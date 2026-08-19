@@ -240,6 +240,82 @@ which called it *"architectural, a different project"* on 2026-08-08.
 Seven patches: `GWG011`, `GWG190`, `GWG191`, `GWG192`, `GWG020`, `GWG030`,
 `GWG040`.
 
+#### ★★ AMENDMENT 2026-08-19 — a FOURTH justification, and it is the direct one
+
+The three above are all *indirect*: an ablation, seven engines agreeing, and
+a RAG judgement. They argue that colorant planes are the right architecture.
+None of them measures **what the current path actually does wrong**, and that
+gap mattered — the operator asked today whether targeting CMYK was practical
+at all, which is a question the indirect arguments answer weakly.
+
+Measured with `crates/pdfce-render/examples/overprint_roundtrip_probe.rs`
+(new, re-runnable). `overprint.rs` implements Table 149 **completely and
+correctly** — the decision logic is not the gap. The gap is its input:
+`interpret.rs:3574` calls `overprint::rgb_to_cmyk` to reconstruct the source
+ink set out of the RGB framebuffer, because there is nowhere else to get it.
+
+```text
+  painted CMYK  ->  RGB (the framebuffer)  ->  reconstructed CMYK  ->  Table 149
+```
+
+That middle arrow is the conversion ISO 32000-1 §8.6.5.7 NOTE 2 names by
+hand: a 4→3→4 round trip is *"unnecessary and results in a loss of fidelity
+in the black component."* (Citation carried from `iccce`'s
+`note_gray_black_routing_is_yours.md`, which offers it as the standard's own
+warrant against round-tripping.)
+
+**The result is worse than a fidelity loss, because Table 149 is a
+per-component ZERO/NONZERO test.** Its rules select the source component for
+any component whose value is nonzero and the backdrop otherwise — so an error
+in the reconstruction is not a slightly-wrong colour, it is **a different
+branch of the rule**.
+
+| ink set | painted | reconstructed | rule input |
+|---|---|---|---|
+| pure K line art | 0/0/0/1.00 | 0/0/0/1.00 | same |
+| **registration black** | **1.00/1.00/1.00/1.00** | **0/0/0/1.00** | ★ CHANGED |
+| rich black | 0.60/0.40/0.40/1.00 | 1.00/0/0.07/1.00 | ★ CHANGED |
+| 75 % K (Ghent 23.0) | 0/0/0/0.75 | 0/0/0/0.75 | same |
+| cyan solid | 1.00/0/0/0 | 1.00/0.27/0/0.06 | ★ CHANGED |
+| magenta solid | 0/1.00/0/0 | 0/0.99/0.41/0.07 | ★ CHANGED |
+| cyan + magenta | 1.00/1.00/0/0 | 0.68/0.67/0/0.43 | ★ CHANGED |
+| 50 % cyan alone | 0.50/0/0/0 | 0.58/0.16/0/0.04 | ★ CHANGED |
+| light warm grey | 0.05/0.04/0.06/0.10 | 0/0/0.01/0.14 | ★ CHANGED |
+| paper white | 0/0/0/0 | 0/0/0/0 | same |
+
+**7 of 10 realistic ink sets make Table 149 read a different row.** Worst
+single-component error **1.000**.
+
+★ **Registration black is the headline and is not a corner case.** It is
+`1/1/1/1` — every plate, which is the whole point of it — and it reconstructs
+as `0/0/0/1`, pure K. It is what crop marks, registration targets and trim
+furniture are printed in, precisely *because* it must appear on every
+separation. The current path decides its overprint behaviour as though three
+of its four inks were absent.
+
+**And four pairs collapse to the same rule input entirely:**
+
+- pure K ↔ registration black
+- registration black ↔ 75 % K
+- cyan solid ↔ cyan + magenta
+- cyan + magenta ↔ 50 % cyan
+
+For those, overprint cannot distinguish the two inputs *at all* — no amount
+of correctness in Table 149 can recover a distinction the buffer already
+destroyed.
+
+**What this changes about the plan:** nothing structural — it corroborates
+§3.3 rather than revising it. What it changes is the *strength of the case*.
+Colorant planes are not an accuracy improvement over a working overprint
+implementation; the overprint implementation is **operating on the wrong ink
+set most of the time**, and its own correctness is currently unobservable.
+
+**A caution for whoever measures Stage B.** Because 7 of 10 branch
+differently, some Ghent overprint patches may currently pass *by accident* —
+a wrong branch that happens to produce the expected pixels. Stage B should
+therefore expect the patch board to move in **both** directions, and a patch
+that regresses from pass to fail is not automatically a Stage B defect. Check
+against this probe before assuming it is.
 ### 1.5 The two that are NOT this build
 
 | Patch | Cause | Where it belongs |

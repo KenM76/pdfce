@@ -50798,3 +50798,125 @@ itself, per the engineer's existing ownership of `docs/core-api/`.
 
 **Terminology (rule 15):** no ce dimension or pdf dimension appears
 anywhere in this filing.
+
+## 2026-08-19 (hundred-and-ninety-sixth filing) — `Pass 103.4` (`826ac25`) SHIPS `adopt_preview`, VERB 124 OF 124; A SECOND GIT-WORKFLOW-HAZARD OCCURRENCE PROMOTES TO STANDING RULE `R201`; ONE NEW `D:\dev\rag\rust\` FINDING; TWO NEW BACKLOG ITEMS
+
+**Filed by `pdfce-librarian`, no shell this filing.** Commit hash relayed
+from the dispatching engineer, who states `git log --oneline -1`
+confirmed `826ac25` present on `main` immediately after committing (hard
+rule 8's accepted no-shell pattern). The engineer's dispatch also
+reported that `826ac25` carries the 195th filing's own doc edits, which
+were uncommitted when the code was committed — see the git-workflow
+finding below.
+
+**Shipped:**
+- `Pass 103.4` — `EditSession::adopt_preview` (verb 124 of 124), the
+  extracted shared `adopt_plan` body, `acroform_register_write` narrowed
+  `&mut self` → `&self`, and additive `InsertOutcome::source_outline_dropped`.
+  `pdfce-cli adopt-widget --dry-run`. 5 new tests (18 total in
+  `widget_adoption.rs`).
+
+**Decisions made this session:**
+- **No decision record minted.** Ceiling stays **072**, next free **073**.
+  The two design choices in this Pass (declining `adopt_refusal` in
+  favour of the preview subsuming it; sharing the plan body rather than
+  duplicating guards) are ordinary Pass-scoping judgement calls with
+  their reasoning recorded in the Pass entry itself, not durable
+  cross-Pass architectural commitments — same bar applied to
+  `Pass 103.1`/`103.3`, neither of which minted a decision either.
+- **One standing rule minted — `R201`.** A LIBRARIAN DISPATCH IN FLIGHT
+  IS NOT A COMMIT WINDOW. This is the **second occurrence** of the
+  git-workflow hazard the 193rd filing flagged but declined to mint
+  (`559da6d`): `826ac25` carries this filing's own predecessor's doc
+  edits (the 195th filing's `ROADMAP.md`/`SESSION_LOG.md`/`FEATURES.md`/
+  `ARCHITECTURE.md`), landing on `Pass 103.4`'s own code commit because
+  the engineer staged and committed while that dispatch was still
+  writing. Same cause, same benign consequence, same misleading `git log`
+  symptom as the first occurrence — clears this project's own
+  two-occurrence promotion bar. Full text: `ROADMAP.md` *Standing rules*.
+  Ceiling `R200` → `R201`, next free `R202`.
+- No Pass ID minted (`103.4` was assigned this filing, under the existing
+  Pass-family ceiling of 105 — no new family claimed).
+
+**Findings + decisions:**
+
+**★ Green sabotage measured nothing — the THIRD instance this session,
+promoted to a standing testing-methodology finding.** The sabotage
+"make the preview mutate" (`let _ = &objects;`) was a semantic no-op; the
+genuine defect (give `adopt_preview` `&mut self` and commit) would fail
+to *compile* the whole workspace, not fail a test, because `EditSession`
+has no interior mutability. Written up as a new
+`D:\dev\rag\rust\` finding (ecosystem-wide — mutation-testing
+methodology, not PDF-specific), indexed:
+`a_sabotage_that_does_not_compile_or_change_behavior_measures_nothing_verify_the_mutation_before_trusting_the_catch.md`.
+Running tally for the session: 5 green sabotages inspected, 3 were
+faults in the instrument rather than signals about the code.
+
+**A CMYK-conversion inconsistency, fixed in passing — filed as an `R171`
+instance, not a new finding.** `vector::geometry::Rgb::from_cmyk` called
+the calibrated conversion table unconditionally while every paint path
+honours the operator's `CmykIntent` (default `NeutralBlack`); measured
+divergence up to 38/255, worst on pure-K CAD line art. Fixed for the
+default case; the caller-supplied-custom-intent case is not — filed as a
+new Backlog item (thread `CmykIntent` through `vector::decompose`, ~57
+call sites) rather than left in a doc comment. New re-runnable measurement:
+`crates/pdfce-core/examples/gray_equivalence_probe.rs`.
+
+**An `iccce` question answered, and a spec-corpus gap surfaced.**
+`note_gray_black_routing_is_yours.md`'s clause-10.3.2-vs-10.4.2.1 question
+does not arise for pdfce today: the rasteriser only ever targets sRGB, so
+the "native device colour space is CMYK" precondition never holds; it
+becomes live the moment an n-channel buffer exists. **Not yet sent back
+to `iccce`** — carried forward as owed. Separately, `iccce` found
+`D:\Dev\Rag-Specialized\PDF_Spec\` has **no clause 10 at all** and is
+missing cl. 8.6.5.6/8.6.5.7 (already self-noted as gaps in
+`iso32000__s__8.6.md`) — filed as a new Backlog item to dispatch
+`pdfce-spec-librarian`, with the `ISO_32000-2_sponsored_EC3.pdf`
+single-user-licence caution carried alongside it.
+
+**Still in flight:**
+- `Pass 102.1` — carry field definitions across `insert_pages`'s copy
+  boundary. Only outstanding ask from the original `pdfceGUI` request
+  family.
+- `v0.7.0` bumped, not tagged.
+- **An n-channel/CMYK compositing buffer — recorded as an open question,
+  not started work.** The operator asked whether the renderer could
+  target CMYK or a neutral space; engineer's relayed answer: no neutral
+  space works (overprint selects per colorant identity), the right
+  target is N channels via `DeviceN`, and overprint accounts for 10 of
+  the 18 remaining Ghent failures. **Flag for the engineer:** a detailed
+  Backlog bucket already covering exactly this — `Pass 97.1` "colorant
+  planes" (filed hundred-and-sixty-ninth filing) — already exists with
+  acceptance criteria. The open question may be *sequencing* (start it
+  now) rather than *scoping* (define it), and should be reconciled
+  against that existing entry before being treated as a fresh ask.
+
+**For next session:**
+1. `Pass 102.1` is next in the `pdfceGUI` request family.
+2. Reconcile the n-channel compositing buffer question against the
+   existing `Pass 97.1` Backlog scope before starting new design work.
+3. Send the `iccce` clause-10.3.2 answer back through whatever channel
+   `note_gray_black_routing_is_yours.md` arrived on.
+4. Dispatch `pdfce-spec-librarian` for `PDF_Spec` clause 10 +
+   cl. 8.6.5.6/8.6.5.7, mindful of the single-user PDF Association
+   licence on the source PDF.
+
+**Ledger effects:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **105** | **105** (unchanged) |
+| decision records | **072** | **072** (unchanged) |
+| standing rules | **R200** | **R201** |
+| `SESSION_LOG` filings | **195** | **196** |
+| `personal_rag/pdf` lessons | **+0** (195th filing) | **+0** this filing (one `D:\dev\rag\rust\` finding instead) |
+
+**`FEATURES.md` — CHANGED.** The widget-adoption row (Implemented) now
+notes `adopt_preview`; the `insert_pages` disclosure row extended to five
+fields with `source_outline_dropped`.
+
+**`ARCHITECTURE.md` — UNCHANGED.** No decision minted this filing (see
+above); no body section went stale.
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing.

@@ -96,6 +96,195 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+> ### ★★★★★ THE 196TH FILING — `Pass 103.4` SHIPS `adopt_preview`, VERB 124 OF 124 — `adopt_refusal` REQUESTED AND DELIBERATELY NOT BUILT BECAUSE THE PREVIEW SUBSUMES IT — AND A SECOND, IDENTICAL-SHAPE GIT-WORKFLOW HAZARD PROMOTES TO STANDING RULE `R201` — no shell this filing
+>
+> **This filing has no shell.** Hard rule 8's no-shell branch applies: the
+> commit hash `826ac25` is relayed from the dispatching engineer, who
+> states `git log --oneline -1` was run immediately after committing and
+> confirmed it present on `main` — the accepted no-shell pattern (hard
+> rule 8; this role's own memory: *"Dispatch should carry git evidence
+> when this librarian has no shell"*).
+>
+> **★ THE GIT-WORKFLOW HAZARD FLAGGED BY THE 193RD FILING HAS RECURRED,
+> AND THAT CLEARS THIS PROJECT'S OWN TWO-OCCURRENCE PROMOTION BAR.**
+> `559da6d` (193rd filing) carried `Pass 103.1`'s doc edits one commit
+> after its own code commit, because the engineer staged and committed
+> while that filing's dispatch was still writing. **`826ac25` does the
+> identical thing to this filing's own predecessor** — it carries the
+> 195th filing's `ROADMAP.md`/`SESSION_LOG.md`/`FEATURES.md`/
+> `ARCHITECTURE.md` edits, landing after `Pass 103.4`'s own code, for the
+> same reason. Same cause, same benign consequence (nothing lost, nothing
+> silently overwritten), same misleading symptom (a Pass commit that
+> `git log` shows with no doc changes, because they rode in on the next
+> commit instead). **Minted below as `R201`** — see *Standing rules*.
+
+### Pass 103.4 — commit `826ac25` (relayed, no shell this filing) — **`adopt_preview`: PRE-FLIGHT FOR WIDGET ADOPTION, PLUS `InsertOutcome::source_outline_dropped` — VERB 124 OF 124** — filed 2026-08-19 (hundred-and-ninety-sixth filing)
+
+**Requested by `pdfceGUI`**, two files, both 2026-08-19:
+`request_adopt_widget_has_no_preflight_so_the_ui_finds_out_by_pressing.md`
+and `note_all_four_wired_and_one_symmetry_ask.md`.
+
+**What shipped:**
+
+- `pdfce-core`: `EditSession::adopt_preview(&self, widget: ObjId, name:
+  Option<&str>) -> Result<AdoptOutcome, EditError>` — reports what
+  `adopt_widget` would do, or why it would refuse, without committing
+  anything. **Verb 124 of 124.**
+- `EditSession::adopt_plan(&self, …)` — the extracted shared body.
+  `adopt_widget` is now *plan, then commit*; `adopt_preview` is *plan,
+  then discard*. The two verbs share one guard implementation rather than
+  each carrying its own copy of the refusal logic.
+- `acroform_register_write` changed from `&mut self` to `&self` — it
+  never allocated anything, which is the fact that made sharing the plan
+  body possible at all.
+- New additive field: `InsertOutcome::source_outline_dropped: bool`.
+- `pdfce-cli`: `adopt-widget --dry-run` (conflicts with `--output`/
+  `--mode`/`--verify-undo`; `--output` becomes
+  `required_unless_present = "dry_run"`).
+- 5 new tests in `crates/pdfce-core/tests/widget_adoption.rs` (18 total).
+- Docs: two new subsections in `docs/core-api/02-editing-and-saving.md`;
+  verb count 123 → 124 in three places plus `index.md`.
+
+**Test results.** **3,995 workspace tests pass, 0 fail** (up 5 from
+`Pass 103.3`'s count, the 5 new `widget_adoption.rs` tests — total filed
+beside the per-item form, per hard rule 10). **Sabotage battery: 5
+injected defects, 5 caught.** **Invariants:** `cargo tree -p pdfce-core`
+/ `-p pdfce-render` — zero matches for GUI/network crates. **Gates
+clean:** `cargo fmt --all`, `cargo clippy --workspace --all-targets -D
+warnings`, `check-ui-strings.sh`, `check-string-gaps.sh`,
+`check-ledger-numbers.py`, `check-core-api-verbs.py`.
+
+**`FEATURES.md` rows affected** — edited in the same filing, see below:
+the widget-adoption row (Implemented, form fields) extended to note the
+preview; the `insert_pages` disclosure row extended to five fields.
+
+**Two design decisions worth recording, both from the dispatch:**
+
+1. **`adopt_refusal` was requested and deliberately not shipped.** The
+   request offered it as ask 1 (matching the project's existing
+   `fill_refusal`/`rename_refusal` shape) and the preview as ask 2, and
+   itself observed that ask 2 subsumes ask 1. It does:
+   `adopt_preview(w, n).err()` is the predicate with strictly more in it
+   than a standalone refusal-only check would carry. Two entry points for
+   one question is a cost paid forever, not once. **The substitution is
+   tested, not merely asserted** —
+   `the_preview_doubles_as_the_refusal_predicate` in the new test file.
+2. **The preview shares the verb's body rather than re-implementing its
+   guards.** The requester explicitly asked whether a preview would force
+   duplication, and offered to accept a narrower ask if so. It does not,
+   because `acroform_register_write` never allocated and could be
+   narrowed to `&self`. Worth recording the reason, not only the outcome:
+   two independent implementations of one guard set are two things that
+   must agree and, on this project's own repeated evidence (decision 040,
+   `print_render_options`; standing rule **R171**), eventually will not —
+   the failure mode being a greyed-out control for an operation that
+   would in fact have succeeded, or a live one for an operation that
+   silently refuses.
+
+#### Findings
+
+**(A) ★ A green sabotage measured nothing — the THIRD time this session,
+and all three were the engineer's instrument, not the tests' fault.** The
+sabotage "make the preview mutate" was `let _ = &objects;`, which mutates
+nothing. The genuine version — give `adopt_preview` `&mut self` and
+commit — does not fail a test, it **fails to compile the whole
+workspace**, because every mutating path (`commit`, `stage_bytes`,
+`alloc_number`) needs `&mut self` and `EditSession` has no interior
+mutability. `the_preview_writes_nothing`'s doc comment now says
+explicitly that it is a **regression guard on the signature**, not a
+live behavioral check — what it defends is a future `&mut self` for some
+unrelated convenience, or an `EditSession` that acquires a
+`Cell`/`RefCell`. **Promoted to standing rule** — see *Standing rules*,
+`D:\dev\rag\rust\a_sabotage_that_does_not_compile_or_change_behavior_measures_nothing_verify_the_mutation_before_trusting_the_catch.md`
+(new file, ecosystem-wide: mutation testing generally, not PDF-specific).
+Running tally this session: five green sabotages inspected, **three were
+faults in the instrument** (a fixture too narrow to express the
+distinction, a non-unique patch anchor landing in the wrong function, and
+this no-op mutation).
+
+**(B) A CMYK-conversion inconsistency, found and fixed in passing — an
+`R171` instance, not a new finding of its own shape.**
+`pdfce_core::vector::geometry::Rgb::from_cmyk` called
+`color::cmyk_to_srgb` — the **calibrated** table, unconditionally — while
+every paint path goes through `pdfce_render::gstate::Rgb::from_cmyk`
+honouring the operator's chosen `CmykIntent`, whose shipped default is
+`NeutralBlack`. They diverge by up to **38/255** across the grey ramp,
+worst exactly where this project's document population concentrates:
+pure-K line art decomposed to `#231F20` while the canvas painted
+`#000000`. The `NeutralBlack` default exists specifically so CAD line art
+renders true black; this path was not honouring it. Fixed by routing
+`from_cmyk` through `CmykIntent::default()`, and adding
+`from_cmyk_with(intent, …)` for callers that carry a real intent value.
+**Stated as partial, not complete:** a caller who has *changed* the
+intent away from the default still gets a decomposition disagreeing with
+their own renderer, because `vector::decompose` takes no settings
+parameter — threading one through touches three public entry points and
+57 call sites, its own Pass. **Filed as a new Backlog item, below**, so
+the residual gap is tracked rather than living only in a doc comment.
+The only current consumer of the discrepancy is
+`pdfce-gui/src/object_summary.rs`, which is PAUSED, so this did not
+compete for priority on its own merits — it was cheap to fix and
+`pdfceGUI` is a forward consumer of the same code path.
+
+**(C) New `crates/pdfce-core/examples/gray_equivalence_probe.rs`** — a
+re-runnable measurement of Ghent 23.0's four-way gray equivalence through
+pdfce's sRGB path, which is how (B) was found.
+
+#### An answer owed to `iccce`, and a corpus gap they found in ours
+
+`note_gray_black_routing_is_yours.md` (the iccce channel file carried as
+owed since the 195th filing) asks pdfce one direct question and reports
+one gap in this project's own spec corpus.
+
+1. **Their question:** ISO 32000-2 cl. 10.3.2 routes `DeviceGray`→CMYK to
+   cl. 10.4.2.3 inside the colour-managed branch, while cl. 10.4.2.1
+   frames all of 10.4.2.x as the less-capable processor's fallback. Which
+   does pdfce implement, and was it deliberate? **Answer, established
+   this filing: the question does not arise for pdfce's current
+   renderer.** Clause 10.3.2's rule is conditioned on *"if the native
+   device colour space is CMYK"*; `pdfce-core::color` exposes
+   `gray_to_srgb`, `rgb_to_srgb` and `cmyk_to_srgb` and nothing else — the
+   rasteriser targets **sRGB**, so that condition never holds. It becomes
+   a live question the moment an n-channel/CMYK compositing buffer
+   exists (see *Backlog*, `Pass 97.1`, below). **Not yet sent back to
+   iccce** — carried forward as still-owed.
+2. **A gap in `D:\Dev\Rag-Specialized\PDF_Spec\`, found from outside it:**
+   that corpus holds **no clause 10 at all**, and no cl. 8.6.5.6 /
+   8.6.5.7 — its own `iso32000__s__8.6.md` lists them as open gaps.
+   Clause 10 is pdfce's own colour-conversion chapter. **Filed as a new
+   Backlog item, below**, to dispatch `pdfce-spec-librarian` for it — a
+   missing chapter in the reference corpus is exactly how a conforming
+   behaviour gets reimplemented from memory, and `iccce` had to carry
+   pdfce's own clauses in `ICC_Spec` as a dated exception to that
+   project's own no-duplication rule.
+   ⚠ **Licence caution to carry with that dispatch:**
+   `ISO_32000-2_sponsored_EC3.pdf` in `PDF_Spec\_sources\` is a
+   **single-user PDF Association copy licensed to the operator**,
+   watermarked *"copying and networking prohibited"*. Short quotation
+   with citation is fine; **the file must not be redistributed and no
+   bulk transcription may enter either repository** — both `PDF_Spec` and
+   pdfce are MIT and public.
+
+**Still open:**
+- `Pass 102.1` — carry field definitions across `insert_pages`'s copy
+  boundary. **The only outstanding `pdfceGUI` ask from the original
+  request family.**
+- `v0.7.0` bumped, not tagged.
+- **An n-channel/CMYK compositing buffer.** The operator asked whether
+  the renderer could target CMYK or a neutral space; the engineer's
+  answer (relayed): no neutral space works, because overprint selects per
+  *colorant identity*, which XYZ and spectral both discard; the right
+  target is N channels where N is a per-page property; `DeviceN` is
+  already PDF's model for it; overprint is 10 of the 18 Ghent patches
+  still failing. **A detailed Backlog bucket for exactly this already
+  exists — `Pass 97.1` "colorant planes"** (filed hundred-and-
+  sixty-ninth filing, from `docs/compositor-plan.md`) — so the
+  engineer's question may already be answered by that entry's existing
+  scope, or the operator's decision now needed may be *sequencing*
+  (start it) rather than *scoping* (define it). **Recorded as an open
+  question, not started work; flagged for reconciliation against
+  `Pass 97.1` rather than treated as unscoped.**
+
 > ### ★★★★★ THE 195TH FILING — `Pass 103.2` SHIPS, CLOSING THE `pdfceGUI` REQUEST'S PART 2 IN FULL — ACROBAT MEASURED AND POINTEDLY NOT MATCHED, DECISION 072 MINTED — no shell this filing
 >
 > **This filing has no shell.** Hard rule 8's no-shell branch applies:
@@ -61937,6 +62126,37 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **Thread `CmykIntent` through `vector::decompose`.** Filed 2026-08-19
+  (hundred-and-ninety-sixth filing), from `Pass 103.4`'s finding (B).
+  `pdfce_core::vector::geometry::Rgb::from_cmyk` was fixed this Pass to
+  route through `CmykIntent::default()` instead of the unconditionally
+  calibrated table (an `R171` instance — a second independent CMYK→RGB
+  construction site, diverging by up to 38/255, the same shape as
+  decision 040's `print_render_options`), but a caller who has *changed*
+  the intent away from the shipped default still gets a decomposition
+  that disagrees with its own renderer, because `vector::decompose` takes
+  no settings parameter. Scope: thread a `CmykIntent` (or the render
+  policy carrying it) through `vector::decompose`'s three public entry
+  points and their ~57 call sites. Only known current consumer is
+  `pdfce-gui/src/object_summary.rs` (PAUSED); the out-of-tree `pdfceGUI`
+  project is the forward consumer.
+
+- **Dispatch `pdfce-spec-librarian` for `D:\Dev\Rag-Specialized\PDF_Spec\`
+  clause 10 (colour space conversion) and cl. 8.6.5.6 / 8.6.5.7.** Filed
+  2026-08-19 (hundred-and-ninety-sixth filing), surfaced by `iccce`'s
+  `note_gray_black_routing_is_yours.md`: the spec corpus holds **no
+  clause 10 at all**, and `iso32000__s__8.6.md` itself lists 8.6.5.6/
+  8.6.5.7 as open gaps. Clause 10 is pdfce's own colour-conversion
+  chapter — a missing chapter in the reference corpus is how a
+  conforming behaviour gets reimplemented from training-data memory
+  instead of sourced, and `iccce` has had to carry pdfce's own clauses in
+  its `ICC_Spec` RAG as a dated exception to that project's
+  no-duplication rule. ⚠ **Carry the licence caution with the dispatch:**
+  `PDF_Spec\_sources\ISO_32000-2_sponsored_EC3.pdf` is a single-user PDF
+  Association copy licensed to the operator, watermarked *"copying and
+  networking prohibited"* — short quotation with citation only, no bulk
+  transcription into either (both MIT, both public) repository.
+
 - **★★★★★ Pass 97.0 / 97.1 / 97.2 — THE COMPOSITOR, filed 2026-08-18
   (hundred-and-sixty-ninth filing) — scoped from `docs/compositor-plan.md`
   §4, itself written off `tools/ghent-cell-probe.py`'s finding (`5ef5498`,
@@ -76715,6 +76935,52 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   `C:\personal_rag\pdf\lesson_20260819_named_destination_reader_normalizes_away_baked_vs_deferred_resolution.md`
   (second, promoting to this rule).
   **Ceiling moves `R199` → `R200`; next free `R201`.** `R193`/`R194`
+  remain claimed by their existing declined-but-intact proposals.
+
+- **R201 — A LIBRARIAN DISPATCH IN FLIGHT IS NOT A COMMIT WINDOW. THE
+  ENGINEER DOES NOT STAGE OR COMMIT WHILE ONE IS OUTSTANDING; WAIT FOR
+  THE COMPLETION NOTIFICATION, THEN COMMIT THE PASS AND THE FILING
+  TOGETHER (2026-08-19; librarian-minted, hundred-and-ninety-sixth
+  filing — a PROMOTION of the flagged-not-minted practice recorded by
+  the 193rd filing, pulled by that practice's own stated trigger: *"if
+  this recurs, propose a standing-rule number rather than leaving it a
+  bare note."*).**
+  **THE WARRANT — two occurrences, same cause, same benign consequence,
+  same misleading symptom:**
+
+  | commit | carries its own doc edits? | actually carries |
+  |---|---|---|
+  | `559da6d` (193rd filing) | no | `Pass 103.1`'s `ROADMAP.md`/`SESSION_LOG.md`/`FEATURES.md` edits, one commit **after** `afa53d5` (`Pass 103.1`'s own code) |
+  | `826ac25` (196th filing) | no | the 195th filing's `ROADMAP.md`/`SESSION_LOG.md`/`FEATURES.md`/`ARCHITECTURE.md` edits, riding in on `Pass 103.4`'s own code commit |
+
+  **THE MECHANISM.** A librarian dispatch writes to `docs/` over some
+  wall-clock interval; if the engineer runs `git add -A && git commit`
+  for the Pass's own code before that dispatch returns, the
+  documentation edits land uncommitted, waiting to be swept in by
+  whatever the *next* commit happens to be — which is not necessarily a
+  documentation-only commit. Both recorded instances happened to be
+  benign (nothing lost, nothing silently overwritten, the next commit
+  was itself a filing/Pass commit that simply carried extra unrelated
+  content). **The risk named for the next occurrence, not yet
+  materialised:** a Pass commit that looks — by `git log` alone — like
+  it shipped with no documentation, because the documentation is one
+  commit later or one commit earlier than a reader would assume from the
+  Pass's own commit message.
+  **Checkable after the fact:** `git show --stat <commit>` on a
+  code-carrying commit lists `docs/` paths unrelated to that commit's
+  own subject line — the same diagnostic `R198` uses for the inverse
+  case (a filing commit carrying code). **No gate is proposed, on the
+  same warrant `R198` gives:** the predicate ("is a librarian dispatch
+  currently in flight?") is not information available to a pre-commit
+  hook — it is a fact about which agent is mid-task, not about the
+  working tree.
+  **Scope — the obligation is procedural, not code-shaped:** the
+  engineer does not run `git add`/`git commit` (including `git add -A`)
+  between dispatching `pdfce-librarian` and receiving its completion
+  notification. Once the dispatch returns, commit the Pass's code and
+  the filing's documentation edits together, or in either order, but not
+  interleaved with a dispatch still writing.
+  **Ceiling moves `R200` → `R201`; next free `R202`.** `R193`/`R194`
   remain claimed by their existing declined-but-intact proposals.
 
 - **R199 — A RECORDED BLOCKER IS A DATED READING, NOT A STANDING FACT. A
