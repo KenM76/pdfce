@@ -1125,6 +1125,29 @@ D:\Dev\pdfce\
                                    dependency-verification policy this
                                    refusal instantiates; full write-up
                                    at `D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`.
+                                   **★★ THE "REFUSED" CLAUSE IS FALSE
+                                   FROM 2026-08-19 (`Pass 85.4b`,
+                                   `972ddbb`, hundred-and-eighty-ninth
+                                   filing) AND IS KEPT ONLY AS HISTORY.**
+                                   The four modes now ship: Table 137 is
+                                   transcribed into
+                                   `pdfce-render/src/blend_nonsep.rs` and
+                                   applied both at a paint and — the half
+                                   that actually moves Ghent — at a
+                                   transparency group's composited result
+                                   through `Canvas::layer`, because every
+                                   non-separable mode in that corpus sits
+                                   at a `Do` and none at a paint. **Ghent
+                                   25 → 26 pass, 15 → 14 FAIL of 51.**
+                                   **The dependency defect is unchanged
+                                   and tiny-skia is still not routed these
+                                   four** — decision 066 is AMENDED, not
+                                   reversed: it refused trusting the
+                                   dependency, never the feature, and its
+                                   verification bar is what produced the
+                                   independent-oracle check that validated
+                                   the replacement. See §12, decision 066's
+                                   dated amendment.
                                    `/Group` is now read on form
                                    XObjects (previously not at all).
                                    **Transparency GROUP compositing
@@ -22373,6 +22396,69 @@ already covers this shape and gains its sixth instance here — an
 existing rule with new evidence, not a new rule, per this project's
 own two-occurrence-plus-review bar for promotion. **Ceiling moves
 066 → 067; next free 068.**
+
+> #### ★★★★ AMENDED 2026-08-19 (hundred-and-eighty-ninth filing, `Pass 85.4b`, `972ddbb`) — **THE POLICY STANDS ENTIRELY; WHAT CHANGED IS THAT PDFCE IMPLEMENTED THE OPERATION ITSELF. THIS IS NOT A REVERSAL AND MUST NOT BE READ AS ONE.**
+>
+> **The four non-separable blend modes now SHIP.** `Hue`, `Saturation`,
+> `Color` and `Luminosity` are computed by
+> `crates/pdfce-render/src/blend_nonsep.rs` — Table 137 transcribed from
+> `iso32000__s__11.3.5.md` — applied at a paint and, decisively, at a
+> transparency group's composited result via `Canvas::layer`. **Ghent 25 →
+> 26 pass, 15 → 14 FAIL of 51.**
+>
+> **★ WHY THIS AMENDS RATHER THAN SUPERSEDES, and the distinction is the
+> whole entry.** Decision 066 refused **TRUSTING THE DEPENDENCY**. It
+> never refused the FEATURE. Every fact in the body above is still true:
+> `tiny_skia` 0.11.4's `clip_color` still gates on `mx >= 0` where the
+> standard uses `mn < 0`; the error is still up to 107/255; the crate is
+> still `pdfce-render`'s rasterizer and still must not be routed these
+> four. **What is no longer true is only the last clause of the "where
+> verification finds a divergence" sentence — the modes are no longer
+> refused, because pdfce wrote the conforming implementation the decision
+> said would be needed.**
+>
+> **★★ THE POLICY IS WHAT PRODUCED THE SHIP, TWICE OVER, AND THAT IS THE
+> part worth carrying forward.**
+>
+> 1. **It set the verification bar for pdfce's OWN code.** *"The
+>    obligation cannot be weaker for pdfce's replacement of the
+>    dependency"* — so the new implementation was checked against
+>    `tiny_skia` **as an independent oracle**, not merely against its
+>    author's unit tests. `tiny_skia` is a *good* oracle **because** its
+>    defect is narrow, which gives a correct implementation a
+>    **signature**: **34,630 in-gamut samples agree within 2/255**, while
+>    **13,084 of 27,870 out-of-gamut samples disagree, worst 227/255**.
+>    **Agreement everywhere would have meant the bug was inherited;
+>    disagreement everywhere would have meant a new wrongness.** Unit
+>    tests written from the same reading as the code could not have
+>    distinguished either case — which is decision 066's own argument,
+>    turned inward.
+> 2. **It kept the refusal COUNTED rather than silent**, so when the
+>    modes became implementable the disclosure had a place to move to:
+>    `nonseparable_composited` / `nonseparable_pixels` on the stable
+>    stdout line, appended never inserted.
+>
+> **★★★ AND THE ROW READ AS SETTLED WHEN IT WAS NOT.** `ROADMAP.md`'s
+> `85.4b` row and `FEATURES.md`'s Planned row both said *"REFUSED, not
+> mapped"* and *"not closeable inside pdfce without an upstream tiny-skia
+> fix"*. **The second clause was false when written** — a from-scratch
+> implementation of the four HSL formulas was always available, and the
+> row said so in the same breath while filing the whole thing under
+> *refused*. Both rows are corrected in the 189th filing; the old wording
+> is kept struck rather than deleted, because **it is what a reader
+> took as settled, and deleting it would erase the evidence that a
+> refusal-of-a-dependency can be misread as a refusal-of-a-feature.**
+>
+> **What made it cheap, and it was not this decision:** `Pass 85.5`
+> (overprint simulation) had already built the coverage-mask machinery —
+> rasterise a paint with **the same rasteriser a normal paint uses**, then
+> blend per pixel. Table 137 then became a **transcription rather than an
+> architecture**. **A refusal minted on a dependency's defect became
+> shippable when unrelated work supplied the substrate**, which is worth
+> noticing whenever a `REFUSED` row is next read as permanent.
+>
+> **Ceiling unchanged: 071; next free 072.** No new decision minted — no
+> new architectural choice was made, an existing one was carried out.
 
 ### 2026-08-17 (hundred-and-sixtieth filing) — decision 068: **TRANSPARENCY GROUPS COMPOSITE INTO A PAGE-SIZED OFFSCREEN BUFFER, NOT A BBOX-SIZED ONE, AND THE CONTENTS' GRAPHICS STATE RESETS TO INITIAL AT GROUP ENTRY**
 
