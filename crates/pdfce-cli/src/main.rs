@@ -1488,9 +1488,15 @@ enum Command {
         /// widget that has none, and the way to resolve a name collision.
         #[arg(long)]
         name: Option<String>,
-        /// Output PDF.
-        #[arg(long)]
-        output: PathBuf,
+        /// Report what would happen and write nothing — including the name
+        /// the widget already carries, which is in the file rather than on
+        /// screen, and whether the field will have a usable `/FT`. Skips
+        /// `--output` entirely.
+        #[arg(long, conflicts_with_all = ["output", "mode", "verify_undo"])]
+        dry_run: bool,
+        /// Output PDF. Required unless `--dry-run`.
+        #[arg(long, required_unless_present = "dry_run")]
+        output: Option<PathBuf>,
         /// Save mode.
         #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
         mode: SaveMode,
@@ -5395,6 +5401,7 @@ fn run() -> ExitCode {
             page,
             index,
             name,
+            dry_run,
             output,
             mode,
             verify_undo,
@@ -5403,7 +5410,8 @@ fn run() -> ExitCode {
             page,
             index,
             name.as_deref(),
-            &output,
+            dry_run,
+            output.as_deref(),
             mode,
             verify_undo,
         ),
@@ -8372,7 +8380,8 @@ fn cmd_adopt_widget(
     page: usize,
     index: usize,
     name: Option<&str>,
-    output: &Path,
+    dry_run: bool,
+    output: Option<&Path>,
     mode: SaveMode,
     verify_undo: bool,
 ) -> u8 {
@@ -8416,6 +8425,47 @@ fn cmd_adopt_widget(
             return exit::EDIT_REFUSED;
         };
         id
+    };
+
+    // ★ `--dry-run` answers BEFORE the press, which is the whole point.
+    //
+    // `pdfceGUI` asked for `adopt_preview` because a widget's two shapes are
+    // indistinguishable from the outside: one adopts losslessly, the other
+    // refuses and can only be made into a NEW empty field. The same is true
+    // at a shell prompt, and worse — there is no row to grey out, so without
+    // this the operator's only way to find out is to write a file.
+    if dry_run {
+        match session.adopt_preview(widget_id, name) {
+            Ok(o) => {
+                println!(
+                    "adopt-widget {} page {page} index {index} DRY RUN; would_register={:?} type={} renamed={} acroform_created={}",
+                    input.display(),
+                    o.name,
+                    o.field_type.as_deref().unwrap_or("none"),
+                    u32::from(o.renamed),
+                    u32::from(o.acroform_created),
+                );
+                if o.field_type.is_none() {
+                    eprintln!(
+                        "pdfce-cli: {}: {:?} would have no field type (/FT) and would be top-level, so it would inherit none — registering it would succeed and it still would not be fillable",
+                        input.display(),
+                        o.name,
+                    );
+                }
+                return exit::SUCCESS;
+            }
+            Err(err) => return report_edit_error(input, &err),
+        }
+    }
+    let Some(output) = output else {
+        // Unreachable: clap's `required_unless_present` enforces it. Handled
+        // rather than unwrapped so a future flag change cannot turn a
+        // missing path into a panic in front of an operator.
+        eprintln!(
+            "pdfce-cli: {}: --output is required unless --dry-run",
+            input.display()
+        );
+        return exit::EDIT_REFUSED;
     };
 
     let outcome = match session.adopt_widget(widget_id, name) {

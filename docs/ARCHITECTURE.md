@@ -22980,3 +22980,67 @@ entry.
 **No standing rule minted.** Architectural/rendering-model decision, same
 disposition as 063/064/066/068/069/070. **Ceiling moves 070 → 071; next
 free 072.**
+
+---
+
+- **2026-08-19 — Decision 072. Page labels on insert: pdfce deliberately
+  does NOT match Acrobat's measured behavior, and the divergence is
+  recorded rather than matched.** `EditSession::insert_pages` (`Pass
+  99.0`) does not merge the source document's `/PageLabels` tree onto the
+  pages it copies — inserted pages simply continue whatever numbering
+  range already covered that position in the target's own tree, per
+  §12.4.2's ordinary per-page computation. `Pass 103.2` measured what
+  Acrobat itself does at this junction (`Acrobat_Features
+  \core_ops__page_labels_and_bates_interaction.md`, addendum 2026-08-19,
+  three independent Adobe Community threads 2024–2025, not an Adobe
+  primary source): Acrobat **actively overwrites every inserted page**
+  with a single static copy of the label displayed on the page
+  immediately preceding the insertion point — not the source's own
+  label, not an incrementing continuation, the same string repeated on
+  every inserted page (sourced example: a twelve-page chapter labelled
+  `10-1`…`10-12` inserted after a page labelled `9-45` comes out of
+  Acrobat labelled `9-45` on all twelve).
+  **Why pdfce does not reproduce this.** The Adobe Community threads this
+  finding is sourced from are complaints about the behavior, not reports
+  of a feature working as intended — Acrobat's insert-time overwrite is a
+  wrong label on every inserted page, written silently. A `/PageLabels`
+  range describes *physical page positions* in one document; carrying a
+  source range onto a page count it was never computed against
+  (`Pass 99.0`'s own `pageops::assemble` carryover-policy table already
+  states this reasoning for the sibling producer path — see §3(c)
+  above), and duplicating the immediately-preceding label onto an
+  arbitrary run of inserted pages, are both confidently wrong outputs;
+  pdfce instead lets the ordinary per-page range computation apply
+  (correct wherever the inserted pages happen to fall inside an existing
+  numbered range, silently absent wherever they do not) and **discloses**
+  the two ways that can go wrong rather than guessing: `InsertOutcome`
+  (`crates/pdfce-core/src/edit.rs`) gained
+  `source_page_labels_dropped: bool` (the source's own labelling never
+  had anywhere to go) and `page_labels_stale: bool` (the target's
+  existing tree is now numerically stale after the structural edit — the
+  pre-existing `edit.rs:16339` ruling, unchanged, restated here because
+  it is the adjacent half of the same disclosure). Kept as two fields
+  rather than one, because the operator's remedy differs by which is
+  true: a stale tree wants renumbering, a dropped one wants creating.
+  **This is an instance of the operator's standing instruction that
+  parity with Acrobat/PDF-XChange is a floor, not a target** (see
+  `pdfce-librarian`'s own memory record and decisions 024/059's "fuzzy,
+  never sneaky" lineage) — pdfce's own computed range plus honest
+  disclosure of what changed is judged the better behavior, not merely a
+  cheaper one, and the measured Acrobat behavior is recorded so a future
+  session does not re-derive it or mistake pdfce's silence on carrying
+  labels for an oversight.
+  **Body-section update:** the load-bearing description of
+  `InsertOutcome`'s full field set (four disclosure fields as of this
+  decision: `pages_inserted`, `orphaned_widgets`,
+  `orphaned_widgets_unrecoverable`, `source_page_labels_dropped`,
+  `page_labels_stale`) lives in
+  `docs/core-api/02-editing-and-saving.md`'s `★ Page labels on insert`
+  subsection (added `Pass 103.2`, same commit) — that document, not a
+  restatement here, is kept current per the engineer's own ownership of
+  `docs/core-api/` (`ROADMAP.md` "`docs/core-api/` is a MAINTAINED
+  artefact" ruling, 2026-08-18). This entry's own obligation is the
+  *policy* record (why pdfce diverges), not a second copy of the field
+  list.
+  **No standing rule minted** — a single behavioral-policy decision, not
+  a recurring pattern. **Ceiling moves 071 → 072; next free 073.**

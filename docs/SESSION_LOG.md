@@ -50638,3 +50638,163 @@ own standing practice.
 
 **Terminology (rule 15):** no ce dimension or pdf dimension appears
 anywhere in this filing.
+
+## 2026-08-19 (hundred-and-ninety-fourth filing) — `Pass 103.3` (`6dd37e8`) SHIPS NAMED DESTINATIONS, VERB 123 OF 123 — A SECOND READER-AS-ORACLE BLIND SPOT PROMOTES TO STANDING RULE `R200`; THREE NEW `personal_rag\pdf` LESSONS
+
+**Filed by `pdfce-librarian`, no shell this filing.** Commit hash and
+verification numbers relayed from the dispatching engineer, who states
+`git log` confirmed `6dd37e8` present on `main` immediately after
+committing (hard rule 8's accepted no-shell pattern).
+
+**Shipped:**
+- `Pass 103.3` — `EditSession::add_named_destination` (verb 123 of 123),
+  and `add_outline_item` now accepts `Destination::Named` (refused by
+  name as of `Pass 103.0`). New `DestinationResolver::lookup`. `pdfce-cli
+  add-named-dest`, `add-bookmark --dest-name`. 7 new tests
+  (`outline_authoring.rs`, 18 total).
+
+**Decisions made this session:**
+- No decision record minted this filing. Ceiling stays **071** (`Pass
+  103.2`, filed next in this same session, mints 072).
+- **One standing rule minted — `R200`**: an independent reader used as a
+  test oracle only proves what it actually touches; a field it never
+  visits and a field it resolves/normalises away are the same failure.
+  Promoted from two instances (`Pass 103.0`'s `/Prev`-blind outline
+  reader; this Pass's baked-vs-deferred named-destination reader).
+  Ceiling **`R199` → `R200`**, next free **`R201`**.
+- No Pass ID minted — `103` already existed as a family.
+
+**Findings + decisions:**
+- **(A) RAG'd** — a sabotage battery patching the first occurrence of a
+  shared idiom silently sabotaged `/EmbeddedFiles` while the `/Dests`
+  suite ran; 3 of 4 reported survivors were false alarms. Surfaced one
+  real gap (`/EmbeddedFiles` sort order untested), filed to `ROADMAP.md`
+  Backlog, not fixed.
+- **(C) not RAG'd** — `--verify-undo` leaves the session undone;
+  `save_edited` never redoes, so a figure read after save is pre-edit
+  state. Found by running with/without the flag (R174). Documented on
+  `save_edited` itself.
+- **(D) RAG'd, promoted to `R200`** — `read_outline` resolves a named
+  `/Dest` for display, so a writer that wrongly bakes the resolved
+  destination and a correct deferred-resolution writer read back
+  identically. Pinned by reading the raw `/Dest`.
+- **(E) RAG'd** — a collision check reused `resolve_destination`, which
+  folds undefined/dangling/remote into one `None`; fixed to check
+  name-tree membership directly. A dangling *reference* (object absent)
+  still resolves `Some`; only a non-reference element 0 (`null`, the
+  shape `pageops::assemble`'s page barrier already writes) triggers
+  `None`.
+- **Three new `personal_rag/pdf` lessons**, indices updated (subject +
+  master):
+  `lesson_20260819_sabotage_anchor_must_be_verified_unique_before_a_green_result_means_anything.md`,
+  `lesson_20260819_named_destination_reader_normalizes_away_baked_vs_deferred_resolution.md`,
+  `lesson_20260819_collision_check_must_ask_membership_not_resolver_reachability.md`.
+
+**Still in flight:**
+- `Pass 102.1` (carry field definitions across `insert_pages`) —
+  unstarted, dependency satisfied.
+- `Pass 103.2` — filed next in this same session, see below.
+- `/EmbeddedFiles` name-tree sort test gap — filed to `ROADMAP.md`
+  Backlog, unfixed.
+- `note_gray_black_routing_is_yours.md` still unread; `v0.7.0` bumped
+  but not tagged.
+
+**For next session:**
+1. `Pass 102.1` is the one outstanding item from `pdfceGUI`'s original
+   request family once `Pass 103.2` (next filing) closes.
+2. Consider scoping the `/EmbeddedFiles` sort-order test (Backlog, cheap,
+   no new verb).
+
+**Ledger effects:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **105** | **105** (unchanged) |
+| decision records | **071** | **071** (unchanged) |
+| standing rules | **R199** | **R200** |
+| `SESSION_LOG` filings | **193** | **194** |
+| `personal_rag/pdf` lessons | **+0** (193rd filing) | **+3** this filing |
+
+**`FEATURES.md` — CHANGED.** New Implemented row: named destinations
+(authoring), `[x]` core / `[x]` cli / `[ ]` gui. The "Bookmark editing"
+Planned row's `Pass 103.3` mention retired.
+
+**`ARCHITECTURE.md` — UNCHANGED this filing.** No decision minted here
+(`Pass 103.2`, next, mints 072).
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing.
+
+## 2026-08-19 (hundred-and-ninety-fifth filing) — `Pass 103.2` (`3ed1270`) SHIPS PAGE LABELS ON INSERT — ACROBAT MEASURED AND DELIBERATELY NOT MATCHED; DECISION 072 MINTED — CLOSES `pdfceGUI` PART 2 IN FULL BAR `Pass 102.1`
+
+**Filed by `pdfce-librarian`, no shell this filing.** Commit hash and
+verification numbers relayed from the dispatching engineer (hard rule
+8's accepted no-shell pattern).
+
+**Shipped:**
+- `Pass 103.2` — `InsertOutcome` gains `source_page_labels_dropped: bool`
+  and `page_labels_stale: bool` (additive, not a further breaking
+  change). 2 new tests (`widget_adoption.rs`), covering all four
+  combinations of {source has labels / none} × {target tree stale /
+  untouched}.
+
+**Decisions made this session:**
+- **One decision minted — 072**: pdfce deliberately does not match
+  Acrobat's measured insert-time page-label behavior (overwriting every
+  inserted page with the immediately-preceding page's label). pdfce
+  continues its own pre-existing computed range and discloses the two
+  ways that can be wrong instead. `ARCHITECTURE.md` §12; ceiling **071 →
+  072**, next free **073**.
+- No standing rule minted this filing (`Pass 103.3`, filed just before
+  this in the same session, minted `R200`).
+- No Pass ID minted.
+
+**Findings + decisions:**
+- **★ The `pdfce-acrobat-librarian` dispatch returned a THIRD hypothesis**
+  neither the original roadmap entry nor the requester's table
+  considered: Acrobat overwrites every inserted page with a static copy
+  of the *preceding* page's label — not carried, not absent, not an
+  incrementing continuation. Sourced from three independent Adobe
+  Community threads (2024–2025), no Adobe-primary source. The threads
+  are complaints about the behavior, which is part of why pdfce declines
+  to match it — that and the operator's standing "parity is a floor"
+  instruction.
+- The dispatch also corrected its own earlier (2026-07-31) claim in
+  `core_ops__merge_combine_files.md`: source labels do **not**
+  concatenate as separate sections on combine. Re-fetched its own cited
+  source and found it did not support the original claim. Not this
+  role's territory to further edit — `pdfce-acrobat-librarian`'s RAG.
+
+**Still in flight:**
+- `Pass 102.1` — the one item left from `pdfceGUI`'s original request
+  family. Unstarted, dependency satisfied.
+- `/EmbeddedFiles` name-tree sort test gap — Backlog, unfixed.
+- `note_gray_black_routing_is_yours.md` unread; `v0.7.0` not tagged.
+
+**For next session:**
+1. `Pass 102.1` is next in this request family.
+2. `/EmbeddedFiles` sort-order test is a cheap standalone pickup.
+
+**Ledger effects:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **105** | **105** (unchanged) |
+| decision records | **071** | **072** |
+| standing rules | **R200** | **R200** (unchanged) |
+| `SESSION_LOG` filings | **194** | **195** |
+| `personal_rag/pdf` lessons | **+3** (194th filing) | **+0** this filing |
+
+**`FEATURES.md` — CHANGED.** The `insert_pages` disclosure row (Planned)
+extended to four fields; the separate "page labels carried on insert"
+Planned row **deleted**, its question now answered and folded into the
+extended row.
+
+**`ARCHITECTURE.md` — CHANGED.** Decision 072 appended to §12; the
+`InsertOutcome` field-list pointer in that entry directs to
+`docs/core-api/02-editing-and-saving.md`'s new `★ Page labels on insert`
+subsection rather than duplicating the field list in `ARCHITECTURE.md`
+itself, per the engineer's existing ownership of `docs/core-api/`.
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing.

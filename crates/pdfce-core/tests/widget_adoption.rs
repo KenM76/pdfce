@@ -664,3 +664,233 @@ cannot justify, and specifically does not copy the anchor page's label onto \
 the inserted range the way Acrobat does"
     );
 }
+
+// ---------------------------------------------------------------------------
+// `adopt_preview` — `Pass 103.4`
+// ---------------------------------------------------------------------------
+
+/// Would catch: the preview and the call disagreeing.
+///
+/// ## The only property that matters, and why it is asserted as an identity
+///
+/// A preview exists so a UI can grey a control instead of failing late. Its
+/// entire value rests on it giving the **same answer** the call will give —
+/// a preview that says "this will work" before a refusal is worse than no
+/// preview, because the shell has already told the operator it is available.
+///
+/// So this does not check the preview against hand-written expectations. It
+/// checks it against `adopt_widget` itself, over **every widget on the page**
+/// — both shapes, named and unnamed, first-adoption and collision — and
+/// requires the two to match exactly in both the `Ok` and the `Err` arm.
+///
+/// They share one body (`adopt_plan`), so this is currently true by
+/// construction. That is the point: this test is what notices if someone
+/// later gives the preview its own implementation.
+#[test]
+fn the_preview_and_the_call_always_agree() {
+    let Some((session, ..)) = orphaned_session() else {
+        eprintln!("SKIP: the external pdfbox corpus is not present");
+        return;
+    };
+    let (named, bare) = widgets(&session);
+    let mut all: Vec<ObjId> = named.clone();
+    all.extend(bare.iter().copied());
+
+    for widget in &all {
+        for name in [None, Some("Chosen"), Some("")] {
+            // A FRESH session per probe: `adopt_widget` mutates, and a
+            // preview taken against a session that has already adopted
+            // something is answering a different question.
+            let Some((mut s, ..)) = orphaned_session() else {
+                return;
+            };
+            let previewed = s.adopt_preview(*widget, name);
+            let called = s.adopt_widget(*widget, name);
+            match (&previewed, &called) {
+                (Ok(p), Ok(c)) => assert_eq!(
+                    p, c,
+                    "widget {widget:?} name={name:?}: preview and call must return the \
+same outcome"
+                ),
+                (Err(p), Err(c)) => assert_eq!(
+                    p.to_string(),
+                    c.to_string(),
+                    "widget {widget:?} name={name:?}: preview and call must refuse for \
+the same reason"
+                ),
+                _ => panic!(
+                    "widget {widget:?} name={name:?}: preview and call disagreed on \
+whether it works at all — preview={previewed:?} call={called:?}"
+                ),
+            }
+        }
+    }
+}
+
+/// Would catch: the preview writing something — **as a regression guard on
+/// the signature, not as a live check**, and the distinction is stated because
+/// a sabotage run is what established it.
+///
+/// Under `&self`, and with no interior mutability anywhere in `EditSession`,
+/// this cannot fail today. Every mutating path — `commit`, `stage_bytes`,
+/// `alloc_number` — needs `&mut self`, so making the preview write is not a
+/// bug this test catches but a **whole-workspace compile error**. The
+/// compiler is the stronger guarantee and it is already in force.
+///
+/// What this defends is the *next* change: a preview given `&mut self` for
+/// some unrelated convenience, or an `EditSession` that acquires a `Cell` or
+/// `RefCell`. Both would restore the possibility this asserts against, and
+/// neither would look like it was touching previews.
+///
+/// Recorded plainly because the first attempt to sabotage it was worthless —
+/// `let _ = &objects;` mutates nothing — and reading "suite stayed green" as
+/// a verdict on the test rather than on the sabotage is a mistake made three
+/// times in one session before it was named.
+#[test]
+fn the_preview_writes_nothing() {
+    let Some((session, ..)) = orphaned_session() else {
+        eprintln!("SKIP: the external pdfbox corpus is not present");
+        return;
+    };
+    let before = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save must succeed")
+        .0;
+
+    let (named, bare) = widgets(&session);
+    for w in named.iter().chain(bare.iter()) {
+        let _ = session.adopt_preview(*w, None);
+        let _ = session.adopt_preview(*w, Some("Whatever"));
+    }
+
+    let after = session
+        .to_incremental_bytes(&SaveOptions::identity())
+        .expect("save must succeed")
+        .0;
+    assert_eq!(
+        before, after,
+        "previewing must not change a single byte of what a save would produce"
+    );
+    assert!(
+        saved_field_names(&session).is_empty(),
+        "and must register nothing"
+    );
+}
+
+/// Would catch: the preview failing to distinguish the two shapes — which is
+/// the entire reason it was asked for.
+///
+/// `pdfceGUI`'s row has to look different for a merged field-widget (one
+/// button, *"Register as `Address`"*) and for a bare kid (a **required** name
+/// box, labelled as *creating* a field rather than restoring one). This pins
+/// that the preview supplies exactly the facts that distinction needs.
+#[test]
+fn the_preview_separates_the_two_widget_shapes_before_any_press() {
+    let Some((session, ..)) = orphaned_session() else {
+        eprintln!("SKIP: the external pdfbox corpus is not present");
+        return;
+    };
+    let (named, bare) = widgets(&session);
+
+    // A merged field-widget: previewable with no name, and it hands back the
+    // name that is in the FILE and not on screen.
+    let out = session
+        .adopt_preview(named[0], None)
+        .expect("a merged field-widget must preview clean");
+    assert_eq!(out.name, "TextField");
+    assert_eq!(out.field_type.as_deref(), Some("Tx"));
+    assert!(!out.renamed);
+
+    // A bare kid: refuses with no name, so the shell knows the box is
+    // REQUIRED before the operator types.
+    assert!(
+        matches!(
+            session.adopt_preview(bare[0], None),
+            Err(EditError::WidgetHasNoFieldIdentity { .. })
+        ),
+        "a bare kid must refuse in the preview, not only in the call"
+    );
+    // And with a name it previews clean, so the shell can label the row as
+    // creating rather than restoring.
+    let out = session
+        .adopt_preview(bare[0], Some("RadioA"))
+        .expect("a named bare kid must preview clean");
+    assert_eq!(out.name, "RadioA");
+    assert!(out.renamed);
+}
+
+/// Would catch: `adopt_preview(..).err()` not being usable as the refusal
+/// predicate the request asked for.
+///
+/// `adopt_refusal(..) -> Option<EditError>` was requested as ask 1 and
+/// deliberately not shipped, on the grounds that the preview subsumes it. That
+/// is only true if the substitution actually works, so it is tested rather
+/// than asserted in a doc comment — the substitution is stated, and here it is
+/// measured.
+#[test]
+fn the_preview_doubles_as_the_refusal_predicate() {
+    let Some((mut session, ..)) = orphaned_session() else {
+        eprintln!("SKIP: the external pdfbox corpus is not present");
+        return;
+    };
+    let (named, bare) = widgets(&session);
+
+    assert!(session.adopt_preview(named[0], None).err().is_none());
+    assert!(matches!(
+        session.adopt_preview(bare[0], None).err(),
+        Some(EditError::WidgetHasNoFieldIdentity { .. })
+    ));
+
+    // And it tracks state: once a name is taken, the predicate says so.
+    session.adopt_widget(named[0], None).expect("adopts");
+    assert!(matches!(
+        session.adopt_preview(named[1], Some("TextField")).err(),
+        Some(EditError::FieldNameTaken { .. })
+    ));
+    assert!(matches!(
+        session.adopt_preview(named[0], None).err(),
+        Some(EditError::WidgetAlreadyOwned { .. })
+    ));
+}
+
+/// Would catch: `source_outline_dropped` reporting the wrong document's
+/// outline, or being conflated with the page-label flag.
+///
+/// Requested as pure symmetry with `source_page_labels_dropped`, for the same
+/// reason: the shell's insert sentence said *"Bookmarks and page labels from
+/// that file did not come across"* unconditionally, and on a CAD drawing with
+/// neither that is a paragraph about two things that never existed.
+///
+/// All four combinations, because a flag that reads the wrong catalog passes
+/// any test where both documents happen to agree.
+#[test]
+fn the_source_outline_flag_is_independent_of_the_page_label_one() {
+    let outlined = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/synthetic/outline/basic-tree.pdf"
+    );
+    let bare = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/synthetic/outline/no-outline.pdf"
+    );
+    let bytes = |p: &str| std::fs::read(p).expect("fixture");
+
+    // source has an outline, target does not -> reported
+    let (_, out) = insert(bytes(bare), bytes(outlined));
+    assert!(
+        out.source_outline_dropped,
+        "the source's bookmarks are gone"
+    );
+    assert!(
+        !out.source_page_labels_dropped,
+        "neither fixture has page labels — the two flags must not move together"
+    );
+
+    // source has no outline -> not reported, even though the TARGET has one
+    let (_, out) = insert(bytes(outlined), bytes(bare));
+    assert!(
+        !out.source_outline_dropped,
+        "nothing was dropped; the target's own outline is untouched and is not \
+this flag's subject"
+    );
+}

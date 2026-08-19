@@ -96,6 +96,298 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+> ### ★★★★★ THE 195TH FILING — `Pass 103.2` SHIPS, CLOSING THE `pdfceGUI` REQUEST'S PART 2 IN FULL — ACROBAT MEASURED AND POINTEDLY NOT MATCHED, DECISION 072 MINTED — no shell this filing
+>
+> **This filing has no shell.** Hard rule 8's no-shell branch applies:
+> the commit hash `3ed1270` and its verification numbers are relayed
+> from the dispatching engineer, who states both `Pass 103.3`'s
+> (`6dd37e8`) and this Pass's hash were confirmed present on `main` via
+> `git log` immediately after committing — the accepted no-shell pattern
+> (hard rule 8; this role's own memory: *"Dispatch should carry git
+> evidence when this librarian has no shell"*).
+>
+> **The substance of this filing is the Acrobat finding, not the code.**
+> `pdfce-acrobat-librarian`'s dispatch returned with a THIRD hypothesis
+> neither the original roadmap entry nor the requester's own table
+> considered: Acrobat does not carry the source's labels and does not
+> leave inserted pages unlabelled — it **overwrites every inserted page**
+> with a single static copy of the label on the page immediately
+> preceding the insertion point, sourced from three independent Adobe
+> Community threads (2024–2025), not an Adobe primary source. **pdfce
+> deliberately does not reproduce this** — the threads it is sourced from
+> are complaints about the behavior, and the operator's standing
+> instruction is that parity with Acrobat is a floor, not a target
+> (`pdfce-librarian`'s own memory record). Filed as **decision 072**,
+> below and in `ARCHITECTURE.md` §12, on the judgement that a
+> behavioral-policy divergence from a parity reference is the kind of
+> thing this project has minted a decision record for before (024, 059).
+>
+> **Both of part 2's remaining asks are now shipped.** `Pass 103.0`
+> (outlines), `103.1` (widget adoption), `103.3` (named destinations,
+> filed immediately below this box) and `103.2` (this entry) close every
+> ask in `pdfceGUI`'s
+> `request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md`.
+> **`Pass 102.1`** (carrying field definitions across `insert_pages`'s
+> copy boundary) remains the one outstanding item from the same request
+> family — unstarted, dependency on `Pass 103.1` already satisfied per
+> the 192nd filing.
+
+### Pass 103.2 — commit `3ed1270` (relayed, no shell this filing) — **PAGE LABELS ON INSERT: A MEASURED, DELIBERATE DIVERGENCE FROM ACROBAT** — filed 2026-08-19 (hundred-and-ninety-fifth filing)
+
+**Requested by `pdfceGUI`**, part 2 ask 3 of the insert-pages request —
+*"'leave them off and report a count' may well be the correct answer,
+exactly as staleness was. What we are asking for is that the question
+gets an answer rather than falling between two verbs."*
+
+**★ The Acrobat finding invalidates the roadmap entry's own framing.**
+The entry (filed 2026-08-18, hundred-and-eighty-fourth filing) offered
+two hypotheses — labels carried across, or labels absent. The
+`pdfce-acrobat-librarian` dispatch's returned addendum to
+`Acrobat_Features\core_ops__page_labels_and_bates_interaction.md`
+establishes a **third**: Acrobat **actively overwrites** every inserted
+page with a static copy of the label displayed on the page immediately
+**preceding** the insertion point — not the source's label, not an
+incrementing continuation, the same single string on all of them.
+Sourced example: a twelve-page chapter labelled `10-1`…`10-12`, inserted
+after a page labelled `9-45`, comes out of Acrobat labelled `9-45` on all
+twelve pages. Three independent Adobe Community threads (2024–2025); no
+Adobe-primary source found.
+
+**pdfce deliberately does not match this.** It is a wrong label on every
+inserted page, written silently, and the threads it is sourced from are
+complaints about it, not descriptions of an intended feature. pdfce
+writes nothing to `/PageLabels` on an `EditSession::insert_pages` call, so
+inserted pages continue whatever range already covered that position —
+what §12.4.2's per-page computation gives on its own, unmodified. The
+labels are not carried across either, for the reason `pageops::assemble`
+already gives for its own, structurally different, `/PageLabels`
+carryover policy: a label tree describes *physical page positions*, so
+carrying one onto a subset inserted at an arbitrary offset yields labels
+confidently wrong about pages that are not in the file. **Full reasoning
+recorded as decision 072**, `ARCHITECTURE.md` §12 (this filing).
+
+**What shipped.** Two additive fields on `InsertOutcome`
+(`crates/pdfce-core/src/edit.rs`) — **not** a further breaking change to
+the struct `pdfceGUI` already wired against `Pass 102.0`/`103.1`:
+
+- `source_page_labels_dropped: bool` — the source document had its own
+  `/PageLabels` tree covering the inserted pages, and it had nowhere to
+  go.
+- `page_labels_stale: bool` — the target's own pre-existing tree is now
+  numerically stale after the structural edit (the pre-existing
+  `edit.rs:16339` ruling, restated on this outcome rather than only on
+  the sibling `DanglingReport`, because it is the adjacent half of the
+  same disclosure and a caller reading `InsertOutcome` alone should not
+  have to know a second report type exists to get the full picture).
+
+**Kept as two fields rather than merged into one**, because the
+remedies differ: a stale tree wants renumbering, a dropped one wants
+creating, and a single combined flag would name neither and would force
+every caller to re-derive which case it was in from other state.
+
+**Tests.** Two new tests in `crates/pdfce-core/tests/widget_adoption.rs`,
+both over byte-authored labelled/unlabelled fixtures, covering all four
+combinations of {source has labels / source has none} × {target tree
+already stale / target tree untouched}.
+
+**Test results (relayed, no shell this filing).** **3,990 workspace
+tests pass, 0 fail** — up 2 from `Pass 103.3`'s 3,988 (the 2 new tests;
+per hard rule 10, total filed beside the per-item form that produced
+it). **Sabotage battery: 4 injected defects, 4 caught** — including one
+deliberately shaped as *"acquire Acrobat's own behavior and write the
+anchor label onto the inserted range,"* caught by the byte-identical-tree
+assertion. **Invariants:** `cargo tree -p pdfce-core` / `-p pdfce-render`
+report zero GUI/network crates. **Gates clean:** `cargo fmt --all`,
+`cargo clippy --workspace --all-targets -D warnings`,
+`tools/check-ui-strings.sh`, `tools/check-string-gaps.sh`,
+`tools/check-ledger-numbers.py`, `tools/check-core-api-verbs.py`.
+
+**Docs.** A `★ Page labels on insert` subsection in
+`docs/core-api/02-editing-and-saving.md`, immediately before §1.21 (the
+named-destinations section `Pass 103.3` added). No verb-count change —
+no new verb, an outcome-struct extension only.
+
+**`FEATURES.md` rows affected** — edited in the same filing, see below:
+the `insert_pages` disclosure row (*Planned → True in-place page
+insertion*) is extended to describe all **four** outcome fields, not two;
+the separate *Planned* row that asked whether source labels are carried
+on insert is **deleted**, its open question now answered and folded into
+the extended row rather than left as a duplicate.
+
+**Also reported by the `pdfce-acrobat-librarian` dispatch, not this
+Pass's own work, carried here for the record:** the dispatch corrected a
+wrong claim it found from the 2026-07-31 session in its own
+`core_ops__merge_combine_files.md` — source page labels do **not**
+concatenate as separate label-tree sections on combine; the dispatch
+re-fetched that file's own cited source and found the source did not
+support the earlier claim. It also marked its remaining gaps explicitly
+rather than filling them plausibly: `source-has-no-labels` is inferred,
+not tested; `target-with-no-tree` is unverified; Organize-Pages
+drag-and-drop is untested. And it rejected a misleading WebSearch echo
+as evidence rather than recording it as fact — not itemised further
+here, since that RAG file is `pdfce-acrobat-librarian`'s own territory
+(project rule 12), not this role's to re-litigate.
+
+**Still open, carried forward:** `Pass 102.1` (carry field definitions
+across the `insert_pages` copy boundary — scoping input is `Pass
+103.1`'s finding (A)), `note_gray_black_routing_is_yours.md` (13.5 KB,
+iccce channel) still unread, `v0.7.0` bumped but not tagged, the
+`/EmbeddedFiles` name-tree sort test gap (filed to *Backlog* this
+filing, see below).
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this Pass.
+
+**Ledger effects.** No new Pass family (`103` already minted). **One
+decision minted — 072** (page labels on insert, above and
+`ARCHITECTURE.md` §12); ceiling **071 → 072**, next free **073**. No
+standing rule minted this Pass (`Pass 103.3`, filed immediately below,
+mints `R200`).
+
+> ### ★★★★★ THE 194TH FILING — `Pass 103.3` SHIPS NAMED DESTINATIONS, VERB 123 OF 123 — A SECOND INSTANCE OF A READER-AS-ORACLE BLIND SPOT PROMOTES TO STANDING RULE `R200` — no shell this filing
+>
+> **This filing has no shell.** Commit hash `6dd37e8` and its
+> verification numbers are relayed from the dispatching engineer, who
+> states `git log` confirmed the commit present on `main` immediately
+> after committing (hard rule 8's accepted no-shell pattern).
+>
+> **`Pass 103.3` is unblocked and shipped first**, per the 193rd filing's
+> own note that it was next and that `Pass 103.2` remained blocked on the
+> `pdfce-acrobat-librarian` dispatch. `Pass 103.2` (filed above this box,
+> in the 195th filing, once the dispatch returned) is therefore the
+> *later* commit even though it is filed *above* this entry — Shipped
+> stays reverse-chronological by filing/ship order, and `Pass 103.2`
+> shipped after `Pass 103.3`.
+
+### Pass 103.3 — commit `6dd37e8` (relayed, no shell this filing) — **NAMED DESTINATIONS: `EditSession::add_named_destination`, AND `add_outline_item` ACCEPTS `Destination::Named` — VERB 123 OF 123** — filed 2026-08-19 (hundred-and-ninety-fourth filing)
+
+**Requested by `pdfceGUI`**, part 2 ask 4 of the insert-pages request —
+the fourth document-level structure, and the one that makes `Pass 103.0`
+worth having: an outline item copied from a source whose destination is a
+named destination points at a name the target does not define.
+
+**What shipped.**
+`EditSession::add_named_destination(name: &[u8], destination:
+outline::Destination) -> Result<(), EditError>` — defines a named
+destination in the catalog's `/Names` → `/Dests` name tree (ISO 32000-1
+§12.3.2.3, §7.9.6), creating the tree if absent. One undo entry. **Verb
+123 of 123.** `add_outline_item` (`Pass 103.0`) now **accepts**
+`Destination::Named` — it refused it by name as of `Pass 103.0`'s own
+ship.
+
+New public `DestinationResolver::lookup(&self, key: &[u8]) -> Option<&
+Object>` in `pageops::references` — the outline module's own doc
+comments had advertised this method for some time; it did not exist
+until this Pass.
+
+Three new `EditError` variants: `NamedDestinationTaken`,
+`NamedDestinationNotFound`, `NameTreeUnsupported`. New
+`CommandKind::AddNamedDestination`.
+
+**`pdfce-cli`**: new `add-named-dest` subcommand, and `add-bookmark
+--dest-name` (clap-enforced mutually exclusive with `--page`/`--top`).
+
+**Tests.** 7 new tests in `crates/pdfce-core/tests/outline_authoring.rs`
+(18 total in that file).
+
+**Test results (relayed, no shell this filing).** **3,988 workspace
+tests pass, 0 fail** — up 7 from `Pass 103.2`'s (this Pass shipped
+first; the running total after this Pass and before `103.2`'s 2 tests
+is 3,988; hard rule 10's total-beside-per-item form). **9 injected
+sabotages, 9 caught.** **Invariants:** `cargo tree -p pdfce-core` / `-p
+pdfce-render` — zero GUI and zero network deps. **All six gates clean.**
+**Round-trip verified empirically:** a real `--verify-undo` run reported
+`undo_identical=1`, and the `--verify-undo` and plain outputs are
+byte-identical.
+
+**Docs.** `docs/core-api/02-editing-and-saving.md` §1.21 "Named
+destinations (1)"; sections renumbered again (ce dimensions → 1.22,
+Fonts → 1.23, Images → 1.24, Outcome structs → 1.25); verb count 122 →
+123 everywhere plus `index.md`; stated `edit.rs` size updated.
+
+**`FEATURES.md` rows affected** — edited in the same filing, see below:
+a new *Implemented* row for **named destinations (authoring)** —
+`[x]` core, `[x]` cli, `[ ]` gui; the pre-existing *Planned* "Bookmark
+editing" row's mention of `Pass 103.3` is retired, since the capability
+it named has shipped.
+
+#### Findings
+
+**(A) — RAG'd**,
+`C:\personal_rag\pdf\lesson_20260819_sabotage_anchor_must_be_verified_unique_before_a_green_result_means_anything.md`.
+The sabotage battery patched the FIRST occurrence of two idioms
+(`entries.sort_by`/`Names` insert) shared byte-for-byte between the
+pre-existing `/EmbeddedFiles` writer and the new `/Dests` writer, so it
+silently sabotaged **attachments** while the **destinations** suite ran
+against it. Three of four reported "survivors" were false alarms; the
+correction surfaced one real, separate gap — `/EmbeddedFiles` key
+ordering has no dedicated test — filed to *Backlog* this filing, not
+fixed. The battery now asserts anchor uniqueness before treating a
+mutation's result as meaningful.
+
+**(B) Filed to *Backlog*, not fixed this Pass:** the `/EmbeddedFiles`
+name-tree sort gap finding (A) surfaced. See *Backlog*, new bullet.
+
+**(C) `--verify-undo` leaves the session UNDONE**, and any figure read
+after `save_edited` is pre-edit state; `save_edited` runs `while
+session.undo().is_some() {}` and never redoes. `add-named-dest` printed
+`names=0` immediately after successfully defining a destination —
+exactly what a document with none would print, plausible rather than
+obviously broken. Found by running the command with and without the flag
+and comparing the two lines (R174). Fixed by reading before the save,
+and documented on `save_edited` itself so the next command reporting a
+session-derived summary figure meets the warning. Not RAG'd — project-
+internal (`save_edited`'s own contract), same species R174 already
+covers.
+
+**(D) — RAG'd, and PROMOTED TO STANDING RULE `R200`**,
+`C:\personal_rag\pdf\lesson_20260819_named_destination_reader_normalizes_away_baked_vs_deferred_resolution.md`.
+The reader cannot see whether a named destination was baked: `read_outline`
+resolves a defined name and reports `Destination::Page`; it reports
+`Destination::Named` only when the name fails to resolve. So a writer
+that resolves the name at author time and bakes `[page /Fit]` in, and a
+correct writer that stores the name and defers resolution, produce
+**identical reader output** — while baking defeats exactly what
+§12.3.2.3 exists for, and goes wrong only after the *next* page reorder.
+Pinned by reading the raw `/Dest`. **Second instance this session of the
+same shape** (the first: `add_outline_item`'s `/Prev`-blind reader,
+`Pass 103.0`) — two independent instances cleared this project's own
+two-occurrence promotion bar. **`R200`, minted this filing**: an
+independent reader used as a test oracle only proves what it actually
+touches; a field it never visits and a field it resolves/normalises away
+are the same failure. See *Standing rules*.
+
+**(E) — RAG'd**,
+`C:\personal_rag\pdf\lesson_20260819_collision_check_must_ask_membership_not_resolver_reachability.md`.
+Collision checks must ask membership, not reachability:
+`resolve_destination` folds undefined / dangling / remote into `None`,
+so a writer reusing it for a "does this name exist?" check would
+silently overwrite a **defined but dangling** key and re-aim every
+existing link naming it at a page nobody chose. Pinned with a
+byte-authored fixture defining `ghost` as `[null /Fit]`. The first
+attempt at that fixture (`[99 0 R /Fit]` with object 99 absent) did not
+reproduce it: `resolve_destination` returns element 0 as a reference
+without checking the object exists, so a dangling *reference* still
+answers `Some`. Only a non-reference element 0 makes it answer `None` —
+and that shape is not contrived, it is what `pageops::assemble`'s page
+barrier already produces when a destination points outside the
+extracted/merged range.
+
+**Still open, carried forward:** `Pass 102.1` (scoping input: finding
+(A) above and `Pass 103.1`'s own finding (A)), `Pass 103.2` (filed
+immediately above, in the 195th filing, once unblocked),
+`note_gray_black_routing_is_yours.md` still unread, `v0.7.0` bumped but
+not tagged.
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this Pass.
+
+**Ledger effects.** No new Pass family (`103` already minted). No
+decision minted this Pass (`Pass 103.2`, filed above in the same
+195th filing, mints decision 072). **One standing rule minted — `R200`**
+(above and *Standing rules*, findings (D)); ceiling **`R199` → `R200`**,
+next free **`R201`**.
+
 > ### ★★★★★ THE 193RD FILING — `Pass 103.1`'S OWED HASH FILLED (`afa53d5`) WITH FULL VERIFICATION NUMBERS; OWED ITEM 35 CLOSED, VERIFIED DIRECTLY AGAINST `docs/NEXT_SESSION.md`; A BENIGN GIT-WORKFLOW HAZARD FLAGGED, NOT MINTED (SINGLE OCCURRENCE)
 >
 > **This filing has partial shell coverage, relayed not independent.** The
@@ -53630,65 +53922,6 @@ parallel one).
 
 ---
 
-### Pass 103.2 — **PAGE LABELS FOR INSERTED PAGES — a DIFFERENT QUESTION from `edit.rs:16339`'s ruling, and the requester says so first** — filed 2026-08-18 (hundred-and-eighty-fourth filing) — **UNSTARTED · NEEDS AN `Acrobat_Features` DISPATCH BEFORE IT IS SCOPED**
-
-**★ Read the distinction before answering this, because the adjacent
-ruling looks like it settles it and does not.**
-
-- **Already ruled, NOT being revisited** (`edit.rs:16339`): the
-  **target's own** label tree goes numerically stale after a structural
-  edit. `core_ops__page_labels_and_bates_interaction.md` records that
-  Acrobat does not adjust an existing label tree for any structural
-  operation; **pdfce matches that baseline AND says so** —
-  `DanglingReport::page_labels_stale` — which is the parity-plus half.
-  Sourced, decided, right.
-- **OPEN, and this Pass:** when pages arrive **from another document**,
-  do the labels those pages carried come with them? A source labelled
-  `A-1 … A-12` inserted into a target contributes twelve pages whose
-  labels **currently vanish — not stale, ABSENT.**
-
-**Neither project has measured what Acrobat does here.** The requester
-says so explicitly and does not assume carry-across is right: *"'leave
-them off and report a count' may well be the correct answer, exactly as
-staleness was. What we are asking for is that the question gets an answer
-rather than falling between two verbs."*
-
-**Action before scoping (project rule 12):** dispatch
-`pdfce-acrobat-librarian` and check whether
-`core_ops__page_labels_and_bates_interaction.md` covers **Insert** as
-well as delete/reorder. If it does, the answer is already in hand and
-this Pass is a day's work; if it does not, that RAG file needs the
-Insert row before acceptance criteria exist.
-
-**Filed under `R151`'s 2026-08-18 qualifier, not deferred by `R151`** —
-see that rule's amendment. This is a missing member of a shipped feature,
-not a verb with no caller.
-
----
-
-### Pass 103.3 — **NAMED DESTINATIONS, so a carried bookmark RESOLVES** — filed 2026-08-18 (hundred-and-eighty-fourth filing) — **UNSTARTED**
-
-The fourth document-level structure, and the one that makes `Pass 103.0`
-worth having: **an outline item copied from a source whose destination is
-a named destination points at a name the target does not define.** The
-bookmark exists, is visible, and goes nowhere — the same *visible control,
-silently inert* shape as `Pass 102.0`'s orphaned widgets, one structure
-along.
-
-**Not measured by either project.** The requester's own table says
-*"presumed"* rather than pretending, and their ask is **for the question
-to be answered**, not for a particular answer. **The first deliverable is
-therefore a measurement, not a verb:** does `insert_pages` currently
-carry, drop, or corrupt a `/Dests` reference reachable from an inserted
-page's annotations?
-
-**Also filed under `R151`'s 2026-08-18 qualifier.** Their draft declined
-to ask for this and their operator overruled it: *"not adding such things
-just because they weren't explicitly asked for i think is how we end up
-with partially finished features."*
-
----
-
 ### ★★★★★ THE GHENT STANDING BOARD — **26 pass / 14 FAIL / 11 UNRESOLVED / 0 render errors, of 51 patches (51.0 % / 27.5 % / 21.6 %)** — ★★ **FIGURE CORRECTED TWICE OVER 2026-08-19 (189th filing): once by a SHIP and once because the PREVIOUS FIGURE WAS ALREADY STALE** — the ONE architectural item that unblocks the largest cluster — opened 2026-08-18 (hundred-and-sixty-sixth filing)
 
 **This box exists so the corpus figure has ONE home that is not a
@@ -65595,6 +65828,21 @@ nothing gets forgotten, not as a commitment to build in this order.
   its row's absence at that time rather than trusting this snapshot — every
   `UNESTABLISHED` above is an invitation to check, not a finding.
 
+- **`/EmbeddedFiles` name-tree key ordering has no dedicated test — flagged
+  by `Pass 103.3`'s sabotage battery, filed 2026-08-19 (hundred-and-
+  ninety-fourth filing), not fixed this Pass.** `EditSession`'s
+  attachments writer (`crates/pdfce-core/src/edit.rs`) sorts its
+  `/EmbeddedFiles` name-tree entries the same way the new `/Dests` writer
+  does (`entries.sort_by(|a, b| a.0.cmp(&b.0))`, per §7.9.6's requirement
+  that a name tree's keys be sorted), but a sabotage battery aimed at
+  that exact line landed on the `/Dests` copy instead (see
+  `C:\personal_rag\pdf\lesson_20260819_sabotage_anchor_must_be_verified_unique_before_a_green_result_means_anything.md`)
+  and, correcting the aim, the attachments sort turned out to be
+  **genuinely unmeasured** — the whole workspace suite stays green with
+  it broken. Scope: one test asserting `/EmbeddedFiles` keys come back in
+  sorted order after inserting attachments out of order; cheap, no new
+  verb, no acceptance-criteria research needed.
+
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
 **NEW this filing (hundred-and-eighty-second filing, 2026-08-18) — both
@@ -76423,6 +76671,50 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   mechanically decidable, and `check-commits-filed.py` already produces
   the right failure one step later, loudly, by going red.
   **Ceiling moves `R197` → `R198`; next free `R199`.** `R193`/`R194`
+  remain claimed by their existing declined-but-intact proposals.
+
+- **R200 — AN INDEPENDENT READER USED AS A TEST ORACLE ONLY PROVES WHAT IT
+  ACTUALLY TOUCHES. A FIELD IT NEVER VISITS, AND A FIELD IT RESOLVES OR
+  NORMALISES AWAY, ARE THE SAME FAILURE — ENUMERATE WHAT THE READER
+  INSPECTS BEFORE TRUSTING A GREEN RUN AGAINST IT (2026-08-19;
+  librarian-minted, hundred-and-ninety-fourth filing).**
+  **THE WARRANT — two instances, same day, same feature family, both in
+  `outline_authoring.rs`:**
+
+  | writer defect | oracle used | why the oracle could not see it |
+  |---|---|---|
+  | `add_outline_item` dropped the `/Prev` write | `outline::read_outline`, walking `/First`→`/Next` only | the reader never dereferences `/Prev` at all — a field it never visits |
+  | `add_outline_item`/`add_named_destination` could bake a resolved `[page /Fit]` array instead of storing the name, defeating §12.3.2.3 | same reader, resolving a named `/Dest` for display | the reader **resolves** the name and reports `Destination::Page` either way — a field it normalises away |
+
+  **★ THE MECHANISM, and it is why these are one rule and not two.** Both
+  failures have the identical shape at one remove: ten tests (instance 1)
+  and every test written against `read_outline` (instance 2) were **not
+  weak** — they correctly asserted what the reader reported. **The
+  reader was the wrong witness for the property under test.** A field a
+  reader never visits and a field a reader resolves/normalises before
+  handing it back are indistinguishable from the assertion's point of
+  view: both are unmeasured, and a passing test proves nothing about
+  either.
+  **SCOPE — named rather than left to taste.** Before trusting a test
+  written *through* an independent reader (not against raw bytes/objects
+  directly) as proof a writer did the right thing, enumerate, in the
+  test or the finding that motivates it, exactly which fields the reader
+  inspects and in which form (raw vs. resolved). If the property under
+  test is a field the reader ignores, resolves, or otherwise transforms
+  before returning it, that reader is not evidence for that property —
+  add a raw-object assertion instead.
+  **CHECKABLE AFTER THE FACT, and no gate is proposed** — same warrant as
+  `R199`: whether a given reader touches a given field in raw form is a
+  fact about that reader's own implementation, not something a green
+  test run can disclose about itself. A reviewer checks by reading the
+  reader's own source for the field in question, not by re-running the
+  suite.
+  **RAG'd instances:**
+  `C:\personal_rag\pdf\lesson_20260819_outline_reader_walking_first_next_only_is_blind_to_prev_writes.md`
+  (first) and
+  `C:\personal_rag\pdf\lesson_20260819_named_destination_reader_normalizes_away_baked_vs_deferred_resolution.md`
+  (second, promoting to this rule).
+  **Ceiling moves `R199` → `R200`; next free `R201`.** `R193`/`R194`
   remain claimed by their existing declined-but-intact proposals.
 
 - **R199 — A RECORDED BLOCKER IS A DATED READING, NOT A STANDING FACT. A

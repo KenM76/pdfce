@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26,742 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 123 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (26848 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 124 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 123 public `EditSession` methods
+## 1. Verb index — all 124 public `EditSession` methods
 
-**Count: 123.** Established by brace-matched extraction of the four
+**Count: 124.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -576,6 +576,54 @@ no name for `list-fields` to show. Note that **`pdfce-cli insert-pages` does
 not produce orphans**: it calls `pageops::assemble`, which merges `/AcroForm`
 (and reports `fields_renamed=` / `fields_dropped=`). Only
 `EditSession::insert_pages` orphans.
+#### ★ `adopt_preview` — ask before pressing (`Pass 103.4`)
+
+| I want to… | Call |
+|---|---|
+| Ask what adoption would do | `adopt_preview(&self, widget: ObjId, name: Option<&str>) -> Result<AdoptOutcome, EditError>` |
+
+Same signature as `adopt_widget` with `&self`. Writes nothing, decides
+nothing, and **shares the verb's entire body** (`adopt_plan`) rather than
+re-implementing its guards — so "the preview said it would work and the call
+refused" is not a state this code can reach.
+
+Requested by `pdfceGUI` because the two widget shapes are **indistinguishable
+from the outside**: one adopts losslessly and *recovers the field exactly*,
+the other refuses and can only be turned into a **new, empty, typeless field
+that is not the control that was lost**. Without this, a UI finds out by
+pressing — a control whose applicability is only knowable after you use it.
+
+Two of `AdoptOutcome`'s fields are inputs to the decision rather than
+confirmations of it:
+
+| field | why it belongs before the press |
+|---|---|
+| `name` | it is **in the file, not on screen**. *"Register as `Address`"* is a decision; *"Register"* is a guess |
+| `field_type: None` | registration will **succeed and the field still will not be fillable** — `/FT` is inheritable and a top-level field has no ancestor left. Saying so afterwards tells an operator their successful action did not do what they wanted |
+
+**It subsumes a refusal predicate.** A narrower
+`adopt_refusal(..) -> Option<EditError>` was requested, matching
+`fill_refusal` and `rename_refusal`. It was not shipped: `adopt_preview(w,
+n).err()` *is* that predicate with more information in it, and two entry
+points for one question is a cost paid forever. The substitution is tested,
+not assumed.
+
+CLI: `pdfce-cli adopt-widget --dry-run` (mutually exclusive with `--output`,
+which becomes optional).
+
+#### `source_outline_dropped` — the fourth insert disclosure
+
+`InsertOutcome` gained one more additive `bool`: the source carried a
+document outline whose bookmarks did not come across. Pure symmetry with
+`source_page_labels_dropped`, requested for the same reason — the shell's
+insert sentence named bookmarks and page labels **unconditionally**, and on a
+CAD drawing with neither that is a paragraph about two things that never
+existed, which is how an operator learns to stop reading it.
+
+`/Outlines` is a catalog entry, unreachable from any page, so the copy never
+sees it — the bookmarks are not lost in transit, they were never in the set
+being copied. Carrying them means reading the source outline and replaying it
+through `add_outline_item`, which is what `Pass 103.0` exists for.
 #### ★ Page labels on insert — `Pass 103.2`, a measured divergence from Acrobat
 
 `InsertOutcome` gained two more fields (both additive, `#[non_exhaustive]`):

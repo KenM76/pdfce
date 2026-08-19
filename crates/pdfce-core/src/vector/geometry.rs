@@ -403,11 +403,56 @@ impl Rgb {
         Self::from_triple(crate::color::rgb_to_srgb(r, g, b))
     }
 
-    /// From DeviceCMYK components (`k`/`K`) — §8.6.4.4, via the calibrated
-    /// conversion in [`crate::color::cmyk_to_srgb`].
+    /// From DeviceCMYK components (`k`/`K`) — §8.6.4.4, under the **default**
+    /// [`CmykIntent`](crate::settings::CmykIntent).
+    ///
+    /// # ★ Why the default and not the raw table
+    ///
+    /// This called [`crate::color::cmyk_to_srgb`] directly, which is the
+    /// **calibrated** table unconditionally — and the renderer does not. Every
+    /// paint path goes through `pdfce_render::gstate::Rgb::from_cmyk(intent,
+    /// …)`, honouring the operator's chosen intent, whose shipped default is
+    /// [`CmykIntent::NeutralBlack`](crate::settings::CmykIntent::NeutralBlack).
+    ///
+    /// The two disagree by up to **38/255** across the grey ramp, and worst
+    /// exactly where this project's document population lives: pure-K line
+    /// art. `0 0 0 1 K` decomposed to `#231F20` while the canvas painted it
+    /// `#000000` — the operator ruling behind `NeutralBlack` is precisely
+    /// that CAD line art must be true black, and this path was not honouring
+    /// it. So "what colour is this line?" and "what colour is this line
+    /// painted?" returned different answers for the commonest case in the
+    /// corpus.
+    ///
+    /// # ★ What this does NOT fix, stated so it is not read as complete
+    ///
+    /// It closes the gap for the **default** intent, which is the shipped
+    /// behaviour and the operator-visible case. A caller who has *changed*
+    /// the intent still gets a decomposition that disagrees with their own
+    /// renderer, because [`crate::vector::decompose`] takes no settings
+    /// parameter at all — threading one through would change three public
+    /// entry points and 57 call sites, which is its own Pass rather than a
+    /// drive-by. [`Self::from_cmyk_with`] is the door for callers who have an
+    /// intent in hand.
     #[must_use]
     pub fn from_cmyk(c: f32, m: f32, y: f32, k: f32) -> Self {
-        Self::from_triple(crate::color::cmyk_to_srgb(c, m, y, k))
+        Self::from_cmyk_with(crate::settings::CmykIntent::default(), c, m, y, k)
+    }
+
+    /// From DeviceCMYK components under an explicit
+    /// [`CmykIntent`](crate::settings::CmykIntent).
+    ///
+    /// The mirror of `pdfce_render::gstate::Rgb::from_cmyk`, so a caller
+    /// holding a render policy can decompose to the same colours it will
+    /// paint. See [`Self::from_cmyk`] for why the two ever differed.
+    #[must_use]
+    pub fn from_cmyk_with(
+        intent: crate::settings::CmykIntent,
+        c: f32,
+        m: f32,
+        y: f32,
+        k: f32,
+    ) -> Self {
+        Self::from_triple(crate::color::cmyk_to_srgb_with(intent, c, m, y, k))
     }
 }
 

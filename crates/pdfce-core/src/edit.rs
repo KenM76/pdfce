@@ -2901,6 +2901,25 @@ pub struct InsertOutcome {
     /// carries that barrier, dropping the key is the safe behaviour and
     /// this counter is the honesty owed for it.
     pub orphaned_widgets_unrecoverable: usize,
+    /// Whether the SOURCE carried a document outline (§12.3.3) whose
+    /// bookmarks did **not** come across with the pages.
+    ///
+    /// Pure symmetry with [`Self::source_page_labels_dropped`], and requested
+    /// for the same reason that one was: `pdfceGUI`'s insert disclosure said
+    /// *"Bookmarks and page labels from that file did not come across"*
+    /// **unconditionally**, on every insert. On a CAD drawing with neither,
+    /// that is a paragraph about two things that never existed — which is how
+    /// an operator learns to stop reading the sentence. The clause was
+    /// unconditional only because nothing reported the fact.
+    ///
+    /// `/Outlines` is a catalog entry, so it is not reachable from any page
+    /// and the copy never sees it. The bookmarks are not lost in transit;
+    /// they were never in the set of objects being copied. That is why this
+    /// is a disclosure rather than a bug, and why carrying them needs a
+    /// shell that reads the source outline and replays it through
+    /// [`Self::add_outline_item`] — which is exactly what `Pass 103.0` was
+    /// built for.
+    pub source_outline_dropped: bool,
     /// Whether the SOURCE carried a `/PageLabels` number tree (§12.4.2)
     /// whose labels did **not** come across with the pages.
     ///
@@ -11649,7 +11668,12 @@ impl EditSession {
     /// appearance pdfce can regenerate (its `/AP` carries its own resources)
     /// but which another viewer re-generating from `/DA` cannot resolve —
     /// a document that works here and not elsewhere.
-    fn acroform_register_write(&mut self, field_id: ObjId) -> Result<ObjectWrite, EditError> {
+    // `&self`, not `&mut self`. It allocates no object number and stages no
+    // bytes — it only reads the catalog and returns a write for the caller to
+    // commit. That is what lets `adopt_preview` share `adopt_plan` with
+    // `adopt_widget` outright instead of duplicating sixty lines of guards,
+    // which is the cost `pdfceGUI` asked about when requesting the preview.
+    fn acroform_register_write(&self, field_id: ObjId) -> Result<ObjectWrite, EditError> {
         let graph = self.graph();
         let catalog_id = graph.catalog_id().ok_or(EditError::NotADictionary {
             id: ObjId::new(0, 0),
@@ -17656,6 +17680,10 @@ impl EditSession {
         // Both are read from the catalogs rather than inferred from the
         // page count, because "has a label tree" is the only thing that
         // makes either statement true.
+        let source_outline_dropped = source
+            .graph()
+            .catalog_dict()
+            .is_some_and(|c| c.contains_key(b"Outlines"));
         let source_page_labels_dropped = source
             .graph()
             .catalog_dict()
@@ -17683,6 +17711,7 @@ impl EditSession {
             pages_inserted: added,
             orphaned_widgets,
             orphaned_widgets_unrecoverable,
+            source_outline_dropped,
             source_page_labels_dropped,
             page_labels_stale,
         })
@@ -18524,6 +18553,86 @@ impl EditSession {
         widget: ObjId,
         name: Option<&str>,
     ) -> Result<AdoptOutcome, EditError> {
+        let (outcome, objects) = self.adopt_plan(widget, name)?;
+        self.commit(Command {
+            kind: CommandKind::AdoptWidget,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(outcome)
+    }
+
+    /// What [`Self::adopt_widget`] **would** do, deciding nothing and writing
+    /// nothing. `&self`.
+    ///
+    /// # Why this exists: a control whose applicability is only knowable by
+    /// pressing it
+    ///
+    /// Requested by `pdfceGUI` (2026-08-19) against `Pass 103.1`, and the
+    /// reasoning is theirs: an operator looking at a list of unclaimed
+    /// widgets **cannot tell the two shapes apart**, and neither can the
+    /// shell. A merged field-widget adopts losslessly and *recovers the
+    /// field exactly*; a bare kid refuses, and naming it **creates a new,
+    /// empty, typeless field that is not the radio button that was lost.**
+    /// Those are different decisions, and without this they look like the
+    /// same button until it is pressed.
+    ///
+    /// # What is worth knowing BEFORE the press rather than after
+    ///
+    /// Two of [`AdoptOutcome`]'s fields are not confirmations, they are
+    /// inputs to the decision:
+    ///
+    /// - [`AdoptOutcome::name`] — for a widget with its own `/T`, this is a
+    ///   name **the operator has never seen**. It is in the file, not on
+    ///   screen. A row that reads *"Register as `Address`"* is a decision;
+    ///   one that reads *"Register"* is a guess.
+    /// - [`AdoptOutcome::field_type`] `== None` — the registration will
+    ///   **succeed and the field still will not be fillable**, because `/FT`
+    ///   is inheritable (§12.7.3.1) and a top-level field has no ancestor
+    ///   left to inherit from. Reporting that afterwards tells an operator
+    ///   their successful action did not achieve what they wanted.
+    ///
+    /// [`AdoptOutcome::acroform_created`] is genuinely after-the-fact — a
+    /// consequence rather than a choice — and is returned only because the
+    /// struct is shared.
+    ///
+    /// # It subsumes a refusal predicate
+    ///
+    /// The request offered a narrower `adopt_refusal(..) -> Option<EditError>`
+    /// matching [`Self::fill_refusal`] and `rename_refusal`, and said a
+    /// preview returning `Err` is that predicate with more in it. Correct, so
+    /// only this shipped: `adopt_preview(w, n).err()` **is** the refusal
+    /// predicate, and two entry points for one question is a cost paid
+    /// forever.
+    ///
+    /// # Errors
+    ///
+    /// Exactly [`Self::adopt_widget`]'s, evaluated identically — the two
+    /// share one body ([`Self::adopt_plan`]) rather than agreeing by
+    /// inspection, so a preview that says "this will work" and a call that
+    /// then refuses is not a state this code can reach.
+    pub fn adopt_preview(
+        &self,
+        widget: ObjId,
+        name: Option<&str>,
+    ) -> Result<AdoptOutcome, EditError> {
+        self.adopt_plan(widget, name).map(|(outcome, _)| outcome)
+    }
+
+    /// The shared body of [`Self::adopt_widget`] and [`Self::adopt_preview`]
+    /// — every guard, the resolved outcome, and the writes that would land.
+    ///
+    /// `&self` and side-effect-free. Splitting it out is what makes the
+    /// preview honest: the alternative — a second implementation of the same
+    /// guards — is two things that must agree and will eventually not, and
+    /// the way it fails is a greyed-out control for an operation that would
+    /// have worked, or a live one for an operation that refuses.
+    fn adopt_plan(
+        &self,
+        widget: ObjId,
+        name: Option<&str>,
+    ) -> Result<(AdoptOutcome, Vec<ObjectWrite>), EditError> {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(EditError::DocumentEncrypted);
         }
@@ -18610,19 +18719,16 @@ impl EditSession {
 
         let had_acroform = form.is_some();
         objects.push(self.acroform_register_write(widget)?);
-        self.commit(Command {
-            kind: CommandKind::AdoptWidget,
+        Ok((
+            AdoptOutcome {
+                field_id: widget,
+                name: final_name,
+                field_type,
+                renamed,
+                acroform_created: !had_acroform,
+            },
             objects,
-            removals: Vec::new(),
-            trailer: None,
-        });
-        Ok(AdoptOutcome {
-            field_id: widget,
-            name: final_name,
-            field_type,
-            renamed,
-            acroform_created: !had_acroform,
-        })
+        ))
     }
 
     /// Define a **named destination** in the catalog's `/Names` `/Dests`
