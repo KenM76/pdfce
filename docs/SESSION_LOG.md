@@ -51177,3 +51177,106 @@ is **not** a survivor and nothing is owed there.
 
 **Terminology (rule 15):** no ce dimension or pdf dimension appears
 anywhere in this filing.
+
+## 2026-08-19 (hundred-and-ninety-ninth filing) — `pdfceGUI` ANSWERS ALL SIXTEEN UNRESOLVED ROWS FROM THE 197TH FILING; TEN `docs/FEATURES.md` CHECKBOXES WERE WRONG IN BOTH DIRECTIONS; STANDING RULE `R203` MINTED; NO PASS, NO SHELL, DOCUMENTATION-ONLY
+
+**Filed by `pdfce-librarian`, no shell.** No code shipped. Every claim is
+either read directly from
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\note_the_sixteen_rows_confirmed_or_corrected.md`
+(a reply from the `pdfceGUI` session, stated there as a fact about the
+build at `e86dda1`) and relayed as such, or verified directly by
+`Grep`/`Read` against this project's own live `docs/FEATURES.md`, which
+needs no shell.
+
+**Shipped:** nothing coded — the filing itself is the correction.
+
+**Decisions made this session:**
+- **One standing rule minted — `R203`.** *A shared column carries no
+  bare verdict about the other project's build; every entry is either the
+  checkbox alone or a dated citation to a confirmed surface.* Applies
+  `R202`'s own cited RAG method to `docs/FEATURES.md` specifically, now
+  that its cost is measured: **ten rows wrong, both directions, none
+  caught by any test.** Full text: `ROADMAP.md`, *Standing rules*.
+  Ceiling `R202` → `R203`, next free `R204`.
+- **No new `ARCHITECTURE.md` decision.** Today applies decision 073 and
+  `R202`; it does not extend either.
+
+**Findings + decisions:**
+- **`docs/FEATURES.md` carried bare prose verdicts about a repository it
+  does not build** — sentences shaped *"No GUI surface."* on rows
+  describing `D:\dev\pdfceGUI`. Two were caught false by understatement
+  (Flatten a form; redaction mark appearance) and, on a further sweep of
+  the same repository for the same failure shape, **six more rows were
+  caught false by overstatement** — `[x]` ticked for gui on Bézier handle
+  editing, multi-node select-and-move, delete a field, rename a field,
+  and remove/embed an embedded font's program, all confirmed to have zero
+  interactive route in `pdfceGUI`. Full row tables in `ROADMAP.md`'s
+  hundred-and-ninety-ninth filing entry.
+- **The fix**: purge bare verdicts (checkbox alone carries the negative
+  claim); where confirmed, cite the reachable **surface**, never a ribbon
+  command id (a capability routinely lands in a panel before its ribbon
+  command is wired — Flatten is the worked example). A new Maintenance
+  note in `docs/FEATURES.md`'s own header states this as the file's
+  standing convention.
+- **Two of the sixteen rows this note answers turned out to name the two
+  worst defects in `pdfceGUI`'s build, both found by answering the list
+  rather than by a test or by use**: closing a document silently
+  destroyed unsaved edits despite a tooltip promising a three-way prompt
+  (fixed same day, not this project's code); and `Document::recovery()`
+  — this project's own `pub` accessor, `document.rs:1057` — is never
+  called by any shell, so a scanned-and-recovered document opens with no
+  disclosure of what pdfce guessed (rule 4's surviving half). Blocked on
+  nothing on either side; wiring it is `pdfceGUI`'s remit.
+- **`pdfce_render::Diagnostics` has 65 top-level fields; `pdfceGUI` reads
+  eleven.** Not filed as 54 rows — the useful split (measurements vs.
+  refusals/silent degradations) is a property `Diagnostics` itself does
+  not currently make. Filed as a new Backlog item.
+- **Four redaction-appearance controls (`/Repeat`, `/RO`, overlay-text
+  font/colour, border) have no engine support**, and `pdfceGUI`
+  explicitly declined to request them. Filed as a new Backlog item, not a
+  request.
+- **The cross-project RAG finding was already written — checked before
+  writing, nothing duplicated.**
+  `D:\dev\rag\rust\a_blocker_naming_another_repository_cannot_fail_a_test_so_it_decays_silently.md`
+  (`last_verified: 2026-08-19`) already covers this session's own
+  four-false-claims table and the `FEATURES.md` ownership contradiction
+  `R202` already answered. Cited from the new Maintenance note rather than
+  restated.
+
+**`FEATURES.md` — CHANGED.** Header gains a Maintenance note paragraph.
+**18 rows touched over 164 total data rows = 10 checkbox changes (1
+promoted `[ ]`→`[x]`, 1 promoted `[ ]`→`◐`, 2 demoted `[x]`→`◐`, 6 demoted
+`[x]`→`[ ]`) + 8 sentence-only purges of bare "No GUI surface" prose with
+the checkbox unchanged.** Full table in `ROADMAP.md`.
+
+**`ARCHITECTURE.md` — unchanged.**
+
+**`personal_rag/pdf` — unchanged, `+0`.** Nothing here is a PDF-domain
+empirical finding; today's findings are a documentation-accuracy sweep
+and a `pdfce-core` API-shape note.
+
+**Still in flight:**
+- `Pass 102.1`, the n-channel compositor (`Pass 97.1`), `v0.7.0`
+  bumped-not-tagged — all carried unchanged from the 198th filing.
+
+**For next session:**
+1. `pdfceGUI` is re-deriving its own fourteen `SCAFFOLDED` ribbon-command
+   entries and will send shape problems separately — expect more requests
+   of that shape (`merge_document` was one), not feature asks.
+2. Consider a Backlog item recommending `pdfceGUI` wire
+   `Document::recovery()` via the request channel — held back this filing
+   since it is squarely their remit.
+3. Everything carried from the 197th/198th filings' own "For next
+   session" lists (settings-panel gate equivalence, `ui-verify` tooling
+   inventory, both already filed as Backlog items) is still open.
+
+**Ledger effects:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **106** | **106** (unchanged) |
+| decision records | **073** | **073** (unchanged) |
+| standing rules | **R202** | **R203** |
+| `SESSION_LOG` filings | **198** | **199** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **18** (10 checkbox changes, 8 sentence-only purges) |

@@ -96,6 +96,283 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+> ### ★★★★★ THE 199TH FILING — `pdfceGUI` ANSWERS ALL SIXTEEN UNRESOLVED ROWS FROM THE 197TH FILING — TEN `docs/FEATURES.md` CHECKBOXES WERE WRONG IN BOTH DIRECTIONS, NOT ONE; `R203` MINTED — NO PASS, NO SHELL, DOCUMENTATION-ONLY
+>
+> **This filing has no shell.** No code shipped this filing — every claim
+> below is either (a) read directly from
+> `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\note_the_sixteen_rows_confirmed_or_corrected.md`,
+> a reply authored by the `pdfceGUI` session and stated there as *"a fact
+> about the build at `e86dda1`, not about what is written down"* — relayed,
+> per hard rule 8, and labelled as relayed rather than independently
+> re-run against that project's tree, which this librarian cannot reach —
+> or (b) verified directly by `Grep`/`Read` against **this** project's own
+> live `docs/FEATURES.md`, which needs no shell to check.
+>
+> **Source dispatch:** the engineer forwarded the note above, itself a
+> reply to this project's own outbound
+> `2026-08-19-gui-column-rebased-please-confirm-these-rows.md` (197th
+> filing's unresolved-rows list).
+>
+> ## Part 1 — the structural fix: `docs/FEATURES.md` carried bare verdicts
+> about a repository it does not build
+>
+> `pdfceGUI`'s own framing, adopted verbatim into `docs/FEATURES.md`'s
+> header this filing: **"A claim can only stay honest if something can
+> falsify it. A claim whose falsifier lives outside your build has no such
+> thing, and diligence on either side does not supply one."** Before this
+> filing, `docs/FEATURES.md` carried prose sentences of the shape *"No GUI
+> surface."* on rows describing `D:\dev\pdfceGUI` — a project this
+> repository neither builds, tests, nor watches. Two were caught false by
+> the note above: **Flatten a form** (row claimed no surface at all;
+> reachable through the Forms panel's own collapsed Flatten section) and
+> **redaction mark appearance** (row claimed no control authored overlay
+> text or fill colour at all; three of five controls were already wired).
+>
+> **Grepping the same repository for the same failure shape found a second,
+> larger cluster this note's sixteen rows did not name directly: SIX rows
+> ticked `[x]` for `gui` that `pdfceGUI` confirms are false the other
+> way** — Bézier handle editing, multi-node select-and-move, delete a
+> field, rename a field, and remove/embed an embedded font's program (two
+> rows) all read as reachable in `docs/FEATURES.md` while `pdfceGUI`'s own
+> canvas/panel code has zero interactive route to any of them. **Ten rows
+> wrong, both directions, none caught by any test** — the exact decay this
+> project's own cited RAG file predicts for a verdict whose falsifier lives
+> in a build the writer cannot run:
+> `D:\dev\rag\rust\a_blocker_naming_another_repository_cannot_fail_a_test_so_it_decays_silently.md`
+> (already indexed, not duplicated — see *Findings*, below).
+>
+> **Fix, applied to `docs/FEATURES.md` this filing:**
+> 1. Every bare *"No GUI surface"*-shaped sentence purged or replaced with
+>    a dated citation to a confirmed surface. Where a row's true state is
+>    still unconfirmed, the checkbox alone now carries the claim — no prose
+>    verdict stands in for it.
+> 2. Where a capability's reachability WAS confirmed, the sentence names the
+>    **surface** (a panel, a section, a control), never a ribbon command
+>    id — `pdfceGUI`'s own stated reason: a capability routinely lands in a
+>    panel before its ribbon command is wired, so an id-keyed row is false
+>    in both directions at different times. Flatten is the worked example:
+>    reachable via the Forms panel while `edit.form_flatten` on the ribbon
+>    is scaffolded and inert.
+> 3. A new **Maintenance note** paragraph added to `docs/FEATURES.md`'s own
+>    header, stating both of the above as this file's standing convention
+>    and naming `R203` (*Standing rules*, below) as its authority.
+>
+> ## Part 2 — the sixteen rows, settled
+>
+> **Promoted `[ ]` → `[x]` (1 row):**
+>
+> | row | verdict |
+> |---|---|
+> | Flatten a form to static page content | Reachable — Forms panel's own collapsed Flatten section (`flatten_fields(None)`); `edit.form_flatten` on the ribbon is scaffolded and inert |
+>
+> **Promoted `[ ]` → `◐` (1 row):**
+>
+> | row | verdict |
+> |---|---|
+> | Redaction mark appearance | `pdfceGUI` reaches fill colour (three named choices + RGB picker), overlay text (`TextEdit`, 64-char cap, illegible-caption warning) and quadding; **not** `/Repeat`, `/RO`, overlay-text font/colour or a border — `RedactAppearance` (`annot_author.rs:1760`) carries only `fill`/`overlay_text`/`quadding`, a `pdfce-core` gap, not a wiring one |
+>
+> **Confirmed already-correct, left unchanged (6 rows):** reset a form
+> (Forms panel) · DXF export (current page only; scale/calibration-
+> candidates/units/fit-arcs/text-as-entities) · edit document metadata
+> (read AND write, commit on focus-loss/Enter, disclosed when stored bytes
+> weren't exactly decodable) · nested object-tree sidebar (Objects panel is
+> a real tree, keyed on page + edit epoch) · keep-preseparated-file-sets
+> (`Settings ▸ Pages and printing`, three-way) · the theme preset picker
+> (the apparent contradiction the 197th filing flagged was `pdfceGUI`'s own
+> stale sentence, dated before the Settings dialog was salvaged
+> 2026-08-17, already corrected at source there).
+>
+> **The three-way close prompt** was flagged unresolved by the 197th
+> filing and is **also** already `[x]` here — but the note attaches a
+> finding worth carrying past the checkbox: `file.close`'s shipped tooltip
+> had promised the prompt since the day it shipped, while the guard behind
+> it consulted a `save_pending` predicate that was permanently `false` by
+> design, so **nothing asked and edits were silently destroyed on Close
+> and Open alike.** Found by answering this exact row, fixed the same day
+> — see *Findings* (D), below.
+>
+> **Six rows corrected from `[x]` to a lower state, none previously flagged
+> as suspect (found by `pdfceGUI` re-deriving each row rather than trusting
+> the prior tick):**
+>
+> | row | was | now | why |
+> |---|---|---|---|
+> | Edit a Bézier handle | `[x]` | `[ ]` | `grep -i bezier` over `pdfceGUI`'s canvas returns nothing |
+> | Select several nodes and move them as one surgery | `[x]` | `[ ]` | whole objects move together (`move_objects`); individual nodes move one at a time (`move_node`); no multi-node selection exists |
+> | Delete a field | `[x]` | `[ ]` | Forms panel is fill-only by design; `FormEdit` has no Delete variant; `edit.form_manage_fields` is drawn and inert |
+> | Rename a field | `[x]` | `[ ]` | same panel, same reason |
+> | Remove an embedded font's program | `[x]` | `[ ]` | `panels/fonts.rs` has zero interactive widgets; it computes and displays a removability verdict — a report, not an editor |
+> | Embed a font that's referenced but missing | `[x]` | `[ ]` | same report-only panel |
+>
+> **Two rows corrected `[x]` → `◐` (real, but narrower than claimed):**
+>
+> | row | why |
+> |---|---|
+> | Modeless select/edit | select, move, resize-handles and delete are all modeless; editing text still needs `Ctrl+E` |
+> | Add non-Latin text via a subsetted, embedded donor font | `edit.add_text` really writes page content but offers no font choice on that path — hard-wired 12-pt black Helvetica; the word "donor" does not appear in that crate |
+>
+> **Confirmed absent, `[ ]` unchanged, bare "No GUI surface" prose purged
+> (8 rows, no checkbox change — see Part 1, item 1):** set a page's size ·
+> revision clouds (the `pdfce-gui`-specific clause removed — that crate is
+> not the referent of this column) · move a widget · script-driven-field
+> census surface · detect an unencrypted wrapper · list/extract/attach/
+> detach attachments · imposition. **Restyle a placed markup annotation**
+> also stays `[ ]` but gains a citation rather than a bare purge —
+> `set_markup_style` has **zero call sites** in `pdfceGUI`, confirmed
+> 2026-08-19, described there as *"the largest engine capability with no
+> route from this GUI"* — with one exception: ce-dimension restyle is live
+> via the Dimension-groups panel (`set_group_style`/`set_dimension_style`).
+>
+> ## Part 3 — findings
+>
+> **(A) The render-diagnostics answer is a different shape from the
+> question, and it names a gap in `pdfce_render::Diagnostics` itself, not
+> in any shell.** `Diagnostics` (`interpret.rs:192`) carries **65
+> top-level fields; `pdfceGUI` reads eleven** (nine in a fixed table shown
+> in both the status line and its Diagnostics dialog, two more in the
+> dialog alone). **Fifty-four are read by nothing** — a repo-wide grep for
+> `.diagnostics.<field>` in that project returns two hits. **Not filed as
+> 54 rows** — `pdfceGUI` is explicit that most of the 54 are measurements
+> (`images_rendered`, `annotations_painted`, `ramps_sampled`), and the
+> useful split its own note draws is one `Diagnostics` itself does not
+> make: **measurements** vs. **refusals and silent degradations**, the
+> latter being rule 4's surviving half. `annotations_without_ap` is named
+> as the highest-priority field to surface first — a comment in the file
+> not being drawn is worse, on a reviewed drawing, than a colour being
+> slightly off. `image_notes`, `annotation_notes`, `color.notes` and
+> `shading.notes` — per-occurrence explanations, not counts — are read by
+> nothing at all. **Filed as a new Backlog item, below**, not a Pass: no
+> code changes here, this is a scoping note for whichever session next
+> touches diagnostics surfacing.
+>
+> **(B) Four of five redaction-appearance controls are ours to add, and
+> `pdfceGUI` explicitly declines to ask for them.** `RedactAppearance`
+> (`annot_author.rs:1760`) carries `fill`, `overlay_text` and `quadding`
+> only; `/Repeat`, `/RO`, overlay-text font, overlay-text colour and border
+> have no engine support at all. Quoted directly: *"four of those five are
+> yours, if you want them. We have not asked and are not asking; the three
+> we have are enough."* **Filed as a new Backlog item, below, explicitly
+> not as a request** — the declining is itself a scoping signal worth
+> preserving, not an oversight to correct.
+>
+> **(C) `set_markup_style` has zero call sites in `pdfceGUI` — entirely
+> theirs, both prior blockers discharged.** No action here; recorded so
+> the `[ ]` on the *Restyle a placed markup annotation* row (Part 2, above)
+> reads as a wiring gap on the other side, not an engine gap on this one.
+>
+> **(D) ★★ Two of the sixteen rows this note answers turned out to name
+> the two worst defects in `pdfceGUI`'s build, and both were found by
+> answering the list — not by a test, not by use.** Recorded here because
+> it is the argument for dispatching this kind of cross-project row-check
+> at all, not because either defect is this project's to fix:
+> - **Closing a document silently destroyed unsaved edits** while the
+>   shipped tooltip promised a three-way prompt. The guard that should have
+>   caught it existed, was well-reasoned, and answered a different
+>   question than the one the tooltip asked. Fixed the same day.
+> - **`Document::recovery()` — this project's own `pub` accessor, every
+>   field `pub`, `document.rs:1057` — is never called by `pdfceGUI`.** A
+>   document whose cross-reference table pdfce rebuilt by scanning opens
+>   with no disclosure whatsoever; `last_wins_collisions` specifically
+>   means two definitions of one object existed and pdfce chose between
+>   them, with the operator never told there was a choice — squarely rule
+>   4's surviving half (*"an inference the operator cannot see still owes
+>   an off-canvas report"*). **Blocked on nothing on either side** — the
+>   accessor already exists and is `pub`; wiring it is `pdfceGUI`'s own
+>   remit. Worth carrying on this side too: a `pub` accessor with real
+>   disclosure value sat unused since it shipped, and nothing on this
+>   project's side would have caught that either.
+>
+> **(E) The cross-project RAG finding already exists — checked before
+> writing, nothing duplicated.** `pdfceGUI` states it wrote up the
+> "claim whose falsifier lives outside your build" pattern in
+> `D:\dev\rag\rust\`. `Grep` against that file
+> (`a_blocker_naming_another_repository_cannot_fail_a_test_so_it_decays_silently.md`,
+> `last_verified: 2026-08-19`) confirms it already covers this exact
+> session's four-false-claims table, including the `FEATURES.md`
+> ownership contradiction this project's own `R202` already answered.
+> **Cited, not duplicated** — `docs/FEATURES.md`'s new Maintenance note
+> (Part 1, item 3) points at it directly, and `R203` (below) is this
+> project's own adoption of the file's practice #1 (*"write every external
+> blocker as a dated citation, never a verdict"*) for this file
+> specifically.
+>
+> ## New Backlog items filed this session (above the existing top entry)
+>
+> 1. **`pdfce_render::Diagnostics`'s 54 unread fields split into
+>    measurements vs. refusals/silent-degradations, with a surfacing
+>    priority order.** From finding (A). Priority, as stated by `pdfceGUI`:
+>    `annotations_without_ap` first, then the four per-occurrence
+>    `*_notes` fields. Scope note: **not** a request to surface all 54 —
+>    the split itself, and which subset is disclosure-obligated under rule
+>    4, is the open question.
+> 2. **Four redaction-appearance controls with no engine support:**
+>    `/Repeat`, `/RO`, overlay-text font, overlay-text colour, border.
+>    From finding (B). `pdfceGUI` explicitly did not request these; filed
+>    for completeness of the capability inventory, not urgency.
+>
+> ## Standing rules
+>
+> **One minted — `R203`.** *A shared column carries no bare verdict about
+> the other project's build; every entry is either the checkbox alone or a
+> dated citation to a confirmed surface.* Full text below, *Standing
+> rules*. Applies `R202`'s own cited method
+> (`a_blocker_naming_another_repository_cannot_fail_a_test_so_it_decays_silently.md`,
+> practice #1) to `docs/FEATURES.md` specifically, having now measured its
+> cost at ten wrong rows in one column. Ceiling `R202` → `R203`; next free
+> `R204`.
+>
+> **`docs/FEATURES.md` — CHANGED.** Header gains a Maintenance note
+> paragraph (Part 1, item 3). **18 rows touched over 164 total data rows
+> (`grep -c '^\| (\[x\]|\[ \]|◐|—) \|'`) = 10 checkbox changes (1 promoted
+> `[ ]`→`[x]`, 1 promoted `[ ]`→`◐`, 2 demoted `[x]`→`◐`, 6 demoted
+> `[x]`→`[ ]`) + 8 sentence-only purges of bare "No GUI surface" prose with
+> the checkbox unchanged.** Full row-by-row table above (Part 2). No row
+> moved section (*Implemented*/*Planned* boundary unaffected this filing).
+>
+> **`ARCHITECTURE.md` — unchanged.** No new crate-boundary/library/
+> invariant decision this filing; today's work applies decision 073 and
+> `R202`, it does not extend them.
+>
+> **`personal_rag/pdf` — unchanged, `+0`.** Every finding this filing is
+> project-internal (a `docs/FEATURES.md` accuracy sweep and a `pdfce-core`
+> API-shape note) or already RAG'd by the other side (finding E) — none is
+> an empirical PDF-*domain* finding of the kind that subject exists to
+> hold.
+>
+> **Still in flight:**
+> - `Pass 102.1` — carry field definitions across `insert_pages`'s
+>   page-*subset* copy boundary. Unaffected by this filing.
+> - The n-channel compositor (`Pass 97.1`) — scoped, not begun, carried
+>   forward unchanged.
+> - `v0.7.0` bumped, not tagged (carried from the 198th filing).
+>
+> **For next session:**
+> 1. `pdfceGUI` is re-deriving its own fourteen `SCAFFOLDED` ribbon-command
+>    entries and will send shape problems separately (its own note, §4);
+>    `merge_document` was already one such find. Expect more requests of
+>    that shape, not feature asks.
+> 2. Consider whether `Document::recovery()`'s non-use (finding D) merits a
+>    Backlog item recommending `pdfceGUI` wire it via the request channel
+>    — held back this filing since it is squarely their remit and no
+>    `pdfce-core` change is implied.
+> 3. Everything carried from the 198th filing's own "For next session"
+>    list (none — that filing listed only "relay merge_document is
+>    unblocked," which item 1 above now supersedes) and the 197th filing's
+>    list (settings-panel gate equivalence, `ui-verify` tooling inventory —
+>    both already filed as Backlog items, unaffected by this filing) is
+>    still open.
+>
+> **Ledger effects.**
+>
+> | ledger | before | after |
+> |---|---|---|
+> | Pass family ceiling | **106** | **106** (unchanged — no Pass, documentation-only) |
+> | decision records | **073** | **073** (unchanged — no new architectural decision) |
+> | standing rules | **R202** | **R203** |
+> | `SESSION_LOG` filings | **198** | **199** |
+> | `personal_rag/pdf` lessons | **+0** | **+0** (no PDF-domain empirical finding this filing) |
+> | `docs/FEATURES.md` rows touched | — | **18** (10 checkbox changes, 8 sentence-only purges) |
+
 > ### ★★★★★ THE 198TH FILING — `Pass 106.0` SHIPS `EditSession::merge_document`, VERB 125 OF 125 — ★ THE DISPATCH'S OWN "Pass 104.0" LABEL WAS A COLLISION AND IS CORRECTED HERE, NOT FILED AS RELAYED — no shell this filing
 >
 > **This filing has no shell.** Commit hash `9f663f9` and the test/gate
@@ -62432,6 +62709,30 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **`pdfce_render::Diagnostics`'s 54 unread fields need a surfacing split,
+  not 54 rows.** Filed 2026-08-19 (hundred-and-ninety-ninth filing), from
+  `pdfceGUI`'s row-answer note, finding (A). `Diagnostics`
+  (`interpret.rs:192`) carries 65 top-level fields; `pdfceGUI` reads
+  eleven (nine in a fixed status/dialog table, two dialog-only). The other
+  54 split into **measurements** (`images_rendered`, `annotations_painted`,
+  `ramps_sampled` — no disclosure obligation under rule 4) and **refusals
+  or silent degradations** (rule 4's surviving half). Scope: define that
+  split as a property on `Diagnostics` itself (or a documented convention
+  any shell can apply), then surface the refusal/degradation half in
+  priority order — `annotations_without_ap` first (a comment in the file
+  not being drawn), then the four per-occurrence `*_notes` fields
+  (`image_notes`, `annotation_notes`, `color.notes`, `shading.notes`),
+  currently read by nothing in any shell. **Not a request to surface all
+  54** — most of the cluster is measurement, not disclosure.
+- **Four redaction-appearance controls `RedactAppearance` does not
+  carry: `/Repeat`, `/RO`, overlay-text font, overlay-text colour, a
+  border.** Filed 2026-08-19 (hundred-and-ninety-ninth filing), from
+  `pdfceGUI`'s row-answer note, finding (B). `RedactAppearance`
+  (`annot_author.rs:1760`) carries only `fill`/`overlay_text`/`quadding`.
+  **`pdfceGUI` explicitly declined to ask for these** — "the three we have
+  are enough for the operator's work today" — so this is filed for
+  capability-inventory completeness, not urgency; the four are real
+  Table-192 controls, not GUI wiring gaps.
 - **`merge_document` carries pages + `/AcroForm` only — outlines, named
   destinations, page labels and `/OCProperties` are not merged.** Filed
   2026-08-19 (hundred-and-ninety-eighth filing), `Pass 106.0`'s own "Still
@@ -77373,6 +77674,39 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   a shared artefact: write the ownership statement, and treat its absence
   as license for the next reader to derive their own.
   **Ceiling moves `R201` → `R202`; next free `R203`.**
+
+- **R203 — A SHARED COLUMN CARRIES NO BARE VERDICT ABOUT THE OTHER
+  PROJECT'S BUILD; EVERY ENTRY IS EITHER THE CHECKBOX ALONE OR A DATED
+  CITATION TO A CONFIRMED SURFACE (2026-08-19; librarian-minted,
+  hundred-and-ninety-ninth filing; applies `R202`'s own cited method,
+  `D:\dev\rag\rust\a_blocker_naming_another_repository_cannot_fail_a_test_so_it_decays_silently.md`,
+  to this project's `docs/FEATURES.md` specifically).**
+  **THE WARRANT:** `docs/FEATURES.md` carried at least a dozen bare prose
+  assertions shaped *"No GUI surface."* about `D:\dev\pdfceGUI` — a
+  repository this project neither builds nor tests. Two were caught false
+  in the direction of understatement: **Flatten a form** was reachable
+  through the Forms panel while the row claimed no surface at all, and
+  **redaction mark appearance** understated three controls (fill colour,
+  overlay text, quadding) that were already wired. The same sweep found
+  **six more rows ticked `[x]` false in the opposite direction** — Bézier
+  handle editing, multi-node select-and-move, delete a field, rename a
+  field, and remove/embed an embedded font's program — reading as
+  reachable while `pdfceGUI` confirmed zero interactive route to any of
+  them. **Ten rows wrong, both directions, none caught by any test** — the
+  exact decay the cited RAG file's own tell predicts for a verdict whose
+  falsifier lives in a build the writer cannot run.
+  **Scope — binding on `docs/FEATURES.md`'s `gui` column specifically, and
+  on any future shared column this project maintains.** No row states a
+  narrative verdict about the other side's absence or presence; the
+  checkbox alone carries a negative claim, and a positive or partial claim
+  is written as a dated citation naming the confirmed **surface** (a
+  panel, a section, a control) — never a ribbon command id, which
+  routinely lands after the panel that already exposes the capability and
+  is therefore false in both directions at different times (see the
+  Flatten row's own worked example, hundred-and-ninety-ninth filing).
+  **No gate proposed**, same warrant as `R202`: a sentence's truth is not
+  mechanically checkable, only its presence.
+  **Ceiling moves `R202` → `R203`; next free `R204`.**
 
 - **R199 — A RECORDED BLOCKER IS A DATED READING, NOT A STANDING FACT. A
   sentence saying work is gated, needs, requires or awaits something
