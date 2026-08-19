@@ -9,7 +9,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (27736 lines) |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (27757 lines) |
 | **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 125 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
@@ -646,6 +646,31 @@ whole merge over one name is worse than a suffix.
 means *"the appearances here may be stale"*, so if either document says so,
 the result must. `/DR` merges key-by-key with the **target winning**, because
 a target entry is already referenced by fields that were here first.
+#### `merge_document` also carries navigation (`Pass 106.1`)
+
+`MergeOutcome` gained three more fields: `named_destinations_carried`,
+`named_destinations_renamed`, `outline_items_carried`.
+
+★ **Destinations are carried BEFORE outlines, and the order is the feature.**
+A source bookmark may point at a named destination whose key collided and had
+to be suffixed here; only the rename map from the destination carry can
+rewrite that bookmark onto the new key. Run it the other way and the bookmark
+keeps a key nothing defines — which renders as a bookmark that does nothing,
+the exact failure `add_outline_item` refuses a forward reference to avoid.
+
+**Outlines arrive as top-level siblings**, appended after this document's own.
+pdfce does **not** invent a "merged document" heading to nest them under:
+that heading would be a bookmark pdfce authored, appearing in the operator's
+panel beside bookmarks the documents' authors wrote.
+
+`named_destinations_renamed` is worth surfacing for a reason beyond the
+`fields_renamed` one: pdfce rewrites the **carried** bookmarks onto the new
+keys, but **cannot rewrite a link it did not copy**. A `/GoToR` in a third
+file naming the old key now resolves to *this* document's destination rather
+than the source's.
+
+**Still not carried:** page labels (decision 072 governs the policy) and
+`/OCProperties`.
 #### ★ `adopt_preview` — ask before pressing (`Pass 103.4`)
 
 | I want to… | Call |
