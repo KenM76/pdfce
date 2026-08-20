@@ -52234,3 +52234,100 @@ divergence finding.
 
 **Terminology (rule 15):** no bare "dimension" appears; not applicable
 this filing (no dimension-related content).
+
+## 2026-08-20 (two-hundred-and-seventh filing) — OPERATOR RULING CLOSES `PASS 113.0`'S TWO NAMED DESIGN QUESTIONS: BOTH BEHAVIOURS SHIP AS OPTIONS, THE ENGINEER PICKS THE DEFAULT — `R206` MINTED, THE FIRST GENERALIZATION OF `R169`'S MECHANISM OUTSIDE SPEC AMBIGUITY
+
+**Filed by `pdfce-librarian`. No shell; no code touched this filing** —
+a ROADMAP amendment plus a standing-rule mint, not a Pass.
+
+**Shipped:** none — no Pass ID minted or moved. `Pass 113.0`'s Backlog
+entry was amended in place; see `ROADMAP.md`'s new Shipped-section
+heading "ruling — Pass 113.0's two named design questions CLOSE…" (top
+of *Shipped*, ahead of `Pass 118.0`) for the full record.
+
+**Decisions made this session:**
+- **The operator ruling itself.** The engineer had asked `pdfceGUI` two
+  design questions about the not-yet-built `transform_objects` verb: (1)
+  mixed/heterogeneous selection (a path and an image together) — act on
+  the whole selection, or refuse; (2) a degenerate drag producing a
+  singular matrix — clamp, or refuse. Ken answered both, unprompted,
+  before the reply reached its recipient, verbatim: *"for you two
+  questions, make things work both ways as options. default it to your
+  best guess as to what would be normally expected."* Both halves bind:
+  both behaviours ship, as options; the default is the engineer's to pick
+  from ordinary-operator expectation, not the operator's to be asked.
+- **The two defaults, as filed into `Pass 113.0`'s acceptance criteria:**
+  mixed selection defaults to transforming the WHOLE selection (one
+  command, one undo entry) with `R168`'s all-or-nothing-with-a-stated-
+  reason boundary still governing objects that cannot be transformed at
+  all; a singular matrix defaults to REFUSE by name (irrecoverable —
+  no inverse to restore the object), with clamp-and-disclose as the named
+  option. Full reasoning in `ROADMAP.md`.
+- **Standing rule `R206` minted**, judged NOT covered by `R169` (the
+  existing "spec ambiguity becomes a setting, default to best-sourced
+  guess" rule) because `R169`'s own minting text scopes it explicitly to
+  spec-ambiguity SETTING findings from the ambiguity-settings register —
+  neither of today's two questions is a spec ambiguity at all, both are
+  pure interaction-design choices. `R206` states the same underlying
+  mechanism (ship both, default from expectation, don't ask) without the
+  spec-sourcing apparatus `R169` carries, since none exists for a
+  question the spec never touches. Full text in `ROADMAP.md`'s *Standing
+  rules*.
+
+**Findings + decisions:**
+- **A question sent to a consuming project is a commitment to act on
+  their answer.** The engineer had already written both design questions
+  into a reply in the `pdfceGUI` channel when Ken's ruling arrived. The
+  reply was amended in place before being sent — the addendum tells
+  `pdfceGUI` explicitly not to answer and gives both defaults with
+  reasoning. Recorded because the near-miss is instructive: had the
+  original reply been read first, there would have been two answers to
+  reconcile for the same two questions, one of them from a party with no
+  standing to make the call.
+- **Neither open question had a lettered *Open operator questions*
+  entry.** Both had been filed inline, as acceptance-criteria ambiguity,
+  inside `Pass 113.0`'s own Backlog bullet — not lettered into the
+  section reserved for that purpose. Amended in place there instead;
+  worth noting because it means this project's ambiguity-tracking has (at
+  least) two shapes — lettered questions, and inline unresolved
+  acceptance criteria — and a future sweep for "what's still open" needs
+  to check both.
+- **A pre-existing parenthetical had drifted into looking like a ruling
+  it never was.** `Pass 113.0`'s own Backlog text (filed two-hundred-and-
+  fourth/fifth filing) carried "(offer the handle, clamp the drag)" for
+  the singular-matrix case — descriptive prose inside a design-question
+  bullet, never a decision, but read literally it stated clamp as
+  settled. Against today's ruling (refuse is the default) that reading
+  would now be wrong. Struck in place, corrected, not silently rewritten.
+
+**Still in flight:**
+- `Pass 113.0`–`117.2` remain Backlog, unblocked since `Pass 112.0`,
+  now with both design questions closed as acceptance criteria — the
+  `q…cm…Q`-wrap-vs-operand-rewriting open question inside the same
+  bullet is untouched, still open.
+- `Pass 119.0` (text editing inside form XObjects) unchanged from the
+  prior filing — still needs a spec/Acrobat-parity librarian dispatch.
+- `Pass 117.2` (`/MK /R` widget rotation) still needs a
+  `pdfce-spec-librarian` dispatch, carried unchanged.
+
+**For next session:**
+1. Commit this filing's `ROADMAP.md`/`SESSION_LOG.md` edits — no shell
+   was available to this dispatch (per the dispatching engineer's own
+   note, they will commit).
+2. Begin `Pass 113.0` — its acceptance criteria are now fully closed
+   except the `q…cm…Q`-vs-operand-rewriting mechanism question, and its
+   dependency chain has been Shipped since two filings ago.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **119** | **119** (unchanged — no new Pass ID) |
+| decision records | **075** | **075** (unchanged — declined, see `ROADMAP.md`) |
+| standing rules | **R205** | **R206** (MINTED) |
+| `SESSION_LOG` filings | **206** | **207** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **0** (confirmed no contradiction) |
+
+**Terminology (rule 15):** no bare "dimension" appears; not applicable
+this filing.

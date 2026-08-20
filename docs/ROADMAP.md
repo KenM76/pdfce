@@ -96,6 +96,86 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ruling — Pass 113.0's two named design questions CLOSE by operator ruling before the engineer's own reply asking them was even read: BOTH behaviours ship as options, the default is the engineer's to pick from ordinary-operator expectation — R206 MINTED, generalizing R169's mechanism beyond spec ambiguity for the first time — 2026-08-20 (two-hundred-and-seventh filing, no Pass ID)
+
+**This filing has no shell; no code changed.** Nothing shipped in `crates/`
+this filing — this is a ROADMAP amendment plus a standing-rule mint,
+recorded here (not only in *Backlog*) because `docs/fix`-style pure-ruling
+filings have precedent for a Shipped-section heading (see the fifty-eighth
+filing's "docs/fix" entry, above) and because a ruling that changes
+acceptance criteria deserves the same reverse-chronological visibility a
+code Pass gets.
+
+**What happened, in order.** The engineer had ended a reply to `pdfceGUI`
+by asking two design questions about `Pass 113.0` (Backlog,
+`transform_objects`): (1) should a mixed/heterogeneous selection (a path
+and an image together) be transformed as a whole, or refused; (2) what
+should happen on a degenerate drag producing a singular matrix — clamp, or
+refuse. **Ken answered both, unprompted, before that reply was read**,
+verbatim: *"for you two questions, make things work both ways as options.
+default it to your best guess as to what would be normally expected."*
+The engineer amended the outbound reply in place to tell `pdfceGUI` not to
+answer — worth recording because the near-miss is instructive: a question
+sent to a consuming project is a commitment to act on their answer, and
+had it been read first there would have been two answers to reconcile,
+one from a party with no standing to make the call.
+
+**`ROADMAP.md`: `Pass 113.0`'s Backlog entry amended in place** (see that
+entry, above) — both defaults recorded as acceptance criteria, with the
+option named alongside each, and the pre-existing "(offer the handle,
+clamp the drag)" parenthetical struck and corrected: read literally it
+had implied clamp was the settled shape for a singular matrix, which
+would now contradict the ruling (refuse is the default). Kept
+strikethrough rather than deleted, per this project's in-place-correction
+convention. The `q…cm…Q`-wrap-vs-operand-rewriting open question inside
+the same bullet is untouched — out of scope for this ruling.
+
+**Standing rule R206 MINTED — judged NOT adequately covered by an
+existing rule, on a narrow but load-bearing distinction from R169.**
+`R169` already carries the identical MECHANISM — ship a setting, default
+to the best-sourced guess of common practice, don't hard-code a solo
+pick — but its own text explicitly narrows its scope: *"this governs
+bucket-1 SETTING findings only… from the spec-ambiguity settings
+register."* Neither of today's two questions is a spec ambiguity at all
+— both are pure interaction-design choices about a not-yet-built verb,
+with no PDF-standard clause bearing on either. Widening `R169` itself
+would mean silently deleting the scope clause its own minting filing
+wrote on purpose; a sibling rule stating the same mechanism one layer up,
+cross-referencing `R169` as the spec-domain instance, is filed instead of
+either widening `R169` or leaving the mechanism unstated outside spec
+work. **Not the same instinct as `CLAUDE.md` rule 4's two narrowings**
+(024 §4.4, decision 059) — those removed VISIBLE MACHINERY (a confirm
+gate, a provisional-render layer); this rule is about who PICKS a
+default, a different axis, cited only as evidence the operator has
+independently converged on "don't make me choose, choose well" more than
+once. See *Standing rules*, below, for the rule's full text.
+
+**`docs/FEATURES.md`: no row changed** — confirmed by `Grep`/`Read`
+against the file's existing row for this capability (line 284, `[ ] [ ]
+[ ] [x]`, "Move, resize and rotate a content-stream object… via `q…cm…Q`
+matrix wrapping"). Its sentence does not assert single-kind-only or
+clamp-only behaviour, so nothing in it contradicts either default; the
+row correctly stays `[ ]`/`[ ]`/`[ ]`/`[x]` until `113.0` itself ships.
+
+**`docs/ARCHITECTURE.md` §12: DECLINED.** An interaction-design default
+for a not-yet-built verb is not a crate boundary, a library pick, or an
+invariant definition — this document's own bar for a decision-log entry,
+consistent with the same disposition `Pass 118.0`'s filing applied one
+filing ago to a comparably-shaped candidate.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **119** | **119** (unchanged — `113.0` already existed; this filing amends its acceptance criteria, mints no new Pass ID) |
+| decision records | **075** | **075** (unchanged — declined, see above) |
+| standing rules | **R205** | **R206** (MINTED — see above and *Standing rules*, below) |
+| `SESSION_LOG` filings | **206** | **207** |
+| `personal_rag/pdf` lessons | **+0** | **+0** (not a PDF-domain finding) |
+| `docs/FEATURES.md` rows touched | — | **0** (confirmed no contradiction, see above) |
+
+---
+
 ### Pass 118.0 — commit `075b1c7` — **THE EXTRACT/EDIT ASYMMETRY IS PUBLISHED: `TextRun::editability()` REPLACES A REQUESTED `bool` THAT COULD NOT HAVE BEEN CORRECT, `EditError::PinnedSpanNotFound` STOPS A REFUSAL FROM BLAMING THE OPERATOR'S OWN TEXT FOR THE SECOND TIME, AND A TEST WAS FOUND ASSERTING THE OLD, MISLEADING MESSAGE** — filed 2026-08-20 (two-hundred-and-sixth filing)
 
 **This filing has no shell.** The commit hash and status are relayed by the
@@ -63896,8 +63976,10 @@ engineer).
   Two named refusals, distinguished because they drive different UI
   (engineer's own framing, kept verbatim): an object with **no placement
   to wrap** (don't offer a handle) vs a **singular matrix** — `Matrix::
-  is_invertible` already exists for this exact check (`Pass 112.0`) — (offer
-  the handle, clamp the drag). Acceptance criteria also cover the two
+  is_invertible` already exists for this exact check (`Pass 112.0`) — ~~(offer
+  the handle, clamp the drag)~~ — **superseded, see the CLOSED ruling below:
+  offer the handle; REFUSE the singular matrix by name is now the default,
+  clamp-and-disclose is the option.** Acceptance criteria also cover the two
   cross-cutting gaps the dispatch flagged as "worth their own lines": no
   `PlannedEdit` shape exists yet for "wrapped in `q…cm…Q`" (`vector/
   edit.rs:380` has no such variant — confirmed by `Grep`, no
@@ -63911,6 +63993,46 @@ engineer).
   their own lines" phrasing might suggest a reader mint them separately.
   Open question against this Pass: `q…cm…Q` wrap vs operand-rewriting is
   not decided (see above).
+
+  **★ CLOSED 2026-08-20 — operator ruling on this Pass's two named design
+  questions (mixed selection, singular matrix).** Neither had been lettered
+  into *Open operator questions* below — both were filed inline, as
+  acceptance-criteria ambiguity, in this bullet itself (above). The
+  engineer put both to the `pdfceGUI` shell by name in a reply; Ken
+  answered before that reply was read, unprompted, both at once, verbatim:
+  *"make things work both ways as options. default it to your best guess
+  as to what would be normally expected."* Both halves of that ruling
+  bind: **both behaviours ship, as options; the default is the engineer's
+  to pick from ordinary-operator expectation, not the operator's to be
+  asked.** New standing rule **R206**, below, generalizes the shape of
+  this ruling (ship both, default from expectation, don't ask) beyond this
+  one Pass.
+  - **Mixed selection (a path and an image together in one call). Default:
+    transform the WHOLE selection, whatever kinds it holds** — one
+    command, one undo entry. That is what a marquee-then-drag gesture IS;
+    refusing on kind would reopen the `NotAPath` complaint this Pass exists
+    to close. **Option:** refuse a heterogeneous selection by name, for a
+    shell wanting single-kind semantics. **`R168` is unaffected and still
+    governs the boundary case:** if an object in the selection cannot be
+    transformed AT ALL, the default remains all-or-nothing with a stated
+    reason, never a silent subset — a *disclosed* partial application is
+    the option, not the default.
+  - **A singular matrix (a resize handle dragged through exactly zero).
+    Default: REFUSE by name.** A singular transform is irrecoverable — the
+    object collapses to a line or a point and no later transform restores
+    it, because there is no inverse to apply, which is data loss nobody
+    asked for. `Matrix::is_invertible` (`Pass 112.0`, `f8dd31f`) is the
+    existing predicate that lets the verb tell "no placement to wrap"
+    (don't offer a handle) apart from "this drag is degenerate" (offer the
+    handle; refuse on release, by default). **Option:** clamp to a minimum
+    scale and disclose that it did. Two things make the default nearly
+    free: a shell that clamps its own gesture interactively never hands
+    the API a singular matrix at all, so the default costs a well-behaved
+    shell nothing while still catching a gesture that forgets to; and a
+    **negative** scale is NOT singular — `scale(-1, 1)` is a mirror,
+    perfectly invertible — so dragging a handle through the *opposite*
+    edge is not the degenerate case at all, only exactly zero is, which a
+    commit-on-release gesture makes essentially unreachable.
 - **`Pass 113.1` — `transform_preview(&self, …)` preflight**, sharing ONE
   body with `113.0`'s verb, in the shape `vertex_edit_preview`
   established. Requested by name, third time asked, citing the
@@ -79233,6 +79355,37 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   that would otherwise catch a hazard like R186's own).
   **Ceiling moves `R204` → `R205`; next free `R206`.**
 
+- **R206 — When a design question has two defensible behaviours and
+  neither is dictated by the PDF standard, ship BOTH as configurable
+  options and PICK THE DEFAULT from what a normal operator would expect;
+  do not return to the operator to choose (operator ruling, 2026-08-20,
+  verbatim: *"make things work both ways as options. default it to your
+  best guess as to what would be normally expected."* — librarian-assigned
+  number; founding instance `Pass 113.0`'s mixed-selection and
+  singular-matrix questions, above).** **Sibling of `R169`, not a
+  duplicate:** `R169` states the identical mechanism — ship a setting,
+  default to the best-sourced guess of common practice — but its own
+  minting text scopes it deliberately to *"bucket-1 SETTING findings
+  only… from the spec-ambiguity settings register"*. `R206` is that same
+  mechanism with the scope clause removed, for the case `R169` explicitly
+  excludes: a pure interaction-design or API-shape choice with no
+  PDF-standard clause bearing on it at all. Both rules answer the same
+  underlying instruction — the operator does not want to be asked to pick
+  between two reasonable behaviours, and does not want either behaviour
+  discarded — but `R169`'s literature (the ambiguity-settings register,
+  its (a)/(b)/(c)/(d) evidence tiers) is spec-sourcing machinery that has
+  no equivalent for a question the spec never touches; `R206` carries no
+  such apparatus, because none exists to carry. **The default is not a
+  free pass to guess casually** — `R169`'s own discipline still applies by
+  analogy: a default chosen this way is a claim about ordinary-operator
+  expectation, and where that expectation is itself genuinely uncertain
+  the choice should be stated as a judgment call, not silently presented
+  as settled, per this project's claim-bearing-copy discipline. **What
+  this rule does NOT license:** it is not permission to skip R168 (whole-
+  selection-or-refuse), R27 (fail-clean over a silent guess), or any
+  other standing rule that already dictates one specific behaviour — it
+  applies only where two behaviours are BOTH legitimate and the choice
+  between them is genuinely open.
 - **R199 — A RECORDED BLOCKER IS A DATED READING, NOT A STANDING FACT. A
   sentence saying work is gated, needs, requires or awaits something
   carries the date it was reasoned and the condition it turns on — and is
