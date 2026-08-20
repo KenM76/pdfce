@@ -12638,7 +12638,8 @@ fn commit_measure_linear_draft(doc: &mut OpenDoc) -> CommitOutcome {
     let Some(state) = doc.measure.as_ref() else {
         return CommitOutcome::Nothing;
     };
-    let Some(kind) = state.pending else {
+    // `.clone()`: `DimensionKind` stopped being `Copy` at `Pass 107.0`.
+    let Some(kind) = state.pending.clone() else {
         return CommitOutcome::Nothing;
     };
     let (page_index, group) = (state.page_index, state.group);
@@ -22892,7 +22893,7 @@ fn run_dimension_drag(
             .session
             .dimension_model()
             .dimension(id)
-            .map(|d| d.kind)
+            .map(|d| d.kind.clone())
             .filter(|k| {
                 // Circular is the ONE kind with nowhere to stand off to.
                 // Filtering on "is it Linear" instead is what made an angular
@@ -22924,6 +22925,21 @@ fn run_dimension_drag(
                         text_along: text_along + mx * u.x + my * u.y,
                     })
                 }
+                // ★ `Pass 107.0`. A perimeter's placement pair IS a
+                // page-space displacement from the vertex centroid, so the
+                // drag needs no projection at all — the pointer delta is the
+                // answer.
+                pdfce_core::dimension::DimensionKind::Perimeter {
+                    points,
+                    closed,
+                    offset,
+                    text_along,
+                } => Some(pdfce_core::dimension::DimensionKind::Perimeter {
+                    points: points.clone(),
+                    closed,
+                    offset: offset + my,
+                    text_along: text_along + mx,
+                }),
                 // ★ `Pass 68.0`. The angular analogue of the same drag. An
                 // arc's own frame is POLAR about the apex, so the standoff is
                 // a change in RADIUS and the text position is a change in
@@ -23010,6 +23026,9 @@ fn run_dimension_drag(
                     pdfce_core::dimension::DimensionKind::Angular {
                         radius, text_along, ..
                     } => (radius, text_along),
+                    pdfce_core::dimension::DimensionKind::Perimeter {
+                        offset, text_along, ..
+                    } => (offset, text_along),
                     pdfce_core::dimension::DimensionKind::Circular { .. } => {
                         return consumed;
                     }
@@ -23017,7 +23036,7 @@ fn run_dimension_drag(
                 let outcome = doc.session_mut().place_dimension(id, offset, text_along);
                 diag::trace(|| {
                     format!(
-                        "commit-place-dimension id={id:?} offset={offset} along={text_along}                          -> {:?}",
+                        "commit-place-dimension id={id:?} offset={offset} along={text_along} -> {:?}",
                         outcome.as_ref().map_err(std::string::ToString::to_string)
                     )
                 });
@@ -23185,7 +23204,8 @@ fn measure_status_ui(
     } else if canvas::tool_builds_measure_linear(active) {
         let raw = st
             .pending
-            .map(|k| k.measured_points())
+            .as_ref()
+            .map(pdfce_core::dimension::DimensionKind::measured_points)
             .or_else(|| pointer_pdf.and_then(|ptr| st.linear.measured(ptr)));
         if let Some(raw) = raw {
             let d = format_measurement(raw, gscale, gformat);
@@ -24379,7 +24399,12 @@ fn selected_dimension_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
         // An angular ce dimension is neither: it has no radius/diameter
         // toggle, so it reports as not-circular and the summary label names
         // it from its own kind rather than from this pair.
-        DimensionKind::Linear { .. } | DimensionKind::Angular { .. } => (false, false),
+        // A perimeter is in the same position as an angular one: it has no
+        // radius/diameter reading to toggle between, so it reports
+        // not-circular and the summary names it from its own kind.
+        DimensionKind::Linear { .. }
+        | DimensionKind::Angular { .. }
+        | DimensionKind::Perimeter { .. } => (false, false),
     };
     ui.label(ui_text::dimension_props_summary(
         id.0,
@@ -24414,6 +24439,13 @@ fn selected_dimension_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
         // that rather than showing a linear dimension's controls on something
         // they do not apply to.
         DimensionKind::Angular { .. } => {}
+        // No per-ce-dimension controls here for a perimeter either, and for a
+        // sharper reason than the angular arm's: a perimeter's editing surface
+        // is its VERTICES, which are canvas handles rather than panel widgets.
+        // `crates/pdfce-gui` is operator-paused (Ken, 2026-08-13) and the live
+        // shell is `D:\dev\pdfceGUI`, which owns that gesture — an empty arm
+        // is honest about where the work is rather than half-building it here.
+        DimensionKind::Perimeter { .. } => {}
         DimensionKind::Circular { .. } => {
             // THE bullet the ROADMAP names as the concrete gap: this control
             // existed only in the tool-armed property bar, at draw time.

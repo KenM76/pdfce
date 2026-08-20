@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (27757 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 125 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (28619 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 129 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 125 public `EditSession` methods
+## 1. Verb index — all 129 public `EditSession` methods
 
-**Count: 125.** Established by brace-matched extraction of the four
+**Count: 129.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -852,7 +852,7 @@ needs no comparator and cannot drift from the standard.
 
 CLI: `pdfce-cli add-named-dest --name X --page N [--top Y]`, then
 `add-bookmark --dest-name X` (mutually exclusive with `--page`).
-### 1.22 ce dimensions (18) — detail in part 3
+### 1.22 ce dimensions (22) — detail in part 3
 
 > #### ★ Group membership, renaming and deletion — added 2026-08-19
 >
@@ -904,6 +904,11 @@ CLI: `pdfce-cli add-named-dest --name X --page N [--top Y]`, then
 | Set one ce dimension's overrides | `set_dimension_style(&mut self, dimension, style: StyleOverrides) -> Result<usize, EditError>` | 16115 | ⚠️ Count of **properties overridden afterwards** — a different unit from the sibling above, same type. |
 | Delete a ce dimension | `delete_dimension(&mut self, dimension) -> Result<(), EditError>` | 16178 | `/Annots` ref + dict + `/AP` + sidecar record. Group survives. |
 | **Translate** a ce dimension | `move_dimension(&mut self, dimension, dx, dy) -> Result<(), EditError>` | 16779 | ⚠️ Translates the **measured points** — takes the ce dimension off the feature it was measuring. |
+
+| **Move one vertex** of a ce dimension | `move_dimension_vertex(&mut self, dimension, index: usize, dx, dy) -> Result<VertexOutcome, EditError>` | 22304 | ⚠️ **The ONLY ce-dimension verb that deliberately RE-MEASURES.** Works on a perimeter at any index and on a linear at 0/1. Cannot refuse for a shape reason, so a drag preview may always be drawn. |
+| Insert a vertex into a perimeter | `insert_dimension_vertex(&mut self, dimension, after: usize, at: Point) -> Result<VertexOutcome, EditError>` | 22339 | `after == len-1` splits the **closing** segment of a closed shape, or extends an open path. Refused on a linear ce dimension (structurally two points). |
+| Remove a vertex from a perimeter | `remove_dimension_vertex(&mut self, dimension, index: usize) -> Result<VertexOutcome, EditError>` | 22367 | Refuses below **2** vertices (open) or **3** (closed) — pdfce policy, not a spec rule. |
+| Preflight a vertex edit | `vertex_edit_preview(&self, dimension, edit: VertexEdit) -> Result<VertexOutcome, EditError>` | 22399 | ✅ **Load-bearing** — shares one body with the three verbs above. `.err()` **is** the refusal predicate; there is deliberately no second one. |
 
 ### 1.23 Fonts (6)
 

@@ -25,7 +25,7 @@
 //! only fallback group is a foot-gun with no benefit — ui-spec §5.3).
 
 use crate::object::ObjId;
-use crate::vector::{AxisConstraint, Point, measured_length};
+use crate::vector::{AxisConstraint, Point, measured_length, polyline_length};
 
 use super::fit::FitCircle;
 use super::units::{
@@ -149,7 +149,30 @@ impl Group {
 /// geometry is stored, the displayed value is derived). Radius vs diameter is
 /// a *display-only* toggle on the same [`Self::Circular`] geometry (ui-spec
 /// §1.1) — never a separate fit.
-#[derive(Debug, Clone, Copy, PartialEq)]
+///
+/// # ★ NOT `Copy`, since `Pass 107.0`, and that is deliberate
+///
+/// Every variant up to `Pass 106.x` was fixed-arity, so the enum was `Copy`
+/// and roughly a hundred call sites across four crates dereferenced it with
+/// `*kind` for free. [`Self::Perimeter`] holds a `Vec<Point>` and cannot be,
+/// so the derive was dropped rather than the variant reshaped.
+///
+/// The alternative was offered by the consuming shell and considered
+/// seriously: keep the enum `Copy` by holding the vertices in
+/// [`DimensionModel`] and referencing them from the variant by id. It was
+/// **refused**, because it splits ONE ce dimension's geometry across two
+/// containers. The sidecar would serialise two arrays that must stay in step,
+/// [`crate::edit::EditSession`]'s undo log would have to revert two of them
+/// atomically, and the invariant this whole subsystem exists to hold — *the
+/// drawn shape is exactly the thing measured* — would become a join between
+/// two tables rather than a property of one value. A bounded inline array was
+/// refused for the shell's own stated reason: a footprint traced around a
+/// building runs to thirty-odd vertices and any cap is a cap somebody hits.
+///
+/// `Copy` is a promise that a bit-copy is the right way to duplicate a value.
+/// A thirty-vertex polyline is not that, so the honest type is not `Copy` and
+/// the ~40 mechanical `.clone()`s are the price of saying so once.
+#[derive(Debug, Clone, PartialEq)]
 pub enum DimensionKind {
     /// A linear dimension between two page-space points under an axis
     /// constraint. The stored measured length is
@@ -258,6 +281,90 @@ pub enum DimensionKind {
         /// Degrees rather than points so the label keeps its position on the
         /// arc when the radius changes, which is what an operator expects
         /// when they drag the arc further out.
+        text_along: f64,
+    },
+    /// A **perimeter / path length** over a picked polyline (`Pass 107.0`) —
+    /// the sum of every segment, printed as ONE number.
+    ///
+    /// # The operator's ask, and why it could not be composed
+    ///
+    /// > *"give me perimeter measuring tool as well where I click around to
+    /// > make a shape and it adds the distance of all the segments together
+    /// > for the dimension display … this should come with all the scaling
+    /// > options of the other dimension tools."*
+    /// > — Ken, 2026-08-20
+    ///
+    /// The last clause is the one that decides this is a [`DimensionKind`]
+    /// rather than a markup annotation carrying a number in its `/Contents`:
+    /// group scale, unit, [`NumberFormat`], drafting standard, layer and the
+    /// `Pass 69.0` style cascade all hang off a ce dimension's group, and a
+    /// number the engine does not own is a caption rather than a measurement
+    /// — it cannot be re-measured when the group's scale is calibrated later.
+    ///
+    /// Three chained [`Self::Linear`] ce dimensions would print three labels
+    /// where the ask is one, and a shared endpoint would move in two commands
+    /// so an undo could leave the chain broken. A single [`Self::Linear`]
+    /// whose `a`/`b` were stretched to fake the total would fabricate
+    /// geometry — the drawn line would not be the thing measured, which is
+    /// the exact invariant [`Self::linear_geometry`]'s doc comment exists to
+    /// hold.
+    ///
+    /// # Open and closed are ONE kind with a flag, not two kinds
+    ///
+    /// `closed: true` is a perimeter (a fence run around a footprint);
+    /// `closed: false` is a path length (a pipe run, a cable route). They
+    /// differ by exactly one segment — the one from the last vertex back to
+    /// the first — and by the annotation subtype that carries them
+    /// (`/Polygon` vs `/PolyLine`, ISO 32000-1 §12.5.6.9 Table 178). Every
+    /// other property, every verb and every formatting path is identical, so
+    /// splitting them into two variants would duplicate all of that to
+    /// express one boolean.
+    Perimeter {
+        /// The picked vertices, in pick order, page space, points.
+        ///
+        /// **At least two** for an open path and **at least three** for a
+        /// closed one — enforced at the verbs that can shorten the list
+        /// ([`crate::edit::EditSession::remove_dimension_vertex`]) rather
+        /// than by this type, because a `Vec` cannot express the bound and a
+        /// wrapper that could would have to be constructible by the shell
+        /// anyway. [`Self::measured_points`] is defined for a shorter list
+        /// (it sums what is there, which is 0.0 for one vertex); it is the
+        /// DRAWING and the file that would be degenerate.
+        points: Vec<Point>,
+        /// Whether the last vertex joins back to the first.
+        ///
+        /// When `true` the closing segment is part of the measured total and
+        /// the annotation is authored as a `/Polygon`; when `false` it is
+        /// not, and the annotation is a `/PolyLine`.
+        closed: bool,
+        /// The label's displacement from the vertex centroid, ALONG PAGE +y.
+        ///
+        /// # Why the centroid, and why page axes rather than a shape axis
+        ///
+        /// [`Self::Linear`] measures the standoff along its own constraint
+        /// normal, because a linear dimension HAS one axis and the number
+        /// belongs beside it. A polyline has as many axes as it has segments.
+        /// The two candidate conventions were *the longest segment's frame*
+        /// (CAD-conventional) and *the vertex centroid* — and the deciding
+        /// property is that this kind's headline feature is **vertex
+        /// editing**. Under the longest-segment convention, dragging one
+        /// corner can change WHICH segment is longest, and the label
+        /// teleports across the shape for a reason no operator can see.
+        /// Under the centroid convention the label drifts smoothly with the
+        /// shape, which is what dragging a corner should look like.
+        ///
+        /// So the anchor is `centroid + (text_along, offset)` in page axes,
+        /// which also means [`crate::edit::EditSession::place_dimension`]
+        /// carries this kind with no new fields and no new semantics: a drag
+        /// still resolves to one `(offset, text_along)` pair.
+        offset: f64,
+        /// The label's displacement from the vertex centroid, ALONG PAGE +x.
+        ///
+        /// Named `text_along` to match [`Self::Linear`] and [`Self::Angular`]
+        /// so [`crate::edit::EditSession::place_dimension`]'s two arguments
+        /// mean the same thing on every placeable kind. See [`Self::Perimeter::offset`]
+        /// for why the pair is page-axis-relative here and frame-relative
+        /// there.
         text_along: f64,
     },
 }
@@ -371,6 +478,19 @@ impl DimensionKind {
     /// `None` for a non-linear or degenerate dimension.
     #[must_use]
     pub fn label_anchor(&self) -> Option<Point> {
+        // A perimeter anchors on its vertex centroid, displaced by the same
+        // `(text_along, offset)` pair every placeable kind carries — but in
+        // PAGE axes, because a polyline has no single frame to be relative to.
+        // See `Perimeter::offset` for why the centroid rather than the longest
+        // segment: vertex editing is this kind's headline feature, and the
+        // longest segment can change identity mid-drag.
+        if let Self::Perimeter {
+            offset, text_along, ..
+        } = *self
+        {
+            let c = self.polyline_centroid()?;
+            return Some(Point::new(c.x + text_along, c.y + offset));
+        }
         let Self::Linear { text_along, .. } = *self else {
             return None;
         };
@@ -396,6 +516,14 @@ impl DimensionKind {
     /// `None` for a non-linear or degenerate dimension.
     #[must_use]
     pub fn placement_from_point(&self, p: Point) -> Option<(f64, f64)> {
+        // A perimeter's placement pair IS the page-space displacement from the
+        // centroid, so the drag resolves with no projection at all — and,
+        // unlike the linear case, dropping the label anywhere is expressible
+        // rather than being flattened onto one axis.
+        if let Self::Perimeter { .. } = *self {
+            let c = self.polyline_centroid()?;
+            return Some((p.y - c.y, p.x - c.x));
+        }
         let Self::Linear { a, b, .. } = *self else {
             return None;
         };
@@ -483,6 +611,25 @@ impl DimensionKind {
                 radius,
                 text_along,
             },
+            // Every vertex moves; the placement pair does not. The label is
+            // held relative to the CENTROID, and a translation moves the
+            // centroid by exactly the same vector, so a perimeter's label
+            // travels with its shape for free — the same reason
+            // `Linear`'s pair is untouched above.
+            Self::Perimeter {
+                points,
+                closed,
+                offset,
+                text_along,
+            } => Self::Perimeter {
+                points: points
+                    .into_iter()
+                    .map(|p| Point::new(p.x + dx, p.y + dy))
+                    .collect(),
+                closed,
+                offset,
+                text_along,
+            },
         }
     }
 
@@ -514,7 +661,55 @@ impl DimensionKind {
                 let dot = dir_a.x.mul_add(dir_b.x, dir_a.y * dir_b.y).clamp(-1.0, 1.0);
                 dot.acos().to_degrees()
             }
+            // The whole point of the kind: ONE number, summed over every
+            // segment, in page points, so the group's scale multiplies it
+            // exactly as it multiplies a linear length. A perimeter IS a
+            // length, which is why no new number formatting was needed.
+            DimensionKind::Perimeter {
+                ref points, closed, ..
+            } => polyline_length(points, closed),
         }
+    }
+
+    /// The picked vertices and whether they close, for a
+    /// [`Self::Perimeter`]; `None` for every other kind.
+    ///
+    /// # Why both facts come out of ONE accessor
+    ///
+    /// A vertex list without its `closed` flag is not enough to draw or to
+    /// measure — the closing segment is a segment. Two accessors would let a
+    /// caller read half the geometry and be confident about it, which is how
+    /// a shell ends up drawing an open path over a closed measurement. The
+    /// shell needs this for hit-testing and for drawing its vertex handles.
+    #[must_use]
+    pub fn polyline(&self) -> Option<(&[Point], bool)> {
+        match self {
+            Self::Perimeter { points, closed, .. } => Some((points.as_slice(), *closed)),
+            _ => None,
+        }
+    }
+
+    /// The mean of a [`Self::Perimeter`]'s vertices — the point its label is
+    /// placed relative to. `None` for every other kind, and for an empty
+    /// vertex list (which has no mean, rather than a mean of zero).
+    ///
+    /// The VERTEX mean, deliberately, not the polygon's area centroid: the
+    /// vertex mean is defined for an open path and for a self-intersecting
+    /// one, and both are shapes this kind accepts. An area centroid is
+    /// undefined for the first and signed-degenerate for the second, so the
+    /// label would jump or vanish on shapes the measurement itself handles
+    /// perfectly well.
+    #[must_use]
+    pub fn polyline_centroid(&self) -> Option<Point> {
+        let (points, _) = self.polyline()?;
+        if points.is_empty() {
+            return None;
+        }
+        let n = points.len() as f64;
+        let (sx, sy) = points
+            .iter()
+            .fold((0.0, 0.0), |(sx, sy), p| (sx + p.x, sy + p.y));
+        Some(Point::new(sx / n, sy / n))
     }
 
     /// Whether this ce dimension measures an ANGLE rather than a length.
@@ -538,6 +733,13 @@ impl DimensionKind {
             // No prefix: the caption carries a trailing degree sign instead,
             // which is where a reader expects to find it on an angle.
             DimensionKind::Angular { .. } => "",
+            // No prefix either, and this one is a decision rather than an
+            // absence. A perimeter's number is a length in the group's unit,
+            // identical in kind to a linear one, so a marker such as `P` or
+            // `⌀`'s analogue would be pdfce inventing a notation that neither
+            // ASME Y14.2 nor ISO 129-1 defines. The shape drawn beside the
+            // number already says what was measured.
+            DimensionKind::Perimeter { .. } => "",
             DimensionKind::Circular { show_diameter, .. } => {
                 if *show_diameter {
                     "DIA "
@@ -553,7 +755,11 @@ impl DimensionKind {
 /// in-document wiring handles (the annotation + appearance object numbers,
 /// filled in once saved — so a scale change can find and regenerate each
 /// member's baked `/AP`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+///
+/// **Not `Copy` since `Pass 107.0`**, for the one reason
+/// [`DimensionKind`]'s own note gives: it contains a [`DimensionKind`], and a
+/// perimeter's vertex list is not bit-copyable.
+#[derive(Debug, Clone, PartialEq)]
 pub struct DimensionRecord {
     /// Stable identifier.
     pub id: DimensionId,
@@ -1031,7 +1237,7 @@ mod angular_tests {
     #[test]
     fn moving_an_angle_does_not_change_it() {
         let before = wedge(37.5);
-        let after = before.translated(250.0, -80.0);
+        let after = before.clone().translated(250.0, -80.0);
         assert!(
             (after.measured_points() - before.measured_points()).abs() < 1e-12,
             "a translation must preserve the measured angle"

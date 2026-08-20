@@ -147,6 +147,7 @@ use crate::pageops::{self};
 use crate::signature::{SaveMode, SignatureCensus, SignatureImpact, census, impact_of};
 use crate::span::ByteSpan;
 use crate::vartext::FontResource;
+use crate::vector::Point;
 use crate::view::{DocumentView, StreamSource};
 use crate::writer::content::ContentBuilder;
 use crate::writer::{DirtySet, SaveOptions, SaveReport, WriteError};
@@ -522,6 +523,33 @@ pub enum CommandKind {
     /// translated and its annotation + baked `/AP` regenerated from it. ONE
     /// undoable command. See [`EditSession::move_dimension`].
     MoveDimension,
+    /// A ce dimension's VERTEX was moved, inserted or removed (`Pass 107.0`),
+    /// and its annotation + baked `/AP` were regenerated from the new
+    /// geometry. ONE undoable command per edit, so a corner drag is one
+    /// Ctrl+Z.
+    ///
+    /// ★ The **first** ce-dimension command that changes what a ce dimension
+    /// MEASURES. [`Self::MoveDimension`] is a rigid motion and
+    /// [`Self::PlaceDimension`] writes only fields the value function does not
+    /// read; both are value-preserving by construction. This one is not, and
+    /// deliberately so — see [`EditSession::move_dimension_vertex`].
+    ///
+    /// The edit is carried rather than flattened so an undo stack can say
+    /// which of the three it would revert.
+    EditDimensionVertex {
+        /// Which of the three edits this entry performed.
+        ///
+        /// The fieldless [`VertexEditKind`] rather than the whole
+        /// [`VertexEdit`], because [`CommandKind`] is `Eq` and a `VertexEdit`
+        /// carries `f64` displacements. That is a constraint rather than a
+        /// preference, but the narrower type is the right one anyway: an undo
+        /// stack wants to say *which operation would be reverted*, and the
+        /// delta is neither displayable nor meaningful without the geometry it
+        /// applied to.
+        edit: VertexEditKind,
+        /// The vertex index the edit named.
+        index: usize,
+    },
     /// A ce dimension was PLACED (Pass 27.1): its standoff and/or its text
     /// position along the dimension line changed, and its appearance was
     /// regenerated. What it MEASURES is untouched — this writes only fields the
@@ -3113,6 +3141,286 @@ fn unique_field_name(base: &str, taken: &BTreeSet<String>) -> String {
     }
     format!("{base}_{}", taken.len())
 }
+/// Which vertex edit one of the three `*_dimension_vertex` verbs performs
+/// (`Pass 107.0`).
+///
+/// # Why an enum exists at all when three named verbs are the public surface
+///
+/// The three verbs are what a shell and a CLI want to call — `insert` reads as
+/// insert. But all three share one set of guards, one label recomputation and
+/// one undo entry, and they are all previewable by the same question. Routing
+/// them through one value lets [`EditSession::vertex_edit_preview`] be a
+/// single method rather than three that must stay in step, and lets
+/// [`CommandKind::EditDimensionVertex`] say precisely which edit an undo entry
+/// would revert instead of collapsing all three into one label.
+///
+/// `Copy`, and cheap: the largest variant is two `f64`s and a `usize`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VertexEdit {
+    /// Move the vertex at `index` by a page-space `(dx, dy)`. Re-measures.
+    Move {
+        /// Which vertex.
+        index: usize,
+        /// Page-space x displacement, points.
+        dx: f64,
+        /// Page-space y displacement, points.
+        dy: f64,
+    },
+    /// Insert a new vertex immediately after `after`, at page-space `at`.
+    ///
+    /// `after == len - 1` appends — which is a point on the CLOSING segment of
+    /// a closed perimeter, and an extension of an open path.
+    Insert {
+        /// The index of the first vertex of the segment being split.
+        after: usize,
+        /// Where the new vertex goes, page space, points.
+        at: Point,
+    },
+    /// Remove the vertex at `index`. Refuses below the minimum for the shape.
+    Remove {
+        /// Which vertex.
+        index: usize,
+    },
+}
+
+/// Which of the three vertex edits an undo entry performed (`Pass 107.0`) —
+/// [`VertexEdit`] with the payload removed.
+///
+/// Exists because [`CommandKind`] is `Eq` and [`VertexEdit`] carries `f64`
+/// displacements, so the full value cannot ride in the command log. See
+/// [`CommandKind::EditDimensionVertex`] for why the narrower type is also the
+/// more honest one for that use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VertexEditKind {
+    /// A vertex was moved. The only one of the three that can change the
+    /// measured value without changing the vertex count.
+    Moved,
+    /// A vertex was inserted.
+    Inserted,
+    /// A vertex was removed.
+    Removed,
+}
+
+impl VertexEdit {
+    /// Which of the three this is, without its payload — what rides in the
+    /// undo log.
+    #[must_use]
+    pub const fn kind(self) -> VertexEditKind {
+        match self {
+            Self::Move { .. } => VertexEditKind::Moved,
+            Self::Insert { .. } => VertexEditKind::Inserted,
+            Self::Remove { .. } => VertexEditKind::Removed,
+        }
+    }
+
+    /// The vertex index this edit names.
+    ///
+    /// For [`Self::Insert`] that is the `after` index — the first vertex of
+    /// the segment being split — because that is the index the operator's
+    /// right-click identified, and it is what an undo entry should name.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        match self {
+            Self::Move { index, .. } | Self::Remove { index } => index,
+            Self::Insert { after, .. } => after,
+        }
+    }
+}
+
+/// What a vertex edit did — or, from [`EditSession::vertex_edit_preview`],
+/// what it would do (`Pass 107.0`).
+///
+/// # This IS the rule-4 disclosure, and it is the reason the verb returns
+/// anything at all
+///
+/// A vertex edit re-measures. The number the ce dimension prints changes as a
+/// direct consequence of the drag, and project rule 4's obligation is that
+/// pdfce never goes silent about something it computed — while decision 059
+/// forbids marking anything on the page. Both are satisfied by the same thing:
+/// the shape and its new label render exactly as they will render after Save,
+/// and the *change* is stated off-canvas from these fields.
+///
+/// [`Self::previous_label`] is carried for one reason: a status line reading
+/// *"12.40 m → 13.85 m"* is a disclosure, and one reading *"13.85 m"* is just
+/// the number, which the operator can already see baked into the drawing. The
+/// shell cannot reconstruct the old value after the fact — the geometry it was
+/// derived from is gone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct VertexOutcome {
+    /// How many vertices the ce dimension has AFTER the edit.
+    ///
+    /// Always 2 for a linear ce dimension, whose count is structural.
+    pub vertices: usize,
+    /// Whether the shape closes. Always `false` for a linear ce dimension.
+    pub closed: bool,
+    /// The displayed value after the edit, formatted through the group's
+    /// scale, unit and number format — the same single producer the baked
+    /// `/AP` uses, so this string and the one in the file are the same string.
+    pub label: String,
+    /// The displayed value before the edit, for the same reason.
+    pub previous_label: String,
+}
+
+/// Apply a [`VertexEdit`] to a [`DimensionKind`](crate::dimension::DimensionKind),
+/// or say precisely why it cannot be applied (`Pass 107.0`).
+///
+/// # Why this is a free function and not a method on the enum
+///
+/// It has to name a [`DimensionId`] in its refusals, and a `DimensionId` is a
+/// property of the RECORD, not of the geometry — [`DimensionKind`] deliberately
+/// knows nothing about which ce dimension it belongs to. Putting this on the
+/// enum would mean either threading an id into a type that has no business
+/// holding one, or returning refusals that cannot say what they are about.
+///
+/// Pure: no session, no document, no side effects. That is what lets
+/// [`EditSession::vertex_edit_preview`] and the three mutating verbs share it
+/// exactly rather than approximately.
+///
+/// # The minimum vertex counts, and why they differ
+///
+/// An OPEN path needs **two** vertices, because one vertex has no segment and
+/// therefore no length. A CLOSED one needs **three**, because two closed
+/// vertices trace a line there and back: it draws as a single stroke and
+/// prints twice the distance between two points, which is a number no operator
+/// asked for attached to a shape that does not look like it.
+///
+/// # Errors
+///
+/// [`EditError::DimensionHasNoVertices`] for a circular or angular ce
+/// dimension; [`EditError::DimensionVertexCountFixed`] for insert/remove on a
+/// linear one; [`EditError::VertexIndexOutOfRange`];
+/// [`EditError::VertexNotPlaceable`] for a non-finite or absurd coordinate;
+/// [`EditError::PerimeterWouldBeDegenerate`] for a removal that would go below
+/// the minimum.
+fn vertex_edited_kind(
+    id: DimensionId,
+    kind: &DimensionKind,
+    edit: VertexEdit,
+) -> Result<DimensionKind, EditError> {
+    // The guard every coordinate this function can write must pass, applied
+    // once, here, before anything is built. `usable_page_value` is the sidecar
+    // reader's own test — deliberately the same function rather than the same
+    // rule written twice (R92): a coordinate the reader would reject must not
+    // be one the writer accepts.
+    let placeable = |p: Point| -> Result<Point, EditError> {
+        if crate::dimension::sidecar::usable_page_value(p.x)
+            && crate::dimension::sidecar::usable_page_value(p.y)
+        {
+            Ok(p)
+        } else {
+            Err(EditError::VertexNotPlaceable {
+                id: id.0,
+                x: p.x,
+                y: p.y,
+            })
+        }
+    };
+
+    match kind {
+        DimensionKind::Perimeter {
+            points,
+            closed,
+            offset,
+            text_along,
+        } => {
+            let mut points = points.clone();
+            match edit {
+                VertexEdit::Move { index, dx, dy } => {
+                    let count = points.len();
+                    let slot = points
+                        .get_mut(index)
+                        .ok_or(EditError::VertexIndexOutOfRange {
+                            id: id.0,
+                            index,
+                            count,
+                        })?;
+                    *slot = placeable(Point::new(slot.x + dx, slot.y + dy))?;
+                }
+                VertexEdit::Insert { after, at } => {
+                    let count = points.len();
+                    if after >= count {
+                        return Err(EditError::VertexIndexOutOfRange {
+                            id: id.0,
+                            index: after,
+                            count,
+                        });
+                    }
+                    points.insert(after + 1, placeable(at)?);
+                }
+                VertexEdit::Remove { index } => {
+                    let count = points.len();
+                    if index >= count {
+                        return Err(EditError::VertexIndexOutOfRange {
+                            id: id.0,
+                            index,
+                            count,
+                        });
+                    }
+                    let minimum = if *closed { 3 } else { 2 };
+                    if count - 1 < minimum {
+                        return Err(EditError::PerimeterWouldBeDegenerate {
+                            id: id.0,
+                            shape: if *closed { "closed" } else { "open" },
+                            remaining: count - 1,
+                            minimum,
+                        });
+                    }
+                    points.remove(index);
+                }
+            }
+            Ok(DimensionKind::Perimeter {
+                points,
+                closed: *closed,
+                offset: *offset,
+                text_along: *text_along,
+            })
+        }
+        DimensionKind::Linear {
+            a,
+            b,
+            constraint,
+            offset,
+            text_along,
+        } => match edit {
+            VertexEdit::Move { index, dx, dy } => {
+                // Index 0 is `a`, index 1 is `b` — the pick order, which is
+                // also the order `linear_geometry` reads them in, so a shell
+                // that draws handles in vertex order draws them where the
+                // operator clicked.
+                let (na, nb) = match index {
+                    0 => (placeable(Point::new(a.x + dx, a.y + dy))?, *b),
+                    1 => (*a, placeable(Point::new(b.x + dx, b.y + dy))?),
+                    _ => {
+                        return Err(EditError::VertexIndexOutOfRange {
+                            id: id.0,
+                            index,
+                            count: 2,
+                        });
+                    }
+                };
+                Ok(DimensionKind::Linear {
+                    a: na,
+                    b: nb,
+                    // Untouched: the constraint is a decision the operator
+                    // made when they placed the ce dimension, and a drag of
+                    // one end is not a request to revoke it. A Horizontal
+                    // dimension stays horizontal and re-measures its span.
+                    constraint: *constraint,
+                    offset: *offset,
+                    text_along: *text_along,
+                })
+            }
+            VertexEdit::Insert { .. } | VertexEdit::Remove { .. } => {
+                Err(EditError::DimensionVertexCountFixed { id: id.0, count: 2 })
+            }
+        },
+        DimensionKind::Circular { .. } | DimensionKind::Angular { .. } => {
+            Err(EditError::DimensionHasNoVertices { id: id.0 })
+        }
+    }
+}
+
 /// What [`EditSession::adopt_widget`] did — returned rather than inferred,
 /// because two of these facts are invisible from the widget afterwards.
 ///
@@ -3775,6 +4083,111 @@ pub enum EditError {
     NotACircularDimension {
         /// The dimension id.
         id: u32,
+    },
+    /// A vertex operation named a ce dimension that has no vertex list at all
+    /// (`Pass 107.0`).
+    ///
+    /// Named for the PROPERTY, not the kind, on R186's reasoning and on the
+    /// precedent [`Self::NotALinearDimension`] set when it was rewritten: a
+    /// refusal keyed on "not the kind I know" grows a new false negative every
+    /// time a variant is added, and the operator experiences it as a control
+    /// that silently does nothing.
+    ///
+    /// A CIRCULAR ce dimension stores a fitted circle — a centre and a radius
+    /// derived from picks that were discarded once the fit was taken. An
+    /// ANGULAR one stores an apex and two unit directions, which are not
+    /// points on the page at all (see
+    /// [`DimensionKind::Angular`](crate::dimension::DimensionKind::Angular)'s
+    /// own note on why the rays are stored rather than the picked lines).
+    /// Neither has anything a vertex index could address.
+    // A single long line on purpose: a `\`-continued literal loses its
+    // backslash to patch tooling often enough that this project has a gate for
+    // it (`tools/check-string-gaps.sh`), and rustfmt leaves a long single-line
+    // literal alone.
+    #[error(
+        "ce dimension {id} is built from a fit rather than from picked points, so it has no vertices to edit"
+    )]
+    DimensionHasNoVertices {
+        /// The dimension id.
+        id: u32,
+    },
+    /// A vertex was to be inserted into, or removed from, a ce dimension whose
+    /// vertex count is structural (`Pass 107.0`).
+    ///
+    /// A LINEAR ce dimension is two points and an axis constraint: three
+    /// points is not a longer linear dimension, it is a different kind. So
+    /// moving one of its two vertices is supported and changing how many it
+    /// has is refused — the two halves of the same fact, split because only
+    /// one of them is impossible.
+    #[error(
+        "ce dimension {id} measures between exactly {count} picked points; only a perimeter can gain or lose vertices"
+    )]
+    DimensionVertexCountFixed {
+        /// The dimension id.
+        id: u32,
+        /// How many vertices it structurally has.
+        count: usize,
+    },
+    /// A vertex index named nothing (`Pass 107.0`).
+    ///
+    /// Reports the count as well as the index, because the caller that got
+    /// this wrong is usually a shell whose picture of the shape is one edit
+    /// stale, and "there are 12, you asked for 14" is the fact that diagnoses
+    /// that. `index` is the value as supplied.
+    #[error("ce dimension {id} has {count} vertices, so index {index} names nothing")]
+    VertexIndexOutOfRange {
+        /// The dimension id.
+        id: u32,
+        /// The index the caller supplied.
+        index: usize,
+        /// How many vertices the ce dimension actually has.
+        count: usize,
+    },
+    /// Removing that vertex would leave a shape that cannot be measured or
+    /// drawn (`Pass 107.0`).
+    ///
+    /// An OPEN path needs two vertices to have a segment; a CLOSED one needs
+    /// three to enclose anything — two "closed" vertices are a line traced
+    /// there and back, which prints double the distance between two points and
+    /// draws as a single stroke. Both are refused rather than repaired,
+    /// because the repair (silently opening a closed shape, or deleting the
+    /// whole ce dimension) is a decision the operator did not ask for.
+    ///
+    /// The shell is expected to grey the menu item instead of catching this —
+    /// [`EditSession::vertex_edit_preview`] answers the same question without
+    /// mutating anything, which is what makes that possible.
+    #[error(
+        "removing that vertex would leave {remaining}, and a {shape} perimeter needs at least {minimum}"
+    )]
+    PerimeterWouldBeDegenerate {
+        /// The dimension id.
+        id: u32,
+        /// The word "closed" or "open", so the message reads as prose.
+        shape: &'static str,
+        /// How many vertices would be left.
+        remaining: usize,
+        /// How many that shape needs.
+        minimum: usize,
+    },
+    /// A vertex coordinate was not a usable page value (`Pass 107.0`).
+    ///
+    /// Non-finite, or three orders of magnitude past PDF's own 14,400-unit
+    /// architectural page limit (Annex C.1) — the identical test the sidecar
+    /// reader applies to file-supplied geometry
+    /// ([`crate::dimension::sidecar::usable_page_value`]), deliberately the
+    /// same function rather than the same rule written twice.
+    ///
+    /// Refused before any mutation: a NaN reaching the writer produces an
+    /// appearance stream with `NaN` in it, which no reader can draw and which
+    /// is invisible until the file is opened somewhere else.
+    #[error("({x}, {y}) is not a usable page coordinate")]
+    VertexNotPlaceable {
+        /// The dimension id.
+        id: u32,
+        /// The offending x.
+        x: f64,
+        /// The offending y.
+        y: f64,
     },
     /// A **tolerance** was supplied that cannot be drawn (`Pass 69.1`).
     ///
@@ -4608,21 +5021,25 @@ pub enum EditError {
     /// [`EditSession::set_markup_style`] was pointed at a **ce
     /// dimension**.
     ///
-    /// A ce dimension is a `/Line` annotation with `/IT /LineDimension`
-    /// and a fully-baked `/AP` that draws witness lines, terminators and
-    /// a measured label. It passes every "is this a markup pdfce can
-    /// author?" test and would regenerate as a **bare line** — the label
-    /// and the witness lines gone, silently, from something the operator
-    /// asked only to recolour.
+    /// A ce dimension is a `/Line` with `/IT /LineDimension`, or (since
+    /// `Pass 107.0`) a `/Polygon` with `/IT /PolygonDimension` or a
+    /// `/PolyLine` with `/IT /PolyLineDimension`, carrying a fully-baked
+    /// `/AP` that draws witness lines, terminators and a measured label. It
+    /// passes every "is this a markup pdfce can author?" test and would
+    /// regenerate as a **bare line or a bare polygon** — the label and the
+    /// witness lines gone, silently, from something the operator asked only
+    /// to recolour.
+    ///
+    /// See `EditSession::is_ce_dimension` for the two independent tests this
+    /// refusal is based on, and for why widening the world past a refusal is
+    /// the same act as removing it.
     ///
     /// Refused by name rather than handled, because the correct verb
     /// already exists: [`EditSession::set_dimension_style`] restyles a ce
     /// dimension through the model that knows what one is. This is a
     /// signpost, not a limitation.
     #[error(
-        "annotation {id} is a ce dimension (/IT /LineDimension); use set_dimension_style, which \
-         regenerates its label and witness lines — restyling it as plain markup would silently \
-         reduce it to a bare line"
+        "annotation {id} is a ce dimension; use set_dimension_style, which regenerates its label and witness lines — restyling it as plain markup would silently reduce it to bare geometry"
     )]
     AnnotationIsCeDimension {
         /// The annotation that was named.
@@ -13186,10 +13603,7 @@ impl EditSession {
         // below, regenerating as a bare line with its label and witness
         // lines gone. Checked BEFORE the spec read so the message names
         // the real problem rather than a downstream symptom.
-        if matches!(
-            current.get(b"IT").map(|o| self.resolve_value(o)),
-            Some(Object::Name(n)) if n.as_bytes() == b"LineDimension"
-        ) {
+        if self.is_ce_dimension(annot_id, &current) {
             return Err(EditError::AnnotationIsCeDimension { id: annot_id });
         }
 
@@ -13535,6 +13949,60 @@ impl EditSession {
     /// Which specialised verb owns this annotation, if any — the routing
     /// decision, shared between the real call and the preview.
     ///
+    /// Whether this annotation is a **ce dimension** — asked TWO ways, and
+    /// both are load-bearing (`Pass 107.0`).
+    ///
+    /// # Why the `/IT` half had to be widened, and the shape of the near-miss
+    ///
+    /// Until `Pass 107.0` every ce dimension was a `/Line` with
+    /// `/IT /LineDimension`, and one string comparison was the whole test.
+    /// `Pass 107.0` added the PERIMETER kind, which authors `/Polygon` +
+    /// `/IT /PolygonDimension` or `/PolyLine` + `/IT /PolyLineDimension`
+    /// (ISO 32000-1 §12.5.6.9 Table 178) — and a `/Polygon` with a stroke and
+    /// a `/C` is byte-shaped exactly like a markup polygon pdfce can author.
+    /// So the un-widened guard would have let [`Self::set_markup_style`]
+    /// regenerate a perimeter ce dimension as a BARE POLYGON: measured label
+    /// gone, silently, from something the operator asked only to recolour.
+    /// That is precisely the failure
+    /// [`EditError::AnnotationIsCeDimension`] was written to prevent, reached
+    /// through a variant that did not exist when it was written.
+    ///
+    /// The general lesson, because this project has paid for it before:
+    /// **widening the world past a refusal is the same act as removing the
+    /// refusal.** A guard keyed on an enumerated value silently stops
+    /// covering the cases added after it, and nothing reports that.
+    ///
+    /// # Why the SIDECAR half exists as well
+    ///
+    /// The two tests fail in opposite directions and neither subsumes the
+    /// other:
+    ///
+    /// - The `/PieceInfo` sidecar is pdfce's authority on what is a ce
+    ///   dimension, but a document whose sidecar was written by a NEWER build,
+    ///   or stripped by another product, has ce dimensions the model cannot
+    ///   see — and their `/IT` is still on the page.
+    /// - `/IT` is *"a hint of intent"* a third party may rewrite or drop, and
+    ///   it is not unique to pdfce; the sidecar is what proves the annotation
+    ///   is one of ours.
+    ///
+    /// Either answer of "yes" refuses the restyle and signposts
+    /// [`Self::set_dimension_style`]. A false positive costs a signpost; a
+    /// false negative costs a measurement.
+    fn is_ce_dimension(&self, annot_id: ObjId, current: &Dict) -> bool {
+        if let Some(Object::Name(n)) = current.get(b"IT").map(|o| self.resolve_value(o))
+            && matches!(
+                n.as_bytes(),
+                b"LineDimension" | b"PolygonDimension" | b"PolyLineDimension"
+            )
+        {
+            return true;
+        }
+        self.read_dimension_model()
+            .dimensions()
+            .iter()
+            .any(|d| d.annot == Some(annot_id))
+    }
+
     /// `None` means the general path handles it.
     fn delegated_route_for(
         &self,
@@ -19256,7 +19724,10 @@ impl EditSession {
 
         self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
-        let dim_id = model.add_dimension(group, kind);
+        // `.clone()` because `DimensionKind` stopped being `Copy` at
+        // `Pass 107.0` (a perimeter carries a vertex list) and `kind` is
+        // needed again below, by `author_dimension`.
+        let dim_id = model.add_dimension(group, kind.clone());
         let gid = model
             .dimension(dim_id)
             .map_or(DEFAULT_GROUP_ID, |d| d.group);
@@ -20749,10 +21220,16 @@ impl EditSession {
         let record = model
             .dimension(dimension)
             .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
-        // Both placeable kinds carry the same two placement components, in
-        // their own geometry's terms: a standoff perpendicular to what is
-        // being measured, and a position for the text along it. Only the
-        // circular kind has neither.
+        // Every placeable kind carries the same two placement components, in
+        // its own geometry's terms: a standoff perpendicular to what is being
+        // measured, and a position for the text along it. Only the circular
+        // kind has neither — a circle has no axis for a caption to run along,
+        // and its label sits on the rim by construction.
+        //
+        // `Pass 107.0` added a third placeable kind, and it reads the pair in
+        // PAGE axes rather than in a frame of its own: see
+        // `DimensionKind::Perimeter::offset` for why a polyline is anchored on
+        // its vertex centroid instead of on its longest segment.
         let placed = match record.kind {
             DimensionKind::Linear {
                 a, b, constraint, ..
@@ -20776,6 +21253,18 @@ impl EditSession {
                 // dragging past the apex is an ordinary slip of the hand, not
                 // a request that deserves an error.
                 radius: offset.abs().max(MIN_DIMENSION_ARC_RADIUS),
+                text_along,
+            },
+            // Geometry untouched: only the two placement scalars move, and
+            // `measured_points` does not read them. So dragging a perimeter's
+            // label cannot re-measure it, which is the identical structural
+            // guarantee the linear arm gets, by the identical means.
+            DimensionKind::Perimeter {
+                ref points, closed, ..
+            } => DimensionKind::Perimeter {
+                points: points.clone(),
+                closed,
+                offset,
                 text_along,
             },
             DimensionKind::Circular { .. } => {
@@ -21724,7 +22213,10 @@ impl EditSession {
         let record = model
             .dimension(dimension)
             .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
-        let moved = record.kind.translated(dx, dy);
+        // `.clone()` — `translated` consumes its receiver and `record` is a
+        // borrow of the model (`DimensionKind` is not `Copy` since
+        // `Pass 107.0`).
+        let moved = record.kind.clone().translated(dx, dy);
         if let Some(d) = model.dimension_mut(dimension) {
             d.kind = moved;
         }
@@ -21738,6 +22230,263 @@ impl EditSession {
             trailer: None,
         });
         Ok(())
+    }
+
+    /// **Move one vertex** of a ce dimension by a page-space `(dx, dy)`, as
+    /// one undoable command (`Pass 107.0`).
+    ///
+    /// # This RE-MEASURES, and that is the whole point
+    ///
+    /// [`Self::move_dimension`] translates every point together, so it cannot
+    /// change any distance — a rigid motion preserves them all.
+    /// [`Self::place_dimension`] writes only fields the value function does
+    /// not read, so it cannot change the number either. This verb is the
+    /// first ce-dimension operation that deliberately changes what a ce
+    /// dimension MEASURES, because the operator asked for exactly that:
+    ///
+    /// > *"I want to be able to edit the endpoints of the lines to adjust the
+    /// > shape."* — Ken, 2026-08-20
+    ///
+    /// Decision 022 §4.2's objection to silent re-measurement does not bite
+    /// here, and it is worth saying why rather than leaving it to inference:
+    /// that argument is about an operation whose PURPOSE is something else
+    /// quietly moving the number as a side effect. Here the number moving IS
+    /// the operation, the operator is dragging the geometry that produces it,
+    /// and [`VertexOutcome`] carries the before and after labels so the shell
+    /// can state the change off-canvas (project rule 4 — the inference is
+    /// disclosed, and nothing is marked on the page).
+    ///
+    /// # It cannot refuse for a shape reason, and the shell may rely on that
+    ///
+    /// The consuming shell asked whether this can refuse — a self-intersecting
+    /// shape, a zero-length segment — so it could decide whether its drag
+    /// preview may be drawn. **It cannot**, and that is a ruling rather than
+    /// an omission:
+    ///
+    /// - A **self-intersecting** polyline has a perfectly well-defined total
+    ///   length, and a figure-eight is a real fence run. Refusing it would
+    ///   refuse a shape the operator can see and meant to draw.
+    /// - A **zero-length segment** contributes 0.0 to a sum. It is invisible
+    ///   rather than wrong, and it disappears the moment the vertex is dragged
+    ///   again.
+    ///
+    /// So the only refusals are structural — an unknown id, a kind with no
+    /// vertices, an index that names nothing, a coordinate that is not a
+    /// usable page value — and every one of them is knowable BEFORE the drag
+    /// starts. **The drag preview may always be drawn.**
+    ///
+    /// # Which kinds accept it, and one that was NOT asked for
+    ///
+    /// [`DimensionKind::Perimeter`](crate::dimension::DimensionKind::Perimeter)
+    /// obviously, at any index. **[`DimensionKind::Linear`](crate::dimension::DimensionKind::Linear)
+    /// also**, at index 0 (`a`) or 1 (`b`) — and that was not in the request.
+    /// It is included because a linear ce dimension's picked points have been
+    /// un-editable since `Pass 12.M2`: an operator who mis-picked one end had
+    /// to delete the ce dimension and draw it again, losing its id, its group
+    /// and its placement. The request's own framing is what argues for it —
+    /// its author wrote that page labels and named destinations *"are not a
+    /// separate feature, they are the missing members of ONE feature"*, and
+    /// their operator's ruling was that *"not adding such things just because
+    /// they weren't explicitly asked for is how we end up with partially
+    /// finished features."* An endpoint edit for the kind that has endpoints
+    /// is the same shape of gap, one variant over.
+    ///
+    /// The axis constraint is untouched, so moving one end of a Horizontal
+    /// dimension re-measures the new horizontal span and keeps the line
+    /// horizontal — the constraint is the operator's earlier decision, and a
+    /// drag is not a request to revoke it.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionNotFound`], [`EditError::DimensionHasNoVertices`]
+    /// (circular/angular), [`EditError::VertexIndexOutOfRange`],
+    /// [`EditError::VertexNotPlaceable`], plus the encryption,
+    /// enforced-certification and newer-sidecar guards every ce-dimension
+    /// mutation carries. Every refusal happens before any mutation.
+    pub fn move_dimension_vertex(
+        &mut self,
+        dimension: DimensionId,
+        index: usize,
+        dx: f64,
+        dy: f64,
+    ) -> Result<VertexOutcome, EditError> {
+        self.apply_vertex_edit(dimension, VertexEdit::Move { index, dx, dy })
+    }
+
+    /// **Insert a vertex** into a perimeter ce dimension, immediately after
+    /// `after`, as one undoable command (`Pass 107.0`).
+    ///
+    /// This is what a right-click on a segment offers — *"add a point here"* —
+    /// so `after` is the index of that segment's FIRST vertex, and the new
+    /// vertex lands between it and the next one.
+    ///
+    /// # The closing segment is addressable, which is why `after` may be the
+    /// last index
+    ///
+    /// On a CLOSED perimeter the segment from the last vertex back to the
+    /// first is a real segment, drawn and measured like any other, so a
+    /// right-click on it must be able to add a point. `after == len - 1`
+    /// appends, which is exactly the point on that segment. On an OPEN path
+    /// the same call extends the path past its end — also correct, and the
+    /// same gesture an operator would expect from clicking beyond the last
+    /// vertex.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionNotFound`],
+    /// [`EditError::DimensionVertexCountFixed`] (a linear ce dimension is
+    /// structurally two points), [`EditError::DimensionHasNoVertices`],
+    /// [`EditError::VertexIndexOutOfRange`],
+    /// [`EditError::VertexNotPlaceable`], plus the usual guards.
+    pub fn insert_dimension_vertex(
+        &mut self,
+        dimension: DimensionId,
+        after: usize,
+        at: Point,
+    ) -> Result<VertexOutcome, EditError> {
+        self.apply_vertex_edit(dimension, VertexEdit::Insert { after, at })
+    }
+
+    /// **Remove a vertex** from a perimeter ce dimension, as one undoable
+    /// command (`Pass 107.0`).
+    ///
+    /// What a right-click on a vertex offers. Refuses rather than leaving a
+    /// degenerate record: an open path keeps at least two vertices, a closed
+    /// one at least three (see [`EditError::PerimeterWouldBeDegenerate`]).
+    ///
+    /// A shell should grey the menu item from [`Self::vertex_edit_preview`]
+    /// rather than catch the error — the `adopt_widget` lesson, in the
+    /// requester's own words: *"a verb with no preflight makes the UI find out
+    /// by pressing."*
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionNotFound`],
+    /// [`EditError::DimensionVertexCountFixed`],
+    /// [`EditError::DimensionHasNoVertices`],
+    /// [`EditError::VertexIndexOutOfRange`],
+    /// [`EditError::PerimeterWouldBeDegenerate`], plus the usual guards.
+    pub fn remove_dimension_vertex(
+        &mut self,
+        dimension: DimensionId,
+        index: usize,
+    ) -> Result<VertexOutcome, EditError> {
+        self.apply_vertex_edit(dimension, VertexEdit::Remove { index })
+    }
+
+    /// What a vertex edit WOULD do, evaluated without mutating anything
+    /// (`Pass 107.0`) — the preflight the three verbs above owe their callers.
+    ///
+    /// # It is also the refusal predicate
+    ///
+    /// `vertex_edit_preview(id, edit).err()` is `Option<EditError>`: exactly
+    /// the narrower `*_refusal` shape a shell needs in order to grey a menu
+    /// item, with the resulting label and vertex count in it as well.
+    /// Shipping both would be two entry points for one question, which is a
+    /// cost paid forever — the same call made when [`Self::adopt_preview`]
+    /// subsumed the `adopt_refusal` that was asked for.
+    ///
+    /// # It cannot disagree with the verb
+    ///
+    /// Preview and mutation share ONE body ([`Self::vertex_edit_plan`]),
+    /// `&self` and side-effect-free. The alternative — a second
+    /// implementation of the same guards — is two things that must agree and
+    /// eventually will not, and the way that fails is a greyed-out control for
+    /// an operation that would have worked, or a live one for an operation
+    /// that refuses.
+    ///
+    /// # Errors
+    ///
+    /// Exactly the corresponding verb's, evaluated identically.
+    pub fn vertex_edit_preview(
+        &self,
+        dimension: DimensionId,
+        edit: VertexEdit,
+    ) -> Result<VertexOutcome, EditError> {
+        self.vertex_edit_plan(dimension, edit).map(|(o, _)| o)
+    }
+
+    /// The shared mutation half of the three vertex verbs: plan, apply,
+    /// regenerate the annotation + baked `/AP`, commit as ONE undo entry.
+    ///
+    /// One undo entry is a requirement rather than a tidiness: a corner drag
+    /// that took two entries would need two Ctrl+Z presses, and an operator
+    /// who pressed once would be left holding a shape that is half-way
+    /// between two he chose.
+    fn apply_vertex_edit(
+        &mut self,
+        dimension: DimensionId,
+        edit: VertexEdit,
+    ) -> Result<VertexOutcome, EditError> {
+        let (outcome, kind) = self.vertex_edit_plan(dimension, edit)?;
+        let mut model = self.read_dimension_model();
+        if let Some(d) = model.dimension_mut(dimension) {
+            d.kind = kind;
+        }
+        let mut objects = self.regenerate_dimension_writes(&model, &[dimension])?;
+        objects.push(self.catalog_dimension_write(&model)?);
+        self.commit(Command {
+            kind: CommandKind::EditDimensionVertex {
+                edit: edit.kind(),
+                index: edit.index(),
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(outcome)
+    }
+
+    /// Every guard, the resulting geometry, and the before/after labels for a
+    /// vertex edit — `&self` and side-effect-free.
+    ///
+    /// Returns the [`VertexOutcome`] a caller discloses and the new
+    /// [`DimensionKind`](crate::dimension::DimensionKind) the mutating half
+    /// installs. Splitting it out is what makes
+    /// [`Self::vertex_edit_preview`] honest; see that method for why a second
+    /// copy of these guards would be a defect generator rather than a
+    /// duplication.
+    fn vertex_edit_plan(
+        &self,
+        dimension: DimensionId,
+        edit: VertexEdit,
+    ) -> Result<(VertexOutcome, DimensionKind), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        self.check_dimension_sidecar()?;
+
+        let model = self.read_dimension_model();
+        let record = model
+            .dimension(dimension)
+            .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
+        let group = model
+            .group(record.group)
+            .ok_or(EditError::DimensionGroupNotFound { id: record.group.0 })?;
+        // The label BEFORE, taken through the same single producer the baked
+        // `/AP` will use (`display_with`), so the disclosure and the file
+        // cannot disagree about what the ce dimension used to say.
+        let style = crate::dimension::resolve_style(group, &record.style);
+        let previous_label = record.kind.display_with(style.scale, style.format).text;
+
+        let after = vertex_edited_kind(dimension, &record.kind, edit)?;
+        let (vertices, closed) = after
+            .polyline()
+            // A linear ce dimension is two picked points, always, and never
+            // closed. Reported rather than refused so a shell can drive one
+            // handle model over both kinds.
+            .map_or((2, false), |(p, c)| (p.len(), c));
+        let label = after.display_with(style.scale, style.format).text;
+        Ok((
+            VertexOutcome {
+                vertices,
+                closed,
+                label,
+                previous_label,
+            },
+            after,
+        ))
     }
 
     // ---- private helpers ----
@@ -24725,6 +25474,121 @@ mod tests {
             )
             .unwrap_err();
         assert!(matches!(err, EditError::AnnotationIsCeDimension { .. }));
+    }
+
+    /// ★ The `/IT` half of `is_ce_dimension`, ISOLATED from the sidecar half.
+    ///
+    /// The sibling above pokes `/IT /LineDimension` onto a plain markup
+    /// annotation precisely so the sidecar cannot be what catches it — the
+    /// annotation is not in the dimension model at all. This does the same for
+    /// the two intents `Pass 107.0` introduced.
+    ///
+    /// Without it, the widening is untested: a perimeter authored the normal
+    /// way IS in the sidecar, so a test built on one passes with the `/IT`
+    /// arm removed and proves nothing about it. That is the difference between
+    /// a test that covers a guard and a test that merely runs beside it.
+    ///
+    /// The case is real rather than contrived: a document whose sidecar was
+    /// written by a NEWER pdfce, or stripped by another product, has ce
+    /// dimensions this build's model cannot see — and their `/IT` is still on
+    /// the page.
+    #[test]
+    fn a_perimeter_intent_alone_is_enough_to_refuse_a_restyle() {
+        for intent in [&b"PolygonDimension"[..], &b"PolyLineDimension"[..]] {
+            let mut s = session(pdf_without_info());
+            let annot_id = s
+                .add_markup(
+                    0,
+                    &MarkupSpec::Line {
+                        start: (10.0, 10.0),
+                        end: (90.0, 10.0),
+                        color: Color::Rgb(0.0, 0.0, 0.0),
+                        width: 1.0,
+                        endings: (
+                            crate::annot_author::LineEnding::None,
+                            crate::annot_author::LineEnding::None,
+                        ),
+                    },
+                )
+                .unwrap();
+            let Some(Object::Dict(annot)) = s.value(annot_id) else {
+                panic!("annot");
+            };
+            let mut dim = annot.clone();
+            dim.insert(Name::from(b"IT"), Object::Name(Name(intent.to_vec())));
+            poke(&mut s, annot_id, Object::Dict(dim));
+
+            let err = s
+                .set_markup_style(
+                    annot_id,
+                    &MarkupStyle {
+                        stroke: Some(StyleEdit::Set(Color::Rgb(1.0, 0.0, 0.0))),
+                        ..MarkupStyle::default()
+                    },
+                )
+                .unwrap_err();
+            assert!(
+                matches!(err, EditError::AnnotationIsCeDimension { .. }),
+                "intent {} must refuse, got {err:?}",
+                String::from_utf8_lossy(intent)
+            );
+        }
+    }
+
+    /// ★ The SIDECAR half of `is_ce_dimension`, isolated the other way.
+    ///
+    /// A REAL perimeter ce dimension with its `/IT` removed — the case where a
+    /// third product rewrote or dropped the intent hint (§12.5.6.9 calls `/IT`
+    /// a hint a reader may ignore, so a rewriter is within its rights). The
+    /// `/IT` arm cannot see this one; the `/PieceInfo` sidecar can, because
+    /// the annotation's object id is recorded against the ce dimension.
+    ///
+    /// Written because the previous two tests both pass with this arm removed:
+    /// a poked markup annotation is not in the sidecar, and a real perimeter
+    /// carries `/IT`. Claiming both arms are load-bearing and testing only one
+    /// is the kind of half-verification this project has a rule about.
+    #[test]
+    fn a_ce_dimension_whose_intent_was_stripped_is_still_refused() {
+        use crate::dimension::{DEFAULT_GROUP_ID, DimensionKind};
+        use crate::vector::Point;
+
+        let mut s = session(pdf_without_info());
+        let (annot_id, _dim) = s
+            .add_dimension(
+                0,
+                DEFAULT_GROUP_ID,
+                DimensionKind::Perimeter {
+                    points: vec![
+                        Point::new(20.0, 20.0),
+                        Point::new(80.0, 20.0),
+                        Point::new(80.0, 60.0),
+                    ],
+                    closed: true,
+                    offset: 0.0,
+                    text_along: 0.0,
+                },
+            )
+            .unwrap();
+        let Some(Object::Dict(annot)) = s.value(annot_id) else {
+            panic!("annot");
+        };
+        let mut stripped = annot.clone();
+        stripped.remove(b"IT");
+        poke(&mut s, annot_id, Object::Dict(stripped));
+
+        let err = s
+            .set_markup_style(
+                annot_id,
+                &MarkupStyle {
+                    stroke: Some(StyleEdit::Set(Color::Rgb(1.0, 0.0, 0.0))),
+                    ..MarkupStyle::default()
+                },
+            )
+            .unwrap_err();
+        assert!(
+            matches!(err, EditError::AnnotationIsCeDimension { .. }),
+            "the sidecar must still recognise it, got {err:?}"
+        );
     }
 
     #[test]

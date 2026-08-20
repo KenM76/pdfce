@@ -676,6 +676,12 @@ pub fn dimension_kind_label(kind: &pdfce_core::dimension::DimensionKind) -> &'st
         } => "Radius",
         K::Circular { .. } => "Diameter",
         K::Angular { .. } => "Angle",
+        // Two readings of one kind, and the distinction is worth a word of
+        // its own: a CLOSED shape's total is a perimeter, an OPEN one's is the
+        // length of a path. Labelling both "Perimeter" would tell an operator
+        // measuring a pipe run that pdfce thinks it goes round something.
+        K::Perimeter { closed: true, .. } => "Perimeter",
+        K::Perimeter { .. } => "Path length",
     }
 }
 

@@ -41,7 +41,30 @@ use crate::vector::Rgb;
 
 /// The sidecar schema version pdfce writes (bumped only on a breaking layout
 /// change; readers ignore unknown extra keys, §14.5 forward-compat).
-pub const SIDECAR_VERSION: i64 = 2;
+///
+/// # The version history, because each bump had to earn itself
+///
+/// - **1** — the original `Pass 12.M2` schema: linear + circular kinds.
+/// - **2** — `Pass 68.0` added the `angular` kind. A new KIND is not a
+///   defaultable key: a build that does not know the token drops the whole
+///   record, so without a bump an older pdfce would read the file, silently
+///   lose every angular ce dimension, and be free to save it back that way.
+/// - **3** — `Pass 107.0` added the `perimeter` kind, for exactly the same
+///   reason. Note what did NOT bump it: `/Offset` and `/TextAlong`
+///   (`Pass 27.0`/`27.1`) and the whole `Pass 69.0` style-override key set are
+///   optional-with-default, so an older build reading them reconstructs a
+///   correct — if plainer — ce dimension rather than losing one.
+///
+/// # What a bump actually buys, since it is not backward compatibility
+///
+/// An older build still READS a version-3 sidecar and shows what it
+/// understands ([`deserialize_model`]'s gate is a range, not an equality). The
+/// bump is what makes that older session REFUSE TO WRITE
+/// (`EditError::SidecarWrittenByNewerBuild`, via [`sidecar_version`]) — the
+/// destructive half, and the only half worth blocking. This matters more than
+/// usual here because the operator deliberately runs two builds side by side
+/// out of two folders and WILL open a perimeter-bearing file in the older one.
+pub const SIDECAR_VERSION: i64 = 3;
 
 /// Serialise the whole [`DimensionModel`] to the `Object` pdfce stores as the
 /// `/PieceInfo /pdfce /Private` value (§14.5). Deterministic — the same model
@@ -348,6 +371,49 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
                 d.insert(Name::from(b"TextAlong"), Object::Real(text_along));
             }
         }
+        DimensionKind::Perimeter {
+            ref points,
+            closed,
+            offset,
+            text_along,
+        } => {
+            // ★ THIS key is why SIDECAR_VERSION went to 3 — see the constant's
+            // own history note. Same argument as `angular`: an unknown kind
+            // token drops the record, and a dropped record is permanent loss
+            // the moment the older build saves.
+            d.insert(Name::from(b"Kind"), Object::Name(Name::from(b"perimeter")));
+            // FLAT `[x1 y1 x2 y2 ...]`, not an array of `[x y]` pairs, even
+            // though `point_array` exists and every other key here uses it.
+            //
+            // The reason is the ANNOTATION: `/Vertices` (ISO 32000-1
+            // §12.5.6.9 Table 178) is flat, and the sidecar's copy of the same
+            // geometry is the thing a reader diffs against it when the two
+            // disagree (decision 011 §2.4: disagreement is disclosed, and the
+            // sidecar wins). Two layouts for one geometry would make that
+            // comparison a transposition, and a transposition is a place to
+            // get an index wrong.
+            let mut flat = Vec::with_capacity(points.len() * 2);
+            for p in points {
+                flat.push(Object::Real(p.x));
+                flat.push(Object::Real(p.y));
+            }
+            d.insert(Name::from(b"Points"), Object::Array(flat));
+            // Written ALWAYS, not optional-when-false, and that breaks this
+            // file's own optional-key discipline on purpose: open and closed
+            // are two shapes the operator picks deliberately between, so an
+            // absent key would have to silently mean one of them. There is no
+            // legacy to be compatible with — the kind is new at this version —
+            // so nothing is bought by defaulting it and a real fact is lost.
+            d.insert(Name::from(b"Closed"), Object::Boolean(closed));
+            // Same optional-key discipline as the linear arm: a label that
+            // was never dragged adds no keys.
+            if offset != 0.0 {
+                d.insert(Name::from(b"Offset"), Object::Real(offset));
+            }
+            if text_along != 0.0 {
+                d.insert(Name::from(b"TextAlong"), Object::Real(text_along));
+            }
+        }
         DimensionKind::Circular { fit, show_diameter } => {
             d.insert(Name::from(b"Kind"), Object::Name(Name::from(b"circular")));
             d.insert(Name::from(b"Center"), point_array(fit.center));
@@ -407,6 +473,18 @@ fn deserialize_dimension(obj: &Object) -> Option<DimensionRecord> {
             dir_a: point_of(d.get(b"DirA")?)?,
             dir_b: point_of(d.get(b"DirB")?)?,
             radius: d.get(b"ArcRadius").and_then(Object::as_number)?,
+            text_along: placement_of(d.get(b"TextAlong")),
+        },
+        b"perimeter" => DimensionKind::Perimeter {
+            points: flat_points(d.get(b"Points")?)?,
+            // Absent means OPEN. That is the safe reading rather than the
+            // symmetric one: the write side always emits this key, so an
+            // absent one means a hand-edited or truncated sidecar, and
+            // reconstructing an open path from a possibly-closed one under-
+            // reports the length by one segment instead of inventing a
+            // segment that may cross the drawing.
+            closed: bool_of(d.get(b"Closed")).unwrap_or(false),
+            offset: placement_of(d.get(b"Offset")),
             text_along: placement_of(d.get(b"TextAlong")),
         },
         b"circular" => DimensionKind::Circular {
@@ -714,9 +792,16 @@ fn point_array(p: Point) -> Object {
 /// not geometry — it is corruption, a hand edit, or another product's bug.
 /// The ceiling is deliberately generous rather than tight: the job here is to
 /// stop absurdity reaching the writer, not to second-guess an unusual drawing.
-const MAX_PAGE_VALUE: f64 = 1.0e7;
+pub const MAX_PAGE_VALUE: f64 = 1.0e7;
 
-/// Whether a file-supplied page-space number is usable.
+/// Whether a page-space number is usable.
+///
+/// **Public since `Pass 107.0`** and no longer only about file-supplied
+/// values: [`crate::edit::EditSession`]'s vertex verbs hold caller-supplied
+/// coordinates to the identical test before they reach the writer. One
+/// function rather than one rule written twice — two definitions of "a usable
+/// page coordinate" would drift, and the drift would show up as a NaN that the
+/// reader rejects but the writer accepted (R92).
 ///
 /// # Why this guard exists
 ///
@@ -733,7 +818,8 @@ const MAX_PAGE_VALUE: f64 = 1.0e7;
 ///
 /// The bounds accumulator already drops non-finite points, which is what makes
 /// the failure quiet rather than loud. This stops it upstream instead.
-fn usable_page_value(v: f64) -> bool {
+#[must_use]
+pub fn usable_page_value(v: f64) -> bool {
     v.is_finite() && v.abs() <= MAX_PAGE_VALUE
 }
 
@@ -748,6 +834,36 @@ fn placement_of(obj: Option<&Object>) -> f64 {
     obj.and_then(Object::as_number)
         .filter(|v| usable_page_value(*v))
         .unwrap_or(0.0)
+}
+
+/// A flat `[x1 y1 x2 y2 ...]` array read back as points (`Pass 107.0`).
+///
+/// `None` — which drops the whole ce-dimension record — for anything that is
+/// not an even-length array of at least two coordinates, or that carries a
+/// non-finite or out-of-page value. A perimeter reconstructed from half a
+/// vertex list would draw a shape the operator never picked AND print a length
+/// nobody measured, which is worse than the record being reported missing:
+/// the first is a wrong measurement that looks right.
+fn flat_points(obj: &Object) -> Option<Vec<Point>> {
+    let arr = obj.as_array()?;
+    if arr.len() < 2 || arr.len() % 2 != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(arr.len() / 2);
+    // A pairwise walk over the iterator rather than `chunks_exact(2)` plus
+    // indexing: the even-length check above already guarantees the pairs, and
+    // this form has no index to be out of bounds (`clippy::indexing_slicing`,
+    // ARCHITECTURE.md §10).
+    let mut it = arr.iter();
+    while let (Some(xo), Some(yo)) = (it.next(), it.next()) {
+        let x = xo.as_number()?;
+        let y = yo.as_number()?;
+        if !usable_page_value(x) || !usable_page_value(y) {
+            return None;
+        }
+        out.push(Point::new(x, y));
+    }
+    Some(out)
 }
 
 fn point_of(obj: &Object) -> Option<Point> {
@@ -879,7 +995,7 @@ mod tests {
     fn wiring_handles_and_ocg_survive_the_round_trip() {
         let m = sample_model();
         let back = deserialize_model(&serialize_model(&m)).unwrap();
-        let d1 = back.dimensions()[0];
+        let d1 = back.dimensions()[0].clone();
         assert_eq!(d1.annot, Some(ObjId::new(20, 0)));
         assert_eq!(d1.ap, Some(ObjId::new(21, 0)));
         let fp = back

@@ -1323,7 +1323,9 @@ fn placing_an_angular_ce_dimension_moves_its_arc_not_its_value() {
         .dimension_model()
         .dimension(dim_id)
         .expect("still there")
-        .kind;
+        // `.clone()`: `DimensionKind` stopped being `Copy` at `Pass 107.0`.
+        .kind
+        .clone();
     match after {
         DimensionKind::Angular {
             radius, text_along, ..
@@ -1349,8 +1351,9 @@ fn placing_an_angular_ce_dimension_clamps_a_negative_arc_radius() {
     let (_annot, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, angular()).unwrap();
     s.place_dimension(dim_id, -30.0, 0.0)
         .expect("an overshot drag is a slip, not an error");
-    match s.dimension_model().dimension(dim_id).unwrap().kind {
+    match &s.dimension_model().dimension(dim_id).unwrap().kind {
         DimensionKind::Angular { radius, .. } => {
+            let radius = *radius;
             assert!(radius > 0.0, "the arc must stay visible, got {radius}");
             assert!(
                 (radius - 30.0).abs() < 1e-9,
@@ -1362,8 +1365,9 @@ fn placing_an_angular_ce_dimension_clamps_a_negative_arc_radius() {
 
     s.place_dimension(dim_id, 0.0, 0.0)
         .expect("still placeable");
-    match s.dimension_model().dimension(dim_id).unwrap().kind {
+    match &s.dimension_model().dimension(dim_id).unwrap().kind {
         DimensionKind::Angular { radius, .. } => {
+            let radius = *radius;
             assert!(
                 (radius - pdfce_core::edit::MIN_DIMENSION_ARC_RADIUS).abs() < 1e-9,
                 "a zero radius must clamp to the floor, got {radius}"
@@ -1646,4 +1650,720 @@ fn set_dimension_group_refuses_unknown_ids() {
         s.set_dimension_group(DimensionId(9999), g),
         Err(EditError::DimensionNotFound { .. })
     ));
+}
+
+// ---------------------------------------------------------------------------
+// Pass 107.0 / 107.1 — the PERIMETER ce dimension and its vertex editing.
+//
+// The operator's ask (Ken, 2026-08-20): "give me perimeter measuring tool as
+// well where I click around to make a shape and it adds the distance of all
+// the segments together for the dimension display. let me right click and add
+// segments to the dimension. also I want to be able to edit the endpoints of
+// the lines to adjust the shape. this should come with all the scaling options
+// of the other dimension tools."
+//
+// Each test below pins one clause of that sentence, plus the structural
+// consequences the request itself flagged (the `Copy` break, the sidecar
+// migration) and the refusals the consuming shell asked to be able to
+// predict.
+// ---------------------------------------------------------------------------
+
+/// A 100 x 60 rectangle traced clockwise from the bottom-left. Open, it is
+/// three sides (100 + 60 + 100 = 260); closed, four (320).
+fn perimeter(closed: bool) -> DimensionKind {
+    DimensionKind::Perimeter {
+        points: vec![
+            Point::new(50.0, 50.0),
+            Point::new(150.0, 50.0),
+            Point::new(150.0, 110.0),
+            Point::new(50.0, 110.0),
+        ],
+        closed,
+        offset: 0.0,
+        text_along: 0.0,
+    }
+}
+
+/// The `/PieceInfo /pdfce /Private` sidecar object of a reloaded document,
+/// resolved through the view so an indirect reference is followed.
+fn read_sidecar(doc: &Document) -> Object {
+    let catalog = doc.catalog().unwrap();
+    let view = doc.view();
+    let piece = view
+        .resolve(catalog.get(b"PieceInfo").unwrap())
+        .as_dict()
+        .unwrap()
+        .clone();
+    let pdfce = view
+        .resolve(piece.get(b"pdfce").unwrap())
+        .as_dict()
+        .unwrap()
+        .clone();
+    view.resolve(pdfce.get(b"Private").unwrap()).clone()
+}
+
+/// ★ The headline clause: ONE number, the sum of every segment — and the
+/// closing segment is the entire difference between the two readings.
+#[test]
+fn a_perimeter_sums_its_segments_and_closure_adds_exactly_one() {
+    let open = perimeter(false).measured_points();
+    let closed = perimeter(true).measured_points();
+    assert!(
+        (open - 260.0).abs() < 1e-9,
+        "an open path is its three sides, got {open}"
+    );
+    assert!(
+        (closed - 320.0).abs() < 1e-9,
+        "a closed perimeter adds the fourth side, got {closed}"
+    );
+    assert!(
+        (closed - open - 60.0).abs() < 1e-9,
+        "the difference must be exactly the closing segment"
+    );
+}
+
+/// "all the scaling options of the other dimension tools" — the clause that
+/// decided this had to be a `DimensionKind` rather than a markup annotation
+/// with a number in its `/Contents`. A perimeter goes through the group's
+/// scale and number format, so calibrating the group re-values it.
+#[test]
+fn a_perimeter_scales_through_its_group_like_every_other_kind() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    // 1 pt = 0.01 m, so 320 pt = 3.20 m.
+    s.set_group_scale(
+        DEFAULT_GROUP_ID,
+        ScaleState::Calibrated { scale: 0.01 },
+        NumberFormat::decimal(Unit::Meter, 2),
+    )
+    .unwrap();
+    let shown = s.dimension_model().display(id).unwrap().text;
+    assert!(
+        shown.starts_with("3.2"),
+        "a perimeter must be scaled by its group, got {shown:?}"
+    );
+}
+
+/// The sidecar migration the request asked for a word on: a perimeter-bearing
+/// file declares schema **3**, which is what makes an older build refuse to
+/// WRITE over it rather than silently drop the ce dimension and save.
+#[test]
+fn a_perimeter_declares_a_sidecar_version_older_builds_refuse_to_overwrite() {
+    let (_orig, mut s) = session();
+    s.add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+    let sidecar = read_sidecar(&reloaded);
+    let version = pdfce_core::dimension::sidecar_version(&sidecar).expect("a version");
+    assert_eq!(
+        version, 3,
+        "a new KIND is not a defaultable key — it must bump the schema"
+    );
+}
+
+/// Every field survives the round trip, including the two that a defaulting
+/// reader would get wrong: the vertex ORDER and the `closed` flag.
+#[test]
+fn a_perimeter_round_trips_through_the_sidecar() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(false))
+        .unwrap();
+    s.place_dimension(id, 17.0, -4.0).unwrap();
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+    let sidecar = read_sidecar(&reloaded);
+    let model = deserialize_model(&sidecar).expect("a readable model");
+    let record = model.dimension(id).expect("the ce dimension");
+    match &record.kind {
+        DimensionKind::Perimeter {
+            points,
+            closed,
+            offset,
+            text_along,
+        } => {
+            assert_eq!(points.len(), 4, "every vertex must survive");
+            assert!(!closed, "the open/closed flag must survive");
+            assert!(
+                (points[1].x - 150.0).abs() < 1e-9,
+                "vertex order must survive"
+            );
+            assert!((points[1].y - 50.0).abs() < 1e-9);
+            assert!(
+                (offset - 17.0).abs() < 1e-9,
+                "the placement pair must survive"
+            );
+            assert!((text_along + 4.0).abs() < 1e-9);
+        }
+        other => panic!("expected Perimeter, got {other:?}"),
+    }
+}
+
+/// ★ "edit the endpoints of the lines to adjust the shape" — and this verb is
+/// the first ce-dimension operation that deliberately RE-MEASURES. The
+/// before/after labels are the rule-4 disclosure, carried on the outcome
+/// because the shell cannot reconstruct the old value afterwards.
+#[test]
+fn moving_a_vertex_re_measures_and_reports_both_labels() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    let before = s.dimension_model().display(id).unwrap().text;
+    // Drag the bottom-right corner 40 pt further right. TWO segments change,
+    // which is the honest shape of a corner drag on a polygon: the bottom
+    // lengthens and the right-hand side becomes a slant.
+    let out = s.move_dimension_vertex(id, 1, 40.0, 0.0).unwrap();
+    assert_eq!(out.vertices, 4, "a move changes no count");
+    assert!(out.closed);
+    assert_eq!(
+        out.previous_label, before,
+        "the disclosure's BEFORE must be the label the operator was looking at"
+    );
+    assert_ne!(
+        out.label, out.previous_label,
+        "a vertex move re-measures — that is the whole point of the verb"
+    );
+    let after = s
+        .dimension_model()
+        .dimension(id)
+        .unwrap()
+        .kind
+        .measured_points();
+    // Bottom (50,50)->(190,50) = 140; right (190,50)->(150,110) = hypot(40,60);
+    // top = 100; closing = 60. Written out rather than as one number so the
+    // test states its own arithmetic and a future edit to the fixture cannot
+    // quietly make it pass against the wrong shape.
+    let expected = 140.0 + 40.0_f64.hypot(60.0) + 100.0 + 60.0;
+    assert!(
+        (after - expected).abs() < 1e-9,
+        "the new total must be the new geometry's, got {after} want {expected}"
+    );
+    assert_eq!(
+        s.dimension_model().display(id).unwrap().text,
+        out.label,
+        "the reported label must be the label the model now holds"
+    );
+}
+
+/// One drag, one Ctrl+Z. A corner drag that took two undo entries would leave
+/// an operator who pressed once holding a shape he never chose.
+#[test]
+fn a_vertex_move_is_exactly_one_undo_entry() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    let before = s
+        .dimension_model()
+        .dimension(id)
+        .unwrap()
+        .kind
+        .measured_points();
+    s.move_dimension_vertex(id, 1, 40.0, 25.0).unwrap();
+    s.undo().expect("the move must be undoable");
+    let after = s
+        .dimension_model()
+        .dimension(id)
+        .unwrap()
+        .kind
+        .measured_points();
+    assert!(
+        (after - before).abs() < 1e-9,
+        "ONE undo must restore the whole edit, got {after} from {before}"
+    );
+}
+
+/// "let me right click and add segments" — inserting after the LAST index is
+/// the right-click on the closing segment, and it must land there rather than
+/// being refused as out of range.
+#[test]
+fn inserting_after_the_last_vertex_adds_a_point_on_the_closing_segment() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    // The midpoint of the closing segment (50,110) -> (50,50).
+    let out = s
+        .insert_dimension_vertex(id, 3, Point::new(50.0, 80.0))
+        .unwrap();
+    assert_eq!(out.vertices, 5);
+    // A point ON the segment adds no length: the sum is unchanged, which is
+    // the strongest available check that it landed on the closing segment and
+    // not somewhere else.
+    let total = s
+        .dimension_model()
+        .dimension(id)
+        .unwrap()
+        .kind
+        .measured_points();
+    assert!(
+        (total - 320.0).abs() < 1e-9,
+        "a vertex inserted ON a segment must not change the total, got {total}"
+    );
+}
+
+/// The degenerate-shape refusals, and their asymmetry: an open path keeps two
+/// vertices, a closed one three. Two "closed" vertices would draw as a single
+/// stroke and print twice the distance between two points.
+#[test]
+fn removing_a_vertex_refuses_below_the_minimum_for_the_shape() {
+    let (_orig, mut s) = session();
+    let (_annot, closed_id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    // 4 -> 3 is fine; 3 -> 2 is not, for a closed shape.
+    s.remove_dimension_vertex(closed_id, 0).unwrap();
+    let err = s.remove_dimension_vertex(closed_id, 0).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            EditError::PerimeterWouldBeDegenerate {
+                remaining: 2,
+                minimum: 3,
+                ..
+            }
+        ),
+        "a closed perimeter needs three vertices, got {err:?}"
+    );
+
+    let (_annot, open_id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(false))
+        .unwrap();
+    s.remove_dimension_vertex(open_id, 0).unwrap();
+    s.remove_dimension_vertex(open_id, 0).unwrap();
+    let err = s.remove_dimension_vertex(open_id, 0).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            EditError::PerimeterWouldBeDegenerate {
+                remaining: 1,
+                minimum: 2,
+                ..
+            }
+        ),
+        "an open path needs two vertices, got {err:?}"
+    );
+}
+
+/// ★ The preflight the shell asked for, and the property that makes it worth
+/// having: it answers the same question the verb would, WITHOUT mutating.
+/// A greyed menu item derived from a preview that could disagree with the
+/// verb is worse than no preview.
+#[test]
+fn the_vertex_preview_predicts_the_verb_and_changes_nothing() {
+    use pdfce_core::edit::VertexEdit;
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    s.remove_dimension_vertex(id, 0).unwrap(); // now 3, at the minimum
+
+    let predicted = s.vertex_edit_preview(id, VertexEdit::Remove { index: 0 });
+    assert!(
+        predicted.is_err(),
+        "the preview must refuse what the verb would refuse"
+    );
+    // Nothing moved.
+    let unchanged = s.dimension_model().dimension(id).unwrap().kind.clone();
+    assert_eq!(
+        unchanged.polyline().map(|(p, _)| p.len()),
+        Some(3),
+        "a preview must not mutate"
+    );
+
+    // And the successful case predicts the successful outcome exactly.
+    let forecast = s
+        .vertex_edit_preview(
+            id,
+            VertexEdit::Move {
+                index: 0,
+                dx: 5.0,
+                dy: 5.0,
+            },
+        )
+        .unwrap();
+    let actual = s.move_dimension_vertex(id, 0, 5.0, 5.0).unwrap();
+    assert_eq!(
+        forecast, actual,
+        "preview and verb share one body; they cannot disagree"
+    );
+}
+
+/// A vertex edit aimed at a kind that has no vertices is refused BY THE
+/// PROPERTY, not by the kind — the R186 lesson `NotALinearDimension` already
+/// learned once.
+#[test]
+fn a_fit_derived_ce_dimension_has_no_vertices_to_edit() {
+    let (_orig, mut s) = session();
+    let (_annot, circ) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, circular(false))
+        .unwrap();
+    let err = s.move_dimension_vertex(circ, 0, 1.0, 1.0).unwrap_err();
+    assert!(
+        matches!(err, EditError::DimensionHasNoVertices { .. }),
+        "a fitted circle has no picked points left to address, got {err:?}"
+    );
+
+    let (_annot, ang) = s.add_dimension(0, DEFAULT_GROUP_ID, angular()).unwrap();
+    let err = s.move_dimension_vertex(ang, 0, 1.0, 1.0).unwrap_err();
+    assert!(matches!(err, EditError::DimensionHasNoVertices { .. }));
+}
+
+/// ★ The addition that was NOT requested: a linear ce dimension's two picked
+/// points have been un-editable since `Pass 12.M2`, so a mis-picked end meant
+/// deleting and redrawing. Moving one re-measures; the axis constraint is a
+/// decision the operator already made and a drag does not revoke it.
+#[test]
+fn a_linear_ce_dimension_can_have_an_endpoint_moved_and_keeps_its_constraint() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+    // 100,200 -> 300,200, Horizontal: 200 pt.
+    let out = s.move_dimension_vertex(id, 1, 50.0, 90.0).unwrap();
+    assert_eq!(out.vertices, 2, "a linear ce dimension is structurally two");
+    assert!(!out.closed);
+    match &s.dimension_model().dimension(id).unwrap().kind {
+        DimensionKind::Linear { constraint, .. } => {
+            assert_eq!(
+                *constraint,
+                AxisConstraint::Horizontal,
+                "a drag must not revoke the constraint"
+            );
+        }
+        other => panic!("expected Linear, got {other:?}"),
+    }
+    let measured = s
+        .dimension_model()
+        .dimension(id)
+        .unwrap()
+        .kind
+        .measured_points();
+    assert!(
+        (measured - 250.0).abs() < 1e-9,
+        "Horizontal measures the horizontal span only, got {measured}"
+    );
+
+    // The count is structural: gaining or losing one is refused by name.
+    let err = s
+        .insert_dimension_vertex(id, 0, Point::new(10.0, 10.0))
+        .unwrap_err();
+    assert!(
+        matches!(err, EditError::DimensionVertexCountFixed { count: 2, .. }),
+        "got {err:?}"
+    );
+    let err = s.remove_dimension_vertex(id, 0).unwrap_err();
+    assert!(matches!(err, EditError::DimensionVertexCountFixed { .. }));
+}
+
+/// An index that names nothing reports the COUNT as well, because the caller
+/// that got it wrong is usually a shell one edit out of date.
+#[test]
+fn a_vertex_index_out_of_range_reports_the_count() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    let err = s.move_dimension_vertex(id, 9, 1.0, 1.0).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            EditError::VertexIndexOutOfRange {
+                index: 9,
+                count: 4,
+                ..
+            }
+        ),
+        "got {err:?}"
+    );
+}
+
+/// A NaN reaching the writer produces an appearance stream no reader can draw,
+/// and it is invisible until the file is opened somewhere else. Refused before
+/// any mutation, by the same predicate the sidecar reader applies.
+#[test]
+fn a_non_finite_vertex_is_refused_before_anything_moves() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    let err = s.move_dimension_vertex(id, 0, f64::NAN, 0.0).unwrap_err();
+    assert!(
+        matches!(err, EditError::VertexNotPlaceable { .. }),
+        "got {err:?}"
+    );
+    let total = s
+        .dimension_model()
+        .dimension(id)
+        .unwrap()
+        .kind
+        .measured_points();
+    assert!(
+        (total - 320.0).abs() < 1e-9,
+        "a refusal must not have moved anything, got {total}"
+    );
+}
+
+/// Placement is value-preserving on a perimeter for the same structural reason
+/// it is on a linear one: it writes fields `measured_points` does not read.
+#[test]
+fn placing_a_perimeter_moves_its_label_and_not_its_value() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    let before = s.dimension_model().display(id).unwrap().text;
+    s.place_dimension(id, 30.0, -12.0)
+        .expect("a perimeter is placeable");
+    assert_eq!(
+        s.dimension_model().display(id).unwrap().text,
+        before,
+        "placing must never change what a ce dimension reports"
+    );
+    // The anchor moved by exactly the pair, from the vertex centroid.
+    let kind = s.dimension_model().dimension(id).unwrap().kind.clone();
+    let c = kind.polyline_centroid().unwrap();
+    let anchor = kind.label_anchor().unwrap();
+    assert!(
+        (anchor.x - (c.x - 12.0)).abs() < 1e-9,
+        "text_along is page +x"
+    );
+    assert!((anchor.y - (c.y + 30.0)).abs() < 1e-9, "offset is page +y");
+}
+
+/// ★ The label follows the shape rather than teleporting. This is the property
+/// that decided the centroid convention over the CAD-conventional
+/// longest-segment one: under longest-segment, dragging a corner can change
+/// WHICH segment is longest and the label jumps across the shape for a reason
+/// no operator can see.
+#[test]
+fn the_label_anchor_drifts_with_an_edited_shape_rather_than_jumping() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    let before = s
+        .dimension_model()
+        .dimension(id)
+        .unwrap()
+        .kind
+        .label_anchor()
+        .unwrap();
+    // Make the SHORT side the long one: 60 -> 400. Under a longest-segment
+    // convention the label's host axis would change identity here.
+    s.move_dimension_vertex(id, 2, 0.0, 340.0).unwrap();
+    let after = s
+        .dimension_model()
+        .dimension(id)
+        .unwrap()
+        .kind
+        .label_anchor()
+        .unwrap();
+    // One of four vertices moved 340 pt, so the centroid moved 85 pt: a
+    // drift proportional to the edit, not a jump to a different segment.
+    assert!(
+        (after.y - before.y - 85.0).abs() < 1e-9,
+        "the anchor must track the centroid, got {before:?} -> {after:?}"
+    );
+}
+
+/// Translating the whole ce dimension preserves every distance, exactly as it
+/// does for the fixed-arity kinds — a rigid motion is a rigid motion.
+#[test]
+fn moving_a_whole_perimeter_preserves_its_value() {
+    let (_orig, mut s) = session();
+    let (_annot, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    let before = s.dimension_model().display(id).unwrap().text;
+    s.move_dimension(id, 25.0, -10.0).unwrap();
+    assert_eq!(
+        s.dimension_model().display(id).unwrap().text,
+        before,
+        "a translation preserves every distance"
+    );
+}
+
+/// ★ The annotation half, against the standard rather than against a habit.
+///
+/// ISO 32000-1 §12.5.6.9 Table 178: a closed shape is a `/Polygon`, an open one
+/// a `/PolyLine`, the geometry key is a FLAT `/Vertices` array of alternating
+/// x and y in default user space, and `/L` — the `/Line` annotation's geometry
+/// key — must not be there at all. A dictionary carrying both would give a
+/// reader that honours `/L` and one that honours `/Vertices` two different
+/// pictures of the same annotation.
+#[test]
+fn a_perimeter_authors_a_polygon_and_an_open_path_a_polyline() {
+    for (closed, subtype, intent) in [
+        (true, &b"Polygon"[..], &b"PolygonDimension"[..]),
+        (false, &b"PolyLine"[..], &b"PolyLineDimension"[..]),
+    ] {
+        let (_orig, mut s) = session();
+        let (annot_id, _id) = s
+            .add_dimension(0, DEFAULT_GROUP_ID, perimeter(closed))
+            .unwrap();
+        let reloaded = Document::from_bytes(save(&s)).unwrap();
+        let Object::Dict(annot) = &reloaded.get(annot_id).unwrap().value else {
+            panic!("annotation is not a dict");
+        };
+        assert_eq!(
+            annot.get(b"Subtype").unwrap().as_name().unwrap().as_bytes(),
+            subtype,
+            "closed={closed}"
+        );
+        assert_eq!(
+            annot.get(b"IT").unwrap().as_name().unwrap().as_bytes(),
+            intent,
+            "closed={closed}"
+        );
+        assert!(
+            annot.get(b"L").is_none(),
+            "a polygon/polyline must not carry the /Line geometry key"
+        );
+        let verts = annot.get(b"Vertices").unwrap().as_array().unwrap();
+        // ★ FOUR vertices, not five. The closing segment of a `/Polygon` is
+        // supplied by the READER; repeating the first vertex is undefined, and
+        // the spec corpus names failing-to-close and over-closing as the two
+        // real hazards. pdfce closes the ring in its own measurement
+        // (`polyline_length`) and leaves this array as the picked vertices.
+        assert_eq!(
+            verts.len(),
+            8,
+            "flat [x y x y ...] over 4 vertices, closed={closed}"
+        );
+        assert!((verts[0].as_number().unwrap() - 50.0).abs() < 1e-9);
+        assert!((verts[1].as_number().unwrap() - 50.0).abs() < 1e-9);
+        assert!((verts[2].as_number().unwrap() - 150.0).abs() < 1e-9);
+    }
+}
+
+/// ★ `/Rect` must equal the `/AP` `/BBox`, and this is the single
+/// highest-risk authoring bug for a ce dimension — it is invisible in an
+/// object dump.
+///
+/// §12.5.5's placement algorithm SCALES the transformed appearance box to fill
+/// `/Rect` exactly. A `/Rect` that does not match the drawn extent therefore
+/// stretches the picture silently, and a perimeter would render at a length
+/// that disagrees with the number printed inside it. Nothing clips; everything
+/// scales.
+#[test]
+fn a_perimeter_rect_equals_its_appearance_bbox() {
+    let (_orig, mut s) = session();
+    let (annot_id, _id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+    let Object::Dict(annot) = &reloaded.get(annot_id).unwrap().value else {
+        panic!("annotation is not a dict");
+    };
+    let rect: Vec<f64> = annot
+        .get(b"Rect")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o.as_number().unwrap())
+        .collect();
+    let ap_ref = annot
+        .get(b"AP")
+        .unwrap()
+        .as_dict()
+        .unwrap()
+        .get(b"N")
+        .unwrap()
+        .as_reference()
+        .unwrap();
+    let Object::Stream(ap) = &reloaded.get(ap_ref).unwrap().value else {
+        panic!("/AP /N is not a stream");
+    };
+    let bbox: Vec<f64> = ap
+        .dict
+        .get(b"BBox")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o.as_number().unwrap())
+        .collect();
+    assert_eq!(rect, bbox, "/Rect must equal the /AP /BBox exactly");
+    // And it must actually contain the shape (50..150 x 50..110), which is
+    // what makes the equality meaningful rather than two matching mistakes.
+    assert!(rect[0] <= 50.0 && rect[1] <= 50.0);
+    assert!(rect[2] >= 150.0 && rect[3] >= 110.0);
+}
+
+/// A vertex edit regenerates the annotation from the new geometry — and leaves
+/// every key authoring does not own alone. `/P`, `/OC` and `/F` are the ones
+/// that would break the page wiring, the layer and printability if a
+/// regeneration rebuilt the dictionary from scratch instead of overwriting.
+#[test]
+fn a_vertex_edit_rewrites_the_vertices_and_preserves_foreign_keys() {
+    let (_orig, mut s) = session();
+    let (annot_id, id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, perimeter(true))
+        .unwrap();
+    s.move_dimension_vertex(id, 1, 40.0, 0.0).unwrap();
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+    let Object::Dict(annot) = &reloaded.get(annot_id).unwrap().value else {
+        panic!("annotation is not a dict");
+    };
+    let verts = annot.get(b"Vertices").unwrap().as_array().unwrap();
+    assert!(
+        (verts[2].as_number().unwrap() - 190.0).abs() < 1e-9,
+        "the moved vertex must be in the file, got {:?}",
+        verts[2]
+    );
+    for key in [&b"P"[..], &b"OC"[..], &b"F"[..], &b"AP"[..]] {
+        assert!(
+            annot.get(key).is_some(),
+            "regeneration must not drop /{}",
+            String::from_utf8_lossy(key)
+        );
+    }
+    // `/Contents` is the label mirror and must have kept up with the geometry.
+    let Some(Object::String(bytes)) = annot.get(b"Contents") else {
+        panic!("/Contents");
+    };
+    assert_eq!(
+        String::from_utf8_lossy(bytes),
+        s.dimension_model().display(id).unwrap().text,
+        "the baked caption and the model's value are one string"
+    );
+}
+
+/// ★ WIDENING THE WORLD PAST A REFUSAL IS THE SAME ACT AS REMOVING IT.
+///
+/// `set_markup_style` refuses a ce dimension by name, because regenerating one
+/// as plain markup drops its measured label and its witness lines silently.
+/// That guard was written when every ce dimension was a `/Line` with
+/// `/IT /LineDimension`, and it tested exactly that string.
+///
+/// `Pass 107.0` authors a perimeter as a `/Polygon` — stroked, coloured,
+/// byte-shaped exactly like a markup polygon pdfce can author — so the
+/// un-widened guard would have let it through and reduced a measurement to a
+/// bare outline. Nothing would have reported that; the file would simply have
+/// stopped saying how long the fence was.
+#[test]
+fn restyling_a_perimeter_as_plain_markup_is_refused_by_name() {
+    for closed in [true, false] {
+        let (_orig, mut s) = session();
+        let (annot_id, _id) = s
+            .add_dimension(0, DEFAULT_GROUP_ID, perimeter(closed))
+            .unwrap();
+        let err = s
+            .set_markup_style(
+                annot_id,
+                &pdfce_core::edit::MarkupStyle {
+                    stroke: Some(pdfce_core::edit::StyleEdit::Set(
+                        pdfce_core::annot_author::Color::Rgb(1.0, 0.0, 0.0),
+                    )),
+                    ..pdfce_core::edit::MarkupStyle::default()
+                },
+            )
+            .unwrap_err();
+        assert!(
+            matches!(err, EditError::AnnotationIsCeDimension { .. }),
+            "closed={closed}: a perimeter ce dimension must be signposted to set_dimension_style, got {err:?}"
+        );
+    }
 }

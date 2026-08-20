@@ -410,6 +410,80 @@ pub fn measured_length(first: Point, second: Point, constraint: AxisConstraint) 
     }
 }
 
+/// The total page-space length of a polyline through `points` — the value a
+/// [`PERIMETER`](crate::dimension::DimensionKind::Perimeter) ce dimension
+/// records before scaling (`Pass 107.0`). When `closed`, the segment from the
+/// last vertex back to the first is included; that segment is the entire
+/// difference between a perimeter and a path length.
+///
+/// # Why it lives here rather than on the enum
+///
+/// A shell needs the running total DURING the pick, before any ce dimension
+/// exists to hold it — the operator is clicking around a footprint and the
+/// number beside the cursor has to be the number the committed measurement
+/// will print. One function, called from the preview and from
+/// [`DimensionKind::measured_points`](crate::dimension::DimensionKind::measured_points),
+/// is what makes those two the same number by construction rather than by two
+/// implementations agreeing. Beside [`measured_length`] because it is the same
+/// category of thing: a page-space measurement primitive with no opinion about
+/// scale, units or annotations.
+///
+/// # No axis constraint, on purpose
+///
+/// [`measured_length`] takes an [`AxisConstraint`] because a linear dimension
+/// can measure only the horizontal or vertical component of a span. A polyline
+/// has no single axis, so summing projected segment lengths would produce a
+/// number that is not the length of anything drawn — the exact disagreement
+/// between a line and its own caption that `Pass 27.0` existed to fix.
+///
+/// Fewer than two points is `0.0`, not an error: a one-vertex polyline has no
+/// segments, and a caller mid-pick legitimately holds one.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::vector::{polyline_length, Point};
+///
+/// let square = [
+///     Point::new(0.0, 0.0),
+///     Point::new(10.0, 0.0),
+///     Point::new(10.0, 10.0),
+///     Point::new(0.0, 10.0),
+/// ];
+/// // Open: three sides.
+/// assert_eq!(polyline_length(&square, false), 30.0);
+/// // Closed: the fourth side joins back to the start.
+/// assert_eq!(polyline_length(&square, true), 40.0);
+/// assert_eq!(polyline_length(&square[..1], true), 0.0);
+/// ```
+#[must_use]
+pub fn polyline_length(points: &[Point], closed: bool) -> f64 {
+    if points.len() < 2 {
+        return 0.0;
+    }
+    // `zip(skip(1))` rather than `windows(2)` indexing: the pairs are the same,
+    // and this form has no index to be out of bounds, so it satisfies
+    // `clippy::indexing_slicing` without an allow (ARCHITECTURE.md §10 —
+    // panic-free by construction, not by inspection).
+    let open: f64 = points
+        .iter()
+        .zip(points.iter().skip(1))
+        .map(|(a, b)| a.distance(*b))
+        .sum();
+    if closed {
+        // `last`/`first` are both present: the length check above guarantees
+        // at least two vertices, so neither unwrap-shaped access can fail —
+        // expressed with `map_or` so there is no panic path at all
+        // (`docs/ARCHITECTURE.md` §10).
+        open + points
+            .last()
+            .zip(points.first())
+            .map_or(0.0, |(l, f)| l.distance(*f))
+    } else {
+        open
+    }
+}
+
 /// Every snap candidate within `config.tolerance` of `query` (page space),
 /// sorted by **(priority ascending, then distance ascending)** — decision 011
 /// §2.2's fixed target list, ties broken by nearest.

@@ -3957,6 +3957,65 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Edit one vertex of a ce dimension** (`Pass 107.0`) — move it, insert
+    /// a new one after it, or remove it.
+    ///
+    /// This is the only ce-dimension verb that deliberately RE-MEASURES.
+    /// `dimension-move` translates the whole thing and preserves every
+    /// distance; `dimension-offset` writes only placement fields the value
+    /// function never reads. Here the number changing is the point, so the
+    /// command prints the value **before and after** — the CLI has no session
+    /// and no undo, so the invocation IS the commit and the disclosure has to
+    /// ride out with it (project rule 4, rule 11).
+    ///
+    /// Read the current vertex count from `dimension-list`, which prints
+    /// `vertices=` for a perimeter. Indices are 0-based and in pick order.
+    ///
+    /// `--dry-run` answers exactly what the real invocation would answer,
+    /// through the same guards, and writes nothing — the scriptable form of
+    /// the preflight a GUI uses to grey a menu item.
+    ///
+    /// Refusals, all evaluated before anything is written: an index that names
+    /// nothing; a removal that would leave fewer than two vertices on an open
+    /// path or three on a closed one; a non-finite coordinate; and
+    /// insert/remove aimed at a linear ce dimension, whose two picked points
+    /// are structural (moving one of them IS supported).
+    DimensionVertex {
+        /// Input PDF.
+        input: PathBuf,
+        /// The ce dimension id, as printed by `dimension-list`.
+        #[arg(long)]
+        dimension: u32,
+        /// Which edit to perform.
+        #[arg(long, value_enum)]
+        op: VertexOpArg,
+        /// The 0-based vertex index. For `insert`, the FIRST vertex of the
+        /// segment being split — so the last index splits a closed shape's
+        /// closing segment, and extends an open path.
+        #[arg(long)]
+        index: usize,
+        /// `move` only: page-space x displacement, in points.
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        dx: f64,
+        /// `move` only: page-space y displacement, in points.
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        dy: f64,
+        /// `insert` only: where the new vertex goes, as `x,y` in points.
+        #[arg(long, allow_hyphen_values = true)]
+        at: Option<String>,
+        /// Report what the edit would do and write nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Output path. Not used with `--dry-run`.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Place a ce dimension** (Pass 27.1): set how far its dimension line
     /// stands off the geometry and where its value sits along that line.
     ///
@@ -3967,6 +4026,12 @@ enum Command {
     ///
     /// Refused by name for a circular dimension, which has no axis to stand
     /// off from or slide along.
+    ///
+    /// For a PERIMETER (`Pass 107.0`) the same two numbers displace the label
+    /// from the shape's vertex centroid, in PAGE axes: `--offset` is +y and
+    /// `--text-along` is +x. A polyline has no single axis for a standoff to
+    /// be perpendicular to, and anchoring on the centroid is what keeps the
+    /// label from teleporting when a vertex is edited.
     DimensionOffset {
         /// Input PDF.
         input: PathBuf,
@@ -4876,6 +4941,21 @@ enum DimKindArg {
     /// for a pair he knows is nominally parallel and that arrived a fraction
     /// off from an exporter's rounding.
     TwoLines,
+    /// A **closed perimeter** over every supplied point (`Pass 107.0`): the
+    /// sum of all its segments including the one from the last point back to
+    /// the first, printed as one number.
+    ///
+    /// Needs at least three points. Use `--offset`/`--text-along` to displace
+    /// the label from the shape's vertex centroid, in page axes.
+    Perimeter,
+    /// An **open path length** over every supplied point (`Pass 107.0`) — the
+    /// same measurement without the closing segment: a pipe run, a cable
+    /// route, a kerb line that does not come back on itself.
+    ///
+    /// Needs at least two points. This is one kind with
+    /// [`DimKindArg::Perimeter`], not a different one; they differ by exactly
+    /// the closing segment, which is why they share every other option.
+    Path,
 }
 
 impl DimKindArg {
@@ -4891,6 +4971,8 @@ impl DimKindArg {
             // and a report that showed only one of them would hide the
             // decision pdfce made.
             DimKindArg::TwoLines => "two-lines",
+            DimKindArg::Perimeter => "perimeter",
+            DimKindArg::Path => "path",
         }
     }
 }
@@ -6255,6 +6337,31 @@ fn run() -> ExitCode {
             clear: &clear,
             reset,
             output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::DimensionVertex {
+            input,
+            dimension,
+            op,
+            index,
+            dx,
+            dy,
+            at,
+            dry_run,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_dimension_vertex(&DimensionVertexArgs {
+            input: &input,
+            dimension,
+            op,
+            index,
+            dx,
+            dy,
+            at: at.as_deref(),
+            dry_run,
+            output: output.as_deref(),
             mode,
             verify_undo,
         }),
@@ -18641,6 +18748,40 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
                 show_diameter: matches!(kind, DimKindArg::Diameter),
             }
         }
+        // ★ `Pass 107.0`. Two tokens for one kind, differing by the closing
+        // segment — the same shape `radius`/`diameter` already has, and for
+        // the same reason: a script filtering for fence runs and one filtering
+        // for pipe runs are looking for different things.
+        //
+        // The minimums are pdfce POLICY, not a spec requirement, and are
+        // stated as such: ISO 32000-1 §12.5.6.9 sets no minimum vertex count
+        // at all (its only count-adjacent sentence is permissive). The floor
+        // comes from §12.9's distance function, which is defined for n >= 2,
+        // plus the fact that a closed shape with two vertices traces a line
+        // there and back — one stroke printing twice the distance between two
+        // points.
+        DimKindArg::Perimeter | DimKindArg::Path => {
+            let closed = matches!(kind, DimKindArg::Perimeter);
+            let minimum = if closed { 3 } else { 2 };
+            if pts.len() < minimum {
+                eprintln!(
+                    "pdfce-cli: {}: --kind {} needs at least {minimum} points",
+                    input.display(),
+                    kind.token()
+                );
+                return exit::EDIT_REFUSED;
+            }
+            DimensionKind::Perimeter {
+                points: pts.clone(),
+                closed,
+                // The placement pair, read in PAGE axes for this kind: the
+                // label sits at the vertex centroid displaced by
+                // (text_along, offset). See `DimensionKind::Perimeter::offset`
+                // for why the centroid rather than the longest segment.
+                offset,
+                text_along,
+            }
+        }
         // ★ The two-line mode: pdfce reads the geometry and decides.
         //
         // The reading AND the authoring both live in
@@ -18892,6 +19033,180 @@ struct DimensionOffsetArgs<'a> {
     output: &'a Path,
     mode: SaveMode,
     verify_undo: bool,
+}
+
+/// Which vertex edit `dimension-vertex` performs (`Pass 107.0`).
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum VertexOpArg {
+    /// Move the vertex at `--index` by `--dx`/`--dy`. Re-measures.
+    Move,
+    /// Insert a new vertex at `--at`, immediately after `--index`.
+    Insert,
+    /// Remove the vertex at `--index`.
+    Remove,
+}
+
+impl VertexOpArg {
+    /// A stable token for CLI output.
+    const fn token(self) -> &'static str {
+        match self {
+            VertexOpArg::Move => "move",     // ui-text-exempt: stable output token
+            VertexOpArg::Insert => "insert", // ui-text-exempt: stable output token
+            VertexOpArg::Remove => "remove", // ui-text-exempt: stable output token
+        }
+    }
+}
+
+/// Borrowed argument bundle for [`cmd_dimension_vertex`] (clippy arg-count).
+struct DimensionVertexArgs<'a> {
+    input: &'a Path,
+    dimension: u32,
+    op: VertexOpArg,
+    index: usize,
+    dx: f64,
+    dy: f64,
+    at: Option<&'a str>,
+    dry_run: bool,
+    output: Option<&'a Path>,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `dimension-vertex` — the CLI half of `Pass 107.1`'s vertex editing.
+///
+/// # The disclosure is not optional here, and the CLI's form of it is print
+///
+/// A vertex edit re-measures. In the GUI the operator watches the number
+/// change and Save is the commit point (decision 059); the CLI has no session,
+/// so the invocation is the commit and there is nothing to watch. Rule 11's
+/// answer is that the CLI PRINTS what it inferred on the way past, which is
+/// why `before=` and `after=` are on the output line rather than only the
+/// resulting value.
+///
+/// # `--dry-run` is the preflight, not a separate code path
+///
+/// It calls `vertex_edit_preview`, which shares one body with the mutating
+/// verb — so a dry run that says "this will work" and a real run that then
+/// refuses is not a state this command can reach.
+fn cmd_dimension_vertex(args: &DimensionVertexArgs<'_>) -> u8 {
+    use pdfce_core::dimension::DimensionId;
+    use pdfce_core::edit::VertexEdit;
+
+    let id = DimensionId(args.dimension);
+    let edit = match args.op {
+        VertexOpArg::Move => VertexEdit::Move {
+            index: args.index,
+            dx: args.dx,
+            dy: args.dy,
+        },
+        VertexOpArg::Insert => {
+            let Some(text) = args.at else {
+                eprintln!(
+                    "pdfce-cli: {}: --op insert needs --at x,y (where the new vertex goes)",
+                    args.input.display()
+                );
+                return exit::EDIT_REFUSED;
+            };
+            let Some(pts) = parse_dim_points(text) else {
+                eprintln!(
+                    "pdfce-cli: {}: --at must be `x,y` in points",
+                    args.input.display()
+                );
+                return exit::EDIT_REFUSED;
+            };
+            let Some(at) = pts.first().copied() else {
+                eprintln!(
+                    "pdfce-cli: {}: --at must be `x,y` in points",
+                    args.input.display()
+                );
+                return exit::EDIT_REFUSED;
+            };
+            VertexEdit::Insert {
+                after: args.index,
+                at,
+            }
+        }
+        VertexOpArg::Remove => VertexEdit::Remove { index: args.index },
+    };
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    if args.dry_run {
+        let forecast = match session.vertex_edit_preview(id, edit) {
+            Ok(o) => o,
+            Err(err) => return report_edit_error(args.input, &err),
+        };
+        println!(
+            "dimension-vertex {} dimension={} op={} index={} dry_run=1 vertices={} closed={} before={:?} after={:?}",
+            args.input.display(),
+            args.dimension,
+            args.op.token(),
+            args.index,
+            forecast.vertices,
+            u32::from(forecast.closed),
+            forecast.previous_label,
+            forecast.label,
+        );
+        return exit::SUCCESS;
+    }
+
+    let Some(output) = args.output else {
+        eprintln!(
+            "pdfce-cli: {}: --output is required unless --dry-run is passed",
+            args.input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+
+    let applied = match args.op {
+        VertexOpArg::Move => session.move_dimension_vertex(id, args.index, args.dx, args.dy),
+        VertexOpArg::Insert => match edit {
+            VertexEdit::Insert { after, at } => session.insert_dimension_vertex(id, after, at),
+            // Unreachable: `edit` was built from `args.op` immediately above.
+            _ => unreachable!("op and edit are built together"),
+        },
+        VertexOpArg::Remove => session.remove_dimension_vertex(id, args.index),
+    };
+    let applied = match applied {
+        Ok(o) => o,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "dimension-vertex {} dimension={} op={} index={} vertices={} closed={} before={:?} after={:?} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.dimension,
+        args.op.token(),
+        args.index,
+        applied.vertices,
+        u32::from(applied.closed),
+        applied.previous_label,
+        applied.label,
+        args.mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
 }
 
 /// `dimension-offset` — set a ce dimension's placement (Pass 27.1).
@@ -21686,6 +22001,12 @@ fn cmd_dimension_list(input: &Path, show_style: bool) -> u8 {
             } => "diameter",
             DimensionKind::Circular { .. } => "radius",
             DimensionKind::Angular { .. } => "angular",
+            // Two tokens for one variant, deliberately: a script filtering for
+            // fence runs and one filtering for pipe runs are looking for
+            // different things, and `closed=` as a separate column would make
+            // the common case a two-field test.
+            DimensionKind::Perimeter { closed: true, .. } => "perimeter",
+            DimensionKind::Perimeter { .. } => "path",
         };
         // The placement, for a linear dimension. Printed because it is
         // otherwise invisible from the CLI — an operator scripting
@@ -21706,6 +22027,19 @@ fn cmd_dimension_list(input: &Path, show_style: bool) -> u8 {
             DimensionKind::Angular {
                 radius, text_along, ..
             } => format!(" arc_radius={radius} text_along={text_along}"),
+            // A perimeter reports its VERTEX COUNT alongside the placement
+            // pair, because that count is the one fact a script driving
+            // `dimension-vertex` needs and cannot get any other way: every
+            // index it can pass is bounded by it.
+            DimensionKind::Perimeter {
+                ref points,
+                offset,
+                text_along,
+                ..
+            } => format!(
+                " vertices={} offset={offset} text_along={text_along}",
+                points.len()
+            ),
         };
         // The override COUNT is printed unconditionally, and that is the
         // point: an operator scanning a list needs to see at a glance which ce

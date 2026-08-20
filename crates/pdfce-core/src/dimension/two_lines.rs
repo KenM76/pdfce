@@ -128,7 +128,11 @@ pub enum TwoLineRefusal {
 /// to satisfy project rule 4's disclosure obligation without re-measuring
 /// anything itself — re-measuring in the shell is how a disclosure comes to
 /// contradict the dimension it describes.
-#[derive(Debug, Clone, Copy, PartialEq)]
+///
+/// **Not `Copy` since `Pass 107.0`** — it carries a [`DimensionKind`], and
+/// that enum stopped being `Copy` when the perimeter variant arrived with a
+/// vertex list. Nothing here changed shape; the derive simply cannot hold.
+#[derive(Debug, Clone, PartialEq)]
 pub struct TwoLineAuthoring {
     /// The ce dimension to hand to `EditSession::add_dimension`.
     pub kind: DimensionKind,

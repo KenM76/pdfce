@@ -84,5 +84,6 @@ pub use hit::{
 };
 pub use snap::{
     AxisConstraint, MAX_CANDIDATES, MAX_NEIGHBOURHOOD_SEGMENTS, SNAP_FLATTEN_STEPS, SnapCandidate,
-    SnapConfig, SnapKind, constrained_second_point, measured_length, snap_candidates,
+    SnapConfig, SnapKind, constrained_second_point, measured_length, polyline_length,
+    snap_candidates,
 };

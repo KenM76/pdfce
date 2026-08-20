@@ -527,6 +527,20 @@ pub fn dimension_preview_segments(kind: &DimensionKind) -> Vec<(Point, Point)> {
                 vec![(dim_a, dim_b), (ext_a, dim_a), (ext_b, dim_b)]
             })
             .unwrap_or_default(),
+        // Every segment, plus the closing one when the shape closes. The
+        // preview draws from the same vertex list the committed ce dimension
+        // will be authored from, so what the operator sees while picking is
+        // what gets baked — the property `measure::pick`'s own preview relies
+        // on for the linear tool.
+        DimensionKind::Perimeter {
+            ref points, closed, ..
+        } => {
+            let mut out: Vec<(Point, Point)> = points.windows(2).map(|w| (w[0], w[1])).collect();
+            if closed && let (Some(first), Some(last)) = (points.first(), points.last()) {
+                out.push((*last, *first));
+            }
+            out
+        }
         DimensionKind::Angular {
             apex,
             dir_a,

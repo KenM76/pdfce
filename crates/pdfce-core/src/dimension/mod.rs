@@ -4,7 +4,10 @@
 //! (`docs/decisions/011-first-beta-scaled-measurement-dimensioning-tool.md`
 //! §2.3–2.4): linear + radius/diameter dimensions, named groups with per-group
 //! scale + units, the tri-state scale, and the **hybrid storage** that makes a
-//! dimensioned PDF self-contained and interoperable at once.
+//! dimensioned PDF self-contained and interoperable at once. Since extended
+//! with ANGULAR ce dimensions (`Pass 68.0`) and **PERIMETER / path-length**
+//! ones (`Pass 107.0`) — the first variable-arity geometry, and the reason
+//! [`group::DimensionKind`] is no longer `Copy`.
 //!
 //! ## Crate placement (GUI-core separation, binding invariant)
 //!
@@ -31,9 +34,13 @@
 //! 4. [`measure_dict`] — the portable §12.9 `/Measure` dict + §8.11 `/OCG` /
 //!    `/OCProperties` optional-content builders (the reader-visible interop
 //!    mirror + toggleable layer).
-//! 5. [`author`] — the `/Line` + `/IT /LineDimension` annotation with a
-//!    fully-baked `/AP` (leader + arrowheads + value label), additive
-//!    (overlay-append, R46 zero-exception).
+//! 5. [`author`] — the annotation with a fully-baked `/AP` (leader +
+//!    arrowheads + value label), additive (overlay-append, R46
+//!    zero-exception). `/Line` + `/IT /LineDimension` (ISO 32000-1 §12.5.6.7
+//!    Table 175) for a linear, circular or angular ce dimension; `/Polygon` +
+//!    `/IT /PolygonDimension` or `/PolyLine` + `/IT /PolyLineDimension`
+//!    (§12.5.6.9 Table 178) carrying `/Vertices` for a **perimeter**
+//!    (`Pass 107.0`).
 //! 6. [`sidecar`] — the authoritative §14.5 `/PieceInfo /pdfce /Private` model
 //!    serialization (round-trips the whole [`group::DimensionModel`]).
 //! 7. [`style`] — the **style cascade** (`Pass 69.0`): factory default →

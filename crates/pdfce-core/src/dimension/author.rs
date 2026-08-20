@@ -210,8 +210,22 @@ impl DimensionStyle {
 /// existing `/C` stale. Owning it would mean the first recolouring feature
 /// silently loses its work the next time anything is regenerated, which is a
 /// bug that would be very hard to attribute.
-pub const AUTHORED_ANNOT_KEYS: [&[u8]; 6] =
-    [b"Type", b"Subtype", b"IT", b"Rect", b"L", b"Contents"];
+/// ★ `/L` and `/Vertices` are BOTH here, and only one of them is ever written
+/// for a given ce dimension (`Pass 107.0`). That is the point: the
+/// overwrite-or-remove rule then guarantees that authoring a perimeter REMOVES
+/// a stale `/L`, and authoring a linear ce dimension removes a stale
+/// `/Vertices`. A dictionary carrying both would give a reader that honours
+/// `/L` and a reader that honours `/Vertices` two different pictures of the
+/// same annotation.
+pub const AUTHORED_ANNOT_KEYS: [&[u8]; 7] = [
+    b"Type",
+    b"Subtype",
+    b"IT",
+    b"Rect",
+    b"L",
+    b"Vertices",
+    b"Contents",
+];
 
 /// The key authoring writes only when the group is calibrated (§12.9 Table
 /// 261) — separated from [`AUTHORED_ANNOT_KEYS`] only for documentation; it is
@@ -224,8 +238,14 @@ pub const AUTHORED_MEASURE_KEY: &[u8] = b"Measure";
 /// content, patch `/Annots`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct AuthoredDimension {
-    /// The `/Line` annotation dict: `/Type /Annot /Subtype /Line /IT
-    /// /LineDimension /Rect /L /C /Contents` and (when scaled) `/Measure`.
+    /// The annotation dict. For a linear, circular or angular ce dimension:
+    /// `/Type /Annot /Subtype /Line /IT /LineDimension /Rect /L /C /Contents`
+    /// and (when scaled) `/Measure`. For a PERIMETER (`Pass 107.0`), and per
+    /// ISO 32000-1 §12.5.6.9 Table 178: `/Subtype /Polygon` with
+    /// `/IT /PolygonDimension` when the shape closes, `/Subtype /PolyLine`
+    /// with `/IT /PolyLineDimension` when it does not, carrying `/Vertices`
+    /// in place of `/L`.
+    ///
     /// **Missing `/AP`, `/P`, `/OC`** — the session adds them.
     pub annot: Dict,
     /// The `/AP` `/N` form-XObject dict (`/BBox` = `/Rect`, identity matrix,
@@ -384,6 +404,11 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
         } => {
             draw_angular(&mut b, &mut bounds, apex, dir_a, dir_b, radius, style);
         }
+        DimensionKind::Perimeter {
+            ref points, closed, ..
+        } => {
+            draw_perimeter(&mut b, &mut bounds, points, closed);
+        }
     }
 
     // The value label. Anchored where the operator DROPPED it along the
@@ -416,7 +441,16 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
     };
     // Perpendicular to the text direction, for the ISO standoff.
     let (px, py) = (-uy, ux);
-    let lift = if style.breaks_line_for_text() {
+    let lift = if matches!(kind, DimensionKind::Perimeter { .. }) {
+        // A perimeter's anchor is a FREE POINT the operator dropped (the
+        // vertex centroid, displaced by the placement pair), not a line the
+        // number has to clear. So it is centred ON that point under BOTH
+        // standards. ISO 129-1 cl. 4.1.1's "above the dimension line" has no
+        // dimension line to be above here, and applying it anyway would lift
+        // the label off the point it was dropped at — the drag would feel
+        // like it missed by a few points, every time, for no visible reason.
+        -label_size * 0.35
+    } else if style.breaks_line_for_text() {
         // Centred ON the line: drop the baseline by roughly half a cap height
         // so the glyphs straddle it rather than sit on it.
         -label_size * 0.35
@@ -489,24 +523,84 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
 
     let rect = bounds.into_rect();
 
-    // Annotation dict: /Line + /IT /LineDimension + /L + /C + /Contents + /Measure.
+    // The annotation dict. Its SUBTYPE, its `/IT` intent and its GEOMETRY KEY
+    // are all kind-dependent (`Pass 107.0`); everything below them is shared.
+    //
+    // - linear/circular/angular -> `/Line` + `/IT /LineDimension` + `/L`
+    //   (ISO 32000-1 §12.5.6.7 Table 175)
+    // - perimeter, closed       -> `/Polygon` + `/IT /PolygonDimension`
+    // - perimeter, open         -> `/PolyLine` + `/IT /PolyLineDimension`
+    //   (both §12.5.6.9 Table 178, `/IT` values PDF 1.7)
     let mut annot = Dict::new();
     annot.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
-    annot.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Line")));
-    annot.insert(
-        Name::from(b"IT"),
-        Object::Name(Name::from(b"LineDimension")),
-    );
     annot.insert(Name::from(b"Rect"), rect_array(rect));
-    annot.insert(
-        Name::from(b"L"),
-        Object::Array(vec![
-            Object::Real(l0.x),
-            Object::Real(l0.y),
-            Object::Real(l1.x),
-            Object::Real(l1.y),
-        ]),
-    );
+    if let DimensionKind::Perimeter {
+        ref points, closed, ..
+    } = *kind
+    {
+        // ★ `/Polygon` for a closed shape even though Acrobat's own AREA tool
+        // uses that subtype for its measurements, and `/IT /PolygonDimension`
+        // with it. The subtype is a STRUCTURAL fact — the shape closes — while
+        // `/IT` is explicitly *"a hint of intent"* a reader may ignore
+        // (§12.5.6.9, Table 170 cross-reference), and no intent name for
+        // "the perimeter of a polygon" exists in Table 178's list. The
+        // alternative — writing `/PolyLine` with the first vertex repeated at
+        // the end — was refused twice over: it misrepresents a closed shape as
+        // open to every reader, and it would put n+1 vertices in the file
+        // against n in the sidecar, which is exactly the transposition-shaped
+        // mistake the flat `/Points` layout was chosen to avoid.
+        //
+        // Nothing is at risk from a reader that reads `/PolygonDimension` as
+        // "area": the number is baked into the `/AP` and mirrored in
+        // `/Contents`, and `/IT` cannot cause a value to be recomputed.
+        let (subtype, intent): (&[u8], &[u8]) = if closed {
+            (b"Polygon", b"PolygonDimension")
+        } else {
+            (b"PolyLine", b"PolyLineDimension")
+        };
+        annot.insert(Name::from(b"Subtype"), Object::Name(Name(subtype.to_vec())));
+        annot.insert(Name::from(b"IT"), Object::Name(Name(intent.to_vec())));
+        // §12.5.6.9 Table 178: a FLAT array of alternating x and y in DEFAULT
+        // USER SPACE — the same space as `/Rect` and as `/Line`'s `/L`, so no
+        // transform is involved. An array of `[x y]` pairs would be wrong: the
+        // nested form belongs to PDF 2.0's `/Path` and to `/InkList`.
+        //
+        // ★ For a `/Polygon` the closing segment is supplied BY THE READER and
+        // the first vertex is NOT repeated (§12.5.6.9: a polyline differs from
+        // a polygon "except that the first and last vertex are not implicitly
+        // connected"). Repeating it is not forbidden but is undefined, and the
+        // spec corpus names the opposite error as the real hazard: closing the
+        // ring for a `/PolyLine`, or failing to close it for a `/Polygon`.
+        // pdfce's own measurement does the closing itself — see
+        // `polyline_length` — and this array stays exactly the picked vertices.
+        let mut flat = Vec::with_capacity(points.len() * 2);
+        for p in points {
+            flat.push(Object::Real(p.x));
+            flat.push(Object::Real(p.y));
+        }
+        annot.insert(Name::from(b"Vertices"), Object::Array(flat));
+        // `/LE`, `/IC` and `/BS` are all deliberately absent. `/LE` defaults to
+        // `[/None /None]`, which is what a measurement wants — a terminator
+        // would assert that the number spans from one end to the other. `/IC`
+        // absent means no interior fill, which is what a perimeter is. `/BS`
+        // is moot: Table 178 states that a present `/AP` "shall take precedence
+        // over the `Vertices` and `BS` entries", and pdfce always bakes one.
+    } else {
+        annot.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Line")));
+        annot.insert(
+            Name::from(b"IT"),
+            Object::Name(Name::from(b"LineDimension")),
+        );
+        annot.insert(
+            Name::from(b"L"),
+            Object::Array(vec![
+                Object::Real(l0.x),
+                Object::Real(l0.y),
+                Object::Real(l1.x),
+                Object::Real(l1.y),
+            ]),
+        );
+    }
     // `/C` — the annotation's own colour (§12.5.2 Table 164), kept in step
     // with what the baked `/AP` actually paints. A reader that ignores the
     // appearance stream and draws from the annotation keys alone (and some
@@ -590,6 +684,17 @@ fn leader_endpoints(kind: &DimensionKind) -> (Point, Point) {
                 dir_b.y.mul_add(radius, apex.y),
             ),
         ),
+        // The path's two ENDS. A perimeter does not write `/L` at all — its
+        // geometry key is `/Vertices` (ISO 32000-1 §12.5.6.9 Table 178) — so
+        // this pair is only the fallback label anchor, and
+        // `DimensionKind::label_anchor` answers for this kind so even that is
+        // not reached. Returning the ends rather than, say, the first vertex
+        // twice keeps the fallback midpoint somewhere on the shape.
+        DimensionKind::Perimeter { ref points, .. } => {
+            let first = points.first().copied().unwrap_or(Point::new(0.0, 0.0));
+            let last = points.last().copied().unwrap_or(first);
+            (first, last)
+        }
     }
 }
 
@@ -816,6 +921,58 @@ fn draw_angular(
     arrowhead(b, bounds, start, tangent(a0, -sign), style);
     let end = at(1.0);
     arrowhead(b, bounds, end, tangent(a0 + sweep, sign), style);
+}
+
+/// Draw a perimeter / path-length ce dimension: the picked polyline itself,
+/// stroked in the resolved style, closed when the kind says so (`Pass 107.0`).
+///
+/// # What is deliberately NOT drawn, and why each absence is a decision
+///
+/// **No terminators.** A linear ce dimension puts an arrowhead at each end
+/// because the pair of arrows is what says *"the number is the distance
+/// between these two points"*. A perimeter's number is the distance
+/// **along** a path, and two arrows at the ends of an open one would assert
+/// exactly the wrong reading — that the number spans from one end to the
+/// other. On a closed shape there are no ends to terminate at all. So the
+/// shape is stroked plain, and the shape itself is the notation.
+///
+/// **No extension (witness) lines.** They exist to reach from a dimension
+/// line standing off the drawing back to the points it measures. A perimeter's
+/// drawn geometry IS the measured geometry — it stands off nothing — so there
+/// is nothing for a witness line to witness.
+///
+/// **No break in the line for the label under ANSI.** The label sits at the
+/// vertex centroid, which is generally not on any segment; breaking a segment
+/// that the label is nowhere near would put a gap in the drawing for no
+/// reason. See [`author_dimension`]'s `lift`, which centres the label on its
+/// anchor under both standards for the same reason.
+///
+/// # The bounds obligation
+///
+/// Every vertex is fed to `bounds`. An under-sized `/Rect` clips the
+/// annotation in every conforming reader, and on this kind the geometry is
+/// the entire drawing — so a missed vertex is a visibly truncated shape
+/// rather than a slightly tight box.
+///
+/// An empty vertex list emits nothing at all rather than a degenerate path.
+/// The verbs that can shorten a vertex list refuse before reaching that state
+/// ([`crate::edit::EditSession::remove_dimension_vertex`]); this is the
+/// belt-and-braces half, and it is silent because there is no operator here to
+/// disclose to — the refusal already happened upstream.
+fn draw_perimeter(b: &mut ContentBuilder, bounds: &mut BoundsAcc, points: &[Point], closed: bool) {
+    let Some(first) = points.first().copied() else {
+        return;
+    };
+    b.move_to(first.x, first.y);
+    bounds.add(first);
+    for p in points.iter().skip(1) {
+        b.line_to(p.x, p.y);
+        bounds.add(*p);
+    }
+    if closed {
+        b.close_subpath();
+    }
+    b.paint(Paint::Stroke);
 }
 
 /// Emit the terminator at `tip`, pointing along the unit direction `dir`, in
