@@ -96,6 +96,184 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 118.0 — commit `075b1c7` — **THE EXTRACT/EDIT ASYMMETRY IS PUBLISHED: `TextRun::editability()` REPLACES A REQUESTED `bool` THAT COULD NOT HAVE BEEN CORRECT, `EditError::PinnedSpanNotFound` STOPS A REFUSAL FROM BLAMING THE OPERATOR'S OWN TEXT FOR THE SECOND TIME, AND A TEST WAS FOUND ASSERTING THE OLD, MISLEADING MESSAGE** — filed 2026-08-20 (two-hundred-and-sixth filing)
+
+**This filing has no shell.** The commit hash and status are relayed by the
+dispatching engineer (this is the third of three `pdfceGUI` requests filed
+today; the other two are `Pass 111.0` and Backlog `113.0`–`117.2`).
+**Everything below about current source is independently confirmed** by
+`Read`/`Grep` this filing, not merely relayed: `crates/pdfce-core/src/
+text_extract/mod.rs` carries `pub fn editability(&self) -> Editability` at
+line 572 and `pub enum Editability` (`#[non_exhaustive]`) at line 610, with
+its own doc comment's `# ★ Why this is not the -> bool that was asked for`
+section (line 533) stating the trap by name; `crates/pdfce-core/src/
+text_edit/edit.rs` carries `EditError::PinnedSpanNotFound { start, end }`
+at line 469 with a doc comment (440–465) that names the `Pass 19.3`
+incident and quotes the consuming shell's own words; `crates/pdfce-core/
+src/text_edit/format.rs` carries the identical variant/message at line
+1041, `#[from]`-converted from the edit-side error at line 1077. Test file
+`crates/pdfce-core/tests/text_extract.rs` carries **4** new `#[test]`
+functions confirmed by direct read: `is_editable_separates_page_text_
+from_form_xobject_text` (809), `without_provenance_the_answer_is_unknown_
+and_not_a_silent_no` (858), `is_editable_agrees_with_the_provenance_it_
+summarises` (878), `a_run_with_no_glyphs_is_not_editable` (906), plus the
+inline fixture `page_and_form_text_pdf` (760) built specifically to carry
+one `Tj` in the page's own `/Contents` and one inside a form XObject
+invoked by `Do`. `text_edit/edit.rs`'s `a_pin_that_names_no_operator_
+still_refuses` (2487) is confirmed rewritten to assert `EditError::
+PinnedSpanNotFound` and that the rendered message does not contain the
+find text, with a doc comment (2470–2485) stating in its own words that
+the test used to codify the misleading `NoMatch` sentence. `docs/core-api/
+02-editing-and-saving.md` §1.9 (223) opens with the call-out block quoted
+below, confirmed present at lines 223–258.
+
+**The finding, stated at the scope this filing can verify.** Text
+extraction (`text_extract`) recurses into form XObjects — a glyph inside
+one is positioned, decoded and reported exactly like a page-stream glyph.
+The edit surgery (`text_edit::edit::Walk`) does not descend into form
+XObjects at all (confirmed already on disk, `edit.rs:3749`, pre-dating this
+Pass). So **a caret can land anywhere extraction can see and commit only
+where the surgery can reach**, and until this Pass the only way a shell
+could tell the two regions apart was by matching on `GlyphProvenance::
+content_stream` directly — encoding a fact about pdfce's own surgery
+internals into the shell's own guard, which then outlives the limitation it
+was written for the day form editing eventually lands (the consuming
+shell's own framing, preserved: this is decision 058's failure mode, "a
+workaround that outlives its bug"). **Measured on the operator's own
+CAD-exported sheet**, the two regions are not a minor edge case: **3,007**
+single-character `Tj` operators spelling the producer's watermark sit in
+the **page** stream (editable, and nobody wants to edit it), while
+**1,696** show operators carrying every label, the title block and every
+dimension callout sit inside a **form XObject** (not editable, and it is
+everything an operator on that sheet actually wants to touch).
+
+**Ask 1 — `TextRun::editability() -> Editability`, and it could NOT be the
+`bool` the request asked for.** The shell's request was literally
+`run_is_editable(run) -> bool`, and the engineer's own first draft was
+exactly that — **the first test run against it said a perfectly editable
+page-stream run was "not editable,"** because `ExtractOptions::
+capture_provenance` defaults to `false`, so every glyph's provenance is
+`None` unless the caller opted in, and a boolean predicate then answers
+`false` for **every run in the document**, meaning "I was not told" while
+reading as a measured "no." Shipped instead as a four-variant, `#[non_
+exhaustive]` enum — `Editable` / `InsideForm { object }` / `NoAnchor` /
+`Unknown` — with **deliberately no `is_editable() -> bool` convenience**,
+because such a convenience would have to pick a meaning for `Unknown`,
+which the doc comment states plainly is "precisely the decision the caller
+must make in the open." The defining test (`without_provenance_the_
+answer_is_unknown_and_not_a_silent_no`) is written from **`ExtractOptions::
+default()`** deliberately, because the default is the state a caller
+reaches without doing anything — the general technique this is worth
+recording for: *test a predicate from the state a caller reaches by doing
+nothing.*
+
+**Ask 2 — `EditError::PinnedSpanNotFound` / `FormatError::
+PinnedSpanNotFound`, and the twin is deliberate, not duplication.**
+`find_anchor` short-circuits on a pinned request — if the pin is present,
+the text search is never attempted — so a pin naming nothing used to
+report `NoMatch(find)`, *"text to edit was not found in an editable run on
+the page,"* which blames the operator's own text for a pin pointing at a
+different buffer entirely (in practice: the pinned run lives inside a form
+XObject while the surgery is looking at the page stream). The `Format`
+twin is carried through (`#[from]`) rather than collapsed into one shared
+type because `format_text` is what the consuming shell's property bar
+drives directly, and because the identical symptom was first investigated
+under `Pass 19.3` and misdiagnosed the same way that time too — **this
+message has now misled twice**, and the doc comment on the new variant
+records both incidents by name.
+
+**★ A TEST WAS ASSERTING THE OLD, WRONG MESSAGE — found closing this Pass,
+not before it.** `a_pin_that_names_no_operator_still_refuses` asserted
+`EditError::NoMatch` for a request whose text is plainly present on the
+page twice. The *refusal* was correct; the *sentence* was not, and the
+test had pinned that wrong sentence in place as expected behaviour —
+through `Pass 19.3`'s own investigation of the identical symptom, and then
+through the consuming shell's second investigation of it on 2026-08-20.
+**A test that codifies a diagnosis nobody checked is how a misleading
+message survives a refactor.** Rewritten to assert the variant by name and
+that the rendered message does not contain the find text.
+
+**The doc paragraph the request asked for, and the consuming shell's own
+cost estimate.** `docs/core-api/02-editing-and-saving.md` §1.9 now opens
+with a call-out ("★★ READ THIS BEFORE OFFERING A CARET") carrying the
+asymmetry, the measured 3,007-vs-1,696 table, the `editability()`
+instruction and the `PinnedSpanNotFound` note, closing with the shell's own
+words: *"a paragraph saying 'editing reaches page-stream text only; check
+`GlyphProvenance::content_stream` before offering a caret' would have cost
+you four lines and saved me three operator reports."*
+
+**`docs/FEATURES.md`: two rows' sentences REPLACED, no checkbox moved.**
+Row "Edit existing text runs in place, including composite/CID (`/Type0`)"
+and row "Text formatting — size, colour, family/style, char and word
+spacing, horizontal scale, super/subscript, synthetic bold/italic" both now
+state the page-stream-only limit — an operator reading either row
+unqualified would conclude editing reaches a CAD drawing's own labels, and
+it does not (the file's own header forbids appending a note instead of
+replacing the sentence, so both sentences were rewritten in place, not
+annotated). No checkbox changes: `core`/`cli`/`gui` were already accurate
+for the region the surgery *does* reach, and the limit is a scope
+statement, not a regression. See that file for the exact wording.
+
+**`docs/ARCHITECTURE.md` §12: DECLINED, not merely omitted.** The
+candidate ruling — "a preflight predicate whose answer depends on an
+omittable precondition must expose 'precondition not met' as its own
+outcome, never collapse it into the negative case" — is real and
+generalises, but it is not a crate boundary, a library pick, or an
+invariant definition, and this project has an **existing, exact
+precedent for declining exactly this shape**: `Permissions::granted(self,
+bit) -> Option<bool>` (`Pass 5` increment 1, `17f4d82`, 2026-08-11) is the
+identical mechanism — a caller-visible "no data to decide from" case that
+a `bool` cannot express — and it never received a §12 entry; it graduated
+straight to `D:\dev\rag\rust\` (confirmed by `Grep`, zero hits for
+"granted" or "Option<bool>" anywhere in this file's decision log). Minting
+one now for the third same-mechanism instance (`Permissions::granted` →
+`FormSourceSupport`, `Pass 8.1`-adjacent → `Editability`, this Pass) would
+be inconsistent with that established disposition, not a correction of it
+— nobody has asked for the disposition itself to change. **Declined on
+precedent, not on the finding's merit.**
+
+**Standing rule: DECLINED for the same reason, and the RAG file is
+widened instead.** `D:\dev\rag\rust\a_revision_gated_reserved_field_
+needs_option_not_a_default_bool.md` already carries the `Permissions::
+granted` instance and a "Where this generalizes" section reasoning about
+the same mechanism from a different trigger (spec-revision gating rather
+than a caller-omitted extraction option). **Amended this filing** with
+`Editability` as a second, differently-triggered instance (caller-side
+omitted precondition, not document-format versioning) rather than filing
+a new RAG entry or a new standing rule — the mechanism is the same one
+already named, and hard rule 4 ("don't duplicate — edit with a dated
+footer") applies to this librarian's own RAG tier exactly as it does to
+`personal_rag`. See that file for the amendment.
+
+**Backlog: ask 3 — text editing inside form XObjects — filed as `Pass
+119.0`, not started.** See Backlog, below. Not the same shape as this
+Pass; recorded there with the demand quote and the shared-object hazard
+the engineer flagged.
+
+**Tests: 4 new** in `crates/pdfce-core/tests/text_extract.rs` (listed
+above, independently confirmed), **1 rewritten** (`a_pin_that_names_no_
+operator_still_refuses`, `text_edit/edit.rs:2487`). **Workspace: 107
+suites, 0 failures** (relayed, not independently re-run — no shell this
+filing, `cargo` not available to this dispatch). `cargo fmt --check` /
+`cargo clippy --all-features -- -D warnings` clean (relayed). `cargo
+tree -p pdfce-core` / `-p pdfce-render`: no GUI dependency (relayed,
+consistent with every prior filing's independent checks of this
+invariant — this Pass touches no `Cargo.toml`, confirmed by the absence of
+any dependency-surface change in the description). No new dependency.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **112** | **119** (`118.0` this Pass; `119.0` minted below for ask 3; `113.0`–`117.2` remain untouched Backlog IDs from the prior filing) |
+| decision records | **075** | **075** (unchanged — declined, see above) |
+| standing rules | **R205** | **R205** (unchanged — declined on precedent, see above; `D:\dev\rag\rust\` amended instead) |
+| `SESSION_LOG` filings | **205** | **206** |
+| `personal_rag/pdf` lessons | **+0** | **+0** (this is a Rust-API-design finding, not a PDF-domain finding — stays in `D:\dev\rag\rust\`) |
+| `docs/FEATURES.md` rows touched | — | **2** (sentences replaced, no checkbox moved) |
+
+---
+
 ### Pass 112.0 — commit `f8dd31f` — **`Matrix::scale`/`rotate`/`about`/`is_invertible` — THE FOUR PRIMITIVES EVERY TRANSFORM VERB IN THE `113.0`–`117.2` BACKLOG BUCKET IS GATED ON, FOUND ALREADY SHIPPED, UNFILED, LAST FILING — AND THE SURVEY FINDING THAT ASKED FOR THEM WAS INVALIDATED BY THE ENGINEER'S OWN WORK BETWEEN MEASUREMENT AND DISPATCH** — filed 2026-08-20 (two-hundred-and-fifth filing)
 
 **This filing has no shell.** The commit hash and its status are relayed by
@@ -63563,6 +63741,59 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+### `Pass 119.0` — TEXT EDITING INSIDE FORM XOBJECTS — filed 2026-08-20 (two-hundred-and-sixth filing), ask 3 of three `pdfceGUI` requests filed today; asks 1 and 2 shipped as `Pass 118.0`, above
+
+**Not started, not dated, not scoped past the shape below.** `Pass 118.0`
+published the boundary this Pass exists to move: pdfce's text-edit surgery
+(`text_edit::edit::Walk`) does not descend into form XObjects, while
+extraction, rendering and object selection all do. On a CAD-exported sheet
+this is not a completeness item — the consuming shell's own words,
+preserved: *"for a shell serving CAD output this is not a completeness
+item, it is where the text is."* Their own measurement (`Pass 118.0`'s
+entry, above): **1,696** of the editable-looking show operators on a real
+sheet sit inside a form XObject, against **3,007** single-character `Tj`
+of producer watermark in the page stream that nobody wants to touch.
+
+**The shape of the work, as given at dispatch.** The surgery today
+operates on exactly **one buffer** — the page's own concatenated
+`/Contents`. A form XObject is a **different stream object**, with its own
+`/Resources` and often its own `/Matrix`. Editing inside one is therefore a
+write to a **possibly-shared object**: the same form XObject stream can be
+invoked by `Do` from several pages, or several times from one page (a
+repeated title-block stamp, a symbol library entry) — legal under §12.5.5
+and already load-bearing elsewhere in this codebase (`ARCHITECTURE.md`
+line ~2900). Whether an edit inside a shared form propagates to every
+invocation (correct, if the operator's intent is "fix the symbol") or must
+refuse by name (correct, if the operator's intent is "fix this one
+instance" and the form is shared) is **a design decision to make in the
+open before writing the surgery, not something to discover afterwards** —
+the engineer's own framing, preserved verbatim because it is exactly right
+and because this project has been burned by the opposite order before
+(decision 058's "a workaround that outlives its bug" is what happens when
+a boundary is discovered rather than decided).
+
+**★ Cross-reference, flagged rather than asserted as settled.** This is
+arguably the same shape as `Pass 111.0`'s decision NOT to rewrite a
+possibly-shared `/Contents` array object in place (decision 075, same
+day) — both are "the object this verb wants to touch may be reached from
+more than one place, and the verb must decide what that means before it
+writes." Whether that rhymes hard enough to be worth stating as one
+general principle (a standing rule, or a widened decision 075) rather than
+two separate rulings is the **engineer's** call, not filed here as a
+ruling — this librarian is not the author of either decision and the two
+problems differ in one respect worth naming before conflating them:
+decision 075 is about a reader/writer **shape** disagreement (an array vs.
+a reference to an array), while this Pass's hazard is about **multiplicity
+of invocation** (one stream, many callers) — the same word "shared" is
+covering two different risks.
+
+**Acceptance criteria: NOT yet scoped.** No `pdfce-spec-librarian` or
+`pdfce-acrobat-librarian` dispatch has grounded this against real Acrobat
+behaviour or the §12.5.5/§8.10 form-XObject clauses specifically for the
+edit case (as opposed to the render case, which `pdfce-render` already
+implements). Flagged as owed before this Pass is scoped past the shape
+above, per project rule 12.
 
 ### ★★★ MOVE / RESIZE / ROTATE, SCOPED TO ITS LOGICAL CONCLUSION — filed 2026-08-20 (two-hundred-and-fourth filing), from the operator's own widening instruction on `request_no_verb_transforms_a_non_path_object_so_a_placed_image_cannot_be_moved.md`
 

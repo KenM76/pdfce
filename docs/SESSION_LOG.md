@@ -52119,3 +52119,118 @@ this role's standing hard rules, not a new ecosystem finding).
 
 **Terminology (rule 15):** no bare "dimension" appears; "ce dimension"/
 "pdf dimension" do not arise this filing (no dimension-related content).
+
+## 2026-08-20 (two-hundred-and-sixth filing) — `Pass 118.0` (`075b1c7`) PUBLISHES THE EXTRACT/EDIT ASYMMETRY: `TextRun::editability()` REPLACES A REQUESTED `bool` THAT COULD NOT HAVE BEEN CORRECT; `PinnedSpanNotFound` STOPS A MESSAGE THAT MISLED TWICE; A TEST WAS FOUND ASSERTING THAT WRONG MESSAGE; `Pass 119.0` FILED FOR THE UNSTARTED WORK; DECISION AND STANDING-RULE MINTS BOTH DECLINED, ON PRECEDENT
+
+**Filed by `pdfce-librarian`.** This filing has no shell — `Pass 118.0`'s
+commit hash and status are relayed by the dispatching engineer, the third
+of three `pdfceGUI` requests filed today (`Pass 111.0` and Backlog
+`113.0`–`117.2` are the other two). **Every claim about current source
+state was independently re-confirmed** by `Read`/`Grep` against
+`crates/pdfce-core/src/text_extract/mod.rs`, `crates/pdfce-core/src/
+text_edit/{edit,format}.rs`, `crates/pdfce-core/tests/text_extract.rs` and
+`docs/core-api/02-editing-and-saving.md` §1.9 — not merely relayed. See
+`ROADMAP.md`'s `Pass 118.0` entry for line numbers.
+
+**Shipped:**
+- Pass 118.0 — `TextRun::editability() -> Editability`
+  (`Editable`/`InsideForm { object }`/`NoAnchor`/`Unknown`,
+  `#[non_exhaustive]`), replacing a requested `run_is_editable(run) ->
+  bool` that its own first test run disproved: with
+  `ExtractOptions::capture_provenance` defaulting to `false`, a boolean
+  answers "not editable" for every run in the document while meaning "I
+  was not told." `EditError::PinnedSpanNotFound { start, end }` and its
+  `FormatError` twin replace a `NoMatch(find)` message that blamed the
+  operator's own text for a pin pointing at a different buffer — the
+  identical symptom investigated once already under `Pass 19.3` and
+  again by the consuming shell on 2026-08-20, now split by name. A test
+  (`a_pin_that_names_no_operator_still_refuses`) was found asserting the
+  OLD message as expected behaviour and rewritten to assert the new
+  variant. `docs/core-api/02-editing-and-saving.md` §1.9 gained the
+  call-out the request asked for, closing with the shell's own cost
+  estimate: "four lines and saved me three operator reports."
+
+**Decisions made this session:** none. The candidate ruling — "a
+preflight predicate over an omittable precondition must expose
+'precondition not met' as its own outcome" — is real but declined a §12
+entry **on precedent**: `Permissions::granted -> Option<bool>` (`Pass 5`
+increment 1, `17f4d82`, 2026-08-11) is the identical mechanism and never
+received one either; it graduated straight to `D:\dev\rag\rust\`. Minting
+now for the third same-mechanism instance would be inconsistent with that
+established disposition, not a correction of it.
+
+**Findings + decisions:**
+1. **A test can assert a defect, not just its absence.** The `NoMatch`
+   sentence survived two separate investigations of the identical symptom
+   partly *because* a test had pinned it as expected behaviour — nobody
+   re-checked the *sentence*, only the *refusal*, which was correct.
+2. **A survey/spec of an API can be invalidated by its own default,
+   not just by a later requirement change.** The requested `bool` was a
+   correct-looking design that could not work; only writing the
+   defining test against **default options specifically** — the state a
+   caller reaches by doing nothing — revealed it. Recorded as a
+   repeatable technique, not a one-off catch.
+3. **Standing rule R206 declined**, same precedent as the decision-log
+   ruling above: three same-mechanism instances now exist in this
+   project's own history (`Permissions::granted`, `FormSourceSupport`,
+   `Editability`) and none has ever needed a ROADMAP standing rule —
+   the mechanism graduates to `D:\dev\rag\rust\` instead, which already
+   had a file for it. Amended rather than duplicated (hard rule 4).
+
+**`docs/FEATURES.md`:** two rows' SENTENCES replaced (not appended to,
+per that file's own rule) — "Edit existing text runs in place" and "Text
+formatting" both now state the page-stream-only limit. No checkbox
+moved.
+
+**`D:\dev\rag\rust\`:** `a_revision_gated_reserved_field_needs_option_
+not_a_default_bool.md` amended with a second, differently-triggered
+instance (caller-omitted extraction option, not document-format
+versioning) and its `last_verified` bumped to 2026-08-20; `index.md`'s
+existing bullet extended in place, not duplicated. `+0` new files this
+filing.
+
+**`personal_rag/pdf`:** unchanged, `+0` — this is a Rust-API-design
+finding about pdfce's own predicate shape, not a PDF-domain producer-
+divergence finding.
+
+**Still in flight:**
+- `Pass 119.0` (text editing inside form XObjects) is filed as Backlog,
+  not started, not scoped past its shape — needs a `pdfce-spec-librarian`
+  and/or `pdfce-acrobat-librarian` dispatch before acceptance criteria can
+  be written (project rule 12), plus an engineer ruling on the
+  shared-object-invocation hazard named in its entry.
+- `Pass 113.0`–`117.2` (move/resize/rotate) remain Backlog, unblocked
+  since `Pass 112.0`, untouched by this filing.
+- `Pass 117.2` (`/MK /R` widget rotation) still needs a
+  `pdfce-spec-librarian` dispatch, carried unchanged from the prior two
+  filings.
+
+**For next session:**
+1. Commit this filing's `ROADMAP.md`/`SESSION_LOG.md`/`FEATURES.md`/
+   `D:\dev\rag\rust\` edits — no shell was available to this dispatch.
+   Also confirm `075b1c7` is real and on the branch this librarian is
+   reading (relayed only, per hard rule 8).
+2. `docs/NEXT_SESSION.md` §2 item 1 is flagged STALE by the dispatching
+   engineer (said "UNTOUCHED, NOT REPLIED TO" — no longer true) and is
+   the engineer's own file to correct, not this librarian's; noted here
+   so nobody acts on the stale line first.
+3. Dispatch `pdfce-spec-librarian`/`pdfce-acrobat-librarian` before
+   scoping `Pass 119.0` further, and separately for `Pass 117.2`'s
+   `/MK /R` semantics.
+4. Begin `Pass 113.0` if `Pass 119.0` is not the next priority — its
+   dependency chain has been fully Shipped since the prior filing.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **112** | **119** (`118.0` shipped this filing; `119.0` minted as Backlog for ask 3; `113.0`–`117.2` untouched) |
+| decision records | **075** | **075** (unchanged — declined on precedent) |
+| standing rules | **R205** | **R205** (unchanged — declined on precedent; `D:\dev\rag\rust\` amended instead) |
+| `SESSION_LOG` filings | **205** | **206** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **2** (sentences replaced, no checkbox moved) |
+| `D:\dev\rag\rust\` files | **new: 0** | **amended: 1** (`a_revision_gated_reserved_field_needs_option_not_a_default_bool.md`) |
+
+**Terminology (rule 15):** no bare "dimension" appears; not applicable
+this filing (no dimension-related content).
