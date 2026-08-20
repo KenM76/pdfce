@@ -96,6 +96,103 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 111.0 — commit `e5ef2a0` — **`add_image` CORRUPTED EVERY PAGE WHOSE `/Contents` WAS AN INDIRECT REFERENCE TO AN ARRAY — THE SHAPE QT AND EVERY CAD EXPORTER EMITS — BY WRAPPING THE REFERENCE INSTEAD OF SPLICING INTO IT; WRITTEN TWICE (`R92`-ADJACENT), NOW ONE FUNCTION BESIDE THE READER; READ-SIDE FLATTENING RECOVERS ALREADY-DAMAGED FILES, PROVED BYTE-IDENTICAL AGAINST THE HEALTHY ORIGINAL** — filed 2026-08-20 (two-hundred-and-fourth filing)
+
+**This filing has no shell.** The commit hash is relayed by the dispatching
+engineer, per hard rule 8 — not independently verified by `git show`.
+**Everything below about current source was independently confirmed** by
+`Grep`/`Read` this filing: `page_tree::append_content_stream` and
+`page_tree::contents_from_array` both exist and sit adjacently
+(`page_tree.rs:747`/`862`); `Page::contents_flattened` exists
+(`page_tree.rs:202`); `crates/pdfce-core/tests/contents_append_shapes.rs`
+exists with **8** `#[test]` functions (grep-counted, matching the dispatch's
+claim); `EditError::VectorEdit` carries `#[error(transparent)]` +
+`#[from]` (`edit.rs:4993`–`4994`), so `NotAPath`'s `index`/`kind` fields
+were already surfaced, not newly added.
+
+**The defect, restated at the scope this filing can verify.** `add_image`
+(serving image insertion) and `text_edit::addtext::append_contents`
+(serving `add_text` and the OCR sandwich layer) were two independent
+hand-written implementations of "append a content stream to `/Contents`,"
+and both mishandled the **indirect-reference-to-array** shape: instead of
+resolving the reference and pushing onto the array it points at, both
+wrapped the reference itself in a new outer array — `/Contents 5 0 R`
+(pointing at an array) became a **new array containing that reference**,
+nesting an array inside what `page_tree::pages` expects to be a flat
+stream-or-array. `page_tree::pages` rejects the nested shape, so the
+document could not be reopened by pdfce — but `add_image` and the
+subsequent save both returned `Ok`, because neither checked the postcondition
+this Pass now adds. **A corruption, not a missing feature**: the operator's
+report that image insertion "had never worked" traces to this one shape,
+which is what Qt (and, by extension, most CAD PDF exporters) emits.
+
+**The fix: one function, placed beside the reader.** `page_tree::
+append_content_stream` now serves both `add_image` and `add_text`/OCR,
+replacing both hand-written copies, and is deliberately defined next to
+`contents_from_array` — the function that already had to know every legal
+`/Contents` shape to *read* one. The two call sites had disagreed with each
+other, not with the spec; unifying them removes the possibility of drifting
+apart again (see Decision 075 below for the generalised placement ruling).
+
+**Read-side repair of already-damaged files — exact, and that is the
+license for it.** `page_tree` now flattens a nested `/Contents` array on
+read, depth-guarded, recovering precisely the streams in precisely Table
+30's original order (`[[a,b],c]` → `[a,b,c]`). Read-side only, per
+`ARCHITECTURE.md` §5 — the file is not silently normalised into a
+different on-disk shape; it stays damaged until a verb legitimately
+rewrites the page. **Proved, not argued**: a damaged `EMPC.pdf` and the
+healthy original render to byte-identical PNGs, `sha256
+f3e7381d12dee91f` (relayed measurement, single hash, not independently
+re-rendered this filing — no render toolchain available to this dispatch).
+`Page::contents_flattened` counts the repair and `pdfce-cli inspect`
+discloses it, including how it happened (rule 4).
+
+**The `commit()` postcondition, and its honestly-stated limit.**
+`EditSession::commit()` now re-walks the page tree in debug builds, gated
+on a base-state walk taken once at `new()` (three existing fixtures have a
+page with no `/Resources` and would otherwise fail on their FIRST walk,
+not because of this Pass's edit). Its claim: no verb turns a readable
+document into an unreadable one. **Stated explicitly, not left implicit,
+that this guard would NOT have caught today's bug**: with read-side
+healing in place, the corrupted page still reads, so the postcondition is
+satisfied vacuously for exactly this defect class. Verified by sabotage
+(temporarily disabling the read-side flattening reproduces a `commit()`
+failure).
+
+**Scope correction accepted from the request, one item.** The request
+asked that `move_objects`' `NotAPath` refusal name the offending object.
+It already did — `index`/`kind` have been on the variant since it was
+minted, exposed transparently via `EditError::VectorEdit`. Closed by
+adding a test pinning the rendered string on a mixed selection, not by
+new fields.
+
+**Tests: 8 new** in `contents_append_shapes.rs`, all four `/Contents`
+shapes (direct stream / direct array / indirect stream / indirect array) ×
+`add_image`/`add_text`, each asserting against both the live session and
+the saved-and-reloaded bytes. **Workspace: 107 suites, 0 failures**
+(relayed). `cargo fmt`/`cargo clippy -D warnings` clean (relayed).
+`cargo tree -p pdfce-core`/`-p pdfce-render`: no GUI dependency (relayed,
+consistent with every prior filing's independent checks of this
+invariant). No new dependency.
+
+**`docs/FEATURES.md`:** no row changed. Row 205 ("Insert an image as a new
+XObject") already reads `[x]`/`[x]`/`[x]`/`[x]` and, post-fix, that is
+accurate for every `/Contents` shape — there is nothing currently wrong
+left to caveat, and this file's own header forbids appending history to a
+row that has stopped being broken. **One new row added instead**,
+folded into the existing lenient-PDF-defect-tolerance row (see below).
+
+**`docs/ARCHITECTURE.md` §12:** **Decision 075 minted** — see below. The
+engineer's candidate ruling ("the writer's model of a structure lives
+beside the reader's, not beside the verb that uses it") is accepted as a
+**distinct** finding from `R92`, not folded into it: `R92` is about a
+predicate hand-duplicating the *shape* of a structure and drifting when
+the structure grows a field; this defect is about two *procedures*
+computing the same structural fact independently and being wrong the same
+way, with no structure-growth event involved at all. Same family
+(duplication that should not exist), different mechanism — worth its own
+record rather than stretching `R92`'s stated boundary to cover it.
+
 ### Pass 110.0 — commit `1c169ba` — **`tools/check-outcome-disclosed.py`: A THIRD GATE BESIDE `check-ui-strings.sh`/`check-disclosure-channel.sh` — TWELVE OUTCOME STRUCTS, 58 `pub` FIELDS, EACH ONE MUST BE READ BY A SHELL — AND ITS OWN SELF-TEST FOUND A BROKEN REGEX ALREADY LIVE IN `check-settings-consumed.py`** — filed 2026-08-20 (two-hundred-and-third filing)
 
 **This filing has no shell.** No `git show`/`git log` was run; the commit
@@ -63361,6 +63458,237 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+### ★★★ MOVE / RESIZE / ROTATE, SCOPED TO ITS LOGICAL CONCLUSION — filed 2026-08-20 (two-hundred-and-fourth filing), from the operator's own widening instruction on `request_no_verb_transforms_a_non_path_object_so_a_placed_image_cannot_be_moved.md`
+
+**Operator, verbatim:** *"we are missing move/resize/rotate, I assume for
+not just the objects it mentions. Please anticipate and increase the scope
+of the request to its logical conclusion."* The triggering request asked
+for one verb, `transform_objects(page, objects, matrix)`, plus a preflight,
+scoped to content-stream objects only. The engineer's own code survey
+(reported in this dispatch, independently spot-checked below) found the
+true shape is **four carriers with four different mechanisms**, not one
+verb. Dependency order below; `[ ]`/`◐`/`[x]` prefixes on each Pass mark
+whether ANY part of it already exists in `crates/` (confirmed by `Grep`/
+`Read` this filing, not relayed).
+
+**★★ CORRECTION TO THE DISPATCH, FOUND BEFORE FILING — F3 IS WRONG, AND
+`Pass 112.0` ALREADY EXISTS ON DISK, UNFILED.** The dispatch's finding F3
+read *"`Matrix` has no `scale` or `rotate` constructor… everything below
+needs the missing constructors first"* and asked this filing to mint a
+Foundation Pass for them. **`Grep`/`Read` against
+`crates/pdfce-core/src/vector/geometry.rs` this filing found `Matrix::
+scale` (line 163), `Matrix::rotate` (line 191), `Matrix::about` — a pivot
+composer, `translate(−p) × self × translate(+p)` (line 246) — and
+`Matrix::is_invertible`, the named-refusal predicate for a singular
+matrix (line 267), ALL ALREADY IMPLEMENTED, each doc-comment explicitly
+citing `(Pass 112.0)`, each carrying a worked doc-test.** `Grep` for
+`Matrix::scale`/`Matrix::rotate`/`Pass 112` across `crates/` returns
+**zero consumers outside `geometry.rs` itself** — foundation-only, wired
+to nothing yet. `ROADMAP.md` had no `Pass 112` entry before this filing
+(`Grep`, zero hits) — **this work exists on disk, cites its own Pass
+number in its own doc comments, and has never been filed.** This filing
+has no shell and cannot determine whether it is committed or sitting
+uncommitted in the working tree (hard rule 8 — asserting either would be
+exactly the disk-state-from-documents inference that rule forbids).
+**Consequence for this filing:** `Pass 112.0` is NOT filed here as
+Backlog — the ID is already real and Backlog is for unbuilt work — and it
+is NOT filed as Shipped either, because commit status is unverified from
+here. **Owed to the engineer: confirm `Pass 112.0`'s commit status and
+either dispatch a "Pass shipped" filing for it or fold its doc-tests into
+whichever Pass first consumes it.** Every Foundation dependency below is
+written as satisfied by this already-built work; new Pass numbering
+starts at **113.0**, skipping 112 entirely so the ID stays stable and
+unambiguous once its owning filing lands.
+
+**F1 — the mechanism the triggering request assumed does not exist, and
+why the alternative is better, not merely necessary.** `move_objects`
+rewrites numeric **operands** in place (`vector/edit.rs:485`–`521`) — `m`/
+`l`/`c`/`v`/`y` points, `re`'s origin — which can express translation and
+nothing else: a rotated rectangle has no `re` spelling, stroke width is a
+user-space scalar untouched by any operand rewrite, and text/image objects
+have no operand family this mechanism touches at all. `Grep` confirms no
+`q…cm…Q` wrapping exists anywhere in `vector/edit.rs` today. `transform_
+objects` is therefore not "`move_objects` with a matrix" — it needs a
+**different edit**, wrapping the object's byte span in `q <matrix> cm …
+Q`. This is independently the better mechanism regardless of urgency: it
+is kind-agnostic (paths, text, images, forms and inline images all wrap
+the same way), where operand rewriting is inherently kind-specific and
+would need a bespoke implementation per object kind.
+
+**F2 — four carriers, four mechanisms.** Content-stream objects (F1,
+above); `/Rect`-carrying annotations/widgets/redaction/links/ce dimensions
+(this project's own established "family (a)" vocabulary, `two-hundred-
+and-Xth`-filing survey below); ce dimensions specifically, which
+additionally regenerate their baked `/AP` rather than patch `/Rect`
+(`move_dimension`'s own doc comment); and widgets, whose appearance
+generators are already size-parameterised. The triggering request saw
+only the first.
+
+**Existing Backlog rows corrected in `docs/FEATURES.md` in this same
+filing** (see that section below) — `Planned` row "Move and resize
+anything carrying a `/Rect`" understated core coverage (`move_widget` and
+`move_dimension` already exist and one is CLI-wired) and said nothing
+about rotate for any of the five listed carriers; `Planned` row "Resize a
+vector object" is superseded in shape by 113.0's kind-agnostic mechanism.
+
+**Q…cm…Q vs operand-rewriting is NOT a decision** — the engineer has only
+established that operand rewriting cannot express rotation. This is an
+open implementation question against `Pass 113.0`, not minted as an
+architectural decision (explicit instruction from the dispatching
+engineer).
+
+#### FOUNDATION
+
+- ~~**`Matrix` constructors — `scale`, `rotate`, a pivot helper.**~~ —
+  **ALREADY SHIPPED, UNFILED, as `Pass 112.0`** (`vector/geometry.rs`,
+  see correction above). Not re-listed as Backlog. Owed: engineer
+  confirms commit status; librarian files it Shipped once confirmed.
+
+#### CONTENT OBJECTS — the triggering request's actual blocker; first real Backlog Pass, gated only on `Pass 112.0`
+
+- **`Pass 113.0` — `transform_objects(page, &[usize], Matrix) ->
+  TransformOutcome`, via `q…cm…Q` byte-span wrapping, kind-agnostic**
+  (path, text, image XObject, form XObject, inline image). Removes the
+  `NotAPath` refusal for this verb specifically — a mixed selection
+  becomes transformable, closing the triggering request's own complaint.
+  Two named refusals, distinguished because they drive different UI
+  (engineer's own framing, kept verbatim): an object with **no placement
+  to wrap** (don't offer a handle) vs a **singular matrix** — `Matrix::
+  is_invertible` already exists for this exact check (`Pass 112.0`) — (offer
+  the handle, clamp the drag). Acceptance criteria also cover the two
+  cross-cutting gaps the dispatch flagged as "worth their own lines": no
+  `PlannedEdit` shape exists yet for "wrapped in `q…cm…Q`" (`vector/
+  edit.rs:380` has no such variant — confirmed by `Grep`, no
+  `QWrap`/`WrapInMatrix`/`CmWrap` symbol anywhere), and `CommandKind` has
+  no transform variant (`MoveObject` is already overloaded for
+  single/multi-object move and should not also carry transform). **Judgment
+  call, flagged for the engineer to accept or reject:** these two are
+  filed as acceptance criteria of `113.0` itself, not as separate Pass
+  IDs — they are prerequisites/components of this one deliverable, not
+  independently shippable, unlike the dispatch's "cross-cutting, worth
+  their own lines" phrasing might suggest a reader mint them separately.
+  Open question against this Pass: `q…cm…Q` wrap vs operand-rewriting is
+  not decided (see above).
+- **`Pass 113.1` — `transform_preview(&self, …)` preflight**, sharing ONE
+  body with `113.0`'s verb, in the shape `vertex_edit_preview`
+  established. Requested by name, third time asked, citing the
+  `adopt_widget` lesson: a verb with no preflight makes the UI find out by
+  pressing.
+- **`Pass 113.2` — CLI `transform-objects` subcommand.**
+
+#### RENDERER PREREQUISITE
+
+- **`Pass 114.0` — implement `NoZoom`/`NoRotate` annotation placement**
+  in `pdfce-render`, currently a documented deferral (`pdfce-render/src/
+  annot.rs:763`–`769`, confirmed by `Grep`: `"annotation NoZoom/NoRotate
+  placement adjustment deferred (base AA placement used)"`, labelled a
+  "Pass-6.0 deferral" in its own comment). A rotate verb that sets these
+  flags on a markup annotation (`Pass 115.0`, below) will not render
+  faithfully until this lands — filed as its own Pass because it is a
+  real, independently shippable `pdfce-render` defect regardless of
+  whether annotation rotate ships, not merely scaffolding for `115.0`.
+
+#### ANNOTATIONS
+
+- **`Pass 115.0` — markup annotations + redaction marks: move, resize,
+  rotate.** Covers `Square`, `Circle`, `Line`, `Ink`, `Polygon`, `Cloud`,
+  `PolyLine`, `TextMarkup` and redaction marks. The crux, per the
+  engineer's own survey: `annot_author.rs:1002`–`1013` writes `/AP`
+  `/BBox = /Rect` in **page coordinates with no `/Matrix`**, so the baked
+  appearance holds absolute page coordinates — moving one of these means
+  moving FOUR things in step: `/Rect`, the subtype geometry key (`/L` /
+  `/Vertices` / `/InkList` / `/QuadPoints`), `/BBox`, and the baked `/AP`
+  itself. The pipeline already exists and is not new work to invent:
+  `spec_from_dict` → transform the spec → `build_appearance_with`, the
+  same shape `set_markup_style` already uses minus the transform step.
+  **Acceptance criterion, not a separate Pass** (judgment call — folded
+  in rather than given its own ID, since it is scoped to the same
+  subtype family and would otherwise be easy to ship 115.0 without):
+  `/RD` maintenance for cloudy `Square`/`Circle` — written once today and
+  never updated under any transform. Depends on `Pass 112.0` (shipped,
+  unfiled) and `Pass 114.0` (render prerequisite).
+- **`Pass 115.1` — text-bearing annotations: move (translate only).**
+  `FreeText`, `Sticky`, `Stamp` — genuinely easier than `115.0`: their
+  `/AP` `/BBox` is `[0 0 W H]` **local**, so §12.5.5's placement matrix
+  already carries the artwork and a `/Rect` translate suffices, same
+  mechanism as a widget move. `Sticky` additionally has a `/Popup`
+  companion with its own `/Rect` that must move with it — named
+  explicitly so it isn't found the hard way. No rotate in this Pass;
+  resize/rotate for this family is unscoped, deliberately, pending
+  operator interest. Depends on `Pass 112.0`.
+- **`Pass 115.2` — foreign/undecodable annotations: general fallback.**
+  `/Link` and anything `spec_from_dict` refuses to decode — the only safe
+  transform for content pdfce cannot interpret is an `/AP` `/Matrix`
+  prepend, which nothing writes today (`Grep`, zero hits for a written
+  `/Matrix` entry on an `/AP` stream in `annot_author.rs`). Worth its own
+  Pass because it is the general-purpose fallback every other annotation
+  Pass in this bucket could eventually fall back to, not a one-off.
+  Depends on `Pass 112.0`.
+
+#### ce DIMENSIONS
+
+- **`Pass 116.0` — rotate/scale a placed ce dimension, per-variant**
+  (rotation is genuinely not uniform across kinds, unlike the other three
+  families above): `Linear` must reconcile `AxisConstraint` — a rotated
+  Horizontal dimension is no longer horizontal, and whether the rotate
+  **revokes** the operator's earlier constraint or is **refused by name**
+  is an open question for the engineer/operator, not decided here.
+  `Angular` rotates `dir_a`/`dir_b` but is **scale-invariant by design** —
+  an angle does not have a length to scale. `Perimeter`'s `offset`/
+  `text_along` are page-axis-relative to the vertex centroid (`Pass
+  107.0`, decision 074's sibling ruling) and would be **wrong** under a
+  naive rotate — they need re-deriving, not merely rotating along with
+  the geometry. `Circular` is rotation-invariant; a *geometric* scale
+  would change the measured value, which **collides conceptually with
+  `set_group_scale`** (the existing measurement-ratio verb) — flagged
+  explicitly so no future Pass names a new verb `scale_dimension` and
+  creates two ways to change what a Circular dimension reads.
+  **Also closes an `R151` instance in the same Pass, by economy of
+  scope**: `move_dimension` has existed core-only since `Pass 25.5` with
+  **no `pdfce-cli` caller** (confirmed by `Grep` against `main.rs` this
+  filing — `object-move`/`dimension-offset` exist, no `move-dimension`
+  or equivalent) — since this Pass is already adding a CLI surface for
+  ce-dimension rotate/scale, wiring translate into the same subcommand
+  family is the natural, cheap place to close the gap rather than a
+  separate Pass. Depends on `Pass 112.0`.
+
+#### WIDGETS
+
+- **`Pass 117.0` — widget resize.** Cheap, per the engineer's own survey:
+  the appearance generators (`build_field_text_appearance`,
+  `build_check_box_appearances`, `build_radio_button_appearances`,
+  `build_push_button_appearance`) are **already size-parameterised and
+  origin-drawn** (`ROADMAP.md:33220`'s own breakdown, cited by the
+  dispatch). Wire core + cli + gui.
+- **`Pass 117.1` — multi-widget move / whole-field move.** `move_widget`
+  (confirmed shipped, `edit.rs:11635`, CLI-wired at `main.rs:5956`) moves
+  exactly one widget and reports `siblings_left_behind`; add a batch verb
+  that moves every widget belonging to one field as a unit.
+  Depends on `Pass 112.0` only (both verbs are translate-shaped).
+- **`Pass 117.2` — widget `/MK /R` rotation — BLOCKED ON A DECISION, not
+  yet scoped.** `Grep` across `annot_author.rs` confirms `/MK /R` is
+  never read or written anywhere in the codebase today — this is not a
+  gap in an existing mechanism, there is no mechanism. **Before this can
+  be scoped into acceptance criteria, `/MK /R`'s exact semantics need
+  sourcing** (whether it rotates the widget's icon/appearance relative to
+  the page, and how that interacts with `/AP` placement) — **dispatch
+  `pdfce-spec-librarian`**, not assumed here from training-data memory
+  (project rule 1). Filed as a Pass ID for tracking continuity only; not
+  a commitment to a specific mechanism.
+
+#### FILED AS OPEN QUESTIONS, NOT PASSES (engineer's own framing, honoured)
+
+- **A unified heterogeneous-selection transform verb** — one matrix
+  applied across a mixed selection of paths, text, images, annotations,
+  ce dimensions and widgets in one gesture. Every verb above is
+  single-kind; nothing in the workspace takes a heterogeneous selection
+  today. The engineer explicitly named this "a real architectural
+  question, not a given" — filed here as a question for the operator/
+  engineer, not scoped into a Pass, per that explicit instruction.
+
+**`docs/FEATURES.md`:** four rows touched this filing — two corrected, two
+added. See that section below.
 
 - **`pdfce_render::Diagnostics`'s 54 unread fields need a surfacing split,
   not 54 rows.** Filed 2026-08-19 (hundred-and-ninety-ninth filing), from

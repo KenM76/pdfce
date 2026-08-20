@@ -23250,3 +23250,60 @@ free 072.**
      fail in opposite directions on different inputs, and a fixture set
      that happens not to exercise the divergence is not evidence the
      divergence cannot occur.
+
+- **2026-08-20 — Decision 075. THE WRITER'S MODEL OF A STRUCTURE LIVES
+  BESIDE THE READER'S, NOT BESIDE THE VERB THAT USES IT — the placement
+  ruling behind `Pass 111.0`'s `add_image` corruption fix.** `EditSession::
+  append_page_content` (serving `add_image`, `flatten_fields`) and
+  `text_edit::addtext::append_contents` (serving `add_text`, the OCR
+  sandwich layer) were two independently hand-written implementations of
+  "append a content stream to `/Contents`," each living next to the verb it
+  served rather than next to `page_tree::contents_from_array` — the
+  function that already had to enumerate every legal `/Contents` shape to
+  *read* one (direct stream, direct array, indirect stream, indirect
+  array). Both got the indirect-reference-to-array case wrong the same
+  way: wrapping the reference in a new array instead of resolving it and
+  pushing onto the array it points at. Neither writer consulted or was
+  co-located with the reader's own model of the shape it was mutating.
+  **Fix: one function, `page_tree::append_content_stream`, deliberately
+  defined beside `contents_from_array` in the same module**, so a future
+  `/Contents` shape (were the spec ever to grow one) has exactly one place
+  to be taught to both sides at once.
+  **Why this is recorded as a decision distinct from `R92`, not an
+  instance of it.** `R92` (`ROADMAP.md` *Standing rules*) is about a
+  *predicate* that hand-duplicates the *shape* of a data structure and
+  drifts the moment the structure gains a field or case — the failure
+  mode is structural growth outrunning a stale mirror. This defect had no
+  structure-growth event: `/Contents`'s four legal shapes were already
+  fully known and already correctly enumerated, in exactly one place
+  (`contents_from_array`) — the bug was that a **second, independent
+  procedure** re-derived the same enumeration from scratch, off to the
+  side, and got one arm wrong. `R92` diagnoses *"the mirror is stale
+  because the original moved and the mirror didn't."* This diagnoses
+  *"there should never have been a mirror — there should have been one
+  function two callers share."* Both are duplication bugs; the fix for
+  the first is deriving the check from the structure, and the fix for the
+  second is **placement**, i.e. which module a shared piece of logic is
+  defined in and who is expected to consult it. Distinct enough mechanism
+  to earn its own record rather than stretching `R92`'s stated text to
+  cover a case its own wording does not name.
+  **The generalisable rule, stated for reuse:** when a writer and a reader
+  must agree on the legal shapes of the same on-disk structure, define the
+  writer's logic in the same module as the reader's, ideally beside it or
+  built from a shared enumeration — not beside whichever call site
+  happened to need writing first. A writer defined next to its caller
+  optimises for the wrong locality: the caller already knows what it
+  wants to do, the *shape* is what it doesn't reliably know, and the
+  reader is where that knowledge already lives correctly.
+  **Body section:** none updated — this is a module-internal placement
+  ruling inside `pdfce-core::page_tree`, below the granularity
+  `ARCHITECTURE.md`'s own sections track (§3 describes crate/module
+  layout, not intra-module function placement); `docs/core-api/` is the
+  engineer-maintained artefact for surface-level API description and
+  `append_content_stream` is an internal, not public surface. **No
+  standing rule minted** — this is a one-off placement ruling with a
+  stated generalisable form, not a recurring pattern with independent
+  prior instances; should a third occurrence of "two writers, one
+  reader's-worth of structural knowledge, defined apart" turn up, that
+  would be the point to mint one. **Ceiling moves 074 → 075; next free
+  076.**

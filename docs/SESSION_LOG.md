@@ -51912,3 +51912,117 @@ not written here.
 
 **Terminology (rule 15):** no ce dimension or pdf dimension appears
 anywhere in this filing.
+
+## 2026-08-20 (two-hundred-and-fourth filing) — `Pass 111.0` (`e5ef2a0`) FIXES THE `add_image` `/Contents`-CORRUPTION DEFECT AND MINTS DECISION 075; THE MOVE/RESIZE/ROTATE REQUEST IS WIDENED PER THE OPERATOR'S OWN INSTRUCTION INTO 12 BACKLOG PASSES (`113.0`–`117.2`) ACROSS FOUR CARRIERS; ★ `Pass 112.0` FOUND ALREADY SHIPPED AND UNFILED, F3 OF THE DISPATCH CORRECTED ON READ
+
+**Filed by `pdfce-librarian`.** This filing has no shell — `Pass 111.0`'s
+commit hash is relayed by the dispatching engineer, per hard rule 8.
+**Every claim about current source state was independently confirmed** by
+`Grep`/`Read` this filing: `page_tree::append_content_stream`/
+`contents_from_array`/`contents_flattened`, the 8-test fixture file,
+`EditError::VectorEdit`'s `#[error(transparent)]`, `Matrix::scale`/
+`rotate`/`about`/`is_invertible`, `move_widget`/`move_dimension`'s
+existence and CLI-wiring status, the absence of any `q…cm…Q` `PlannedEdit`
+shape, the absence of any `/MK /R` read/write site, and the renderer's
+`NoZoom`/`NoRotate` deferral comment were all read directly, not relayed.
+
+**Shipped:**
+- Pass 111.0 — `add_image` corrupted every page whose `/Contents` was an
+  indirect reference to an array (the shape Qt and most CAD exporters
+  emit) by wrapping the reference instead of splicing into it — a
+  corruption, not a missing feature; `add_image` and the following save
+  both returned `Ok` on a file pdfce could no longer reopen. The same bug
+  existed independently in `text_edit::addtext::append_contents`
+  (`add_text`/OCR), written twice and wrong the same way. Fixed with one
+  function, `page_tree::append_content_stream`, deliberately placed
+  beside `contents_from_array`, the reader that already enumerated every
+  legal shape. Read-side flattening now recovers already-damaged files
+  (depth-guarded, exact — proved byte-identical to a healthy original by
+  rendered-PNG hash, relayed measurement); `Page::contents_flattened`
+  counts it, `pdfce-cli inspect` discloses it. `commit()` gained a
+  debug-only page-tree-walk postcondition, explicitly stated as unable to
+  have caught this exact defect once read-side healing exists (verified
+  by sabotage). 8 new tests, all four `/Contents` shapes × two verbs,
+  workspace 107 suites / 0 failures (relayed).
+
+**Decisions made this session:**
+- **Decision 075** — the writer's model of a structure lives beside the
+  reader's, not beside the verb that uses it. Recorded as distinct from
+  `R92` (`R92` is a structure-growth-drift predicate bug; this is two
+  independent procedures re-deriving the same structural enumeration off
+  to the side, no growth event involved). No standing rule minted; no
+  `ARCHITECTURE.md` body section touched (below §3's tracked granularity).
+
+**Findings + decisions:**
+1. **★★ `Pass 112.0` (`Matrix::scale`/`rotate`/`about`/`is_invertible`)
+   already exists on disk, doc-cited to its own Pass number, tested via
+   doctest, zero consumers anywhere outside `geometry.rs` — and was never
+   filed in `ROADMAP.md` (zero hits for "Pass 112" before this filing).**
+   This directly falsifies the dispatch's finding F3 ("`Matrix` has no
+   `scale` or `rotate` constructor"). Not filed as Backlog (the ID is
+   real, not unbuilt) and not filed as Shipped (commit status unverified
+   from a shell-less filing) — flagged as owed to the engineer. New
+   Backlog Pass numbering for this initiative starts at **113.0**,
+   deliberately skipping 112.
+2. **F1 confirmed by `Grep`**: no `q…cm…Q` wrapping exists anywhere in
+   `vector/edit.rs`; `move_objects` rewrites operands only, which cannot
+   express rotation or a rotated `re`. F2 confirmed: `move_widget` and
+   `move_dimension` both already exist core-side (`edit.rs:11635`/
+   `:22394`); only `move_widget` has a CLI caller (`main.rs:5956`) —
+   `move_dimension` is a live, previously-unfiled `R151` instance (core
+   since Pass 25.5, no `pdfce-cli` caller), now scheduled to close inside
+   `Pass 116.0` rather than as its own Pass, for economy of scope.
+   `/MK /R` confirmed unread/unwritten anywhere in the codebase.
+3. **`FEATURES.md` row 284 was substantively wrong, not merely stale** —
+   it read `core [ ]` for "move anything carrying a `/Rect`" despite
+   `move_widget` and `move_dimension` both existing core-side. Corrected
+   to `◐`/`◐`/`[ ]` with the carrier-by-carrier breakdown in the same
+   filing finding 2 required.
+
+**`docs/FEATURES.md`:** four rows touched. Row "Move and resize anything
+carrying a `/Rect`" corrected (ticks + text, per finding 3). Row "Resize a
+vector object" removed, superseded by a new row for the kind-agnostic
+`q…cm…Q` content-object transform (`Pass 113.0`). Two new rows added: ce-
+dimension rotate/scale (`Pass 116.0`) and widget `/MK /R` rotation
+(`Pass 117.2`, decision-blocked).
+
+**`personal_rag/pdf` / `D:\dev\rag\rust`/`egui` — unchanged, `+0`.** No
+finding this filing generalises past this project's own object model.
+
+**Still in flight:**
+- `Pass 112.0`'s commit-status confirmation and filing — owed to the
+  engineer, see finding 1.
+- `Pass 117.2` (`/MK /R` widget rotation) needs a `pdfce-spec-librarian`
+  dispatch before it can be scoped past a Pass-ID placeholder.
+- `Pass 113.0`'s open question (`q…cm…Q` vs operand-rewriting) is the
+  engineer's implementation call, not filed as a decision per explicit
+  instruction.
+- The unified heterogeneous-selection transform verb is filed as an open
+  question, not a Pass, per the engineer's own "architectural question,
+  not a given" framing.
+- Everything carried in the two-hundred-and-third filing's "For next
+  session" list is still open.
+
+**For next session:**
+1. Commit this filing's `ROADMAP.md`/`ARCHITECTURE.md`/`FEATURES.md`/
+   `SESSION_LOG.md` edits — no shell was available to this dispatch.
+2. Resolve `Pass 112.0`'s commit status (finding 1) and file accordingly.
+3. Dispatch `pdfce-spec-librarian` for `/MK /R` semantics before scoping
+   `Pass 117.2` further.
+4. Begin `Pass 113.0` once `Pass 112.0`'s status is settled — it is the
+   triggering request's actual blocker.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **110** | **111** (new Backlog IDs `113.0`–`117.2` reserved, not yet counted as shipped; `112.0` deliberately unfiled, see finding 1) |
+| decision records | **074** | **075** |
+| standing rules | **R205** | **R205** (unchanged — no new rule minted, see Decision 075's own text) |
+| `SESSION_LOG` filings | **203** | **204** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **4** |
+
+**Terminology (rule 15):** "ce dimension" used throughout, correctly
+qualified every occurrence; no bare "dimension" appears; "pdf dimension"
+does not arise this filing.
