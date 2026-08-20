@@ -52026,3 +52026,96 @@ finding this filing generalises past this project's own object model.
 **Terminology (rule 15):** "ce dimension" used throughout, correctly
 qualified every occurrence; no bare "dimension" appears; "pdf dimension"
 does not arise this filing.
+
+## 2026-08-20 (two-hundred-and-fifth filing) — `Pass 112.0` (`f8dd31f`) FILED SHIPPED, CLOSING THE OWED ITEM FROM THE TWO-HUNDRED-AND-FOURTH FILING; ★ THE SURVEY FINDING THAT ASKED FOR IT WAS INVALIDATED BY THE ENGINEER'S OWN WORK BETWEEN MEASUREMENT AND DISPATCH — THE SECOND SAME-SESSION DISPATCH SELF-CORRECTION TODAY
+
+**Filed by `pdfce-librarian`.** This filing has no shell — `Pass 112.0`'s
+commit hash and status are relayed by the dispatching engineer, closing
+exactly the item the two-hundred-and-fourth filing's "For next session"
+list left owed. **Every claim about current source state was
+independently re-confirmed** by `Read` against
+`crates/pdfce-core/src/vector/geometry.rs` — `Matrix::scale`/`rotate`/
+`about`/`is_invertible`, their doc comments (all four cite `Pass 112.0`
+by name), and 7 property-pinning `#[test]` functions plus `about`'s own
+4-assertion doc-test — not merely relayed.
+
+**Shipped:**
+- Pass 112.0 — the four `Matrix` primitives every transform verb in the
+  `113.0`–`117.2` backlog bucket is gated on: `scale`/`rotate` about the
+  ORIGIN (the pivot is the consuming shell's to choose, by the shell's
+  own request); `about(pivot)` composing either with an operator-chosen
+  point, written as its own method because `post_concat`'s argument order
+  is the reverse of the composing formula's reading order and getting it
+  backwards produces a drift that reads as a rounding bug, not a logic
+  bug; `is_invertible()`, the predicate behind a named refusal for an
+  operator dragging a resize grip through zero, distinguished from "no
+  placement to wrap" because the two need different UI. `scale`
+  deliberately does not reject a zero factor — a value constructor with
+  no operator context should not hide the case the verb layer exists to
+  name. Zero consumers outside `geometry.rs` (confirmed by `Grep`) — a
+  deliberate foundation commit, filed the same session its first
+  consumers (`113.0`–`117.2`) are already Backlog.
+
+**Decisions made this session:** none — `about`'s pivot convention is a
+property of one function's API, not a crate boundary, library pick, or
+invariant definition, so no `ARCHITECTURE.md` §12 entry was minted for
+it.
+
+**Findings + decisions:**
+1. **★★ Dispatch-discipline finding, filed at the engineer's own request.**
+   The survey finding that asked the two-hundred-and-fourth filing to mint
+   a Foundation Pass for `Matrix::scale`/`rotate` (dispatch finding "F3")
+   was **built while the engineer was building these same four
+   primitives** — true when measured, false by the time it was
+   dispatched, because the engineer's own subsequent work invalidated it
+   before the librarian ever read the disk. Caught on read, not filed as
+   given.
+2. This is the **second** instance in one calendar session of a subagent
+   correcting a dispatch rather than filing it as given — the first was
+   `Pass 106.2`'s "promoted out of the token line" correction (`720cb6f`,
+   two-hundred-and-third filing) against `main.rs`'s actual disclosure
+   shape. **Not named as a pattern or proposed as a rule**: applying this
+   librarian's own standing test ("would fixing one have prevented the
+   others?"), a stale survey finding and a mis-described disclosure route
+   share no mechanism — only the shape "a subagent read source before
+   filing what it was told." Two occurrences, no shared cause, no rule.
+
+**`docs/FEATURES.md`:** no row touched. `Matrix` constructors are not an
+operator-facing capability; the row this work surfaces under (line 284,
+`Pass 113.0`'s Planned row) was already filed last filing and stays
+`[ ]`/`[ ]`/`[ ]`/`[x]` until `113.0` itself ships.
+
+**`personal_rag/pdf` / `D:\dev\rag\rust`/`egui` — unchanged, `+0`.** No
+finding this filing generalises past this project's own object model or
+this librarian's own dispatch-verification discipline (already covered by
+this role's standing hard rules, not a new ecosystem finding).
+
+**Still in flight:**
+- `Pass 113.0` (kind-agnostic `q…cm…Q` content-object transform) is now
+  unblocked — its only dependency, `Pass 112.0`, is Shipped.
+- `Pass 117.2` (`/MK /R` widget rotation) still needs a
+  `pdfce-spec-librarian` dispatch before it can be scoped past a
+  placeholder.
+- Everything else carried in the two-hundred-and-fourth filing's "For
+  next session" list not already closed above remains open.
+
+**For next session:**
+1. Commit this filing's `ROADMAP.md`/`SESSION_LOG.md` edits — no shell
+   was available to this dispatch.
+2. Begin `Pass 113.0` — its dependency chain is now fully Shipped.
+3. Dispatch `pdfce-spec-librarian` for `/MK /R` semantics before scoping
+   `Pass 117.2` further.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **111** | **112** (ID was reserved, not new; `113.0`–`117.2` remain untouched Backlog IDs) |
+| decision records | **075** | **075** (unchanged) |
+| standing rules | **R205** | **R205** (unchanged — two same-session dispatch-correction instances share no mechanism, see finding 2) |
+| `SESSION_LOG` filings | **204** | **205** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **0** |
+
+**Terminology (rule 15):** no bare "dimension" appears; "ce dimension"/
+"pdf dimension" do not arise this filing (no dimension-related content).

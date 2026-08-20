@@ -96,6 +96,111 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 112.0 — commit `f8dd31f` — **`Matrix::scale`/`rotate`/`about`/`is_invertible` — THE FOUR PRIMITIVES EVERY TRANSFORM VERB IN THE `113.0`–`117.2` BACKLOG BUCKET IS GATED ON, FOUND ALREADY SHIPPED, UNFILED, LAST FILING — AND THE SURVEY FINDING THAT ASKED FOR THEM WAS INVALIDATED BY THE ENGINEER'S OWN WORK BETWEEN MEASUREMENT AND DISPATCH** — filed 2026-08-20 (two-hundred-and-fifth filing)
+
+**This filing has no shell.** The commit hash and its status are relayed by
+the dispatching engineer, closing exactly the item the two-hundred-and-
+fourth filing left owed ("confirm `Pass 112.0`'s commit status"). **The
+code-level claims below were independently re-confirmed** this filing by
+`Read` against `crates/pdfce-core/src/vector/geometry.rs`
+(`Matrix::scale` at line 163, `Matrix::rotate` at 191, `Matrix::about` at
+246, `Matrix::is_invertible` at 267, all four doc-cited `(Pass 112.0)`) and
+against `geometry.rs`'s `#[cfg(test)]` module, where **7** `#[test]`
+functions pin these four primitives by property rather than coefficient
+(`rotation_is_counter_clockwise`, `about_fixes_its_pivot_for_every_
+transform`, `about_agrees_with_translate_transform_translate_back`,
+`scaling_about_a_pivot_scales_distance_from_it`, `non_uniform_scale_does_
+not_rotate`, `is_invertible_refuses_exactly_the_degenerate_matrices`,
+`is_invertible_agrees_with_inverse`), plus the worked doc-test on `about`
+itself (4 assertions: half-turn about an off-origin pivot, the pivot-is-
+fixed invariant, a quarter-turn's direction, and scale-about-pivot leaving
+the pivot put).
+
+**What the four primitives are, and the one design choice in each worth
+recording (source: the code's own doc comments, confirmed by `Read`, not
+restated from the dispatch):**
+- **`scale(sx, sy)`** and **`rotate(radians)`** are both **about the
+  origin**, deliberately — a resize/rotate gesture is almost never about
+  the origin, but the pivot is the **consuming shell's** to choose (the
+  shell asked, in as many words, that pdfce not decide it), so these stay
+  primitive constructors and `about` is what composes either with an
+  operator-chosen point.
+- **`about(pivot)`** exists as its own method, rather than being left for
+  each caller to compose, because **the order is the whole difficulty**:
+  `translate(−p) × self × translate(+p)`, and `post_concat`'s argument
+  order is the *reverse* of that formula's reading order. Getting it
+  backwards doesn't error — it produces a shape that drifts a little on
+  every drag, which reads as a rounding bug, not a logic bug. One
+  implementation, one doc-test, no caller has to get it right twice.
+- **`is_invertible()`** is the predicate behind a *named* refusal for the
+  exact case the consuming shell singled out: an operator dragging a
+  resize grip through zero. The shell's own framing, preserved: an object
+  with no placement to wrap and a degenerate drag "produce different UI,"
+  and this predicate is what lets a caller tell them apart without
+  duplicating `inverse()`'s arithmetic. Non-finite coefficients answer
+  `false` — a `NaN` must never reach a `cm` operand.
+- **`scale` does NOT reject a zero factor.** Deliberate: it is a value
+  constructor with no operator context, and clamping here would hide
+  exactly the drag-through-zero case `is_invertible` exists to distinguish
+  downstream, at the verb layer where the refusal can be named.
+
+**★★ Dispatch-discipline finding, owed to `SESSION_LOG.md` by the
+engineer's own request.** The survey finding that asked this filing (two
+filings ago) to mint a Foundation Pass for `Matrix::scale`/`rotate` was
+**built while the engineer was building these same four primitives** —
+the finding was true at the moment it was measured and false by the time
+it was dispatched, because the engineer's own subsequent work invalidated
+it before the librarian ever read the disk. This is the **second** time in
+one day a subagent has corrected a dispatch on read rather than filing it
+as given — the first was `Pass 106.2`'s "promoted out of the token line"
+correction (`720cb6f`, two-hundred-and-third filing) against `main.rs`'s
+actual disclosure shape. Two occurrences in one session is not enough to
+name a pattern by itself (this librarian's own standing judgment: "would
+fixing one have prevented the others?" — no shared mechanism between a
+stale survey and a mis-described disclosure route), so **not** proposed as
+a rule; recorded here and in `SESSION_LOG.md` as the engineer asked,
+nothing more.
+
+**`docs/FEATURES.md`: no row added or changed.** A `Matrix` constructor is
+not an operator-facing capability; the row this foundation work surfaces
+under already exists — line 284, "Move, resize and rotate a content-stream
+object … via `q…cm…Q` matrix wrapping" (`Pass 113.0`'s Planned row, filed
+last filing) — and stays `[ ]`/`[ ]`/`[ ]`/`[x]` until `113.0` itself
+ships. Filing `112.0` does not tick anything.
+
+**`docs/ARCHITECTURE.md` §12: no decision entry.** `about`'s pivot
+convention is a property of one function's API, not an architectural
+choice (crate boundary, library pick, or invariant definition) — it does
+not meet this document's own bar for a decision-log entry.
+
+**R151 does not yet apply to this Pass by itself.** These four primitives
+have zero consumers outside `geometry.rs` — confirmed by `Grep`, no hit
+for `Matrix::scale`/`Matrix::rotate`/`Matrix::about`/`Matrix::
+is_invertible` anywhere outside that file — but R151 names a *shipped Pass
+with no caller left standing unfiled*; this Pass is filed the same session
+its first consumers (`113.0`–`117.2`) are already Backlog, dependency-
+labelled against it. A deliberate foundation commit, stated plainly so a
+future sweep does not "discover" this as dead code: nothing consumes it
+yet, and that is the intended shape until `113.0` ships.
+
+**Test results, gates, invariant check: not independently re-run this
+filing** (no shell). Per the two-hundred-and-fourth filing's own
+independent confirmation of these tests' existence and content, and per
+the engineer's relay this filing that `f8dd31f` is the commit.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **111** | **112** (the ID was reserved, not new — see the two-hundred-and-fourth filing's own note; `113.0`–`117.2` remain untouched Backlog IDs) |
+| decision records | **075** | **075** (unchanged — no architectural decision, see above) |
+| standing rules | **R205** | **R205** (unchanged — no new rule; two same-session dispatch-correction instances is not enough to name a pattern by, see above) |
+| `SESSION_LOG` filings | **204** | **205** |
+| `personal_rag/pdf` lessons | **+0** | **+0** (not a PDF-domain finding) |
+| `docs/FEATURES.md` rows touched | — | **0** |
+
+---
+
 ### Pass 111.0 — commit `e5ef2a0` — **`add_image` CORRUPTED EVERY PAGE WHOSE `/Contents` WAS AN INDIRECT REFERENCE TO AN ARRAY — THE SHAPE QT AND EVERY CAD EXPORTER EMITS — BY WRAPPING THE REFERENCE INSTEAD OF SPLICING INTO IT; WRITTEN TWICE (`R92`-ADJACENT), NOW ONE FUNCTION BESIDE THE READER; READ-SIDE FLATTENING RECOVERS ALREADY-DAMAGED FILES, PROVED BYTE-IDENTICAL AGAINST THE HEALTHY ORIGINAL** — filed 2026-08-20 (two-hundred-and-fourth filing)
 
 **This filing has no shell.** The commit hash is relayed by the dispatching
@@ -63501,6 +63606,11 @@ written as satisfied by this already-built work; new Pass numbering
 starts at **113.0**, skipping 112 entirely so the ID stays stable and
 unambiguous once its owning filing lands.
 
+**★ CLOSED 2026-08-20 (two-hundred-and-fifth filing).** `Pass 112.0` is
+now filed in Shipped, above, commit `f8dd31f` (relayed). The "owed" line
+immediately above is discharged; every "Depends on `Pass 112.0`" note in
+this bucket (below) now points at a Shipped, not merely on-disk, Pass.
+
 **F1 — the mechanism the triggering request assumed does not exist, and
 why the alternative is better, not merely necessary.** `move_objects`
 rewrites numeric **operands** in place (`vector/edit.rs:485`–`521`) — `m`/
@@ -63541,9 +63651,9 @@ engineer).
 #### FOUNDATION
 
 - ~~**`Matrix` constructors — `scale`, `rotate`, a pivot helper.**~~ —
-  **ALREADY SHIPPED, UNFILED, as `Pass 112.0`** (`vector/geometry.rs`,
-  see correction above). Not re-listed as Backlog. Owed: engineer
-  confirms commit status; librarian files it Shipped once confirmed.
+  **SHIPPED as `Pass 112.0`** (`vector/geometry.rs`, commit `f8dd31f`,
+  filed 2026-08-20, two-hundred-and-fifth filing — see correction above).
+  Not re-listed as Backlog; nothing further owed here.
 
 #### CONTENT OBJECTS — the triggering request's actual blocker; first real Backlog Pass, gated only on `Pass 112.0`
 
