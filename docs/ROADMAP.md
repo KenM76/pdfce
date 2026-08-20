@@ -96,6 +96,147 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### escalation — `Pass 119.0` PROMOTED to *Next up* on operator priority ruling: *"I need that editing capability as it is 99% of the text I will want to edit… I'll clear the session for it"* — `Pass 113.0` now waits behind it; the shared-invocation design question flagged, not decided; the `pdfce-spec-librarian` dispatch it is gated on named as owed — 2026-08-20 (two-hundred-and-eighth filing, no Pass ID)
+
+**This filing has no shell; no code changed.** Pure ROADMAP/SESSION_LOG
+amendment, same shape as the two-hundred-and-seventh filing immediately
+below: a priority ruling, not a Pass.
+
+**What Ken said, verbatim, 2026-08-20 (relayed by the dispatching
+engineer):** *"I need that editing capability as it is 99% of the text I
+will want to edit. please put this request in the handoff. and I'll clear
+the session for it."* He is referring to `Pass 119.0` — text editing
+inside form XObjects, filed as *Backlog* one filing ago (two-hundred-and-
+sixth filing). **Clearing a session for a specific item is the strongest
+priority signal this project records** — stronger than a lettered *Open
+operator question* or a ranked bucket, because it commits calendar time,
+not just an ordering preference.
+
+**The measurement behind "99%" — already on record, not asserted fresh.**
+`Pass 118.0`'s own entry (below) measured the operator's benchmark
+CAD-exported sheet: the **page** stream carries **3,007** single-character
+`Tj` operators spelling the producer's watermark — editable today, and
+nobody wants to touch it; a **form XObject** on the same sheet carries
+**1,696** show operators — every drawing label, the title block, every
+dimension callout — and today's `edit_text` cannot reach any of it
+(`text_edit::edit::Walk` does not descend into form XObjects; confirmed
+pre-existing at `edit.rs:3749` by that filing's own `Read`/`Grep`).
+1,696 of 4,703 total show operators on that sheet is **36%** by operator
+count, not 99% — the operator's own figure is about *which* 36% he
+personally needs, not a recount, and this filing does not correct or
+round it; it is recorded here for anyone who reaches for a total-vs-
+per-item form (hard rule 10) and finds only the raw counts in `Pass
+118.0`'s entry.
+
+**Consequence: `Pass 113.0` (`transform_objects`) now waits.** It was the
+item named next in the prior filing's own "For next session" list
+(`SESSION_LOG.md`, two-hundred-and-seventh filing, item 2: *"Begin `Pass
+113.0`"*). It is not any more — `Pass 119.0` is. The dispatching engineer
+reports `pdfceGUI`'s whole shell side is built and waiting on `113.0`
+specifically, so the delay is not a free reorder: it has a known,
+named cost, recorded here rather than left implicit. `Pass 113.0`'s own
+Backlog entry (below) is otherwise unchanged — its two design questions
+closed by `R206` in the immediately-following filing stay closed; nothing
+about its acceptance criteria moves.
+
+**★ The design question, recorded where it cannot be missed — flagged, NOT
+decided.** A form XObject can be invoked by `Do` from more than one page,
+and more than once from one page (§12.5.5, a repeated title-block stamp or
+symbol-library entry — already load-bearing elsewhere in this codebase,
+`ARCHITECTURE.md` line ~2900). Editing text inside one therefore either
+**propagates to every invocation** (correct if the operator's intent is
+"fix the symbol everywhere it appears") or must **refuse by name**
+(correct if the intent is "fix this one instance" and the form is
+shared) — and which one pdfce does must be decided **before** the first
+line of edit surgery, not discovered after, per the engineer's own framing
+on `Pass 119.0`'s Backlog entry.
+
+Two cross-references, both explicit rather than asserted as settling
+anything:
+
+- **`Pass 111.0` / decision 075 decided the same shape the same day**
+  for a possibly-shared `/Contents` array object — pdfce spliced the
+  *page dictionary* rather than rewriting the shared array, precisely so
+  an edit could not reach a page nobody touched. `Pass 119.0`'s own
+  Backlog entry already names the one respect in which the two problems
+  differ: decision 075 is a reader/writer **shape** disagreement (an
+  array vs. a reference to an array); this hazard is about
+  **multiplicity of invocation** (one stream object, many callers). The
+  same word "shared" covers two different risks — worth restating here
+  because a reader who only sees this entry, not `Pass 119.0`'s full
+  Backlog text, could otherwise conflate them.
+- **`R206`, minted the very next filing (two-hundred-and-seventh, see
+  immediately below), governs the SHAPE of the answer once it is made**:
+  two defensible behaviours ⇒ ship both as configurable options, pick the
+  default from ordinary-operator expectation, do not return to the
+  operator to ask. `R206` did not exist when `Pass 119.0` was first filed
+  one filing earlier; it now plainly applies to this question too, though
+  applying it is scoping work still owed, not performed here.
+
+**This librarian's instinct, recorded explicitly AS AN INSTINCT — no call
+has been made.** An operator editing a label on the sheet in front of him
+expects to change *that* sheet, so **copy-on-write of a private form
+copy for the page being edited reads like the likely `R206` default**,
+with edit-in-place (propagate to every invocation) as the named option.
+**The counter-example that deserves weighing, not dismissing:** a title
+block appearing identically on six sheets, where the operator may well
+want all six to change at once — copy-on-write would silently defeat that
+exact intent. Do not let the instinct above read as settled; it is not
+this role's decision to make (the librarian is not the author of decision
+075 or of any future decision on this question), and scoping `Pass 119.0`
+past its current shape is the engineer's act.
+
+**The outstanding spec dispatch this Pass is gated on.** A
+`pdfce-spec-librarian` dispatch went out 2026-08-20 covering: §8.10.1
+Tables 95/96 (`/BBox` as clip-or-advisory, `/Matrix` composition order,
+`/LastModified` + `/PieceInfo` obligations when pdfce rewrites a form);
+the shared-invocation question above; whether text state and the text
+matrix are reset at `Do`; and `/Resources` fallback when a form omits its
+own. **`Pass 119.0`'s acceptance criteria stay UNSCOPED until this
+dispatch's findings land in a pdfce doc** (per the engineer's own
+"a RAG deliverable is not handed off until a pdfce doc names it" rule,
+`pdfce-engineer.md`). **Named here for exactly that reason**: `Pass
+119.0`'s Backlog entry (below) is amended to name the expected deliverable
+file so the next session's `Grep` finds a target rather than an open
+question with no address. Expected location:
+`D:\Dev\Rag-Specialized\PDF_Spec\` — exact filename not yet known,
+librarian to confirm on delivery.
+
+**`docs/ROADMAP.md`: `Pass 119.0`'s Backlog entry amended in place**
+(below) — promotion note added to the heading, the operator's verbatim
+quote added, the design-question elaboration and both cross-references
+folded in, and the expected spec-RAG deliverable named. **Not physically
+relocated out of *Backlog*** — this project's established convention
+(the `Pass 71.0`/OCR precedent, "Bucket text retained below as the
+scoping record") keeps a promoted bucket's scoping text where it was
+authored and marks the promotion in place, rather than duplicating or
+moving prose between sections. A short pointer entry is added at the top
+of *Next up* itself so a reader of that section is not left with nothing.
+
+**`docs/ARCHITECTURE.md` §12: no entry.** A priority reordering is not a
+crate boundary, a library pick, or an invariant definition. The shared-
+invocation question, once actually decided, will be — but it is
+explicitly not decided by this filing.
+
+**`docs/FEATURES.md`: no row changed.** `Pass 119.0` remains unbuilt; its
+capability's *Planned* row and the already-corrected `[x][x][x][x]`
+*Implemented* row for page-stream text editing (line 107, citing `Pass
+118.0`'s page-stream-only limit) both already say exactly what is true
+today. A priority reorder among unbuilt work changes no checkbox.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **119** | **119** (unchanged — no new Pass ID; `119.0` already existed) |
+| decision records | **075** | **075** (unchanged — the shared-invocation question is flagged, not decided) |
+| standing rules | **R206** | **R206** (unchanged — cross-referenced as the likely governing mechanism, not applied) |
+| `SESSION_LOG` filings | **207** | **208** |
+| `personal_rag/pdf` lessons | **+0** | **+0** (not a PDF-domain finding) |
+| `docs/FEATURES.md` rows touched | — | **0** |
+
+---
+
 ### ruling — Pass 113.0's two named design questions CLOSE by operator ruling before the engineer's own reply asking them was even read: BOTH behaviours ship as options, the default is the engineer's to pick from ordinary-operator expectation — R206 MINTED, generalizing R169's mechanism beyond spec ambiguity for the first time — 2026-08-20 (two-hundred-and-seventh filing, no Pass ID)
 
 **This filing has no shell; no code changed.** Nothing shipped in `crates/`
@@ -54920,6 +55061,18 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### `Pass 119.0` — TEXT EDITING INSIDE FORM XOBJECTS — PROMOTED here on operator priority ruling, 2026-08-20 (two-hundred-and-eighth filing)
+
+**Pointer entry only — the full scoping record, the shared-invocation
+design question, and the outstanding `pdfce-spec-librarian` dispatch all
+live in this Pass's *Backlog* entry (below), per this project's
+established convention of not relocating a promoted bucket's scoping
+prose (`Pass 71.0`/OCR precedent).** Operator, verbatim: *"I need that
+editing capability as it is 99% of the text I will want to edit… I'll
+clear the session for it."* Full record: the two-hundred-and-eighth
+filing's Shipped-section entry (top of *Shipped*). `Pass 113.0`
+(`transform_objects`), previously next in line, now waits behind this.
+
 ### ★★★★★ OWED TO THE NEXT SESSION — the 186th filing's convergence list, put HERE because `docs/NEXT_SESSION.md` is OVERWRITTEN each session and this file is not — opened 2026-08-18 (hundred-and-eighty-sixth filing)
 
 **Why this box exists at all.** The dispatching engineer asked explicitly
@@ -63822,7 +63975,7 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
-### `Pass 119.0` — TEXT EDITING INSIDE FORM XOBJECTS — filed 2026-08-20 (two-hundred-and-sixth filing), ask 3 of three `pdfceGUI` requests filed today; asks 1 and 2 shipped as `Pass 118.0`, above
+### `Pass 119.0` — TEXT EDITING INSIDE FORM XOBJECTS — filed 2026-08-20 (two-hundred-and-sixth filing), ask 3 of three `pdfceGUI` requests filed today; asks 1 and 2 shipped as `Pass 118.0`, above — **★★ PROMOTED to *Next up*, 2026-08-20 (two-hundred-and-eighth filing), on operator priority ruling — see the pointer entry at the top of *Next up* and the full record at the top of *Shipped*. Not physically relocated; this heading and everything below it remain the scoping record.**
 
 **Not started, not dated, not scoped past the shape below.** `Pass 118.0`
 published the boundary this Pass exists to move: pdfce's text-edit surgery
@@ -63874,6 +64027,46 @@ behaviour or the §12.5.5/§8.10 form-XObject clauses specifically for the
 edit case (as opposed to the render case, which `pdfce-render` already
 implements). Flagged as owed before this Pass is scoped past the shape
 above, per project rule 12.
+
+**★★ PRIORITY ESCALATION, 2026-08-20 (two-hundred-and-eighth filing) —
+operator, verbatim:** *"I need that editing capability as it is 99% of
+the text I will want to edit. please put this request in the handoff.
+and I'll clear the session for it."* Clearing a session for a specific
+item is this project's strongest priority signal. Consequence: `Pass
+113.0` (`transform_objects`), previously next in the "For next session"
+queue (`SESSION_LOG.md`, two-hundred-and-seventh filing), now waits
+behind this Pass. `pdfceGUI`'s shell side for `113.0` is reported already
+built and idle — the delay has a known, named cost.
+
+**★★ THE OUTSTANDING SPEC DISPATCH THIS PASS IS GATED ON, named so the
+next session's `Grep` finds a target.** A `pdfce-spec-librarian` dispatch
+went out 2026-08-20 covering: §8.10.1 Tables 95/96 (`/BBox` as
+clip-or-advisory, `/Matrix` composition order, `/LastModified` +
+`/PieceInfo` obligations when pdfce rewrites a form); the shared-
+invocation question above; whether text state and the text matrix are
+reset at `Do`; and `/Resources` fallback when a form omits its own.
+**Acceptance criteria stay UNSCOPED until this dispatch's findings land
+in a pdfce doc** — expected location `D:\Dev\Rag-Specialized\PDF_Spec\`,
+exact filename to be confirmed on delivery and recorded here when known.
+
+**★★ THE SHARED-INVOCATION QUESTION, RE-STATED WITH ITS GOVERNING
+MECHANISM NAMED — still flagged, still NOT decided.** `R206`, minted the
+filing immediately after this Pass was first filed (two-hundred-and-
+seventh filing, *Standing rules*, below), governs exactly this shape of
+question: two defensible behaviours (propagate the edit to every
+invocation of a shared form vs. refuse by name), neither dictated by the
+PDF standard ⇒ ship BOTH as configurable options, default from ordinary-
+operator expectation, do not return to the operator to ask. `R206`
+postdates this Pass's first filing by one entry; it plainly applies now.
+**This librarian's instinct only, not a ruling:** an operator editing a
+label on the sheet in front of him expects to change *that* sheet, so
+copy-on-write of a private form copy for the page being edited reads like
+the likely default, with edit-in-place (propagate) as the option — but a
+title block appearing identically on six sheets, where the operator may
+want all six to change at once, is the counter-example that keeps this
+open rather than settled. Deciding it is the engineer's act. Full
+reasoning and the `Pass 111.0`/decision 075 cross-reference: the
+two-hundred-and-eighth filing's Shipped-section entry (top of *Shipped*).
 
 ### ★★★ MOVE / RESIZE / ROTATE, SCOPED TO ITS LOGICAL CONCLUSION — filed 2026-08-20 (two-hundred-and-fourth filing), from the operator's own widening instruction on `request_no_verb_transforms_a_non_path_object_so_a_placed_image_cannot_be_moved.md`
 

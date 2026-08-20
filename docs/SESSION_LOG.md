@@ -52331,3 +52331,122 @@ of *Shipped*, ahead of `Pass 118.0`) for the full record.
 
 **Terminology (rule 15):** no bare "dimension" appears; not applicable
 this filing.
+
+## 2026-08-20 (two-hundred-and-eighth filing) — OPERATOR PRIORITY ESCALATION: `PASS 119.0` PROMOTED TO *NEXT UP*, `PASS 113.0` NOW WAITS BEHIND IT; SHARED-INVOCATION DESIGN QUESTION FLAGGED, NOT DECIDED; OUTSTANDING SPEC DISPATCH NAMED; A SEPARATE OPERATOR INSTRUCTION ON REPLY BREVITY RECORDED AS A WORKING-PRACTICE FACT, NOT A STANDING RULE
+
+**Filed by `pdfce-librarian`. No shell; no code touched this filing** —
+a ROADMAP amendment recording an operator priority ruling, not a Pass.
+
+**Shipped:** none — no Pass ID minted or moved, no commit. `Pass 119.0`'s
+existing Backlog entry (filed two-hundred-and-sixth filing) was amended
+in place with a promotion note, the operator's verbatim escalation, the
+design-question elaboration, and the outstanding spec-dispatch's expected
+deliverable location; a new dated entry was added at the top of
+`ROADMAP.md`'s *Shipped* section (ahead of the two-hundred-and-seventh
+filing's `R206` ruling entry) carrying the full record; a short pointer
+entry was added at the top of *Next up*.
+
+**Decisions made this session:** none. This filing records an operator
+*priority* ruling (what to work on next) and explicitly declines to make
+the *design* ruling `Pass 119.0` still needs (whether an edit inside a
+shared form XObject propagates to every invocation or refuses by name) —
+that stays flagged, not decided, per the operator's own instruction on
+the engineer's dispatch: *"a design decision to make in the open before
+writing the surgery, not something to discover afterwards."*
+
+**Findings + decisions:**
+- **Operator, verbatim, 2026-08-20:** *"I need that editing capability as
+  it is 99% of the text I will want to edit. please put this request in
+  the handoff. and I'll clear the session for it."* Referring to `Pass
+  119.0` (text editing inside form XObjects). Clearing a session for a
+  named item is the strongest priority signal this project records —
+  stronger than a lettered *Open operator question* or a ranked bucket
+  position, because it commits calendar time.
+- **The measurement behind "99%" was already on record**, not re-derived
+  here: `Pass 118.0`'s own entry measured the operator's benchmark
+  CAD-exported sheet at **3,007** single-character `Tj` (page-stream
+  watermark, editable, unwanted) against **1,696** show operators inside a
+  form XObject (every label, the title block, every dimension callout —
+  wanted, unreachable today). Recorded as raw counts, not converted to a
+  percentage of anything, per hard rule 10 — the operator's "99%" is his
+  own read of *which* text matters to him, not a recount of the sheet.
+- **`Pass 113.0` (`transform_objects`) was the explicit "For next session"
+  item one filing ago** (this log, two-hundred-and-seventh filing, item
+  2). It is superseded by this ruling, not cancelled — its Backlog entry
+  and closed design questions (`R206`) are untouched. The dispatching
+  engineer reports `pdfceGUI`'s shell side for `113.0` is already built
+  and idle, so the reorder has a stated, non-zero cost, recorded rather
+  than left implicit.
+- **The shared-invocation design question is cross-referenced to two
+  existing project artefacts, neither of which settles it:** `Pass
+  111.0`/decision 075 decided the analogous-but-not-identical question for
+  a possibly-shared `/Contents` array (a reader/writer *shape*
+  disagreement, not a *multiplicity-of-invocation* one — the two differ in
+  exactly that respect, per `Pass 119.0`'s own Backlog text); `R206`
+  (minted the immediately-following two-hundred-and-seventh filing)
+  governs the *shape* the eventual answer should take — ship both
+  behaviours as options, default from ordinary-operator expectation,
+  don't ask — and postdates this Pass's first filing by one entry, so it
+  plainly applies now even though it did not exist when the question was
+  first raised.
+- **This librarian's own instinct is recorded as an instinct, explicitly
+  not a ruling:** copy-on-write of a private form copy for the page being
+  edited reads like the likely `R206` default (an operator editing a
+  label expects to change *that* sheet), with edit-in-place as the named
+  option — but a title block repeated identically across six sheets, where
+  the operator may want all six to change together, is the live
+  counter-example and is stated as such rather than dismissed.
+- **A separate operator instruction from the same message, unrelated to
+  pdfce's code:** *"omg that is so much better. how do I get you to tldr
+  coles notes all the time."* Already actioned by the engineer as its own
+  agent-memory entry (`feedback_reply_in_coles_notes.md`, committed
+  `dad9d32`) — TL;DR is now the default register for every reply to the
+  operator. **This librarian's ruling: it does NOT belong in
+  `ROADMAP.md`'s *Standing rules*.** That section's rules govern how the
+  software behaves; this instruction governs how the engineer *talks to
+  the operator*, a different axis entirely — nearer to a `CLAUDE.md`-style
+  working-practice fact than to an `R`-numbered project rule. Recorded
+  here instead, as the working-practice fact it is. **The load-bearing
+  distinction, worth stating because it protects the documentation-first
+  rule rather than contradicting it:** the detail does not disappear —
+  it still goes into commit messages, `ROADMAP.md`, `SESSION_LOG.md`, doc
+  comments and FeatureRequests replies, exactly as verbosely as before.
+  Only the *chat reply* to the operator gets terser. Brevity to him,
+  completeness to the record — the chat reply was never the archive.
+
+**Still in flight:**
+- `Pass 119.0` — promoted to *Next up*, still **UNSCOPED**: the
+  `pdfce-spec-librarian` dispatch (§8.10.1 Tables 95/96, the shared-
+  invocation question, text-state reset at `Do`, `/Resources` fallback)
+  is outstanding, and acceptance criteria stay open until its findings
+  land in a pdfce doc (expected `D:\Dev\Rag-Specialized\PDF_Spec\`, exact
+  filename TBD).
+- `Pass 113.0`–`117.2` remain Backlog, both `Pass 113.0` design questions
+  already closed by `R206` (two-hundred-and-seventh filing) — unblocked
+  and ready to start whenever `Pass 119.0` yields the session, but no
+  longer the stated next item.
+- `Pass 117.2` (`/MK /R` widget rotation) still needs a
+  `pdfce-spec-librarian` dispatch, carried unchanged.
+
+**For next session:**
+1. Commit this filing's `ROADMAP.md`/`SESSION_LOG.md` edits — no shell was
+   available to this dispatch; the dispatching engineer will commit.
+2. Await the `pdfce-spec-librarian` dispatch's findings on `Pass 119.0`'s
+   four open spec questions before scoping acceptance criteria.
+3. Decide the shared-invocation design question (propagate vs. refuse,
+   or both-as-options per `R206`) before writing any edit surgery inside
+   a form XObject — the engineer's own stated order, preserved.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **119** | **119** (unchanged — no new Pass ID) |
+| decision records | **075** | **075** (unchanged — flagged, not decided) |
+| standing rules | **R206** | **R206** (unchanged — cross-referenced, not applied) |
+| `SESSION_LOG` filings | **207** | **208** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **0** |
+
+**Terminology (rule 15):** no bare "dimension" appears; not applicable
+this filing.
