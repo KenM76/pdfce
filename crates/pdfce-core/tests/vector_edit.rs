@@ -372,6 +372,54 @@ fn moving_a_text_object_is_refused_as_not_a_path() {
     assert!(!s.is_modified());
 }
 
+/// ★ The refusal NAMES THE OFFENDING OBJECT, on a MIXED selection.
+///
+/// `pdfceGUI` reported (2026-08-20) that `move_objects`' `NotAPath` "currently
+/// names no object", so on a mixed selection the operator has to bisect their
+/// own selection by hand, and asked for the index to be added.
+///
+/// **The index was already there** — `vector_object_as_path(obj, i)` is called
+/// with the loop index and `NotAPath` has carried `index` and `kind` since it
+/// was minted. `EditError::VectorEdit` is `#[error(transparent)]`, so the
+/// message passes through intact.
+///
+/// This test exists because "it already works" is a claim, and the shell was
+/// looking at a real screen when it said otherwise. Pinning the rendered
+/// STRING — not just the variant — is what makes the answer checkable and
+/// stops a future `#[error]` rewrite from quietly making the report true.
+#[test]
+fn a_mixed_selection_refusal_names_which_object_is_not_a_path() {
+    let base = std::fs::read(fixture("mixed.pdf")).unwrap();
+    let model = decompose0(&Document::from_bytes(base.clone()).unwrap());
+    let text_idx = model
+        .objects
+        .iter()
+        .position(|o| matches!(o, VectorObject::Text(_)))
+        .unwrap();
+    let path_idx = model
+        .objects
+        .iter()
+        .position(|o| matches!(o, VectorObject::Path(_)))
+        .unwrap();
+
+    let mut s = session(&base);
+    // A genuinely MIXED selection — a path and a text object together, which
+    // is the case the report was about.
+    let err = s
+        .move_objects(0, &[path_idx, text_idx], 5.0, 5.0)
+        .unwrap_err();
+    let rendered = err.to_string();
+    assert!(
+        rendered.contains(&format!("object {text_idx}")),
+        "the refusal must name WHICH object, got: {rendered}"
+    );
+    assert!(
+        rendered.contains("text"),
+        "and what kind it turned out to be, got: {rendered}"
+    );
+    assert!(!s.is_modified(), "a refused move must change nothing");
+}
+
 /// **Vector edits accumulate within one session.**
 ///
 /// This test previously asserted the OPPOSITE — that a second surgery on the

@@ -6874,6 +6874,7 @@ fn cmd_inspect(file: &Path) -> u8 {
             // clean result that they are looking at the document.
             if let Some(loaded) = full.as_ref() {
                 disclose_wrapper(file, loaded);
+                disclose_repaired_contents(file, loaded);
             }
             exit::SUCCESS
         }
@@ -6883,6 +6884,50 @@ fn cmd_inspect(file: &Path) -> u8 {
             exit_code_for(err)
         }
     }
+}
+
+/// Disclose that this document carries the `/Contents` damage a pdfce build
+/// older than `Pass 111.0` wrote, and that pdfce repaired it ON READ ONLY
+/// (`Pass 111.0`).
+///
+/// # Why `inspect` and why at all
+///
+/// The repair is exact and silent, and silence is the problem: the operator's
+/// file opens, renders and extracts perfectly here while **other readers may
+/// still refuse it**, because the bytes on disk are unchanged. Rule 4 — pdfce
+/// inferred nothing here, but it did REPAIR something, and a repair the
+/// operator cannot see is a repair they cannot act on.
+///
+/// `inspect` is the right home because it is what a sweep runs first, on the
+/// same reasoning the encryption disclosure above it gives. Stderr, so a
+/// script reading the stable `path: PDF version` line is undisturbed.
+///
+/// It also tells them the way out, which is the part that makes it actionable:
+/// any edit that rewrites the page dictionary writes the flat form, so
+/// re-saving the document through this build fixes it permanently.
+fn disclose_repaired_contents(file: &Path, doc: &pdfce_core::document::Document) {
+    let Ok(pages) = pdfce_core::page_tree::pages(doc) else {
+        return;
+    };
+    let damaged: Vec<usize> = pages
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.contents_flattened > 0)
+        .map(|(i, _)| i + 1)
+        .collect();
+    if damaged.is_empty() {
+        return;
+    }
+    let list = damaged
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    eprintln!(
+        "pdfce-cli: {}: {} page(s) carry a nested /Contents array (pages {list}) -- damage written by a pdfce build older than Pass 111.0. pdfce repairs this ON READ, so the document is fully usable here, but the FILE IS STILL DAMAGED and other readers may refuse it. Re-saving through this build after any edit writes the corrected form.",
+        file.display(),
+        damaged.len(),
+    );
 }
 
 /// Print the honest cross-reference-recovery disclosure (decision 013,

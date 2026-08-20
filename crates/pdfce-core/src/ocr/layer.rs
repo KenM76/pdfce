@@ -148,7 +148,7 @@ use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object};
 use crate::page_tree::{self, PageTreeError};
 use crate::span::ByteSpan;
-use crate::text_edit::addtext::{append_contents, pick_font_name};
+use crate::text_edit::addtext::pick_font_name;
 use crate::text_edit::edit::make_raw_stream;
 use crate::vartext::{encode_winansi, standard14_font_dict};
 use crate::writer::content::{emit_literal_string, emit_number};
@@ -682,7 +682,12 @@ pub fn add_ocr_layer(
     let mut new_page = page_dict;
     new_page.insert(
         Name::from(b"Contents"),
-        append_contents(contents_before.as_ref(), content_id),
+        // The ONE append (see `page_tree::append_content_stream`). This called
+        // `addtext::append_contents`, which did not resolve `/Contents` and so
+        // nested an array inside an array on any page whose `/Contents` was a
+        // reference to one -- the corruption `add_image` was reported for, in a
+        // third verb.
+        crate::page_tree::append_content_stream(doc, contents_before.as_ref(), content_id),
     );
     let mut font_subdict = font_subdict_base;
     font_subdict.insert(Name(font_name.clone()), Object::Reference(font_id));

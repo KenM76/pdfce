@@ -164,6 +164,42 @@ pub struct Page {
     /// [`PageTreeError::BadContents`]. Only "the reference resolves to
     /// null" degrades.
     pub contents_unresolved: usize,
+    /// How many **nested arrays** were flattened out of this page's
+    /// `/Contents` on the way in — the count of a specific, recognisable
+    /// damage that **pdfce itself wrote** (`Pass 111.0`).
+    ///
+    /// # What the damage is, and why the repair is exact rather than a guess
+    ///
+    /// Until 2026-08-20, appending a content stream to a page whose
+    /// `/Contents` was an *indirect reference to an array* wrapped that
+    /// reference instead of splicing into it, producing
+    /// `/Contents [38 0 R, new]` where `38 0 R` dereferences to
+    /// `[7 0 R, 37 0 R]`. Nothing in Table 30 permits an array inside the
+    /// `/Contents` array, so this walker rejected the page with
+    /// [`PageTreeError::BadContents`] — and the file was one pdfce had just
+    /// written and reported `Ok` for.
+    ///
+    /// **The repair is deterministic, which is the whole reason it is
+    /// allowed.** Flattening `[[a, b], c]` to `[a, b, c]` recovers exactly the
+    /// streams the page had, in exactly the order Table 30 concatenates them.
+    /// Nothing is inferred, chosen, or approximated — the nesting is pure
+    /// noise, and the correct reading is the only reading. Contrast
+    /// [`Self::contents_unresolved`], where content genuinely IS missing.
+    ///
+    /// # It is READ-side only — nothing is rewritten
+    ///
+    /// This makes a damaged document open, render and extract. It does **not**
+    /// repair the file: `ARCHITECTURE.md` §5 forbids normalising structure as
+    /// a side effect of reading, and an incremental save with no edits still
+    /// emits nothing. The page is repaired in the file only when something
+    /// else legitimately rewrites that page dictionary — at which point the
+    /// fixed [`append_content_stream`] writes the flat form.
+    ///
+    /// Non-zero therefore means: *this document was damaged by a pdfce build
+    /// older than `Pass 111.0`, and other readers may still refuse it.* That
+    /// is worth surfacing to an operator, which is why it is a counted
+    /// disclosure and not a silent kindness.
+    pub contents_flattened: usize,
 }
 
 /// Page-tree structural errors.
@@ -653,23 +689,23 @@ fn resolve_page<G: ObjectGraph + ?Sized>(
     //     with `BadContents`. Degrading these too would convert a real
     //     defect into a silent blank page, which is precisely the outcome
     //     "fuzzy, never sneaky" forbids.
-    let (contents, contents_unresolved) = match page.get(b"Contents") {
-        None => (Vec::new(), 0),
+    let (contents, contents_unresolved, contents_flattened) = match page.get(b"Contents") {
+        None => (Vec::new(), 0, 0),
         // A direct `null` value: §7.3.9 "equivalent to omitting the entry",
         // so this is a well-formed empty page, not a degradation — nothing
         // is missing, so nothing is counted.
-        Some(Object::Null) => (Vec::new(), 0),
+        Some(Object::Null) => (Vec::new(), 0, 0),
         Some(entry @ Object::Reference(r)) => match doc.resolve(entry) {
-            Object::Stream(_) => (vec![*r], 0),
+            Object::Stream(_) => (vec![*r], 0, 0),
             // A reference to an ARRAY of streams is also legal
             // (substitutability, §7.3.10) — recurse into the array.
-            Object::Array(items) => contents_from_array(doc, items)?,
+            Object::Array(items) => contents_from_array(doc, items, 0)?,
             // §7.3.10 + Table 30: the whole `Contents` value is the null
             // object, which reads as absent — an empty page, disclosed.
-            Object::Null => (Vec::new(), 1),
+            Object::Null => (Vec::new(), 1, 0),
             _ => return Err(PageTreeError::BadContents),
         },
-        Some(Object::Array(items)) => contents_from_array(doc, items)?,
+        Some(Object::Array(items)) => contents_from_array(doc, items, 0)?,
         Some(_) => return Err(PageTreeError::BadContents),
     };
 
@@ -681,11 +717,20 @@ fn resolve_page<G: ObjectGraph + ?Sized>(
         rotate,
         contents,
         contents_unresolved,
+        contents_flattened,
     })
 }
 
+/// The deepest nesting [`contents_from_array`] will flatten before refusing.
+///
+/// Realistically the damage is ONE level deep — a wrapped reference — and two
+/// only if a damaged page was damaged again. The bound is generous rather than
+/// tight because its job is to stop unbounded recursion on hostile input, not
+/// to second-guess an unusual file (`ARCHITECTURE.md` §10).
+const MAX_CONTENTS_NESTING: usize = 8;
+
 /// Collect the stream ids of a `Contents` array, degrading unresolvable
-/// elements and rejecting wrong-typed ones.
+/// elements, FLATTENING nested arrays, and rejecting wrong-typed ones.
 ///
 /// Returns the ids that resolved to real streams, in order, plus the count
 /// of elements that resolved to null (§7.3.10) and so contribute nothing.
@@ -702,9 +747,14 @@ fn resolve_page<G: ObjectGraph + ?Sized>(
 fn contents_from_array<G: ObjectGraph + ?Sized>(
     doc: &G,
     items: &[Object],
-) -> Result<(Vec<ObjId>, usize), PageTreeError> {
+    depth: usize,
+) -> Result<(Vec<ObjId>, usize, usize), PageTreeError> {
+    if depth > MAX_CONTENTS_NESTING {
+        return Err(PageTreeError::BadContents);
+    }
     let mut ids = Vec::with_capacity(items.len());
     let mut unresolved = 0usize;
+    let mut flattened = 0usize;
     for item in items {
         match (item.as_reference(), doc.resolve(item)) {
             (Some(id), Object::Stream(_)) => ids.push(id),
@@ -716,12 +766,123 @@ fn contents_from_array<G: ObjectGraph + ?Sized>(
             // the file, so it is skipped WITHOUT counting — the count is
             // reserved for content that should have been there and wasn't.
             (None, Object::Null) => {}
-            // Anything else — a number, a dict, a nested array, a
-            // reference to a non-stream — is a type error.
+            // ★ A NESTED ARRAY. Not legal, and specifically the damage a
+            // pdfce build older than `Pass 111.0` wrote into any page whose
+            // `/Contents` was an indirect reference to an array (see
+            // `Page::contents_flattened`). Flattened rather than refused,
+            // because the repair is EXACT — the nesting carries no
+            // information and the streams inside it are already in the order
+            // Table 30 concatenates them — and because refusing costs the
+            // operator a document pdfce itself damaged.
+            //
+            // Depth-guarded (`MAX_CONTENTS_NESTING`) rather than trusted:
+            // this is a recursive walk over attacker-controllable structure,
+            // which `ARCHITECTURE.md` §10 requires a bound on. A cycle
+            // (`38 0 obj [ 38 0 R ] endobj`) terminates by depth, not by
+            // luck.
+            (_, Object::Array(inner)) => {
+                let (mut nested, unres, flat) = contents_from_array(doc, inner, depth + 1)?;
+                ids.append(&mut nested);
+                unresolved += unres;
+                flattened += flat + 1;
+            }
+            // Anything else — a number, a dict, a reference to a non-stream
+            // — is a type error.
             _ => return Err(PageTreeError::BadContents),
         }
     }
-    Ok((ids, unresolved))
+    Ok((ids, unresolved, flattened))
+}
+
+/// Append `new_id` to a page's `/Contents`, returning the value to write —
+/// **the one place the writer's model of `/Contents` lives** (Table 30).
+///
+/// # Why this is in `page_tree` and not next to a verb
+///
+/// It sits beside [`contents_from_array`], the READER, deliberately. The
+/// question *"what shapes can `/Contents` take?"* has exactly one answer, and
+/// on 2026-08-20 the writer and the reader held **different** ones: the reader
+/// accepted a reference-to-an-array (correctly — §7.3.10 substitutability), and
+/// the writer wrapped that reference instead of splicing into it, producing an
+/// array whose first element dereferenced to another array. Nothing in PDF
+/// permits that, so `pages()` rejected pages that `add_image` had just written
+/// and returned `Ok` for. **The two halves of this crate disagreed with each
+/// other rather than with the spec.**
+///
+/// ★ **It was written TWICE, and both copies were wrong the same way.**
+/// `EditSession::append_page_content` served `add_image` and `flatten_fields`;
+/// `text_edit::addtext::append_contents` served `add_text` and the OCR text
+/// layer. Neither resolved. That is R92's failure mode — one question answered
+/// in two places — and the fix is not "correct both" but "have one".
+///
+/// # The four shapes, and what each becomes
+///
+/// | `/Contents` before | after |
+/// |---|---|
+/// | absent | `[new]` |
+/// | `R` → a stream | `[R, new]` — the reference is re-emitted **as written** |
+/// | `[a, b]` a direct array | `[a, b, new]` |
+/// | `R` → **an array** `[a, b]` | `[a, b, new]` — **spliced, not wrapped** |
+///
+/// The last row is the fix. `R` is left in the file, now unreferenced from this
+/// page; it is deliberately not deleted, because it may be shared with another
+/// page and because deleting it would be a second, unrelated mutation. An
+/// orphaned array object costs a few bytes and breaks nothing.
+///
+/// Splicing the ELEMENTS rather than rewriting the array object in place is
+/// also deliberate: `R` may be shared between pages (rare but legal), and
+/// appending to it would put the new content on every page that names it.
+/// Changing only this page's dictionary cannot do that.
+///
+/// # A malformed `/Contents` is preserved, not dropped
+///
+/// If the value is neither a stream, an array, nor a reference to either, the
+/// page is already one [`pages`] rejects. The old value is still carried into
+/// the array rather than discarded — a page that was unreadable stays
+/// unreadable, but nothing the operator had is silently thrown away on the way
+/// past.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::document::Document;
+/// use pdfce_core::object::ObjId;
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let doc = Document::from_bytes(
+///     b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
+///         .to_vec(),
+/// )?;
+/// // An absent `/Contents` becomes a one-element array.
+/// let appended = pdfce_core::page_tree::append_content_stream(&doc, None, ObjId::new(9, 0));
+/// assert_eq!(appended.as_array().map(<[_]>::len), Some(1));
+/// # Ok(())
+/// # }
+/// ```
+#[must_use]
+pub fn append_content_stream<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    before: Option<&Object>,
+    new_id: ObjId,
+) -> Object {
+    let Some(before) = before else {
+        return Object::Array(vec![Object::Reference(new_id)]);
+    };
+    // `resolve` follows a reference CHAIN and is depth-guarded (§7.3.10,
+    // `MAX_RESOLVE_DEPTH`), which answers the reference-to-a-reference case
+    // without this function needing to know it exists.
+    match graph.resolve(before) {
+        Object::Array(items) => {
+            let mut spliced = Vec::with_capacity(items.len() + 1);
+            spliced.extend(items.iter().cloned());
+            spliced.push(Object::Reference(new_id));
+            Object::Array(spliced)
+        }
+        // A stream, or anything else. `before` is re-emitted verbatim so an
+        // indirect reference stays an indirect reference — a stream shall be
+        // an indirect object (§7.3.8), so inlining one here would itself be
+        // malformed.
+        _ => Object::Array(vec![before.clone(), Object::Reference(new_id)]),
+    }
 }
 
 /// Parse (and resolve) a rectangle attribute: an array of four

@@ -70,7 +70,8 @@
 //! Table 30's `/Contents` *"shall be either a single stream or an array of
 //! streams … the effect shall be as if all of the streams in the array were
 //! concatenated, in order"* — and *"conforming writers shall not create a
-//! `Contents` array containing no elements."* So (see [`append_contents`]):
+//! `Contents` array containing no elements."* So (see
+//! [`crate::page_tree::append_content_stream`]):
 //! `R_orig` → `[R_orig R_new]`; `[R1…Rk]` → `[R1…Rk R_new]`; absent → `R_new`.
 //! The new run is appended at the END so it executes last and paints ON TOP
 //! (§8.2 painter's model) — what "add text on top of the page" requires.
@@ -648,7 +649,7 @@ pub fn add_text(doc: &Document, req: &AddTextRequest) -> Result<AddTextOutcome, 
     let content_id = ObjId::new(content_num, 0);
     let font_id = ObjId::new(font_num, 0);
 
-    let new_page = prep.build_page_dict(content_id, font_id);
+    let new_page = prep.build_page_dict(doc, content_id, font_id);
 
     // Stage the content bytes into the dirty set's own buffer and point the
     // new stream object's span at `base.len() + local` (R45 combined source).
@@ -785,18 +786,35 @@ pub(crate) struct AddTextPrep {
 impl AddTextPrep {
     /// Build the modified page dict from the two allocated object numbers.
     ///
-    /// Sets `/Contents` to the single→array append ([`append_contents`]) and
+    /// Sets `/Contents` via [`crate::page_tree::append_content_stream`] and
     /// `/Resources` to an inline dict that references the same sub-dictionaries
     /// as the effective resources EXCEPT for a fresh merged `/Font` subdict
     /// carrying the new font — the inheritance-safe recipe (§7.7.3.4). The
     /// original page dict's other keys are preserved (e.g. `/Annots` a prior
     /// session op added).
-    pub(crate) fn build_page_dict(&self, content_id: ObjId, font_id: ObjId) -> Dict {
+    pub(crate) fn build_page_dict<G: ObjectGraph + ?Sized>(
+        &self,
+        graph: &G,
+        content_id: ObjId,
+        font_id: ObjId,
+    ) -> Dict {
         let mut new_page = self.page_dict.clone();
 
+        // ★ `page_tree::append_content_stream`, not a local helper. This used
+        // to call `append_contents`, a SECOND implementation of the same
+        // append that lived in this file -- and it was wrong the same way the
+        // first one was: it matched on the RAW `/Contents` value and wrapped a
+        // reference without resolving it, so a reference to an ARRAY (Qt, and
+        // every CAD sheet) produced an array nested inside an array. That is
+        // R92 exactly, and the graph is threaded in here rather than the logic
+        // being re-derived because ONE answer is the fix, not two correct ones.
         new_page.insert(
             Name::from(b"Contents"),
-            append_contents(self.contents_before.as_ref(), content_id),
+            crate::page_tree::append_content_stream(
+                graph,
+                self.contents_before.as_ref(),
+                content_id,
+            ),
         );
 
         let mut font_subdict = self.font_subdict_base.clone();
@@ -1029,24 +1047,12 @@ fn make_font_program_stream(span: ByteSpan, len: usize) -> Object {
     })
 }
 
-/// The single→array `/Contents` append (§7.7.3.3).
-///
-/// A single stream reference becomes `[R_orig R_new]`; an existing array grows
-/// by one at the END (so the new run paints last); an absent `/Contents`
-/// becomes a single `R_new`. A never-empty array is guaranteed (Table 30
-/// forbids `[]`). Streams are always indirect (§7.3.8.1), so a non-array
-/// `/Contents` value is a reference, wrapped defensively either way.
-pub(crate) fn append_contents(before: Option<&Object>, new_id: ObjId) -> Object {
-    match before {
-        Some(Object::Array(existing)) => {
-            let mut v = existing.clone();
-            v.push(Object::Reference(new_id));
-            Object::Array(v)
-        }
-        Some(other) => Object::Array(vec![other.clone(), Object::Reference(new_id)]),
-        None => Object::Reference(new_id),
-    }
-}
+// The `/Contents` append that used to live here (`append_contents`) is GONE —
+// it was a second implementation of `page_tree::append_content_stream`, and it
+// was wrong the same way that one was: it matched on the RAW `/Contents` value
+// and wrapped a reference without resolving it, so a reference to an ARRAY
+// produced an array nested inside an array (`Pass 111.0`). One answer, in
+// `page_tree`, beside the reader that decides the same question.
 
 /// Build the `q BT…ET Q` content bytes (§9.4.2/§9.4.3), leading `\n` included.
 ///

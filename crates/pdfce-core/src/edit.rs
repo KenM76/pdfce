@@ -5349,6 +5349,16 @@ pub struct EditSession {
     staging: Vec<u8>,
     undo: Vec<Command>,
     redo: Vec<Command>,
+    /// Whether the BASE document's page tree walked at construction — the
+    /// gate on [`Self::debug_assert_page_tree_still_walks`] (`Pass 111.0`).
+    ///
+    /// Computed once, in debug builds only, so the postcondition can assert
+    /// the thing worth asserting (*no verb turns a readable document into an
+    /// unreadable one*) rather than the thing that merely happens to be true
+    /// (*this document is readable*). See that method for why the distinction
+    /// had to be drawn the moment the guard was first switched on.
+    #[cfg(debug_assertions)]
+    base_page_tree_walked: bool,
     /// The `/QuadPoints` corner order this session authors text markup in
     /// (spec ambiguity `QP-A1`, §12.5.6.10).
     ///
@@ -5420,6 +5430,11 @@ impl EditSession {
     pub fn new(doc: Document) -> Self {
         let trailer = doc.trailer().clone();
         let next_number = doc.next_object_number();
+        // Walked ONCE, here, in debug builds only. See
+        // `debug_assert_page_tree_still_walks` for why the postcondition needs
+        // a before-state and cannot simply assert the after-state.
+        #[cfg(debug_assertions)]
+        let walkable = page_tree::pages(&doc).is_ok();
         Self {
             base: doc,
             state: BTreeMap::new(),
@@ -5430,6 +5445,8 @@ impl EditSession {
             undo: Vec::new(),
             redo: Vec::new(),
             quad_point_order: QuadPointOrder::default(),
+            #[cfg(debug_assertions)]
+            base_page_tree_walked: walkable,
         }
     }
 
@@ -6899,7 +6916,7 @@ impl EditSession {
         let content_id = ObjId::new(content_num, 0);
         let font_id = ObjId::new(font_num, 0);
 
-        let new_page = prep.build_page_dict(content_id, font_id);
+        let new_page = prep.build_page_dict(&self.graph(), content_id, font_id);
         let content_len = prep.content_data.len();
         let span = self.stage_bytes(&prep.content_data);
         let content_stream = make_raw_stream(span, content_len);
@@ -7808,6 +7825,104 @@ impl EditSession {
         // module docs.
         if self.undo.len() > MAX_UNDO_DEPTH {
             self.undo.remove(0);
+        }
+        self.debug_assert_page_tree_still_walks();
+    }
+
+    /// **In debug builds only**, re-walk the page tree after every committed
+    /// command and panic if it no longer resolves (`Pass 111.0`).
+    ///
+    /// # The defect this exists for, and why a return value was not enough
+    ///
+    /// `add_image` on a page whose `/Contents` was an indirect reference to an
+    /// array produced a page dictionary that [`page_tree::pages`] rejects —
+    /// and returned `Ok`, and saved `Ok`, and wrote a file pdfce could not
+    /// reopen. **Every layer above trusted the `Ok`**, which is what let it
+    /// ship: the shell's trace said `add-image page=0 n=1`, the disclosures
+    /// were correct, and the only visible symptom was that the page looked
+    /// unchanged.
+    ///
+    /// The reporting shell asked for exactly this, in these words: *"a verb
+    /// that leaves the document in a state the crate's own reader rejects, and
+    /// returns `Ok`, is the specific shape that let this ship."* A postcondition
+    /// is the mechanical answer to that shape — it converts "the reader and the
+    /// writer disagree" from a silent condition into a failing test, at the
+    /// first test that exercises the verb, without anybody having to think of
+    /// asserting it.
+    ///
+    /// # Why `debug_assertions` and not always
+    ///
+    /// It re-walks the whole tree, which is `O(pages)` per command — fine for
+    /// a test suite and for an interactive session, wasteful for a batch job
+    /// that commits thousands of edits. The value is entirely in catching a
+    /// developer's mistake at the moment it is made, and a release build's
+    /// operator gains nothing from paying for it. CI runs the test suite in
+    /// debug, so the guard is live exactly where it earns its cost.
+    ///
+    /// # ★ It asserts "this COMMAND broke it", not "this document is broken"
+    ///
+    /// The first draft asserted only the post-state, and it fired immediately
+    /// on three existing tests whose fixtures have a page with **no
+    /// `/Resources`** — a required attribute (§7.7.3.4, Table 30). Those page
+    /// trees did not walk *before* the edit either, so the guard was reporting
+    /// the fixture rather than the verb. **A postcondition that fails on input
+    /// it was handed is one nobody can leave switched on**, and a guard that
+    /// gets switched off is worth less than no guard, because its silence then
+    /// reads as a pass.
+    ///
+    /// So the base is walked ONCE, at [`Self::new`], and this asserts only
+    /// when that succeeded ([`Self::base_page_tree_walked`]). A document that
+    /// arrived broken stays the caller's problem; a document this session
+    /// broke is this session's.
+    ///
+    /// That is also the honest scope. The claim being defended is *no verb
+    /// turns a readable document into an unreadable one* — exactly the claim
+    /// `add_image` violated. It says nothing about documents that were never
+    /// readable, and it should not.
+    ///
+    /// A page damaged by an older pdfce build is healed on read
+    /// ([`page_tree::Page::contents_flattened`]), so those walk and are held
+    /// to the guard like anything else.
+    ///
+    /// # ★ What it would and would NOT have caught, stated honestly
+    ///
+    /// **Before the read-side healing existed, this guard would have caught
+    /// the `/Contents` corruption at the first test that placed an image.**
+    /// After it, the same defect leaves a page that still *reads* — because
+    /// the reader now repairs it — so this guard alone would go green on it.
+    /// The byte-level assertions in `tests/contents_append_shapes.rs` are the
+    /// ones that hold that specific line, and they were checked against
+    /// exactly this: with the writer reverted and the healing left on, they
+    /// fail and this guard does not.
+    ///
+    /// That is not a reason to drop either. They cover different halves —
+    /// this one is a **general** postcondition over every structural edit
+    /// (a lost `/Resources`, a broken `/Kids`, a `/MediaBox` destroyed by a
+    /// dictionary rewrite), and it needs no test author to have thought of
+    /// asserting it. Claiming it as the guard for the `/Contents` class
+    /// specifically would be the overclaim, so it is not claimed.
+    #[inline]
+    fn debug_assert_page_tree_still_walks(&self) {
+        #[cfg(debug_assertions)]
+        {
+            if !self.base_page_tree_walked {
+                return;
+            }
+            // `debug_assert!`, not `panic!`, and that is a deliberate choice
+            // rather than a lint dodge. This crate DENIES `clippy::panic`
+            // crate-wide and has never once carried an `#[allow]` for it
+            // (`lib.rs`: "a panic reachable from library code is a
+            // denial-of-service bug, not a style issue"). Introducing the
+            // first exemption for a debug-only guard would spend that
+            // policy's whole value -- the next reader would find a precedent
+            // rather than a rule. `debug_assert!` is the construct that means
+            // exactly this and costs nothing in a release build.
+            let walked = page_tree::pages_in(&self.graph());
+            debug_assert!(
+                walked.is_ok(),
+                "POSTCONDITION VIOLATED: the command just committed left a page tree this crate's own reader rejects ({:?}), and it walked before the edit. A verb that returns Ok and produces a document pdfce cannot reopen is the shape that shipped the 2026-08-20 /Contents corruption.",
+                walked.err()
+            );
         }
     }
 
@@ -17087,21 +17202,22 @@ impl EditSession {
     /// resulting defect. Taking `&mut Dict` makes the three **compose** and
     /// makes it structurally impossible to reintroduce: there is nothing
     /// left to overwrite.
+    /// # ★ This used to hold its own copy of the shape logic, and it was wrong
+    ///
+    /// It matched on the RAW value and wrapped an `Object::Reference` into
+    /// `[ref, overlay]` without resolving it. When the reference pointed at an
+    /// **array** — which is what Qt-based exporters and every CAD sheet emit —
+    /// that produced an array whose first element dereferenced to another
+    /// array, which [`page_tree::pages`] rejects. `add_image` returned `Ok`,
+    /// the save returned `Ok`, and the file could not be reopened by pdfce.
+    ///
+    /// The logic now lives in [`page_tree::append_content_stream`], beside the
+    /// READER that decides the same question — see that function for the four
+    /// shapes and for why one copy rather than two corrected ones.
     fn append_page_content(&self, updated: &mut Dict, overlay_id: ObjId) {
-        let new_contents = match updated.get(b"Contents").cloned() {
-            None => Object::Array(vec![Object::Reference(overlay_id)]),
-            Some(Object::Reference(r)) => {
-                Object::Array(vec![Object::Reference(r), Object::Reference(overlay_id)])
-            }
-            Some(Object::Array(mut arr)) => {
-                arr.push(Object::Reference(overlay_id));
-                Object::Array(arr)
-            }
-            // A direct or malformed /Contents: wrap what is referenceable
-            // plus the overlay, keeping the original as a reference only if
-            // it already was one (handled above). Otherwise append after.
-            Some(_) => Object::Array(vec![Object::Reference(overlay_id)]),
-        };
+        let before = updated.get(b"Contents").cloned();
+        let new_contents =
+            page_tree::append_content_stream(&self.graph(), before.as_ref(), overlay_id);
         updated.insert(Name::from(b"Contents"), new_contents);
     }
 
