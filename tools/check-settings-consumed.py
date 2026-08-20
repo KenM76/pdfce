@@ -240,7 +240,31 @@ def check_option_structs() -> list[str]:
             # only goes red once assignments are excluded.
             #
             # `[^=]` after `=` keeps `==` a read.
-            pattern = re.compile(rf"\.\s*{re.escape(field)}\b\s*(?!=[^=])")
+            # ★ THE WHITESPACE BELONGS INSIDE THE LOOKAHEAD. This line read
+            # `\b\s*(?!=[^=])` until 2026-08-20 and that spelling is BROKEN:
+            # `\s*` outside the lookahead BACKTRACKS TO ZERO, so the engine
+            # matches `.field`, consumes no space, and then asks whether the
+            # very next character is `=`. For `settings.field = true` the next
+            # character is a SPACE, the negative lookahead succeeds, and the
+            # assignment is counted as a read — the filter that is the entire
+            # point of the line silently does nothing on the one spelling that
+            # matters. (`settings.field=true`, with no space, was correctly
+            # rejected, which is how it survived.)
+            #
+            # The comment block above says this was sabotage-verified, and it
+            # was — but against `pick_tray_by_page_size`, whose write form is a
+            # `&mut` BORROW, caught by the SEPARATE borrow filter below. The
+            # `=` filter was never the thing under test. It was found by
+            # `tools/check-outcome-disclosed.py`'s own self-test, which drove a
+            # spaced assignment as a decoy on its first run and went green when
+            # it should have gone red.
+            #
+            # ★★ NOTE THE SHAPE, because this project keeps paying for it: a
+            # verified gate, with a comment explaining at length why it is
+            # right, that was verified against a DIFFERENT case than the one
+            # the comment describes. A stated derivation reads exactly like a
+            # maintained one.
+            pattern = re.compile(rf"\.\s*{re.escape(field)}\b(?!\s*=[^=])")
             # ...and a `&mut` BORROW is a write too, which is the form
             # the defect actually took. `pdfce-gui` binds its checkbox
             # with `&mut pending.device.pick_tray_by_page_size` -- no

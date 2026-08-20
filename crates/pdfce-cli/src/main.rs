@@ -12899,11 +12899,18 @@ clear. Re-run with --apply --output FILE to perform it.",
         Err(code) => return code,
     };
     println!(
-        "reset-form {} reset={} defaulted={} removed={} skipped={} applied={}",
+        "reset-form {} reset={} defaulted={} removed={} widgets={} skipped={} applied={}",
         input.display(),
         out.fields_reset,
         out.values_defaulted,
         out.values_removed,
+        // `Pass 110.0`. Computed since the verb existed and printed by
+        // nothing. It is NOT `reset` under another name: a field presented in
+        // several places has more widgets than fields, so this is how many
+        // CONTROLS changed on the page against how many VALUES changed in the
+        // form. An operator reconciling a reset against what he can see needs
+        // the first number, and had only the second.
+        out.widgets_updated,
         out.skipped_pushbuttons + out.skipped_signatures + out.skipped_read_only,
         out.fields_reset,
     );
@@ -13198,9 +13205,24 @@ fn report_disclosures(disclosures: &[String]) {
 /// Print the fuzzy-never-sneaky disclosures a fill owes (an applied
 /// auto-size, any unencodable characters) to stderr.
 fn disclose_fill(name: &str, out: &pdfce_core::edit::FillOutcome) {
-    // Stated FIRST, before the cosmetic caveats. The others describe how the
-    // value was drawn; this one says the value may not be the one a reader
-    // sees at all, which is a different order of consequence.
+    // `Pass 110.0`. Computed since the verb existed and emitted by nothing.
+    //
+    // Stated only ABOVE ONE, deliberately. One widget per field is the
+    // unremarkable case and printing it on every fill would be noise that
+    // trains an operator to skip the line. More than one means the SAME field
+    // is presented in several places on the page (§12.7.3.1 — one field, many
+    // widgets), so a fill the operator made in one place just changed
+    // something he may not be looking at. That is a fact about the document he
+    // cannot get from `sets=1`.
+    if out.widgets_updated > 1 {
+        eprintln!(
+            "pdfce-cli: field {name:?}: {} widget appearance(s) were regenerated — this field is presented in more than one place, so the value changed everywhere it appears",
+            out.widgets_updated
+        );
+    }
+    // Stated FIRST among the caveats, before the cosmetic ones. The others
+    // describe how the value was drawn; this one says the value may not be the
+    // one a reader sees at all, which is a different order of consequence.
     if out.xfa_may_disagree {
         eprintln!(
             "pdfce-cli: field {name:?}: this form also carries an XFA packet. pdfce filled the \

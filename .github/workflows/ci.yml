@@ -350,6 +350,24 @@ jobs:
       - name: check the disclosure channel goes through its traced setter
         run: bash tools/check-disclosure-channel.sh
 
+      # The THIRD side of the same surface. R1 asks whether the words live
+      # where they can be reviewed; the disclosure channel asks whether they
+      # can be SEEN to have been said; this asks whether they are said AT ALL.
+      #
+      # `pdfce-core` returns outcome structs whose fields exist solely to
+      # discharge rule 4 -- what pdfce decided, inferred, renamed or dropped.
+      # A field no shell reads is a disclosure that does not happen, and the
+      # effect is identical to never having computed it.
+      #
+      # Nothing type-checks that. `#[must_use]` is about the struct, not its
+      # fields: reading ONE field consumes the value and satisfies the
+      # compiler forever. `Pass 106.1` added three fields to `MergeOutcome`
+      # and `merge-document` never grew the tokens -- three numbers computed,
+      # returned and discarded, one of them describing a cross-file breakage.
+      # It was found by the librarian while filing an unrelated Pass, by luck.
+      - name: check every outcome field is surfaced by a shell
+        run: python tools/check-outcome-disclosed.py
+
       # Every CODE commit is named in the record. `check-passes-filed.py`
       # already covers commits that CLAIM a Pass ID; most claim none, and
       # for those it is blind — which is how eleven commits, including a
