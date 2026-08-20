@@ -144,6 +144,135 @@ impl Matrix {
         }
     }
 
+    /// A pure scale `[sx 0 0 sy 0 0]`, about the ORIGIN (`Pass 112.0`).
+    ///
+    /// # About the origin, deliberately — see [`Self::about`]
+    ///
+    /// A resize gesture is almost never about the origin; it is about the grip
+    /// opposite the one being dragged. That pivot is the **shell's** to choose
+    /// (the consuming shell asked, in as many words, that pdfce not decide
+    /// where the pivot is), so this constructor stays primitive and
+    /// [`Self::about`] composes it with the operator's chosen point.
+    ///
+    /// A zero or non-finite factor is **not** rejected here: this is a value
+    /// constructor with no operator context, and the verb that consumes a
+    /// matrix is where a degenerate transform earns a *named* refusal the
+    /// shell can act on. Silently clamping here would hide the drag-through-
+    /// zero case the shell explicitly wants to distinguish.
+    #[must_use]
+    pub const fn scale(sx: f64, sy: f64) -> Self {
+        Self {
+            a: sx,
+            b: 0.0,
+            c: 0.0,
+            d: sy,
+            e: 0.0,
+            f: 0.0,
+        }
+    }
+
+    /// A pure rotation by `radians` **counter-clockwise**, about the origin
+    /// (`Pass 112.0`).
+    ///
+    /// `[cos θ, sin θ, −sin θ, cos θ, 0, 0]` — the row-vector form, which is
+    /// the one PDF's `cm` operand order wants. Getting the sign of `c` wrong
+    /// produces a mirror image rather than an error, so the direction is
+    /// pinned by a doc-test below.
+    ///
+    /// # Radians, not degrees
+    ///
+    /// Every trigonometric call in this crate takes radians and the one place
+    /// degrees appear is a formatted ce-dimension label
+    /// (`DimensionKind::measured_points`, which returns degrees precisely so a
+    /// caller cannot feed an angle to a length formatter). A `rotate_degrees`
+    /// convenience beside this would be a second spelling of one operation and
+    /// the first place a caller passes 90.0 to the radians one.
+    #[must_use]
+    pub fn rotate(radians: f64) -> Self {
+        let (sin, cos) = radians.sin_cos();
+        Self {
+            a: cos,
+            b: sin,
+            c: -sin,
+            d: cos,
+            e: 0.0,
+            f: 0.0,
+        }
+    }
+
+    /// `self`, applied **about the point `pivot`** rather than the origin
+    /// (`Pass 112.0`).
+    ///
+    /// `translate(−p) × self × translate(+p)` — move the pivot to the origin,
+    /// transform, move it back. This is the form every direct-manipulation
+    /// gesture actually wants: a resize grip pivots on the opposite corner, a
+    /// rotation handle pivots on the selection centre, and neither is the page
+    /// origin.
+    ///
+    /// # Why this exists rather than leaving the shell to compose it
+    ///
+    /// It is three multiplications in the right order, and *the order is the
+    /// whole difficulty* — `post_concat`'s argument order is the reverse of
+    /// the reading order in `translate(−p) × self × translate(+p)`, which is
+    /// exactly the sort of thing that produces a shape that drifts a little
+    /// on every drag and looks like a rounding bug. One implementation, one
+    /// doc-test, and no consumer has to get it right twice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::vector::{Matrix, Point};
+    ///
+    /// let pivot = Point::new(10.0, 10.0);
+    /// // A half-turn about (10, 10) maps (11, 10) to (9, 10).
+    /// let m = Matrix::rotate(std::f64::consts::PI).about(pivot);
+    /// let p = m.map_point(Point::new(11.0, 10.0));
+    /// assert!((p.x - 9.0).abs() < 1e-9, "got {}", p.x);
+    /// assert!((p.y - 10.0).abs() < 1e-9, "got {}", p.y);
+    ///
+    /// // The pivot itself is always fixed — the defining property.
+    /// let q = m.map_point(pivot);
+    /// assert!((q.x - pivot.x).abs() < 1e-9 && (q.y - pivot.y).abs() < 1e-9);
+    ///
+    /// // A quarter-turn CCW about the origin takes +x to +y.
+    /// let r = Matrix::rotate(std::f64::consts::FRAC_PI_2).map_point(Point::new(1.0, 0.0));
+    /// assert!((r.x - 0.0).abs() < 1e-9 && (r.y - 1.0).abs() < 1e-9, "got {r:?}");
+    ///
+    /// // Scaling about a pivot leaves the pivot put.
+    /// let s = Matrix::scale(3.0, 3.0).about(pivot).map_point(pivot);
+    /// assert!((s.x - 10.0).abs() < 1e-9 && (s.y - 10.0).abs() < 1e-9);
+    /// ```
+    #[must_use]
+    pub fn about(self, pivot: Point) -> Self {
+        Self::translate(-pivot.x, -pivot.y)
+            .post_concat(self)
+            .post_concat(Self::translate(pivot.x, pivot.y))
+    }
+
+    /// Whether this matrix can be inverted — equivalently, whether it maps
+    /// area to non-zero area (`Pass 112.0`).
+    ///
+    /// The predicate behind a *named* refusal for the case the consuming shell
+    /// singled out: **an operator dragging a resize grip through zero**, which
+    /// they will, and which must be distinguishable from "this object cannot
+    /// be transformed at all" because the two produce different UI. Asking
+    /// this is what lets a caller say which one happened without duplicating
+    /// [`Self::inverse`]'s arithmetic to find out.
+    ///
+    /// Non-finite coefficients answer `false`: a matrix that cannot be
+    /// written as six real numbers has no inverse worth claiming, and letting
+    /// a `NaN` through here would put one in a `cm` operand where no reader
+    /// can draw it.
+    #[must_use]
+    pub fn is_invertible(self) -> bool {
+        let det = self.determinant();
+        det.is_finite()
+            && det != 0.0
+            && [self.a, self.b, self.c, self.d, self.e, self.f]
+                .iter()
+                .all(|v| v.is_finite())
+    }
+
     /// Transform `p` by this matrix: `p' = p × M` (module docs' formula).
     #[must_use]
     pub fn map_point(self, p: Point) -> Point {
@@ -668,5 +797,144 @@ mod tests {
         assert_eq!(c[1], Point::new(5.0, 2.0));
         assert_eq!(c[2], Point::new(5.0, 5.0));
         assert_eq!(c[3], Point::new(1.0, 5.0));
+    }
+
+    // -----------------------------------------------------------------
+    // Pass 112.0 — the scale/rotate/about constructors
+    //
+    // These are the primitives every transform verb is built on, and each
+    // one has a failure mode that produces a PLAUSIBLE WRONG PICTURE rather
+    // than an error: a sign flip is a mirror image, a composition-order
+    // slip is a shape that drifts a little on every drag. So the properties
+    // are pinned, not the coefficients.
+    // -----------------------------------------------------------------
+
+    fn close(a: Point, b: Point) -> bool {
+        (a.x - b.x).abs() < 1e-9 && (a.y - b.y).abs() < 1e-9
+    }
+
+    /// Rotation is COUNTER-CLOCKWISE. A sign error on `c` is a mirror image,
+    /// which renders perfectly and is wrong, so the direction is pinned at
+    /// all four quarter turns rather than one.
+    #[test]
+    fn rotation_is_counter_clockwise() {
+        use std::f64::consts::{FRAC_PI_2, PI};
+        let x = Point::new(1.0, 0.0);
+        assert!(close(
+            Matrix::rotate(FRAC_PI_2).map_point(x),
+            Point::new(0.0, 1.0)
+        ));
+        assert!(close(
+            Matrix::rotate(PI).map_point(x),
+            Point::new(-1.0, 0.0)
+        ));
+        assert!(close(
+            Matrix::rotate(3.0 * FRAC_PI_2).map_point(x),
+            Point::new(0.0, -1.0)
+        ));
+        assert!(close(Matrix::rotate(2.0 * PI).map_point(x), x));
+    }
+
+    /// ★ The defining property of `about`: the pivot does not move. It holds
+    /// for rotation, uniform scale, non-uniform scale and a composition of
+    /// them, and it is the one assertion that catches a reversed
+    /// `post_concat` order — which otherwise looks like a small drift.
+    #[test]
+    fn about_fixes_its_pivot_for_every_transform() {
+        let pivot = Point::new(37.5, -12.25);
+        for m in [
+            Matrix::rotate(0.7),
+            Matrix::scale(3.0, 3.0),
+            Matrix::scale(2.0, 0.5),
+            Matrix::rotate(-1.3).post_concat(Matrix::scale(1.5, 4.0)),
+        ] {
+            let moved = m.about(pivot).map_point(pivot);
+            assert!(close(moved, pivot), "pivot moved to {moved:?} under {m:?}");
+        }
+    }
+
+    /// `about` must agree with the long-hand it is shorthand for. Written as
+    /// an independent reference implementation rather than a restatement:
+    /// asserting `about` against its own formula would prove nothing.
+    #[test]
+    fn about_agrees_with_translate_transform_translate_back() {
+        let pivot = Point::new(-4.0, 9.0);
+        let m = Matrix::rotate(0.4).post_concat(Matrix::scale(2.0, 3.0));
+        for p in [
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 0.0),
+            Point::new(-7.5, 22.0),
+            pivot,
+        ] {
+            let via_about = m.about(pivot).map_point(p);
+            // The long-hand, done in three separate steps on the POINT.
+            let shifted = Point::new(p.x - pivot.x, p.y - pivot.y);
+            let turned = m.map_point(shifted);
+            let back = Point::new(turned.x + pivot.x, turned.y + pivot.y);
+            assert!(close(via_about, back), "{p:?}: {via_about:?} vs {back:?}");
+        }
+    }
+
+    /// A scale about a pivot moves every OTHER point by the factor, measured
+    /// from the pivot — the property a resize grip actually relies on.
+    #[test]
+    fn scaling_about_a_pivot_scales_distance_from_it() {
+        let pivot = Point::new(100.0, 100.0);
+        let m = Matrix::scale(3.0, 3.0).about(pivot);
+        let p = m.map_point(Point::new(110.0, 100.0));
+        assert!(close(p, Point::new(130.0, 100.0)), "got {p:?}");
+    }
+
+    /// Non-uniform scale must not secretly rotate: a horizontal edge stays
+    /// horizontal.
+    #[test]
+    fn non_uniform_scale_does_not_rotate() {
+        let m = Matrix::scale(4.0, 0.25);
+        let a = m.map_point(Point::new(0.0, 5.0));
+        let b = m.map_point(Point::new(10.0, 5.0));
+        assert!((a.y - b.y).abs() < 1e-9, "the edge tilted: {a:?} {b:?}");
+        assert!((b.x - a.x - 40.0).abs() < 1e-9);
+    }
+
+    /// ★ `is_invertible` answers the question a shell needs BEFORE it offers
+    /// a resize grip, and separately from "this object has no placement".
+    /// The drag-through-zero case is the one the consuming shell named.
+    #[test]
+    fn is_invertible_refuses_exactly_the_degenerate_matrices() {
+        assert!(Matrix::IDENTITY.is_invertible());
+        assert!(Matrix::rotate(1.0).is_invertible());
+        assert!(Matrix::scale(2.0, 0.5).is_invertible());
+        assert!(Matrix::translate(10.0, -3.0).is_invertible());
+
+        // Dragged through zero — the case that must be a NAMED refusal.
+        assert!(!Matrix::scale(0.0, 1.0).is_invertible());
+        assert!(!Matrix::scale(1.0, 0.0).is_invertible());
+        assert!(!Matrix::scale(0.0, 0.0).is_invertible());
+        // Collapsed onto a line by a shear.
+        assert!(!Matrix::new(1.0, 2.0, 2.0, 4.0, 0.0, 0.0).is_invertible());
+        // Non-finite must never reach a `cm` operand.
+        assert!(!Matrix::scale(f64::NAN, 1.0).is_invertible());
+        assert!(!Matrix::scale(f64::INFINITY, 1.0).is_invertible());
+        assert!(!Matrix::new(1.0, 0.0, 0.0, 1.0, f64::NAN, 0.0).is_invertible());
+    }
+
+    /// `is_invertible` must agree with `inverse` — two answers to one
+    /// question that could drift apart otherwise.
+    #[test]
+    fn is_invertible_agrees_with_inverse() {
+        for m in [
+            Matrix::IDENTITY,
+            Matrix::rotate(0.3),
+            Matrix::scale(2.0, 3.0),
+            Matrix::scale(0.0, 1.0),
+            Matrix::new(1.0, 2.0, 2.0, 4.0, 0.0, 0.0),
+            Matrix::scale(f64::NAN, 1.0),
+        ] {
+            assert_eq!(
+                m.is_invertible(),
+                m.inverse().is_some(),
+                "the predicate and the operation disagree about {m:?}"
+            );
+        }
     }
 }
