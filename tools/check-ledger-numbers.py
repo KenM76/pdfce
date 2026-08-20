@@ -278,6 +278,45 @@ ARCH_DECISION = re.compile(
     r"^(?:#{2,4}\s.*?|\*\*)[Dd]ecision\s+(\d{3})\b",
 )
 
+# ★ THE CEILING SCAN, WIDENED 2026-08-20 AFTER IT UNDER-REPORTED BY THREE.
+#
+# `ARCH_DECISION` above is a DECLARATION pattern: a heading, or a line
+# beginning `**Decision NNN`. It is right for saying WHERE a decision was
+# declared. It is NOT sufficient for the ceiling, and on 2026-08-20 this
+# checker printed
+#
+#     decision records    : 071 -> next free is 072
+#
+# while decisions **072, 073 AND 074 already existed** in ARCHITECTURE.md.
+# All three are written as a dated list item —
+# `- **2026-08-19/20 — Decision 074. ...**` — so the `**` alternative, which
+# requires `**` at line start followed immediately by "Decision", could not see
+# any of them, and neither could the heading alternative.
+#
+# ★ THIS IS THE EXACT FAILURE collect_decisions()'s OWN DOCSTRING WAS WRITTEN
+# ABOUT, RECURRING. It says: "this checker printed 'next free is 039' — a
+# number that was ALREADY TAKEN, TWICE. That is worse than no answer … a
+# confidently wrong ceiling is how a duplicate gets created rather than
+# caught." The 2026-08-11 fix added ARCHITECTURE.md as a second SOURCE but kept
+# a DECLARATION-shaped PATTERN, so the same hole reopened the moment the
+# prevailing spelling changed. §12 duplicate detection is deliberately absent
+# (see the docstring), so nothing else in this project would have caught the
+# duplicate this was about to produce.
+#
+# THE FIX IS TO STOP PATTERN-MATCHING A SPELLING. For a CEILING, any mention of
+# `decision NNN` anywhere in the file is safe, and that is provable rather than
+# hopeful: `arch` drives the ceiling ONLY (never duplicate detection), the
+# ceiling is a MAX, and a prose back-reference can only name a decision that
+# already exists — so it can never raise the max above a real number. The
+# widening therefore cannot produce a false ceiling, and it cannot
+# under-report, whatever spelling a future filing invents.
+#
+# Direction of error, stated rather than left to be inferred: this over-counts
+# WHICH numbers are "spoken for" if a filing ever writes a forward reference to
+# a decision it does not then mint. That costs one skipped number. The opposite
+# error costs a duplicate decision record that nothing here can see.
+ARCH_DECISION_MENTION = re.compile(r"[Dd]ecision\s+(\d{3})\b")
+
 
 def collect_decisions():
     """Every decision number that is SPOKEN FOR, from both places they live.
@@ -344,9 +383,17 @@ def collect_decisions():
     # decision that never got its own file lives (034-036, 039, 040).
     arch = defaultdict(list)
     for lineno, line in enumerate(read_lines(ARCHITECTURE), start=1):
-        m = ARCH_DECISION.match(line.strip())
+        stripped = line.strip()
+        m = ARCH_DECISION.match(stripped)
         if m:
             arch[int(m.group(1))].append(f"{ARCHITECTURE}:{lineno}")
+            continue
+        # Anything else that names a decision number at all. CEILING ONLY —
+        # see ARCH_DECISION_MENTION's note for why this cannot over-report a
+        # ceiling, and why it must not be narrowed back to a declaration shape
+        # the next time the prevailing spelling changes.
+        for mention in ARCH_DECISION_MENTION.finditer(stripped):
+            arch[int(mention.group(1))].append(f"{ARCHITECTURE}:{lineno} (mention)")
     return files, arch
 
 
