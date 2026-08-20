@@ -3,396 +3,290 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
-**Written 2026-08-18**, replacing the earlier 2026-08-18 handoff whose task
-(`Pass 75.0`) is now shipped.
+**Written 2026-08-20**, replacing the 2026-08-18 handoff whose headline task
+(the `pdfceGUI` reply + the orphan count) shipped as `Pass 102.x`/`103.x` and
+whose queue is now three items shorter.
 
 ---
 
-## ★★★ THE TASK: reply to `pdfceGUI`, then build what the reply promises
+## §0 — DO THESE TWO THINGS BEFORE ANYTHING ELSE
 
-`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` contains **one unanswered
-request**, and it is about code that shipped the same day:
+**1. `ls` BOTH FeatureRequests channels.** They are outside this repository, so
+**no gate will ever contradict a stale sentence about them** — including this
+one.
 
 ```
-request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md
+D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\
+D:\Dev\FeatureRequests\iccce_FeatureRequests\open\
 ```
 
-**★ THE PREVIOUS HANDOFF SAID THAT CHANNEL WAS EMPTY. It was not, and I
-repeated the claim to the librarian before checking.** The failure mode is
-worth more than the correction: **that directory is outside the repository, so
-no gate will ever contradict a stale sentence about it.** The two `iccce`
-requests have been demonstrating the same thing for three filings. `ls` both
-channels at session start — it costs nothing and it is the only thing that
-works.
+`R196` exists because a handoff said the pdfce channel was empty and it was
+not. **Today's session found the newest request by `ls`, three lines into the
+session, before reading anything else.** That is the whole procedure.
 
-**Filed as `Pass 102.0` / `102.1` / `103.0` / `103.1` / `103.2` / `103.3`.**
-`102.0` (the orphan count) is the one to do first: it is small, it is ruled
-**permanent rather than interim**, and it turns a consuming project's
-currently-false disclosure into a true one.
+**2. Run the gates, all of them — do not trust a handoff's list.** The previous
+handoff's §6 said *"Gates all clean"* and named eight. Running the full set
+today found **three that were red**, and **none of the three was among the
+eight it named.** The claim was true about the set it listed and false about
+the set that exists. **A handoff that enumerates gates by name ages badly the
+moment one is added.**
 
-### What it says, in one paragraph
+```
+bash tools/check-ui-strings.sh          bash tools/check-disclosure-channel.sh
+bash tools/check-theme-colors.sh        bash tools/check-bypass-paths.sh
+bash tools/check-string-gaps.sh         python tools/check-ledger-numbers.py
+python tools/check-core-api-verbs.py    python tools/check-settings-consumed.py
+python tools/check-fmt-excluded.py      python tools/check-shipped-assets.py
+python tools/check-passes-filed.py      python tools/check-commits-filed.py
+python tools/check-one-commit-per-command.py
+```
 
-`insert_pages` (`Pass 99.0`, `38c0ef2`) copies everything reachable from a
-page, and a page's `/Annots` reaches its widgets. So **widgets DO arrive while
-`/AcroForm` does not** — they measured 13 widgets with `fields=None`. The
-result is not "the form fields did not come across". It is **boxes that draw
-exactly like form fields, that an operator will click, and that nothing can
-fill**. A visible control that is silently inert, arriving through a document
-instead of through a ribbon. They wrote their disclosure from my reply without
-checking, which they own; the disclosure named the wrong failure, and *a
-disclosure that names the wrong failure is worse than none, because it is
-believed.*
-
-### The four options they offer, and ★ my reading, which sharpens theirs
-
-1. carry field definitions for fields whose widgets are all on inserted pages
-2. strip the orphaned widgets
-3. **report a count** of orphans so a shell can be precise
-4. refuse a source page with widgets unless a flag is passed
-
-Their preference is *(3) now, (1) later*, treating (3) as the cheap interim.
-
-**I think (3) is permanent and (1) is a layer on top of it.** A field's widgets
-can be **split** across inserted and non-inserted pages, and (1) cannot carry
-such a field without either fracturing it or dragging in widgets nobody
-inserted. **A residue of orphans survives (1) by construction**, so the count
-has to exist forever.
-
-⇒ **(3) unconditionally, (1) as the follow-on, never (2) or (4).** (2)
-destroys content the operator can see in the source; (4) turns a disclosable
-condition into a refusal.
-
-### The four API asks in part 2
-
-- ~~`EditSession::add_outline_item(parent, title, dest)`~~ — **SHIPPED**
-  2026-08-19, `Pass 103.0`. Also `pdfce-cli add-bookmark`; `list-outline` now
-  prints `n=` so `--under` composes with it.
-- ~~**adopt an existing widget into a field**~~ — **SHIPPED** 2026-08-19,
-  `Pass 103.1`, as `EditSession::adopt_widget` + `pdfce-cli adopt-widget`.
-  ★ **Partly.** Measured with `examples/orphan_probe.rs`: of 13 orphans in a
-  real AcroForm, **11 adopt losslessly and 2 cannot be adopted at all** —
-  bare radio kids whose `/Parent` the copy drops, leaving no name, type or
-  value anywhere. Counted by the new
-  `InsertOutcome::orphaned_widgets_unrecoverable`; the fix is `Pass 102.1`.
-- **page labels for inserted pages** — STILL OPEN (`Pass 103.2`). They
-  explicitly ask this NOT be answered by the existing
-  `/PageLabels`-stays-stale ruling at `edit.rs:16339`. **Needs a**
-  **`pdfce-acrobat-librarian` dispatch before it is scoped** — nobody has
-  measured what Acrobat does with page labels on an insert.
-- **named destinations** — STILL OPEN (`Pass 103.3`), so a carried bookmark
-  resolves. `add_outline_item` refuses `Destination::Named` **by name**
-  today, which is the honest interim: CAD and Word exports use named
-  destinations often, so a shell carrying a real outline will hit it.
-
-### ★ The part worth carrying into our own rules
-
-Their draft declined to ask for the last two, citing **R151** and my own reason
-for not shipping `markup_rects`. Their operator overruled it:
-
-> *"not adding such things just because they weren't explicitly asked for i
-> think is how we end up with partially finished features."*
-
-The distinction they had collapsed is a good one. **`markup_rects` was a
-convenience query duplicating something already reachable**, so no caller meant
-no value and declining was right. **Page labels and named destinations are not
-a separate feature — they are the missing members of ONE feature.** A
-document's pages carry labels and are pointed at by destinations. Shipping
-Insert with two of four handled makes Insert permanently partial, and the
-partiality gets found by a user rather than by us.
-
-**No reply has been written into the channel.** That is owed, and it is owed
-deliberately rather than forgotten — it was not worth doing badly at the end of
-a long session. `ROADMAP.md` carries a standing box under *Next up*
-enumerating the five things the reply must cover.
-
-### What was fixed on our side already, so the reply can say so
-
-- `edit.rs`'s `insert_pages` doc comment — which was **the source of their
-  wrong disclosure** — now states the widget/field split in full, with the
-  measured counts and an explicit instruction not to paraphrase it as "form
-  fields did not come across".
-- `docs/core-api/02-editing-and-saving.md` **never mentioned `insert_pages` at
-  all**, which is why a chat reply was their only source. It was **eight verbs
-  behind**; all eight are now documented and the stated count is corrected
-  108 → 116.
-- `tools/check-core-api-verbs.py` (new) re-derives the verb list from
-  `edit.rs` and fails if the doc omits one or states a wrong count.
+Two of the three red ones were fixed today (`check-fmt-excluded` →
+`tools/tw-census` unformatted; `check-settings-consumed` → `Pass 108.0`).
+**One is still red — see §5.**
 
 ---
 
-## ★★ TWO MORE REQUESTS LANDED AT 19:22 AND 19:23 — three minutes after the
-## commit that fixed the first one
-
-```
-request_a_placed_ce_dimension_cannot_be_moved_to_another_group.md
-request_a_dimension_group_can_be_created_and_never_renamed_or_deleted.md
-```
-
-Found by `ls`-ing the channel per `R196`, **not** by inheriting the previous
-filing's "one open request". That is the rule earning its keep within hours of
-being minted, and it is the reason the count in any handoff — including this
-one — is hearsay until re-listed.
-
-**Both verified against the source rather than taken on trust:**
-`grep -cE "pub fn (rename_dimension_group|delete_dimension_group|set_dimension_group|move_dimension_to_group)"`
-returns **0**. `add_dimension_group` exists at `edit.rs:17692`,
-`add_dimension` takes its `GroupId` at creation (`17549`), and nothing ever
-changes it.
-
-### ★ They are the SAME SHAPE as the `insert_pages` request, and that is the story
-
-All three are *"missing members of a shipped cluster"* — the requester's own
-phrase, and precisely the `R151` qualifier their operator articulated. Not
-speculative features; the absent members of clusters pdfce already ships and
-`FEATURES.md` already ticks. Three in one day suggests the pattern is
-systematic rather than coincidental, and the honest question for next session
-is **whether other shipped clusters have the same holes and nobody has hit
-them yet.** A sweep for verbs that create a thing without a verb to rename,
-re-parent or delete it would answer that cheaply.
-
-### My parse, for whoever scopes them
-
-- **`set_dimension_group(DimensionId, GroupId)`** — not a field assignment. A
-  ce dimension's *appearance* derives from its group's scale, precision, units
-  and standard, so re-parenting must **re-measure and re-bake the `/AP`**, and
-  it must be ONE undo entry. The refusal cases are the interesting part: a
-  target group on a different page, and a group whose unit is incompatible.
-- **`rename_dimension_group(GroupId, &str)`** — small, and the only question
-  is whether names must stay unique. If they do, that is a refusal with a
-  name; if not, say so, because a UI listing two identical groups is a
-  discoverability defect the shell cannot fix.
-- **`delete_dimension_group(GroupId, …)`** — ★ **this is the orphan question
-  again, in a second place.** What becomes of the dimensions in the group?
-  Reassign to a default, delete with it, or refuse while non-empty. The
-  `insert_pages` answer generalises: **report and refuse to guess**, with the
-  count, rather than picking a fate silently. Whatever is chosen here should
-  match `Pass 102.0`'s shape so a shell learns one convention rather than two.
-
-The librarian filed all three **unscoped, with no Pass ID claimed** — parsing
-them into Passes is the engineer's act and has not been done.
-
----
-
-## §1 — WHAT SHIPPED 2026-08-18 (this session)
+## §1 — WHAT SHIPPED 2026-08-20
 
 | commit | |
 |---|---|
-| `e13f8ed` | `Canvas` plumbing — 16 + 2 signatures, provably transparent |
-| `6af5655` | **`Pass 75.0`** — the display list |
-| `6b797db` | poster printing fixed (it failed outright above ~2× magnification) |
-| `2aa1066` | **`Pass 101.0`** build stamp · string-gap gate · guard discharge |
-| `85c9cb4` | librarian filings 182–183 · the widened ledger anchor |
-| `e194b46` | three sweep survivors · `docs/core-api` was 8 verbs behind · new gate |
+| `ae06440` | `check-string-gaps.sh` widened inside `#[error(…)]` · `tw-census` fmt |
+| `9940acf` | **`Pass 107.0` / `107.1` / `107.2`** — the perimeter ce dimension |
+| `4a1416e` | librarian: `107.x` filed · **decision 074** · **`R204`** |
+| `07c8c22` | `check-ledger-numbers.py`'s decision ceiling was wrong by three |
+| `186a983` | **`Pass 108.0`** — `quad_point_order` was a setting that did nothing |
 
-### `Pass 75.0` — the numbers, so nobody re-derives them
+### `Pass 107.x` — the perimeter tool, whole, in one session
 
-Three runs, medians, release, `examples/region_bench.rs`, A3 CAD sheet
-(148,517 paints · 24,128 clip ops → **127,267 ops, 40 clips, 29.5 MiB**):
+`pdfceGUI` asked for a perimeter measuring tool with vertex editing and *"all
+the scaling options of the other dimension tools"*. All seven sections of the
+request are answered; nothing was deferred. Reply written into the channel and
+an `INDEX.md` row added **in the same edit as the reply**, per that folder's own
+rule.
 
-| case | from stream | replayed | ratio |
-|---|---:|---:|---:|
-| **FLOOR** 1×1 pt, 2 px | **636 ms** | **1.06 ms** | **600×** |
-| region 400×300 pt, scale 1 | 680 ms | 83.5 ms | 8.1× |
-| region 400×300 pt, scale 8 | 819 ms | 10.5 ms | **78×** |
-| recording the page | — | 618 ms | — |
+**`DimensionKind::Perimeter { points: Vec<Point>, closed, offset, text_along }`.**
+Open and closed are ONE kind with a flag — they differ by exactly the closing
+segment. Authored as `/Polygon` + `/IT /PolygonDimension` or `/PolyLine` +
+`/IT /PolyLineDimension` with a flat `/Vertices`, ISO 32000-1 §12.5.6.9
+Table 178.
 
-Read the FLOOR row first: almost no fill in it, so it measures interpretation
-and nothing else, and interpretation is **gone** from the second render. Full
-write-up in `docs/render-region-measurements.md`.
+**`DimensionKind` and `DimensionRecord` are no longer `Copy`** (decision 074).
+The requester's own id-reference alternative was heard and declined. Blast
+radius measured: 7 errors in core, 9 across the shells, all mechanical.
 
-**The key is `(page, epoch, scale)`** — the consumer asked for `(page, epoch)`.
-Scale was added because half the interpreter's decisions are device-dependent
-(hairline, image minification, edge anti-aliasing, mask size) and because
-composing the transform in a different order is not associative in f32.
-Panning at fixed zoom is fully served; a zoom step costs one rebuild.
-**Decision 071.**
+Three vertex verbs plus `vertex_edit_preview`, sharing **one** plan body, so
+`preview(..).err()` **is** the refusal predicate. **The first ce-dimension verb
+that deliberately re-measures.**
 
-**~2.4 % of pages refuse to record** (shading, overprint composite, soft mask)
-and fall back — measured over 3,222 loadable files, so roughly one page in
-forty.
+**Three numbers worth keeping**, because they are the answers to questions that
+will be asked again:
+
+- **It cannot refuse for a shape reason.** Self-intersection and zero-length
+  segments are legal; every refusal is structural and knowable before the drag.
+  **The shell's drag preview may always be drawn** — that is on the record and
+  the shell was told.
+- **The label anchors on the vertex CENTROID**, not the CAD-conventional
+  longest segment, because a corner drag can change *which* segment is longest
+  and the label would teleport. Vertex editing is this kind's headline feature.
+- **`/Rect` must equal the `/AP` `/BBox`.** §12.5.5 step (b) **scales** the
+  appearance to fill `/Rect`; nothing clips. A mismatch renders a perimeter at a
+  length that disagrees with the number printed inside it, and is **invisible in
+  an object dump**. The spec corpus calls it *"the single highest-risk authoring
+  bug for a ce dimension"*. Now pinned by a test.
+
+### ★ The defect that nearly shipped silently, and the rule it minted
+
+`set_markup_style` refuses a ce dimension by name. The guard tested the literal
+string `LineDimension`. **A perimeter is a `/Polygon`** — stroked, coloured,
+byte-shaped exactly like a markup polygon pdfce can author — so **adding the
+variant silently un-gated the refusal**, and a restyle would have reduced a
+measurement to a bare outline with nothing reporting it.
+
+**`R204`: widening the world past a refusal is the same act as removing the
+refusal.** The mirror of `R143`/`R144`/`R147`. Operationally: *when a Pass adds
+a variant to an enum that any refusal matches on, grep every match site for that
+enum and re-verify each one covers the new case.*
+
+`is_ce_dimension` now asks **twice** — the three `/IT` intents **OR** the
+sidecar — because they fail in opposite directions. **Each arm has its own
+isolated test and each was sabotage-verified to fail with the other arm
+intact**, which was not true of the first test written: a real perimeter carries
+both, so the obvious test passed with either arm deleted and proved nothing.
+
+### `Pass 108.0` — a setting that did nothing
+
+`Settings::quad_point_order` was parsed, validated, defaulted, documented in the
+generated file's own comments, and **read by nothing**. Now session state
+(`EditSession::set_quad_point_order`) rather than a second `add_markup_with`
+entry point (decision 062), with the **shell** reading the store. Both call
+sites — `add_markup` and `set_markup_style`'s regeneration.
+
+The test asserts **what must not change** as well: the baked `/AP` is
+byte-identical under both orders. If that ever diverged, a preference change
+would silently alter how already-shipped markup *looks*.
 
 ---
 
 ## §2 — THE QUEUE, in the order I would take it
 
-1. **The `pdfceGUI` reply + `(3)` orphan count** above. Small, unblocks a
-   consumer, and corrects a false disclosure now in their shipping UI.
-2. **`Pass 97.0 / 97.1 / 97.2`** — the colorant compositor. **~16 of the 18
-   remaining Ghent failures**, still the highest-impact item in the project.
-   Plan of record: `docs/compositor-plan.md`; collapse model sourced in
-   `docs/collapse-model-survey.md`.
-3. **`Pass 80.0`** (note text on markup) and **`Pass 81.1`** (markup opacity,
+1. **`Pass 97.0 / 97.1 / 97.2`** — the colorant compositor. Still the
+   highest-impact item in the project. Plan of record:
+   `docs/compositor-plan.md`; collapse model in
+   `docs/collapse-model-survey.md`. **★ Its "16 of the 18 remaining Ghent
+   failures" thesis is AMENDED and owes a re-derivation before the Pass is
+   scoped from it** — see §3.
+   This is also where the **iccce dependency edge appears** (§4), so
+   `Pass 101.1` unblocks at the same moment.
+2. **`Pass 80.0`** (note text on markup) and **`Pass 81.1`** (markup opacity,
    write half) — both `pdfceGUI` requests, both already scoped.
-4. **`Pass 98.0`** — read a foreign `/BE` back into `MarkupSpec`.
-5. **`Pass 101.1`** — iccce provenance, **BLOCKED** until pdfce actually
-   depends on iccce. See §4.
+3. **`Pass 98.0`** — read a foreign `/BE` back into `MarkupSpec`.
+4. **`Pass 103.2` / `103.3`** — page labels for inserted pages, and named
+   destinations so a carried bookmark resolves. `103.2` **needs a
+   `pdfce-acrobat-librarian` dispatch before it is scoped** — nobody has
+   measured what Acrobat does with page labels on an insert. Note that today's
+   Acrobat dispatch **did** measure the adjacent junction: Acrobat overwrites
+   every inserted page with a static copy of the preceding page's label, and
+   pdfce deliberately does not match that (decision 072).
+5. **The `iccce` channel** — 16 files, two requests genuinely owed, and
+   **`note_gray_black_routing_is_yours.md` is still the highest-value unread
+   file there.** It is a boundary ruling handing pdfce the four-way
+   gray/CMYK/`Separation`/`DeviceN` black equivalence, and it bears directly on
+   `Pass 97.x`. Not a request — do not triage it as one.
 
-**★ Ghent standing 2026-08-19: 26 pass / 14 FAIL / 11 UNRESOLVED of 51** —
-measured, not quoted. The previously-recorded `25 / 18 / 8` was already stale
-before this session: `18+8 = 15+11` with `pass` unchanged at 25, so three
-patches had crossed the FAIL/UNRESOLVED classifier line without any patch
-changing outcome. The one real gain is `1_GWG160`, flipped by the
-non-separable blend modes. **`docs/compositor-plan.md`'s "16 of the 18"
-thesis is amended and owes a re-derivation before `Pass 97.x` is scoped from
-it.** The GWG
-Reference file is still not on this machine.
-
----
-
-## §3 — THE LEDGER ANCHOR: DONE, and what it found on the way
-
-`tools/check-ledger-numbers.py`'s Pass-heading anchor was widened from
-`(?:★ )?` to `(?:★+ )?` and is **committed** (`85c9cb4`). Nothing is held back.
-
-Widening it immediately surfaced a **real, pre-existing `Pass 85.5`
-duplicate** the single-star anchor had never been able to see. Ruled by the
-librarian as **one Pass in two stages** — now `Pass 85.5 (compositing)` and
-`Pass 85.5 (Table 149 logic)` — on evidence that predates the gate being able
-to read those lines: `bd9d5ef` already calls itself *"slice 1 of the 85.5
-simulation half"*, and the two commits are 29 minutes apart. Unlike the
-`Pass 75.0` ruling, this one moves no number and creates no immutable-history
-debt.
-
-**The transferable finding:** this is the *second* time this anchor's blind
-spot was found, and **both times it was found by somebody predicting the gate's
-output and disagreeing with it** — never by the gate reporting anything. **A
-gate that under-reports is byte-indistinguishable from a green one**, so the
-only detector is an independent forecast, which is the exact labour a gate
-exists to remove. The first fix repaired the one spelling that had been seen
-(`★`) rather than the class, so a convention that uses one to three stars by
-weight stayed half invisible.
-
-★ **And the same shape turned up in a document the same day**, which is why it
-is worth carrying rather than filing under "regex". `docs/core-api/` asserted
-`**Count: 108.**` *and showed its derivation* while being eight verbs behind.
-**A stated derivation reads exactly like a maintained derivation** — a precise,
-sourced, stale number is more durable than a vague one, because it deters the
-check that would catch it. Both cases: something that looked audited, wasn't,
-and nothing could tell the difference from outside.
+**★ Ghent standing, unchanged since 2026-08-19 and NOT re-measured today:
+26 pass / 14 FAIL / 11 UNRESOLVED of 51.** Re-measure rather than quoting this
+line. The GWG Reference file is still not on this machine.
 
 ---
 
-## §4 — iccce: PENDING INTEGRATION, not a separate project pdfce merely knows about
+## §3 — WHAT TODAY SAYS ABOUT GATES, because it happened three times
 
-**★ THIS SECTION WAS WRONG WHEN FIRST WRITTEN AND THE OPERATOR CORRECTED IT
-THE SAME DAY.** It said *"pdfce does not depend on iccce… a boundary is not a
-dependency edge"* and posed, as an open question for him, *"does he intend
-iccce to become an actual pdfce dependency?"*
+**A gate that under-reports is byte-indistinguishable from a green one.** The
+only detector is an independent forecast — the exact labour a gate exists to
+remove. Today produced two more instances, bringing the count to **four across
+two files**:
 
-**That question is already answered in this repository, and in iccce's.** He
-asked why it was being asked, and he was right to.
+- **`check-string-gaps.sh` reported TWO of THREE** gaps one Pass introduced.
+  The invisible one had `{minimum}` after the gap; the class required a letter.
+  Found because I knew there were three and the report listed two.
+- **`check-ledger-numbers.py` printed `071 -> next free is 072` while decisions
+  072, 073 AND 074 all existed.** All three are written as a dated list item, a
+  spelling the declaration pattern could not see. **This was a live hazard**:
+  §12 duplicate detection is deliberately absent, so the printed ceiling was the
+  only thing preventing a duplicate. Found because the librarian reported
+  minting 074 and the gate disagreed — neither was lying and only one could be
+  right.
 
-- `iccce`'s `README.md`, second sentence: ***"Its first consumer is `pdfce`."***
-  It exists **because of** pdfce.
-- It lists **four capabilities pdfce cannot deliver without it**, none of them
-  a one-time reference: `ICCBased` spaces rendered better than their
-  `/Alternate`; `Separation`/`DeviceN` spot colour through a real colorimetric
-  path instead of a tint approximation; **PDF/X output intents**, "the whole
-  point of PDF/X and currently ignored"; and soft-proofing / separations
-  preview.
-- Decision 064's own status line: **"DECIDED (boundary), NOT STARTED (either
-  consumer)."** Unstarted work — not a decision to stay apart.
-- iccce even maintains a `FEATURES.md` written *for a consumer, principally
-  pdfce*.
+**★ Both prior fixes to these two files had already been written about this
+exact failure, and both expired.** The star-anchor fix repaired the one spelling
+that had been seen. The 2026-08-11 decision-ceiling fix added `ARCHITECTURE.md`
+as a second **source** while keeping a declaration-shaped **pattern** — so the
+hole reopened the moment the prevailing spelling changed. **Fixing a source
+while leaving the pattern spelling-dependent is a fix that expires.** Prefer a
+rule that *cannot* under-report over one that matches the instance you saw.
 
-**So the absence is a TASK, not an architecture.** The two look identical in a
-one-word banner, which is exactly how the mistake was made: `--version` said
-`iccce: not-linked`, which is true and reads as final. It now says
-**`not-linked-yet (integration pending -- Pass 97.x)`**.
+**And the first widening was wrong in the other direction.** Widening the
+string-gap class globally took the tree from 0 findings to ~60, every one a
+deliberately aligned report column in a dev tool. The distinguishing property is
+not the characters — a `thiserror` message is PROSE, a `println!` in a sweep
+tool is a TABLE. **The false-positive shape is now pinned in the gate's CLEAN
+self-test**, which is the half that stops the next widening re-breaking it.
 
-### The lesson, because it is one this project has already written down
-
-The answer was **already sourced in the record while a document still asked
-the question** — the same shape `CLAUDE.md`'s XFA bullet names by example:
-*"Nothing was wrong, nothing contradicted anything — the finding simply never
-propagated to the place that needed it. Grep the corpus before recording
-something as unverified."* Asking the operator something decision 064 answers
-costs him the work of being the memory.
-
-### Where it actually lands
-
-**`Pass 97.x`, the colorant compositor — already the top of §2's queue.**
-`docs/compositor-plan.md` (line ~355) records that the ICC hop is iccce's, and
-iccce has **already shipped the exact call**:
-`Chain::with_destination(&src, Destination::None, intent)`. So the dependency
-edge appears when the compositor does; there is no separate "adopt iccce"
-Pass to schedule, and `Pass 101.1`'s block clears at the same moment.
-
-- iccce is at `D:\Dev\iccce`, `v0.1.0-19-g400179b`.
-- **`iccce_FeatureRequests\open\` holds SIXTEEN files** — 5 requests, 6
-  replies, 5 notes, direction read from each file's own header. Two requests
-  are genuinely owed. One stray duplicate reply to delete; three answered
-  exchanges awaiting archival.
-- ★ **`note_gray_black_routing_is_yours.md`** (newest, 13.5 KB) is a boundary
-  ruling handing pdfce the four-way gray/CMYK/`Separation`/`DeviceN` black
-  equivalence. **Not a request — the highest-value unread file in that
-  channel**, and it bears directly on `Pass 97.x`.
+**A librarian ruling on whether this earns a standing rule was requested and is
+pending** — check `ROADMAP.md` before proposing one.
 
 ---
 
-## §5 — TRAPS THAT COST TIME TODAY
+## §4 — iccce: PENDING INTEGRATION, unchanged and still true
 
-- **★ I ran `git checkout -- crates/` to undo a partial script run.** My own
-  agent-memory note forbids exactly that. It destroyed three uncommitted edits
-  to **tracked** files while leaving the new **untracked** files alone — which
-  is what makes the damage easy to miss, because most of the work was still
-  there. Undo by editing.
-- **A `\` continuation inside a string literal loses its backslash to patch
-  tooling and `rustfmt` bakes the padding in as literal spaces.** This bit
-  twice today, once in shipped code. There is now a gate:
-  `tools/check-string-gaps.sh` (`--self-test` included). **A long single-line
-  literal is the safe form** — rustfmt leaves it alone.
-- **A cache's win and its cost do not live in the same case.** The first
-  recorder was 88× faster at scale 8 and **2.5× slower than no cache** at
-  scale 1, because at deep zoom almost every op culls before its clip is
-  requested, so the expensive path was never taken. **Measure the case where
-  the cache does the most work, not the case that motivated it.**
-- **A test that guesses where content is tests the fixture, not the code.**
-  Two wrong guesses (tile 0 = page margin; mid-grid = line leading) before the
-  poster test was changed to *locate* the inked tile from a cheap render.
-- **Run every new regression test against sabotaged code.** Three sabotages
-  today, three different tests caught them — and the broad byte-identity test
-  did **not** catch a too-tight cull, which is exactly why the dedicated case
-  exists.
+`iccce`'s `README.md`, second sentence: ***"Its first consumer is `pdfce`."***
+Decision 064's status line: **"DECIDED (boundary), NOT STARTED (either
+consumer)."** The absence is a **task, not an architecture** — the two look
+identical in a one-word banner, which is how a previous session came to ask the
+operator a question decision 064 already answers.
+
+The edge appears when the compositor does (`docs/compositor-plan.md` ~line 355:
+the ICC hop is iccce's, and iccce has already shipped the exact call
+`Chain::with_destination(&src, Destination::None, intent)`). **There is no
+separate "adopt iccce" Pass to schedule.**
+
+`iccce` is at `D:\Dev\iccce`. **`--version` says
+`not-linked-yet (integration pending -- Pass 97.x)`**, not `not-linked`, and the
+difference is the whole point.
 
 ---
 
-## §6 — STATE AT HANDOFF
+## §5 — ONE RED GATE LEFT, and it is not mine to file blind
 
-- Gates **all clean**: `string-gaps` (new), `core-api-verbs` (new),
-  `ui-strings`, `ledger-numbers`, `disclosure-channel`, `passes-filed`,
-  `commits-filed`, `one-commit-per-command`. `cargo fmt --check`,
-  `clippy --all-targets --workspace -D warnings`, `cargo test --workspace`,
-  and the wasm32 cross-check are green.
-- **Two new gates landed today**, both because a defect was found by hand that
-  a grep could have found: `tools/check-string-gaps.sh` (ported from
-  `pdfceGUI`) and `tools/check-core-api-verbs.py`. Both have been verified
-  against sabotaged input; neither has ever been seen only to pass.
-- Working tree: clean apart from whatever the librarian is holding in `docs/`.
-- **v0.7.0 is bumped but NOT tagged.** The operator gave a standing go-ahead
-  for builds/releases on 2026-08-17. Verify CI green on `HEAD`, then
+```
+python tools/check-passes-filed.py
+UNFILED  af12b31  Pass 106.1
+```
+
+From the **previous** session, not this one. That session also renamed a Pass ID
+mid-flight (`433e549` — *"correct the Pass ID: this was 106.0, not 104.0"*), so
+the likely story is that `Pass 106.1` reached `ROADMAP.md` under a different
+hash and the gate is matching on the wrong one. **The librarian was asked to
+rule on it; check its answer before touching anything.**
+
+---
+
+## §6 — TRAPS THAT COST TIME TODAY
+
+- **★ Anchoring a code insertion on `fn foo(` or on an enum variant splits it
+  from its doc comment.** Happened **twice**, in the same file, in one session.
+  The first instance **shipped a wrong `--help`**: `clap` derives its
+  description from the doc comment, so `dimension-vertex` displayed
+  `dimension-offset`'s text and `dimension-offset` displayed nothing. **Caught
+  by running the binary — not by fmt, clippy, any test or any gate.** Anchor on
+  the blank line *before* the doc comment, and read `--help` either side of a
+  new subcommand.
+- **The bash heredoc still eats backslashes**, and it produced all three of the
+  `#[error(…)]` gaps above. `\\b` inside a `<<'PY'` heredoc reached Python as a
+  **backspace character**. Write the script with `Write`, or use `Edit`. The
+  safe form for a Rust string that would need a continuation is **one long
+  line** — `rustfmt` leaves it alone.
+- **A test that exercises a guard is not a test that covers it.** The first
+  `is_ce_dimension` test used a real perimeter, which trips *both* arms — so it
+  passed with either arm deleted. Isolating each arm took two more tests and
+  two sabotage runs, and only then did the widening actually have coverage.
+- **My own arithmetic in a test is a fixture, not an oracle.** Asserting `400.0`
+  for a corner drag on a rectangle was wrong (a corner drag changes *two*
+  segments, and one becomes a slant). Write the arithmetic out in the assertion
+  so the test states its own reasoning.
+
+---
+
+## §7 — STATE AT HANDOFF
+
+- **Working tree clean**; five commits today, listed in §1. **Nothing pushed.**
+  `github.com/KenM76/pdfce` is public and has a remote — a careless `git push`
+  reaches the world.
+- `cargo fmt --check`, `clippy --all-targets --workspace -D warnings`, and
+  `cargo test --workspace` (**106 suites, 0 failures**) all green.
+- `cargo tree -p pdfce-core` / `-p pdfce-render` / `-p pdfce-cli`: **no**
+  egui/eframe/winit/wgpu/glow. **No manifest was touched and no dependency was
+  added this session.**
+- **`v0.7.0` is bumped but NOT tagged.** Standing operator go-ahead for
+  builds/releases since 2026-08-17. Verify CI green on `HEAD`, then
   `verify-release.py` → tag → portable package → GitHub release → librarian
-  release record. **A release build now stamps its own provenance**; note that
-  a CI-built release would report `revision: unknown` unless that workflow
-  gets `fetch-depth: 0` (depth-1 checkout has no tags).
-- **`MAX_DISPLAY_LIST_BYTES` veraPDF discharge: DONE this session** —
-  `examples/guard_probe.rs`, 3,245 files, 0 firings. The largest observed list
-  is **41.9 MiB** (a §6.1.12 conformance file, **not** the CAD sheet), so real
-  headroom is **6.1×**, correcting a claim of 8.5×. The librarian **widened the
-  standing rule** rather than waiving it: the "fire on a real file" half is
-  undischargeable for a ceiling no real input reaches, and a **measured
-  non-zero maximum** defeats the reading that half exists to defeat. Successor
-  obligation recorded: re-sweep whenever per-op cost changes, and **re-derive
-  headroom from the maximum, never from a reference document.**
-- **The `iccce` channel holds 16 files, not the 2 or the 5 previously claimed**
-  — 5 requests / 6 replies / 5 notes, direction read from each file's own
-  header. The two owed requests were the right count with the wrong
-  description. **★ `note_gray_black_routing_is_yours.md` (newest, 13.5 KB) is a
-  boundary ruling handing pdfce the four-way gray/CMYK/Separation/DeviceN black
-  equivalence — the highest-value unread file in that channel, and not a
-  request.** Also: one stray duplicate reply to delete, three answered
-  exchanges awaiting archival.
-- Ledger: next free Pass family **104**, decision **072**, standing rule
-  **R197**, filing ordinal **185**. **Re-measure with
-  `tools/check-ledger-numbers.py` rather than trusting this line** — that is
-  what it is for, and this line has been wrong before.
+  release record. A CI-built release reports `revision: unknown` unless that
+  workflow gets `fetch-depth: 0`.
+- **Ledger, re-measured after the `07c8c22` fix** — next free Pass family
+  **109**, decision **075**, standing rule **R205**, filing ordinal **201**.
+  **Re-measure with `tools/check-ledger-numbers.py` rather than trusting this
+  line; it has been wrong before and was wrong by three this morning.**
+- New spec corpus file: `iso32000__s__12.5.6.9.md` (58 kB). It also **corrected
+  the corpus**: Errata Issue #444 is `Completed`, not `Accepted` — the review
+  state is a chain of `/IRT`-linked replies and only the first had been read.
+  **376 of 547 `Accepted` state annotations carry a later `Completed` reply
+  (68.7 %)**, so a state read from the first reply is stale two times in three.
+  **One open `GAP` left behind:** `iso32000__delta__pdf20_encryption.md`'s
+  Algorithm 2.B step-(a) `Accepted` claim needs the same `/IRT` walk.
+- New Acrobat corpus file: `measure__perimeter_and_area_tools.md`. Its
+  load-bearing finding: **Acrobat cannot insert or delete vertices on a
+  committed Perimeter/Area measurement**, sourced from Adobe's own forum with an
+  Adobe expert confirming scripting is the only route. **`Pass 107.1` is an
+  exceed of the parity reference, not a catch-up**, and that divergence is on
+  the record.
