@@ -96,6 +96,139 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 108.0 — commit `186a983` — **`quad_point_order` WIRED: THE OPERATOR'S CORNER-ORDER SETTING NOW REACHES BOTH ANNOTATION-AUTHORING CALL SITES; TWO NEW VERBS, `EditSession::set_quad_point_order`/`quad_point_order`, 129 → 131** — filed 2026-08-20 (two-hundred-and-first filing)
+
+**This filing has no shell.** No `git show`/`git log` was run; the commit
+hash and the fact that this closes the Backlog entry filed one dispatch
+earlier are relayed by the dispatching engineer. **Everything else below
+was independently re-verified against live source this filing**, by
+`Grep`/`Read`, not merely relayed — the exact discipline the prior (two-
+hundredth) filing's own Backlog entry asked for.
+
+**The gap, as filed two-hundredth-filing (now closed):** `Settings::
+quad_point_order` was parsed, validated and written for its whole life
+and read by nothing — `EditSession::add_markup` and the `set_markup_style`
+restyle path both called the bare `annot_author::build_appearance(spec)`,
+which always defaulted to `QuadPointOrder::default()` regardless of what
+the operator chose.
+
+**The fix, confirmed by `Grep`/`Read` against `crates/pdfce-core/src/
+edit.rs`:**
+- `EditSession` gained a `quad_point_order: QuadPointOrder` field plus two
+  public methods — `set_quad_point_order(&mut self, order)` and
+  `quad_point_order(&self) -> QuadPointOrder` (`edit.rs:5476`/`5482`) —
+  **session state, not a second `add_markup_with` entry point**, per
+  decision **062**'s single-entry-point discipline for markup authoring.
+  `docs/core-api/02-editing-and-saving.md` §1.15 *Annotations* moves from
+  9 to 11 verbs; the document's own stated total moves 129 → 131
+  throughout.
+- **Both call sites now consult it**, not one: `add_markup`
+  (`edit.rs:12524`) and `set_markup_style`'s regeneration path
+  (`edit.rs:13698`/`13702`) both call `build_appearance_with(spec,
+  self.quad_point_order)`. Fixing only `add_markup` would have left a
+  restyle silently reverting the corner order to reading-order on every
+  restyled quad-bearing annotation — exactly the second-call-site failure
+  the Backlog entry warned about.
+- **Both shells wired**, confirmed independently, not merely relayed:
+  `pdfce-cli`'s `annotate` subcommand calls `session.set_quad_point_order
+  (settings.quad_point_order)` (`main.rs:14703`); the paused in-repo
+  `pdfce-gui` crate's `commit_markup` reads `self.settings.
+  quad_point_order` and calls the same setter (`main.rs:5601`/`5666`)
+  before placing a markup annotation.
+
+**The test, `edit.rs`'s own module (`the_quad_point_order_setting_
+reaches_the_written_annotation`), asserts what must change AND what must
+not.** It authors the same `Highlight` spec under both `QuadPointOrder`
+values and checks two things: the written `/QuadPoints` differ in exactly
+the last two corner pairs (reading order ends `LL, LR`; the
+counterclockwise walk, §12.5.6.10, ends `LR, LL`) — and the baked `/AP`
+content is **byte-identical** under both orders, because the quads are
+drawn from the same four corners either way. **Sabotage-verified in the
+direction that matters**: reverting `add_markup` back to the bare
+`build_appearance` call makes the first assertion fail. If the `/AP`
+half ever diverged instead, switching a preference would silently alter
+how already-shipped markup *looks* — a different and much worse defect
+than the one this Pass fixes.
+
+**Test results, gates, invariant check: relayed, not independently
+re-run this filing** (no shell). Per the dispatch: all named gates clean,
+including `check-settings-consumed.py`, which was the one reporting this
+Pass's gap red at `HEAD`.
+
+**`docs/FEATURES.md`: no row added, none corrected.** Checked every
+existing Annotations & markup row (`Grep`, case-insensitive, for
+`markup|QuadPoints|counterclockwise|corner order`) — none states or
+implies a fixed corner order, so there was nothing to un-say. Corner
+order was an invisible authoring parameter, not a claimed capability; it
+does not clear this file's bar for its own row.
+
+---
+
+### Pass 106.1 — commit `af12b31` — **`merge_document` CARRIES NAVIGATION: NAMED DESTINATIONS THEN THE OUTLINE TREE, IN THAT ORDER BECAUSE THE ORDER IS THE FEATURE** — shipped before `Pass 107.x`, filed here for the first time (two-hundred-and-first filing)
+
+**★ THIS PASS SHIPPED, THEN WENT UNFILED FOR TWO LIBRARIAN DISPATCHES.**
+Found only by `tools/check-passes-filed.py` reporting `UNFILED af12b31
+Pass 106.1` during this dispatch's gate sweep — neither the hundred-and-
+ninety-ninth nor the two-hundredth filing named it, and both filed other
+Pass 106.x/107.x work in the same window without catching the gap. Filed
+now, out of commit order relative to `Pass 107.0`–`107.2` immediately
+below (which shipped later but were filed first) — the append-only
+discipline applies to *this document's* order, not to a claim that
+nothing shipped between two filed entries.
+
+**This filing has no shell.** Commit hash relayed by the dispatching
+engineer; **the mechanism below is independently confirmed** by `Grep`/
+`Read` against live `crates/pdfce-core/src/edit.rs`, not merely relayed.
+
+**Why destinations before outlines, and why that ordering is the
+finding, not an implementation detail.** `EditSession::merge_document`
+(`edit.rs:18166`) now calls, in this fixed sequence:
+
+```
+let form  = self.merge_acroform(source, &mut mapping, &mut scratch)?;
+let dests = self.merge_named_destinations(source, &mut mapping, &mut scratch)?;
+let outline_items =
+    self.merge_outline(source, &dests.renames, &mut mapping, &mut scratch)?;
+```
+
+A carried bookmark may point at a named destination whose key collided
+with one already defined in the target document and had to be suffixed.
+Only `merge_named_destinations`'s return value (`DestMerge.renames: BTree
+Map<Vec<u8>, Vec<u8>>`, old key → new key) lets `merge_outline` rewrite
+that bookmark's target to the key it actually landed at. Run the other
+way round, the bookmark keeps a key that no longer resolves to anything
+in this document.
+
+**`MergeOutcome` grows three new disclosure fields** (`edit.rs:3054`–
+`3072`, confirmed by `Read`): `named_destinations_carried`,
+`named_destinations_renamed`, `outline_items_carried`. Each is
+doc-commented with why it is disclosed rather than counted silently —
+the renamed count especially, because pdfce rewrites the *carried*
+bookmarks to their new keys but **cannot rewrite a `/GoToR` in some third
+document it never copied**; an outside reference to the old key now
+resolves to this document's own (different) destination instead of the
+source's.
+
+**★★ FOUND THIS FILING, NOT SHIPPED WITH THE PASS: `pdfce-cli`'s
+`merge-document` subcommand does not print any of the three new fields.**
+`main.rs`'s `merge-document` `println!` (confirmed by `Grep`/`Read`,
+`main.rs:8877`–`8899`) reports `pages=`, `fields=`, `renamed=`,
+`acroform_created=` and the save-report fields — the exact four
+`MergeOutcome` fields that existed *before* this Pass. The merge itself
+is complete and correct from the CLI (it calls the same
+`session.merge_document` that carries destinations and outlines); only
+the **disclosure** is short a line. Filed as a new Backlog entry, below,
+rather than fixed inline — this librarian has no shell to edit
+`pdfce-cli` and the fix is a one-line format-string change an engineer
+session should make, not a documentation correction.
+
+**Test results, gates, invariant check: relayed, not independently
+re-run this filing** (no shell). Per the dispatch's earlier framing (this
+Pass shipped alongside the `Pass 107.x` family's gate run): fmt, clippy,
+and the named gate suite clean.
+
+---
+
 ### Pass 107.2 — commit `9940acf` (this filing has a shell for source, not for git history — see note below) — **THE CLI SURFACE FOR PERIMETER/PATH ce DIMENSIONS AND VERTEX EDITING: `dimension-add --kind perimeter|path`, `dimension-vertex --op move|insert|remove --dry-run`, `dimension-list` PRINTS `vertices=`** — filed 2026-08-20 (two-hundredth filing)
 
 **This filing has NO shell for git history.** Hard rule 8 applies precisely:
@@ -62917,32 +63050,6 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
-- **`quad_point_order` is a setting that does nothing — an R83 violation,
-  found red at `HEAD` by `check-settings-consumed.py` while running the
-  full gate suite for an unrelated Pass, pre-existing before this
-  session.** Filed 2026-08-20 (two-hundredth filing). Confirmed by direct
-  read of `crates/pdfce-core/src/annot_author.rs`: the public
-  `build_appearance(spec)` (line 832) calls
-  `build_appearance_with(spec, QuadPointOrder::default())` — the operator's
-  setting is parsed and written (`crates/pdfce-core/src/settings/mod.rs`)
-  but never reaches this call. `EditSession::add_markup` (`edit.rs:12446`)
-  calls the bare `build_appearance(spec)`, and the restyle path
-  (`edit.rs:13620`/`13624`) does too — **both call sites**, confirmed by
-  `Grep`. An operator who switches to `counterclockwise` sees zero effect
-  on any authored or restyled quad-bearing markup.
-  **Scope, not a one-liner — do not smuggle into an unrelated commit.**
-  Decision **062** fixed markup authoring at exactly ONE entry point, so
-  the fix must reach `EditSession::add_markup` as **session state**
-  (e.g. `EditSession::set_quad_point_order`), not a second
-  `add_markup_with` verb — the established convention
-  (`with_unmappable_code`, `with_xref_entry_eol`) is that the **shell**
-  loads `Settings` and passes the value in, not that the core grows a
-  parallel verb per setting. Both shells (CLI, and `pdfceGUI` once it
-  reaches this surface) must be updated to actually load and pass
-  `Settings::quad_point_order`. **`set_markup_style`'s regeneration path
-  is a second call site needing the same order-plumbing** — fixing only
-  `add_markup` would leave a restyle silently reverting the corner order
-  to reading-order on every restyled quad annotation.
 - **`pdfce_render::Diagnostics`'s 54 unread fields need a surfacing split,
   not 54 rows.** Filed 2026-08-19 (hundred-and-ninety-ninth filing), from
   `pdfceGUI`'s row-answer note, finding (A). `Diagnostics`
@@ -62967,23 +63074,36 @@ nothing gets forgotten, not as a commitment to build in this order.
   are enough for the operator's work today" — so this is filed for
   capability-inventory completeness, not urgency; the four are real
   Table-192 controls, not GUI wiring gaps.
-- **`merge_document` carries pages + `/AcroForm` only — outlines, named
-  destinations, page labels and `/OCProperties` are not merged.** Filed
-  2026-08-19 (hundred-and-ninety-eighth filing), `Pass 106.0`'s own "Still
-  open" list. `EditSession::merge_document` (verb 125) merges every page
-  of a source document plus its `/AcroForm` field tree as one undoable
-  command, but does not yet carry the source's outline/bookmark tree
-  (`add_outline_item`, `Pass 103.0`), named destinations
-  (`add_named_destination`, `Pass 103.3`), `/PageLabels`, or optional-
-  content group configuration. **Scope note: the first two are
-  substantially cheaper now than they would have been a week ago**,
-  since both authoring verbs already exist and merging is closer to
-  "call the existing verb once per source entry, remapped through the
-  same object-ID table `merge_document` already builds" than to new
-  design. Page labels have a documented precedent to reuse or diverge
-  from deliberately (`Pass 103.2`'s Acrobat-measured-and-not-matched
-  ruling, decision 072).
-
+- **`merge_document` still doesn't carry page labels or `/OCProperties`.**
+  Filed 2026-08-19 (hundred-and-ninety-eighth filing), `Pass 106.0`'s own
+  "Still open" list. **Narrowed 2026-08-20 (two-hundred-and-first
+  filing):** the entry originally read "carries pages + `/AcroForm` only
+  — outlines, named destinations, page labels and `/OCProperties` are not
+  merged." Two of those four shipped as `Pass 106.1` (`af12b31`) —
+  `EditSession::merge_document` now also carries named destinations
+  (`merge_named_destinations`) and the outline/bookmark tree
+  (`merge_outline`), destinations first so a bookmark pointing at a
+  renamed key is rewritten before the outline copy runs. Remaining scope:
+  `/PageLabels` and optional-content group configuration only. Page
+  labels have a documented precedent to reuse or diverge from
+  deliberately (`Pass 103.2`'s Acrobat-measured-and-not-matched ruling,
+  decision 072).
+- **`pdfce-cli`'s `merge-document` prints four `MergeOutcome` fields and
+  is silent on three more that `Pass 106.1` added.** Filed 2026-08-20
+  (two-hundred-and-first filing), found by `Grep`/`Read` while filing that
+  Pass. `main.rs:8877`–`8899`'s `println!` reports `pages=`, `fields=`,
+  `renamed=`, `acroform_created=` — the fields that existed before
+  `Pass 106.1` — but not `named_destinations_carried`,
+  `named_destinations_renamed` or `outline_items_carried`, all three
+  doc-commented on `MergeOutcome` (`edit.rs:3054`–`3072`) specifically
+  *because* they are worth disclosing rather than counting silently (the
+  renamed-destinations count especially: an outside `/GoToR` to the old
+  key now resolves to this document's own destination instead of the
+  source's, and the operator has no way to know that happened from the
+  current output line). **The merge is complete and correct** — this is a
+  disclosure gap on an already-shipped capability, not a missing feature.
+  One-line fix: extend the format string and the argument list with the
+  three fields, same pattern as the four already there.
 - **A gate dies with `crates/pdfce-gui` unless `pdfceGUI` carries an
   equivalent.** Filed 2026-08-19 (hundred-and-ninety-seventh filing),
   from the `docs/FEATURES.md` `gui`-column re-basing dispatch.
@@ -78003,6 +78123,73 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   (the lift-side family this is the mirror of), and `Pass 107.0`'s own
   *Shipped* entry.
   **Ceiling moves `R203` → `R204`; next free `R205`.**
+
+- **R205 — A GATE'S BLIND SPOT IS FOUND BY AN INDEPENDENT FORECAST
+  DISAGREEING WITH ITS OUTPUT, NEVER BY THE GATE ITSELF; WHEN THAT
+  HAPPENS, FIX THE CLASS THE PATTERN MISSED, NOT THE SPELLING THAT FAILED
+  (2026-08-20; librarian-minted, two-hundred-and-first filing; tooling
+  rule, fourth confirmed occurrence in one project session, across two
+  files).** An under-reporting gate is byte-indistinguishable from a
+  correct one — it prints the same shape of success either way, and
+  nothing about running it tells you it checked less than it appeared to.
+  The only thing that has ever surfaced one of these on this project is a
+  person who already knew what the answer should be, disagreeing with
+  what the tool said.
+  *Four instances, same session, two files:* (1) `check-ledger-numbers.py`'s
+  Pass-heading anchor required `Pass` immediately after the hashes, so
+  every `★ Pass N` umbrella heading was invisible to it — found because a
+  librarian predicted a heading count the checker did not match; (2) the
+  same anchor, fixed to accept exactly one `★`, still missed `★★`/`★★★`
+  headings when the project's own emphasis convention (one to three stars
+  by weight) was used a star wider — found the identical way, a predicted
+  delta the checker disagreed with; (3) `check-string-gaps.sh`'s baked-gap
+  scan required a letter on both sides of a run of spaces, so a gap
+  adjacent to a `{placeholder}` inside a `thiserror` `#[error(...)]`
+  message was invisible — found because somebody knew a Pass had
+  introduced three gaps and the gate reported two; (4) `check-ledger-
+  numbers.py`'s decision-ceiling scan matched only a *declaration*-shaped
+  line (a heading, or `**Decision NNN` at line start), so three decisions
+  recorded as dated list items (`- **2026-08-19/20 — Decision 074. …**`)
+  never registered, and the tool printed "next free is 072" while 072,
+  073 AND 074 already existed — found because the printed ceiling
+  disagreed with a number this librarian had just minted.
+  **The rule, in two parts.** First: before running a gate whose result
+  you already have an expectation for, **state the expectation before you
+  see the output** — a delta you predict and the tool confirms is
+  unremarkable; a delta you predict and the tool *disagrees with* is the
+  gate's blind spot surfacing, not your expectation being wrong, and it
+  should be treated as the more likely explanation by default. Second,
+  and the part each of the four instances got right only on a second
+  attempt: **the fix widens the semantic CLASS the pattern was trying to
+  recognise, not the one SPELLING that happened to fail.** Instance (2)'s
+  own history is the cautionary tale inside this rule — its first fix
+  repaired exactly the `★` spelling that had been seen and left `★★`/`★★★`
+  unguarded, which is the same narrowness recurring one star later.
+  Instance (4) states the proof for why the wider class is safe rather
+  than merely convenient: for a *ceiling* (a maximum, never a uniqueness
+  check), matching any mention of `decision NNN` anywhere in the file
+  cannot over-report, because a prose back-reference can only name a
+  decision number that already exists — so the class can be widened all
+  the way to "any mention" with no new false-positive risk, which is a
+  stronger fix than tuning the pattern's edges.
+  **Why a gate is the wrong place to look for the fix.** Every one of
+  these checkers documents, in its own header, that it parses text by
+  pattern rather than by understanding the document's grammar — that is
+  a stated, accepted limitation, not a bug to eliminate. A pattern that
+  covers less than the convention it targets is not a defect that
+  testing catches, because the checker's own self-test only exercises
+  the spellings its author already thought of. The gap is found
+  downstream, by someone using the tool's answer for something and
+  noticing the answer is wrong — which is what happened, four times.
+  Cross-references: `docs/NEXT_SESSION.md` §3 (this shape recorded
+  against `check-ledger-numbers.py`'s star anchor before this rule
+  existed); R174 (the disclosure-reading half of the same discipline —
+  "read the tool's OWN OUTPUT, not a test asserting on it" — applied here
+  to a different failure mode: not a wrong string, a wrong COUNT); R186
+  (a guard failing open, silently, when a hazard arrives without the
+  marker it was keyed on — the same shape one layer up, in the tooling
+  that would otherwise catch a hazard like R186's own).
+  **Ceiling moves `R204` → `R205`; next free `R206`.**
 
 - **R199 — A RECORDED BLOCKER IS A DATED READING, NOT A STANDING FACT. A
   sentence saying work is gated, needs, requires or awaits something

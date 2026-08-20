@@ -51506,3 +51506,156 @@ existing tree can be searched for a duplicate first.
 | `SESSION_LOG` filings | **199** | **200** |
 | `personal_rag/pdf` lessons | **+0** | **+0** |
 | `docs/FEATURES.md` rows touched | — | **2** (2 new rows, ce dimensions) |
+
+## 2026-08-20 (two-hundred-and-first filing) — `Pass 108.0` WIRES `quad_point_order`; `Pass 106.1` (SHIPPED, NEVER FILED) CAUGHT AND FILED; `check-ledger-numbers.py`'S DECISION-CEILING SCAN WIDENED; `R205` MINTED; ★ THE TWO-HUNDREDTH FILING'S COMMIT IS CONFIRMED
+
+**Filed by `pdfce-librarian`.** This dispatch's tool grant is
+`Read`/`Grep`/`Glob`/`Write`/`Edit`/`WebSearch`/`WebFetch` — **no `Bash`,
+same as the prior filing.** Every commit-history claim below (hashes,
+what a given commit contains) is **relayed** from the dispatching
+engineer, per hard rule 8; every current-tree claim (what the source
+says right now) was **independently checked** by `Grep`/`Read` this
+filing and is marked so inline. `.git/refs/heads/main` was read directly
+(needs no shell) and confirms `HEAD` = `186a983…` at the start of this
+dispatch, matching the dispatch's own stated `Pass 108.0` commit.
+
+**Addendum to the two-hundredth filing, immediately above:** that entry's
+own header stated its edits were uncommitted, with no hash to report.
+**The dispatching engineer confirms it is now committed as `4a1416e`.**
+Not re-opening or rewriting that entry — hard rule 1 — recording the
+missing hash here as new information reaching this document, one filing
+later.
+
+**Shipped (already shipped before this dispatch; filed here):**
+- `Pass 108.0` (`186a983`) — `EditSession::set_quad_point_order`/
+  `quad_point_order` (verbs 130/131), wired into both authoring call
+  sites (`add_markup`, `set_markup_style`'s regeneration path) and both
+  shells (`pdfce-cli`'s `annotate`, the in-repo `pdfce-gui`'s
+  `commit_markup`). Closes the Backlog entry the two-hundredth filing
+  opened one dispatch earlier.
+- `Pass 106.1` (`af12b31`) — `EditSession::merge_document` now carries
+  named destinations then the outline/bookmark tree, destinations first
+  so a renamed key can be rewritten in the carried bookmarks before the
+  outline copy runs. **This Pass shipped before `Pass 107.x` and was
+  never filed** — see Findings, below, for how that was found and why it
+  matters more than the fix itself.
+- `07c8c22` — `check-ledger-numbers.py`'s decision-ceiling scan widened
+  from a declaration-shaped pattern to any mention of `decision NNN`
+  (ceiling only, not duplicate detection — see the tool's own docstring,
+  independently read this filing).
+
+**Test results, gates, invariant check:** relayed for `Pass 108.0` and
+`Pass 106.1` (no shell); **the mechanism and wiring for both was
+independently confirmed** by `Grep`/`Read` against live source — see each
+Pass's own `ROADMAP.md` entry for file:line citations. `07c8c22`'s
+behaviour change was read directly from the tool's source, not relayed:
+the widened `ARCH_DECISION_MENTION` pattern and its docstring's own
+proof-of-safety (a ceiling can only be pushed by a real existing
+decision number, never invented) were read in full this filing.
+
+**Decisions made this session:** none — no new architectural decision.
+Decision ceiling stays **074**.
+
+**Standing rule `R205` minted** — *a gate's blind spot is found by an
+independent forecast disagreeing with its output, never by the gate
+itself; the fix widens the class the pattern missed, not the spelling
+that failed.* Fourth confirmed occurrence in one project session, across
+two files (`check-ledger-numbers.py`'s Pass-heading star anchor, twice;
+`check-string-gaps.sh`'s placeholder-adjacent gap; `check-ledger-
+numbers.py`'s decision-ceiling scan). Full text and all four instances:
+`ROADMAP.md` *Standing rules*. **This rule was proposed by the
+dispatching engineer, not self-generated** — ruled on and minted here
+because it clears this project's own promotion bar (two-plus independent
+occurrences, same shape, corroborated across files) with more headroom
+than most rules that have earned a number: four instances, not two.
+Ceiling `R204` → `R205`.
+
+**Findings + decisions:**
+- **`Pass 106.1` shipped and went unfiled for two librarian dispatches**
+  (the hundred-and-ninety-ninth and the two-hundredth), both of which
+  filed adjacent `Pass 106.x`/`107.x` work in the same window without
+  catching it. Found by `tools/check-passes-filed.py` reporting `UNFILED
+  af12b31 Pass 106.1` during this dispatch's gate sweep — **not by this
+  librarian rereading its own prior work**, by the tool built specifically
+  because a librarian's own read of `ROADMAP.md` is not a reliable
+  cross-check against `git log`. The prior handoff (`docs/NEXT_SESSION.md`)
+  had reported "gates all clean"; this gate was one of three that
+  were not (see below), and it was the one carrying a real, unfiled Pass.
+- **Two of the three previously-red gates the handoff named "clean" were
+  independently confirmed fixed this session, by the engineer's own
+  commits, not by this dispatch:** `check-fmt-excluded.py`
+  (`tools/tw-census` unformatted — fixed in `ae06440`) and
+  `check-settings-consumed.py` (`quad_point_order` unread — fixed in
+  `Pass 108.0`). **The third, `check-passes-filed.py`'s `Pass 106.1`
+  report, is what this filing exists to close.** None of the three red
+  gates were among the eight the handoff enumerated by name — a
+  reminder that a handoff listing gates by name ages the moment a ninth
+  one is added, not only when an existing one breaks.
+- **A CLI disclosure gap found while filing `Pass 106.1`, not shipped
+  with it:** `pdfce-cli`'s `merge-document` subcommand prints four
+  `MergeOutcome` fields and stays silent on the three `Pass 106.1` added
+  (`named_destinations_carried`/`renamed`, `outline_items_carried`) —
+  confirmed by `Grep`/`Read` against `main.rs:8877`–`8899`. The merge
+  itself is complete and correct from the CLI; only the print line is
+  short three fields. Filed as a new `ROADMAP.md` Backlog entry rather
+  than fixed inline — no shell to edit `crates/pdfce-cli`.
+- **The `merge_document` Backlog entry filed 2026-08-19 (hundred-and-
+  ninety-eighth filing) is narrowed, not deleted**, per hard rule 1's
+  "corrections get a dated footer, entries don't vanish" spirit applied
+  to a Backlog item: two of its four named gaps (named destinations,
+  outlines) are now closed by `Pass 106.1`; the entry is edited in place
+  with a dated `★ Narrowed 2026-08-20` note rather than replaced, so the
+  original filing date and reasoning stay legible.
+
+**`FEATURES.md` — CHANGED, 2 rows.** The Merge row (*Document & pages*,
+Implemented) gains a sentence for `Pass 106.1`'s outline/destination
+merge and a sentence for the CLI disclosure gap; boxes unchanged
+(`[x]`/`[x]`/`[ ]`). One new Planned row: `merge_document` carrying
+`/PageLabels` and `/OCProperties`, the two remaining gaps, all boxes
+unticked. No row added or corrected for `quad_point_order` — checked
+every existing Annotations & markup row and none claimed a fixed corner
+order, so there was nothing to un-say; an invisible authoring parameter
+does not clear this file's bar for its own row.
+
+**`ARCHITECTURE.md` — unchanged.** No architectural decision this
+filing.
+
+**`personal_rag/pdf` — unchanged, `+0`.** Neither finding this filing
+(a gate's own blind spot; a CLI print-line omission) is PDF-domain —
+both are this project's own tooling/disclosure discipline, filed as
+`R205` and a Backlog entry respectively.
+
+**`D:\dev\rag\rust\`/`D:\dev\rag\egui\` — unchanged, `+0` this filing.**
+The doc-comment/code-insertion-anchoring finding the two-hundredth filing
+flagged as owed is still owed; not written this filing either — still
+deferred to a session that can search the existing tree for a duplicate
+first.
+
+**Still in flight:**
+- `Pass 102.1`, the n-channel compositor (`Pass 97.1`), `v0.7.0`
+  bumped-not-tagged — unchanged, carried since the 199th filing.
+- The CLI `merge-document` disclosure gap (above) — scoped, not fixed.
+- The `D:\dev\rag\rust\` doc-comment-anchoring finding — still owed.
+- `iso32000__delta__pdf20_encryption.md`'s Algorithm 2.B step-(a) —
+  still needs the `/IRT`-chain re-walk.
+
+**For next session:**
+1. Fix `pdfce-cli`'s `merge-document` print line (three fields, one-line
+   change) and re-run `check-passes-filed.py`/`check-disclosure-
+   channel.sh` after.
+2. Write the `D:\dev\rag\rust\` doc-comment/code-insertion-anchoring
+   finding.
+3. `iso32000__delta__pdf20_encryption.md`'s `/IRT`-chain re-walk.
+4. Commit this filing's `ROADMAP.md`/`FEATURES.md`/`SESSION_LOG.md`
+   edits — no shell was available to this dispatch.
+
+**Ledger effects:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **107** | **108** |
+| decision records | **074** | **074** (unchanged) |
+| standing rules | **R204** | **R205** |
+| `SESSION_LOG` filings | **200** | **201** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **2** (1 sentence-only edit, 1 new Planned row) |
