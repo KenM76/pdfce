@@ -58,6 +58,45 @@
 # two spaces after a full stop is a typographic convention somebody may hold
 # deliberately, and this gate should not adjudicate that.
 #
+# ★ INSIDE A `#[error(...)]` ATTRIBUTE, "WORD-ISH" ALSO INCLUDES `{` AND `}` —
+# a format placeholder is a word THERE. Widened 2026-08-20 after this gate
+# reported TWO of the THREE gaps a single `Pass` introduced. The one it could
+# not see was
+#
+#     "...perimeter needs at least          {minimum}"
+#
+# because the character after the run was `{` and the class only admitted a
+# letter. `thiserror`'s `#[error(...)]` messages are dense with placeholders, so
+# a gap adjacent to one is not an exotic case — it is the common one, and the
+# `}` end of the same class had the identical hole
+# (`"...{remaining}          and..."`).
+#
+# ★ NOTE HOW IT WAS FOUND, because the shape recurs in this project: NOT by the
+# gate reporting anything. By somebody knowing there were three defects and
+# reading a report that listed two. A gate that under-reports is
+# byte-indistinguishable from a green one, so the only detector is an
+# independent forecast — which is the exact labour a gate exists to remove.
+# `docs/NEXT_SESSION.md` §3 records the same shape against
+# `check-ledger-numbers.py`'s star anchor, twice. The first fix there repaired
+# the one spelling that had been seen rather than the class; this one widens
+# both ends of the class rather than only the end that failed.
+#
+# ★★ AND WHY THE WIDENING IS SCOPED TO `#[error(...)]` RATHER THAN APPLIED
+# EVERYWHERE. The first attempt widened the class globally and the scan went
+# from 0 findings to about SIXTY, every one of them a deliberately aligned
+# report column in a dev tool — `println!("files scanned:        {}", …)`. That
+# is the shape the original narrow class was protecting, and nothing in the
+# header said so, which is how it came to look like an oversight rather than a
+# choice.
+#
+# The distinguishing property is not the characters. It is that a `thiserror`
+# message is PROSE — a sentence an operator reads — while a `println!` in a
+# sweep tool is a TABLE. Prose has no reason to contain a run of spaces; a
+# table is made of them. So the gate widens exactly where prose is
+# structurally guaranteed and stays narrow everywhere else, and the
+# aligned-column case is now pinned in the clean self-test so a future
+# widening cannot quietly re-break it.
+#
 # WHAT THIS GATE CANNOT SEE, AND THE ONE ESCAPE HATCH
 # ===================================================
 #
@@ -119,15 +158,29 @@ scan() {
     local out
     out="$(find "$root" -name '*.rs' -not -path '*/target/*' -print0 2>/dev/null |
         xargs -0 -r awk -v exempt="$EXEMPT" '
-            FNR == 1 { armed = 0 }
+            FNR == 1 { armed = 0; in_error = 0 }
             index($0, exempt) { armed = 1; next }
             {
                 code = $0
                 sub(/\/\/.*$/, "", code)
                 if (code !~ /[^[:space:]]/) next    # blank or comment-only: hold the arming
                 if (armed) { armed = 0; next }      # the marker above covers THIS line
+
+                # PROSE MODE. A `#[error(...)]` message is a sentence an
+                # operator reads, never an aligned report column, so inside one
+                # a `{placeholder}` counts as a word and the class widens at
+                # both ends. Stays armed across a multi-line attribute, which is
+                # the form the three 2026-08-20 misses were written in.
+                was_error = in_error
+                if (index(code, "#[error(")) in_error = 1
+                prose = (in_error || was_error)
+                if (in_error && index(code, ")]")) in_error = 0
+
                 if (code !~ /"/) next
-                if (code ~ /[A-Za-z,.:;)]   +[A-Za-z]/) {
+                hit = 0
+                if (code ~ /[A-Za-z,.:;)]   +[A-Za-z]/) hit = 1
+                if (prose && code ~ /[A-Za-z0-9,.:;)}]   +[A-Za-z0-9{]/) hit = 1
+                if (hit) {
                     body = code
                     sub(/^[[:space:]]+/, "", body)
                     print "  " FILENAME ":" FNR ": a run of spaces baked into a string literal"
@@ -156,12 +209,23 @@ scan() {
 if [ "$SELF_TEST" = "1" ]; then
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
-    mkdir -p "$tmp/dirty" "$tmp/clean" "$tmp/leak"
+    mkdir -p "$tmp/dirty" "$tmp/dirty2" "$tmp/dirty3" "$tmp/clean" "$tmp/leak"
 
     cat > "$tmp/dirty/bad.rs" <<'EOF'
 pub const fn note() -> &'static str {
     "With no line drawn yet, the scale is given as a ratio. To set it by      pointing at a stated length, measure it first."
 }
+EOF
+    # The 2026-08-20 widening: a gap adjacent to a `{}` format placeholder, on
+    # both sides. Each of these was invisible to the original character class,
+    # and the second one shipped in a `thiserror` message.
+    cat > "$tmp/dirty2/placeholder.rs" <<'EOF'
+#[error("removing that vertex would leave {remaining}, and it needs at least          {minimum}")]
+struct A;
+EOF
+    cat > "$tmp/dirty3/placeholder_lhs.rs" <<'EOF'
+#[error("it has exactly {count}          picked points and cannot gain one")]
+struct B;
 EOF
     cat > "$tmp/clean/good.rs" <<'EOF'
 //! A doc comment may align a table:
@@ -182,6 +246,14 @@ pub const fn block_marked() -> &'static str {
 pub const fn short() -> &'static str {
     "Two spaces after a stop.  That is a convention, not a defect."
 }
+/// An ALIGNED REPORT COLUMN. Deliberate, ubiquitous in this repo's sweep
+/// tools, and the reason the `{}`-aware class is scoped to `#[error(...)]`
+/// instead of applied everywhere. A global widening turned this shape into
+/// ~60 findings in one scan.
+pub fn report(files_scanned: usize, clean: usize) {
+    println!("files scanned:        {}", files_scanned);
+    println!("  clean (strict load)   {}", clean);
+}
 EOF
     # An exemption must cover ONE line, not leak down the file.
     cat > "$tmp/leak/leak.rs" <<'EOF'
@@ -197,6 +269,14 @@ EOF
     fail=0
     if scan "$tmp/dirty" > /dev/null; then
         echo "SELF-TEST FAILED: a baked gap was not detected"
+        fail=1
+    fi
+    if scan "$tmp/dirty2" > /dev/null; then
+        echo "SELF-TEST FAILED: a gap before a {placeholder} was not detected"
+        fail=1
+    fi
+    if scan "$tmp/dirty3" > /dev/null; then
+        echo "SELF-TEST FAILED: a gap after a {placeholder} was not detected"
         fail=1
     fi
     if ! scan "$tmp/clean"; then

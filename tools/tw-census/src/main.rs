@@ -703,9 +703,7 @@ fn print_block(name: &str, a: &Agg) {
     let t = &a.totals;
     println!();
     println!("  (a) REACHABILITY — three denominators, loose and strict");
-    println!(
-        " denominator loose (simple font) strict (+ has code 32)"
-    );
+    println!(" denominator loose (simple font) strict (+ has code 32)");
     println!(
         "      by document  (n={:>6})           {}              {}",
         a.text_bearing,
