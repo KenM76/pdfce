@@ -1,6 +1,6 @@
 # MEMORY.md — pdfce-engineer index
 
-- [Reply in Coles Notes, always](feedback_reply_in_coles_notes.md) — TL;DR is the DEFAULT register, not a mode; the detail goes in commits and docs, never the chat reply
+- [Reply in Coles Notes, always](feedback_reply_in_coles_notes.md) — a GLOBAL rule (top of ~/.claude/CLAUDE.md), all projects; detail goes in commits and docs, never the chat reply
 - [KenAgent decision protocol](feedback_kenagent_decisions.md) — route technical decisions through autonomous-builder; archive Markdown to docs/decisions/
 - [Dimension terminology](feedback_dimension_terminology.md) — say "pdf dimensions" (CAD-exported) vs "ce dimensions" (pdfce-authored); never bare "dimensions"
 - [Inkscape parity scope](project_inkscape_parity.md) — 2026-07-30: scope = Acrobat Pro + Inkscape vector-editing parity; Inkscape is GPL, reference-only
