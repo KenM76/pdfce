@@ -39,11 +39,20 @@ python tools/check-core-api-verbs.py    python tools/check-settings-consumed.py
 python tools/check-fmt-excluded.py      python tools/check-shipped-assets.py
 python tools/check-passes-filed.py      python tools/check-commits-filed.py
 python tools/check-one-commit-per-command.py
+python tools/check-outcome-disclosed.py
 ```
 
-Two of the three red ones were fixed today (`check-fmt-excluded` →
-`tools/tw-census` unformatted; `check-settings-consumed` → `Pass 108.0`).
-**One is still red — see §5.**
+**That last one is new today (`Pass 110.0`), and this list is already the thing
+§0 warns about** — it is a snapshot, and the next gate added makes it incomplete
+without changing a word of it. Prefer `ls tools/check-*` over reading this
+block.
+
+All three that were red this morning are green, and so is everything else:
+`check-fmt-excluded` (`tools/tw-census` unformatted), `check-settings-consumed`
+(→ `Pass 108.0`) and `check-passes-filed` (→ four unfiled 2026-08-19 commits,
+now filed). **`check-commits-filed.py` reports clean across all 489 code
+commits** — the first time both record gates have been green together in this
+session.
 
 ---
 
@@ -56,6 +65,29 @@ Two of the three red ones were fixed today (`check-fmt-excluded` →
 | `4a1416e` | librarian: `107.x` filed · **decision 074** · **`R204`** |
 | `07c8c22` | `check-ledger-numbers.py`'s decision ceiling was wrong by three |
 | `186a983` | **`Pass 108.0`** — `quad_point_order` was a setting that did nothing |
+| `860d540` | librarian: `108.0` + the genuinely-unfiled `Pass 106.1` · **`R205`** |
+| `3329202` | **`Pass 106.2`** — `merge-document` printed none of its three disclosures |
+| `5d1a579` | the handoff + two agent-memory lessons |
+| `e265f43` | librarian: the four unfiled 2026-08-19 commits · **`Pass 109.0`** |
+| `1c169ba` | **`Pass 110.0`** — `check-outcome-disclosed.py`, the class gate |
+| `720cb6f` | librarian: `106.2` + `110.0` filed |
+
+### ★ THE RECORD GATES ARE CLEAN FOR THE FIRST TIME THIS SESSION
+
+`check-commits-filed.py` started the day reporting **seven** unfiled code
+commits and now reports **clean across all 489**; `check-passes-filed.py` is
+clean. **Four of the seven were left by the 2026-08-19 session**, whose handoff
+said the gates were clean.
+
+**The shape is worth more than the cleanup.** `check-passes-filed.py` was green
+that entire time, because every one of those four belongs to work that *did*
+reach `ROADMAP.md`. **Filing a Pass and filing a COMMIT are two different
+acts**, and only the second decays silently. Two gates, adjacent names, and only
+one of them was looking.
+
+One of the four (`f93f8da`, the commit that *introduced* `quad_point_order`)
+**had no Pass ID at all** and is now `Pass 109.0` — so today's `Pass 108.0`
+wired a setting whose own introduction was unfiled.
 
 ### `Pass 107.x` — the perimeter tool, whole, in one session
 
@@ -217,18 +249,48 @@ difference is the whole point.
 
 ---
 
-## §5 — ONE RED GATE LEFT, and it is not mine to file blind
+## §5 — THE THREE PASSES NOBODY ASKED FOR, AND THE ONE SHAPE BEHIND THEM
 
-```
-python tools/check-passes-filed.py
-UNFILED  af12b31  Pass 106.1
-```
+`Pass 106.2`, `108.0` and `110.0` were none of them the session's brief. They
+belong together because they are **one shape, seen three times in one day**: a
+value that is computed and never consumed.
 
-From the **previous** session, not this one. That session also renamed a Pass ID
-mid-flight (`433e549` — *"correct the Pass ID: this was 106.0, not 104.0"*), so
-the likely story is that `Pass 106.1` reached `ROADMAP.md` under a different
-hash and the gate is matching on the wrong one. **The librarian was asked to
-rule on it; check its answer before touching anything.**
+- **`Pass 108.0`** — a SETTING parsed, validated, written back and read by
+  nothing. *Inbound*: a caller fills it, nobody honours it.
+- **`Pass 106.2`** — three OUTCOME fields computed, returned, dropped.
+  *Outbound*: core fills them, no shell tells anybody.
+- **`Pass 110.0`** — the gate for the outbound class, because `106.2` was found
+  by the librarian **by luck**, while filing something else, and luck is not a
+  detection mechanism. Nothing in Rust catches it: `#[must_use]` is about the
+  struct, so reading ONE field satisfies the compiler forever.
+
+**`110.0` is the one to read before writing any gate.** Its output was
+**forecast before it was built** — 58 fields, 8 unread. Had it come back 50 it
+would have been this morning's string-gap mistake again, where a global widening
+produced ~60 findings that were all correct as written. *8 is a gate; 50 is a
+wall nobody reads.*
+
+★ **And its self-test found a broken regex in `check-settings-consumed.py` on
+its first run.** Both gates filter assignments out of `.field` matches, and the
+spelling both used lets the whitespace **backtrack to zero**, so
+`settings.field = true` — an assignment, with a space — was counted as a READ.
+The no-space form was correctly rejected, which is how it survived. That gate's
+comment says it was sabotage-verified, **and it was** — against a defect whose
+write form was a `&mut` borrow, caught by a *separate* filter beside it. **The
+`=` filter was never the thing under test.** Fixed in both; the sibling stays
+clean afterwards, so it was latent rather than hiding a live defect.
+
+**Two transferable halves:** *sabotage-verifying a script proves the branch you
+sabotaged, not the branch you documented*; and *the cheapest way to test an old
+tool is to write a new one that shares its mechanism and hand it the inputs
+nobody thought to try.*
+
+The librarian **declined** to grow `R205` to cover this (a resemblance, not a
+shared mechanism) and **declined** a new rule (the content reduces to a truism
+once both files' doc comments carry the reasoning). Both refusals are on the
+record — do not re-litigate without new evidence. The regex finding itself was
+handed to `troubleshooting-librarian` for `C:\personal_rag\`, being a general
+Python gotcha rather than a pdfce one.
 
 ---
 
@@ -260,7 +322,7 @@ rule on it; check its answer before touching anything.**
 
 ## §7 — STATE AT HANDOFF
 
-- **Working tree clean**; five commits today, listed in §1. **Nothing pushed.**
+- **Working tree clean**; eleven commits today, listed in §1. **Nothing pushed.**
   `github.com/KenM76/pdfce` is public and has a remote — a careless `git push`
   reaches the world.
 - `cargo fmt --check`, `clippy --all-targets --workspace -D warnings`, and
@@ -273,8 +335,8 @@ rule on it; check its answer before touching anything.**
   `verify-release.py` → tag → portable package → GitHub release → librarian
   release record. A CI-built release reports `revision: unknown` unless that
   workflow gets `fetch-depth: 0`.
-- **Ledger, re-measured after the `07c8c22` fix** — next free Pass family
-  **109**, decision **075**, standing rule **R205**, filing ordinal **201**.
+- **Ledger, re-measured at end of session** — next free Pass family **111**,
+  decision **075**, standing rule **R206**, filing ordinal **204**.
   **Re-measure with `tools/check-ledger-numbers.py` rather than trusting this
   line; it has been wrong before and was wrong by three this morning.**
 - New spec corpus file: `iso32000__s__12.5.6.9.md` (58 kB). It also **corrected
