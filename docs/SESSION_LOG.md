@@ -51659,3 +51659,145 @@ first.
 | `SESSION_LOG` filings | **200** | **201** |
 | `personal_rag/pdf` lessons | **+0** | **+0** |
 | `docs/FEATURES.md` rows touched | — | **2** (1 sentence-only edit, 1 new Planned row) |
+
+## 2026-08-20 (two-hundred-and-second filing) — FOUR 2026-08-19 CODE COMMITS FOUND UNFILED BY `check-commits-filed.py`'S FULL SWEEP; ONE ADDED TO AN EXISTING SHIPPED ENTRY, ONE MINTED AS `Pass 109.0`, TWO CITED INTO THE `Pass 97.x` BACKLOG ENTRY; NO SHELL, NO NEW DECISION OR RULE
+
+**Filed by `pdfce-librarian`.** This dispatch's tool grant is
+`Read`/`Grep`/`Glob`/`Write`/`Edit`/`WebSearch`/`WebFetch` — **no `Bash`,
+same as the prior two filings.** All four commit hashes, dates and subject
+lines below are **relayed** from the dispatching engineer, per hard rule
+8 — `git show` could not be run. **Every claim about what currently exists
+in the tree was independently confirmed** by `Grep`/`Read`, not relayed,
+and is marked so inline. This filing is itself the second consecutive one
+with no shell; §7 of `docs/NEXT_SESSION.md` should be checked before
+assuming the next session has one either.
+
+**Shipped: nothing coded this filing.** Documentation-only, closing a
+filing gap left by the previous (2026-08-19) session, not by either of
+this session's own two prior filings.
+
+**The gap, as handed to this dispatch:** `tools/check-commits-filed.py`
+(whose docstring this filing read in full) reported four code commits from
+2026-08-19 present in no filing — `433e549`, `f93f8da`, `18119c4`,
+`9094e95` — none of them named by hash in `ROADMAP.md` or `SESSION_LOG.md`
+(independently confirmed by `Grep`, this filing, before any edit was
+made). All four predate this session; the 2026-08-19 session's own handoff
+had nevertheless reported "gates all clean" (a claim `docs/NEXT_SESSION.md`
+§0 already corrects for three *other* gates — this is a fourth instance of
+the same shape, on a fifth gate).
+
+**Findings + decisions:**
+
+1. **`433e549` — "correct the Pass ID: this was 106.0, not 104.0" — was
+   already reachable from the live tree, just not from `ROADMAP.md`.**
+   `Grep` for `Pass 104.0|Pass 106.0` inside `crates/` (this filing) found
+   the correction already written into `CommandKind::MergeDocument`'s doc
+   comment (`edit.rs:254`–`262`) and `merge_document.rs`'s own module doc
+   (lines 1–8) — both state, verbatim, that `9f663f9`'s subject line says
+   "Pass 104.0" and is wrong, and that `ROADMAP.md` is authoritative. The
+   correction was real and already in the code; only the citing hash was
+   missing from the record. **Added to the existing `Pass 106.0` Shipped
+   entry** (a dated addendum paragraph, not a rewrite — hard rule 1) rather
+   than a new entry, since the work is a correction OF that entry, not a
+   separate unit.
+2. **`f93f8da` — "QP-A1 becomes a setting" — had NO Pass ID anywhere,
+   and is the missing citation `Pass 108.0`'s own entry gestures at
+   without naming.** `Pass 108.0` (filed two filings ago) narrates *"has
+   been parsed, validated and written to the generated settings file
+   since it was introduced"* without ever saying which commit introduced
+   it. Confirmed by `Grep`/`Read` against `crates/pdfce-core/src/
+   settings/mod.rs` (the `QuadPointOrder` enum, the `Settings::
+   quad_point_order` field, parse/write support) and `crates/pdfce-gui/
+   src/settings_panel.rs:739`–`763` (the GUI row) that this is a coherent,
+   real, shippable unit distinct from `Pass 108.0`'s later wiring —
+   **minted `Pass 109.0`**, filed at the top of *Shipped* per the
+   `Pass 106.1` precedent (uncited shipped work gets the ledger's next
+   free ID at filing time, not a backdated slot in an earlier family).
+3. **`18119c4` and `9094e95` — compositor-groundwork research, neither
+   shipping a feature, both already living in the tree under 2026-08-19
+   amendment headers this filing found by `Grep`, not by relay.**
+   `docs/compositor-plan.md` and `docs/collapse-model-survey.md` both
+   carry `★★ AMENDMENT 2026-08-19` sections; `crates/pdfce-render/src/
+   overprint.rs:26`–`57` carries a matching 2026-08-19 doc-comment
+   correction (`OP-N1` rescoped for ISO 32000-2 §10.8.3). **The
+   file-to-commit attribution is inferred from content matching, not
+   confirmed by `git show` — stated as such in `ROADMAP.md`, not claimed
+   as certain.** Cited into the existing `Pass 97.x` Backlog entry
+   (satisfies the gate) rather than minted as a Pass of their own — no
+   feature shipped, matching this project's own precedent (the "TWO
+   FINDINGS ADDED 2026-08-18" block already folded into the same Backlog
+   entry the same way). **The substantive addition, not just the
+   citation:** the Backlog entry's acceptance-criteria patch lists were
+   still keyed to the pre-amendment `18 FAIL`/`8 UNRESOLVED` baseline: now
+   flagged as stale against the amended `26 pass · 14 FAIL · 11
+   UNRESOLVED` standing, with both corrections already folded into the two
+   amended files named so a future session does not re-derive either one
+   from scratch when scoping `Pass 97.x` for real.
+
+**★ The shape worth keeping, separate from any one of the four fixes.**
+Filing a Pass and filing a commit are two different acts, and this
+project's two gates watch them separately —
+`tools/check-passes-filed.py` (clean the whole time this session) and
+`tools/check-commits-filed.py` (red on all four). Every one of these four
+commits belongs to work that DID reach `ROADMAP.md` in some form — three
+of the four had their substance already filed, correctly, under an
+adjacent Pass or Backlog entry. **None of the four represents a Pass that
+went unrecorded; all four represent a hash that went uncited.** That is a
+narrower failure than the shape `check-commits-filed.py`'s own docstring
+was written to catch (its worked example, `d3ea5de` etc., was work with
+zero presence anywhere), and it is worth naming as its own, milder
+instance: a gate can be exactly right that something is unfiled while the
+underlying engineering is not actually lost — the two gates are adjacent
+in name and in purpose, and only one of them was looking at any given
+commit.
+
+**`FEATURES.md` — unchanged, `+0` rows.** No capability changed; all four
+commits' substantive capability claims were already reflected (or
+deliberately not reflected, per `Pass 108.0`'s and `Pass 106.1`'s own
+"no row" reasoning) by the filings that covered their mechanism.
+
+**`ARCHITECTURE.md` — unchanged.** No architectural decision this filing.
+
+**`personal_rag/pdf` — unchanged, `+0`.** Nothing here is a PDF-domain
+empirical finding; this filing is entirely project-internal
+record-keeping.
+
+**`D:\dev\rag\rust\`/`D:\dev\rag\egui\` — unchanged, `+0` this filing.**
+The doc-comment/code-insertion-anchoring finding flagged as owed two
+filings ago is still owed.
+
+**Still in flight:**
+- `Pass 102.1`, `v0.7.0` bumped-not-tagged — unchanged.
+- `Pass 97.x` itself remains unscoped-for-real; this filing added a
+  re-derivation flag to its Backlog entry, not a re-measurement — the GWG
+  Reference file is still not on this machine.
+- The CLI `merge-document` disclosure gap (three fields) — still scoped,
+  not fixed.
+- The `D:\dev\rag\rust\` doc-comment-anchoring finding — still owed.
+- `iso32000__delta__pdf20_encryption.md`'s `/IRT`-chain re-walk — still
+  owed.
+
+**For next session:**
+1. Commit this filing's `ROADMAP.md`/`SESSION_LOG.md` edits — no shell was
+   available to this dispatch.
+2. Re-run `tools/check-commits-filed.py` to confirm all four hashes now
+   resolve clean.
+3. `Pass 97.x` re-derivation from the amended `26 pass · 14 FAIL · 11
+   UNRESOLVED` standing is still owed before that Pass is actually scoped
+   — see the Backlog entry's own new addendum.
+4. Everything else carried from the two-hundred-and-first filing's own
+   "For next session" list is still open.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **108** | **109** |
+| decision records | **074** | **074** (unchanged) |
+| standing rules | **R205** | **R205** (unchanged) |
+| `SESSION_LOG` filings | **201** | **202** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **0** |
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing.

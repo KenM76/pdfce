@@ -96,6 +96,72 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 109.0 — commit `f93f8da` — **`QuadPointOrder` / `Settings::quad_point_order` INTRODUCED: THE `/QuadPoints` CORNER-ORDER SETTING (AMBIGUITY `QP-A1`) ENTERS THE SETTINGS FILE — PARSED, VALIDATED, WRITTEN, GIVEN A GUI SETTINGS-PANEL ROW, AND READ BY NOTHING** — shipped 2026-08-19, filed here for the first time (two-hundred-and-second filing)
+
+**★ THIS PASS SHIPPED AND WENT UNFILED FOR THREE LIBRARIAN DISPATCHES**
+(the hundred-and-ninety-eighth through two-hundred-and-first filings all
+touched adjacent quad-point-order work — `Pass 107.1` noted the gap it
+left, `Pass 108.0` closed that gap — without either filing ever citing
+`f93f8da` itself). Found by `tools/check-commits-filed.py`'s full-history
+sweep, not by any Pass-completion dispatch. **This filing has no shell**;
+commit hash and timestamp (2026-08-19 08:01:28) are relayed by the
+dispatching engineer, cross-checked against the subject line *"QP-A1
+becomes a setting — the register's own 'worst case' was decided in the
+wrong place."* **Everything below is independently confirmed against live
+source** by `Grep`/`Read`, not merely relayed.
+
+**What this commit is, established from three converging facts, none of
+them a `git show`:**
+
+1. `crates/pdfce-core/src/settings/mod.rs` defines `pub enum QuadPointOrder
+   { ReadingOrder, Counterclockwise }` (`#[default]` `ReadingOrder`,
+   `#[non_exhaustive]`), a `Settings::quad_point_order` field, parse
+   support (`"quad_point_order" => match value { "reading_order" | ... }`,
+   `mod.rs:1388`) and write support (`mod.rs:1683`–`1684`) — a settings-
+   file round trip with no caller anywhere in `pdfce-core` at this point.
+2. `crates/pdfce-gui/src/settings_panel.rs:739`–`763` carries a GUI row
+   headed *"the `/QuadPoints` corner-order setting (ambiguity `QP-A1`)"*
+   that writes `draft.working.quad_point_order` — a UI control for a value
+   nothing downstream reads.
+3. `Pass 108.0`'s own Shipped entry (below) narrates the gap this commit
+   left, in its own words: *"`Settings::quad_point_order` has been parsed,
+   validated and written to the generated settings file since it was
+   introduced, and read by nothing … the exact failure R83 names."*
+   `Pass 108.0` never names which commit introduced it — this entry supplies
+   that citation, retroactively.
+
+**Why this is filed as its own Pass rather than folded into `Pass 108.0`
+as background:** the introduction and the wiring are two different
+sessions' work (`f93f8da` is 2026-08-19; `Pass 108.0`'s `186a983` is
+2026-08-20) and two different defects — shipping a setting nothing reads
+is R83's "a setting is a promise, broken silently" failure, independent of
+whatever eventually fixes it. Hard rule 2 (Pass IDs stable, never reused)
+and this project's own `Pass 106.1` precedent (filing shipped-but-uncited
+work out of chronological order, at the ledger's next free ID rather than
+backdating into an existing family) both apply the same way here.
+
+**Test results, gates: not independently re-run this filing** (no shell,
+and no dispatch narrated them for this specific commit — `Pass 108.0`'s
+entry covers the gates as they stood the day the gap was *closed*, not the
+day it was *opened*). The mechanism above is confirmed by direct source
+read, which is the evidence this filing has.
+
+**`docs/FEATURES.md`: no row added.** Same reasoning `Pass 108.0` gives —
+corner order is an invisible authoring parameter, not a claimed
+capability.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **108** | **109** |
+| decision records | **074** | **074** (unchanged — no new architectural decision; decision 062's single-entry-point discipline already governs how this setting is consumed) |
+| standing rules | **R205** | **R205** (unchanged — this is a further instance of R83, not a new rule) |
+| `SESSION_LOG` filings | **201** | **202** |
+| `personal_rag/pdf` lessons | **+0** | **+0** (no PDF-domain empirical finding this filing — this is a project-internal filing-gap catch) |
+
+---
+
 ### Pass 108.0 — commit `186a983` — **`quad_point_order` WIRED: THE OPERATOR'S CORNER-ORDER SETTING NOW REACHES BOTH ANNOTATION-AUTHORING CALL SITES; TWO NEW VERBS, `EditSession::set_quad_point_order`/`quad_point_order`, 129 → 131** — filed 2026-08-20 (two-hundred-and-first filing)
 
 **This filing has no shell.** No `git show`/`git log` was run; the commit
@@ -893,6 +959,23 @@ from this entry's own content.
 > | standing rules | **R202** | **R202** (unchanged — findings (C)/(D) corroborate `R200`/`R174`, neither newly minted) |
 > | `SESSION_LOG` filings | **197** | **198** |
 > | `personal_rag/pdf` lessons | **+2** new, **+1** addendum footer | see above |
+
+> **★ CORRECTION APPLIED IN CODE, COMMIT `433e549`** (2026-08-19,
+> *"correct the Pass ID: this was 106.0, not 104.0 — and git log will say
+> otherwise forever"*). This filing's own collision catch, above, lived only
+> in `ROADMAP.md`/`SESSION_LOG.md` until this commit carried it into the
+> source itself: `CommandKind::MergeDocument`'s doc comment
+> (`crates/pdfce-core/src/edit.rs:254`–`262`) and
+> `crates/pdfce-core/tests/merge_document.rs`'s own module doc (lines 1–8)
+> both now state, verbatim, that commit `9f663f9`'s subject line says
+> "Pass 104.0" and is wrong, that `104.0` was already the ce-dimension
+> group verbs (`ad960f2`), and that `ROADMAP.md` — not `git log` — is
+> authoritative for this one Pass. **Filed here, two filings late**: neither
+> the 198th filing (which made the catch) nor the 199th/200th/201st
+> named `433e549` by hash, so `tools/check-commits-filed.py` reported it
+> unfiled — caught by the two-hundred-and-second filing's commit sweep, not
+> by any Pass-completion dispatch. Confirmed against live source by
+> `Grep`/`Read`, not relayed.
 
 > ### ★★★★★ THE 197TH FILING — `docs/FEATURES.md`'S `gui` COLUMN RE-BASED FROM `crates/pdfce-gui` TO `D:\dev\pdfceGUI` — DECISION 073, STANDING RULE `R202` MINTED — NO PASS, NO SHELL, DOCUMENTATION-ONLY
 
@@ -63395,6 +63478,63 @@ nothing gets forgotten, not as a commitment to build in this order.
   ranking table (same pattern as `AD-A1`/`AD-A3`'s back-fill note,
   earlier in this file) — this librarian has no access to that RAG to
   check (hard rule 6) and did not assume either way.
+
+  **★★ TWO RESEARCH COMMITS ADDED 2026-08-19, `9094e95` AND `18119c4` —
+  CITED HERE FOR THE FIRST TIME (two-hundred-and-second filing); NEITHER
+  WAS FILED BY THE SESSION THAT MADE THEM, AND `docs/compositor-plan.md` /
+  `docs/collapse-model-survey.md` CARRY THE SUBSTANCE UNDER 2026-08-19
+  AMENDMENT HEADERS THIS BACKLOG ENTRY DOES NOT YET REFLECT.** Found by
+  `tools/check-commits-filed.py`'s full-history sweep; **this filing has no
+  shell**, so the file-to-commit attribution below is inferred from content
+  matching against the live tree (dated amendment headers, a doc-comment
+  correction in `crates/pdfce-render/src/overprint.rs`), **not confirmed by
+  `git show`** — flagged as such rather than stated as certain.
+
+  1. **`9094e95` (05:55) — *"scope confirmed: the n-channel buffer is
+     already Pass 97.x, and here is the shape."*** Best-evidenced as
+     groundwork confirming the colorant-plane buffer belongs to
+     `Pass 97.1`/`97.2` as already scoped above, rather than a new Backlog
+     item — consistent with `docs/collapse-model-survey.md`'s own framing
+     ("Once pdfce composites overprint in an N-plane colorant buffer
+     (`Pass 97.1`), the buffer must be collapsed to sRGB… (`Pass 97.2`)").
+     No new Pass ID is owed by this commit; it confirms an existing one.
+  2. **`18119c4` (06:43) — *"research before code: the plan was wrong in
+     two ways and our own corpus already said so."*** Matches, by content,
+     the **two** corrections both `compositor-plan.md` and
+     `collapse-model-survey.md` now carry under `★★ AMENDMENT 2026-08-19`
+     headers, confirmed independently by `Read`/`Grep` this filing:
+     - **The Ghent standing moved without a patch changing outcome.**
+       `18+8 = 15+11 = 26`: three patches crossed the FAIL/UNRESOLVED line
+       from a classifier shift alone. `1_GWG160` also now genuinely
+       passes — resolved by Table 137 arithmetic, **not** by a compositor —
+       so *"16 of the 18"* cannot be restated as *"16 of the 14"* without
+       re-deriving which failures actually require `Pass 97.x`.
+     - **`OP-N1` was edition-scoped, not universal.** `crates/pdfce-render/
+       src/overprint.rs:26`–`57`'s doc comment (confirmed by `Read`, this
+       filing) now records that ISO 32000-2:2020 §10.8.3 "Separation
+       simulation" specifies the algorithm ISO 32000-1 does not, and that
+       §10.8.3 is a `should` **on the outcome** — constraining `Pass 97.2`'s
+       collapse step, not `Pass 97.0`/`97.1`'s Table 149 arithmetic. The gap
+       was found from outside pdfce's own spec corpus (a sibling project's
+       cross-reference attempt), which is itself worth carrying: **a survey
+       of implementations cannot detect a specification its own reference
+       corpus is missing.**
+
+  **What this means for THIS Backlog entry, not just for the two amended
+  files:** the acceptance-criteria patch lists above (**"25 → up to 32"**,
+  **"32 → up to 41"**) and the `18`-failure baseline the whole entry opens
+  with were derived from the 2026-08-18 measurement
+  (`25 pass · 18 FAIL · 8 UNRESOLVED`). The current standing, per
+  `compositor-plan.md`'s own amendment and **not yet re-measured since**,
+  is **`26 pass · 14 FAIL · 11 UNRESOLVED`**. Both corrections above are
+  already folded into `compositor-plan.md`/`collapse-model-survey.md`
+  themselves — **a future session scoping `Pass 97.x` should re-derive the
+  acceptance-criteria patch lists from the current 14, not re-discover
+  either correction from scratch, and not re-measure Ghent only to
+  rediscover a standing this entry could have stated.** Re-measurement
+  itself (the GWG Reference file is not on this machine per
+  `docs/NEXT_SESSION.md` §2) remains owed to whichever session scopes this
+  Pass for real.
 
 - **★★★ NETWORK, filed 2026-08-13 (hundred-and-forty-fourth filing) —
   `pdfce-fetch`: THE ONE FETCH PRIMITIVE, IN A SIBLING CRATE, STRIPPABLE
