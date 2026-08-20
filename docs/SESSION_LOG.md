@@ -51801,3 +51801,114 @@ filings ago is still owed.
 
 **Terminology (rule 15):** no ce dimension or pdf dimension appears
 anywhere in this filing.
+
+## 2026-08-20 (two-hundred-and-third filing) — `Pass 110.0` (`1c169ba`) SHIPS `tools/check-outcome-disclosed.py`, A THIRD DISCLOSURE GATE — ITS OWN SELF-TEST FOUND A BROKEN REGEX ALREADY LIVE IN `check-settings-consumed.py`; `Pass 106.2` (`3329202`) CLOSES THE MERGE-DOCUMENT DISCLOSURE GAP THIS LIBRARIAN FOUND TWO FILINGS AGO; `R205` GROWTH DECLINED, NOT MINTED EITHER WAY
+
+**Filed by `pdfce-librarian`.** Fourth and final filing of 2026-08-20. This
+dispatch's tool grant is `Read`/`Grep`/`Glob`/`Write`/`Edit`/`WebSearch`/
+`WebFetch` — **no `Bash`**, same as the prior three filings today. Commit
+hashes and dates are **relayed** by the dispatching engineer, per hard rule
+8. **Every claim about what currently exists in the tree was independently
+confirmed** by `Grep`/`Read` this filing, not relayed — both new/changed
+Python gates and the three `main.rs` call sites were read in full.
+
+**Shipped:**
+- Pass 110.0 — `tools/check-outcome-disclosed.py`: twelve outcome structs,
+  58 `pub` fields (relayed total; struct list and exemption table
+  independently confirmed), each field must be read by `pdfce-cli` or
+  `pdfce-gui`. Two real gaps found under the forecast, both fixed in the
+  same commit: `reset-form` now prints `widgets=`; `fill-field` states
+  `widgets_updated` above one. Six fields exempted with a stated reason
+  each (five `InsertOutcome` fields, one handle).
+- Pass 106.2 — `merge-document` prints the three `MergeOutcome` fields
+  `Pass 106.1` added (`dests=`, `dests_renamed=`, `outline_items=`), plus a
+  stderr warning when a destination key collided. Closes the Backlog entry
+  this librarian filed two filings ago (two-hundred-and-first filing) and
+  the matching `docs/FEATURES.md` Merge-row clause.
+
+**Findings + decisions:**
+
+1. **The regex bug, and why it is the finding of the session, not either
+   Pass.** Both `check-outcome-disclosed.py` and `check-settings-
+   consumed.py` filter a `.field` match for an assignment with a negative
+   lookahead, and both originally spelled it with the whitespace OUTSIDE
+   the lookahead (`` \b\s*(?!=[^=]) ``) — a spelling that backtracks to
+   zero and lets a spaced assignment (`settings.field = true`) count as a
+   read. `check-outcome-disclosed.py`'s own self-test, built fresh for the
+   new gate, happened to drive a spaced-assignment decoy the OLD gate's
+   self-test had never used (that gate's sabotage case was a `&mut` borrow,
+   caught by a *separate* filter). **A verified gate, with a comment
+   explaining at length why it is right, was verified against a different
+   case than the comment describes** — the sibling stays clean after the
+   fix, so this was a latent flaw, not a live defect that had been hiding
+   anything.
+2. **`R205` growth declined; no new rule minted either.** `R205`'s stated
+   mechanism is a forecast disagreeing with a gate's own output; this
+   discovery had no forecast step — a fresh self-test simply drove a case
+   the old one never had. Extending `R205`'s text would blur a real rule's
+   boundary for a resemblance, not a shared mechanism (this librarian's own
+   memory on pattern-naming judgment calls: "would fixing one have
+   prevented the others?" — no). A new standing rule was also declined: the
+   enforceable content reduces to a truism ("write a new test and it might
+   catch an old bug") once the specific methodological point is already
+   captured in full inside both files' own doc comments, which are the
+   durable record here.
+3. **The dispatch's framing of the `named_destinations_renamed` fix was
+   corrected on read.** It described the field as "promoted out of the
+   token line to its own stderr warning." `Read` against `main.rs` shows
+   the field stays in the token line (`dests_renamed=`) AND gains the
+   warning — additive, not a move. Filed precisely in `Pass 106.2`'s own
+   entry rather than repeating the imprecise framing.
+
+**`docs/FEATURES.md`:** one row touched. The Merge row's stale
+disclosure-gap clause (filed by this librarian two filings ago) is removed
+and replaced with a statement that all three fields now print. No new
+capability row for either Pass — a gate is not a capability, and `Pass
+106.2` fixes a disclosure on an already-`[x]` row rather than adding one.
+
+**`personal_rag/pdf` / `D:\dev\rag\rust`/`egui` — unchanged, `+0`.** Neither
+Pass is PDF-domain or Rust/egui-ecosystem in the sense those tiers cover;
+the regex-backtracking-in-a-lookahead finding is a general Python/regex
+gotcha in project tooling, outside both tiers' scope and outside this
+librarian's remit (`C:\personal_rag\python\` belongs to
+`troubleshooting-librarian`) — flagged to the engineer as worth a dispatch,
+not written here.
+
+**`ARCHITECTURE.md` — unchanged.** No architectural decision this filing.
+
+**Still in flight:**
+- `Pass 97.x` re-derivation from the amended `26 pass · 14 FAIL · 11
+  UNRESOLVED` standing — still owed, unchanged this filing.
+- The `D:\dev\rag\rust\` doc-comment-anchoring finding — still owed,
+  unchanged.
+- `iso32000__delta__pdf20_encryption.md`'s `/IRT`-chain re-walk — still
+  owed, unchanged.
+- The Python-regex-lookahead finding — newly flagged, not yet dispatched
+  to `troubleshooting-librarian`.
+
+**For next session:**
+1. Commit this filing's `ROADMAP.md`/`SESSION_LOG.md`/`FEATURES.md` edits —
+   no shell was available to this dispatch. (Per the dispatching engineer,
+   this commit will be made on the engineer's own side after review.)
+2. Re-run `tools/check-commits-filed.py` and `tools/check-passes-filed.py`
+   to confirm both clean — expected clean per this filing's own reading of
+   both new commits into the record, not independently re-run (no shell).
+3. Consider dispatching `troubleshooting-librarian` for the Python-
+   regex-lookahead-backtracking finding (`C:\personal_rag\python\` or
+   `claude_code\` — this librarian's judgment call, not a ruling).
+4. Everything else carried from the two-hundred-and-second filing's own
+   "For next session" list is still open.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **109** | **110** |
+| decision records | **074** | **074** (unchanged) |
+| standing rules | **R205** | **R205** (unchanged — growth declined, new rule declined) |
+| `SESSION_LOG` filings | **202** | **203** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **1** |
+
+**Terminology (rule 15):** no ce dimension or pdf dimension appears
+anywhere in this filing.

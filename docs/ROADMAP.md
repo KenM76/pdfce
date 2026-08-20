@@ -96,6 +96,235 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 110.0 — commit `1c169ba` — **`tools/check-outcome-disclosed.py`: A THIRD GATE BESIDE `check-ui-strings.sh`/`check-disclosure-channel.sh` — TWELVE OUTCOME STRUCTS, 58 `pub` FIELDS, EACH ONE MUST BE READ BY A SHELL — AND ITS OWN SELF-TEST FOUND A BROKEN REGEX ALREADY LIVE IN `check-settings-consumed.py`** — filed 2026-08-20 (two-hundred-and-third filing)
+
+**This filing has no shell.** No `git show`/`git log` was run; the commit
+hash is relayed by the dispatching engineer. **Everything below was
+independently re-confirmed against live source this filing**, by `Grep`/
+`Read`, not merely relayed — `tools/check-outcome-disclosed.py` and
+`tools/check-settings-consumed.py` were both read in full.
+
+**What the new gate is, and why it is a third side of one surface, not a
+duplicate of the other two.** `crates/pdfce-core`'s outcome structs
+(`MergeOutcome`, `FillOutcome`, `ResetOutcome`, `InsertOutcome`, …) exist
+because rule 4 obliges pdfce to disclose what it inferred, renamed, dropped
+or could not do — each `pub` field is a sentence pdfce owes the operator, not
+data a caller may use privately. `check-ui-strings.sh` asks whether the
+words a shell prints live in a place review can find; `check-disclosure-
+channel.sh` asks whether a disclosure travels the right route (off-canvas,
+stderr, not a blocking dialog); **this gate asks the question neither of
+those can: is the field read by a shell AT ALL.** Confirmed by `Read`:
+`OUTCOME_STRUCTS` (`check-outcome-disclosed.py:114`–`127`) lists **twelve**
+structs, all in `crates/pdfce-core/src/edit.rs` — `FieldAuthorOutcome`,
+`InsertOutcome`, `MergeOutcome`, `VertexOutcome`, `AdoptOutcome`,
+`DeleteOutcome`, `ResetOutcome`, `FillOutcome`, `RegenOutcome`,
+`ImportOutcome`, `FlattenOutcome`, `ImageAuthorOutcome`. **Consumer roots are
+`crates/pdfce-cli/src` and `crates/pdfce-gui/src` only, deliberately
+excluding `pdfce-core`** — core's own tests read outcome fields in every
+`assert_eq!`, and a round trip through a test proves a field is *computed*,
+not that anybody is *told*.
+
+**(a) Nothing type-checks this, and the gap is real, not merely unfilled.**
+The module docstring states it directly (confirmed by `Read`,
+`check-outcome-disclosed.py:31`–`33`): `#[must_use]` binds to the *struct*,
+so reading any ONE field consumes the value and satisfies the compiler
+forever; R151 governs a `pub fn` with no caller, the adjacent case, not this
+one. **A `pub` field with no reader has no detector in Rust at all** — this
+gate is the only thing that looks.
+
+**(b) The count was forecast before the gate ran, per `R205`'s own
+discipline, and it landed inside the gate.** Confirmed by `Read` against the
+`EXEMPT` table (`check-outcome-disclosed.py:131`–`156`): **six** fields carry
+a stated exemption reason — `ImageAuthorOutcome::content_id` (a HANDLE, the
+object id of a created content stream, offered so a caller can refer to it
+later; it states nothing about the document) and all **five** of
+`InsertOutcome`'s disclosure fields (`pages_inserted`, `orphaned_widgets`,
+`orphaned_widgets_unrecoverable`, `source_outline_dropped`,
+`source_page_labels_dropped`) — exempt because `EditSession::insert_pages`
+has **no `pdfce-cli` verb by decision** (a one-shot invocation has no open
+session to insert into; the CLI's own `insert-pages` is the *other* verb,
+`pageops::insert`) and `pdfceGUI`, which does surface all five, is out of
+tree and invisible to a gate scoped to `crates/`. **The exemption table
+demands a reason string beside each name — that is what makes it an
+exemption table and not a baseline**, which the module docstring states
+outright: *"a baseline is a list of things nobody has looked at, and it
+grows by default."* The remaining **two** of the forecast eight were real
+gaps, not exemptions, and both were fixed in this same commit rather than
+excused — see below. **8 predicted, 8 accounted for: 6 exempted, 2 fixed,
+0 left over.** Total field count across the twelve structs (**58**, per the
+gate's own `main()` summary line) is **relayed from the dispatch, not
+independently recounted field-by-field this filing** — the struct list and
+the exemption table were, and are the two facts load-bearing for whether the
+gate's *scope* is honest; the raw total is not.
+
+**(c) ★★ THE NEW GATE'S OWN SELF-TEST CAUGHT A BROKEN REGEX ALREADY LIVE IN
+`check-settings-consumed.py`, ON ITS FIRST RUN — the finding worth more than
+either the gate or the two fixes.** Confirmed by `Read` against both files.
+Both gates filter an assignment out of a `.field` match with a negative
+lookahead, and both **originally spelled it**
+`` \.\s*field\b\s*(?!=[^=]) `` — the whitespace placed OUTSIDE the lookahead.
+That spelling is broken: `\s*` outside a negative lookahead can **backtrack
+to zero**, so the engine matches `.field`, lets `\s*` consume nothing, then
+asks whether the very next character is `=`. For `settings.field = true` the
+next character is a **space**, so the lookahead succeeds and an **assignment
+is counted as a read** — the filter that is the entire point of the line
+silently does nothing on the one spelling that matters. (`settings.field=
+true`, no space, was correctly rejected, which is how the bug survived
+undetected.) The fix, live in both files today (`Read`, this filing):
+`` \.\s*field\b(?!\s*=[^=]) `` — the whitespace moved **inside** the
+lookahead, so it is part of what is forbidden rather than a thing that can
+be consumed and discarded before the lookahead even runs.
+
+**And `check-settings-consumed.py`'s own comment says it was sabotage-
+verified — and it WAS, against the wrong case.** Confirmed by `Read`,
+`check-settings-consumed.py:237`–`241`: the sabotage removed every genuine
+read from `pdfce-print` and confirmed the gate went red — but the case that
+made it red was `pick_tray_by_page_size`'s write form, a `&mut` **borrow**,
+caught by a *separate* borrow filter three lines below the `=` filter
+(`check-settings-consumed.py:282`–`288`). **The `=` filter was never the
+thing under test.** A gate carrying a long, confident comment explaining at
+length why the line is correct, verified against a case that does not
+exercise the line the comment is about — the file's own new comment names
+this exactly: *"a verified gate, with a comment explaining at length why it
+is right, that was verified against a DIFFERENT case than the one the
+comment describes. A stated derivation reads exactly like a maintained
+one."* The sibling file **stays clean after the fix** — the flaw was
+latent, not hiding a live defect, which is worth stating plainly because
+"we fixed a gate" reads as "we found a live bug" otherwise, and here it did
+not.
+
+**★ This is `R205`'s occurrence by a route `R205` does not itself name.**
+`R205`'s mechanism is a *forecast disagreeing with a gate's own output*
+(state the expectation, then be surprised when the tool disagrees). This one
+arrived differently: **a NEW gate's self-test, built to verify the NEW
+gate's own filter, happened to drive a decoy — a spaced assignment — that
+the OLD gate's self-test had never been given**, because the old gate's
+sabotage case was a borrow, not an assignment. Two gates sharing one
+mechanism is what let a fresh test built for one of them expose a latent
+defect in the other, with no forecast involved at either end. **Ruled: this
+does NOT extend `R205`'s text** — `R205`'s two-part mechanism (state the
+expectation first; fix the semantic class, not the spelling) is specific to
+the forecast-vs-output shape, and this discovery had no forecast step to
+misstate. It is closer kin to the file's own new comment than to any
+standing rule's wording, and forcing it under `R205` would blur a real
+rule's boundary for a resemblance, not a shared mechanism (see this
+librarian's own memory on pattern-naming judgment calls — "would fixing one
+have prevented the others?" — and the answer here is no: nothing about
+restating `R205` more broadly would have caused anyone to write the
+assignment-shaped decoy earlier). **Not minted as a new standing rule
+either**, on the same ground `R167`/the ablation candidate were refused
+twice this project: the instance is real and worth this filing's length,
+but a rule text that reduces to *"write a new test and it might catch an
+old bug"* is a truism, not an enforceable predicate — the actual content
+worth keeping is the SPECIFIC methodological point already captured, in
+full, inside `check-outcome-disclosed.py:197`–`214`'s own doc comment and
+`check-settings-consumed.py:243`–`266`'s matching one. **The code comment IS
+the durable record here**; a standing rule would only paraphrase it at one
+remove. Ceiling stays `R205`; `R206` next free.
+
+**The two real findings under the forecast, both fixed in this commit,
+neither exempted:**
+- **`reset-form` now prints `widgets=`.** Confirmed by `Read`,
+  `main.rs:12902`–`12913`: `out.widgets_updated` is threaded into the
+  existing token line. **Not `reset=` under another name** — a field
+  presented in more than one place on the page has more widgets than
+  fields, so `widgets=` answers "how many controls on the page changed"
+  against `reset=`'s "how many values in the form changed." Example line
+  from the doc comment: `reset=1 … widgets=3`.
+- **`fill-field` states `widgets_updated`, stated ONLY above one.**
+  Confirmed by `Read`, `main.rs:13207`–`13222`: printed to stderr, beside
+  the other fill disclosures, and gated on `> 1` deliberately — one widget
+  per field is the unremarkable case, and printing it on every fill would
+  train an operator to skip the line. Measured, from the doc comment:
+  *"field "Reference": 3 widget appearance(s) were regenerated — this field
+  is presented in more than one place, so the value changed everywhere it
+  appears."*
+
+**Test results, gates, invariant check: not independently re-run this
+filing** (no shell). Per the dispatch, both new-gate self-tests pass and
+`check-settings-consumed.py`'s own self-test still passes after the shared
+fix.
+
+**`docs/FEATURES.md`: no row added.** A gate is not a capability; the CLI
+Merge row's stale disclosure-gap clause is closed by `Pass 106.2`, below,
+not by this entry.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **109** | **110** |
+| decision records | **074** | **074** (unchanged — tooling methodology, no architectural decision) |
+| standing rules | **R205** | **R205** (unchanged — deliberately not minted; see (c) above for the refusal reasoning) |
+| `SESSION_LOG` filings | **202** | **203** |
+| `personal_rag/pdf` lessons | **+0** | **+0** (not a PDF-domain finding) |
+| `docs/FEATURES.md` rows touched | — | **0** (see `Pass 106.2` for the one row this session's two Passes actually change) |
+
+---
+
+### Pass 106.2 — commit `3329202` — **`merge-document` PRINTS THE THREE `MergeOutcome` FIELDS `Pass 106.1` ADDED — THE GAP THIS LIBRARIAN FOUND WHILE FILING THAT PASS, CLOSED THE NEXT FILING** — filed 2026-08-20 (two-hundred-and-third filing)
+
+**This filing has no shell.** Commit hash relayed by the dispatching
+engineer; **the mechanism below is independently confirmed** by `Grep`/
+`Read` against live `crates/pdfce-cli/src/main.rs`, not merely relayed.
+
+**The gap, as this librarian filed it two filings ago:** `Pass 106.1` added
+`named_destinations_carried`, `named_destinations_renamed` and
+`outline_items_carried` to `MergeOutcome`; `merge-document`'s `println!`
+kept reporting only the four fields that predate that Pass. The merge itself
+was complete and correct from the CLI the whole time — only the disclosure
+was short a line.
+
+**The fix, confirmed by `Read`, `main.rs:8877`–`8934`:** all three fields
+now appear as tokens on the existing output line — `dests=`,
+`dests_renamed=`, `outline_items=` (`main.rs:8880`–`8881`, `8897`–`8899`).
+**`named_destinations_renamed` additionally gained a stderr warning when
+it is nonzero** (`main.rs:8910`–`8924`), mirroring the treatment
+`fields_renamed` already had (`main.rs:8925`–`8934`) — ★ **stated
+precisely, because the dispatch's own framing ("promoted out of the token
+line") does not match what `Read` shows**: the field stays in the token
+line at `dests_renamed=` AND gains the warning; nothing was removed. The
+warning exists because the field's own doc comment gives a reason nothing
+else surfaces: pdfce rewrites the bookmarks it **carried** to their new
+keys, but **cannot rewrite a `/GoToR` in a third document it never
+copied** — that document's link to the old key now silently resolves to
+*this* document's own (different) destination. A cross-file breakage with
+no other route to the operator than this line.
+
+**Exercised, not merely asserted, per the dispatch: merging a document with
+itself renames every key** — measured output `pages=3 fields=0 renamed=0
+acroform_created=0 dests=4 dests_renamed=4 outline_items=6`, plus the
+stderr warning.
+
+**Test results, gates, invariant check: not independently re-run this
+filing** (no shell). Per the dispatch: clean.
+
+**`docs/FEATURES.md`: one row closed.** The Merge row's stale clause —
+*"CLI runs the full merge but doesn't print the three new counts"* — is
+removed and replaced with a statement that all three now print, in this
+same filing (this librarian's own note, filed two-hundred-and-first
+filing, closed here). Checkboxes unchanged (`[x] [x] [ ] [x]` —
+core/cli/gui/Acrobat) — this is a disclosure fix on an already-`[x]`
+capability, not a new one.
+
+**Backlog entry closed** (below, in place — the entry stays and states its
+own closure per this document's convention for resolved Backlog buckets;
+it is not deleted, since deleting would erase the record of what the gap
+was and how it was found).
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **110** | **110** (unchanged — `106.2` is a sub-letter of an existing family, not a new ceiling number) |
+| decision records | **074** | **074** (unchanged) |
+| standing rules | **R205** | **R205** (unchanged) |
+| `SESSION_LOG` filings | **203** | **203** (this entry and `Pass 110.0` above share one `SESSION_LOG` filing — the two-hundred-and-third) |
+| `personal_rag/pdf` lessons | **+0** | **+0** (not a PDF-domain finding) |
+| `docs/FEATURES.md` rows touched | — | **1** (the Merge row, line ~93) |
+
+---
+
 ### Pass 109.0 — commit `f93f8da` — **`QuadPointOrder` / `Settings::quad_point_order` INTRODUCED: THE `/QuadPoints` CORNER-ORDER SETTING (AMBIGUITY `QP-A1`) ENTERS THE SETTINGS FILE — PARSED, VALIDATED, WRITTEN, GIVEN A GUI SETTINGS-PANEL ROW, AND READ BY NOTHING** — shipped 2026-08-19, filed here for the first time (two-hundred-and-second filing)
 
 **★ THIS PASS SHIPPED AND WENT UNFILED FOR THREE LIBRARIAN DISPATCHES**
@@ -63187,6 +63416,10 @@ nothing gets forgotten, not as a commitment to build in this order.
   disclosure gap on an already-shipped capability, not a missing feature.
   One-line fix: extend the format string and the argument list with the
   three fields, same pattern as the four already there.
+  **CLOSED 2026-08-20 (two-hundred-and-third filing) — see `Pass 106.2`
+  (commit `3329202`).** All three fields print as tokens; the renamed-count
+  additionally gained a stderr warning. `docs/FEATURES.md`'s Merge row's
+  matching clause is closed in the same filing.
 - **A gate dies with `crates/pdfce-gui` unless `pdfceGUI` carries an
   equivalent.** Filed 2026-08-19 (hundred-and-ninety-seventh filing),
   from the `docs/FEATURES.md` `gui`-column re-basing dispatch.
