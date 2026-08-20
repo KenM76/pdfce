@@ -11,9 +11,16 @@ conversation with Ken.
 
 **Why:** Ken, 2026-08-20, after a long detailed session report followed by a
 short one: *"omg that is so much better. how do I get you to tldr coles notes
-all the time."* He then asked explicitly how to make it permanent — so this
-memory IS the answer to that question, and it must not decay back into long
-form.
+all the time."*
+
+★ **AND IT IS NOW A GLOBAL RULE, NOT A pdfce ONE.** When it was first recorded
+here and in pdfce's session log only, he came back with *"put it in the global
+rules please."* It is the **first section** of `C:/Users/Ken/.claude/CLAUDE.md`,
+above every other directive, and applies to **every project on the machine** —
+SolidWorks, ScripTree, combridge, tax, all of them.
+
+**This file is the pdfce-local copy of a global instruction. If the two ever
+disagree, the global file wins.**
 
 **The shape that worked**, reproduced so it can be copied:
 
