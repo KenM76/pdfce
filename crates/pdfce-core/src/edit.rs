@@ -144,6 +144,7 @@ use crate::page_tree::{self, Page, PageSlot, PageTreeError};
 use crate::pageops::references::{DanglingReport, census_dangling};
 use crate::pageops::separation::{SeparationImpact, SeparationPolicy, SeparationSplitRefused};
 use crate::pageops::{self};
+use crate::settings::QuadPointOrder;
 use crate::signature::{SaveMode, SignatureCensus, SignatureImpact, census, impact_of};
 use crate::span::ByteSpan;
 use crate::vartext::FontResource;
@@ -5348,6 +5349,32 @@ pub struct EditSession {
     staging: Vec<u8>,
     undo: Vec<Command>,
     redo: Vec<Command>,
+    /// The `/QuadPoints` corner order this session authors text markup in
+    /// (spec ambiguity `QP-A1`, §12.5.6.10).
+    ///
+    /// # Why this is SESSION state and not a parameter
+    ///
+    /// Decision 062 fixed markup authoring at **exactly one entry point**
+    /// ([`Self::add_markup`]). A sibling `add_markup_with(.., order)` would be
+    /// a second one, and *"a guard that a second entry point can bypass is not
+    /// a guard, it is a convention"*. So the order is configured on the
+    /// session and consulted by that one entry point and by the one
+    /// regeneration path ([`Self::set_markup_style`]) — which matters, because
+    /// a restyle regenerating under a different order would silently rewrite
+    /// the corner order of an annotation the operator only asked to recolour.
+    ///
+    /// # Why the SHELL sets it rather than core reading `Settings`
+    ///
+    /// The established convention for every other ambiguity setting
+    /// (`with_unmappable_code`, `with_xref_entry_eol`): `pdfce-core` takes the
+    /// resolved value and the shell reads the store. Core loading a settings
+    /// file would make an engine call depend on machine state, which is the
+    /// opposite of what the `wasm32` fork needs.
+    ///
+    /// Defaults to [`QuadPointOrder::ReadingOrder`] — what Acrobat, PDFBox and
+    /// pdf.js emit and expect — so a caller that never sets it authors exactly
+    /// what every previous pdfce build authored.
+    quad_point_order: QuadPointOrder,
 }
 
 /// What [`EditSession::copy_and_splice`] produced, before any command is
@@ -5402,7 +5429,58 @@ impl EditSession {
             staging: Vec::new(),
             undo: Vec::new(),
             redo: Vec::new(),
+            quad_point_order: QuadPointOrder::default(),
         }
+    }
+
+    /// Set the `/QuadPoints` corner order this session authors text markup in
+    /// (§12.5.6.10, ambiguity `QP-A1`).
+    ///
+    /// # Why this exists at all — a setting that did nothing
+    ///
+    /// `Settings::quad_point_order` has been parsed, defaulted, validated and
+    /// written to the generated settings file since it was introduced, and
+    /// **read by nothing**: `annot_author::build_appearance` called
+    /// `build_appearance_with(spec, QuadPointOrder::default())` and no caller
+    /// ever passed the operator's choice. An operator who switched to
+    /// `counterclockwise` saw no effect anywhere — the exact failure R83 names,
+    /// and `tools/check-settings-consumed.py` had been reporting it red.
+    ///
+    /// **A setting is a promise.** Storing one that does nothing breaks it
+    /// silently, which is worse than not offering the choice.
+    ///
+    /// # What it changes, and what it deliberately does not
+    ///
+    /// Only the `/QuadPoints` ARRAY in the annotation dictionary. The baked
+    /// `/AP` content stream is byte-identical under both orders — the quads
+    /// are drawn from the same four corners either way — so switching this
+    /// cannot change how the markup looks in a reader that honours the
+    /// appearance. It changes what a consumer that **re-derives geometry from
+    /// `/QuadPoints`** sees, which is precisely the population the ambiguity is
+    /// about.
+    ///
+    /// The two orders differ only in the last two corners: reading order ends
+    /// `LL, LR`, the counterclockwise walk §12.5.6.10 describes ends `LR, LL`.
+    /// Getting it wrong draws a bow-tie, because swapping the bottom pair
+    /// crosses the edges.
+    ///
+    /// # Existing annotations are NOT rewritten
+    ///
+    /// This governs what the session AUTHORS from now on. It does not sweep
+    /// the document — a preference change is not an edit, and rewriting every
+    /// markup annotation in a file because one moved is exactly the kind of
+    /// unrequested normalisation `ARCHITECTURE.md` §5 forbids. A markup
+    /// annotation restyled through [`Self::set_markup_style`] IS regenerated
+    /// and picks up the current order at that point, which is correct: that
+    /// call is already rewriting the keys authoring owns.
+    pub const fn set_quad_point_order(&mut self, order: QuadPointOrder) {
+        self.quad_point_order = order;
+    }
+
+    /// The `/QuadPoints` corner order this session is authoring in.
+    #[must_use]
+    pub const fn quad_point_order(&self) -> QuadPointOrder {
+        self.quad_point_order
     }
 
     /// The base document — the parse result, and the writer's source of
@@ -12443,7 +12521,7 @@ impl EditSession {
         }
 
         // Generate the appearance + annotation dictionary.
-        let authored = annot_author::build_appearance(spec);
+        let authored = annot_author::build_appearance_with(spec, self.quad_point_order);
 
         // Allocate object numbers: appearance stream, then annotation.
         let ap_id = ObjId::new(self.alloc_number()?, 0);
@@ -13617,11 +13695,11 @@ impl EditSession {
         // the new look against the old bytes and always disagree.
         let appearance_was_pdfces = self.appearance_matches(
             &current,
-            &annot_author::build_appearance(&original).ap_content,
+            &annot_author::build_appearance_with(&original, self.quad_point_order).ap_content,
         );
 
         let spec = apply_markup_style(original, style);
-        let authored = annot_author::build_appearance(&spec);
+        let authored = annot_author::build_appearance_with(&spec, self.quad_point_order);
 
         // Where does the new appearance go? Three cases, cheapest first.
         let ap_slot = self.appearance_slot(annot_id, &current)?;
@@ -25588,6 +25666,91 @@ mod tests {
         assert!(
             matches!(err, EditError::AnnotationIsCeDimension { .. }),
             "the sidecar must still recognise it, got {err:?}"
+        );
+    }
+
+    /// ★ R83: a setting is a promise. `quad_point_order` was parsed,
+    /// validated and written back for its whole life, and READ BY NOTHING —
+    /// an operator who chose `counterclockwise` got reading order anyway.
+    ///
+    /// The two orders differ only in the LAST TWO corner pairs: reading order
+    /// ends `LL, LR`, the counterclockwise walk §12.5.6.10 describes ends
+    /// `LR, LL`. This asserts exactly that swap in the written `/QuadPoints`,
+    /// so it fails the moment the session stops consulting its own setting.
+    ///
+    /// It also pins the half that must NOT change: the baked `/AP` content is
+    /// byte-identical under both orders, because the quads are drawn from the
+    /// same four corners either way. If that ever diverged, switching a
+    /// preference would silently alter how existing markup LOOKS, which is a
+    /// different and much worse feature than the one being offered.
+    #[test]
+    fn the_quad_point_order_setting_reaches_the_written_annotation() {
+        use crate::annot_author::{Color, MarkupSpec, Quad, TextMarkupKind};
+        use crate::page_tree::Rect;
+        use crate::settings::QuadPointOrder;
+
+        let spec = MarkupSpec::TextMarkup {
+            kind: TextMarkupKind::Highlight,
+            quads: vec![Quad::from_rect(Rect {
+                llx: 10.0,
+                lly: 20.0,
+                urx: 90.0,
+                ury: 60.0,
+            })],
+            color: Color::Rgb(1.0, 1.0, 0.0),
+        };
+
+        let mut written = Vec::new();
+        let mut appearances = Vec::new();
+        for order in [
+            QuadPointOrder::ReadingOrder,
+            QuadPointOrder::Counterclockwise,
+        ] {
+            let mut s = session(pdf_without_info());
+            s.set_quad_point_order(order);
+            assert_eq!(s.quad_point_order(), order);
+            let annot_id = s.add_markup(0, &spec).unwrap();
+            let Some(Object::Dict(annot)) = s.value(annot_id) else {
+                panic!("annot");
+            };
+            let quads: Vec<f64> = annot
+                .get(b"QuadPoints")
+                .and_then(Object::as_array)
+                .expect("/QuadPoints")
+                .iter()
+                .map(|o| o.as_number().expect("number"))
+                .collect();
+            let ap_id = annot
+                .get(b"AP")
+                .and_then(Object::as_dict)
+                .and_then(|d| d.get(b"N"))
+                .and_then(Object::as_reference)
+                .expect("/AP /N");
+            let Some(Object::Stream(ap)) = s.value(ap_id) else {
+                panic!("ap");
+            };
+            // The staged appearance content: `stage_bytes` addresses in the
+            // combined `base.len() + local` coordinate system, so subtract the
+            // base length to index the staging buffer.
+            let start = ap.data_span.start - s.base.bytes().len();
+            appearances.push(s.staging[start..start + ap.data_span.len].to_vec());
+            written.push(quads);
+        }
+
+        let (reading, ccw) = (&written[0], &written[1]);
+        assert_eq!(reading.len(), 8, "one quad, eight numbers");
+        // The first two corners (UL, UR) are identical under both orders.
+        assert_eq!(reading[0..4], ccw[0..4], "UL and UR must not move");
+        // The last two are SWAPPED, in pairs.
+        assert_eq!(reading[4..6], ccw[6..8], "reading LL must be ccw's last");
+        assert_eq!(reading[6..8], ccw[4..6], "reading LR must be ccw's third");
+        assert_ne!(
+            reading, ccw,
+            "the setting must reach the file at all — this is the R83 half"
+        );
+        assert_eq!(
+            appearances[0], appearances[1],
+            "the baked /AP must be byte-identical: this changes what /QuadPoints says, never how the markup looks"
         );
     }
 

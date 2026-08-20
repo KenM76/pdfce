@@ -14688,6 +14688,20 @@ fn cmd_annotate(args: &AnnotateArgs<'_>) -> u8 {
         return exit::EDIT_REFUSED;
     };
 
+    // The operator's `/QuadPoints` corner order (ambiguity `QP-A1`,
+    // §12.5.6.10). Read from the store here, in the SHELL, and handed to the
+    // session — the same convention `--unmappable-code` and the writer's
+    // `xref_entry_eol` follow, and the reason `pdfce-core` never opens a
+    // settings file itself.
+    //
+    // Until this line existed the setting was parsed, validated and written
+    // back, and READ BY NOTHING: an operator who chose `counterclockwise` got
+    // reading order anyway, everywhere. R83 — a setting is a promise.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
+    session.set_quad_point_order(settings.quad_point_order);
+
     // Pass 6.2 text-bearing subtypes take the variable-text path
     // (add_text_annotation); the Pass 6.1 geometric subtypes take
     // add_markup. Both share every guard and the same save/undo plumbing.

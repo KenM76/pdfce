@@ -5590,6 +5590,15 @@ impl PdfceApp {
             f64::from(c.b()) / 255.0,
         );
         let width = f64::from(self.markup_width);
+        // The operator's `/QuadPoints` corner order (ambiguity `QP-A1`,
+        // §12.5.6.10), copied out for the same reason the pen settings are:
+        // `self.settings` cannot be read once the session is borrowed.
+        //
+        // Set on the SHELL side, like every other ambiguity setting —
+        // `pdfce-core` takes the resolved value and never opens a settings
+        // file. Until this existed the setting was parsed, validated, written
+        // back and read by nothing (R83).
+        let quad_order = self.settings.quad_point_order;
 
         let outcome: Result<(), String> = {
             let Status::Open(doc) = &mut self.status else {
@@ -5654,6 +5663,7 @@ impl PdfceApp {
                     rect.llx, rect.lly, rect.urx, rect.ury
                 )
             });
+            doc.session_mut().set_quad_point_order(quad_order);
             match doc.session_mut().add_markup(page_index, &spec) {
                 Ok(_) => {
                     doc.refresh_pages();
