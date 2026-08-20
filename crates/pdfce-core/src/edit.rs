@@ -6857,21 +6857,116 @@ impl EditSession {
         let pages = page_tree::pages(&self.base)?;
         let page = pages
             .get(req.page_index)
-            .ok_or(FmtError::PageIndex(req.page_index))?;
-        let content_id = *page
-            .contents
-            .first()
-            .ok_or_else(|| FmtError::Unsupported("the page has no /Contents to edit".to_owned()))?;
+            .ok_or(FmtError::PageIndex(req.page_index))?
+            .clone();
 
-        let stream = self
-            .current_page_content(content_id, page)
-            .map_err(FmtError::Content)?;
-        let plan = plan_format(&self.base, page, &stream, req, opts)?;
+        // The page's own `/Contents` first, for the same reason
+        // `Self::edit_text` keeps this branch separate (`Pass 119.2`): this
+        // path reads the session's ALREADY-EDITED raw stream through
+        // `current_page_content`, which is what makes sequential format edits
+        // accumulate, and that read is not interchangeable with a fresh decode.
+        let mut page_attempt = if matches!(
+            req.target,
+            crate::text_edit::EditTarget::Auto | crate::text_edit::EditTarget::PageContents
+        ) {
+            match page.contents.first().copied() {
+                Some(content_id) => {
+                    let stream = self
+                        .current_page_content(content_id, &page)
+                        .map_err(FmtError::Content)?;
+                    match plan_format(&self.base, &page, &stream, req, opts) {
+                        Ok(plan) => {
+                            let command = self.text_edit_command(
+                                CommandKind::FormatText,
+                                content_id,
+                                &page,
+                                plan.new_content,
+                            );
+                            self.commit(command);
+                            return Ok(plan.report);
+                        }
+                        Err(e) => Some(e),
+                    }
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+        if let Some(e) = page_attempt {
+            if crate::text_edit::format::is_locational_format_error(&e) {
+                page_attempt = Some(e);
+            } else {
+                return Err(e);
+            }
+        }
+        if matches!(req.target, crate::text_edit::EditTarget::PageContents) {
+            return Err(page_attempt
+                .unwrap_or_else(|| FmtError::Unsupported("the page has no /Contents".to_owned())));
+        }
 
-        let command =
-            self.text_edit_command(CommandKind::FormatText, content_id, page, plan.new_content);
+        self.format_text_in_form(&page, req, opts, page_attempt)
+    }
+
+    /// The form-XObject half of [`Self::format_text`] (`Pass 119.2`).
+    ///
+    /// Structurally identical to [`Self::edit_text_in_form`] — search the
+    /// forms the page paints in `Do` order, plan against each, **commit once
+    /// after the loop** (R179/R49) — and kept as its own function for the same
+    /// reason the free-function twins are: the two differ only in the plan and
+    /// error types, and a generic seam over two error enums would cost more in
+    /// indirection than the duplication saves.
+    fn format_text_in_form(
+        &mut self,
+        page: &Page,
+        req: &crate::text_edit::FormatRequest,
+        opts: &crate::text_edit::FormatOptions,
+        page_error: Option<crate::text_edit::FormatError>,
+    ) -> Result<crate::text_edit::FormatReport, crate::text_edit::FormatError> {
+        use crate::text_edit::FormatError as FmtError;
+        use crate::text_edit::format::{is_locational_format_error, plan_format_target};
+        use crate::text_edit::forms;
+
+        let scan = forms::scan_page_forms(&self.base, &self.view(), page);
+        let mut map = forms::invocation_map(&self.base, &self.view());
+        let mut seen: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        let mut first_locational = page_error;
+        let mut found: Option<(ObjId, Dict, Vec<u8>, crate::text_edit::FormatReport)> = None;
+        for form in scan.forms {
+            if let crate::text_edit::EditTarget::Form { object } = req.target
+                && form.id.num != object
+            {
+                continue;
+            }
+            if !seen.insert(form.id.num) {
+                continue;
+            }
+            let Ok(stream) = crate::content::ContentStream::from_form(&self.view(), form.id) else {
+                continue;
+            };
+            let invocations = map.remove(&form.id.num).unwrap_or_default();
+            let form_id = form.id;
+            let form_dict = form.dict.clone();
+            let target = crate::text_edit::edit::EditPlanTarget::form(form, invocations);
+            match plan_format_target(&self.base, &target, &stream, req, opts) {
+                Ok(plan) => {
+                    found = Some((form_id, form_dict, plan.new_content, plan.report));
+                    break;
+                }
+                Err(e) if is_locational_format_error(&e) => {
+                    if first_locational.is_none() {
+                        first_locational = Some(e);
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        let Some((form_id, form_dict, new_content, report)) = found else {
+            return Err(first_locational.unwrap_or_else(|| FmtError::NoMatch(req.find.clone())));
+        };
+        let command = self.form_edit_command(form_id, &form_dict, new_content);
         self.commit(command);
-        Ok(plan.report)
+        Ok(report)
     }
 
     /// Ask what a synthetic bold/italic request **would** do to one run,

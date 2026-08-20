@@ -543,8 +543,8 @@ impl TextRun {
     /// reader may substitute wholesale), a form whose `/Resources` is present
     /// but does not declare the font its own text selects, and pdfce's 64-deep
     /// nesting guard. Each is refused **by name** at edit time. And
-    /// `format_text`, `reflow_block` and `add_text` were **not** retargeted by
-    /// `Pass 119.0`, so for those three this answer is optimistic.
+    /// `reflow_block` and `add_text` were **not** retargeted (`format_text`
+    /// was, by `Pass 119.2`), so for those two this answer is optimistic.
     ///
     /// # ★ Why this is not the `-> bool` that was asked for
     ///

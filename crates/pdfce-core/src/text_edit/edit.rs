@@ -2018,7 +2018,9 @@ pub(crate) const fn is_locational_error(e: &EditError) -> bool {
 /// # Errors
 ///
 /// [`EditError::Unsupported`] with the trigger named.
-fn refuse_unsuitable_form(form: &crate::text_edit::forms::FormRef) -> Result<(), EditError> {
+pub(crate) fn refuse_unsuitable_form(
+    form: &crate::text_edit::forms::FormRef,
+) -> Result<(), EditError> {
     if form.dict.contains_key(b"Ref") {
         return Err(EditError::Unsupported(
             "this form XObject is a REFERENCE XObject (/Ref, ISO 32000-1 8.10.4) -- its visible content is a proxy for content in another file, which a conforming reader may substitute wholesale, so an edit here could silently fail to reach what is actually printed".to_owned(),
@@ -2042,7 +2044,7 @@ fn refuse_unsuitable_form(form: &crate::text_edit::forms::FormRef) -> Result<(),
 /// opened. That is not a bug to be fixed — it is the file's own structure —
 /// and the only honest response is to **say so**, off-canvas, in the report
 /// (rule 4 as narrowed by decision 059: render normally, report separately).
-fn disclose_form_edit(
+pub(crate) fn disclose_form_edit(
     doc: &Document,
     form: &crate::text_edit::forms::FormRef,
     invocations: Option<&crate::text_edit::forms::InvocationSet>,

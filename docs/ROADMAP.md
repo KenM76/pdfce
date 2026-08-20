@@ -96,6 +96,191 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 119.0` (`cc57080`) — TEXT INSIDE A FORM XOBJECT IS EDITABLE; THE SHARED-FORM PROBLEM HAS NO FIX, ONLY A DISCLOSURE; DECISION 076 DECIDES EDIT-IN-PLACE AS DEFAULT; `check-outcome-disclosed.py`'S OWN INPUT LIST FOUND UNDER-SCOPED, FIFTH INSTANCE OF THE UNDER-REPORTING-GATE CLASS — 2026-08-20 (two-hundred-and-ninth filing)
+
+**Escalated by the operator himself** (two-hundred-and-eighth filing,
+verbatim: *"I need that editing capability as it is 99% of the text I
+will want to edit… I'll clear the session for it"*), measured against his
+own CAD benchmark sheet: page `/Contents` carries **3,007** single-
+character `Tj` of producer watermark (editable, unwanted); one form
+XObject carries **1,696** show operators — every label, the title block,
+every **pdf dimension** callout (project rule 15 — this Pass concerns pdf
+dimensions, i.e. CAD-exported page content; it does not touch pdfce's own
+ce dimensions at all).
+
+**What shipped.** `edit_text` (free function and `EditSession::edit_text`)
+now resolves a **target content stream** instead of assuming the page's
+own `/Contents`. New `EditRequest::target: EditTarget { Auto (default) |
+PageContents | Form { object } }` — `Auto` searches the page's own content
+first, then each form XObject the page paints, **in `Do` order**. New
+module `crates/pdfce-core/src/text_edit/forms.rs` (form discovery,
+resource-tier resolution, document-wide invocation census). New
+`ContentStream::from_form`. CLI: `edit-text --target auto|page|form:N`,
+`inspect --forms`.
+
+**The surgery itself did not change — only the addressing.** A new
+`EditPlanTarget` names the stream object, its resource dictionary and its
+sibling-collapse count — three values `plan_edit` used to read straight
+off the `Page`. The §9.4.4 advance arithmetic, the inverse encoding, the
+follower disposition and every pre-existing refusal operate on operators,
+which do not know which stream they were parsed from.
+
+**Test results.** `cargo test --workspace` green, 0 failures. New suite
+`crates/pdfce-core/tests/form_xobject_text_edit.rs`, 16 tests. Two
+sabotage runs recorded: replacing the form dictionary with a fresh one
+fails 4 of 16; suppressing the shared-content disclosure fails 1 of 16.
+
+**Invariants.** `cargo fmt --check` clean; `cargo clippy --all-targets
+--workspace` clean. No manifest touched, no dependency added this Pass —
+`cargo tree -p pdfce-core` / `-p pdfce-render` unchanged by construction.
+Minimal-diff verified by test, not asserted: a form edit re-emits only the
+form's stream object (byte-search confirms the page's content object is
+absent from the appended revision); edit-then-undo-then-save reports
+`objects_written == 0`. Packaging not touched.
+
+**The `pdfce-spec-librarian` dispatch this Pass was gated on has
+returned and landed.** New corpus file
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__form_xobject_text_edit.md`
+(confirmed present on disk this filing, 68 kB) covers §8.10.1 Tables
+95/96, the shared-invocation question, text-state reset at `Do`, and
+`/Resources` fallback — the four questions named as outstanding in the
+two-hundred-and-eighth filing's entry, above. Neither the dispatch nor
+the shared-invocation design question reads as open any longer; both are
+closed by this entry and decision 076 respectively.
+
+**★★ The design question and the negative result behind it.** A form
+XObject may legally be painted from several pages and several times on
+one page — §8.10.1 states this as the feature's *purpose*, naming CAD
+output by name as its illustration. **There is no ownership rule in
+either edition** (`FX-N1`, spec corpus, argued three independent ways:
+the `/Name` single-identity vestige is deprecated; the standard writes
+"shall not… more than one" exclusivity rules four times for other
+constructs and never here; Annex F normatively defines a shared-object
+class "referenced from more than one page"). So editing a shared form
+changes every sheet, and pdfce cannot prevent it structurally — there is
+exactly one stream object.
+
+**`Editability::InsideForm` is now `#[deprecated]`, never returned.**
+`TextRun::editability()` answers `Editable` for form content, exactly as
+`Pass 118.0`'s documentation promised. This is the retrospective argument
+for `Pass 118.0` having shipped an owned predicate rather than telling
+shells to match on `GlyphProvenance::content_stream` directly: a shell
+that had encoded the limitation in its own caret guard would still be
+refusing carets today. See the `D:\dev\rag\rust\` finding filed this Pass
+for the general pattern.
+
+**Two tolerances built and reverted before shipping** (per-name merge,
+then weaker per-category merge) — both let the edit path resolve a font
+`pdfce-render`'s own `Do` handler does not (own resources win entirely
+when present, per §7.8.3), producing an advance computed from `/Widths`
+nothing else consults: text lands visibly wrong while every internal
+check reports success. `text_extract` independently agrees with the
+renderer (reports no run at all), a test pins this. **Settled: whole-
+dictionary, own-wins-entirely**, empty `<< >>` counted as absent. One
+divergence stated rather than hidden — `Pass 119.3` (Backlog, above)
+tracks it.
+
+**Refusals shipped, each named, each before any mutation:** `/Ref`
+reference XObjects and `/OPI` proxies (their visible content may be
+wholesale-substituted by a conforming reader, so an edit could appear to
+work and never reach what prints); a form whose `/Resources` does not
+declare the font its own text selects; 64-deep nesting refused as
+**pdfce's own limit**, not the file's defect (neither edition states a
+nesting ceiling for forms).
+
+**`/LastModified` bumped only when the form carries `/PieceInfo`** —
+§14.5's staleness protocol is an equality comparison; a form with no
+`/PieceInfo` has no such protocol to break, and adding the key would
+invent one. First wall-clock read in the crate, `cfg`-guarded off
+`wasm32` (`SystemTime::now` panics there); fallback is "leave the key
+alone," never a fabricated constant.
+
+**Named non-goals:** `format_text`, `reflow_block`, `add_text` were **not**
+retargeted this Pass and still reach page-stream text only (`Pass 119.2`,
+Backlog, above). `editability()` is therefore optimistic for those three
+— stated in its own doc comment and in `docs/core-api`.
+
+**★★ `tools/check-outcome-disclosed.py` was green because it was not
+looking — fifth instance of the under-reporting-gate class, first whose
+mechanism is scope-of-input-list rather than spelling-of-pattern.** Its
+`OUTCOME_STRUCTS` list was written from `edit.rs` alone; every report
+type living in a submodule was outside it, `EditReport` included. Three
+fields were added to `EditReport` this Pass — one, `form_invocations`,
+exists solely to stop a shell changing six sheets while showing one — and
+the gate would have stayed green had all three been dropped on the floor.
+Forecast before the gate ran: 13 fields, 11 printed ⇒ two problems. It
+reported exactly `disposition` and `extra_objects_emptied`. `EditReport`
+is now in `OUTCOME_STRUCTS`; both fields now print from `pdfce-cli`.
+
+**`tools/check-one-commit-per-command.py` found the new session path the
+day it was written** — the form-search loop committed per iteration,
+harmless only while the loop returned on first success (the exact latent
+shape `import_form_data` shipped with). Hoisted out of the loop.
+
+**Decision 076 (`ARCHITECTURE.md` §12): the shared-form-XObject edit
+default is edit-in-place, disclosed — copy-on-write is NOT the default.**
+Full reasoning below, *Decisions made this session* equivalent; see
+`ARCHITECTURE.md` §12 for the canonical record. `R206` compliance: both
+behaviours ship — edit-in-place now, `unshare_form` filed as `Pass 119.1`
+— but the shape is a **reframing**, not two defaults for one verb: one is
+*edit*, the other is *unshare, then edit*. Acrobat's own behaviour here
+is **unsourceable** (`pdfce-acrobat-librarian`, 50 tool calls, nobody —
+including Acrobat's own competitors — documents what Acrobat does to a
+shared form XObject's stream); this decision is pdfce's own reasoning,
+not a parity claim. New corpus file:
+`D:\Dev\Rag-Specialized\Acrobat_Features\text_edit__form_xobject_shared_content_editing.md`
+— also flags a trap by name: a forum thread titled almost exactly "text
+edits appear on every page" is root-caused by AcroForm field-name
+collisions, not shared form XObjects.
+
+**`docs/ROADMAP.md`: `Pass 119.0`'s pointer entry in *Next up* and its
+full scoping entry in *Backlog* are both FULLY DELETED** per this
+project's ship-and-delete convention (`Pass 92.0`/`93.0` precedent,
+reconfirmed 177th filing) — this entry is the enduring record. Three new
+Backlog entries filed for named follow-on work: `Pass 119.1`
+(`unshare_form`), `Pass 119.2` (retarget `format_text`/`reflow_block`/
+`add_text`), `Pass 119.3` (align the nested-form resource-fallback
+divergence). A separate, unrelated Backlog family, `Pass 120.0`–`120.4`
+(object clipboard), filed from a fresh `pdfceGUI` request — see *Backlog*,
+above.
+
+**`docs/FEATURES.md`:** row 107 ("Edit existing text runs in place…")
+rewritten in place — core/cli now reach form-XObject text via
+`--target`; `pdfceGUI`'s own caret guard is unchanged this Pass (the
+reply telling them to drop it was sent today, not yet acted on), so the
+`gui` box is **not** ticked on that basis. New row added: "list the form
+XObjects a page paints, and how many places in the document paint each
+one" — core `[x]`, cli `[x]` (`inspect --forms`), gui `[ ]`. See
+*Implemented → Text*, `docs/FEATURES.md`.
+
+**RAG escalations, both written this filing:**
+- `D:\dev\rag\rust\an_out_of_tree_capability_change_is_signalled_with_deprecated_on_the_stale_match_arm.md`
+  — using `#[deprecated]` on an enum variant to tell a downstream, out-
+  of-tree consumer their guard is stale, fired at the exact match arm
+  that needs deleting.
+- `C:\personal_rag\pdf\lesson_20260820_open_question_form_xobject_resources_missing_font_declaration_frequency.md`
+  — open question, not a finding: how common is a form whose
+  `/Resources` is present but omits a font its own content selects?
+  pdfce currently refuses that shape; the refusal is only right if it is
+  rare. Records what to capture on first real-world sighting.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **119** | **120** — `119.1`–`119.3` are sub-IDs of the existing family (no ceiling move); `120.0`–`120.4` (object clipboard) mint the new one |
+| decision records | **075** | **076** |
+| standing rules | **R206** | **R206** (unchanged — `R206`'s mechanism applied, not extended) |
+| `SESSION_LOG` filings | **208** | **209** |
+| `personal_rag/pdf` lessons | **+0** | **+1** (open-question entry, above) |
+| `D:\dev\rag\rust\` findings | **+0** | **+1** (deprecated-variant pattern, above) |
+| `docs/FEATURES.md` rows touched | — | **2** (row 107 rewritten; one new row added) |
+
+**Terminology (rule 15):** every occurrence of "dimension" in this entry
+is qualified — **pdf dimensions** (existing CAD-exported callouts, what
+this Pass makes editable) throughout; **ce dimensions** named once, only
+to state this Pass does not touch them.
+
 ### escalation — `Pass 119.0` PROMOTED to *Next up* on operator priority ruling: *"I need that editing capability as it is 99% of the text I will want to edit… I'll clear the session for it"* — `Pass 113.0` now waits behind it; the shared-invocation design question flagged, not decided; the `pdfce-spec-librarian` dispatch it is gated on named as owed — 2026-08-20 (two-hundred-and-eighth filing, no Pass ID)
 
 **This filing has no shell; no code changed.** Pure ROADMAP/SESSION_LOG
@@ -55061,17 +55246,12 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### `Pass 119.0` — TEXT EDITING INSIDE FORM XOBJECTS — PROMOTED here on operator priority ruling, 2026-08-20 (two-hundred-and-eighth filing)
-
-**Pointer entry only — the full scoping record, the shared-invocation
-design question, and the outstanding `pdfce-spec-librarian` dispatch all
-live in this Pass's *Backlog* entry (below), per this project's
-established convention of not relocating a promoted bucket's scoping
-prose (`Pass 71.0`/OCR precedent).** Operator, verbatim: *"I need that
-editing capability as it is 99% of the text I will want to edit… I'll
-clear the session for it."* Full record: the two-hundred-and-eighth
-filing's Shipped-section entry (top of *Shipped*). `Pass 113.0`
-(`transform_objects`), previously next in line, now waits behind this.
+**`Pass 119.0` SHIPPED, `cc57080` — see top of *Shipped*, below.** The
+pointer entry that lived here (two-hundred-and-eighth filing) is removed
+per this project's fully-delete-on-ship convention (`Pass 92.0`/`93.0`
+precedent, reconfirmed 177th filing) — the enduring record is the fresh
+Shipped entry, not relocated *Next up* prose. `Pass 113.0`
+(`transform_objects`) is next in line again.
 
 ### ★★★★★ OWED TO THE NEXT SESSION — the 186th filing's convergence list, put HERE because `docs/NEXT_SESSION.md` is OVERWRITTEN each session and this file is not — opened 2026-08-18 (hundred-and-eighty-sixth filing)
 
@@ -63975,98 +64155,77 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
-### `Pass 119.0` — TEXT EDITING INSIDE FORM XOBJECTS — filed 2026-08-20 (two-hundred-and-sixth filing), ask 3 of three `pdfceGUI` requests filed today; asks 1 and 2 shipped as `Pass 118.0`, above — **★★ PROMOTED to *Next up*, 2026-08-20 (two-hundred-and-eighth filing), on operator priority ruling — see the pointer entry at the top of *Next up* and the full record at the top of *Shipped*. Not physically relocated; this heading and everything below it remain the scoping record.**
+### `Pass 119.1` — `unshare_form`: copy-on-write a shared form XObject onto one page
 
-**Not started, not dated, not scoped past the shape below.** `Pass 118.0`
-published the boundary this Pass exists to move: pdfce's text-edit surgery
-(`text_edit::edit::Walk`) does not descend into form XObjects, while
-extraction, rendering and object selection all do. On a CAD-exported sheet
-this is not a completeness item — the consuming shell's own words,
-preserved: *"for a shell serving CAD output this is not a completeness
-item, it is where the text is."* Their own measurement (`Pass 118.0`'s
-entry, above): **1,696** of the editable-looking show operators on a real
-sheet sit inside a form XObject, against **3,007** single-character `Tj`
-of producer watermark in the page stream that nobody wants to touch.
+**Filed 2026-08-20 (two-hundred-and-ninth filing), the "option" half of
+decision 076's default** (edit-in-place is the default verb behaviour;
+this is the explicit, separate act of breaking the sharing first).
+Clone the invoked form to a new object; re-bind only the targeted page's
+`/XObject` name entry, privatising the page's `/Resources`/`/XObject`
+subdictionary first if either is inherited or shared — the same shape
+`Pass 111.0`/decision 075 used for a shared `/Contents` array. **Refuse
+by name when the invocation is nested inside another form** — re-binding
+there means editing the parent, which may itself be shared, and a default
+whose semantics depend on nesting depth is worse than one that always
+means the same thing (decision 076). Acceptance criterion: an unshare
+followed by an edit changes exactly one page (verified by render), every
+other invocation site byte-identical.
 
-**The shape of the work, as given at dispatch.** The surgery today
-operates on exactly **one buffer** — the page's own concatenated
-`/Contents`. A form XObject is a **different stream object**, with its own
-`/Resources` and often its own `/Matrix`. Editing inside one is therefore a
-write to a **possibly-shared object**: the same form XObject stream can be
-invoked by `Do` from several pages, or several times from one page (a
-repeated title-block stamp, a symbol library entry) — legal under §12.5.5
-and already load-bearing elsewhere in this codebase (`ARCHITECTURE.md`
-line ~2900). Whether an edit inside a shared form propagates to every
-invocation (correct, if the operator's intent is "fix the symbol") or must
-refuse by name (correct, if the operator's intent is "fix this one
-instance" and the form is shared) is **a design decision to make in the
-open before writing the surgery, not something to discover afterwards** —
-the engineer's own framing, preserved verbatim because it is exactly right
-and because this project has been burned by the opposite order before
-(decision 058's "a workaround that outlives its bug" is what happens when
-a boundary is discovered rather than decided).
+### `Pass 119.2` — retarget `format_text` (and then `reflow_block` / `add_text`) into form XObjects
 
-**★ Cross-reference, flagged rather than asserted as settled.** This is
-arguably the same shape as `Pass 111.0`'s decision NOT to rewrite a
-possibly-shared `/Contents` array object in place (decision 075, same
-day) — both are "the object this verb wants to touch may be reached from
-more than one place, and the verb must decide what that means before it
-writes." Whether that rhymes hard enough to be worth stating as one
-general principle (a standing rule, or a widened decision 075) rather than
-two separate rulings is the **engineer's** call, not filed here as a
-ruling — this librarian is not the author of either decision and the two
-problems differ in one respect worth naming before conflating them:
-decision 075 is about a reader/writer **shape** disagreement (an array vs.
-a reference to an array), while this Pass's hazard is about **multiplicity
-of invocation** (one stream, many callers) — the same word "shared" is
-covering two different risks.
+**Filed 2026-08-20 (two-hundred-and-ninth filing).** `Pass 119.0` gave
+`plan_edit` a target-resolution layer (`EditPlanTarget`: stream object,
+resource dictionary, sibling-collapse count) that `plan_format` needs the
+identical three values for and currently reads straight off the `Page`.
+An operator can now *edit* form text but not *restyle* it — this Pass
+closes that asymmetry. `add_text`'s extra hazard, named so it is not
+discovered mid-surgery: appending to a form's content stream changes
+every invocation site that paints it, a different disclosure shape than
+`edit_text`'s single-target report.
 
-**Acceptance criteria: NOT yet scoped.** No `pdfce-spec-librarian` or
-`pdfce-acrobat-librarian` dispatch has grounded this against real Acrobat
-behaviour or the §12.5.5/§8.10 form-XObject clauses specifically for the
-edit case (as opposed to the render case, which `pdfce-render` already
-implements). Flagged as owed before this Pass is scoped past the shape
-above, per project rule 12.
+### `Pass 119.3` — align `pdfce-render`'s nested-form resource fallback with `text_edit::forms`
 
-**★★ PRIORITY ESCALATION, 2026-08-20 (two-hundred-and-eighth filing) —
-operator, verbatim:** *"I need that editing capability as it is 99% of
-the text I will want to edit. please put this request in the handoff.
-and I'll clear the session for it."* Clearing a session for a specific
-item is this project's strongest priority signal. Consequence: `Pass
-113.0` (`transform_objects`), previously next in the "For next session"
-queue (`SESSION_LOG.md`, two-hundred-and-seventh filing), now waits
-behind this Pass. `pdfceGUI`'s shell side for `113.0` is reported already
-built and idle — the delay has a known, named cost.
+**Filed 2026-08-20 (two-hundred-and-ninth filing).** `pdfce-render`'s `Do`
+handler inherits the **caller's** resources for a resource-less *nested*
+form XObject; `text_edit::forms.rs` inherits the **page's**, per §7.8.3's
+literal reading (`FX-A1`, spec corpus, ambiguity register). Identical at
+depth 0 — every real file measured so far — divergent only for a nested
+form that both omits `/Resources` and is itself invoked from inside
+another form. Filed so the inconsistency is tracked rather than latent;
+not urgent, no known fixture exercises it.
 
-**★★ THE OUTSTANDING SPEC DISPATCH THIS PASS IS GATED ON, named so the
-next session's `Grep` finds a target.** A `pdfce-spec-librarian` dispatch
-went out 2026-08-20 covering: §8.10.1 Tables 95/96 (`/BBox` as
-clip-or-advisory, `/Matrix` composition order, `/LastModified` +
-`/PieceInfo` obligations when pdfce rewrites a form); the shared-
-invocation question above; whether text state and the text matrix are
-reset at `Do`; and `/Resources` fallback when a form omits its own.
-**Acceptance criteria stay UNSCOPED until this dispatch's findings land
-in a pdfce doc** — expected location `D:\Dev\Rag-Specialized\PDF_Spec\`,
-exact filename to be confirmed on delivery and recorded here when known.
+### `Pass 120.0`–`120.4` — object clipboard (kind-agnostic copy/cut/paste)
 
-**★★ THE SHARED-INVOCATION QUESTION, RE-STATED WITH ITS GOVERNING
-MECHANISM NAMED — still flagged, still NOT decided.** `R206`, minted the
-filing immediately after this Pass was first filed (two-hundred-and-
-seventh filing, *Standing rules*, below), governs exactly this shape of
-question: two defensible behaviours (propagate the edit to every
-invocation of a shared form vs. refuse by name), neither dictated by the
-PDF standard ⇒ ship BOTH as configurable options, default from ordinary-
-operator expectation, do not return to the operator to ask. `R206`
-postdates this Pass's first filing by one entry; it plainly applies now.
-**This librarian's instinct only, not a ruling:** an operator editing a
-label on the sheet in front of him expects to change *that* sheet, so
-copy-on-write of a private form copy for the page being edited reads like
-the likely default, with edit-in-place (propagate) as the option — but a
-title block appearing identically on six sheets, where the operator may
-want all six to change at once, is the counter-example that keeps this
-open rather than settled. Deciding it is the engineer's act. Full
-reasoning and the `Pass 111.0`/decision 075 cross-reference: the
-two-hundred-and-eighth filing's Shipped-section entry (top of *Shipped*).
+**Filed 2026-08-20 (two-hundred-and-ninth filing), from `pdfceGUI`'s
+`request_an_object_clipboard_the_whole_capability_not_the_convenient_
+subset.md` (dated 2026-08-20 16:57), which supersedes the narrower `◐`/
+`⛔` clipboard rows of an earlier note.** Operator, relayed verbatim by
+the requester: *"oh I might want all cases so we shouldn't be
+restrictive in our ask."* Five parts, dependency-ordered; **the
+requester's own key claim is filed as a CLAIM, not verified fact** —
+that `EditSession::import_object` (`edit.rs:19367`) already does the hard
+half (recursive cross-document graph copy, reference remapping, cycle
+handling, stream re-staging), so this is "expose the existing engine at
+object granularity," not "build a copy engine." Confirm before scoping
+acceptance criteria past this shape.
+
+- **`Pass 120.0`** — `ObjectClip` + `copy_objects` / `paste_objects` /
+  `paste_preview`, kind-agnostic, `at: Matrix` (composes with `Pass
+  112.0`'s `Matrix::about`), `&self` preflight in the
+  `vertex_edit_preview` shape. Foundation; everything below depends on it.
+- **`Pass 120.1`** — `ObjectClip::to_bytes` / `from_bytes`, versioned,
+  refusing a payload from a newer build — the same posture the
+  ce-dimension sidecar already takes. This is what makes cross-document
+  and cross-session paste free rather than a second feature.
+- **`Pass 120.2`** — "render this selection as a standalone one-page
+  PDF." The requester explicitly does **not** want pdfce touching the OS
+  clipboard directly; they register the formats on their side.
+- **`Pass 120.3`** — cut as one undo entry (group two verbs, or a
+  `cut_objects` verb — implementation choice left to the engineer).
+- **`Pass 120.4`** — dimensions and widgets on the clipboard: refuse
+  loudly on the first cut rather than paste something structurally right
+  and semantically wrong (a ce dimension's `/Measure`/scale context, a
+  widget's field-tree membership, do not survive a naive object copy).
 
 ### ★★★ MOVE / RESIZE / ROTATE, SCOPED TO ITS LOGICAL CONCLUSION — filed 2026-08-20 (two-hundred-and-fourth filing), from the operator's own widening instruction on `request_no_verb_transforms_a_non_path_object_so_a_placed_image_cannot_be_moved.md`
 

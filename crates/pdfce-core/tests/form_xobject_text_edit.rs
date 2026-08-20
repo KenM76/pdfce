@@ -644,3 +644,142 @@ fn a_self_contained_form_reports_no_inheritance() {
         "this form declares /F1 itself -- nothing was inherited: {disclosed}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// `Pass 119.2` — format_text reaches the same text edit_text does
+// ---------------------------------------------------------------------------
+
+/// ★ **The asymmetry `Pass 119.0` shipped, closed.**
+///
+/// `edit_text` reached form content and `format_text` did not, which an
+/// operator meets as *"I can change the words but not the size"* — the same
+/// class of half-working the whole Pass exists to remove, one verb over. The
+/// asymmetry was named as a known non-goal rather than left to be discovered,
+/// and this is it being paid off.
+#[test]
+fn format_text_reaches_form_xobject_text() {
+    use pdfce_core::text_edit::{FormatOptions, FormatRequest, set_format};
+
+    let doc = Document::from_bytes(page_and_form_pdf()).expect("fixture loads");
+    let req = FormatRequest::new(0, "TITLE").size(24.0);
+    let outcome =
+        set_format(&doc, &req, &FormatOptions::default()).expect("the format edit succeeds");
+
+    assert_eq!(
+        outcome.report.form_object,
+        Some(5),
+        "the restyle must land in the form's stream, and say so"
+    );
+    assert_eq!(
+        outcome.report.size_change,
+        Some((12.0, 24.0)),
+        "the size actually changed"
+    );
+    // The text survives the restyle -- a format edit re-emits the show
+    // operator, so a broken splice would lose the run rather than resize it.
+    assert!(all_text(&outcome.bytes).contains("TITLE"));
+}
+
+/// A shared form reports its fan-out on the FORMAT path too.
+///
+/// Pinned separately rather than assumed from `edit_text`'s test: the two verbs
+/// build their reports in different functions, and "it works for the sibling"
+/// is exactly the reasoning that lets one of a pair ship without the
+/// disclosure. (Same lesson as `Pass 106.2`, where three computed outcome
+/// fields reached no shell at all.)
+#[test]
+fn a_shared_form_reports_its_fan_out_on_the_format_path() {
+    use pdfce_core::text_edit::{FormatOptions, FormatRequest, set_format};
+
+    let doc = Document::from_bytes(shared_form_pdf()).expect("fixture loads");
+    let outcome = set_format(
+        &doc,
+        &FormatRequest::new(0, "TITLE").size(24.0),
+        &FormatOptions::default(),
+    )
+    .expect("the format edit succeeds");
+
+    assert_eq!(outcome.report.form_invocations, 2);
+    assert_eq!(outcome.report.form_pages, vec![0, 1]);
+    assert!(
+        outcome
+            .report
+            .disclosures
+            .join(" ")
+            .contains("SHARED CONTENT"),
+        "the fan-out must be disclosed on this path too: {:?}",
+        outcome.report.disclosures
+    );
+}
+
+/// The session path formats form text as one undoable command, and an
+/// edit-then-undo save is byte-identical.
+#[test]
+fn the_session_formats_form_text_as_one_undoable_command() {
+    use pdfce_core::text_edit::{FormatOptions, FormatRequest};
+
+    let doc = Document::from_bytes(page_and_form_pdf()).expect("fixture loads");
+    let mut session = pdfce_core::edit::EditSession::new(doc);
+    let report = session
+        .format_text(
+            &FormatRequest::new(0, "TITLE").size(24.0),
+            &FormatOptions::default(),
+        )
+        .expect("the session format succeeds");
+    assert_eq!(report.form_object, Some(5));
+    assert_eq!(session.undo_depth(), 1);
+
+    session.undo().expect("there is a command to undo");
+    let (_bytes, save) = session
+        .to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
+        .expect("the session saves");
+    assert_eq!(
+        save.objects_written, 0,
+        "a formatted-then-undone form must appear in no update section: {save:?}"
+    );
+}
+
+/// `edit_text` and `format_text` must agree about WHICH stream a run is in.
+///
+/// Two verbs, two search implementations (different plan and error types), one
+/// answer required. They are kept textually parallel rather than merged, and
+/// parallel code drifts — this is the assertion that notices.
+#[test]
+fn both_verbs_target_the_same_stream_for_the_same_run() {
+    use pdfce_core::text_edit::{FormatOptions, FormatRequest, set_format};
+
+    let doc = Document::from_bytes(page_and_form_pdf()).expect("fixture loads");
+    let edited = edit_text(
+        &doc,
+        &EditRequest::find_replace(0, "TITLE", "SHEET"),
+        &EditOptions::default(),
+    )
+    .expect("edit finds it");
+    let formatted = set_format(
+        &doc,
+        &FormatRequest::new(0, "TITLE").size(24.0),
+        &FormatOptions::default(),
+    )
+    .expect("format finds it");
+    assert_eq!(edited.report.form_object, formatted.report.form_object);
+    assert_eq!(
+        edited.report.content_object,
+        formatted.report.content_object
+    );
+
+    // And on page text, both must still answer "the page".
+    let page_edit = edit_text(
+        &doc,
+        &EditRequest::find_replace(0, "PAGE", "LEAF"),
+        &EditOptions::default(),
+    )
+    .expect("edit finds the page run");
+    let page_format = set_format(
+        &doc,
+        &FormatRequest::new(0, "PAGE").size(24.0),
+        &FormatOptions::default(),
+    )
+    .expect("format finds the page run");
+    assert_eq!(page_edit.report.form_object, None);
+    assert_eq!(page_format.report.form_object, None);
+}

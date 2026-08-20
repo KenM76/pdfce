@@ -238,10 +238,11 @@ use crate::page_tree::{self, PageTreeError};
 use crate::span::ByteSpan;
 use crate::text_edit::EditGlyphSource;
 use crate::text_edit::edit::{
-    EditError, EditRequest, EditTarget, FillState, FollowerDisposition, FontClass, MatchRun, OpRec,
-    Rec, ShowData, ShowElem, ShowOp, Walk, carried_codes, classify_font, compensating_tj,
-    emit_show, emit_tm, find_anchor, glyph_advance_with, is_subset_tag, mat_mul, match_run,
-    resolve_font_dict, splice, trust_disclosure, write_incremental,
+    EditError, EditPlanTarget, EditRequest, EditTarget, FillState, FollowerDisposition, FontClass,
+    MatchRun, OpRec, Rec, ShowData, ShowElem, ShowOp, Walk, carried_codes, classify_font,
+    compensating_tj, emit_show, emit_tm, find_anchor, glyph_advance_with, is_subset_tag, mat_mul,
+    match_run, refuse_unsuitable_form, resolve_font_dict, splice, trust_disclosure,
+    write_incremental,
 };
 use crate::text_edit::encoding::{InverseEncoding, RInvTrigger, Refusal};
 use crate::text_edit::synth::{
@@ -596,6 +597,13 @@ pub struct FormatRequest {
     /// When set, only consider the show operator whose decoded-buffer byte
     /// span equals this (the provenance-pinned path).
     pub pinned_span: Option<ByteSpan>,
+    /// **Which content stream to format** (`Pass 119.2`). Defaults to
+    /// [`EditTarget::Auto`], the same selector and the same default
+    /// [`EditRequest::target`](crate::text_edit::EditRequest::target) carries —
+    /// deliberately the identical type, because a shell that has decided which
+    /// stream a caret is in should not have to translate that decision between
+    /// two verbs that act on the same run.
+    pub target: EditTarget,
     /// New `Tf` font size (points). `None` leaves the size unchanged.
     pub set_size: Option<f64>,
     /// New fill colour (device space preserved). `None` leaves it unchanged.
@@ -688,7 +696,15 @@ impl FormatRequest {
             set_script: None,
             set_rise: None,
             set_synthetic: None,
+            target: EditTarget::Auto,
         }
+    }
+
+    /// Select the content stream to format (`Pass 119.2`), returning `self`.
+    #[must_use]
+    pub const fn target(mut self, target: EditTarget) -> Self {
+        self.target = target;
+        self
     }
 
     /// Add a size change (points), returning `self`.
@@ -823,6 +839,18 @@ pub struct FormatOutcome {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct FormatReport {
+    /// The form XObject this format edit went into, or `None` when it
+    /// rewrote the page's own `/Contents` (`Pass 119.2`).
+    pub form_object: Option<u32>,
+    /// ★ **How many places in the document paint the formatted form** — the
+    /// fan-out. `1` for the ordinary case; `0` when the edit was not in a form.
+    /// Greater than `1` means this restyle is visible on pages the operator
+    /// was not looking at, which the standard explicitly permits and gives no
+    /// way to prevent (§8.10.1; `FX-N1`).
+    pub form_invocations: u64,
+    /// The zero-based page indices the formatted form appears on, ascending.
+    /// Empty when the edit was not in a form.
+    pub form_pages: Vec<usize>,
     /// The `/BaseFont` of the run AFTER the edit (the target's, if the
     /// family changed; else the run's own).
     pub base_font: String,
@@ -1116,17 +1144,95 @@ pub fn set_format(
     // BASE READ (decision 018 caller audit) — same rationale as
     // `text_edit::edit_text`: this is the one-shot `&Document` entry point,
     // planning against the file as loaded for an incremental save.
-    let stream = ContentStream::from_page(&doc.view(), page)?;
-    let plan = plan_format(doc, page, &stream, req, opts)?;
-    // Incremental save (R34/R70), exactly as 14.1: the plan's report already
-    // carries the correct content_object / extra_objects_emptied, so the
-    // write's returned identity is discarded.
-    let (bytes, _content_object, _extra) =
-        write_incremental(doc, page, &plan.new_content).map_err(FormatError::from_edit)?;
+    let (plan, target) = plan_format_anywhere(doc, &doc.view(), page, req, opts)?;
+    // Incremental save (R34/R70), exactly as 14.1 — and, since `Pass 119.2`,
+    // to whichever stream held the run: the page's first content object, or
+    // the form XObject's own. The plan's report already carries the correct
+    // content_object / extra_objects_emptied, so the page write's returned
+    // identity is discarded.
+    let bytes = match target.form.as_ref() {
+        Some(form) => crate::text_edit::edit::write_incremental_form(
+            doc,
+            form.id,
+            &form.dict,
+            &plan.new_content,
+        )
+        .map_err(FormatError::from_edit)?,
+        None => {
+            write_incremental(doc, page, &plan.new_content)
+                .map_err(FormatError::from_edit)?
+                .0
+        }
+    };
     Ok(FormatOutcome {
         bytes,
         report: plan.report,
     })
+}
+
+/// Plan a FORMAT edit against the first candidate stream that yields one
+/// (`Pass 119.2`) — the twin of
+/// [`plan_edit_anywhere`](crate::text_edit::edit::plan_edit_anywhere).
+///
+/// Candidate order and error selection are **deliberately identical** to that
+/// function's, and the two are kept textually parallel rather than merged: they
+/// return different plan and error types, and a generic seam over two error
+/// enums would cost more in indirection than the twelve lines it saves. The
+/// property that must not drift — *a refusal describing the RUN wins over "not
+/// in this buffer"* — is asserted by both and stated in both.
+///
+/// # Errors
+///
+/// See [`FormatError`].
+pub(crate) fn plan_format_anywhere(
+    doc: &Document,
+    view: &crate::view::DocumentView<'_>,
+    page: &crate::page_tree::Page,
+    req: &FormatRequest,
+    opts: &FormatOptions,
+) -> Result<(FormatPlan, EditPlanTarget), FormatError> {
+    let locate = EditRequest {
+        page_index: req.page_index,
+        find: req.find.clone(),
+        replace: String::new(),
+        pinned_span: req.pinned_span,
+        target: req.target,
+    };
+    let candidates = crate::text_edit::edit::edit_candidates(doc, view, page, &locate)
+        .map_err(FormatError::from_edit)?;
+    if candidates.is_empty() {
+        return Err(FormatError::NoMatch(req.find.clone()));
+    }
+    let mut first_locational: Option<FormatError> = None;
+    for (target, stream) in candidates {
+        match plan_format_target(doc, &target, &stream, req, opts) {
+            Ok(plan) => return Ok((plan, target)),
+            Err(e) if is_locational_format_error(&e) => {
+                if first_locational.is_none() {
+                    first_locational = Some(e);
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(first_locational.unwrap_or_else(|| FormatError::NoMatch(req.find.clone())))
+}
+
+/// Whether a [`FormatError`] means "not in *this* buffer" rather than "this run
+/// cannot be formatted" — the [`FormatError`] twin of
+/// [`is_locational_error`](crate::text_edit::edit::is_locational_error).
+///
+/// Both variants exist because `Pass 118.0` split them: a pin that names no
+/// operator used to report `NoMatch(find)`, which blames the operator's own
+/// text for a pin pointing at the wrong buffer. Here that split earns a second
+/// keep — a pin naming nothing in the page stream is exactly the signal to look
+/// in the form, and treating it as a terminal refusal would stop the search one
+/// candidate short of the answer.
+pub(crate) const fn is_locational_format_error(e: &FormatError) -> bool {
+    matches!(
+        e,
+        FormatError::NoMatch(_) | FormatError::PinnedSpanNotFound { .. }
+    )
 }
 
 /// The result of planning a format edit WITHOUT committing it: the fully
@@ -1164,16 +1270,55 @@ pub(crate) fn plan_format(
     req: &FormatRequest,
     opts: &FormatOptions,
 ) -> Result<FormatPlan, FormatError> {
-    // Content-object identity + the save-independent report object numbers.
-    let content_id = *page
-        .contents
-        .first()
-        .ok_or_else(|| FormatError::Unsupported("the page has no /Contents to edit".to_owned()))?;
-    let extra_emptied = page.contents.len().saturating_sub(1) as u64;
+    let target = EditPlanTarget::page(page).map_err(FormatError::from_edit)?;
+    plan_format_target(doc, &target, stream, req, opts)
+}
+
+/// Plan a FORMAT edit against an explicitly-named target stream
+/// (`Pass 119.2`).
+///
+/// The sibling of
+/// [`plan_edit_target`](crate::text_edit::edit::plan_edit_target), and it
+/// exists for the same reason: on a CAD-exported drawing the text an operator
+/// wants to restyle lives inside a **form XObject**, not in the page's own
+/// `/Contents`. `Pass 119.0` moved that boundary for `edit_text` and left this
+/// verb behind — which is the shape an operator meets as *"I can change the
+/// words but not the size"*, and which was named as a known asymmetry rather
+/// than left to be discovered.
+///
+/// As in `Pass 119.0`, **the surgery is untouched**: only the three
+/// page-derived values (the stream object, its resource dictionary, the
+/// sibling-collapse count) are named instead of assumed.
+///
+/// ★ **One thing this verb does that `edit_text` does not, and why it is still
+/// safe here.** A family change (`set_font`) must find the target face in a
+/// resource dictionary — and it is **read-only** about that: a face that does
+/// not resolve is [`FormatError::TargetFontMissing`], never an insertion. So
+/// retargeting cannot make this verb write to a form's `/Resources`, and the
+/// selector resolves against the **form's** dictionary, which is the correct
+/// one: `/F1` inside a form is a different font from `/F1` on the page
+/// (§8.10.1).
+///
+/// # Errors
+///
+/// See [`FormatError`].
+pub(crate) fn plan_format_target(
+    doc: &Document,
+    target: &EditPlanTarget,
+    stream: &ContentStream,
+    req: &FormatRequest,
+    opts: &FormatOptions,
+) -> Result<FormatPlan, FormatError> {
+    let content_id = target.content_id;
+    let extra_emptied = target.extra_emptied;
+    if let Some(form) = target.form.as_ref() {
+        refuse_unsuitable_form(form).map_err(FormatError::from_edit)?;
+    }
+    let page_resources_dict = &target.resources;
 
     // --- pass 1: record every operator with its text + fill state (the
     //     shared 14.1 walk, now also carrying fill colour) ---
-    let mut walk = Walk::new(doc, &page.resources);
+    let mut walk = Walk::new(doc, page_resources_dict);
     for op in stream.operations() {
         walk.operation(&op, &stream.buf);
     }
@@ -1223,7 +1368,7 @@ pub(crate) fn plan_format(
     // a run whose font resource does not resolve now reports THAT rather
     // than "text not found" when the find text also misses.
     let orig_dict =
-        resolve_font_dict(doc, &page.resources, &anchor.font_name).ok_or_else(|| {
+        resolve_font_dict(doc, page_resources_dict, &anchor.font_name).ok_or_else(|| {
             FormatError::Unsupported(
             "the run's font resource is unresolvable (outlined/vector art has no font to format)"
                 .to_owned(),
@@ -1262,7 +1407,7 @@ pub(crate) fn plan_format(
     let m = match_run(anchor, &req.find).map_err(FormatError::from_edit)?;
 
     // --- resolve the family-change target, if any, and re-encode the run ---
-    let font_plan = plan_font(doc, page_resources(page), &recs, req)?;
+    let font_plan = plan_font(doc, page_resources_dict, &recs, req)?;
 
     // --- the run's BASE size: what it would be shown at with no script
     //     reduction. Every R89 ratio (script rise, script size, relative
@@ -1521,7 +1666,7 @@ pub(crate) fn plan_format(
             .map_or(&orig_font.base_font, |p| &p.font.base_font);
         gate_synthesis(
             doc,
-            page_resources(page),
+            page_resources_dict,
             effective_font,
             synthesis,
             set_font_name,
@@ -1785,7 +1930,27 @@ pub(crate) fn plan_format(
         ));
     }
 
+    if let Some(form) = target.form.as_ref() {
+        crate::text_edit::edit::disclose_form_edit(
+            doc,
+            form,
+            target.invocations.as_ref(),
+            anchor,
+            &mut disclosures,
+        );
+    }
+
     let report = FormatReport {
+        form_object: target.form.as_ref().map(|f| f.id.num),
+        form_invocations: target
+            .invocations
+            .as_ref()
+            .map_or(0, |set| set.count() as u64),
+        form_pages: target
+            .invocations
+            .as_ref()
+            .map(|set| set.pages.iter().copied().collect())
+            .unwrap_or_default(),
         base_font: report_font,
         glyph_source: if embedded {
             EditGlyphSource::Embedded

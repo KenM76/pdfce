@@ -3596,6 +3596,19 @@ enum Command {
         /// Repeatable.
         #[arg(long = "font-dir", value_name = "DIR")]
         font_dirs: Vec<PathBuf>,
+        /// Which content stream to format (Pass 119.2): `auto` (default -- the
+        /// page's own content first, then each form XObject it paints, in paint
+        /// order), `page` (the page's own content ONLY), or `form:N`.
+        ///
+        /// Same selector `edit-text --target` takes, and for the same reason:
+        /// on a CAD-exported drawing the text worth restyling lives inside a
+        /// form XObject. `pdfce-cli inspect --forms` lists them.
+        #[arg(
+            long = "target",
+            value_name = "auto|page|form:N",
+            default_value = "auto"
+        )]
+        target: String,
     },
 
     /// Re-wrap (reflow) a recognized paragraph in place (Pass 15.1).
@@ -6177,6 +6190,7 @@ fn run() -> ExitCode {
             output,
             pin,
             font_dirs,
+            target,
         } => cmd_format_text(&FormatTextArgs {
             input: &input,
             output: &output,
@@ -6203,6 +6217,7 @@ fn run() -> ExitCode {
             },
             pin,
             font_dirs: &font_dirs,
+            target: &target,
         }),
         Command::Reflow {
             input,
@@ -15770,6 +15785,8 @@ struct FormatTextArgs<'a> {
     /// the only state in which nothing is synthesized (R90).
     synthetic: pdfce_core::text_edit::StyleSynthesis,
     pin: bool,
+    /// The `--target` selector, unparsed — see `parse_edit_target`.
+    target: &'a str,
     font_dirs: &'a [PathBuf],
 }
 
@@ -15934,7 +15951,14 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
         return exit::EDIT_REFUSED;
     }
 
-    let mut req = FormatRequest::new(args.page - 1, args.find);
+    let target = match parse_edit_target(args.target) {
+        Ok(t) => t,
+        Err(message) => {
+            eprintln!("pdfce-cli: format-text refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let mut req = FormatRequest::new(args.page - 1, args.find).target(target);
     if let Some(size) = args.set_size {
         req = req.size(size);
     }
@@ -16087,6 +16111,22 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
     }
     if report.justify_slack_invalidated {
         println!("  justify_slack_invalidated=1");
+    }
+    // `Pass 119.2`: WHERE the restyle landed and how far it reaches. Same
+    // obligation as `edit-text`'s: in the CLI the invocation IS the commit, so
+    // a fan-out an interactive shell would show off-canvas is printed here on
+    // the way past.
+    if let Some(object) = report.form_object {
+        println!(
+            "  form_object={object} form_invocations={} form_pages={}",
+            report.form_invocations,
+            report
+                .form_pages
+                .iter()
+                .map(|p| (p + 1).to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
     }
     println!(
         "  base_font={} content_object={} advance_delta={:.3} followers_repositioned={} fill_narrowed={}",

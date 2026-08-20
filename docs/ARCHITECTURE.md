@@ -23307,3 +23307,65 @@ free 072.**
   reader's-worth of structural knowledge, defined apart" turn up, that
   would be the point to mint one. **Ceiling moves 074 → 075; next free
   076.**
+
+- **2026-08-20 — Decision 076. THE SHARED-FORM-XOBJECT EDIT DEFAULT IS
+  EDIT-IN-PLACE, DISCLOSED — COPY-ON-WRITE IS NOT THE DEFAULT, AND THE
+  TWO ARE NOT TWO DEFAULTS FOR ONE VERB.** `Pass 119.0` gave `edit_text` a
+  target-resolution layer (`EditTarget::{Auto, PageContents, Form}`) that
+  can reach text inside a form XObject — and a form XObject may legally be
+  invoked by `Do` from more than one page and more than once from one page
+  (§8.10.1 names CAD output as its own illustration of why; no ownership
+  rule exists in either edition to forbid it, `FX-N1` in the spec corpus).
+  So an edit inside a shared form necessarily changes every sheet that
+  invokes it — pdfce cannot prevent this structurally, because there is
+  exactly one stream object to write.
+  **Decided: edit-in-place, disclosed** (the invocation census
+  `EditReport::form_invocations` reports every site the edit will reach,
+  before the write). Copy-on-write of a private form for one page is
+  filed as a **separate, explicit verb** (`Pass 119.1`, `unshare_form`),
+  not as a mode of `edit_text`.
+  **Reason 1.** Text in a shared form is identical on every sheet *by
+  construction*, so an operator editing it is editing what they think of
+  as *the* title block. Wanting one sheet to differ is wanting to *break
+  the sharing* — a distinct, deliberate act, not a mode of "edit text."
+  **Reason 2, decisive.** Copy-on-write is not always expressible: a form
+  invoked from *inside another form* cannot be re-bound without editing
+  the parent, which may itself be shared. A default whose semantics
+  silently depend on the document's nesting structure is worse than one
+  that always means the same thing.
+  **`R206` compliance, and the reframing that matters more than the
+  compliance.** `R206` (two-hundred-and-seventh filing) says: two
+  defensible behaviours ⇒ ship both as options, pick a default from
+  ordinary-operator expectation, don't return to the operator to ask.
+  Both *are* shipped — `Pass 119.0` (edit-in-place) and `Pass 119.1`
+  (`unshare_form`). But they are not two configurable behaviours of one
+  verb; they are two different verbs, one of which (edit) is not always
+  even expressible in the other's terms (unshare only applies to
+  top-level invocations, reason 2 above). Filing the option as its own
+  Pass rather than a flag on `edit_text` is the correct application of
+  `R206`'s mechanism to a case where the "two options" are not siblings.
+  **Acrobat's behaviour here is UNSOURCEABLE, and that absence is itself
+  a sourced result, not a gap left unfilled.** `pdfce-acrobat-librarian`
+  was dispatched specifically for this question — 50 tool calls across
+  Adobe Community, the Acrobat SDK docs, Enfocus/PitStop's manuals,
+  Apryse's community and prepressure.com found nobody documenting what
+  Acrobat does to a shared form XObject's content stream on edit,
+  including Acrobat's own direct competitors. This decision is therefore
+  recorded as **pdfce's own reasoning**, not a parity claim. New corpus
+  file:
+  `D:\Dev\Rag-Specialized\Acrobat_Features\text_edit__form_xobject_shared_content_editing.md`,
+  which also flags a specific trap by name: an Adobe forum thread titled
+  almost exactly "text edits appear on every page" is root-caused there
+  by AcroForm **field-name collisions**, an unrelated mechanism, not by
+  shared form XObjects — cited so a future search does not mistake it for
+  corroboration.
+  **Body section: none updated.** This is a verb-default policy decision
+  for one editing surgery, not a crate boundary, a library pick, or an
+  invariant definition at `ARCHITECTURE.md`'s own granularity; the public
+  API surface itself (`EditTarget`, `EditReport::form_invocations`) is
+  the engineer-maintained `docs/core-api/`'s territory, not this
+  document's. **No standing rule minted or widened** — `R206` already
+  covers the mechanism; this decision is an *application* of it, with a
+  reasoned exception (reason 2) rather than a new case for the rule
+  itself.
+  **Ceiling moves 075 → 076; next free 077.**

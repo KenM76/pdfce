@@ -9,7 +9,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (29055 lines) |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (29150 lines) |
 | **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 131 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
@@ -303,11 +303,22 @@ need their own policy).
 > - **Nesting is guarded at 64 levels.** Deeper is *conforming* content pdfce
 >   refuses; the refusal says so, because it is pdfce's limit and not the file's
 >   defect.
-> - **`format_text`, `reflow_block` and `add_text` still reach page-stream text
->   only.** Only `edit_text` was retargeted in `Pass 119.0`. `editability()`
->   answers for `edit_text`'s reach, so for those three verbs it is now
->   optimistic — check `GlyphProvenance::content_stream` directly if you gate
->   on them.
+> - **`format_text` was retargeted too (`Pass 119.2`)** — same `target`
+>   selector, same default, same `form_object` / `form_invocations` /
+>   `form_pages` on its report, same `"SHARED CONTENT: ..."` disclosure. It is
+>   `FormatRequest::target`, and the type is deliberately the identical
+>   `EditTarget`: a shell that has decided which stream a caret is in should not
+>   have to translate that decision between two verbs acting on the same run.
+>   A family change (`set_font`) resolves its target face against the **form's**
+>   resource dictionary, which is the correct one — `/F1` inside a form is a
+>   different font from `/F1` on the page — and is read-only about it, so a face
+>   that does not resolve is still `TargetFontMissing`, never an insertion.
+> - **`reflow_block` and `add_text` still reach page-stream text only.**
+>   `editability()` reports `edit_text`'s reach, so for those two it is now
+>   optimistic — check `GlyphProvenance::content_stream` directly if you gate on
+>   them. `add_text` in particular is not merely unfinished work: appending to a
+>   form's content stream changes what **every** invocation site paints, which
+>   is a different disclosure from an in-place edit's and needs its own thinking.
 >
 > A pinned request that names no operator in the buffer reports
 > `EditError::PinnedSpanNotFound { start, end }` rather than `NoMatch(find)` —
@@ -320,147 +331,6 @@ need their own policy).
 > |---|---|
 > | 3,007 single-character `Tj` spelling the producer's watermark | the **page** stream — editable, and nobody wants to edit it |
 > | 1,696 show operators: every label, the title block, every *pdf dimension* callout | a **form XObject** — editable as of `Pass 119.0` |
-
-| I want to… | Call | Line | Returns |
-|---|---|---|---|
-| Compute what a save would write | `dirty_set(&self) -> DirtySet` | 3497 | Structural diff vs base, **right now**. Never consults history. |
-| Show an "unsaved changes" indicator | `is_modified(&self) -> bool` | 3580 | `!self.dirty_set().is_empty()`. Cannot disagree with the writer. |
-
-### 1.4 Undo / redo (7)
-
-| I want to… | Call | Line | Returns |
-|---|---|---|---|
-| Enable/disable the Undo control | `can_undo(&self) -> bool` | 3588 | |
-| Enable/disable the Redo control | `can_redo(&self) -> bool` | 3594 | |
-| Label the Undo control | `undo_kind(&self) -> Option<CommandKind>` | 3601 | Peeks; does not undo. |
-| Label the Redo control | `redo_kind(&self) -> Option<CommandKind>` | 3607 | |
-| Undo | `undo(&mut self) -> Option<CommandKind>` | 3617 | What was undone. `None` ⇒ stack empty. |
-| Redo | `redo(&mut self) -> Option<CommandKind>` | 3634 | What was redone. |
-| Show history depth | `undo_depth(&self) -> usize` | 3653 | Bounded by `MAX_UNDO_DEPTH` = **256** (`edit.rs:166`). |
-
-### 1.5 Save (2)
-
-| I want to… | Call | Line | Returns |
-|---|---|---|---|
-| Save (the default) | `to_incremental_bytes(&self, &SaveOptions) -> Result<(Vec<u8>, SaveReport), WriteError>` | 4053 | Bytes + report. §7.5.6 append. **Superseded objects stay in the file.** |
-| Save as one revision | `to_full_bytes(&self, &SaveOptions) -> Result<(Vec<u8>, SaveReport), WriteError>` | 4071 | Bytes + report. ⚠️ Destroys every existing signature. |
-
-Both take `&self` — saving does not mutate the session and does not clear the
-undo stack or the dirty set. Neither writes to disk.
-
-### 1.6 Signature / structure queries (3)
-
-| I want to… | Call | Line | Returns |
-|---|---|---|---|
-| Ask what saving would do to signatures | `signature_impact_of_save(&self, mode: SaveMode) -> SignatureImpact` | 6992 | `None` / `ByteRangePreserved` / `Invalidated`. Ask **immediately before Save**, not at edit time. |
-| Census the document's signatures | `signature_census(&self) -> SignatureCensus` | 6998 | Counts + `/P` + `perms_enforced`. |
-| Ask whether pages were added/removed/moved | `changes_structure(&self) -> bool` | 7010 | Computed from the page tree, not from history. |
-
-### 1.7 Document metadata (3)
-
-| I want to… | Call | Line | Returns |
-|---|---|---|---|
-| Set or clear `/Title`, `/Author`, … | `set_info_field(&mut self, field: InfoField, value: Option<&str>) -> Result<(), EditError>` | 3689 | `Some` sets, `None` **removes the key**. Creates `/Info` if absent. **A no-op records no command.** |
-| Read a field's raw bytes | `info_bytes(&self, field: InfoField) -> Option<Vec<u8>>` | 3788 | Reflects unsaved edits. |
-| Read a field as text | `info_text(&self, field: InfoField) -> Option<InfoText>` | 3807 | `InfoText{ text, exact }`. `exact == false` ⇒ **do not write it back** unless the operator changed it. |
-
-`InfoField` (`edit.rs:197`, `#[non_exhaustive]`) deliberately **excludes**
-`/Producer` (R41 fingerprint rule) and `/CreationDate`/`/ModDate` (§7.9.4 dates
-need their own policy).
-
-### 1.8 Page rotation, geometry and organisation (9)
-
-| I want to… | Call | Line | Returns |
-|---|---|---|---|
-| Set one page's absolute rotation | `set_page_rotation(&mut self, page_index, degrees: i32) -> Result<(), EditError>` | 3848 | Refuses non-multiples of 90 (`RotationNotMultipleOf90`). |
-| Turn one page relative to its current rotation | `rotate_page_by(&mut self, page_index, delta: i32) -> Result<(), EditError>` | 3981 | Delegates to `set_page_rotation`. |
-| Delete pages | `delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError>` | 14644 | See `DeleteOutcome`, §1.25. |
-| Delete pages, answering the pre-separation question | `delete_pages_with(&mut self, indices, separations: SeparationPolicy) -> Result<DeleteOutcome, EditError>` | 14663 | |
-| Reorder pages | `reorder_pages(&mut self, new_order: &[usize]) -> Result<(), EditError>` | 14944 | `NotAPermutation` if `new_order` is not one. ONE undo entry. |
-| Rotate several pages | `rotate_pages(&mut self, indices: &[usize], delta: i32) -> Result<usize, EditError>` | 15063 | Count of pages turned. ONE undo entry. |
-| Set one page's `/MediaBox` | `set_media_box(&mut self, page_index: usize, rect: page_tree::Rect) -> Result<MediaBoxChange, EditError>` | 5013 | |
-| Set several pages' `/MediaBox` | `set_media_boxes(&mut self, indices: &[usize], rect: page_tree::Rect) -> Result<Vec<MediaBoxChange>, EditError>` | 5061 | |
-| **Insert pages from another document** | `insert_pages(&mut self, source: &DocumentView<'_>, source_pages: &[usize], position: pageops::InsertPosition) -> Result<InsertOutcome, EditError>` | 16978 | `InsertOutcome { pages_inserted, orphaned_widgets }`. **Read the warning below before writing a disclosure about it.** |
-
-> #### ★★ `insert_pages`: THE WIDGETS ARRIVE, THEIR FIELDS DO NOT — and one
-> consumer has already shipped the wrong sentence about it
->
-> `insert_pages` copies everything **reachable from the page**, and a page's
-> `/Annots` reaches its widget annotations. A **field definition** is not
-> reachable from the page — it lives in the document-level `/AcroForm`
-> `/Fields`. So the two halves of a form field separate:
->
-> ```text
-> SOURCE  fields=Some(12)
-> TARGET  fields=None   annots=13   widgets=13
-> ```
->
-> The result is **not** *"the form fields did not come across"*. It is
-> **boxes that draw exactly like form fields, that an operator will click on,
-> and that nothing can fill, because no field claims them.** That is worse
-> than absence, and worse in a way this project already has a name for: a
-> visible control that is silently inert — arriving through a document
-> instead of through a ribbon.
->
-> **Do not paraphrase this as "form fields did not come across."** An
-> operator given that sentence goes looking for missing fields instead of at
-> the inert ones in front of them. *A disclosure that names the wrong failure
-> is worse than none, because it is believed.*
->
-> Also not merged, and these ARE plain absences: outlines, named
-> destinations, page labels, optional-content configuration.
-> [`pageops::insert`] merges all of it and returns a new document; the
-> difference is the cost of staying incremental.
->
-> **`Pass 102.0` SHIPPED 2026-08-19** — `InsertOutcome::orphaned_widgets` is
-> that count, so a shell can say *"three controls arrived that cannot be
-> filled"* instead of warning unconditionally. It is **exact, not
-> conservative**: `/AcroForm` is not merged and the copy remaps every object
-> number, so no field in the target can be claiming a widget that just
-> arrived.
->
-> `Pass 102.1` will carry field definitions for fields whose widgets are
-> *wholly* on inserted pages. **102.1 does not retire 102.0** — a field whose
-> widgets are split across inserted and non-inserted pages leaves a residue
-> no merge can absorb, so the count is permanent.
-
-### 1.9 Page-text editing (5) — detail in part 3
-
-> ### ★★ READ THIS BEFORE OFFERING A CARET — editing reaches PAGE-STREAM text only
->
-> **Extraction recurses into form XObjects. The edit surgery does not.**
-> `text_extract` executes a form's content with its own `/Resources` and
-> `/Matrix`, so a glyph inside one is extracted, positioned and reported like
-> any other. Every verb in this section operates on the page's own concatenated
-> `/Contents` buffer, and `text_edit/edit.rs` names form-XObject content a
-> **non-goal** of that cut.
->
-> So **a caret can land anywhere extraction can see, and commit only where the
-> surgery can reach.** Those two regions are not the same one, and the
-> difference is not academic:
->
-> | measured on a CAD-exported sheet | where |
-> |---|---|
-> | 3,007 single-character `Tj` spelling the producer's watermark | the **page** stream — editable, and nobody wants to edit it |
-> | 1,696 show operators: every label, the title block, every dimension callout | a **form XObject** — *not* editable |
->
-> **Check `TextRun::editability()` before offering a caret.** It returns
-> `Editability::{Editable, InsideForm { object }, NoAnchor, Unknown}` —
-> deliberately not a `bool`, because `ExtractOptions::capture_provenance`
-> defaults to **false** and a boolean would answer "not editable" for every run
-> in the document while meaning *"I was not told"*.
->
-> A pinned request that names no operator in the buffer now reports
-> `EditError::PinnedSpanNotFound { start, end }` rather than
-> `NoMatch(find)` — the old message blamed the operator's own text for a pin
-> pointing at the wrong buffer, and **it misled twice** before it was split.
->
-> This paragraph exists because a consuming shell shipped into this boundary
-> three times and asked for it: *"a paragraph saying 'editing reaches
-> page-stream text only; check `GlyphProvenance::content_stream` before
-> offering a caret' would have cost you four lines and saved me three operator
-> reports."* (`Pass 118.0`.)
-
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|

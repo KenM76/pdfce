@@ -52450,3 +52450,100 @@ writing the surgery, not something to discover afterwards."*
 
 **Terminology (rule 15):** no bare "dimension" appears; not applicable
 this filing.
+
+## 2026-08-20 (two-hundred-and-ninth filing) — `PASS 119.0` (`cc57080`) SHIPS: TEXT INSIDE A FORM XOBJECT IS EDITABLE; DECISION 076 SETS THE SHARED-FORM DEFAULT; `check-outcome-disclosed.py`'S OWN INPUT LIST FOUND UNDER-SCOPED (FIFTH INSTANCE OF THE CLASS); THREE NEW `119.x` BACKLOG PASSES FILED; A FIFTH-PART CLIPBOARD REQUEST FILED AS `PASS 120.0`–`120.4`
+
+**Filed by `pdfce-librarian`.** Relayed dispatch, engineer's own shell —
+commit `cc57080` reported, not independently verified from here (hard
+rule 8 — this filing has no shell of its own this dispatch).
+
+**Shipped:**
+- `Pass 119.0` (`cc57080`) — `edit_text` (free function and
+  `EditSession::edit_text`) resolves a target content stream instead of
+  assuming the page's own `/Contents`; new `EditTarget::{Auto,
+  PageContents, Form}`, new `text_edit::forms` module, new
+  `ContentStream::from_form`, CLI `edit-text --target` and
+  `inspect --forms`. 16 new tests, `cargo test --workspace` green,
+  `cargo fmt --check`/`cargo clippy --all-targets --workspace` clean, no
+  manifest touched. Full record: `ROADMAP.md`, top of *Shipped*.
+
+**Decisions made this session:**
+- **Decision 076 (`ARCHITECTURE.md` §12): the shared-form-XObject edit
+  default is edit-in-place, disclosed.** Copy-on-write is filed as a
+  separate verb (`Pass 119.1`, `unshare_form`), not a mode of
+  `edit_text` — the two are not two configurable behaviours of one verb,
+  because copy-on-write cannot always be expressed (a form nested inside
+  another form cannot be re-bound without editing the parent). Acrobat's
+  own behaviour is unsourceable (50-call `pdfce-acrobat-librarian`
+  dispatch, nobody documents it) — this is pdfce's own reasoning, filed
+  as such, not a parity claim.
+
+**Findings + decisions:**
+- **★★ Fifth instance of the under-reporting-gate class, and the first
+  whose mechanism is scope-of-input-list rather than spelling-of-
+  pattern.** `tools/check-outcome-disclosed.py`'s `OUTCOME_STRUCTS` list
+  was built from `edit.rs` alone, so every report struct living in a
+  submodule — `EditReport` included — was invisible to it. Three fields
+  were added to `EditReport` this Pass, one (`form_invocations`) existing
+  solely to stop a shell changing six sheets while showing one, and the
+  gate would have stayed green had all three been silently dropped.
+  Forecast before running: 13 fields, 11 printed ⇒ two problems. The gate
+  reported exactly `disposition` and `extra_objects_emptied`. Fixed —
+  `EditReport` is now in `OUTCOME_STRUCTS`, both fields print from
+  `pdfce-cli`.
+- **`tools/check-one-commit-per-command.py` found the new form-search
+  loop committing per iteration** — harmless only while it returned on
+  first success, the exact latent shape `import_form_data` already
+  shipped with. Hoisted out.
+- **A form XObject has no ownership rule in either spec edition** —
+  `FX-N1` in the spec corpus, argued three ways (deprecated `/Name`
+  vestige, the standard's "shall not… more than one" idiom used
+  elsewhere and never here, Annex F's normative shared-object class). A
+  shared-form edit changing every invoking sheet is therefore not a bug
+  to fix, it is the structure — the only lever is disclosure
+  (`EditReport::form_invocations`) plus the separate unshare verb.
+- **`Editability::InsideForm` is now `#[deprecated]`, never returned** —
+  the retrospective argument for `Pass 118.0` having shipped an owned
+  predicate rather than telling shells to match on provenance directly.
+  New `D:\dev\rag\rust\` finding filed for the general pattern.
+
+**Still in flight:**
+- `Pass 119.1` (`unshare_form`), `Pass 119.2` (retarget `format_text`/
+  `reflow_block`/`add_text`), `Pass 119.3` (align `pdfce-render`'s
+  nested-form resource fallback with `text_edit::forms`) — all filed
+  fresh to *Backlog*, none started.
+- `Pass 120.0`–`120.4` (object clipboard) — filed fresh to *Backlog* from
+  a new `pdfceGUI` request; `120.0` unblocks the rest. The requester's
+  own claim that `EditSession::import_object` already does the hard half
+  is filed as a claim, not verified.
+- `pdfceGUI`'s caret guard for form-XObject text has NOT been updated —
+  the reply telling them to drop it was sent today; `docs/FEATURES.md`'s
+  `gui` box for text editing stays unticked on that basis, per this
+  project's own ticking bar (an operator must be able to reach it in a
+  real build).
+- `Pass 113.0` (`transform_objects`) is next in line again now that
+  `119.0` has shipped.
+
+**For next session:**
+1. Confirm `pdfceGUI` has acted on the caret-guard removal before
+   ticking its `FEATURES.md` box.
+2. Decide `Pass 119.1` vs `119.2` vs `120.0` ordering, or start
+   `113.0` — no operator priority ruling on this yet.
+3. `Pass 117.2` (`/MK /R` widget rotation) still needs a
+   `pdfce-spec-librarian` dispatch, carried unchanged.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **119** | **120** (`119.1`–`119.3` are sub-IDs, no ceiling move; `120.0`–`120.4` mint the new family) |
+| decision records | **075** | **076** |
+| standing rules | **R206** | **R206** (unchanged — applied, not extended) |
+| `SESSION_LOG` filings | **208** | **209** |
+| `personal_rag/pdf` lessons | **+0** | **+1** |
+| `D:\dev\rag\rust\` findings | **+0** | **+1** |
+| `docs/FEATURES.md` rows touched | — | **5** (row 107 rewritten; 4 new rows added — form listing, `unshare_form`, form restyle, object clipboard) |
+
+**Terminology (rule 15):** every "dimension" above is qualified — **pdf
+dimensions** for the CAD-exported callouts this Pass makes editable; **ce
+dimensions** named once, only to state this Pass does not touch them.

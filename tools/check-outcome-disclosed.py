@@ -131,6 +131,7 @@ OUTCOME_STRUCTS: list[tuple[str, str]] = [
     # stop a shell changing six drawing sheets while showing one -- and the gate
     # would have stayed green if all three had been dropped on the floor.
     ("crates/pdfce-core/src/text_edit/edit.rs", "EditReport"),
+    ("crates/pdfce-core/src/text_edit/format.rs", "FormatReport"),
 ]
 
 # `Struct::field` -> why no shell reads it. A reason is mandatory: see the
