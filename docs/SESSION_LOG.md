@@ -51280,3 +51280,229 @@ and a `pdfce-core` API-shape note.
 | `SESSION_LOG` filings | **198** | **199** |
 | `personal_rag/pdf` lessons | **+0** | **+0** |
 | `docs/FEATURES.md` rows touched | — | **18** (10 checkbox changes, 8 sentence-only purges) |
+
+## 2026-08-20 (two-hundredth filing) — `Pass 107.0`/`107.1`/`107.2` SHIP THE PERIMETER ce DIMENSION AND VERTEX EDITING; DECISION 074 AND STANDING RULE `R204` MINTED; NEW BACKLOG ENTRY FOR A SETTING THAT DOES NOTHING; ★ THIS FILING HAS NO SHELL AND MADE NO COMMIT — DOCS EDITED, UNCOMMITTED
+
+**Filed by `pdfce-librarian`.** This dispatch's tool grant is
+`Read`/`Grep`/`Glob`/`Write`/`Edit`/`WebSearch`/`WebFetch` — **no `Bash`.**
+Two consequences, stated up front because both bind hard rule 8: (1) the
+two commits this filing records (`ae06440`, `9940acf`) are described from
+the **dispatching engineer's relayed text**, cross-checked against live
+source wherever `Grep`/`Read` could reach it (and marked per-claim where it
+could), not from an independently-run `git show`; (2) **this filing's own
+edits to `ROADMAP.md`/`FEATURES.md`/`ARCHITECTURE.md`/this file are
+UNCOMMITTED at the time of writing** — there is no filing commit hash to
+report, and `.claude/agent-memory/pdfce-spec-librarian/`'s three modified
+files (flagged by the dispatch as also owed a commit) remain uncommitted
+too. **A session with a shell needs to run the commit** for both sets of
+changes; nothing here should be read as claiming otherwise.
+
+**Shipped:**
+- `Pass 107.0` — `DimensionKind::Perimeter`, a new ce-dimension kind
+  measuring the summed length of every segment of an open or closed
+  polyline as one number, through the existing scale/group/style cascade.
+  Authors `/Polygon`+`/PolygonDimension` (closed) or
+  `/PolyLine`+`/PolyLineDimension` (open), ISO 32000-1 §12.5.6.9 Table 178.
+  `SIDECAR_VERSION` 2 → 3. `DimensionKind`/`DimensionRecord` lose `Copy`
+  (decision 074).
+- `Pass 107.1` — vertex editing: `move_dimension_vertex`,
+  `insert_dimension_vertex`, `remove_dimension_vertex`,
+  `vertex_edit_preview`, sharing one plan body; five new `EditError`
+  variants; linear ce dimensions also gained endpoint (index 0/1) editing,
+  unrequested. The first ce-dimension verb that deliberately re-measures.
+  Exceeds the Acrobat parity reference (Acrobat cannot insert/delete a
+  vertex on a committed Perimeter/Area measurement at all).
+- `Pass 107.2` — the CLI surface: `dimension-add --kind perimeter|path`,
+  `dimension-vertex --op move|insert|remove --dry-run`, `dimension-list`
+  now prints `vertices=`.
+- `ae06440` — `check-string-gaps.sh` gate widening (see Findings, below)
+  and `cargo fmt` on `tools/tw-census`.
+
+**Test results, as relayed and independently spot-checked:** 63 tests in
+`crates/pdfce-core/tests/dimension_roundtrip.rs` — **`Grep`-confirmed this
+filing**, was 55 (+8) — plus 3 new unit tests in `edit.rs`, 11 new tests
+total; workspace-wide 106 suites, 0 failures (relayed, not re-run — no
+shell). Gates (`cargo fmt --check`, `clippy -D warnings`,
+`check-ui-strings.sh`, `check-disclosure-channel.sh`,
+`check-theme-colors.sh`, `check-bypass-paths.sh`, `check-string-gaps.sh`,
+`check-core-api-verbs.py`, `check-ledger-numbers.py`,
+`check-fmt-excluded.py`, `check-shipped-assets.py`,
+`check-one-commit-per-command.py`) all clean per the dispatch; not
+re-run. Invariant check (`cargo tree -p pdfce-core`/`-p pdfce-render`/
+`-p pdfce-cli`, no GUI-crate matches) relayed; no `Cargo.toml` touched,
+no dependency added, consistent with the dispatch naming no manifest
+change.
+
+**Decisions made this session:**
+- **Decision 074 minted** — `DimensionKind`/`DimensionRecord` give up
+  `Copy` for `Perimeter`'s unbounded `Vec<Point>`; the `pdfceGUI`-offered
+  id-reference alternative (keep `Copy`, hold vertices in `DimensionModel`,
+  reference by id) was heard and **declined** — it would split one ce
+  dimension's geometry across two containers, breaking "the drawn shape is
+  exactly the thing measured" as a property of one value, and would need
+  undo to revert two containers atomically instead of one. A bounded
+  inline array was also refused, on the requester's own stated reason (a
+  building footprint runs to thirty-odd vertices — any cap is a cap
+  somebody hits). Full text: `ARCHITECTURE.md` §12. Ceiling 073 → 074.
+- **Two "no decision NUMBER minted" rulings recorded**, following the
+  hundred-and-twenty-fifth filing's own precedent: (1) a perimeter/path ce
+  dimension's label anchors on the **vertex centroid**, not the longest
+  segment — the CAD-conventional reading was rejected because vertex
+  editing is this kind's headline feature and the longest-segment
+  convention would make the label teleport across the shape as a side
+  effect of an unrelated edit; (2) `is_ce_dimension`'s two-arm (`/IT` OR
+  sidecar) test is recorded as a durable API contract for the next Pass
+  reusing a markup byte-shape, not merely a bugfix. Ceiling stays 074.
+- **Standing rule `R204` minted** — *widening the world past a refusal is
+  the same act as removing the refusal, and owes the same audit.* Second
+  confirmed occurrence of the R143/R144/R147 family, on the **mirror**
+  mechanism: R144/R147 fire when a refusal is **lifted**; R204 fires when
+  the **domain a refusal must cover grows** while the refusal itself is
+  untouched and, read alone, still correct. Full text and instance:
+  `ROADMAP.md` *Standing rules*. Ceiling `R203` → `R204`.
+- **A Backlog entry filed, not fixed this session**: `quad_point_order` is
+  parsed and written by `Settings` but reaches no authoring call site —
+  `build_appearance(spec)` always calls `build_appearance_with(spec,
+  QuadPointOrder::default())`, confirmed by direct `Grep`/`Read` against
+  `annot_author.rs` and both `EditSession::add_markup`
+  (`edit.rs:12446`) and the `set_markup_style` regeneration path
+  (`edit.rs:13620`/`13624`). `check-settings-consumed.py` reports it red
+  at `HEAD` (an R83 violation) and has been doing so **before this
+  session** — this filing did not introduce the gap, it found it while
+  running the full gate suite for `Pass 107.x`. Fix scope named in the
+  Backlog entry: session-state plumbing (`EditSession::set_quad_point_
+  order`), not a second `add_markup_with` verb, per decision 062's
+  single-entry-point discipline; both shells must load and pass
+  `Settings::quad_point_order`; `set_markup_style` needs the same
+  plumbing or a restyle silently reverts the corner order.
+
+**Findings + decisions:**
+- **`check-string-gaps.sh` reported TWO of THREE known gaps — an
+  under-reporting gate is byte-indistinguishable from a green one, same
+  shape `NEXT_SESSION.md` §3 already records twice against
+  `check-ledger-numbers.py`'s star anchor.** The invisible gap had
+  `{minimum}` immediately after it and the character class required a
+  letter; a leading `}` had the identical hole. Found by knowing there
+  were three gaps and reading a report that listed two, not by the gate
+  itself.
+- **The first fix was wrong, and the widened scan said so immediately**:
+  widening the character class globally took the tree from 0 findings to
+  ~60, every one a deliberately aligned report column in a dev tool, not a
+  real gap. Fix scoped to inside `#[error(...)]` only — the distinguishing
+  property is PROSE (a `thiserror` message) vs. TABLE (an aligned
+  `println!` column in a sweep tool), not the characters themselves. An
+  aligned column is now pinned in the gate's own clean self-test so a
+  future widening cannot quietly re-break it. Shipped in `ae06440`.
+- **Anchoring a code insertion on a `fn` or enum variant, rather than on
+  its preceding doc comment, splits the two — happened TWICE in one
+  session in `pdfce-cli/src/main.rs`.** The first instance shipped a
+  visibly wrong `--help`: `dimension-vertex` displayed `dimension-offset`'s
+  description and `dimension-offset` displayed nothing. Caught by running
+  the binary, not by any gate, test, `fmt` or `clippy` — rustdoc/`clap`
+  happily attach a doc comment to whatever text follows it, correct or
+  not. Candidate for `D:\dev\rag\rust\` (a patch-tooling/rustdoc-adjacency
+  gotcha, not PDF-domain) — **not yet written this filing**; judged
+  worth a session-log record now and a proper RAG file next time this
+  librarian has a shell to search the existing tree for a duplicate
+  first (rule: don't duplicate).
+- **Two pre-existing red gates found at `HEAD` while running the full
+  suite, contradicting the prior handoff's "gates all clean":**
+  `check-fmt-excluded.py` (`tools/tw-census` unformatted) — **fixed**, in
+  `ae06440`; `check-settings-consumed.py` (`quad_point_order` unread) —
+  **not fixed**, filed as a Backlog entry this session (see Decisions,
+  above).
+- **`D:\Dev\Rag-Specialized\PDF_Spec\` gained `iso32000__s__12.5.6.9.md`**
+  (58 kB, `pdfce-spec-librarian`, this session) — did not exist before;
+  `iso32000__s__12.9.md` had been cross-referencing Table 178 with nothing
+  to point at. Five answers encoded directly into `Pass 107.0`: flat
+  `/Vertices` in default user space; `/Polygon` closure is implicit, first
+  vertex not repeated; `/Vertices` alone is fully conformant in 1.7 and
+  2.0 (`/Path` is 2.0-only); `/LE` is meaningless on `/Polygon`; `/IC`
+  absent means no fill; and **`/Rect` must equal the transformed `/AP`
+  `/BBox`**, described by the spec-librarian as *"the single highest-risk
+  authoring bug for a ce dimension"* — invisible in an object dump, now
+  pinned by a test.
+- **The spec-librarian also corrected the corpus**: Errata Issue #444 was
+  recorded as `/State Accepted` and is actually `Completed` (ISO-ratified)
+  — the review state is an `/IRT`-linked reply chain and only the first
+  reply had been read. Measured: **376 of 547 `Accepted`-state annotations
+  carry a later `Completed` reply (68.7%)**, so a state read from the
+  first reply alone is stale roughly two times in three. **One open GAP
+  left, not closed this session**: `iso32000__delta__pdf20_encryption.md`'s
+  Algorithm 2.B step-(a) `Accepted` claim needs the same `/IRT` walk.
+- **`D:\Dev\Rag-Specialized\Acrobat_Features\` gained
+  `measure__perimeter_and_area_tools.md`** (`pdfce-acrobat-librarian`,
+  this session). Load-bearing findings for `Pass 107.1`'s exceeds-parity
+  framing: Acrobat cannot insert or delete a vertex on a committed
+  Perimeter/Area measurement (Adobe Community, Adobe-expert-confirmed);
+  whether an existing vertex can even be moved is contested across
+  sources; Acrobat ships Perimeter and Area as **two separate tools**
+  (Perimeter never closes, Area requires closure) where pdfce's one kind
+  with a `closed` flag synthesises both; Acrobat's value sits in a popup
+  note the operator must open, pdfce bakes it on-canvas like Distance. That
+  agent flagged its own upgrade of the entry's `parity_priority` from
+  `nice_to_have` to `must_have` as a judgment call for confirmation —
+  **confirmed**; the feature shipped the same day.
+- **A `personal_rag/pdf` candidate was judged and NOT written this
+  session**: a `/Polygon` annotation pdfce authors is byte-indistinguishable
+  from a markup polygon a user drew by hand — which is exactly why
+  `is_ce_dimension` needs two independent tests rather than one shape
+  check. Judged as belonging to this project's own `R204`/decision-074
+  record rather than to `personal_rag/pdf`, because the finding is about
+  **pdfce's own authored output colliding with pdfce's own markup format**,
+  not about how a real-world third-party producer diverges from spec —
+  the personal_rag/pdf scope test in this librarian's own brief.
+  `personal_rag/pdf` unchanged, `+0`.
+
+**`FEATURES.md` — CHANGED.** Two new rows added to the *ce dimensions*
+table (Implemented section): perimeter/path-length authoring
+(`[x]`/`[x]`/`[ ]`/`[x]`) and vertex editing (`[x]`/`[x]`/`[ ]`/`◐`). `gui`
+left unticked on both, per decision 073/`R203` — `pdfceGUI` has not built
+either surface; the core+cli verbs exist so it can.
+
+**`ARCHITECTURE.md` — CHANGED.** §12 gains decision 074 and the two
+no-number rulings that follow it. No §4.1 lettered subsection minted —
+that convention reached its ceiling at `(Z)` (`Pass 100.0`, 2026-08-18);
+decision 074 flags, rather than duplicates, that
+`docs/core-api/03-capabilities.md` §1 does not yet describe
+`DimensionKind::Perimeter`, the vertex-edit verbs, or `SIDECAR_VERSION` 3
+— that directory is the engineer's own maintained artefact, per the
+2026-08-18 ruling.
+
+**`personal_rag/pdf` — unchanged, `+0`** (see Findings, above, for the
+candidate that was judged out of scope).
+
+**`D:\dev\rag\rust\`/`D:\dev\rag\egui\` — unchanged, `+0` this filing.**
+The doc-comment/code-insertion-anchoring finding (above) is flagged as
+owed, not yet written — deferred to a session with a shell so the
+existing tree can be searched for a duplicate first.
+
+**Still in flight:**
+- `Pass 102.1`, the n-channel compositor (`Pass 97.1`), `v0.7.0`
+  bumped-not-tagged — all carried unchanged from the 199th filing, this
+  session's work was orthogonal to all three.
+- **This filing's own docs edits are uncommitted** — see the header note.
+  A session with a shell must commit `ROADMAP.md`, `FEATURES.md`,
+  `ARCHITECTURE.md`, this file, and the three pre-existing modified files
+  under `.claude/agent-memory/pdfce-spec-librarian/`.
+
+**For next session:**
+1. Commit this filing's edits (no shell was available to this dispatch).
+2. Write the `D:\dev\rag\rust\` doc-comment/code-insertion-anchoring
+   finding, after checking the existing tree for a duplicate.
+3. `iso32000__delta__pdf20_encryption.md`'s Algorithm 2.B step-(a) still
+   needs the `/IRT`-chain re-walk the spec-librarian's Issue #444
+   correction found the general pattern for.
+4. `quad_point_order` Backlog entry is real, scoped, and unfixed — see
+   `ROADMAP.md` Backlog.
+
+**Ledger effects:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **106** | **107** |
+| decision records | **073** | **074** |
+| standing rules | **R203** | **R204** |
+| `SESSION_LOG` filings | **199** | **200** |
+| `personal_rag/pdf` lessons | **+0** | **+0** |
+| `docs/FEATURES.md` rows touched | — | **2** (2 new rows, ce dimensions) |

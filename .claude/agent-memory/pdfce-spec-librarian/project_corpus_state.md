@@ -62,6 +62,8 @@ heading (`**<N>. `).**
 | 46 | ★ **THE DELIBERATELY-NARROWED dispatch.** Honour the scope cut and LABEL the skipped half in THREE places (banner, gap line, index) · when a brief and an existing corpus file disagree on an identifier the CORPUS usually wins · **a brief demanding something "verbatim" that returns 0 hits document-wide means the HEADLINE IS THE NEGATIVE** · check the NEWER EDITION before filing an ambiguity · a NOTE in 1.7 can be a `shall` in 2.0 · an informative NOTE can be the ONLY statement of a load-bearing rule · 2.0's clean Unicode cross-checks a 1.7 scrambled equation |
 | 49 | ★ **THE MODALITY-DECISION dispatch — `shall` vs `should` IS the engineering decision.** **The MODALITY ITSELF can be version-gated** (1.7 hedged writer `shall not ORDINARILY` + a bare-indicative reader consequence → 2.0 writer `should` + explicit processor `shall`), and the later edition's SPLIT is ISO's own reading of the earlier text · a hedged `shall` is a THIRD modality class · **a writer-side "must I clamp?" is answered by the READER's obligation** · default-value chains and containment chains are DIFFERENT GRAPHS · a missing-OPERATION negative needs a document-wide CO-OCCURRENCE regex, not a clause-scoped term count · a figure can illustrate more nesting than any clause requires · **the dispatch's cheap "just confirm this quote" item is where the corpus error was** (Annex C is `(normative)`, not informative) |
 | 50 | ★ **THE TWO-SOURCES-DISAGREE dispatch — and the CORPUS'S OWN COMPRESSION is the ancestor of the error.** A one-line table compression is a CLAIM and it propagates (`Intensity 0–2` → a validator refusing conforming `/I 1.5`); **quote the row, never compress it, when a cell is what an implementer will read** · the enumeration-vs-RANGE drafting idiom contrast lives in the SIBLING ROW of the same table · **THREE of my own counts were wrong, all from `head`-truncated grep listings — run `grep -c`, anchor `^KEY` for TABLE ROWS, and add a pre-report re-measure pass** · grep the RECOVERY VERB (`tolerate`, `adjusted to the nearest`) not the key name · **a key name can be overloaded across two unrelated features** (`/BE` = border effect ∪ multimedia "best effort"; second instance after `/AS` ⇒ a pattern) · **the same key in three tables can carry three different normative forces, and only one has the `shall`** · an ABSENT row is a finding · "meaningful only for X" is a verbatim negative whose CONSEQUENCE is still unstated · the 2.0 delta can NARROW an ambiguity without closing it · **the "confirm rather than re-derive" item is where the omission was — third instance** · bucket-5 deferrals must name their destination bucket |
+| 51 | ★ **THE TWO-GAPS-NAMED-FROM-OUTSIDE dispatch** (body § 51, line ~3078) — index row added 2026-08-20; the item had been appended without one. "Clause X is ENTIRELY ABSENT" is a coverage HYPOTHESIS; an ID minted by a SIBLING corpus; the refutation is in the OLDER edition; a third clause settles a two-`should` tie; a version-delta negative can be true of the SENTENCE and false of the CONCEPT; a recorded negative is a PREDICTION and expires; UNREMEDIED ≠ PERMANENT; quote the FREE edition of a sentence that exists in both; Write the script, then run it |
+| 52 | ★ **THE SIBLING-CARRIER dispatch** ("build clause C's file, parallel to C′'s"). The dispatch's "clause X is absent" was true of the FILE and false of the COVERAGE — **third instance** · **★ the headline was a CORRECTION to the corpus's own record, and its mechanism is corpus-wide: an ISO 32000-2 erratum's review `/State` is a CHAIN of `/Text` replies linked by `/IRT` — LATEST `/M` wins — and 376 of 547 `Accepted` annots (68.7 %) carry a later `Completed` reply, so an `Accepted` read from the first reply is stale two times in three** · **a table NUMBER can name DIFFERENT TABLES in the two editions** (1.7 T178 = polygon, 2.0 T178 = LINE) · **a `free_primary` table row can be corrupted by COPY-PASTE, and the next edition printing it clean is the proof** · **a key can be VACUOUS in one edition** (1.7's `/IC` fills "line endings" on a shape that has none) **and the later edition's ADDITION proves it** · complementary restrictions in one table are a pattern — grep for the mirror of a recorded one · **"must X bound Y?" can be a true negative whose practical answer is a DIFFERENT clause with a DIFFERENT failure mode** (no clipping; §12.5.5 SCALES the `/AP` to `/Rect`) · three readings can disagree on legality and agree on the decision · **a term with EXACTLY 1 hit per edition IS the headline** · a ~58 kB Bash heredoc dies with `ENAMETOOLONG`, use Write |
 
 ---
 
@@ -3194,3 +3196,103 @@ downstream files carrying stale claims.
   a multi-`rep()` script that `assert`s and writes only at the end means **one
   bad anchor discards every good replacement** — either write after each
   replacement or split the script.
+
+---
+
+**52. ★ THE SIBLING-CARRIER dispatch — "build the file for clause C, parallel to
+the one you already have for clause C′".** Established 2026-08-20 building
+`iso32000__s__12.5.6.9.md` (Polygon/PolyLine) as the sibling of
+`iso32000__s__12.5.6.7.md` (Line), for a **perimeter ce dimension** parallel to the
+shipped linear one. The dispatch shape is distinctive: it names the sibling, so the
+file's structure is given, and the *real* work is finding the places the two
+clauses **diverge**. Nine findings, several of which generalise past this shape.
+
+- **The dispatch's coverage claim was true of the FILE and false of the
+  COVERAGE — item 51 again, third instance.** "No file for §12.5.6.9" was
+  literally right; §12.5.6.9 material already sat in **two** neighbouring files
+  (`iso32000__s__12.5.3.md` § §12.5.4-BE for `/BE`/`BE-A3`, and
+  `iso32000__s__12.5.6.md`'s subtype row + a first record of the `Issue #444`
+  erratum). **Grep the CLAUSE NUMBER and every KEY NAME across the corpus before
+  writing a line** — the new file then cross-references instead of duplicating,
+  and carries an explicit **"COVERAGE NOTE — this clause was NOT previously
+  uncovered"** paragraph so the next session does not re-discover the overlap.
+- **★ THE STRONGEST FINDING WAS A CORRECTION TO THE CORPUS'S OWN EARLIER RECORD,
+  AND ITS MECHANISM IS CORPUS-WIDE.** `iso32000__s__12.5.6.md` recorded ISO
+  32000-2 Errata `Issue #444` as review `/State` **`Accepted`** ("TWG only, NOT
+  ISO-ratified"). **It is `Completed`.** The review state of an erratum in the
+  staged 2.0 PDF is **a CHAIN of `/Text` reply notes linked by `/IRT`**, not one
+  reply: `/StrikeOut` ← `Accepted` (`/M` 2024-07-20) ← `Completed` (`/M`
+  2026-05-21). **The LATEST `/M` wins.** Measured over the whole staged document:
+  **1 205 `Completed` + 547 `Accepted`, and 376 of the 547 (68.7 %) carry a later
+  `Completed` reply** ⇒ a state read from the first reply found is **stale about
+  two times in three**. Amends memory item 3-ISO2's `Completed`-vs-`Accepted`
+  rule: it is right about what the two words *mean* and silent about *where to
+  read them from*. **Walk `/IRT`, take max `/M`.** Left an explicit `GAP`:
+  `iso32000__delta__pdf20_encryption.md`'s Algorithm 2.B step-(a) `Accepted`
+  claim was recorded the same way and is not yet re-verified.
+- **★ A TABLE NUMBER CAN NAME DIFFERENT TABLES IN THE TWO EDITIONS — not merely
+  shift.** The usual trap is renumbering (item 45's uniform off-by-one). This is
+  worse: **1.7 Table 178 = polygon/polyline; 2.0 Table 178 = LINE annotations**
+  (2.0's polygon table is 181). A cross-edition citation that "matches" is not
+  evidence. Ship the collision as the file's **§0 item 1**, as a table, with every
+  neighbouring pair (166→168, 167→169, 170→172, 175→178, 176→179, 178→181,
+  261→266).
+- **★ A ROW IN A `free_primary` TABLE CAN BE CORRUPTED BY COPY-PASTE, and the
+  corrupted phrase is the one an implementer reads.** ISO 32000-1 Table 178's
+  `Vertices` row reads *"An array of numbers **(see Table 174) specifying the
+  width and dash pattern** that shall represent the alternating horizontal and
+  vertical coordinates…"* — Table 174 is *free text annotations* and the phrase
+  belongs to the `BS` row three rows below. **The proof is the NEXT EDITION
+  printing the row clean.** Two lesser instances in the same table: `/IC` gated
+  *PDF 1.4*, earlier than the PDF-1.5 annotation type containing it (2.0 deletes
+  the gate), and *"any number of vertices"* → *"many"*. **When a row's prose
+  mentions a concept no other key in the row uses, suspect an interpolation and
+  diff against the other edition.**
+- **★ A KEY CAN BE VACUOUS IN ONE EDITION AND ONLY GAIN MEANING IN THE NEXT —
+  and the later edition's ADDITION is the proof the earlier text was empty.**
+  ISO 32000-1 Table 178's `/IC` defines the interior colour as filling *"the
+  annotation's **line endings**"*, while the same table qualifies `/LE`
+  *"meaningful only for polyline annotations"* ⇒ **on a `/Polygon` the sentence
+  has no referent, so 1.7 never says a polygon's interior is filled at all.**
+  2.0 had to *append* a paragraph (Polygon ⇒ fills the entire shape *"much as the
+  `F` operator would"*; PolyLine ⇒ only the ending) — which is simultaneously the
+  **only fill-rule anchor** (`F` ⇒ nonzero winding) either edition supplies.
+  **Read every row against the OTHER rows of its own table**; the vacuity is only
+  visible when two rows are held together.
+- **COMPLEMENTARY RESTRICTIONS IN ONE TABLE ARE A PATTERN, and the corpus had
+  already recorded half of it.** `/BE` is *"meaningful only for polygon
+  annotations"* (`BE-A3`, filed 2026-08-18) and `/LE` is *"meaningful only for
+  polyline annotations"* (`PG-A4`, this build). **Same table, same drafting idiom,
+  same missing reader consequence.** When a corpus file records one such
+  qualifier, grep the same table for its mirror — it is usually there, unrecorded.
+- **★ "MUST X BOUND Y?" CAN BE A TRUE NEGATIVE WHOSE PRACTICAL ANSWER LIVES IN A
+  DIFFERENT CLAUSE, WITH A DIFFERENT FAILURE MODE THAN THE ONE ASKED ABOUT.** The
+  dispatch asked whether `/Rect` must bound `/Vertices` and *"does a reader clip"*.
+  Answer: **no obligation, no clipping clause, in either edition** — the only
+  *"shall be inscribed within the annotation rectangle"* belongs to Square/Circle,
+  which is the **opposite** case (derived geometry). But §12.5.5 step (b)
+  **scales** a baked `/AP` to fill `/Rect`, so the binding rule is `/Rect` == the
+  transformed `/BBox` and **the real failure mode is silent anisotropic scaling,
+  not clipping.** Item 17's "trace the artifact to its consumer clause", applied
+  to the *question's own premise*: the asked-about failure mode did not exist and
+  a worse one did.
+- **A DISPATCH POINT CAN HAVE THREE ANSWERS AND THEY CAN ALL AGREE ON THE THING
+  THAT MATTERS.** `/Path`-vs-`/Vertices` has a 1.7 reading, a 2.0-as-printed
+  reading and a 2.0-with-errata reading; they disagree on whether co-presence is
+  *illegal* or *legal-but-ignored*, and **agree that `/Path` wins and that
+  `/Vertices`-alone is fully conformant.** Tabulate all three columns and then say
+  which cell the engineer actually needs — the agreement is the deliverable, the
+  disagreement is the footnote.
+- **The count negative that paid best was a SINGLE-OCCURRENCE count.**
+  `PolygonDimension` and `PolyLineDimension` = **exactly 1 hit each per edition**,
+  both inside the `/IT` row ⇒ *the standard names the feature the dispatch is
+  building and says nothing else about it anywhere.* One `grep -o | wc -l` per
+  term, two terms, and it reframes the whole file: everything the feature draws is
+  product policy. **Measure the headline term first; if it is 1, that IS the
+  headline.** (Case-sensitivity matters: `Vertices` case-insensitive = 26 hits and
+  is useless; case-sensitive = 7, of which **exactly 3** are the annotation key.)
+- **TOOLING, repeat of item 51's note in a new form:** a `cat > file <<'MDEOF'`
+  heredoc for a ~58 kB RAG file failed with **`ENAMETOOLONG: name too long,
+  uv_spawn`** — the whole heredoc is part of the spawned command line. **Use the
+  Write tool for the file itself**; keep Bash heredocs for the small Python
+  patch-scripts that edit `index.md`.

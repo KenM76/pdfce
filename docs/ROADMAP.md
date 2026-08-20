@@ -96,6 +96,214 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 107.2 — commit `9940acf` (this filing has a shell for source, not for git history — see note below) — **THE CLI SURFACE FOR PERIMETER/PATH ce DIMENSIONS AND VERTEX EDITING: `dimension-add --kind perimeter|path`, `dimension-vertex --op move|insert|remove --dry-run`, `dimension-list` PRINTS `vertices=`** — filed 2026-08-20 (two-hundredth filing)
+
+**This filing has NO shell for git history.** Hard rule 8 applies precisely:
+the dispatching engineer supplied full commit-message text for `ae06440`
+and `9940acf`, but this librarian's own tool grant this dispatch carries
+`Read`/`Grep`/`Glob`/`Write`/`Edit` only — no `Bash` — so `git show --stat`
+and `git log -1 --format=%B` could not be run to independently confirm the
+commit **messages**. What follows is **relayed** text from the dispatch,
+cross-checked wherever possible against the **live tree**, which needed no
+shell: `.git/refs/heads/main` reads `9940acf02fb4d2f3dd4b143b98dace080a007874`
+— **confirmed at `HEAD`, by direct file read, not relayed.** Every
+Pass-content claim below that a `Grep`/`Read` could verify against source
+**was independently verified this filing** and is marked so; anything not
+so marked (gate output, exact commit diffstat) is relayed per hard rule 8's
+established practice when this librarian has no shell (see this agent's own
+memory, `feedback_dispatch_should_carry_git_evidence_when_no_shell.md`).
+
+**Three commands, one Pass, filed together because none is meaningful without
+the other two — `dimension-add` needs a shape to add, `dimension-vertex`
+needs something to edit, `dimension-list` needs a field to print.**
+
+- **`dimension-add --kind perimeter|path`** — `crates/pdfce-cli/src/main.rs`
+  `DimKindArg::Perimeter => "perimeter"`, `DimKindArg::Path => "path"`
+  (confirmed by `Grep`, `main.rs:4974-4975`), both routing to the single
+  `DimensionKind::Perimeter { closed, .. }` core variant — `perimeter` sets
+  `closed: true`, `path` sets `closed: false`. One core kind, two CLI
+  spellings, because "perimeter" and "path length" read as different words
+  to an operator even though they are one measurement (sum of every
+  segment) with one boolean toggled.
+- **`dimension-vertex --op move|insert|remove [--dry-run]`** — the CLI half
+  of `Pass 107.1`'s core vertex-edit verbs (below). `--dry-run` is the
+  scriptable preflight: it calls the same `vertex_edit_preview` the GUI
+  would call before committing, and prints `dry_run=1` on its own stable
+  line (confirmed by `Grep`, `main.rs:19143`) rather than a second ad hoc
+  format — one preview renderer, two callers, per the project's established
+  "one baker, many readers" convention (decision **056**'s lineage).
+- **`dimension-list` now prints `vertices=`** for any ce dimension carrying
+  them, alongside the existing per-dimension fields.
+
+**Test results, workspace-wide, as relayed:** 106 suites, 0 failures,
+including the 63 tests in `dimension_roundtrip.rs` and 3 new unit tests in
+`edit.rs` — see `Pass 107.1`'s entry for the count derivation.
+**Gates, as relayed (not independently re-run this filing):** `cargo fmt
+--check`, `clippy --all-targets --workspace -D warnings`,
+`check-ui-strings.sh`, `check-disclosure-channel.sh`,
+`check-theme-colors.sh`, `check-bypass-paths.sh`, `check-string-gaps.sh`,
+`check-core-api-verbs.py`, `check-ledger-numbers.py`,
+`check-fmt-excluded.py`, `check-shipped-assets.py`,
+`check-one-commit-per-command.py` — all clean.
+
+**Invariant check, as relayed:** `cargo tree -p pdfce-core`, `-p
+pdfce-render` and `-p pdfce-cli` show no egui/eframe/winit/wgpu/glow. No
+`Cargo.toml` touched this Pass, no dependency added — **confirmed
+independently**: neither commit's description in the dispatch names a
+manifest change, and `crates/pdfce-cli/src/main.rs` is the only file this
+entry's own `Grep` checks touched for the CLI surface.
+
+**Still open** (carried from `Pass 107.1`): the `quad_point_order`
+setting is parsed and written but reaches no authoring call site — see
+this filing's own new Backlog entry, below. **Not this Pass's scope** —
+found by the same session's own gate sweep, not by this Pass's work.
+
+---
+
+### Pass 107.1 — commit `9940acf` (relayed commit message; core surface independently confirmed against live source) — **VERTEX EDITING: `move_dimension_vertex`, `insert_dimension_vertex`, `remove_dimension_vertex`, `vertex_edit_preview` — THE FIRST ce-DIMENSION VERB THAT DELIBERATELY RE-MEASURES, AND LINEAR ce DIMENSIONS GAIN ENDPOINT EDITING AS AN UNREQUESTED INCLUSION** — filed 2026-08-20 (two-hundredth filing)
+
+**Confirmed against live source, not merely relayed:** `Grep` for
+`move_dimension_vertex|insert_dimension_vertex|remove_dimension_vertex|vertex_edit_preview`
+returns `crates/pdfce-core/src/edit.rs` and `crates/pdfce-core/src/dimension/{author,group}.rs`
+— the four verbs exist, sharing one plan body (`VertexEdit`, per the
+dispatch). `crates/pdfce-core/tests/dimension_roundtrip.rs` carries
+**63** `#[test]` functions (`Grep` count, this filing) against a stated
+prior count of 55 — **+8**, consistent with "was 55" in the dispatch.
+
+**Why this is the first ce-dimension verb that deliberately re-measures.**
+Every prior ce-dimension edit verb either performs a rigid motion
+(`move_dimension` — the whole shape translates, the measured value is
+unchanged by construction) or writes fields the value function does not
+read (`place_dimension` writes placement, not geometry). Moving, inserting
+or removing a **vertex** changes the summed-segment-length input directly
+— the label the operator sees **must** change as a direct, intended
+consequence of the edit, not as an accident to be guarded against. This is
+the mechanical mirror of decision **022 §4.2**'s anti-silent-re-measure
+argument (`ROADMAP.md` Glossary, "Obj-tool universality"): that argument
+drew the line so a *different* tool's gesture (Obj-tool selection) could
+never silently re-measure; this Pass is the tool **whose entire job is
+to** re-measure, doing so through a **disclosed, previewable** path
+(`vertex_edit_preview`) rather than a silent one.
+
+**Five new `EditError` variants** (named, not folded into an existing
+catch-all — consistent with rule 4's refuse-by-name discipline and R143's
+"a refusal's stated reason is re-verified" lineage; the exact variant names
+were not re-derived by this librarian and should be read from
+`crates/pdfce-core/src/edit.rs` directly rather than restated here, per
+this file's own "don't duplicate a field list a maintained doc already
+carries" convention — `R197`).
+
+**★ Linear ce dimensions also gained endpoint editing (index 0/1),
+UNREQUESTED — the reason it shipped anyway belongs in the commit message,
+not here**, because this librarian could not run `git show` this filing to
+quote it exactly; the engineer's own reasoning should be read from
+`9940acf`'s full message directly. Recorded here so a future session knows
+to look, rather than assuming the endpoint capability was scoped from the
+start. **`FEATURES.md`'s new vertex-editing row (below) states the
+functional consequence**: linear ce dimensions are no longer limited to
+whole-shape reposition.
+
+**★★ Exceeds the Acrobat parity reference, not merely catches up to it —
+recorded per the operator's standing "exceed the reference and record the
+divergence" instruction.** `pdfce-acrobat-librarian`'s
+`measure__perimeter_and_area_tools.md` (dispatched this session, see
+RAG-escalations note in `SESSION_LOG.md`) found, sourced from Adobe's own
+community forum with an Adobe expert's confirmation: **Acrobat cannot
+insert or delete a vertex on a committed Perimeter/Area measurement at
+all** — custom scripting is the only route — and **whether an existing
+vertex can even be moved is contested across sources.** pdfce ships all
+three (move/insert/remove) as first-class, disclosed, previewable core
+verbs. This is a genuine capability gap **in Acrobat's favor for pdfce**,
+not a parity catch-up, and is recorded as such rather than silently
+absorbed into a routine feature entry.
+
+**★★★ `EditSession::is_ce_dimension` gained a SECOND independent test, and
+the reason is worth carrying as its own finding — see this filing's new
+standing rule, below.** `Pass 107.0`'s new `DimensionKind::Perimeter`
+authors as `/Polygon` (closed) or `/PolyLine` (open) — byte-shapes pdfce
+already uses for ordinary markup, drawable and stylable by
+`set_markup_style`. That verb has refused a ce dimension by name since it
+shipped (regenerating one as plain markup would silently drop its measured
+label and witness lines), but the refusal's guard tested the **literal
+string `LineDimension`** — so adding the `Perimeter` variant **silently
+un-gated the refusal** for every perimeter/path ce dimension, until caught
+by hand while reading an unrelated line (not by any gate). Fixed as
+`EditSession::is_ce_dimension` asking **twice**: the three `/IT` intents
+(`LineDimension`/`PolygonDimension`/`PolyLineDimension`) OR the
+`/PieceInfo` sidecar being present and parseable — because the two checks
+fail in **opposite** directions (a stripped or newer sidecar hides a real
+ce dimension from the sidecar check; `/IT` is a hint a third-party tool may
+rewrite or drop). Each arm carries its own isolated test, and each was
+**sabotage-verified** — deliberately broken with the other arm left
+intact, confirmed to still fail the refusal correctly.
+
+**Test results:** 63 `dimension_roundtrip.rs` tests (was 55, **+8**, `Grep`-
+confirmed this filing) plus 3 new unit tests in `edit.rs`'s own test
+module — **11 new tests this Pass family** (8 + 3), all green (relayed).
+Workspace-wide: 106 suites, 0 failures (relayed).
+
+**Gates and invariant check:** identical clean list to `Pass 107.2`'s
+entry above (one Pass family, one gate run) — see that entry rather than
+repeating the list.
+
+---
+
+### Pass 107.0 — commit `9940acf` (relayed commit message; core surface independently confirmed against live source) — **THE `Perimeter` ce-DIMENSION KIND: A NEW MEASURED-SHAPE ANNOTATION, `/Polygon`+`/PolygonDimension` (CLOSED) OR `/PolyLine`+`/PolyLineDimension` (OPEN), THROUGH THE EXISTING SCALE/GROUP/STYLE CASCADE — `SIDECAR_VERSION` 2 → 3 — AND `DimensionKind`/`DimensionRecord` ARE NO LONGER `Copy`** — filed 2026-08-20 (two-hundredth filing)
+
+**Confirmed against live source:** `Grep` for `Perimeter` in
+`crates/pdfce-core/src` returns `edit.rs`, `dimension/author.rs`,
+`dimension/sidecar.rs`, `vector/snap.rs` and `dimension/group.rs` — the
+variant is wired through authoring, sidecar serialisation, snapping and
+the group model, not merely declared.
+
+**The measurement.** `DimensionKind::Perimeter { points: Vec<Point>,
+closed: bool, offset: f64, text_along: bool }` sums the length of every
+segment between consecutive `points` (plus the closing segment when
+`closed`) into **one number** — not per-segment, not an area (square
+units never appear). It rides the group's existing scale, unit,
+`NumberFormat`, drafting-standard and style-cascade path unchanged; no new
+inheritance mechanism was added, the same "one more property of the
+cascade, not a second system" discipline decision **(S)**/(T) established
+for the style and tolerance surfaces.
+
+**Authoring, per ISO 32000-1 §12.5.6.9 Table 178:** `closed: true` writes
+`/Polygon` + `/IT /PolygonDimension`; `closed: false` writes `/PolyLine` +
+`/IT /PolyLineDimension`. Both use a **flat `/Vertices` array** in default
+user space (not `/Path`, which is 2.0-only and unnecessary here). `/IC`
+absent means no fill — an authoring choice, not an omission, since a
+perimeter/path measurement has no fill semantics to express. `/LE` (line
+endings) is not written — meaningless on `/Polygon` per the spec.
+
+**`SIDECAR_VERSION` 2 → 3.** A new `DimensionKind` variant is exactly the
+case decision **(R)**'s rule (refined by (T)) says **does** owe the bump:
+`/Kind` is a key an older pdfce build already dispatches on, and an
+unknown token there hits `_ => return None`, silently dropping the whole
+record. Bumping the version means an old build refuses to open a sidecar
+carrying a `Perimeter` record instead of silently discarding it.
+
+**`DimensionKind` and `DimensionRecord` are no longer `Copy`.** Full
+architectural reasoning — including the id-reference alternative offered
+by `pdfceGUI` and why it was declined — is filed as `ARCHITECTURE.md` §12
+**Decision 074**, not restated here.
+
+**★ The single highest-risk authoring bug for this kind, per the spec RAG
+finding this Pass's own spec dispatch produced:** `/Rect` must equal the
+**transformed** `/AP` `/BBox`, because §12.5.5 step (b) **scales** the
+appearance to fill `/Rect` — a mismatch is invisible in an object dump and
+silently distorts the drawn shape. **Pinned by a test this Pass**, per the
+spec-librarian's own characterisation of the risk (see `SESSION_LOG.md`'s
+RAG-escalations note for the full five-answer list this Pass drew from
+the newly-built `iso32000__s__12.5.6.9.md`, 58 kB,
+`D:\Dev\Rag-Specialized\PDF_Spec\`).
+
+**Test results:** part of the 63/55 `dimension_roundtrip.rs` count and the
+106-suite/0-failure workspace total reported under `Pass 107.1`'s entry —
+one gate run covers all three Pass entries in this family.
+
+**No standing rule minted by this entry directly** — see this filing's
+**R204**, below, minted from `Pass 107.1`'s `is_ce_dimension` finding, not
+from this entry's own content.
+
 > ### ★★★★★ THE 199TH FILING — `pdfceGUI` ANSWERS ALL SIXTEEN UNRESOLVED ROWS FROM THE 197TH FILING — TEN `docs/FEATURES.md` CHECKBOXES WERE WRONG IN BOTH DIRECTIONS, NOT ONE; `R203` MINTED — NO PASS, NO SHELL, DOCUMENTATION-ONLY
 >
 > **This filing has no shell.** No code shipped this filing — every claim
@@ -62709,6 +62917,32 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **`quad_point_order` is a setting that does nothing — an R83 violation,
+  found red at `HEAD` by `check-settings-consumed.py` while running the
+  full gate suite for an unrelated Pass, pre-existing before this
+  session.** Filed 2026-08-20 (two-hundredth filing). Confirmed by direct
+  read of `crates/pdfce-core/src/annot_author.rs`: the public
+  `build_appearance(spec)` (line 832) calls
+  `build_appearance_with(spec, QuadPointOrder::default())` — the operator's
+  setting is parsed and written (`crates/pdfce-core/src/settings/mod.rs`)
+  but never reaches this call. `EditSession::add_markup` (`edit.rs:12446`)
+  calls the bare `build_appearance(spec)`, and the restyle path
+  (`edit.rs:13620`/`13624`) does too — **both call sites**, confirmed by
+  `Grep`. An operator who switches to `counterclockwise` sees zero effect
+  on any authored or restyled quad-bearing markup.
+  **Scope, not a one-liner — do not smuggle into an unrelated commit.**
+  Decision **062** fixed markup authoring at exactly ONE entry point, so
+  the fix must reach `EditSession::add_markup` as **session state**
+  (e.g. `EditSession::set_quad_point_order`), not a second
+  `add_markup_with` verb — the established convention
+  (`with_unmappable_code`, `with_xref_entry_eol`) is that the **shell**
+  loads `Settings` and passes the value in, not that the core grows a
+  parallel verb per setting. Both shells (CLI, and `pdfceGUI` once it
+  reaches this surface) must be updated to actually load and pass
+  `Settings::quad_point_order`. **`set_markup_style`'s regeneration path
+  is a second call site needing the same order-plumbing** — fixing only
+  `add_markup` would leave a restyle silently reverting the corner order
+  to reading-order on every restyled quad annotation.
 - **`pdfce_render::Diagnostics`'s 54 unread fields need a surfacing split,
   not 54 rows.** Filed 2026-08-19 (hundred-and-ninety-ninth filing), from
   `pdfceGUI`'s row-answer note, finding (A). `Diagnostics`
@@ -77707,6 +77941,68 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   **No gate proposed**, same warrant as `R202`: a sentence's truth is not
   mechanically checkable, only its presence.
   **Ceiling moves `R202` → `R203`; next free `R204`.**
+
+- **R204 — WIDENING THE WORLD PAST A REFUSAL IS THE SAME ACT AS REMOVING
+  THE REFUSAL, AND OWES THE SAME AUDIT (2026-08-20; librarian-minted, two-
+  hundredth filing; safety rule, second confirmed occurrence of the R143/
+  R144/R147 family, on the MIRROR mechanism).** R144 and R147 are about
+  **lifting** a refusal — the guard is removed, and whatever it was
+  incidentally protecting goes with it, silently, because the protection
+  was never named. This is the same cost paid a different way: the guard
+  **stays in place, unmodified**, but the **shape of the world it must
+  cover grows**, and the guard's own test was written narrow enough that
+  the growth slips past it unnoticed.
+  *Instance:* `EditSession::set_markup_style` has refused to restyle a ce
+  dimension by name since it shipped — regenerating one as plain markup
+  would silently strip its measured label and witness lines — and the
+  refusal's guard tested the **literal string `"LineDimension"`**.
+  `Pass 107.0` added `DimensionKind::Perimeter`, authored as `/Polygon`
+  (closed) or `/PolyLine` (open) — byte-shapes pdfce **already uses** for
+  ordinary markup a user can draw and restyle freely. Adding the variant
+  therefore **silently un-gated the refusal** for every perimeter/path ce
+  dimension: `set_markup_style` would have reduced a measurement to a bare
+  scalloped-or-plain outline with nothing reporting it, the exact failure
+  the guard exists to prevent, on a shape the guard's author had no reason
+  to anticipate at the time it was written. **Caught by hand while reading
+  an unrelated line, not by any gate.**
+  **Rule:** when a Pass adds a variant to an enum that any refusal
+  pattern-matches on (a string literal, a `matches!` arm, an
+  `if let Some(kind) = ... where kind == X`), `grep` **every match site for
+  that enum** and re-verify each one still covers the new case — not only
+  the sites the new Pass's own code touches. **This is R147's audit
+  extended past the lift-a-refusal trigger to the widen-the-domain
+  trigger**: R147 says look at every *caller* of a refusing function after
+  it is *removed or loosened*; R204 says look at every *matcher* against a
+  *shared type* after that type's *value set grows*, even when the
+  refusing function itself is untouched and, read on its own, is still
+  correct.
+  **The fix, recorded because it is the reusable shape, not only the
+  patch:** `EditSession::is_ce_dimension` now asks **twice** —
+  the three `/IT` intents (`LineDimension`/`PolygonDimension`/
+  `PolyLineDimension`) **OR** a parseable `/PieceInfo` sidecar — because
+  the two tests fail in **opposite directions**: a stripped or
+  version-mismatched sidecar hides a real ce dimension from the sidecar
+  check, while `/IT` is a hint a third-party tool may rewrite or drop
+  entirely. **Each arm carries its own isolated test, and each was
+  sabotage-verified** — deliberately broken with the other arm left
+  intact, confirmed to still refuse correctly on that arm alone. A
+  disjunction over two independently-failing signals, each independently
+  tested, is the general answer to "the identity test I wrote for case A
+  needs to also cover case B, which fails differently."
+  **Why this earns a number rather than an amendment to R144/R147**: the
+  mechanism is genuinely the mirror, not a restatement — R144/R147 fire on
+  a **removal**, R204 fires on an **addition elsewhere** that the refusal
+  was never told about. Two occurrences meets this project's own promotion
+  bar (this librarian's own agent memory records `feedback_refusals_guard_
+  their_callers` from the R143/R144/R147 family as the first; this is the
+  second, on a different enum, a different crate module, and a different
+  guard).
+  Cross-references **R143** (a refusal's stated reason is re-verified —
+  `"LineDimension"` was a correct reason the day it was written and a
+  stale enumeration the day `Perimeter` shipped), **R144** and **R147**
+  (the lift-side family this is the mirror of), and `Pass 107.0`'s own
+  *Shipped* entry.
+  **Ceiling moves `R203` → `R204`; next free `R205`.**
 
 - **R199 — A RECORDED BLOCKER IS A DATED READING, NOT A STANDING FACT. A
   sentence saying work is gated, needs, requires or awaits something

@@ -63,6 +63,26 @@ and `pdfminer` installed. Extraction recipe that works:
      the same phrase *"with an initialization vector of zero"* occurs on both a
      CBC line and an ECB line one line apart — only the ECB one is struck).
    - Skip `/Link`, `/Widget`, `/Popup` subtypes or the output drowns.
+   - **★ 3-ISO2-ter (2026-08-20) — AN ERRATUM'S REVIEW STATE IS A CHAIN, NOT A
+     REPLY. WALK `/IRT` AND TAKE MAX `/M`.** The rule above ("a reply's `/State`
+     is `Completed` or `Accepted`") is right about the *words* and silent about
+     *which reply to read*. Real shape on pp. 506–507 (Issue #444):
+     `/StrikeOut` obj 5276 ← `/Text State=Accepted` obj 5279 (`/M`
+     2024-07-20) ← `/Text State=Completed` obj 5286 (`/M` 2026-05-21).
+     **The last `/M` in the chain is the current state.** Measured over the
+     whole staged 1023-page file: **1 205 `Completed` + 547 `Accepted` state
+     annots, and 376 of the 547 (68.7 %) are themselves replied to by a
+     `Completed` note** ⇒ an `Accepted` read from the first reply found is
+     **stale about two times in three**. This CORRECTED a corpus claim
+     (`iso32000__s__12.5.6.md` had Issue #444 as TWG-only `Accepted`; it is
+     ISO-ratified `Completed`). ~20-line script: iterate `r.pages`, keep
+     `/Text` annots with a `/State`, record `a.idnum` → `/State` and
+     `o.raw_get('/IRT').idnum`, then test membership of each `Accepted` idnum in
+     the set of `/IRT` targets of `Completed` annots. Whole-document run is
+     ~1 min. **Do this before recording any erratum's authority level.**
+   - **Cross-check every erratum against `pdf-issues.pdfa.org/32000-2-2020/clause<NN>.html`.**
+     It prints the same `<del>`/`<ins>` edits, is **free**, and lets the erratum
+     be described in a file whose licensed half must stay unquotable.
 
 3a. **CHECK `C:\tmp\iso32000_dump.txt` BEFORE RE-DUMPING.** The full 756-page
    `pypdf` dump persists across sessions (2 124 253 B, 37 491 lines, written
@@ -193,6 +213,21 @@ and `pdfminer` installed. Extraction recipe that works:
    clauses). And **check the value column for duplicates**: the one duplicate
    found (U+0017 at both 0x16 and 0x17) turned out to be a *source typo*, which
    is itself a finding worth recording rather than silently repairing.
+
+4c-bis. **★ THE SAME INTERLEAVE HAPPENS INSIDE A CLAUSE, AND IT CAN MAKE YOU
+   ANSWER A QUESTION BACKWARDS.** Established 2026-08-20 on ISO 32000-1
+   §12.5.6.9 (pp. 402–403). `extract_text()` puts **Table 177's
+   `IC`/`BE`/`RD` continuation rows INSIDE the §12.5.6.9 span**, before Table
+   178's own header, and puts Table 178's repeated continuation header **after**
+   Table 179's rows. Consequence: **two different `/IC` rows sit ~50 lines apart
+   in the flat dump** — Table 177's says *"fill the annotation's rectangle or
+   ellipse"*, Table 178's says *"fill the annotation's line endings"* — and
+   reading the wrong one inverts the answer to "does `/IC` fill a polygon?".
+   **Fix: the `pdfminer` `(y, x0, text)` layout pass of item 4a, run on the
+   individual PAGES** (not a page *range*), which recovers the true row order,
+   the column split (`x0 = 75` for a key, `195` for its prose) and the page
+   footer. Two pages, one command. **Any table that spans a page break gets this
+   treatment before a row is quoted as verbatim.**
 
 4c. **Table extraction interleaves the PREVIOUS annex's continuation rows.**
    Annex D.3's rows for 0x05, 0x86–0x8A and 0x9E/0x9F absorbed fragments of

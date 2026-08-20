@@ -23135,3 +23135,118 @@ free 072.**
   specific to `FEATURES.md` and is worth catching the next time this
   project shares a document across a project boundary. **Ceiling moves
   072 → 073; next free 074.**
+
+- **2026-08-19/20 — Decision 074. `DimensionKind` and `DimensionRecord`
+  give up `Copy` for `Pass 107.0`'s `Perimeter` variant; the
+  `pdfceGUI`-offered id-reference alternative (keep `Copy`, hold vertices
+  in `DimensionModel`, reference them by id from the variant) was heard
+  and DECLINED.** `DimensionKind` gained a third heap-carrying shape —
+  `Perimeter { points: Vec<Point>, closed: bool, offset: f64, text_along:
+  bool }` — an unbounded vertex list a building footprint can run to
+  thirty-odd points on. A `Vec` inside an enum that must also derive
+  `Copy` is not expressible; the type had to give up `Copy` (or the field
+  had to move elsewhere), and this decision is the record of why it gave
+  up `Copy` rather than the field.
+  **The alternative, offered by the consuming project, not invented here
+  to be knocked down.** `pdfceGUI` proposed keeping `DimensionKind` `Copy`
+  by holding the vertex geometry in `DimensionModel` (the group/session
+  container) and having the `Perimeter` variant carry only an id
+  referencing back into it — and stated its own cost as **two one-word
+  changes** on its side. A cheap ask, taken seriously, and refused on this
+  project's own reasoning rather than on the requester's cost estimate.
+  **Refused because it splits ONE ce dimension's geometry across TWO
+  containers.** Today, every ce dimension's full state — kind, geometry,
+  placement — lives in one `DimensionRecord`, and "the drawn shape is
+  exactly the thing measured" is a property **of that one value**: bake
+  the `/AP` from the record, and the label and the geometry cannot drift,
+  because there is nothing else to read. The id-reference shape would make
+  that property a **join** between two tables instead: the sidecar would
+  need to serialise the vertex array **and** the id, keep them in step
+  across every mutation, and undo would have to revert **both atomically**
+  — the record's kind/scale/style AND the separately-held vertex array —
+  or a redo/undo boundary could leave a `Perimeter` variant pointing at
+  vertices from a different history state than the rest of the record. The
+  project's round-trip/minimal-diff invariant (§5) is stated in terms of
+  **objects**, and splitting one logical object's geometry across two
+  containers is a standing invitation for exactly the drift class §5
+  exists to prevent, paid every time a future Pass touches either half and
+  forgets the other.
+  **A bounded inline array (`[Point; N]`, keeping `Copy`) was also
+  considered and refused, on the REQUESTER'S OWN STATED REASON**: a
+  building footprint runs to thirty-odd vertices, and any fixed cap is a
+  cap somebody's real drawing hits, at which point the type either
+  silently truncates (a measurement lying about what it measured — rule 4
+  in its most literal form) or refuses valid input for a reason that has
+  nothing to do with the document.
+  **Consequence, stated at the scope this librarian could actually
+  verify and no further:** every `match` over `DimensionKind` that used to
+  bind by value now needs a reference or a `.clone()`; every place a
+  `DimensionRecord` was copied wholesale now allocates. `Grep` for
+  `DimensionKind::` / `DimensionRecord` across `crates/` returns **185
+  occurrences over 16 files** (this filing, workspace-wide, not narrowed
+  to call sites outside the defining module — that finer split was not
+  measured and is not claimed). **Whether any of the 185 required more
+  than a `&`/`.clone()` insertion is a claim about the DIFF, which this
+  librarian's shell grant this filing cannot produce (`git show` is
+  unavailable — see `Pass 107.2`'s *Shipped* entry) and is therefore left
+  unstated rather than estimated.**
+  **What this does NOT settle:** whether a FUTURE `DimensionKind` variant
+  should follow `Perimeter`'s shape (an owned, unbounded `Vec`) by default,
+  or whether a variant with genuinely fixed-arity geometry (as `Linear`,
+  `Circular` and `Angular` all are) should stay `Copy`-friendly by keeping
+  its own fields scalar. `DimensionKind` **as a whole** is no longer
+  `Copy` regardless, so this is a stylistic question for the variant's own
+  fields, not an open question this decision leaves load-bearing.
+  **Body section updated in the same filing:** none minted in
+  `ARCHITECTURE.md` §4.1 — this project's lettered-subsection convention
+  (`(A)`…`(Z)`) reached its ceiling at `(Z)` (`Pass 100.0`'s display-list
+  entry, 2026-08-18) and subsequent Passes record new `pdfce-core` surface
+  in `docs/core-api/` instead (see decision 072's own precedent). **This
+  decision flags, rather than duplicates, that
+  `docs/core-api/03-capabilities.md` §1 ("ce dimensions") does not yet
+  describe `DimensionKind::Perimeter`, the four vertex-edit verbs, or
+  `SIDECAR_VERSION` 3 — kept current by the engineer's own ownership of
+  that directory** (`ROADMAP.md`'s "`docs/core-api/` is a MAINTAINED
+  artefact" ruling, 2026-08-18), same restraint decision 072 exercised for
+  the same reason.
+  **No standing rule minted for this decision's substance** (a single
+  crate-internal representation choice with a named, declined alternative
+  — not a recurring pattern). **Ceiling moves 073 → 074; next free 075.**
+
+- **2026-08-20 — no decision NUMBER minted; two rulings recorded instead,
+  because each is a property of one API's behavior rather than an
+  architectural choice — following the hundred-and-twenty-fifth filing's
+  own precedent (§12, 2026-08-12, no-number entry above `Decision 055`) of
+  declining a number where the ruling is fully stated at its own call site
+  and a ledger entry would only point back to it.**
+  **Ceiling check:** `Decision 074` immediately above already moved the
+  ceiling to 074; **this entry mints nothing and the ceiling stays 074.**
+  Said explicitly, per that same precedent, so the omission reads as
+  decided rather than forgotten.
+  1. **A perimeter/path ce dimension's label anchors on the VERTEX
+     CENTROID, not the longest segment.** The CAD-conventional reading —
+     "along the longest segment", matching how a linear ce dimension's
+     label sits on its one segment — was considered and rejected, because
+     vertex editing (`Pass 107.1`, same session) is this kind's headline
+     feature: under the longest-segment convention, dragging **any single
+     corner** can change which segment is longest, and the label
+     **teleports across the shape** as a side effect of an edit that had
+     nothing to do with where the label sits. Centroid anchoring is stable
+     under every vertex edit that does not change the shape's overall
+     extent, which is the common case. Stated in
+     `crates/pdfce-core/src/dimension/author.rs`'s own doc comment on the
+     `Perimeter` label-placement code path; not restated in full here.
+  2. **`EditSession::is_ce_dimension`'s two-arm (`/IT` OR sidecar) identity
+     test is itself a durable API CONTRACT, not merely a bugfix**, and is
+     recorded here as one for the next Pass that adds a `DimensionKind`
+     variant reusing an existing markup byte-shape. The general form —
+     `R204` (`ROADMAP.md` *Standing rules*) — is the process rule; this is
+     the narrower statement that the specific function's two-arm shape is
+     now the API's own contract, not an implementation detail free to
+     collapse back to one arm the next time it looks redundant. A future
+     Pass that finds one arm "always agrees with" the other on its own
+     fixtures should re-read `R204`'s sabotage-verification note before
+     simplifying: the two arms are independently necessary because they
+     fail in opposite directions on different inputs, and a fixture set
+     that happens not to exercise the divergence is not evidence the
+     divergence cannot occur.
