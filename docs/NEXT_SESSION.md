@@ -71,6 +71,45 @@ session.
 | `e265f43` | librarian: the four unfiled 2026-08-19 commits · **`Pass 109.0`** |
 | `1c169ba` | **`Pass 110.0`** — `check-outcome-disclosed.py`, the class gate |
 | `720cb6f` | librarian: `106.2` + `110.0` filed |
+| `4c96985` | the handoff, level with the eight commits after it |
+| `e5ef2a0` | **`Pass 111.0`** — the `/Contents` corruption, in TWO copies |
+| `f8dd31f` | **`Pass 112.0`** — `Matrix::scale`/`rotate`/`about`/`is_invertible` |
+| `57b67c5` | librarian: `111.0` · **decision 075** · Backlog `113`–`117` |
+| `b32635a` | the core-api stated line count moved with `111.0` |
+| `472af76` | librarian: `112.0` filed, the owed line discharged |
+
+### ★★ THREE pdfceGUI REQUESTS LANDED ON 2026-08-20, NOT ONE
+
+Found by `ls`-ing the channel, per §0. **One is a CORRUPTION** and was taken
+first; one is scoped and its foundation shipped; **one is untouched.**
+
+| request | state |
+|---|---|
+| `request_add_image_corrupts_a_page_whose_contents_is_an_indirect_array.md` | **FIXED — `Pass 111.0`.** Replied, INDEX row added. |
+| `request_no_verb_transforms_a_non_path_object_so_a_placed_image_cannot_be_moved.md` | **SCOPED + widened on the operator's instruction.** Foundation shipped (`112.0`); `113`–`117` filed. Replied. |
+| `request_text_inside_a_form_xobject_cannot_be_edited_and_the_error_blames_the_text.md` | ★ **UNTOUCHED. NOT REPLIED TO.** Read only. See §2 item 1. |
+
+### `Pass 111.0` — the corruption, and the part worth carrying
+
+`add_image` wrote files **pdfce itself could not reopen**, on any page whose
+`/Contents` is an indirect reference to an ARRAY — Qt and every CAD exporter.
+It returned `Ok`, the save returned `Ok`.
+
+**It was written TWICE** — `append_page_content` and
+`text_edit::addtext::append_contents`, two independent implementations of the
+same six lines, wrong the same way, from the same wrong assumption at different
+times. Now ONE function in `page_tree`, beside the **reader** that decides the
+same question. **Decision 075**: *the writer's model of a structure lives beside
+the reader's, not beside the verb that uses it.*
+
+**Already-damaged files now open** — read-side flatten, depth-guarded, disclosed
+via `Page::contents_flattened` and `pdfce-cli inspect`. The repair is exact and
+was **proved, not argued**: damaged and healthy `EMPC.pdf` render to
+byte-identical PNGs.
+
+★ **The postcondition in `commit()` would NOT catch this bug today**, because
+the healing means the page still reads. That is in its own doc comment rather
+than implied. Its value is the *other* structural breakages.
 
 ### ★ THE RECORD GATES ARE CLEAN FOR THE FIRST TIME THIS SESSION
 
@@ -162,33 +201,64 @@ would silently alter how already-shipped markup *looks*.
 
 ## §2 — THE QUEUE, in the order I would take it
 
-1. **`Pass 97.0 / 97.1 / 97.2`** — the colorant compositor. Still the
-   highest-impact item in the project. Plan of record:
+1. ★ **REPLY TO THE THIRD REQUEST** —
+   `request_text_inside_a_form_xobject_cannot_be_edited_and_the_error_blames_the_text.md`.
+   Read but **not answered**, and it is owed. Their claim: on a CAD-exported
+   sheet, text inside a form XObject is the **majority case, not an edge case**,
+   and `text_edit/edit.rs:79` names form-XObject content a non-goal of that cut.
+   They also fixed a real defect on their own side (reading `operator_span`
+   while discarding `content_stream` — two different buffers) and say fixing it
+   only lets them *refuse honestly*. The operator has raised this at least three
+   times.
+
+2. **`Pass 113.0`** — `transform_objects`, the verb `pdfceGUI` is blocked on and
+   says its whole shell side is built and waiting for. **Read the open question
+   first**: operand rewriting cannot express rotation, so this needs a
+   `q…cm…Q` wrap, and that choice is filed as an OPEN QUESTION rather than
+   decided. `Pass 112.0` is the foundation and is shipped.
+   **Two answers are owed from `pdfceGUI` before it lands** (asked in the
+   reply): whether a mixed selection must transform in one gesture, and whether
+   a degenerate drag should clamp or refuse.
+
+3. **`Pass 97.0 / 97.1 / 97.2`** — the colorant compositor. Still the
+   highest-impact item by Ghent count. Plan of record:
    `docs/compositor-plan.md`; collapse model in
    `docs/collapse-model-survey.md`. **★ Its "16 of the 18 remaining Ghent
    failures" thesis is AMENDED and owes a re-derivation before the Pass is
-   scoped from it** — see §3.
-   This is also where the **iccce dependency edge appears** (§4), so
-   `Pass 101.1` unblocks at the same moment.
-2. **`Pass 80.0`** (note text on markup) and **`Pass 81.1`** (markup opacity,
+   scoped from it** — see §3. This is also where the **iccce dependency edge
+   appears** (§4), so `Pass 101.1` unblocks at the same moment.
+
+4. **`Pass 80.0`** (note text on markup) and **`Pass 81.1`** (markup opacity,
    write half) — both `pdfceGUI` requests, both already scoped.
-3. **`Pass 98.0`** — read a foreign `/BE` back into `MarkupSpec`.
-4. **`Pass 103.2` / `103.3`** — page labels for inserted pages, and named
+
+5. **`Pass 98.0`** — read a foreign `/BE` back into `MarkupSpec`.
+
+6. **`Pass 103.2` / `103.3`** — page labels for inserted pages, and named
    destinations so a carried bookmark resolves. `103.2` **needs a
-   `pdfce-acrobat-librarian` dispatch before it is scoped** — nobody has
-   measured what Acrobat does with page labels on an insert. Note that today's
-   Acrobat dispatch **did** measure the adjacent junction: Acrobat overwrites
-   every inserted page with a static copy of the preceding page's label, and
-   pdfce deliberately does not match that (decision 072).
-5. **The `iccce` channel** — 16 files, two requests genuinely owed, and
+   `pdfce-acrobat-librarian` dispatch before it is scoped**. Note that the
+   2026-08-20 Acrobat dispatch **did** measure the adjacent junction: Acrobat
+   overwrites every inserted page with a static copy of the preceding page's
+   label, and pdfce deliberately does not match that (decision 072).
+
+7. **The `iccce` channel** — 16 files, two requests genuinely owed, and
    **`note_gray_black_routing_is_yours.md` is still the highest-value unread
-   file there.** It is a boundary ruling handing pdfce the four-way
-   gray/CMYK/`Separation`/`DeviceN` black equivalence, and it bears directly on
+   file there.** A boundary ruling handing pdfce the four-way
+   gray/CMYK/`Separation`/`DeviceN` black equivalence, bearing directly on
    `Pass 97.x`. Not a request — do not triage it as one.
 
-**★ Ghent standing, unchanged since 2026-08-19 and NOT re-measured today:
+**★ Ghent standing, unchanged since 2026-08-19 and NOT re-measured since:
 26 pass / 14 FAIL / 11 UNRESOLVED of 51.** Re-measure rather than quoting this
 line. The GWG Reference file is still not on this machine.
+
+### ★ The 43 gaps, because the number is the finding
+
+A crate-wide survey for the transform work found **43 (object kind × operation)
+pairs with no verb**. `pdfceGUI`'s request covers ten. The rest is Backlog
+`113`–`117`, dependency-ordered, with two **open questions** filed rather than
+decided: the `q…cm…Q`-versus-operand-rewriting mechanism, and whether a single
+**heterogeneous-selection** verb should exist at all (paths + text + images +
+annotations + dimensions + widgets in one gesture). Every existing verb is
+single-kind. That is a real architectural question, not a given.
 
 ---
 
@@ -296,6 +366,16 @@ Python gotcha rather than a pdfce one.
 
 ## §6 — TRAPS THAT COST TIME TODAY
 
+- **★ A SURVEY FINDING IS TRUE AS OF A MEASUREMENT.** I dispatched the librarian
+  with a finding stating that `Matrix` had no `scale`/`rotate` constructors —
+  and then built them **while that dispatch was in flight**. It caught the
+  contradiction, refused to file the Pass as either Backlog (not unbuilt) or
+  Shipped (no shell to confirm a commit), skipped the number so nothing would
+  collide, and handed the question back. Right on every count. **Second
+  same-session instance of a subagent correcting a dispatch rather than filing
+  it as given** — the first was `Pass 106.2`'s "promoted out of the token line".
+  Deliberately NOT named as a pattern: the two share no mechanism, only the
+  shape "read before filing."
 - **★ Anchoring a code insertion on `fn foo(` or on an enum variant splits it
   from its doc comment.** Happened **twice**, in the same file, in one session.
   The first instance **shipped a wrong `--help`**: `clap` derives its
@@ -322,7 +402,7 @@ Python gotcha rather than a pdfce one.
 
 ## §7 — STATE AT HANDOFF
 
-- **Working tree clean**; eleven commits today, listed in §1. **Nothing pushed.**
+- **Working tree clean**; seventeen commits today, listed in §1. **Nothing pushed.**
   `github.com/KenM76/pdfce` is public and has a remote — a careless `git push`
   reaches the world.
 - `cargo fmt --check`, `clippy --all-targets --workspace -D warnings`, and
@@ -335,8 +415,9 @@ Python gotcha rather than a pdfce one.
   `verify-release.py` → tag → portable package → GitHub release → librarian
   release record. A CI-built release reports `revision: unknown` unless that
   workflow gets `fetch-depth: 0`.
-- **Ledger, re-measured at end of session** — next free Pass family **111**,
-  decision **075**, standing rule **R206**, filing ordinal **204**.
+- **Ledger, re-measured at end of session** — next free Pass family **118**
+  (`113`–`117` are SPOKEN FOR by the transform Backlog), decision **076**,
+  standing rule **R206**, filing ordinal **206**.
   **Re-measure with `tools/check-ledger-numbers.py` rather than trusting this
   line; it has been wrong before and was wrong by three this morning.**
 - New spec corpus file: `iso32000__s__12.5.6.9.md` (58 kB). It also **corrected
