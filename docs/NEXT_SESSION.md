@@ -80,14 +80,14 @@ session.
 
 ### ★★ THREE pdfceGUI REQUESTS LANDED ON 2026-08-20, NOT ONE
 
-Found by `ls`-ing the channel, per §0. **One is a CORRUPTION** and was taken
-first; one is scoped and its foundation shipped; **one is untouched.**
+Found by `ls`-ing the channel, per §0. **One was a CORRUPTION** and was taken
+first. **All three are now answered, with a reply and an `INDEX.md` row each.**
 
 | request | state |
 |---|---|
 | `request_add_image_corrupts_a_page_whose_contents_is_an_indirect_array.md` | **FIXED — `Pass 111.0`.** Replied, INDEX row added. |
 | `request_no_verb_transforms_a_non_path_object_so_a_placed_image_cannot_be_moved.md` | **SCOPED + widened on the operator's instruction.** Foundation shipped (`112.0`); `113`–`117` filed. Replied. |
-| `request_text_inside_a_form_xobject_cannot_be_edited_and_the_error_blames_the_text.md` | ★ **UNTOUCHED. NOT REPLIED TO.** Read only. See §2 item 1. |
+| `request_text_inside_a_form_xobject_cannot_be_edited_and_the_error_blames_the_text.md` | **Asks 1 + 2 SHIPPED — `Pass 118.0`.** Ask 3 (the real work) filed as `Pass 119.0`, not started. Replied, INDEX row added. |
 
 ### `Pass 111.0` — the corruption, and the part worth carrying
 
@@ -201,24 +201,33 @@ would silently alter how already-shipped markup *looks*.
 
 ## §2 — THE QUEUE, in the order I would take it
 
-1. ★ **REPLY TO THE THIRD REQUEST** —
-   `request_text_inside_a_form_xobject_cannot_be_edited_and_the_error_blames_the_text.md`.
-   Read but **not answered**, and it is owed. Their claim: on a CAD-exported
-   sheet, text inside a form XObject is the **majority case, not an edge case**,
-   and `text_edit/edit.rs:79` names form-XObject content a non-goal of that cut.
-   They also fixed a real defect on their own side (reading `operator_span`
-   while discarding `content_stream` — two different buffers) and say fixing it
-   only lets them *refuse honestly*. The operator has raised this at least three
-   times.
+1. **`Pass 113.0`** — `transform_objects`, the verb `pdfceGUI` is blocked on and
+   says its whole shell side is built and waiting for. `Pass 112.0` is the
+   foundation and is shipped.
 
-2. **`Pass 113.0`** — `transform_objects`, the verb `pdfceGUI` is blocked on and
-   says its whole shell side is built and waiting for. **Read the open question
-   first**: operand rewriting cannot express rotation, so this needs a
-   `q…cm…Q` wrap, and that choice is filed as an OPEN QUESTION rather than
-   decided. `Pass 112.0` is the foundation and is shipped.
-   **Two answers are owed from `pdfceGUI` before it lands** (asked in the
-   reply): whether a mixed selection must transform in one gesture, and whether
-   a degenerate drag should clamp or refuse.
+   **★ Read the one remaining open question first**: operand rewriting **cannot
+   express rotation**, so this needs a `q…cm…Q` wrap — and that mechanism choice
+   is filed as an OPEN QUESTION rather than decided. Only the impossibility is
+   established.
+
+   **★★ NOTHING IS OWED FROM `pdfceGUI`.** I had asked them two design
+   questions; **Ken answered both himself** before they read the reply
+   (*"make things work both ways as options. default it to your best guess as
+   to what would be normally expected"*), and the reply has been amended in
+   place to say so. Both defaults are now acceptance criteria:
+   **mixed selections transform whole** (the option is refuse-by-name;
+   `R168`'s no-silent-subset still governs), and **a singular matrix is refused
+   by name** (the option is clamp-and-disclose) because a singular transform is
+   irrecoverable and a *negative* scale is not singular anyway.
+
+2. **`Pass 119.0`** — text editing inside form XObjects, the third `pdfceGUI`
+   request's real ask. Asks 1 and 2 shipped as `Pass 118.0`; this is the one
+   that closes the operator's complaint. **Acceptance criteria are UNSCOPED**
+   pending a librarian dispatch (project rule 12). The hazard already recorded:
+   a form can be invoked from several pages or several times on one page, so
+   editing inside one is a **write to a possibly-shared object** — the same
+   shape `Pass 111.0`/decision 075 decided the same day for a possibly-shared
+   `/Contents` array.
 
 3. **`Pass 97.0 / 97.1 / 97.2`** — the colorant compositor. Still the
    highest-impact item by Ghent count. Plan of record:

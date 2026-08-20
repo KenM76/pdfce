@@ -38,6 +38,6 @@
 - [Verify each instance, not the class](feedback_verify_each_instance_not_the_class.md) — an oracle run on one of two new variants shipped a defect beside a verified twin
 - [Check BOTH FeatureRequests channels every session](project_feature_request_channels.md) — they live outside the repo, so no gate can contradict a stale "it's empty" claim
 - [Read ARCHITECTURE every session](feedback_read_architecture_every_session.md) — §12 decision log holds cross-project boundaries no gate can catch; a subagent cannot check a constraint the dispatch omits
-- [Spec ambiguity defaults are MINE](feedback_spec_ambiguity_defaults_are_mine.md) — Ken 2026-08-19: make it a setting AND pick the default; he refused to be asked
+- [Two defensible answers? Ship both, pick the default](feedback_spec_ambiguity_defaults_are_mine.md) — NOT just spec ambiguity; Ken refused to be asked twice, and never ask a consuming project either
 - [A gate that under-reports looks green](feedback_a_gate_that_underreports_looks_green.md) — found only by forecasting its output; fix the CLASS, not the spelling that failed
 - [Inserting before an anchor orphans its doc comment](feedback_inserting_before_an_anchor_orphans_its_doc_comment.md) — splicing before `fn`/variant lands inside the preceding `///`; clap ships it as wrong `--help`
