@@ -271,6 +271,18 @@ pub enum ContentStreamRef {
     },
 }
 
+impl ContentStreamRef {
+    /// Whether this names the page's own `/Contents` buffer.
+    ///
+    /// The primitive behind [`TextRun::is_editable`]; see that method for why
+    /// a consuming shell should ask the question there rather than matching on
+    /// this enum itself.
+    #[must_use]
+    pub const fn is_page(self) -> bool {
+        matches!(self, Self::Page)
+    }
+}
+
 /// A fill colour captured from the graphics state at the instant a glyph
 /// was shown (§8.6.8; text is painted in the current *fill* colour under
 /// the default text-rendering modes 0/2/4/6).
@@ -491,6 +503,132 @@ impl TextRun {
     pub const fn is_sourced(&self) -> bool {
         self.origin.is_sourced()
     }
+
+    /// **Whether pdfce's in-place text editing can reach this run, and if
+    /// not, why** (`Pass 118.0`) — ask this before offering a caret.
+    ///
+    /// # The asymmetry it publishes
+    ///
+    /// **Extraction recurses into form XObjects; the edit surgery does not.**
+    /// `text_extract` executes a form's content with its own `/Resources` and
+    /// `/Matrix`, so a glyph inside one is extracted, positioned and reported
+    /// like any other. [`crate::text_edit`] operates on the page's own
+    /// concatenated `/Contents` buffer and names form content a non-goal of
+    /// its cut.
+    ///
+    /// So **a caret can land anywhere extraction can see, and commit only
+    /// where the surgery can reach** — and those two regions are not the same
+    /// one. This is the boundary between them, published.
+    ///
+    /// ★ **On a CAD-exported sheet the difference is not an edge case, it is
+    /// the whole document.** Measured on the operator's own benchmark drawing:
+    /// the page stream holds 3,007 single-character `Tj` operators spelling
+    /// the producer's watermark, and the form XObject holds 1,696 show
+    /// operators carrying every label, the title block and every dimension
+    /// callout. Everything an operator would want to click on is inside the
+    /// form; everything editing can currently reach is metadata nobody wants
+    /// to change. That is why "edit text" reads as *does nothing* on a
+    /// drawing.
+    ///
+    /// # ★ Why this is not the `-> bool` that was asked for
+    ///
+    /// The consuming shell asked for `run_is_editable(run) -> bool`. **A bool
+    /// cannot be written correctly here**, and finding out why is the reason
+    /// this returns an enum:
+    ///
+    /// [`ExtractOptions::capture_provenance`] defaults to **`false`**, and
+    /// without it every glyph's provenance is `None`. A boolean predicate
+    /// would then answer `false` for *every run in the document* — including
+    /// perfectly editable page text — and a shell trusting it would refuse
+    /// every caret while reporting a reason that was never measured. **"No"
+    /// and "I was not told" are different answers**, and collapsing them is
+    /// the exact defect class this predicate exists to remove.
+    ///
+    /// The variants also carry the *reason*, which the shell needs anyway:
+    /// it words its own refusal from this, and [`Self::InsideForm`] names the
+    /// form so a diagnostic can say which one.
+    ///
+    /// **There is deliberately no `is_editable() -> bool` convenience.** It
+    /// would have to pick a meaning for [`Editability::Unknown`], and that is
+    /// precisely the decision the caller must make in the open.
+    ///
+    /// # Why pdfce publishes this rather than leaving the shell to derive it
+    ///
+    /// A shell can compute the form case today by matching on
+    /// [`GlyphProvenance::content_stream`] — and the consuming shell did
+    /// exactly that. But then **the shell encodes a fact about pdfce's
+    /// surgery internals**, and on the day form editing lands its guard keeps
+    /// refusing until somebody notices and deletes it. That is decision 058's
+    /// failure mode: a workaround that outlives its bug. A predicate pdfce
+    /// owns cannot go stale that way — when the capability grows, this starts
+    /// answering [`Editability::Editable`] and every caller improves without
+    /// changing.
+    ///
+    /// Same shape as `EditSession::adopt_preview` and `vertex_edit_preview`,
+    /// asked for the same stated reason: *a verb with no preflight makes the
+    /// UI find out by pressing* — and here pressing costs the operator a
+    /// sentence they had already typed.
+    #[must_use]
+    pub fn editability(&self) -> Editability {
+        let Some(first) = self.glyphs.first() else {
+            // An `/ActualText` run covers no show operators of its own, so
+            // there is no operator for the surgery to anchor on. Reported as
+            // its own reason rather than folded into "not editable": the shell
+            // may well want to say something different about text that is
+            // derived rather than text that is out of reach.
+            return Editability::NoAnchor;
+        };
+        if first.provenance.is_none() {
+            return Editability::Unknown;
+        }
+        for g in &self.glyphs {
+            match g.provenance.as_ref().map(|p| p.content_stream) {
+                Some(ContentStreamRef::Page) => {}
+                Some(ContentStreamRef::Form { object }) => {
+                    return Editability::InsideForm { object };
+                }
+                // A run whose glyphs disagree about whether provenance was
+                // captured cannot happen from one extraction, but answering
+                // `Unknown` is the safe reading if it ever does.
+                None => return Editability::Unknown,
+            }
+        }
+        Editability::Editable
+    }
+}
+
+/// Whether pdfce's in-place text editing can reach a run, and if not, why
+/// (`Pass 118.0`). Returned by [`TextRun::editability`].
+///
+/// Deliberately **not** a `bool`. See that method for why: with
+/// [`ExtractOptions::capture_provenance`] off — which is the default — a
+/// boolean would answer "not editable" for every run in the document while
+/// meaning "I was not told", and a shell trusting it would refuse every caret
+/// for a reason nobody measured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Editability {
+    /// Every glyph came from the page's own `/Contents`. The surgery can
+    /// anchor on it; offer the caret.
+    Editable,
+    /// The run lives inside a form XObject, which extraction reads and the
+    /// edit surgery does not. **Do not offer a caret** — the operator would
+    /// type into something that cannot be committed.
+    InsideForm {
+        /// The form XObject stream's object number, for diagnostics.
+        object: u32,
+    },
+    /// The run has no show operator of its own to anchor on — an
+    /// `/ActualText` run ([`TextOrigin::ActualText`]) covering no glyphs.
+    NoAnchor,
+    /// **Provenance was not captured**, so the question cannot be answered
+    /// from this run. Re-extract with
+    /// `ExtractOptions::default().with_provenance(true)`.
+    ///
+    /// This variant is the whole reason the type is not a `bool`: it is the
+    /// state a caller reaches by default, and it must not be indistinguishable
+    /// from a measured "no".
+    Unknown,
 }
 
 /// Everything one page's extraction produced.

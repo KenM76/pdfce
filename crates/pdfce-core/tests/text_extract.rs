@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use pdfce_core::document::Document;
 use pdfce_core::settings::{ActualTextPrecedence, UnmappableCode};
 use pdfce_core::text_extract::{
-    self, ArtifactKind, ExtractOptions, ExtractedText, LadderRung, TextOrigin,
+    self, ArtifactKind, Editability, ExtractOptions, ExtractedText, LadderRung, TextOrigin,
 };
 
 /// A fixture path under `fixtures/synthetic/text/`.
@@ -744,5 +744,187 @@ fn the_ambient_state_is_not_built_unless_provenance_is_requested() {
                 assert!(g.provenance.is_none());
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pass 118.0 — `TextRun::is_editable`, the extract/edit boundary, published
+// ---------------------------------------------------------------------------
+
+/// A one-page PDF with text in BOTH buffers: one `Tj` in the page's own
+/// `/Contents`, and one inside a form XObject the page invokes with `Do`.
+///
+/// Built inline rather than as a checked-in fixture — it exists to prove one
+/// asymmetry and nothing else reads it (project rule 7 / `LEGAL.md` §5 keep
+/// the corpus to what is needed).
+fn page_and_form_text_pdf() -> Vec<u8> {
+    let page_content = "BT /F1 12 Tf 50 700 Td (PAGE) Tj ET\nq 1 0 0 1 20 20 cm /X1 Do Q";
+    let form_content = "BT /F1 12 Tf 10 10 Td (FORM) Tj ET";
+    let bodies = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R \
+         /Resources << /Font << /F1 6 0 R >> /XObject << /X1 5 0 R >> >> >>"
+            .to_owned(),
+        format!(
+            "<< /Length {} >>\nstream\n{page_content}\nendstream",
+            page_content.len() + 1
+        ),
+        format!(
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 200 200] \
+             /Resources << /Font << /F1 6 0 R >> >> /Length {} >>\nstream\n{form_content}\nendstream",
+            form_content.len() + 1
+        ),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+            .to_owned(),
+    ];
+    let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in bodies.iter().enumerate() {
+        offsets.push(buf.len());
+        buf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref_at = buf.len();
+    let size = bodies.len() + 1;
+    buf.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \n").as_bytes());
+    for off in &offsets {
+        buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
+    }
+    buf.extend_from_slice(
+        format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n")
+            .as_bytes(),
+    );
+    buf
+}
+
+/// ★ THE ASYMMETRY, PUBLISHED. Extraction recurses into a form XObject; the
+/// edit surgery does not. So a caret can land anywhere extraction can see and
+/// commit only where the surgery can reach, and until `Pass 118.0` the only
+/// way a shell could tell those regions apart was by matching on
+/// `ContentStreamRef` — encoding a fact about pdfce's internals into its own
+/// guard, which then outlives the limitation it was written for.
+///
+/// On a CAD-exported sheet this is not an edge case: the page stream holds the
+/// producer's watermark and the form holds every label the operator wants.
+#[test]
+fn is_editable_separates_page_text_from_form_xobject_text() {
+    let doc = Document::from_bytes(page_and_form_text_pdf()).expect("fixture loads");
+    // Provenance ON — without it the answer is `Unknown` for everything, which
+    // is the point of the sibling test below.
+    let options = ExtractOptions::default().with_provenance(true);
+    let text = text_extract::extract_document(&doc, &options).expect("extraction runs");
+    let page = &text.pages[0];
+
+    // Both are EXTRACTED — that is the half that already worked, and the half
+    // that makes the caret land in the wrong place.
+    let all: String = page.runs.iter().map(|r| r.text.as_str()).collect();
+    assert!(all.contains("PAGE"), "page text must extract: {all:?}");
+    assert!(all.contains("FORM"), "form text must extract too: {all:?}");
+
+    let page_run = page
+        .runs
+        .iter()
+        .find(|r| r.text.contains("PAGE"))
+        .expect("the page-stream run");
+    let form_run = page
+        .runs
+        .iter()
+        .find(|r| r.text.contains("FORM"))
+        .expect("the form-XObject run");
+
+    assert_eq!(
+        page_run.editability(),
+        Editability::Editable,
+        "text in the page's own /Contents is what the surgery reaches"
+    );
+    assert!(
+        matches!(form_run.editability(), Editability::InsideForm { .. }),
+        "text inside a form XObject is NOT reachable, and the shell must be able to learn that -- WITH THE REASON -- before it offers a caret, got {:?}",
+        form_run.editability()
+    );
+}
+
+/// ★ THE TRAP THE `-> bool` WOULD HAVE WALKED INTO.
+///
+/// [`ExtractOptions::capture_provenance`] defaults to **false**, so on a
+/// default extraction no glyph carries provenance at all. A boolean predicate
+/// would answer "not editable" for EVERY run in the document — including
+/// perfectly editable page text — while meaning *"I was not told"*, and a
+/// shell trusting it would refuse every caret for a reason nobody measured.
+///
+/// **This is the test that made the API an enum instead of the `bool` that was
+/// asked for.** It is written from the DEFAULT options deliberately, because
+/// the default is the state a caller reaches without doing anything.
+#[test]
+fn without_provenance_the_answer_is_unknown_and_not_a_silent_no() {
+    let doc = Document::from_bytes(page_and_form_text_pdf()).expect("fixture loads");
+    // Default options — provenance OFF.
+    let text =
+        text_extract::extract_document(&doc, &ExtractOptions::default()).expect("extraction runs");
+    let page_run = text.pages[0]
+        .runs
+        .iter()
+        .find(|r| r.text.contains("PAGE"))
+        .expect("the page-stream run");
+    assert_eq!(
+        page_run.editability(),
+        Editability::Unknown,
+        "editable page text must report UNKNOWN when provenance was not captured -- never a measured-looking no"
+    );
+}
+
+/// The predicate must agree with the provenance it is derived from — two
+/// answers to one question that could otherwise drift.
+#[test]
+fn is_editable_agrees_with_the_provenance_it_summarises() {
+    use pdfce_core::text_extract::ContentStreamRef;
+
+    let doc = Document::from_bytes(page_and_form_text_pdf()).expect("fixture loads");
+    let options = ExtractOptions::default().with_provenance(true);
+    let text = text_extract::extract_document(&doc, &options).expect("extraction runs");
+
+    for run in &text.pages[0].runs {
+        let all_page = !run.glyphs.is_empty()
+            && run.glyphs.iter().all(|g| {
+                g.provenance
+                    .as_ref()
+                    .is_some_and(|p| matches!(p.content_stream, ContentStreamRef::Page))
+            });
+        assert_eq!(
+            run.editability() == Editability::Editable,
+            all_page,
+            "the predicate and the provenance disagree about {:?}",
+            run.text
+        );
+    }
+}
+
+/// A run with no glyphs answers `false`, not the vacuous `true` an empty
+/// `all()` would give. Offering a caret over text that cannot be committed is
+/// precisely the failure this predicate exists to prevent, so the optimistic
+/// default is the wrong one.
+#[test]
+fn a_run_with_no_glyphs_is_not_editable() {
+    let text = extract_with(
+        "actual-text-drucker.pdf",
+        &ExtractOptions::default().with_provenance(true),
+    );
+    let derived: Vec<_> = text
+        .pages
+        .iter()
+        .flat_map(|p| p.runs.iter())
+        .filter(|r| r.glyphs.is_empty())
+        .collect();
+    assert!(
+        !derived.is_empty(),
+        "this fixture is expected to carry at least one glyph-less run"
+    );
+    for run in derived {
+        assert_eq!(
+            run.editability(),
+            Editability::NoAnchor,
+            "a run with no show operator has its OWN reason -- it is not out of reach, it has nothing to reach for: {:?}",
+            run.text
+        );
     }
 }

@@ -1024,6 +1024,26 @@ pub enum FormatError {
     /// The find text was not present in any editable run.
     #[error("text to format ({0:?}) was not found in an editable run on the page")]
     NoMatch(String),
+    /// A **pinned** request named a byte span that matches no show operator
+    /// (`Pass 118.0`) — the format-side twin of
+    /// [`EditError::PinnedSpanNotFound`], carried through rather than
+    /// collapsed into [`Self::NoMatch`].
+    ///
+    /// It is carried because the format path is the one the shipped property
+    /// bar drives, and it is where the `Pass 19.3` incident this variant
+    /// exists to prevent was originally observed: *"Apply size refused with
+    /// 'text to format (…) was not found in an editable run on the page' on a
+    /// perfectly ordinary one-`Tj` page."* Collapsing it here would put that
+    /// exact sentence back in front of the operator.
+    #[error(
+        "the pinned span {start}..{end} names no show operator in this content stream -- the text is not the problem; the pin is pointing at a different buffer (a form XObject's content is not the page's)"
+    )]
+    PinnedSpanNotFound {
+        /// First byte of the pin, as supplied.
+        start: usize,
+        /// One past the last byte of the pin, as supplied.
+        end: usize,
+    },
     /// The run is real but this cut cannot format it (composite font, a
     /// `'`/`"` anchor, a cross-element `TJ` match, an unresolvable font
     /// resource — including outlined/vectorized text).
@@ -1054,6 +1074,7 @@ impl FormatError {
             EditError::Refused(r) => Self::Refused(r),
             EditError::PageIndex(i) => Self::PageIndex(i),
             EditError::NoMatch(s) => Self::NoMatch(s),
+            EditError::PinnedSpanNotFound { start, end } => Self::PinnedSpanNotFound { start, end },
             EditError::Unsupported(s) => Self::Unsupported(s),
             EditError::Encrypted => Self::Encrypted,
             EditError::Content(e) => Self::Content(e),

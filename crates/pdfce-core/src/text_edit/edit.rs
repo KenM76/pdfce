@@ -434,6 +434,44 @@ pub enum EditError {
     /// The find text was not present in any editable run.
     #[error("text to edit ({0:?}) was not found in an editable run on the page")]
     NoMatch(String),
+    /// A **pinned** request named a byte span that matches no show operator in
+    /// the buffer being edited (`Pass 118.0`).
+    ///
+    /// # Why this is not [`Self::NoMatch`], and the cost of it having been
+    ///
+    /// `find_anchor` short-circuits on a pinned request: if the pin is
+    /// present, the text search is **never attempted**. So a pin that names
+    /// nothing used to report `NoMatch(find)` — *"text to edit (`"p"`) was not
+    /// found in an editable run on the page"* — which **names the operator's
+    /// own text as the problem when the text is not the problem at all.**
+    ///
+    /// Those are different diagnoses with different fixes. `NoMatch` means
+    /// *the text is not on this page*; this means *the text is there and the
+    /// caller pointed at the wrong buffer* — which, in practice, means the run
+    /// lives inside a form XObject while the surgery is looking at the page
+    /// stream. A shell cannot word its own message without being able to tell
+    /// them apart.
+    ///
+    /// ★ **This message has now misled twice.**
+    /// [`pin_names_operator`]'s own doc comment records the `Pass 19.3`
+    /// incident with the identical symptom — a perfectly ordinary page
+    /// refusing with "was not found" — and the consuming shell spent an
+    /// investigation on the same sentence again on 2026-08-20. Their words:
+    /// *"`EditError::PinnedSpanNotFound { .. }` would have made today's
+    /// investigation a two-minute one."*
+    ///
+    /// The span is carried because the caller's next question is always
+    /// *which* pin, and because a pin that is plausible-but-wrong (the wrong
+    /// span convention) looks identical to one that is absent.
+    #[error(
+        "the pinned span {start}..{end} names no show operator in this content stream -- the text is not the problem; the pin is pointing at a different buffer (a form XObject's content is not the page's)"
+    )]
+    PinnedSpanNotFound {
+        /// First byte of the pin, as supplied.
+        start: usize,
+        /// One past the last byte of the pin, as supplied.
+        end: usize,
+    },
     /// The run is real but this cut cannot edit it (composite font, a
     /// `'`/`"` anchor, a cross-element `TJ` match, …).
     #[error("this run cannot be edited in the first cut: {0}")]
@@ -1589,6 +1627,17 @@ pub(crate) fn find_anchor(recs: &[OpRec], req: &EditRequest) -> Result<usize, Ed
             return Ok(i);
         }
     }
+    // ★ The two failures are told apart (`Pass 118.0`). A pinned request never
+    // reaches the text search above -- the `continue` skips it -- so reporting
+    // `NoMatch(find)` here blamed the operator's own text for a pin that named
+    // nothing. See `EditError::PinnedSpanNotFound` for why that sentence has
+    // now misled twice.
+    if let Some(pin) = req.pinned_span {
+        return Err(EditError::PinnedSpanNotFound {
+            start: pin.start,
+            end: pin.start.saturating_add(pin.len),
+        });
+    }
     Err(EditError::NoMatch(req.find.clone()))
 }
 
@@ -2416,6 +2465,24 @@ mod tests {
     /// operator must not silently match a neighbour — otherwise the fix would
     /// have traded a refusal for the far worse failure of editing the wrong
     /// run.
+    ///
+    /// # ★ THIS TEST ASSERTED THE DEFECT, and that is worth recording
+    ///
+    /// It used to assert [`EditError::NoMatch`] — *"text to edit (`"cat"`) was
+    /// not found in an editable run on the page"* — for a request whose text
+    /// is plainly on the page twice. The refusal was **correct**; the
+    /// *sentence* blamed the operator's own text for a pin that named nothing,
+    /// and this test pinned that sentence in place as expected behaviour.
+    ///
+    /// **A test that codifies a diagnosis nobody checked is how a misleading
+    /// message survives a refactor.** This one did, through `Pass 19.3`'s
+    /// investigation of the identical symptom, and the consuming shell spent a
+    /// second investigation on it on 2026-08-20 — which is what finally split
+    /// the variant (`Pass 118.0`).
+    ///
+    /// The behaviour under test is unchanged: the pin still refuses to match a
+    /// neighbour. Only the name of the refusal moved, and now it is the name
+    /// that is asserted.
     #[test]
     fn a_pin_that_names_no_operator_still_refuses() {
         let content = "BT /F1 12 Tf 72 700 Td (cat) Tj 72 680 Td (cat) Tj ET\n";
@@ -2426,7 +2493,17 @@ mod tests {
         let tj = content.find("Tj").unwrap();
         req.pinned_span = Some(ByteSpan::new(tj, 1));
         let err = edit_text(&doc, &req, &EditOptions::default()).unwrap_err();
-        assert!(matches!(err, EditError::NoMatch(_)), "{err}");
+        assert!(
+            matches!(err, EditError::PinnedSpanNotFound { .. }),
+            "the pin named nothing -- the TEXT is not the problem and the message must not say it is: {err}"
+        );
+        // And the message must not contain the find text, which is exactly
+        // what made the old one mislead.
+        let rendered = err.to_string();
+        assert!(
+            !rendered.contains("cat"),
+            "the refusal must not name the operator's own text: {rendered}"
+        );
     }
 
     // -- Pass 19.0: the authoring walk's text-state model ---------------

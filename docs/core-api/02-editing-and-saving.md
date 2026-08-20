@@ -222,6 +222,42 @@ need their own policy).
 
 ### 1.9 Page-text editing (5) — detail in part 3
 
+> ### ★★ READ THIS BEFORE OFFERING A CARET — editing reaches PAGE-STREAM text only
+>
+> **Extraction recurses into form XObjects. The edit surgery does not.**
+> `text_extract` executes a form's content with its own `/Resources` and
+> `/Matrix`, so a glyph inside one is extracted, positioned and reported like
+> any other. Every verb in this section operates on the page's own concatenated
+> `/Contents` buffer, and `text_edit/edit.rs` names form-XObject content a
+> **non-goal** of that cut.
+>
+> So **a caret can land anywhere extraction can see, and commit only where the
+> surgery can reach.** Those two regions are not the same one, and the
+> difference is not academic:
+>
+> | measured on a CAD-exported sheet | where |
+> |---|---|
+> | 3,007 single-character `Tj` spelling the producer's watermark | the **page** stream — editable, and nobody wants to edit it |
+> | 1,696 show operators: every label, the title block, every dimension callout | a **form XObject** — *not* editable |
+>
+> **Check `TextRun::editability()` before offering a caret.** It returns
+> `Editability::{Editable, InsideForm { object }, NoAnchor, Unknown}` —
+> deliberately not a `bool`, because `ExtractOptions::capture_provenance`
+> defaults to **false** and a boolean would answer "not editable" for every run
+> in the document while meaning *"I was not told"*.
+>
+> A pinned request that names no operator in the buffer now reports
+> `EditError::PinnedSpanNotFound { start, end }` rather than
+> `NoMatch(find)` — the old message blamed the operator's own text for a pin
+> pointing at the wrong buffer, and **it misled twice** before it was split.
+>
+> This paragraph exists because a consuming shell shipped into this boundary
+> three times and asked for it: *"a paragraph saying 'editing reaches
+> page-stream text only; check `GlyphProvenance::content_stream` before
+> offering a caret' would have cost you four lines and saved me three operator
+> reports."* (`Pass 118.0`.)
+
+
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
 | Replace text in place | `edit_text(&mut self, &EditRequest, &EditOptions) -> Result<EditReport, text_edit::EditError>` | 4126 | Report, **not** saved bytes. One undo entry. |
