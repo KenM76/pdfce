@@ -8877,7 +8877,8 @@ fn cmd_merge_document(
     let r = &saved.report;
     println!(
         "merge-document {} + {} mode={} -> {}; \
-pages={} fields={} renamed={} acroform_created={} changed={} objects={} \
+pages={} fields={} renamed={} acroform_created={} dests={} dests_renamed={} \
+outline_items={} changed={} objects={} \
 verbatim={} reserialized={} appended={} out_bytes={} undo_verified={} \
 undo_identical={} delinearized={}",
         input.display(),
@@ -8888,6 +8889,14 @@ undo_identical={} delinearized={}",
         outcome.fields_merged,
         outcome.fields_renamed,
         u32::from(outcome.acroform_created),
+        // `Pass 106.2`. The three counts `Pass 106.1` added to `MergeOutcome`
+        // and that this line did not print. A shell that computes a
+        // disclosure and does not emit it has the same effect as one that
+        // never computed it — and in the CLI the invocation IS the commit
+        // (rule 11), so there is no later screen to find it on.
+        outcome.named_destinations_carried,
+        outcome.named_destinations_renamed,
+        outcome.outline_items_carried,
         saved.changed,
         r.objects_written,
         r.objects_verbatim,
@@ -8898,6 +8907,21 @@ undo_identical={} delinearized={}",
         u32::from(saved.undo_identical),
         u32::from(r.delinearized),
     );
+    if outcome.named_destinations_renamed > 0 {
+        // Promoted out of the token line for the same reason `fields_renamed`
+        // is, plus one the field's own doc comment gives and nothing else
+        // surfaces: pdfce rewrites the bookmarks it CARRIED to the new keys,
+        // but cannot rewrite a link it did not copy — and it copies only what
+        // the merged pages reach. So a `/GoToR` in a THIRD document pointing
+        // at the old key now silently resolves to this document's own
+        // destination instead of the source's. That is a cross-file breakage
+        // an operator has no other way to learn about.
+        eprintln!(
+            "pdfce-cli: {}: {} named destination(s) were renamed because the key was already defined here; a link from a third document to the old key now resolves to this document's own destination",
+            input.display(),
+            outcome.named_destinations_renamed,
+        );
+    }
     if outcome.fields_renamed > 0 {
         // Named rather than left in a token, because a renamed field breaks
         // any script, FDF or calculation keyed on the old name -- and the
