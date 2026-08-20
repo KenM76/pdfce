@@ -837,11 +837,43 @@ fn is_editable_separates_page_text_from_form_xobject_text() {
         Editability::Editable,
         "text in the page's own /Contents is what the surgery reaches"
     );
-    assert!(
-        matches!(form_run.editability(), Editability::InsideForm { .. }),
-        "text inside a form XObject is NOT reachable, and the shell must be able to learn that -- WITH THE REASON -- before it offers a caret, got {:?}",
+    assert_eq!(
+        form_run.editability(),
+        Editability::Editable,
+        "PASS 119.0: text inside a form XObject is reachable NOW, and the predicate must say so -- a shell whose caret guard reads this is the whole reason it exists, got {:?}",
         form_run.editability()
     );
+}
+
+/// ★ THE PROMISE `Pass 118.0` MADE, KEPT BY `Pass 119.0`.
+///
+/// That Pass published `editability()` instead of letting the shell match on
+/// `GlyphProvenance::content_stream` itself, with an explicit reason: *"when
+/// the capability grows, this starts answering `Editable` and every caller
+/// improves without changing."* This test is that sentence, executable.
+///
+/// It is written as a **sweep over every run** rather than as a second look at
+/// the one form run above, because the claim is about the predicate's whole
+/// range: after 119.0 there is no run in this fixture that reports as
+/// out-of-reach, and a regression that re-introduced the old answer for some
+/// second-order case (a nested form, a form reached twice) would slip past a
+/// single-run assertion.
+#[test]
+fn no_run_reports_as_out_of_reach_now_that_forms_are_editable() {
+    let doc = Document::from_bytes(page_and_form_text_pdf()).expect("fixture loads");
+    let options = ExtractOptions::default().with_provenance(true);
+    let text = text_extract::extract_document(&doc, &options).expect("extraction runs");
+    for run in &text.pages[0].runs {
+        if run.glyphs.is_empty() {
+            continue; // `NoAnchor`, a different question -- see its own test
+        }
+        assert_eq!(
+            run.editability(),
+            Editability::Editable,
+            "every sourced run in this fixture is editable after Pass 119.0: {:?}",
+            run.text
+        );
+    }
 }
 
 /// ★ THE TRAP THE `-> bool` WOULD HAVE WALKED INTO.
@@ -884,15 +916,23 @@ fn is_editable_agrees_with_the_provenance_it_summarises() {
     let text = text_extract::extract_document(&doc, &options).expect("extraction runs");
 
     for run in &text.pages[0].runs {
-        let all_page = !run.glyphs.is_empty()
+        // `Pass 119.0` widened the agreement: BOTH stream kinds are editable
+        // now, so the property under test is "provenance was captured at all",
+        // not "the provenance says Page". Note what changed and what did not
+        // -- the predicate still may not answer `Editable` for a run whose
+        // provenance is absent, which is the `Unknown`-is-not-a-no contract.
+        let all_sourced = !run.glyphs.is_empty()
             && run.glyphs.iter().all(|g| {
-                g.provenance
-                    .as_ref()
-                    .is_some_and(|p| matches!(p.content_stream, ContentStreamRef::Page))
+                g.provenance.as_ref().is_some_and(|p| {
+                    matches!(
+                        p.content_stream,
+                        ContentStreamRef::Page | ContentStreamRef::Form { .. }
+                    )
+                })
             });
         assert_eq!(
             run.editability() == Editability::Editable,
-            all_page,
+            all_sourced,
             "the predicate and the provenance disagree about {:?}",
             run.text
         );

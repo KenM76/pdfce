@@ -9,7 +9,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (28900 lines) |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (29055 lines) |
 | **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 131 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
@@ -116,6 +116,210 @@ Read the columns as: **I want to…** → **call this** → **returns / what tha
 | List pages as *structural slots* | `page_slots(&self) -> Result<Vec<PageSlot>, PageTreeError>` | 4032 | Parent node, index within it, ancestor chain, inherited raw attributes. Survives a damaged file that `pages()` cannot resolve. |
 
 ### 1.3 Dirty state (2)
+
+| I want to… | Call | Line | Returns |
+|---|---|---|---|
+| Compute what a save would write | `dirty_set(&self) -> DirtySet` | 3497 | Structural diff vs base, **right now**. Never consults history. |
+| Show an "unsaved changes" indicator | `is_modified(&self) -> bool` | 3580 | `!self.dirty_set().is_empty()`. Cannot disagree with the writer. |
+
+### 1.4 Undo / redo (7)
+
+| I want to… | Call | Line | Returns |
+|---|---|---|---|
+| Enable/disable the Undo control | `can_undo(&self) -> bool` | 3588 | |
+| Enable/disable the Redo control | `can_redo(&self) -> bool` | 3594 | |
+| Label the Undo control | `undo_kind(&self) -> Option<CommandKind>` | 3601 | Peeks; does not undo. |
+| Label the Redo control | `redo_kind(&self) -> Option<CommandKind>` | 3607 | |
+| Undo | `undo(&mut self) -> Option<CommandKind>` | 3617 | What was undone. `None` ⇒ stack empty. |
+| Redo | `redo(&mut self) -> Option<CommandKind>` | 3634 | What was redone. |
+| Show history depth | `undo_depth(&self) -> usize` | 3653 | Bounded by `MAX_UNDO_DEPTH` = **256** (`edit.rs:166`). |
+
+### 1.5 Save (2)
+
+| I want to… | Call | Line | Returns |
+|---|---|---|---|
+| Save (the default) | `to_incremental_bytes(&self, &SaveOptions) -> Result<(Vec<u8>, SaveReport), WriteError>` | 4053 | Bytes + report. §7.5.6 append. **Superseded objects stay in the file.** |
+| Save as one revision | `to_full_bytes(&self, &SaveOptions) -> Result<(Vec<u8>, SaveReport), WriteError>` | 4071 | Bytes + report. ⚠️ Destroys every existing signature. |
+
+Both take `&self` — saving does not mutate the session and does not clear the
+undo stack or the dirty set. Neither writes to disk.
+
+### 1.6 Signature / structure queries (3)
+
+| I want to… | Call | Line | Returns |
+|---|---|---|---|
+| Ask what saving would do to signatures | `signature_impact_of_save(&self, mode: SaveMode) -> SignatureImpact` | 6992 | `None` / `ByteRangePreserved` / `Invalidated`. Ask **immediately before Save**, not at edit time. |
+| Census the document's signatures | `signature_census(&self) -> SignatureCensus` | 6998 | Counts + `/P` + `perms_enforced`. |
+| Ask whether pages were added/removed/moved | `changes_structure(&self) -> bool` | 7010 | Computed from the page tree, not from history. |
+
+### 1.7 Document metadata (3)
+
+| I want to… | Call | Line | Returns |
+|---|---|---|---|
+| Set or clear `/Title`, `/Author`, … | `set_info_field(&mut self, field: InfoField, value: Option<&str>) -> Result<(), EditError>` | 3689 | `Some` sets, `None` **removes the key**. Creates `/Info` if absent. **A no-op records no command.** |
+| Read a field's raw bytes | `info_bytes(&self, field: InfoField) -> Option<Vec<u8>>` | 3788 | Reflects unsaved edits. |
+| Read a field as text | `info_text(&self, field: InfoField) -> Option<InfoText>` | 3807 | `InfoText{ text, exact }`. `exact == false` ⇒ **do not write it back** unless the operator changed it. |
+
+`InfoField` (`edit.rs:197`, `#[non_exhaustive]`) deliberately **excludes**
+`/Producer` (R41 fingerprint rule) and `/CreationDate`/`/ModDate` (§7.9.4 dates
+need their own policy).
+
+### 1.8 Page rotation, geometry and organisation (9)
+
+| I want to… | Call | Line | Returns |
+|---|---|---|---|
+| Set one page's absolute rotation | `set_page_rotation(&mut self, page_index, degrees: i32) -> Result<(), EditError>` | 3848 | Refuses non-multiples of 90 (`RotationNotMultipleOf90`). |
+| Turn one page relative to its current rotation | `rotate_page_by(&mut self, page_index, delta: i32) -> Result<(), EditError>` | 3981 | Delegates to `set_page_rotation`. |
+| Delete pages | `delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError>` | 14644 | See `DeleteOutcome`, §1.25. |
+| Delete pages, answering the pre-separation question | `delete_pages_with(&mut self, indices, separations: SeparationPolicy) -> Result<DeleteOutcome, EditError>` | 14663 | |
+| Reorder pages | `reorder_pages(&mut self, new_order: &[usize]) -> Result<(), EditError>` | 14944 | `NotAPermutation` if `new_order` is not one. ONE undo entry. |
+| Rotate several pages | `rotate_pages(&mut self, indices: &[usize], delta: i32) -> Result<usize, EditError>` | 15063 | Count of pages turned. ONE undo entry. |
+| Set one page's `/MediaBox` | `set_media_box(&mut self, page_index: usize, rect: page_tree::Rect) -> Result<MediaBoxChange, EditError>` | 5013 | |
+| Set several pages' `/MediaBox` | `set_media_boxes(&mut self, indices: &[usize], rect: page_tree::Rect) -> Result<Vec<MediaBoxChange>, EditError>` | 5061 | |
+| **Insert pages from another document** | `insert_pages(&mut self, source: &DocumentView<'_>, source_pages: &[usize], position: pageops::InsertPosition) -> Result<InsertOutcome, EditError>` | 16978 | `InsertOutcome { pages_inserted, orphaned_widgets }`. **Read the warning below before writing a disclosure about it.** |
+
+> #### ★★ `insert_pages`: THE WIDGETS ARRIVE, THEIR FIELDS DO NOT — and one
+> consumer has already shipped the wrong sentence about it
+>
+> `insert_pages` copies everything **reachable from the page**, and a page's
+> `/Annots` reaches its widget annotations. A **field definition** is not
+> reachable from the page — it lives in the document-level `/AcroForm`
+> `/Fields`. So the two halves of a form field separate:
+>
+> ```text
+> SOURCE  fields=Some(12)
+> TARGET  fields=None   annots=13   widgets=13
+> ```
+>
+> The result is **not** *"the form fields did not come across"*. It is
+> **boxes that draw exactly like form fields, that an operator will click on,
+> and that nothing can fill, because no field claims them.** That is worse
+> than absence, and worse in a way this project already has a name for: a
+> visible control that is silently inert — arriving through a document
+> instead of through a ribbon.
+>
+> **Do not paraphrase this as "form fields did not come across."** An
+> operator given that sentence goes looking for missing fields instead of at
+> the inert ones in front of them. *A disclosure that names the wrong failure
+> is worse than none, because it is believed.*
+>
+> Also not merged, and these ARE plain absences: outlines, named
+> destinations, page labels, optional-content configuration.
+> [`pageops::insert`] merges all of it and returns a new document; the
+> difference is the cost of staying incremental.
+>
+> **`Pass 102.0` SHIPPED 2026-08-19** — `InsertOutcome::orphaned_widgets` is
+> that count, so a shell can say *"three controls arrived that cannot be
+> filled"* instead of warning unconditionally. It is **exact, not
+> conservative**: `/AcroForm` is not merged and the copy remaps every object
+> number, so no field in the target can be claiming a widget that just
+> arrived.
+>
+> `Pass 102.1` will carry field definitions for fields whose widgets are
+> *wholly* on inserted pages. **102.1 does not retire 102.0** — a field whose
+> widgets are split across inserted and non-inserted pages leaves a residue
+> no merge can absorb, so the count is permanent.
+
+### 1.9 Page-text editing (5) — detail in part 3
+
+> ### ★★ FORM-XOBJECT TEXT IS EDITABLE AS OF `Pass 119.0` — and the old warning here is REVERSED
+>
+> **This block used to say the opposite.** Until 2026-08-20 it read *"editing
+> reaches PAGE-STREAM text only"* and told you to refuse a caret on
+> `Editability::InsideForm`. That is now wrong in the most expensive direction
+> — a shell that still refuses is refusing on **99 % of the text on a CAD
+> drawing**, which is the operator's own estimate and the reason this Pass was
+> escalated ahead of everything else.
+>
+> **What changed.** `edit_text` (and `format_text`'s sibling path is *not* yet
+> included — see the limits below) now resolves the target stream instead of
+> assuming the page's. `EditRequest::target` selects it:
+>
+> | `EditTarget` | what it edits |
+> |---|---|
+> | `Auto` (**default**, and what every existing caller already gets) | the page's own `/Contents` first, then each form XObject the page paints, **in `Do` order** — i.e. paint order, so when two streams both contain the text the one drawn first wins, which is predictable without knowing anything about PDF structure |
+> | `PageContents` | the page's own content ONLY — the pre-119.0 reach, for a batch caller that wants a hard failure rather than a widened search |
+> | `Form { object }` | that form XObject's stream, by object number. A form that is not painted by the page is an **error**, not a widened search |
+>
+> **`TextRun::editability()` now answers `Editable` for form content**, exactly
+> as `Pass 118.0`'s documentation promised it would when the capability landed.
+> `Editability::InsideForm` is **`#[deprecated]` and never returned** — delete
+> the arm that matches it. The deprecation is deliberate: a silent change would
+> have left your guard refusing carets forever, and deleting the variant would
+> have broken your build with a message that said nothing about what to do.
+>
+> ### ★ THE ONE THING TO PUT IN FRONT OF THE OPERATOR: shared content
+>
+> A form XObject may legally be painted **from several pages and several times
+> on one page** — ISO 32000-1 §8.10.1 states that as the *purpose* of the
+> feature — and **no clause in either edition binds a form to a page.** That is
+> a confirmed permanent negative result in pdfce's spec corpus (`FX-N1`), argued
+> three independent ways.
+>
+> **So editing text inside a shared form changes every place it appears, and
+> there is nothing pdfce can do about it: there is exactly one stream holding
+> those glyphs.** The default is therefore edit-in-place, disclosed — chosen
+> over copy-on-write because copy-on-write is *not always expressible* (a form
+> invoked from inside another form cannot be re-bound without editing the
+> parent, which may itself be shared), and a default whose semantics silently
+> depend on document structure is worse than one that always means the same
+> thing. **Adobe's behaviour here is unsourceable** — an `Acrobat_Features`
+> sweep found no documentation of what Acrobat does to a shared form, from
+> Adobe or from its competitors — so this is pdfce's own reasoned choice, not
+> a parity claim.
+>
+> `EditReport` carries the fan-out:
+>
+> | field | meaning |
+> |---|---|
+> | `form_object: Option<u32>` | the form stream that was rewritten; `None` = the edit was in the page's own `/Contents` |
+> | `form_invocations: u64` | **how many places in the DOCUMENT paint it**, transitively through nesting. `1` is the ordinary case; `0` means the edit was not in a form |
+> | `form_pages: Vec<usize>` | the zero-based page indices it appears on |
+>
+> **Do not drop `form_invocations`.** A shell that ignores it is a shell that
+> changes six drawing sheets while showing one. The matching disclosure string
+> (`"SHARED CONTENT: ..."`) is in `report.disclosures` and is worded for direct
+> display.
+>
+> To enumerate targets *before* an edit: `pdfce_core::text_edit::forms` —
+> `scan_page_forms(doc, view, page)` returns every form the page paints with its
+> object number, nesting depth, effective resources and dictionary;
+> `invocation_map(doc, view)` answers the fan-out for all of them in **one**
+> document walk. `pdfce-cli inspect --forms` prints the same thing.
+>
+> ### Limits, so you do not find them by pressing
+>
+> - **A `/Ref` reference XObject or an OPI proxy is refused by name.** Its
+>   visible content is a placeholder a conforming reader may substitute
+>   wholesale, so an edit there can appear to work and never reach what is
+>   printed.
+> - **A form whose `/Resources` is present but does not declare the font its own
+>   text selects is refused**, not guessed at. Filling the gap from the page
+>   would resolve a font `pdfce-render`'s interpreter does not, and the advance
+>   arithmetic would then be computed from `/Widths` nothing else consults.
+> - **A form that omits `/Resources` entirely IS editable** — §7.8.3's fourth
+>   bullet makes inheritance from the page a `shall` on the reader, and PDF 2.0
+>   removed the sentence calling it obsolete. The inheritance is disclosed.
+> - **Nesting is guarded at 64 levels.** Deeper is *conforming* content pdfce
+>   refuses; the refusal says so, because it is pdfce's limit and not the file's
+>   defect.
+> - **`format_text`, `reflow_block` and `add_text` still reach page-stream text
+>   only.** Only `edit_text` was retargeted in `Pass 119.0`. `editability()`
+>   answers for `edit_text`'s reach, so for those three verbs it is now
+>   optimistic — check `GlyphProvenance::content_stream` directly if you gate
+>   on them.
+>
+> A pinned request that names no operator in the buffer reports
+> `EditError::PinnedSpanNotFound { start, end }` rather than `NoMatch(find)` —
+> the old message blamed the operator's own text for a pin pointing at the
+> wrong buffer, and **it misled twice** before it was split (`Pass 118.0`).
+>
+> The measurement that drove all of this, on a CAD-exported sheet:
+>
+> | | where |
+> |---|---|
+> | 3,007 single-character `Tj` spelling the producer's watermark | the **page** stream — editable, and nobody wants to edit it |
+> | 1,696 show operators: every label, the title block, every *pdf dimension* callout | a **form XObject** — editable as of `Pass 119.0` |
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|

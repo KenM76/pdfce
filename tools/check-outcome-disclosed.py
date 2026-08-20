@@ -124,6 +124,13 @@ OUTCOME_STRUCTS: list[tuple[str, str]] = [
     ("crates/pdfce-core/src/edit.rs", "ImportOutcome"),
     ("crates/pdfce-core/src/edit.rs", "FlattenOutcome"),
     ("crates/pdfce-core/src/edit.rs", "ImageAuthorOutcome"),
+    # `Pass 119.0`. Not in `edit.rs`, and that is the point: the gate's list was
+    # written from ONE file, so every report type living in a submodule was
+    # outside it while the summary line read "clean". `EditReport` gained three
+    # fields that day -- including `form_invocations`, whose whole purpose is to
+    # stop a shell changing six drawing sheets while showing one -- and the gate
+    # would have stayed green if all three had been dropped on the floor.
+    ("crates/pdfce-core/src/text_edit/edit.rs", "EditReport"),
 ]
 
 # `Struct::field` -> why no shell reads it. A reason is mandatory: see the

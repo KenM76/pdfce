@@ -64,7 +64,7 @@ use crate::filters::{self, FilterError};
 // graph via `DocumentView::graph()`, whose `&dyn ObjectGraph` resolves trait
 // methods without the trait being in scope.
 use crate::lexer::{Lexer, Token, TokenKind};
-use crate::object::{Dict, Name, Object};
+use crate::object::{Dict, Name, ObjId, Object};
 use crate::page_tree::Page;
 use crate::span::ByteSpan;
 use crate::view::DocumentView;
@@ -232,6 +232,36 @@ impl ContentStream {
             buf.extend_from_slice(&decoded);
         }
         Self::parse(buf)
+    }
+
+    /// One **form XObject's** own decoded content (`Pass 119.0`).
+    ///
+    /// A form XObject is a content stream in its own right (§8.10.1) — a
+    /// separate object with separate bytes, its own `/Resources` and its own
+    /// coordinate space. It is emphatically **not** part of the page's
+    /// concatenated `/Contents`, which is why [`Self::from_page`] cannot reach
+    /// the text inside one and why the edit surgery needed this door opened.
+    ///
+    /// The `view` argument carries the same base-versus-session meaning as
+    /// [`Self::from_page`], and it is *more* load-bearing here: once a session
+    /// can edit a form's content, a second edit to the same form must compose
+    /// on top of the first, and only a session view resolves the staged value.
+    ///
+    /// # Errors
+    ///
+    /// [`ContentError::NotAStream`] when the object is absent or is not a
+    /// stream; a decode or syntax error otherwise. The `/Subtype` is **not**
+    /// checked here: this decodes whatever stream it is pointed at, and
+    /// deciding what counts as an editable form belongs to the caller that
+    /// found it (`crate::text_edit::forms`).
+    pub fn from_form(view: &DocumentView<'_>, id: ObjId) -> Result<Self, ContentError> {
+        let Some(Object::Stream(stream)) = view.graph().value(id) else {
+            return Err(ContentError::NotAStream);
+        };
+        let raw = view
+            .slice(stream.data_span)
+            .ok_or(ContentError::NotAStream)?;
+        Self::parse(filters::decode_stream(&stream.dict, raw)?)
     }
 
     /// Tokenize decoded content bytes into the lossless token stream.

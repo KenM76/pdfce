@@ -75,14 +75,34 @@
 //! Simple (`Type1`/`TrueType`/`MMType1`) fonts only; `Tj`/`TJ` anchors only.
 //! NO reflow/block re-wrap (line overflow is disclosed), NO family-change
 //! formatting (Pass 14.2), NO font subsetting (FF-C), NO composite/CJK/RTL
-//! editing (R-INV-4), NO add-new-text (FF-D). The `'`/`"` show operators and
-//! form-XObject content are named non-goals of this cut.
+//! editing (R-INV-4), NO add-new-text (FF-D). The `'`/`"` show operators are a
+//! named non-goal of this cut.
+//!
+//! ## ★ `Pass 119.0` — the target is no longer assumed to be the page
+//!
+//! **Form-XObject content was a named non-goal of the 14.1 cut, and that
+//! sentence stood here until 2026-08-20.** It is now false, and the correction
+//! is worth more than the deletion would be: on a CAD-exported drawing the
+//! page's own `/Contents` holds the producer's watermark and a **form
+//! XObject** holds every label and the whole title block, so "form content is
+//! out of scope" and "text editing does nothing on my drawings" were the same
+//! sentence. The operator's estimate: *"99 % of the text I will want to
+//! edit."*
+//!
+//! What changed is small and deliberately confined to the *addressing*:
+//! [`EditPlanTarget`] names the stream object, its resource dictionary and its
+//! sibling-collapse count, where those three used to be read straight off the
+//! [`Page`]. **The surgery itself is untouched** — the §9.4.4 advance
+//! arithmetic, the inverse encoding, the follower disposition and every
+//! refusal operate on operators, and an operator does not know which stream it
+//! was parsed from. See [`crate::text_edit::forms`] for the discovery half and
+//! for the shared-invocation problem it exists to disclose.
 
 use std::collections::{BTreeSet, HashMap};
 
 use crate::content::{ContentError, ContentStream, ContentTokenKind, Operation};
 use crate::document::Document;
-use crate::object::{Dict, Name, Object, Stream};
+use crate::object::{Dict, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, Page, PageTreeError};
 use crate::settings::UnmappableCode;
 use crate::span::ByteSpan;
@@ -333,10 +353,16 @@ pub struct EditRequest {
     /// form silently broke every provenance-pinned request — fixed in Pass
     /// 19.3, with the history in `pin_names_operator`'s documentation.
     pub pinned_span: Option<ByteSpan>,
+    /// **Which content stream to edit** (`Pass 119.0`). Defaults to
+    /// [`EditTarget::Auto`], which is what every pre-119.0 caller gets by
+    /// construction and what a shell should keep using unless it has a
+    /// specific reason not to.
+    pub target: EditTarget,
 }
 
 impl EditRequest {
-    /// A find/replace request on `page_index` (no span pin).
+    /// A find/replace request on `page_index` (no span pin), targeting
+    /// [`EditTarget::Auto`].
     #[must_use]
     pub fn find_replace(page_index: usize, find: &str, replace: &str) -> Self {
         Self {
@@ -344,8 +370,62 @@ impl EditRequest {
             find: find.to_owned(),
             replace: replace.to_owned(),
             pinned_span: None,
+            target: EditTarget::Auto,
         }
     }
+
+    /// Set the [`EditTarget`], returning `self`.
+    #[must_use]
+    pub const fn with_target(mut self, target: EditTarget) -> Self {
+        self.target = target;
+        self
+    }
+}
+
+/// Which content stream an edit is aimed at (`Pass 119.0`).
+///
+/// # Why this exists
+///
+/// A page's visible text does not all live in the page's own `/Contents`.
+/// Anything drawn by a form XObject (§8.10.1) lives in **that stream object**,
+/// and the surgery rewrites one buffer at a time. Before `Pass 119.0` the
+/// buffer was always the page's, so form text was unreachable — the asymmetry
+/// [`TextRun::editability`](crate::text_extract::TextRun::editability)
+/// published. This names the buffer instead of assuming it.
+///
+/// # Why [`Self::Auto`] is the default rather than an explicit choice
+///
+/// A caller that types "replace *Rev A* with *Rev B*" does not know, and
+/// should not have to know, which of a page's content streams holds those
+/// glyphs — that is a fact about the producer's export settings, not about the
+/// operator's intent. `Auto` searches the page's own content first and then
+/// each reachable form in `Do` order, so the common case needs no decision.
+/// The explicit variants exist for a shell that already knows (it has a
+/// [`GlyphProvenance`](crate::text_extract::GlyphProvenance) in hand, or the
+/// operator picked a target from a list) and for a batch caller that wants a
+/// hard failure rather than a search.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum EditTarget {
+    /// Search the page's own `/Contents` first, then every reachable form
+    /// XObject in `Do` order, and edit the first stream that yields a match.
+    ///
+    /// A refusal that is *not* "no match here" (a font-coverage refusal, an
+    /// unsupported run) stops the search and is reported: those describe the
+    /// run the caller found, and retrying elsewhere would replace a precise
+    /// diagnosis with a vague one.
+    #[default]
+    Auto,
+    /// Edit the page's own `/Contents` only. A match inside a form is not
+    /// considered, and its absence reports as a normal no-match.
+    PageContents,
+    /// Edit this form XObject's own content stream.
+    Form {
+        /// The form stream's object number, as reported by
+        /// [`Editability::InsideForm`](crate::text_extract::Editability::InsideForm)
+        /// or [`FormRef::id`](crate::text_edit::forms::FormRef::id).
+        object: u32,
+    },
 }
 
 /// Per-edit options.
@@ -411,10 +491,32 @@ pub struct EditReport {
     /// The `/MCID` of the enclosing marked-content sequence, if the edit was
     /// inside a Tagged-PDF sequence (its wrapper is preserved; §14.7).
     pub tagged_mcid: Option<i64>,
-    /// The content-stream object number that was rewritten.
+    /// The content-stream object number that was rewritten. For a form-XObject
+    /// edit (`Pass 119.0`) this is the **form stream's** object number, not the
+    /// page's — the page's `/Contents` is untouched in that case.
     pub content_object: u32,
-    /// Extra content objects collapsed/emptied on a multi-stream page.
+    /// Extra content objects collapsed/emptied on a multi-stream page. Always
+    /// `0` for a form edit: a form XObject is exactly one stream (§8.10.1), so
+    /// there is nothing to collapse.
     pub extra_objects_emptied: u64,
+    /// The form XObject the edit went into, or `None` when the edit rewrote
+    /// the page's own `/Contents` (`Pass 119.0`).
+    pub form_object: Option<u32>,
+    /// ★ **How many places in the document paint the edited form** — the
+    /// fan-out of the edit, counted document-wide and transitively through
+    /// nesting. `1` for the ordinary case; `0` when the edit was not in a form.
+    ///
+    /// Greater than `1` means the edit is visible somewhere the operator was
+    /// not looking, which the standard explicitly permits and provides no way
+    /// to prevent: a form XObject "may be painted multiple times — either on
+    /// several pages or at several locations on the same page" (§8.10.1) and
+    /// **no clause anywhere binds one to a page** (`FX-N1`). A caller that
+    /// drops this field is a caller that changes six drawing sheets while
+    /// showing one.
+    pub form_invocations: u64,
+    /// The zero-based page indices the edited form appears on, ascending.
+    /// Empty when the edit was not in a form.
+    pub form_pages: Vec<usize>,
     /// Every operator-facing disclosure, verbatim (surfaced by the UI/CLI).
     pub disclosures: Vec<String>,
 }
@@ -1321,13 +1423,18 @@ pub fn edit_text(
     // `&Document` entry point — it plans against the file as loaded and
     // hands the plan to an incremental save. The GUI's accumulating
     // multi-edit path is `EditSession::current_page_content`, not this.
-    let stream = ContentStream::from_page(&doc.view(), page)?;
-    let plan = plan_edit(doc, page, &stream, req, opts)?;
-    // Incremental save (R34/R70): replace the first content object with the
-    // spliced buffer, empty any extras. The report's content_object /
-    // extra_objects_emptied are already correct (plan derives them from
-    // `page.contents`), so the returned identity is discarded here.
-    let (bytes, _content_object, _extra) = write_incremental(doc, page, &plan.new_content)?;
+    let (plan, target) = plan_edit_anywhere(doc, &doc.view(), page, req, opts)?;
+    // Incremental save (R34/R70). Which object gets rewritten now depends on
+    // where the text was found (`Pass 119.0`): the page's first content
+    // object, or the form XObject's own stream. Both are one-object rewrites
+    // and both leave every other byte of the file verbatim.
+    let bytes = match target.form.as_ref() {
+        Some(form) => write_incremental_form(doc, form.id, &form.dict, &plan.new_content)?,
+        // The report's content_object / extra_objects_emptied are already
+        // correct (the plan derives them from `page.contents`), so the
+        // returned identity is discarded here.
+        None => write_incremental(doc, page, &plan.new_content)?.0,
+    };
     Ok(EditOutcome {
         bytes,
         report: plan.report,
@@ -1375,17 +1482,101 @@ pub(crate) fn plan_edit(
     req: &EditRequest,
     opts: &EditOptions,
 ) -> Result<EditPlan, EditError> {
-    // Content-object identity: also validates the page HAS a content stream
-    // to edit (matching `write_incremental`'s own first check), and yields
-    // the report's save-independent object numbers.
-    let content_id = *page
-        .contents
-        .first()
-        .ok_or_else(|| EditError::Unsupported("the page has no /Contents to edit".to_owned()))?;
-    let extra_emptied = page.contents.len().saturating_sub(1) as u64;
+    plan_edit_target(doc, &EditPlanTarget::page(page)?, stream, req, opts)
+}
+
+/// The stream an edit is being planned against, with everything the planner
+/// needs that used to come straight off the [`Page`] (`Pass 119.0`).
+///
+/// # Why the planner stopped taking a `&Page`
+///
+/// Every use of the page inside `plan_edit` was one of three things: *which
+/// object do I rewrite*, *how many sibling content streams get collapsed*, and
+/// *which resource dictionary do names resolve in*. None of those is
+/// page-specific — they are properties of **the buffer being edited** — and
+/// hard-coding them to the page is precisely what made form content
+/// unreachable. Naming them explicitly makes the page the *default* target
+/// rather than the *only* one, and leaves the surgery itself completely
+/// unchanged: the advance arithmetic, the re-encode, the follower disposition
+/// and every refusal work on operators, not on pages.
+pub(crate) struct EditPlanTarget {
+    /// The stream object the spliced buffer replaces.
+    pub(crate) content_id: ObjId,
+    /// Sibling `/Contents` streams to empty (page target only; a form is one
+    /// stream by construction).
+    pub(crate) extra_emptied: u64,
+    /// The effective resource dictionary for names inside this buffer.
+    pub(crate) resources: Dict,
+    /// The form being edited, when this is a form target. Carries the form's
+    /// dictionary so the planner can apply the form-specific refusals without
+    /// re-resolving anything.
+    pub(crate) form: Option<crate::text_edit::forms::FormRef>,
+    /// The form's document-wide invocation set, when this is a form target.
+    pub(crate) invocations: Option<crate::text_edit::forms::InvocationSet>,
+}
+
+impl EditPlanTarget {
+    /// The page's own `/Contents` — the pre-`Pass 119.0` behaviour, unchanged.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::Unsupported`] when the page has no `/Contents` at all.
+    /// Checked here rather than at save time so the refusal precedes any
+    /// mutation, matching `write_incremental`'s own first check.
+    pub(crate) fn page(page: &Page) -> Result<Self, EditError> {
+        let content_id = *page.contents.first().ok_or_else(|| {
+            EditError::Unsupported("the page has no /Contents to edit".to_owned())
+        })?;
+        Ok(Self {
+            content_id,
+            extra_emptied: page.contents.len().saturating_sub(1) as u64,
+            resources: page.resources.clone(),
+            form: None,
+            invocations: None,
+        })
+    }
+
+    /// A form XObject's own content stream.
+    pub(crate) fn form(
+        form: crate::text_edit::forms::FormRef,
+        invocations: crate::text_edit::forms::InvocationSet,
+    ) -> Self {
+        Self {
+            content_id: form.id,
+            extra_emptied: 0,
+            resources: form.resources.clone(),
+            form: Some(form),
+            invocations: Some(invocations),
+        }
+    }
+}
+
+/// Plan a REPLACE edit against an explicitly-named target stream.
+///
+/// The body is `plan_edit`'s, with the three page-derived values taken from
+/// [`EditPlanTarget`] and the form-specific refusal/disclosure block added.
+///
+/// # Errors
+///
+/// See [`EditError`].
+pub(crate) fn plan_edit_target(
+    doc: &Document,
+    target: &EditPlanTarget,
+    stream: &ContentStream,
+    req: &EditRequest,
+    opts: &EditOptions,
+) -> Result<EditPlan, EditError> {
+    let content_id = target.content_id;
+    let extra_emptied = target.extra_emptied;
+
+    // Form-specific HARD refusals, applied before any surgery so a refused
+    // edit costs nothing and mutates nothing (rule 4).
+    if let Some(form) = target.form.as_ref() {
+        refuse_unsuitable_form(form)?;
+    }
 
     // --- pass 1: record every operator with its text state ---
-    let mut walk = Walk::new(doc, &page.resources);
+    let mut walk = Walk::new(doc, &target.resources);
     for op in stream.operations() {
         walk.operation(&op, &stream.buf);
     }
@@ -1424,9 +1615,19 @@ pub(crate) fn plan_edit(
     // sought text happens to be inside it, so there was never a reason to
     // establish the match before applying it. For a simple font nothing
     // changes — the same call, the same inputs, a few lines earlier.
+    //
+    // ★ `target.resources`, not the page's (`Pass 119.0`). Inside a form
+    // XObject the SAME NAME `/F1` can mean a different font dictionary
+    // (§8.10.1: the form executes with its own `/Resources`), so resolving a
+    // form run's `Tf` against the page's dictionary would silently measure the
+    // wrong widths, and the advance arithmetic would be wrong in a way that
+    // renders as text drifting out of place rather than as an error.
     let font_dict =
-        resolve_font_dict(doc, &page.resources, &anchor.font_name).ok_or_else(|| {
-            EditError::Unsupported("the run's font resource is unresolvable".to_owned())
+        resolve_font_dict(doc, &target.resources, &anchor.font_name).ok_or_else(|| {
+            EditError::Unsupported(
+                "the run's font resource is unresolvable in the target stream's resources"
+                    .to_owned(),
+            )
         })?;
     // `&doc.view()` (Pass 17.1) — see `ExtractFont::resolve`. The text-edit
     // planner is base-relative by contract (`EditSession::edit_text` plans
@@ -1585,6 +1786,15 @@ pub(crate) fn plan_edit(
              into the first and emptied so the edit's byte offsets stay coherent."
         ));
     }
+    if let Some(form) = target.form.as_ref() {
+        disclose_form_edit(
+            doc,
+            form,
+            target.invocations.as_ref(),
+            anchor,
+            &mut disclosures,
+        );
+    }
 
     let report = EditReport {
         base_font: font.base_font.clone(),
@@ -1600,12 +1810,295 @@ pub(crate) fn plan_edit(
         tagged_mcid: anchor.mcid,
         content_object: content_id.num,
         extra_objects_emptied: extra_emptied,
+        form_object: target.form.as_ref().map(|f| f.id.num),
+        form_invocations: target
+            .invocations
+            .as_ref()
+            .map_or(0, |set| set.count() as u64),
+        form_pages: target
+            .invocations
+            .as_ref()
+            .map(|set| set.pages.iter().copied().collect())
+            .unwrap_or_default(),
         disclosures,
     };
     Ok(EditPlan {
         new_content,
         report,
     })
+}
+
+/// Build the ordered list of candidate targets an [`EditRequest`] may be
+/// planned against (`Pass 119.0`).
+///
+/// # The order, and why it is not negotiable
+///
+/// The page's own `/Contents` comes first, then each reachable form in `Do`
+/// order — i.e. **paint order**. Two reasons, and the second is the one that
+/// matters:
+///
+/// 1. The page stream is the cheap case: no scan, no invocation map. A
+///    document with no forms pays nothing at all for this Pass existing.
+/// 2. `Do` order is the order the marks appear on the page, so when two
+///    streams both contain the sought text, the one chosen is the one drawn
+///    first — a rule the operator can predict without knowing anything about
+///    PDF structure. Choosing by object number, or by whichever stream happens
+///    to be smaller, would be arbitrary in a way that shows up as *"it edited
+///    the wrong one"*.
+///
+/// # Errors
+///
+/// [`EditError::Unsupported`] when an explicitly-named
+/// [`EditTarget::Form`] is not reachable from this page, or when the page has
+/// no `/Contents` and the target needs one. A *named* target that cannot be
+/// found is an error rather than an empty candidate list on purpose: the
+/// caller asserted a fact about the document, and silently searching somewhere
+/// else would hide that the assertion was wrong.
+pub(crate) fn edit_candidates(
+    doc: &Document,
+    view: &crate::view::DocumentView<'_>,
+    page: &Page,
+    req: &EditRequest,
+) -> Result<Vec<(EditPlanTarget, ContentStream)>, EditError> {
+    use crate::text_edit::forms;
+
+    let mut out: Vec<(EditPlanTarget, ContentStream)> = Vec::new();
+    if matches!(req.target, EditTarget::Auto | EditTarget::PageContents) {
+        // A page with no `/Contents` is not an error when forms are still on
+        // the table — it is simply not a candidate. The refusal only fires
+        // when the caller asked for the page stream by name (below).
+        if let Ok(target) = EditPlanTarget::page(page) {
+            match ContentStream::from_page(view, page) {
+                Ok(stream) => out.push((target, stream)),
+                Err(e) => return Err(EditError::Content(e)),
+            }
+        } else if matches!(req.target, EditTarget::PageContents) {
+            return Err(EditError::Unsupported(
+                "the page has no /Contents to edit".to_owned(),
+            ));
+        }
+    }
+    if matches!(req.target, EditTarget::PageContents) {
+        return Ok(out);
+    }
+
+    let scan = forms::scan_page_forms(doc, view, page);
+    if scan.forms.is_empty() {
+        if let EditTarget::Form { object } = req.target {
+            return Err(EditError::Unsupported(format!(
+                "form XObject {object} is not painted by this page, so there is nothing to edit inside it here"
+            )));
+        }
+        return Ok(out);
+    }
+    // ONE document walk for every candidate (see `forms::invocation_map`).
+    let mut map = forms::invocation_map(doc, view);
+    let mut seen: BTreeSet<u32> = BTreeSet::new();
+    for form in scan.forms {
+        if let EditTarget::Form { object } = req.target
+            && form.id.num != object
+        {
+            continue;
+        }
+        // The same form painted twice on this page is ONE editable stream, so
+        // it is one candidate. Its fan-out is reported by the invocation set,
+        // which counts both sites.
+        if !seen.insert(form.id.num) {
+            continue;
+        }
+        let Ok(stream) = ContentStream::from_form(view, form.id) else {
+            // An undecodable form is skipped rather than fatal: every other
+            // form on the page is still editable, and refusing the whole
+            // request would cost the operator content that is fine (§10).
+            continue;
+        };
+        let invocations = map.remove(&form.id.num).unwrap_or_default();
+        out.push((EditPlanTarget::form(form, invocations), stream));
+    }
+    if out.is_empty()
+        && let EditTarget::Form { object } = req.target
+    {
+        return Err(EditError::Unsupported(format!(
+            "form XObject {object} is painted by this page but its content stream could not be decoded"
+        )));
+    }
+    Ok(out)
+}
+
+/// Plan an edit against the first candidate stream that yields one
+/// (`Pass 119.0`).
+///
+/// # Which error survives when every candidate refuses
+///
+/// The candidates are tried in order and the **first non-locational** error
+/// wins — a font-coverage refusal, an unsupported run, a form-level refusal —
+/// because those describe a run the planner actually found and are what the
+/// operator needs to hear. [`EditError::NoMatch`] and
+/// [`EditError::PinnedSpanNotFound`] are *locational*: they mean "not in this
+/// buffer", which is uninformative while other buffers remain untried. Only if
+/// every candidate is locational does the first one propagate.
+///
+/// ★ This ordering is the whole reason the pre-119.0 failure was so
+/// misleading. A pinned edit into a form used to report *"text to edit was not
+/// found in an editable run on the page"* — naming the operator's text as the
+/// problem when the text was present and the surgery was looking at the wrong
+/// stream. Now the search reaches the other stream; and when it genuinely
+/// cannot, `PinnedSpanNotFound` says so in those words.
+///
+/// # Errors
+///
+/// See [`EditError`].
+pub(crate) fn plan_edit_anywhere(
+    doc: &Document,
+    view: &crate::view::DocumentView<'_>,
+    page: &Page,
+    req: &EditRequest,
+    opts: &EditOptions,
+) -> Result<(EditPlan, EditPlanTarget), EditError> {
+    let candidates = edit_candidates(doc, view, page, req)?;
+    if candidates.is_empty() {
+        return Err(EditError::NoMatch(req.find.clone()));
+    }
+    let mut first_locational: Option<EditError> = None;
+    for (target, stream) in candidates {
+        match plan_edit_target(doc, &target, &stream, req, opts) {
+            Ok(plan) => return Ok((plan, target)),
+            Err(e) if is_locational_error(&e) => {
+                if first_locational.is_none() {
+                    first_locational = Some(e);
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(first_locational.unwrap_or_else(|| EditError::NoMatch(req.find.clone())))
+}
+
+/// Whether an error means "not in *this* buffer" rather than "not editable".
+///
+/// See [`plan_edit_anywhere`] for why the distinction decides which error a
+/// multi-candidate search reports.
+///
+/// `pub(crate)` because the session-integrated
+/// [`EditSession::edit_text`](crate::edit::EditSession::edit_text) runs the
+/// same search over the same candidates and must classify errors the same way.
+/// One predicate, two callers -- the `FormatRequest::is_empty` lesson (Pass
+/// 19.1), where a re-listed copy of a condition learned about new cases and
+/// the original did not.
+pub(crate) const fn is_locational_error(e: &EditError) -> bool {
+    matches!(
+        e,
+        EditError::NoMatch(_) | EditError::PinnedSpanNotFound { .. }
+    )
+}
+
+/// The form-XObject HARD refusals, applied before any surgery.
+///
+/// Two triggers, both from the spec corpus's `Pass 119.0` refuse table
+/// (`iso32000__ref__form_xobject_text_edit.md` §11):
+///
+/// - **`R-FX-2` — `/Ref` or `/OPI`.** The stream is a **proxy**: a reference
+///   XObject (§8.10.4) stands in for content in *another PDF file*, and an OPI
+///   proxy stands in for a high-resolution image held by a prepress system. In
+///   both cases the bytes pdfce can see are a low-fidelity placeholder that a
+///   conforming consumer is entitled to replace wholesale with the real thing.
+///   Editing text in a proxy is therefore editing something that may never be
+///   printed, while the printed article keeps the old text — an edit that
+///   *appears* to work and silently does not, which is the exact class rule 4
+///   forbids. Refused by name instead.
+///
+/// - **`R-FX-9` — the nesting guard.** Reported as pdfce's limit, never as the
+///   file's defect: neither ISO edition states any nesting limit for form
+///   XObjects (`FX-N9`), so a document deeper than
+///   [`MAX_FORM_DEPTH`](crate::text_edit::forms::MAX_FORM_DEPTH) is conforming
+///   and pdfce is the one saying no. (Detected upstream, in the scan; this
+///   function refuses the *targeted* form only when it is itself at the
+///   guard's edge.)
+///
+/// # Errors
+///
+/// [`EditError::Unsupported`] with the trigger named.
+fn refuse_unsuitable_form(form: &crate::text_edit::forms::FormRef) -> Result<(), EditError> {
+    if form.dict.contains_key(b"Ref") {
+        return Err(EditError::Unsupported(
+            "this form XObject is a REFERENCE XObject (/Ref, ISO 32000-1 8.10.4) -- its visible content is a proxy for content in another file, which a conforming reader may substitute wholesale, so an edit here could silently fail to reach what is actually printed".to_owned(),
+        ));
+    }
+    if form.dict.contains_key(b"OPI") {
+        return Err(EditError::Unsupported(
+            "this form XObject is an OPI proxy (/OPI, ISO 32000-1 14.11.7) -- a prepress system substitutes the real high-resolution artwork at print time, so an edit here could silently fail to reach what is actually printed".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// Every disclosure a form-XObject edit owes the operator (`Pass 119.0`,
+/// rule 4).
+///
+/// ★ **The first one is the reason this whole Pass has a design question.**
+/// Nothing in either ISO edition binds a form XObject to a page (`FX-N1`), and
+/// §8.10.1 states multi-invocation as the *purpose* of the feature, so an
+/// in-place edit of a shared form changes content on pages the operator never
+/// opened. That is not a bug to be fixed — it is the file's own structure —
+/// and the only honest response is to **say so**, off-canvas, in the report
+/// (rule 4 as narrowed by decision 059: render normally, report separately).
+fn disclose_form_edit(
+    doc: &Document,
+    form: &crate::text_edit::forms::FormRef,
+    invocations: Option<&crate::text_edit::forms::InvocationSet>,
+    anchor: &ShowData,
+    disclosures: &mut Vec<String>,
+) {
+    let object = form.id.num;
+    disclosures.push(format!(
+        "the edited text lives inside form XObject {object}, not in the page's own /Contents -- that stream object is what changed; the page dictionary and its content streams are byte-identical to the original."
+    ));
+
+    if let Some(set) = invocations {
+        if set.is_shared() {
+            disclosures.push(format!(
+                "SHARED CONTENT: {} -- the edit changed all of them, because the standard binds a form XObject to no page at all (ISO 32000-1 8.10.1) and there is exactly one stream holding these glyphs.",
+                set.describe()
+            ));
+        }
+        if set.is_lower_bound() {
+            disclosures.push(
+                "the shared-content count above is a LOWER BOUND: at least one page could not be scanned completely (a nesting-depth guard or an unreadable form), so this text may appear in more places than reported.".to_owned(),
+            );
+        }
+    }
+
+    if !form.owns_font(doc, &anchor.font_name) {
+        disclosures.push(format!(
+            "the font this run selects (/{}) is NOT declared in the form's own /Resources -- pdfce resolved it by inheritance from the page, which ISO 32000-1 7.8.3's fourth bullet requires a reader to do ('All resources that are referenced from those forms ... shall be inherited from the resource dictionary of the page on which they are used'), and which PDF 2.0 no longer calls obsolete. The re-encoding used that inherited font.",
+            String::from_utf8_lossy(&anchor.font_name)
+        ));
+    }
+
+    // `FX-N6` / `R-FX-4`: a form may show text with NO `Tf` of its own and
+    // inherit the caller's font, because the nine text state parameters ARE
+    // graphics state (Table 52) and §8.10.1 inherits the graphics state at the
+    // `Do`. Invoked from two sites with different current fonts, the same
+    // bytes render in two typefaces and the run has no single font -- so a
+    // re-encode has no defined target. pdfce detects the *inherited* case and
+    // discloses it whenever it is shared; the hard refusal case is the
+    // intersection, and is handled by the caller that knows both halves.
+    if anchor.font_name.is_empty() {
+        disclosures.push(
+            "this run selected no font of its own (no Tf inside the form): it inherits the font in force where the form is painted, so the glyphs it renders with depend on the invoking content stream (ISO 32000-1 8.10.1, 8.4.1 Table 52).".to_owned(),
+        );
+    }
+
+    if form.dict.contains_key(b"OC") {
+        disclosures.push(
+            "this form is optional content (/OC): it is skipped entirely when its optional-content group is OFF, so the edit may not be visible in every configuration of this document.".to_owned(),
+        );
+    }
+    if form.dict.contains_key(b"StructParent") || form.dict.contains_key(b"StructParents") {
+        disclosures.push(
+            "this form is tagged content (/StructParent or /StructParents): the operand replacement leaves the marked-content structure intact, but any /ActualText or reading order the structure tree records for it is now STALE.".to_owned(),
+        );
+    }
 }
 
 // ===================================================================
@@ -2187,6 +2680,147 @@ pub(crate) fn write_incremental(
     dirty.set_staging(staging);
     let (bytes, _report) = save_incremental(doc, &dirty, &SaveOptions::identity())?;
     Ok((bytes, content_id.num, extra))
+}
+
+/// Replace one **form XObject's** content stream with `new_content` and save
+/// **incrementally** (`Pass 119.0`). Returns the appended bytes.
+///
+/// # Why this is not `write_incremental` with a different id
+///
+/// A page content stream's dictionary carries nothing but `/Length` and
+/// filtering, so [`make_raw_stream`] can build a whole replacement from
+/// scratch. **A form XObject's dictionary is the object's identity**:
+/// `/Subtype /Form` and `/BBox` are required (Table 95 in ISO 32000-1, Table
+/// 93 in ISO 32000-2), and `/Matrix`, `/Resources`, `/Group`, `/OC`,
+/// `/StructParent`, `/PieceInfo` and `/Metadata` all carry meaning that
+/// nothing in the content stream reproduces. Rebuilding the dictionary would
+/// turn an edited title block into an unclipped, unpositioned, resource-less
+/// stream — a file that opens and draws nothing.
+///
+/// So the dictionary is **preserved key-for-key**, with exactly three changes,
+/// each of which has to happen:
+///
+/// - `/Length` becomes the new byte count (§7.3.8.2 — required, and a wrong
+///   one truncates or over-reads the stream).
+/// - `/Filter` and `/DecodeParms` are **removed**, because the replacement
+///   content is emitted verbatim. Leaving a stale `/FlateDecode` on plain
+///   bytes is the one mistake here that produces a file every reader rejects.
+/// - `/LastModified` is bumped when the form carries `/PieceInfo`. See
+///   [`bump_last_modified`] for why that is conditional.
+///
+/// # Errors
+///
+/// [`EditError::Unsupported`] when the object is not a stream, or a write
+/// failure from the incremental save.
+pub(crate) fn write_incremental_form(
+    doc: &Document,
+    form_id: ObjId,
+    form_dict: &Dict,
+    new_content: &[u8],
+) -> Result<Vec<u8>, EditError> {
+    let mut dirty = DirtySet::empty();
+    let base_len = doc.bytes().len();
+    let mut staging: Vec<u8> = Vec::new();
+    let span = stage(&mut staging, base_len, new_content);
+    dirty.replace(
+        form_id,
+        make_form_stream(form_dict, span, new_content.len()),
+    );
+    dirty.set_staging(staging);
+    let (bytes, _report) = save_incremental(doc, &dirty, &SaveOptions::identity())?;
+    Ok(bytes)
+}
+
+/// Build the replacement [`Object::Stream`] for an edited form XObject: the
+/// original dictionary, `/Length` corrected, filtering dropped, timestamp
+/// bumped. See [`write_incremental_form`] for why each of those is required.
+///
+/// `pub(crate)` so the session-integrated path builds the identical object the
+/// one-shot path builds — one definition, no drift, the same reason
+/// [`make_raw_stream`] is shared.
+pub(crate) fn make_form_stream(form_dict: &Dict, span: ByteSpan, len: usize) -> Object {
+    let mut dict = form_dict.clone();
+    dict.remove(b"Filter");
+    dict.remove(b"DecodeParms");
+    dict.insert(
+        Name::from(b"Length"),
+        Object::Integer(i64::try_from(len).unwrap_or(i64::MAX)),
+    );
+    bump_last_modified(&mut dict);
+    Object::Stream(Stream {
+        dict,
+        data_span: span,
+    })
+}
+
+/// Mark a form's `/PieceInfo` private data as stale by bumping the form
+/// dictionary's `/LastModified` (§14.5).
+///
+/// # Why this is conditional rather than always
+///
+/// `FX-N7`: **no `shall` obliges a writer to update `/LastModified` after
+/// editing a form's content.** But §14.5 defines the staleness protocol for
+/// page-piece dictionaries as an *equality comparison* — a consuming
+/// application compares the `/LastModified` in its own `/PieceInfo` entry with
+/// the one on the containing dictionary, and treats its private data as valid
+/// when they match. So a form whose content pdfce changed while its
+/// `/LastModified` stayed put tells every other application *"nothing has
+/// happened here"*, and their cached private data — an Illustrator editable
+/// layer, a CAD tool's own model of this block — silently outlives the content
+/// it describes. That is the same class of defect as a silent edit, one layer
+/// down.
+///
+/// A form with **no** `/PieceInfo` has no such protocol to break, and adding a
+/// `/LastModified` to it would be pdfce inventing a key nobody asked for,
+/// against the minimal-diff invariant. Hence: bump it if the protocol exists,
+/// leave the dictionary alone if it does not.
+///
+/// # Why the timestamp can be absent
+///
+/// The clock is read only where the platform has one. On `wasm32` targets —
+/// the web fork's target, which `pdfce-core` must keep compiling for —
+/// `SystemTime::now` is not implemented and **panics at runtime**, so a
+/// conditional here is the difference between a portable engine and one that
+/// aborts the browser tab on its first form edit. Where no clock exists the
+/// key is left untouched and the edit still succeeds; the staleness protocol
+/// is not repaired, which is worse than repairing it and much better than a
+/// panic.
+fn bump_last_modified(dict: &mut Dict) {
+    if !dict.contains_key(b"PieceInfo") {
+        return;
+    }
+    let Some(now) = wall_clock_pdf_date() else {
+        return;
+    };
+    dict.insert(
+        Name::from(b"LastModified"),
+        Object::String(now.into_bytes()),
+    );
+}
+
+/// The current time as a §7.9.4 date string (`D:YYYYMMDDHHmmSSZ`), or `None`
+/// on a target with no clock. See [`bump_last_modified`] for why the `None`
+/// arm exists and must not be turned into a panic or a fabricated constant.
+fn wall_clock_pdf_date() -> Option<String> {
+    #[cfg(target_family = "wasm")]
+    {
+        None
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs();
+        let secs = i64::try_from(secs).ok()?;
+        // `format_rfc3339_utc` yields `YYYY-MM-DDTHH:MM:SSZ`; §7.9.4 wants the same
+        // fields with no separators behind a `D:` prefix. Reusing the crate's
+        // one calendar implementation rather than writing a second one is the
+        // point — see `civil_time`'s own header on why that file exists.
+        let iso = crate::civil_time::format_rfc3339_utc(secs);
+        let digits: String = iso.chars().filter(char::is_ascii_digit).collect();
+        Some(format!("D:{digits}Z"))
+    }
 }
 
 /// Append `bytes` to staging and return their combined-space span.

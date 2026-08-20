@@ -238,10 +238,10 @@ use crate::page_tree::{self, PageTreeError};
 use crate::span::ByteSpan;
 use crate::text_edit::EditGlyphSource;
 use crate::text_edit::edit::{
-    EditError, EditRequest, FillState, FollowerDisposition, FontClass, MatchRun, OpRec, Rec,
-    ShowData, ShowElem, ShowOp, Walk, carried_codes, classify_font, compensating_tj, emit_show,
-    emit_tm, find_anchor, glyph_advance_with, is_subset_tag, mat_mul, match_run, resolve_font_dict,
-    splice, trust_disclosure, write_incremental,
+    EditError, EditRequest, EditTarget, FillState, FollowerDisposition, FontClass, MatchRun, OpRec,
+    Rec, ShowData, ShowElem, ShowOp, Walk, carried_codes, classify_font, compensating_tj,
+    emit_show, emit_tm, find_anchor, glyph_advance_with, is_subset_tag, mat_mul, match_run,
+    resolve_font_dict, splice, trust_disclosure, write_incremental,
 };
 use crate::text_edit::encoding::{InverseEncoding, RInvTrigger, Refusal};
 use crate::text_edit::synth::{
@@ -1185,6 +1185,10 @@ pub(crate) fn plan_format(
         find: req.find.clone(),
         replace: String::new(),
         pinned_span: req.pinned_span,
+        // `find_anchor` searches the recs it is handed, so the target selector
+        // is never consulted on this path (`Pass 119.0`). Spelled out rather
+        // than defaulted so a reader does not have to check.
+        target: EditTarget::Auto,
     };
     let anchor_index = find_anchor(&recs, &locate).map_err(FormatError::from_edit)?;
     let (a_start, a_end, anchor) = match recs.get(anchor_index) {
@@ -2216,6 +2220,7 @@ pub(crate) fn preview_style_resolution(
         find: find.to_owned(),
         replace: String::new(),
         pinned_span,
+        target: EditTarget::Auto,
     };
     let anchor_index = find_anchor(&recs, &locate).map_err(FormatError::from_edit)?;
     let anchor = match recs.get(anchor_index) {

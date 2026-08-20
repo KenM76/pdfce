@@ -507,28 +507,44 @@ impl TextRun {
     /// **Whether pdfce's in-place text editing can reach this run, and if
     /// not, why** (`Pass 118.0`) — ask this before offering a caret.
     ///
-    /// # The asymmetry it publishes
+    /// # The asymmetry it published, and its closure
     ///
-    /// **Extraction recurses into form XObjects; the edit surgery does not.**
-    /// `text_extract` executes a form's content with its own `/Resources` and
-    /// `/Matrix`, so a glyph inside one is extracted, positioned and reported
-    /// like any other. [`crate::text_edit`] operates on the page's own
-    /// concatenated `/Contents` buffer and names form content a non-goal of
-    /// its cut.
+    /// This predicate exists because **extraction recursed into form XObjects
+    /// and the edit surgery did not**, so a caret could land anywhere
+    /// extraction could see and commit only where the surgery could reach.
     ///
-    /// So **a caret can land anywhere extraction can see, and commit only
-    /// where the surgery can reach** — and those two regions are not the same
-    /// one. This is the boundary between them, published.
+    /// ★ **`Pass 119.0` closed that gap**, and this method's answer moved with
+    /// it: a run inside a form XObject now reports [`Editability::Editable`],
+    /// because [`crate::text_edit::edit_text`] resolves the target stream
+    /// instead of assuming the page's. [`Editability::InsideForm`] is
+    /// deprecated and never returned.
     ///
-    /// ★ **On a CAD-exported sheet the difference is not an edge case, it is
+    /// **That transition is the argument for this method having been an owned
+    /// predicate rather than a note telling shells to match on
+    /// [`GlyphProvenance::content_stream`] themselves.** A shell that had
+    /// encoded the old limitation in its own caret guard would still be
+    /// refusing today; every caller of this improved by recompiling.
+    ///
+    /// ★ **On a CAD-exported sheet the stakes were not an edge case, they were
     /// the whole document.** Measured on the operator's own benchmark drawing:
     /// the page stream holds 3,007 single-character `Tj` operators spelling
     /// the producer's watermark, and the form XObject holds 1,696 show
-    /// operators carrying every label, the title block and every dimension
-    /// callout. Everything an operator would want to click on is inside the
-    /// form; everything editing can currently reach is metadata nobody wants
-    /// to change. That is why "edit text" reads as *does nothing* on a
+    /// operators carrying every label, the title block and every *pdf
+    /// dimension* callout. Everything an operator would want to click on was
+    /// inside the form; everything editing could reach was metadata nobody
+    /// wants to change. That is why "edit text" read as *does nothing* on a
     /// drawing.
+    ///
+    /// # What it still cannot answer, so a caller does not over-trust it
+    ///
+    /// It reports **`edit_text`'s** reach. Three refusals live past it and
+    /// need the document, which a [`TextRun`] does not carry: a `/Ref`
+    /// reference XObject or OPI proxy (whose visible content a conforming
+    /// reader may substitute wholesale), a form whose `/Resources` is present
+    /// but does not declare the font its own text selects, and pdfce's 64-deep
+    /// nesting guard. Each is refused **by name** at edit time. And
+    /// `format_text`, `reflow_block` and `add_text` were **not** retargeted by
+    /// `Pass 119.0`, so for those three this answer is optimistic.
     ///
     /// # ★ Why this is not the `-> bool` that was asked for
     ///
@@ -583,10 +599,21 @@ impl TextRun {
         }
         for g in &self.glyphs {
             match g.provenance.as_ref().map(|p| p.content_stream) {
-                Some(ContentStreamRef::Page) => {}
-                Some(ContentStreamRef::Form { object }) => {
-                    return Editability::InsideForm { object };
-                }
+                // ★ `Pass 119.0` — a form XObject's own content stream is now
+                // an edit target like any other, so this arm answers
+                // `Editable` and no longer distinguishes the two buffers.
+                //
+                // **This is the change the type was designed to absorb**, and
+                // the design worked: `Pass 118.0` published a predicate pdfce
+                // owns rather than letting the shell match on
+                // `GlyphProvenance::content_stream` itself, precisely so that
+                // the day form editing landed, every caller would improve
+                // without editing a line. A shell that had encoded the old
+                // limitation in its own guard would still be refusing carets
+                // today (decision 058's failure mode: a workaround outliving
+                // its bug). See [`Editability::InsideForm`] for the deprecated
+                // variant this arm used to return and why it was not deleted.
+                Some(ContentStreamRef::Page | ContentStreamRef::Form { .. }) => {}
                 // A run whose glyphs disagree about whether provenance was
                 // captured cannot happen from one extraction, but answering
                 // `Unknown` is the safe reading if it ever does.
@@ -611,9 +638,35 @@ pub enum Editability {
     /// Every glyph came from the page's own `/Contents`. The surgery can
     /// anchor on it; offer the caret.
     Editable,
-    /// The run lives inside a form XObject, which extraction reads and the
-    /// edit surgery does not. **Do not offer a caret** — the operator would
-    /// type into something that cannot be committed.
+    /// **★ NEVER RETURNED SINCE `Pass 119.0` — delete the arm that matches
+    /// it.** The run lives inside a form XObject; that used to mean the edit
+    /// surgery could not reach it, and it no longer does.
+    /// [`TextRun::editability`] answers [`Self::Editable`] for form content
+    /// now, exactly as that method's documentation promised it would.
+    ///
+    /// # Why the variant was deprecated rather than deleted
+    ///
+    /// A consuming shell has a live `InsideForm => refuse the caret` arm
+    /// today. Deleting the variant would break its build with a "no variant
+    /// named" error that says nothing about what to do; leaving it silently
+    /// would leave the guard in place, still refusing carets on text pdfce can
+    /// now edit — decision 058's failure mode, a workaround outliving its bug,
+    /// which is the exact thing `Pass 118.0` published this enum to prevent.
+    ///
+    /// A deprecation warning is the only one of the three that *tells the
+    /// caller what changed at the moment they compile*. The variant will be
+    /// removed at the next deliberate breaking change.
+    ///
+    /// A form that genuinely cannot be edited — a `/Ref` reference XObject or
+    /// an OPI proxy, whose visible content is a placeholder a conforming
+    /// reader may substitute wholesale — is refused **at edit time, by name**
+    /// (`R-FX-2`). That refusal needs the form's dictionary, which a
+    /// [`TextRun`] does not carry, so it could never have been answered here
+    /// truthfully anyway.
+    #[deprecated(
+        since = "0.7.0",
+        note = "Pass 119.0 made form-XObject text editable; this variant is never returned. Delete the match arm that refuses on it -- `Editability::Editable` now covers form content, and an unsuitable form is refused by name at edit time."
+    )]
     InsideForm {
         /// The form XObject stream's object number, for diagnostics.
         object: u32,

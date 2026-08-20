@@ -645,6 +645,17 @@ enum Command {
         /// Default = the block's measured baseline gap.
         #[arg(long)]
         leading: Option<f64>,
+
+        /// List the form XObjects each page paints, with the object number
+        /// `edit-text --target form:N` takes, the nesting depth, where its
+        /// resources resolve, and HOW MANY PLACES IN THE DOCUMENT paint it
+        /// (Pass 119.0).
+        ///
+        /// That last column is the one to read before a batch edit: a form
+        /// XObject may legally be painted from several pages, so editing text
+        /// inside one changes every place it appears. Honours `--pages`.
+        #[arg(long)]
+        forms: bool,
     },
 
     /// Merge several PDFs into one, in argument order.
@@ -3402,6 +3413,21 @@ enum Command {
         /// Repeatable.
         #[arg(long = "font-dir", value_name = "DIR")]
         font_dirs: Vec<PathBuf>,
+        /// Which content stream to edit (Pass 119.0): `auto` (default -- the
+        /// page's own content first, then each form XObject it paints, in
+        /// paint order), `page` (the page's own content ONLY), or `form:N`
+        /// (that form XObject's stream, by object number).
+        ///
+        /// On a CAD-exported drawing nearly every label lives inside a form
+        /// XObject, so `auto` is what finds them; `page` reproduces the
+        /// pre-119.0 reach for a batch script that wants a hard failure rather
+        /// than a widened search.
+        #[arg(
+            long = "target",
+            value_name = "auto|page|form:N",
+            default_value = "auto"
+        )]
+        target: String,
     },
 
     /// Format a page's own text in place (Pass 14.2): size, colour, font family.
@@ -5425,8 +5451,11 @@ fn run() -> ExitCode {
             width,
             align,
             leading,
+            forms,
         } => {
-            if reflow_preview {
+            if forms {
+                cmd_inspect_forms(&file, &pages)
+            } else if reflow_preview {
                 cmd_inspect_reflow_preview(
                     &file,
                     &pages,
@@ -6118,6 +6147,7 @@ fn run() -> ExitCode {
             output,
             pin,
             font_dirs,
+            target,
         } => cmd_edit_text(&EditTextArgs {
             input: &input,
             output: &output,
@@ -6126,6 +6156,7 @@ fn run() -> ExitCode {
             replace: &replace,
             pin,
             font_dirs: &font_dirs,
+            target: &target,
         }),
         Command::FormatText {
             input,
@@ -14984,6 +15015,32 @@ fn cmd_redact_mark(args: &RedactMarkArgs<'_>) -> u8 {
 /// phase). Prints the redaction report; the refusal-acknowledgement gate
 /// (ui-spec §4.4) forces a non-zero exit on un-scrubbed carrier residuals
 /// unless `--acknowledge-residuals` is passed.
+/// Parse the `--target` selector of `edit-text` (`Pass 119.0`).
+///
+/// Accepted: `auto`, `page`, `form:N`. A bad value returns the message to
+/// print rather than an error type, because there is exactly one caller and
+/// what it needs is a sentence naming the accepted spellings — a refusal that
+/// only says "invalid value" makes the operator go looking for the help text.
+///
+/// # Errors
+///
+/// The operator-facing message, ready to print.
+fn parse_edit_target(raw: &str) -> Result<pdfce_core::text_edit::EditTarget, String> {
+    use pdfce_core::text_edit::EditTarget;
+    match raw {
+        "auto" => Ok(EditTarget::Auto),
+        "page" => Ok(EditTarget::PageContents),
+        other => match other.strip_prefix("form:") {
+            Some(digits) => digits.parse::<u32>().map(|object| EditTarget::Form { object }).map_err(|_| {
+                format!("--target {other:?} names no object number -- use form:N where N is a form XObject's object number (pdfce-cli inspect --forms lists them)")
+            }),
+            None => Err(format!(
+                "--target {other:?} is not a target -- use auto (the page's content then every form it paints), page (the page's own content only), or form:N"
+            )),
+        },
+    }
+}
+
 /// Arguments for [`cmd_edit_text`], grouped so the handler stays under the
 /// clippy `too_many_arguments` bound (same pattern as `RedactMarkArgs`).
 struct EditTextArgs<'a> {
@@ -14995,6 +15052,10 @@ struct EditTextArgs<'a> {
     replace: &'a str,
     pin: bool,
     font_dirs: &'a [PathBuf],
+    /// The `--target` selector, unparsed. Parsed inside the handler so a
+    /// malformed value is a named refusal with the accepted spellings printed,
+    /// rather than a clap error that only says "invalid value".
+    target: &'a str,
 }
 
 /// `edit-text`: Pass 14.1 in-place text editing.
@@ -15040,7 +15101,14 @@ fn cmd_edit_text(args: &EditTextArgs<'_>) -> u8 {
         eprintln!("pdfce-cli: --page is 1-based; 0 is not a valid page number");
         return exit::EDIT_REFUSED;
     }
-    let req = EditRequest::find_replace(args.page - 1, args.find, args.replace);
+    let target = match parse_edit_target(args.target) {
+        Ok(t) => t,
+        Err(message) => {
+            eprintln!("pdfce-cli: edit-text refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let req = EditRequest::find_replace(args.page - 1, args.find, args.replace).with_target(target);
     let opts = EditOptions::default().with_disposition(if args.pin {
         FollowerDisposition::Pin
     } else {
@@ -15086,6 +15154,41 @@ fn cmd_edit_text(args: &EditTextArgs<'_>) -> u8 {
         report.advance_delta,
         report.followers_repositioned
     );
+    // The disposition ACTUALLY USED and the sibling-stream collapse count.
+    // Both were computed and printed by nobody until `check-outcome-disclosed`
+    // was pointed at `EditReport` -- which it had never covered, because its
+    // struct list was written from `edit.rs` alone and every report type in a
+    // submodule sat outside it while the summary line read "clean".
+    //
+    // `disposition` is not merely an echo of `--pin`: it is what the surgery
+    // settled on, and a run that cannot be pinned reports the difference here
+    // rather than leaving the operator to infer it from the geometry.
+    // `extra_objects_emptied` says the page had several `/Contents` streams
+    // and the edit collapsed them -- a structural change to the file that the
+    // operator did not ask for and should not learn about from a diff.
+    println!(
+        "  disposition={:?} extra_objects_emptied={}",
+        report.disposition, report.extra_objects_emptied
+    );
+    // `Pass 119.0`: WHERE the edit landed, and how far it reaches. In the CLI
+    // the invocation IS the commit -- there is no session and no undo -- so
+    // rule 11's obligation is to print what an interactive shell would show
+    // off-canvas, on the way past. The fan-out line is the one that matters:
+    // a form XObject may be painted from several pages and no clause binds it
+    // to one, so an operator running a batch rename needs the count in the
+    // same output as the success.
+    if let Some(object) = report.form_object {
+        println!(
+            "  form_object={object} form_invocations={} form_pages={}",
+            report.form_invocations,
+            report
+                .form_pages
+                .iter()
+                .map(|p| (p + 1).to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+    }
 
     // Refine the core's Embedded/NonEmbedded into the three decision-012
     // trust levels via the ONE shared classifier on `FontEnvironment`
@@ -17587,6 +17690,124 @@ fn json_escape(s: &str) -> String {
         }
     }
     out
+}
+
+// ---------------------------------------------------------------------------
+// inspect --forms (Pass 119.0): which content streams a page actually paints
+// ---------------------------------------------------------------------------
+
+/// List the form XObjects each requested page paints, with everything a
+/// caller needs to aim `edit-text --target form:N` — and, more importantly,
+/// everything they need to decide whether they *should*.
+///
+/// # Why this subcommand exists at all
+///
+/// A page's visible text is not all in the page's own content stream. On a
+/// CAD-exported drawing almost none of it is: the page stream holds the
+/// producer's watermark and a form XObject holds every label and the whole
+/// title block. Without a listing, an operator whose `edit-text` found nothing
+/// has no way to see that the text is in a different stream, and the honest
+/// diagnosis ("the pin is pointing at a different buffer") is unactionable
+/// without a way to enumerate the buffers.
+///
+/// # ★ The column that matters most is `paints`
+///
+/// A form XObject may legally be painted from several pages, and **no clause
+/// in either ISO edition binds one to a page** (`FX-N1`). So `paints=6` means
+/// editing text inside that form changes six places. The number is computed
+/// document-wide and transitively through nesting, which is why this walks the
+/// whole document rather than only the requested pages.
+///
+/// Read-only. Nothing is written, no content stream is mutated.
+fn cmd_inspect_forms(input: &Path, pages_spec: &str) -> u8 {
+    use pdfce_core::text_edit::forms;
+
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let page_list = match pdfce_core::page_tree::pages(&doc) {
+        Ok(pages) => pages,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let indices = match parse_pages(pages_spec, page_list.len()) {
+        Ok(indices) => indices,
+        Err(message) => {
+            eprintln!("pdfce-cli: {}: --pages {message}", input.display());
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    let view = doc.view();
+    // ONE document walk for every page's `paints` column (`forms::invocation_map`).
+    let map = forms::invocation_map(&doc, &view);
+
+    let mut total = 0u64;
+    let mut shared = 0u64;
+    let mut incomplete = 0u64;
+    println!("inspect --forms {}", input.display());
+    for index in indices {
+        let Some(page) = page_list.get(index) else {
+            continue;
+        };
+        let scan = forms::scan_page_forms(&doc, &view, page);
+        println!("  page {}:", index + 1);
+        if scan.forms.is_empty() {
+            println!("    (none -- every mark on this page comes from its own /Contents)");
+        }
+        for form in &scan.forms {
+            total += 1;
+            let set = map.get(&form.id.num);
+            let paints = set.map_or(1, forms::InvocationSet::count);
+            let at_least = if set.is_some_and(forms::InvocationSet::is_lower_bound) {
+                ">="
+            } else {
+                ""
+            };
+            if paints > 1 {
+                shared += 1;
+            }
+            // One word, because a form either declares its own resources or
+            // inherits the page's -- there is no partial state (see
+            // `ResourceTier`, and the tolerance that was built and reverted
+            // before it shipped).
+            let tier = match form.resource_tier {
+                forms::ResourceTier::Own => "own",
+                forms::ResourceTier::Page => "inherited-from-page",
+                _ => "inherited-from-enclosing-form",
+            };
+            println!(
+                "    /{} object={} depth={} paints={at_least}{paints} pages={} resources={}",
+                String::from_utf8_lossy(&form.name),
+                form.id.num,
+                form.depth,
+                set.map_or_else(String::new, |s| s
+                    .pages
+                    .iter()
+                    .map(|p| (p + 1).to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")),
+                tier
+            );
+        }
+        if scan.depth_overflows > 0 || scan.unresolved > 0 || scan.cycles_skipped > 0 {
+            incomplete += 1;
+            println!(
+                "    incomplete: depth_overflows={} unresolved={} cycles_skipped={} -- the counts above are a LOWER BOUND",
+                scan.depth_overflows, scan.unresolved, scan.cycles_skipped
+            );
+        }
+    }
+    // The stable, locale-invariant summary line, same two-half contract as
+    // every other inspect mode.
+    println!("forms: total={total} shared={shared} incomplete_pages={incomplete}");
+    exit::SUCCESS
 }
 
 // ---------------------------------------------------------------------------

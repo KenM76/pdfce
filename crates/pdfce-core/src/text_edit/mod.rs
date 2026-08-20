@@ -64,6 +64,7 @@ pub mod addtext;
 pub mod edit;
 pub mod encoding;
 pub mod format;
+pub mod forms;
 pub mod model;
 pub mod reflow;
 pub mod reflow_apply;
@@ -74,7 +75,7 @@ pub use addtext::{
     FontProvenance, NewTextColor, WrapPreviewLine, add_text, preview_wrap,
 };
 pub use edit::{
-    EditError, EditGlyphSource, EditOptions, EditOutcome, EditReport, EditRequest,
+    EditError, EditGlyphSource, EditOptions, EditOutcome, EditReport, EditRequest, EditTarget,
     FollowerDisposition, edit_text,
 };
 // `CompositeEncoding` sits beside `InverseEncoding` deliberately: they are the
@@ -92,6 +93,10 @@ pub use format::{
     FillModel, FontSelector, FormatError, FormatOptions, FormatOutcome, FormatReport,
     FormatRequest, MetricSpec, NewFill, SUBSCRIPT, SUPERSCRIPT, ScriptMetrics, ScriptPosition,
     StyleOutcome, StyleResolution, set_format,
+};
+pub use forms::{
+    FormRef, FormScan, InvocationSet, InvocationSite, MAX_FORM_DEPTH, ResourceTier,
+    form_objects_on_page, invocation_set, scan_page_forms,
 };
 pub use model::{
     Block, BlockDiagnostics, BlockKind, BlockRecognitionOptions, EditableTextModel, GlyphRef, Line,

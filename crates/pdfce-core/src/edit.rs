@@ -6635,6 +6635,7 @@ impl EditSession {
         opts: &crate::text_edit::EditOptions,
     ) -> Result<crate::text_edit::EditReport, crate::text_edit::EditError> {
         use crate::text_edit::EditError as TeError;
+        use crate::text_edit::EditTarget;
         use crate::text_edit::edit::plan_edit;
 
         if self.base.trailer().contains_key(b"Encrypt") {
@@ -6643,21 +6644,175 @@ impl EditSession {
         let pages = page_tree::pages(&self.base)?;
         let page = pages
             .get(req.page_index)
-            .ok_or(TeError::PageIndex(req.page_index))?;
-        let content_id = *page
-            .contents
-            .first()
-            .ok_or_else(|| TeError::Unsupported("the page has no /Contents to edit".to_owned()))?;
+            .ok_or(TeError::PageIndex(req.page_index))?
+            .clone();
 
-        let stream = self
-            .current_page_content(content_id, page)
-            .map_err(TeError::Content)?;
-        let plan = plan_edit(&self.base, page, &stream, req, opts)?;
+        // The page's own `/Contents` first, exactly as before `Pass 119.0`.
+        // Kept as its own branch rather than folded into the shared candidate
+        // search for one specific reason: this path reads the session's
+        // ALREADY-EDITED raw stream through `current_page_content`, which is
+        // what makes five sequential edits accumulate, and that read is not
+        // interchangeable with a fresh decode.
+        let mut page_attempt = if matches!(req.target, EditTarget::Auto | EditTarget::PageContents)
+        {
+            match page.contents.first().copied() {
+                Some(content_id) => {
+                    let stream = self
+                        .current_page_content(content_id, &page)
+                        .map_err(TeError::Content)?;
+                    match plan_edit(&self.base, &page, &stream, req, opts) {
+                        Ok(plan) => {
+                            let command = self.text_edit_command(
+                                CommandKind::EditText,
+                                content_id,
+                                &page,
+                                plan.new_content,
+                            );
+                            self.commit(command);
+                            return Ok(plan.report);
+                        }
+                        Err(e) => Some(e),
+                    }
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+        // A refusal that describes the RUN — a font-coverage refusal, an
+        // unsupported anchor — is the answer, and searching a second stream
+        // would replace a precise diagnosis with a vague one. Only "not in
+        // this buffer" lets the search continue. Same rule as the free
+        // function's `plan_edit_anywhere`, and it is spelled out in both
+        // places because the two paths must not drift on it.
+        if let Some(e) = page_attempt {
+            if crate::text_edit::edit::is_locational_error(&e) {
+                page_attempt = Some(e);
+            } else {
+                return Err(e);
+            }
+        }
+        if matches!(req.target, EditTarget::PageContents) {
+            return Err(page_attempt
+                .unwrap_or_else(|| TeError::Unsupported("the page has no /Contents".to_owned())));
+        }
 
-        let command =
-            self.text_edit_command(CommandKind::EditText, content_id, page, plan.new_content);
+        self.edit_text_in_form(&page, req, opts, page_attempt)
+    }
+
+    /// The form-XObject half of [`Self::edit_text`] (`Pass 119.0`): try each
+    /// form the page paints, in `Do` order, and commit the first one that
+    /// yields an edit.
+    ///
+    /// Split out rather than inlined because the two halves differ in the one
+    /// place that matters — **which object the command rewrites, and with what
+    /// dictionary**. A page content stream's dictionary holds nothing but
+    /// `/Length`, so its replacement is built from scratch; a form XObject's
+    /// dictionary IS the object (`/Subtype`, `/BBox`, `/Matrix`,
+    /// `/Resources`), so its replacement is the original dictionary with three
+    /// corrections. Sharing one function would mean a runtime branch on that
+    /// difference inside code whose whole job is to be undoable.
+    ///
+    /// `page_error` is the page stream's locational failure, carried so that a
+    /// document where nothing matches anywhere reports the page's error rather
+    /// than the last form's — the caller asked about text on a page, and
+    /// "not found on this page" is the answer they can act on.
+    fn edit_text_in_form(
+        &mut self,
+        page: &Page,
+        req: &crate::text_edit::EditRequest,
+        opts: &crate::text_edit::EditOptions,
+        page_error: Option<crate::text_edit::EditError>,
+    ) -> Result<crate::text_edit::EditReport, crate::text_edit::EditError> {
+        use crate::text_edit::EditError as TeError;
+        use crate::text_edit::edit::{is_locational_error, plan_edit_target};
+        use crate::text_edit::forms;
+
+        let scan = forms::scan_page_forms(&self.base, &self.view(), page);
+        let mut map = forms::invocation_map(&self.base, &self.view());
+        let mut seen: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        let mut first_locational = page_error;
+        // The SEARCH runs in the loop; the COMMIT happens once, after it
+        // (R179/R49). A `commit` inside the loop would be a command per
+        // iteration -- harmless while the loop returns on its first success,
+        // and a latent defect the moment somebody makes it continue, which is
+        // exactly the shape `import_form_data` shipped. The gate that names
+        // this is `tools/check-one-commit-per-command.py`, and it found this
+        // function on the day it was written.
+        let mut found: Option<(ObjId, Dict, Vec<u8>, crate::text_edit::EditReport)> = None;
+        for form in scan.forms {
+            if let crate::text_edit::EditTarget::Form { object } = req.target
+                && form.id.num != object
+            {
+                continue;
+            }
+            if !seen.insert(form.id.num) {
+                continue;
+            }
+            // The SESSION view, so a second edit to the same form composes on
+            // top of the first exactly as a second edit to a page's content
+            // does. A staged form stream carries no `/Filter` (see
+            // `make_form_stream`), so the decode inside `from_form` is a
+            // no-op on it and the raw staged bytes come back verbatim.
+            let Ok(stream) = crate::content::ContentStream::from_form(&self.view(), form.id) else {
+                continue;
+            };
+            let invocations = map.remove(&form.id.num).unwrap_or_default();
+            let form_id = form.id;
+            let form_dict = form.dict.clone();
+            let target = crate::text_edit::edit::EditPlanTarget::form(form, invocations);
+            match plan_edit_target(&self.base, &target, &stream, req, opts) {
+                Ok(plan) => {
+                    found = Some((form_id, form_dict, plan.new_content, plan.report));
+                    break;
+                }
+                Err(e) if is_locational_error(&e) => {
+                    if first_locational.is_none() {
+                        first_locational = Some(e);
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        let Some((form_id, form_dict, new_content, report)) = found else {
+            return Err(first_locational.unwrap_or_else(|| TeError::NoMatch(req.find.clone())));
+        };
+        let command = self.form_edit_command(form_id, &form_dict, new_content);
         self.commit(command);
-        Ok(plan.report)
+        Ok(report)
+    }
+
+    /// The one [`Command`] that replaces an edited **form XObject's** content
+    /// (`Pass 119.0`), staged into this session's buffer.
+    ///
+    /// The sibling of [`Self::text_edit_command`], and deliberately simpler:
+    /// there are no sibling streams to collapse, because a form XObject is
+    /// exactly one stream (§8.10.1) and cannot be split across an array the
+    /// way a page's `/Contents` can. Its `before` value is whatever the
+    /// session currently holds for the object — a prior form edit's staged
+    /// stream, or `None` meaning "read through to the base" — so undo restores
+    /// the exact prior state and the §11.1 save-time diff sees an
+    /// edited-then-undone form as unchanged.
+    fn form_edit_command(
+        &mut self,
+        form_id: ObjId,
+        form_dict: &Dict,
+        new_content: Vec<u8>,
+    ) -> Command {
+        use crate::text_edit::edit::make_form_stream;
+        let before = self.state.get(&form_id).cloned();
+        let len = new_content.len();
+        let span = self.stage_bytes(&new_content);
+        Command {
+            kind: CommandKind::EditText,
+            objects: vec![ObjectWrite {
+                id: form_id,
+                before,
+                after: Some(make_form_stream(form_dict, span, len)),
+            }],
+            removals: Vec::new(),
+            trailer: None,
+        }
     }
 
     /// Apply one in-place page-text FORMAT edit (size / fill-colour model /

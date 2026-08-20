@@ -48,15 +48,21 @@
 ///
 /// Timestamps before 1970 format correctly: the divisions are Euclidean, so
 /// the time-of-day never comes out negative.
-// DEAD IN THE CRATE, ALIVE IN THE BUILD SCRIPT -- and that is the whole
-// arrangement rather than an oversight. `build.rs` `include!`s this file and
-// calls the function; the crate `mod`-s it only so `cargo test` can assert
-// the arithmetic. Nothing in `pdfce-core` itself formats a timestamp: it
-// reads the already-formatted string out of an environment variable.
+// NO LONGER DEAD IN THE CRATE (Pass 119.0) -- and the correction is left
+// visible rather than silently deleted, because the arrangement it describes
+// is still the reason this file exists. `build.rs` `include!`s it and calls
+// this function for the build stamp; the crate `mod`-s it so `cargo test` can
+// assert the arithmetic. What changed is that `text_edit::edit` now needs a
+// wall-clock timestamp in ISO 32000-1 7.9.4 form -- to bump a form XObject's
+// `/LastModified` when the form carries `/PieceInfo`, so another application's
+// cached private data does not silently outlive the content it describes
+// (14.5's staleness protocol is an equality comparison). It reformats this
+// function's output rather than growing a second calendar, which is the whole
+// point of the file.
 //
-// The alternative to this `allow` is exporting a general-purpose date
-// formatter from a PDF engine, which is a worse trade than one suppressed
-// lint with its reason attached.
+// The `allow` stays: the build script compiles this file WITHOUT the crate
+// around it, so from its point of view the function still has no in-tree
+// caller, and dropping the attribute would warn there.
 #[allow(dead_code)]
 #[allow(clippy::many_single_char_names)]
 #[must_use]

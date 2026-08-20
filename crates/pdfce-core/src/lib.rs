@@ -80,9 +80,11 @@ pub mod build;
 /// Unix timestamp to RFC 3339 UTC, shared with this crate's BUILD SCRIPT via
 /// `include!` so the calendar arithmetic exists once and stays testable.
 ///
-/// Private: it exists to serve [`build`], and a general-purpose date
-/// formatter is not something `pdfce-core` should be offering. The file's own
-/// header comments carry the reasoning and the leap-year cases.
+/// Private: it serves the build stamp and, since `Pass 119.0`, the
+/// `/LastModified` bump a form-XObject content edit owes a `/PieceInfo`
+/// holder (ISO 32000-1 14.5). Still private — a general-purpose date formatter
+/// is not something `pdfce-core` should be offering. The file's own header
+/// comments carry the reasoning and the leap-year cases.
 mod civil_time;
 pub mod color;
 pub mod content;
