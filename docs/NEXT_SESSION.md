@@ -56,6 +56,99 @@ session.
 
 ---
 
+## §0.5 — ★★★ THE TASK: `Pass 119.0`, TEXT EDITING INSIDE FORM XObjects
+
+**The operator escalated this himself, 2026-08-20, and cleared a session for
+it.** Verbatim:
+
+> *"I need that editing capability as it is 99% of the text I will want to
+> edit."*
+
+**That reorders the queue.** It was item 2 behind the transform verb; it is now
+the task. `Pass 113.0` (`transform_objects`) waits.
+
+### Why it is 99% of his text, measured not assumed
+
+`pdfceGUI` measured the operator's own benchmark CAD drawing
+(`D:\Dev	emp\pdfce
+cored-benchmark-cad-drawing.pdf`):
+
+| where | what is there |
+|---|---|
+| the **page** content stream | 3,007 single-character `Tj` spelling `GSPublisherVersion 0.0.100.100BRV1F1d160d110d63L1L1…` — **producer metadata** |
+| a **form XObject** (obj 23, own `/Font`) | **1,696 show operators** — every drawing label, the title block, every dimension callout |
+
+So today's `edit_text` reaches only the watermark, and refuses on everything an
+operator would click. **That is the whole of "editing text does nothing on my
+drawings."** He has raised it at least three times.
+
+### What already exists, so this does not start cold
+
+- **Extraction already recurses into forms correctly** — `text_extract`
+  executes a form's content with its own `/Resources` and `/Matrix`. The
+  *reading* half is done and right.
+- **`TextRun::editability()` (`Pass 118.0`, `075b1c7`) is the published
+  boundary** and is already the routing key: it answers
+  `Editable | InsideForm { object } | NoAnchor | Unknown`. When this Pass lands,
+  it starts answering `Editable` for form text and **every caller improves
+  without changing** — that was the design intent, so do not add a second
+  predicate.
+- **`EditError::PinnedSpanNotFound`** already distinguishes "the pin named
+  nothing" from "the text is not here", which is what made this diagnosable.
+- **`GlyphProvenance::content_stream`** already names *which* buffer a glyph
+  came from. The information needed to AIM the edit is published and correct.
+
+### ★ The design question that decides everything, and it is not a small one
+
+**A form XObject can be invoked from more than one page, and more than once on
+one page.** So editing text inside one **changes every place it appears.**
+
+That is either the correct behaviour or a refusal, and **it must be decided
+before the first line of surgery is written**, not discovered afterwards.
+
+**This is the same shape `Pass 111.0` decided the same day** for a
+possibly-shared `/Contents` array object: pdfce spliced the page dictionary
+rather than rewriting the shared array, precisely so an edit could not reach a
+page nobody touched. Decision 075 records the placement half of that. Whether
+the same instinct applies here — *never mutate a shared object; copy-on-write a
+private form for this page* — or whether an operator editing a title block that
+appears on six sheets **wants** all six to change, is the call to make.
+
+★ **R206 (minted today) governs the shape of the answer**: if both behaviours
+are defensible, **ship both as options and pick the default from what a normal
+operator would expect — do not come back to ask.** My instinct, not yet a
+decision: an operator editing a label on the sheet in front of him expects to
+change *that* sheet, so **copy-on-write is the likely default** with
+edit-in-place as the option — but a title block is the counter-example and
+deserves weighing before this is fixed.
+
+### The rest of the known shape
+
+- **The surgery operates on ONE buffer** — the page's concatenated `/Contents`.
+  A form is a **different stream object**; editing inside one means splicing
+  *that* object.
+- **The font lives in the FORM's `/Resources`**, not the page's, so every
+  coverage/classification check must resolve against the right dictionary — and
+  `/Resources` inheritance means "the right one" is not always obvious.
+- **`vector_surgery` and `text_edit_command` both assume `page.contents.first()`**
+  and blank the remaining page streams on first edit. Neither has a concept of
+  editing a stream that is not a page content stream. That plumbing is the bulk
+  of the work.
+
+### A `pdfce-spec-librarian` dispatch was sent 2026-08-20 for this
+
+It covers §8.10.1 Tables 95/96 (`/BBox` as clip-or-advisory, `/Matrix`
+composition order, `/LastModified`/`/PieceInfo` obligations), the
+**shared-invocation** question above, whether text state and the text matrix are
+reset at `Do`, and `/Resources` fallback when a form omits its own. **Check the
+corpus for `iso32000__s__8.10*` before re-deriving any of it** — the answers may
+already be filed.
+
+`Pass 119.0`'s acceptance criteria are deliberately **UNSCOPED** in `ROADMAP.md`
+pending that. Scope them from the corpus, then build.
+
+---
+
 ## §1 — WHAT SHIPPED 2026-08-20
 
 | commit | |
@@ -201,7 +294,9 @@ would silently alter how already-shipped markup *looks*.
 
 ## §2 — THE QUEUE, in the order I would take it
 
-1. **`Pass 113.0`** — `transform_objects`, the verb `pdfceGUI` is blocked on and
+1. **`Pass 119.0`** — **see §0.5. This is the task.** Everything below waits.
+
+2. **`Pass 113.0`** — `transform_objects`, the verb `pdfceGUI` is blocked on and
    says its whole shell side is built and waiting for. `Pass 112.0` is the
    foundation and is shipped.
 
@@ -219,15 +314,6 @@ would silently alter how already-shipped markup *looks*.
    `R168`'s no-silent-subset still governs), and **a singular matrix is refused
    by name** (the option is clamp-and-disclose) because a singular transform is
    irrecoverable and a *negative* scale is not singular anyway.
-
-2. **`Pass 119.0`** — text editing inside form XObjects, the third `pdfceGUI`
-   request's real ask. Asks 1 and 2 shipped as `Pass 118.0`; this is the one
-   that closes the operator's complaint. **Acceptance criteria are UNSCOPED**
-   pending a librarian dispatch (project rule 12). The hazard already recorded:
-   a form can be invoked from several pages or several times on one page, so
-   editing inside one is a **write to a possibly-shared object** — the same
-   shape `Pass 111.0`/decision 075 decided the same day for a possibly-shared
-   `/Contents` array.
 
 3. **`Pass 97.0 / 97.1 / 97.2`** — the colorant compositor. Still the
    highest-impact item by Ghent count. Plan of record:
