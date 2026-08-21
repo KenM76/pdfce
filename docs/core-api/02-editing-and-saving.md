@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (30057 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 137 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (30287 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 139 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 137 public `EditSession` methods
+## 1. Verb index — all 139 public `EditSession` methods
 
-**Count: 137.** Established by brace-matched extraction of the four
+**Count: 139.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -342,7 +342,7 @@ need their own policy).
 
 These five return `text_edit`'s own error types, **not** `EditError`.
 
-### 1.10 Vector geometry (17) — detail in part 3
+### 1.10 Vector geometry (19) — detail in part 3
 
 Eleven of the thirteen return `Result<Vec<String>, EditError>`. **The
 `Vec<String>` is the disclosure list**
@@ -535,13 +535,56 @@ The two exceptions are `transform_objects` / `transform_preview`
 > refused with a sentence), `Truncated`, `NewerFormat`. A truncation sweep over
 > **every** prefix length is pinned by a test.
 >
-> #### Two limits, named so you do not find them by pressing
+> #### ★ Annotations are on the clipboard too (`Pass 120.4`) — a SECOND address space
 >
-> - **Content objects only.** A ce dimension, a markup annotation and a widget
->   are *annotations*, not content-stream objects, so they are not addressable
->   by these indices at all. Copying one is `Pass 120.4`, filed and unstarted —
->   and it needs more than a graph copy (a dimension's sidecar record and group,
->   a widget's `/AcroForm` registration and a non-colliding field name).
+> ```rust
+> session.copy_annotations(page, &[0, 2])            // /Annots order
+> session.copy_selection(page, &[3, 4], &[0, 2])     // both, one gesture
+> ```
+>
+> `copy_annotations` takes the `/Annots` numbering; `copy_selection` takes
+> both lists at once and is the verb to call when a marquee caught content and
+> a comment, which on a marked-up drawing is the ordinary case.
+>
+> **Two index lists, not one, because they are genuinely different
+> numberings.** An annotation is not content, so it has no paint-order index.
+> Merging them into a tagged list would put you in the business of remembering
+> which numbering a given index came from; this signature makes that mistake
+> impossible.
+>
+> Annotations are copied **through pdfce's own models**, not as raw
+> dictionaries — a markup through `MarkupSpec`, a ce dimension through its
+> `DimensionKind` **plus its group's name and unit**. So the destination
+> re-bakes the appearance and re-registers the sidecar itself, and a pasted ce
+> dimension keeps measuring the thing it measured at home. A `GroupId` means
+> nothing in another document; the group is matched **by name**, and created if
+> absent.
+>
+> | kind | what happens |
+> |---|---|
+> | markup (`Square`, `Circle`, `Line`, `Ink`, `Polygon`, `Cloud`, `PolyLine`, text markup) | pasted |
+> | **ce dimension** | pasted, with its group |
+> | **widget**, and anything else | **refused by name, with the reason** — a widget carries an `/AcroForm` field registration, and a *renamed* field is a **different field**: any script, calculation order or parent-child relationship naming the old one breaks silently. That is a decision about your form, not a copy |
+>
+> `PasteOutcome::annotations_pasted` counts only the ones that landed, so it
+> disagreeing with `clip.annotation_count()` **is** the signal that something
+> was refused. The refusal text is in `disclosures`.
+>
+> ★ **A rotated `Square` or `Circle` ENCLOSES rather than refusing, and says
+> so.** `/Rect` is axis-aligned by definition (§12.5.2), so a rotated rectangle
+> has no spelling — the `re` problem from `Pass 113.0` in a different carrier.
+> Enclosing is the only shape the format admits, so this is not pdfce choosing
+> between two renderings; it is pdfce doing the one available and disclosing
+> it. Point-based markup and every ce dimension rotate faithfully.
+>
+> ★★ **`to_bytes` does NOT carry annotations in this cut, and the clip says
+> so**: `clip.annotations_survive_serialisation()`. Ask it before writing a
+> clip to disk — the alternative is a payload that quietly loses the operator's
+> comments, which is the kind of data loss only noticed later. An in-process or
+> in-session annotation clipboard works today.
+>
+> #### One more limit, named so you do not find it by pressing
+>
 > - **A resource that does not resolve on the SOURCE page refuses the copy**,
 >   not the paste. That is the earliest point the operator can be told, and
 >   their selection is still on screen.

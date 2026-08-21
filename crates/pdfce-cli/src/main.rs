@@ -4448,11 +4448,36 @@ enum Command {
         #[arg(long, default_value_t = 1)]
         page: u32,
         /// 0-based paint-order object indices, comma-separated (`3,4,7`).
-        #[arg(long, value_name = "N,N,...")]
+        ///
+        /// May be empty when `--annotations` is given: content objects and
+        /// annotations are two different address spaces, and a selection may
+        /// be entirely one or the other.
+        #[arg(long, value_name = "N,N,...", default_value = "")]
         objects: String,
+        /// 0-based ANNOTATION indices, comma-separated (Pass 120.4) — markup
+        /// and ce dimensions, in the page's /Annots order.
+        ///
+        /// A different numbering from `--objects`: an annotation is not page
+        /// content, so it has no paint-order index. A widget is carried but
+        /// NOT pasted — see the paste refusal.
+        #[arg(long, value_name = "N,N,...", default_value = "")]
+        annotations: String,
         /// Where to write the clipboard payload.
         #[arg(long, value_name = "FILE")]
         clip: PathBuf,
+        /// Also write the selection as a standalone one-page PDF here
+        /// (Pass 120.2) — the interchange format, for applications that are
+        /// not pdfce.
+        ///
+        /// The page IS the selection: its MediaBox is the selection's own
+        /// bounding box, so a consumer placing the file gets the objects and
+        /// no surrounding whitespace. Deliberately NOT the same thing as
+        /// `--clip`: a PDF cannot carry which byte range was which object,
+        /// each item's CTM, or which resource names its operators consumed, so
+        /// a pdfce-to-pdfce paste through it would be worse than the private
+        /// format. Write both; use each with its own consumer.
+        #[arg(long, value_name = "FILE.pdf")]
+        pdf: Option<PathBuf>,
         /// Also delete the copied objects, writing the result here — cut.
         #[arg(long, value_name = "OUTPUT.pdf")]
         cut: Option<PathBuf>,
@@ -6685,10 +6710,21 @@ fn run() -> ExitCode {
             input,
             page,
             objects,
+            annotations,
             clip,
+            pdf,
             cut,
             mode,
-        } => cmd_object_copy(&input, page, &objects, &clip, cut.as_deref(), mode),
+        } => cmd_object_copy(&ObjectCopyArgs {
+            input: &input,
+            page,
+            objects: &objects,
+            annotations: &annotations,
+            clip: &clip,
+            pdf: pdf.as_deref(),
+            cut: cut.as_deref(),
+            mode,
+        }),
         Command::ObjectPaste {
             input,
             page,
@@ -23877,26 +23913,43 @@ fn selection_centre(
 /// A one-shot CLI has no session to hold a clip in either, so a file is the
 /// only place a payload can live between two invocations — which makes this
 /// subcommand the CLI's whole clipboard, not a debug affordance.
-fn cmd_object_copy(
-    input: &Path,
+struct ObjectCopyArgs<'a> {
+    input: &'a Path,
     page: u32,
-    objects: &str,
-    clip_path: &Path,
-    cut: Option<&Path>,
+    /// `--objects`, unparsed.
+    objects: &'a str,
+    /// `--annotations`, unparsed.
+    annotations: &'a str,
+    clip: &'a Path,
+    pdf: Option<&'a Path>,
+    cut: Option<&'a Path>,
     mode: SaveMode,
-) -> u8 {
+}
+
+fn cmd_object_copy(args: &ObjectCopyArgs<'_>) -> u8 {
+    let (input, page, clip_path, cut, mode) =
+        (args.input, args.page, args.clip, args.cut, args.mode);
     let page_index = (page.max(1) - 1) as usize;
-    let indices = match parse_object_indices(objects) {
-        Ok(v) if !v.is_empty() => v,
-        Ok(_) => {
-            eprintln!("pdfce-cli: object-copy refused: --objects named no objects");
-            return exit::EDIT_REFUSED;
-        }
+    let indices = match parse_object_indices(args.objects) {
+        Ok(v) => v,
         Err(message) => {
             eprintln!("pdfce-cli: object-copy refused: {message}");
             return exit::EDIT_REFUSED;
         }
     };
+    let annots = match parse_object_indices(args.annotations) {
+        Ok(v) => v,
+        Err(message) => {
+            eprintln!("pdfce-cli: object-copy refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    if indices.is_empty() && annots.is_empty() {
+        eprintln!(
+            "pdfce-cli: object-copy refused: nothing selected -- give --objects, --annotations, or both"
+        );
+        return exit::EDIT_REFUSED;
+    }
     let (source, mut session) = match open_for_edit(input) {
         Ok(pair) => pair,
         Err(code) => return code,
@@ -23905,7 +23958,7 @@ fn cmd_object_copy(
     // with nothing deleted. Reversed, a cut whose copy half failed would take
     // the objects away with nothing on the clipboard, which is the one outcome
     // the operator cannot recover from by pasting.
-    let clip = match session.copy_objects(page_index, &indices) {
+    let clip = match session.copy_selection(page_index, &indices, &annots) {
         Ok(clip) => clip,
         Err(err) => return report_edit_error(input, &err),
     };
@@ -23913,6 +23966,37 @@ fn cmd_object_copy(
     if let Err(err) = std::fs::write(clip_path, &payload) {
         eprintln!("pdfce-cli: {}: {err}", clip_path.display());
         return exit::IO_ERROR;
+    }
+
+    // The interchange export, if asked for -- a second write of the same
+    // read, not a second traversal.
+    let mut pdf_note = String::from("pdf=0");
+    if let Some(path) = args.pdf {
+        let exported = clip.to_pdf();
+        if exported.size_substituted {
+            eprintln!(
+                "pdfce-cli: object-copy: the selection has no area in one direction, so the exported page was given a minimum size of {:.2}x{:.2} pt -- a zero-area /MediaBox produces a file readers refuse to open.",
+                exported.size.0, exported.size.1
+            );
+        }
+        if let Err(err) = std::fs::write(path, &exported.bytes) {
+            eprintln!("pdfce-cli: {}: {err}", path.display());
+            return exit::IO_ERROR;
+        }
+        pdf_note = format!(
+            "pdf=1 pdf_out={} pdf_size={:.2}x{:.2} pdf_size_substituted={}",
+            path.display(),
+            exported.size.0,
+            exported.size.1,
+            u32::from(exported.size_substituted)
+        );
+    }
+
+    if !clip.annotations_survive_serialisation() {
+        eprintln!(
+            "pdfce-cli: object-copy: {} annotation(s) were copied but are NOT carried by the clipboard file -- this cut serialises content objects only, so a paste from this file will place the content and not the annotations.",
+            clip.annotation_count()
+        );
     }
 
     let mut cut_note = String::from("cut=0");
@@ -23948,6 +24032,12 @@ fn cmd_object_copy(
         clip.kinds().join("+"),
         clip.resource_count(),
     );
+    println!(
+        "  annotations={} annotations_serialise={}",
+        clip.annotation_count(),
+        u32::from(clip.annotations_survive_serialisation())
+    );
+    println!("  {pdf_note}");
     exit::SUCCESS
 }
 
@@ -24045,11 +24135,12 @@ fn cmd_object_paste(args: &ObjectPasteArgs<'_>) -> u8 {
             Ok(outcome) => {
                 report_disclosures(&outcome.disclosures);
                 println!(
-                    "object-paste {} page {} clip={} PREVIEW; would_paste={} resources={} bbox={:.2},{:.2},{:.2},{:.2}",
+                    "object-paste {} page {} clip={} PREVIEW; would_paste={} annotations={} resources={} bbox={:.2},{:.2},{:.2},{:.2}",
                     args.input.display(),
                     args.page,
                     args.clip.display(),
                     outcome.objects_pasted,
+                    outcome.annotations_pasted,
                     outcome.resources_added,
                     outcome.bbox.min.x,
                     outcome.bbox.min.y,
@@ -24085,7 +24176,7 @@ fn cmd_object_paste(args: &ObjectPasteArgs<'_>) -> u8 {
     };
     let r = &outcome.report;
     println!(
-        "object-paste {} page {} clip={} mode={} -> {}; pasted={} resources={} \
+        "object-paste {} page {} clip={} mode={} -> {}; pasted={} annotations={} resources={} \
 bbox={:.2},{:.2},{:.2},{:.2} changed={} objects_written={} appended={} out_bytes={} \
 undo_verified={} undo_identical={}",
         args.input.display(),
@@ -24094,6 +24185,7 @@ undo_verified={} undo_identical={}",
         args.mode.name(),
         output.display(),
         pasted.objects_pasted,
+        pasted.annotations_pasted,
         pasted.resources_added,
         pasted.bbox.min.x,
         pasted.bbox.min.y,

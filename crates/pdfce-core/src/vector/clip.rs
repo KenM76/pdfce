@@ -115,6 +115,38 @@ pub struct ClipItem {
     /// Every `(category, name)` the bytes consume, paired with the clip-local
     /// object number carrying it. Sorted, so a clip is deterministic.
     pub bindings: Vec<ClipBinding>,
+    /// ★ **The graphics state this item DEPENDS ON but does not itself
+    /// establish**, as content-stream operators, emitted inside the paste
+    /// wrapper immediately before [`Self::bytes`] (`Pass 120.2`).
+    ///
+    /// # The defect this exists to fix, found on a real file and not on a
+    /// fixture
+    ///
+    /// Text state is **graphics state** (§8.4.1 Table 52), so a producer may
+    /// set `/F8 12 Tf` **once** and then emit many `BT`…`ET` blocks that
+    /// inherit it. That is exactly what a CAD exporter does — and a text
+    /// object's byte span is its `BT`…`ET`, so **the `Tf` is not in it.**
+    ///
+    /// Copying such an object recorded no font binding (there was no name in
+    /// the bytes to bind) and pasted content that showed text **with no font
+    /// selected at all**. pdfce's own extractor said so about the export:
+    /// *"a show operator appeared with no font selected (§9.4.1 requires Tf
+    /// first)"* — `chars=0 codes=4 failed=4`. Nothing errored at copy or at
+    /// paste.
+    ///
+    /// The same argument applies to every other inherited state a copied
+    /// object relies on: a path stroked after `0.5 g 2 w` carries neither
+    /// operator in its own span, so it would paste black and hairline.
+    ///
+    /// # Why a prelude rather than rewriting the bytes
+    ///
+    /// [`Self::bytes`] stays **verbatim** (see its own note). Prepending to it
+    /// would normalise nothing today and everything eventually, and it would
+    /// make the copied bytes no longer comparable with the source's. A
+    /// separate field keeps "what the producer wrote" and "what pdfce had to
+    /// re-establish" distinguishable — which also makes the second one
+    /// **disclosable**, and it is.
+    pub prelude: Vec<u8>,
 }
 
 /// One resource-name reference inside a [`ClipItem`]'s bytes.
@@ -144,6 +176,83 @@ pub struct ClipObject {
     pub payload: Option<Vec<u8>>,
 }
 
+/// One annotation on the clipboard (`Pass 120.4`).
+///
+/// # ★ Why annotations are a SEPARATE payload rather than more `items`
+///
+/// A `ClipItem` is a byte range in a content stream. An annotation is not
+/// content at all — it is a dictionary in the page's `/Annots`, with its own
+/// coordinate convention, its own appearance stream, and, for the two kinds
+/// pdfce authors itself, its own registration outside the page: a ce dimension
+/// has a `/PieceInfo` sidecar record and a group; a widget has an `/AcroForm`
+/// field-tree entry and a field name that must not collide.
+///
+/// **The original acceptance criteria for this Pass said "refuse loudly", and
+/// that was written before `120.0` shipped.** Once copy addressed content
+/// objects by paint-order index, there was no index by which those verbs could
+/// even *name* an annotation to refuse it — the refusal had nowhere to live.
+/// This is the address space that gives it one, and having built it, most of
+/// the kinds turned out to be paste-able rather than refuse-able.
+///
+/// # Copied through the MODEL, not through the object graph
+///
+/// A raw dictionary copy would be structurally right and semantically wrong: a
+/// pasted ce dimension would carry a `/PieceInfo` record naming a group that
+/// does not exist in the destination, and a pasted widget would carry a field
+/// name that already means something there. So a markup annotation round-trips
+/// through [`MarkupSpec`](crate::annot_author::MarkupSpec) and a ce dimension
+/// through its [`DimensionKind`](crate::dimension::DimensionKind) — the same
+/// models `add_markup` and `add_dimension` author from, so the destination
+/// re-bakes the appearance and re-registers the sidecar itself.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum ClipAnnotation {
+    /// A markup annotation, as the spec `add_markup` authors from.
+    Markup(Box<crate::annot_author::MarkupSpec>),
+    /// A **ce dimension** — pdfce's own measured annotation (project rule 15;
+    /// this is never a *pdf dimension*, which is page content and travels as a
+    /// [`ClipItem`]).
+    ///
+    /// The group is carried **by name and unit**, not by id: a `GroupId` means
+    /// nothing in another document, and the destination either has a group of
+    /// that name already or gets one created. That is what makes a dimension
+    /// pasted between documents keep its scale and its label format rather
+    /// than arriving as bare geometry.
+    Dimension {
+        /// The source group's name — matched, or created, on paste.
+        group_name: String,
+        /// The source group's unit.
+        unit: crate::dimension::Unit,
+        /// The measured geometry.
+        kind: Box<crate::dimension::DimensionKind>,
+    },
+    /// An annotation kind this cut does not model — carried so the count is
+    /// honest, refused by name on paste.
+    ///
+    /// **A widget is here deliberately.** Pasting one means registering a
+    /// field in the destination's `/AcroForm` under a name that does not
+    /// collide, and a *renamed* field is a different field: any JavaScript,
+    /// calculation order or parent-child relationship that named the old one
+    /// is silently broken. That is a decision about the operator's form, not a
+    /// copy, so it is refused rather than guessed at.
+    Unsupported {
+        /// The annotation's `/Subtype`, so the refusal can name it.
+        subtype: String,
+    },
+}
+
+impl ClipAnnotation {
+    /// A short kind label for a paste summary.
+    #[must_use]
+    pub fn label(&self) -> String {
+        match self {
+            Self::Markup(_) => "markup".to_owned(),
+            Self::Dimension { .. } => "ce dimension".to_owned(),
+            Self::Unsupported { subtype } => format!("{subtype} (unsupported)"),
+        }
+    }
+}
+
 /// A copied selection of page objects — the clipboard payload (`Pass 120.0`).
 ///
 /// Opaque by intent: the shell moves one of these around, hands it back to
@@ -168,6 +277,19 @@ pub struct ObjectClip {
     /// The union of the items' page-space bounds at copy time — what a shell
     /// needs to draw a paste preview outline before it commits.
     pub bbox: Bounds,
+    /// The copied **annotations** (`Pass 120.4`) — a separate payload from
+    /// [`Self::items`], for the reasons on [`ClipAnnotation`].
+    ///
+    /// **Not serialised by [`Self::to_bytes`] in this cut**, and that is a
+    /// stated limit rather than an oversight: `MarkupSpec` and `DimensionKind`
+    /// are rich enums whose byte encoding would be a second format to version
+    /// alongside the content one, and getting it wrong means a clip that
+    /// parses and pastes the wrong shape. An in-session or in-process
+    /// annotation clipboard works today; a serialised one is its own decision.
+    /// [`Self::to_bytes`] therefore drops them and
+    /// [`Self::annotations_survive_serialisation`] says so, rather than
+    /// letting a caller discover it from a count.
+    pub annotations: Vec<ClipAnnotation>,
 }
 
 impl ObjectClip {
@@ -201,6 +323,24 @@ impl ObjectClip {
     #[must_use]
     pub fn resource_count(&self) -> usize {
         self.objects.len()
+    }
+
+    /// How many annotations the clip holds (`Pass 120.4`).
+    #[must_use]
+    pub fn annotation_count(&self) -> usize {
+        self.annotations.len()
+    }
+
+    /// Whether [`Self::to_bytes`] preserves this clip completely.
+    ///
+    /// `false` when it holds annotations, which this cut does not serialise —
+    /// see [`Self::annotations`]. Published as a **question a caller can ask**
+    /// rather than left to be discovered from a count that silently drops:
+    /// a shell writing a clip to disk can warn, or keep the in-process copy,
+    /// instead of finding out on the paste.
+    #[must_use]
+    pub fn annotations_survive_serialisation(&self) -> bool {
+        self.annotations.is_empty()
     }
 }
 
@@ -432,6 +572,7 @@ impl ObjectClip {
                 put_bytes(&mut out, &binding.name);
                 put_u32(&mut out, binding.object);
             }
+            put_bytes(&mut out, &item.prelude);
         }
 
         put_u32(
@@ -511,12 +652,14 @@ impl ObjectClip {
                     object: r.u32()?,
                 });
             }
+            let prelude = r.bytes()?;
             items.push(ClipItem {
                 bytes: item_bytes,
                 ctm,
                 kind,
                 bbox: item_bbox,
                 bindings,
+                prelude,
             });
         }
 
@@ -551,7 +694,357 @@ impl ObjectClip {
             items,
             objects,
             bbox,
+            // Not carried by this format -- see `ObjectClip::annotations`.
+            annotations: Vec::new(),
         })
+    }
+}
+
+// ===========================================================================
+// Interchange: a standalone one-page PDF (`Pass 120.2`)
+// ===========================================================================
+
+/// What [`ObjectClip::to_pdf`] produced, beside the bytes.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct ClipPdf {
+    /// The complete, standalone one-page PDF.
+    pub bytes: Vec<u8>,
+    /// The page size in points — the clip's own bounds, so the sheet is the
+    /// selection and nothing else.
+    pub size: (f64, f64),
+    /// How many objects were drawn onto it.
+    pub objects: usize,
+    /// Whether the clip's bounds were **empty or degenerate** and a minimum
+    /// page size was substituted.
+    ///
+    /// A zero-area `/MediaBox` is not merely ugly: §7.7.3.3 requires a
+    /// rectangle, and a reader given one of zero extent shows an empty window
+    /// or refuses the file. An operator who copied a zero-height rule and got
+    /// back a document that will not open would have no way to tell which of
+    /// the two steps failed, so the substitution happens and is **disclosed**
+    /// rather than being left to look like corruption.
+    pub size_substituted: bool,
+}
+
+/// The smallest page pdfce will emit for a degenerate selection, in points.
+///
+/// One point, not zero: large enough to be a legal rectangle, small enough
+/// that nobody mistakes it for a deliberate page size.
+const MIN_CLIP_PAGE: f64 = 1.0;
+
+impl ObjectClip {
+    /// Render the clip as a **standalone one-page PDF** (`Pass 120.2`).
+    ///
+    /// The page is exactly the selection's bounding box, with the content
+    /// translated so it sits at the origin — so a consumer that places the
+    /// file gets the objects and no surrounding whitespace.
+    ///
+    /// # ★ Why this is NOT [`Self::to_bytes`], and must not be merged with it
+    ///
+    /// They serve different consumers and the difference is lossy in one
+    /// direction only.
+    ///
+    /// [`Self::to_bytes`] is **pdfce's own format**: it carries which byte
+    /// range was which object, each item's per-object CTM, and which resource
+    /// names each item's operators consumed. A PDF carries **none** of those.
+    /// Reading this file back in would mean re-decomposing a page and guessing
+    /// at the structure the clip already knew exactly — which would make a
+    /// pdfce→pdfce round trip *worse* than a pdfce→Illustrator one, and for no
+    /// gain, since the private format already exists.
+    ///
+    /// So: **this is an export, not a serialisation.** Put both on the system
+    /// clipboard — the private format for a pdfce→pdfce paste, this for
+    /// everyone else — which is exactly the split the requesting shell asked
+    /// for: *"I am not asking you to touch the OS clipboard. That is mine."*
+    ///
+    /// # What it does not carry, stated rather than discovered
+    ///
+    /// The clip's resource closure travels, so fonts and images arrive. What
+    /// does **not** is anything that was never in the clip: annotations,
+    /// optional-content membership, structure tags. A selection is content,
+    /// and this is that content on a page of its own.
+    #[must_use]
+    pub fn to_pdf(&self) -> ClipPdf {
+        use crate::object::{ObjId, Stream};
+        use crate::settings::{TrailingEol, XrefEntryEol};
+        use crate::writer::encoder::IdentityEncoder;
+        use crate::writer::fileid;
+        use crate::writer::serialize;
+        use crate::writer::xref_out;
+        use crate::xref::XrefEntry;
+
+        // ---- geometry -------------------------------------------------
+        let degenerate = self.bbox.min.x > self.bbox.max.x
+            || !self.bbox.min.x.is_finite()
+            || !self.bbox.max.y.is_finite();
+        let (width, height) = if degenerate {
+            (MIN_CLIP_PAGE, MIN_CLIP_PAGE)
+        } else {
+            (
+                (self.bbox.max.x - self.bbox.min.x).max(MIN_CLIP_PAGE),
+                (self.bbox.max.y - self.bbox.min.y).max(MIN_CLIP_PAGE),
+            )
+        };
+        let size_substituted = degenerate
+            || (self.bbox.max.x - self.bbox.min.x) < MIN_CLIP_PAGE
+            || (self.bbox.max.y - self.bbox.min.y) < MIN_CLIP_PAGE;
+        let origin = if degenerate {
+            Matrix::IDENTITY
+        } else {
+            Matrix::translate(-self.bbox.min.x, -self.bbox.min.y)
+        };
+
+        // ---- objects ---------------------------------------------------
+        //
+        // Numbering: 1 catalog, 2 pages, 3 page, 4 content, then the clip's
+        // own objects at 5.., in clip-local order. A clip-local reference `n`
+        // therefore maps to `n + 4`, which is why the remap below is
+        // arithmetic rather than a map — clip ids are already dense and
+        // 1-based by construction (`clip_import` allocates them that way).
+        const FIRST: u32 = 5;
+        let shift = |id: u32| ObjId::new(id.saturating_add(FIRST - 1), 0);
+
+        let mut names: Vec<(Vec<u8>, Vec<u8>, u32)> = Vec::new();
+        let mut chosen: BTreeMap<(Vec<u8>, u32), Vec<u8>> = BTreeMap::new();
+        let mut taken: BTreeMap<Vec<u8>, BTreeSet<Vec<u8>>> = BTreeMap::new();
+        let empty = Dict::new();
+        for item in &self.items {
+            for binding in &item.bindings {
+                let key = (binding.category.clone(), binding.object);
+                if chosen.contains_key(&key) {
+                    continue;
+                }
+                let used = taken.entry(binding.category.clone()).or_default();
+                let name = free_name(&empty, &binding.category, used);
+                used.insert(name.clone());
+                names.push((binding.category.clone(), name.clone(), binding.object));
+                chosen.insert(key, name);
+            }
+        }
+
+        let mut content = Vec::new();
+        for item in &self.items {
+            let mut mapping: BTreeMap<(Vec<u8>, Vec<u8>), Vec<u8>> = BTreeMap::new();
+            for binding in &item.bindings {
+                if let Some(name) = chosen.get(&(binding.category.clone(), binding.object)) {
+                    mapping.insert(
+                        (binding.category.clone(), binding.name.clone()),
+                        name.clone(),
+                    );
+                }
+            }
+            // A rewrite failure here means the item's own bytes do not parse,
+            // which `copy_objects` could not have produced. Emitting them
+            // unrewritten would bind to nothing; emitting nothing at all loses
+            // the object silently. The bytes are emitted verbatim, which at
+            // worst draws in a default state -- the same degradation
+            // `serialize` documents for an unresolvable span.
+            let rewritten =
+                rewrite_names(&item.bytes, &mapping).unwrap_or_else(|_| item.bytes.clone());
+            let placement = item.ctm.post_concat(origin);
+            content.extend_from_slice(b"\nq ");
+            for v in [
+                placement.a,
+                placement.b,
+                placement.c,
+                placement.d,
+                placement.e,
+                placement.f,
+            ] {
+                crate::writer::content::emit_number(&mut content, v);
+                content.push(b' ');
+            }
+            content.extend_from_slice(b"cm\n");
+            if !item.prelude.is_empty() {
+                content.extend_from_slice(
+                    &rewrite_names(&item.prelude, &mapping)
+                        .unwrap_or_else(|_| item.prelude.clone()),
+                );
+                content.push(b'\n');
+            }
+            content.extend_from_slice(&rewritten);
+            content.extend_from_slice(b"\nQ");
+        }
+
+        let mut resources = Dict::new();
+        for (category, name, clip_object) in &names {
+            let mut sub = resources
+                .get(category)
+                .and_then(Object::as_dict)
+                .cloned()
+                .unwrap_or_default();
+            sub.insert(Name(name.clone()), Object::Reference(shift(*clip_object)));
+            resources.insert(Name(category.clone()), Object::Dict(sub));
+        }
+
+        let mut catalog = Dict::new();
+        catalog.insert(Name::from(b"Type"), Object::Name(Name::from(b"Catalog")));
+        catalog.insert(Name::from(b"Pages"), Object::Reference(ObjId::new(2, 0)));
+
+        let mut pages = Dict::new();
+        pages.insert(Name::from(b"Type"), Object::Name(Name::from(b"Pages")));
+        pages.insert(
+            Name::from(b"Kids"),
+            Object::Array(vec![Object::Reference(ObjId::new(3, 0))]),
+        );
+        pages.insert(Name::from(b"Count"), Object::Integer(1));
+
+        let mut page = Dict::new();
+        page.insert(Name::from(b"Type"), Object::Name(Name::from(b"Page")));
+        page.insert(Name::from(b"Parent"), Object::Reference(ObjId::new(2, 0)));
+        page.insert(
+            Name::from(b"MediaBox"),
+            Object::Array(vec![
+                Object::Integer(0),
+                Object::Integer(0),
+                Object::Real(width),
+                Object::Real(height),
+            ]),
+        );
+        page.insert(Name::from(b"Resources"), Object::Dict(resources));
+        page.insert(Name::from(b"Contents"), Object::Reference(ObjId::new(4, 0)));
+
+        // ---- staging + emission ---------------------------------------
+        //
+        // One staging buffer for every stream payload, exactly as
+        // `pageops::assemble` does it, so `write_indirect`'s span model has a
+        // single buffer to index.
+        let mut staging: Vec<u8> = Vec::new();
+        let stage = |bytes: &[u8], staging: &mut Vec<u8>| -> ByteSpan {
+            let start = staging.len();
+            staging.extend_from_slice(bytes);
+            ByteSpan::new(start, bytes.len())
+        };
+
+        let mut objects: BTreeMap<u32, Object> = BTreeMap::new();
+        objects.insert(1, Object::Dict(catalog));
+        objects.insert(2, Object::Dict(pages));
+        objects.insert(3, Object::Dict(page));
+
+        let content_span = stage(&content, &mut staging);
+        let mut content_dict = Dict::new();
+        content_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(content.len()).unwrap_or(i64::MAX)),
+        );
+        objects.insert(
+            4,
+            Object::Stream(Stream {
+                dict: content_dict,
+                data_span: content_span,
+            }),
+        );
+
+        for (&clip_id, object) in &self.objects {
+            let value = match (&object.value, &object.payload) {
+                (Object::Stream(stream), Some(bytes)) => {
+                    let span = stage(bytes, &mut staging);
+                    Object::Stream(Stream {
+                        dict: shift_refs(&Object::Dict(stream.dict.clone()), FIRST)
+                            .as_dict()
+                            .cloned()
+                            .unwrap_or_default(),
+                        data_span: span,
+                    })
+                }
+                (other, _) => shift_refs(other, FIRST),
+            };
+            objects.insert(clip_id.saturating_add(FIRST - 1), value);
+        }
+
+        let mut out = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
+        let body_start = out.len();
+        let mut entries: BTreeMap<u32, XrefEntry> = BTreeMap::new();
+        entries.insert(
+            0,
+            XrefEntry::Free {
+                next_free: 0,
+                generation: 65_535,
+            },
+        );
+        for (number, value) in &objects {
+            entries.insert(
+                *number,
+                XrefEntry::InUse {
+                    offset: out.len() as u64,
+                    generation: 0,
+                },
+            );
+            serialize::write_indirect(
+                &mut out,
+                ObjId::new(*number, 0),
+                value,
+                &staging,
+                &IdentityEncoder,
+            );
+        }
+        let body_end = out.len();
+        let highest = objects.keys().copied().max().unwrap_or(0);
+        for number in 0..=highest {
+            entries.entry(number).or_insert(XrefEntry::Free {
+                next_free: 0,
+                generation: 65_535,
+            });
+        }
+
+        let mut trailer = Dict::new();
+        trailer.insert(
+            Name::from(b"Size"),
+            Object::Integer(i64::from(highest).saturating_add(1)),
+        );
+        trailer.insert(Name::from(b"Root"), Object::Reference(ObjId::new(1, 0)));
+        // §14.4, and derived from the body bytes with no clock involved — so
+        // two exports of the same clip are byte-identical, which is what makes
+        // a shell able to cache one.
+        let body = out.get(body_start..body_end).unwrap_or(&[]);
+        trailer.insert(
+            Name::from(b"ID"),
+            Object::Array(vec![
+                Object::String(
+                    fileid::changing_identifier(b"pdfce/clip-export/permanent", 0, body).to_vec(),
+                ),
+                Object::String(
+                    fileid::changing_identifier(b"pdfce/clip-export/changing", 0, body).to_vec(),
+                ),
+            ]),
+        );
+
+        let section_offset = out.len() as u64;
+        let _ = xref_out::write_classic_table(&mut out, &entries, XrefEntryEol::default());
+        xref_out::write_classic_tail(&mut out, &trailer, section_offset, TrailingEol::default());
+
+        ClipPdf {
+            bytes: out,
+            size: (width, height),
+            objects: self.items.len(),
+            size_substituted,
+        }
+    }
+}
+
+/// Renumber every reference in a value from clip-local space into the export's
+/// numbering (clip `n` becomes `n + first - 1`).
+///
+/// Saturating rather than wrapping: a clip id near `u32::MAX` cannot arise
+/// from [`crate::edit::EditSession::copy_objects`], which allocates densely
+/// from 1, but a hand-built payload could carry one, and a wrapped reference
+/// would point at the catalog.
+fn shift_refs(value: &Object, first: u32) -> Object {
+    match value {
+        Object::Reference(id) => Object::Reference(crate::object::ObjId::new(
+            id.num.saturating_add(first - 1),
+            0,
+        )),
+        Object::Array(items) => Object::Array(items.iter().map(|v| shift_refs(v, first)).collect()),
+        Object::Dict(dict) => {
+            let mut out = Dict::new();
+            for (key, v) in dict.iter() {
+                out.insert(key.clone(), shift_refs(v, first));
+            }
+            Object::Dict(out)
+        }
+        other => other.clone(),
     }
 }
 
@@ -785,6 +1278,13 @@ pub fn plan_paste(clip: &ObjectClip, existing: &Dict, at: Matrix) -> Result<Past
             content.push(b' ');
         }
         content.extend_from_slice(b"cm\n");
+        // The inherited state first, INSIDE the wrapper -- so it applies to
+        // this item and is discarded by the closing `Q` rather than leaking
+        // onto whatever the destination page draws next.
+        if !item.prelude.is_empty() {
+            content.extend_from_slice(&rewrite_names(&item.prelude, &mapping)?);
+            content.push(b'\n');
+        }
         content.extend_from_slice(&rewritten);
         content.extend_from_slice(b"\nQ");
         bbox = bbox.union(transformed_bounds(item.bbox, at));
@@ -846,6 +1346,91 @@ fn transformed_bounds(b: Bounds, m: Matrix) -> Bounds {
         out = out.union_point(m.map_point(super::geometry::Point::new(x, y)));
     }
     out
+}
+
+/// Build the **prelude** for a decomposed object: the graphics state it
+/// depends on but does not establish in its own bytes (`Pass 120.2`).
+///
+/// See [`ClipItem::prelude`] for the defect this exists to fix and why it is a
+/// separate field rather than a rewrite of the item's bytes.
+///
+/// # What is emitted, and what deliberately is not
+///
+/// Only state the decomposition already **measured**, and only when the item's
+/// own bytes do not set it:
+///
+/// - **`Tf`** for a text object, from [`TextObject::font`] — the case the real
+///   file found.
+/// - **`w`** (line width) and the fill/stroke colours for a path, from
+///   [`PathObject`]'s recorded values.
+///
+/// Not emitted: dash patterns, `gs` parameters, clipping, blend modes,
+/// rendering intent. Those are **not in the object model**, so emitting
+/// anything for them would be fabrication rather than transcription — and a
+/// fabricated dash is worse than an absent one, because it looks deliberate.
+/// A caller who needs them has a copy that renders solid where the source
+/// rendered dashed, which is visible; the alternative is a copy that renders
+/// wrong in a way that looks right.
+pub(crate) fn item_prelude(o: &VectorObject, own_bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let sets = |keyword: &[u8]| -> bool {
+        // (borrow-free by construction: `own_bytes` outlives the closure)
+        // Cheap and deliberately conservative: if the item's own bytes mention
+        // the operator ANYWHERE, the prelude stays out of its way. A false
+        // positive costs an inherited value the object was going to set for
+        // itself; a false negative would double-set it, which is harmless but
+        // noisy. Parsing here would be more precise and would also make the
+        // prelude depend on the item parsing, which `to_pdf` deliberately
+        // survives without.
+        own_bytes.windows(keyword.len()).any(|w| w == keyword)
+    };
+    match o {
+        VectorObject::Text(t) => {
+            if let Some(font) = t.font.as_ref()
+                && !sets(b"Tf")
+            {
+                out.push(b'/');
+                out.extend_from_slice(font.resource.as_bytes());
+                out.push(b' ');
+                crate::writer::content::emit_number(&mut out, font.size);
+                out.extend_from_slice(b" Tf");
+            }
+        }
+        VectorObject::Path(p) => {
+            if !sets(b" w") && !out_starts_with_w(own_bytes) && p.line_width > 0.0 {
+                crate::writer::content::emit_number(&mut out, p.line_width);
+                out.extend_from_slice(b" w ");
+            }
+            // Colours are emitted as DeviceRGB, which is what the model
+            // records. A source in DeviceCMYK or a `Separation` arrives as its
+            // RGB equivalent -- a real limitation, stated here rather than
+            // discovered: the decomposition holds an `Rgb`, and inventing a
+            // colourant name pdfce never measured would be worse.
+            if !sets(b" rg") {
+                emit_rgb(&mut out, p.fill_color, false);
+            }
+            if !sets(b" RG") {
+                emit_rgb(&mut out, p.stroke_color, true);
+            }
+        }
+        VectorObject::Image(_) => {}
+    }
+    out
+}
+
+/// Whether the bytes BEGIN with a line-width operator, which `sets(b" w")`
+/// cannot see because there is no leading space.
+fn out_starts_with_w(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"w ") || bytes.starts_with(b"w\n") || bytes.starts_with(b"w\r")
+}
+
+/// `r g b rg` / `r g b RG` appended to `out`.
+fn emit_rgb(out: &mut Vec<u8>, colour: super::geometry::Rgb, stroking: bool) {
+    for v in [colour.r, colour.g, colour.b] {
+        crate::writer::content::emit_number(out, f64::from(v));
+        out.push(b' ');
+    }
+    out.extend_from_slice(if stroking { b"RG " } else { b"rg " });
 }
 
 /// The category label and CTM of a decomposed object — the two things a clip

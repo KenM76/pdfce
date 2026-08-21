@@ -2894,6 +2894,190 @@ fn stamp(
     })
 }
 
+/// Transform a [`MarkupSpec`]'s page-space geometry by `m` (`Pass 120.4`).
+///
+/// Returns the moved spec and whether a **rectangle had to be enclosed rather
+/// than rotated**.
+///
+/// # ★ The one thing a markup annotation cannot express
+///
+/// `Square` and `Circle` are `/Rect`-based (§12.5.2: `/Rect` is an
+/// axis-aligned rectangle in default user space), so a rotated one **has no
+/// spelling**. This is the `re` problem from `Pass 113.0` in a different
+/// carrier, and it has the same two possible answers.
+///
+/// **The default is to ENCLOSE and disclose**, not to refuse. An operator
+/// pasting a comment onto a rotated placement expects the comment to arrive;
+/// refusing the whole paste over an annotation's coordinate convention would
+/// be pdfce declining to do the thing it can do. The enclosing rectangle is
+/// the only shape the format admits, so this is not pdfce choosing between two
+/// renderings — it is pdfce doing the one available and saying so.
+///
+/// Point-based variants (`Line`, `Ink`, `Polygon`, `Cloud`, `PolyLine`) and
+/// `TextMarkup`'s quads carry no such limit: every point maps exactly, and a
+/// rotation is faithful.
+#[must_use]
+pub fn transform_spec(spec: &MarkupSpec, m: crate::vector::Matrix) -> (MarkupSpec, bool) {
+    let pt = |p: &(f64, f64)| {
+        let mapped = m.map_point(crate::vector::Point::new(p.0, p.1));
+        (mapped.x, mapped.y)
+    };
+    let pts = |v: &[(f64, f64)]| v.iter().map(pt).collect::<Vec<_>>();
+    // A rectangle's four corners mapped and re-enclosed — right under a
+    // rotation in the only sense a rectangle can be, and exact otherwise.
+    let rect = |r: &Rect| {
+        let corners = [
+            (r.llx, r.lly),
+            (r.urx, r.lly),
+            (r.urx, r.ury),
+            (r.llx, r.ury),
+        ]
+        .map(|c| pt(&c));
+        let (mut llx, mut lly) = (f64::INFINITY, f64::INFINITY);
+        let (mut urx, mut ury) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for (x, y) in corners {
+            llx = llx.min(x);
+            lly = lly.min(y);
+            urx = urx.max(x);
+            ury = ury.max(y);
+        }
+        Rect { llx, lly, urx, ury }
+    };
+    // A width is a length, so it scales by the matrix's linear magnitude. The
+    // square root of |det| is the isotropic equivalent — exact for a uniform
+    // scale and a rotation, and the honest average for a non-uniform one,
+    // where a single stroke width cannot be right in both directions anyway.
+    let scale = m.determinant().abs().sqrt();
+    let w = |v: f64| {
+        if scale.is_finite() && scale > 0.0 {
+            v * scale
+        } else {
+            v
+        }
+    };
+
+    // No wildcard arm: a new markup variant must consciously decide how it
+    // transforms, at compile time, rather than shipping as an un-moved copy.
+    match spec {
+        MarkupSpec::Square {
+            rect: r,
+            border,
+            interior,
+            border_width,
+            border_effect,
+        } => (
+            MarkupSpec::Square {
+                rect: rect(r),
+                border: *border,
+                interior: *interior,
+                border_width: w(*border_width),
+                border_effect: *border_effect,
+            },
+            true,
+        ),
+        MarkupSpec::Circle {
+            rect: r,
+            border,
+            interior,
+            border_width,
+        } => (
+            MarkupSpec::Circle {
+                rect: rect(r),
+                border: *border,
+                interior: *interior,
+                border_width: w(*border_width),
+            },
+            true,
+        ),
+        MarkupSpec::Line {
+            start,
+            end,
+            color,
+            width,
+            endings,
+        } => (
+            MarkupSpec::Line {
+                start: pt(start),
+                end: pt(end),
+                color: *color,
+                width: w(*width),
+                endings: *endings,
+            },
+            false,
+        ),
+        MarkupSpec::Ink {
+            strokes,
+            color,
+            width,
+        } => (
+            MarkupSpec::Ink {
+                strokes: strokes.iter().map(|s| pts(s)).collect(),
+                color: *color,
+                width: w(*width),
+            },
+            false,
+        ),
+        MarkupSpec::Polygon {
+            vertices,
+            border,
+            interior,
+            width,
+        } => (
+            MarkupSpec::Polygon {
+                vertices: pts(vertices),
+                border: *border,
+                interior: *interior,
+                width: w(*width),
+            },
+            false,
+        ),
+        MarkupSpec::Cloud {
+            vertices,
+            border,
+            interior,
+            width,
+            intensity,
+        } => (
+            MarkupSpec::Cloud {
+                vertices: pts(vertices),
+                border: *border,
+                interior: *interior,
+                width: w(*width),
+                intensity: *intensity,
+            },
+            false,
+        ),
+        MarkupSpec::PolyLine {
+            vertices,
+            color,
+            width,
+        } => (
+            MarkupSpec::PolyLine {
+                vertices: pts(vertices),
+                color: *color,
+                width: w(*width),
+            },
+            false,
+        ),
+        MarkupSpec::TextMarkup { kind, quads, color } => (
+            MarkupSpec::TextMarkup {
+                kind: *kind,
+                quads: quads
+                    .iter()
+                    .map(|q| Quad {
+                        ul: pt(&q.ul),
+                        ur: pt(&q.ur),
+                        ll: pt(&q.ll),
+                        lr: pt(&q.lr),
+                    })
+                    .collect(),
+                color: *color,
+            },
+            false,
+        ),
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,

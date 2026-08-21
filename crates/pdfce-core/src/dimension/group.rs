@@ -1250,3 +1250,74 @@ mod angular_tests {
         }
     }
 }
+
+/// Transform a [`DimensionKind`]'s geometry by `m` (`Pass 120.4`).
+///
+/// Every variant is point-based, so a transform is exact — there is no
+/// rectangle here to lose to a rotation, which is the one place the markup
+/// twin has to compromise.
+///
+/// # What is deliberately NOT transformed
+///
+/// `offset` and `text_along` are **placement scalars in the dimension's own
+/// frame**, not page-space points. `radius` on an angular dimension is the arc
+/// radius in the same frame. Scaling them by the matrix's magnitude would be
+/// right for a uniform scale and wrong for everything else, and a pasted
+/// dimension whose label has drifted off its own leader is worse than one
+/// whose label offset stayed put. A **measurement is re-derived from the
+/// geometry on authoring**, so the number stays correct either way.
+#[must_use]
+pub fn transform_kind(kind: &DimensionKind, m: crate::vector::Matrix) -> DimensionKind {
+    let pt = |p: &Point| m.map_point(*p);
+    // No wildcard arm: a new dimension variant must decide how it transforms
+    // at compile time rather than shipping as an un-moved copy.
+    match kind {
+        DimensionKind::Linear {
+            a,
+            b,
+            constraint,
+            offset,
+            text_along,
+        } => DimensionKind::Linear {
+            a: pt(a),
+            b: pt(b),
+            constraint: *constraint,
+            offset: *offset,
+            text_along: *text_along,
+        },
+        DimensionKind::Circular { fit, show_diameter } => DimensionKind::Circular {
+            fit: crate::dimension::FitCircle {
+                center: pt(&fit.center),
+                // The radius scales with the geometry, unlike the placement
+                // scalars above: it IS geometry -- the circle's own size.
+                radius: fit.radius * m.determinant().abs().sqrt(),
+                ..*fit
+            },
+            show_diameter: *show_diameter,
+        },
+        DimensionKind::Angular {
+            apex,
+            dir_a,
+            dir_b,
+            radius,
+            text_along,
+        } => DimensionKind::Angular {
+            apex: pt(apex),
+            dir_a: pt(dir_a),
+            dir_b: pt(dir_b),
+            radius: *radius,
+            text_along: *text_along,
+        },
+        DimensionKind::Perimeter {
+            points,
+            closed,
+            offset,
+            text_along,
+        } => DimensionKind::Perimeter {
+            points: points.iter().map(pt).collect(),
+            closed: *closed,
+            offset: *offset,
+            text_along: *text_along,
+        },
+    }
+}

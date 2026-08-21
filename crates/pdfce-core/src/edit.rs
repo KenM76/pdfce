@@ -3272,8 +3272,14 @@ impl VertexEdit {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct PasteOutcome {
-    /// How many objects were placed.
+    /// How many content objects were placed.
     pub objects_pasted: u64,
+    /// How many **annotations** were placed (`Pass 120.4`) — markup and ce
+    /// dimensions. An annotation the clip carries but this cut will not paste
+    /// (a widget) is **not** counted here and earns a disclosure instead, so
+    /// this number and `clip.annotation_count()` disagreeing is the signal
+    /// that something was refused.
+    pub annotations_pasted: u64,
     /// How many resource bindings the destination page gained.
     ///
     /// **Not noise, and worth showing somewhere.** Every paste adds fresh
@@ -7616,6 +7622,53 @@ impl EditSession {
         page_index: usize,
         object_indices: &[usize],
     ) -> Result<crate::vector::ObjectClip, EditError> {
+        self.copy_selection(page_index, object_indices, &[])
+    }
+
+    /// **Copy a selection of ANNOTATIONS to a clipboard payload**
+    /// (`Pass 120.4`).
+    ///
+    /// `annotation_indices` index the page's `/Annots` in document order —
+    /// the same order [`crate::annot::page_annotations`] returns and a shell
+    /// enumerates with. **A different address space from
+    /// [`Self::copy_objects`]'**: an annotation is not content, so it has no
+    /// paint-order index, which is why the two verbs cannot share one list.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::PageOutOfRange`], or [`EditError::VectorEdit`] with
+    /// `ObjectOutOfRange` for an annotation index the page does not have —
+    /// refusing the whole call, not the valid remainder (`R168`).
+    pub fn copy_annotations(
+        &self,
+        page_index: usize,
+        annotation_indices: &[usize],
+    ) -> Result<crate::vector::ObjectClip, EditError> {
+        self.copy_selection(page_index, &[], annotation_indices)
+    }
+
+    /// **Copy content objects AND annotations in one gesture** (`Pass 120.4`).
+    ///
+    /// The one body [`Self::copy_objects`] and [`Self::copy_annotations`] are
+    /// wrappers over, and the verb a shell should call when a marquee caught
+    /// both — which on a marked-up drawing is the ordinary case, not the
+    /// exotic one.
+    ///
+    /// Two index lists rather than one, because the two are genuinely
+    /// different address spaces (see [`Self::copy_annotations`]). Merging them
+    /// into a tagged list would put the shell in the business of remembering
+    /// which numbering a given index came from, which is the mistake this
+    /// signature makes impossible.
+    ///
+    /// # Errors
+    ///
+    /// See [`Self::copy_objects`] and [`Self::copy_annotations`].
+    pub fn copy_selection(
+        &self,
+        page_index: usize,
+        object_indices: &[usize],
+        annotation_indices: &[usize],
+    ) -> Result<crate::vector::ObjectClip, EditError> {
         use crate::vector::clip;
 
         let (page, stream, model) = self.decompose_for_read(page_index)?;
@@ -7651,8 +7704,16 @@ impl EditSession {
                 .get(span.start..span.end())
                 .unwrap_or_default()
                 .to_vec();
+            // The PRELUDE first: state the object depends on but does not
+            // establish in its own bytes (`Pass 120.2`). Its names are bound
+            // exactly like the item's own, which is the whole point -- a `Tf`
+            // synthesised from the decomposition names a resource that must
+            // travel with the clip like any other.
+            let prelude = clip::item_prelude(obj, &bytes);
             let mut bindings = Vec::new();
-            for site in clip::name_sites(&bytes).map_err(EditError::Clip)? {
+            let mut sites = clip::name_sites(&bytes).map_err(EditError::Clip)?;
+            sites.extend(clip::name_sites(&prelude).map_err(EditError::Clip)?);
+            for site in sites {
                 let Some(entry) = resolved
                     .get(&site.category)
                     .and_then(|sub| sub.get(&site.name))
@@ -7679,7 +7740,26 @@ impl EditSession {
                 kind: clip::item_kind(obj),
                 bbox: obj.page_bbox(),
                 bindings,
+                prelude,
             });
+        }
+
+        let mut annotations = Vec::with_capacity(annotation_indices.len());
+        if !annotation_indices.is_empty() {
+            let all = crate::annot::page_annotations(&self.graph(), page.id);
+            let count = all.len();
+            for &i in annotation_indices {
+                let annot = all
+                    .get(i)
+                    .ok_or(crate::vector::VectorEditError::ObjectOutOfRange { index: i, count })?;
+                if let Some(rect) = annot.rect {
+                    bbox = bbox.union(crate::vector::Bounds {
+                        min: crate::vector::Point::new(rect.llx, rect.lly),
+                        max: crate::vector::Point::new(rect.urx, rect.ury),
+                    });
+                }
+                annotations.push(self.clip_annotation(annot)?);
+            }
         }
 
         Ok(crate::vector::ObjectClip {
@@ -7687,7 +7767,132 @@ impl EditSession {
             items,
             objects: clip_objects,
             bbox,
+            annotations,
         })
+    }
+
+    /// Classify and capture one annotation for the clipboard (`Pass 120.4`).
+    ///
+    /// Copied through pdfce's own **models** rather than as a raw dictionary —
+    /// see [`ClipAnnotation`](crate::vector::ClipAnnotation) for why. The order
+    /// of the tests matters: a ce dimension IS a markup annotation by subtype
+    /// (`/Line`, `/Polygon`, `/PolyLine`), so it must be recognised first or it
+    /// would paste as a bare outline with its measurement lost — which is
+    /// exactly the defect `R204` was minted for, one Pass over.
+    fn clip_annotation(
+        &self,
+        annot: &crate::annot::Annotation,
+    ) -> Result<crate::vector::ClipAnnotation, EditError> {
+        let subtype = String::from_utf8_lossy(&annot.subtype).into_owned();
+        let unsupported = || crate::vector::ClipAnnotation::Unsupported {
+            subtype: subtype.clone(),
+        };
+        let Some(id) = annot.id else {
+            return Ok(unsupported());
+        };
+        let Some(Object::Dict(dict)) = self.value(id).cloned() else {
+            return Ok(unsupported());
+        };
+
+        // ce dimension FIRST -- see this function's own note on the order.
+        if self.is_ce_dimension(id, &dict) {
+            let model = self.read_dimension_model();
+            if let Some(record) = model.dimensions().iter().find(|d| d.annot == Some(id))
+                && let Some(group) = model.group(record.group)
+            {
+                return Ok(crate::vector::ClipAnnotation::Dimension {
+                    group_name: group.name.clone(),
+                    unit: group.unit(),
+                    kind: Box::new(record.kind.clone()),
+                });
+            }
+            // Recognised as a ce dimension but its sidecar record is absent --
+            // a file whose annotation and model disagree. Carried as
+            // unsupported rather than as markup: pasting the outline without
+            // the measurement is the silently-wrong outcome, and `R204`'s
+            // lesson is that a shape which merely LOOKS like markup is the
+            // dangerous case.
+            return Ok(unsupported());
+        }
+
+        match crate::annot_author::spec_from_dict(&self.graph(), &dict) {
+            Ok(spec) => Ok(crate::vector::ClipAnnotation::Markup(Box::new(spec))),
+            Err(_) => Ok(unsupported()),
+        }
+    }
+
+    /// Place the clip's annotations on `page_index`, transformed by `at`
+    /// (`Pass 120.4`).
+    ///
+    /// Returns the disclosures the placement owes. Called by
+    /// [`Self::paste_objects`] **after** its content command commits, so an
+    /// annotation paste is its own undo entry — which is a deliberate
+    /// difference from the content half and is disclosed: annotations are
+    /// authored by `add_markup`/`add_dimension`, each of which is already one
+    /// command, and re-plumbing them to share a command with content surgery
+    /// is a larger change than this Pass.
+    fn paste_clip_annotations(
+        &mut self,
+        page_index: usize,
+        clip: &crate::vector::ObjectClip,
+        at: crate::vector::Matrix,
+    ) -> Result<(u64, Vec<String>), EditError> {
+        use crate::vector::ClipAnnotation;
+
+        let mut placed = 0u64;
+        let mut disclosures = Vec::new();
+        let axis_aligned = at.b == 0.0 && at.c == 0.0;
+        for annotation in &clip.annotations {
+            match annotation {
+                ClipAnnotation::Markup(spec) => {
+                    let moved = crate::annot_author::transform_spec(spec, at);
+                    if !axis_aligned && moved.1 {
+                        disclosures.push(format!(
+                            "paste: a {} annotation cannot express a rotation -- its geometry is an axis-aligned rectangle (ISO 32000-1 12.5.2 /Rect), so the pasted one ENCLOSES the rotated shape rather than being it.",
+                            annotation.label()
+                        ));
+                    }
+                    self.add_markup(page_index, &moved.0)?;
+                    placed += 1;
+                }
+                ClipAnnotation::Dimension {
+                    group_name,
+                    unit,
+                    kind,
+                } => {
+                    let group = self.find_or_create_dimension_group(group_name, *unit)?;
+                    let moved = crate::dimension::transform_kind(kind, at);
+                    self.add_dimension(page_index, group, moved)?;
+                    placed += 1;
+                }
+                ClipAnnotation::Unsupported { subtype } => {
+                    disclosures.push(format!(
+                        "paste: a /{subtype} annotation was NOT pasted. A widget carries an /AcroForm field registration and a field name, and a renamed field is a DIFFERENT field -- any script, calculation order or parent-child relationship naming the old one would break silently. That is a decision about your form, not a copy."
+                    ));
+                }
+            }
+        }
+        Ok((placed, disclosures))
+    }
+
+    /// The id of a dimension group with this name, creating one if the
+    /// document has none (`Pass 120.4`).
+    ///
+    /// Matched **by name**, because a `GroupId` means nothing in another
+    /// document. Two documents that both call a group "Site plan 1:200" are
+    /// asserting the same thing about it, and a paste that created a second
+    /// group of the same name would give the operator two identical entries in
+    /// their group list and no way to tell them apart.
+    fn find_or_create_dimension_group(
+        &mut self,
+        name: &str,
+        unit: crate::dimension::Unit,
+    ) -> Result<crate::dimension::GroupId, EditError> {
+        let model = self.read_dimension_model();
+        if let Some(existing) = model.groups().iter().find(|g| g.name == name) {
+            return Ok(existing.id);
+        }
+        self.add_dimension_group(name, unit)
     }
 
     /// **Paste a clipboard payload onto a page** (`Pass 120.0`).
@@ -7717,11 +7922,14 @@ impl EditSession {
     ) -> Result<PasteOutcome, EditError> {
         let (plan, page_id, page_resources) = self.plan_paste_at(page_index, clip, at)?;
         if plan.items == 0 {
+            let (annotations_pasted, disclosures) =
+                self.paste_clip_annotations(page_index, clip, at)?;
             return Ok(PasteOutcome {
                 objects_pasted: 0,
+                annotations_pasted,
                 resources_added: 0,
                 bbox: plan.bbox,
-                disclosures: Vec::new(),
+                disclosures,
             });
         }
 
@@ -7779,11 +7987,14 @@ impl EditSession {
             removals: Vec::new(),
             trailer: None,
         });
+        let (annotations_pasted, disclosures) =
+            self.paste_clip_annotations(page_index, clip, at)?;
         Ok(PasteOutcome {
             objects_pasted: plan.items as u64,
+            annotations_pasted,
             resources_added: plan.resources.len() as u64,
             bbox: plan.bbox,
-            disclosures: Vec::new(),
+            disclosures,
         })
     }
 
@@ -7811,11 +8022,30 @@ impl EditSession {
         at: crate::vector::Matrix,
     ) -> Result<PasteOutcome, EditError> {
         let (plan, _page_id, _resources) = self.plan_paste_at(page_index, clip, at)?;
+        // The annotation half is COUNTED, not planned: `add_markup` and
+        // `add_dimension` are the authoring path and both are `&mut self`, so a
+        // preview cannot run them. What a preview owes is the count and the
+        // refusals, and both are derivable from the clip alone -- which is why
+        // the unsupported-kind disclosure is built here rather than only in the
+        // verb, and why the two produce the same strings.
+        let mut annotations_pasted = 0u64;
+        let mut disclosures = Vec::new();
+        for annotation in &clip.annotations {
+            match annotation {
+                crate::vector::ClipAnnotation::Unsupported { subtype } => {
+                    disclosures.push(format!(
+                        "paste: a /{subtype} annotation was NOT pasted. A widget carries an /AcroForm field registration and a field name, and a renamed field is a DIFFERENT field -- any script, calculation order or parent-child relationship naming the old one would break silently. That is a decision about your form, not a copy."
+                    ));
+                }
+                _ => annotations_pasted += 1,
+            }
+        }
         Ok(PasteOutcome {
             objects_pasted: plan.items as u64,
+            annotations_pasted,
             resources_added: plan.resources.len() as u64,
             bbox: plan.bbox,
-            disclosures: Vec::new(),
+            disclosures,
         })
     }
 

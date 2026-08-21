@@ -641,3 +641,563 @@ fn a_serialised_clip_from_a_newer_build_is_refused() {
         .expect_err("a newer format is refused");
     assert!(err.to_string().contains("newer build"), "{err}");
 }
+
+// ---------------------------------------------------------------------------
+// Interchange — Pass 120.2
+// ---------------------------------------------------------------------------
+
+/// ★ **A clip exports as a standalone one-page PDF that pdfce itself can
+/// reopen, and whose page IS the selection.**
+///
+/// Reopening it with pdfce is the strongest available check that the file is
+/// well-formed — a hand-emitted xref table with one wrong offset produces a
+/// file that looks fine in a hex dump and opens in nothing.
+#[test]
+fn a_clip_exports_as_a_standalone_one_page_pdf() {
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[0, 1, 2]).unwrap();
+    let exported = clip.to_pdf();
+
+    assert_eq!(exported.objects, 3);
+    assert!(!exported.size_substituted, "the selection has real extent");
+
+    let reopened = Document::from_bytes(exported.bytes).expect("pdfce can reopen its own export");
+    let pages = pdfce_core::page_tree::pages(&reopened).expect("it has a page tree");
+    assert_eq!(pages.len(), 1, "one selection, one page");
+
+    // The page IS the selection: its MediaBox matches the clip's bounds, so a
+    // consumer that places the file gets the objects and no whitespace.
+    let media = pages[0].media_box;
+    let source = clip.bbox();
+    assert!(
+        close(media.urx - media.llx, source.max.x - source.min.x)
+            && close(media.ury - media.lly, source.max.y - source.min.y),
+        "the page must be the selection's own size: {media:?} vs {source:?}"
+    );
+}
+
+/// The exported PDF still carries the clip's own font — the export is not a
+/// picture of the selection, it is the selection.
+#[test]
+fn an_exported_pdf_carries_the_clips_resources() {
+    let doc = Document::from_bytes(pdf_with_font(MIXED, "Times-BoldItalic")).unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[1]).unwrap();
+    let exported = clip.to_pdf();
+    let text = String::from_utf8_lossy(&exported.bytes);
+    assert!(
+        text.contains("/Times-BoldItalic"),
+        "the font must travel with the export: {text}"
+    );
+}
+
+/// The exported text extracts, which is what an interchange consumer will
+/// actually do with it.
+#[test]
+fn exported_text_is_still_text() {
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[1]).unwrap();
+    let reopened = Document::from_bytes(clip.to_pdf().bytes).expect("it reopens");
+    let text = pdfce_core::text_extract::extract_document(
+        &reopened,
+        &pdfce_core::text_extract::ExtractOptions::default(),
+    )
+    .expect("extraction runs");
+    let all: String = text
+        .pages
+        .iter()
+        .flat_map(|p| p.runs.iter())
+        .map(|r| r.text.as_str())
+        .collect();
+    assert!(
+        all.contains("hi"),
+        "the copied run must still be text: {all:?}"
+    );
+}
+
+/// ★ **A degenerate selection gets a minimum page size, and SAYS SO.**
+///
+/// A zero-area `/MediaBox` is not merely ugly — a reader given one shows an
+/// empty window or refuses the file, and an operator who copied a zero-height
+/// rule and got back a document that will not open has no way to tell which
+/// step failed. So the substitution happens and is disclosed.
+#[test]
+fn a_degenerate_selection_gets_a_minimum_page_and_discloses_it() {
+    // A horizontal rule: real width, zero height.
+    let doc = Document::from_bytes(pdf("10 10 m 110 10 l S")).unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[0]).unwrap();
+    let exported = clip.to_pdf();
+    assert!(
+        exported.size_substituted,
+        "a zero-height selection must report the substitution: {exported:?}"
+    );
+    assert!(exported.size.1 > 0.0, "and the page must have real extent");
+    assert!(
+        Document::from_bytes(exported.bytes).is_ok(),
+        "the substituted page must still open"
+    );
+}
+
+/// Two exports of the same clip are **byte-identical** — no clock is
+/// involved, so a shell can cache one.
+#[test]
+fn exporting_twice_is_byte_identical() {
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[0, 1]).unwrap();
+    assert_eq!(clip.to_pdf().bytes, clip.to_pdf().bytes);
+}
+
+/// ★ The export and the private format are **not** interchangeable, and the
+/// asymmetry is the reason both exist.
+///
+/// `from_bytes` refuses a PDF by name rather than half-parsing it. Pinned so
+/// that a future "simplify these two into one" cannot pass quietly.
+#[test]
+fn the_pdf_export_is_not_a_clip_payload_and_is_refused_as_one() {
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[0]).unwrap();
+    let err = pdfce_core::vector::ObjectClip::from_bytes(&clip.to_pdf().bytes)
+        .expect_err("a PDF is not a clip payload");
+    assert!(
+        err.to_string().contains("not a pdfce clipboard payload"),
+        "{err}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// ★★ The prelude — inherited graphics state (Pass 120.2's real-file finding)
+// ---------------------------------------------------------------------------
+
+/// ★★ **A text object whose `Tf` is OUTSIDE its own `BT`…`ET` still pastes
+/// with a font.**
+///
+/// Text state is graphics state (§8.4.1 Table 52), so a producer may set
+/// `/F1 12 Tf` **once** and emit many `BT`…`ET` blocks that inherit it. A text
+/// object's byte span is its `BT`…`ET`, so **the `Tf` is not in it** — and the
+/// first cut of this Pass therefore recorded no font binding and pasted
+/// content that showed text with no font selected at all.
+///
+/// **Found on the operator's real CAD drawing, not here.** pdfce's own
+/// extractor said it about the export: *"a show operator appeared with no font
+/// selected (§9.4.1 requires Tf first)"*, `chars=0 codes=4 failed=4`. Nothing
+/// errored at copy or at paste. The fixture below is that file in miniature.
+#[test]
+fn a_text_object_that_inherits_its_font_still_carries_one() {
+    // `Tf` BEFORE `BT` — legal, common, and what a CAD exporter writes.
+    let doc = Document::from_bytes(pdf_with_font(
+        "/F1 12 Tf\nBT 20 20 Td (hi) Tj ET",
+        "Times-BoldItalic",
+    ))
+    .unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[0]).expect("copy the text");
+
+    assert_eq!(
+        clip.resource_count(),
+        1,
+        "the inherited font must travel with the clip: {clip:?}"
+    );
+    assert!(
+        !clip.items[0].prelude.is_empty(),
+        "the inherited state must be recorded as a prelude"
+    );
+
+    // The export is the strongest check available: pdfce's own extractor is
+    // the thing that diagnosed the original defect, so asking it again is
+    // asking the same question that failed.
+    let reopened = Document::from_bytes(clip.to_pdf().bytes).expect("the export reopens");
+    let text = pdfce_core::text_extract::extract_document(
+        &reopened,
+        &pdfce_core::text_extract::ExtractOptions::default(),
+    )
+    .expect("extraction runs");
+    let all: String = text
+        .pages
+        .iter()
+        .flat_map(|p| p.runs.iter())
+        .map(|r| r.text.as_str())
+        .collect();
+    assert!(
+        all.contains("hi"),
+        "the exported text must be readable, not fontless: {all:?}"
+    );
+}
+
+/// The same fix on the PASTE path, not only the export path.
+///
+/// Pinned separately because the two emit their content in different
+/// functions, and "it works in the export" is exactly the reasoning that would
+/// let one of a pair ship without it.
+#[test]
+fn an_inherited_font_survives_a_paste_too() {
+    let source = Document::from_bytes(pdf_with_font(
+        "/F1 12 Tf\nBT 20 20 Td (hi) Tj ET",
+        "Times-BoldItalic",
+    ))
+    .unwrap();
+    let session_a = EditSession::new(source);
+    let clip = session_a.copy_objects(0, &[0]).unwrap();
+
+    let destination = Document::from_bytes(pdf_with_font("0 0 5 5 re f", "Courier")).unwrap();
+    let mut session = EditSession::new(destination);
+    session.paste_objects(0, &clip, Matrix::IDENTITY).unwrap();
+    let text = saved(&session);
+    assert!(
+        text.contains("/Times-BoldItalic"),
+        "the inherited font must arrive: {text}"
+    );
+    assert!(
+        text.contains(" Tf"),
+        "and a Tf must be emitted for it: {text}"
+    );
+}
+
+/// A path stroked under an inherited colour and line width carries them too —
+/// the same class as the font, one object kind over.
+///
+/// Without this a copied line pastes **black and hairline** regardless of what
+/// the source drew, which is the failure mode that looks like a rendering bug
+/// rather than like a clipboard bug.
+#[test]
+fn a_path_carries_the_colour_and_width_it_inherited() {
+    let doc = Document::from_bytes(pdf("0.9 0.1 0.1 RG 4 w\n10 10 m 110 10 l S")).unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[0]).unwrap();
+    let prelude = String::from_utf8_lossy(&clip.items[0].prelude).into_owned();
+    assert!(
+        prelude.contains("RG"),
+        "the stroke colour must be re-established: {prelude:?}"
+    );
+    assert!(
+        prelude.contains(" w"),
+        "and so must the line width: {prelude:?}"
+    );
+}
+
+/// An object that sets its own state gets **no** prelude for it — the prelude
+/// re-establishes what was inherited, never what the object already says.
+///
+/// Without this the paste would double-set, which is harmless but noisy, and
+/// the noise is what a reader of the output would have to rule out first.
+#[test]
+fn an_object_that_sets_its_own_state_gets_no_prelude_for_it() {
+    let doc = Document::from_bytes(pdf("BT /F1 12 Tf 20 20 Td (hi) Tj ET")).unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[0]).unwrap();
+    let prelude = String::from_utf8_lossy(&clip.items[0].prelude).into_owned();
+    assert!(
+        !prelude.contains("Tf"),
+        "the object's own Tf is in its bytes; the prelude must not repeat it: {prelude:?}"
+    );
+}
+
+/// The prelude survives serialisation — it is part of the payload, not a
+/// derived value the parse side could recompute.
+#[test]
+fn the_prelude_round_trips_through_serialisation() {
+    let doc = Document::from_bytes(pdf_with_font(
+        "/F1 12 Tf\nBT 20 20 Td (hi) Tj ET",
+        "Times-BoldItalic",
+    ))
+    .unwrap();
+    let session = EditSession::new(doc);
+    let clip = session.copy_objects(0, &[0]).unwrap();
+    let parsed =
+        pdfce_core::vector::ObjectClip::from_bytes(&clip.to_bytes()).expect("it parses back");
+    assert_eq!(parsed.items[0].prelude, clip.items[0].prelude);
+    assert_eq!(parsed, clip);
+}
+
+// ---------------------------------------------------------------------------
+// Annotations on the clipboard — Pass 120.4
+// ---------------------------------------------------------------------------
+
+/// ★ **A markup annotation copies and pastes, and it round-trips through
+/// pdfce's OWN MODEL rather than through the object graph.**
+///
+/// A raw dictionary copy would be structurally right and semantically wrong:
+/// the appearance stream would arrive as-is rather than being re-baked for the
+/// destination. Going through `MarkupSpec` means `add_markup` authors it in
+/// the destination exactly as if the operator had drawn it there.
+#[test]
+fn a_markup_annotation_copies_and_pastes() {
+    use pdfce_core::annot_author::{Color, MarkupSpec};
+    use pdfce_core::page_tree::Rect;
+
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let mut source = EditSession::new(doc);
+    source
+        .add_markup(
+            0,
+            &MarkupSpec::Square {
+                rect: Rect {
+                    llx: 10.0,
+                    lly: 10.0,
+                    urx: 60.0,
+                    ury: 40.0,
+                },
+                border: Some(Color::Rgb(1.0, 0.0, 0.0)),
+                interior: None,
+                border_width: 2.0,
+                border_effect: None,
+            },
+        )
+        .expect("author a square");
+
+    let clip = source.copy_annotations(0, &[0]).expect("copy it");
+    assert_eq!(clip.annotation_count(), 1);
+    assert_eq!(clip.annotations[0].label(), "markup");
+
+    let destination = Document::from_bytes(pdf("0 0 5 5 re f")).unwrap();
+    let mut session = EditSession::new(destination);
+    let outcome = session
+        .paste_objects(0, &clip, Matrix::translate(100.0, 0.0))
+        .expect("paste it");
+    assert_eq!(outcome.annotations_pasted, 1);
+
+    // It arrived MOVED: the source rect started at x=10, so a 100-point
+    // offset must put it at 110.
+    let reopened = Document::from_bytes(saved(&session).into_bytes()).expect("reopens");
+    let pages = pdfce_core::page_tree::pages(&reopened).unwrap();
+    let annots = pdfce_core::annot::page_annotations(&reopened, pages[0].id);
+    let square = annots
+        .iter()
+        .find(|a| a.subtype == b"Square")
+        .expect("the pasted square is there");
+    let rect = square.rect.expect("it has a /Rect");
+    assert!(
+        close(rect.llx, 110.0),
+        "the paste offset must move the annotation: {rect:?}"
+    );
+}
+
+/// ★★ **A ce dimension keeps its GROUP and its scale across a paste into
+/// another document.**
+///
+/// This is the reason a raw graph copy was never going to be enough. A ce
+/// dimension's measurement comes from its group's scale and unit, which live
+/// in a `/PieceInfo` sidecar — not in the annotation. Copying the dictionary
+/// alone would paste an outline whose printed number means nothing in the
+/// destination.
+///
+/// The group is matched **by name**, because a `GroupId` means nothing in
+/// another document.
+#[test]
+fn a_ce_dimension_carries_its_group_across_documents() {
+    use pdfce_core::dimension::{DimensionKind, Unit};
+    use pdfce_core::vector::AxisConstraint;
+    use pdfce_core::vector::Point as VPoint;
+
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let mut source = EditSession::new(doc);
+    let group = source
+        .add_dimension_group("Site plan", Unit::Millimeter)
+        .expect("a group");
+    source
+        .add_dimension(
+            0,
+            group,
+            DimensionKind::Linear {
+                a: VPoint::new(10.0, 10.0),
+                b: VPoint::new(110.0, 10.0),
+                constraint: AxisConstraint::Horizontal,
+                offset: 12.0,
+                text_along: 0.5,
+            },
+        )
+        .expect("author a ce dimension");
+
+    let copied = source.copy_annotations(0, &[0]).expect("copy it");
+    assert_eq!(copied.annotation_count(), 1);
+    assert_eq!(
+        copied.annotations[0].label(),
+        "ce dimension",
+        "a ce dimension must NOT be classified as plain markup -- it is a /Line by subtype, which is exactly the R204 trap"
+    );
+
+    let destination = Document::from_bytes(pdf("0 0 5 5 re f")).unwrap();
+    let mut session = EditSession::new(destination);
+    let outcome = session
+        .paste_objects(0, &copied, Matrix::IDENTITY)
+        .expect("paste it");
+    assert_eq!(outcome.annotations_pasted, 1);
+
+    // The GROUP arrived, by name and unit -- which is what makes the pasted
+    // dimension measure the same thing it measured at home.
+    let model = session.dimension_model();
+    let landed = model
+        .groups()
+        .iter()
+        .find(|g| g.name == "Site plan")
+        .expect("the group was recreated in the destination");
+    assert_eq!(landed.unit(), Unit::Millimeter);
+    assert_eq!(model.dimensions().len(), 1);
+}
+
+/// An unsupported annotation kind is **refused by name, with the reason**, and
+/// is not counted as pasted.
+///
+/// ★ Note what changed for this to be possible at all: the original
+/// acceptance criteria said "refuse loudly", written before `120.0` shipped —
+/// and once copy addressed content objects by paint-order index, there was no
+/// index by which those verbs could even *name* an annotation to refuse it.
+/// This address space is what gives the refusal somewhere to live.
+#[test]
+fn an_unsupported_annotation_is_refused_by_name_and_not_counted() {
+    use pdfce_core::vector::ClipAnnotation;
+
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let mut session = EditSession::new(doc);
+    let mut clip = session.copy_objects(0, &[]).unwrap();
+    clip.annotations.push(ClipAnnotation::Unsupported {
+        subtype: "Widget".to_owned(),
+    });
+    assert_eq!(clip.annotation_count(), 1);
+
+    let outcome = session
+        .paste_objects(0, &clip, Matrix::IDENTITY)
+        .expect("the paste succeeds; the widget is skipped");
+    assert_eq!(
+        outcome.annotations_pasted, 0,
+        "an unpasted annotation must not be counted as pasted"
+    );
+    let disclosed = outcome.disclosures.join(" ");
+    assert!(
+        disclosed.contains("Widget") && disclosed.contains("AcroForm"),
+        "the refusal must name the kind AND the reason: {disclosed}"
+    );
+}
+
+/// A rotated `Square` **encloses** rather than refusing, and says so.
+///
+/// `/Rect` is axis-aligned by definition (§12.5.2), so a rotated rectangle has
+/// no spelling — the same shape as `re` in `Pass 113.0`. Enclosing is the only
+/// thing the format admits, so this is not pdfce choosing between two
+/// renderings; it is pdfce doing the one available and disclosing it.
+#[test]
+fn a_rotated_square_annotation_encloses_and_discloses() {
+    use pdfce_core::annot_author::{Color, MarkupSpec};
+    use pdfce_core::page_tree::Rect;
+
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let mut session = EditSession::new(doc);
+    session
+        .add_markup(
+            0,
+            &MarkupSpec::Square {
+                rect: Rect {
+                    llx: 0.0,
+                    lly: 0.0,
+                    urx: 100.0,
+                    ury: 10.0,
+                },
+                border: Some(Color::Rgb(0.0, 0.0, 1.0)),
+                interior: None,
+                border_width: 1.0,
+                border_effect: None,
+            },
+        )
+        .unwrap();
+    let clip = session.copy_annotations(0, &[0]).unwrap();
+
+    let quarter = Matrix::rotate(std::f64::consts::FRAC_PI_2).about(Point::new(0.0, 0.0));
+    let outcome = session.paste_objects(0, &clip, quarter).expect("it pastes");
+    assert_eq!(outcome.annotations_pasted, 1, "it is placed, not refused");
+    let disclosed = outcome.disclosures.join(" ");
+    assert!(
+        disclosed.contains("cannot express a rotation"),
+        "the compromise must be disclosed: {disclosed}"
+    );
+}
+
+/// ★ **`to_bytes` does not carry annotations, and the clip SAYS SO** rather
+/// than letting a caller discover it from a count that silently drops.
+///
+/// A shell writing a clip to disk can warn, or keep the in-process copy. The
+/// alternative — a serialised clip that quietly loses the operator's comments
+/// — is the kind of data loss that is only noticed later.
+#[test]
+fn a_clip_says_whether_serialisation_would_lose_anything() {
+    use pdfce_core::annot_author::{Color, MarkupSpec};
+    use pdfce_core::page_tree::Rect;
+
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let mut session = EditSession::new(doc);
+    let content_only = session.copy_objects(0, &[0]).unwrap();
+    assert!(
+        content_only.annotations_survive_serialisation(),
+        "a content-only clip serialises completely"
+    );
+
+    session
+        .add_markup(
+            0,
+            &MarkupSpec::Square {
+                rect: Rect {
+                    llx: 1.0,
+                    lly: 1.0,
+                    urx: 2.0,
+                    ury: 2.0,
+                },
+                border: Some(Color::Rgb(0.0, 0.0, 0.0)),
+                interior: None,
+                border_width: 1.0,
+                border_effect: None,
+            },
+        )
+        .unwrap();
+    let with_annots = session.copy_annotations(0, &[0]).unwrap();
+    assert!(
+        !with_annots.annotations_survive_serialisation(),
+        "a clip holding annotations must say that to_bytes would drop them"
+    );
+    let parsed =
+        pdfce_core::vector::ObjectClip::from_bytes(&with_annots.to_bytes()).expect("it parses");
+    assert_eq!(
+        parsed.annotation_count(),
+        0,
+        "and the drop is real, not merely warned about"
+    );
+}
+
+/// `copy_selection` takes both address spaces in one call — the verb a shell
+/// calls when a marquee caught content and a comment, which on a marked-up
+/// drawing is the ordinary case.
+#[test]
+fn copy_selection_takes_both_address_spaces_at_once() {
+    use pdfce_core::annot_author::{Color, MarkupSpec};
+    use pdfce_core::page_tree::Rect;
+
+    let doc = Document::from_bytes(pdf(MIXED)).unwrap();
+    let mut session = EditSession::new(doc);
+    session
+        .add_markup(
+            0,
+            &MarkupSpec::Square {
+                rect: Rect {
+                    llx: 1.0,
+                    lly: 1.0,
+                    urx: 2.0,
+                    ury: 2.0,
+                },
+                border: Some(Color::Rgb(0.0, 0.0, 0.0)),
+                interior: None,
+                border_width: 1.0,
+                border_effect: None,
+            },
+        )
+        .unwrap();
+
+    let clip = session
+        .copy_selection(0, &[0, 1], &[0])
+        .expect("both at once");
+    assert_eq!(clip.len(), 2, "two content objects");
+    assert_eq!(clip.annotation_count(), 1, "and one annotation");
+    // The bbox spans both address spaces, which is what a paste outline needs.
+    assert!(clip.bbox().min.x <= 1.0);
+}
