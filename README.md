@@ -45,11 +45,29 @@ list with per-surface (core / CLI / GUI) checkboxes, updated whenever a
 feature lands rather than at release time. Read that before assuming
 anything here is complete.
 
-The current release is
-**[v0.3.0](https://github.com/KenM76/pdfce/releases/latest)** — a
-single-folder portable build for Windows x64. No installer, no registry
-writes: unzip it and run `pdfce-gui.exe`, or `pdfce-cli.exe` for the
-scriptable side.
+The **[latest release](https://github.com/KenM76/pdfce/releases/latest)**
+is a single-folder portable build for Windows x64. No installer, no
+registry writes: unzip it and run `pdfce-gui.exe`, or `pdfce-cli.exe` for
+the scriptable side.
+
+<!--
+  ★ THE VERSION NUMBER IS DELIBERATELY NOT WRITTEN HERE.
+
+  It used to be, and it said "v0.3.0" through v0.4.0, v0.5.x, v0.6.0 and
+  v0.7.0 — FOUR releases, on a public repository, as the first concrete
+  claim a stranger reads.
+
+  It survived every review for one reason worth keeping: the LINK was
+  always `/releases/latest`, so clicking it went somewhere correct and
+  only the LABEL lied. A wrong claim next to a right link reads as a
+  right claim.
+
+  So the label is gone rather than corrected. A number that must be
+  updated by hand at a moment nobody is editing this file is a number
+  that will be stale again, and "remember to update the README" is a
+  reminder rather than a remedy. The link already carries the answer and
+  cannot go stale by construction.
+-->
 
 ## Privacy, platform and signing
 

@@ -508,6 +508,53 @@ pub struct Diagnostics {
     /// `ColorSpace::indexed_entry` is correct, cited, and **inert on the
     /// whole corpus** until this number can go down.
     pub overprint_images_unsupported: usize,
+    /// Transparency groups (and the page itself) whose **blending colour
+    /// space is SUBTRACTIVE** — `DeviceCMYK`, `Separation`, `DeviceN`, or
+    /// a four-component `ICCBased` resolving to one (§11.3.4).
+    ///
+    /// # Why this is counted before it is honoured
+    ///
+    /// Because it is the size of a gap that is otherwise invisible.
+    /// §11.3.4 requires a subtractive space's components to be
+    /// **complemented before the blend function and complemented back
+    /// after it**; pdfce blends in device sRGB throughout, so every blend
+    /// inside one of these groups is computed on the wrong side of that
+    /// switch. The marks land in the right places and the picture is
+    /// plausible — which is precisely why a counter is the only way to see
+    /// it.
+    ///
+    /// **It is not a small class.** Every patch in the Ghent transparency
+    /// panel declares `/Group /CS /DeviceCMYK` on the PAGE, including the
+    /// one whose own objects are `ICCBased` RGB, because a non-isolated
+    /// group inherits its blending space rather than choosing one
+    /// (Table 147's `/CS` row).
+    ///
+    /// Zero means every group on the page blends additively and pdfce's
+    /// answer is the standard's answer. Non-zero means it is not, and
+    /// [`Self::blends_in_wrong_space`] says how often that mattered.
+    pub blend_space_subtractive: usize,
+    /// Blend-mode applications performed **additively while the blending
+    /// colour space was subtractive** — §11.3.4 violations, counted where
+    /// they happen.
+    ///
+    /// # Why this is separate from [`Self::blend_space_subtractive`]
+    ///
+    /// Because a subtractive blending space with nothing but `Normal`
+    /// inside it is **not** wrong: §11.3.4's complement is applied to the
+    /// blend function, and `Normal` is `c_s` on either side of it
+    /// (`1 − (1 − c_s) = c_s`). A page can be entirely `DeviceCMYK` and
+    /// entirely correct.
+    ///
+    /// So this is the number that says a rendering is actually affected,
+    /// and the pair reads as *"N groups are in the risky space, and M
+    /// blends inside them were computed the wrong way"*. Reporting only
+    /// the first would overstate; only the second would hide the exposure.
+    ///
+    /// The worked case is Ghent `1_GWG162`'s `Difference` cell: magenta
+    /// under black gives `DeviceCMYK 1 0 1 0` — the green the patch is
+    /// authored around — under §11.3.4, and `(237, 1, 140)` without it.
+    /// `Pass 97.1`'s colorant buffer is the fix; this counts what it owes.
+    pub blends_in_wrong_space: usize,
     /// Pixels whose value the overprint composites actually changed.
     ///
     /// The measurement that distinguishes "overprint ran and mattered" from
@@ -1172,6 +1219,8 @@ polarity unverifiable (decision 006 R30)",
         self.nonseparable_pixels += other.nonseparable_pixels;
         self.overprint_refused += other.overprint_refused;
         self.overprint_images_unsupported += other.overprint_images_unsupported;
+        self.blend_space_subtractive += other.blend_space_subtractive;
+        self.blends_in_wrong_space += other.blends_in_wrong_space;
         self.overprint_pixels += other.overprint_pixels;
         self.overprint_mode1_requested += other.overprint_mode1_requested;
         self.transparency_groups_composited += other.transparency_groups_composited;
@@ -1308,7 +1357,55 @@ pub fn run(
         &mut Canvas::paint(pixmap),
         cancel,
         policy,
+        // This entry point is handed a bare content stream and no page, so
+        // there is no `/Group /CS` to read. Additive is 11.4.7's own answer
+        // for an RGBA8 output device, not a shrug.
+        crate::compositor::BlendSpace::Additive,
     )
+}
+
+/// §11.4.7 / §11.3.4 — the **page's** blending colour space.
+///
+/// A page is a transparency group (§11.4.7: *"all of the elements painted
+/// directly onto a page … shall be treated as if they were contained in a
+/// transparency group P"*), so it has a blending colour space, and every
+/// element on it — including every non-isolated group inside it, which
+/// **inherits** rather than choosing (Table 147's `/CS` row) — composites
+/// in that space.
+///
+/// # Why this is the number that matters
+///
+/// **Every patch in the Ghent transparency panel declares
+/// `/Group /CS /DeviceCMYK` here**, including the one whose own objects
+/// are `ICCBased` RGB. So the space is subtractive for all of them
+/// regardless of what the artwork is coloured in, and §11.3.4's complement
+/// governs every blend on the page. That is why the transparency panels
+/// could not be fixed by the group model alone.
+///
+/// # The default, and why it is `Additive` rather than a guess
+///
+/// §11.4.7 says an unspecified page group colour space *"shall be
+/// inherited from the native colour space of the output device"*. pdfce's
+/// output device is an `RGBA8` pixmap, so `Additive` is not a fallback
+/// here — it is the clause's own answer for this renderer. A file that
+/// says nothing gets the right answer, not a shrug.
+pub(crate) fn page_blend_space(
+    doc: &DocumentView<'_>,
+    page_id: ObjId,
+    resources: &Dict,
+    diag: &mut crate::color::ColorDiagnostics,
+) -> crate::compositor::BlendSpace {
+    let Some(dict) = doc.value(page_id).and_then(Object::as_dict) else {
+        return crate::compositor::BlendSpace::Additive;
+    };
+    dict.get(b"Group")
+        .map(|o| doc.resolve(o))
+        .and_then(Object::as_dict)
+        .and_then(|g| g.get(b"CS"))
+        .and_then(|cs| crate::color::resolve_object(doc, doc.resolve(cs), resources, 0, diag))
+        .map_or(crate::compositor::BlendSpace::Additive, |sp| {
+            crate::compositor::BlendSpace::of(&sp)
+        })
 }
 
 /// [`run`], against an arbitrary drawing target rather than a pixmap.
@@ -1333,6 +1430,11 @@ pub(crate) fn run_on(
     canvas: &mut Canvas<'_>,
     cancel: Option<&RenderCancel>,
     policy: RenderPolicy<'_>,
+    // §11.4.7 makes the PAGE a transparency group, and §11.3.4 makes its
+    // `/CS` the blending colour space every element on the page composites
+    // in. Read from the page dictionary by the caller, because this
+    // function is handed a content stream and never sees one.
+    blend_space: crate::compositor::BlendSpace,
 ) -> Diagnostics {
     run_nested(
         doc,
@@ -1348,6 +1450,7 @@ pub(crate) fn run_on(
         // A page's own content stream has nothing above it to inherit
         // hiddenness from; `/OC` sections inside it start the stack.
         false,
+        blend_space,
     )
 }
 
@@ -1433,6 +1536,11 @@ pub fn trace_paths(
         base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
+        // Geometry only — `trace_paths` records paths and
+        // composites nothing, so §11.3.4 cannot apply. Additive
+        // is the value that changes no behaviour rather than a
+        // claim about the document.
+        blend_space: crate::compositor::BlendSpace::Additive,
         path: PathBuilder::new(),
         path_ctm: None,
         current: None,
@@ -1495,6 +1603,11 @@ fn run_nested(
     // and structural oddities are still counted; a form that vanishes
     // from the diagnostics is a form nobody can tell was there.
     hidden: bool,
+    // §11.3.4's blending colour space for THIS stream — see
+    // `Interpreter::blend_space`. Passed rather than derived because it is
+    // decided at the group boundary the caller owns, and a callee that
+    // re-derived it would have to re-read the isolation rule.
+    blend_space: crate::compositor::BlendSpace,
 ) -> Diagnostics {
     // §8.7.2 PM3/PM5: pattern space anchors to this stream's DEFAULT
     // coordinate system, not to the CTM where the fill occurs. Captured
@@ -1505,6 +1618,7 @@ fn run_nested(
         base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
+        blend_space,
         path: PathBuilder::new(),
         path_ctm: None,
         current: None,
@@ -1641,6 +1755,14 @@ pub(crate) fn run_form_at_on(
         base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
+        // §12.5.5: an appearance stream with no `/Group` is a
+        // NON-ISOLATED group, and a non-isolated group INHERITS
+        // its blending space (Table 147's `/CS` row). This entry
+        // point is handed no parent to inherit from, so it takes
+        // the value that changes nothing. Threading the page's
+        // space in here is owed when annotations composite in
+        // ink rather than on screen.
+        blend_space: crate::compositor::BlendSpace::Additive,
         path: PathBuilder::new(),
         path_ctm: None,
         current: None,
@@ -1679,6 +1801,24 @@ struct Interpreter<'a> {
     base_ctm: Transform,
     gs: GStateStack,
     diag: Diagnostics,
+    /// §11.3.4's **blending colour space**, for the group this stream is
+    /// the contents of.
+    ///
+    /// On the interpreter rather than on [`GraphicsState`] deliberately:
+    /// it is a property of the GROUP NESTING, not of the graphics state,
+    /// and `q`/`Q` must not be able to change it. A group establishes one
+    /// at its boundary and every element inside it blends in that space
+    /// until the next boundary.
+    ///
+    /// Inherited, not chosen, unless the group is isolated — Table 147's
+    /// `/CS` row: *"if the group is non-isolated, `CS` shall be ignored
+    /// and the colour space shall be inherited"*. ISO 32000-2 states the
+    /// same rule from the other side in §11.6.6 (*"non-isolated groups
+    /// shall inherit their colour space from the nearest ancestor isolated
+    /// parent group"*), and cites the reason: converting the backdrop into
+    /// a different space is not always possible, and would be an excessive
+    /// number of conversions where it is.
+    blend_space: crate::compositor::BlendSpace,
     /// The path under construction, in USER space (module docs).
     path: PathBuilder,
     /// CTM captured at the path's first construction op.
@@ -2827,6 +2967,15 @@ impl Interpreter<'_> {
                     // Left at `SourceOver` on purpose — see the field docs.
                     self.gs.current.blend_mode = tiny_skia::BlendMode::SourceOver;
                     self.diag.blend_modes_applied += 1;
+                    // §11.3.5.3 makes these FOUR worse than the separable
+                    // ones in a subtractive space, not merely different:
+                    // K is SELECTED rather than blended, from the backdrop
+                    // for Hue/Saturation/Color and from the source for
+                    // Luminosity. Computed additively they blend all four
+                    // channels, which is plausible and non-conforming.
+                    if self.blend_space.is_subtractive() {
+                        self.diag.blends_in_wrong_space += 1;
+                    }
                 } else {
                     self.gs.current.nonseparable = None;
                     match crate::gstate::blend_mode_from_name(&name) {
@@ -2839,6 +2988,16 @@ impl Interpreter<'_> {
                             // every reader to ignore the counter.
                             if mode != tiny_skia::BlendMode::SourceOver {
                                 self.diag.blend_modes_applied += 1;
+                                // §11.3.4: a non-`Normal` mode selected
+                                // while the blending space is subtractive
+                                // will be computed on the wrong side of
+                                // the complement. `Normal` is deliberately
+                                // NOT counted — it is `c_s` in either
+                                // space, so a `DeviceCMYK` page that only
+                                // ever composites Normal is correct.
+                                if self.blend_space.is_subtractive() {
+                                    self.diag.blends_in_wrong_space += 1;
+                                }
                             }
                         }
                         None => {
@@ -3488,6 +3647,30 @@ impl Interpreter<'_> {
             None => self.resources,
         };
 
+        // §11.6.5 / Table 147: a luminosity mask group's `/CS` is
+        // **Required**, precisely because such a group is rootless — it
+        // does NOT inherit the page's blending space, and making it do so
+        // "for consistency" is a named error. So the space is read from
+        // the mask group's own dictionary, and a mask group missing `/CS`
+        // (already counted above) falls to additive, which is what pdfce
+        // does everywhere today.
+        let mask_space = g_dict
+            .get(b"Group")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .and_then(|g| g.get(b"CS"))
+            .and_then(|cs| {
+                crate::color::resolve_object(
+                    doc,
+                    doc.resolve(cs),
+                    resources,
+                    0,
+                    &mut self.diag.color,
+                )
+            })
+            .map_or(crate::compositor::BlendSpace::Additive, |sp| {
+                crate::compositor::BlendSpace::of(&sp)
+            });
         let nested = run_nested(
             doc,
             &content,
@@ -3506,6 +3689,7 @@ impl Interpreter<'_> {
             self.cancel,
             self.policy,
             false,
+            mask_space,
         );
         self.diag.merge(nested);
         Self::mask_from_buffer(&buf, luminosity, canvas)
@@ -4471,6 +4655,52 @@ impl Interpreter<'_> {
             self.diag.transparency_groups_special += 1;
         }
 
+        // §11.3.4 / Table 147 — THE GROUP'S BLENDING COLOUR SPACE.
+        //
+        // Table 147's `/CS` row is the whole rule, and its second half is
+        // the one an implementation skips: *"if the group is NON-ISOLATED,
+        // `CS` shall be IGNORED and the colour space shall be inherited
+        // from the group's parent"*. ISO 32000-2 §11.6.6 states it from
+        // the other side — *"non-isolated groups shall inherit their
+        // colour space from the nearest ancestor isolated parent group"* —
+        // and gives the reason: converting the backdrop into a different
+        // space is not always possible (some conversions run one way
+        // only), and would be an excessive number of conversions where it
+        // is.
+        //
+        // ★ Which is why every Ghent transparency patch blends in
+        // `DeviceCMYK` even though one of them draws in `ICCBased` RGB:
+        // the declaration is on the PAGE group, and the cell groups either
+        // inherit it or restate it.
+        //
+        // A group that is not a transparency group is not a compositing
+        // scope at all and changes nothing.
+        let group_space = if is_transparency_group {
+            let declared = group_flag(b"I")
+                .then(|| {
+                    group_dict
+                        .and_then(|g| g.get(b"CS"))
+                        .and_then(|cs| {
+                            crate::color::resolve_object(
+                                doc,
+                                doc.resolve(cs),
+                                form_resources,
+                                0,
+                                &mut self.diag.color,
+                            )
+                        })
+                        .map(|sp| crate::compositor::BlendSpace::of(&sp))
+                })
+                .flatten();
+            let space = declared.unwrap_or(self.blend_space);
+            if space.is_subtractive() {
+                self.diag.blend_space_subtractive += 1;
+            }
+            space
+        } else {
+            self.blend_space
+        };
+
         let mut active = self.active.clone();
         if let Some(id) = id {
             active.push(id);
@@ -4601,6 +4831,7 @@ impl Interpreter<'_> {
                         cancel,
                         policy,
                         hidden_here,
+                        group_space,
                     );
                     // "Did anything inside this group need to read what was
                     // underneath it?" — §11.4.4 NOTE 2's condition, answered
@@ -4658,6 +4889,7 @@ impl Interpreter<'_> {
                     cancel,
                     policy,
                     hidden_here,
+                    group_space,
                 );
                 self.diag.merge(nested);
                 if needs_buffer {

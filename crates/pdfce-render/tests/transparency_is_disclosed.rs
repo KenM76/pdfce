@@ -668,6 +668,141 @@ fn a_soft_mask_applies_to_the_group_result_not_to_each_object_inside_it() {
     );
 }
 
+/// ★ **§11.3.4 / Table 147 — the blending colour space is INHERITED by a
+/// non-isolated group and CHOSEN by an isolated one, and the difference
+/// is what makes the whole Ghent transparency panel subtractive.**
+///
+/// Table 147's `/CS` row: *"if the group is non-isolated, `CS` shall be
+/// ignored and the colour space shall be inherited from the group's
+/// parent"*. ISO 32000-2 §11.6.6 says it from the other side —
+/// *"non-isolated groups shall inherit their colour space from the
+/// nearest ancestor isolated parent group"* — and gives the reason:
+/// converting the backdrop into another space is not always possible, and
+/// would be an excessive number of conversions where it is.
+///
+/// So a `DeviceCMYK` **page** group makes every non-isolated group on the
+/// page subtractive whatever those groups declare, and that is exactly the
+/// shape of `3_GWG161`: `ICCBased` RGB artwork, `DeviceCMYK` page group,
+/// and all fifteen of its blends computed on the wrong side of §11.3.4.
+///
+/// Four cases in one test because the interesting ones are the pairs:
+/// declaring RGB while non-isolated must **not** escape a CMYK page, and
+/// declaring CMYK while isolated must **not** need a CMYK page.
+#[test]
+fn the_blending_space_is_inherited_unless_the_group_is_isolated() {
+    fn subtractive_count(page_cs: &str, group_extra: &str) -> usize {
+        // One `/BM /Multiply` inside the group, so `blends_in_wrong_space`
+        // has something to count as well.
+        let form_body = "/GS1 gs 0 g 10 10 30 30 re f";
+        let form = format!(
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 60 60] {group_extra} \
+             /Resources << /ExtGState << /GS1 << /Type /ExtGState /BM /Multiply >> >> >> \
+             /Length {} >>\nstream\n{form_body}\nendstream",
+            form_body.len()
+        );
+        let content = "/Fm0 Do";
+        let stream = format!("{content}\n");
+        let bytes = build(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 60 60] >>",
+            ),
+            (
+                3,
+                &format!(
+                    "<< /Type /Page /Parent 2 0 R /Contents 4 0 R {page_cs} \
+                     /Resources << /XObject << /Fm0 5 0 R >> >> >>"
+                ),
+            ),
+            (
+                4,
+                &format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
+            ),
+            (5, &form),
+        ]);
+        render(bytes).diagnostics.blend_space_subtractive
+    }
+
+    // An RGB page and an RGB group: nothing subtractive anywhere.
+    assert_eq!(
+        subtractive_count(
+            "/Group << /S /Transparency /CS /DeviceRGB >>",
+            "/Group << /S /Transparency /I true /CS /DeviceRGB >>"
+        ),
+        0
+    );
+    // A CMYK page: the page counts, and the NON-isolated group inherits it
+    // — even though it declares RGB, which Table 147 says to ignore.
+    assert_eq!(
+        subtractive_count(
+            "/Group << /S /Transparency /CS /DeviceCMYK >>",
+            "/Group << /S /Transparency /CS /DeviceRGB >>"
+        ),
+        2,
+        "a non-isolated group inherits the page's CMYK space and may not \
+         escape it by declaring one of its own — Table 147's /CS row"
+    );
+    // The same CMYK page with an ISOLATED group declaring RGB: the group
+    // genuinely escapes, so only the page counts.
+    assert_eq!(
+        subtractive_count(
+            "/Group << /S /Transparency /CS /DeviceCMYK >>",
+            "/Group << /S /Transparency /I true /CS /DeviceRGB >>"
+        ),
+        1,
+        "an ISOLATED group's /CS is honoured, so it leaves the page's space"
+    );
+    // And an RGB page with an isolated CMYK group: the group alone.
+    assert_eq!(
+        subtractive_count(
+            "/Group << /S /Transparency /CS /DeviceRGB >>",
+            "/Group << /S /Transparency /I true /CS /DeviceCMYK >>"
+        ),
+        1
+    );
+}
+
+/// `Normal` inside a subtractive space is **not** a §11.3.4 violation, and
+/// this test is the reason the two counters are separate.
+///
+/// The complement is applied to the **blend function**, and `Normal` is
+/// `c_s` on either side of it: `1 − (1 − c_s) = c_s`. So a page can be
+/// entirely `DeviceCMYK`, composite hundreds of objects, and be entirely
+/// correct. Counting the space alone would report every CMYK print file in
+/// the world as broken.
+#[test]
+fn a_cmyk_page_that_only_composites_normal_is_not_counted_as_wrong() {
+    let content = "0 0 0 1 k 10 10 40 40 re f 0 1 0 0 k 20 20 30 30 re f";
+    let stream = format!("{content}\n");
+    let bytes = build(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 60 60] >>",
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+             /Group << /S /Transparency /CS /DeviceCMYK >> /Resources << >> >>",
+        ),
+        (
+            4,
+            &format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
+        ),
+    ]);
+    let d = render(bytes).diagnostics;
+    assert_eq!(
+        d.blend_space_subtractive, 1,
+        "the page group's own space is a DeviceCMYK one and is counted"
+    );
+    assert_eq!(
+        d.blends_in_wrong_space, 0,
+        "…but nothing here blends, so nothing is wrong. A page can be \
+         entirely CMYK and entirely correct."
+    );
+}
+
 /// A form with NO `/Group` is an ordinary reusable content stream and is
 /// not a compositing scope. Counting it would put a large number on
 /// ordinary documents — forms are how every producer factors repeated

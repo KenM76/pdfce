@@ -7634,7 +7634,8 @@ groups_composited={} groups_knockout_approx={} \
 overprint_requested={} overprint_opm1={} overprint_effective={} \
 overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_composited={} nonseparable_pixels={} \
 groups_backdrop_reruns={} soft_masks_on_group_result={} \
-overprint_images_unsupported={}",
+overprint_images_unsupported={} \
+blend_space_subtractive={} blends_in_wrong_space={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -7914,6 +7915,24 @@ overprint_images_unsupported={}",
         // four Ghent patches, and it is the number that has to fall before
         // the /Indexed colorant fix can be observed at all.
         d.overprint_images_unsupported,
+        // 11.3.4's blending colour space, and how often it mattered.
+        //
+        // `blend_space_subtractive` counts the page and every transparency
+        // group whose blending space is DeviceCMYK / Separation / DeviceN,
+        // or a four-component ICCBased resolving to one. It is a CENSUS,
+        // not a shortfall on its own -- a page can be entirely DeviceCMYK
+        // and entirely correct, because Normal is c_s on either side of
+        // the complement.
+        //
+        // `blends_in_wrong_space` is the shortfall: non-Normal blend modes
+        // pdfce computed ADDITIVELY inside one of those groups, where
+        // 11.3.4 requires the components complemented before the blend
+        // function and complemented back after it. Non-zero means the
+        // picture is plausible and wrong -- on Ghent 1_GWG162's Difference
+        // cell the two answers are green and magenta. Pass 97.1's colorant
+        // buffer is the fix.
+        d.blend_space_subtractive,
+        d.blends_in_wrong_space,
     );
     report_diagnostics(d);
 

@@ -697,6 +697,18 @@ pub fn record_page(
                 &mut canvas,
                 options.cancel.as_ref(),
                 options.policy(),
+                // §11.4.7's page group carries the blending colour
+                // space, and a RECORDING must resolve it exactly as a
+                // paint does — a display list that recorded the wrong
+                // space would replay a plausible wrong picture, which
+                // is the one outcome this module refuses everywhere
+                // else by poisoning.
+                crate::interpret::page_blend_space(
+                    doc,
+                    page.id,
+                    &page.resources,
+                    &mut Default::default(),
+                ),
             );
             diagnostics.contents_streams_unresolved = page.contents_unresolved;
             diagnostics

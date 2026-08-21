@@ -478,6 +478,19 @@ fn render_impl(
         let mut diagnostics = if scope.paints_page_content() {
             let content = ContentStream::from_page(doc, page)?;
             let initial = gstate::GraphicsState::default_with_ctm(base_ctm);
+            // §11.4.7 / §11.3.4 — THE PAGE'S BLENDING COLOUR SPACE, read
+            // before anything is painted, because every element on the page
+            // and every non-isolated group inside it composites in it.
+            //
+            // ★ This is the number the Ghent transparency panels turn on:
+            // all of them declare `/Group /CS /DeviceCMYK` here, including
+            // the one whose own objects are `ICCBased` RGB, so §11.3.4's
+            // complement governs every blend on those pages and pdfce
+            // performs none of them that way yet. Counted rather than
+            // silently ignored — `Pass 97.1`'s colorant buffer is the fix.
+            let mut colour_diag = color::ColorDiagnostics::default();
+            let page_space =
+                interpret::page_blend_space(doc, page.id, &page.resources, &mut colour_diag);
             let mut diagnostics = interpret::run_on(
                 doc,
                 &content,
@@ -487,7 +500,11 @@ fn render_impl(
                 &mut canvas,
                 options.cancel.as_ref(),
                 options.policy(),
+                page_space,
             );
+            if page_space.is_subtractive() {
+                diagnostics.blend_space_subtractive += 1;
+            }
             // Carry the page-level omission into the render diagnostics. The
             // interpreter cannot observe it — the streams it never received
             // leave no trace in the operator stream — so the count is copied

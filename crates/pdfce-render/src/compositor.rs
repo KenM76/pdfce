@@ -188,6 +188,49 @@ pub enum BlendSpace {
     Subtractive,
 }
 
+impl BlendSpace {
+    /// Which side of §11.3.4 a resolved colour space falls on.
+    ///
+    /// # The list is the clause's, not an inference
+    ///
+    /// §11.3.4 names the subtractive spaces outright — *"subtractive
+    /// colour spaces (`DeviceCMYK`, `Separation`, and `DeviceN`)"* — and
+    /// separately requires an `ICCBased` blending space to be equivalent
+    /// to one of the device families, which `crate::color` has already
+    /// resolved through its `/Alternate` by the time this sees it
+    /// (§8.6.5.5 / Table 66: the fallback is a *reinterpretation*, not a
+    /// conversion). So a four-component `ICCBased` arrives here as
+    /// `DeviceCmyk` and needs no arm of its own.
+    ///
+    /// # What is deliberately NOT subtractive
+    ///
+    /// `Indexed` — because §8.6.6.3 puts its colour values in the **base**
+    /// space, so the question belongs to the base and asking it of the
+    /// index is the same category error `ColorSpace::indexed_entry` exists
+    /// for. It recurses.
+    ///
+    /// `Lab` and `Pattern` are `Additive` here only because §11.3.4
+    /// **forbids** them as blending spaces outright (*"shall not be
+    /// used"*), so any answer is a fallback for a malformed file. Additive
+    /// is the safer fallback: it is what pdfce does today, so a bad file
+    /// changes nothing rather than inverting.
+    #[must_use]
+    pub fn of(space: &crate::color::ColorSpace) -> Self {
+        use crate::color::ColorSpace as C;
+        match space {
+            C::DeviceCmyk | C::Separation { .. } | C::DeviceN { .. } => Self::Subtractive,
+            C::Indexed { base, .. } => Self::of(base),
+            _ => Self::Additive,
+        }
+    }
+
+    /// `true` when blending here needs §11.3.4's complement.
+    #[must_use]
+    pub fn is_subtractive(self) -> bool {
+        matches!(self, Self::Subtractive)
+    }
+}
+
 impl Blend {
     /// Map a `tiny_skia::BlendMode` that `blend_mode_from_name` produced
     /// back onto this enum.
