@@ -4428,6 +4428,84 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Copy** a selection of page objects to a clipboard file (Pass 120.0/
+    /// 120.1).
+    ///
+    /// Writes a self-contained `.pdfceclip` payload carrying the copied bytes
+    /// AND every resource they reference — the font, the image, the graphics
+    /// state — so `object-paste` needs neither the source file nor this
+    /// process. That is what makes cross-document paste work.
+    ///
+    /// Reads only; the input PDF is not modified and no output PDF is written.
+    ///
+    /// `--objects` takes 0-based paint-order indices, the numbering
+    /// `object-list` prints. Add `--cut OUTPUT.pdf` to also remove them from a
+    /// copy of the input, which is cut in the one-shot shape a CLI can offer.
+    ObjectCopy {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object indices, comma-separated (`3,4,7`).
+        #[arg(long, value_name = "N,N,...")]
+        objects: String,
+        /// Where to write the clipboard payload.
+        #[arg(long, value_name = "FILE")]
+        clip: PathBuf,
+        /// Also delete the copied objects, writing the result here — cut.
+        #[arg(long, value_name = "OUTPUT.pdf")]
+        cut: Option<PathBuf>,
+        /// Save mode for `--cut`.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
+    /// **Paste** a clipboard file onto a page (Pass 120.0/120.1).
+    ///
+    /// The payload's resources are imported at fresh object numbers and bound
+    /// to fresh names, and the copied content is rewritten to use them — so a
+    /// text run copied from a Helvetica document stays Helvetica even when the
+    /// destination's own `/F1` is Courier. Pasting the bytes verbatim would
+    /// bind to the destination's font and silently render the wrong typeface.
+    ///
+    /// Placement is a page-space transform built from `--translate`,
+    /// `--scale` and `--rotate`, the same flags `object-transform` takes. With
+    /// none of them the paste lands exactly where it was copied from.
+    ///
+    /// `--preview` reports what would happen and writes nothing.
+    ObjectPaste {
+        /// Input PDF — the destination.
+        input: PathBuf,
+        /// 1-based page number to paste onto.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// The clipboard payload written by `object-copy`.
+        #[arg(long, value_name = "FILE")]
+        clip: PathBuf,
+        /// Page-space translation `DX,DY` in points.
+        #[arg(long, value_name = "DX,DY", allow_hyphen_values = true)]
+        translate: Option<String>,
+        /// Uniform or `SX,SY` scale, about the clip's own centre.
+        #[arg(long, value_name = "S|SX,SY", allow_hyphen_values = true)]
+        scale: Option<String>,
+        /// Rotation in DEGREES counter-clockwise, about the clip's own centre.
+        #[arg(long, value_name = "DEG", allow_hyphen_values = true)]
+        rotate: Option<f64>,
+        /// Plan and report WITHOUT writing anything.
+        #[arg(long)]
+        preview: bool,
+        /// Output path. Required unless `--preview`.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// **Delete** a vector object (Pass 9c-min, decision 011 §2.5): remove an
     /// object's construction + painting operators from the content stream via
     /// surgery (R46/§5.7). Works on any object kind (path/text/image). NOT
@@ -6598,6 +6676,37 @@ fn run() -> ExitCode {
             pivot: pivot.as_deref(),
             on_mixed: &on_mixed,
             on_singular: &on_singular,
+            preview,
+            output: output.as_deref(),
+            mode,
+            verify_undo,
+        }),
+        Command::ObjectCopy {
+            input,
+            page,
+            objects,
+            clip,
+            cut,
+            mode,
+        } => cmd_object_copy(&input, page, &objects, &clip, cut.as_deref(), mode),
+        Command::ObjectPaste {
+            input,
+            page,
+            clip,
+            translate,
+            scale,
+            rotate,
+            preview,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_object_paste(&ObjectPasteArgs {
+            input: &input,
+            page,
+            clip: &clip,
+            translate: translate.as_deref(),
+            scale: scale.as_deref(),
+            rotate,
             preview,
             output: output.as_deref(),
             mode,
@@ -23756,6 +23865,248 @@ fn selection_centre(
         f64::midpoint(bounds.min.x, bounds.max.x),
         f64::midpoint(bounds.min.y, bounds.max.y),
     ))
+}
+
+/// `object-copy` — write a selection to a self-contained clipboard payload
+/// (Pass 120.0/120.1), optionally cutting it from a copy of the document.
+///
+/// # Why a FILE rather than the system clipboard
+///
+/// The requesting shell asked for exactly this split: *"I am not asking you to
+/// touch the OS clipboard. That is mine. What I need from you is `to_bytes`."*
+/// A one-shot CLI has no session to hold a clip in either, so a file is the
+/// only place a payload can live between two invocations — which makes this
+/// subcommand the CLI's whole clipboard, not a debug affordance.
+fn cmd_object_copy(
+    input: &Path,
+    page: u32,
+    objects: &str,
+    clip_path: &Path,
+    cut: Option<&Path>,
+    mode: SaveMode,
+) -> u8 {
+    let page_index = (page.max(1) - 1) as usize;
+    let indices = match parse_object_indices(objects) {
+        Ok(v) if !v.is_empty() => v,
+        Ok(_) => {
+            eprintln!("pdfce-cli: object-copy refused: --objects named no objects");
+            return exit::EDIT_REFUSED;
+        }
+        Err(message) => {
+            eprintln!("pdfce-cli: object-copy refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    // COPY FIRST, always -- so a selection that cannot be copied is refused
+    // with nothing deleted. Reversed, a cut whose copy half failed would take
+    // the objects away with nothing on the clipboard, which is the one outcome
+    // the operator cannot recover from by pasting.
+    let clip = match session.copy_objects(page_index, &indices) {
+        Ok(clip) => clip,
+        Err(err) => return report_edit_error(input, &err),
+    };
+    let payload = clip.to_bytes();
+    if let Err(err) = std::fs::write(clip_path, &payload) {
+        eprintln!("pdfce-cli: {}: {err}", clip_path.display());
+        return exit::IO_ERROR;
+    }
+
+    let mut cut_note = String::from("cut=0");
+    if let Some(output) = cut {
+        if let Err(err) = session.delete_objects(page_index, &indices) {
+            return report_edit_error(input, &err);
+        }
+        let outcome = match save_edited(
+            &mut session,
+            &source,
+            output,
+            mode,
+            ProducerArg::Preserve,
+            false,
+        ) {
+            Ok(outcome) => outcome,
+            Err(code) => return code,
+        };
+        cut_note = format!("cut=1 cut_out={}", output.display());
+        let code = finish_edit(input, &outcome);
+        if code != exit::SUCCESS {
+            return code;
+        }
+    }
+
+    println!(
+        "object-copy {} page {} objects={} -> {} ({} bytes); kinds={} resources={} {cut_note}",
+        input.display(),
+        page,
+        clip.len(),
+        clip_path.display(),
+        payload.len(),
+        clip.kinds().join("+"),
+        clip.resource_count(),
+    );
+    exit::SUCCESS
+}
+
+/// Arguments for [`cmd_object_paste`], grouped so the handler stays under the
+/// clippy `too_many_arguments` bound.
+struct ObjectPasteArgs<'a> {
+    input: &'a Path,
+    page: u32,
+    clip: &'a Path,
+    translate: Option<&'a str>,
+    scale: Option<&'a str>,
+    /// Degrees, counter-clockwise.
+    rotate: Option<f64>,
+    preview: bool,
+    output: Option<&'a Path>,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `object-paste` — place a clipboard payload onto a page (Pass 120.0/120.1).
+///
+/// The scale and rotation pivot on the **clip's own centre**, not the page
+/// origin: a pasted selection scaled about the origin flies off the sheet,
+/// which is not a gesture anybody makes. Same reasoning as
+/// `object-transform`'s default pivot, and the clip already carries the bounds
+/// to compute it from.
+fn cmd_object_paste(args: &ObjectPasteArgs<'_>) -> u8 {
+    use pdfce_core::vector::{Matrix, ObjectClip, Point};
+
+    let page_index = (args.page.max(1) - 1) as usize;
+    if !args.preview && args.output.is_none() {
+        eprintln!("pdfce-cli: object-paste refused: --output is required unless --preview");
+        return exit::EDIT_REFUSED;
+    }
+    let payload = match std::fs::read(args.clip) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", args.clip.display());
+            return exit::IO_ERROR;
+        }
+    };
+    let clip = match ObjectClip::from_bytes(&payload) {
+        Ok(clip) => clip,
+        Err(err) => {
+            eprintln!("pdfce-cli: object-paste refused: {err}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    let scale = match args.scale.map(|raw| parse_pair("--scale", raw)) {
+        Some(Ok(pair)) => Some(pair),
+        Some(Err(message)) => {
+            eprintln!("pdfce-cli: object-paste refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+        None => None,
+    };
+    let translate = match args.translate.map(|raw| parse_pair("--translate", raw)) {
+        Some(Ok(pair)) => Some(pair),
+        Some(Err(message)) => {
+            eprintln!("pdfce-cli: object-paste refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+        None => None,
+    };
+
+    let bbox = clip.bbox();
+    let pivot = if bbox.min.x > bbox.max.x {
+        Point::new(0.0, 0.0)
+    } else {
+        Point::new(
+            f64::midpoint(bbox.min.x, bbox.max.x),
+            f64::midpoint(bbox.min.y, bbox.max.y),
+        )
+    };
+    let mut at = Matrix::IDENTITY;
+    if let Some((sx, sy)) = scale {
+        at = at.post_concat(Matrix::scale(sx, sy).about(pivot));
+    }
+    if let Some(degrees) = args.rotate {
+        at = at.post_concat(Matrix::rotate(degrees.to_radians()).about(pivot));
+    }
+    if let Some((dx, dy)) = translate {
+        at = at.post_concat(Matrix::translate(dx, dy));
+    }
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    if args.preview {
+        match session.paste_preview(page_index, &clip, at) {
+            Err(err) => return report_edit_error(args.input, &err),
+            Ok(outcome) => {
+                report_disclosures(&outcome.disclosures);
+                println!(
+                    "object-paste {} page {} clip={} PREVIEW; would_paste={} resources={} bbox={:.2},{:.2},{:.2},{:.2}",
+                    args.input.display(),
+                    args.page,
+                    args.clip.display(),
+                    outcome.objects_pasted,
+                    outcome.resources_added,
+                    outcome.bbox.min.x,
+                    outcome.bbox.min.y,
+                    outcome.bbox.max.x,
+                    outcome.bbox.max.y,
+                );
+                return exit::SUCCESS;
+            }
+        }
+    }
+
+    let pasted = match session.paste_objects(page_index, &clip, at) {
+        Err(err) => return report_edit_error(args.input, &err),
+        Ok(outcome) => {
+            report_disclosures(&outcome.disclosures);
+            outcome
+        }
+    };
+    let Some(output) = args.output else {
+        eprintln!("pdfce-cli: object-paste refused: --output is required unless --preview");
+        return exit::EDIT_REFUSED;
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "object-paste {} page {} clip={} mode={} -> {}; pasted={} resources={} \
+bbox={:.2},{:.2},{:.2},{:.2} changed={} objects_written={} appended={} out_bytes={} \
+undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.page,
+        args.clip.display(),
+        args.mode.name(),
+        output.display(),
+        pasted.objects_pasted,
+        pasted.resources_added,
+        pasted.bbox.min.x,
+        pasted.bbox.min.y,
+        pasted.bbox.max.x,
+        pasted.bbox.max.y,
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
 }
 
 /// `object-delete` — remove a vector object's construction + painting

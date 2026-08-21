@@ -50,6 +50,7 @@
 //! R49/R60 "one pipeline" discipline.
 
 pub mod centerline;
+pub mod clip;
 pub mod decompose;
 pub mod edit;
 pub mod geometry;
@@ -64,6 +65,10 @@ pub mod snap;
 // reach through the submodule paths for the everyday types.
 pub use centerline::{
     CENTERLINE_ASPECT_THRESHOLD, CenterlineCandidate, derive_from_path, page_candidates,
+};
+pub use clip::{
+    CLIP_MAGIC, CLIP_VERSION, ClipBinding, ClipError, ClipItem, ClipObject, ObjectClip, PastePlan,
+    plan_paste,
 };
 pub use decompose::{
     DecomposeDiagnostics, DocumentFonts, DocumentXObjects, FillRule, FontResolver, ImageObject,

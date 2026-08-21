@@ -132,6 +132,12 @@ OUTCOME_STRUCTS: list[tuple[str, str]] = [
     # would have stayed green if all three had been dropped on the floor.
     ("crates/pdfce-core/src/text_edit/edit.rs", "EditReport"),
     ("crates/pdfce-core/src/text_edit/format.rs", "FormatReport"),
+    # `Pass 113.0` / `Pass 120.0`. Added when each landed rather than
+    # afterwards -- the `EditReport` lesson was that a struct outside this list
+    # is a struct whose fields can be dropped on the floor while the gate
+    # reports clean.
+    ("crates/pdfce-core/src/edit.rs", "TransformOutcome"),
+    ("crates/pdfce-core/src/edit.rs", "PasteOutcome"),
 ]
 
 # `Struct::field` -> why no shell reads it. A reason is mandatory: see the

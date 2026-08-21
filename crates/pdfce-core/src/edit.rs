@@ -640,6 +640,11 @@ pub enum CommandKind {
     /// restores the byte-identical pre-move content stream (Pass 3.1 command
     /// log). See [`EditSession::move_object`].
     MoveObject,
+    /// A clipboard payload was **pasted** onto a page (`Pass 120.0`): its
+    /// resources imported at fresh object numbers, its content re-bound to
+    /// fresh names and appended as one new content stream. ONE undoable
+    /// command however many objects arrived.
+    PasteObjects,
     /// A selection of vector objects was **transformed** (`Pass 113.0`):
     /// each object's operator run was wrapped in `q <cm> … Q` so one
     /// page-space matrix scaled, rotated, sheared or moved the whole
@@ -3258,6 +3263,38 @@ impl VertexEdit {
 /// the number, which the operator can already see baked into the drawing. The
 /// shell cannot reconstruct the old value after the fact — the geometry it was
 /// derived from is gone.
+/// What [`EditSession::paste_objects`] did — and what
+/// [`EditSession::paste_preview`] says it *would* do (`Pass 120.0`).
+///
+/// One type for both, for the same reason [`TransformOutcome`] is: the preview
+/// is the verb's own planner run without the commit, so a caller comparing the
+/// two compares the same fields.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct PasteOutcome {
+    /// How many objects were placed.
+    pub objects_pasted: u64,
+    /// How many resource bindings the destination page gained.
+    ///
+    /// **Not noise, and worth showing somewhere.** Every paste adds fresh
+    /// `/Resources` entries — a font, an XObject, an `/ExtGState` — because
+    /// reusing the source's name would make correctness depend on a
+    /// coincidence the destination page does not preserve. A shell that pastes
+    /// the same clip forty times and wonders why the file grew has the answer
+    /// here.
+    pub resources_added: u64,
+    /// The page-space bounds the pasted content occupies **after** `at` is
+    /// applied — computed by mapping all four corners, so it is right for a
+    /// rotation and not only for a translation.
+    ///
+    /// This is what a shell draws its paste outline from, which is why
+    /// [`EditSession::paste_preview`] exists at all.
+    pub bbox: crate::vector::Bounds,
+    /// Every operator-facing disclosure, verbatim. Empty for an ordinary
+    /// paste.
+    pub disclosures: Vec<String>,
+}
+
 /// What [`EditSession::transform_objects`] did — and what
 /// [`EditSession::transform_preview`] says it *would* do (`Pass 113.0`).
 ///
@@ -5035,6 +5072,16 @@ pub enum EditError {
     /// [`crate::vector::VectorEditError`] names which.
     #[error(transparent)]
     VectorEdit(#[from] crate::vector::VectorEditError),
+    /// A clipboard copy or paste was refused (`Pass 120.0`) — an unresolvable
+    /// resource on the source page, a payload from a newer build, or an
+    /// inconsistent one. The inner [`crate::vector::ClipError`] names which.
+    ///
+    /// Kept separate from [`Self::VectorEdit`] rather than folded into it: a
+    /// clipboard refusal is about a PAYLOAD, and a shell showing it has a
+    /// different recovery to offer (re-copy, or tell the operator which build
+    /// wrote the clip) from the one it offers for a stale selection index.
+    #[error(transparent)]
+    Clip(#[from] crate::vector::ClipError),
     /// A basic vector edit could not read the page's content stream to
     /// decompose it (Pass 9c-min) — a decode/tokenize failure identical to
     /// the one the renderer would hit on the same page.
@@ -7527,6 +7574,283 @@ impl EditSession {
         })
     }
 
+    /// **Copy a selection of page objects to a clipboard payload**
+    /// (`Pass 120.0`).
+    ///
+    /// `&self`: copying reads. Nothing is staged, nothing is committed, and
+    /// the returned [`ObjectClip`](crate::vector::ObjectClip) **owns
+    /// everything it needs** — the copied bytes and the transitive closure of
+    /// every resource they reference, by value. So copy → close the source →
+    /// paste works, cross-document paste is the same code path as
+    /// same-document paste, and `Pass 120.1`'s `to_bytes` becomes a
+    /// serialisation problem rather than a design problem.
+    ///
+    /// # ★ What the requesting shell believed, and the half it did not see
+    ///
+    /// They asked for this on the reading that [`Self::import_object`] already
+    /// does the hard part — a recursive object-graph copy with reference
+    /// remapping, cycle handling and stream re-staging. **That reading is
+    /// correct, and it is the smaller half.**
+    ///
+    /// `import_object` copies *indirect objects*. A page's content objects are
+    /// not indirect objects: a path, a text run and an image invocation are
+    /// **byte ranges inside a content stream**, and the operators in those
+    /// bytes name their resources **by page-local name** — `/F1 12 Tf`,
+    /// `/Im1 Do`. On the destination page `/F1` is a different font. Pasting
+    /// the bytes verbatim draws the right shapes in the wrong typeface, or
+    /// draws nothing, and neither failure errors.
+    ///
+    /// So this records which names each item consumes and carries the objects
+    /// behind them; [`Self::paste_objects`] re-binds each to a fresh
+    /// non-colliding destination name and rewrites the names inside the copied
+    /// bytes. See [`crate::vector::clip`].
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] for a stale index;
+    /// [`EditError::Clip`] when a resource the selection uses does not resolve
+    /// on the source page — refused at COPY time, which is the earliest point
+    /// the operator can be told and while the selection is still on screen.
+    pub fn copy_objects(
+        &self,
+        page_index: usize,
+        object_indices: &[usize],
+    ) -> Result<crate::vector::ObjectClip, EditError> {
+        use crate::vector::clip;
+
+        let (page, stream, model) = self.decompose_for_read(page_index)?;
+        let objs = Self::resolve_objects(&model, object_indices)?;
+        // Every resource category, resolved ONCE. Resolving inside the loop
+        // would re-walk the graph per name on a page whose text uses forty
+        // fonts, and would need a borrow that outlives the closure that took
+        // it -- which is what the type system says here rather than a comment.
+        let resolved: BTreeMap<Vec<u8>, Dict> = {
+            let graph = self.graph();
+            crate::vector::clip::RESOURCE_CATEGORIES
+                .iter()
+                .filter_map(|category| {
+                    page.resources
+                        .get(category)
+                        .map(|o| graph.resolve(o))
+                        .and_then(Object::as_dict)
+                        .map(|d| ((*category).to_vec(), d.clone()))
+                })
+                .collect()
+        };
+
+        let mut clip_objects: BTreeMap<u32, clip::ClipObject> = BTreeMap::new();
+        let mut mapping: BTreeMap<ObjId, u32> = BTreeMap::new();
+        let mut next: u32 = 1;
+        let mut items = Vec::with_capacity(objs.len());
+        let mut bbox = crate::vector::Bounds::EMPTY;
+
+        for obj in objs {
+            let span = obj.bytes();
+            let bytes = stream
+                .buf
+                .get(span.start..span.end())
+                .unwrap_or_default()
+                .to_vec();
+            let mut bindings = Vec::new();
+            for site in clip::name_sites(&bytes).map_err(EditError::Clip)? {
+                let Some(entry) = resolved
+                    .get(&site.category)
+                    .and_then(|sub| sub.get(&site.name))
+                else {
+                    return Err(EditError::Clip(clip::ClipError::UnresolvedResource {
+                        category: String::from_utf8_lossy(&site.category).into_owned(),
+                        name: String::from_utf8_lossy(&site.name).into_owned(),
+                    }));
+                };
+                let clip_id =
+                    self.clip_import(entry, &mut clip_objects, &mut mapping, &mut next)?;
+                bindings.push(clip::ClipBinding {
+                    category: site.category,
+                    name: site.name,
+                    object: clip_id,
+                });
+            }
+            bindings.sort();
+            bindings.dedup();
+            bbox = bbox.union(obj.page_bbox());
+            items.push(clip::ClipItem {
+                bytes,
+                ctm: clip::item_ctm(obj),
+                kind: clip::item_kind(obj),
+                bbox: obj.page_bbox(),
+                bindings,
+            });
+        }
+
+        Ok(crate::vector::ObjectClip {
+            version: clip::CLIP_VERSION,
+            items,
+            objects: clip_objects,
+            bbox,
+        })
+    }
+
+    /// **Paste a clipboard payload onto a page** (`Pass 120.0`).
+    ///
+    /// `at` is a **page-space** matrix, the same contract
+    /// [`Self::transform_objects`] takes: `Matrix::IDENTITY` is paste-in-place,
+    /// `Matrix::translate` is paste-with-offset, and `Matrix::about` gives
+    /// paste-scaled and paste-rotated. One verb, four gestures.
+    ///
+    /// The clip's resources are imported at fresh object numbers, bound to
+    /// fresh names on the destination page, and the copied bytes are rewritten
+    /// to use them — see [`crate::vector::clip::plan_paste`] for why every
+    /// binding gets a fresh name even when the source's spelling is free.
+    ///
+    /// ONE undoable command, however many objects arrive.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::Clip`] for a payload from a newer build or an inconsistent
+    /// one; the session-level guards this shares with every content-appending
+    /// verb — encryption, an enforced certification, a missing page.
+    pub fn paste_objects(
+        &mut self,
+        page_index: usize,
+        clip: &crate::vector::ObjectClip,
+        at: crate::vector::Matrix,
+    ) -> Result<PasteOutcome, EditError> {
+        let (plan, page_id, page_resources) = self.plan_paste_at(page_index, clip, at)?;
+        if plan.items == 0 {
+            return Ok(PasteOutcome {
+                objects_pasted: 0,
+                resources_added: 0,
+                bbox: plan.bbox,
+                disclosures: Vec::new(),
+            });
+        }
+
+        // Import the clip's owned resource closure at fresh object numbers.
+        let mut imported: BTreeMap<u32, ObjId> = BTreeMap::new();
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        for &clip_id in clip.objects.keys() {
+            self.clip_materialize(clip, clip_id, &mut imported, &mut objects)?;
+        }
+
+        // The appended content stream.
+        let content_id = ObjId::new(self.alloc_number()?, 0);
+        let len = plan.content.len();
+        let span = self.stage_bytes(&plan.content);
+        let mut sdict = Dict::new();
+        sdict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(len).unwrap_or(i64::MAX)),
+        );
+        objects.push(ObjectWrite {
+            id: content_id,
+            before: None,
+            after: Some(Object::Stream(Stream {
+                dict: sdict,
+                data_span: span,
+            })),
+        });
+
+        // ONE page-dictionary write carrying both page mutations.
+        let Some(Object::Dict(page_dict)) = self.value(page_id) else {
+            return Err(EditError::NotADictionary {
+                id: page_id,
+                key: "Contents",
+            });
+        };
+        let mut updated = page_dict.clone();
+        self.append_page_content(&mut updated, content_id);
+        let graph = self.graph();
+        let resources = crate::vector::clip::paste_resource_dict(
+            &page_resources,
+            &plan,
+            &imported,
+            &|o: &Object| graph.resolve(o).clone(),
+        );
+        updated.insert(Name::from(b"Resources"), Object::Dict(resources));
+        objects.push(ObjectWrite {
+            id: page_id,
+            before: self.state.get(&page_id).cloned(),
+            after: Some(Object::Dict(updated)),
+        });
+
+        self.commit(Command {
+            kind: CommandKind::PasteObjects,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(PasteOutcome {
+            objects_pasted: plan.items as u64,
+            resources_added: plan.resources.len() as u64,
+            bbox: plan.bbox,
+            disclosures: Vec::new(),
+        })
+    }
+
+    /// Ask what [`Self::paste_objects`] **would** do, without doing it
+    /// (`Pass 120.0`).
+    ///
+    /// `&self`, side-effect-free, and **sharing one body with the verb** —
+    /// both call [`Self::plan_paste_at`], so `preview(..).is_ok()` *is* the
+    /// predicate and a preview that says yes where the paste then refuses is
+    /// not a reachable state. Same shape as [`Self::transform_preview`] and
+    /// `vertex_edit_preview`, for the same stated reason: a verb with no
+    /// preflight makes the UI find out by pressing.
+    ///
+    /// [`PasteOutcome::bbox`] is what a shell draws its paste outline from
+    /// before committing.
+    ///
+    /// # Errors
+    ///
+    /// Exactly what [`Self::paste_objects`] would raise for the same
+    /// arguments.
+    pub fn paste_preview(
+        &self,
+        page_index: usize,
+        clip: &crate::vector::ObjectClip,
+        at: crate::vector::Matrix,
+    ) -> Result<PasteOutcome, EditError> {
+        let (plan, _page_id, _resources) = self.plan_paste_at(page_index, clip, at)?;
+        Ok(PasteOutcome {
+            objects_pasted: plan.items as u64,
+            resources_added: plan.resources.len() as u64,
+            bbox: plan.bbox,
+            disclosures: Vec::new(),
+        })
+    }
+
+    /// **Cut**: copy a selection to a clip and delete it, as ONE undoable
+    /// command (`Pass 120.3`).
+    ///
+    /// # Why this is a verb and not "call copy, then call delete"
+    ///
+    /// The requester's own framing, and it is right: *"what I need is that cut
+    /// is one undo entry — otherwise Ctrl+X then Ctrl+Z gives the operator
+    /// their objects back but leaves the clipboard changed, or takes two
+    /// presses."* Two commands is two undos for one gesture, which is the
+    /// `R168`/`move_nodes` precedent one class up.
+    ///
+    /// The copy half is already `&self` and commits nothing, so this is
+    /// literally copy-then-delete with **one** command reaching the undo
+    /// stack — the deletion's. The clip is returned rather than stored:
+    /// pdfce owns no clipboard state, and a shell that wants Ctrl+Z to restore
+    /// the *previous* clip contents is holding the only stack that could.
+    ///
+    /// # Errors
+    ///
+    /// Whatever [`Self::copy_objects`] or [`Self::delete_objects`] would
+    /// raise. **The copy runs first**, so a selection that cannot be copied is
+    /// refused with nothing deleted.
+    pub fn cut_objects(
+        &mut self,
+        page_index: usize,
+        object_indices: &[usize],
+    ) -> Result<crate::vector::ObjectClip, EditError> {
+        let clip = self.copy_objects(page_index, object_indices)?;
+        self.delete_objects(page_index, object_indices)?;
+        Ok(clip)
+    }
+
     /// Delete **several objects at once** from page `page_index`, as ONE
     /// undoable command (Pass 47.0, R168).
     ///
@@ -8028,6 +8352,291 @@ impl EditSession {
     /// This previously read the base unconditionally and refused once a page
     /// had been touched. See the comment at the read site for why that was
     /// backwards.
+    /// The destination page's identity, resolved resources, and a
+    /// [`PastePlan`](crate::vector::PastePlan) — the ONE body
+    /// [`Self::paste_objects`] and [`Self::paste_preview`] share.
+    ///
+    /// `&self` by signature and by behaviour: it allocates no object number,
+    /// stages no bytes and commits nothing. Everything that mutates lives in
+    /// the verb, after this returns.
+    fn plan_paste_at(
+        &self,
+        page_index: usize,
+        clip: &crate::vector::ObjectClip,
+        at: crate::vector::Matrix,
+    ) -> Result<(crate::vector::PastePlan, ObjId, Dict), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        let pages = page_tree::pages_in(&self.graph())?;
+        let count = pages.len();
+        let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
+            index: page_index,
+            count,
+        })?;
+        let plan = crate::vector::plan_paste(clip, &page.resources, at).map_err(EditError::Clip)?;
+        Ok((plan, page.id, page.resources.clone()))
+    }
+
+    /// The page, its current content and its decomposition — the read half
+    /// [`Self::copy_objects`] needs, and deliberately the SAME decomposition
+    /// the editing verbs run so an index means one thing.
+    fn decompose_for_read(
+        &self,
+        page_index: usize,
+    ) -> Result<
+        (
+            Page,
+            crate::content::ContentStream,
+            crate::vector::PageObjects,
+        ),
+        EditError,
+    > {
+        let pages = page_tree::pages_in(&self.graph())?;
+        let count = pages.len();
+        let page = pages
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count,
+            })?
+            .clone();
+        let content_id = *page
+            .contents
+            .first()
+            .ok_or(EditError::VectorEditNoContents { page_index })?;
+        let stream = self
+            .current_page_content(content_id, &page)
+            .map_err(EditError::VectorEditContent)?;
+        let base_view = self.base.view();
+        let resolver = crate::vector::DocumentXObjects {
+            view: &base_view,
+            resources: &page.resources,
+        };
+        let fonts = crate::vector::DocumentFonts::new(&base_view, &page.resources);
+        let model = crate::vector::decompose_with_fonts(
+            &stream,
+            crate::vector::Matrix::IDENTITY,
+            &resolver,
+            &fonts,
+        );
+        Ok((page, stream, model))
+    }
+
+    /// Copy one object, and everything it references, into a CLIP's owned
+    /// graph at clip-local numbers (`Pass 120.0`).
+    ///
+    /// The clipboard twin of [`Self::import_object`], and the differences are
+    /// the whole reason it is not that function:
+    ///
+    /// - it writes into a caller-owned map rather than into this session;
+    /// - it allocates **clip-local** numbers, so a clip is independent of the
+    ///   document it came from and of the one it lands in;
+    /// - it **owns stream payloads as bytes**, because a span into a document
+    ///   that may already be closed is the classic cross-document mis-slice,
+    ///   and a serialisable clip (`Pass 120.1`) cannot carry a span at all.
+    ///
+    /// The cycle guard is the same and for the same reason: the mapping entry
+    /// is inserted **before** the children are walked, so a resource that
+    /// refers back to its own container terminates.
+    fn clip_import(
+        &self,
+        entry: &Object,
+        out: &mut BTreeMap<u32, crate::vector::ClipObject>,
+        mapping: &mut BTreeMap<ObjId, u32>,
+        next: &mut u32,
+    ) -> Result<u32, EditError> {
+        let graph = self.graph();
+        let Some(id) = entry.as_reference() else {
+            // A DIRECT resource value (legal, and common for a small
+            // `/ExtGState`): it carries no identity, so it is given a
+            // clip-local one of its own and copied whole.
+            let clip_id = *next;
+            *next += 1;
+            let value = self.clip_value(entry, out, mapping, next)?;
+            out.insert(
+                clip_id,
+                crate::vector::ClipObject {
+                    value,
+                    payload: None,
+                },
+            );
+            return Ok(clip_id);
+        };
+        if let Some(existing) = mapping.get(&id) {
+            return Ok(*existing);
+        }
+        let clip_id = *next;
+        *next += 1;
+        mapping.insert(id, clip_id);
+
+        let Some(value) = graph.value(id) else {
+            // §7.3.10: a dangling reference is not an error; it is null.
+            out.insert(
+                clip_id,
+                crate::vector::ClipObject {
+                    value: Object::Null,
+                    payload: None,
+                },
+            );
+            return Ok(clip_id);
+        };
+        let owned = value.clone();
+        // `SessionGraph` is `Copy`, so the borrow ends with the last use
+        // rather than with a `drop` -- the clone above is what releases it.
+        let (value, payload) = match &owned {
+            Object::Stream(stream) => {
+                let dict = self.clip_dict(&stream.dict, out, mapping, next)?;
+                let view = self.view();
+                let bytes = view.slice(stream.data_span).unwrap_or(&[]).to_vec();
+                (
+                    Object::Stream(Stream {
+                        dict,
+                        // Meaningless by construction — see `ClipObject::value`.
+                        data_span: ByteSpan::new(0, bytes.len()),
+                    }),
+                    Some(bytes),
+                )
+            }
+            other => (self.clip_value(other, out, mapping, next)?, None),
+        };
+        out.insert(clip_id, crate::vector::ClipObject { value, payload });
+        Ok(clip_id)
+    }
+
+    /// The value half of [`Self::clip_import`] — deep-copies a value, replacing
+    /// every reference with a clip-local one.
+    fn clip_value(
+        &self,
+        value: &Object,
+        out: &mut BTreeMap<u32, crate::vector::ClipObject>,
+        mapping: &mut BTreeMap<ObjId, u32>,
+        next: &mut u32,
+    ) -> Result<Object, EditError> {
+        Ok(match value {
+            Object::Reference(_) => {
+                let clip_id = self.clip_import(value, out, mapping, next)?;
+                // Clip-local ids live in generation 0 by construction.
+                Object::Reference(ObjId::new(clip_id, 0))
+            }
+            Object::Array(items) => {
+                let mut copied = Vec::with_capacity(items.len());
+                for item in items {
+                    copied.push(self.clip_value(item, out, mapping, next)?);
+                }
+                Object::Array(copied)
+            }
+            Object::Dict(dict) => Object::Dict(self.clip_dict(dict, out, mapping, next)?),
+            Object::Stream(stream) => {
+                // A stream nested inside a value rather than reached as an
+                // object: legal nowhere in PDF (§7.3.8 makes streams
+                // indirect), so this arm exists only so the walk is total.
+                Object::Stream(stream.clone())
+            }
+            other => other.clone(),
+        })
+    }
+
+    /// Dictionary half of the clip walk.
+    fn clip_dict(
+        &self,
+        dict: &Dict,
+        out: &mut BTreeMap<u32, crate::vector::ClipObject>,
+        mapping: &mut BTreeMap<ObjId, u32>,
+        next: &mut u32,
+    ) -> Result<Dict, EditError> {
+        let mut copied = Dict::new();
+        for (key, value) in dict.iter() {
+            // `/Parent` is dropped for the same reason `import_dict` drops it:
+            // a resource's back-pointer into the source page tree means
+            // nothing here and would drag the whole document along behind it.
+            if key.as_bytes() == b"Parent" {
+                continue;
+            }
+            copied.insert(key.clone(), self.clip_value(value, out, mapping, next)?);
+        }
+        Ok(copied)
+    }
+
+    /// Materialise one clip-local object into this session at a fresh number,
+    /// recursively, remapping clip-local references as it goes.
+    ///
+    /// The inverse of [`Self::clip_import`]. Same mapping-first cycle guard.
+    fn clip_materialize(
+        &mut self,
+        clip: &crate::vector::ObjectClip,
+        clip_id: u32,
+        imported: &mut BTreeMap<u32, ObjId>,
+        objects: &mut Vec<ObjectWrite>,
+    ) -> Result<ObjId, EditError> {
+        if let Some(existing) = imported.get(&clip_id) {
+            return Ok(*existing);
+        }
+        let new_id = ObjId::new(self.alloc_number()?, 0);
+        imported.insert(clip_id, new_id);
+        let Some(source) = clip.objects.get(&clip_id) else {
+            return Err(EditError::Clip(
+                crate::vector::ClipError::DanglingClipObject { object: clip_id },
+            ));
+        };
+        let value = match (&source.value, &source.payload) {
+            (Object::Stream(stream), Some(bytes)) => {
+                let dict = self.clip_materialize_value(
+                    clip,
+                    &Object::Dict(stream.dict.clone()),
+                    imported,
+                    objects,
+                )?;
+                let span = self.stage_bytes(bytes);
+                Object::Stream(Stream {
+                    dict: dict.as_dict().cloned().unwrap_or_default(),
+                    data_span: span,
+                })
+            }
+            (other, _) => self.clip_materialize_value(clip, other, imported, objects)?,
+        };
+        objects.push(ObjectWrite {
+            id: new_id,
+            before: None,
+            after: Some(value),
+        });
+        Ok(new_id)
+    }
+
+    /// The value half of [`Self::clip_materialize`].
+    fn clip_materialize_value(
+        &mut self,
+        clip: &crate::vector::ObjectClip,
+        value: &Object,
+        imported: &mut BTreeMap<u32, ObjId>,
+        objects: &mut Vec<ObjectWrite>,
+    ) -> Result<Object, EditError> {
+        Ok(match value {
+            Object::Reference(id) => {
+                Object::Reference(self.clip_materialize(clip, id.num, imported, objects)?)
+            }
+            Object::Array(items) => {
+                let mut out = Vec::with_capacity(items.len());
+                for item in items {
+                    out.push(self.clip_materialize_value(clip, item, imported, objects)?);
+                }
+                Object::Array(out)
+            }
+            Object::Dict(dict) => {
+                let mut out = Dict::new();
+                for (key, v) in dict.iter() {
+                    out.insert(
+                        key.clone(),
+                        self.clip_materialize_value(clip, v, imported, objects)?,
+                    );
+                }
+                Object::Dict(out)
+            }
+            other => other.clone(),
+        })
+    }
+
     /// Resolve a selection of object indices against a decomposition, refusing
     /// the WHOLE call on the first stale index (`R168`: never a silent
     /// subset).

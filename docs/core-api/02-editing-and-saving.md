@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (29448 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 133 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (30057 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 137 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 133 public `EditSession` methods
+## 1. Verb index — all 137 public `EditSession` methods
 
-**Count: 133.** Established by brace-matched extraction of the four
+**Count: 137.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -342,7 +342,7 @@ need their own policy).
 
 These five return `text_edit`'s own error types, **not** `EditError`.
 
-### 1.10 Vector geometry (13) — detail in part 3
+### 1.10 Vector geometry (17) — detail in part 3
 
 Eleven of the thirteen return `Result<Vec<String>, EditError>`. **The
 `Vec<String>` is the disclosure list**
@@ -447,6 +447,108 @@ The two exceptions are `transform_objects` / `transform_preview`
 >
 > CLI equivalent: `pdfce-cli object-transform --objects 3,4,7 --scale 1.5
 > --rotate 15 --translate 10,0 [--pivot X,Y] [--preview]`.
+
+> ### ★★ The object clipboard — and the half of it that is NOT `import_object`
+>
+> ```rust
+> session.copy_objects(page, &[3, 4, 7])      -> Result<ObjectClip, EditError>   // &self
+> session.cut_objects(page, &[3, 4, 7])       -> Result<ObjectClip, EditError>   // ONE undo entry
+> session.paste_objects(page, &clip, at)      -> Result<PasteOutcome, EditError>
+> session.paste_preview(page, &clip, at)      -> Result<PasteOutcome, EditError> // &self
+>
+> clip.to_bytes()                             -> Vec<u8>
+> ObjectClip::from_bytes(&bytes)              -> Result<ObjectClip, ClipError>
+> ```
+>
+> **Your reading of `import_object` was right, and it is the smaller half.**
+> That function copies *indirect objects*. A page's content objects are **byte
+> ranges inside a content stream**, and the operators in those bytes name their
+> resources **by page-local name** — `/F1 12 Tf`, `/Im1 Do`.
+>
+> **On the destination page, `/F1` is a different font.** Pasting the bytes
+> verbatim draws the right shapes in the wrong typeface, or draws nothing, and
+> **neither failure errors.** So copy records which names each item consumes
+> and carries the objects behind them; paste re-binds every one to a fresh
+> `pdfceP*` name on the destination page and rewrites the names inside the
+> copied bytes. That is the part you would have had to build, and it is done.
+>
+> #### The clip owns its resources
+>
+> `ObjectClip` carries the transitive closure of everything its items
+> reference, **by value**, with stream payloads owned as bytes rather than as
+> spans into a document that may already be closed. So:
+>
+> - **copy → close the source → paste** works;
+> - **cross-document paste is the same code path** as same-document paste —
+>   there is no source to consult at paste time, so there is no case to
+>   special-case;
+> - **`to_bytes` was a serialisation problem, not a design one**, which is why
+>   it shipped in the same session.
+>
+> #### Placement
+>
+> `paste_objects` takes `at`, a **page-space** matrix — the same contract
+> `transform_objects` takes.
+> `Matrix::IDENTITY` is paste-in-place, `Matrix::translate` is
+> paste-with-offset, `Matrix::about` gives paste-scaled and paste-rotated. One
+> verb, four gestures.
+>
+> `PasteOutcome::bbox` is what you draw your paste outline from — it maps **all
+> four corners**, so it is right under a rotation and not only under a
+> translation. Ask `paste_preview` for it before committing.
+>
+> #### `PasteOutcome`
+>
+> | field | meaning |
+> |---|---|
+> | `objects_pasted: u64` | how many arrived |
+> | `resources_added: u64` | how many `/Resources` bindings the page gained — **worth showing somewhere**: every paste adds fresh entries, so a shell that pastes the same clip forty times and wonders why the file grew has the answer here |
+> | `bbox` | page-space bounds after `at` |
+> | `disclosures` | as everywhere; empty for an ordinary paste |
+>
+> #### Cut is one undo entry, and the ORDER is load-bearing
+>
+> You asked for exactly this: *"otherwise Ctrl+X then Ctrl+Z gives the operator
+> their objects back but leaves the clipboard changed, or takes two presses."*
+> `copy_objects` is `&self` and commits nothing, so only the deletion reaches
+> the undo stack.
+>
+> **Copy runs first**, deliberately: a selection that cannot be copied is
+> refused with **nothing deleted**. Reversed, a cut whose copy half failed
+> would take the objects away with nothing on the clipboard — the one outcome
+> the operator cannot recover from by pasting.
+>
+> **pdfce holds no clipboard state.** `cut_objects` *returns* the clip. If you
+> want Ctrl+Z to restore the previous clip contents, you are holding the only
+> stack that could.
+>
+> #### Serialisation, and the refusals on the way back in
+>
+> `to_bytes` writes a magic-prefixed, versioned, length-prefixed payload.
+> Numbers are **bit-exact** — a matrix that changed in the last place on every
+> copy/paste cycle would drift a shape visibly after enough of them. Object
+> values go through the crate's own writer and come back through its own
+> parser, so the COS grammar has one implementation per side.
+>
+> `from_bytes` refuses, by name: `ClipError::NotAClip` (checked **before** any
+> length prefix is read, so an unrelated payload from the OS clipboard is
+> refused with a sentence), `Truncated`, `NewerFormat`. A truncation sweep over
+> **every** prefix length is pinned by a test.
+>
+> #### Two limits, named so you do not find them by pressing
+>
+> - **Content objects only.** A ce dimension, a markup annotation and a widget
+>   are *annotations*, not content-stream objects, so they are not addressable
+>   by these indices at all. Copying one is `Pass 120.4`, filed and unstarted —
+>   and it needs more than a graph copy (a dimension's sidecar record and group,
+>   a widget's `/AcroForm` registration and a non-colliding field name).
+> - **A resource that does not resolve on the SOURCE page refuses the copy**,
+>   not the paste. That is the earliest point the operator can be told, and
+>   their selection is still on screen.
+>
+> CLI equivalent: `pdfce-cli object-copy --objects 3,4,7 --clip sel.pdfceclip
+> [--cut out.pdf]` then `pdfce-cli object-paste --clip sel.pdfceclip
+> --translate 10,20 -o out.pdf [--preview]`.
 
 #### ★ 1.10.1 Object indices across an edit — which verbs RENUMBER
 
