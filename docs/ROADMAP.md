@@ -96,6 +96,222 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `26c6fad` — THE THIRD `/Indexed` COPY CLOSES, DISCHARGING THE 218TH FILING'S LAST OWED `crates/` ITEM AND UNBLOCKING THE `v0.7.0` TAG — ★★ AND THE MECHANISM IS A **THIRD AXIS**, NOT A THIRD INSTANCE: THE DAY'S THREE STALE-CLAIM CASES FAILED AT THREE DIFFERENT STAGES — **NO SWEEP / WRONG KEY / WRONG BOUNDARY** — SO THE DISPATCH'S "THIRD INSTANCE OF ONE SHAPE" IS REFINED HERE; ★★★ AND THE SWEEP'S BOUNDARY WAS DERIVABLE BY ONE COMMAND IT NEVER RAN — `git log -S "four of the seven"` RETURNS **EXACTLY ONE** INTRODUCING COMMIT AND ITS `--stat` NAMES **BOTH** FILES; ★★ THE FILE-SCOPED BOUNDARY ORIGINATED IN **THIS ROLE'S OWN REPORT** (`943575e`'s message: *"overprint.rs, twice"*), NOT IN THE ENGINEER'S GREP; **MINT DECLINED — `R209` STANDS**, recommended as ONE amendment to hard rule 11's method, merged with the absence-phrasing amendment rather than filed beside it — no Pass ID; one correction commit — 2026-08-21 (two-hundred-and-twentieth filing)
+
+**Sourcing.** This filing has a shell. Every figure below was produced
+here by the command named beside it. Hard rule 8 discharged by looking.
+
+**Scope, stated first.** This is a **small addition to the same session**
+as the 218th and 219th filings, not a new one. It files **one commit**,
+`26c6fad`, and **mints nothing**. The `v0.7.0` release state is the 219th
+entry's subject and is not re-narrated; only the two figures that moved
+since it are restated in the ledger.
+
+---
+
+#### What the commit does
+
+`ColorSpace::indexed_entry`'s own rustdoc at
+`crates/pdfce-render/src/color.rs:599–600` still read *"`/Indexed`
+appears in **four of the seven** failing Ghent overprint patches"* —
+bare, and carrying exactly the *reachable-by-the-renderer* reading that
+`943575e` had corrected in the other two sites to **present in four,
+reachable in none**. `26c6fad` gives it the same qualification plus a
+note naming why it was the survivor. **+17 / −2 lines, one file, no
+behaviour change.**
+
+**This discharges the 218th filing's owed item 2** — the last open
+`crates/` stale-claim survivor, and the last thing blocking the tag.
+
+**Sweep re-run at `HEAD`, and it is clean.**
+`grep -rn "four of the seven\|four of seven\|in four of"` across
+`crates/`, `docs/`, `tools/` and `.github/` returns **3 code sites, all
+qualified** (`color.rs:600`, `overprint.rs:487`, `overprint.rs:804`) plus
+**1 documentation site** — `docs/compositor-plan.md:1044` — which is
+inside a block explicitly headed *"The `/Indexed` finding as originally
+written, kept because the fix is real even where it is currently
+unreachable"*, under a struck-through item and a `★ FIXED 2026-08-21 —
+AND IT MOVED NOTHING` header. **A quoted historical claim under a
+correction header is not a survivor**, and the distinction is worth
+stating because a future sweep will hit that line and must not "fix" it.
+`docs/FEATURES.md:202` and `docs/NEXT_SESSION.md:196–210` already carry
+the qualification. **0 survivors.**
+
+---
+
+#### ★★ THE DISPATCH ASKED WHERE THIS BELONGS. ANSWER FIRST, THEN THE WARRANT
+
+**Where: in the SAME amendment as the absence-phrasing one, merged into a
+single sentence about the sweep's DENOMINATOR — not a separate amendment,
+not a new standing rule, and not nowhere.** `R209` stands; next free
+**`R210`**.
+
+**Why not a new rule.** Hard rule 11 already says *"sweep **every place**
+that describes it — searching for the CLAIM, not for a string"*. The
+scope obligation is **already written**, and the RAG's amendment #1
+(*fixing one copy does not find the others*) already covers it. This case
+is an **instance** of the rule as written, not a gap in it. Minting a
+rule that restates an existing rule's own words is the *"a rule telling
+somebody to run a tool that already exists is a reminder, not a remedy"*
+decline the 219th filing made, one axis over.
+
+**Why not a separate amendment.** The 218th declined the absence-phrasing
+mint **on shape** — *"it refines hard rule 11's method, so a number would
+fragment the sweep obligation."* Two amendments to the same method
+paragraph, filed three days apart, fragment it exactly as a number would.
+And they are not two things: **both are the same defect at different
+points — the sweeper chose the search's boundary from MEMORY rather than
+from a source that knows the answer.** In the absence case the remembered
+boundary was the *term*; here it was the *file*.
+
+**★★★ And the source that knows the answer existed, costs one command,
+and was never run.** Measured here:
+
+```
+$ git log --oneline -S "four of the seven" -- crates/
+0d5fc29  Pass 97.1, first two deliverables: overprint could not see …
+$ git show --stat 0d5fc29 | grep 'crates/pdfce-render'
+ crates/pdfce-render/src/color.rs      | 139 +++++…
+ crates/pdfce-render/src/overprint.rs  |  70 ++++…
+```
+
+**All three copies were born in ONE commit, across TWO files**, and that
+commit's `--stat` names both. `git log -S` on the claim's most
+distinctive fragment returns **exactly one** introducing commit — no
+noise to filter. **The sweep's denominator was machine-derivable and a
+human one was used instead.**
+
+**Recommended amendment text** (engineer's act, not this role's — the
+same restraint the 218th observed):
+
+> *Derive the sweep's extent, do not remember it.* `git log -S "<the
+> claim's most distinctive fragment>"` names every file the claim was
+> written into, because copies of one claim are almost always born
+> together. Sweep that file list, then read it for meaning.
+
+**★ Its limit, stated rather than discovered later.** This does **not**
+subsume the absence-phrasing case: the `interpret.rs` survivor shared no
+literal fragment with the copies it was born beside, so `git log -S`
+would have returned nothing for it. **The denominator command handles
+copies born together; reading for meaning is still the only thing that
+handles a claim phrased as a negation.** The merged amendment must carry
+both halves or it will be read as a replacement for the harder one.
+
+---
+
+#### ★★ THE DISPATCH'S "THIRD INSTANCE OF ONE SHAPE" IS REFINED — THEY ARE THREE STAGES, NOT THREE INSTANCES
+
+Read against the commits, the day's three cases fail at three **different
+points of the same procedure**, which is a more useful taxonomy than a
+count:
+
+| # | commit | sweep performed? | what was wrong | axis |
+|---|---|---|---|---|
+| 1 | `05ba72a` | **no** — `Pass 97.0` shipped and left 4 comments + 1 operator-facing message describing the old world | nothing was swept at all | **stage 0: no sweep** |
+| 2 | `943575e` (`interpret.rs` half) | yes | the claim is a **negation**, so it contains no token tying it to the name that appeared | **stage 1: wrong KEY** |
+| 3 | `26c6fad` (this commit) | yes, and the key was right | the search's **scope** was the file where the claim was noticed | **stage 2: wrong BOUNDARY** |
+
+**Why the refinement earns its space:** a count of three says *"do this
+more carefully"*, which is not actionable. Three named stages say *sweep
+at all → derive the key from meaning → derive the boundary from the
+introducing commit*, and each clause is checkable after the fact. The
+dispatch's framing was not wrong, it was **coarser than the evidence
+supports**, and the evidence was in the three commit messages.
+
+**★★ AND THE FILE-SCOPED BOUNDARY ORIGINATED ON THIS ROLE'S SIDE OF THE
+HANDOFF.** `943575e`'s commit message — which quotes the librarian's
+report verbatim — reads:
+
+> *"**overprint.rs, twice**: `/Indexed` appears in four of the seven
+> failing Ghent overprint patches."*
+
+**That is a file-scoped denominator, written by this role, in the report
+the engineer then swept against.** The engineer's grep is not where the
+boundary was set; the *report* set it, and the sweep honoured it exactly.
+This matters because hard rule 11's remedy lives on the librarian's side
+by design — *"this belongs where it demonstrably works: in the reading,
+on your side"* — so a reporting convention that names **files** rather
+than **claim sites** hands the engineer the wrong denominator while
+appearing precise. **Report the claim and its site count, then the
+files** — *"the `/Indexed` claim, 3 copies in 2 files"* — not *"file X,
+twice"*.
+
+---
+
+#### ★ THE DEFINITION SITE WAS THE SURVIVOR IN TWO OF THE DAY'S THREE CASES
+
+Independently of the above, and worth one line because it is a *place* to
+look rather than a method:
+
+- `05ba72a`: the survivor was **`transparency_groups_knockout_approximated`'s
+  own rustdoc** — its message calls that *"the IDE-hover definition site —
+  the one place a reader lands without meaning to."*
+- `26c6fad`: the survivor was **`ColorSpace::indexed_entry`'s own
+  rustdoc** — described in this filing, before the earlier message was
+  re-read, in **the same words**.
+
+**Two independent instances, same day, same phrase, arrived at
+separately.** The mechanism is not coincidence: a sweeper reasons from
+**where the change was made**, and a definition site is where the change
+was **depended on**. It is therefore the highest-traffic and
+lowest-swept location in the diff's neighbourhood. **Heuristic: sweep the
+definition site of every symbol the fix hangs on, regardless of what the
+grep returned.** Recorded in the RAG amendment below; **not** proposed as
+a rule — it is a reading habit, and hard rule 11 already owns those.
+
+---
+
+#### Documentation / RAG effects
+
+- **Amended:**
+  `D:\dev\rag\rust\disclosure_text_must_be_tested_against_producing_branch.md`
+  — dated 2026-08-21 footer carrying the three things that file does not
+  already have: the **`git log -S` denominator** and its stated limit,
+  the **report-side origin** of the file boundary (`943575e`'s
+  *"overprint.rs, twice"*), and the **definition-site heuristic** at its
+  second independent instance. The file already carried the
+  file-vs-feature boundary sub-lesson, written by the 218th filing
+  **before** this fix landed — so the amendment extends it rather than
+  restating it.
+- **No `C:\personal_rag\pdf\` lesson.** Nothing here is PDF-domain: the
+  `/Indexed` present-vs-reachable fact is filed under `Pass 97.1a`
+  (217th) and the rest is documentation-maintenance methodology.
+- **Nothing for `pdfce-spec-librarian`** — §8.6.6.3 is cited as
+  already-sourced, not re-derived.
+- **`docs/FEATURES.md`: 0 rows touched**, confirmed by `grep` this
+  filing, not relayed. Row 202 already reads *"correct, tested, and
+  **inert on the whole corpus**"* — it was accurate before this commit
+  and is accurate after it, because the commit corrects a rustdoc, not a
+  capability.
+
+#### Terminology (project rule 15)
+
+No occurrence of "dimension", qualified or bare, in this entry or in
+`26c6fad`'s diff — not applicable this filing.
+
+#### Ledger effects
+
+| ledger (per-item form, denominator stated — hard rule 10) | before | after |
+|---|---|---|
+| Pass family ceiling | **121** | **121** (unchanged — no Pass ID; a rustdoc correction) |
+| decision records | **077** | **077** (unchanged) |
+| standing rules | **R209** | **R209** (unchanged — **mint DECLINED**, see above; next free **`R210`**) |
+| `SESSION_LOG` filings | **219** | **220** |
+| commits filed by this entry | — | **1** — `26c6fad` |
+| commits in no filing (`tools/check-commits-filed.py`, run this filing) | **1 of 1** outside the baseline (`26c6fad`) | **0**, exit 0 — 25-line baseline unchanged |
+| `crates/` stale-claim survivors reported and open | **1** — `color.rs:599–600` | **0** |
+| `/Indexed` claim copies, per-site and per-file (hard rule 10a) | **3 copies in 2 files**; `943575e` corrected **2 of 3** = **1 of 2 files** | **3 of 3 qualified**; 1 further copy in `docs/compositor-plan.md:1044` is a **quoted historical claim under a correction header**, deliberately unchanged |
+| local `tools/check-*` scripts | **16** (11 `.py` + 5 `.sh`) | **16** (unchanged — no gate added or changed) |
+| `git describe --tags` | `v0.6.0-166-g5884ed1` (219th) | **`v0.6.0-168-g26c6fad`** |
+| commits ahead of `origin/main` | **2** (219th) | **4** — `fb06d93`, `5884ed1`, `eefb1af`, `26c6fad` |
+| newest bundle staleness, commits since `3c4c00e` (the bundle's own `refs/heads/main`, **not** ahead-of-remote) | **166** (219th) | **168** — `git rev-list --count 3c4c00e..HEAD`; `pdfce-20260817-v060.bundle`, 2026-08-17 20:34, **~3.5 days** |
+| `v0.7.0` tagged? | **no** (5th consecutive filing) | **no** (6th) — this filing is the last thing blocking it |
+| `D:\dev\rag\rust\` findings | **200** (201 directory entries incl. `index.md`, `ls \| wc -l` this filing) | **200** (+0 new, **+1 amended in place**) |
+| `C:\personal_rag\pdf\` lessons | **138** (139 entries incl. `index.md`) | **138** (+0) |
+| `docs/FEATURES.md` rows touched | — | **0** |
+
+---
+
 ### ★★★ `v0.7.0` IS BUILT AND SMOKE-TESTED, AND **IT IS NOT RELEASED** — no tag, nothing pushed, no GitHub release, and CI **RED** at the last pushed commit; ★★★ THE DISPATCH'S OWN BASELINE WAS WRONG AND ITS OWN BINARY SAYS SO — **"53 commits since `v0.6.0` (`df97ec2`)"** against `git describe` = **`v0.6.0-166-g5884ed1`** and the staged CLI's own banner = **`v0.6.0-164-g67ad7ea`**; ★★ AND THE BACKUP DENOMINATOR IS WRONG FOR THE **THIRD** CONSECUTIVE FILING — **"~55 commits" dispatched, 166 measured** — no Pass ID; release-process record — 2026-08-21 (two-hundred-and-nineteenth filing)
 
 **Sourcing.** This filing has a shell. **Every figure in this entry was

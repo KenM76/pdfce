@@ -54579,3 +54579,163 @@ Measured here, precondition by precondition:
    removing a duplicate `R209` after the fact; the next may not be
    noticed.
 
+## 2026-08-21 (two-hundred-and-twentieth filing) — `26c6fad` FILED: THE THIRD `/Indexed` COPY CLOSES AND THE LAST OWED `crates/` ITEM WITH IT, WHICH UNBLOCKS THE `v0.7.0` TAG; ★★ THE DAY'S THREE STALE-CLAIM CASES ARE THREE **STAGES**, NOT THREE INSTANCES — **NO SWEEP / WRONG KEY / WRONG BOUNDARY**; ★★★ THE BOUNDARY WAS DERIVABLE BY ONE UNRUN COMMAND — `git log -S` RETURNS **ONE** INTRODUCING COMMIT NAMING **BOTH** FILES; ★★ AND THE FILE-SCOPED BOUNDARY ORIGINATED IN **THIS ROLE'S OWN REPORT**, NOT THE ENGINEER'S GREP; **MINT DECLINED, `R209` STANDS** — recommended as ONE merged amendment to hard rule 11's method
+
+**Sourcing.** Shell held; every figure produced here by the command named
+beside it. **Scope: a small addition to the same session as the 218th and
+219th filings, not a new one.** One commit, no mint, and the `v0.7.0`
+release state is the 219th entry's subject — not re-narrated here.
+
+**Shipped:**
+- No Pass ID. **`26c6fad`** — `ColorSpace::indexed_entry`'s rustdoc at
+  `crates/pdfce-render/src/color.rs:599–600` gains the
+  present-vs-reachable qualification the other two copies already carried
+  (**present in four of the seven failing Ghent overprint patches,
+  reachable in none**). **+17 / −2 lines, one file, no behaviour change.**
+  Discharges the 218th filing's **owed item 2** — the last open `crates/`
+  stale-claim survivor.
+
+**Decisions made this session:**
+- **Mint declined; `R209` stands, next free `R210`.** The dispatch asked
+  explicitly whether this belongs in the absence-phrasing amendment, in a
+  separate one, or nowhere. **Answer: the same amendment, merged into one
+  sentence about the sweep's DENOMINATOR.**
+  - **Not a new rule** — hard rule 11 already says *"sweep **every place**
+    that describes it"*. This is an **instance** of the rule as written,
+    and the RAG's amendment #1 (*fixing one copy does not find the
+    others*) already covers it. A rule restating an existing rule's own
+    words is the *"reminder, not a remedy"* decline the 219th made.
+  - **Not a separate amendment** — the 218th declined the absence-phrasing
+    mint **on shape**, because *"a number would fragment the sweep
+    obligation."* Two amendments to the same method paragraph, three days
+    apart, fragment it the same way. And they are one thing: **the sweeper
+    chose the search's boundary from MEMORY rather than from a source that
+    knows the answer** — the *term* in the absence case, the *file* here.
+
+**Findings + decisions:**
+- **★★★ The denominator was machine-derivable and one command away.**
+  `git log --oneline -S "four of the seven" -- crates/` returns **exactly
+  one** commit, `0d5fc29`, and `git show --stat 0d5fc29` names **both**
+  files (`color.rs`, `overprint.rs`). **All three copies were born in one
+  commit across two files.** Recommended amendment text (the engineer's
+  act, not this role's): *"Derive the sweep's extent, do not remember it —
+  `git log -S "<the claim's most distinctive fragment>"` names every file
+  the claim was written into, because copies of one claim are almost
+  always born together."*
+  **★ Its limit, stated rather than discovered later:** it does **not**
+  subsume the absence case — the `interpret.rs` survivor shared no literal
+  fragment, so `git log -S` returns nothing for it. **The command handles
+  copies born together; reading for meaning is still the only thing that
+  handles a claim phrased as a negation.** The merged amendment must carry
+  both halves or it reads as a replacement for the harder one.
+- **★★ The dispatch's "third instance of one shape" is refined — three
+  STAGES, not three instances.** `05ba72a` = **stage 0, no sweep**
+  (`Pass 97.0` shipped and left 4 comments + 1 operator-facing message
+  describing the old world). `943575e`'s `interpret.rs` half = **stage 1,
+  wrong key** (a negation contains no token tying it to the name that
+  appeared). `26c6fad` = **stage 2, wrong boundary** (the key was right;
+  the scope was the file where the claim was noticed). *Why the refinement
+  earns its space:* a count of three says "be more careful", which is not
+  actionable; three named stages say **sweep at all → derive the key from
+  meaning → derive the boundary from the introducing commit**, and each
+  clause is checkable after the fact. The dispatch was not wrong, it was
+  **coarser than the evidence supports**, and the evidence was in the
+  three commit messages.
+- **★★ The file-scoped boundary originated on THIS ROLE'S side of the
+  handoff.** `943575e`'s commit message quotes the librarian's report
+  verbatim as *"**overprint.rs, twice**: `/Indexed` appears in four of the
+  seven failing Ghent overprint patches."* **That is a file-scoped
+  denominator, written by this role, and the engineer's sweep honoured it
+  exactly.** The grep is not where the boundary was set. This matters
+  because hard rule 11 deliberately puts the remedy on the librarian's
+  side — *"this belongs where it demonstrably works: in the reading, on
+  your side"* — so a reporting convention naming **files** rather than
+  **claim sites** hands the engineer the wrong denominator while looking
+  precise. **Report the claim and its site count first:** *"the `/Indexed`
+  claim, 3 copies in 2 files"*, not *"file X, twice"*.
+- **★ The definition site was the survivor in two of the day's three
+  cases, described in the same words both times, arrived at separately.**
+  `05ba72a`: `transparency_groups_knockout_approximated`'s own rustdoc —
+  *"the IDE-hover definition site, the one place a reader lands without
+  meaning to."* `26c6fad`: `ColorSpace::indexed_entry`'s own rustdoc.
+  Not coincidence — **a sweeper reasons from where the change was MADE,
+  and a definition site is where the change was DEPENDED ON**, so it is
+  the highest-traffic and lowest-swept location in the diff's
+  neighbourhood. **Heuristic: sweep the definition site of every symbol
+  the fix hangs on, regardless of what the grep returned.** Recorded as a
+  reading habit, **not** proposed as a rule — hard rule 11 already owns
+  those.
+- **Sweep re-run at `HEAD`, clean.** `grep -rn "four of the seven\|four of
+  seven\|in four of"` across `crates/`, `docs/`, `tools/`, `.github/`:
+  **3 code sites, all qualified** (`color.rs:600`, `overprint.rs:487`,
+  `overprint.rs:804`), plus **1 documentation site**,
+  `docs/compositor-plan.md:1044`, inside a block headed *"The `/Indexed`
+  finding as originally written, kept because the fix is real even where
+  it is currently unreachable"* under a `★ FIXED 2026-08-21 — AND IT MOVED
+  NOTHING` header. **A quoted historical claim under a correction header
+  is not a survivor** — stated because a future sweep will hit that line
+  and must not "fix" it. `FEATURES.md:202` and `NEXT_SESSION.md:196–210`
+  already carry the qualification. **0 survivors.**
+- **`docs/FEATURES.md`: 0 rows touched**, confirmed by `grep` here, not
+  relayed. Row 202 already reads *"correct, tested, and **inert on the
+  whole corpus**"* — accurate before and after, because the commit
+  corrects a rustdoc, not a capability.
+- **Amended:**
+  `D:\dev\rag\rust\disclosure_text_must_be_tested_against_producing_branch.md`
+  — dated footer with the three things it did not already have: the
+  **`git log -S` denominator** and its limit, the **report-side origin**
+  of the file boundary, and the **definition-site heuristic** at its
+  second independent instance. The file already carried the
+  file-vs-feature sub-lesson, written by the 218th filing **before** this
+  fix landed; the amendment extends rather than restates it.
+- **No `C:\personal_rag\pdf\` lesson** (nothing PDF-domain — the
+  present-vs-reachable fact is filed under `Pass 97.1a`, 217th) and
+  **nothing for `pdfce-spec-librarian`** (§8.6.6.3 cited as
+  already-sourced).
+
+**Ledger (per-item form, denominator stated — hard rule 10):** Pass
+ceiling **121** unchanged · decisions **077** unchanged · standing rules
+**R209** unchanged, next free **R210** · filings **219 → 220** · commits
+filed by this entry **1** (`26c6fad`) · `check-commits-filed.py` **1 → 0**
+outside the 25-line baseline, exit 0 · `crates/` stale-claim survivors
+open **1 → 0** · `/Indexed` claim copies **3 in 2 files**, `943575e`
+corrected **2 of 3 = 1 of 2 files**, now **3 of 3** qualified ·
+`tools/check-*` **16** unchanged · `git describe --tags`
+**`v0.6.0-166-g5884ed1` → `v0.6.0-168-g26c6fad`** · ahead of `origin/main`
+**2 → 4** (`fb06d93`, `5884ed1`, `eefb1af`, `26c6fad`) · newest bundle
+`pdfce-20260817-v060.bundle` (2026-08-17 20:34, **~3.5 days**), head
+`3c4c00e`, **168 commits since `3c4c00e` — the bundle's own
+`refs/heads/main`, NOT ahead-of-remote, which is 4** · `v0.7.0` tagged
+**no (6th consecutive filing)** · `D:\dev\rag\rust\` **200 findings** (201
+entries incl. `index.md`), **+0 new / +1 amended** · `C:\personal_rag\pdf\`
+**138 lessons** (139 entries), **+0** · `FEATURES.md` rows touched **0**.
+
+**Terminology (project rule 15):** no occurrence of "dimension", qualified
+or bare, in this entry or in `26c6fad`'s diff — not applicable.
+
+**Still in flight:**
+- **The release, and this filing was the last thing blocking it.** The
+  219th's sequence stands unchanged: **commit this filing → push `main` →
+  watch all NINE CI job definitions (TEN runs) → rebuild the zip at the
+  pushed `HEAD` (or tag `67ad7ea` deliberately and say which) → tag →
+  publish → run `tools/verify-release.py v0.7.0`.** The zip staged at
+  `67ad7ea` is now **five commits behind `HEAD`**.
+- **`R209`'s first live application is still pending** — CI has not been
+  observed green on the commit that would be tagged, and under `R209` a
+  green local sweep is not evidence about a CI job.
+- **Backups 168 commits and ~3.5 days behind**, and **4 commits exist off
+  the remote**. Engineer's calls.
+
+**For next session:**
+1. **Merge the two hard-rule-11 method amendments into one denominator
+   sentence** rather than filing them separately — with the `git log -S`
+   limit stated, so it is not read as covering the absence case.
+2. **Change this role's own survivor-reporting convention** to lead with
+   the claim and its site count (*"3 copies in 2 files"*) before naming
+   files. The file-scoped report is what set the boundary that failed.
+3. **`tools/verify-release.py v0.7.0` as the release's last step**, and
+   treat its output as the release record's source (carried forward from
+   the 219th, unchanged and still owed).
+4. **The `CODE_PREFIXES` complement** — still owed, still `tools/`-side,
+   carried forward from the 218th and 219th.
+
