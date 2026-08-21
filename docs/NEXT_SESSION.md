@@ -3,596 +3,368 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
-**Written 2026-08-20 (evening)**, replacing the 2026-08-20 (morning) handoff
-whose headline task — `Pass 119.0`, text editing inside form XObjects — **shipped
-this session**, along with `Pass 119.2`, `121.0`, `121.1`, `113.x` and `120.x`,
-none of which were the brief.
+**Written 2026-08-21**, replacing the 2026-08-20 (evening) handoff whose
+headline task — `Pass 97.x`, the colour compositor — **is where this session
+went**, and which it re-scopes.
 
 ---
 
-## §0 — DO THESE TWO THINGS BEFORE ANYTHING ELSE
+## §0 — DO THESE THREE THINGS BEFORE ANYTHING ELSE
 
-**1. `ls` BOTH FeatureRequests channels.** They are outside this repository, so
-**no gate will ever contradict a stale sentence about them** — including this
-one.
+**1. `ls` BOTH FeatureRequests channels.** They are outside this repository,
+so **no gate will ever contradict a stale sentence about them** — including
+this one.
 
 ```
 D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\
 D:\Dev\FeatureRequests\iccce_FeatureRequests\open\
 ```
 
-`R196` exists because a handoff said the pdfce channel was empty and it was not.
-**This session found `request_an_object_clipboard_the_whole_capability_not_the_convenient_subset.md`
-(2026-08-20 16:57) that way** — it had landed *after* the previous handoff was
-written, was in no document, and `grep ROADMAP.md` for "clipboard" returned
-**zero**. It is now filed as `Pass 120.0`–`120.4`.
+At this handoff: pdfce's channel had nothing new since our own 02:14 reply.
+**iccce's had TWO notes that landed at 03:04 and 03:15 — after the previous
+handoff was written — and both were compositor input.** They were read and
+used. That is the second session running where the `ls` found something a
+document said was not there.
 
-**2. Run the gates — `ls tools/check-*`, do not trust any list.** There are 15
-today. The previous handoff hard-coded 14 and warned, correctly, that its own
-list was already the thing it was warning about.
+**2. Run the gates — `ls tools/check-*`, do not trust any list.** 15 today,
+14 wired into CI (`check-image-colorspace-truth.py` takes a fixture dir and
+is a sweep tool, deliberately out). All green at this handoff.
 
-All green at this handoff.
+**★ `tools/check-ledger-numbers.py` was rewritten this session** and its
+live ceiling moved **118 → 121**. If you read a Pass ceiling from a document
+older than today, it is wrong by three families. Re-run the gate.
+
+**3. Read `docs/compositor-plan.md`'s 2026-08-21 amendment** before scoping
+anything in the `97.x` family. It carries the derivation that re-orders
+Stage B, and §7's two struck-through items carry measured negatives that
+change what is worth doing next.
 
 ---
 
-## §0.5 — WHAT SHIPPED, AND THE ONE THING IT LEAVES ON THE TABLE
+## §0.5 — WHAT SHIPPED
 
 | commit | |
 |---|---|
-| `cc57080` | **`Pass 119.0`** — text inside a form XObject is editable |
-| `a10a5c1` | **`Pass 119.2`** — `format_text` reaches it too, + a document repair (§3) |
-| `97ed7fa` | **`Pass 121.0`** — a code was reported as colliding with **itself**, falsely refusing his drawing |
-| `bab0a23` | **`Pass 121.1`** — one edit moved **1,676 labels**; reflow's "line" had no end |
-| `e5be7d5` | **`Pass 113.0`/`113.1`/`113.2`** — `transform_objects`, on **every** object kind (§2.5) |
-| `73fa218` | **`Pass 120.0`/`120.1`/`120.3`** — the object clipboard: copy, cut, paste, serialise (§2.6) |
-| `af5989f` | **`Pass 120.2`/`120.4`** — the clipboard's last two parts, **and a third real-file defect** (§2.6) |
-| `108d0e8` | CI ran **six of fifteen** gates; it runs **fourteen** now (§4) |
+| `7160819` | **`Pass 97.0a`** — `compositor.rs`; the four non-separable modes were blending against **imaginary white paper** |
+| `9b49ca0` | **`Pass 97.0b`/`97.0c`** — non-isolated groups get their backdrop; §11.4.6 knockout implemented |
+| `86a7b70` | **`Pass 97.0d`** — soft mask applied to the group **result**, not to each object inside it |
+| `0d5fc29` | **`Pass 97.1`, first two deliverables** — `/Indexed` colorants, and the counter for images that never reach overprint |
+| `05ba72a` | five stale comments + a user-facing message + the ledger gate, third instance of one class |
 
-Plus two librarian filings (209th, 210th), `decision 076`, and Backlog
-`119.1` / `119.3` / `119.4` / `120.0`–`120.4`.
+Plus librarian filings (216th), **`R208`** minted, **decision 077**.
 
-### ★★ THE TWO DEFECTS ONLY THE REAL FILE COULD FIND — read §6 first
+### The numbers, because the headline one did not move
 
-`119.0` and `119.2` were green on 20 tests and a fixture corpus. Then I ran
-them on **the operator's actual benchmark CAD drawing** (see §7 for the exact
-path, which is written there ONCE and nowhere else) and found two defects in a
-row, **neither of them in the code I had just written**:
+**Ghent board: `26 pass · 14 FAIL · 11 UNRESOLVED` — identical before and
+after.** What moved underneath it:
 
-1. **`Pass 121.0`** — it refused outright, with *"codes 361 and 361 both map
-   to 'Ʃ'"*. **The same number twice.** A code present in both a `bfchar` and
-   a `bfrange` was materialised twice (because `lookup` consults the singles
-   first), and the injectivity check reported a code colliding with **itself**.
-   A **false refusal** on a perfectly invertible font. That sentence had been
-   shippable since `R110` landed, because *a refusal message is the one string
-   a developer never expects to see*.
-2. **`Pass 121.1`** — with that fixed it edited, and reported
-   **`followers_repositioned=1676`**. Render diff: **34,059 changed pixels
-   across the whole page** versus **42 pixels in a 20×7 box** after the fix.
-   Reflow shifted every following `Tm` until a `Td`-family boundary, and a CAD
-   stream positions everything with `Tm` and **never emits `Td`** — so there
-   was no boundary and one edit slid the rest of the drawing sideways. **The
-   bug is `Pass 14.1`-era.** `119.0` is simply what first let the surgery reach
-   a stream shaped that way.
+| | before | after |
+|---|---:|---:|
+| total traps across failing patches | 67 | **55** |
+| `1_GWG161` (non-isolated knockout) | 14 traps | **2** |
+| `1_GWG1610` strip correlation | 0.576 | **0.962** |
+| `1_GWG168` strip correlation | 0.725 | **0.978** |
+| `1_GWG169` strip correlation | 0.905 | **0.986** |
 
-**The transferable half:** a reach extension does not only find new text, **it
-finds old assumptions**. Both defects were in code years older than the Pass
-that exposed them, and no fixture in the corpus has the shape that triggers
-either. **Run the new capability on his real file before calling it shipped.**
-
-**The operator's own framing, which is why this jumped the queue:** *"I need
-that editing capability as it is 99% of the text I will want to edit."*
-Measured on his benchmark CAD drawing, that is if anything low — the page's own
-`/Contents` holds 3,007 single-character `Tj` of producer watermark, and **one
-form XObject holds 1,696 show operators** carrying every label, the title block
-and every *pdf dimension* callout.
-
-### ★★ THE THING THAT IS NOT DONE, AND IT IS NOT CODE
-
-**`pdfceGUI` still has a caret guard that refuses form text.** Until they delete
-it, none of this reaches the operator. The reply telling them so is
-`open/2026-08-20-form-xobject-text-is-editable-and-your-caret-guard-is-now-wrong.md`,
-and `Editability::InsideForm` is now `#[deprecated]` **specifically** so their
-build tells them where the arm is.
-
-**Do not tick `FEATURES.md`'s gui box for either verb until they confirm.** The
-librarian was told this explicitly and complied; it is repeated here because the
-temptation on reading "shipped" is to tick everything.
+Full-corpus render parity, 4,023 files, **run twice** — this branch and a
+worktree built at `2e6bb83` — **identical** bucket for bucket, band for
+band, same single unexplained file. That is the intended result and it is
+why the *isolated* group composite still goes through
+`tiny_skia::draw_pixmap`: pdfce's `f32` path computes the same function with
+different rounding, so routing the already-correct case through it would
+move every anti-aliased edge in the corpus and turn the parity gate into a
+rounding detector.
 
 ---
 
-## §1 — THE QUEUE, in the order I would take it
-
-**★ The operator's standing instruction this session was
-*"fix the housekeeping items first before moving on to the color compositor.
-loop until done."*** The housekeeping is done: the clipboard family is closed,
-CI runs fourteen of fifteen gates, and the iccce note is read and answered.
-**`Pass 97.x`, the compositor, is next** — and §2.7 changes how it must be
-scoped, so read that before anything else.
-
-1. ~~**`Pass 113.0`** — `transform_objects`.~~ **SHIPPED this session**
-   (`e5be7d5`, with `113.1` preview and `113.2` CLI). See §2.5 for what it
-   decided, including the one thing a consumer must not get wrong.
-
-2. ~~**`Pass 120.0`–`120.4`** — the object clipboard.~~ **THE WHOLE FAMILY
-   SHIPPED** (`73fa218`, `af5989f`). See §2.6, including the third real-file
-   defect it turned up. Only *serialising annotations* remains, filed on its
-   own.
-
-3. **`Pass 119.1`** — `unshare_form` (copy-on-write a shared form onto one
-   page). See §2 for why this is a *separate verb* and not a mode of `edit_text`.
-
-4. **`Pass 97.0/97.1/97.2`** — the colorant compositor. Still the highest-impact
-   item by Ghent count. Plan of record `docs/compositor-plan.md`. ★ Its "16 of
-   the 18 remaining Ghent failures" thesis is **AMENDED and owes a
-   re-derivation** before the Pass is scoped from it. This is also where the
-   **iccce dependency edge appears**, so `Pass 101.1` unblocks at the same
-   moment. **Ghent standing has not been re-measured since 2026-08-19**
-   (26 pass / 14 FAIL / 11 UNRESOLVED of 51) — re-measure rather than quoting.
-
-5. **`Pass 80.0`** (note text on markup) and **`Pass 81.1`** (markup opacity,
-   write half) — both `pdfceGUI` requests, both already scoped.
-
-6. **`Pass 119.3`** — align `pdfce-render`'s nested-form resource fallback with
-   `text_edit::forms`. Small, and see §2 for exactly what diverges.
-
-7. ~~**The `iccce` channel** — `note_gray_black_routing_is_yours.md`~~ **READ
-   2026-08-21, and answered.** See §2.7 — it changes how `Pass 97.x` must be
-   scoped, and the reply is
-   `open/2026-08-21-reply-gray-routing-we-never-noticed-and-here-is-why.md`.
-
----
-
-## §2.7 — ★★ WHAT THE iccce NOTE CHANGES ABOUT THE COMPOSITOR — read before scoping `Pass 97.x`
-
-**Their question to us was: does pdfce route `DeviceGray` → CMYK per ISO
-32000-2 cl. 10.3.2 (inside the colour-managed branch) or per cl. 10.4.2.1 (the
-less-capable processor's fallback)?**
-
-**Answered by measurement, not memory: NEITHER, because pdfce has no
-`DeviceGray` → CMYK conversion at all.** Every device space converts to
-**sRGB** — `gray_to_srgb`, `rgb_to_srgb`, `cmyk_to_srgb`, and there is no
-fourth function. The render target is a `tiny_skia::Pixmap` (RGBA8) and there
-is **no CMYK-native output path anywhere in the workspace.**
-
-★ **So the routing decision belongs INSIDE the compositor Pass**, because
-`97.x` is the first thing that gives pdfce a CMYK-native destination. On the
-day it lands, the clause stops being a question and becomes a line somebody
-writes. **Make it deliberately; do not let it arrive as a side effect.**
-
-Three things from that note are now compositor input:
-
-- **§8.6.5.7 NOTE 2** — a 4→3→4 conversion *"is unnecessary and results in a
-  loss of fidelity in the black component"*. That is the standard's own warrant
-  for not round-tripping `DeviceCMYK` through a PCS, i.e. **a conformance
-  argument rather than a taste one**, which the compositor plan lacked.
-- **The corrected GWG 23.0 panel values**: `DeviceGray` **25 %**, `DeviceCMYK`
-  **0/0/0/75**, `Separation` **75**, `DeviceN` **75**. The note's *earlier*
-  figures (50 % / 0/0/0/50) were wrong and were wrong **in our inbox**. Do not
-  build a fixture from anything but these.
-- **★ `1 − 0.25 = 0.75`** — GWG authored the patch on the device-space rule
-  itself, so the artwork is independent evidence for the whole conclusion,
-  arriving from a direction neither project used to reach it.
-
-### ★★★ THE SPEC DISPATCH CAME BACK, AND IT CHANGES MORE THAN THE QUESTION DID
-
-**First, a correction I owe this document.** It said our corpus *"does not
-hold clause 10 at all"*. **False.** `iso32000__s__10.md` (42 kB),
-`iso32000__s__10.8.md`, `iso32000__s__8.6.5.6.md`, `iso32000__s__8.6.5.7.md`
-and §8.6.6.4/.5 have been there since **2026-08-19**, built for an earlier
-iccce dispatch on the same topic. **iccce's claim was stale and I relayed it
-without grepping my own corpus** — the exact failure `CLAUDE.md`'s XFA item
-already records: *the answer was already sourced in one document while another
-still asked the question.* One `ls` would have caught it.
-
-**The ambiguity is adjudicated: `REND-A1` (indexed against iccce's `A52`).**
-iccce's resolution **holds, but not for their reason.** Their containment
-argument (10.3.2 is inside 10.3, so "always follow 10.3" routes you to
-10.4.2.3) was **tested and found insufficient on its own** — P1 and P2 are
-*both* `should`, so neither outranks the other. What settles it is a third
-clause nobody cited: **§10.5** (1.7 §10.4, transfer functions), in **both**
-editions, calls `c = m = y = 0` *"the normal conversion"* from `DeviceGray` to
-`DeviceCMYK` and hangs a **`shall not`** on it — in the ordinary rendering
-path, outside §10.4.2 entirely.
-
-**★ And PDF 1.7 answers it the OTHER WAY, with a `shall`.** §10.2: *"CIE-based
-gamut and colour mapping functions **shall be applied only to** colour values
-presented in a CIE-based colour space."* So colour-managing gray→CMYK is
-**unusual but conforming in 2.0, and non-conforming in 1.7**. The ambiguity is
-*created by 2.0*, not inherited — which inverts the framing both projects were
-using. A correction is owed to iccce and has been sent.
-
-### ★★ AND THE COMPOSITOR FALSIFIES A PREMISE THE CORPUS IS BUILT ON
-
-`iso32000__ref__spot_colour_overprint.md` opens with *"pdfce renders to an
-**additive display**"* and derives six consequences from it — including
-**"No colorant matching. Ever."** A CMYK-native output path makes that
-**false**, and five rows invert. The corpus now carries a device-class banner
-and a `§A-SUB` inversion table. Three that bite:
-
-- **Colorant matching becomes obliged** (`shall`), and **`SEP-A1` — colorant-
-  name matching is undefined — stops being moot.** It was filed *"moot for
-  pdfce today"*. `97.x` un-moots it: **you will need a name-matching policy.**
-- **`NChannel` reverts per-component**, not wholesale — C/M/Y/K and matched
-  spots paint directly; only unmatched spots hit the tint transform.
-- **★ The overprint gate is REWORDED between editions and lands exactly on
-  this device.** 1.7 disables `OPM` when the native space **is not
-  `DeviceCMYK`** (identity test); 2.0 when it **does not include CMYK device
-  colourants** (inclusion test). A CMYK+N-spot buffer is *not* `DeviceCMYK`
-  but *does* include those colourants ⇒ **`OPM` is inert under 1.7 and live
-  under 2.0.** Same file, same compositor, two conformant and visibly
-  different results. **Filed as a setting, not a hard-coded default** — and
-  that is `R169`'s shape, so do not quietly pick one.
-
-**New corpus file: `iso32000__s__11.7.5.3.md`.** §11.7.5 was explicitly *out*
-of the corpus and holds rules the compositor cannot be built without:
-
-- **conversion happens at EVERY GROUP BOUNDARY**, not once at the device;
-- BG/UCR are captured at **paint time** for an object and at **`Do` time** for
-  a group;
-- ★★ **BG/UCR are fenced by a `shall … only` to `DeviceRGB` → `DeviceCMYK`.**
-  Gray→CMYK, CIE→CMYK and CMYK→CMYK are three *other* rules. **A compositor
-  that routes everything through BG/UCR is non-conforming** — check
-  `docs/compositor-plan.md` against this before building from it.
-
-It also closes §8.6.5.9 (black point compensation), a gap three corpus files
-had declared — with the note that pdfce **cannot implement `/UseBlackPtComp
-ON` faithfully**, because the algorithm is delegated to paywalled ISO 18619.
-
-### Three corrections to what iccce relayed, and one to what I did
-
-- **§8.6.6.4's "shall ignore" is real but GATED**: *"The preceding paragraph
-  applies only to **subtractive output devices**."*
-- **"A `Separation` is a one-component `DeviceN`" overstates the text.**
-  §8.6.6.5 says one *can be defined* as such — an equivalence in one
-  direction, not identity.
-- **`cl. 10.3.1` has no edition attached in their note.** 1.7 §10.3.1 is the
-  `DeviceCMYK` passthrough; **2.0 DELETED that sentence**, and 2.0 §10.3.1 is
-  "General" under the CIE branch.
-- **Mine:** I passed on "your corpus holds no clause 10" without checking.
-
-★ **A licence constraint that binds anyone touching this**: the ISO 32000-2
-source in `_sources/` is a **single-user PDF Association copy licensed to the
-operator**, watermarked *"copying and networking prohibited"*. The corpus
-quotes **1.7 wording** wherever the sentence exists in both editions precisely
-so pdfce's own code comments can carry it; 2.0 is cited by clause number with
-short quotation only, marked never-publish. **Keep that discipline** — both
-this repository and `iccce` are MIT and public.
-
-★ **A licence constraint that binds anyone touching this**: the ISO 32000-2
-source in `_sources/` is a **single-user PDF Association copy licensed to the
-operator**, watermarked *"copying and networking prohibited"*. Short quotation
-with citation is fine; **no bulk transcription into any repository** — both
-this one and `iccce` are MIT and public.
-
----
-
-## §2.6 — WHAT `Pass 120.x` FOUND, and the two parts still open
-
-**★★ The claim the Backlog entry flagged for verification is CONFIRMED AND
-INSUFFICIENT**, and that distinction is the scoping outcome. `pdfceGUI`
-believed `import_object` already did the hard half. It does — and it is the
-*smaller* half. `import_object` copies **indirect objects**; a page's content
-objects are **byte ranges inside a content stream** whose operators name their
-resources **by page-local name**. On the destination page `/F1` is a different
-font, so pasting verbatim draws the right glyphs in the wrong typeface — **and
-nothing errors**, because a resource name is not a reference and there is
-nothing in the graph to remap.
-
-So the feature is name rebinding: copy records the names each item consumes and
-carries the objects behind them; paste re-binds each to a fresh name and
-**rewrites the names inside the copied bytes**, driven by a 10-operator /
-7-category table.
-
-**The clip owns its resources** (transitive closure by value, payloads as bytes
-not spans), which is why cross-document paste is the same code path and why
-`to_bytes` shipped the same session rather than forcing that structure to be
-invented later.
-
-**`Pass 120.2` and `120.4` shipped 2026-08-21 (`af5989f`) — the family is
-CLOSED.**
-
-- **`120.2`** — `ObjectClip::to_pdf()`. The page **is** the selection. Still a
-  *different* format from `to_bytes`, and **a test now enforces it**:
-  `from_bytes` refuses a PDF by name, so a future "simplify these into one"
-  cannot pass quietly.
-- **`120.4`** — annotations got their own address space (`copy_annotations`,
-  `copy_selection`). ★ **The filed "refuse loudly" framing was aimed at a hole
-  that did not exist** — content indices could not *name* an annotation to
-  refuse it. Once the address space existed, markup and ce dimensions turned
-  out **paste-able**, copied through pdfce's own models (a ce dimension carries
-  its group's **name and unit**, matched or created on paste). **Widgets are
-  refused by name**: a renamed field is a *different* field.
-- **Still open, filed as its own item:** serialising annotations into a clip
-  payload. It needs a second versioned encoding beside the content one.
-
-### ★★★ AND HIS REAL DRAWING FOUND A THIRD DEFECT — read this before the next reach extension
-
-Exporting a selection from the operator's CAD file produced a PDF whose text
-**pdfce's own extractor** read as `chars=0 codes=4 failed=4`:
-
-> *a show operator appeared with no font selected (§9.4.1 requires Tf first)*
-
-**Text state is graphics state (§8.4.1 Table 52).** A producer may set
-`/F8 12 Tf` **once** and emit many `BT`…`ET` blocks that inherit it — which is
-what a CAD exporter does. A text object's byte span is its `BT`…`ET`, so **the
-`Tf` is not in it.** Copy bound no font, paste emitted fontless text, and
-**nothing errored at either end.** Same argument for a path stroked after
-`0.5 g 2 w`: it would have pasted black and hairline.
-
-Fixed with a **prelude** — the inherited state, captured at copy time, emitted
-inside the paste wrapper. `ClipItem::bytes` stays verbatim so *what the
-producer wrote* and *what pdfce re-established* stay distinguishable.
-
-**★ THREE CONSECUTIVE PASSES, THREE DEFECTS, NONE FOUND BY A FIXTURE.** The
-false font refusal, the reflow that moved 1,676 labels, and this. All three
-were in code older than the Pass that exposed them. **Run it on his file
-before calling anything shipped** — it is now the last step, not an optional
-one.
-
----
-
-## §2.5 — WHAT `Pass 113.x` DECIDED, and the one thing not to get wrong
-
-**The open question is closed by IMPOSSIBILITY, not by preference.** `q…cm…Q`
-wrapping beat operand rewriting because operand rewriting *cannot* do the job:
-a rotated rectangle has no `re` spelling, `line_width` is a user-space scalar a
-coordinate scale leaves behind, and text and images carry no coordinate
-operands at all. Wrapping never looks at an operand, so **kind-agnosticism is a
-property of the mechanism** rather than a match arm somebody must remember to
-extend.
-
-**★★ The matrix emitted is NOT the matrix passed in.** `matrix` is page space
-(that is where the operator gestures); `cm` composes into the CTM in force at
-that point, which is the object's *user* space. pdfce emits
-**`X = CTM × M × CTM⁻¹`** from each object's own captured CTM. Emitting the
-request directly is correct only where an object's CTM is the identity and
-**silently wrong everywhere else** — the object lands twice as far as the
-pointer went, with nothing erroring. Sabotage-verified: removing the
-compensation fails exactly one of sixteen tests, the one written for it. **If
-you touch this code, run that test first.**
-
-**`TextObject` gained a `ctm` field.** Paths and images always had one; text did
-not, because until now no verb needed it.
-
-**Both `R206` options ship** — mixed selections **transform whole** (option:
-refuse, naming both kinds); a singular matrix is **refused by name** (option:
-`Clamp { min }`, which clamps and discloses; a *sheared* singular matrix
-refuses the clamp, because its degeneracy is a direction rather than an axis).
-**This Pass is `R206`'s founding instance and discharges it.**
-
-**★ A negative scale is not singular** — a mirror is invertible — and there is
-a test whose only job is to stop somebody "fixing" this by refusing
-non-positive scales, which would break mirroring while passing every other
-test.
-
-**One measured number a consumer will hit:** the operator's CAD page takes
-**~4 s to decompose in a debug build**, and *both* the verb and the preview
-decompose. `pdfceGUI` was told to call the preview on selection change, not per
-frame.
-
-**Still unstarted from that request:** `Pass 114.0`–`117.0` — annotation
-`/NoZoom`/`/NoRotate` placement, markup and redaction-mark transforms,
-per-variant ce-dimension rotate/scale, widget resize.
-
----
-
-## §2 — WHAT `Pass 119.x` DECIDED, so it is not re-litigated
-
-**Shared forms: edit-in-place, disclosed. `decision 076`.** A form XObject may
-legally be painted from several pages (§8.10.1 states it as the *purpose* of the
-feature) and **no clause in either ISO edition binds one to a page** (`FX-N1`,
-permanent, argued three ways). So an edit changes every sheet, and there is
-exactly one stream — pdfce cannot prevent it, only disclose it.
-
-**Copy-on-write was weighed and declined as a default**, for two reasons and the
-second is decisive:
-
-1. Text in a shared form is **identical on every sheet by construction**, so
-   wanting one sheet different is wanting to *break the sharing* — a distinct
-   act, not a mode of "edit text".
-2. **CoW is not always expressible.** A form invoked from inside another form
-   cannot be re-bound without editing the parent, which may itself be shared. A
-   default whose semantics silently depend on nesting structure is worse than one
-   that always means the same thing.
-
-**★ Acrobat's behaviour here is unsourceable, and that is a *sourced* result.**
-Fifty tool calls across Adobe Community, the Acrobat SDK docs, Enfocus/PitStop,
-Apryse and prepressure.com found nobody documenting what Acrobat does to a
-shared form's stream — **including Acrobat's own competitors**. Recorded in
-`Acrobat_Features\text_edit__form_xobject_shared_content_editing.md`, which also
-flags a trap **by name**: a well-indexed forum thread titled almost exactly
-*"text edits appear on every page"* is root-caused by AcroForm field-name
-collisions, **not** shared form XObjects. Do not re-run that search expecting a
-different answer.
-
-**★ Two resource-merge tolerances were built and reverted before shipping.**
-Merging a form's resources per *name*, then the weaker per-*category* version.
-Both made the edit path resolve a font **`pdfce-render`'s interpreter does not**
-(its `Do` handler takes the form's own `/Resources` when present and the
-caller's only when absent), so the advance would be computed from `/Widths`
-nothing else consults and text would land **visibly wrong while every internal
-check reported success**. `text_extract` agrees with the renderer independently.
-Settled on whole-dictionary, own-wins-entirely. **If you ever meet a
-partially-declared form on real producer output, that measurement reopens the
-decision** — there is a `personal_rag/pdf` entry waiting for it.
-
-**The one divergence that survives, stated rather than hidden:** for a *nested*
-resource-less form, `text_edit::forms` inherits the **page's** resources (the
-clause's actual words) and `pdfce-render` inherits the **caller's** (the common
-implementation). Identical at depth 0, which is every real file.
-`FormRef::resource_tier` records which tier resolved. `Pass 119.3`.
-
-**Deliberate non-goals, so they read as decisions:** `reflow_block` and
-`add_text` still reach page-stream text only. `add_text` is **not merely
-unfinished** — appending to a form's content stream changes what *every*
-invocation site paints, a different disclosure from an in-place edit's.
-`editability()` reports `edit_text`'s reach, so it is **optimistic** for those
-two.
-
----
-
-## §3 — ★★ THE DEFECT I SHIPPED, AND WHAT CAUGHT IT
-
-`cc57080` **duplicated 141 lines of `docs/core-api/02-editing-and-saving.md`** —
-the document `pdfceGUI` builds against. Sections 1.4 through 1.9 existed twice,
-and **the second copy still carried the stale "refuse a caret on form text"
-warning the commit was written to reverse.**
-
-The cause was one missing argument:
-
-```python
-end = s.index(TABLE_MARKER)        # searches from 0
-# should have been s.index(TABLE_MARKER, start)
+## §1 — ★★★ THE FINDING THAT RE-ORDERS THE PLAN. Read before scoping `97.1`.
+
+`docs/compositor-plan.md` §4 expects **seven patches** from Stage A. It got
+zero patch verdicts, **and the group model is not why.**
+
+Derived by hand on `1_GWG162`'s `Difference` cell, whose two operands are
+printed in the file — X1 = `DeviceCMYK 0 1 0 0` (magenta), X2 =
+`DeviceCMYK 0 0 0 1` (black), `/BM /Difference`, and the surround a correct
+engine must produce is RGB `(0, 165, 79)`:
+
+```text
+§11.3.4 complement:  cb′ = (1,0,1,1)   cs′ = (1,1,1,0)
+|cb′ − cs′|              = (0,1,0,1)
+complement back          = (1,0,1,0) = DeviceCMYK 1 0 1 0 = GREEN
 ```
 
-`"| I want to… | Call | Line | Returns |"` appears in nearly every section, so
-`end` resolved ~200 lines *before* `start` and the splice re-appended everything
-from §1.3 onward.
+**That is the surround, exactly.** pdfce renders `(237,1,140)`; pdfium
+renders `(202,29,108)`; both blend in RGB and both are wrong, differently.
+The trap is authored on the **blending colour space**, and no amount of
+group-model correctness reaches it.
 
-**Three things worth carrying, and the second is the one that matters:**
+★ **Every Ghent transparency patch declares `/Group /CS /DeviceCMYK` on the
+PAGE** — including `3_GWG161`, whose own objects are `ICCBased` RGB. So the
+blending space is CMYK for all of them regardless of what the artwork is
+coloured in.
 
-- **The failure mode is silent by construction.** A bad splice end does not
-  error, lose content or reorder anything — it **duplicates**, and a duplicated
-  Markdown section is invisible to every check this project owns.
-  `check-core-api-verbs.py` was **green** (it counts verbs and line-count
-  claims; a duplicated section has the same verbs). `cargo test` was green. The
-  commit's `+205 lines` looked plausible for a rewrite meant to add a hundred.
-- **★ It was caught by a READER, not a check** — `pdfce-librarian`, reading the
-  document while filing the Pass it had just been told about. That is the
-  argument for the post-commit librarian dispatch being a *read* and not a
-  transcription, and it is the second time this month an omission has lived
-  precisely in the gap where nothing was looking.
-- **Recorded, not promoted.** One occurrence against this project's two-instance
-  bar, so no standing rule was minted. It is in the engineer's agent memory
-  (`feedback_splice_end_marker_must_be_searched_from_start.md`) and escalated to
-  `C:\personal_rag\claude_code\`. **A second instance changes that.**
-
-Prefer the `Edit` tool for structured documents: it fails loudly on a non-unique
-`old_string` instead of guessing.
+⇒ **§11.3.4's subtractive complement is `Pass 97.1`'s leading deliverable,
+ahead of the spot planes.** And it needs a real colorant buffer: the
+4→3→4 reconstruction is measurably lossy — `DeviceCMYK 0 1 0 0` painted and
+recovered from the sRGB buffer comes back as `(0, 0.995, 0.409, 0.071)`, and
+that `Y = 0.41` is not a rounding error.
 
 ---
 
-## §4 — GATES: the same lesson, from the other side
+## §2 — THE QUEUE, in the order I would take it
 
-`tools/check-outcome-disclosed.py` reported **clean** the whole time it could
-not see `EditReport`. Its `OUTCOME_STRUCTS` list had been written from `edit.rs`
-alone, so **every report type in a submodule was outside it.** Three fields were
-added to `EditReport` this session — one of them `form_invocations`, whose only
-purpose is to stop a shell changing six sheets while showing one — and the gate
-would have stayed green if all three had been dropped on the floor.
+1. **`Pass 97.1` — the colorant buffer, led by §11.3.4.** The big one, and
+   now the only thing that can move the transparency panels. `Pass 97.0`
+   built the group model it plugs into. §3 below is what to build it from.
 
-**The finding was forecast before the gate ran**: 13 fields, 11 printed ⇒ two
-problems, specifically `disposition` and `extra_objects_emptied`. It reported
-exactly those two. Both now print. `FormatReport` followed. The gate covers
-**100 fields across 14 structs**, up from 58 across 12.
+2. **`Pass 119.1`** — `unshare_form` (copy-on-write a shared form onto one
+   page). Carried from the previous handoff, unstarted, still a *separate
+   verb* and not a mode of `edit_text` (`decision 076`).
 
-★ **This is the fifth instance of the under-reporting-gate class and the first
-whose mechanism is the SCOPE OF ITS INPUT LIST rather than the spelling of a
-pattern.** The previous four were all "the regex missed a spelling". Widening a
-pattern does not fix a list that was written from one file.
+3. **`Pass 80.0`** (note text on markup) and **`Pass 81.1`** (markup
+   opacity, write half) — both `pdfceGUI` requests, both already scoped,
+   both untouched by this session.
 
-### ★★ AND THE GATES THEMSELVES WERE ONLY HALF-WIRED — fixed 2026-08-21 (`108d0e8`)
+4. **`Pass 119.3`** — align `pdfce-render`'s nested-form resource fallback
+   with `text_edit::forms`.
 
-> ★ **A hash-hygiene note, because this document cited the wrong one for an
-> hour.** That commit was written, cited here as `2ddbbbe`, and then
-> **amended** — which gave it a new hash and left this file pointing at an
-> object that is no longer on `main`. It still *resolves* (git keeps the old
-> object), so nothing looked broken. **Cite a hash after the last amend, not
-> before**, and re-derive from `git log` rather than from memory of what you
-> just typed.
-
-`tools/` held **fifteen** check scripts and CI invoked **six**. The other nine
-ran only when somebody remembered to run them locally — which is exactly the
-"green because nobody looked" failure each of those scripts was written to end,
-one level up.
-
-**The ratio had been mis-filed twice before anyone counted it**: one session
-recorded "3 of 16", the next corrected it to "5 of 14", and both were derived
-by *reading* rather than by counting. `ls tools/check-*` plus one grep over
-`ci.yml` are the only two commands that answer it.
-
-Fourteen are wired now. The fifteenth, `check-image-colorspace-truth.py`, is
-**deliberately** out — it takes a fixture directory and checks a corpus, not
-the repo, so it is a sweep tool rather than a gate. Named in `ci.yml` so the
-next person counting does not record it as a ninth miss.
-
-They went into the `ui-strings` job on purpose: it already checks out with
-`fetch-depth: 0`, which `passes-filed` needs to walk history, and **a shallow
-clone would have made it pass vacuously.**
-
-**`tools/check-one-commit-per-command.py` earned its keep the same day** — the
-new session-path form loop committed per iteration. Harmless while the loop
-returned on first success, and the exact latent shape `import_form_data`
-shipped. Hoisted.
+5. **The reference-strip threshold for `ghent-check.py`** — see §5. Small,
+   and it is the difference between three patches reading UNRESOLVED and
+   reading what they are.
 
 ---
 
-## §5 — STATE AT HANDOFF
+## §3 — WHAT `Pass 97.0` BUILT, so it is not rebuilt or mistrusted
 
-- **Working tree clean apart from agent-memory files.** Two code commits today
-  (`cc57080`, `a10a5c1`) plus the librarian's filings. **Nothing pushed.**
-  `github.com/KenM76/pdfce` is public and has a remote — a careless
-  `git push` reaches the world.
-- `cargo test --workspace` green; `cargo fmt --check` clean;
-  `clippy --all-targets --workspace` clean.
-- `cargo tree -p pdfce-core` / `-p pdfce-render` / `-p pdfce-cli`: **no manifest
-  was touched and no dependency was added this session**, so the GUI-free
-  property is unchanged by construction.
-- **One new wall-clock read in `pdfce-core`, the crate's first.** `cfg`-guarded
-  off on `wasm32` (where `SystemTime::now` panics); the fallback is "leave
-  `/LastModified` alone", never a fabricated constant. Worth knowing before the
-  web fork.
-- **`v0.7.0` is bumped but NOT tagged.** Standing operator go-ahead for
-  builds/releases since 2026-08-17. Verify CI green on `HEAD`, then
-  `verify-release.py` → tag → portable package → GitHub release → librarian
-  release record. A CI-built release reports `revision: unknown` unless that
-  workflow gets `fetch-depth: 0`.
-- **Ledger, re-measure with `tools/check-ledger-numbers.py` rather than trusting
-  this line** — it has been wrong before, by three, this same week.
-- New spec corpus file: `iso32000__ref__form_xobject_text_edit.md` (68 kB),
-  which did not exist before this Pass. It also **corrected the corpus**:
-  `iso32000__ref__text_edit_surgery.md` had been silently page-`/Contents`-only,
-  so an LLM grepping "text edit surgery" would have got a confidently wrong
-  answer.
-- New Acrobat corpus file:
-  `text_edit__form_xobject_shared_content_editing.md` — a file whose finding is
-  an **absence**.
+**`crates/pdfce-render/src/compositor.rs`** is now the single place the
+standard's compositing arithmetic lives: §11.4.4's element formula,
+§11.4.8's knockout variant, §11.4.4's backdrop removal, §11.3.7.3's `Union`,
+and all thirteen Table 136 separable blend functions — transcribed **with**
+the corpus's four printing errata (`GD-1`…`GD-4`: `ColorDodge`'s and
+`ColorBurn`'s second branches, `SoftLight`'s `D(x)`, and `Difference`'s
+missing absolute-value bars, which every text extractor loses because they
+are path-drawn).
+
+**`Canvas::group`** replaces `Canvas::layer` for transparency groups.
+`Canvas::layer` stays, unchanged, for an annotation's `/CA` — that one
+really is "composite this sub-drawing as one object" over a transparent
+start.
+
+★ **The two-walk mechanism, and why it is not expensive.** The standard
+needs two per-pixel quantities one `Pixmap` cannot both hold: `C_n`
+(accumulated **over** the backdrop) and `α_gn` (the group's own alpha,
+**excluding** it). So a non-isolated group's contents are walked twice. The
+second walk is **skipped under §11.4.4 NOTE 5's own condition** — with the
+interior compositing `Normal` throughout, the one-walk answer is
+*identically* exact. On the operator's real CAD drawing the counter is zero
+and the render time is unchanged at **0.96 s**.
+
+**`KnockoutTarget`** — four planes where a `Pixmap` has one. Each element is
+rasterised into a reused scratch **at full opacity**, so its alpha comes
+back as pure coverage (`f_s`), with `q_s` taken out of the paint — because
+§11.4.8 scales the destination by `(1 − f_s)` where the ordinary formula has
+`(1 − α_s)`. §11.4.6 NOTE 6's nesting rule is honoured: a non-isolated group
+inside a knockout group inherits the **outer** group's initial backdrop.
+
+**The soft mask** is lifted out of the contents' clip at a group `Do` and
+applied once to the composite. Folding into the clip is **still** what
+happens to an elementary object and is **correct** there — §11.6.4.1 makes
+the mask value that object's `q_m`. Two clauses, one implementation, not a
+fix half-applied.
+
+### Three counters whose meaning you must not misread
+
+- **`transparency_groups_knockout_approximated` CHANGED MEANING.** It used
+  to be `1` for every `/K true` group; it now counts the **elements** inside
+  one that read the destination back and so could not be given knockout
+  semantics. A knockout group pdfce renders exactly reports **zero**.
+- **`groups_backdrop_reruns`** is a **cost** counter, not a shortfall — the
+  only place in the renderer where one page's content stream is interpreted
+  more than once. Zero is normal and does not mean non-isolated groups were
+  mishandled.
+- **`overprint_images_unsupported`** is new and deliberately **not**
+  `overprint_refused`. `refused` = "offered and could not run"; this =
+  "never offered this object class at all".
 
 ---
 
-## §6 — TRY IT (and this is where the two 121.x defects came from)
+## §4 — ★★ TWO FIXES THAT MOVED NOTHING, AND WHY THAT IS THE USEFUL PART
 
-**Run it on a real drawing before believing a green test run.** Both defects
-above were invisible to 20 passing tests and a fixture corpus, and both
-surfaced within two commands of pointing the binary at the file named in §7.
+Both were listed in `docs/compositor-plan.md` as measured-and-confirmed.
+Both were real. Both are inert today.
+
+**`/Indexed` colorant classification.** §8.6.6.3 puts an `/Indexed`
+operand's colour values in the **base** space, and Table 149 keys on which
+colorants the source *names* — so `/Indexed [/DeviceN [/Cyan] /DeviceCMYK …]`
+was classified as "some other process space" and Table 149 decided what
+survives from a colorant list it had never read. Fixed in three places (the
+third — `overprint_would_change` — was **not** in the plan's write-up, and
+it is the predicate that decides whether the composite is called at all).
+
+**Measured A/B, pre- and post-fix binaries, same corpus:**
+`overprint_effective` / `overprint_composited` / `overprint_refused` /
+`overprint_pixels` **identical to the digit** on all four patches that carry
+`/Indexed`. Cause, verified structurally: **every one of those spaces is an
+IMAGE colour space and nothing else** (`1_GWG190`'s two are `/XO1` and
+`/XO2`, both `/Subtype /Image`), and `overprint::composite` has no image
+call site. **The plan listed the `/Indexed` half first and the image half
+second; the dependency runs the other way round.**
+
+**Stage A itself**, same shape at a larger scale — see §1.
+
+★ **The transferable half, and it is now in the engineer's agent memory:**
+a plan's *ordering* of two related items is a claim, and it is the claim
+least likely to have been checked. Keep the previous binary
+(`git worktree add /tmp/x <sha>` + `cargo build --release`, four minutes) —
+it is the only thing that separates *"this fix did nothing"* from *"this fix
+did nothing **yet**"*.
+
+---
+
+## §5 — AN INSTRUMENT PROBLEM, NAMED AND DELIBERATELY NOT SOLVED
+
+`ghent-check.py` has **no calibrated threshold** for reference-strip
+patches — its own output says so — so the three soft-mask patches stay
+UNRESOLVED at 0.96–0.99 correlation.
+
+There is now a bimodal split to calibrate against: **0.962 / 0.978 / 0.986**
+for the three soft-mask patches against **0.039 / 0.053 / 0.062 / 0.406** for
+the 16-bit and shading ones.
+
+**It was left alone on purpose.** Calibrating the instrument immediately
+after making it report what you wanted is not a measurement. Do it in its
+own session, with its own justification, and preferably against a patch
+whose expected verdict is known independently — which is exactly how
+`ghent-check`'s *trap* threshold was calibrated in the first place
+(GWG 16.0, 2026-08-17).
+
+---
+
+## §6 — `3_GWG161`: 14 traps, UNEXPLAINED — with two explanations RULED OUT
+
+This is the largest single unknown left on the board, and it is recorded as
+unknown rather than assumed.
+
+**Ruled out (1) — GWG's own CMM tolerance.** The patch's ReadMe says in
+terms: *"A faint X is due to differences in the CMM and does not indicate a
+failure."* pdfce **has** a different CMM — its `DeviceCMYK` → sRGB is the
+naive additive conversion, and the parity harness measures `DeviceCMYK`-only
+pages diverging at **5.4×** the clean-page mean against pdfium's
+`AdobeCMYK_to_sRGB1`. So this was the obvious candidate. **Measured:** the
+X-versus-surround worst-channel gap across the fourteen trapping cells is
+**39, 47, 68, 69, 77, 88, 90, 90, 101, 121, 126, 171, 176, 178**. One cell is
+arguably faint. Thirteen are not.
+
+**Ruled out (2) — "the blend never ran."** pdfium's value sits **between**
+pdfce's and the surround on essentially every cell. A blend that never ran
+returns `C_s` unchanged and would put pdfce *at* the source, not past pdfium
+in the same direction. pdfce is applying the blend **harder** than it
+should — a wrong operand, not a missing operation.
+
+**Where to look first.** The ReadMe describes a **three-layer**
+construction: *"Upper object — ICCbased with transparency effect (Fill),
+Lower object — ICCbased, Background object — DeviceCMYK."* **Which form
+XObject pdfce takes as which has never been established.** A wrong operand
+is what the evidence points at, and the operand pairing is the thing nobody
+has checked.
+
+---
+
+## §7 — HOUSEKEEPING, and two of these are owed
+
+- **`tools/render-parity/out/summary.json`, the standing gate's RECORDED
+  BASELINE, is STALE and not comparable to a current run.** It records a
+  bucket vocabulary the harness no longer emits (`benign`/`known-gap`
+  against `below-band`/`disclosed-gap-small`). **`--gate` mode is
+  meaningless until it is re-based.** Comparing two current runs is the only
+  thing that means anything today, and that is what was done here.
+- **`check-ledger-numbers.py` was rewritten**, third instance of one class
+  (anchor one decoration-spelling behind — first stars, then more stars, now
+  backticks). The anchor is **gone** rather than widened a third time; a
+  heading declares a Pass iff it is an `###` whose pre-em-dash prefix
+  **leads with** a Pass ID, with parenthesised mentions stripped and
+  struck-through headings excluded. All four refinements were **measured**
+  against `ROADMAP.md`, not assumed. A fifth defect fell out: the
+  staged-ship qualifier regex capped the parenthetical at 40 characters, so
+  `Pass 52.2`'s two legitimate halves matched neither and a correct filing
+  was reported as a collision.
+- **`overprint::composite` still carries the "a transparent pixel is white
+  paper" convention** that `Pass 97.0a` removed from the two blend
+  composites. Deliberate: it is Table 149 *decision* logic rather than a
+  blend function, and changing it belongs with the colorant buffer that will
+  replace its input.
+- **`/TR` on a soft mask is still read, counted and never evaluated.** It
+  needs the §7.10 function machinery inside `pdfce-render`. `/TR` is where a
+  mask gets inverted, so an ignored one can leave visible exactly what the
+  document meant to hide.
+- **Backups are 4 days and ~50 commits stale** (newest bundle 2026-08-17).
+  Librarian-measured, not inferred.
+- **Nothing pushed.** `origin/main` is behind; `v0.7.0` is bumped but **not
+  tagged** (`git tag -l` tops at `v0.6.0`). Standing operator go-ahead for
+  builds/releases since 2026-08-17.
+
+---
+
+## §8 — BROTLI, and the operator's condition has NOT fired
+
+Ken asked, 2026-08-21: *"please note somewhere that we are going to have to
+add brotli compression when it becomes part of the pdf 2.0 standard."*
+
+`pdfce-spec-librarian` established the answer and wrote
+`D:\Dev\Rag-Specialized\PDF_Spec\filters\filter__brotli.md`:
+
+- **Measured negative from the licensed primary:** `brotli` returns **zero
+  hits** in ISO 32000-2:2020 (1,023 pp) *and* ISO 32000-1:2008. §7.4 ends at
+  7.4.10; **Table 6 enumerates exactly ten filters in both editions**; and a
+  scan of all 2,840 Errata Collection 3 annotations found nothing, so the
+  negative holds for the corrected text too.
+- **But the specification EXISTS and is finished.** `EXTN-BROTLI-1 v1.3`,
+  *Brotli compression in PDF 2.0*, PDF Association PDF TWG, announced
+  **2026-08-19** — two days before he asked. CC-BY-4.0. Filter name
+  **`/BrotliDecode`**. It is an **extension**, registered under the `PDFa`
+  developer prefix, **not** on a dated ISO path.
+
+★ **So his condition describes an event that has not been scheduled, while a
+specification pdfce could implement against already exists.** That is
+**open operator question `(bq)`** and it is his call, not the engineer's.
+Default if unanswered: wait.
+
+Three things a future session should not have to rediscover: **a false
+citation is circulating** — every web-search summary says the filter is in
+"ISO 32000-2:2020 §7.4.11", and **§7.4.11 does not exist** (traced to an
+unmerged pypdf PR); **`FlateDecode`'s predictors apply verbatim**, so
+pdfce's predictor code is reusable as-is; and **`brotli` 8.0.4 is
+BSD-3-Clause AND MIT**, so a read-side addition needs no operator licence
+call. Today pdfce returns `FilterError::UnsupportedFilter("BrotliDecode")`,
+which is correct behaviour and not a bug.
+
+---
+
+## §9 — TRY IT
 
 ```
-pdfce-cli inspect --forms  <a CAD drawing>
-pdfce-cli edit-text        <in> --find "OLD" --replace "NEW" -o <out>
-pdfce-cli format-text      <in> --find "OLD" --set-size 14   -o <out>
+pdfce-cli render-page <a Ghent transparency patch> --page 1 --scale 2 -o out.png
+python tools/ghent-check.py D:\Dev\temp\ghent-patches
+python tools/ghent-cell-probe.py <patch stem> --reference-dir <pdfium renders>
 ```
 
-`inspect --forms` is the one to run first on a real drawing — the `paints`
-column is the fan-out, and it is the number to look at before any batch edit.
-On his drawing it reports `/Fm3 object=23 depth=0 paints=1` — object 23, which
-is the exact form the original request measured at 1,696 show operators.
+`render-page`'s stable stdout line gained three keys this session, all
+appended last: `groups_backdrop_reruns`, `soft_masks_on_group_result`,
+`overprint_images_unsupported`.
 
-**And check `followers_repositioned` on the way past.** It is now the cheapest
-tell that a reflow has over-reached: on absolutely-placed CAD content it should
-be `0`, and a large number means the edited "line" ran further than the line.
+**And run it on his real drawing before calling anything shipped** — that
+rule earned itself three defects in one session last week. It has no
+transparency groups, so this session's work could not touch it, and that
+was verified rather than assumed: 0.96 s, both new group counters at zero.
 
 ---
 
-## §7 — THE BENCHMARK FILE, written once
-
-The operator's own CAD drawing, and the input that found both `121.x` defects:
+## §10 — THE BENCHMARK FILE, written once
 
     D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf
 
-★ **Written here once, on its own line, and referenced from everywhere else in
-this document rather than repeated** — a Windows path in prose is the single
-most reliably-mangled string this project handles. Both earlier copies in this
-file arrived as `D:\Dev<TAB>emp\pdfce<NEWLINE>cored-...`, because a scripted
-patch turned `\t` and `\n` into the characters they escape. The engineer's
-agent memory carries the rule (*any backslash breaks heredoc patching — write
-the file, or use `Edit`*), and this is its second instance in one session.
+★ **Written here once, on its own line, and referenced from everywhere else
+rather than repeated** — a Windows path in prose is the single most reliably
+mangled string this project handles. The engineer's agent memory carries the
+rule: **any shell metacharacter breaks heredoc patching — write the file, or
+use `Edit`.**

@@ -481,9 +481,18 @@ pub fn classify(space: &ColorSpace, in_image_sample: bool) -> Option<SourceKind>
         //
         // Without this arm an `/Indexed [/DeviceN [/Cyan] /DeviceCMYK …]`
         // space fell to the catch-all below and Table 149 decided what
-        // survives from a colorant list it never read. `/Indexed` appears
-        // in four of the seven Ghent overprint patches, and `1_GWG190` is
+        // survives from a colorant list it never read. `1_GWG190` is
         // authored on exactly that discriminator.
+        //
+        // ★ `/Indexed` is PRESENT in four of the seven Ghent overprint
+        // patches — and, measured 2026-08-21, REACHABLE IN NONE OF THEM:
+        // every one of those spaces is an IMAGE colour space, and
+        // `composite` has no image call site, so pre- and post-fix
+        // binaries report identical overprint counters on all four. This
+        // arm is correct and currently inert; it stops being inert when
+        // `overprint_images_unsupported` can fall. **Present-in-the-file
+        // and reachable-by-the-renderer are different claims**, and the
+        // first reads as the second unless it says so.
         //
         // ★★ AND THE CALLER OWES THE OTHER HALF. This arm fixes the ROW;
         // the TINTS handed to `cmyk_group_rules` must independently be the
@@ -788,10 +797,18 @@ mod tests {
     ///
     /// Without this, `/Indexed [/DeviceN [/Cyan] /DeviceCMYK …]` fell to
     /// `OtherProcess` and Table 149 decided what survives from a colorant
-    /// list it never read. `/Indexed` appears in four of the seven failing
-    /// Ghent overprint patches, and `1_GWG190` is authored on exactly that
+    /// list it never read. `1_GWG190` is authored on exactly that
     /// discriminator: its a/b pair's `DeviceN` omits the backdrop's
     /// colorants and its c/d pair includes them at 0 %.
+    ///
+    /// ★ **`/Indexed` is PRESENT in four of the seven failing Ghent
+    /// overprint patches, and REACHABLE in none of them** — measured
+    /// 2026-08-21: every one of those spaces is an *image* colour space,
+    /// `composite` has no image call site, and pre- and post-fix binaries
+    /// report identical overprint counters on all four. This test guards a
+    /// correct rule that no Ghent pixel currently exercises, which is a
+    /// reason to keep it rather than to discount it — but the four is not
+    /// a scoreboard.
     #[test]
     fn indexed_classifies_as_its_base_space() {
         let base = ColorSpace::DeviceN {

@@ -384,10 +384,18 @@ pub struct Diagnostics {
     /// measure: the four PROCESS colorants survive, but a SPOT colorant has
     /// no plane of its own and is flattened through its tint transform, so
     /// it cannot be left standing the way a press leaves it. Image
-    /// XObjects do not reach the overprint composite at all — and are not
-    /// counted as [`Self::overprint_refused`] when they skip it, which is
-    /// the same blind-counter shape the glyph painter had before
-    /// `bf75351`. Both are `Pass 97.1`, the n-channel compositing buffer.
+    /// XObjects do not reach the overprint composite at all — they are
+    /// **counted** now, on [`Self::overprint_images_unsupported`], which
+    /// this sentence said they were not until `Pass 97.1b`. Both remain
+    /// `Pass 97.1`'s n-channel compositing buffer to FIX; only the
+    /// blind-counter half is closed.
+    ///
+    /// ★ Note how that stale half survived a sweep: it named
+    /// `overprint_refused` in order to say the situation did **not** reach
+    /// it, so a grep for the *new* counter could not find it and a grep
+    /// for the old one found a sentence that looked deliberate. A claim
+    /// phrased as an absence is invisible to a search for the thing that
+    /// now exists.
     pub overprint_requested: usize,
     /// Of those, the ones that also selected **overprint mode 1** (`/OPM 1`,
     /// the "nonzero overprint mode").
