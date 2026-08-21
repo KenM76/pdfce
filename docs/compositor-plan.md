@@ -611,6 +611,25 @@ so **one extra scalar per pixel** is the whole cost over a plain RGBA buffer.
 Sourced from `D:\Dev\Rag-Specialized\Compositor\` (new subject, 21 files +
 an archived benchmark, deliberately outside every git repo).
 
+> **★★ CONSUMED AND VALIDATED 2026-08-21 (`pdfce-librarian`, 224th filing,
+> `Pass 97.1e` + `Pass 97.1f`, `a277931` + `ff4b4bf`) — recorded HERE, on the
+> consuming side, so the RAG's claim of usefulness is not filed only in the
+> RAG.** Both amendments below are now **proved in trap marks**, not merely
+> sourced:
+>
+> | RAG file | proved by |
+> |---|---|
+> | `shape_must_be_tracked_separately_from_alpha.md` | **13 trap marks** on Ghent `1_GWG161`. Shape `f_g` and alpha `α_g` ship on **separate** planes in `cmyk_buffer.rs`; the patch **passes the suite**. Its *"a fixture built from opaque fills cannot distinguish a correct knockout implementation from a wrong one — build it with `/ca < 1`"* rule is followed by **all three** new knockout tests, one of which asserts an ordinary group and a knockout group give **different** answers on the same two paints. |
+> | `backdrop_defaults_zero_fill_inverts_masks.md` | prevented the class **exactly at the Stage A → Stage B boundary it predicted**. Related and learned the hard way the same session: handing a knockout group a **transparent** initial backdrop took `1_GWG161` from **2 traps to 15** — worse than no implementation at all. |
+>
+> **Two of this file's own sentences are now stale and are flagged rather
+> than rewritten** (`pdfce-librarian` does not write this document): `:56`
+> and `:71` (*"…every one of them in device sRGB"*) are false on a
+> subtractive page since `a277931`, and `:174`'s *"`blends_in_wrong_space`
+> reports **15 of its 15**"* was true at `Pass 97.1d` and is now **0** — the
+> counter was narrowed by `97.1e`. Full record: `ROADMAP.md`'s
+> `a277931` + `ff4b4bf` entry.
+
 ##### 1. The pixel is one scalar short, and our own corpus said so first
 
 `alpha` and `alpha_g` are not enough. §11.4 requires **three**: shape

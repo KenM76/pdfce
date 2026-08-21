@@ -231,9 +231,19 @@ pub struct Diagnostics {
     /// census, not a shortfall" until 2026-08-18.** **§11.3.4** requires
     /// blending in the **group's colour space**, with subtractive
     /// components complemented before and after
-    /// (`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`). pdfce blends
-    /// in device sRGB, so a CMYK group's blends are computed in the wrong
-    /// space. `Pass 97.1` is the fix.
+    /// (`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`).
+    ///
+    /// ★ **Corrected 2026-08-21 (`Pass 97.1e`/`97.1f`): this said "pdfce
+    /// blends in device sRGB, so a CMYK group's blends are computed in the
+    /// wrong space. `Pass 97.1` is the fix", in the future tense, and it
+    /// is now the past.** A page whose group declares a subtractive
+    /// blending space composites in a colorant buffer, and the blends
+    /// inside it go through §11.3.4's complement. What remains true is the
+    /// distinction this paragraph was written to make: **applied is still
+    /// not applied correctly** — an *additive* page's blends are computed
+    /// in device sRGB, which is what §8.6.6.4 specifies for an additive
+    /// device, and a mode this counter records as applied can still be
+    /// wrong for reasons that have nothing to do with the space.
     ///
     /// **Measured evidence, and it is one cell rather than a cluster:**
     /// Ghent `3_GWG164` (ICCBased CMYK) fails its **`Difference`** cell —
@@ -512,16 +522,23 @@ pub struct Diagnostics {
     /// space is SUBTRACTIVE** — `DeviceCMYK`, `Separation`, `DeviceN`, or
     /// a four-component `ICCBased` resolving to one (§11.3.4).
     ///
-    /// # Why this is counted before it is honoured
+    /// # Why this is counted at all, now that it IS honoured
     ///
-    /// Because it is the size of a gap that is otherwise invisible.
-    /// §11.3.4 requires a subtractive space's components to be
-    /// **complemented before the blend function and complemented back
-    /// after it**; pdfce blends in device sRGB throughout, so every blend
-    /// inside one of these groups is computed on the wrong side of that
-    /// switch. The marks land in the right places and the picture is
-    /// plausible — which is precisely why a counter is the only way to see
-    /// it.
+    /// ★ **This section was headed "Why this is counted before it is
+    /// honoured" and was itself the stale claim it warned about.** Until
+    /// `Pass 97.1e` pdfce blended in device sRGB throughout, so every
+    /// blend inside one of these groups was computed on the wrong side of
+    /// §11.3.4's complement — the marks landing in the right places and
+    /// the picture staying plausible, which is why a counter was the only
+    /// way to see it.
+    ///
+    /// That is no longer true, and the counter survives with a **changed
+    /// job**: it is now a CENSUS of exposure rather than a measure of
+    /// shortfall. Non-zero says *this page's compositing is governed by
+    /// §11.3.4*; whether it was HONOURED is
+    /// [`Diagnostics::cmyk_buffer_engaged`], and what it cost when it was
+    /// not is [`Diagnostics::blends_in_wrong_space`]. Three numbers, three
+    /// questions, and reading any one of them alone gets a wrong answer.
     ///
     /// **It is not a small class.** Every patch in the Ghent transparency
     /// panel declares `/Group /CS /DeviceCMYK` on the PAGE, including the

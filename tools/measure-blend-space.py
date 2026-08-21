@@ -6,10 +6,21 @@ WHY THIS EXISTS
 ISO 32000-1 §11.3.4 requires a SUBTRACTIVE blending colour space
 (`DeviceCMYK`, `Separation`, `DeviceN`) to have its components
 **complemented before the blend function and complemented back after it**.
-pdfce blends in device sRGB, so every non-`Normal` blend inside such a
-group is computed on the wrong side of that switch — and the marks land in
-the right places, so the page looks plausible. A counter is the only way to
-see it, and this script is how that counter is read at corpus scale.
+Until `Pass 97.1e` (2026-08-21) pdfce blended in device sRGB, so every
+non-`Normal` blend inside such a group was computed on the wrong side of
+that switch — and the marks landed in the right places, so the page looked
+plausible. A counter was the only way to see it, and this script is how
+that counter is read at corpus scale.
+
+★ THE COUNTER'S MEANING CHANGED WITH THE FIX, AND THIS DOCSTRING WAS THE
+LAST PLACE STILL DESCRIBING THE OLD WORLD. A page whose group declares a
+subtractive space now composites in a colorant buffer, and
+`blends_in_wrong_space` increments only where that did NOT happen. On the
+Ghent suite this script reported 107 of 107 wrong before the fix and 0 of
+107 after it — which is the whole reason the counter had to be narrowed:
+left as it was, it would have gone on reporting 107 while two patches
+started passing, and this script is the only instrument anybody runs at
+corpus scale for the question.
 
 WHAT THE TWO NUMBERS MEAN, AND WHY BOTH
 =======================================

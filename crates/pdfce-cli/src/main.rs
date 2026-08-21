@@ -7790,8 +7790,10 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         // Where they actually stand, and neither is "implemented" without
         // a qualifier:
         //  * BLEND MODES — all 15 of Table 136 and Table 137 are applied,
-        //    but in device sRGB rather than the group's colour space
-        //    (§11.3.4). The 4 NONSEPARABLE modes are computed by pdfce
+        //    in device sRGB on an additive page (which is what §8.6.6.4
+        //    specifies for an additive device) and in the group's own
+        //    colour space on a subtractive one, since `Pass 97.1e`'s
+        //    colorant buffer. The 4 NONSEPARABLE modes are computed by pdfce
         //    itself (`pdfce_render::blend_nonsep`) and counted separately on
         //    `nonseparable_composited`, because they take a different code
         //    path and the two can fail independently.
@@ -7840,8 +7842,13 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         // becomes an isolated one, and every blend inside it composites
         // against nothing. On the Ghent transparency patches that is 14,
         // 15 and 7 wrong cells out of 16, and each one is counted here as
-        // a success. `Pass 97.0` is the fix; until it lands this number
-        // over-reports.
+        // a success. `Pass 97.0` SHIPPED that fix on 2026-08-21, and
+        // this sentence still read "until it lands this number over-reports"
+        // a day afterwards. A non-isolated group now renders over its own
+        // backdrop, so the over-report is gone on the additive path. It
+        // survives on a SUBTRACTIVE page, where a non-isolated group is
+        // still composited as if isolated -- counted separately as
+        // `cmyk_groups_approximated`, and `Pass 97.1g`'s work.
         //
         // `knockout_approx` CHANGED MEANING in `Pass 97.0`. It used to
         // read "/K groups get their outer boundary right and their
@@ -7931,8 +7938,11 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         // 11.3.4 requires the components complemented before the blend
         // function and complemented back after it. Non-zero means the
         // picture is plausible and wrong -- on Ghent 1_GWG162's Difference
-        // cell the two answers are green and magenta. Pass 97.1's colorant
-        // buffer is the fix.
+        // cell the two answers are green and magenta.
+        //
+        // ★ SINCE Pass 97.1e THIS ONLY FIRES WHERE THE COLORANT BUFFER DID
+        // NOT RUN. A subtractive page composites in ink and reports zero
+        // here; read it together with `cmyk_buffer` below, never alone.
         d.blend_space_subtractive,
         d.blends_in_wrong_space,
         // ★ THE KEY THAT CHANGES WHAT THE PREVIOUS ONE MEANS. When

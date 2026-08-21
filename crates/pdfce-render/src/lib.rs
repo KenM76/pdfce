@@ -530,7 +530,8 @@ fn render_impl(
             // the one whose own objects are `ICCBased` RGB, so §11.3.4's
             // complement governs every blend on those pages and pdfce
             // performs none of them that way yet. Counted rather than
-            // silently ignored — `Pass 97.1`'s colorant buffer is the fix.
+            // silently ignored. `Pass 97.1e`'s colorant buffer IS that
+            // fix and it shipped; a subtractive page composites in ink.
             let mut diagnostics = interpret::run_on(
                 doc,
                 &content,

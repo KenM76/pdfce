@@ -96,6 +96,378 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `a277931` + `ff4b4bf` — `PASS 97.1e` + `PASS 97.1f`: PDFCE COMPOSITES A CMYK PAGE IN INK FROM THE FIRST OPERATOR TO THE LAST, AND THE GHENT BLEND-SPACE CENSUS GOES **107 OF 107 WRONG → 0 OF 107**; ★★★ **THE RE-SCOPING FACT, AND IT IS THE HALF THAT OUTLIVES THE NUMBERS — EVERY REMAINING FAIL ON THE SUITE IS AN OVERPRINT, SPOT OR ICC PATCH; NOT ONE IS A BLENDING-SPACE FAILURE ANY MORE**, so the next Ghent gains are `85.5`'s n-channel spot remainder, not more compositing; ★★★ **THE BASELINE WAS BUILT, NOT QUOTED** — `06aaad3` compiled in a worktree and run through the harness, which is the only reason the `1_GWG161` REGRESSION `97.1e` shipped was visible to be closed by `97.1f`; ★★ **AN INSTRUMENT FIX WITHOUT WHICH THIS PASS WOULD HAVE READ AS A NO-OP** — `blends_in_wrong_space` was narrowed, and **the counter's own docstring at the definition site was updated while the SAME CLAIM three fields above it and the DOCSTRING OF THE SCRIPT THAT READS IT were not** (hard-rule-11 sweep: **5 survivors reported, 0 edited by this role**); ★★ **THE COMPOSITOR RAG'S TWO LOAD-BEARING FINDINGS ARE NOW PROVED IN TRAPS AND RECORDED ON THE CONSUMING SIDE**, worth 13 trap marks between them; ★ **REAL-WORLD A/B: 463 IDENTICAL PNGs OF 500 SAMPLED, 0 CHANGED** — the prediction decision 078 filed, confirmed on a sample and **deliberately not extrapolated to the 4,012-file corpus, whose run was still executing when this was dispatched** — 2026-08-21 (two-hundred-and-twenty-fourth filing)
+
+**Sourcing.** Shell held and used (hard rule 8); the command is named beside
+every figure this role produced itself. **Every Ghent, census and A/B figure
+below is the engineer's, taken this session against a binary built from
+`06aaad3` in a git worktree** — none is carried from a document. **Nothing
+was committed by this role.**
+
+**Scope.** Two commits, two Passes, one deliverable in two halves: the
+colorant buffer (`97.1e`) and the knockout accumulator that closes the one
+regression it shipped (`97.1f`). This entry files both, because filing
+`97.1e` alone would put a named regression into *Shipped* with its fix
+sitting one commit later in the same session.
+
+**Verified before writing** (`python tools/check-passes-filed.py`,
+`python tools/check-commits-filed.py`, run at `ff4b4bf`): both gates listed
+**exactly these two commits and nothing else**. Every other gate was green.
+Re-run after this filing is reported at the foot of this entry.
+
+---
+
+#### What shipped
+
+**`Pass 97.1e` (`a277931`) — the buffer.** A page whose group declares a
+subtractive blending colour space (`/Group /CS /DeviceCMYK`, `Separation`,
+`DeviceN`, or a four-component `ICCBased` resolving to one — ISO 32000-1
+§11.4.7) is composited in **four plane-major `f32` colorant planes plus
+alpha**, from the first operator to the last, and converted to screen colour
+**once**, at the collapse. New modules `crates/pdfce-render/src/cmyk_buffer.rs`
+and `crates/pdfce-render/src/cmyk_paint.rs`.
+
+- **Native subtractive paths** for fills, strokes, text, Table 149 overprint
+  and the four non-separable modes.
+- **Images and shadings bridge through sRGB** — their colour is resolved to
+  sRGB before any canvas sees them — **disclosed per pixel**
+  (`cmyk_bridged_pixels`), not assumed away.
+- **`BrushSpec::cmyk`** — a paint now carries the colorants **the file
+  stated**. `ColorState` had them all along, `q`/`Q`-correct; they died at
+  the `GraphicsState::fill_color: Rgb` seam, one call before every paint
+  site. **`overprint::authored_tints` is now the single shared rule**, read
+  by both the colorant buffer and Table 149 — one rule, not two copies that
+  can drift.
+- **A display list is REFUSED outright on a subtractive page**
+  (`PoisonReason::ColorantBuffer`). Its replay target is a `Pixmap`, so a
+  cached page would render a *different and worse* picture than the uncached
+  one — a plausible wrong picture, which is what every other `PoisonReason`
+  in that module exists to prevent.
+- **`f32`, not `f64`, and the decision lives on one type alias**
+  (`cmyk_buffer::Chan`), so revisiting it is one line. The amplification that
+  forces floats at all is §11.4.4's `1/α_gn`: an 8-bit half-level becomes
+  **25 levels**, an `f32` one about **1/2600th of a level**.
+
+**`Pass 97.1f` (`ff4b4bf`) — the knockout accumulator.** §11.4.6/§11.4.8 in
+a subtractive space: `compositor::composite_element_knockout_cmyk` and
+`compositor::remove_backdrop_cmyk`, with **shape (`f_g`) and alpha (`α_g`)
+carried on SEPARATE planes**. `CmykBuffer::composite_at` is a single dispatch
+point, so §11.4.4 and §11.4.8 cannot be selected inconsistently by three
+different callers. **The removal needs no complement** — it is a linear
+extrapolation, and complementing both operands of `x + k(x − y)` and
+complementing back is the identity; only `B()` sits on the wrong side, which
+is why `apply_subtractive` is the single place the round trip happens.
+
+**★ AND IT IS SMALLER THAN THE ADDITIVE IMPLEMENTATION, WHICH IS THE
+COUNTER-INTUITIVE PART.** `tiny_skia` rasterises and composites in one call,
+so recovering an element's **shape** `f_s` — which §11.4.8 reads where
+§11.4.4 reads alpha — means painting each element into a scratch pixmap and
+reading it back: three page buffers plus a per-element scratch. A **colorant
+paint already arrives as a coverage mask plus a colour**, so `f_s` **is** the
+coverage byte and `α_s` is that times the constant alpha. The scratch, the
+per-element clear and the accumulate step all disappear.
+
+**The tests are built with `/ca < 1` on purpose.** Shape and alpha are equal
+at opacity 1, so an all-opaque knockout fixture passes under both the correct
+model and a collapsed one that uses `α_s` where the clause says `f_s`. One of
+the three asserts that an ordinary group and a knockout group give
+**different** answers on the same two paints — the property that would
+silently disappear.
+
+---
+
+#### MEASURED — the baseline was BUILT, not quoted
+
+**Ghent PDF Output Suite, 51 patches** (`tools/ghent-check.py`, corpus at
+`D:\Dev\temp\ghent-patches`), against a binary compiled from **`06aaad3`** in
+a git worktree:
+
+| Ghent PDF Output Suite (**of 51 patches**) | baseline `06aaad3` | `97.1e` | **`97.1f`** |
+|---|---:|---:|---:|
+| pass | 26 (51.0 %) | 28 (54.9 %) | **29 (56.9 %)** |
+| FAIL | 14 (27.5 %) | 11 (21.6 %) | **10 (19.6 %)** |
+| UNRESOLVED | 11 (21.6 %) | 12 (23.5 %) | **12 (23.5 %)** |
+| render errors | 0 | 0 | **0** |
+| trap marks, **total over the 51** | 55 | 45 | **41** |
+
+| blend-space census, **Ghent, 51 patches** (`tools/measure-blend-space.py`) | baseline | `97.1e` | **`97.1f`** |
+|---|---:|---:|---:|
+| blend modes applied | 107 | 107 | **107** |
+| **of those, in the wrong space** | 107 (**100.0 %**) | 15 (14.0 %) | **0 (0.0 %)** |
+
+**Patches that changed verdict:** `1_GWG162` (Isolate) FAIL → pass;
+`3_GWG164` (ICCBasedCMYK) FAIL → pass; **`1_GWG161` (Knockout) FAIL → pass at
+`97.1f`**; `1_GWG1611` FAIL → UNRESOLVED (lost its last trap, reference-strip
+correlation **0.986**). `3_GWG161` improved **14 → 11 traps** and still FAILs.
+
+**★ THE REGRESSION `97.1e` SHIPPED, NAMED IN ITS OWN COMMIT MESSAGE RATHER
+THAN AVERAGED AWAY, AND CLOSED ONE COMMIT LATER.** `1_GWG161` went **2 → 4
+traps** at `97.1e`, because a knockout group was the one construct still
+running its interior in sRGB (`KnockoutTarget`'s target is a `Pixmap`), so
+its elements blended additively inside a page that did not. **The census
+named it exactly**: 15 wrong-space blends remained on the whole suite and
+**all 15 were in that one file**. That is what a shortfall counter is for,
+and it is only legible because the baseline was a **built binary**, not a
+number in a document.
+
+**Real-world A/B, build against build, page by page over a 500-file random
+sample of `fixtures/external`: 463 identical PNGs, 0 changed, 37 unrenderable
+by one or both builds.** **463 + 37 = 500**, so every sampled file is
+accounted for and **the "0 changed" is over the 463 that both builds could
+render**, not over 500.
+
+> ⚠ **A full-corpus (4,012-file) run of the same A/B was still executing when
+> this filing was dispatched, and NO figure for it is recorded here.** The
+> dispatch said so explicitly and said to ask the engineer rather than invent
+> one. **The claim the sample supports is the one decision 078 predicted:
+> ordinary additive documents are untouched byte-for-byte.** It is a
+> confirmation of a prediction on a sample; it is **not** a corpus result, and
+> a later filing that finds one must not quote this row as though it were.
+
+> **★★★ AMENDED WITHIN THIS SAME FILING — THE FULL-CORPUS RUN FINISHED AND
+> WAS COMMITTED (`b805f99`) WHILE THIS ENTRY WAS BEING WRITTEN. THE PARAGRAPH
+> ABOVE IS KEPT VERBATIM RATHER THAN REWRITTEN, BECAUSE ITS CAUTION WAS
+> CORRECT AND ITS SUCCESSOR IS WHY.**
+>
+> **Full-corpus A/B, both binaries over all 4,023 files in
+> `fixtures/external`, PNGs compared byte for byte: 3,731 identical, 4
+> CHANGED, 288 unrenderable by one or both.** `3,731 + 4 + 288 = 4,023`, so
+> every file is accounted for; **4 of the 3,735 both builds could render =
+> 0.107 %**.
+>
+> **The two denominators reconcile, and the check is worth one line (hard rule
+> 10):** the paragraph above says **4,012**, decision 078 says **3,735
+> rendered of 4,012 on disk**, and this run says **4,023 with 288
+> unrenderable**. **4,023 - 288 = 3,735** — the RENDERABLE population is
+> identical across both measurements; **11 files were added to the corpus on
+> disk between them.** The two figures are not in conflict and neither needs
+> correcting.
+>
+> **★★ THE PREDICTION WAS 2 AND THE MEASUREMENT IS 4 — A FACTOR OF TWO,
+> AND THE MECHANISM IS THE PART THAT TRANSFERS.** The prediction named two
+> files and both appear (`6-2-9-t05-fail-g`, `6-2-10-t05-fail-g`). **Two more
+> appear that it did not name**, from *6.2.4.3 Uncalibrated — Device colour
+> spaces*. **It was derived from `blends_in_wrong_space`, which counts
+> BLENDS** — and those two files declare a subtractive page group while
+> performing **no non-`Normal` blend at all**, so they were never in that
+> number. **Their pixels move anyway, because the CONVERSION moved, not the
+> blend:** each paint used to be converted `CMYK`→sRGB and composited on
+> screen; the page now composites in ink and converts **once at the end**, and
+> the two orders differ on **any partially-covered pixel** because the
+> conversion is non-affine — the same non-affinity that makes §11.4.7's
+> collapse order load-bearing (see *THE THREE THINGS THAT WERE WRONG*, item 1).
+>
+> **Measured on one of the two, so the magnitude is on record rather than the
+> fact alone: 4,600 of 484,704 pixels (0.95 %), max channel delta 11/255,
+> confined to a single 110×80 box.** One object with partial coverage, **not
+> a page-wide shift** — which is the distinction that decides whether this is
+> correct behaviour or a Poppler-#1565-shaped regression, and it is why the
+> box matters more than the percentage.
+>
+> ★ **THE AFFECTED POPULATION IS *"pages with a subtractive GROUP"* (15
+> files), NOT *"pages that BLEND inside one"* (2).** Two counters that both
+> look like the right one answer different questions, and the census
+> (`blend_space_subtractive`) was the right one here while the shortfall
+> (`blends_in_wrong_space`) was the one that got used. **This is the same
+> defect shape as the instrument fix recorded below** — a counter consulted
+> for a question it was not written to answer — arriving twice in one session
+> on the same pair of counters, in opposite directions: the shortfall
+> **over-reported** failure, and it **under-predicted** the affected
+> population.
+>
+> **And the sampling lesson, which is why the caution above stands rather
+> than being embarrassed by its successor: the 500-file sample missed ALL
+> FOUR.** `0 changed of 463` was true, correctly measured, and consistent
+> with **both** 2 and 4 — an expected count of ~0.5 in a 500-file sample of a
+> 4-file population. **A sample that cannot distinguish the hypotheses is not
+> weak evidence for one of them; it is silent.** What a sweep bought over a
+> sample was not confidence in the prediction — it was the two files nobody
+> had thought of.
+
+---
+
+#### ★★★ THE RE-SCOPING FACT
+
+**Every remaining FAIL on the Ghent suite is an overprint, spot or ICC patch.
+Not one is a blending-space failure any more.** Ten FAILs of 51.
+
+This retires §11.3.4 as an open item and hands the remaining Ghent gains to a
+different piece of work: **`Pass 85.5`'s n-channel remainder — one plate per
+SPOT colorant** — carried in *Backlog* as the *Per-colorant (n-channel)
+compositing buffer* row, whose **stated leading reason was the blending
+colour space** and is now its spot half only. Both `FEATURES.md` rows were
+rewritten in this filing rather than appended to, and the superseded phrase
+is quoted inside the new text so the change stays legible.
+
+**What is still approximated on a subtractive page, named so it does not read
+as done:**
+
+- **A NON-ISOLATED ORDINARY group is composited as if isolated** — backdrop
+  dropped, §11.4.4's removal skipped. The arithmetic exists
+  (`remove_backdrop_cmyk`); the **second content walk** does not. Counted as
+  `cmyk_groups_approximated`. The additive path already does this walk, so it
+  is **a port, not a design** (`Pass 97.1g` in the engineer's queue).
+- **Images and shadings** reach the buffer as resolved sRGB
+  (`cmyk_bridged_pixels`, `cmyk_unbridged_images`) — fixing either means
+  widening a type one layer up (`DecodedImage` holds a `Pixmap`;
+  `ColorRamp::at` returns three-channel sRGB when the ramp is *built*).
+- **Spot colorants are still flattened.** Four planes, not runtime `N`.
+- Unchanged by these two Passes and still true: only explicit `/K true` is
+  honoured (§9.3.8's default-`true` `/TK`, §11.7.4.4's `B`/`b` and §11.6.7's
+  shading patterns are the three larger tiers); `/TR` on a soft mask is read,
+  counted and **not** evaluated; `/AIS true` is not distinguished from
+  `/AIS false`.
+
+---
+
+#### THE THREE THINGS THAT WERE WRONG ON THE WAY — each cost a cycle, each is a CLASS
+
+**1. §11.4.7's collapse order is CONVERT-THEN-FLATTEN.** The page group's
+result is converted to the device's native colour space **before** being
+composited with the context-dependent (white medium) backdrop. The intuitive
+order is the wrong one, **both orders produce something that looks like a
+page**, and because the conversion is non-affine they differ by **up to 117
+of 255 levels** on saturated ink. Worked example, using the standard's own
+crude §10.4.2.5 conversion (whose `min()` supplies the non-affinity): a 50 %
+`Normal` composite of `C=M=Y=K=0.9` over paper white gives 8-bit **25**
+composited-then-converted against **128** converted-then-composited.
+Caught only because `iccce` filed a clause-by-clause check of a design
+sentence written in chat. ⇢ *A design sentence nobody has checked against the
+primary source is a guess with good posture.*
+
+**2. A TRANSPARENT BACKDROP IS NOT A BACKDROP.** Handing knockout groups an
+empty initial backdrop took `1_GWG161` from **2 trap marks to 15** — **worse
+than having no knockout implementation at all**. A knockout group's entire
+definition is *"composite each element against the group's INITIAL
+backdrop"*; supply an empty one and it knocks out against nothing. ⇢ *When a
+construct is DEFINED in terms of a thing, an empty version of that thing is
+not a degraded implementation, it is a different one.*
+
+**3. A TERMINAL CONVERSION WANTS ACCURACY; A ROUND TRIP WANTS
+INVERTIBILITY.** pdfce has two `DeviceCMYK`→sRGB transforms: a lattice fitted
+against a reference renderer, and a max-GCR pair that is the **exact inverse**
+of its own `rgb_to_cmyk`. Using the *accurate* one on a round trip (colorant
+buffer → sRGB group interior → colorant buffer) left `1_GWG161` at **10 trap
+marks**; swapping to the *invertible* one took it to **4**, and carrying shape
+separately took it to **0**. The value never reaches a screen in the
+intermediate form, so accuracy there buys nothing and costs invertibility.
+**Mixing them drifts once per nesting level.** ⇢ Filed to `C:\personal_rag\pdf\`
+and repeated to `iccce` as a possible API distinction on their side.
+
+---
+
+#### THE COUNTER THAT CHANGED MEANING, AND THE HARD-RULE-11 SWEEP
+
+**`blends_in_wrong_space` used to increment on the blending SPACE alone.** It
+now increments **only when the paint target is not a colorant buffer.**
+
+Leaving it alone was tried in the same session and produced this:
+`tools/measure-blend-space.py` **went on reporting 107 of 107 wrong** after
+the buffer landed and two patches started passing — **and that script is the
+only instrument anyone runs at corpus scale for this question**, so it would
+have said so indefinitely. ⇢ *A shortfall counter written under the assumption
+that the shortfall cannot be fixed encodes the world in which it was
+unfixable, and will report the fix as a no-op.* Filed to `D:\dev\rag\rust\`.
+
+**Hard rule 11 sweep — searched for the CLAIM (*"pdfce blends in device
+sRGB"*, *"computed in the wrong space"*, *"`Pass 97.1` is the fix"*), not for
+the counter's name. FIVE SURVIVORS, ALL REPORTED, NONE EDITED BY THIS ROLE**
+(`crates/` and `tools/` are outside this role's remit; `docs/` survivors in
+files this role owns were fixed in this filing):
+
+| # | site | the stale claim | severity |
+|---|---|---|---|
+| 1 | `tools/measure-blend-space.py:9–10` | *"pdfce blends in device sRGB, so every non-`Normal` blend inside such a group is computed on the wrong side of that switch"* | **highest** — the docstring of **the very instrument whose counter changed meaning** |
+| 2 | `crates/pdfce-render/src/interpret.rs:235–236` (`blend_modes_applied`) | *"pdfce blends in device sRGB, so a CMYK group's blends are computed in the wrong space. `Pass 97.1` is the fix."* | high — names the Pass that fixed it, **in the future tense** |
+| 3 | `crates/pdfce-render/src/interpret.rs:520–521` (`blend_space_subtractive`, §*"Why this is counted before it is honoured"*) | *"pdfce blends in device sRGB throughout, so every blend inside one of these groups is computed on the wrong side of that switch"* | high — **the section heading is itself the stale claim** |
+| 4 | `crates/pdfce-cli/src/main.rs:7793` | *"all 15 … are applied, but in device sRGB rather than the group's colour space (§11.3.4)"* | medium |
+| 5 | `crates/pdfce-render/src/compositor.rs:1188` | *"both blend in device sRGB, both wrong, and wrong differently"* | low — the pdfce half is past tense (*"pdfce rendered"*), only the joint clause reads present |
+
+**★★ THE SHAPE, and it is worth more than the list.** The engineer wrote a
+careful, correct **★ NARROWED BY `Pass 97.1e`** section into
+`blends_in_wrong_space`'s own rustdoc — **and survivor 3 is the same claim,
+285 lines earlier in the same file, on the sibling field the narrowed one
+points at**; survivor 1 is in the script the narrowed docstring **names by
+path**. **Updating a claim at its definition site does not sweep the claim.**
+This is the fourth consecutive filing to find survivors of exactly this
+species, and the third to find one in a doc-comment that had *just* been
+edited for the same change.
+
+Also stale on the same claim, in **engineer-owned** documents (reported, not
+edited): `docs/compositor-plan.md:56`, `:71` (*"every one of them in device
+sRGB"*) and `:174` (*"`blends_in_wrong_space` reports 15 of its 15"* — true at
+`97.1d`, now 0). `docs/NEXT_SESSION.md` is **correct throughout** and was read,
+not touched.
+
+---
+
+#### NEW CLI SURFACE — the stable stdout line is a contract
+
+**Five keys appended LAST, in this order**, so no existing field position
+moves: `cmyk_buffer`, `cmyk_buffer_refused`, `cmyk_bridged_pixels`,
+`cmyk_groups_approximated`, `cmyk_unbridged_images`. Three new
+operator-facing notes on stderr. `blends_in_wrong_space` keeps its name and
+position and **changed meaning** (above); `cmyk_buffer` is the companion that
+says which of the two regimes produced a zero.
+
+---
+
+#### THE COMPOSITOR RAG'S TWO FINDINGS ARE NOW PROVED IN TRAPS
+
+`D:\Dev\Rag-Specialized\Compositor\` supplied two findings that were
+load-bearing this session, and **this paragraph exists so the RAG's claim of
+usefulness is filed on the CONSUMING side too, not only in the RAG** — the
+same "an obligation needs a record on both sides" reason
+`check-commits-filed.py` and the `commits-filed-baseline.txt` both exist:
+
+| RAG file | what it said | what it was worth |
+|---|---|---|
+| `shape_must_be_tracked_separately_from_alpha.md` | a `(C, α)` pixel is **one scalar short** of §11.4's model — shape `f` and alpha `α` are separate quantities and only their product is alpha | **13 trap marks** on `1_GWG161`; also supplied the *"a fixture built from opaque fills cannot distinguish a correct knockout implementation from a wrong one — build it with `/ca < 1`"* rule that all three new tests follow |
+| `backdrop_defaults_zero_fill_inverts_masks.md` | never `memset(0)` a subtractive buffer — `DeviceCMYK`'s initial colour is `[0 0 0 1]`, so a zero fill is **white** and inverts every luminosity mask | prevented the whole class at the Stage A → Stage B boundary, exactly where it was predicted to appear |
+
+`docs/compositor-plan.md` §3.2 carries both as amendments already; a dated
+pointer recording that they were **consumed and validated** was added there in
+this filing.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `97.1d` | **`97.1e`**, **`97.1f`** (both **MINTED BY THE COMMITS**, not by this filing — the subject lines carry them and they do not collide; contrast the 222nd filing's `97.1a`/`97.1b` collision) |
+| decisions (`ARCHITECTURE.md` §12) | **078** | **079** (**MINTED** — *the colorant buffer is engaged only on a subtractive page, and that is a CONFORMANCE requirement rather than caution*). Next free **080**. |
+| standing rules | **`R209`** | **`R209`** (unchanged — **mint DECLINED**, see below; next free **`R210`**) |
+
+**Why no standing rule was minted, stated rather than left as a silence.**
+Two candidates presented themselves and both were declined on **shape**, not
+on count:
+
+1. *"When you fix a thing, re-read the counter that measures it."* This is a
+   real finding and it is **filed as a finding**, in `D:\dev\rag\rust\`. It is
+   not a pdfce standing rule because **it has no enforcement layer here** —
+   no gate can content-check whether a counter's semantics still match its
+   name, for the same reason `check-disclosure-channel.sh` can verify a
+   note's *route* and never its *truth*. Minting a rule that nothing can
+   check dilutes the ones that can.
+2. *"Sweep the sibling field when you amend a doc-comment."* This is hard
+   rule 11 already, applied to a narrower target. **Minting a number for it
+   would fragment the sweep obligation**, which is the same reason the
+   absence-phrasing mint was declined at n=2 by the 217th filing. The right
+   response is that this filing **performed** the sweep and reported five
+   survivors.
+
+**Backup currency, checked rather than inferred** (`ls -lt D:\Dev\pdfce-backups\`):
+the newest bundle on disk is **`pdfce-20260817-v060.bundle`, 2026-08-17
+20:34**. `HEAD` is `ff4b4bf`. **No bundle on disk contains the `v0.7.0` tag
+or either commit filed here.** Cutting one is the operator's call and this
+role did not.
+
+**Gates, re-run after this filing** — reported at the foot of this entry's
+`SESSION_LOG.md` twin.
+
+---
+
 ### `74c5f2c` — THE HANDOFF LEVELLED WITH THE MEASUREMENT, THE INSTRUMENT PROMOTED INTO `tools/`, AND A MEMORY THAT WAS RIGHT AND DID NOT PREVENT ITS OWN RECURRENCE — no Pass ID; infrastructure and record; ★★ **THE 222ND FILING'S OWED ITEM IS DISCHARGED IN THE COMMIT THAT PRECEDED THE FILING REPORTING IT** — `tools/measure-blend-space.py` is tracked; ★★ **HARD-RULE-11 SURVIVOR #2 DISCHARGED BY WHOLESALE REWRITE, AND ITS THREE FALSE CLAUSES KEPT QUOTED RATHER THAN DELETED**; ★★★ **AND THE AMENDMENT THAT NAMES BOUNDARY-CLAIMS AS THE DEFECT CLASS CONTAINS ONE — "fourteen scripts", TWO SUPERSESSIONS STALE, THIRTEEN LINES FROM "All 15 CI-wired gates green" IN ITS OWN COMMIT MESSAGE**; gate inventory filed in the form that stops the next miscount — **16 `check-*` on disk / 15 CI-wired / 2 sweeps, one of which is not `check-`-prefixed at all** — 2026-08-21 (two-hundred-and-twenty-third filing, **session close**)
 
 **Sourcing.** Shell held (hard rule 8) and used for every figure below; the
@@ -60150,7 +60522,7 @@ parallel one).
 
 ---
 
-### ★★★★★ THE GHENT STANDING BOARD — **26 pass / 14 FAIL / 11 UNRESOLVED / 0 render errors, of 51 patches (51.0 % / 27.5 % / 21.6 %)** — ★★ **FIGURE CORRECTED TWICE OVER 2026-08-19 (189th filing): once by a SHIP and once because the PREVIOUS FIGURE WAS ALREADY STALE** — the ONE architectural item that unblocks the largest cluster — opened 2026-08-18 (hundred-and-sixty-sixth filing)
+### ★★★★★ THE GHENT STANDING BOARD — **29 pass / 10 FAIL / 12 UNRESOLVED / 0 render errors, of 51 patches (56.9 % / 19.6 % / 23.5 %)** — ★★★ **RE-MEASURED 2026-08-21 (224th filing, `Pass 97.1e`/`97.1f`, `a277931`+`ff4b4bf`) AGAINST A BINARY BUILT FROM `06aaad3` IN A WORKTREE; the previous figure (**26 / 14 / 11**) is kept below as history and was NOT stale — it was correct at its own commit, and this is a SHIP moving it, not a correction** — ★★ **AND THE COMPOSITION OF THE REMAINING 10 FAILs IS NOW THE BOARD'S MOST USEFUL FACT: every one of them is an OVERPRINT, SPOT or ICC patch. Not one is a blending-space failure any more** — ★★ **FIGURE CORRECTED TWICE OVER 2026-08-19 (189th filing): once by a SHIP and once because the PREVIOUS FIGURE WAS ALREADY STALE** — the ONE architectural item that unblocks the largest cluster — opened 2026-08-18 (hundred-and-sixty-sixth filing)
 
 **This box exists so the corpus figure has ONE home that is not a
 per-Pass entry.** Before this filing the number lived only inside
@@ -60162,6 +60534,38 @@ see the correction immediately below.** One home for a figure stops it
 being quoted *inconsistently*; it does not stop it being *stale*, because
 staleness is a relation to the world and a document has no access to
 that. **Only re-measuring does.**
+
+#### ★★★★★ RE-MEASURED 2026-08-21 (two-hundred-and-twenty-fourth filing) — A SHIP, NOT A CORRECTION, AND THE BASELINE WAS BUILT
+
+**Standing at `HEAD` (`ff4b4bf`), from `tools/ghent-check.py`. The
+comparison column is a binary compiled from `06aaad3` in a git worktree —
+not a number quoted from this board**, which is the discipline the 189th
+filing's Half 2 made a rule of and the reason a 2-trap regression inside
+`97.1e` was visible at all.
+
+| outcome (**of 51 patches**) | baseline `06aaad3` | `97.1e` | **`97.1f` = `HEAD`** |
+|---|---:|---:|---:|
+| pass | 26 (51.0 %) | 28 (54.9 %) | **29 (56.9 %)** |
+| FAIL | 14 (27.5 %) | 11 (21.6 %) | **10 (19.6 %)** |
+| UNRESOLVED | 11 (21.6 %) | 12 (23.5 %) | **12 (23.5 %)** |
+| render errors | 0 | 0 | **0** |
+| trap marks, **total over the 51** | 55 | 45 | **41** |
+
+**Arithmetic check (hard rule 10):** `26+14+11 = 28+11+12 = 29+10+12 = 51`
+in every column, so no patch is unaccounted for. **Three patches changed to
+`pass`** (`1_GWG162`, `3_GWG164`, `1_GWG161`) and **one moved FAIL →
+UNRESOLVED** (`1_GWG1611`, having lost its last trap; strip correlation
+**0.986**), which is `14 − 10 = 4` FAILs leaving and `11 → 12` UNRESOLVED
+gaining one. **`3_GWG161` improved 14 → 11 traps and still FAILs.**
+
+★★★ **THE COMPOSITION FACT, which is what this board should be read for
+now: all 10 remaining FAILs are overprint, spot or ICC patches.** The
+blending-colour-space cluster this board tracked since the 166th filing is
+**closed** — the census went **107 of 107 wrong → 0 of 107**. The next
+movement on this board comes from `Pass 85.5`'s **n-channel spot**
+remainder, not from more compositing work. Full record: the
+`a277931` + `ff4b4bf` entry at the top of *Shipped*.
+
 
 #### ★★★★ CORRECTED 2026-08-19 (hundred-and-eighty-ninth filing) — BOTH HALVES, AND THE SECOND ONE MATTERS MORE
 
@@ -68771,6 +69175,50 @@ added. See that section below.
   > could not have produced this — a conformance suite is by construction
   > 100 % of whatever it tests. Full record: the `cbb1ede` + `90739d7`
   > entry at the top of *Shipped*.
+
+  > ★★★ **THE PROCESS HALF OF THIS PASS SHIPPED 2026-08-21 AS `Pass 97.1e`
+  > + `Pass 97.1f` (`a277931`, `ff4b4bf`; top of *Shipped*, 224th filing).
+  > THE SCOPE BELOW IS KEPT VERBATIM — read it with this amendment.**
+  >
+  > **What is now BUILT:** four plane-major `f32` colorant planes plus alpha
+  > for any page whose group declares a subtractive blending space, native
+  > fills/strokes/text/Table 149 overprint/non-separable modes, a native
+  > subtractive knockout accumulator carrying shape and alpha on **separate**
+  > planes, and §11.4.7's collapse (**convert-then-flatten**). §11.3.4's
+  > complement and §11.3.5.3's CMYK detour — written and tested by `97.1c`,
+  > unwired until now — finally have somewhere to run.
+  >
+  > **Measured:** Ghent **26 → 29 pass of 51**, **55 → 41 trap marks**, and
+  > the blend-space census **107 of 107 wrong → 0 of 107**. This Pass's
+  > acceptance list named `1_GWG160`, `3_GWG164`, `GWG011`, `GWG190`,
+  > `GWG191`, `GWG192`, `GWG020`, `GWG030`, `GWG040`; **`3_GWG164` is the one
+  > of those nine this ship flipped**, plus `1_GWG162` and `1_GWG161` from
+  > `97.0`'s list. **The other eight are the SPOT half and are still open** —
+  > which is the re-scoping fact, below.
+  >
+  > ★★★ **RE-SCOPED BY ITS OWN RESULT: what remains of this Pass is the
+  > SPOT/n-channel half ONLY.** Every remaining Ghent FAIL is an overprint,
+  > spot or ICC patch; **not one is a blending-space failure any more**. The
+  > paragraph below still reads as though the blend space and the spot planes
+  > arrive together — **they did not**, and the blend space arrived first.
+  > Keep four planes as the floor; the open work is **one plate per spot
+  > colorant**, sized by pre-scanning the page's resources, with the tint
+  > transform kept out of the paint path for any colorant owning a plane.
+  >
+  > **Still approximated on a subtractive page, so this row is NOT closed:** a
+  > **non-isolated ORDINARY group is composited as if isolated** (backdrop
+  > dropped, §11.4.4's removal skipped, counted as
+  > `cmyk_groups_approximated`) — the arithmetic exists in
+  > `compositor::remove_backdrop_cmyk` and the **second content walk** does
+  > not, so it is a **port** of the additive path, not a design; and
+  > **images and shadings bridge through sRGB** (`cmyk_bridged_pixels`,
+  > `cmyk_unbridged_images`) because `DecodedImage` holds a `Pixmap` and
+  > `ColorRamp::at` returns sRGB when the ramp is *built* — fixing either
+  > widens a type one layer up.
+  >
+  > **And the image OVERPRINT path is still absent** — `97.1b` counts that
+  > gap (`overprint_images_unsupported`), and per-sample overprint needs
+  > per-sample colorants, so it lands with the spot planes and not before.
 
   **Pass 97.1 — colorant planes.** Same compositor, different pixel: one
   plane per colorant, CMYK + one per spot, sized by pre-scanning the

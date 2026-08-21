@@ -1695,6 +1695,92 @@ D:\Dev\pdfce\
                                    read, counted
                                    (`soft_mask_tr_ignored`) and NOT
                                    evaluated**, unchanged.
+                                   **★★★ AMENDED 2026-08-21
+                                   (two-hundred-and-twenty-fourth filing,
+                                   `Pass 97.1e` + `Pass 97.1f`, `a277931` +
+                                   `ff4b4bf`; decision 079) — THE BUFFER
+                                   THIS CELL PLANNED IS BUILT, AND FOUR OF
+                                   ITS STANDING CLAIMS ARE NOW FALSE. THEY
+                                   ARE KEPT ABOVE AS HISTORY.**
+                                   **(1)** *"PLANNED, NOT DECIDED, NOT
+                                   STARTED — a CMYK+alpha compositing
+                                   buffer"* — **SHIPPED**, and it is
+                                   **not** CMYK+alpha: it is **four
+                                   plane-major `f32` colorant planes plus
+                                   alpha**, and — after `97.1f` — four more
+                                   for knockout, carrying shape `f_g` and
+                                   alpha `α_g` on **SEPARATE** planes
+                                   because §11.4.8 reads shape where
+                                   §11.4.4 reads alpha.
+                                   `crates/pdfce-render/src/cmyk_buffer.rs`
+                                   + `cmyk_paint.rs`; knockout arithmetic
+                                   in
+                                   `compositor::composite_element_knockout_cmyk`
+                                   / `remove_backdrop_cmyk`.
+                                   **(2)** *"pdfce blends in RGB today
+                                   (decision 068), so
+                                   `Difference`/`Exclusion` and the
+                                   non-separable modes are computed in the
+                                   wrong space wherever the BCS is CMYK"* —
+                                   **FALSE on a subtractive page since
+                                   `a277931`.** The census went **107 of
+                                   107 wrong → 0 of 107** on the Ghent
+                                   suite. It remains **true on an additive
+                                   page and that is correct, not a
+                                   shortfall**: §8.6.6.4 makes reverting to
+                                   the alternate space the **specified**
+                                   behaviour on an additive device
+                                   (decision 079).
+                                   **(3)** *"(2) the SAME buffer is also
+                                   where blending happens correctly at all
+                                   … That paragraph is correct and is now
+                                   the whole remainder"* — **discharged.**
+                                   The remainder is now the
+                                   **spot/n-channel** half only: **every
+                                   remaining Ghent FAIL is an overprint,
+                                   spot or ICC patch, and not one is a
+                                   blending-space failure.** Ghent **26 →
+                                   29 pass of 51**, trap marks **55 → 41**.
+                                   **(4)** *"the `iccce` boundary (decision
+                                   064) still owns the final conversion"* —
+                                   **unchanged as a BOUNDARY and no longer
+                                   a BLOCKER.** §11.4.7's collapse ships
+                                   against pdfce's own conversion tables
+                                   today. Two conversions exist and **they
+                                   are for different jobs**: a
+                                   **calibrated** lattice for the TERMINAL
+                                   conversion, and an **exactly
+                                   invertible** max-GCR pair for a ROUND
+                                   TRIP. Using the accurate one on a round
+                                   trip left `1_GWG161` at **10 trap
+                                   marks**; the invertible one took it to
+                                   **4**. When `iccce` lands it replaces
+                                   the terminal one, not both.
+                                   **Cost figures above are UNAFFECTED and
+                                   untested against the shipped buffer** —
+                                   they price *iccce's* transform, which is
+                                   not what runs today. No new performance
+                                   measurement was taken this session; do
+                                   not read the ship as a measurement of
+                                   the cost paragraph.
+                                   **STILL NOT DONE, so this cell is still
+                                   not closed:** a **non-isolated ORDINARY
+                                   group on a subtractive page is
+                                   composited as if isolated** (backdrop
+                                   dropped, §11.4.4's removal skipped,
+                                   counted `cmyk_groups_approximated`) —
+                                   the arithmetic exists, the **second
+                                   content walk** does not; **images and
+                                   shadings bridge through sRGB**
+                                   (`cmyk_bridged_pixels`,
+                                   `cmyk_unbridged_images`); **spot
+                                   colorants are still flattened** (four
+                                   planes, not runtime `N`); and everything
+                                   the previous amendment listed — implicit
+                                   knockout (§9.3.8 `/TK`, §11.7.4.4
+                                   `B`/`b`, §11.6.7 shading patterns),
+                                   `/AIS`, and **`/TR` still read, counted
+                                   and NOT evaluated** — is **unchanged**.
     pdfce-print\                 <- Printing: job planning + spooling. Shipped with
                                    `Pass 55.2` (2026-08-10) but never documented in this
                                    tree until the eighty-fifth filing — a filing gap this
@@ -23710,4 +23796,101 @@ free 072.**
   lands, the real-world corpus is expected not to move, and that must not
   be read as failure.
 
-  **Ceiling moves 077 → 078; next free 079.**
+  ~~**Ceiling moves 077 → 078; next free 079.**~~ **Superseded by
+  decision 079, below.**
+
+- **2026-08-21 — Decision 079. THE COLORANT BUFFER IS ENGAGED ONLY ON A PAGE
+  WHOSE GROUP DECLARES A SUBTRACTIVE BLENDING SPACE — AND THAT IS A
+  CONFORMANCE REQUIREMENT, NOT CAUTION. ROUTING AN ORDINARY PAGE THROUGH INK
+  WOULD ITSELF BE THE DEVIATION.** Filed with `Pass 97.1e`/`Pass 97.1f`
+  (`a277931`, `ff4b4bf`; `ROADMAP.md`'s top *Shipped* entry, 224th filing).
+
+  **(a) The gate, and why the reflexive reading of it is wrong.** A new
+  rendering path that runs on 13 of 51 conformance patches and 15 of 4,012
+  real files *looks* like a feature someone hedged — shipped narrow, to be
+  widened once it is trusted. **It is not.** ISO 32000-1 **§8.6.6.4** makes
+  reverting a device colour space to its **alternate** the specified
+  behaviour on a device that does not have the colorants, and §11.4.7 makes
+  the page group's own `/CS` the thing that decides. **An additive page has
+  no subtractive blending space to honour**, so compositing it in ink and
+  converting back would introduce a round trip the standard never asks for,
+  through a non-affine conversion — measurably lossy, and a deviation pdfce
+  would have chosen for itself. **The narrow gate is the conformant
+  behaviour; widening it later would be the regression.** This is recorded
+  because *"why is this only on 0.4 % of files?"* is a question a future
+  session will ask, and *"caution"* is the wrong answer to give it.
+
+  **(b) The consequence for judgement, inherited from decision 078 and now
+  CONFIRMED rather than predicted.** 078 decided this Pass was a
+  **conformance and print-credibility** deliverable that would change nothing
+  about ordinary documents. Measured after the ship: a page-by-page A/B of
+  the two builds over a **500-file random sample** of `fixtures/external`
+  gives **463 identical PNGs, 0 changed, 37 unrenderable by one or both**
+  (`463 + 37 = 500`). **A full-corpus run was still executing when this was
+  filed and no figure for it is recorded** — the sample confirms the
+  prediction, it is not a corpus result.
+
+  **★★★ AMENDED WITHIN THIS SAME FILING (`b805f99`, committed while this
+  entry was being written) — (b)'s PREDICTION IS NOW MEASURED, AND IT WAS
+  WRONG BY A FACTOR OF TWO IN A WAY THAT IS WORTH MORE THAN BEING RIGHT.**
+  **Full-corpus A/B over all 4,023 files of `fixtures/external`, PNGs
+  compared byte for byte: 3,731 identical, 4 CHANGED, 288 unrenderable by one
+  or both** (`3,731 + 4 + 288 = 4,023`; **4 of the 3,735 renderable =
+  0.107 %**). The prediction named **two** files and both appear; **two more
+  do not come from the prediction at all**, and the reason is structural:
+  the prediction was derived from `blends_in_wrong_space`, **which counts
+  BLENDS**, and those two files declare a subtractive page group while
+  performing **no non-`Normal` blend**. **Their pixels move because the
+  CONVERSION moved, not the blend** — per-paint `CMYK`→sRGB then composite,
+  versus composite in ink then convert once, and the two differ on any
+  partially covered pixel because the conversion is non-affine.
+  **Measured on one: 4,600 of 484,704 pixels (0.95 %), max channel delta
+  11/255, inside a single 110×80 box** — one partially-covered object, not a
+  page-wide shift, which is the distinction that separates correct behaviour
+  from a regression. ★ **The affected population is *pages with a
+  subtractive GROUP* (15 files), not *pages that BLEND inside one* (2)** — so
+  the CENSUS counter was the right instrument and the SHORTFALL counter was
+  the one consulted. **Decision 078's judgement clause stands and is
+  sharpened**: the corpus moved on **4 files of 4,023**, all four
+  conformance fixtures, which is *"expected not to move"* being confirmed at
+  the scale it was asserted at — not refuted. **What the sweep bought over
+  the 500-file sample was the two files nobody predicted:** the sample
+  reported `0 changed of 463`, correctly, and that observation is consistent
+  with both 2 and 4, so it distinguished nothing.
+
+  **(c) Two structural consequences of the gate, both already in code.**
+  A **display list is REFUSED by name** on a subtractive page
+  (`PoisonReason::ColorantBuffer`), because its replay target is a `Pixmap`:
+  a cached page would render a *different and worse* picture than the
+  uncached one, which is what every other `PoisonReason` exists to prevent.
+  And the buffer is disclosed rather than assumed: five keys appended **last**
+  to `render-page`'s stable stdout line — `cmyk_buffer`,
+  `cmyk_buffer_refused`, `cmyk_bridged_pixels`, `cmyk_groups_approximated`,
+  `cmyk_unbridged_images` — so no existing field position moves.
+
+  **(d) `f32`, on one type alias.** `cmyk_buffer::Chan`, so revisiting it is
+  one line. §11.4.4's `1/α_gn` is what forces floats at all: an 8-bit
+  half-level becomes **25 levels**, an `f32` one about **1/2600th of a
+  level**. `f64` was declined and the sibling `iccce` project told so at its
+  own request — widening `f32`→`f64` is exact and happens **once per pixel at
+  the collapse**, not inside the blend loop.
+
+  **(e) ★ One counter changed MEANING, which is a contract change even though
+  no key moved.** `blends_in_wrong_space` incremented on the blending
+  **space** alone, because at the time nothing could honour §11.3.4 and every
+  such blend really was additive. **It now increments only when the paint
+  target is not a colorant buffer.** Leaving it alone was tried in the same
+  session: `tools/measure-blend-space.py` — the only instrument anyone runs
+  at corpus scale for this question — went on reporting **107 of 107 wrong**
+  after the buffer landed and two patches started passing. `cmyk_buffer` is
+  the companion key that says which regime produced a zero.
+
+  **Body sections updated in this same filing:** §4's `pdfce-render` cell
+  (four standing claims marked false, the text kept above them). **§3's
+  GUI-core separation invariant is verified, not assumed**: `cargo tree -p
+  pdfce-core` / `-p pdfce-render` show no GUI or network dependency, and **no
+  manifest was touched and no dependency added**, so the property holds by
+  construction. **§5's round-trip invariant is not engaged** — both Passes
+  are entirely inside `pdfce-render`, with no writer path.
+
+  **Ceiling moves 078 → 079; next free 080.**
