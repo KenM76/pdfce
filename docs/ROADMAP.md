@@ -96,6 +96,1029 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ `v0.7.0` IS BUILT AND SMOKE-TESTED, AND **IT IS NOT RELEASED** — no tag, nothing pushed, no GitHub release, and CI **RED** at the last pushed commit; ★★★ THE DISPATCH'S OWN BASELINE WAS WRONG AND ITS OWN BINARY SAYS SO — **"53 commits since `v0.6.0` (`df97ec2`)"** against `git describe` = **`v0.6.0-166-g5884ed1`** and the staged CLI's own banner = **`v0.6.0-164-g67ad7ea`**; ★★ AND THE BACKUP DENOMINATOR IS WRONG FOR THE **THIRD** CONSECUTIVE FILING — **"~55 commits" dispatched, 166 measured** — no Pass ID; release-process record — 2026-08-21 (two-hundred-and-nineteenth filing)
+
+**Sourcing.** This filing has a shell. **Every figure in this entry was
+produced here, by the command named beside it**, except the items
+explicitly labelled *relayed* (the packaging smoke test on a fresh path,
+`cargo test`/`fmt`/`clippy`/`cargo tree`, the `cargo-about` regeneration
+and the 4,023-file render-parity double run). Hard rule 8 discharged by
+looking, not by disclaiming.
+
+**★ Scope, stated first because this filing was written concurrently with
+another and must not be read as duplicating it.** `5884ed1`
+(`tools/check-ci-parity.py`), the `fuzz/` widening of
+`check-commits-filed.py`, and the **`R209` mint** are all filed by the
+**218th** entry immediately below — see its *"AND `5884ed1` LANDED TOO"*
+and *"`R209` MINTED"* sections. **This entry does not re-file them and
+mints nothing.** It exists for the one thing that entry does not cover:
+**the state of the `v0.7.0` release**, which was dispatched to this role
+as a finished fact and is not one. Three small measurements about
+`5884ed1` that the 218th entry does not carry are recorded at the end,
+because they were taken here and are only checkable now.
+
+---
+
+#### ★★★ THE HEADLINE, AND IT IS A NEGATIVE ONE
+
+This entry was dispatched as *"THE `v0.7.0` RELEASE RECORD"*. **It is not
+one, because there is no release.** The dispatch's own instruction —
+*"confirm the run before writing that sentence — if it is not green when
+you check, say so instead"* — is honoured here **and then some: the CI
+half is not the only half that failed to check out.**
+
+| release precondition | command run this filing | dispatch stated | **MEASURED HERE** |
+|---|---|---|---|
+| tag `v0.7.0` exists locally | `git tag -l`; `git describe --tags` | *"Tag `v0.7.0`, on `main`"* | **NO** — newest tag is **`v0.6.0`**; `git describe --tags` = **`v0.6.0-166-g5884ed1`** |
+| tag `v0.7.0` exists on the remote | `git ls-remote --tags origin` | implied | **NO** — remote tags top out at `refs/tags/v0.6.0` (`^{}` = `3c4c00e`) |
+| GitHub release published | `gh release list` | implied by *"the release"* | **NO** — Latest is **`v0.6.0`**, 2026-08-18T00:34:08Z |
+| `HEAD` is pushed | `git log --oneline origin/main..HEAD` | not stated | **NO — 2 commits unpushed** (`fb06d93`, `5884ed1`); `origin/main` = `67ad7ea` |
+| CI green at the commit that would be tagged | `gh run view 32481109179` | *"cut on a green run (confirm…)"* | **NO — `failure`.** 8 of 10 job runs green, **2 red**: `ui-strings` (via `check-commits-filed.py`) and `fuzz-smoke` |
+| commits since `v0.6.0` | `git rev-list --count v0.6.0..HEAD` | **53**, base given as `df97ec2` | **166.** `df97ec2` is a **2026-08-19** commit, **not the tag** — `git rev-list --count df97ec2..HEAD` = **53**, so the number is real and the base is not |
+| portable zip staged | `ls -la D:/builds/*.zip` | 10,913,301 B | **YES** — `D:/builds/pdfce-v0.7.0-portable-win64.zip`, **10,913,301 B**, 2026-08-21 08:34. Exact match |
+| staged folder contents | Python `zipfile` listing, run here | 6 files, sizes given | **YES, all six, byte-exact** — table below |
+
+**★★ THE REFUTATION WAS INSIDE THE DELIVERABLE THE DISPATCH DESCRIBED.**
+The dispatch quotes the staged CLI as reporting **`revision:
+v0.6.0-164-g67ad7ea`** — quoted correctly; **run here, the binary prints
+exactly that.** **`164` and `53` are the same fact in two forms and they
+do not agree**, and the dispatch carried both, four bullets apart. This is
+hard rule 10's mechanism with the two figures closer together than in any
+prior instance: *review is an operation on one claim, consistency is an
+operation on a set, and nothing performs the second.* **The correction
+required no new measurement — only noticing that a tag-relative revision
+string IS a commit count.** `BUILD-INFO.txt` in the same folder says
+*"Changes since the previous build (`3c4c00e`)"* and then lists **164
+commit lines** (file is 196 lines; the changelog opens at line 30), so
+**the artefact states the right base twice.**
+
+**★ What `df97ec2` actually is, since a wrong base is more useful named
+than deleted.** `2026-08-19 11:55:39 -0400`, subject *"ten wrong rows in
+one column, and six of them told pdfceGUI they were already finished"* — a
+`FEATURES.md`-correction commit, and **the last commit before the current
+transparency-compositor stretch**. That makes it a plausible *narrative*
+baseline for release notes and **not** the tag. Recorded so the next
+release does not re-derive the same wrong number from the same
+plausible-looking commit.
+
+**★★ And the backup denominator is wrong for the THIRD consecutive
+filing.** The dispatch says the newest bundle is *"~4 days and ~55 commits
+stale"*. Measured here: `ls -lt D:/Dev/pdfce-backups/` → newest is
+**`pdfce-20260817-v060.bundle`, 2026-08-17 20:34** (**~3.7 days**);
+`git bundle list-heads` on it → `refs/heads/main` = **`3c4c00e`**;
+`git rev-list --count 3c4c00e..HEAD` → **166**. The 216th filing said
+**47**, the 217th said **48**, the 218th corrected both to **160/161** and
+named the mechanism — *a commits-ahead-of-`origin/main` figure re-used
+against a different denominator* — and **the dispatch for this filing
+supplied the same wrong shape again (`~55` ≈ the 53 commits since
+`df97ec2`).** A correction that lands in the record but not in the habit
+has not landed. **Hard rule 10(a) is the remedy and it is cheap: state the
+denominator with the count** — *"166 commits since `3c4c00e`, the bundle's
+own `refs/heads/main`"* cannot be confused with *"166 ahead of the
+remote"*, which is **2**.
+
+---
+
+#### What DOES exist, verified here: a complete, correct, staged portable build
+
+`D:\builds\pdfce-20260821-0829-67ad7ea\`, built at **`67ad7ea`** — **two
+commits BEHIND `HEAD`, and the two missing commits are exactly the two
+that fix CI** (`fb06d93`, `5884ed1`). **The staged zip does not contain
+the fuzz fix.** Whether that matters for a shipped artefact is the
+engineer's call — neither commit touches `crates/`, so the binaries are
+unaffected — but it is recorded because *"the release is cut at `HEAD`"*
+and *"the zip was built at `HEAD`"* are different claims and **neither is
+true right now.**
+
+Zip contents, listed here with Python's `zipfile` rather than relayed —
+**six entries, no `userdata/`, no stray file**:
+
+| entry | bytes |
+|---|---|
+| `pdfce-gui.exe` | 16,026,624 |
+| `pdfce-cli.exe` | 11,883,008 |
+| `THIRD_PARTY_LICENSES.md` | 376,103 |
+| `BUILD-INFO.txt` | 17,539 |
+| `README.md` | 7,872 |
+| `LICENSE` | 1,067 |
+| **uncompressed total** | **28,312,213** |
+| **zip on disk** | **10,913,301** — **38.5%** of uncompressed |
+
+Per-item beside the total with the denominator stated — hard rule 10(a).
+Against `v0.6.0`'s filed figures (folder **27,067,242 B** → zip
+**10,464,533 B**, 159th filing): folder **+1,244,971 B (+4.6%)**, zip
+**+448,768 B (+4.3%)** over **166 commits** = **+2,703 B of zip per
+commit**, which is the per-item form of a number that is otherwise only
+comparable to itself.
+
+**`userdata/` is absent from BOTH the zip and the staged folder**
+(`ls -d …/userdata` → no such file, run here) — decision 003 / `R15`'s
+payload-vs-user-state partition holds **on the payload side, checked
+independently rather than inferred from the smoke test**, which observes
+the other side (creation at runtime).
+
+**Binary banner, run here** (`pdfce-cli.exe --version`): `pdfce-cli 0.7.0`
+· built `2026-08-21T12:29:21Z` · committed `2026-08-21T11:40:33Z` ·
+revision `v0.6.0-164-g67ad7ea` · `iccce: not-linked-yet (integration
+pending -- Pass 97.x; see ARCHITECTURE.md decision 064)`. The version
+agrees with `Cargo.toml:77` (`version = "0.7.0"`).
+
+**Relayed, not re-run here.** The packaging smoke test performed by
+copying the folder to a fresh path and running both binaries from it — the
+CLI reports its revision and renders; the GUI launches and creates
+`userdata/` **inside its own folder**; no installer, no registry, nothing
+written outside the folder. `cargo test --workspace` green;
+`cargo fmt --all --check` and
+`cargo clippy --all-targets --workspace -- -D warnings` clean; `cargo
+tree` shows **no GUI dependency** in `pdfce-core`, `pdfce-render` or
+`pdfce-cli` (project rule 2 invariant holds); wasm32 cross-check clean;
+**`THIRD_PARTY_LICENSES.md` regenerated with `cargo-about` 0.9.1 and
+byte-identical**, so no dependency changed in this release (project rule
+13 discharged). The **full-corpus render parity over 4,023 files, run
+twice** — this tree and a worktree at `2e6bb83` — **identical bucket for
+bucket and band for band**, naming the same single unexplained file: filed
+in detail by the 218th entry below and **cross-referenced here rather than
+restated.**
+
+---
+
+#### What the release notes would say, and the honest half beside it
+
+Recorded here because the 218th entry files the *engineering* and this is
+the *release* framing, and because a release entry that lists only wins is
+the kind nobody trusts.
+
+**The headline is that a sentence from `v0.6.0`'s own notes stops being
+true.** Those notes said, under a heading titled *"Not implemented"*:
+*"Transparency-group compositing and soft masks are not implemented… do
+not read this release as 'transparency works'."* **This is the release
+where that changes.** Knockout groups, non-isolated group backdrops and
+soft masks applied to a group's **result** all ship (`Pass 97.0a–d`);
+Ghent **16.1 goes from 14 wrong cells to 2**; the three measurable
+soft-mask patches go **0.576 → 0.962**, **0.725 → 0.978**, **0.905 →
+0.986**. Also in it: **text editing inside form XObjects** (`Pass 119.0`,
+`119.2`), the **object clipboard** (`Pass 120.x`), `transform_objects`,
+and three defects only the operator's own CAD drawing could find.
+
+**★ The honest half, and it belongs in the record as much as in the
+notes.** The **Ghent board did not move** — **26 pass / 14 FAIL / 11
+UNRESOLVED of 51, before and after** — while the trap count across the
+failing patches fell **67 → 55**, i.e. **12 traps cleared over 14 failing
+patches = 0.86 traps per failing patch**. **The transparency panels are
+blocked on §11.3.4's blending colour space, not on the group model.**
+Both figures and that conclusion are already filed by the 218th and 216th
+entries and are cited, not re-derived.
+
+**★ There is also a release-notes correction still owed from `v0.6.0`,
+and it is now overdue in a second way.** The 160th filing recorded that
+`v0.6.0`'s published notes say *"soft masks are not implemented"* and that
+a `v0.6.1` was needed to correct it. **`v0.6.1` was skipped** (`30b0375`,
+version bumped straight to `0.7.0`), so **the correction has never been
+published** — and it is no longer merely stale, it is the **headline of
+the release that has not been cut.** Publishing `v0.7.0` discharges it;
+nothing else will.
+
+---
+
+#### The honest sequence — written by the 218th filing, still undone
+
+The 218th filing wrote it as **push → watch all NINE CI jobs → tag**, and
+nothing has been pushed since. With `5884ed1` now filed, the sequence is:
+
+1. **Commit the filings** (`docs/ROADMAP.md`, `docs/SESSION_LOG.md`) — the
+   `check-commits-filed.py` job is red *because* `5884ed1` is unfiled, and
+   the 218th entry plus this one are the fix.
+2. **Push `main`** — 2 unpushed commits become 3.
+3. **Watch all nine CI jobs.** `fuzz-smoke`'s fix (`fb06d93`) and
+   `ui-strings`'s fix (the filings) have **never been observed green in
+   CI**, only locally — which is precisely the claim `R209` now forbids
+   treating as sufficient. **This step is the rule's first live
+   application.**
+4. **Rebuild the zip at the pushed `HEAD`** if the artefact is to match the
+   tag, or tag `67ad7ea` deliberately and say which.
+5. **Tag, then publish**, then run `tools/verify-release.py v0.7.0` — its
+   seven checks are exactly the seven rows of the table at the top of this
+   entry, and running it would have caught every one of them.
+   **★ It was not run before this dispatch.** That tool exists, is in the
+   repo, was written for this, and answered these questions for `v0.6.0`
+   (159th filing: *"all seven checks ok"*). **The gap this filing closes by
+   hand is the gap that tool closes by command.**
+
+**Operator authorisation is on record and project rule 8 is satisfied by
+it.** The operator said, this session: *"if you haven't released do that
+first"* — an explicit, current go-ahead, narrower in wording than the
+`v0.6.0` entry's *"release new builds when it seems like a good time"* but
+unambiguous as to this release. **The go-ahead is not what is missing. The
+steps are.**
+
+**★ Why this is filed as a release-BUILD record rather than deferred until
+the release happens.** Two prior entries establish the shape: `abe6c97`
+(version bump, 158th) and the `v0.6.0` record (159th) are **separate
+entries**, and the earlier one carries an explicit caveat naming what it
+is not. Deferring would also lose the eight measurements above, which are
+only checkable now. **A release record is still owed and is NOT discharged
+by this entry.** `v0.7.0` is now **bumped-but-untagged for the FIFTH
+consecutive filing**.
+
+---
+
+#### Three small `5884ed1` measurements the 218th entry does not carry
+
+Taken here, recorded because they are cheap and they correct a count that
+is quoted from a commit message rather than measured.
+
+1. **The gate inventory is 16 on disk / 15 wired into CI, not fourteen.**
+   `ls tools/check-*` = **16**;
+   `grep -oE 'tools/check-[a-z-]+\.(py|sh)' .github/workflows/ci.yml |
+   sort -u` = **15**. The *"fourteen scripts"* in `5884ed1`'s message and
+   in the 218th entry is the **pre-commit** count and was correct when
+   written; at `HEAD` it is fifteen wired, plus
+   `check-image-colorspace-truth.py` which takes a fixture directory and
+   is the deliberate sweep-tool carve-out named in `ci.yml`'s own comment.
+2. **`check-ci-parity.py` is a STEP inside the existing `ui-strings` job,
+   not a tenth job** (`ci.yml:474–475`, inside the job that opens at
+   `:299`). So **the job count is unchanged at 9 definitions / 10 runs** —
+   which matters because the gate's whole purpose is to be consulted when
+   that count changes, and a gate that changed it on arrival would have
+   invalidated its own baseline. `ci.yml`'s comment states the reason:
+   *"a job that costs a container to grep one YAML is a job people
+   delete."*
+3. **`tools/commits-filed-baseline.txt` is unchanged at 25 lines**
+   (`wc -l`, run here) — the `fuzz/` widening added **no** named debt, as
+   the 218th filing forecast and the gate then confirmed.
+
+**And one recommendation from the 218th filing that `5884ed1` does NOT
+discharge, re-stated here so it is not read as closed:** replace
+`CODE_PREFIXES` with its **complement** — everything except a named
+docs/memory exclusion list — so the next directory is covered the day it
+is created. `.github/` was added on 2026-08-18 and `fuzz/` on 2026-08-21;
+**two directories added to the same four-element tuple in three days**, in
+both cases because somebody noticed, not because the list was derived.
+`tools/` is outside this role's remit; this is a recommendation, not a
+change.
+
+---
+
+#### Not a Pass
+
+No document capability is added, changed or disclosed. This is a
+release-process record, the same class as `abe6c97` (158th) and the
+`v0.6.0` record (159th), **neither of which took a Pass ID either.**
+`Pass 97.1` stays in *Backlog* with its leading deliverable untouched.
+
+#### Terminology (project rule 15)
+
+No occurrence of "dimension", qualified or bare, in this entry — not
+applicable this filing.
+
+#### `docs/FEATURES.md` — checked this filing, **no rows touched**
+
+A release record ships no new verb, and nothing in the staged build is a
+capability that was not already filed by the 216th–218th entries. This is
+the same ruling the `v0.6.0` release entry made (159th filing: *"no
+capability moved; this entry is a release record only"*). Verified by
+`grep`, not deferred to.
+
+#### Escalation triage
+
+- **Nothing for `D:\dev\rag\rust\`, `C:\personal_rag\pdf\` or
+  `pdfce-spec-librarian`** from this entry. The one ecosystem-general
+  finding in this session's material — a cheap local command standing in
+  for an expensive CI job — is already escalated by the 218th entry to
+  `D:\dev\rag\rust\a_ci_job_with_no_local_runner_is_unobserved_not_passing.md`.
+  **A release-verification finding (*"the tool that answers these seven
+  questions exists and was not run"*) is project-scoped, not
+  ecosystem-scoped**, and is filed above rather than escalated.
+
+#### Ledger effects
+
+| ledger (per-item form, denominator stated — hard rule 10) | before | after |
+|---|---|---|
+| Pass family ceiling | **121** | **121** (unchanged — no Pass ID) |
+| decision records | **077** | **077** (unchanged) |
+| standing rules | **R209** | **R209** (unchanged — **minted by the 218th entry**, not by this one; next free **`R210`**) |
+| `SESSION_LOG` filings | **218** | **219** |
+| commits filed by this entry | — | **0** — every commit at `HEAD` is filed by the 218th entry; this entry files a release state, not a commit |
+| commits in no filing (`tools/check-commits-filed.py`) | **1** (`5884ed1`, before the 218th entry was extended) | **0 expected once the filings are committed** — the gate reads the filing, so it cannot be re-run green until then |
+| `v0.7.0` tagged? | **no** (4th consecutive filing) | **no** (**5th**) — `git tag -l`, `git ls-remote --tags origin`, `gh release list`, all run here |
+| commits since `v0.6.0` (`3c4c00e`) | dispatched as **53** (wrong base, `df97ec2`) | **166** at `5884ed1` — `git rev-list --count v0.6.0..HEAD`; staged build is at **164** (`67ad7ea`), per its own banner |
+| commits ahead of `origin/main` | **1** (218th hand-off) | **2** — `fb06d93`, `5884ed1` |
+| newest backup bundle staleness | dispatched as **~55** | **166** commits since the bundle's own `refs/heads/main` (`3c4c00e`), ~**3.7 days** — `git bundle list-heads` + `git rev-list --count` |
+| CI at the last pushed commit (`67ad7ea`) | reported green | **RED** — run `32481109179`, `failure`; **8 of 10 job runs green, 2 red** |
+| release zip staged / published | — | **staged, 10,913,301 B, verified byte-exact** / **not published** |
+| `tools/check-*` scripts on disk / wired into CI | **15 / 14** | **16 / 15** — both counted here |
+| `crates/` stale-claim survivors reported and open | **1** — `color.rs:599–600` | **1** — unchanged; still owed to the engineer |
+| `docs/FEATURES.md` rows touched | — | **0** |
+
+
+---
+
+### `943575e` — TWO STALE CLAIMS CLOSED IN `crates/pdfce-render/`, AND THE MECHANISM THAT HID ONE OF THEM: ★★ **A CLAIM PHRASED AS AN ABSENCE IS INVISIBLE TO A GREP FOR THE THING THAT NOW EXISTS** — hard rule 11's first known COUNTER-mechanism, and it defeats the remedy rather than merely escaping it; ★★★ **A THIRD COPY OF THE `/Indexed` CLAIM SURVIVES AT `color.rs:599`**, found by this filing's own sweep, at the definition site of the very function the fix hangs on; ★★ AND THE BACKUP-STALENESS FIGURE HAS CARRIED THE WRONG DENOMINATOR FOR TWO CONSECUTIVE FILINGS — **47/48 filed, 160/161 true, 166 at hand-off**; ★★★ AND `check-commits-filed.py` CANNOT SEE `fuzz/` EITHER — THE `.github/` HOLE AGAIN, THREE DAYS LATER, **9 OF 23 `fuzz/`-TOUCHING COMMITS ARE FUZZ-ONLY AND 2 OF THOSE WERE UNCITED**, BOTH FILED HERE; ★★ AND `tools/check-ci-parity.py` LANDS — THE LOCAL SWEEP IS 14 SCRIPTS AND **ONE OF CI'S NINE JOBS**, AND NOTHING COMPARED THE TWO; ★★★ **`R209` MINTED FROM IT — A CI JOB WITH NO LOCAL RUNNER IS UNOBSERVED, NOT PASSING** (2 instances, 2 media, 16 days apart, the same job both times; the Backlog-item option declined as MOOT because the tool was already on disk, the amendment option declined on SHAPE because this is not `R205`) — no Pass ID; four correction/infrastructure commits (`943575e`, `fb06d93`, `5884ed1`, `d311e3a`) — 2026-08-21 (two-hundred-and-eighteenth filing)
+
+**This filing has a shell; hard rule 8 discharged by looking, and every
+figure below names the command that produced it.** Nothing here is
+relayed except the engineer's `cargo`/CI results, which are labelled where
+they appear.
+
+**★★ EVERY FIGURE BELOW IS THE HAND-OFF VALUE, RE-MEASURED AFTER THE TREE
+MOVED UNDER THIS FILING.** `fb06d93` and then `5884ed1` were committed by the engineer **while this
+entry was being written** — the opening measurements were taken at
+`67ad7ea` and several went stale within the hour, twice. **They are
+corrected in place rather than printed above their own corrections**,
+because the failure hard rule 10 records is precisely *the correct reading
+printed above the incorrect one, with the prose the half that travelled*.
+The `67ad7ea` values are named in the *"went stale mid-filing"* column so
+nothing is hidden.
+
+| claim | command run this filing | value at `67ad7ea` (when first measured) | **HAND-OFF value (`5884ed1`)** |
+|---|---|---|---|
+| `943575e` is on `main` and unfiled | `python tools/check-commits-filed.py` | **1 code commit in no filing: `943575e`** | **clean, exit 0** — 511 code commits checked (whole history), 5 known-unfiled carried in the baseline |
+| push state | `git rev-list --left-right --count origin/main...HEAD` | `0  0` — `HEAD` **was** `origin/main` | **`0  2`** — `HEAD` = **`5884ed1`**, **two commits AHEAD of `origin/main` (`67ad7ea`); `fb06d93` and `5884ed1` are NOT pushed** |
+| remote branch set | `git ls-remote --heads origin` | **one ref**, `refs/heads/main` = `67ad7ea` | unchanged — **one ref**, still `67ad7ea` |
+| local branch set | `git for-each-ref refs/heads \| wc -l` | **13** local branches | **13** |
+| are any local commits off-remote? | `git branch --no-merged main` | **0 branches** — every commit reachable from `origin/main` | **0 branches**, but see push state — **`fb06d93` itself is now off-remote** |
+| tag state | `git tag -l` vs `Cargo.toml:77` | tops out at **`v0.6.0`** against `version = "0.7.0"` | unchanged — **bumped-but-untagged for the FOURTH consecutive filing** |
+| tree state | `git status --porcelain` | **empty** | **`docs/ROADMAP.md` + `docs/SESSION_LOG.md` only** — this filing's own two files, nothing else |
+| newest backup bundle | `ls -lt D:/Dev/pdfce-backups/` | **`pdfce-20260817-v060.bundle`, 2026-08-17 20:34** | unchanged |
+| that bundle's `main` | `git bundle list-heads <bundle>` | **`3c4c00e`** | **`3c4c00e`** |
+| commits since that bundle | `git rev-list --count 3c4c00e..HEAD` | **164** | **166** — see the denominator correction below |
+
+**Shipped (no Pass ID — four commits).** None adds, changes or discloses
+a **document capability**, so none is filed as a Pass; they are
+correction/infrastructure commits, the same class as the 215th filing's
+three. `Pass 97.1` stays in *Backlog* with its leading deliverable
+untouched.
+
+- **`943575e`** — the dispatched subject. Corrects two rustdoc/comment
+  claims in `crates/pdfce-render/` and rewrites the engineer-owned
+  `docs/NEXT_SESSION.md`.
+- **`fb06d93`** — landed **mid-filing**. Fixes a three-day-old
+  `cargo fuzz build` compile break and a fuzz dispatch that had **never
+  fuzzed `MarkupSpec::Cloud`**. Detail below.
+- **`5884ed1`** — landed **mid-filing**, after `fb06d93`. Adds
+  `tools/check-ci-parity.py` (**19 `LOCAL` / 11 `LOCAL-VIA` / 3 `CI-ONLY`**
+  over 33 workflow `run:` commands, unrecognised command = FAIL) and
+  widens `check-commits-filed.py`'s `CODE_PREFIXES` with `fuzz/`. Detail
+  below.
+- **`d311e3a`** (2026-08-11) — `fuzz/Cargo.lock` pinned to the workspace's
+  `sha2`. **Never filed anywhere until now**; surfaced by this filing's
+  own sweep of a gate blind spot. Detail below.
+
+**★ Three of the four landed or were surfaced DURING this filing**, which
+is why the figures below carry an explicit hand-off column. The tree was
+live throughout; see the closing note.
+
+#### The two claims it closed
+
+Both were found **by this role, while filing the 217th**, both live in
+`crates/` and were therefore **reported rather than edited** (hard rule
+11's scope line). The engineer applied both corrections in this commit.
+
+1. **`crates/pdfce-render/src/interpret.rs`, `Diagnostics::overprint_requested`'s
+   rustdoc** — *"Image XObjects do not reach the overprint composite at
+   all — and are **not counted** as `overprint_refused` when they skip
+   it."* The second half stopped being true in `0d5fc29`, which added
+   **`overprint_images_unsupported`** (`Pass 97.1b`, filed 217th). The
+   first half is still true and stays. At `HEAD` the corrected text runs
+   `interpret.rs:384–397` and now names the new counter, **keeps the stale
+   sentence legible rather than deleting it** (*"which this sentence said
+   they were not until `Pass 97.1b`"*), and carries the mechanism note
+   below inline at `:392–397`.
+
+2. **`crates/pdfce-render/src/overprint.rs`, twice** (the `classify`
+   arm's comment, corrected text at `:487–495`, and the test's rustdoc,
+   corrected text at `:804–812`) — *"`/Indexed`
+   appears in four of the seven failing Ghent overprint patches."*
+   **Not false.** The defect is that it reads as
+   *reachable-by-the-renderer* when it only ever asserted
+   *present-in-the-file* — and `Pass 97.1a`'s own A/B measurement
+   (217th filing) **falsified the reading, not the sentence**: every one
+   of those spaces is an **image** colour space, `overprint::composite`
+   has **no image call site**, and pre- and post-fix binaries report
+   **identical counters on all four patches**. Both sites now say which
+   claim they are making; the test's rustdoc adds that **the four is not a
+   scoreboard** and that guarding a correct rule no pixel currently
+   exercises is *a reason to keep the test, not to discount it*.
+
+#### ★★ THE MECHANISM — and why it is worse than an ordinary stale claim
+
+The commit message names it and it is the reason this commit earns a
+filing rather than a line:
+
+> *The sentence names the **OLD** counter in order to say the situation
+> does **NOT** reach it. A grep for the new counter cannot find it, and a
+> grep for the old one finds a sentence that reads deliberate.*
+> **A claim phrased as an ABSENCE is invisible to a search for the thing
+> that now exists.**
+
+**Why this is a distinct species, stated as a property rather than as a
+count.** Hard rule 11's whole remedy is *"search for the CLAIM, not for a
+string"*, and its recorded failure mode is that a text-grep's set is
+reliably the smaller one. This mechanism is one level worse: **it defeats
+BOTH greps while each returns the correct answer to the question it was
+asked.**
+
+| the sweep you would actually run | what it returns | why it misses |
+|---|---|---|
+| grep for `overprint_images_unsupported` (the thing that changed) | the counter's real call sites — **not this sentence** | the sentence does not contain the new name; it predates it |
+| grep for `overprint_refused` (the thing named) | this sentence, **reading as deliberate** | the sentence is *about* `overprint_refused`, correctly, and its falsity lives in a negation two words later |
+
+**Neither grep is wrong.** The claim is a *negative existential* about a
+counter that has since been created, so the only search that finds it is
+one that reads the negation and asks *is that still an absence?* — which
+is reading, not grepping. That is the same boundary hard rule 11 already
+sits on, arriving from a new direction.
+
+**PROMOTION CALL: declined this filing, and recommended as an AMENDMENT
+TO HARD RULE 11 rather than a new numbered rule.** The engineer's own
+dispatch put it that way and this role agrees, for two reasons and one
+constraint:
+
+- **It is a refinement of an existing rule's METHOD, not a new
+  obligation.** Hard rule 11 already commands the sweep; this names a
+  shape the sweep must be told to look for. A rule that duplicated the
+  obligation would fragment it — the narrow-spelling failure `R205` warns
+  about.
+- **One occurrence is one occurrence.** This project has declined mints
+  at one and at two occurrences on stated warrants (the 211th, 212th and
+  213th filings) and minted `R207` only at two instances in two media.
+  Filing the mechanism, naming it, and putting it in the cross-project
+  RAG is the proportionate act at n=1.
+- **The constraint:** hard rule 11 lives in
+  `.claude/agents/pdfce-librarian.md`, and **that file is the engineer's
+  to amend, not this role's** — precedent set when hard rule 11 itself was
+  proposed by this role and minted by the engineer (2026-08-18). Draft
+  amendment text is in this filing's report; applying it is the engineer's
+  act.
+
+**★ And it is not covered by a gate, for the reason hard rule 11 already
+records.** No mechanical check can content-check a disclosure, because
+doing so requires knowing current behaviour — the fact the disclosure
+exists to report. An absence-phrased claim makes this strictly harder: a
+gate would need to know that a name the sentence *does not contain* now
+exists. **Do not propose one.**
+
+#### ★★★ SURVIVOR FOUND BY THIS FILING'S OWN SWEEP — a THIRD copy of the `/Indexed` claim
+
+Hard rule 11 obliges this role to sweep every place that describes a
+claim recorded as changed, and to **report survivors as owed work**. Done
+this filing by `grep -rniE "four of (the )?seven|4 of 7"` across `crates/`
+and `docs/`, then read. Result:
+
+> **`crates/pdfce-render/src/color.rs:599–600`**, in
+> **`ColorSpace::indexed_entry`'s rustdoc** (the function itself at
+> `:617`):
+> *"`/Indexed` appears in **four of the seven** failing Ghent overprint
+> patches."*
+> **Bare, unqualified, and carrying exactly the reading `943575e`
+> corrected in the other two sites.**
+
+**Owed to the engineer; not edited by this role** (`crates/` is outside
+the remit). Suggested correction: the same present-vs-reachable
+qualification the `overprint.rs` sites now carry, one sentence.
+
+**★ The sub-mechanism is the transferable half, and it is the RAG's own
+amendment #1 recurring: fixing one copy does not find the others.**
+`943575e` swept the file where the claim was **noticed** (`overprint.rs`,
+both copies) and missed the copy in the file the fix is **built on**.
+`color.rs` is where `indexed_entry` — the function `Pass 97.1a` added and
+the whole `/Indexed` fix hangs on — is defined; it is the *last* place a
+reader would expect the claim to be stale and the *first* place a
+maintainer will read it. **The sweep's boundary was the file, and the
+claim's boundary was the feature.**
+
+**Also swept, and clean:** `grep -rn "overprint_images_unsupported"`
+across `crates/` and `docs/` returns 14 sites — `interpret.rs`
+(declaration `:510`, increment `:4755`, merge `:1174`, and the corrected
+rustdoc), `pdfce-cli/src/main.rs:7637`/`:7916`, the stable-key ORDER test
+at `pdfce-cli/tests/render_page.rs:501`, `ARCHITECTURE.md:22794`/`:22805`,
+`compositor-plan.md:1061`, `NEXT_SESSION.md:185`/`:353` and
+`FEATURES.md` — **every one accurate at `HEAD`.** The `.claude/agent-memory`
+note `feedback_a_correct_fix_can_be_unreachable.md:18` says *"present in 4
+of 7"*, which is the **correct** phrasing and needs nothing.
+
+#### ★★ A CORRECTION THIS ROLE OWES ITSELF — the backup-staleness figure has had the wrong denominator twice
+
+**A correction is a claim (hard rule 10's corollary), so this one names
+its world-source rather than saying "corrected".**
+
+The 216th filing recorded the newest bundle as *"four days and **47**
+commits stale"*; the 217th as *"four days and **48** commits stale…
+reported as measured by `stat`"*. **`stat` produces a timestamp, not a
+commit count.** Both figures are the *commits-ahead-of-`origin/main`*
+number from two sentences earlier, re-used against a different
+denominator.
+
+Measured this filing, by `git bundle list-heads` on the bundle followed
+by `git rev-list --count`:
+
+| filing | bundle `main` head | filed figure | true figure (`git rev-list --count 3c4c00e..<commit>`) | ratio |
+|---|---|---|---|---|
+| 216th (at `86a7b70`) | `3c4c00e` | **47** | **160** | 3.4× understated |
+| 217th (at `0d5fc29`) | `3c4c00e` | **48** | **161** | 3.4× understated |
+| this filing, opening measurement (at `67ad7ea`) | `3c4c00e` | — | **164** | — |
+| **this filing, HAND-OFF (at `5884ed1`)** | `3c4c00e` | — | **166** | — |
+
+The two figures were never the same fact. **Commits ahead of `origin/main`
+counts what is unpushed; commits since the bundle counts what is
+un-bundled**, and on 2026-08-21 those two denominators were 48 and 161
+apart because the bundle predates the remote's last update by four days
+of heavy work. **This is hard rule 10(a) exactly** — a total filed
+without its denominator, where the denominator is the whole difference —
+and it is filed here as a correction to the two entries rather than as an
+edit to them (Shipped is append-only).
+
+**★ And the correction's own significance had inverted by the time it was
+made — then partly inverted back within the hour, which is the part worth
+carrying forward.** Measured above: `origin` holds **one** ref, `main` =
+`67ad7ea`, and **`git branch --no-merged main` returns 0 of 13 local
+branches**, so **every commit up to and including `943575e` is reachable
+from `origin/main`**: the 164-commit bundle gap was, at that moment, real
+**bookkeeping** debt and **zero** off-machine risk for commits. Then
+`fb06d93` landed mid-filing and **is not pushed**, so the hand-off state
+is **166 un-bundled, 2 unpushed** — two commits exist in exactly one place
+on earth. What a `--all` bundle still holds that the push does not is the
+**13 local branch refs** (all ancestors of `main`, so no unique objects) —
+names, not content. **Taking a fresh bundle and pushing are both the
+engineer's calls, not this role's.** The point of recording the true
+figure is that the next filing inherits a number that can be checked
+rather than one that agrees with itself — **and this hour is why the
+form matters: the figure that agrees with itself would have said `0`
+un-bundled and `0` unpushed, and both would have been wrong within the
+hour.**
+
+#### ★★★ ALSO FILED HERE: `fb06d93` (landed mid-filing) and `d311e3a` (2026-08-11, never filed) — AND THE GATE HOLE THAT HID THE SECOND ONE FOR TEN DAYS
+
+**`fb06d93` — the fuzz gate had been red for three days on a one-line
+compile break, and the variant it never fuzzed was silent.** Committed by
+the engineer **while this entry was being written**, found while verifying
+CI before tagging `v0.7.0`. Two defects, and the second is the one worth
+carrying:
+
+- **The compile break.** `Pass 82.0` gave `MarkupSpec::Square` a
+  `border_effect` field (the `/BE` cloudy border) and did not update
+  `fuzz/fuzz_targets/annot_author.rs`, which constructs that variant. So
+  `cargo +nightly fuzz build` failed with `error[E0063]: missing field
+  border_effect` **on every push since 2026-08-19**.
+- **★★ The variant that was never fuzzed, which nothing would have
+  reported.** The dispatch read `match c.byte() % 8` against an
+  **eight-variant** enum **with one arm spent on a second `TextMarkup`
+  kind** — so **`MarkupSpec::Cloud` had no arm at all and has never been
+  fuzzed.** Cloud bakes a scalloped appearance from an arbitrary vertex
+  list and takes a continuous intensity, i.e. **the markup spec with the
+  most arithmetic between input bytes and emitted path** — precisely what
+  a fuzz target is for. **A compile break is the loudest failure a fuzz
+  target has; a missing variant is completely silent**, and the only
+  reason this one surfaced is that the loud failure forced somebody to
+  read the dispatch.
+- Fixed: modulo is **9**, `Cloud` has an arm, `border_effect` is driven
+  from the cursor **deliberately including values outside the documented
+  `0.0..=2.0` range plus `None`** (which writes no `/BE` key at all — a
+  different code path, not a zero), and Cloud's vertex count starts at
+  **2** so the degenerate "cloud too small to enclose anything" case is
+  reachable. The dispatch now carries a note saying **the modulo IS a
+  coverage claim and nothing enforces it against the enum.**
+
+**★ That last note is the same species as this filing's headline finding.**
+`% 8` is a claim about coverage, phrased as a number; it went stale when
+the enum grew, and **no search for the new variant could find it, because
+the stale claim does not contain the variant's name — it contains an
+integer.** Absence-phrasing and magnitude-phrasing are two ways of writing
+a claim with no token tying it to the thing that changed.
+
+**`d311e3a` (2026-08-11) — *"lock the fuzz crate against the same `sha2`
+the workspace uses"*, `fuzz/Cargo.lock`, +31 lines. Filed retroactively
+here; it had never been filed anywhere.** `fuzz/` has its own lockfile and
+links `pdfce-core`, so it resolves `sha2`, `digest` and `block-buffer`
+independently. Leaving it stale lets the fuzz build and the workspace
+build **disagree about the crate whose unsafe posture decision 039 is
+about**, which is the one place they must not.
+
+**★★ THE GATE HOLE, MEASURED — `check-commits-filed.py` CANNOT SEE
+`fuzz/`.** Its `CODE_PREFIXES` tuple reads
+`("crates/", "tools/", "fixtures/", ".github/")`. **`fuzz/` is not in it**,
+so a commit touching only `fuzz/` is **structurally invisible** to the one
+gate whose job is finding unfiled work. Measured this filing, before
+recommending anything:
+
+| figure | command | value |
+|---|---|---|
+| commits touching `fuzz/` | `git log --format=%h -- fuzz/ \| wc -l` | **23** |
+| of those, **fuzz-only** (no `crates/`/`tools/`/`fixtures/`/`.github/` path) | per-commit `git show --name-only` + `grep -cE` | **9 of 23** |
+| of those 9, **already cited** in `ROADMAP.md`/`SESSION_LOG.md` | `grep -c <hash>` over both | **7** |
+| of those 9, **uncited** | same | **2** — `d311e3a` and `fb06d93`, **both filed by this entry** |
+
+**★★★ THIS IS THE `.github/` HOLE AGAIN, THREE DAYS LATER, AND THE SHAPE
+IS WHAT MATTERS.** `498d045` (215th filing, 2026-08-21) widened the same
+tuple because *"the workflow that RUNS these gates was not covered by the
+gate that checks commits are filed"*, and that filing's own comment names
+the species: **a gate that is green because its INPUT LIST is too narrow,
+not because its pattern is wrong. Widening a pattern does not fix a
+list.** Two directories have now been found missing from the same
+four-element tuple in three days. **The recurrence is the finding**: the
+tuple was extended by the directory somebody happened to notice, twice,
+rather than derived from a question — *which directories in this
+repository hold work the record is meant to narrate?*
+
+**Recommended to the engineer, not applied here** (`tools/` is outside
+this role's remit): **add `"fuzz/"` to `CODE_PREFIXES`.** Because both
+uncited commits are filed by this entry, **the widening flags zero new
+commits and needs no baseline change** — it is free, and it is free only
+until the next fuzz-only commit lands. Worth considering in the same
+change: whether the tuple should be replaced by its complement (everything
+except a named docs/memory exclusion list), so the next directory is
+covered on the day it is created rather than on the day somebody notices
+it.
+
+**★ Observed at hand-off, stated as a working-tree fact rather than a
+committed one (hard rule 8 — checked by `git diff`, not inferred, and not
+this role's to commit):** the engineer arrived at the same widening
+independently while this entry was being written.
+`git status --porcelain` at hand-off shows
+**`tools/check-commits-filed.py` modified** with
+`CODE_PREFIXES = ("crates/", "tools/", "fixtures/", ".github/", "fuzz/")`
+and a comment naming `2523860` (*"the vector-edit target had drifted three
+Passes behind its own module"*) as the earlier instance, **plus an
+untracked `tools/check-ci-parity.py` and a modified
+`.github/workflows/ci.yml`.** Those are uncommitted and are **not filed by
+this entry** — a future filing owes them. Recorded here only so the next
+reader does not re-derive a recommendation that was already in flight.
+
+**★★ AND THE FORECAST ABOVE WAS CHECKED AGAINST THE GATE'S OWN OUTPUT
+rather than left as a prediction (`R205`).** Forecast, written before the
+widened tuple was on disk: *the widening flags zero new commits and needs
+no baseline change, because both uncited fuzz-only commits are filed by
+this entry.* Re-run afterwards, with `"fuzz/"` live in the tuple:
+**`commits-filed: clean — 520 code commit(s) checked (whole history); 5
+known-unfiled carried in the baseline`, exit 0.** The checked corpus grew
+**511 → 520** — the nine fuzz-only commits, matching the measurement above
+— and **none of the nine is unfiled.** Forecast and gate agree.
+
+#### ★★ AND `5884ed1` LANDED TOO — `tools/check-ci-parity.py`, the gate that makes "a green local sweep" and "a green CI" comparable claims
+
+**Third commit to land mid-filing** (after `fb06d93`), and it closes the
+**shape** the fuzz break came through rather than the break itself. Its own
+framing: *"Fixing the fuzz target closed one hole. This closes the shape it
+came through."*
+
+**The gap it names.** *"Run the gates"* in this project means
+`for g in tools/check-*`, which is **fourteen scripts and one of CI's nine
+jobs.** `cargo fuzz build`, the **wasm32 cross-target check**, the
+**no-network denylist** and the **third-party licence audit** have **no
+local equivalent anybody runs by habit**. When `fuzz-smoke` went red on
+2026-08-19 and stayed red three days, every local check stayed green —
+**and neither signal was wrong. There was simply no place where the two
+were compared.**
+
+**The mechanism.** `tools/check-ci-parity.py` reads **every `run:` command
+in `.github/workflows/`** and classifies each into exactly one of three
+states:
+
+| state | meaning |
+|---|---|
+| `LOCAL` | the gate sweep or a `cargo` command already covers it |
+| `LOCAL-VIA` | a **different** local command catches the same failure class, **written down beside it** |
+| `CI-ONLY` | genuinely unrunnable here, **with the reason** |
+
+**An unrecognised command FAILS.** That is the whole design: **a tenth CI
+job cannot be added without somebody deciding, in this file, whether a
+local runner exists.** Current state **19 / 11 / 3** (33 `run:` commands
+classified), and `--list` prints the eleven stand-ins, so *"match what CI
+does"* becomes **a command rather than a memory**.
+
+**It deliberately does not RUN anything**, on a stated warrant: a parity
+checker that ran the jobs would take CI's fifteen minutes and nobody would
+run it, and the question it answers — *is anything unaccounted for* — is a
+property of the **workflow file**, not of today's tree.
+
+**★ The most useful entry is the fuzz one, and it is the transferable
+half.** `cargo fuzz build` needs nightly **and** ASan, and on Windows it
+needs the MSVC `clang_rt.asan` DLL on `PATH` or it dies with
+`STATUS_DLL_NOT_FOUND` — **which is exactly why nobody runs it here.** But
+
+```
+cd fuzz && cargo check --bins
+```
+
+needs none of that and catches **the entire class that has actually broken
+that job**: a fuzz target that no longer compiles against the spec it
+constructs. **It would have caught the three-day break in six seconds.**
+*The stand-in does not have to be the job; it has to catch the job's
+observed failure class.*
+
+**SABOTAGE-VERIFIED, and the verification is the part worth keeping** — *a
+gate that has only ever passed is a gate nobody has seen work.* A fake job
+with an unrecognised command was appended to `ci.yml`, the check **failed
+and named it by file and line**, and the workflow was restored
+**byte-identical, confirmed by `git diff --exit-code` rather than by eye.**
+
+**Also carried in that commit:** the `CODE_PREFIXES` widening to include
+`fuzz/`, with the measurement this filing forecast independently and the
+gate then confirmed (**9 fuzz-only commits in history, 7 already cited, 2
+unfiled — `d311e3a` and `fb06d93`, both filed above**), and its own note
+that *"the widening cost one piece of genuine old debt, which is the gate
+working rather than a reason not to widen."* It also flags **`2523860`
+(2026-08-05), *"the vector-edit target had drifted three Passes behind its
+own module"*** — the same drift class, already suffered once, **invisible
+to the gate at the time.**
+
+**And one invariant re-checked because the new parity file names it as a
+local stand-in:**
+`cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown`
+**clean** — the web-fork invariant, which **had not been checked locally
+all session**. That is the parity file paying for itself within the commit
+that introduced it.
+
+#### ★★★ `R209` MINTED — THE JUDGEMENT CALL THE DISPATCH HANDED THIS ROLE, DECIDED RATHER THAN LEFT AS PROSE
+
+**The engineer put a standing-rule-shaped finding on the table and
+explicitly left the disposition here: mint `R209`, amend an existing rule,
+or file a Backlog item for a local runner. The decision is `R209`,
+MINTED — Backlog item DECLINED AS MOOT, amendment DECLINED ON SHAPE.**
+Full text under *Standing rules*; the reasoning, and the two things this
+role checked before deciding, are here. The finding's mechanism is not
+restated — it is `5884ed1`'s section above.
+
+**The promotion warrant: two instances, two media, sixteen days apart, and
+THE SAME CI JOB BOTH TIMES.** That is this project's bar exactly — `R207`
+was minted on that shape, and mints were declined at n=1 and n=2 in the
+211th, 212th and 213th filings for lacking it.
+
+1. **2026-08-05, agent memory** —
+   `.claude/agent-memory/pdfce-engineer/feedback_gates_i_owe_myself.md`,
+   **read this filing, not relayed**, titled *"The cargo-fuzz gate is the
+   one that gets skipped"*. It records `Pass 36.1` shipping with fmt,
+   clippy, tests, ui-strings, ledger and cargo-tree all run and the Pass
+   **reported complete without the fuzz arm** — *"the librarian caught it,
+   not me."* **Its stated reason IS the rule's mechanism:** *"the other
+   gates are one command with a pass/fail line. Fuzzing needs a DLL on
+   PATH, a minute of runtime, and a judgement about which branches to
+   drive — so it reads as optional in a way `cargo clippy` never does. It
+   is not optional."*
+2. **2026-08-21, CI** — `fuzz-smoke` red on **every push for three days**,
+   found only while verifying CI before tagging `v0.7.0` (`fb06d93`).
+
+**★ A recorded lesson that did not prevent its own second instance is a
+stronger warrant than a count**, and it is the same warrant `R208` was
+minted on two filings ago: there, a comment above `outer_is_neutral` had
+named the mechanism twice in past tense and the defect recurred anyway.
+Here the mechanism sits in the engineer's own memory file, correctly
+diagnosed, sixteen days early. **Knowing it was left as a thing to
+remember.**
+
+**★★ "UNOBSERVED, NOT PASSING" is the load-bearing phrase, and it is why
+this is a rule about CLAIMS rather than about fuzzing.** Nobody believed a
+false thing about `fuzz-smoke`; nobody believed anything about it, because
+it produced no local evidence in either direction. What failed is that
+*"all gates green"* was written, and read, as though it **ranged over CI**
+when it ranged over **one job of nine**. A claim about a set is only as
+good as the enumeration of the set — and the three-way job-count
+disagreement recorded below is that same defect leaving a second set of
+tracks in the same hour.
+
+**★★ WHY A GATE IS THE RIGHT ANSWER HERE, WHEN `R207`, HARD RULE 11 AND
+THIS ENTRY'S OWN ABSENCE-PHRASING FINDING ALL REFUSED ONE — and this must
+not be over-read as a reversal.** Those three declined on one shared
+warrant: content-checking a claim needs to know the author's intent or the
+current behaviour, **the very fact the claim exists to report**, so there
+is **no oracle**. **This one has an oracle.** *"Is every `run:` command in
+the workflow accounted for?"* is a property of a text file, answerable
+against a written table, needing no reference to today's tree or to
+anyone's intent — which is why `5884ed1` could be **sabotage-verified**
+and the others could not be built at all. **The refusals were a diagnosis
+of missing oracles, never a policy against gates.**
+
+**★ And the gate does NOT discharge the rule, which is the whole reason a
+rule is minted on the same day the tool ships.** `check-ci-parity.py`
+makes a new **unaccounted** job impossible; it **cannot make anybody run
+the stand-in**, and by its own docstring it deliberately runs nothing. The
+obligation to say which set you mean by *"green"* is a commitment on
+behaviour — hard rules 8 and 10's family: checkable after the fact,
+enforced by nothing. **A tool that closes the enumeration gap and a rule
+that governs the claim are different artefacts, and shipping the first is
+not doing the second.**
+
+**Backlog item DECLINED AS MOOT — checked, not assumed.** The dispatch
+offered *"a Backlog item for a local `tools/check-ci-parity.sh` that runs
+what CI runs"*. Before filing it this role ran `ls tools/check-*` and
+found **`tools/check-ci-parity.py` already present** — untracked at the
+time, committed as `5884ed1` while this section was being written. Filing
+a Backlog entry to build a thing already in the tree would have been this
+project's own *already-answered-elsewhere* failure, committed in the hour
+it was being warned about. **And a runner was the wrong artefact anyway**,
+per the script's own stated warrant: one that ran the jobs would take CI's
+fifteen minutes, so nobody would run it.
+
+**Amendment DECLINED ON SHAPE — this is NOT `R205`, and the boundary is
+worth keeping legible.** `R205` is a gate that **runs and under-reports**:
+it produces output, the output is short, and the blind spot surfaces when
+an independent forecast disagrees with it. `R209` is a gate **never
+consulted at all** — it does not under-report because it does not report.
+Different remedies (**widen the class** vs. **write down a stand-in**),
+different detectors (**a forecast** vs. **an enumeration**). Not `R106`
+either (a ledger green because its input was narrowed), for the same
+reason one layer up.
+**★ Where they DO meet:** the `.github/` widening (215th) and the `fuzz/`
+widening (this filing) are `R205`'s *input-list-too-narrow* species
+applied to **a gate's** input list; `R209` is that same species applied to
+**the human's gate list** — and that list is the one no gate was watching.
+
+**Two figures the rule turns on, filed with their denominators (hard rule
+10).** `.github/workflows/ci.yml` defines **nine job definitions** but
+**ten runs** — `test` carries `matrix.os = [ubuntu-latest,
+windows-latest]` at `ci.yml:73`, so a reader watching the checks list sees
+ten. Both forms are stated because *"the sweep is one of N"* is the whole
+claim and N differs by which you mean. And the local sweep is now
+**sixteen `tools/check-*` scripts** (11 `.py` + 5 `.sh`) since `5884ed1`
+added the sixteenth — the figures of **14** and **15** elsewhere in this
+entry were true when written, at `67ad7ea` and before the commit landed.
+
+#### The OTHER finding in `fb06d93`, and why it gets NO rule
+
+`fb06d93` carries a second defect — **a harness that enumerates a module's
+entry points goes stale in silence** (`match c.byte() % 8` against an
+eight-variant enum with one arm doubled up, so `MarkupSpec::Cloud` had
+never been fuzzed). **This is a second occurrence**, and the first is in
+the very same agent-memory file as `R209`'s first instance: on 2026-08-05
+`fuzz/fuzz_targets/vector_edit.rs` still drove only the three planners it
+was written for, leaving `plan_delete_subpath`, `plan_move_subpath` and
+`plan_move_handle` **never fuzzed at all** (`2523860`).
+
+**No rule minted, on coverage rather than count.** That memory file
+already places the shape in the `R151`/`R152` family — *"the harness has
+no way to complain about what it does not mention"* — and its *how to
+apply* line is the remedy verbatim: **diff the harness's list against the
+module's current public surface; the gap will be older than your change.**
+A new number would fragment an existing family, the narrow-spelling
+failure `R205` warns about. The **transferable** half — that `% 8` is a
+coverage claim phrased as an *integer*, so no search for the new variant's
+name can reach it — is already filed as the generalizing second instance
+in this filing's new `D:\dev\rag\rust\` absence-claim file, where it turned
+an absence-claim finding into a **boundary-claim** one.
+
+#### Release readiness at `67ad7ea` — engineer-relayed except where marked
+
+- `cargo test --workspace` **green**; `cargo fmt --all --check` clean;
+  `cargo clippy --all-targets --workspace -- -D warnings` clean.
+- `cargo tree -p pdfce-core` / `-p pdfce-render` / `-p pdfce-cli` — **no
+  GUI dependency** (project rule 2 invariant holds).
+- `THIRD_PARTY_LICENSES.md` regenerated by `cargo-about` and
+  **byte-identical** — no dependency changed this session (project rule
+  13 discharged).
+- **★★ CI ON `67ad7ea` WAS RED FOR TWO REASONS, NOT ONE, AND THE SECOND
+  WAS THREE DAYS OLD.** The dispatch that opened this filing reported
+  *"nine jobs green, one red, and this commit is the only reason it is
+  red"*. `check-commits-filed.py` naming `943575e` was **confirmed here by
+  running the gate**, and filing it does clear that job. But **`cargo
+  +nightly fuzz build` is a separate CI job and had been failing since
+  2026-08-19** — found by the engineer mid-filing and fixed in `fb06d93`,
+  filed below. **Filing `943575e` was necessary and not sufficient**, and
+  the "only reason" clause was a claim about a job set nobody had
+  enumerated at the time it was made.
+  ★ **Note the mechanism, because it is this filing's other subject
+  wearing different clothes:** the local sweep runs `tools/check-*` —
+  fourteen scripts, all green throughout — and **CI runs NINE jobs, of
+  which that sweep is one.** A green local sweep and a red CI were never a
+  contradiction. *"All gates green"* and *"CI green"* are different
+  claims, and the first is routinely written as though it settled the
+  second.
+
+  **★★ AND THE JOB COUNT ITSELF DISAGREED THREE WAYS IN ONE HOUR — filed
+  with the measurement rather than picked between (hard rule 10).**
+  Measured this filing by parsing `.github/workflows/ci.yml`'s `jobs:`
+  mapping: **9 jobs** — `fmt`, `clippy`, `test`, `gui-core-separation`,
+  `ui-strings`, `cross-check`, `no-network`, `third-party-licenses`,
+  `fuzz-smoke`. So: the **dispatch** said *"nine green, one red"*, which
+  totals **ten** and is **arithmetically impossible** against a nine-job
+  workflow; **`fb06d93`'s** commit message says *"CI runs TEN JOBS"*,
+  **also wrong**; **`5884ed1`'s** says *"nine jobs"*, **correct**. The
+  true state at `67ad7ea` was **seven green, two red** (`ui-strings` via
+  `check-commits-filed.py`, and `fuzz-smoke`).
+  **The instructive part is not the miscount but that nobody could catch
+  it**: three statements of the same fact, an hour apart, in three
+  documents, and **no two of them are adjacent** — which is precisely the
+  set-property-versus-single-claim distinction hard rule 10 exists for.
+  One `grep -c` on the workflow settles it, and none of the three ran it.
+- **`943575e` is NOT added to `tools/commits-filed-baseline.txt`.** The
+  gate's own output says not to and it is right: that file is the
+  pre-existing debt the gate was written around, and extending it is the
+  false-green shape `R106` has been amended four times over.
+- **All 15 local `tools/check-*` gates run by this role are green** — 10
+  `.py` + 5 `.sh`, run this filing. `check-image-colorspace-truth.py`
+  exits 1 on a bare invocation because it takes a fixture directory as an
+  argument; that is the **deliberate carve-out `ci.yml`'s own comment
+  names**, not a failure.
+- **`v0.7.0` remains bumped-but-untagged** (`git tag -l` vs
+  `Cargo.toml:77`), now the **fourth consecutive filing** to record it.
+  Tagging is the operator's act.
+  **★ And the ORDER now matters, which it did not at dispatch.** Both red
+  CI jobs have their fixes **in the tree**, and **neither is on the
+  remote** — `fb06d93` and this filing are unpushed. So **CI has not been
+  observed green on the commit that would be tagged**, and *"all local
+  gates green"* cannot stand in for that, for exactly the reason the
+  previous bullet gives. Honest sequence: **push → watch all NINE CI jobs
+  → tag.**
+
+#### `docs/FEATURES.md` — checked this filing, not deferred to; **no rows touched**
+
+`grep -niE "overprint" docs/FEATURES.md` returns rows **202**, **203** and
+**279**. All three were brought current by the 217th filing and are
+**accurate at `HEAD`**: row 203 already names
+`overprint_images_unsupported` as *deliberately separate* from
+`overprint_refused` and gives the `2_GWG031` = 1 measurement; row 202
+already carries the `/Indexed`-is-inert result with its structural
+reason; row 279 already names §11.3.4's blending colour space as *the
+leading reason, measured* for the colorant buffer. `943575e` changes no
+capability, so there is nothing to tick, untick or move.
+
+#### RAG
+
+- **New `D:\dev\rag\rust\` file:**
+  `a_claim_phrased_as_an_absence_is_invisible_to_a_grep_for_the_thing_that_now_exists.md`
+  — the mechanism above, generalized off pdfce (it is a
+  sweep-methodology finding, not a Rust-language one, and belongs beside
+  the other sweep/gate findings in that tree). `index.md` bullet added the
+  same filing. **Generalized by `fb06d93`'s `% 8` modulo** into *any claim
+  asserting a BOUNDARY rather than a MEMBER* — absence, count, modulo,
+  closed "either/or" — none of which contains a token tying it to what
+  changed.
+- **Second new `D:\dev\rag\rust\` file:**
+  `the_local_gate_sweep_is_a_subset_of_ci_and_nothing_compares_the_two.md`
+  — **amended the same day** with `R209`'s three load-bearing halves
+  (claim-scope; the 2026-08-05 second instance; the oracle test that
+  separates a buildable gate from the three this tree refuses).
+
+**★★ AND THE SAME FINDING GOT WRITTEN TWICE, AN HOUR APART, BY TWO
+LIBRARIAN PASSES — caught on the DIRECTORY LISTING rather than on the
+index, and recorded because hard rule 4 is the rule it broke.** A second
+pass, dispatched to make this same judgement call, wrote
+`a_ci_job_with_no_local_runner_is_unobserved_not_passing.md` **while**
+`the_local_gate_sweep_is_a_subset_of_ci_and_nothing_compares_the_two.md`
+was being written by the first — same finding, same worked example, same
+two commits. **It surfaced from `ls -lt` showing two files a minute apart,
+not from the pre-write index grep**, which had been run and was correct at
+the time it was run. **Resolved by merging, not by keeping both:** the
+first file stays canonical; the second's distinct material — the
+claim-scope framing, the 2026-08-05 second instance, and the oracle
+argument — is appended to it as a dated amendment section; the duplicate is
+**deleted**; `index.md` carries **one** bullet, extended.
+**The transferable half: "grep the index first" is a check against what is
+COMMITTED, and with two agents on one finding the hazard is what is being
+WRITTEN.** Re-stat the directory immediately before writing, not only
+before deciding to write.
+  — from `fb06d93`/`5884ed1`: the habitual `tools/check-*` sweep is **one
+  of CI's nine jobs**, nothing compared the two, and the
+  `LOCAL`/`LOCAL-VIA`/`CI-ONLY` classification with
+  **unrecognised-command = FAIL** is the fix. Carries the transferable
+  half — **a `LOCAL-VIA` stand-in is justified by the FAILURE CLASS it
+  catches, not by how much of the job it reproduces**
+  (`cd fuzz && cargo check --bins` versus `cargo +nightly fuzz build`, six
+  seconds against three days) — and the sabotage-verification step.
+  `index.md` bullet added the same filing.
+- **Amended:**
+  `D:\dev\rag\rust\disclosure_text_must_be_tested_against_producing_branch.md`
+  — the derivation file hard rule 11 cites. Dated **seventh-occurrence**
+  amendment for the absence-phrasing mechanism, plus the `color.rs:599`
+  survivor as a fresh instance of its own amendment #1 (*fixing one copy
+  does not find the others*), cross-linked to the new file rather than
+  restating it.
+- **No `C:\personal_rag\pdf\` lesson.** Nothing here is PDF-domain: the
+  `/Indexed` present-vs-reachable distinction is already filed under
+  `Pass 97.1a` (217th) as a *renderer-coverage* fact, and the rest is
+  documentation-maintenance methodology.
+- **Nothing for `pdfce-spec-librarian`** — no spec claim is at issue;
+  §8.6.6.3, §11.7.4.3 and §11.3.4 are cited as already-sourced, not
+  re-derived.
+
+#### Terminology (project rule 15)
+
+No occurrence of "dimension", qualified or bare, in this entry or in
+`943575e`'s diff — not applicable this filing.
+
+#### Ledger effects
+
+| ledger (per-item form, denominator stated — hard rule 10) | before | after |
+|---|---|---|
+| Pass family ceiling | **121** | **121** (unchanged — no Pass ID; all three commits are correction/infrastructure, per the engineer's reading for `943575e`, checked not deferred to, and this role's own for the other two) |
+| decision records | **077** | **077** (unchanged — no architectural decision this filing) |
+| standing rules | **R208** | **R209** (**MINTED** — *a CI job with no local runner is unobserved, not passing*; 2 instances, 2 media, 16 days apart, same job both times. Next free **`R210`**.) The **absence-phrasing** mint stays **declined** — now at n=2, not n=1, since `fb06d93`'s `% 8` dispatch is a second instance in a different medium — because **that decline was made on SHAPE, not on count**: it refines hard rule 11's *method*, so a number would fragment the sweep obligation. n=2 **strengthens the recommended amendment**; it does not overturn the decline. |
+| CI `run:` commands with no local story (`tools/check-ci-parity.py`, run this filing) | **not measurable — the gate did not exist** | **0 of 33** — 19 `LOCAL`, 11 `LOCAL-VIA`, 3 `CI-ONLY`, exit 0 |
+| local `tools/check-*` scripts | **15** at `67ad7ea` (10 `.py` + 5 `.sh`), 14 wired into CI | **16** after `5884ed1` (11 `.py` + 5 `.sh`), 15 wired |
+| CI job count, filed in both forms (hard rule 10) | **"ten jobs"** in `fb06d93`'s message, **"nine green + one red"** in the dispatch — neither counted | **nine job definitions / ten runs** — `test` is a two-OS matrix (`ci.yml:73`); `5884ed1`'s "nine jobs" is the correct one of the three |
+| `SESSION_LOG` filings | **217** | **218** |
+| commits in no filing (`tools/check-commits-filed.py`, run this filing) | **1 of 1** outside the baseline | **0**, exit 0 — 511 code commits checked, 5 baseline |
+| commits filed by this entry | — | **4** — `943575e` (dispatched), `fb06d93` and `5884ed1` (both landed mid-filing), `d311e3a` (2026-08-11, never filed) |
+| `fuzz/`-only commits invisible to `check-commits-filed.py` | **9 of 23** `fuzz/`-touching commits are fuzz-only; **2 of those 9 uncited** | **0** — `5884ed1` widened `CODE_PREFIXES` with `fuzz/` mid-filing; gate corpus **511 → 521** code commits, **0 of 9 uncited**, exit 0 |
+| `crates/` stale-claim survivors reported and open | **0** (both closed by `943575e`) | **1** — `color.rs:599–600`, owed to the engineer |
+| newest bundle staleness, commits since `3c4c00e` | **48** (filed 217th, wrong denominator) | **166** at hand-off (measured, `git rev-list --count 3c4c00e..HEAD`) |
+| commits ahead of `origin/main` | **48** (217th) | **2** — `fb06d93` and `5884ed1` unpushed; `943575e` and everything before it **are** pushed |
+| `v0.7.0` tagged? | **no** (3rd consecutive filing) | **no** (4th) |
+| `D:\dev\rag\rust\` findings | **198** (199 directory entries incl. `index.md`, counted by `ls \| wc -l` this filing) | **200** (201 entries, same command **re-run after the merge below**) — **+2** new, **+2** amended in place. ★ The intermediate reading of **201/202** was true for about a minute and is **not** the hand-off figure: a duplicate third file was written concurrently and **deleted on discovery**, its distinct material merged. |
+| `C:\personal_rag\pdf\` lessons | **138** (139 entries incl. `index.md`) | **138** (+0) |
+| `docs/FEATURES.md` rows touched | — | **0** (confirmed by `grep` this filing, not relayed) |
+
+---
+
 ### `0d5fc29` — `PASS 97.1a` + `PASS 97.1b`: OVERPRINT COULD NOT SEE AN `/Indexed` SPACE'S COLORANTS, AND IMAGES WERE NEVER COUNTED AS MISSING OVERPRINT AT ALL — ★★★ THE `/Indexed` FIX IS CORRECT, CITED, TESTED AND **INERT ON THE WHOLE CORPUS**, WHICH IS THE FINDING: THE DEPENDENCY BETWEEN `docs/compositor-plan.md` §7'S TWO ITEMS RUNS THE OPPOSITE WAY ROUND FROM HOW THE PLAN ORDERED THEM — 2026-08-21 (two-hundred-and-seventeenth filing)
 
 **Sub-Pass IDs `97.1a` and `97.1b` are assigned BY THIS FILING** — the
@@ -82146,6 +83169,128 @@ same cause (hashes exist only at commit time), two different failure modes.
   fact being checked.
 
   **Ceiling moves `R207` → `R208`; next free `R209`.**
+  ~~**next free `R209`**~~ — **claimed by `R209`, below (2026-08-21, same
+  day, next filing).**
+
+- **R209 — "ALL GATES GREEN" NAMES A SET, AND THE SET SOMEBODY RUNS IS NOT
+  THE SET CI RUNS. A CI JOB WITH NO LOCAL RUNNER IS UNOBSERVED, NOT
+  PASSING — SO EVERY CI COMMAND OWES A NAMED LOCAL STAND-IN, OR AN
+  EXPLICIT CI-ONLY JUSTIFICATION, IN WRITING (2026-08-21;
+  librarian-minted, two-hundred-and-eighteenth filing, the dispatching
+  engineer having explicitly left the disposition to this role; tooling
+  rule, second confirmed occurrence across two media, sixteen days apart,
+  THE SAME CI JOB BOTH TIMES).**
+
+  **The mechanism.** The habit this project calls *"run the gates"* is
+  `for g in tools/check-*` — **sixteen scripts** as of `5884ed1`, each one
+  command with a pass/fail line. `.github/workflows/ci.yml` defines
+  **nine jobs / ten runs** (`test` is a two-OS matrix, `ci.yml:73`), and
+  that entire sweep is **ONE** of them. `cargo +nightly fuzz build`, the
+  wasm32 leg of `cross-check`, `no-network`'s denylist and
+  `third-party-licenses`' `cargo about` regeneration have **no local
+  equivalent anybody runs by habit**. A green local sweep and a red CI are
+  therefore **not a contradiction and never were** — and **neither signal
+  is wrong**, which is what lets this survive for days.
+
+  **Two instances, two media, sixteen days apart, same job:**
+  1. **2026-08-05, agent memory** —
+     `.claude/agent-memory/pdfce-engineer/feedback_gates_i_owe_myself.md`,
+     *"The cargo-fuzz gate is the one that gets skipped"*: `Pass 36.1`
+     shipped with fmt, clippy, tests, ui-strings, ledger and cargo-tree
+     all run and the Pass reported complete **without the fuzz arm**;
+     *"the librarian caught it, not me."* Its stated reason is this rule's
+     whole mechanism: *"the other gates are one command with a pass/fail
+     line. Fuzzing needs a DLL on PATH, a minute of runtime, and a
+     judgement about which branches to drive — so it reads as optional in
+     a way `cargo clippy` never does. It is not optional."*
+  2. **2026-08-21, CI** — `fuzz-smoke` **red on every push for three
+     days** (`MarkupSpec::Square` gained `border_effect` on 2026-08-19 and
+     `fuzz/fuzz_targets/annot_author.rs` was not updated), found only
+     while verifying CI before tagging `v0.7.0`. **Not one local signal
+     disagreed, because none was looking.** See `fb06d93` and `5884ed1` in
+     the 218th filing's Shipped entry.
+
+  **★ "UNOBSERVED, NOT PASSING" is the load-bearing phrase, and it makes
+  this a rule about CLAIMS rather than about fuzzing.** Nobody believed a
+  false thing about the job — nobody believed anything about it; it
+  produced no local evidence in either direction. What failed is that
+  *"all gates green"* was written, and read, as though it **ranged over
+  CI** when it ranged over **one job of nine**. **A claim about a set is
+  only as good as the enumeration of the set**, and nobody had enumerated
+  this one: the dispatch opening the 218th filing said *"nine jobs green,
+  one red"* — **ten**, against a nine-job workflow, arithmetically
+  impossible and unnoticed for an hour.
+
+  **What the rule obliges, in three lines.**
+  (a) **Never write *"all gates green"* unqualified** — name the set
+  (`tools/check-*`, the `cargo` trio, or CI) and say which you mean.
+  (b) ***"CI green"* is assertable only from an OBSERVED CI run on the
+  commit in question** — never inferred from a local sweep, never from CI
+  on the parent commit.
+  (c) **Every CI `run:` command is classified `LOCAL` / `LOCAL-VIA` /
+  `CI-ONLY` with the stand-in command WRITTEN DOWN**; `CI-ONLY` stays a
+  small, individually justified set, never a default.
+
+  **★★ WHY A GATE IS THE RIGHT ANSWER HERE, WHEN `R207`, HARD RULE 11 AND
+  THE ABSENCE-PHRASING FINDING ALL REFUSED ONE — do not over-read this as
+  a reversal.** Those three declined on one shared warrant:
+  content-checking a claim requires knowing the author's intent or the
+  current behaviour, **the very fact the claim exists to report**, so
+  there is no oracle. **This one HAS an oracle.** *"Is every `run:`
+  command in the workflow accounted for?"* is a property of a text file,
+  answerable against a written table, needing no reference to today's tree
+  or to anyone's intent — which is precisely why `tools/check-ci-parity.py`
+  could be **sabotage-verified** (a fake job with an unrecognised command
+  appended to `ci.yml`; the gate failed and named it by file and line; the
+  workflow restored byte-identical, confirmed by `git diff --exit-code`
+  rather than by eye) and the other three could not be built at all.
+  **The refusals were a diagnosis of missing oracles, not a policy against
+  gates.**
+
+  **The mechanical half: `tools/check-ci-parity.py` (`5884ed1`)** —
+  classifies every `run:` command in `.github/workflows/*.yml`, **fails on
+  anything unrecognised**, and deliberately **runs nothing** (one that ran
+  the jobs would take CI's fifteen minutes, so nobody would run it, and
+  the question is a property of the workflow file, not of today's tree).
+  At mint: **19 `LOCAL` / 11 `LOCAL-VIA` / 3 `CI-ONLY` = 33 commands, 0
+  unaccounted**. Its `LOCAL-VIA` entry for the offending job is the
+  finding turned into a runnable line: **`cd fuzz && cargo check --bins`**
+  — no nightly, no ASan DLL, and it catches *"a fuzz target that no longer
+  compiles against the spec it constructs"*, **the entire class that has
+  ever broken that job**, in seconds. `python tools/check-ci-parity.py
+  --list` prints the whole local command set. ★ *The stand-in does not
+  have to be the job; it has to catch the job's observed failure class.*
+
+  **★ The rule is NOT discharged by that script — which is why it is a
+  rule and not a closed ticket.** The script makes a new **unaccounted**
+  job impossible. It **cannot make anybody run the stand-in**. The
+  obligation to name which set you mean by *"green"* is a commitment on
+  behaviour, in hard rules 8 and 10's family — checkable after the fact,
+  enforced by nothing.
+
+  **What this rule is NOT.** Not `R205`: that is a gate which **runs and
+  under-reports**, surfaced by an independent forecast disagreeing with
+  its output; this is a gate **never consulted**, which does not
+  under-report because it does not report. Different remedies (widen the
+  class vs. write down a stand-in), different detectors (a forecast vs. an
+  enumeration). Not `R106` (a ledger green because its input was narrowed)
+  for the same reason one layer up. **Where they meet, recorded so the
+  boundary stays legible:** the `.github/` widening (215th filing) and the
+  `fuzz/` widening (218th) are `R205`'s *input-list-too-narrow* species
+  applied to **a gate's** input list; `R209` is that species applied to
+  **the human's** gate list — the one no gate was watching.
+
+  Cross-references: `R205`, `R106`, `R174` (read the tool's own output,
+  not a test asserting on it), `R207` and `R208` (the two previous mints,
+  and two of the three gate-refusals this rule's oracle argument
+  distinguishes itself from). New RAG file:
+  `D:\dev\rag\rust\the_local_gate_sweep_is_a_subset_of_ci_and_nothing_compares_the_two.md`
+  — **amended the same day** with this rule's claim-scope half, its
+  2026-08-05 second instance, and the oracle argument. (A second file
+  was started for those and **deleted as a duplicate**; see the
+  filing's RAG section.)
+
+  **Ceiling moves `R208` → `R209`; next free `R210`.**
 
 ## Update protocol
 
