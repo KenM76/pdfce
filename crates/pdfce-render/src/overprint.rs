@@ -477,6 +477,23 @@ pub fn classify(space: &ColorSpace, in_image_sample: bool) -> Option<SourceKind>
         ColorSpace::DeviceN { names, .. } => Some(SourceKind::SeparationOrDeviceN {
             names: names.to_vec(),
         }),
+        // ★ §8.6.6.3 — AN `Indexed` SPACE'S COLOUR VALUES ARE IN ITS BASE.
+        //
+        // Without this arm an `/Indexed [/DeviceN [/Cyan] /DeviceCMYK …]`
+        // space fell to the catch-all below and Table 149 decided what
+        // survives from a colorant list it never read. `/Indexed` appears
+        // in four of the seven Ghent overprint patches, and `1_GWG190` is
+        // authored on exactly that discriminator.
+        //
+        // ★★ AND THE CALLER OWES THE OTHER HALF. This arm fixes the ROW;
+        // the TINTS handed to `cmyk_group_rules` must independently be the
+        // palette-looked-up base components rather than the raw index, via
+        // `ColorSpace::indexed_entry`. Classifying from the base while
+        // still reading tints from the index is a worse state than either
+        // half alone — a correct rule applied to a meaningless number —
+        // which is why the obligation is stated here, where somebody
+        // adding a call to `classify` will read it.
+        ColorSpace::Indexed { base, .. } => classify(base, in_image_sample),
         _ => Some(SourceKind::OtherProcess),
     }
 }
@@ -765,6 +782,59 @@ mod tests {
 
     fn spot(name: &str) -> Component {
         Component::Spot(name.to_owned())
+    }
+
+    /// ★ §8.6.6.3 — an `Indexed` space classifies as its BASE.
+    ///
+    /// Without this, `/Indexed [/DeviceN [/Cyan] /DeviceCMYK …]` fell to
+    /// `OtherProcess` and Table 149 decided what survives from a colorant
+    /// list it never read. `/Indexed` appears in four of the seven failing
+    /// Ghent overprint patches, and `1_GWG190` is authored on exactly that
+    /// discriminator: its a/b pair's `DeviceN` omits the backdrop's
+    /// colorants and its c/d pair includes them at 0 %.
+    #[test]
+    fn indexed_classifies_as_its_base_space() {
+        let base = ColorSpace::DeviceN {
+            names: std::sync::Arc::from(
+                vec![crate::color::Colorant::Named("Cyan".into())].into_boxed_slice(),
+            ),
+            alternate: std::sync::Arc::new(ColorSpace::DeviceCmyk),
+            tint: None,
+        };
+        let indexed = ColorSpace::Indexed {
+            base: std::sync::Arc::new(base),
+            hival: 1,
+            lookup: std::sync::Arc::from(vec![0_u8, 255].into_boxed_slice()),
+        };
+        assert_eq!(
+            classify(&indexed, false),
+            Some(sep(&["Cyan"])),
+            "an Indexed space must classify as the space its palette entries \
+             are written in"
+        );
+    }
+
+    /// …and `DeviceCMYK` under `Indexed` is `OtherProcess`, not
+    /// `DeviceCmykDirect`.
+    ///
+    /// Table 149 separates "`DeviceCMYK`, specified directly, **not in a
+    /// sampled image**" from every other `DeviceCMYK` case, and only the
+    /// first gets `OPM 1` behaviour. An `/Indexed` operand is an index, so
+    /// the CMYK was not "specified directly" by the operator — it was
+    /// looked up. Getting this backwards would turn `OPM 1` on for palette
+    /// colours the document never wrote as CMYK operands.
+    #[test]
+    fn indexed_over_device_cmyk_is_not_the_direct_row() {
+        let indexed = ColorSpace::Indexed {
+            base: std::sync::Arc::new(ColorSpace::DeviceCmyk),
+            hival: 0,
+            lookup: std::sync::Arc::from(vec![0_u8; 4].into_boxed_slice()),
+        };
+        // `in_image_sample` is what the caller says about the CONTEXT, and
+        // an Indexed palette entry reached through a path fill is not an
+        // image sample — so this is the honest call and it is the one the
+        // recursion makes.
+        assert_eq!(classify(&indexed, true), Some(SourceKind::OtherProcess));
     }
 
     fn sep(names: &[&str]) -> SourceKind {

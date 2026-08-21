@@ -967,8 +967,34 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
    operator call (a large download, and `LEGAL.md` §5 governs what enters the
    corpus), so this item is **owed, not merely unstarted** — it should not be
    picked up as if it were a free afternoon.
-3. **`/Indexed` colorants — MEASURED AND CONFIRMED, 2026-08-18. This is a live
-   defect, not a suspicion.** Colorants must be read from the **base** space
+3. ~~**`/Indexed` colorants — MEASURED AND CONFIRMED, 2026-08-18. This is a live
+   defect, not a suspicion.**~~ **★ FIXED 2026-08-21 — AND IT MOVED NOTHING,
+   WHICH IS THE FINDING.**
+
+   `ColorSpace::indexed_entry` (§8.6.6.3) now resolves an `Indexed` operand to
+   its palette entry in the base space, `overprint::classify` recurses into
+   the base, and **both** call sites — `paint_overprint` **and**
+   `overprint_would_change` — resolve before they classify. The second was not
+   in the original write-up and matters more than it looks: that predicate is
+   what decides whether the composite is called at all, so an `/Indexed`
+   source was never even *counted* as an effective overprint.
+
+   **Measured A/B on the four patches that carry `/Indexed`, pre- and
+   post-fix binaries, same corpus:** `overprint_effective`,
+   `overprint_composited`, `overprint_refused` and `overprint_pixels` are
+   **identical to the digit** on `1_GWG190` (5/5/0/3607), `1_GWG191`
+   (2/2/0/1679), `1_GWG192` (3/3/0/2182) and `2_GWG020` (4/4/0/1654). Board
+   unchanged.
+
+   ★ **Why: every `/Indexed [/DeviceN …]` space in those patches is an IMAGE
+   colour space and nothing else.** Verified structurally — `1_GWG190`'s two
+   are `/XO1` and `/XO2`, both `/Subtype /Image`. So the classification fix
+   is correct, cited, tested, and **inert on the whole corpus** until images
+   reach overprint at all. The original write-up put the `/Indexed` half
+   first and the image half second; **the dependency runs the other way**.
+
+   The `/Indexed` finding as originally written, kept because the fix is
+   real even where it is currently unreachable: Colorants must be read from the **base** space
    (§8.6.6.3). `overprint::classify` has no `Indexed` arm, so an `/Indexed`
    space falls to `_ => SourceKind::OtherProcess` and its base's colorant list
    is invisible to Table 149. Extracted from the corpus:
@@ -998,6 +1024,30 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
    buffer. Before building it, add the counter: an image that skips overprint
    is currently not counted as `overprint_refused`, which is the same
    blind-counter shape as the glyph painter in `bf75351`.
+
+   **★ THE COUNTER SHIPPED 2026-08-21 — `overprint_images_unsupported`**, and
+   it is deliberately **not** `overprint_refused`. Those two name different
+   failures: `refused` means *"the composite was offered this paint and could
+   not run it"*; this means *"the composite was never offered this object
+   class at all"*. Widening the old counter would have made a whole missing
+   object class look like a run of ordinary failures and would have moved a
+   number an operator may already be diffing between runs — the same
+   meaning-change trap `transparency_groups_knockout_approximated` walked
+   into this session, and the reason that one's test was updated rather than
+   deleted.
+
+   First measurement, images painted under `/OP true` with no overprint path:
+
+   | patch | count |
+   |---|---:|
+   | `1_GWG190` | 2 |
+   | `1_GWG191` | 2 |
+   | `1_GWG192` | 2 |
+   | `2_GWG020` | 4 |
+   | `2_GWG031` | **1 — and this patch PASSES the suite** |
+
+   That last row is the one to keep: a patch can pass its own trap and still
+   have an object class the renderer never offered the feature to.
 
 And one new one, produced while writing this document:
 

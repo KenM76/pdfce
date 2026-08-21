@@ -573,6 +573,78 @@ impl ColorSpace {
         }
     }
 
+    /// §8.6.6.3 — resolve an `Indexed` selection to the colour values it
+    /// **selects**, expressed in the base space.
+    ///
+    /// # Why anything that reasons about COLORANTS must call this first
+    ///
+    /// An `Indexed` operand is an **index into a table**, not a colour.
+    /// §8.6.6.3 is explicit that the values live in the base space:
+    /// *"a colour map or colour table of arbitrary colours in some other
+    /// space"*. Everything that paints already goes through
+    /// [`Self::to_rgb`], which does the lookup internally and therefore
+    /// never sees the problem — so the defect this method exists for is
+    /// invisible on screen and shows up only where something asks a
+    /// question about the space itself.
+    ///
+    /// Overprint is exactly that. §11.7.4.3's Table 149 keys on **which
+    /// colorants the source names**, and an `/Indexed [/DeviceN [/Cyan]
+    /// /DeviceCMYK …]` space names one. Without this resolution the
+    /// classifier sees `Indexed`, falls to "some other process space", and
+    /// Table 149 decides what survives from a colorant list it never read.
+    /// Ghent's `1_GWG190` is authored on precisely that discriminator —
+    /// its a/b pair's `DeviceN` **omits** the backdrop's colorants and its
+    /// c/d pair **includes** them at 0 %, and the patch's own ReadMe says
+    /// the colorant LIST, not the tint values, decides the outcome.
+    /// `/Indexed` appears in **four of the seven** failing Ghent overprint
+    /// patches.
+    ///
+    /// # Returns
+    ///
+    /// `None` when `self` is not `Indexed` — the caller keeps what it had,
+    /// which makes this safe to call unconditionally. `Some((base, comps))`
+    /// otherwise, with `comps` the palette entry mapped into the base
+    /// space's own component ranges.
+    ///
+    /// An index outside `0..=hival` is **clamped**, which §8.6.6.3
+    /// requires; a lookup table shorter than the entry implies yields the
+    /// base space's all-zero components. Neither case touches
+    /// [`ColorDiagnostics`] — this is a *classification* helper, and
+    /// [`Self::to_rgb`] already counts both on the painting path. Counting
+    /// them twice would make one malformed palette read as two separate
+    /// findings.
+    #[must_use]
+    pub fn indexed_entry(&self, comps: &[f32]) -> Option<(&Self, Vec<f32>)> {
+        let Self::Indexed {
+            base,
+            hival,
+            lookup,
+        } = self
+        else {
+            return None;
+        };
+        let index = comps.first().copied().unwrap_or(0.0);
+        // §8.6.6.3: "shall be … clamped to the range 0 to hival".
+        let clamped = index.round().clamp(0.0, f32::from(*hival));
+        let m = base.components();
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let offset = (clamped as usize).saturating_mul(m);
+        let entry = lookup.get(offset..offset.saturating_add(m));
+        let out = (0..m)
+            .map(|i| {
+                let byte = entry.and_then(|e| e.get(i)).copied().unwrap_or(0);
+                let (lo, hi) = base.component_range(i);
+                // The table is ALWAYS 8 bits per component whatever the
+                // base space's natural precision is (§8.6.6.3), so the
+                // byte is a fraction of the base component's own range,
+                // not a value in it. That matters for `Lab`, whose `a`/`b`
+                // range is negative at one end.
+                (byte as f32 / 255.0).mul_add(hi - lo, lo)
+            })
+            .collect();
+        Some((base.as_ref(), out))
+    }
+
     /// This space's **neutral** rendering of a subtractive tint in
     /// `0.0..=1.0`, where 0.0 is the lightest achievable colour and 1.0 the
     /// darkest (§8.6.6.4's polarity, which is CMYK's and the opposite of
@@ -2898,6 +2970,73 @@ mod tests {
             "the note names the space, so an operator can fix the file: {:?}",
             rendered.diagnostics.color.notes
         );
+    }
+
+    /// ★ §8.6.6.3 — an `Indexed` operand is an INDEX, and
+    /// [`ColorSpace::indexed_entry`] is what turns it into the colour the
+    /// palette selects, in the base space.
+    ///
+    /// This is a *classification* path, not a painting one: everything that
+    /// paints already resolves the palette inside `to_rgb`, which is
+    /// exactly why the missing resolution was invisible on screen and
+    /// visible only to overprint, which asks a question about the space
+    /// rather than about the pixel.
+    #[test]
+    fn indexed_entry_returns_the_palette_colour_in_the_base_space() {
+        // Two entries in DeviceRGB: black, then a known non-neutral.
+        let space = ColorSpace::Indexed {
+            base: std::sync::Arc::new(ColorSpace::DeviceRgb),
+            hival: 1,
+            lookup: std::sync::Arc::from(vec![0_u8, 0, 0, 255, 128, 0].into_boxed_slice()),
+        };
+        let (base, comps) = space.indexed_entry(&[1.0]).expect("Indexed resolves");
+        assert!(matches!(base, ColorSpace::DeviceRgb));
+        assert!((comps[0] - 1.0).abs() < 1e-3, "{comps:?}");
+        assert!((comps[1] - 128.0 / 255.0).abs() < 1e-3, "{comps:?}");
+        assert!((comps[2] - 0.0).abs() < 1e-3, "{comps:?}");
+
+        // A non-Indexed space returns None, so the caller can call this
+        // unconditionally and keep what it had.
+        assert!(
+            ColorSpace::DeviceRgb
+                .indexed_entry(&[1.0, 0.0, 0.0])
+                .is_none()
+        );
+    }
+
+    /// §8.6.6.3's clamp, on the classification path too.
+    ///
+    /// The painting path already clamps and COUNTS the clamp; this one
+    /// clamps and deliberately does not count, because counting in both
+    /// would make one malformed palette read as two separate findings.
+    #[test]
+    fn indexed_entry_clamps_an_out_of_range_index_without_double_counting() {
+        let space = ColorSpace::Indexed {
+            base: std::sync::Arc::new(ColorSpace::DeviceGray),
+            hival: 1,
+            lookup: std::sync::Arc::from(vec![0_u8, 255].into_boxed_slice()),
+        };
+        let (_, high) = space.indexed_entry(&[9.0]).expect("Indexed resolves");
+        assert!((high[0] - 1.0).abs() < 1e-3, "index 9 clamps to hival 1");
+        let (_, low) = space.indexed_entry(&[-4.0]).expect("Indexed resolves");
+        assert!((low[0] - 0.0).abs() < 1e-3, "a negative index clamps to 0");
+    }
+
+    /// A lookup table shorter than the entry it is asked for yields the
+    /// base space's all-zero components rather than reading past the end.
+    ///
+    /// Producers routinely trim trailing unused entries, so this is a real
+    /// file shape and not a fuzzing artefact.
+    #[test]
+    fn indexed_entry_survives_a_short_lookup_table() {
+        let space = ColorSpace::Indexed {
+            base: std::sync::Arc::new(ColorSpace::DeviceRgb),
+            hival: 7,
+            lookup: std::sync::Arc::from(vec![0_u8, 0, 0].into_boxed_slice()),
+        };
+        let (_, comps) = space.indexed_entry(&[5.0]).expect("Indexed resolves");
+        assert_eq!(comps.len(), 3);
+        assert!(comps.iter().all(|v| v.abs() < 1e-6), "{comps:?}");
     }
 
     /// An operand count that disagrees with the space has no spec-defined

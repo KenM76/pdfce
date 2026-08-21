@@ -7633,7 +7633,8 @@ groups_flattened={} groups_special={} \
 groups_composited={} groups_knockout_approx={} \
 overprint_requested={} overprint_opm1={} overprint_effective={} \
 overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_composited={} nonseparable_pixels={} \
-groups_backdrop_reruns={} soft_masks_on_group_result={}",
+groups_backdrop_reruns={} soft_masks_on_group_result={} \
+overprint_images_unsupported={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -7896,6 +7897,12 @@ groups_backdrop_reruns={} soft_masks_on_group_result={}",
         // being applied once per object inside instead of once to the
         // composite.
         d.soft_masks_on_group_result,
+        // Images painted under /OP true that CompatibleOverprint was
+        // never offered — a whole object class with no path, distinct from
+        // `overprint_refused`'s "offered and could not run". Non-zero on
+        // four Ghent patches, and it is the number that has to fall before
+        // the /Indexed colorant fix can be observed at all.
+        d.overprint_images_unsupported,
     );
     report_diagnostics(d);
 

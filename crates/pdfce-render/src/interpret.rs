@@ -465,6 +465,41 @@ pub struct Diagnostics {
     /// the operator cannot see by looking is the kind that must be said out
     /// loud.
     pub overprint_refused: usize,
+    /// **Images painted while overprint was in force**, which
+    /// `CompatibleOverprint` was never offered.
+    ///
+    /// # Why this is a separate counter and not more `overprint_refused`
+    ///
+    /// Because they are different failures and a reader acts on them
+    /// differently. `overprint_refused` means *"the composite was offered
+    /// this paint and could not run it"* — a recording canvas, a
+    /// degenerate region, a mask that would not allocate. This one means
+    /// *"the composite was never offered this object at all"*, because
+    /// `overprint::composite` has exactly one call site, in the path and
+    /// glyph painter, and an image XObject does not reach it.
+    ///
+    /// Widening `overprint_refused` to cover both would have made a
+    /// whole missing object class look like a run of ordinary failures,
+    /// and would have moved a number an operator may already be diffing
+    /// between runs.
+    ///
+    /// # Why it cannot be fixed where it is counted
+    ///
+    /// Per-sample overprint needs per-sample colorants, and pdfce's buffer
+    /// is device sRGB — the image's own colorant identity is gone by the
+    /// time its texels are composited. That is `Pass 97.1`'s colorant
+    /// buffer, not a call-site change. Counting it first is deliberate:
+    /// **a counter blind to a whole object class reports a smaller problem
+    /// than exists**, which this project has already paid for once in the
+    /// glyph painter (`bf75351`).
+    ///
+    /// ★ It is also what makes the `/Indexed` classification fix
+    /// measurable. Ghent's `1_GWG190`, `1_GWG191`, `1_GWG192` and
+    /// `2_GWG020` all carry `/Indexed [/DeviceN …]` spaces and every one
+    /// of them uses that space **only** for an image — so
+    /// `ColorSpace::indexed_entry` is correct, cited, and **inert on the
+    /// whole corpus** until this number can go down.
+    pub overprint_images_unsupported: usize,
     /// Pixels whose value the overprint composites actually changed.
     ///
     /// The measurement that distinguishes "overprint ran and mattered" from
@@ -1076,6 +1111,7 @@ polarity unverifiable (decision 006 R30)",
         self.nonseparable_composited += other.nonseparable_composited;
         self.nonseparable_pixels += other.nonseparable_pixels;
         self.overprint_refused += other.overprint_refused;
+        self.overprint_images_unsupported += other.overprint_images_unsupported;
         self.overprint_pixels += other.overprint_pixels;
         self.overprint_mode1_requested += other.overprint_mode1_requested;
         self.transparency_groups_composited += other.transparency_groups_composited;
@@ -3237,6 +3273,16 @@ impl Interpreter<'_> {
             // operand count. Not classifiable, so not counted.
             return false;
         };
+        // §8.6.6.3, the same resolution `paint_overprint` does — and it has
+        // to be done in BOTH, because this predicate is what decides
+        // whether that one is called at all. An `Indexed` space that fell
+        // to the `_ => false` arm below was never even counted as an
+        // effective overprint, so the disclosure under-reported by exactly
+        // the set the renderer then failed to honour.
+        let resolved = space.indexed_entry(comps);
+        let (space, comps) = resolved
+            .as_ref()
+            .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
         match space {
             crate::color::ColorSpace::DeviceCmyk => {
                 // Mode 1 only: at mode 0 all four components are specified
@@ -3549,6 +3595,16 @@ impl Interpreter<'_> {
         let Some((space, comps)) = self.color.device_color(stroking) else {
             return false;
         };
+        // §8.6.6.3: an `Indexed` operand is an INDEX, not a colour. Resolve
+        // it to the palette entry in the base space before anything asks a
+        // question about colorants — see `ColorSpace::indexed_entry`, and
+        // note that `overprint::classify` recurses into the base
+        // independently, so the row and the tints agree only if this
+        // happens too.
+        let resolved = space.indexed_entry(comps);
+        let (space, comps) = resolved
+            .as_ref()
+            .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
         let Some(kind) = overprint::classify(space, false) else {
             return false;
         };
@@ -4620,6 +4676,17 @@ impl Interpreter<'_> {
                     dict.get(b"Interpolate").map(|o| doc.resolve(o)),
                     Some(Object::Boolean(true))
                 );
+                // §11.7.4.3 has no image path in this renderer — see
+                // `Diagnostics::overprint_images_unsupported`. Counted
+                // BEFORE the paint so a paint that panics or is clipped
+                // away still leaves the shortfall on the record.
+                if self.gs.current.overprint_fill {
+                    self.diag.overprint_images_unsupported += 1;
+                    self.diag.note(
+                        b"image painted under /OP true: CompatibleOverprint has no \
+                          per-sample path; painted normally",
+                    );
+                }
                 self.paint_image(&decoded.pixmap, interpolate, canvas);
                 self.diag.images_rendered += 1;
             }
