@@ -758,14 +758,14 @@ impl<'a> Canvas<'a> {
                 // direction, which is the point: content inside a layer
                 // and identical content outside it must reach the page as
                 // the same ink.
-                let mut child =
-                    crate::cmyk_buffer::CmykBuffer::new(b.width(), b.height(), b.intent())?;
+                let mut child = b.take_child()?;
                 let result = {
                     let mut sub = Canvas::Cmyk(&mut child);
                     f(&mut sub)
                 };
                 let blend = layer_blend(paint);
                 b.composite_buffer(&child, paint.opacity.clamp(0.0, 1.0), blend);
+                b.give_back_child(child);
                 Some(result)
             }
             Self::Paint(p) => {
@@ -952,8 +952,7 @@ impl<'a> Canvas<'a> {
                 // shortfall is carried by `groups_bridged` instead. The
                 // two must not be conflated: one is a cost that was paid,
                 // the other is a correction that was skipped.
-                let mut child =
-                    crate::cmyk_buffer::CmykBuffer::new(b.width(), b.height(), b.intent())?;
+                let mut child = b.take_child()?;
                 let (result, _dependent) = {
                     let mut sub = Canvas::Cmyk(&mut child);
                     f(&mut sub)
@@ -976,6 +975,7 @@ impl<'a> Canvas<'a> {
                 }
                 let blend = layer_blend(paint);
                 b.composite_buffer(&child, paint.opacity.clamp(0.0, 1.0), blend);
+                b.give_back_child(child);
                 Some(GroupOutcome {
                     result,
                     backdrop_rerun: false,

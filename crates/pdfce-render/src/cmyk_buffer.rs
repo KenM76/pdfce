@@ -391,6 +391,73 @@ pub(crate) struct CmykBuffer {
     /// "Defer the optimisation" is only safe when somebody has multiplied
     /// the per-unit cost by the unit count.
     coverage: Option<Mask>,
+    /// The rectangle this buffer has actually been written in, as
+    /// `(x0, y0, x1, y1)` with the upper bounds exclusive — or `None` when
+    /// nothing has been written at all.
+    ///
+    /// # ★ Why a group buffer needs this, with the number
+    ///
+    /// A transparency group gets a **page-sized** child buffer, because its
+    /// contents are drawn under the same CTM as its parent and a smaller
+    /// buffer would need a translation threaded through every paint site
+    /// and every clip mask. That is the right call and it has a
+    /// consequence: compositing the child back walked the **whole page**,
+    /// per group.
+    ///
+    /// Measured on the Ghent combined document at scale 2 (1224×1584,
+    /// 1.94 M pixels): page 1 carries **1** group and renders in 330 ms;
+    /// page 2 carries **142** and rendered in 3,445 ms. That is ≈ 22 ms
+    /// per group, for groups whose artwork is a swatch a few hundred
+    /// pixels across.
+    ///
+    /// A group's result can only be non-transparent where something was
+    /// painted, so tracking that rectangle turns an O(page) merge into an
+    /// O(mark) one — and `None` means the group painted nothing, which is
+    /// then free rather than a full-page scan of zeroes.
+    ///
+    /// ⇒ Same shape as the per-paint coverage mask this buffer already
+    /// learned once today: **page-sized work for mark-sized content**. It
+    /// is worth asking of every remaining loop in this module.
+    dirty: Option<(u32, u32, u32, u32)>,
+    /// One spare child buffer, kept for the next transparency group.
+    ///
+    /// # ★ Why, with the measurement that forced it
+    ///
+    /// Every transparency group gets a page-sized child buffer, and at
+    /// 1224×1584 that is five `f32` planes — **38.8 MB** — allocated,
+    /// zeroed and dropped **per group**. Ghent page 2 carries 142 groups.
+    ///
+    /// Measured per-group cost against page area, which is what identified
+    /// it (the first hypothesis — that the full-page *merge* was the cost —
+    /// was tested by bounding the merge to a dirty rectangle and bought
+    /// only 9 %, so it was wrong):
+    ///
+    /// | scale | page area | ms per group |
+    /// |---|---|---:|
+    /// | 0.5 | 1× | 2.76 |
+    /// | 1.0 | 4× | 4.49 |
+    /// | 2.0 | 16× | **16.68** |
+    ///
+    /// Cost tracks area, sub-linearly — the signature of allocation and
+    /// page-faulting rather than of a per-pixel loop. At scale 2 that is
+    /// 2.4 s of page 2's 2.66 s.
+    ///
+    /// # Why ONE spare and not a pool
+    ///
+    /// Groups on a page are overwhelmingly **siblings** — 142 of them in
+    /// sequence, not 142 deep — so a single spare handed back and forth
+    /// covers the common case exactly. Nesting still allocates, once per
+    /// level, which is `O(depth)` and is what §11.4's own memory
+    /// discussion says to expect.
+    ///
+    /// # What makes reuse cheap, and it is the previous fix
+    ///
+    /// Handing a buffer back means clearing it, and clearing a page-sized
+    /// buffer is the cost being avoided. It is affordable only because
+    /// [`CmykBuffer::dirty`] says which rectangle was actually written —
+    /// so the clear is `O(mark)`, not `O(page)`. The dirty rectangle
+    /// bought little on its own and is what makes this possible.
+    spare: Option<Box<Self>>,
 }
 
 impl CmykBuffer {
@@ -442,6 +509,8 @@ impl CmykBuffer {
             // Allocated once, here, and reused by every paint for the life
             // of the buffer.
             coverage: Mask::new(width, height),
+            dirty: None,
+            spare: None,
         })
     }
 
@@ -526,6 +595,31 @@ impl CmykBuffer {
     /// `Difference` on values a hair outside `[0, 1]` compounds rather
     /// than settles. Clamping on write means every value this buffer hands
     /// back to a blend function is a legal colorant tint.
+    /// Widen the dirty rectangle to include `region`.
+    ///
+    /// Called by every composite entry point rather than by `set_pixel`,
+    /// deliberately: a per-pixel widen would cost a branch and two
+    /// comparisons in the innermost loop of the renderer to compute
+    /// something the caller already knows as a rectangle.
+    fn mark_dirty(&mut self, region: (u32, u32, u32, u32)) {
+        let (x0, y0, x1, y1) = region;
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        self.dirty = Some(match self.dirty {
+            None => (x0, y0, x1, y1),
+            Some((ax0, ay0, ax1, ay1)) => (ax0.min(x0), ay0.min(y0), ax1.max(x1), ay1.max(y1)),
+        });
+    }
+
+    /// The rectangle worth scanning: what has been written, clamped to the
+    /// buffer. `None` means nothing has been written.
+    fn dirty_region(&self) -> Option<(u32, u32, u32, u32)> {
+        let (x0, y0, x1, y1) = self.dirty?;
+        let r = (x0, y0, x1.min(self.width), y1.min(self.height));
+        (r.0 < r.2 && r.1 < r.3).then_some(r)
+    }
+
     #[inline]
     pub(crate) fn set_pixel(&mut self, idx: usize, px: PixelCmyk) {
         for i in 0..4 {
@@ -576,6 +670,7 @@ impl CmykBuffer {
         let x1 = x1.min(self.width);
         let y1 = y1.min(self.height);
         let alpha = alpha.clamp(0.0, 1.0);
+        self.mark_dirty((x0, y0, x1, y1));
         let mut changed = 0_u32;
         for y in y0..y1 {
             for x in x0..x1 {
@@ -646,6 +741,7 @@ impl CmykBuffer {
         let x1 = x1.min(self.width);
         let y1 = y1.min(self.height);
         let alpha = alpha.clamp(0.0, 1.0);
+        self.mark_dirty((x0, y0, x1, y1));
         let pixels = src.pixels();
         let mut changed = 0_u32;
         for y in y0..y1 {
@@ -737,6 +833,7 @@ impl CmykBuffer {
         let x1 = x1.min(self.width);
         let y1 = y1.min(self.height);
         let alpha = alpha.clamp(0.0, 1.0);
+        self.mark_dirty((x0, y0, x1, y1));
         let mut changed = 0_u32;
         for y in y0..y1 {
             for x in x0..x1 {
@@ -798,11 +895,22 @@ impl CmykBuffer {
     /// scales `α_s` and leaves shape alone. `/AIS true` is not yet
     /// distinguished, in either implementation.
     pub(crate) fn apply_mask(&mut self, mask: &Mask) {
-        for (a, &m8) in self.alpha.iter_mut().zip(mask.data().iter()) {
-            if m8 == u8::MAX || *a <= 0.0 {
-                continue;
+        // Only where something was painted: masking transparency leaves it
+        // transparent, so the rest of the page is a scan of zeroes.
+        let Some((x0, y0, x1, y1)) = self.dirty_region() else {
+            return;
+        };
+        let data = mask.data();
+        for y in y0..y1 {
+            let row = (y * self.width) as usize;
+            for x in x0 as usize..x1 as usize {
+                let i = row + x;
+                let m8 = data[i];
+                if m8 == u8::MAX || self.alpha[i] <= 0.0 {
+                    continue;
+                }
+                self.alpha[i] *= Chan::from(m8) / 255.0;
             }
-            *a *= Chan::from(m8) / 255.0;
         }
     }
 
@@ -840,23 +948,34 @@ impl CmykBuffer {
         debug_assert_eq!(child.width, self.width);
         debug_assert_eq!(child.height, self.height);
         let alpha = alpha.clamp(0.0, 1.0);
-        let n = (self.width as usize) * (self.height as usize);
+        // ★ ONLY WHERE THE CHILD WAS ACTUALLY PAINTED. A group's result is
+        // transparent everywhere else by construction, and
+        // `composite_element_cmyk` of a transparent source is the identity
+        // -- so the rest of the page was being read, tested and skipped,
+        // once per group. See the `dirty` field for the measurement.
+        let Some((x0, y0, x1, y1)) = child.dirty_region() else {
+            return 0;
+        };
+        self.mark_dirty((x0, y0, x1, y1));
         let mut changed = 0_u32;
-        for idx in 0..n {
-            let mut source = child.pixel(idx);
-            if source.a <= 0.0 {
-                continue;
-            }
-            // A group's result has shape too, and it is the group's own
-            // `f_g` rather than its alpha. `alpha` here is §11.4.5's outer
-            // constant opacity, which scales `α` and leaves shape alone —
-            // so the shape handed on is the child's UNSCALED alpha, which
-            // for a child built by `CmykBuffer::new` is `f_g` exactly
-            // (nothing has scaled it yet).
-            let shape = source.a;
-            source.a *= alpha;
-            if self.composite_at(idx, source, shape, blend) {
-                changed += 1;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let idx = (y * self.width + x) as usize;
+                let mut source = child.pixel(idx);
+                if source.a <= 0.0 {
+                    continue;
+                }
+                // A group's result has shape too, and it is the group's own
+                // `f_g` rather than its alpha. `alpha` here is §11.4.5's outer
+                // constant opacity, which scales `α` and leaves shape alone —
+                // so the shape handed on is the child's UNSCALED alpha, which
+                // for a child built by `CmykBuffer::new` is `f_g` exactly
+                // (nothing has scaled it yet).
+                let shape = source.a;
+                source.a *= alpha;
+                if self.composite_at(idx, source, shape, blend) {
+                    changed += 1;
+                }
             }
         }
         changed
@@ -960,6 +1079,56 @@ impl CmykBuffer {
         Some(out)
     }
 
+    /// A cleared, page-sized child buffer for a transparency group —
+    /// reused from the spare slot when one is there.
+    ///
+    /// Returns `None` only if no spare exists and a fresh allocation
+    /// fails, which the caller treats exactly as it treats any other
+    /// failed buffer allocation: the group does not run.
+    pub(crate) fn take_child(&mut self) -> Option<Self> {
+        match self.spare.take() {
+            Some(b) => Some(*b),
+            None => Self::new(self.width, self.height, self.intent),
+        }
+    }
+
+    /// Hand a finished child buffer back for the next group to use.
+    ///
+    /// Clears **only the rectangle the child actually wrote**, which is
+    /// what makes reuse cheaper than reallocation, and resets every piece
+    /// of per-group state so the next group cannot inherit any of it:
+    ///
+    /// - the **dirty rectangle**, or the next group would clear more than
+    ///   it wrote and report a merge region larger than its own marks;
+    /// - the **knockout planes**, which are `Option` and whose presence
+    ///   changes which clause every composite obeys (§11.4.8 instead of
+    ///   §11.4.4);
+    /// - the **disclosure counters**, which the caller has already folded
+    ///   into the parent with `absorb_counters` and which would otherwise
+    ///   be counted once per subsequent sibling.
+    ///
+    /// The child's own spare is dropped rather than chained, so the memory
+    /// held between groups stays `O(depth)`.
+    pub(crate) fn give_back_child(&mut self, mut child: Self) {
+        if let Some((x0, y0, x1, y1)) = child.dirty_region() {
+            for y in y0..y1 {
+                let row = (y * child.width) as usize;
+                let (a, b) = (row + x0 as usize, row + x1 as usize);
+                for plane in &mut child.planes {
+                    plane[a..b].fill(0.0);
+                }
+                child.alpha[a..b].fill(0.0);
+            }
+        }
+        child.dirty = None;
+        child.knockout = None;
+        child.bridged = 0;
+        child.groups_approximated = 0;
+        child.unbridged_images = 0;
+        child.spare = None;
+        self.spare = Some(Box::new(child));
+    }
+
     /// Borrow the reusable coverage mask, leaving `None` behind.
     ///
     /// Take/put rather than a `&mut` accessor because the caller needs the
@@ -1010,6 +1179,9 @@ impl CmykBuffer {
         // each one.
         self.planes = initial.planes.clone();
         self.alpha = initial.alpha.clone();
+        // The accumulator STARTS as the backdrop, so everything the
+        // backdrop touched is already written here.
+        self.dirty = initial.dirty;
         self.knockout = Some(Box::new(KnockoutPlanes {
             initial: initial.planes.clone(),
             initial_alpha: initial.alpha.clone(),
@@ -1043,8 +1215,16 @@ impl CmykBuffer {
         let Some(ko) = self.knockout.take() else {
             return self;
         };
-        let n = (self.width as usize) * (self.height as usize);
-        for idx in 0..n {
+        // Backdrop removal only where the group was written; elsewhere
+        // `α_g` is zero and the correction is the identity.
+        let Some((x0, y0, x1, y1)) = self.dirty_region() else {
+            return self;
+        };
+        let width = self.width;
+        for idx in (y0..y1).flat_map(move |y| {
+            let row = y * width;
+            (x0..x1).map(move |x| (row + x) as usize)
+        }) {
             let ag = ko.group_alpha[idx];
             let accum = self.pixel(idx);
             let initial = PixelCmyk {
