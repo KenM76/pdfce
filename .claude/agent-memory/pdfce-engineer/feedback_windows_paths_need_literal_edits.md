@@ -105,6 +105,24 @@ appears **once**, on its own line, in `docs/NEXT_SESSION.md` §7, and every
 other mention references that section instead of repeating it. One place to
 get right beats seven places to check.
 
+**★★ 2026-08-21 — WIDENED AGAIN, TO BACKTICKS, and the trigger is not a
+backslash at all.** I wrote a commit message with `git commit -m "…"` that
+contained a backticked phrase. **Bash read the backticks as COMMAND
+SUBSTITUTION** and spliced a fifteen-line file listing into the middle of a
+sentence. It shipped; I caught it only because I printed the message back.
+
+Note the shape, because it is why the previous wording did not protect me:
+this file had grown into *the backslash rule*, and a backtick is not a
+backslash — so the rule did not feel like it applied. **The real class is
+"content that goes through a shell gets interpreted by the shell,"** and the
+dangerous characters are all of `` ` ``, `$`, `\`, `!`, and unbalanced quotes.
+
+**Operationally, one line covers every instance so far: NEVER put prose
+through the Bash tool.** Not a commit message, not a heredoc, not a `-m`.
+Write the text with `Write` and pass the file (`git commit -F file`), or use
+`Edit`. Every long commit message this session went through `-F` and was
+fine; the ONE that used `-m` because it was "short" is the one that broke.
+
 Related: [[absence-needs-an-unscoped-query]] — same family. Both are cases
 where a tool returned something that *looked* like a normal result, and the
 only defence was checking with an instrument rather than with a glance. Also
