@@ -49,10 +49,9 @@ Plus two librarian filings (209th, 210th), `decision 076`, and Backlog
 ### ★★ THE TWO DEFECTS ONLY THE REAL FILE COULD FIND — read §6 first
 
 `119.0` and `119.2` were green on 20 tests and a fixture corpus. Then I ran
-them on **the operator's actual benchmark CAD drawing**
-(`D:\Dev	emp\pdfce
-cored-benchmark-cad-drawing.pdf`) and found two defects
-in a row, **neither of them in the code I had just written**:
+them on **the operator's actual benchmark CAD drawing** (see §7 for the exact
+path, which is written there ONCE and nowhere else) and found two defects in a
+row, **neither of them in the code I had just written**:
 
 1. **`Pass 121.0`** — it refused outright, with *"codes 361 and 361 both map
    to 'Ʃ'"*. **The same number twice.** A code present in both a `bfchar` and
@@ -306,9 +305,7 @@ shipped. Hoisted.
 
 **Run it on a real drawing before believing a green test run.** Both defects
 above were invisible to 20 passing tests and a fixture corpus, and both
-surfaced within two commands of pointing the binary at
-`D:\Dev	emp\pdfce
-cored-benchmark-cad-drawing.pdf`.
+surfaced within two commands of pointing the binary at the file named in §7.
 
 ```
 pdfce-cli inspect --forms  <a CAD drawing>
@@ -324,3 +321,19 @@ is the exact form the original request measured at 1,696 show operators.
 **And check `followers_repositioned` on the way past.** It is now the cheapest
 tell that a reflow has over-reached: on absolutely-placed CAD content it should
 be `0`, and a large number means the edited "line" ran further than the line.
+
+---
+
+## §7 — THE BENCHMARK FILE, written once
+
+The operator's own CAD drawing, and the input that found both `121.x` defects:
+
+    D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf
+
+★ **Written here once, on its own line, and referenced from everywhere else in
+this document rather than repeated** — a Windows path in prose is the single
+most reliably-mangled string this project handles. Both earlier copies in this
+file arrived as `D:\Dev<TAB>emp\pdfce<NEWLINE>cored-...`, because a scripted
+patch turned `\t` and `\n` into the characters they escape. The engineer's
+agent memory carries the rule (*any backslash breaks heredoc patching — write
+the file, or use `Edit`*), and this is its second instance in one session.
