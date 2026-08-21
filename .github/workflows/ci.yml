@@ -456,6 +456,24 @@ jobs:
       - name: check every colour is a named theme role
         run: bash tools/check-theme-colors.sh
 
+      # Every command THIS FILE runs has a local story: covered by the gate
+      # sweep, covered by a named local stand-in, or deliberately CI-only.
+      #
+      # Added 2026-08-21 after `cargo fuzz build` had been red for three
+      # days while every local check was green -- and neither signal was
+      # wrong. The habit called "run the gates" is `tools/check-*`, which is
+      # ONE of this workflow's nine jobs (ten runs -- `test` is a two-OS
+      # matrix); the other eight had no local equivalent anybody ran. This
+      # gate cannot make them run, and does not try. What it makes
+      # impossible is adding a tenth without somebody deciding, in writing,
+      # whether one exists.
+      #
+      # It is in THIS job rather than its own because it is a text audit of a
+      # file already checked out here, and a job that costs a container to
+      # grep one YAML is a job people delete.
+      - name: check every CI command has a local runner
+        run: python tools/check-ci-parity.py
+
   cross-check:
     name: cross-target compile check (macOS / wasm32)
     runs-on: ubuntu-latest

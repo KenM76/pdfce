@@ -156,7 +156,21 @@ BASELINE = ROOT / "tools" / "commits-filed-baseline.txt"
 # `.github/`, and the sweep below was run to confirm they are already filed
 # rather than assuming it. Any that are not go in the baseline as named debt,
 # never silently.
-CODE_PREFIXES = ("crates/", "tools/", "fixtures/", ".github/")
+# ★ `fuzz/` ADDED 2026-08-21, and it is the fourth prefix rather than the
+# first three because nobody thought of it — which is this gate's own
+# documented failure shape, applied to itself.
+#
+# `cargo-fuzz` targets are CODE: they construct the public specs they
+# fuzz, so they break when a spec gains a field, and they go stale in
+# silence when a spec gains a VARIANT. Both have happened. `2523860`
+# (2026-08-05) is titled *"the vector-edit target had drifted three Passes
+# behind its own module"*, and on 2026-08-19 the `annot_author` target
+# stopped compiling because `MarkupSpec::Square` had gained
+# `border_effect` — three days red, on every push.
+#
+# A commit touching only `fuzz/` was classified as docs-only and skipped
+# by this gate, so the record has no obligation to explain any of it.
+CODE_PREFIXES = ("crates/", "tools/", "fixtures/", ".github/", "fuzz/")
 
 
 def git(*args: str) -> str:
