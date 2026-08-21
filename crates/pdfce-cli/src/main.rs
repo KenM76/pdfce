@@ -7633,7 +7633,7 @@ groups_flattened={} groups_special={} \
 groups_composited={} groups_knockout_approx={} \
 overprint_requested={} overprint_opm1={} overprint_effective={} \
 overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_composited={} nonseparable_pixels={} \
-groups_backdrop_reruns={}",
+groups_backdrop_reruns={} soft_masks_on_group_result={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -7883,6 +7883,19 @@ groups_backdrop_reruns={}",
         // mishandled: §11.4.4 NOTE 5 makes the single walk exact whenever
         // the group's interior composites Normal throughout.
         d.transparency_groups_backdrop_reruns,
+        // 11.4.5 soft masks that reached the GROUP RESULT rather than
+        // being folded into the contents' clip.
+        //
+        // Read it against `soft_masks_applied`, and the difference is NOT
+        // a shortfall on its own: a mask on an elementary object belongs
+        // in the clip, because 11.6.4.1 makes the mask value that object's
+        // q_m and a q_m multiplies coverage exactly as a clip does. What
+        // this counter is for is the other case -- a document with
+        // transparency groups where this stays at zero while
+        // `soft_masks_reset_stale` climbs is one whose group masks are
+        // being applied once per object inside instead of once to the
+        // composite.
+        d.soft_masks_on_group_result,
     );
     report_diagnostics(d);
 

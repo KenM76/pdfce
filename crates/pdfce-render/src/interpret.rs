@@ -522,6 +522,28 @@ pub struct Diagnostics {
     /// overwhelming majority of real content. The second walk is taken
     /// only when the interior actually blended against something.
     pub transparency_groups_backdrop_reruns: usize,
+    /// Transparency groups whose **soft mask was applied to the group's
+    /// RESULT** (§11.4.5) rather than folded into its contents' clip.
+    ///
+    /// # Why this is counted separately from `soft_masks_applied`
+    ///
+    /// Because they answer different questions and the difference is a
+    /// correctness one. `soft_masks_applied` counts masks pdfce **built**;
+    /// this counts the ones that reached the place §11.4.5 puts them.
+    /// Folding a mask into the clip is exactly right for an elementary
+    /// object (§11.6.4.1 makes the mask value that object's `q_m`) and
+    /// exactly wrong for a group, where it multiplies once per object
+    /// inside instead of once on the composite — visible wherever two of
+    /// those objects overlap.
+    ///
+    /// A group whose mask could **not** be lifted out of the clip — a
+    /// `W n` intervened between the `gs` that set it and the `Do`, so the
+    /// pre-mask clip no longer describes the geometry — keeps the old
+    /// behaviour and is counted on `soft_masks_reset_stale` instead. That
+    /// counter already existed for the same underlying limit; this Pass
+    /// gave it a second way to fire rather than inventing a third name for
+    /// one condition.
+    pub soft_masks_on_group_result: usize,
     /// Of those, the ones that are **isolated** (`/I true`) or
     /// **knockout** (`/K true`) — Table 147.
     ///
@@ -1058,6 +1080,7 @@ polarity unverifiable (decision 006 R30)",
         self.overprint_mode1_requested += other.overprint_mode1_requested;
         self.transparency_groups_composited += other.transparency_groups_composited;
         self.transparency_groups_backdrop_reruns += other.transparency_groups_backdrop_reruns;
+        self.soft_masks_on_group_result += other.soft_masks_on_group_result;
         self.transparency_groups_knockout_approximated +=
             other.transparency_groups_knockout_approximated;
         self.transparency_groups_flattened += other.transparency_groups_flattened;
@@ -2768,6 +2791,7 @@ impl Interpreter<'_> {
                     }
                 }
                 self.gs.current.clips_since_smask = 0;
+                self.gs.current.soft_mask = None;
             } else if let Some(dict) = sm.as_dict().cloned() {
                 match self.build_soft_mask(&dict, canvas) {
                     Some(mask) => {
@@ -2781,6 +2805,11 @@ impl Interpreter<'_> {
                             self.gs.current.clip_before_smask = Some(self.gs.current.clip.clone());
                             self.gs.current.clips_since_smask = 0;
                         }
+                        // Keep the mask ITSELF, un-folded: §11.4.5 needs
+                        // it as a value a group composite can apply once,
+                        // not as a coverage multiplier already fused into
+                        // the clip. See `GraphicsState::soft_mask`.
+                        self.gs.current.soft_mask = Some(std::sync::Arc::new(mask.clone()));
                         let combined = match self.gs.current.clip.as_deref() {
                             Some(old) => {
                                 let mut m = mask;
@@ -4129,6 +4158,74 @@ impl Interpreter<'_> {
             inner.ctm = m.post_concat(inner.ctm);
         }
 
+        // §11.4.5 / §11.6.6 — THE SOFT MASK, DECIDED BEFORE THE CLIP
+        //
+        // A soft mask in force at a `Do` applies to the group's RESULT,
+        // not to the objects inside it, and §11.6.6 says the second half
+        // out loud: inside the group the mask "shall be" None, "to ensure
+        // that they are not applied twice".
+        //
+        // pdfce folds a mask into the clip, which is correct for an
+        // elementary object (§11.6.4.1: the mask value is that object's
+        // `q_m`, and a `q_m` multiplies coverage exactly as a clip does)
+        // and wrong for a group. So for a transparency group the mask is
+        // LIFTED BACK OUT here — `inner.clip` is restored to what it was
+        // before the fold — and handed to `Canvas::group` to apply once,
+        // to the composite.
+        //
+        // This has to happen BEFORE step (c) so the form's own `/BBox`
+        // clip lands on the mask-free clip rather than on top of the fold.
+        //
+        // The one case it cannot be lifted: a `W n` established between
+        // the `gs` that set the mask and this `Do`. The pre-mask clip
+        // predates that clip, so restoring it would UNCLIP content
+        // (`GraphicsState::clip_before_smask`'s own documented limit).
+        // Those groups keep the old behaviour and are counted on
+        // `soft_masks_reset_stale`, which is the counter that limit
+        // already had.
+        let is_group_here = stream
+            .dict
+            .get(b"Group")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .is_some_and(|g| {
+                g.get(b"S")
+                    .map(|o| doc.resolve(o))
+                    .and_then(Object::as_name)
+                    .is_some_and(|n| n.as_bytes() == b"Transparency")
+            });
+        let group_mask = if is_group_here && self.gs.current.soft_mask.is_some() {
+            match (
+                self.gs.current.clip_before_smask.clone(),
+                self.gs.current.clips_since_smask,
+            ) {
+                (Some(pre), 0) => {
+                    let m = self.gs.current.soft_mask.clone();
+                    inner.clip = pre;
+                    inner.clip_bbox = None;
+                    m
+                }
+                _ => {
+                    self.diag.soft_masks_reset_stale += 1;
+                    self.diag.note(
+                        b"Do(group): a clip was established after the soft mask, so the \
+                          mask stays folded into the contents' clip; 11.4.5 not applied \
+                          to the group result)",
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        // §11.6.6: whatever happened above, the group's own contents run
+        // with NO soft mask. When one was lifted it is applied to the
+        // result; when it could not be, it is already inside `inner.clip`
+        // and must not be applied a second time from the state.
+        inner.soft_mask = None;
+        inner.clip_before_smask = None;
+        inner.clips_since_smask = 0;
+
         // --- (c) clip to /BBox, expressed in FORM space ---
         match rect_entry(doc, &stream.dict, b"BBox") {
             Some(rect) => {
@@ -4145,6 +4242,14 @@ impl Interpreter<'_> {
                 // the ALREADY-Matrix-concatenated CTM (step b before
                 // step c — see the fn docs).
                 let form_ctm = inner.ctm;
+                // NOTE the ORDER: `group_mask` above has already replaced
+                // `inner.clip` with the pre-mask clip when this form is a
+                // transparency group, so the BBox intersects the
+                // MASK-FREE clip. Doing it the other way round would
+                // leave the mask inside the group's clip and the BBox
+                // outside it — the BBox is geometry and belongs with the
+                // geometric clip.
+
                 intersect_clip(
                     &mut inner,
                     &path,
@@ -4273,8 +4378,18 @@ impl Interpreter<'_> {
         // arrives twice: a new graphics-state field has to be added to every
         // predicate that asks "is the state still default?", and nothing
         // makes those sites findable from the field.
+        // ★ AND THE SOFT MASK, which is the SAME BUG A THIRD TIME and the
+        // comment above predicted it: "a new graphics-state field has to be
+        // added to every predicate that asks 'is the state still default?',
+        // and nothing makes those sites findable from the field."
+        //
+        // A group under a soft mask with a `Normal` blend and alpha 1 looked
+        // neutral, took the inline path, and had its mask applied to every
+        // object inside it — §11.4.5 says it applies to the group's result.
+        // The inline path has no result to apply it to.
         let outer_is_neutral = self.gs.current.blend_mode == tiny_skia::BlendMode::SourceOver
             && self.gs.current.nonseparable.is_none()
+            && self.gs.current.soft_mask.is_none()
             && self.gs.current.fill_alpha >= 1.0;
         // KNOCKOUT is unconditional, and the neutral-outer-state shortcut is
         // not available to it. §11.4.4 NOTE 5's inline fast path requires
@@ -4341,37 +4456,43 @@ impl Interpreter<'_> {
             // otherwise — see `Canvas::group` for why the second run is
             // both necessary and conditional. Only the first run's
             // diagnostics are returned, so nothing here double-counts.
-            canvas.group(paint, group_flag(b"I"), is_knockout, |sub| {
-                let nested = run_nested(
-                    doc,
-                    &content,
-                    form_resources,
-                    fonts,
-                    group_state.clone(),
-                    sub,
-                    depth,
-                    nested_active.clone(),
-                    cancel,
-                    policy,
-                    hidden_here,
-                );
-                // "Did anything inside this group need to read what was
-                // underneath it?" — §11.4.4 NOTE 2's condition, answered
-                // from the run rather than guessed from the dictionary.
-                //
-                // Deliberately CONSERVATIVE in the safe direction: a
-                // nested *isolated* child's own interior blends also land
-                // in these counters, so the outer group can be re-run when
-                // it did not strictly need to be. Over-triggering costs a
-                // second walk; under-triggering silently renders a blend
-                // against nothing, which is the failure this whole path
-                // exists to end.
-                let backdrop_dependent = nested.blend_modes_applied > 0
-                    || nested.nonseparable_composited > 0
-                    || nested.overprint_composited > 0
-                    || nested.transparency_groups_backdrop_reruns > 0;
-                (nested, backdrop_dependent)
-            })
+            canvas.group(
+                paint,
+                group_flag(b"I"),
+                is_knockout,
+                group_mask.as_deref(),
+                |sub| {
+                    let nested = run_nested(
+                        doc,
+                        &content,
+                        form_resources,
+                        fonts,
+                        group_state.clone(),
+                        sub,
+                        depth,
+                        nested_active.clone(),
+                        cancel,
+                        policy,
+                        hidden_here,
+                    );
+                    // "Did anything inside this group need to read what was
+                    // underneath it?" — §11.4.4 NOTE 2's condition, answered
+                    // from the run rather than guessed from the dictionary.
+                    //
+                    // Deliberately CONSERVATIVE in the safe direction: a
+                    // nested *isolated* child's own interior blends also land
+                    // in these counters, so the outer group can be re-run when
+                    // it did not strictly need to be. Over-triggering costs a
+                    // second walk; under-triggering silently renders a blend
+                    // against nothing, which is the failure this whole path
+                    // exists to end.
+                    let backdrop_dependent = nested.blend_modes_applied > 0
+                        || nested.nonseparable_composited > 0
+                        || nested.overprint_composited > 0
+                        || nested.transparency_groups_backdrop_reruns > 0;
+                    (nested, backdrop_dependent)
+                },
+            )
         } else {
             None
         };
@@ -4388,6 +4509,9 @@ impl Interpreter<'_> {
                 // knockout group that renders exactly reports zero.
                 self.diag.transparency_groups_knockout_approximated +=
                     outcome.knockout_approximated;
+                if group_mask.is_some() {
+                    self.diag.soft_masks_on_group_result += 1;
+                }
                 self.diag.merge(outcome.result);
                 self.diag.transparency_groups_composited += 1;
             }

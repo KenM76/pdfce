@@ -571,6 +571,103 @@ fn knockout_erases_an_earlier_element_where_a_normal_group_layers() {
     );
 }
 
+/// ★ **§11.4.5, measured — a soft mask applies to the group's RESULT, once,
+/// not to each object inside it.**
+///
+/// # Why the fixture is two OVERLAPPING squares and not one
+///
+/// Because one square cannot tell the two models apart. A mask folded into
+/// the clip multiplies each object's coverage; a mask applied to the result
+/// multiplies the composite's alpha. With a single object those are the
+/// same number. They diverge exactly where two objects overlap, and they
+/// diverge by the mask value squared:
+///
+/// | model | first square | overlap |
+/// |---|---|---|
+/// | folded into the contents' clip (what pdfce did) | `1 − M` | `(1 − M)²` |
+/// | applied to the group result (§11.4.5) | `1 − M` | `1 − M` |
+///
+/// At `M = 0.5`, black on white: **128 either way outside the overlap, and
+/// 64 versus 128 inside it.** So the assertion is taken inside the overlap
+/// and nowhere else.
+///
+/// # Why the mask is a `/Luminosity` group painting a flat grey
+///
+/// Because a flat mask makes the arithmetic checkable by hand. §11.5.3's
+/// device-space luminosity is `0.30 R + 0.59 G + 0.11 B` with **no** gamma
+/// compensation, and those coefficients sum to 1, so a neutral `0.5 g`
+/// gives a mask of exactly 0.5 whatever the coefficients are — which means
+/// this test cannot fail for a reason it is not about.
+#[test]
+fn a_soft_mask_applies_to_the_group_result_not_to_each_object_inside_it() {
+    // The mask group: flat 50% grey over the whole page.
+    let mask_body = "0.5 g 0 0 60 60 re f";
+    let mask_form = format!(
+        "<< /Type /XObject /Subtype /Form /BBox [0 0 60 60] \
+         /Group << /S /Transparency /CS /DeviceGray >> /Length {} >>\n\
+         stream\n{mask_body}\nendstream",
+        mask_body.len()
+    );
+    // The masked group: two black squares overlapping in the middle.
+    let form_body = "0 g 5 5 30 30 re f 0 g 25 25 30 30 re f";
+    let form = format!(
+        "<< /Type /XObject /Subtype /Form /BBox [0 0 60 60] \
+         /Group << /S /Transparency >> /Length {} >>\n\
+         stream\n{form_body}\nendstream",
+        form_body.len()
+    );
+    let content = "/GS0 gs /Fm0 Do";
+    let stream = format!("{content}\n");
+    let bytes = build(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 60 60] >>",
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources \
+             << /XObject << /Fm0 5 0 R >> \
+                /ExtGState << /GS0 << /Type /ExtGState /SMask \
+                  << /S /Luminosity /G 6 0 R >> >> >> >> >>",
+        ),
+        (
+            4,
+            &format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
+        ),
+        (5, &form),
+        (6, &mask_form),
+    ]);
+    let r = render(bytes);
+    assert_eq!(
+        r.diagnostics.soft_masks_on_group_result, 1,
+        "the mask must have been lifted out of the contents' clip"
+    );
+    assert_eq!(
+        r.diagnostics.soft_masks_reset_stale, 0,
+        "nothing here establishes a clip between the gs and the Do"
+    );
+
+    // (30, 30) in PDF space is inside BOTH squares; device y is flipped,
+    // so the same device pixel is inside both as well.
+    let overlap = r.pixmap.pixel(30, 30).expect("in bounds").demultiply();
+    // (10, 50) device = (10, 10) PDF: inside the first square only.
+    let single = r.pixmap.pixel(10, 50).expect("in bounds").demultiply();
+
+    assert!(
+        (i32::from(single.red()) - 128).abs() <= 4,
+        "one black square under a 50% mask over white is mid grey, got {}",
+        single.red()
+    );
+    assert!(
+        (i32::from(overlap.red()) - 128).abs() <= 4,
+        "the OVERLAP must be the same mid grey: the mask applies once, to the \
+         group's result. Folding it into the contents' clip squares it and \
+         gives ~64. Got {}",
+        overlap.red()
+    );
+}
+
 /// A form with NO `/Group` is an ordinary reusable content stream and is
 /// not a compositing scope. Counting it would put a large number on
 /// ordinary documents — forms are how every producer factors repeated

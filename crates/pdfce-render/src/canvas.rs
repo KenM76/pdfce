@@ -745,6 +745,7 @@ impl<'a> Canvas<'a> {
         paint: LayerPaint,
         isolated: bool,
         knockout: bool,
+        mask: Option<&Mask>,
         mut f: impl FnMut(&mut Canvas<'_>) -> (R, bool),
     ) -> Option<GroupOutcome<R>> {
         // §11.4.6 is orthogonal to §11.4.5 — *"isolated and knockout are
@@ -752,7 +753,7 @@ impl<'a> Canvas<'a> {
         // `isolated` is carried into it as the initial backdrop's identity
         // rather than as a second branch.
         if knockout && !matches!(self, Self::Record(_)) {
-            return self.knockout_group(paint, isolated, f);
+            return self.knockout_group(paint, isolated, mask, f);
         }
         match self {
             Self::Paint(p) => {
@@ -767,7 +768,7 @@ impl<'a> Canvas<'a> {
                 // twice and nothing to remove.
                 let backdrop_present = p.pixels().iter().any(|px| px.alpha() > 0);
                 if isolated || !backdrop_dependent || !backdrop_present {
-                    composite_group_result(p, &iso, paint);
+                    composite_group_result(p, &iso, paint, mask);
                     return Some(GroupOutcome {
                         result,
                         backdrop_rerun: false,
@@ -782,7 +783,7 @@ impl<'a> Canvas<'a> {
                     let mut sub = Canvas::Paint(&mut nis);
                     let _ = f(&mut sub);
                 }
-                composite_non_isolated_group(p, &iso, &nis, paint);
+                composite_non_isolated_group(p, &iso, &nis, paint, mask);
                 Some(GroupOutcome {
                     result,
                     backdrop_rerun: true,
@@ -808,6 +809,9 @@ impl<'a> Canvas<'a> {
                     let mut sub = Canvas::Paint(&mut iso);
                     f(&mut sub)
                 };
+                if let Some(m) = mask {
+                    apply_mask(&mut iso, m);
+                }
                 let blend = layer_blend(paint);
                 let opacity = paint.opacity.clamp(0.0, 1.0);
                 let initial_present = k.initial.pixels().iter().any(|px| px.alpha() > 0);
@@ -839,6 +843,13 @@ impl<'a> Canvas<'a> {
                 };
                 let ops = r.frames.pop().unwrap_or_default();
                 r.push(Op::Layer { paint, ops });
+                if mask.is_some() {
+                    // §11.4.5's mask is a device-sized buffer built for
+                    // THIS viewport; a replay at another scale would apply
+                    // it at the wrong resolution. Refuse by name rather
+                    // than replay a plausible wrong picture.
+                    r.poison(PoisonReason::SoftMask);
+                }
                 if !isolated && backdrop_dependent {
                     // Replay would give the isolated approximation. Refuse
                     // the recording by name rather than keep a plausible
@@ -893,6 +904,7 @@ impl Canvas<'_> {
         &mut self,
         paint: LayerPaint,
         isolated: bool,
+        mask: Option<&Mask>,
         mut f: impl FnMut(&mut Canvas<'_>) -> (R, bool),
     ) -> Option<GroupOutcome<R>> {
         let (w, h) = (self.width(), self.height());
@@ -914,9 +926,12 @@ impl Canvas<'_> {
         };
         let approximated = target.approximated;
         match self {
-            Self::Paint(p) => target.finish(p, paint),
+            Self::Paint(p) => target.finish(p, paint, mask),
             Self::Knockout(k) => {
-                let r = target.result_pixmap();
+                let mut r = target.result_pixmap();
+                if let Some(m) = mask {
+                    apply_mask(&mut r, m);
+                }
                 k.element_from_pixmap(&r, paint.opacity.clamp(0.0, 1.0), layer_blend(paint));
             }
             Self::Record(_) => {}
@@ -1198,11 +1213,14 @@ impl KnockoutTarget {
 
     /// Composite this group's result onto its parent, by §11.4.4's element
     /// formula.
-    fn finish(&self, dest: &mut Pixmap, paint: LayerPaint) {
+    fn finish(&self, dest: &mut Pixmap, paint: LayerPaint, mask: Option<&Mask>) {
         use crate::compositor::{Pixel, composite_element};
         let blend = layer_blend(paint);
         let opacity = paint.opacity.clamp(0.0, 1.0);
-        let result = self.result_pixmap();
+        let mut result = self.result_pixmap();
+        if let Some(m) = mask {
+            apply_mask(&mut result, m);
+        }
         let n = dest.pixels().len().min(result.pixels().len());
         for idx in 0..n {
             let g = Pixel::from_premultiplied(result.pixels()[idx]);
@@ -1217,6 +1235,50 @@ impl KnockoutTarget {
             if let Some(px) = composite_element(backdrop, source, blend).to_premultiplied() {
                 dest.pixels_mut()[idx] = px;
             }
+        }
+    }
+}
+
+/// Multiply a rendered group's alpha by a soft mask — §11.4.5.
+///
+/// # Why this multiplies ALPHA and not shape
+///
+/// §11.6.4.1 splits a soft mask into `f_m` (mask shape) and `q_m` (mask
+/// opacity) according to `/AIS`. Under the **default** `/AIS false` the
+/// mask value is the *opacity*: `f_m = 1`, `q_m = M`. So it scales `α_s`
+/// and leaves `f_s` alone.
+///
+/// That distinction is invisible outside a knockout group — where only
+/// `α_s` is read — and load-bearing inside one, because §11.4.8's
+/// destination scale is `(1 − f_si)`. A renderer that routes the mask
+/// through a coverage channel is silently implementing `/AIS true` for
+/// every group. pdfce's approximation here is the reverse and the safer
+/// one: the mask is applied to alpha only, so a group inside a knockout
+/// group knocks out by its **unmasked** shape. Named rather than hidden;
+/// `/AIS true` is not yet distinguished.
+///
+/// The buffer is premultiplied, so both the colour and the alpha scale by
+/// the same factor and the un-premultiplied colour is unchanged — which is
+/// what "the mask changes how much of the group you see, not what colour
+/// it is" means arithmetically.
+fn apply_mask(buf: &mut Pixmap, mask: &Mask) {
+    let data = mask.data();
+    for (px, &m8) in buf.pixels_mut().iter_mut().zip(data.iter()) {
+        // A fully open mask and an untouched pixel are both no-ops, and
+        // together they are most of a page: a soft mask is usually a small
+        // gradient on a large sheet.
+        if m8 == u8::MAX || px.alpha() == 0 {
+            continue;
+        }
+        let m = u32::from(m8);
+        let scale = |v: u8| u8::try_from((u32::from(v) * m) / 255).unwrap_or(u8::MAX);
+        if let Some(q) = tiny_skia::PremultipliedColorU8::from_rgba(
+            scale(px.red()),
+            scale(px.green()),
+            scale(px.blue()),
+            scale(px.alpha()),
+        ) {
+            *px = q;
         }
     }
 }
@@ -1285,7 +1347,25 @@ fn layer_blend(paint: LayerPaint) -> crate::compositor::Blend {
 /// confined to the case that is currently **wrong**, which keeps the
 /// pdfium parity gate a signal about correctness rather than about
 /// rounding.
-fn composite_group_result(dest: &mut Pixmap, group: &Pixmap, paint: LayerPaint) {
+fn composite_group_result(
+    dest: &mut Pixmap,
+    group: &Pixmap,
+    paint: LayerPaint,
+    mask: Option<&Mask>,
+) {
+    // §11.4.5 — the mask applies to the group's RESULT. Applied to a copy
+    // rather than in place because `group` is also run 1's `α_gn` source
+    // for the non-isolated path, and mutating it there would silently
+    // change what backdrop removal divides by.
+    let masked;
+    let group = if let Some(m) = mask {
+        let mut g = group.clone();
+        apply_mask(&mut g, m);
+        masked = g;
+        &masked
+    } else {
+        group
+    };
     if let Some(mode) = paint.nonseparable {
         crate::blend_nonsep::composite_layer(dest, group, mode, paint.opacity.clamp(0.0, 1.0));
     } else {
@@ -1327,11 +1407,18 @@ fn composite_group_result(dest: &mut Pixmap, group: &Pixmap, paint: LayerPaint) 
 /// remaining quantisation is a documented shortfall of this stage rather
 /// than a solved problem: `Pass 97.1`'s colorant buffer is where the
 /// accumulation itself becomes `f32`.
-fn composite_non_isolated_group(dest: &mut Pixmap, iso: &Pixmap, nis: &Pixmap, paint: LayerPaint) {
+fn composite_non_isolated_group(
+    dest: &mut Pixmap,
+    iso: &Pixmap,
+    nis: &Pixmap,
+    paint: LayerPaint,
+    mask: Option<&Mask>,
+) {
     use crate::compositor::{Pixel, composite_element, remove_backdrop};
 
     let blend = layer_blend(paint);
     let opacity = paint.opacity.clamp(0.0, 1.0);
+    let mask = mask.map(Mask::data);
     let n = dest
         .pixels()
         .len()
@@ -1347,12 +1434,20 @@ fn composite_non_isolated_group(dest: &mut Pixmap, iso: &Pixmap, nis: &Pixmap, p
         }
         let backdrop = Pixel::from_premultiplied(dest.pixels()[idx]);
         let over = Pixel::from_premultiplied(nis.pixels()[idx]);
+        // ★ The removal divides by the UNMASKED `α_gn`. The mask is not
+        // part of the group's own accumulation — §11.4.5 applies it to the
+        // finished result — so masking before the removal would divide by
+        // the wrong number and shift the colour, not just the alpha.
         let c = remove_backdrop(over, backdrop, agn);
-        // §11.4.5: the constant alpha at the `Do` multiplies the group's
-        // own alpha to give the source alpha of the group-as-element.
+        // §11.4.5: the constant alpha at the `Do`, and the soft mask,
+        // multiply the group's own alpha to give the source alpha of the
+        // group-as-element. §11.6.4.1: under the default `/AIS false` the
+        // mask value is an OPACITY (`q_m`), which is why it multiplies
+        // alpha here rather than shape.
+        let m = mask.map_or(1.0, |d| d.get(idx).map_or(1.0, |v| f32::from(*v) / 255.0));
         let source = Pixel {
             c,
-            a: agn * opacity,
+            a: agn * opacity * m,
         };
         if let Some(px) = composite_element(backdrop, source, blend).to_premultiplied() {
             dest.pixels_mut()[idx] = px;

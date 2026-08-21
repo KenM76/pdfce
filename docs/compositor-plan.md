@@ -115,13 +115,54 @@ appearance for the overprint patches).
 > 4. `transparency_groups_knockout_approximated` **changed meaning** —
 >    from "this group is an approximation" to "these elements inside it
 >    were", which is zero for a knockout group pdfce rendered exactly.
+> 5. **The soft mask reaches the group's result** (§11.4.5), and
+>    `outer_is_neutral` learned about soft masks — the third instance of
+>    a graphics-state field being absent from the "is the state still
+>    default?" predicate, which the comment above that predicate had
+>    already named twice in past tense.
+> 6. **Full-corpus render parity is unchanged**, 4,023 files, measured
+>    twice — this branch and a worktree at `2e6bb83` — identical bucket
+>    for bucket, band for band, same single unexplained file. That is the
+>    intended result and it is why the *isolated* group composite still
+>    goes through `tiny_skia::draw_pixmap`: pdfce's `f32` path computes
+>    the same function with different rounding, so routing the already-
+>    correct case through it would move every anti-aliased edge in the
+>    corpus and turn the parity gate into a rounding detector.
+>
+>    ⚠ **`tools/render-parity/out/summary.json` is STALE and not
+>    comparable to a current run** — it records a bucket vocabulary the
+>    harness no longer emits (`benign` / `known-gap` against `below-band`
+>    / `disclosed-gap-small`). Comparing two current runs is the only
+>    thing that means anything until it is re-based.
 >
 > ### Still owed from Stage A, and named rather than left implicit
 >
-> * **Soft mask on the group RESULT** (§11.4.5) is NOT done. Masks are
->   still folded into the clip. Four patches (`1_GWG1610`, `1_GWG1611`,
->   `1_GWG168`, `1_GWG169`) and it is the one Stage A item with no §11.3.4
->   dependency, so it is the next thing that can move the board on its own.
+> * ~~**Soft mask on the group RESULT** (§11.4.5) is NOT done.~~
+>   **SHIPPED as `Pass 97.0d`, same session**, and it was indeed the one
+>   Stage A item with no §11.3.4 dependency. Reference-strip correlation:
+>
+>   | patch | before | after |
+>   |---|---:|---:|
+>   | `1_GWG1610` Softmasks Text part1 | 0.576 | **0.962** |
+>   | `1_GWG168` Softmasks Vector part1 | 0.725 | **0.978** |
+>   | `1_GWG169` Softmasks Vector part2 | 0.905 | **0.986** |
+>
+>   `1_GWG1611` still traps once and `1_GWG166` / `3_GWG167` still report
+>   `corr=None` (their strips could not be located at all, which is a
+>   harness limit rather than a render result).
+>
+>   ★ **AND IT LEAVES AN INSTRUMENT PROBLEM, named rather than solved.**
+>   Those three stay in the UNRESOLVED bucket because `ghent-check.py` has
+>   **no calibrated threshold** for reference-strip patches — its own
+>   output says so. There is now a visible bimodal split to calibrate
+>   against (`0.96`–`0.99` for the three above against `0.04`–`0.41` for
+>   the 16-bit patches), so the calibration is finally *possible*.
+>   **Deliberately not done in the same change that moved the numbers**:
+>   calibrating the instrument immediately after making it report what you
+>   wanted is not a measurement. It needs its own session, its own
+>   justification, and preferably a patch whose expected verdict is known
+>   independently — which is exactly how `ghent-check`'s trap threshold was
+>   calibrated in the first place (GWG 16.0, 2026-08-17).
 > * **`f_g` is approximated by `α_g`** for a group used as an element of a
 >   knockout group — exact whenever that group's own elements are opaque,
 >   which is §11.4 corpus §7.4's stated safe-skip condition.

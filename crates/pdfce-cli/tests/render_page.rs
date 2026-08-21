@@ -497,6 +497,7 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // and inserting in the middle would break every consumer
             // parsing it positionally.
             "groups_backdrop_reruns",
+            "soft_masks_on_group_result",
         ],
         "metrics key order is part of the stable contract"
     );

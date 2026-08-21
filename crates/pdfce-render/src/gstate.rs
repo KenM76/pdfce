@@ -284,6 +284,34 @@ pub struct GraphicsState {
     /// that case (`soft_masks_reset_stale`) instead of silently producing
     /// the wrong clip.
     pub clip_before_smask: Option<Option<std::sync::Arc<tiny_skia::Mask>>>,
+    /// The soft mask **as built**, before it was multiplied into
+    /// [`Self::clip`] — §11.6.5.
+    ///
+    /// # Why the same mask is kept twice
+    ///
+    /// Because it is two different things depending on what it is applied
+    /// to, and until `Pass 97.0` pdfce only had the first:
+    ///
+    /// * For an **elementary object** — a fill, a stroke, a glyph, an
+    ///   image — §11.6.4.1 makes the mask value the object's `q_m`, which
+    ///   multiplies coverage exactly as a clip does. Folding it into
+    ///   [`Self::clip`] is therefore the operation, not an approximation
+    ///   of it.
+    /// * For a **transparency group** — §11.4.5 — the mask applies to the
+    ///   group's **RESULT**, once, after its contents have been
+    ///   composited together. Folding it into the clip applies it to each
+    ///   object *inside* instead, which multiplies twice wherever two of
+    ///   them overlap and reaches the wrong answer wherever they blend.
+    ///
+    /// So the folded copy stays (every paint site already honours it) and
+    /// this one exists so a group `Do` can take the mask **out** of its
+    /// contents' clip and hand it to the composite.
+    ///
+    /// §11.6.6 also requires the mask to be **reset to `None` inside** the
+    /// group, "to ensure that they are not applied twice" — which is the
+    /// same statement from the other side, and is why a group's inner
+    /// state clears this field.
+    pub soft_mask: Option<std::sync::Arc<tiny_skia::Mask>>,
     /// Number of clips established since the soft mask was set, used only
     /// to detect the stale-restore case described on
     /// [`Self::clip_before_smask`].
@@ -362,6 +390,7 @@ impl GraphicsState {
             overprint_mode: 0,
             clip: None,
             clip_before_smask: None,
+            soft_mask: None,
             clips_since_smask: 0,
             clip_bbox: None,
             clip_id: None,
