@@ -365,6 +365,32 @@ pub(crate) struct CmykBuffer {
     /// replaces §11.4.4 — which is why it lives here rather than as a flag
     /// a call site could forget to consult.
     knockout: Option<Box<KnockoutPlanes>>,
+    /// A page-sized coverage mask, **reused across every paint**.
+    ///
+    /// ★ THIS FIELD IS A PERFORMANCE FIX FOR A REGRESSION THIS MODULE
+    /// SHIPPED, and the number is worth carrying because the mistake was
+    /// documented-and-deferred rather than overlooked.
+    ///
+    /// `Pass 97.1e` allocated a fresh `Mask::new(page)` per paint. Its own
+    /// module documentation said so, cited pdfce's measurement of that
+    /// allocation at **259 µs**, and deferred the fix on the grounds that
+    /// bundling a layout optimisation into a correctness Pass makes two
+    /// kinds of regression indistinguishable. That reasoning was sound and
+    /// the arithmetic behind it was never done: **every glyph is a fill**,
+    /// a text-heavy page has thousands, and the per-paint cost was not one
+    /// page-sized pass but roughly four — allocate, zero, copy the clip
+    /// (`to_vec`), and multiply, each over the whole page regardless of
+    /// how small the mark was.
+    ///
+    /// Measured on the Ghent combined document at scale 2 (1224×1584):
+    /// page 1 went from **632 ms to 3,713 ms**, a 5.9× slowdown on a page
+    /// carrying a *single* transparency group — so the cost tracked the
+    /// paint count, not the group count.
+    ///
+    /// ⇒ The deferral was right about the risk and wrong about the size.
+    /// "Defer the optimisation" is only safe when somebody has multiplied
+    /// the per-unit cost by the unit count.
+    coverage: Option<Mask>,
 }
 
 impl CmykBuffer {
@@ -413,6 +439,9 @@ impl CmykBuffer {
             unbridged_images: 0,
             intent,
             knockout: None,
+            // Allocated once, here, and reused by every paint for the life
+            // of the buffer.
+            coverage: Mask::new(width, height),
         })
     }
 
@@ -929,6 +958,27 @@ impl CmykBuffer {
             }
         }
         Some(out)
+    }
+
+    /// Borrow the reusable coverage mask, leaving `None` behind.
+    ///
+    /// Take/put rather than a `&mut` accessor because the caller needs the
+    /// mask **and** the buffer mutably at the same time — it rasterises
+    /// into the first and composites into the second — and those are two
+    /// mutable borrows of one struct. Moving the mask out for the duration
+    /// is the cheap, obvious way to say that, and it costs an `Option`
+    /// discriminant.
+    ///
+    /// A caller that takes must put back; one that does not merely makes
+    /// the next paint allocate its own, which is the pre-fix behaviour and
+    /// is slow rather than wrong.
+    pub(crate) fn take_coverage(&mut self) -> Option<Mask> {
+        self.coverage.take()
+    }
+
+    /// Return the coverage mask borrowed by [`CmykBuffer::take_coverage`].
+    pub(crate) fn put_coverage(&mut self, mask: Mask) {
+        self.coverage = Some(mask);
     }
 
     /// Turn a fresh buffer into a **knockout group accumulator** over

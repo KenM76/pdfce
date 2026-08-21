@@ -110,16 +110,26 @@ pub(crate) fn device_region(
 /// travel together, and these do not.
 #[allow(clippy::too_many_arguments)]
 fn coverage(
-    width: u32,
-    height: u32,
+    cov: &mut Mask,
+    region: (u32, u32, u32, u32),
     path: &Path,
     rule: Option<FillRule>,
     stroke: Option<&Stroke>,
     ctm: Transform,
     clip: ClipRef<'_>,
     anti_alias: bool,
-) -> Option<Mask> {
-    let mut cov = Mask::new(width, height)?;
+) -> Option<()> {
+    let width = cov.width();
+    let (x0, y0, x1, y1) = region;
+    // ★ CLEAR ONLY THE REGION WE ARE ABOUT TO USE. The mask is reused
+    // across every paint on the page, so it carries the previous paint's
+    // coverage; `fill_path` accumulates rather than replacing. Clearing
+    // the whole page here would reintroduce exactly the per-paint
+    // full-page pass this reuse exists to remove.
+    for y in y0..y1 {
+        let row = (y * width) as usize;
+        cov.data_mut()[row + x0 as usize..row + x1 as usize].fill(0);
+    }
     if let Some(r) = rule {
         cov.fill_path(path, r, anti_alias, ctm);
     } else {
@@ -127,15 +137,25 @@ fn coverage(
         cov.fill_path(&stroked, FillRule::Winding, anti_alias, ctm);
     }
     if let Some(old) = clip.mask {
-        let old_data = old.data().to_vec();
-        for (n, o) in cov.data_mut().iter_mut().zip(old_data.iter()) {
-            #[allow(clippy::cast_possible_truncation)]
-            {
-                *n = ((u16::from(*n) * u16::from(*o)) / 255) as u8;
+        // ★ AND MULTIPLY THE CLIP ONLY OVER THE REGION, reading the clip
+        // in place. The previous version did `old.data().to_vec()` — a
+        // full page-sized COPY — and then multiplied across the whole
+        // page, per paint. On a text-heavy page that is two more
+        // page-sized passes per glyph.
+        let old_data = old.data();
+        let cov_data = cov.data_mut();
+        for y in y0..y1 {
+            let row = (y * width) as usize;
+            for x in x0 as usize..x1 as usize {
+                let i = row + x;
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    cov_data[i] = ((u16::from(cov_data[i]) * u16::from(old_data[i])) / 255) as u8;
+                }
             }
         }
     }
-    Some(cov)
+    Some(())
 }
 
 /// Paint a solid [`BrushSpec`] into a colorant buffer.
@@ -189,9 +209,29 @@ pub(crate) fn paint_solid_into_cmyk(
     let Some(region) = device_region(bounds, 1.0, w, h) else {
         return;
     };
-    let Some(cov) = coverage(w, h, path, rule, stroke, ctm, clip, brush.anti_alias) else {
+    // Borrowed from the buffer and put back before returning on EVERY
+    // path, so the next paint finds it there. Failing to return it is not
+    // a correctness bug — the next `take` yields `None` and that caller
+    // allocates — but it is the whole performance fix, so the returns
+    // below are deliberate rather than incidental.
+    let Some(mut cov) = buf.take_coverage().or_else(|| Mask::new(w, h)) else {
         return;
     };
+    if coverage(
+        &mut cov,
+        region,
+        path,
+        rule,
+        stroke,
+        ctm,
+        clip,
+        brush.anti_alias,
+    )
+    .is_none()
+    {
+        buf.put_coverage(cov);
+        return;
+    }
     let blend = Blend::from_tiny_skia(brush.blend).unwrap_or(Blend::Normal);
     match &brush.brush {
         Brush::Solid { rgba } => {
@@ -211,6 +251,7 @@ pub(crate) fn paint_solid_into_cmyk(
             buf.note_unbridged_image();
         }
     }
+    buf.put_coverage(cov);
 }
 
 #[cfg(test)]
