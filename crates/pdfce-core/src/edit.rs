@@ -640,6 +640,18 @@ pub enum CommandKind {
     /// restores the byte-identical pre-move content stream (Pass 3.1 command
     /// log). See [`EditSession::move_object`].
     MoveObject,
+    /// A selection of vector objects was **transformed** (`Pass 113.0`):
+    /// each object's operator run was wrapped in `q <cm> … Q` so one
+    /// page-space matrix scaled, rotated, sheared or moved the whole
+    /// selection. ONE undoable command.
+    ///
+    /// **Deliberately not folded into [`Self::MoveObject`].** That variant is
+    /// already overloaded for the single- and multi-object move, and a
+    /// transform is a different operation by every measure a reader of the
+    /// undo stack cares about: it rewrites no operand, it applies to kinds a
+    /// move refuses outright, and its undo label should not say "move" when
+    /// the operator rotated something.
+    TransformObjects,
     /// One vector object was **deleted** (Pass 9c-min, decision 011 §2.5):
     /// its construction + painting operators were removed from the content
     /// stream (surgery, R46/§5.7). ONE undoable command; undo restores the
@@ -3246,6 +3258,37 @@ impl VertexEdit {
 /// the number, which the operator can already see baked into the drawing. The
 /// shell cannot reconstruct the old value after the fact — the geometry it was
 /// derived from is gone.
+/// What [`EditSession::transform_objects`] did — and what
+/// [`EditSession::transform_preview`] says it *would* do (`Pass 113.0`).
+///
+/// One type for both, deliberately: the preview is the verb's own planner run
+/// without the commit, so a caller comparing the two is comparing the same
+/// fields rather than two shapes it has to reconcile.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct TransformOutcome {
+    /// How many objects were wrapped.
+    ///
+    /// **Not necessarily the length of the caller's index list.** Duplicate
+    /// indices, and an object whose byte span is contained inside another
+    /// selected object's, are collapsed by the planner — because wrapping a
+    /// contained span twice would apply the transform to those marks twice,
+    /// which is the one arithmetic error here that renders as *almost* right.
+    /// A shell that shows "12 objects moved" needs this number rather than its
+    /// own count.
+    pub objects_transformed: u64,
+    /// Whether a singular transform was **clamped** rather than applied
+    /// ([`SingularPolicy::Clamp`](crate::vector::SingularPolicy::Clamp)).
+    ///
+    /// Always `false` under the default policy, which refuses instead. When
+    /// true, the selection is not the size the operator's gesture asked for —
+    /// it asked for zero — so a shell that ignores this shows a drag that
+    /// visibly did not land where the pointer was.
+    pub clamped: bool,
+    /// Every operator-facing disclosure, verbatim.
+    pub disclosures: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct VertexOutcome {
@@ -7352,6 +7395,138 @@ impl EditSession {
         })
     }
 
+    /// **Transform several objects at once** — scale, rotate, shear or move a
+    /// whole selection by one page-space matrix, as ONE undoable command
+    /// (`Pass 113.0`).
+    ///
+    /// # The verb the consuming shell was blocked on, and why `move_objects`
+    /// could not become it
+    ///
+    /// `move_objects` rewrites numeric **operands**, which can express
+    /// translation and nothing else — a rotated rectangle has no `re`
+    /// spelling, `line_width` is a user-space scalar a coordinate scale leaves
+    /// behind, and neither text nor images have coordinate operands at all
+    /// (which is exactly why that verb refuses them with `NotAPath`). This
+    /// wraps each object's operator run in `q <cm> … Q` instead, which never
+    /// looks at an operand and is therefore **kind-agnostic by construction**:
+    /// a path, a text object, an image XObject, a form XObject and an inline
+    /// image are all just a byte span with a CTM. See
+    /// [`crate::vector::plan_transform_many`] for the full argument and for
+    /// why the emitted matrix is not the one passed in.
+    ///
+    /// # `matrix` is in PAGE space
+    ///
+    /// Because that is the space the operator gestures in.
+    /// [`Matrix::about`](crate::vector::Matrix::about) composes a scale or
+    /// rotation around the pivot a resize grip or rotation handle actually
+    /// turns on — the pivot is the **shell's** to choose, by its own request,
+    /// so this verb does not invent one.
+    ///
+    /// # Two named refusals, because they drive different UI
+    ///
+    /// The requesting shell asked for these to be distinguishable, in as many
+    /// words, because *"the two produce different UI"*:
+    ///
+    /// - [`VectorEditError::DegenerateCtm`](crate::vector::VectorEditError::DegenerateCtm)
+    ///   — **this object cannot be transformed at all** (its own captured CTM
+    ///   is singular, so there is no local matrix to emit). Do not offer a
+    ///   handle.
+    /// - [`VectorEditError::SingularTransform`](crate::vector::VectorEditError::SingularTransform)
+    ///   — **this drag is degenerate** (the requested matrix maps area to
+    ///   zero). Offer the handle; refuse on release. A *negative* scale is not
+    ///   this — a mirror is perfectly invertible.
+    ///
+    /// # Defaults, and the options beside them (`R206`)
+    ///
+    /// Both behaviours ship for both questions and the default is picked from
+    /// ordinary-operator expectation, per the operator's own ruling: *"make
+    /// things work both ways as options. default it to your best guess as to
+    /// what would be normally expected."* A **mixed selection transforms
+    /// whole** ([`MixedSelection`](crate::vector::MixedSelection)) and a
+    /// **singular matrix is refused by name**
+    /// ([`SingularPolicy`](crate::vector::SingularPolicy)). `R168` is
+    /// unaffected: if any object in the selection cannot be transformed at
+    /// all, the whole call refuses with a stated reason rather than
+    /// transforming the part that qualified.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] carrying any of the refusals above, plus
+    /// `ObjectOutOfRange` for a stale index and `OverlappingObjectSpans` for a
+    /// torn model; and the session-level guards this verb shares with every
+    /// other content surgery — encryption, an enforced certification, a page
+    /// with no `/Contents`.
+    pub fn transform_objects(
+        &mut self,
+        page_index: usize,
+        object_indices: &[usize],
+        matrix: crate::vector::Matrix,
+        options: crate::vector::TransformOptions,
+    ) -> Result<TransformOutcome, EditError> {
+        let planned = self.vector_surgery_planned(
+            CommandKind::TransformObjects,
+            page_index,
+            |stream, model| {
+                let objs = Self::resolve_objects(model, object_indices)?;
+                let refs: Vec<&crate::vector::VectorObject> = objs.to_vec();
+                Ok(crate::vector::plan_transform_many(
+                    stream, &refs, matrix, options,
+                )?)
+            },
+        )?;
+        Ok(TransformOutcome {
+            objects_transformed: planned.operators_touched as u64,
+            clamped: planned.disclosures.iter().any(|d| d.contains("CLAMPED")),
+            disclosures: planned.disclosures,
+        })
+    }
+
+    /// Ask what [`Self::transform_objects`] **would** do, without doing it
+    /// (`Pass 113.1`).
+    ///
+    /// `&self`, side-effect-free: it decomposes the session's current page,
+    /// runs the identical planner, and throws the planned bytes away. Calling
+    /// it a hundred times changes nothing.
+    ///
+    /// # Why this exists, asked for by name three times
+    ///
+    /// *A verb with no preflight makes the UI find out by pressing* — the
+    /// requesting shell's own words, citing `adopt_widget`. A greyed-out menu
+    /// item needs the answer **before** the gesture; discovering it from a
+    /// refusal after the operator has dragged is a worse version of the same
+    /// information.
+    ///
+    /// ★ **It shares ONE body with the verb**, in the shape
+    /// [`Self::vertex_edit_preview`] established, so `preview(..).is_ok()`
+    /// **is** the predicate rather than a second implementation that agrees
+    /// with it until somebody changes one. A preview that says yes and a call
+    /// that then refuses is not a reachable state.
+    ///
+    /// # Errors
+    ///
+    /// Exactly what [`Self::transform_objects`] would raise for the same
+    /// arguments.
+    pub fn transform_preview(
+        &self,
+        page_index: usize,
+        object_indices: &[usize],
+        matrix: crate::vector::Matrix,
+        options: crate::vector::TransformOptions,
+    ) -> Result<TransformOutcome, EditError> {
+        let planned = self.vector_plan_only(page_index, |stream, model| {
+            let objs = Self::resolve_objects(model, object_indices)?;
+            let refs: Vec<&crate::vector::VectorObject> = objs.to_vec();
+            Ok(crate::vector::plan_transform_many(
+                stream, &refs, matrix, options,
+            )?)
+        })?;
+        Ok(TransformOutcome {
+            objects_transformed: planned.operators_touched as u64,
+            clamped: planned.disclosures.iter().any(|d| d.contains("CLAMPED")),
+            disclosures: planned.disclosures,
+        })
+    }
+
     /// Delete **several objects at once** from page `page_index`, as ONE
     /// undoable command (Pass 47.0, R168).
     ///
@@ -7853,6 +8028,106 @@ impl EditSession {
     /// This previously read the base unconditionally and refused once a page
     /// had been touched. See the comment at the read site for why that was
     /// backwards.
+    /// Resolve a selection of object indices against a decomposition, refusing
+    /// the WHOLE call on the first stale index (`R168`: never a silent
+    /// subset).
+    ///
+    /// Deliberately no kind check — that is what makes
+    /// [`EditSession::transform_objects`] kind-agnostic, and it is the
+    /// difference between this and `move_objects`' own resolution loop, which
+    /// calls `vector_object_as_path` on every entry.
+    fn resolve_objects<'m>(
+        model: &'m crate::vector::PageObjects,
+        indices: &[usize],
+    ) -> Result<Vec<&'m crate::vector::VectorObject>, EditError> {
+        let count = model.objects.len();
+        indices
+            .iter()
+            .map(|&i| {
+                model.objects.get(i).ok_or_else(|| {
+                    EditError::from(crate::vector::VectorEditError::ObjectOutOfRange {
+                        index: i,
+                        count,
+                    })
+                })
+            })
+            .collect()
+    }
+
+    /// [`Self::vector_surgery`], but returning the whole
+    /// [`PlannedEdit`](crate::vector::PlannedEdit) rather than its disclosures
+    /// alone (`Pass 113.0`).
+    ///
+    /// `vector_surgery` drops `operators_touched` on the floor, which was
+    /// harmless while every caller's answer was "the object you named". A
+    /// transform reports **how many objects it wrapped**, and that number is
+    /// not recoverable from the caller's own index list — duplicates and
+    /// containment are collapsed by the planner. One body, two return shapes,
+    /// so the two cannot drift.
+    fn vector_surgery_planned(
+        &mut self,
+        kind: CommandKind,
+        page_index: usize,
+        plan: impl FnOnce(
+            &crate::content::ContentStream,
+            &crate::vector::PageObjects,
+        ) -> Result<crate::vector::PlannedEdit, EditError>,
+    ) -> Result<crate::vector::PlannedEdit, EditError> {
+        self.vector_surgery_inner(Some(kind), page_index, plan)
+    }
+
+    /// Plan a vector surgery and **commit nothing** — the preflight half
+    /// (`Pass 113.1`).
+    ///
+    /// `&self` by signature and by behaviour: the same decomposition, the same
+    /// planner, no staging and no command. This is what lets a preview and a
+    /// verb share one body rather than one intention.
+    fn vector_plan_only(
+        &self,
+        page_index: usize,
+        plan: impl FnOnce(
+            &crate::content::ContentStream,
+            &crate::vector::PageObjects,
+        ) -> Result<crate::vector::PlannedEdit, EditError>,
+    ) -> Result<crate::vector::PlannedEdit, EditError> {
+        // `&self` cannot call the committing path, so the read half is
+        // duplicated here in the smallest form that keeps the two honest: the
+        // guards and the decomposition. If those ever diverge, a preview would
+        // answer for a document the verb does not see -- so any change to the
+        // guard set below belongs in `vector_surgery_inner` too, and both
+        // carry this note.
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        let pages = page_tree::pages(&self.base)?;
+        let count = pages.len();
+        let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
+            index: page_index,
+            count,
+        })?;
+        let content_id = *page
+            .contents
+            .first()
+            .ok_or(EditError::VectorEditNoContents { page_index })?;
+        let stream = self
+            .current_page_content(content_id, page)
+            .map_err(EditError::VectorEditContent)?;
+        let base_view = self.base.view();
+        let resolver = crate::vector::DocumentXObjects {
+            view: &base_view,
+            resources: &page.resources,
+        };
+        let fonts = crate::vector::DocumentFonts::new(&base_view, &page.resources);
+        let model = crate::vector::decompose_with_fonts(
+            &stream,
+            crate::vector::Matrix::IDENTITY,
+            &resolver,
+            &fonts,
+        );
+        plan(&stream, &model)
+    }
+
     fn vector_surgery(
         &mut self,
         kind: CommandKind,
@@ -7862,6 +8137,28 @@ impl EditSession {
             &crate::vector::PageObjects,
         ) -> Result<crate::vector::PlannedEdit, EditError>,
     ) -> Result<Vec<String>, EditError> {
+        self.vector_surgery_inner(Some(kind), page_index, plan)
+            .map(|planned| planned.disclosures)
+    }
+
+    /// The shared body of [`Self::vector_surgery`] and
+    /// [`Self::vector_surgery_planned`] (`Pass 113.0`).
+    ///
+    /// `kind` is an `Option` so the two wrappers differ in exactly one thing —
+    /// whether a command is committed — rather than in a copy of the guards,
+    /// the page lookup and the decomposition. `None` is currently unused by
+    /// any caller and is kept because the alternative is a second body: see
+    /// [`Self::vector_plan_only`]'s own note on the read half it duplicates
+    /// for `&self`.
+    fn vector_surgery_inner(
+        &mut self,
+        kind: Option<CommandKind>,
+        page_index: usize,
+        plan: impl FnOnce(
+            &crate::content::ContentStream,
+            &crate::vector::PageObjects,
+        ) -> Result<crate::vector::PlannedEdit, EditError>,
+    ) -> Result<crate::vector::PlannedEdit, EditError> {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(EditError::DocumentEncrypted);
         }
@@ -7942,14 +8239,15 @@ impl EditSession {
                 &resolver,
                 &fonts,
             );
-            let planned = plan(&stream, &model)?;
-            (planned.content, planned.disclosures)
+            plan(&stream, &model)?
         };
-        let (new_content, disclosures) = new_content;
 
-        let command = self.text_edit_command(kind, content_id, page, new_content);
-        self.commit(command);
-        Ok(disclosures)
+        if let Some(kind) = kind {
+            let command =
+                self.text_edit_command(kind, content_id, page, new_content.content.clone());
+            self.commit(command);
+        }
+        Ok(new_content)
     }
 
     /// The page's CURRENT decoded content, tokenized: the session's own

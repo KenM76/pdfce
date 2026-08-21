@@ -4365,6 +4365,69 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Transform** a selection of vector objects (Pass 113.0): scale, rotate,
+    /// shear or move them by one page-space matrix, by wrapping each object's
+    /// operator run in `q <cm> ... Q`.
+    ///
+    /// Works on ANY object kind — path, text, image XObject, form XObject,
+    /// inline image — because wrapping never looks at an operand. That is what
+    /// `object-move` cannot do: operand rewriting can express translation and
+    /// nothing else, which is why it refuses text and images outright.
+    ///
+    /// The transform is built from `--scale`, `--rotate` and `--translate`,
+    /// composed in that order, and applied about `--pivot` (default: the
+    /// selection's own bounding-box centre, so a scale or rotation stays where
+    /// the objects are instead of flying toward the page origin).
+    ///
+    /// `--objects` takes 0-based paint-order indices, the numbering
+    /// `object-list` prints. `--preview` plans and reports WITHOUT writing
+    /// anything, which is the same body the real verb runs.
+    ObjectTransform {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object indices, comma-separated (`3,4,7`).
+        #[arg(long, value_name = "N,N,...")]
+        objects: String,
+        /// Uniform or `SX,SY` scale factor. A NEGATIVE factor is a mirror and
+        /// is perfectly legal; exactly zero is refused (see `--on-singular`).
+        #[arg(long, value_name = "S|SX,SY", allow_hyphen_values = true)]
+        scale: Option<String>,
+        /// Rotation in DEGREES, counter-clockwise.
+        #[arg(long, value_name = "DEG", allow_hyphen_values = true)]
+        rotate: Option<f64>,
+        /// Page-space translation `DX,DY` in points, applied last.
+        #[arg(long, value_name = "DX,DY", allow_hyphen_values = true)]
+        translate: Option<String>,
+        /// Pivot `X,Y` in page points for the scale/rotation. Defaults to the
+        /// selection's bounding-box centre.
+        #[arg(long, value_name = "X,Y", allow_hyphen_values = true)]
+        pivot: Option<String>,
+        /// What to do when the selection holds more than one object kind:
+        /// `whole` (default) or `refuse`.
+        #[arg(long, value_name = "whole|refuse", default_value = "whole")]
+        on_mixed: String,
+        /// What to do when the transform is singular (maps area to zero):
+        /// `refuse` (default) or `clamp:MIN`.
+        #[arg(long, value_name = "refuse|clamp:MIN", default_value = "refuse")]
+        on_singular: String,
+        /// Plan and report WITHOUT writing anything (Pass 113.1). `--output`
+        /// is then optional and ignored.
+        #[arg(long)]
+        preview: bool,
+        /// Output path. Required unless `--preview`.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// **Delete** a vector object (Pass 9c-min, decision 011 §2.5): remove an
     /// object's construction + painting operators from the content stream via
     /// surgery (R46/§5.7). Works on any object kind (path/text/image). NOT
@@ -6508,6 +6571,35 @@ fn run() -> ExitCode {
             dx,
             dy,
             output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::ObjectTransform {
+            input,
+            page,
+            objects,
+            scale,
+            rotate,
+            translate,
+            pivot,
+            on_mixed,
+            on_singular,
+            preview,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_object_transform(&ObjectTransformArgs {
+            input: &input,
+            page,
+            objects: &objects,
+            scale: scale.as_deref(),
+            rotate,
+            translate: translate.as_deref(),
+            pivot: pivot.as_deref(),
+            on_mixed: &on_mixed,
+            on_singular: &on_singular,
+            preview,
+            output: output.as_deref(),
             mode,
             verify_undo,
         }),
@@ -23364,6 +23456,306 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
         u32::from(outcome.undo_identical),
     );
     finish_edit(args.input, &outcome)
+}
+
+/// Arguments for [`cmd_object_transform`], grouped so the handler stays under
+/// the clippy `too_many_arguments` bound (the `EditTextArgs` pattern).
+struct ObjectTransformArgs<'a> {
+    input: &'a Path,
+    page: u32,
+    /// `--objects`, unparsed.
+    objects: &'a str,
+    scale: Option<&'a str>,
+    /// Degrees, counter-clockwise.
+    rotate: Option<f64>,
+    translate: Option<&'a str>,
+    pivot: Option<&'a str>,
+    on_mixed: &'a str,
+    on_singular: &'a str,
+    preview: bool,
+    output: Option<&'a Path>,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// Parse a comma-separated list of 0-based object indices.
+///
+/// # Errors
+///
+/// The operator-facing message, ready to print.
+fn parse_object_indices(raw: &str) -> Result<Vec<usize>, String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            s.parse::<usize>()
+                .map_err(|_| format!("--objects: {s:?} is not a 0-based object index"))
+        })
+        .collect()
+}
+
+/// Parse an `X,Y` pair, or a single number meaning both.
+///
+/// # Errors
+///
+/// The operator-facing message, ready to print.
+fn parse_pair(flag: &str, raw: &str) -> Result<(f64, f64), String> {
+    let parts: Vec<&str> = raw.split(',').map(str::trim).collect();
+    let num = |s: &str| {
+        s.parse::<f64>()
+            .map_err(|_| format!("{flag}: {s:?} is not a number"))
+    };
+    match parts.as_slice() {
+        [one] => {
+            let v = num(one)?;
+            Ok((v, v))
+        }
+        [x, y] => Ok((num(x)?, num(y)?)),
+        _ => Err(format!("{flag}: expected `N` or `X,Y`, got {raw:?}")),
+    }
+}
+
+/// `object-transform` — scale/rotate/shear/move a selection by one page-space
+/// matrix (Pass 113.0/113.1/113.2).
+///
+/// # Why the CLI composes the matrix rather than taking six numbers
+///
+/// A `--matrix a,b,c,d,e,f` flag would be a faithful mirror of the API and a
+/// poor command line: nobody types a rotation matrix, and the pivot — which is
+/// what makes a scale or a rotation land where the objects are rather than
+/// flying toward the page origin — would have to be pre-composed by the
+/// caller. So the flags name the gesture and the composition happens here,
+/// through the same `Matrix::about` the shell uses.
+///
+/// # `--preview` is the same body, not a dry run
+///
+/// It calls `EditSession::transform_preview`, which shares one planner with
+/// the verb. A preview that said yes where the verb refuses is not a reachable
+/// state, which is the whole point of the preflight the consuming shell asked
+/// for three times.
+fn cmd_object_transform(args: &ObjectTransformArgs<'_>) -> u8 {
+    use pdfce_core::vector::{Matrix, MixedSelection, Point, SingularPolicy, TransformOptions};
+
+    let page_index = (args.page.max(1) - 1) as usize;
+    let indices = match parse_object_indices(args.objects) {
+        Ok(v) if !v.is_empty() => v,
+        Ok(_) => {
+            eprintln!("pdfce-cli: object-transform refused: --objects named no objects");
+            return exit::EDIT_REFUSED;
+        }
+        Err(message) => {
+            eprintln!("pdfce-cli: object-transform refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    if !args.preview && args.output.is_none() {
+        eprintln!("pdfce-cli: object-transform refused: --output is required unless --preview");
+        return exit::EDIT_REFUSED;
+    }
+
+    let mixed = match args.on_mixed {
+        "whole" => MixedSelection::TransformWhole,
+        "refuse" => MixedSelection::RefuseHeterogeneous,
+        other => {
+            eprintln!(
+                "pdfce-cli: object-transform refused: --on-mixed {other:?} is not whole or refuse"
+            );
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let singular = if args.on_singular == "refuse" {
+        SingularPolicy::Refuse
+    } else if let Some(min) = args.on_singular.strip_prefix("clamp:") {
+        match min.parse::<f64>() {
+            Ok(min) if min > 0.0 => SingularPolicy::Clamp { min },
+            _ => {
+                eprintln!(
+                    "pdfce-cli: object-transform refused: --on-singular clamp:MIN needs a positive MIN, got {min:?}"
+                );
+                return exit::EDIT_REFUSED;
+            }
+        }
+    } else {
+        eprintln!(
+            "pdfce-cli: object-transform refused: --on-singular {:?} is not refuse or clamp:MIN",
+            args.on_singular
+        );
+        return exit::EDIT_REFUSED;
+    };
+    let options = TransformOptions::default()
+        .with_mixed(mixed)
+        .with_singular(singular);
+
+    let scale = match args.scale.map(|raw| parse_pair("--scale", raw)) {
+        Some(Ok(pair)) => Some(pair),
+        Some(Err(message)) => {
+            eprintln!("pdfce-cli: object-transform refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+        None => None,
+    };
+    let translate = match args.translate.map(|raw| parse_pair("--translate", raw)) {
+        Some(Ok(pair)) => Some(pair),
+        Some(Err(message)) => {
+            eprintln!("pdfce-cli: object-transform refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+        None => None,
+    };
+    let pivot_arg = match args.pivot.map(|raw| parse_pair("--pivot", raw)) {
+        Some(Ok(pair)) => Some(pair),
+        Some(Err(message)) => {
+            eprintln!("pdfce-cli: object-transform refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+        None => None,
+    };
+    if scale.is_none() && args.rotate.is_none() && translate.is_none() {
+        eprintln!(
+            "pdfce-cli: object-transform refused: nothing to do -- give at least one of --scale, --rotate, --translate"
+        );
+        return exit::EDIT_REFUSED;
+    }
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // The pivot defaults to the SELECTION's own centre, computed from the
+    // session's current decomposition. A default of the page origin would send
+    // a scaled object flying off the sheet, which is not a gesture anybody
+    // makes; the shell chooses its own pivot and this is the CLI's equivalent.
+    let pivot = match pivot_arg {
+        Some((x, y)) => Point::new(x, y),
+        None => match selection_centre(&session, page_index, &indices) {
+            Ok(p) => p,
+            Err(code) => return code,
+        },
+    };
+
+    let mut matrix = Matrix::IDENTITY;
+    if let Some((sx, sy)) = scale {
+        matrix = matrix.post_concat(Matrix::scale(sx, sy).about(pivot));
+    }
+    if let Some(degrees) = args.rotate {
+        matrix = matrix.post_concat(Matrix::rotate(degrees.to_radians()).about(pivot));
+    }
+    if let Some((dx, dy)) = translate {
+        matrix = matrix.post_concat(Matrix::translate(dx, dy));
+    }
+
+    if args.preview {
+        match session.transform_preview(page_index, &indices, matrix, options) {
+            Err(err) => return report_edit_error(args.input, &err),
+            Ok(outcome) => {
+                report_disclosures(&outcome.disclosures);
+                println!(
+                    "object-transform {} page {} objects={} PREVIEW; would_transform={} clamped={}",
+                    args.input.display(),
+                    args.page,
+                    indices.len(),
+                    outcome.objects_transformed,
+                    u32::from(outcome.clamped),
+                );
+                return exit::SUCCESS;
+            }
+        }
+    }
+
+    let transformed = match session.transform_objects(page_index, &indices, matrix, options) {
+        Err(err) => return report_edit_error(args.input, &err),
+        Ok(outcome) => {
+            report_disclosures(&outcome.disclosures);
+            outcome
+        }
+    };
+    let Some(output) = args.output else {
+        eprintln!("pdfce-cli: object-transform refused: --output is required unless --preview");
+        return exit::EDIT_REFUSED;
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "object-transform {} page {} objects={} mode={} -> {}; transformed={} clamped={} \
+changed={} objects_written={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.page,
+        indices.len(),
+        args.mode.name(),
+        output.display(),
+        transformed.objects_transformed,
+        u32::from(transformed.clamped),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// The page-space bounding-box centre of a selection — `object-transform`'s
+/// default pivot.
+///
+/// # Errors
+///
+/// An exit code, already reported to stderr.
+fn selection_centre(
+    session: &pdfce_core::edit::EditSession,
+    page_index: usize,
+    indices: &[usize],
+) -> Result<pdfce_core::vector::Point, u8> {
+    use pdfce_core::vector::{Bounds, Point};
+    let view = session.view();
+    let pages = match pdfce_core::page_tree::pages_in(&view) {
+        Ok(pages) => pages,
+        Err(err) => {
+            eprintln!("pdfce-cli: object-transform: {err}");
+            return Err(exit::RUNTIME_ERROR);
+        }
+    };
+    let Some(page) = pages.get(page_index) else {
+        eprintln!("pdfce-cli: object-transform: no page {}", page_index + 1);
+        return Err(exit::EDIT_REFUSED);
+    };
+    let model =
+        match pdfce_core::vector::decompose_page(&view, page, pdfce_core::vector::Matrix::IDENTITY)
+        {
+            Ok(model) => model,
+            Err(err) => {
+                eprintln!("pdfce-cli: object-transform: {err}");
+                return Err(exit::RUNTIME_ERROR);
+            }
+        };
+    let mut bounds = Bounds::EMPTY;
+    for &i in indices {
+        let Some(obj) = model.objects.get(i) else {
+            // Out of range is the VERB's refusal to raise, by name, with the
+            // page's real object count -- not this helper's. Falling back to
+            // the origin here keeps one refusal in one place.
+            return Ok(Point::new(0.0, 0.0));
+        };
+        bounds = bounds.union(obj.page_bbox());
+    }
+    if bounds.min.x > bounds.max.x {
+        return Ok(Point::new(0.0, 0.0));
+    }
+    Ok(Point::new(
+        f64::midpoint(bounds.min.x, bounds.max.x),
+        f64::midpoint(bounds.min.y, bounds.max.y),
+    ))
 }
 
 /// `object-delete` — remove a vector object's construction + painting

@@ -108,7 +108,7 @@ use crate::text_edit::edit::splice;
 use crate::writer::content::emit_number;
 
 use super::decompose::{PathObject, RunPositioning, TextObject, VectorObject};
-use super::geometry::{Point, rect_corners};
+use super::geometry::{Matrix, Point, rect_corners};
 
 /// Why a vector-edit surgery could not be planned.
 ///
@@ -159,6 +159,65 @@ pub enum VectorEditError {
         "the object contains a malformed construction operator (unexpected operand count), so it cannot be moved without tearing it"
     )]
     MalformedOperand,
+    /// The **requested** transform is singular — it maps area to zero, so the
+    /// object would collapse to a line or a point (`Pass 113.0`).
+    ///
+    /// # Why this is refused by default rather than applied
+    ///
+    /// A singular transform is **irrecoverable**. There is no inverse to apply
+    /// later, so no subsequent gesture restores the object: it is data loss
+    /// under a drag the operator almost certainly did not mean. The consuming
+    /// shell asked for this case to be distinguishable from
+    /// [`Self::DegenerateCtm`] — *"this object cannot be transformed at all"*
+    /// — because the two produce different UI: one means do not offer a
+    /// handle, this one means offer the handle and refuse on release.
+    ///
+    /// ★ **A negative scale is NOT this.** `scale(-1.0, 1.0)` is a mirror and
+    /// is perfectly invertible, so dragging a resize grip through the opposite
+    /// edge is an ordinary transform. Only *exactly* zero area is degenerate,
+    /// which a commit-on-release gesture makes nearly unreachable — the
+    /// default therefore costs a well-behaved shell nothing while still
+    /// catching a gesture that forgets to clamp.
+    ///
+    /// [`TransformOptions::singular`] selects the clamp-and-disclose
+    /// alternative (`R206`: both behaviours ship, the default is picked from
+    /// what an ordinary operator would expect).
+    #[error(
+        "the requested transform is singular (it maps area to zero), so the selection would collapse to a line or a point with no inverse to undo it"
+    )]
+    SingularTransform,
+    /// A clamp was requested for a singular transform that has no
+    /// axis-aligned reading, so there is nothing well-defined to clamp
+    /// (`Pass 113.0`).
+    ///
+    /// [`SingularPolicy::Clamp`] replaces a zero scale factor with a minimum,
+    /// which is exactly what a resize gesture produces (`b == 0 && c == 0`).
+    /// A singular matrix that also shears has no single "the scale that went
+    /// to zero" — its degeneracy is a direction, not an axis — and inventing
+    /// one would be pdfce choosing a shape the operator did not draw. Refused
+    /// by name, naming the option rather than the gesture, so the caller can
+    /// tell "you asked for a clamp I cannot express" from "I refuse singular
+    /// transforms".
+    #[error(
+        "a clamp was requested but this singular transform is not axis-aligned (it shears), so there is no single scale factor to clamp -- refusing rather than inventing a shape"
+    )]
+    ClampNotExpressible,
+    /// The selection holds objects of more than one kind and the caller asked
+    /// for single-kind semantics (`Pass 113.0`,
+    /// [`MixedSelection::RefuseHeterogeneous`]).
+    ///
+    /// **Not the default.** A marquee-then-drag over a drawing selects
+    /// whatever is under it, and refusing on kind would reopen the `NotAPath`
+    /// complaint this verb exists to close.
+    #[error(
+        "the selection holds more than one kind of object ({first} and {second}) and single-kind semantics were requested"
+    )]
+    HeterogeneousSelection {
+        /// The first kind seen, in selection order.
+        first: &'static str,
+        /// The first kind that differed from it.
+        second: &'static str,
+    },
     /// Two objects selected for deletion have **partially overlapping** byte
     /// spans — each starts inside the other and runs past its end.
     ///
@@ -707,6 +766,314 @@ pub fn plan_delete_many(
         operators_touched: touched,
         disclosures: Vec::new(),
     })
+}
+
+/// How a heterogeneous selection is treated by [`plan_transform_many`]
+/// (`Pass 113.0`).
+///
+/// Both behaviours ship and the default is picked from what an ordinary
+/// operator would expect, per standing rule **R206** — the operator ruled on
+/// this by name: *"make things work both ways as options. default it to your
+/// best guess as to what would be normally expected."*
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum MixedSelection {
+    /// **Default.** Transform the whole selection, whatever kinds it holds —
+    /// one command, one undo entry.
+    ///
+    /// That is what a marquee-then-drag gesture *is*. Refusing on kind would
+    /// reopen the `NotAPath` complaint this verb exists to close: the
+    /// requesting shell's words were *"a placed image and a placed text run
+    /// are the same shape"*, and under `q…cm…Q` wrapping they genuinely are —
+    /// the wrap never looks at an operand, so it is kind-agnostic by
+    /// construction rather than by a match arm per kind.
+    #[default]
+    TransformWhole,
+    /// Refuse a selection holding more than one kind, by name, for a shell
+    /// that wants single-kind semantics.
+    RefuseHeterogeneous,
+}
+
+/// What [`plan_transform_many`] does with a **singular** requested transform
+/// (`Pass 113.0`). Same `R206` shape as [`MixedSelection`].
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum SingularPolicy {
+    /// **Default.** Refuse by name
+    /// ([`VectorEditError::SingularTransform`]) — a singular transform is
+    /// irrecoverable, and collapsing an object to a line under a drag is data
+    /// loss nobody asked for.
+    #[default]
+    Refuse,
+    /// Clamp the degenerate axis to `min` (keeping its sign where it has one)
+    /// and **disclose** that it happened.
+    ///
+    /// Expressible only for an axis-aligned matrix (`b == 0 && c == 0`), which
+    /// is what a resize gesture produces. Anything else is
+    /// [`VectorEditError::ClampNotExpressible`].
+    Clamp {
+        /// The minimum absolute scale factor to substitute for a zero.
+        min: f64,
+    },
+}
+
+/// Per-call options for [`plan_transform_many`] (`Pass 113.0`).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub struct TransformOptions {
+    /// How a multi-kind selection is treated. Default
+    /// [`MixedSelection::TransformWhole`].
+    pub mixed: MixedSelection,
+    /// What a singular requested transform does. Default
+    /// [`SingularPolicy::Refuse`].
+    pub singular: SingularPolicy,
+}
+
+impl TransformOptions {
+    /// Set [`Self::mixed`], returning `self` — the out-of-crate constructor,
+    /// since this struct is `#[non_exhaustive]`.
+    #[must_use]
+    pub const fn with_mixed(mut self, mixed: MixedSelection) -> Self {
+        self.mixed = mixed;
+        self
+    }
+
+    /// Set [`Self::singular`], returning `self`.
+    #[must_use]
+    pub const fn with_singular(mut self, singular: SingularPolicy) -> Self {
+        self.singular = singular;
+        self
+    }
+}
+
+/// Plan a **transform**: wrap each selected object's operator run in
+/// `q <cm> … Q`, so the whole selection is scaled, rotated, sheared or moved
+/// by one page-space matrix (`Pass 113.0`).
+///
+/// # ★ Why this is not `plan_move_many` with a matrix
+///
+/// The requesting shell assumed it would be, and it cannot be. `plan_move_many`
+/// **rewrites numeric operands in place**, and operand rewriting can express
+/// translation and nothing else:
+///
+/// - **A rotated rectangle has no `re` spelling.** `re` carries an origin and a
+///   size (§8.5.2.1); there is no operand arrangement that makes it a
+///   parallelogram, so a rotate would have to expand every rectangle to four
+///   lines — changing the file's shape to express a gesture that changed
+///   nothing about what is drawn.
+/// - **`line_width` is a user-space scalar** (§8.4.3.2). Scaling coordinates
+///   leaves it behind, so a scaled path would keep its original stroke weight
+///   and look wrong in a way no operand carries.
+/// - **Text and images have no coordinate operands at all.** A placed image is
+///   a unit square under the CTM (§8.9.5) and a text run is positioned by `Tm`.
+///   Operand rewriting never touches either, which is precisely why
+///   `move_objects` refuses them with `NotAPath`.
+///
+/// Wrapping in `q…cm…Q` has none of those problems **because it never looks at
+/// an operand**. It is therefore kind-agnostic by construction — a path, a
+/// text object, an image XObject, a form XObject and an inline image are all
+/// just a byte span with a CTM — which is the requesting shell's own argument
+/// that *"a placed image and a placed text run are the same shape"*, granted
+/// by the mechanism rather than by a match arm per kind.
+///
+/// # ★★ The matrix that gets emitted is NOT the one that was asked for
+///
+/// `page_matrix` is in **page space**, because that is the space the operator
+/// gestures in. The `cm` operator composes into the CTM *at that point in the
+/// stream* (§8.3.4: `CTM′ = M × CTM`), which is the object's **user** space.
+/// Emitting `page_matrix` directly would apply it in whatever local space the
+/// producer happened to leave in force — correct only when the object's CTM is
+/// the identity, and silently wrong at a slant or a scale everywhere else.
+///
+/// The object's marks land at `p × CTM`; the operator wants them at
+/// `p × CTM × M`. Inserting `cm X` puts them at `p × (X × CTM)`. Equating the
+/// two gives
+///
+/// ```text
+///     X = CTM × M × CTM⁻¹
+/// ```
+///
+/// which is what is emitted, per object, using **that object's own** captured
+/// CTM. A selection spanning two different local spaces therefore gets two
+/// different `cm` operands for one gesture, and both land in the same place on
+/// the page. An object whose CTM is not invertible has no such `X` and is
+/// refused ([`VectorEditError::DegenerateCtm`]) — **refusing the whole call**,
+/// per `R168`, rather than transforming the part of the selection that
+/// happened to qualify.
+///
+/// # Balance, and why wrapping cannot tear the stream
+///
+/// `q` and `Q` are inserted at the object's own span boundaries, which begin
+/// at its first defining operator and end after its painting operator. A
+/// decomposed object is a complete graphics object, so the inserted pair
+/// encloses a balanced region and every byte between them is re-emitted
+/// verbatim. Nothing outside the span is touched, and the graphics state is
+/// restored exactly — an object drawn after the selection sees the state the
+/// producer left it, not the transform.
+///
+/// # Errors
+///
+/// [`VectorEditError::SingularTransform`] (default policy),
+/// [`VectorEditError::ClampNotExpressible`] (clamp requested but not
+/// axis-aligned), [`VectorEditError::HeterogeneousSelection`] (opt-in),
+/// [`VectorEditError::DegenerateCtm`], and
+/// [`VectorEditError::OverlappingObjectSpans`] for a torn model. An empty
+/// selection is **not** an error — it plans an unchanged buffer.
+pub fn plan_transform_many(
+    content: &ContentStream,
+    objs: &[&VectorObject],
+    page_matrix: Matrix,
+    options: TransformOptions,
+) -> Result<PlannedEdit, VectorEditError> {
+    if objs.is_empty() {
+        return Ok(PlannedEdit {
+            content: content.buf.clone(),
+            operators_touched: 0,
+            disclosures: Vec::new(),
+        });
+    }
+
+    if matches!(options.mixed, MixedSelection::RefuseHeterogeneous)
+        && let Some(&head) = objs.first()
+    {
+        let first = object_kind(head);
+        if let Some(other) = objs.iter().map(|o| object_kind(o)).find(|k| *k != first) {
+            return Err(VectorEditError::HeterogeneousSelection {
+                first,
+                second: other,
+            });
+        }
+    }
+
+    let mut disclosures = Vec::new();
+    let matrix = resolve_singular(page_matrix, options.singular, &mut disclosures)?;
+
+    // Collect (span, ctm) and apply the same containment/overlap discipline
+    // `plan_delete_many` uses — one shared reading of what a decomposition can
+    // and cannot produce, so the two verbs cannot disagree about a torn model.
+    let mut spans: Vec<(usize, usize, Matrix)> = objs
+        .iter()
+        .map(|o| {
+            let s = o.bytes();
+            (s.start, s.end(), object_ctm(o))
+        })
+        .collect();
+    spans.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
+
+    let mut kept: Vec<(usize, usize, Matrix)> = Vec::with_capacity(spans.len());
+    for (start, end, ctm) in spans {
+        match kept.last() {
+            // Fully contained in a span already accepted: wrapping it again
+            // would apply the transform TWICE to the same marks.
+            Some(&(_, prev_end, _)) if end <= prev_end => continue,
+            Some(&(_, prev_end, _)) if start < prev_end => {
+                return Err(VectorEditError::OverlappingObjectSpans { start, end });
+            }
+            _ => kept.push((start, end, ctm)),
+        }
+    }
+
+    let touched = kept.len();
+    let mut edits: Vec<(usize, usize, Vec<u8>)> = Vec::with_capacity(kept.len() * 2);
+    for (start, end, ctm) in kept {
+        let local = local_matrix(ctm, matrix)?;
+        // Zero-length insertions at the span boundaries: `splice` copies the
+        // gap between edits verbatim, so the object's own bytes pass through
+        // untouched and only the wrapper is new.
+        edits.push((start, start, emit_q_cm(local)));
+        edits.push((end, end, b" Q".to_vec()));
+    }
+
+    Ok(PlannedEdit {
+        content: splice(&content.buf, &mut edits),
+        operators_touched: touched,
+        disclosures,
+    })
+}
+
+/// The `cm` matrix to emit for an object whose captured CTM is `ctm`, so that
+/// `page_matrix` takes effect in **page** space. See
+/// [`plan_transform_many`]'s "the matrix that gets emitted is not the one that
+/// was asked for".
+fn local_matrix(ctm: Matrix, page_matrix: Matrix) -> Result<Matrix, VectorEditError> {
+    let inverse = ctm.inverse().ok_or(VectorEditError::DegenerateCtm)?;
+    Ok(ctm.post_concat(page_matrix).post_concat(inverse))
+}
+
+/// Apply [`SingularPolicy`] to the requested matrix, returning the matrix to
+/// use and pushing any disclosure the clamp owes.
+fn resolve_singular(
+    m: Matrix,
+    policy: SingularPolicy,
+    disclosures: &mut Vec<String>,
+) -> Result<Matrix, VectorEditError> {
+    if m.is_invertible() {
+        return Ok(m);
+    }
+    match policy {
+        SingularPolicy::Refuse => Err(VectorEditError::SingularTransform),
+        SingularPolicy::Clamp { min } => {
+            // Axis-aligned only: with a shear present the degeneracy is a
+            // DIRECTION, not an axis, and there is no single factor to clamp.
+            if m.b != 0.0 || m.c != 0.0 || !min.is_finite() || min <= 0.0 {
+                return Err(VectorEditError::ClampNotExpressible);
+            }
+            // Sign-preserving: a scale that arrived as -0.0 was heading
+            // negative, and clamping it to +min would flip the object as well
+            // as rescue it.
+            let clamp = |v: f64| {
+                if v == 0.0 {
+                    if v.is_sign_negative() { -min } else { min }
+                } else {
+                    v
+                }
+            };
+            let clamped = Matrix {
+                a: clamp(m.a),
+                d: clamp(m.d),
+                ..m
+            };
+            if !clamped.is_invertible() {
+                return Err(VectorEditError::ClampNotExpressible);
+            }
+            disclosures.push(format!(
+                "transform: the requested scale collapsed the selection to zero area, so it was CLAMPED to a minimum of {min} rather than applied -- a singular transform has no inverse and could not have been undone by dragging back."
+            ));
+            Ok(clamped)
+        }
+    }
+}
+
+/// `q a b c d e f cm ` as bytes, with `emit_number`'s round-trip-safe
+/// formatting — the same emitter every other planner uses, so a transformed
+/// object's operands are spelled exactly as a moved one's are.
+fn emit_q_cm(m: Matrix) -> Vec<u8> {
+    let mut out = b"q ".to_vec();
+    for v in [m.a, m.b, m.c, m.d, m.e, m.f] {
+        emit_number(&mut out, v);
+        out.push(b' ');
+    }
+    out.extend_from_slice(b"cm ");
+    out
+}
+
+/// A short kind label for a diagnostic — the same vocabulary
+/// [`VectorEditError::NotAPath`] uses.
+const fn object_kind(o: &VectorObject) -> &'static str {
+    match o {
+        VectorObject::Path(_) => "path",
+        VectorObject::Text(_) => "text",
+        VectorObject::Image(_) => "image",
+    }
+}
+
+/// The object's captured CTM, whatever its kind.
+const fn object_ctm(o: &VectorObject) -> Matrix {
+    match o {
+        VectorObject::Path(p) => p.ctm,
+        VectorObject::Text(t) => t.ctm,
+        VectorObject::Image(i) => i.ctm,
+    }
 }
 
 /// Plan a **subpath delete**: remove ONE subpath's construction operators

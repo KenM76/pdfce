@@ -706,6 +706,26 @@ pub struct TextObject {
     pub tokens: TokenRange,
     /// The equivalent byte span.
     pub bytes: ByteSpan,
+    /// The effective CTM captured at the object's `BT` (`Pass 113.0`).
+    ///
+    /// The other two object kinds have carried this since decomposition
+    /// existed ([`PathObject::ctm`], [`ImageObject::ctm`]); text did not,
+    /// because every verb that needed a CTM was a path verb and text's
+    /// placement is expressed through `Tm` rather than through operands a
+    /// move would rewrite.
+    ///
+    /// **A page-space transform needs it for every kind.** `cm` composes into
+    /// the CTM in force at that point in the stream, so expressing a
+    /// page-space matrix as a local one requires the object's own CTM
+    /// (`crate::vector::plan_transform_many` derives `CTM x M x CTM-inverse`
+    /// from it). Without this field a text object would have had to be
+    /// transformed as if its CTM were the identity — correct on a page a
+    /// producer never scaled, and silently wrong at a slant everywhere else.
+    ///
+    /// Note what it is NOT: this is the CTM, not `Tm`. The text matrix is
+    /// per-show-operator and lives in [`TextRun`]; this is the graphics-state
+    /// transform the whole `BT`...`ET` is drawn under.
+    pub ctm: Matrix,
 }
 
 impl TextObject {
@@ -1459,6 +1479,8 @@ struct PathAccum {
 /// accumulator.
 struct TextAccum {
     token_start: usize,
+    /// The CTM in force at `BT` — see [`TextObject::ctm`].
+    ctm: Matrix,
     /// The hull of every show operator's pen-START position, page space.
     ///
     /// Still tracked even when the metrics path is available, for two
@@ -1546,9 +1568,10 @@ struct TextAccum {
 }
 
 impl TextAccum {
-    fn new(token_start: usize) -> Self {
+    fn new(token_start: usize, ctm: Matrix) -> Self {
         Self {
             token_start,
+            ctm,
             origins: Bounds::EMPTY,
             runs: Vec::new(),
             current_run_tokens: None,
@@ -1877,7 +1900,7 @@ impl<'a> Decomposer<'a> {
             // ---- text objects (Table 107) ----
             b"BT" => {
                 self.discard_path(); // defensive: a path open across BT is malformed
-                self.text = Some(TextAccum::new(op_index));
+                self.text = Some(TextAccum::new(op_index, self.gs.ctm));
             }
             b"ET" => self.end_text(op_index),
 
@@ -2601,6 +2624,7 @@ impl<'a> Decomposer<'a> {
         };
         let bytes = self.span_of(t.token_start, op_index);
         let token_start = t.token_start;
+        let ctm = t.ctm;
         // The still-open run was already folded in by the `close_text_run`
         // at the top of this function.
         let runs = std::mem::take(&mut t.runs);
@@ -2618,6 +2642,7 @@ impl<'a> Decomposer<'a> {
                 end: op_index + 1,
             },
             bytes,
+            ctm,
         }));
     }
 

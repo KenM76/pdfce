@@ -73,9 +73,10 @@ pub use decompose::{
     XObjectResolver, XObjectShape, decompose, decompose_page, decompose_with_fonts,
 };
 pub use edit::{
-    Handle, PlannedEdit, VectorEditError, anchor_count, plan_delete, plan_delete_many,
-    plan_delete_node, plan_delete_subpath, plan_delete_text_run, plan_move, plan_move_handle,
-    plan_move_many, plan_move_node, plan_move_nodes, plan_move_subpath, remap_index_after_delete,
+    Handle, MixedSelection, PlannedEdit, SingularPolicy, TransformOptions, VectorEditError,
+    anchor_count, plan_delete, plan_delete_many, plan_delete_node, plan_delete_subpath,
+    plan_delete_text_run, plan_move, plan_move_handle, plan_move_many, plan_move_node,
+    plan_move_nodes, plan_move_subpath, plan_transform_many, remap_index_after_delete,
 };
 pub use geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
 pub use hit::{

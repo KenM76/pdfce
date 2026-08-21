@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (29150 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 131 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (29448 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 133 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 131 public `EditSession` methods
+## 1. Verb index — all 133 public `EditSession` methods
 
-**Count: 131.** Established by brace-matched extraction of the four
+**Count: 133.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -342,14 +342,111 @@ need their own policy).
 
 These five return `text_edit`'s own error types, **not** `EditError`.
 
-### 1.10 Vector geometry (11) — detail in part 3
+### 1.10 Vector geometry (13) — detail in part 3
 
-All eleven return `Result<Vec<String>, EditError>`. **The `Vec<String>` is the
-disclosure list** (`crate::vector::PlannedEdit::disclosures`) — operator-facing
-strings the surgery owes under project rule 4, usually empty. **They must be
-surfaced**; an empty vector is the normal case, a non-empty one means the
-gesture changed an operator's *form* (an `re` rectangle expanded to explicit
-segments, an implicit `m` materialised, a curve discarded with a node).
+Eleven of the thirteen return `Result<Vec<String>, EditError>`. **The
+`Vec<String>` is the disclosure list**
+(`crate::vector::PlannedEdit::disclosures`) — operator-facing strings the
+surgery owes under project rule 4, usually empty. **They must be surfaced**; an
+empty vector is the normal case, a non-empty one means the gesture changed an
+operator's *form* (an `re` rectangle expanded to explicit segments, an implicit
+`m` materialised, a curve discarded with a node).
+
+The two exceptions are `transform_objects` / `transform_preview`
+(`Pass 113.0`/`113.1`), which return a `TransformOutcome` — see below.
+
+> ### ★★ `transform_objects` — the verb that is NOT `move_objects` with a matrix
+>
+> ```rust
+> session.transform_objects(page, &[3, 4, 7], matrix, TransformOptions::default())
+>     -> Result<TransformOutcome, EditError>
+> session.transform_preview(page, &[3, 4, 7], matrix, TransformOptions::default())
+>     -> Result<TransformOutcome, EditError>   // &self, commits nothing
+> ```
+>
+> **You asked for this on the reasoning that `move_objects` just needed a
+> matrix. It could not.** Operand rewriting expresses translation and nothing
+> else:
+>
+> - a **rotated rectangle has no `re` spelling** — `re` carries an origin and a
+>   size, so a rotate would have to expand every rectangle to four lines,
+>   changing the file's shape to express a gesture that changed nothing about
+>   what is drawn;
+> - **`line_width` is a user-space scalar**, so a scaled path would keep its
+>   original stroke weight;
+> - **text and images have no coordinate operands at all**, which is precisely
+>   why `move_objects` refuses them with `NotAPath`.
+>
+> So each object's operator run is wrapped in `q <cm> … Q`. That never looks at
+> an operand, and is therefore **kind-agnostic by construction** — your own
+> argument that *"a placed image and a placed text run are the same shape"*,
+> granted by the mechanism rather than by a match arm per kind. Path, text,
+> image XObject, form XObject and inline image are all just a byte span with a
+> CTM.
+>
+> #### ★ `matrix` is in PAGE space, and it is NOT what gets emitted
+>
+> `cm` composes into the CTM in force at that point in the stream (§8.3.4:
+> `CTM′ = M × CTM`), which is the object's **user** space. Emitting your matrix
+> directly would be correct only where an object's CTM is the identity and
+> **silently wrong at every scale or slant the producer left in force** — an
+> object moved twice as far as the pointer went, with nothing erroring.
+>
+> pdfce emits `X = CTM × M × CTM⁻¹`, per object, from **that object's own**
+> captured CTM. A selection spanning two local spaces gets two different `cm`
+> operands for one gesture and both land in the same place on the page. **You
+> pass page-space; that is the whole contract.**
+>
+> Use `Matrix::about(pivot)` (`Pass 112.0`) — the pivot is yours to choose, by
+> your own request, and pdfce does not invent one.
+>
+> #### Two refusals, distinguished because you said they drive different UI
+>
+> | error | means | UI |
+> |---|---|---|
+> | `DegenerateCtm` | **this object cannot be transformed at all** (its own CTM is singular) | do not offer a handle |
+> | `SingularTransform` | **this drag is degenerate** (the requested matrix maps area to zero) | offer the handle, refuse on release |
+>
+> ★ **A negative scale is NOT singular.** `scale(-1.0, 1.0)` is a mirror and is
+> perfectly invertible, so dragging a grip through the *opposite* edge is an
+> ordinary transform. Only exactly zero is degenerate — which a
+> commit-on-release gesture makes nearly unreachable, so the default costs a
+> well-behaved shell nothing.
+>
+> #### Both options ship, per the operator's own ruling (`R206`)
+>
+> He answered both of my design questions before you read them: *"make things
+> work both ways as options. default it to your best guess as to what would be
+> normally expected."*
+>
+> | question | **default** | option |
+> |---|---|---|
+> | mixed selection | **transform whole**, one command, one undo | `MixedSelection::RefuseHeterogeneous` |
+> | singular matrix | **refuse by name** | `SingularPolicy::Clamp { min }` — clamps and discloses |
+>
+> `R168` is unaffected: if an object in the selection cannot be transformed at
+> all, the whole call refuses with a stated reason rather than transforming the
+> part that qualified.
+>
+> #### `TransformOutcome`
+>
+> | field | meaning |
+> |---|---|
+> | `objects_transformed: u64` | **not necessarily your index count** — duplicates, and an object whose span is contained inside another selected object's, are collapsed, because wrapping a contained span twice applies the transform to those marks twice |
+> | `clamped: bool` | a singular transform was clamped rather than applied; the selection is not the size the gesture asked for |
+> | `disclosures: Vec<String>` | as everywhere |
+>
+> #### The preflight you asked for three times
+>
+> `transform_preview` is `&self`, side-effect-free, and **shares one body with
+> the verb** — so `preview(..).is_ok()` *is* the predicate, and a preview that
+> says yes where the call then refuses is not a reachable state. Four cases
+> (good transform, singular, stale index, refused mixed selection) are pinned
+> equal by a test, because "they agree on the happy path" is what a second
+> implementation would also manage.
+>
+> CLI equivalent: `pdfce-cli object-transform --objects 3,4,7 --scale 1.5
+> --rotate 15 --translate 10,0 [--pivot X,Y] [--preview]`.
 
 #### ★ 1.10.1 Object indices across an edit — which verbs RENUMBER
 
