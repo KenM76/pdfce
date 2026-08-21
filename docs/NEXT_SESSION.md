@@ -173,11 +173,90 @@ Three things from that note are now compositor input:
   itself, so the artwork is independent evidence for the whole conclusion,
   arriving from a direction neither project used to reach it.
 
-**A `pdfce-spec-librarian` dispatch is in flight** to ingest **clause 10**,
-which our corpus does not hold *at all* — a gap iccce found from outside it —
-plus §8.6.5.6/§8.6.5.7. It was asked to **evaluate** iccce's A52 resolution
-rather than adopt it, because two projects agreeing because one relayed it to
-the other is not corroboration. **Check its result before scoping `97.x`.**
+### ★★★ THE SPEC DISPATCH CAME BACK, AND IT CHANGES MORE THAN THE QUESTION DID
+
+**First, a correction I owe this document.** It said our corpus *"does not
+hold clause 10 at all"*. **False.** `iso32000__s__10.md` (42 kB),
+`iso32000__s__10.8.md`, `iso32000__s__8.6.5.6.md`, `iso32000__s__8.6.5.7.md`
+and §8.6.6.4/.5 have been there since **2026-08-19**, built for an earlier
+iccce dispatch on the same topic. **iccce's claim was stale and I relayed it
+without grepping my own corpus** — the exact failure `CLAUDE.md`'s XFA item
+already records: *the answer was already sourced in one document while another
+still asked the question.* One `ls` would have caught it.
+
+**The ambiguity is adjudicated: `REND-A1` (indexed against iccce's `A52`).**
+iccce's resolution **holds, but not for their reason.** Their containment
+argument (10.3.2 is inside 10.3, so "always follow 10.3" routes you to
+10.4.2.3) was **tested and found insufficient on its own** — P1 and P2 are
+*both* `should`, so neither outranks the other. What settles it is a third
+clause nobody cited: **§10.5** (1.7 §10.4, transfer functions), in **both**
+editions, calls `c = m = y = 0` *"the normal conversion"* from `DeviceGray` to
+`DeviceCMYK` and hangs a **`shall not`** on it — in the ordinary rendering
+path, outside §10.4.2 entirely.
+
+**★ And PDF 1.7 answers it the OTHER WAY, with a `shall`.** §10.2: *"CIE-based
+gamut and colour mapping functions **shall be applied only to** colour values
+presented in a CIE-based colour space."* So colour-managing gray→CMYK is
+**unusual but conforming in 2.0, and non-conforming in 1.7**. The ambiguity is
+*created by 2.0*, not inherited — which inverts the framing both projects were
+using. A correction is owed to iccce and has been sent.
+
+### ★★ AND THE COMPOSITOR FALSIFIES A PREMISE THE CORPUS IS BUILT ON
+
+`iso32000__ref__spot_colour_overprint.md` opens with *"pdfce renders to an
+**additive display**"* and derives six consequences from it — including
+**"No colorant matching. Ever."** A CMYK-native output path makes that
+**false**, and five rows invert. The corpus now carries a device-class banner
+and a `§A-SUB` inversion table. Three that bite:
+
+- **Colorant matching becomes obliged** (`shall`), and **`SEP-A1` — colorant-
+  name matching is undefined — stops being moot.** It was filed *"moot for
+  pdfce today"*. `97.x` un-moots it: **you will need a name-matching policy.**
+- **`NChannel` reverts per-component**, not wholesale — C/M/Y/K and matched
+  spots paint directly; only unmatched spots hit the tint transform.
+- **★ The overprint gate is REWORDED between editions and lands exactly on
+  this device.** 1.7 disables `OPM` when the native space **is not
+  `DeviceCMYK`** (identity test); 2.0 when it **does not include CMYK device
+  colourants** (inclusion test). A CMYK+N-spot buffer is *not* `DeviceCMYK`
+  but *does* include those colourants ⇒ **`OPM` is inert under 1.7 and live
+  under 2.0.** Same file, same compositor, two conformant and visibly
+  different results. **Filed as a setting, not a hard-coded default** — and
+  that is `R169`'s shape, so do not quietly pick one.
+
+**New corpus file: `iso32000__s__11.7.5.3.md`.** §11.7.5 was explicitly *out*
+of the corpus and holds rules the compositor cannot be built without:
+
+- **conversion happens at EVERY GROUP BOUNDARY**, not once at the device;
+- BG/UCR are captured at **paint time** for an object and at **`Do` time** for
+  a group;
+- ★★ **BG/UCR are fenced by a `shall … only` to `DeviceRGB` → `DeviceCMYK`.**
+  Gray→CMYK, CIE→CMYK and CMYK→CMYK are three *other* rules. **A compositor
+  that routes everything through BG/UCR is non-conforming** — check
+  `docs/compositor-plan.md` against this before building from it.
+
+It also closes §8.6.5.9 (black point compensation), a gap three corpus files
+had declared — with the note that pdfce **cannot implement `/UseBlackPtComp
+ON` faithfully**, because the algorithm is delegated to paywalled ISO 18619.
+
+### Three corrections to what iccce relayed, and one to what I did
+
+- **§8.6.6.4's "shall ignore" is real but GATED**: *"The preceding paragraph
+  applies only to **subtractive output devices**."*
+- **"A `Separation` is a one-component `DeviceN`" overstates the text.**
+  §8.6.6.5 says one *can be defined* as such — an equivalence in one
+  direction, not identity.
+- **`cl. 10.3.1` has no edition attached in their note.** 1.7 §10.3.1 is the
+  `DeviceCMYK` passthrough; **2.0 DELETED that sentence**, and 2.0 §10.3.1 is
+  "General" under the CIE branch.
+- **Mine:** I passed on "your corpus holds no clause 10" without checking.
+
+★ **A licence constraint that binds anyone touching this**: the ISO 32000-2
+source in `_sources/` is a **single-user PDF Association copy licensed to the
+operator**, watermarked *"copying and networking prohibited"*. The corpus
+quotes **1.7 wording** wherever the sentence exists in both editions precisely
+so pdfce's own code comments can carry it; 2.0 is cited by clause number with
+short quotation only, marked never-publish. **Keep that discipline** — both
+this repository and `iccce` are MIT and public.
 
 ★ **A licence constraint that binds anyone touching this**: the ISO 32000-2
 source in `_sources/` is a **single-user PDF Association copy licensed to the

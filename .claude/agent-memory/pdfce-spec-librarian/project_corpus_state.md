@@ -3422,3 +3422,90 @@ WRITE/AUTHOR — item 8/11 stacked twice on one clause file).
   **non-isolated** group (`/I` default false) composites the same edited bytes
   differently at each invocation site — so `/Group` is not "a rendering concern",
   it changes what the edit DOES.
+
+---
+
+**54. ★ THE THIRD NULL-DELTA — and the residue was a PREMISE that a new Pass
+falsifies, not a missing clause** (2026-08-21, re-dispatch of item 51's clause-10
+/ §8.6.5.6/.7 topic, two days later, again relayed from `iccce`).
+
+**Shape:** the dispatch asked for clause 10 "in full", §8.6.5.6/.7, and
+§8.6.6.4/.5 "if not already present", and asked me to adjudicate the
+§10.3.2-vs-§10.4.2.1 ambiguity (`A52`). **All three coverage items were already
+built — by me, on 2026-08-19 (item 51) — and the ambiguity was already
+adjudicated as `REND-A1`.** Two `ls`/`grep` commands established that. The value
+of the session was entirely in what the dispatch did **not** ask for.
+
+- **★★ THE RESIDUE OF A NULL-DELTA DISPATCH CAN BE A FALSIFIED PREMISE IN AN
+  EXISTING FILE, AND THE TRIGGER IS THE NEW PASS, NOT A NEW CLAUSE.**
+  `iso32000__ref__spot_colour_overprint.md` §A opens *"pdfce renders to an
+  **additive display**. Under ISO 32000-1 that single fact collapses most of the
+  prepress colour model"* and derives six consequences, incl. **"No colorant
+  matching. Ever."** `Pass 97.x` (the CMYK-native colorant compositor) is
+  **precisely the change that makes that premise false**. §8.6.6.4 gates its
+  governing paragraph on device class in one explicit sentence (*"The preceding
+  paragraph applies only to **subtractive output devices**…"*), so five §A rows
+  invert. **When a dispatch names an upcoming Pass, test every corpus file whose
+  analysis rests on a property of the CURRENT implementation** — those files are
+  correct-and-about-to-be-wrong, and nothing in them looks stale. Deliverable was
+  a **DEVICE-CLASS SCOPE BANNER** + a `§A-SUB` inversion table, not a new clause.
+  (Item 53's "an absent scope banner lies invisibly", one rung worse: here the
+  banner was **present, explicit and honest**, and still lethal, because the
+  reader's device class changed underneath it.)
+- **★ A VERSION DELTA CAN BE A CHANGE OF PREDICATE TYPE, WHICH IS INVISIBLE TO A
+  RENUMBERING CHECK.** §8.6.7's overprint gate: 1.7 disables `OPM` when the
+  device's native space **is not `DeviceCMYK`** (an **identity** test); 2.0 when
+  it **does not include CMYK device colourants** (an **inclusion** test). Same
+  clause number, same consequent sentence, different predicate — and on a
+  **CMYK+N-spot** buffer (exactly `Pass 97.x`) `OPM` is therefore **inert under
+  1.7 and live under 2.0**. The corpus had quoted only the 1.7 form and concluded
+  "OPM is inert". **Diff the PREDICATE of a conditional across editions, not just
+  its clause number and its outcome.**
+- **★ A SUSPECTED CROSS-EDITION DELETION MUST BE CONFIRMED BY A WHOLE-DOCUMENT
+  COUNT, NEVER BY A CLAUSE WINDOW — I nearly filed a false deletion.**
+  §11.7.5.3's BG/UCR third bullet ("the **default functions for the page**")
+  ends up **immediately after a page break** (2.0 dump line 20458) while my
+  `sed` window ended at 20455 ⇒ it **looked deleted** and is **retained**. The
+  count caught it (`1` vs `1`). The *neighbouring* rendering-intent third bullet
+  **is** genuinely deleted — confirmed on **four** independent stripped phrases,
+  all `1→0`. **The two structurally identical bullets went opposite ways**, which
+  is also what proves the surviving one is not an extraction artifact. Same
+  family as item 4c-bis, now as a *deletion* false-positive.
+- **RE-AUDITING MY OWN NEGATIVE FOUND AN ADJACENT MECHANISM, NOT AN ERROR.**
+  `REND-N3` (`rich black`/`pure black`/`black preservation` = 0 in 2.0) **held**
+  on re-measure — but `black point compensation` = **24 hits** in 2.0, **0** in
+  1.7, and §8.6.5.9 is named in 2.0's own Introduction as a headline PDF 2.0
+  feature. **Do not let an adjacent hit collapse into the negative:** BPC is
+  about **shadow detail**, `REND-A1` leg 4 is about **keeping greys K-only** —
+  different problems, so the negative and leg 4's "unsourced" flag both stand.
+  **State explicitly why the adjacent mechanism does NOT rescue the argument**,
+  or the next session will assume it does.
+- **A "MOOT" MARKER IN THE AMBIGUITY REGISTER IS A DATED CLAIM ABOUT THE
+  IMPLEMENTATION, AND A PASS CAN EXPIRE IT.** `SEP-A1` (colorant-name matching
+  undefined) was filed *"Moot for pdfce today"* because an additive device never
+  matches a name. `Pass 97.x` un-moots it. **Grep the register for `moot`,
+  `today`, `not yet`, `on screen` whenever the implementation's capabilities
+  change** — same expiry logic as item 51's "a *no ingestion closes it* clause is
+  a PREDICTION".
+- **CLAUSE ATTRIBUTION BY WALK-BACK BEAT MY INFERENCE AGAIN, AND THE WALK-BACK
+  LOOKED WRONG.** The `TR BG UCR … UseBlackPtComp` ignore-list I assumed was
+  §8.7.3.3 (uncoloured tiling patterns) walked back to **§8.6.8 "Colour
+  operators"** — which I doubted, because the list *is* about patterns. Reading
+  the preceding lines showed §8.6.8 states **one restriction covering TWO
+  circumstances**: a `d1` Type 3 glyph description **and** an uncoloured tiling
+  pattern, both propagating to nested streams. **When a walk-back contradicts a
+  confident guess, read the intervening prose rather than overriding it** — the
+  clause was more general than either guess. (Third instance of this exact
+  misattribution class; items 52, 53.)
+- **A DECLARED GAP CAN BE CLOSED AS A BY-PRODUCT, AND ITS DECLARERS MUST ALL BE
+  EDITED.** §8.6.5.9 was declared NOT-ingested in **three** places
+  (`color__cie_based.md`, `iso32000__s__8.6.md`, `index.md`). Closing it inside
+  a file named for a *different* clause (§11.7.5.3) reprises item 51's
+  invisibility problem — mitigated by putting **both clause numbers in `clause:`
+  and `keywords:`** and editing all three declarers to point at the new file.
+- **THE CROSS-PROJECT CORRECTION FROM ITEM 51 HAD NOT PROPAGATED.** `iccce` was
+  told on 2026-08-19 that `A52`'s "PDF 1.7 carries no such steer" leg is wrong
+  (1.7 answers it with a `shall`); the 2026-08-21 dispatch **repeats the original
+  framing verbatim**, incl. re-relaying clause numbers as unverified leads.
+  **Report a correction owed to a foreign corpus in the FINAL MESSAGE every time
+  it recurs** — filing it only in my own file did not reach them.

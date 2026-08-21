@@ -96,6 +96,353 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `498d045`/`108d0e8`/`5047cb9` — THE GATE THAT FINDS UNFILED COMMITS COULD NOT SEE THE WORKFLOW THAT RUNS THE GATES; CI NOW WIRES FOURTEEN OF FIFTEEN `tools/check-*` SCRIPTS, NOT SIX; A TEN-DAY-OLD CI DEFECT (BACKTICK → SILENT COMMAND SUBSTITUTION) RECURRED IN THIS FILING'S OWN COMMIT MESSAGE — `R207` MINTED — no Pass ID; three infrastructure/record commits — 2026-08-21 (two-hundred-and-fifteenth filing)
+
+**This filing has no shell (hard rule 8).** Commit hashes, subject-line
+wording, and the git-history counts below (seventeen commits touch
+`.github/` project-wide; the widening flags two as newly unfiled) are
+**relayed** by the dispatching engineer, not independently re-derived —
+re-deriving them needs `git log`/`git show`, which this dispatch does
+not have. What **is** independently confirmed against live source this
+filing, via `Glob`/`Grep`/`Read`: `tools/check-commits-filed.py`'s
+`CODE_PREFIXES` tuple reads `("crates/", "tools/", "fixtures/",
+".github/")` at line 159 — the `.github/` entry `498d045` is said to have
+added is live on disk. `tools/` holds exactly **10** `check-*.py` and
+**5** `check-*.sh` files (**15 total**, counted by `Glob` this filing).
+`.github/workflows/ci.yml` invokes **14 distinct** `check-*` scripts by
+name inside `run:` steps (counted by `Grep -o` this filing, deduplicated
+list below); the fifteenth, `check-image-colorspace-truth.py`, appears
+only inside a comment (`ci.yml:390-401`) naming it a **deliberate**
+exclusion — *"it takes a fixture directory as an argument and checks a
+corpus, not the repo, so it is a sweep tool rather than a gate."*
+
+Fourteen invoked (deduplicated, alphabetical): `check-bypass-paths.sh`,
+`check-commits-filed.py`, `check-core-api-verbs.py`,
+`check-disclosure-channel.sh`, `check-fmt-excluded.py`,
+`check-ledger-numbers.py`, `check-one-commit-per-command.py`,
+`check-outcome-disclosed.py`, `check-passes-filed.py`,
+`check-settings-consumed.py`, `check-shipped-assets.py`,
+`check-string-gaps.sh`, `check-theme-colors.sh`, `check-ui-strings.sh`.
+
+**Shipped (no Pass ID — the dispatching engineer's own reading, checked
+rather than deferred to: none of the three adds, changes or discloses a
+document capability, so none is filed as a Pass):**
+
+- **`108d0e8`** — CI ran six of fifteen `tools/check-*` scripts; wired to
+  fourteen (the fifteenth deliberately excluded, above). The newly wired
+  scripts joined the existing six inside the `ui-strings` job
+  specifically because that job already checks out with
+  `fetch-depth: 0`, which `check-passes-filed.py` needs to walk full
+  history — a shallow clone would have made it pass **vacuously**. Every
+  one of the nine had, until this commit, run only when somebody
+  remembered to run it locally: the *"green because nobody looked"*
+  failure each script was individually written to end, one level up.
+- **`498d045`** — `check-commits-filed.py`'s `CODE_PREFIXES` named
+  `crates/`, `tools/`, `fixtures/` — not `.github/`. So `108d0e8` was not
+  flagged and forgiven; it was **structurally invisible** to the one gate
+  whose job is finding exactly this. Widened to include `.github/`.
+  Relayed measurement (git-history count, not independently re-derivable
+  from this dispatch): **17** commits touch `.github/` project-wide; the
+  widening flags **2** as newly unfiled, both genuinely so. **Neither is
+  backfilled into the gate's baseline** — that file is pre-existing debt
+  the gate was written around, and exempting the two now would silence
+  precisely the class the widening exists to expose.
+- **`5047cb9`** (2026-08-11 — a defect fix that predates this session and
+  was never itself filed; filed retroactively here rather than left
+  permanently absent from the record) — a double-quoted `ci.yml` shell
+  string carried a backtick-quoted word meant as a Markdown code span;
+  bash ran it as command substitution, found nothing, spliced in an
+  empty string, and the printed CI error read
+  `::error::pdfce-core  enables an extra feature on the  crate.` — losing
+  the one word it existed to name. `set -e` did not catch it: `echo`'s
+  own exit status is `0` regardless of what its arguments contained.
+
+**★★ `5047cb9`'s exact defect recurred in THIS filing's own dispatch, ten
+days later, in a different medium.** A `git commit -m` call containing a
+backticked phrase had bash splice a fifteen-line file listing into the
+middle of a commit-message sentence — same root cause (a backtick inside
+a string handed to a shell is command substitution, not punctuation),
+different host (an interactive Bash-tool call, not a CI YAML `run:`
+step). **Neither instance would have surfaced from a green run**: the
+2026-08-11 one was found only because somebody deliberately made the gate
+fail so as to read what it printed; this one only because the resulting
+message was printed back and read.
+
+**`R207` minted** (Standing rules, below) from this pair — two instances,
+two media, one mechanism, and the property that makes it a rule candidate
+rather than a habit: **nothing detects it.** No gate is proposed, on the
+same warrant hard rule 10's corollary already gives for stale figures:
+checking *"is this string what the author meant"* requires knowing the
+author's intent, which is the very fact the defect destroys. New
+`D:\dev\rag\rust\` file:
+`prose_with_backticks_through_a_shell_string_undergoes_command_substitution_silently.md`
+(index updated same filing).
+
+**A hash-hygiene note, filed once here and cross-referenced rather than
+repeated.** `docs/NEXT_SESSION.md` cited the CI-wiring commit as
+`2ddbbbe` for roughly an hour; the commit was then amended, which gave it
+the new hash `108d0e8` filed above and left the earlier citation pointing
+at an orphaned-but-still-resolvable object (git keeps the old object, so
+nothing *looked* broken). Fixed in `NEXT_SESSION.md` — engineer-owned,
+not this filing's to edit; recorded here because this role files by hash
+too, and a hash cited before the last amend is a hash that will still
+resolve while naming the wrong commit.
+
+**A correction to the "3 of 16"/"5 of 14" figure, with a nuance the
+"mis-filed twice" framing (`ci.yml`'s own comment, `108d0e8`) undersells.**
+Measured this filing (`Glob` + `Grep -o` over `ci.yml`, both above): **14
+of 15 wired, one deliberately excluded** — not a ratio, a near-total with
+one named carve-out. The 185th filing's *"3 of 16"* does read as a plain
+misread. The 186th filing's *"5 of 14"* is different: it was derived **by
+counting** (`ls`/`grep`, its own text says so) and was **correct at the
+time it was filed** — `check-outcome-disclosed.py` did not exist yet
+(`Pass 110.0`, 203rd filing, is later than the 186th) — so the true
+corpus then really was 14 scripts, 5 wired. It went stale for the
+ordinary reason (the corpus grew by one script, then CI was rewired), not
+because its own count method was flawed a second time. **Filed as a
+correction to the "twice mis-filed" characterization, not a
+contradiction of the underlying repair** — the figure the *reader* needs
+(what is wired *today*) is unaffected either way. Item 7 of the 186th
+filing's owed-work box, below, is marked closed with the same figure and
+the same method.
+
+**`docs/FEATURES.md`: checked, not deferred to the dispatch — no rows
+touched.** `Grep` this filing for `gate`/`CI `/`check-commits-filed`/
+`check-passes-filed`/`tools/check` across `FEATURES.md` returns matches
+only for unrelated capability rows (redaction's runtime-proof gate, the
+build-time feature-strip gate, the UI-chrome glyph-coverage gate) — none
+of which name a `tools/check-*` script or CI wiring. None of this
+filing's three commits is a capability change.
+
+**RAG.** One new `D:\dev\rag\rust\` file (above). No
+`C:\personal_rag\pdf\` lesson — nothing in this filing is PDF-domain.
+
+**Terminology (rule 15):** no "dimension" occurrence, qualified or bare,
+appears in this entry — not applicable this filing.
+
+**Ledger effects.**
+
+| ledger (per-item form, denominator stated — hard rule 10) | before | after |
+|---|---|---|
+| Pass family ceiling | **121** | **121** (unchanged — no Pass ID; infrastructure/record commits, per the engineer's reading, checked not deferred to) |
+| decision records | **076** | **076** (unchanged — no architectural decision this filing) |
+| standing rules | **R206** | **R207** (minted — content routed through a shell is live shell text, not inert data; two instances, two media, one mechanism) |
+| `SESSION_LOG` filings | **214** | **215** |
+| `tools/check-*` scripts wired into CI | **6 of 15** | **14 of 15** (1 deliberately excluded, named in `ci.yml`'s own comment) |
+| commits touching `.github/` visible to `check-commits-filed.py` | **0 of 17** (relayed) | **17 of 17** (relayed); **2** newly flagged unfiled, both filed here |
+| `D:\dev\rag\rust\` findings | — | **+1** |
+| `C:\personal_rag\pdf\` lessons | — | **+0** |
+| `docs/FEATURES.md` rows touched | — | **0** (confirmed by `Grep` this filing, not relayed) |
+
+---
+
+### `Pass 120.2`/`Pass 120.4` (`af5989f`) — THE `Pass 120.x` OBJECT-CLIPBOARD FAMILY CLOSES: A SELECTION EXPORTS AS A STANDALONE ONE-PAGE PDF (`ObjectClip::to_pdf`), AND ANNOTATIONS (ce DIMENSIONS, MARKUP) JOIN THE CLIPBOARD; ★★★ A REAL CAD EXPORT FOUND A DEFECT IN `Pass 120.0` ITSELF — TEXT STATE IS GRAPHICS STATE, AND A COPIED `BT`…`ET` SPAN DOES NOT CARRY THE `Tf` IT DEPENDS ON — 2026-08-21 (two-hundred-and-fourteenth filing)
+
+**This filing has no shell (hard rule 8).** Commit hash, `cargo test`/
+`fmt`/`clippy` results and the sabotage counts below are relayed by the
+dispatching engineer. The structural claims — `ObjectClip::to_pdf`,
+`copy_annotations`/`copy_selection`, the prelude mechanism
+(`item_prelude`/`name_sites`), `annot_author::transform_spec`'s
+enclose-and-disclose posture for a rotated `Square`/`Circle`,
+`dimension::group::transform_kind`'s exhaustive match, `EditError::
+AnnotationIsWidget`, and the `annotations_pasted`/`annotation_count`
+disclosure pair — were **independently confirmed against live source
+this filing**: `crates/pdfce-core/src/vector/clip.rs` (`to_pdf`,
+`CLIP_VERSION`, `NotAClip`, `annotations_survive_serialisation`),
+`crates/pdfce-core/src/edit.rs` (`copy_annotations` at line 7642,
+`copy_selection` at line 7666, the prelude wired into `copy_selection`'s
+loop at line 7712, `is_ce_dimension` consulted at line 7798 before the
+markup branch, `EditError::AnnotationIsWidget` at line 4852/returned at
+line 15521), `crates/pdfce-core/src/annot_author.rs` (`transform_spec`
+and its doc comment on `Square`/`Circle`'s enclose-and-disclose
+posture), `crates/pdfce-core/src/dimension/group.rs` (`transform_kind`),
+and `crates/pdfce-cli/src/main.rs` (`object-copy`'s `--objects`/
+`--annotations`/`--pdf`/`--cut`, `object-paste`, both disclosure
+`eprintln!`s). Test count (**38**, `#[test]` occurrences in
+`crates/pdfce-core/tests/object_clipboard.rs`) counted directly this
+filing, matching the dispatch's own figure exactly.
+
+**Shipped:**
+- **`Pass 120.2`** — `ObjectClip::to_pdf() -> ClipPdf`: renders the
+  clip as a standalone one-page PDF whose `/MediaBox` **is** the
+  clip's own bounds — no surrounding whitespace for a consumer placing
+  the file. The resource closure travels; the export reopens in pdfce
+  and its text extracts. A degenerate (zero-height or zero-width)
+  selection gets a minimum page size, **disclosed**
+  (`ClipPdf::size_substituted`) rather than silently substituted — a
+  zero-area `/MediaBox` makes readers show an empty window or refuse
+  the file outright, and an operator who copied a rule and got back an
+  unopenable document would have no way to tell which step failed.
+  Two exports of one clip are byte-identical (`/ID` derives from the
+  body, no clock), so a shell can cache one. **CLI**: `object-copy
+  --pdf OUT.pdf`, a second write of the same read rather than a second
+  traversal.
+- **`Pass 120.4`** — `EditSession::copy_annotations(page, &[usize])`
+  (the `/Annots` numbering) and `copy_selection(page, objects,
+  annotations)` — **two index lists, not one tagged list**, so the
+  caller never has to remember which numbering an index came from.
+  Copied through pdfce's own models, not a raw dictionary copy: a
+  markup annotation through `MarkupSpec` (`annot_author::
+  transform_spec`), a ce dimension through `DimensionKind`
+  (`dimension::group::transform_kind`) **plus its group's name and
+  unit** — matched by name on the destination (a `GroupId` means
+  nothing in another document) and created if absent. A **widget is
+  refused by name** (`EditError::AnnotationIsWidget`): it carries an
+  `/AcroForm` field registration, and a renamed field is a *different*
+  field — any script, calculation order or parent/child relationship
+  naming the old one breaks silently. `annotations_pasted` counts only
+  what actually landed, so its disagreeing with `annotation_count()`
+  **is** the disclosure signal, not a bug.
+
+**★★ The classification order is load-bearing, and it is `R204`'s
+lesson one Pass over.** A ce dimension **is** a markup annotation by
+subtype (`/Line`, `/Polygon`, `/PolyLine`) — `copy_selection` calls
+`is_ce_dimension` **before** the generic markup branch, or a perimeter/
+path ce dimension pastes as a bare scalloped-or-plain outline with its
+measurement silently lost. A test asserts the pasted item's reported
+kind is the string `"ce dimension"`, not `"markup"`, and its own
+failure message carries this reasoning.
+
+**A rotated `Square`/`Circle` ENCLOSES rather than refusing, and
+discloses.** `/Rect` is axis-aligned by definition (§12.5.2) — the `re`
+problem from `Pass 113.0` in a different carrier. Enclosing is the only
+shape the format admits, so this is pdfce doing the one available
+rendering and saying so, not choosing between two. Point-based markup
+(`Line`, `Ink`, `Polygon`, `Cloud`, `PolyLine`) and every ce dimension
+rotate faithfully — every point maps exactly.
+
+**A stated limit, published as a question rather than left to be
+discovered from a silently-dropped count:** `to_bytes` does not carry
+annotations in this cut — `ObjectClip::annotations_survive_
+serialisation() -> bool` lets a caller **ask** rather than find out
+from a paste that quietly arrived short. The CLI checks it on every
+`object-copy` and prints a warning naming the annotation count that
+will not survive the round trip through a saved clip file. Filed as
+its own Backlog entry below, per the operator's instruction, rather
+than left as a footnote inside a shipped Pass: it needs a second
+versioned encoding alongside the content-object one, and getting it
+wrong means a clip that parses cleanly and pastes the wrong shape.
+
+`transform_spec` and `transform_kind` both use **exhaustive matches
+with no wildcard arm**, so a new markup or dimension variant becomes a
+compile error at the one place that must consciously decide how it
+moves.
+
+**★★★ THE DEFECT THE REAL FILE FOUND, AND IT WAS IN `Pass 120.0` ITSELF
+— TWO PASSES AND ONE COMMIT AGO, NOT YEARS OLD LIKE `Pass 121.0`/
+`121.1`, WHICH MAKES IT A DIFFERENT SHAPE OF THE SAME LESSON.**
+Exporting a selection from the operator's own CAD drawing produced a
+clipboard PDF whose text pdfce's **own** extractor read back as
+`chars=0 codes=4 failed=4`, diagnostic *"a show operator appeared with
+no font selected (§9.4.1 requires Tf first)"* — on a text object that
+plainly uses a font (`resources=0` on the pasted item).
+
+**Text state is graphics state (§8.4.1 Table 52).** A producer may set
+`/F8 12 Tf` **once** and emit many `BT`…`ET` blocks that inherit it —
+exactly what this CAD exporter does. A content-stream object's byte
+span **is** its `BT`…`ET`, so the `Tf` that governs it is not *in* it.
+Copy found no name to bind; paste emitted text with no font selected;
+**nothing errored at either end.** The same argument reaches every
+other inherited state: a path stroked after `0.5 g 2 w` earlier in the
+stream would paste black and hairline, silently.
+
+**The fix: a prelude.** `clip::item_prelude`/`name_sites`
+(`edit.rs:7712`) capture, at copy time, the state an item **depends
+on** but does not itself **establish**, and emit it inside the paste
+wrapper before the item's own bytes. `ClipItem::bytes` stays
+**verbatim, deliberately** — prepending to it would make the copied
+bytes no longer directly comparable with the source's, and a separate
+prelude field keeps *what the producer wrote* apart from *what pdfce
+had to re-establish*, which is also what makes the second one
+disclosable rather than silently folded into the first.
+
+Emitted **only** from state the decomposition actually measured, and
+**only** when the item's own bytes do not already set it. **Not**
+emitted: dashes, `gs` parameters, clipping, blend modes — none of
+these are in the object model, and a fabricated dash is worse than an
+absent one, because it looks deliberate rather than missing.
+
+After the fix the same export extracts `chars=2 failed=0
+sourced_pct=100.0` with `resources=5`.
+
+**★★★ This is the THIRD consecutive Pass where the operator's real
+drawing found a defect that fixtures and a green suite did not** —
+`Pass 121.0` (`ToUnicodeCMap::injective_inverse`'s self-collision,
+`ToUnicodeCMap`-era) and `Pass 121.1` (reflow's missing line boundary,
+`Pass 14.1`-era) were the first two, both found by running `Pass
+119.0`'s form-XObject text edit against the benchmark drawing; this
+one was found by running `Pass 120.0`'s own clipboard against the same
+file, **two Passes and one commit after `120.0` shipped green on 21
+tests.** Recorded here as instructed, prominently, because the pattern
+is now stronger than any one instance of it: **a reach extension does
+not only find new content — it finds old assumptions the fixture
+corpus was never shaped to challenge**, and in this instance "old" is
+relative — the assumption was two Passes old, not years. No standing-
+rule mint was asked for or offered this dispatch; if a fourth instance
+surfaces, the declined-on-precedent question from the two-hundred-and-
+eleventh filing (a *different* class — test-vacuity, `R162`'s family)
+is not the right precedent to check it against — this pattern (corpus-
+representativeness, not test-assertion-shape) has no standing rule of
+its own yet and would need its own occurrence count started fresh.
+
+**Decisions made this session: none.** Same class as decision 076's
+own precedent, already drawn at the `120.0`/`120.1`/`120.3` filing: a
+verb-level payload/address-space design for one editing surgery (here:
+the annotation clipboard's two-index-list shape, the prelude mechanism)
+is `docs/core-api/`'s territory, checked against `docs/core-api/
+02-editing-and-saving.md` §1.10 rather than re-derived — confirmed
+current on disk this filing, including `copy_annotations`/
+`copy_selection` (lines 541–545) and the **139** public-method count.
+
+**Test results.** `crates/pdfce-core/tests/object_clipboard.rs`: **38
+tests** (up from 21 at the `120.0`/`120.1`/`120.3` filing — **17 new
+tests**), counted directly this filing. `cargo test --workspace`
+green, `cargo fmt --check` and `cargo clippy --all-targets --workspace`
+clean (relayed). No manifest touched, no dependency added. Every new
+mechanism sabotage-verified (relayed, not independently re-run):
+removing the prelude fails **3** tests; mis-ordering the ce-dimension
+classification (markup branch checked first) fails **1**; skipping
+annotation placement entirely fails **4**.
+
+**`docs/FEATURES.md`:** row widened (Vector objects section) to cover
+annotation copy/cut/paste and the standalone-PDF export in the same
+row as the content-object clipboard, rather than two new near-
+duplicate rows — core `[x]`, cli `[x]`, gui `[ ]` (unchanged from the
+`120.0` filing). The two matching *Planned* rows (render-as-PDF,
+annotations-on-clipboard) are removed; one new *Planned* row takes
+their place for the annotation-serialisation limit named above.
+
+**RAG:** the §8.4.1 text-state-is-graphics-state *fact* is already in
+the spec corpus; what is new is pdfce's own collision with it. New
+`C:\personal_rag\pdf\` lesson (below): a CAD exporter sets `Tf` once
+outside the `BT`…`ET` blocks that depend on it, which is the shape
+that broke `Pass 120.0`'s clipboard and which any future "copy a
+content-stream object's own state" reasoning needs to carry. Distinct
+mechanism from the existing `Pass 121.1` lesson (that one: no line-
+boundary operator at all, an *absence*; this one: a *dependency* on
+state set outside the copied byte span) — filed as a sibling, not a
+footer on the existing entry, and cross-referenced both ways.
+
+**Terminology (rule 15):** every "dimension" occurrence in this entry
+naming a ce dimension is qualified as such; there is no unqualified
+bare-geometry "dimension" occurrence in this entry.
+
+**Ledger effects.**
+
+| ledger (per-item form, denominator stated — hard rule 10) | before | after |
+|---|---|---|
+| Pass family ceiling | **121** | **121** (unchanged — `120.2`/`120.4` were already Backlog IDs, now shipped; family closes) |
+| decision records | **076** | **076** (unchanged — same class as decision 076's own precedent) |
+| standing rules | **R206** | **R206** (unchanged — no mint asked for or offered this dispatch) |
+| `SESSION_LOG` filings | **213** | **214** |
+| test count, this file | **21** | **38** (+17 new tests, `crates/pdfce-core/tests/object_clipboard.rs`) |
+| sabotage yield | — | **prelude removed: 3 of 38 fail; ce-dimension order swapped: 1 of 38 fails; annotation placement skipped: 4 of 38 fail** (denominator: the file's post-Pass test count, 38) |
+| `D:\dev\rag\rust\` findings | — | **+0** |
+| `C:\personal_rag\pdf\` lessons | — | **+1** (new file, distinct mechanism from the `Pass 121.1` sibling) |
+| `docs/FEATURES.md` rows touched | — | **2** (1 Implemented row widened in place; 2 Planned rows removed, 1 new Planned row added) |
+
+---
+
 ### `Pass 120.0`/`Pass 120.1`/`Pass 120.3` (`73fa218`) — OBJECT CLIPBOARD: `copy_objects`/`cut_objects`/`paste_objects`/`paste_preview`, A VERSIONED `ObjectClip` THAT OWNS ITS RESOURCE CLOSURE BY VALUE AND REBINDS EVERY RESOURCE NAME ON PASTE; THE REQUESTER'S OWN "`import_object` ALREADY DOES THE HARD HALF" CLAIM CONFIRMED **AND INSUFFICIENT** — NAME REBINDING WAS THE ACTUAL FEATURE — 2026-08-20 (two-hundred-and-thirteenth filing)
 
 **This filing has no shell (hard rule 8).** Commit hash, `cargo test`/
@@ -308,6 +655,16 @@ sessions" — core `[x]`, cli `[x]`, gui `[ ]`. *Planned* row for the
 `Pass 120.0`–`120.4` family split in place: the shipped slice moved out,
 `Pass 120.2` and `Pass 120.4` kept as two narrower rows carrying the limits
 above.
+
+**★ Footer, 2026-08-21 (two-hundred-and-fourteenth filing).** Both
+`Pass 120.2` and `Pass 120.4`, named above as "Backlog, below"/"Left
+open, Backlog," have since **shipped** — see the *Shipped* entry now
+sitting above this one (`af5989f`). Left in place rather than edited,
+per this file's append-only convention; the standalone-PDF-format
+reasoning and the annotation-address-space reasoning both held and are
+not re-argued in the new entry. The one thing that changed on shipping:
+`Pass 120.4`'s widget half is **refused**, not built, matching the
+"more than a graph copy" prediction made here.
 
 **RAG escalations, both written this filing:**
 - `D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
@@ -56015,7 +56372,7 @@ and `crates/`, both outside this role's remit.
 | **4** | **`index.md`'s citation tallies do not reconcile with a naive count and state no method** | `index.md:16–17` | 186th sweep | Says *"382 verified citations"* / *"128 citations"*; `grep -o "\.rs:[0-9]\+" \| wc -l` gives **458** / **191**. **NOT asserted as wrong** — "verified citations" may count something narrower. Asserted only as **not re-derivable by a reader**, which is the `R197` failure in its milder form. |
 | **5** | **★★ PARTIALLY DISCHARGED 2026-08-19 (189th filing) — `open\2026-08-19-insert-pages-orphan-count-reply.md` answers item 1 of the five (the orphan ruling, with the permanence argument); items 2–5 remain owed and the box above stays open.** Original text: **A REPLY TO `pdfceGUI` IS STILL OWED** — `request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md` | `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` | carried 184th → 185th → **186th** | Third consecutive filing. `e194b46` supplies most of the material verbatim; **it is not the reply.** Channel re-established by `ls` this filing (`R196`): the file is dated **2026-08-18 15:19** and still open. |
 | **6** | **★★ `note_gray_black_routing_is_yours.md` STILL UNREAD** | `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\` | carried forward | `ls` this filing: dated **2026-08-18 01:37**, 13,543 bytes — **the largest open note in that channel.** Named by the engineer in this dispatch as owed. |
-| **7** | **CI runs 5 of 14 `tools/check-*` gates** | `.github/workflows/*.yml` | 186th sweep | See the correction note below. |
+| **7** | ~~**CI runs 5 of 14 `tools/check-*` gates**~~ — **CLOSED by `108d0e8`, 215th filing: 14 of 15 wired, the 15th (`check-image-colorspace-truth.py`) deliberately excluded and named as such in `ci.yml`'s own comment.** | `.github/workflows/*.yml` | 186th sweep; closed 215th | Measured 215th filing by `Glob` (10 `.py` + 5 `.sh` = 15 total) + `Grep -o` over `ci.yml` (14 unique invocations) + reading the exclusion comment — counting, not reading, which is also what the 186th filing's own "5 of 14" did (see the 215th filing's Shipped entry: that figure was correct for its own time, not a second misread — `check-outcome-disclosed.py` did not exist until `Pass 110.0`, 203rd filing). |
 
 **★ A CORRECTION THIS FILING OWES ITS OWN PREDECESSOR, sourced per hard
 rule 10's corollary (*a correction is a claim, and must name its
@@ -64936,50 +65293,27 @@ form that both omits `/Resources` and is itself invoked from inside
 another form. Filed so the inconsistency is tracked rather than latent;
 not urgent, no known fixture exercises it.
 
-### `Pass 120.2` / `Pass 120.4` — object clipboard, the residue after `120.0`/`120.1`/`120.3` shipped
+### `Pass 120.5` — a versioned annotation payload for `ObjectClip`, so a clip's annotations survive `to_bytes`/`from_bytes`
 
-**Filed 2026-08-20 (two-hundred-and-ninth filing), from `pdfceGUI`'s
-`request_an_object_clipboard_the_whole_capability_not_the_convenient_
-subset.md` (dated 2026-08-20 16:57), which supersedes the narrower `◐`/
-`⛔` clipboard rows of an earlier note.** Operator, relayed verbatim by
-the requester: *"oh I might want all cases so we shouldn't be
-restrictive in our ask."* Originally five parts, dependency-ordered.
-**`Pass 120.0`/`Pass 120.1`/`Pass 120.3` SHIPPED** (`73fa218`,
-two-hundred-and-thirteenth filing, see *Shipped* above — `ObjectClip` +
-`copy_objects`/`paste_objects`/`paste_preview`/`cut_objects` +
-serialisation + CLI). **The requester's own key claim — that
-`EditSession::import_object` already does the hard half — is now
-CONFIRMED, and confirmed as the SMALLER half**: the actual feature was
-resource-name rebinding, not graph copy. Full reasoning in the Shipped
-entry; not re-argued here.
-
-Two parts remain, both narrower than they read when this bucket was
-filed:
-
-- **`Pass 120.2`** — "render this selection as a standalone one-page
-  PDF." The requester explicitly does **not** want pdfce touching the OS
-  clipboard directly; they register the formats on their side.
-  **Deliberately not the `ObjectClip` format that shipped** — a one-page
-  PDF cannot carry which byte range was which object, each item's
-  per-object CTM, or which resource names its operators consumed, and
-  re-deriving those on paste-back would make a pdfce→pdfce round trip
-  worse than a pdfce→Illustrator one. Two different formats for two
-  different consumers, not one simplified into the other.
-- **`Pass 120.4`** — dimensions and widgets on the clipboard.
-  **Acceptance criteria corrected from the original filing**, which read
-  "refuse loudly on the first cut rather than paste something
-  structurally right and semantically wrong." That is subtly wrong for
-  the shape `120.0`/`120.1`/`120.3` actually shipped: `copy_objects`
-  addresses **content-stream object indices only** (paths, text runs,
-  image/form-XObject invocations, per `crates/pdfce-core/src/vector/
-  decompose.rs`'s `VectorObject`), and a ce dimension, markup annotation
-  or widget is an **annotation**, not a content object — there is no
-  index by which one of these verbs could even *name* an annotation to
-  refuse it. This Pass needs a genuinely separate address space and
-  payload shape (a dimension's `/Measure`/scale/`/PieceInfo` sidecar and
-  group membership; a widget's `/AcroForm` field-tree registration and a
-  non-colliding field name on paste) — more than a graph copy, and more
-  than a refusal.
+**Filed 2026-08-21 (two-hundred-and-fourteenth filing), the limit named
+rather than left as a footnote in `Pass 120.4`'s own Shipped entry
+(above), per the dispatching engineer's explicit instruction.**
+`copy_annotations`/`copy_selection` (`Pass 120.4`, Shipped) copy ce
+dimensions and markup annotations correctly within a live session, but
+`ObjectClip::to_bytes` does not yet carry them across a save/reload of
+the clip file itself — `annotations_survive_serialisation()` returns
+`false` today, and `pdfce-cli object-copy` warns on every invocation
+that copies one. Needs a **second versioned payload** alongside `Pass
+120.1`'s content-object encoding — its own magic/version, so a clip
+written by a build that only knows the content-object format is
+refused by name rather than silently truncated — able to round-trip a
+`MarkupSpec` and a `DimensionKind` **plus its group's name, scale and
+unit**: the same three things `copy_selection`'s live-session path
+already reconstructs on paste, serialised instead of only held in
+memory. Widgets stay out of scope here too, for the same field-
+registration reason `Pass 120.4` refuses them live (§12.7.3.1's
+`/AcroForm` naming problem does not go away because the payload is now
+on disk instead of in a session).
 
 ### ★★★ MOVE / RESIZE / ROTATE, SCOPED TO ITS LOGICAL CONCLUSION — filed 2026-08-20 (two-hundred-and-fourth filing), from the operator's own widening instruction on `request_no_verb_transforms_a_non_path_object_so_a_placed_image_cannot_be_moved.md`
 
@@ -80409,6 +80743,22 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   marker it was keyed on — the same shape one layer up, in the tooling
   that would otherwise catch a hazard like R186's own).
   **Ceiling moves `R204` → `R205`; next free `R206`.**
+  **★ Footer, 2026-08-21 (215th filing) — TWO FURTHER INSTANCES OF THE
+  CLASS, NEITHER FOLDED INTO THE FOUR ABOVE BECAUSE BOTH ARE A DIFFERENT
+  SUB-MECHANISM.** `check-outcome-disclosed.py`'s `OUTCOME_STRUCTS` list
+  (written from `edit.rs` alone, blind to every report struct in a
+  submodule — `Pass 119.0`, 209th filing) was named there as *"the fifth
+  instance of the under-reporting-gate class, first whose mechanism is
+  the scope of its input list rather than the spelling of a pattern."*
+  `check-commits-filed.py`'s `CODE_PREFIXES` (missing `.github/` —
+  `498d045`, this filing's Shipped entry, above) is the **sixth**
+  instance of the same class and the **second** whose mechanism is
+  input-list scope rather than pattern spelling. Recorded here for
+  continuity of the count rather than left implicit across two Shipped
+  entries; no new rule number claimed — both fit `R205`'s own stated
+  generalization (*"the fix widens the semantic CLASS the pattern was
+  trying to recognise"*), which already covers a narrow enumerated list
+  the same way it covers a narrow regex.
 
 - **R206 — When a design question has two defensible behaviours and
   neither is dictated by the PDF standard, ship BOTH as configurable
@@ -80690,6 +81040,64 @@ the durable half — hooks get `--no-verify`'d, a docstring does not.
 that tree's existing
 `a_gate_joining_on_a_hash_the_commit_itself_writes_is_unsatisfiable.md` —
 same cause (hashes exist only at commit time), two different failure modes.
+
+- **R207 — CONTENT ROUTED THROUGH A SHELL COMMAND LINE OR STRING (A CI
+  `run:` STEP, A `git commit -m` CALL, ANY INTERPOLATED PROSE) IS LIVE
+  SHELL TEXT, NEVER INERT DATA; WRITE IT TO A FILE OR PASS IT VIA A
+  NATIVE ARGV API INSTEAD OF INTERPOLATING IT INTO A SHELL STRING
+  (2026-08-21; librarian-minted, two-hundred-and-fifteenth filing;
+  tooling rule, second confirmed occurrence across two media, ten days
+  apart, root cause identical both times).** A backtick inside a
+  double-quoted or unquoted shell string is not punctuation, it is
+  **command substitution**: `` `word` `` runs `word` as a command and
+  splices its STDOUT in place — silently, because a missing command
+  prints to *stderr* and substitutes the *empty string*, and the
+  enclosing command's own exit status stays `0`, so `set -e` never
+  fires. The failure is not an error; it looks exactly like text the
+  author might have written.
+  **Two instances, ten days apart, same mechanism, two different hosts:**
+  (1) `.github/workflows/ci.yml` (`5047cb9`, 2026-08-11) built an
+  `::error::` string containing a backtick-quoted word meant as a
+  Markdown code span; the printed message lost the one word it existed
+  to name — `::error::pdfce-core  enables an extra feature on the
+  crate.` (2) a `git commit -m` call in this project's own librarian
+  dispatch (interactive Bash-tool call, 2026-08-21) had a backticked
+  phrase splice a fifteen-line file listing into the middle of a
+  commit-message sentence. **Neither was found by a gate — both were
+  found by a person reading the printed string back and noticing it was
+  short a word or long a paragraph.**
+  **The rule is about the MECHANISM, not the trigger character, and
+  that is deliberate — the dispatching engineer's own framing, adopted
+  verbatim: *"it wants to be about content passing through a shell, not
+  about backticks or backslashes specifically — the whole lesson is
+  that the trigger keeps changing and the mechanism does not."*** A
+  sibling, pre-existing finding
+  (`D:\dev\rag\rust\a_multiline_string_literal_that_loses_its_trailing_backslash_bakes_a_visible_gap_mid_sentence.md`,
+  footer (b)) already carries the same mechanism under a **different**
+  trigger — escape-sequence collapsing (`\t`/`\n`) inside a shell
+  heredoc, rather than command substitution inside a shell string — and
+  is cited here as the rule's other confirmed shape, not folded into a
+  single instance count: two triggers, one class, now two write-ups.
+  **Fix, in order of preference:** (a) write the content to a file and
+  reference the file (`git commit -F`, a CI step that `cat`s a
+  generated artifact) — a file is inert to every downstream reader; (b)
+  if a string must be built inline, use a native argv API with no
+  shell in the loop (`subprocess.run([...])`, `Command::new(...).arg(...)`)
+  rather than string-interpolating into a shell command line; a
+  single-quoted heredoc delimiter (`<<'EOF'`) is the fallback when
+  neither is available, because it suppresses all expansion including
+  backticks — an *unquoted* delimiter does not. **Never trust `set -e`
+  to catch this** — the failure is a silently shortened string, not a
+  non-zero exit.
+  **Why no gate is proposed, and why that is not an oversight.** The
+  same warrant hard rule 10's corollary already gives for stale
+  figures: checking *"is this string what the author meant"* requires
+  knowing the author's intent, which is the very fact the defect
+  destroys. A tool cannot tell a deliberately short sentence from a
+  splice-shortened one without an oracle it does not have.
+  New RAG file:
+  `D:\dev\rag\rust\prose_with_backticks_through_a_shell_string_undergoes_command_substitution_silently.md`.
+  **Ceiling moves `R206` → `R207`; next free `R208`.**
 
 ## Update protocol
 
