@@ -767,6 +767,101 @@ pub fn composite_element_knockout(
     (Pixel { c, a: ai }, ag)
 }
 
+/// **§11.4.8's knockout formula, in a subtractive space.**
+///
+/// The subtractive twin of [`composite_element_knockout`], standing in the
+/// same relationship to it that [`composite_element_cmyk`] stands to
+/// [`composite_element`]: identical structure, four components instead of
+/// three, and `B()` reached through [`Blend::apply_subtractive`] so that
+/// §11.3.4's complement is applied around the blend function and
+/// §11.3.5.3's **K selection** replaces the formula entirely for the four
+/// non-separable modes.
+///
+/// # Why this is a second function and not a const generic
+///
+/// The same reason [`composite_element_cmyk`] is: unifying them would put
+/// a type parameter on the function every per-pixel loop in this crate
+/// calls, to save about twenty lines that the compiler would then have to
+/// monomorphise back into two anyway.
+///
+/// # Everything load-bearing about the additive version is load-bearing here
+///
+/// The blend function reads the **initial** backdrop, never the
+/// accumulated one — using `accum` turns a knockout group back into a
+/// normal one while still looking entirely plausible on opaque artwork.
+/// Shape and alpha stay separate because `f_s` appears **alone** in
+/// `(1 − f_si)` where the ordinary formula has `(1 − α_si)`, and the two
+/// coincide exactly when opacity is 1, which is why a fixture built from
+/// opaque fills cannot tell a correct implementation from a collapsed one.
+///
+/// # Returns
+///
+/// `(⟨C_i, α_i⟩, α_gi)` — the accumulated pixel and the group's own alpha
+/// excluding the backdrop, which the caller must carry forward because it
+/// cannot be recovered from `α_i` alone.
+#[must_use]
+pub fn composite_element_knockout_cmyk(
+    initial: PixelCmyk,
+    accum: PixelCmyk,
+    source: PixelCmyk,
+    shape: f32,
+    accum_group_alpha: f32,
+    blend: Blend,
+) -> (PixelCmyk, f32) {
+    let a0 = initial.a.clamp(0.0, 1.0);
+    let a_s = source.a.clamp(0.0, 1.0);
+    let f_s = shape.clamp(a_s, 1.0);
+    let ag_prev = accum_group_alpha.clamp(0.0, 1.0);
+
+    // α_gi = (1 − f_si)·α_g(i−1) + α_si   (the α_gb term is identically 0)
+    let ag = (1.0 - f_s).mul_add(ag_prev, a_s).clamp(0.0, 1.0);
+    let ai = union_(a0, ag);
+    if ai <= 0.0 {
+        return (PixelCmyk::TRANSPARENT, 0.0);
+    }
+
+    let blended = if a0 <= 0.0 || blend.is_normal() {
+        source.c
+    } else {
+        let b = blend.apply_subtractive(initial.c, source.c);
+        let mut m = [0.0_f32; 4];
+        for i in 0..4 {
+            m[i] = a0.mul_add(b[i] - source.c[i], source.c[i]);
+        }
+        m
+    };
+    let k = (f_s - a_s) * a0;
+    let mut c = [0.0_f32; 4];
+    for i in 0..4 {
+        let ct = a_s.mul_add(blended[i], k * initial.c[i]);
+        c[i] = (1.0 - f_s).mul_add(accum.a * accum.c[i], ct) / ai;
+    }
+    (PixelCmyk { c, a: ai }, ag)
+}
+
+/// **§11.4.4's backdrop removal, in a subtractive space.**
+///
+/// The subtractive twin of [`remove_backdrop`]. Note it needs **no**
+/// complement: §11.4.4's correction is a linear extrapolation, and
+/// complementing both operands of `x + k·(x − y)` and complementing the
+/// result again is the identity. Only `B()` sits on the wrong side of the
+/// complement, which is §11.3.6's own observation and is why
+/// [`Blend::apply_subtractive`] is the only place the round trip happens.
+#[must_use]
+pub fn remove_backdrop_cmyk(group: PixelCmyk, initial: PixelCmyk, group_alpha: f32) -> [f32; 4] {
+    let a0 = initial.a.clamp(0.0, 1.0);
+    let agn = group_alpha.clamp(0.0, 1.0);
+    if a0 <= 0.0 || agn <= 0.0 {
+        return group.c;
+    }
+    let k = a0.mul_add(-1.0, a0 / agn);
+    let mut out = [0.0_f32; 4];
+    for (i, o) in out.iter_mut().enumerate() {
+        *o = k.mul_add(group.c[i] - initial.c[i], group.c[i]);
+    }
+    out
+}
+
 /// **§11.4.4's backdrop removal** — the correction that makes §11.4.3's
 /// *"the backdrop's contribution … shall be applied only once"* true.
 ///

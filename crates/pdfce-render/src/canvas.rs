@@ -914,19 +914,24 @@ impl<'a> Canvas<'a> {
         // independent attributes"* — so knockout is dispatched first and
         // `isolated` is carried into it as the initial backdrop's identity
         // rather than as a second branch.
-        // ★ `Cmyk` IS DISPATCHED HERE, AND IT WAS NOT IN THE FIRST DRAFT.
-        // Routing a subtractive page's knockout groups to the ordinary
-        // bridged arm below cost `1_GWG161` -- the suite's KNOCKOUT patch
-        // -- eleven of the thirteen traps `Pass 97.0c` had just removed,
-        // because it silently replaced real §11.4.6 semantics with the
-        // non-knockout approximation on exactly the pages that test them.
+        // ★ A SUBTRACTIVE CANVAS TAKES ITS OWN KNOCKOUT PATH, and the
+        // history of this two-line dispatch is worth keeping.
         //
-        // The knockout accumulation runs in sRGB (that is
-        // `KnockoutTarget`, unchanged) and only its RESULT crosses into
-        // ink, which is the same trade every other nested drawing on a
-        // subtractive page makes. Correct group semantics in the wrong
-        // space beats the wrong semantics in the right one, and the two
-        // shortfalls are counted separately so neither hides the other.
+        // `Pass 97.1e` first sent `Cmyk` to the ordinary bridged arm below,
+        // which cost `1_GWG161` -- the suite's KNOCKOUT patch -- eleven of
+        // the thirteen traps `Pass 97.0c` had just removed, by silently
+        // substituting non-knockout semantics on exactly the pages that
+        // test them. Sending it to `KnockoutTarget` instead recovered most
+        // of that but not all: the accumulation ran in sRGB, so the group's
+        // interior blended additively inside a page that did not, and the
+        // patch sat at 4 traps against a pre-Pass baseline of 2.
+        //
+        // `Pass 97.1f` gives it a native subtractive accumulator, so
+        // §11.4.6's semantics and §11.3.4's space hold at the same time and
+        // neither is traded for the other.
+        if knockout && matches!(self, Self::Cmyk(_)) {
+            return self.knockout_group_cmyk(paint, isolated, mask, f);
+        }
         if knockout && !matches!(self, Self::Record(_)) {
             return self.knockout_group(paint, isolated, mask, f);
         }
@@ -1189,6 +1194,85 @@ impl Canvas<'_> {
             result,
             backdrop_rerun: false,
             knockout_approximated: approximated,
+        })
+    }
+}
+
+impl Canvas<'_> {
+    /// §11.4.6 / §11.4.8 on a **subtractive** canvas.
+    ///
+    /// # Why this is a separate method from [`Canvas::knockout_group`] and
+    /// not a branch inside it
+    ///
+    /// Because it needs no [`KnockoutTarget`] at all, and the reason is
+    /// structural rather than incidental. `KnockoutTarget` exists to
+    /// recover an element's **shape** in isolation, which it can only do by
+    /// rasterising each element into a spare pixmap first — `tiny_skia`
+    /// rasterises and composites in one call and offers no way to see the
+    /// coverage it used. A subtractive paint already arrives as a coverage
+    /// mask plus a colour, so `f_s` is the coverage byte and `α_s` is that
+    /// times the constant alpha, both available per pixel with nothing to
+    /// reconstruct. The whole scratch-buffer-and-accumulate dance
+    /// disappears.
+    ///
+    /// The knockout state therefore lives on the buffer itself
+    /// (`CmykBuffer::into_knockout`) and every composite dispatches on it,
+    /// which also means a knockout group nested inside another one needs no
+    /// special handling here: the inner group's own buffer carries its own
+    /// state.
+    ///
+    /// # Isolation
+    ///
+    /// Expressed entirely as the identity of the initial backdrop, exactly
+    /// as it is in the additive path: transparent for an isolated group, a
+    /// copy of the parent's current content for a non-isolated one.
+    /// §11.4.8's alpha recurrence is the same either way — `α_gb` is
+    /// identically zero in a knockout group — so there is no second branch.
+    ///
+    /// # Returns
+    ///
+    /// `None` if a buffer could not be allocated, with the same contract as
+    /// [`Canvas::group`]: `f` was never called.
+    fn knockout_group_cmyk<R>(
+        &mut self,
+        paint: LayerPaint,
+        isolated: bool,
+        mask: Option<&Mask>,
+        mut f: impl FnMut(&mut Canvas<'_>) -> (R, bool),
+    ) -> Option<GroupOutcome<R>> {
+        let Self::Cmyk(parent) = self else {
+            return None;
+        };
+        let (w, h, intent) = (parent.width(), parent.height(), parent.intent());
+        let initial = if isolated {
+            crate::cmyk_buffer::CmykBuffer::new(w, h, intent)?
+        } else {
+            // A full copy of the parent, which is what §11.4.8's `C_b` is.
+            // Expensive and unavoidable: the backdrop has to survive every
+            // element of the group while the accumulator is overwritten by
+            // each one.
+            parent.clone()
+        };
+        let mut child =
+            crate::cmyk_buffer::CmykBuffer::new(w, h, intent)?.into_knockout(&initial)?;
+        let (result, _dependent) = {
+            let mut sub = Canvas::Cmyk(&mut child);
+            f(&mut sub)
+        };
+        let mut done = child.finish_knockout();
+        if let Some(m) = mask {
+            done.apply_mask(m);
+        }
+        parent.absorb_counters(&done);
+        let blend = layer_blend(paint);
+        parent.composite_buffer(&done, paint.opacity.clamp(0.0, 1.0), blend);
+        Some(GroupOutcome {
+            result,
+            backdrop_rerun: false,
+            // ZERO, and that is the claim this method makes: nothing was
+            // approximated. Every element of this group composited through
+            // §11.4.8's own formula, in the space the page declared.
+            knockout_approximated: 0,
         })
     }
 }

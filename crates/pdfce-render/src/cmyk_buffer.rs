@@ -154,7 +154,63 @@
 
 use tiny_skia::{Mask, Pixmap};
 
-use crate::compositor::{Blend, PixelCmyk, composite_element_cmyk};
+use crate::compositor::{
+    Blend, PixelCmyk, composite_element_cmyk, composite_element_knockout_cmyk, remove_backdrop_cmyk,
+};
+
+/// The extra planes a **knockout** group needs — ISO 32000-1 §11.4.6,
+/// §11.4.8.
+///
+/// # Why a knockout group needs state an ordinary one does not
+///
+/// In a knockout group each element composites against the group's
+/// **initial** backdrop rather than against the elements beneath it, so
+/// that backdrop has to survive the whole group rather than being consumed
+/// by the first paint. And §11.4.8's recurrence carries two quantities
+/// that cannot be recovered from the accumulated pixel afterwards:
+///
+/// - **`α_g`**, the group's own alpha *excluding* the backdrop, which
+///   §11.4.4's backdrop removal divides by on the way out;
+/// - **`f_g`**, the group's **shape**, which §11.4.6 requires *"shall be
+///   computed in any group that is subsequently used as an element of a
+///   knockout group"*.
+///
+/// # ★ Shape and alpha are not the same number, and an opaque fixture
+/// cannot tell
+///
+/// `α = f × q`. They coincide exactly when opacity is 1 — which is most
+/// artwork — so a test built from opaque fills passes under both the
+/// correct model and the collapsed one. §11.4.8 reads `(1 − f_si)` where
+/// §11.4.4 reads `(1 − α_si)`: a knockout element **erases more** of what
+/// is under it than an ordinary element does, and only a fixture with
+/// `/ca < 1` can see the difference.
+///
+/// # What this costs, and why it is cheap here
+///
+/// Four planes: the initial backdrop's colorants and alpha (shared with
+/// the buffer's own layout), plus `α_g` and `f_g`. Notably it needs **no
+/// scratch buffer**, unlike [`crate::canvas::KnockoutTarget`] — that one
+/// must rasterise each element into a spare pixmap first, because
+/// `tiny_skia` rasterises and composites in the same call and there is no
+/// other way to recover an element's shape in isolation. A colorant paint
+/// already arrives as a separate coverage mask, so `f_s` is simply the
+/// coverage byte and `α_s` is that times the constant alpha. The
+/// subtractive implementation is the simpler of the two, which is not the
+/// direction one expects.
+#[derive(Debug, Clone)]
+struct KnockoutPlanes {
+    /// The group's initial backdrop colorants, `[C, M, Y, K]`.
+    initial: [Vec<Chan>; 4],
+    /// The group's initial backdrop alpha, `α_0`.
+    initial_alpha: Vec<Chan>,
+    /// `α_gi` — the group's own accumulated alpha, excluding the backdrop.
+    group_alpha: Vec<Chan>,
+    /// `f_gi` — the group's own accumulated shape. Tracked because
+    /// §11.4.6 makes it a `shall` for any group that may itself become an
+    /// element of a knockout group, and because adding a plane later means
+    /// revisiting every write site.
+    group_shape: Vec<Chan>,
+}
 
 /// The buffer's element type.
 ///
@@ -301,6 +357,14 @@ pub(crate) struct CmykBuffer {
     /// conversion "unless the processor has an implementation-dependent way
     /// of specifying otherwise". This setting is that way.
     intent: pdfce_core::settings::CmykIntent,
+    /// The §11.4.6 knockout state, when this buffer **is** a knockout
+    /// group's accumulator.
+    ///
+    /// `None` is the ordinary case and costs one `Option` discriminant.
+    /// `Some` changes what every composite on this buffer means — §11.4.8
+    /// replaces §11.4.4 — which is why it lives here rather than as a flag
+    /// a call site could forget to consult.
+    knockout: Option<Box<KnockoutPlanes>>,
 }
 
 impl CmykBuffer {
@@ -348,6 +412,7 @@ impl CmykBuffer {
             groups_approximated: 0,
             unbridged_images: 0,
             intent,
+            knockout: None,
         })
     }
 
@@ -490,16 +555,19 @@ impl CmykBuffer {
                 if c <= 0.0 {
                     continue;
                 }
+                // ★ COVERAGE IS SHAPE; COVERAGE TIMES OPACITY IS ALPHA.
+                // §11.4's `α = f × q`, and the two are handed on
+                // separately because §11.4.8 reads `f_s` alone. Collapsing
+                // them here would make every knockout group behave as if
+                // its elements were opaque — correct on most artwork and
+                // wrong exactly where the clause exists.
                 let source = PixelCmyk {
                     c: colour,
                     a: alpha * c,
                 };
-                let before = self.pixel(idx);
-                let after = composite_element_cmyk(before, source, blend);
-                if after != before {
+                if self.composite_at(idx, source, c, blend) {
                     changed += 1;
                 }
-                self.set_pixel(idx, after);
             }
         }
         changed
@@ -570,12 +638,14 @@ impl CmykBuffer {
                     c: crate::overprint::rgb_to_cmyk(r, g, b),
                     a: a * alpha,
                 };
-                let before = self.pixel(idx);
-                let after = composite_element_cmyk(before, source, blend);
-                if after != before {
+                // An image's own alpha is SHAPE, not opacity: §11.6.4.2
+                // makes an image's `/SMask` an object-shape input unless
+                // `/AIS` says otherwise. So `f_s = a` and `q_s` is the
+                // constant alpha, which is the same split
+                // `Canvas::fill_image`'s knockout arm already makes.
+                if self.composite_at(idx, source, a, blend) {
                     changed += 1;
                 }
-                self.set_pixel(idx, after);
                 self.bridged += 1;
             }
         }
@@ -748,13 +818,17 @@ impl CmykBuffer {
             if source.a <= 0.0 {
                 continue;
             }
+            // A group's result has shape too, and it is the group's own
+            // `f_g` rather than its alpha. `alpha` here is §11.4.5's outer
+            // constant opacity, which scales `α` and leaves shape alone —
+            // so the shape handed on is the child's UNSCALED alpha, which
+            // for a child built by `CmykBuffer::new` is `f_g` exactly
+            // (nothing has scaled it yet).
+            let shape = source.a;
             source.a *= alpha;
-            let before = self.pixel(idx);
-            let after = composite_element_cmyk(before, source, blend);
-            if after != before {
+            if self.composite_at(idx, source, shape, blend) {
                 changed += 1;
             }
-            self.set_pixel(idx, after);
         }
         changed
     }
@@ -855,6 +929,132 @@ impl CmykBuffer {
             }
         }
         Some(out)
+    }
+
+    /// Turn a fresh buffer into a **knockout group accumulator** over
+    /// `initial` — ISO 32000-1 §11.4.6, §11.4.8.
+    ///
+    /// # The initialisation, which is where the clause is easy to misread
+    ///
+    /// §11.4.8 initialises `C_0 = C_b`, `α_0 = α_b`, and — crucially —
+    /// `f_g0 = α_g0 = 0` **unconditionally**, isolated or not. So the
+    /// accumulator *starts as the backdrop* while the group's own alpha
+    /// and shape start at zero, and the whole of the isolation difference
+    /// lives in the value of `C_b`/`α_b` rather than in a second branch.
+    /// That is the single most useful structural fact in the clause and it
+    /// is stated nowhere in it.
+    ///
+    /// Pass a transparent `initial` for an isolated knockout group; pass a
+    /// copy of the parent's current content for a non-isolated one.
+    ///
+    /// # Returns
+    ///
+    /// `None` if the extra planes cannot be allocated.
+    pub(crate) fn into_knockout(mut self, initial: &Self) -> Option<Self> {
+        debug_assert_eq!(initial.width, self.width);
+        debug_assert_eq!(initial.height, self.height);
+        let n = (self.width as usize).checked_mul(self.height as usize)?;
+        // C_0 = C_b, α_0 = α_b: the accumulator IS the backdrop at element
+        // zero. Copying rather than referencing because the backdrop must
+        // survive every element while the accumulator is overwritten by
+        // each one.
+        self.planes = initial.planes.clone();
+        self.alpha = initial.alpha.clone();
+        self.knockout = Some(Box::new(KnockoutPlanes {
+            initial: initial.planes.clone(),
+            initial_alpha: initial.alpha.clone(),
+            group_alpha: vec![0.0; n],
+            group_shape: vec![0.0; n],
+        }));
+        Some(self)
+    }
+
+    /// The knockout group's **result**: §11.4.4's backdrop removal applied,
+    /// alpha replaced by the group's own `α_g`.
+    ///
+    /// # Why the alpha is replaced rather than kept
+    ///
+    /// Because the accumulator's `α_i` includes the backdrop that was
+    /// composited into it at element zero, and the parent is about to
+    /// composite this result **onto that same backdrop again**. §11.4.3
+    /// states the requirement — *"the backdrop's contribution … shall be
+    /// applied only once"* — and §11.4.4's `C_n + (C_n − C_0)·(α_0/α_gn −
+    /// α_0)` together with `α = α_gn` is how it is met. Returning `α_i`
+    /// here instead is the double-count, and it darkens every non-isolated
+    /// knockout group by exactly its own backdrop.
+    ///
+    /// # Returns
+    ///
+    /// An ordinary (non-knockout) buffer the caller can composite with
+    /// [`CmykBuffer::composite_buffer`]. `self` is consumed because the
+    /// accumulator is meaningless afterwards.
+    #[must_use]
+    pub(crate) fn finish_knockout(mut self) -> Self {
+        let Some(ko) = self.knockout.take() else {
+            return self;
+        };
+        let n = (self.width as usize) * (self.height as usize);
+        for idx in 0..n {
+            let ag = ko.group_alpha[idx];
+            let accum = self.pixel(idx);
+            let initial = PixelCmyk {
+                c: [
+                    ko.initial[0][idx],
+                    ko.initial[1][idx],
+                    ko.initial[2][idx],
+                    ko.initial[3][idx],
+                ],
+                a: ko.initial_alpha[idx],
+            };
+            let c = remove_backdrop_cmyk(accum, initial, ag);
+            self.set_pixel(idx, PixelCmyk { c, a: ag });
+        }
+        self
+    }
+
+    /// Composite one element at `idx`, dispatching between §11.4.4 and
+    /// §11.4.8.
+    ///
+    /// `shape` is the element's coverage; `source.a` is that coverage
+    /// times its constant alpha. In the ordinary case the shape is unused —
+    /// §11.4.4 never reads it — and in the knockout case both are read,
+    /// separately, which is the entire reason they are two parameters.
+    ///
+    /// Returning `bool` rather than writing unconditionally lets the
+    /// callers keep their changed-pixel tallies without each one repeating
+    /// the dispatch.
+    fn composite_at(&mut self, idx: usize, source: PixelCmyk, shape: Chan, blend: Blend) -> bool {
+        let before = self.pixel(idx);
+        let after = if let Some(ko) = self.knockout.as_deref_mut() {
+            let initial = PixelCmyk {
+                c: [
+                    ko.initial[0][idx],
+                    ko.initial[1][idx],
+                    ko.initial[2][idx],
+                    ko.initial[3][idx],
+                ],
+                a: ko.initial_alpha[idx],
+            };
+            let (px, ag) = composite_element_knockout_cmyk(
+                initial,
+                before,
+                source,
+                shape,
+                ko.group_alpha[idx],
+                blend,
+            );
+            ko.group_alpha[idx] = ag;
+            // f_gi = Union(f_g(i−1), f_si) — the shape recurrence, which
+            // §11.4.8 gives the same form as the alpha one with `f` in
+            // place of `α`.
+            let f_prev = ko.group_shape[idx];
+            ko.group_shape[idx] = crate::compositor::union_(f_prev, shape.clamp(0.0, 1.0));
+            px
+        } else {
+            composite_element_cmyk(before, source, blend)
+        };
+        self.set_pixel(idx, after);
+        after != before
     }
 
     /// **§11.4.7's collapse**: convert to sRGB, then composite over the
@@ -1129,6 +1329,149 @@ mod tests {
         assert!((px.c[0] - 0.0).abs() < 1e-6);
         assert!((px.c[1] - 1.0).abs() < 1e-6);
         assert!((px.c[2] - 1.0).abs() < 1e-6);
+    }
+
+    /// ★ THE FIXTURE THE COMPOSITOR RAG WARNS IS THE ONLY KIND THAT CAN
+    /// SEE THIS BUG — built with `/ca < 1` on purpose.
+    ///
+    /// Shape and alpha are equal when opacity is 1, so an all-opaque
+    /// knockout test passes under both the correct model and a collapsed
+    /// one that uses `α_s` where §11.4.8 says `f_s`. At half opacity they
+    /// separate, and a knockout element erases more of what is under it
+    /// than an ordinary element does.
+    ///
+    /// Two half-opacity elements painted over each other: in an ORDINARY
+    /// group the second composites over the first and the two accumulate;
+    /// in a KNOCKOUT group the second composites against the group's
+    /// initial backdrop and the first is knocked out. So the knockout
+    /// group's result is the second element alone.
+    #[test]
+    fn a_knockout_group_knocks_out_by_shape_not_by_alpha() {
+        let full = full_mask(1, 1);
+        let cyan = [1.0, 0.0, 0.0, 0.0];
+        let magenta = [0.0, 1.0, 0.0, 0.0];
+
+        // The ordinary group, for contrast.
+        let mut plain = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        plain.composite_mask(&full, (0, 0, 1, 1), cyan, 0.5, Blend::Normal);
+        plain.composite_mask(&full, (0, 0, 1, 1), magenta, 0.5, Blend::Normal);
+
+        // The knockout group over the same (transparent) backdrop.
+        let backdrop = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        let mut ko = CmykBuffer::new(1, 1, CmykIntent::default())
+            .unwrap()
+            .into_knockout(&backdrop)
+            .unwrap();
+        ko.composite_mask(&full, (0, 0, 1, 1), cyan, 0.5, Blend::Normal);
+        ko.composite_mask(&full, (0, 0, 1, 1), magenta, 0.5, Blend::Normal);
+        let ko = ko.finish_knockout();
+
+        assert!(
+            plain.pixel(0).c[0] > 0.2,
+            "the ordinary group keeps the cyan underneath, got {:?}",
+            plain.pixel(0).c
+        );
+        assert!(
+            ko.pixel(0).c[0] < 1e-5,
+            "the knockout group must have knocked the cyan out entirely, got {:?}",
+            ko.pixel(0).c
+        );
+        assert!(
+            (ko.pixel(0).c[1] - 1.0).abs() < 1e-5,
+            "…leaving the magenta"
+        );
+        assert!(
+            (ko.pixel(0).a - 0.5).abs() < 1e-5,
+            "and the group's own alpha is the last element's, not the union"
+        );
+    }
+
+    /// A knockout element blends against the group's **initial** backdrop,
+    /// never against the elements beneath it.
+    ///
+    /// Using the accumulator here is the mistake that turns a knockout
+    /// group back into a normal one while still looking entirely plausible
+    /// on opaque artwork, so it is asserted with a blend mode whose answer
+    /// differs between the two backdrops.
+    #[test]
+    fn a_knockout_element_blends_against_the_initial_backdrop() {
+        let full = full_mask(1, 1);
+        let mut backdrop = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        backdrop.set_pixel(
+            0,
+            PixelCmyk {
+                c: [0.0, 0.0, 0.0, 1.0],
+                a: 1.0,
+            },
+        );
+        let mut ko = CmykBuffer::new(1, 1, CmykIntent::default())
+            .unwrap()
+            .into_knockout(&backdrop)
+            .unwrap();
+        // First element: yellow, which a wrong implementation would then
+        // blend the second element against.
+        ko.composite_mask(
+            &full,
+            (0, 0, 1, 1),
+            [0.0, 0.0, 1.0, 0.0],
+            1.0,
+            Blend::Normal,
+        );
+        // Second: magenta with Difference. Against the INITIAL backdrop
+        // (K = 1) §11.3.4 gives `1 − |c_b′ − c_s′|` = `1 0 1 0`, the same
+        // answer `compositor.rs`'s own Ghent test pins.
+        ko.composite_mask(
+            &full,
+            (0, 0, 1, 1),
+            [0.0, 1.0, 0.0, 0.0],
+            1.0,
+            Blend::Difference,
+        );
+        let out = ko.finish_knockout().pixel(0).c;
+        for (got, want) in out.iter().zip([1.0, 0.0, 1.0, 0.0].iter()) {
+            assert!(
+                (got - want).abs() < 1e-4,
+                "blended against the accumulator instead of the initial backdrop: {out:?}"
+            );
+        }
+    }
+
+    /// A non-isolated knockout group's backdrop must be counted **once**.
+    ///
+    /// The accumulator starts as the backdrop (§11.4.8's `C_0 = C_b`) and
+    /// the parent is about to composite the result onto that same backdrop
+    /// again, so the result's alpha has to be the group's own `α_g` with
+    /// §11.4.4's removal applied. Skipping that is a double-count, and on a
+    /// fully covered opaque backdrop it is invisible — hence the partial
+    /// alpha here.
+    #[test]
+    fn a_non_isolated_knockout_group_does_not_count_its_backdrop_twice() {
+        let full = full_mask(1, 1);
+        let mut backdrop = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        backdrop.set_pixel(
+            0,
+            PixelCmyk {
+                c: [0.0, 0.0, 0.0, 1.0],
+                a: 0.5,
+            },
+        );
+        let mut ko = CmykBuffer::new(1, 1, CmykIntent::default())
+            .unwrap()
+            .into_knockout(&backdrop)
+            .unwrap();
+        ko.composite_mask(
+            &full,
+            (0, 0, 1, 1),
+            [1.0, 0.0, 0.0, 0.0],
+            0.5,
+            Blend::Normal,
+        );
+        let done = ko.finish_knockout();
+        assert!(
+            (done.pixel(0).a - 0.5).abs() < 1e-5,
+            "the result's alpha is the GROUP's alpha, not the union with its backdrop: {}",
+            done.pixel(0).a
+        );
     }
 
     #[test]
