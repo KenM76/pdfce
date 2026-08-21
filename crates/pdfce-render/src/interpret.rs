@@ -553,8 +553,77 @@ pub struct Diagnostics {
     /// The worked case is Ghent `1_GWG162`'s `Difference` cell: magenta
     /// under black gives `DeviceCMYK 1 0 1 0` — the green the patch is
     /// authored around — under §11.3.4, and `(237, 1, 140)` without it.
-    /// `Pass 97.1`'s colorant buffer is the fix; this counts what it owes.
+    ///
+    /// # ★ NARROWED BY `Pass 97.1e`, AND THE NARROWING IS THE POINT
+    ///
+    /// This used to increment whenever the blending space was subtractive,
+    /// full stop, because pdfce had no way to honour §11.3.4 and every such
+    /// blend really was computed additively. It now increments only when the
+    /// paint target is **not** a colorant buffer.
+    ///
+    /// Leaving it un-narrowed was tried and rejected in the same session:
+    /// `tools/measure-blend-space.py` went on reporting **107 of 107 wrong**
+    /// on the Ghent suite after the buffer landed and two of its patches
+    /// started passing. A shortfall counter that cannot see the fix reports
+    /// the fix as a no-op — and it is the only instrument anyone runs at
+    /// corpus scale for this question, so it would have said so
+    /// indefinitely.
+    ///
+    /// The companion `cmyk_buffer` key still exists and still matters: it
+    /// says *which* of the two regimes produced the zero.
     pub blends_in_wrong_space: usize,
+    /// The page was composited in a **subtractive colorant buffer**
+    /// (`Pass 97.1e`) rather than in sRGB.
+    ///
+    /// The answer to [`Self::blends_in_wrong_space`]. When this is `true`
+    /// that counter's meaning changes and its name becomes misleading if
+    /// read alone: the blends it counted at `/BM`-selection time were
+    /// **performed** subtractively, because the buffer they landed in was.
+    /// The counter is left as it is rather than suppressed, because it
+    /// still measures a real quantity — how many blends on this page were
+    /// exposed to §11.3.4 — and a number that changes meaning silently is
+    /// worse than one that needs a companion.
+    pub cmyk_buffer_engaged: bool,
+    /// The page declared a subtractive blending space and pdfce composited
+    /// it in sRGB **anyway**, because the colorant buffer could not be
+    /// allocated.
+    ///
+    /// A refusal, and the honest outcome of a page-size ceiling: see
+    /// [`crate::cmyk_buffer::MAX_CMYK_BUFFER_BYTES`]. Non-zero means the
+    /// render is the pre-`Pass 97.1e` approximation and says so, rather
+    /// than failing.
+    pub cmyk_buffer_refused: usize,
+    /// Pixels that entered the colorant buffer through the **sRGB bridge**
+    /// rather than as authored ink — images, shadings, and the results of
+    /// transparency groups.
+    ///
+    /// A disclosure, not a shortfall. An image's samples were flattened to
+    /// sRGB inside the decode loop long before any canvas saw them, so
+    /// bridging is the only information that reaches the compositor. The
+    /// count exists so that "this page composited in ink" cannot be read
+    /// as "every colour on this page was authored ink".
+    pub cmyk_bridged_pixels: u64,
+    /// Transparency groups on a subtractive page that could **not** be
+    /// composited natively in ink.
+    ///
+    /// Two cases, both genuine shortfalls and both `Pass 97.1f`'s work: a
+    /// **knockout** group, whose §11.4.6 semantics are preserved but whose
+    /// interior runs in sRGB; and a **non-isolated** group, composited as
+    /// if isolated with §11.4.4's backdrop removal skipped.
+    ///
+    /// An ordinary isolated group is **not** counted — it gets a child
+    /// colorant buffer and crosses no conversion at all.
+    pub cmyk_groups_approximated: u64,
+    /// Image brushes that reached a subtractive paint through a path with
+    /// no bridge, and were therefore **not painted at all**.
+    ///
+    /// Should always be zero: the only route to one is a replayed display
+    /// list, and a subtractive page is refused for recording outright
+    /// ([`crate::display_list::PoisonReason::ColorantBuffer`]). It is
+    /// counted rather than asserted because a claim of unreachability
+    /// decays as the code around it changes, and a counter that stays zero
+    /// costs one `u64` and one line of output.
+    pub cmyk_unbridged_images: u64,
     /// Pixels whose value the overprint composites actually changed.
     ///
     /// The measurement that distinguishes "overprint ran and mattered" from
@@ -1220,6 +1289,11 @@ polarity unverifiable (decision 006 R30)",
         self.overprint_refused += other.overprint_refused;
         self.overprint_images_unsupported += other.overprint_images_unsupported;
         self.blend_space_subtractive += other.blend_space_subtractive;
+        self.cmyk_buffer_engaged |= other.cmyk_buffer_engaged;
+        self.cmyk_buffer_refused += other.cmyk_buffer_refused;
+        self.cmyk_bridged_pixels += other.cmyk_bridged_pixels;
+        self.cmyk_groups_approximated += other.cmyk_groups_approximated;
+        self.cmyk_unbridged_images += other.cmyk_unbridged_images;
         self.blends_in_wrong_space += other.blends_in_wrong_space;
         self.overprint_pixels += other.overprint_pixels;
         self.overprint_mode1_requested += other.overprint_mode1_requested;
@@ -2707,8 +2781,8 @@ impl Interpreter<'_> {
             && self.color.paints(false)
             && !op_fill
         {
-            let paint = solid(
-                self.gs.current.fill_color,
+            let paint = self.solid_authored(
+                false,
                 self.gs.current.fill_alpha,
                 self.gs.current.blend_mode,
             );
@@ -2724,8 +2798,8 @@ impl Interpreter<'_> {
             && self.color.paints(true)
             && !op_stroke
         {
-            let paint = solid(
-                self.gs.current.stroke_color,
+            let paint = self.solid_authored(
+                true,
                 self.gs.current.stroke_alpha,
                 self.gs.current.blend_mode,
             );
@@ -2758,8 +2832,8 @@ impl Interpreter<'_> {
         // defers its composites: `paint_overprint` needs `&mut self`.
         if op_fill && !self.paint_overprint(&path, Some(FillRule::Winding), false, canvas) {
             self.diag.overprint_refused += 1;
-            let paint = solid(
-                self.gs.current.fill_color,
+            let paint = self.solid_authored(
+                false,
                 self.gs.current.fill_alpha,
                 self.gs.current.blend_mode,
             );
@@ -2768,8 +2842,8 @@ impl Interpreter<'_> {
         }
         if op_stroke && !self.paint_overprint(&path, None, true, canvas) {
             self.diag.overprint_refused += 1;
-            let paint = solid(
-                self.gs.current.stroke_color,
+            let paint = self.solid_authored(
+                true,
                 self.gs.current.stroke_alpha,
                 self.gs.current.blend_mode,
             );
@@ -2973,7 +3047,7 @@ impl Interpreter<'_> {
                     // for Hue/Saturation/Color and from the source for
                     // Luminosity. Computed additively they blend all four
                     // channels, which is plausible and non-conforming.
-                    if self.blend_space.is_subtractive() {
+                    if self.blend_space.is_subtractive() && canvas.cmyk_mut().is_none() {
                         self.diag.blends_in_wrong_space += 1;
                     }
                 } else {
@@ -2995,7 +3069,8 @@ impl Interpreter<'_> {
                                 // NOT counted — it is `c_s` in either
                                 // space, so a `DeviceCMYK` page that only
                                 // ever composites Normal is correct.
-                                if self.blend_space.is_subtractive() {
+                                if self.blend_space.is_subtractive() && canvas.cmyk_mut().is_none()
+                                {
                                     self.diag.blends_in_wrong_space += 1;
                                 }
                             }
@@ -3412,6 +3487,35 @@ impl Interpreter<'_> {
         // that cannot reproduce this operator, and the honest answer there
         // is to refuse the whole recording rather than to drop the shading.
         canvas.refuse(PoisonReason::Shading);
+        // ★ BRIDGED, NOT NATIVE, AND THE REASON IS UPSTREAM OF THIS CALL.
+        // `ColorRamp::at` resolves a shading's colour to three-channel
+        // sRGB when the ramp is BUILT, so by the time the pixel loop runs
+        // there are no colorants left to composite. Evaluating the ramp in
+        // ink is `Pass 97.1g`; until then the shading paints into a
+        // transparent scratch with the same evaluator, and its RESULT
+        // crosses into the colorant buffer -- so a shading on a
+        // subtractive page composites against the page in ink even though
+        // it is not authored in ink.
+        if let Some(buf) = canvas.cmyk_mut() {
+            let (w, h) = (buf.width(), buf.height());
+            let Some(mut scratch) = tiny_skia::Pixmap::new(w, h) else {
+                self.diag.shading.refused += 1;
+                return;
+            };
+            if shading
+                .paint(to_target, region, clip, alpha, &mut scratch)
+                .is_some()
+            {
+                buf.composite_srgb(
+                    &scratch,
+                    clamp_region(region, w, h),
+                    1.0,
+                    crate::compositor::Blend::Normal,
+                );
+                self.diag.shading.painted += 1;
+            }
+            return;
+        }
         let Some(dest) = canvas.pixmap_mut() else {
             self.diag.shading.refused += 1;
             return;
@@ -3811,6 +3915,69 @@ impl Interpreter<'_> {
             .unwrap_or(black)
     }
 
+    /// The current paint colour as **authored subtractive tints**, or
+    /// `None` when the source colour space does not state any.
+    ///
+    /// # Why the interpreter is the only place that can answer this
+    ///
+    /// Because the answer dies one call later. `ColorState` keeps the
+    /// operands of the last colour-setting operator, un-converted and
+    /// `q`/`Q`-correct; `GraphicsState::fill_color` and `stroke_color` are
+    /// plain `Rgb`. Every paint site in this crate reads the second and
+    /// never consults the first, so the colorants are present in the
+    /// graphics state and absent from the paint — which is exactly the gap
+    /// `BrushSpec::cmyk` closes.
+    ///
+    /// # The `Indexed` resolution, which is not optional
+    ///
+    /// §8.6.6.3: an `Indexed` operand is an **index**, not a colour. It is
+    /// resolved to its palette entry in the base space before anything asks
+    /// a colorant question, because `overprint::classify` recurses into the
+    /// base independently and the row and the tints agree only if this
+    /// happens too.
+    ///
+    /// # `None` is a real answer
+    ///
+    /// It means "this space states no tints", not "something failed". The
+    /// colorant buffer then converts the resolved sRGB with
+    /// `overprint::rgb_to_cmyk`, which is §11.6.6's required conversion —
+    /// and is measurably not the same thing as an authored value, which is
+    /// why the two are distinguished all the way down to the paint.
+    fn authored_cmyk(&self, stroking: bool) -> Option<[f32; 4]> {
+        let (space, comps) = self.color.device_color(stroking)?;
+        let resolved = space.indexed_entry(comps);
+        let (space, comps) = resolved
+            .as_ref()
+            .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
+        let kind = crate::overprint::classify(space, false)?;
+        crate::overprint::authored_tints(&kind, comps)
+    }
+
+    /// A solid paint at `alpha`, carrying its authored colorants when the
+    /// file stated any.
+    ///
+    /// Replaces ten call sites that read `gs.current.{fill,stroke}_color`
+    /// and built a `BrushSpec` from it alone. Taking `stroking` rather than
+    /// the colour means the colour and the colorants are read from the same
+    /// half of the graphics state by construction — passing the colour in
+    /// separately is how a fill paint would end up carrying the stroke's
+    /// ink, and that mistake would be invisible on every additive page.
+    ///
+    /// The quantisation itself is untouched: `BrushSpec::solid` still
+    /// produces the same bytes, so the sRGB path does not move.
+    fn solid_authored(&self, stroking: bool, alpha: f32, blend: tiny_skia::BlendMode) -> BrushSpec {
+        let colour = if stroking {
+            self.gs.current.stroke_color
+        } else {
+            self.gs.current.fill_color
+        };
+        let spec = BrushSpec::solid(colour, alpha, blend);
+        match self.authored_cmyk(stroking) {
+            Some(cmyk) => spec.with_cmyk(cmyk),
+            None => spec,
+        }
+    }
+
     /// Paint one path with `CompatibleOverprint` instead of `Normal`.
     ///
     /// Called only where [`Self::overprint_would_change`] is true, which is
@@ -3834,7 +4001,7 @@ impl Interpreter<'_> {
         stroking: bool,
         canvas: &mut Canvas<'_>,
     ) -> bool {
-        use crate::overprint::{self, SourceKind};
+        use crate::overprint;
 
         let Some((space, comps)) = self.color.device_color(stroking) else {
             return false;
@@ -3854,76 +4021,26 @@ impl Interpreter<'_> {
         };
 
         // The source colour as SUBTRACTIVE TINTS, which is what Table 149
-        // is written in.
+        // is written in. The rule lives in `overprint::authored_tints`
+        // because the colorant buffer needs the same answer and the two
+        // must not be able to disagree -- see that function for why a
+        // `DeviceCMYK` or `Separation`/`DeviceN` source is READ rather than
+        // converted, and for the Ghent patch that discriminates.
         //
-        // For a DeviceCMYK source the operands ARE the tints and are used
-        // directly — going via RGB would destroy the very component
-        // identity overprint depends on (a `0 0 0 1 k` black would come
-        // back as C=M=Y=0, K=1 only by luck of the conversion, and an
-        // `OPM 1` decision would then be made on a reconstructed value
-        // rather than the authored one).
-        //
-        // For every other space the pipeline has already resolved the paint
-        // to RGB — including running a Separation/DeviceN tint transform —
-        // so the tints are recovered from that. The recovery is exact under
+        // `None` means the space states no tints of its own, and the only
+        // thing left is to reconstruct them from the paint colour the
+        // pipeline already resolved. The recovery is exact under
         // `rgb_to_cmyk`/`cmyk_to_rgb` (see their docs), and which CHANNELS
         // that source is entitled to paint is decided from the colorant
         // names by `cmyk_group_rules`, not from these numbers.
-        let source_cmyk: [f32; 4] = match &kind {
-            SourceKind::DeviceCmykDirect if comps.len() == 4 => {
-                [comps[0], comps[1], comps[2], comps[3]]
-            }
-            // A Separation/DeviceN states its tints DIRECTLY, one operand
-            // per declared colorant, in `names` order (O7, §8.6.6.5:
-            // operands "shall" be interpreted in names-array order). Where
-            // a colorant IS a process colorant, that operand IS the process
-            // tint, and no reconstruction is needed or wanted.
-            //
-            // Deriving it from RGB instead -- which is what this did first
-            // -- is wrong for a space naming a spot ALONGSIDE a process
-            // colorant, because the flattened RGB carries the SPOT's
-            // contribution and reconstructing CMYK from it smears the spot
-            // into the process channels; Table 149 then faithfully paints
-            // the smear. Ghent 2_GWG030 is built entirely from that shape
-            // (`/CS1 cs .5 1 scn` over a two-colorant space).
-            //
-            // Measured honestly: on the Ghent corpus this changes no trap
-            // count, because those patches' remaining failures have a
-            // different cause. It is kept because it is strictly more
-            // faithful to what the file states, and because a value read
-            // from the operands cannot drift the way a reconstruction can.
-            SourceKind::SeparationOrDeviceN { names } => {
-                let mut t = [0.0_f32; 4];
-                for (i, n) in names.iter().enumerate() {
-                    let Some(v) = comps.get(i) else { break };
-                    match n {
-                        crate::color::Colorant::All => t = [*v; 4],
-                        crate::color::Colorant::None => {}
-                        crate::color::Colorant::Named(name) => {
-                            let ch = match name.to_ascii_lowercase().as_str() {
-                                "cyan" => Some(0),
-                                "magenta" => Some(1),
-                                "yellow" => Some(2),
-                                "black" => Some(3),
-                                _ => None,
-                            };
-                            if let Some(ch) = ch {
-                                t[ch] = *v;
-                            }
-                        }
-                    }
-                }
-                t
-            }
-            _ => {
-                let c = if stroking {
-                    self.gs.current.stroke_color
-                } else {
-                    self.gs.current.fill_color
-                };
-                overprint::rgb_to_cmyk(c.r, c.g, c.b)
-            }
-        };
+        let source_cmyk: [f32; 4] = overprint::authored_tints(&kind, comps).unwrap_or_else(|| {
+            let c = if stroking {
+                self.gs.current.stroke_color
+            } else {
+                self.gs.current.fill_color
+            };
+            overprint::rgb_to_cmyk(c.r, c.g, c.b)
+        });
 
         let op = if stroking {
             self.gs.current.overprint_stroke
@@ -4003,6 +4120,24 @@ impl Interpreter<'_> {
         // caller's documented response is to paint normally AND disclose —
         // never to paint nothing.
         canvas.refuse(PoisonReason::Overprint);
+        // ★ THE SUBTRACTIVE PATH IS THE ONE THIS OPERATOR WAS ALWAYS
+        // WRITTEN FOR. Table 149 selects per COLORANT, and until the
+        // colorant buffer existed the backdrop's colorants had to be
+        // reconstructed from an sRGB composite on every pixel. Here they
+        // are simply read. Same rules, same coverage, same rasteriser --
+        // only the backdrop stops being a guess.
+        if let Some(buf) = canvas.cmyk_mut() {
+            let changed = buf.composite_overprint(
+                &coverage,
+                region,
+                rules,
+                source_cmyk,
+                alpha.clamp(0.0, 1.0),
+            );
+            self.diag.overprint_composited += 1;
+            self.diag.overprint_pixels += u64::from(changed);
+            return true;
+        }
         let Some(dest) = canvas.pixmap_mut() else {
             return false;
         };
@@ -4108,6 +4243,31 @@ impl Interpreter<'_> {
         // canvas cannot reproduce it and must refuse BY NAME rather than
         // silently record a normally-blended paint.
         canvas.refuse(PoisonReason::NonSeparableBlend);
+        // The subtractive path, and note it is SHORTER than the additive
+        // one rather than an extra case: `composite_element_cmyk` already
+        // dispatches Table 137 through `Blend::apply_subtractive`, which
+        // performs §11.3.4's complement around C/M/Y and then §11.3.5.3's
+        // K SELECTION -- K takes the backdrop's value for Hue, Saturation
+        // and Color and the source's for Luminosity, and is never put
+        // through the formula. A CMYK buffer that ran all four channels
+        // through Table 137 would produce entirely plausible output and be
+        // non-conforming, which is why the selection lives in the shared
+        // arithmetic and not at this call site.
+        if let Some(buf) = canvas.cmyk_mut() {
+            let source = self
+                .authored_cmyk(stroking)
+                .unwrap_or_else(|| crate::overprint::rgb_to_cmyk(colour.r, colour.g, colour.b));
+            let changed = buf.composite_mask(
+                &coverage,
+                region,
+                source,
+                alpha.clamp(0.0, 1.0),
+                crate::compositor::Blend::NonSeparable(mode),
+            );
+            self.diag.nonseparable_composited += 1;
+            self.diag.nonseparable_pixels += u64::from(changed);
+            return true;
+        }
         let Some(dest) = canvas.pixmap_mut() else {
             return false;
         };
@@ -4276,6 +4436,31 @@ impl Interpreter<'_> {
             self.gs.current.fill_alpha
         };
         canvas.refuse(PoisonReason::Shading);
+        // Bridged for the same reason the `sh` operator is: the ramp is
+        // already sRGB by the time it is sampled. See that site.
+        if let Some(buf) = canvas.cmyk_mut() {
+            let (w, h) = (buf.width(), buf.height());
+            let Some(mut scratch) = tiny_skia::Pixmap::new(w, h) else {
+                self.diag.color.patterns_unpainted += 1;
+                return false;
+            };
+            return if shading
+                .paint(to_target, region, Some(&mask), alpha, &mut scratch)
+                .is_some()
+            {
+                buf.composite_srgb(
+                    &scratch,
+                    clamp_region(region, w, h),
+                    1.0,
+                    crate::compositor::Blend::Normal,
+                );
+                self.diag.shading.painted += 1;
+                true
+            } else {
+                self.diag.color.patterns_unpainted += 1;
+                false
+            };
+        }
         let Some(dest) = canvas.pixmap_mut() else {
             self.diag.color.patterns_unpainted += 1;
             return false;
@@ -5403,8 +5588,8 @@ impl Interpreter<'_> {
                 } else if nonsep.is_some() {
                     // Deferred below with the other composites.
                 } else {
-                    let paint = solid(
-                        self.gs.current.fill_color,
+                    let paint = self.solid_authored(
+                        false,
                         self.gs.current.fill_alpha,
                         self.gs.current.blend_mode,
                     );
@@ -5426,8 +5611,8 @@ impl Interpreter<'_> {
             } else if nonsep.is_some() {
                 // Deferred below with the other composites.
             } else {
-                let paint = solid(
-                    self.gs.current.stroke_color,
+                let paint = self.solid_authored(
+                    true,
                     self.gs.current.stroke_alpha,
                     self.gs.current.blend_mode,
                 );
@@ -5449,8 +5634,8 @@ impl Interpreter<'_> {
                 // operator with a Normal-blended mark and a diagnostic
                 // claiming the mode was applied.
                 self.diag.blend_modes_ignored += 1;
-                let paint = solid(
-                    self.gs.current.fill_color,
+                let paint = self.solid_authored(
+                    false,
                     self.gs.current.fill_alpha,
                     tiny_skia::BlendMode::SourceOver,
                 );
@@ -5462,8 +5647,8 @@ impl Interpreter<'_> {
                 && !self.paint_nonseparable(&path, mode, None, true, canvas)
             {
                 self.diag.blend_modes_ignored += 1;
-                let paint = solid(
-                    self.gs.current.stroke_color,
+                let paint = self.solid_authored(
+                    true,
                     self.gs.current.stroke_alpha,
                     tiny_skia::BlendMode::SourceOver,
                 );
@@ -5495,8 +5680,8 @@ impl Interpreter<'_> {
             // operator with a knocked-out backdrop and a diagnostic
             // claiming overprint was honoured.
             self.diag.overprint_refused += 1;
-            let paint = solid(
-                self.gs.current.fill_color,
+            let paint = self.solid_authored(
+                false,
                 self.gs.current.fill_alpha,
                 self.gs.current.blend_mode,
             );
@@ -5506,8 +5691,8 @@ impl Interpreter<'_> {
         }
         if overprint_stroke_pending && !self.paint_overprint(&path, None, true, canvas) {
             self.diag.overprint_refused += 1;
-            let paint = solid(
-                self.gs.current.stroke_color,
+            let paint = self.solid_authored(
+                true,
                 self.gs.current.stroke_alpha,
                 self.gs.current.blend_mode,
             );
@@ -5853,6 +6038,30 @@ fn rect_entry(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<Rect> {
     Rect::from_ltrb(x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1))
 }
 
+/// Clamp a shading's signed device-space region to a pixel rectangle the
+/// colorant buffer can scan.
+///
+/// `Shading::paint` works in `i32` because a shading's geometry can extend
+/// off the page in either direction and the sign carries meaning while the
+/// region is being derived. A buffer scan cannot use a negative bound, and
+/// silently casting one to `u32` would wrap to four billion — which reads
+/// as "scan the whole page" on a good day and as a panic on a bad one.
+///
+/// Returns an **empty** rectangle (`x0 == x1`) when the region lies wholly
+/// off-page, which the scan loops treat as "nothing to do".
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn clamp_region(region: (i32, i32, i32, i32), width: u32, height: u32) -> (u32, u32, u32, u32) {
+    let (l, t, r, b) = region;
+    let x0 = l.max(0) as u32;
+    let y0 = t.max(0) as u32;
+    let x1 = (r.max(0) as u32).min(width);
+    let y1 = (b.max(0) as u32).min(height);
+    if x0 >= x1 || y0 >= y1 {
+        return (0, 0, 0, 0);
+    }
+    (x0, y0, x1, y1)
+}
+
 /// The last name operand of an operator (`Do`, `gs`, `sh`, …).
 ///
 /// Taken from the END of the operand run for the same reason
@@ -5864,26 +6073,6 @@ fn last_name(op: &Operation<'_>) -> Option<Vec<u8>> {
         ContentTokenKind::Operand(Object::Name(n)) => Some(n.as_bytes().to_vec()),
         _ => None,
     })
-}
-
-/// An opaque solid-colour paint, anti-aliased (the only paint kind this
-/// Pass produces — patterns and shadings are later work).
-/// A solid paint at a constant alpha (§11.6.4.4).
-///
-/// `alpha` is the graphics state's `/ca` or `/CA`. It took a parameter on
-/// 2026-08-09; before that it hard-coded 255 and every `gs`-set opacity
-/// in every document was silently discarded at this one line.
-///
-/// tiny-skia composites a non-opaque paint correctly on its own, so
-/// constant alpha needs nothing beyond passing the number through — which
-/// is what made the omission cheap to fix and expensive to have shipped.
-fn solid(c: Rgb, alpha: f32, blend: tiny_skia::BlendMode) -> BrushSpec {
-    // The quantisation itself moved to `BrushSpec::solid`, unchanged, so
-    // that the recorder and the painter cannot come to disagree about what
-    // a colour is. This function stays because every call site reads
-    // `solid(colour, alpha, blend)` and renaming forty of them would bury
-    // the one change that matters.
-    BrushSpec::solid(c, alpha, blend)
 }
 
 /// The last string operand of a text-showing operator.

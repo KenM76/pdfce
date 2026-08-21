@@ -392,6 +392,25 @@ pub enum PoisonReason {
     /// perfectly recordable in principle, it is simply too big to be worth
     /// holding. The remedy is the same either way: render it directly.
     TooLarge,
+    /// The page's **blending colour space is subtractive** (§11.4.7,
+    /// §11.7.2), so a direct render composites it in a colorant buffer and
+    /// a replay cannot.
+    ///
+    /// # Why this is a refusal rather than a difference to live with
+    ///
+    /// A display list replays into a `tiny_skia::Pixmap`. That is the whole
+    /// point of the type — a recorded page is re-rasterised at a viewport
+    /// chosen later — and a `Pixmap` cannot hold ink. So from `Pass 97.1e`
+    /// onward a subtractive page rendered directly and the same page
+    /// replayed from a recording produce **different pixels**, and the
+    /// replayed one is the pre-Pass approximation.
+    ///
+    /// That is precisely the failure this module refuses everywhere else:
+    /// not a visible breakage but *a plausible wrong picture*. The comment
+    /// at the recording site has said so since `Pass 97.1d`, when the space
+    /// was first threaded through; it became actionable the moment a paint
+    /// render started doing something different with it.
+    ColorantBuffer,
 }
 
 impl PoisonReason {
@@ -399,6 +418,7 @@ impl PoisonReason {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::ColorantBuffer => "subtractive blending colour space",
             Self::Shading => "shading",
             Self::Overprint => "overprint composite",
             Self::SoftMask => "soft mask",
@@ -683,8 +703,27 @@ pub fn record_page(
 
     let mut recorder = Recorder::new(page_w, page_h);
     let scope = options.effective_annotation_scope();
+    // Resolved ONCE, and used for two things that must not disagree: what
+    // the interpreter is told the blending space is, and whether this page
+    // is recordable at all.
+    let page_space = if scope.paints_page_content() {
+        crate::interpret::page_blend_space(doc, page.id, &page.resources, &mut Default::default())
+    } else {
+        crate::compositor::BlendSpace::Additive
+    };
     let diagnostics = {
         let mut canvas = Canvas::record(&mut recorder);
+        // ★ REFUSED BEFORE A SINGLE OPERATOR IS WALKED. A direct render of
+        // a subtractive page composites it in a colorant buffer; a replay
+        // cannot, because a replay's destination is a `Pixmap`. Recording
+        // it anyway would hand the caller a cache entry that renders a
+        // DIFFERENT and worse picture than the uncached path -- which is
+        // the exact failure mode every other `PoisonReason` in this module
+        // exists to prevent, and the one hardest to notice, because the
+        // replayed page looks entirely reasonable.
+        if page_space.is_subtractive() {
+            canvas.refuse(PoisonReason::ColorantBuffer);
+        }
         let mut diagnostics = if scope.paints_page_content() {
             let content = crate::ContentStream::from_page(doc, page)?;
             let initial = crate::gstate::GraphicsState::default_with_ctm(page_ctm);
@@ -703,12 +742,7 @@ pub fn record_page(
                 // space would replay a plausible wrong picture, which
                 // is the one outcome this module refuses everywhere
                 // else by poisoning.
-                crate::interpret::page_blend_space(
-                    doc,
-                    page.id,
-                    &page.resources,
-                    &mut Default::default(),
-                ),
+                page_space,
             );
             diagnostics.contents_streams_unresolved = page.contents_unresolved;
             diagnostics
@@ -1187,6 +1221,7 @@ mod tests {
                 },
                 blend: BlendMode::SourceOver,
                 anti_alias: true,
+                cmyk: None,
             },
             rule: FillRule::Winding,
             ctm: Transform::identity(),

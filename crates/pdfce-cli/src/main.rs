@@ -7635,7 +7635,9 @@ overprint_requested={} overprint_opm1={} overprint_effective={} \
 overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_composited={} nonseparable_pixels={} \
 groups_backdrop_reruns={} soft_masks_on_group_result={} \
 overprint_images_unsupported={} \
-blend_space_subtractive={} blends_in_wrong_space={}",
+blend_space_subtractive={} blends_in_wrong_space={} \
+cmyk_buffer={} cmyk_buffer_refused={} cmyk_bridged_pixels={} \
+cmyk_groups_approximated={} cmyk_unbridged_images={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -7933,6 +7935,27 @@ blend_space_subtractive={} blends_in_wrong_space={}",
         // buffer is the fix.
         d.blend_space_subtractive,
         d.blends_in_wrong_space,
+        // ★ THE KEY THAT CHANGES WHAT THE PREVIOUS ONE MEANS. When
+        // `cmyk_buffer=1` the blends counted by `blends_in_wrong_space`
+        // were PERFORMED subtractively -- that counter is fixed at
+        // `/BM`-selection time and measures exposure to 11.3.4, not
+        // failure. Read the pair, never the second alone.
+        u8::from(d.cmyk_buffer_engaged),
+        // The page asked for ink and the buffer would not fit (the byte
+        // ceiling). Non-zero means this render is the pre-97.1e
+        // approximation, disclosed rather than failed.
+        d.cmyk_buffer_refused,
+        // Pixels that entered the buffer as CONVERTED sRGB rather than as
+        // authored ink -- images, shadings, group results. A disclosure:
+        // an image's samples were flattened to sRGB in the decode loop
+        // long before any canvas saw them.
+        d.cmyk_bridged_pixels,
+        // A real shortfall, and the one Pass 97.1f removes: the group's
+        // RESULT composited in ink, its INTERIOR did not.
+        d.cmyk_groups_approximated,
+        // Should always be zero; see the field's docs for why it is
+        // counted rather than asserted.
+        d.cmyk_unbridged_images,
     );
     report_diagnostics(d);
 
@@ -8089,7 +8112,7 @@ when comparing against another renderer",
     }
     if d.overprint_requested > 0 {
         eprintln!(
-            "pdfce-cli: note: {} PAINT(s) were affected by OVERPRINT; {} graphics-state operator(s) enabled it (/OP or /op, ISO 32000-1 §8.6.7){}. pdfce COMPOSITED {} of those paints through CompatibleOverprint (§11.7.4.3, Table 149) and REFUSED {}. ★ THE FIRST TWO NUMBERS COUNT DIFFERENT THINGS and neither is a subset of the other: the first counts PAINTED OBJECTS, the second counts `gs` OPERATORS, and one `gs` governs every paint until the next one — so a single enable can produce many affected paints, or none. The first is the one to read, because a DeviceCMYK fill over a DeviceCMYK backdrop at overprint mode 0 specifies all four components and is IDENTICAL to Normal, and producers enable overprint document-wide. ★ WHAT IS STILL APPROXIMATE, because a composited count is not a correct one: pdfce composites in additive RGB with CMYK reconstructed per pixel, so the four PROCESS colorants can be preserved, but a SPOT colorant has no plane of its own — it is flattened through its tint transform and cannot be left standing the way a press leaves it. A REFUSED count above zero is stronger still: those paints knocked the backdrop out where a press would have shown ink. On a PDF/X file this matters: Acrobat turns Overprint Preview ON automatically for PDF/X, so the document's EXPECTED appearance includes overprint",
+            "pdfce-cli: note: {} PAINT(s) were affected by OVERPRINT; {} graphics-state operator(s) enabled it (/OP or /op, ISO 32000-1 §8.6.7){}. pdfce COMPOSITED {} of those paints through CompatibleOverprint (§11.7.4.3, Table 149) and REFUSED {}. ★ THE FIRST TWO NUMBERS COUNT DIFFERENT THINGS and neither is a subset of the other: the first counts PAINTED OBJECTS, the second counts `gs` OPERATORS, and one `gs` governs every paint until the next one — so a single enable can produce many affected paints, or none. The first is the one to read, because a DeviceCMYK fill over a DeviceCMYK backdrop at overprint mode 0 specifies all four components and is IDENTICAL to Normal, and producers enable overprint document-wide. {} A REFUSED count above zero is stronger still: those paints knocked the backdrop out where a press would have shown ink. On a PDF/X file this matters: Acrobat turns Overprint Preview ON automatically for PDF/X, so the document's EXPECTED appearance includes overprint",
             d.overprint_effective,
             d.overprint_requested,
             if d.overprint_mode1_requested > 0 {
@@ -8101,7 +8124,36 @@ when comparing against another renderer",
                 String::new()
             },
             d.overprint_composited,
-            d.overprint_refused
+            d.overprint_refused,
+            // ★ THE APPROXIMATION CLAUSE IS NOW CONDITIONAL, because as
+            // of `Pass 97.1e` it is FALSE on a subtractive page. The
+            // sentence it replaces -- "pdfce composites in additive RGB
+            // with CMYK reconstructed per pixel" -- was true of every
+            // render pdfce had ever performed until a colorant buffer
+            // existed, which is exactly the kind of claim that goes stale
+            // silently: nothing tests an operator-facing paragraph.
+            if d.cmyk_buffer_engaged {
+                "★ WHAT IS AND IS NOT APPROXIMATE HERE: this page's blending colour space is SUBTRACTIVE, so pdfce composited it in a four-colorant buffer and Table 149 read the backdrop's colorants DIRECTLY rather than reconstructing them from an RGB composite. That is the exact case CompatibleOverprint was written for. What remains approximate is narrower and unchanged: a SPOT colorant still has no plane of its own — it is flattened through its tint transform and cannot be left standing the way a press leaves it — and an image under /OP is still painted normally"
+            } else {
+                "★ WHAT IS STILL APPROXIMATE, because a composited count is not a correct one: this page's blending colour space is ADDITIVE, so pdfce composited in RGB with CMYK reconstructed per pixel. The four PROCESS colorants survive that reconstruction; a SPOT colorant does not — it is flattened through its tint transform and cannot be left standing the way a press leaves it"
+            }
+        );
+    }
+    if d.cmyk_buffer_engaged {
+        eprintln!(
+            "pdfce-cli: note: this page's PAGE GROUP declares a SUBTRACTIVE blending colour space (/Group /CS /DeviceCMYK or equivalent), so pdfce composited the whole page in a FOUR-COLORANT buffer rather than on screen — ISO 32000-1 §11.7.2 and §11.6.6 both make that a `shall`, and §11.4.7 requires the result be converted to the display's space BEFORE the white paper is composited in, which is the order pdfce uses. Blend modes ran through §11.3.4's subtractive complement and §11.3.5.3's K selection. ★ WHAT DID NOT: {} pixel(s) entered the buffer as CONVERTED sRGB rather than as authored ink — images and shadings resolve their colour to sRGB before any canvas sees them, so bridging them is the only information that reaches the compositor — and {} transparency group(s) could not be composited natively in ink — a KNOCKOUT group keeps its §11.4.6 semantics but runs its interior on screen, and a NON-ISOLATED group is composited as if isolated, dropping its backdrop. An ordinary isolated group is not among them: it gets its own colorant buffer and crosses no conversion at all. ★ AND A CONSEQUENCE FOR HOW YOU CHECK THIS PAGE: a renderer that composites in RGB is not a reference for one that composites in ink. The two are REQUIRED to differ, by up to ~100 of 255 levels on saturated overlaps, and where they disagree the RGB answer is the wrong one",
+            d.cmyk_bridged_pixels, d.cmyk_groups_approximated
+        );
+    }
+    if d.cmyk_buffer_refused > 0 {
+        eprintln!(
+            "pdfce-cli: note: this page's PAGE GROUP declares a SUBTRACTIVE blending colour space, and pdfce composited it on screen ANYWAY — the four-colorant buffer would have exceeded its allocation ceiling at this raster size. The page rendered; it rendered the way every pdfce release before this one rendered it, with §11.3.4's complement not applied. RE-RENDER AT A LOWER RESOLUTION to get the conforming composite"
+        );
+    }
+    if d.cmyk_unbridged_images > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} IMAGE BRUSH(es) reached a subtractive paint with no conversion path and were NOT PAINTED. This is not supposed to be reachable — the page is missing marks, and the render should be reported rather than trusted",
+            d.cmyk_unbridged_images
         );
     }
     if d.transparency_groups_flattened > 0 {

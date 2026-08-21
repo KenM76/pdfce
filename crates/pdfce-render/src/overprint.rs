@@ -447,6 +447,87 @@ pub fn compatible_overprint_cmyk(
     }
 }
 
+/// The paint's colour as **subtractive tints**, taken from the operands
+/// the file actually wrote — or `None` when the space does not state them.
+///
+/// # Why this is not "convert the colour to CMYK"
+///
+/// Because for two of the three source kinds the tints are already present
+/// and a conversion would destroy them:
+///
+/// - **`DeviceCMYK`, specified directly.** The operands *are* the tints.
+///   Going via RGB and back would erase the very component identity that
+///   both Table 149 and §11.3.4's subtractive blend depend on: a
+///   `0 0 0 1 k` black returns as `C = M = Y = 0, K = 1` only by luck of
+///   the conversion, and pdfce has measured `0 1 0 0` coming back as
+///   `(0, 0.995, 0.409, 0.071)`.
+/// - **`Separation` / `DeviceN`.** These state their tints DIRECTLY, one
+///   operand per declared colorant, in `names` order (§8.6.6.5: the
+///   operands "shall" be interpreted in names-array order). Where a
+///   colorant *is* a process colorant, that operand *is* the process tint.
+///
+///   ★ Deriving this from the flattened RGB instead — which pdfce did
+///   first — is wrong for a space naming a spot ALONGSIDE a process
+///   colorant: the flattened RGB carries the spot's contribution, and
+///   reconstructing CMYK from it smears the spot into the process
+///   channels. Ghent `2_GWG030` is built entirely from that shape.
+///
+/// # `None`, and what the caller must do with it
+///
+/// Returned for [`SourceKind::OtherProcess`] — `DeviceRGB`, `DeviceGray`,
+/// `CalRGB`, `Lab`, an `ICCBased` that did not resolve to CMYK, a CMYK
+/// image sample. Those spaces state no tints, so there is nothing to read
+/// and the caller must **convert** rather than read: [`rgb_to_cmyk`] on the
+/// already-resolved paint colour. That conversion is §11.6.6's required
+/// "convert the source to the group's colour space" and is not equivalent
+/// to an authored value — which is the whole reason this function
+/// distinguishes the two cases instead of always returning something.
+///
+/// # Why it lives here rather than in the interpreter
+///
+/// Two callers need exactly this answer and must not be able to disagree:
+/// `Interpreter::paint_overprint` (Table 149's source tints) and
+/// `Interpreter::authored_cmyk` (the colorant buffer's paint colour). One
+/// implementation of one rule, per this crate's standing habit of putting
+/// a formula in the single place both clauses can reach.
+#[must_use]
+pub fn authored_tints(kind: &SourceKind, comps: &[f32]) -> Option<[f32; 4]> {
+    match kind {
+        SourceKind::DeviceCmykDirect if comps.len() == 4 => {
+            Some([comps[0], comps[1], comps[2], comps[3]])
+        }
+        SourceKind::SeparationOrDeviceN { names } => {
+            let mut t = [0.0_f32; 4];
+            for (i, n) in names.iter().enumerate() {
+                let Some(v) = comps.get(i) else { break };
+                match n {
+                    crate::color::Colorant::All => t = [*v; 4],
+                    crate::color::Colorant::None => {}
+                    crate::color::Colorant::Named(name) => {
+                        let ch = match name.to_ascii_lowercase().as_str() {
+                            "cyan" => Some(0),
+                            "magenta" => Some(1),
+                            "yellow" => Some(2),
+                            "black" => Some(3),
+                            _ => None,
+                        };
+                        if let Some(ch) = ch {
+                            t[ch] = *v;
+                        }
+                    }
+                }
+            }
+            Some(t)
+        }
+        // `Group` joins the `None` row for a stronger reason than the
+        // others: §11.7.4.5 NOTE 2 says compatible overprinting is
+        // UNAVAILABLE for a group and "the special overprinting blend mode
+        // reverts to Normal". A group result has no authored tints to read
+        // because it is not an authored colour at all.
+        SourceKind::DeviceCmykDirect | SourceKind::OtherProcess | SourceKind::Group => None,
+    }
+}
+
 /// Classify a [`ColorSpace`] into its Table 149 row.
 ///
 /// `in_image_sample` distinguishes the two `DeviceCMYK` rows: the standard

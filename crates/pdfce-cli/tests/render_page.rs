@@ -501,6 +501,15 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "overprint_images_unsupported",
             "blend_space_subtractive",
             "blends_in_wrong_space",
+            // `Pass 97.1e`'s colorant buffer, appended for the same reason
+            // the previous group was: this list IS the contract, and a
+            // consumer parsing positionally must not have keys inserted
+            // under it.
+            "cmyk_buffer",
+            "cmyk_buffer_refused",
+            "cmyk_bridged_pixels",
+            "cmyk_groups_approximated",
+            "cmyk_unbridged_images",
         ],
         "metrics key order is part of the stable contract"
     );

@@ -61,6 +61,8 @@ pub(crate) mod canvas;
 /// Reuse of identical clip masks within one render — see the module's
 /// own docs for the census that justified it.
 pub(crate) mod clip_cache;
+pub(crate) mod cmyk_buffer;
+pub(crate) mod cmyk_paint;
 pub mod color;
 pub mod compositor;
 pub mod display_list;
@@ -465,6 +467,44 @@ fn render_impl(
     // workflow is printing onto a pre-printed paper form where the page
     // background already physically exists. See `AnnotationScope`.
     let scope = options.effective_annotation_scope();
+
+    // §11.4.7 / §11.7.2 — THE PAGE'S BLENDING COLOUR SPACE, read BEFORE the
+    // buffer is chosen, because it is what chooses the buffer.
+    //
+    // ★ This read was already here one block below, feeding a counter. It
+    // is hoisted rather than duplicated: two reads of the same catalog
+    // entry could disagree after a future change to `page_blend_space`, and
+    // the one thing that must not happen is a page counted as subtractive
+    // and composited additively, or the reverse.
+    let mut page_space_diag = color::ColorDiagnostics::default();
+    let page_space = if scope.paints_page_content() {
+        interpret::page_blend_space(doc, page.id, &page.resources, &mut page_space_diag)
+    } else {
+        // No page content means no page group to have a blending space.
+        // Annotations composite in sRGB either way.
+        compositor::BlendSpace::Additive
+    };
+
+    // ★ THE SWITCH. A colorant buffer is engaged ONLY for a page whose
+    // group declares a subtractive blending space -- 13 of 51 files in the
+    // Ghent PDF Output Suite, and 15 of 4,012 in `fixtures/external`, of
+    // which every single one is a conformance fixture rather than an
+    // organic document. Every other page keeps the sRGB path byte for byte,
+    // which is not merely a safety measure: ISO 32000-1 §8.6.6.4 makes it
+    // the SPECIFIED behaviour on an additive device, where a `Separation`
+    // "never applies a process colorant directly; it always reverts to the
+    // alternate colour space". Routing an ordinary page through ink would
+    // be a deviation, not an improvement -- and Poppler #1565 is the
+    // empirical version of the same warning, where enabling overprint
+    // preview visibly shifted unrelated RGB raster content.
+    let mut cmyk = if page_space.is_subtractive() {
+        cmyk_buffer::CmykBuffer::new(width, height, options.policy().cmyk_intent)
+    } else {
+        None
+    };
+    // A page that asked for ink and could not have it. Recorded here, where
+    // both facts are in scope, and reported rather than failed.
+    let cmyk_refused = usize::from(page_space.is_subtractive() && cmyk.is_none());
     // ONE canvas for the whole page — content first, then annotations over
     // it. Scoped in a block so the mutable borrow of `pixmap` ends before
     // the page-group flatten below, which needs the buffer back.
@@ -474,7 +514,10 @@ fn render_impl(
     // paint mode it forwards everything, so this call chain is byte-for-byte
     // what it was.
     let diagnostics = {
-        let mut canvas = canvas::Canvas::paint(&mut pixmap);
+        let mut canvas = match cmyk.as_mut() {
+            Some(buffer) => canvas::Canvas::cmyk(buffer),
+            None => canvas::Canvas::paint(&mut pixmap),
+        };
         let mut diagnostics = if scope.paints_page_content() {
             let content = ContentStream::from_page(doc, page)?;
             let initial = gstate::GraphicsState::default_with_ctm(base_ctm);
@@ -488,9 +531,6 @@ fn render_impl(
             // complement governs every blend on those pages and pdfce
             // performs none of them that way yet. Counted rather than
             // silently ignored — `Pass 97.1`'s colorant buffer is the fix.
-            let mut colour_diag = color::ColorDiagnostics::default();
-            let page_space =
-                interpret::page_blend_space(doc, page.id, &page.resources, &mut colour_diag);
             let mut diagnostics = interpret::run_on(
                 doc,
                 &content,
@@ -573,7 +613,42 @@ fn render_impl(
 
     // §11.4.7's second formula: composite the isolated page group over the
     // medium's nominally-white backdrop.
-    flatten_page_group_over_white(&mut pixmap);
+    //
+    // ★★ TWO IMPLEMENTATIONS OF ONE CLAUSE, AND THEY ARE NOT THE SAME
+    // ORDER OF OPERATIONS.
+    //
+    // For an sRGB buffer the group's colour is ALREADY in the device space,
+    // so §11.4.7's "convert the result to the device's native colour space
+    // BEFORE compositing it with the context-dependent backdrop" is
+    // vacuous -- there is nothing to convert -- and the media composite is
+    // the only step.
+    //
+    // For a colorant buffer it is emphatically not vacuous. The conversion
+    // comes FIRST and the white comes SECOND, because the conversion is
+    // non-affine and the two orders give different pixels. Flattening onto
+    // CMYK white (no ink) and converting afterwards is the intuitive order
+    // and is wrong; see `CmykBuffer::to_srgb_over_white`, which carries the
+    // worked number.
+    let mut diagnostics = diagnostics;
+    diagnostics.cmyk_buffer_refused += cmyk_refused;
+    if let Some(buffer) = cmyk {
+        diagnostics.cmyk_buffer_engaged = true;
+        diagnostics.cmyk_bridged_pixels += buffer.bridged_pixels();
+        diagnostics.cmyk_groups_approximated += buffer.groups_approximated();
+        diagnostics.cmyk_unbridged_images += buffer.unbridged_images();
+        // The one failure mode here is an allocation the page has already
+        // proven possible, so falling back to the transparent pixmap would
+        // be a blank page. Keeping the (empty) pixmap and flattening it is
+        // the same outcome the additive path would produce for a page that
+        // painted nothing, which is at least a white sheet.
+        if let Some(collapsed) = buffer.to_srgb_over_white() {
+            pixmap = collapsed;
+        } else {
+            flatten_page_group_over_white(&mut pixmap);
+        }
+    } else {
+        flatten_page_group_over_white(&mut pixmap);
+    }
 
     Ok(RenderedPage {
         pixmap,

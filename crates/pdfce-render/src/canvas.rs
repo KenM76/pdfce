@@ -72,6 +72,8 @@ use crate::display_list::{
     ClipDef, ClipId, DeviceBounds, Op, PoisonReason, Recorder, fill_bounds, stroke_bounds,
 };
 
+use crate::cmyk_paint::{device_region, paint_solid_into_cmyk};
+
 /// What a paint is made of, in **owned** terms.
 ///
 /// # Why this exists at all — `tiny_skia::Paint` cannot be stored
@@ -131,6 +133,31 @@ pub(crate) struct BrushSpec {
     pub blend: BlendMode,
     /// Whether tiny_skia anti-aliases this paint's edges.
     pub anti_alias: bool,
+    /// The paint's colour as **authored subtractive tints**, when the
+    /// canvas it lands on composites in a subtractive space.
+    ///
+    /// # Why this is a second field rather than a replacement for the
+    /// quantised RGBA
+    ///
+    /// Because the sRGB path must not move. [`Brush::Solid`]'s `[u8; 4]`
+    /// is byte-locked by a test to what the interpreter's inline `solid()`
+    /// produced before `Pass 75.0`, and a "correctness improvement"
+    /// smuggled in under a colorant field is exactly the change nobody
+    /// would think to look for when the parity harness moved. So the two
+    /// coexist: `rgba` is what `tiny_skia` paints, `cmyk` is what the
+    /// colorant buffer composites, and neither derives from the other.
+    ///
+    /// # Why it is `Option` rather than always present
+    ///
+    /// `None` means "the interpreter did not resolve colorants for this
+    /// paint" -- a pattern fill, a recorded image brush replayed later, or
+    /// a paint built by a test. The colorant buffer then falls back to
+    /// [`crate::overprint::rgb_to_cmyk`] on the quantised RGB, which is
+    /// §11.6.6's required conversion performed with the only transform
+    /// this crate has, and is measurably worse than the authored values
+    /// (`DeviceCMYK 0 1 0 0` recovers as `0, 0.995, 0.409, 0.071`). The
+    /// distinction is worth a branch precisely because it is not free.
+    pub cmyk: Option<[f32; 4]>,
 }
 
 impl BrushSpec {
@@ -159,7 +186,24 @@ impl BrushSpec {
             // anti-aliased; the flag is spelled out rather than defaulted
             // so the image case below reads as the exception it is.
             anti_alias: true,
+            // Deliberately NOT derived from `c` here. The interpreter knows
+            // the authored colour space and this function does not; a
+            // reconstruction made at this level would be indistinguishable
+            // from an authored value at the point of use, which is the one
+            // property the colorant buffer must be able to tell apart.
+            cmyk: None,
         }
+    }
+
+    /// The same paint, carrying its authored subtractive tints.
+    ///
+    /// Called by the interpreter, which is the only place that can answer
+    /// "what colorants did the file actually state?" -- see
+    /// `Interpreter::authored_cmyk`.
+    #[must_use]
+    pub(crate) fn with_cmyk(mut self, cmyk: [f32; 4]) -> Self {
+        self.cmyk = Some(cmyk);
+        self
     }
 
     /// Rebuild the `tiny_skia::Paint` this spec describes.
@@ -224,6 +268,12 @@ impl BrushSpec {
                     },
                     blend: self.blend,
                     anti_alias: self.anti_alias,
+                    // The colorants are a property of the COLOUR. Splitting
+                    // shape from opacity changes the alpha byte and nothing
+                    // else, so dropping them here would silently downgrade
+                    // an authored paint to a reconstructed one inside every
+                    // knockout group.
+                    cmyk: self.cmyk,
                 },
                 f32::from(rgba[3]) / 255.0,
             ),
@@ -309,6 +359,16 @@ pub(crate) enum Canvas<'a> {
     /// elements beneath it, so each one has to be rasterised on its own
     /// before it can be accumulated. See [`KnockoutTarget`].
     Knockout(&'a mut KnockoutTarget),
+    /// Draw into a **subtractive colorant buffer** (§11.7.2, §11.6.6):
+    /// the page's blending colour space is `DeviceCMYK`, so every blend
+    /// and every composite on this page is required to happen in ink
+    /// rather than on screen. See [`crate::cmyk_buffer::CmykBuffer`].
+    ///
+    /// Structurally this is the same move [`Self::Knockout`] makes and for
+    /// the same reason: `tiny_skia` can rasterise a shape but cannot
+    /// composite it under a model it does not implement, so the paint is
+    /// rasterised to a coverage mask and composited here.
+    Cmyk(&'a mut crate::cmyk_buffer::CmykBuffer),
 }
 
 impl<'a> Canvas<'a> {
@@ -320,6 +380,29 @@ impl<'a> Canvas<'a> {
     /// Wrap a recorder as a recording canvas.
     pub(crate) fn record(recorder: &'a mut Recorder) -> Self {
         Self::Record(recorder)
+    }
+
+    /// Wrap a subtractive colorant buffer as a paint-mode canvas.
+    ///
+    /// Engaged by [`crate::render_page`] only when the page group declares
+    /// a subtractive blending colour space; every other page keeps the
+    /// sRGB path byte for byte.
+    pub(crate) fn cmyk(buffer: &'a mut crate::cmyk_buffer::CmykBuffer) -> Self {
+        Self::Cmyk(buffer)
+    }
+
+    /// The colorant buffer behind this canvas, when there is one.
+    ///
+    /// The counterpart to [`Canvas::pixmap_mut`] for the four operators
+    /// that read their destination back — a shading, an overprint
+    /// composite, a per-paint non-separable blend, a shading pattern. Each
+    /// asks this first and takes its native subtractive path when the
+    /// answer is `Some`; `pixmap_mut` remains the sRGB answer.
+    pub(crate) fn cmyk_mut(&mut self) -> Option<&mut crate::cmyk_buffer::CmykBuffer> {
+        match self {
+            Self::Cmyk(b) => Some(b),
+            _ => None,
+        }
     }
 
     /// Refuse the recording, by name, keeping the first reason.
@@ -341,7 +424,7 @@ impl<'a> Canvas<'a> {
     /// builds a real mask instead.
     pub(crate) fn record_clip(&mut self, def: ClipDef) -> Option<ClipId> {
         match self {
-            Self::Paint(_) | Self::Knockout(_) => None,
+            Self::Paint(_) | Self::Knockout(_) | Self::Cmyk(_) => None,
             Self::Record(r) => Some(r.push_clip(def)),
         }
     }
@@ -357,6 +440,7 @@ impl<'a> Canvas<'a> {
             Self::Paint(p) => p.width(),
             Self::Record(r) => r.width,
             Self::Knockout(k) => k.accum.width(),
+            Self::Cmyk(b) => b.width(),
         }
     }
 
@@ -366,6 +450,7 @@ impl<'a> Canvas<'a> {
             Self::Paint(p) => p.height(),
             Self::Record(r) => r.height,
             Self::Knockout(k) => k.accum.height(),
+            Self::Cmyk(b) => b.height(),
         }
     }
 
@@ -386,6 +471,9 @@ impl<'a> Canvas<'a> {
                 k.element(bounds, q_s, brush.blend, |scratch| {
                     scratch.fill_path(path, &opaque.to_paint(), rule, ctm, clip.mask);
                 });
+            }
+            Self::Cmyk(b) => {
+                paint_solid_into_cmyk(b, path, brush, Some(rule), None, ctm, clip);
             }
             Self::Record(r) => r.push(Op::Fill {
                 bounds: fill_bounds(path, ctm),
@@ -416,6 +504,9 @@ impl<'a> Canvas<'a> {
                 k.element(bounds, q_s, brush.blend, |scratch| {
                     scratch.stroke_path(path, &opaque.to_paint(), stroke, ctm, clip.mask);
                 });
+            }
+            Self::Cmyk(b) => {
+                paint_solid_into_cmyk(b, path, brush, None, Some(stroke), ctm, clip);
             }
             Self::Record(r) => r.push(Op::Stroke {
                 bounds: stroke_bounds(path, stroke, ctm),
@@ -479,6 +570,11 @@ impl<'a> Canvas<'a> {
                         },
                         blend,
                         anti_alias,
+                        // A recorded image brush is replayed into a
+                        // `Pixmap`, never into a colorant buffer -- a
+                        // display list is refused outright on a subtractive
+                        // page. See `PoisonReason::ColorantBuffer`.
+                        cmyk: None,
                     },
                     rule: FillRule::Winding,
                     ctm,
@@ -499,6 +595,48 @@ impl<'a> Canvas<'a> {
                     force_hq_pipeline: false,
                 };
                 p.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
+            }
+            Self::Cmyk(b) => {
+                // ★ THE ONE PAINT KIND THAT CANNOT GO NATIVE AT THIS PASS,
+                // and the reason is upstream of this method: `DecodedImage`
+                // holds a `Pixmap`, so a `DeviceCMYK` image's samples were
+                // already flattened to sRGB inside the decode loop, one
+                // call before this one. Bridging here is therefore not a
+                // shortcut taken at the canvas -- it is the only
+                // information that reaches the canvas.
+                //
+                // The scratch is rasterised with `tiny_skia` exactly as the
+                // `Paint` arm above does, so an image edge has identical
+                // geometry on both paths; only the composite differs.
+                // `SourceOver` into a transparent scratch, then the real
+                // blend on the way into the buffer -- letting `tiny_skia`
+                // apply the blend would blend against the scratch, which is
+                // empty, and silently reduce every mode to `Normal`.
+                if let Some(mut scratch) = Pixmap::new(b.width(), b.height()) {
+                    let paint = Paint {
+                        shader: Pattern::new(
+                            texels.as_ref(),
+                            SpreadMode::Pad,
+                            quality,
+                            1.0,
+                            image_to_user,
+                        ),
+                        blend_mode: BlendMode::SourceOver,
+                        anti_alias,
+                        force_hq_pipeline: false,
+                    };
+                    scratch.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
+                    let region = device_region(fill_bounds(path, ctm), 1.0, b.width(), b.height());
+                    if let Some(region) = region {
+                        b.composite_srgb(
+                            &scratch,
+                            region,
+                            1.0,
+                            crate::compositor::Blend::from_tiny_skia(blend)
+                                .unwrap_or(crate::compositor::Blend::Normal),
+                        );
+                    }
+                }
             }
             Self::Knockout(k) => {
                 // An image carries its own per-sample alpha, and that alpha
@@ -562,6 +700,14 @@ impl<'a> Canvas<'a> {
                 k.approximated += 1;
                 Some(&mut k.accum)
             }
+            // A colorant buffer has no sRGB pixmap to hand out, and
+            // fabricating one would defeat the entire point of the buffer.
+            // Every caller of this method also calls
+            // [`Canvas::cmyk_mut`] first and takes a native subtractive
+            // path, so reaching here with a `Cmyk` canvas means a NEW
+            // destination-reading operator was added without one -- which
+            // the caller reports as a refusal rather than painting wrongly.
+            Self::Cmyk(_) => None,
         }
     }
 
@@ -604,6 +750,22 @@ impl<'a> Canvas<'a> {
                 };
                 let blend = layer_blend(paint);
                 k.element_from_pixmap(&buf, paint.opacity.clamp(0.0, 1.0), blend);
+                Some(result)
+            }
+            Self::Cmyk(b) => {
+                // A layer on a subtractive page gets a subtractive layer.
+                // No conversion happens at this boundary in either
+                // direction, which is the point: content inside a layer
+                // and identical content outside it must reach the page as
+                // the same ink.
+                let mut child =
+                    crate::cmyk_buffer::CmykBuffer::new(b.width(), b.height(), b.intent())?;
+                let result = {
+                    let mut sub = Canvas::Cmyk(&mut child);
+                    f(&mut sub)
+                };
+                let blend = layer_blend(paint);
+                b.composite_buffer(&child, paint.opacity.clamp(0.0, 1.0), blend);
                 Some(result)
             }
             Self::Paint(p) => {
@@ -752,10 +914,72 @@ impl<'a> Canvas<'a> {
         // independent attributes"* — so knockout is dispatched first and
         // `isolated` is carried into it as the initial backdrop's identity
         // rather than as a second branch.
+        // ★ `Cmyk` IS DISPATCHED HERE, AND IT WAS NOT IN THE FIRST DRAFT.
+        // Routing a subtractive page's knockout groups to the ordinary
+        // bridged arm below cost `1_GWG161` -- the suite's KNOCKOUT patch
+        // -- eleven of the thirteen traps `Pass 97.0c` had just removed,
+        // because it silently replaced real §11.4.6 semantics with the
+        // non-knockout approximation on exactly the pages that test them.
+        //
+        // The knockout accumulation runs in sRGB (that is
+        // `KnockoutTarget`, unchanged) and only its RESULT crosses into
+        // ink, which is the same trade every other nested drawing on a
+        // subtractive page makes. Correct group semantics in the wrong
+        // space beats the wrong semantics in the right one, and the two
+        // shortfalls are counted separately so neither hides the other.
         if knockout && !matches!(self, Self::Record(_)) {
             return self.knockout_group(paint, isolated, mask, f);
         }
         match self {
+            Self::Cmyk(b) => {
+                // ★ TREATED AS ISOLATED, ALWAYS, AND THAT IS A NAMED
+                // APPROXIMATION. A non-isolated group composites against
+                // its backdrop, and this canvas's backdrop is ink while
+                // the child buffer is screen colour -- there is no way to
+                // hand one to the other without the very round trip the
+                // colorant buffer exists to delete. So the contents run
+                // ONCE, over a transparent backdrop, which is exactly what
+                // §11.4.5's isolated case specifies and is what a
+                // non-isolated group on this page does not get.
+                //
+                // `backdrop_rerun` is therefore reported as `false`
+                // truthfully -- no second walk happened -- and the
+                // shortfall is carried by `groups_bridged` instead. The
+                // two must not be conflated: one is a cost that was paid,
+                // the other is a correction that was skipped.
+                let mut child =
+                    crate::cmyk_buffer::CmykBuffer::new(b.width(), b.height(), b.intent())?;
+                let (result, _dependent) = {
+                    let mut sub = Canvas::Cmyk(&mut child);
+                    f(&mut sub)
+                };
+                if let Some(m) = mask {
+                    child.apply_mask(m);
+                }
+                // The group's own bridge tallies ride along: a child
+                // buffer's bridged pixels and bridged sub-groups are the
+                // parent page's too, and dropping them here would make a
+                // page composited entirely out of bridged images report
+                // zero bridging.
+                b.absorb_counters(&child);
+                // Counted ONLY when the group was non-isolated: an
+                // isolated group is now exact, and counting it would make
+                // the shortfall look larger than it is on precisely the
+                // documents where it is smallest.
+                if !isolated {
+                    b.note_group_approximated();
+                }
+                let blend = layer_blend(paint);
+                b.composite_buffer(&child, paint.opacity.clamp(0.0, 1.0), blend);
+                Some(GroupOutcome {
+                    result,
+                    backdrop_rerun: false,
+                    // A knockout group reaching here has lost its knockout
+                    // semantics along with its blending space; reported
+                    // through the channel that already means exactly that.
+                    knockout_approximated: usize::from(knockout),
+                })
+            }
             Self::Paint(p) => {
                 let mut iso = Pixmap::new(p.width(), p.height())?;
                 let (result, backdrop_dependent) = {
@@ -916,7 +1140,25 @@ impl Canvas<'_> {
                 // §11.4.6 NOTE 6: the inner group inherits the OUTER
                 // group's initial backdrop, not its accumulated result.
                 Self::Knockout(k) => k.initial.clone(),
+                // ★ A NON-ISOLATED knockout group on a subtractive page
+                // gets the ISOLATED backdrop, and that is a named
+                // approximation rather than an oversight: the backdrop is
+                // ink and this buffer is screen colour, so there is
+                // nothing to copy that would not go through the very round
+                // trip the colorant buffer exists to delete. §11.4.8's
+                // alpha recurrence is identical either way (`α_gb` is
+                // always zero in a knockout group), so what is lost is
+                // confined to `C_b` and `α_b`.
                 Self::Record(_) => Pixmap::new(w, h)?,
+                // ★ THE ROUND TRIP THAT IS WORSE THAN NOT DOING ONE AND
+                // BETTER THAN HAVING NO BACKDROP AT ALL, and the numbers
+                // are in `snapshot_srgb_backdrop`'s own docs: handing a
+                // subtractive page's knockout groups a TRANSPARENT initial
+                // backdrop took Ghent `1_GWG161` from 2 traps to 15. A
+                // knockout group's entire definition is "composite against
+                // the group's initial backdrop"; give it nothing and it
+                // knocks out against nothing.
+                Self::Cmyk(b) => b.snapshot_srgb_backdrop()?,
             }
         };
         let mut target = KnockoutTarget::new(initial)?;
@@ -933,6 +1175,13 @@ impl Canvas<'_> {
                     apply_mask(&mut r, m);
                 }
                 k.element_from_pixmap(&r, paint.opacity.clamp(0.0, 1.0), layer_blend(paint));
+            }
+            // Unreachable -- see the note on the `initial` match above.
+            // A real knockout result would still be bridgeable, so the arm
+            // does the bridgeable thing rather than dropping the group.
+            Self::Cmyk(b) => {
+                let r = target.result_pixmap();
+                bridge_layer_into_cmyk(b, &r, paint, mask);
             }
             Self::Record(_) => {}
         }
@@ -1280,6 +1529,64 @@ fn apply_mask(buf: &mut Pixmap, mask: &Mask) {
         ) {
             *px = q;
         }
+    }
+}
+
+/// Composite a rendered sRGB layer or group **result** into a colorant
+/// buffer — the bridge every nested drawing on a subtractive page crosses.
+///
+/// # What this is, honestly
+///
+/// The group's **interior** was composited in sRGB, by an ordinary
+/// [`Canvas::Paint`] child, because a colorant buffer cannot be handed to
+/// `tiny_skia` and a group's contents are rasterised the same way any other
+/// content is. Its **result** then crosses into ink here, and composites
+/// under §11.4.4's formula in the subtractive space, through
+/// [`crate::cmyk_buffer::CmykBuffer::composite_srgb`].
+///
+/// So a page with groups on it gets:
+///
+/// | | blends in |
+/// |---|---|
+/// | elements painted directly on the page | **ink** — correct |
+/// | a group's result against the page | **ink** — correct |
+/// | elements *inside* a group, against each other | screen — **wrong** |
+///
+/// The third row is `Pass 97.1f`'s work and is counted here
+/// ([`crate::cmyk_buffer::CmykBuffer::groups_bridged`]) rather than
+/// described in a comment, because a shortfall nobody counts is a shortfall
+/// nobody notices has grown.
+///
+/// # Why this is nonetheless an improvement and not a wash
+///
+/// Before this Pass **every** row above blended in screen colour. §11.4.5
+/// makes the outer state — the group's `/ca` and its `/BM` — apply to the
+/// group's *result*, which is precisely the composite this function
+/// performs, so the row that moves is the one the standard singles out.
+///
+/// # The soft mask
+///
+/// Applied to the sRGB result before the bridge, by the same
+/// [`apply_mask`] the additive path uses. §11.4.5's mask multiplies the
+/// group's **alpha**, and alpha is space-independent — so performing it on
+/// either side of the colour conversion gives the same answer, and doing it
+/// on the sRGB side reuses code that is already tested.
+fn bridge_layer_into_cmyk(
+    buf: &mut crate::cmyk_buffer::CmykBuffer,
+    group: &Pixmap,
+    paint: LayerPaint,
+    mask: Option<&Mask>,
+) {
+    buf.note_group_approximated();
+    let region = (0, 0, buf.width(), buf.height());
+    let blend = layer_blend(paint);
+    let opacity = paint.opacity.clamp(0.0, 1.0);
+    if let Some(m) = mask {
+        let mut masked = group.clone();
+        apply_mask(&mut masked, m);
+        buf.composite_srgb(&masked, region, opacity, blend);
+    } else {
+        buf.composite_srgb(group, region, opacity, blend);
     }
 }
 

@@ -803,6 +803,108 @@ fn a_cmyk_page_that_only_composites_normal_is_not_counted_as_wrong() {
     );
 }
 
+/// **The Pass's headline claim, end to end**: a page whose group declares
+/// `DeviceCMYK` is composited in ink, and the `Difference` cell that
+/// motivated the whole build lands on the value §11.3.4 requires.
+///
+/// # Why this fixture is the Ghent cell and not a synthetic one
+///
+/// Because the arithmetic is already pinned by `compositor.rs`'s unit
+/// test, and pinning it twice proves nothing. What is unproven until this
+/// test runs is that a real content stream, walked by the real
+/// interpreter, through the real canvas, reaches that arithmetic — which is
+/// exactly the failure mode `Pass 28.0`'s `move_subpath` had for eight
+/// Passes: correct, callable and never called.
+///
+/// Magenta `0 1 0 0 k` under black `0 0 0 1 k` with `/BM /Difference`
+/// gives `1 − |c_b′ − c_s′|` = `DeviceCMYK 1 0 1 0`. Rendered additively
+/// pdfce produced `(237, 1, 140)`; the assertion below is that it no
+/// longer does.
+#[test]
+fn a_subtractive_page_group_composites_the_difference_cell_in_ink() {
+    let content = "0 0 0 1 k 0 0 20 20 re f /GS0 gs 0 1 0 0 k 0 0 20 20 re f";
+    let stream = format!(
+        "{content}
+"
+    );
+    let bytes = build(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 20 20] >>",
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R              /Group << /S /Transparency /CS /DeviceCMYK >>              /Resources << /ExtGState << /GS0 5 0 R >> >> >>",
+        ),
+        (
+            4,
+            &format!(
+                "<< /Length {} >>
+stream
+{stream}endstream",
+                stream.len()
+            ),
+        ),
+        (5, "<< /Type /ExtGState /BM /Difference >>"),
+    ]);
+    let r = render(bytes);
+    assert!(
+        r.diagnostics.cmyk_buffer_engaged,
+        "a DeviceCMYK page group must engage the colorant buffer"
+    );
+    assert_eq!(
+        r.diagnostics.blends_in_wrong_space, 0,
+        "the blend ran in the space the page declared, so nothing is owed"
+    );
+    assert_eq!(
+        r.diagnostics.cmyk_groups_approximated, 0,
+        "no groups here beyond the page group itself"
+    );
+
+    // `DeviceCMYK 1 0 1 0` is the answer; compare against the SAME
+    // conversion the renderer collapses through rather than a hard-coded
+    // RGB triple, so that a future re-calibration of the CMYK table moves
+    // the fixture and the renderer together instead of breaking this test
+    // for a reason that has nothing to do with compositing.
+    let want = pdfce_core::color::cmyk_to_srgb_with(
+        pdfce_core::settings::CmykIntent::default(),
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+    );
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let px = r.pixmap.pixels()[(10 * 20 + 10) as usize];
+    for (got, want) in [px.red(), px.green(), px.blue()]
+        .iter()
+        .zip([q(want[0]), q(want[1]), q(want[2])].iter())
+    {
+        assert!(
+            got.abs_diff(*want) <= 1,
+            "expected the subtractive Difference result, got ({}, {}, {})",
+            px.red(),
+            px.green(),
+            px.blue()
+        );
+    }
+}
+
+/// The other half of the switch, and the one that protects every ordinary
+/// document: a page with **no** subtractive group keeps the sRGB path.
+///
+/// ISO 32000-1 §8.6.6.4 makes that the *specified* behaviour on an
+/// additive device rather than merely the safe one, so a regression here
+/// would be a conformance failure in the opposite direction — and it would
+/// be invisible, because the picture would still look like a page.
+#[test]
+fn an_additive_page_does_not_engage_the_colorant_buffer() {
+    let r = render(page("<< /Type /ExtGState /BM /Multiply >>"));
+    assert!(!r.diagnostics.cmyk_buffer_engaged);
+    assert_eq!(r.diagnostics.cmyk_bridged_pixels, 0);
+}
+
 /// A form with NO `/Group` is an ordinary reusable content stream and is
 /// not a compositing scope. Counting it would put a large number on
 /// ordinary documents — forms are how every producer factors repeated
