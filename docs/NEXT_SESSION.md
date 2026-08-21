@@ -3,340 +3,259 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
-**Written 2026-08-21**, replacing the 2026-08-20 (evening) handoff whose
-headline task — `Pass 97.x`, the colour compositor — **is where this session
-went**, and which it re-scopes.
+**Written 2026-08-21 (afternoon)**, replacing the 2026-08-21 (morning)
+handoff, which is superseded in three of its own clauses (§7 below says
+which, and why a *provenance* label is not a *freshness* label).
 
 ---
 
 ## §0 — DO THESE THREE THINGS BEFORE ANYTHING ELSE
 
-**1. `ls` BOTH FeatureRequests channels.** They are outside this repository,
-so **no gate will ever contradict a stale sentence about them** — including
-this one.
+**1. `ls` BOTH FeatureRequests channels.** They are outside this
+repository, so **no gate will ever contradict a stale sentence about
+them — including this one.**
 
 ```
 D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\
 D:\Dev\FeatureRequests\iccce_FeatureRequests\open\
 ```
 
-At this handoff: pdfce's channel had nothing new since our own 02:14 reply.
-**iccce's had TWO notes that landed at 03:04 and 03:15 — after the previous
-handoff was written — and both were compositor input.** They were read and
-used. That is the second session running where the `ls` found something a
-document said was not there.
+Last session the `ls` found **two `iccce` notes that had landed after the
+previous handoff was written**, both compositor input, both used. That is
+two sessions running where the `ls` found something a document said was not
+there.
 
-**2. Run the gates — `ls tools/check-*`, do not trust any list.** 15 today,
-14 wired into CI (`check-image-colorspace-truth.py` takes a fixture dir and
-is a sweep tool, deliberately out). All green at this handoff.
+**2. Run the gates — `ls tools/check-*`, do not trust any list.** There are
+**16** on disk, **15 wired into CI** (`check-image-colorspace-truth.py`
+takes a fixture directory and is a sweep tool, named in `ci.yml` so the
+next person counting does not record it as a miss).
 
-**★ `tools/check-ledger-numbers.py` was rewritten this session** and its
-live ceiling moved **118 → 121**. If you read a Pass ceiling from a document
-older than today, it is wrong by three families. Re-run the gate.
+**★ And `tools/check-ci-parity.py` is new, and it exists because the local
+sweep is not the CI set.** `for g in tools/check-*` is **one of CI's nine
+jobs**. `cargo fuzz build`, the wasm32 cross-check, the no-network denylist
+and the licence audit have no local runner anybody runs by habit — which is
+how the fuzz job stayed red for **three days** while every local check was
+green. `python tools/check-ci-parity.py --list` prints the eleven local
+stand-ins. **`R209` is the rule this minted:** *"all gates green" names a
+set, and the set somebody runs is not the set CI runs; a CI job with no
+local runner is UNOBSERVED, not passing.*
 
-**3. Read `docs/compositor-plan.md`'s 2026-08-21 amendment** before scoping
-anything in the `97.x` family. It carries the derivation that re-orders
-Stage B, and §7's two struck-through items carry measured negatives that
-change what is worth doing next.
+**3. Read `docs/compositor-plan.md`'s 2026-08-21 amendments** before
+scoping anything in the `97.x` family.
 
 ---
 
-## §0.5 — WHAT SHIPPED
+## §0.5 — `v0.7.0` IS RELEASED
 
-| commit | |
+Tag **`3bc8fbe`**, pushed, published, asset
+`pdfce-v0.7.0-portable-win64.zip` (10,906,752 B, SHA-256
+`25BDBB11…1042AFE`). `tools/verify-release.py v0.7.0` passes **all seven
+checks**. CI run `32486133822` was **green on all ten runs, observed BEFORE
+the tag was placed** — `R209`'s first live application — ending **nine
+consecutive red runs** over three days.
+
+Packaging smoke test passed on the tagged build, in a fresh folder: the CLI
+reports `revision: v0.7.0` exactly, and the GUI creates `userdata/` inside
+its own directory (decision 003 / `R15`).
+
+⚠ **`v0.7.0`'s tag is in no bundle on disk.** Unlike `v0.6.0`, this release
+is **not recoverable from backup**. The newest bundle is
+`pdfce-20260817-v060.bundle`, head `3c4c00e`, **169 commits** behind — and
+that head **is** `v0.6.0^{}`, so "commits since backup" and "commits in
+this release" are the same 169 and a future filing that reports them
+differently refutes itself. **Cutting a bundle is the operator's call.**
+
+---
+
+## §1 — WHERE THE COMPOSITOR IS, AND WHAT TO DO NEXT
+
+`Pass 97.0` (a–d) and `Pass 97.1` (a–b) shipped. What exists:
+
+| | |
 |---|---|
-| `7160819` | **`Pass 97.0a`** — `compositor.rs`; the four non-separable modes were blending against **imaginary white paper** |
-| `9b49ca0` | **`Pass 97.0b`/`97.0c`** — non-isolated groups get their backdrop; §11.4.6 knockout implemented |
-| `86a7b70` | **`Pass 97.0d`** — soft mask applied to the group **result**, not to each object inside it |
-| `0d5fc29` | **`Pass 97.1`, first two deliverables** — `/Indexed` colorants, and the counter for images that never reach overprint |
-| `05ba72a` | five stale comments + a user-facing message + the ledger gate, third instance of one class |
+| `compositor.rs` | §11.4.4's element formula, §11.4.8's knockout variant, backdrop removal, `Union`, **all thirteen Table 136 separable functions**, and — new — §11.3.4's **subtractive complement** and §11.3.5.3's CMYK detour with K **selected** by mode |
+| `Canvas::group` | non-isolated groups render over their own backdrop; second walk skipped under §11.4.4 NOTE 5's own condition |
+| `KnockoutTarget` | real §11.4.6, four planes, §11.4.6 NOTE 6's nesting rule |
+| soft masks | applied to the group **result** (§11.4.5) |
+| **blending colour space** | **read and disclosed** — page group and per-group, honouring Table 147's inheritance rule |
 
-Plus librarian filings (216th), **`R208`** minted, **decision 077**.
+### ★★ THE NEXT BUILD, and the measurement that scopes it
 
-### The numbers, because the headline one did not move
+`Pass 97.1c` — **a CMYK group buffer**. The arithmetic is done and tested;
+what is missing is a buffer that holds ink rather than screen colour, so
+the operands reach it un-round-tripped.
 
-**Ghent board: `26 pass · 14 FAIL · 11 UNRESOLVED` — identical before and
-after.** What moved underneath it:
+**Why a round trip will not do, measured:** `DeviceCMYK 0 1 0 0` painted
+and recovered from the sRGB buffer comes back as
+`(0, 0.995, 0.409, 0.071)`. That `Y = 0.41` is not a rounding error, and
+§8.6.5.7 NOTE 2 names the 4→3→4 trip by hand as *"unnecessary and results
+in a loss of fidelity in the black component"*.
 
-| | before | after |
-|---|---:|---:|
-| total traps across failing patches | 67 | **55** |
-| `1_GWG161` (non-isolated knockout) | 14 traps | **2** |
-| `1_GWG1610` strip correlation | 0.576 | **0.962** |
-| `1_GWG168` strip correlation | 0.725 | **0.978** |
-| `1_GWG169` strip correlation | 0.905 | **0.986** |
+**Why four channels and not N:** the leading deliverable is the *blending
+space*, which is `DeviceCMYK` for every file that matters here. Spot planes
+are the *second* deliverable and want a runtime-N **plane-major** buffer
+(measured **3–5×** faster than interleaved, `compositor-plan.md` §3.2).
+Building N now fuses two questions that fail independently.
 
-Full-corpus render parity, 4,023 files, **run twice** — this branch and a
-worktree built at `2e6bb83` — **identical** bucket for bucket, band for
-band, same single unexplained file. That is the intended result and it is
-why the *isolated* group composite still goes through
-`tiny_skia::draw_pixmap`: pdfce's `f32` path computes the same function with
-different rounding, so routing the already-correct case through it would
-move every anti-aliased edge in the corpus and turn the parity gate into a
-rounding detector.
+**The shape that already worked once:** `paint_nonseparable` and
+`paint_overprint` both rasterise a paint to a coverage `Mask` with the same
+rasteriser a normal paint uses, then composite per pixel inside the path's
+device bounds. That machinery exists and is proven; a `Canvas::Cmyk`
+variant is the same move at group scope. `BrushSpec` will need to carry the
+authored colorants alongside the sRGB it already bakes — the interpreter
+*has* them (`ColorState::device_color`) and throws them away.
 
----
+### ★★★ AND THE NUMBER THAT SHOULD SET YOUR EXPECTATIONS
 
-## §1 — ★★★ THE FINDING THAT RE-ORDERS THE PLAN. Read before scoping `97.1`.
+| corpus | files with a subtractive space | blend modes applied | **in the wrong space** |
+|---|---:|---:|---:|
+| Ghent PDF Output Suite (51) | 13 (25.5 %) | 107 | **107 (100.0 %)** |
+| `fixtures/external` (3,735) | 15 (0.4 %) | 49 | **2 (4.1 %)** |
 
-`docs/compositor-plan.md` §4 expects **seven patches** from Stage A. It got
-zero patch verdicts, **and the group model is not why.**
+**One hundred percent on the suite built to test this; four percent on the
+corpus of files people actually have.**
 
-Derived by hand on `1_GWG162`'s `Difference` cell, whose two operands are
-printed in the file — X1 = `DeviceCMYK 0 1 0 0` (magenta), X2 =
-`DeviceCMYK 0 0 0 1` (black), `/BM /Difference`, and the surround a correct
-engine must produce is RGB `(0, 165, 79)`:
-
-```text
-§11.3.4 complement:  cb′ = (1,0,1,1)   cs′ = (1,1,1,0)
-|cb′ − cs′|              = (0,1,0,1)
-complement back          = (1,0,1,0) = DeviceCMYK 1 0 1 0 = GREEN
-```
-
-**That is the surround, exactly.** pdfce renders `(237,1,140)`; pdfium
-renders `(202,29,108)`; both blend in RGB and both are wrong, differently.
-The trap is authored on the **blending colour space**, and no amount of
-group-model correctness reaches it.
-
-★ **Every Ghent transparency patch declares `/Group /CS /DeviceCMYK` on the
-PAGE** — including `3_GWG161`, whose own objects are `ICCBased` RGB. So the
-blending space is CMYK for all of them regardless of what the artwork is
-coloured in.
-
-⇒ **§11.3.4's subtractive complement is `Pass 97.1`'s leading deliverable,
-ahead of the spot planes.** And it needs a real colorant buffer: the
-4→3→4 reconstruction is measurably lossy — `DeviceCMYK 0 1 0 0` painted and
-recovered from the sRGB buffer comes back as `(0, 0.995, 0.409, 0.071)`, and
-that `Y = 0.41` is not a rounding error.
+- The Ghent transparency panels **cannot** be passed without this build.
+- It is a **prepress-shaped** problem, not a general one. It buys
+  conformance and print-site credibility — the stated goal — and will
+  change **almost nothing** about how ordinary documents look. Do not
+  expect the render-parity buckets to move, and do not read that as
+  failure.
 
 ---
 
 ## §2 — THE QUEUE, in the order I would take it
 
-1. **`Pass 97.1` — the colorant buffer, led by §11.3.4.** The big one, and
-   now the only thing that can move the transparency panels. `Pass 97.0`
-   built the group model it plugs into. §3 below is what to build it from.
-
+1. **`Pass 97.1c`** — the CMYK group buffer, above.
 2. **`Pass 119.1`** — `unshare_form` (copy-on-write a shared form onto one
-   page). Carried from the previous handoff, unstarted, still a *separate
-   verb* and not a mode of `edit_text` (`decision 076`).
-
+   page). Carried unstarted through three handoffs now; still a *separate
+   verb*, not a mode of `edit_text` (`decision 076`).
 3. **`Pass 80.0`** (note text on markup) and **`Pass 81.1`** (markup
-   opacity, write half) — both `pdfceGUI` requests, both already scoped,
-   both untouched by this session.
-
+   opacity, write half) — both `pdfceGUI` requests, both scoped, both
+   untouched.
 4. **`Pass 119.3`** — align `pdfce-render`'s nested-form resource fallback
    with `text_edit::forms`.
-
-5. **The reference-strip threshold for `ghent-check.py`** — see §5. Small,
-   and it is the difference between three patches reading UNRESOLVED and
-   reading what they are.
+5. **The reference-strip threshold for `ghent-check.py`** — §5.
 
 ---
 
-## §3 — WHAT `Pass 97.0` BUILT, so it is not rebuilt or mistrusted
+## §3 — COUNTERS WHOSE MEANING YOU MUST NOT MISREAD
 
-**`crates/pdfce-render/src/compositor.rs`** is now the single place the
-standard's compositing arithmetic lives: §11.4.4's element formula,
-§11.4.8's knockout variant, §11.4.4's backdrop removal, §11.3.7.3's `Union`,
-and all thirteen Table 136 separable blend functions — transcribed **with**
-the corpus's four printing errata (`GD-1`…`GD-4`: `ColorDodge`'s and
-`ColorBurn`'s second branches, `SoftLight`'s `D(x)`, and `Difference`'s
-missing absolute-value bars, which every text extractor loses because they
-are path-drawn).
+`render-page`'s stable stdout line gained **five** keys this session, all
+appended last:
 
-**`Canvas::group`** replaces `Canvas::layer` for transparency groups.
-`Canvas::layer` stays, unchanged, for an annotation's `/CA` — that one
-really is "composite this sub-drawing as one object" over a transparent
-start.
-
-★ **The two-walk mechanism, and why it is not expensive.** The standard
-needs two per-pixel quantities one `Pixmap` cannot both hold: `C_n`
-(accumulated **over** the backdrop) and `α_gn` (the group's own alpha,
-**excluding** it). So a non-isolated group's contents are walked twice. The
-second walk is **skipped under §11.4.4 NOTE 5's own condition** — with the
-interior compositing `Normal` throughout, the one-walk answer is
-*identically* exact. On the operator's real CAD drawing the counter is zero
-and the render time is unchanged at **0.96 s**.
-
-**`KnockoutTarget`** — four planes where a `Pixmap` has one. Each element is
-rasterised into a reused scratch **at full opacity**, so its alpha comes
-back as pure coverage (`f_s`), with `q_s` taken out of the paint — because
-§11.4.8 scales the destination by `(1 − f_s)` where the ordinary formula has
-`(1 − α_s)`. §11.4.6 NOTE 6's nesting rule is honoured: a non-isolated group
-inside a knockout group inherits the **outer** group's initial backdrop.
-
-**The soft mask** is lifted out of the contents' clip at a group `Do` and
-applied once to the composite. Folding into the clip is **still** what
-happens to an elementary object and is **correct** there — §11.6.4.1 makes
-the mask value that object's `q_m`. Two clauses, one implementation, not a
-fix half-applied.
-
-### Three counters whose meaning you must not misread
-
-- **`transparency_groups_knockout_approximated` CHANGED MEANING.** It used
-  to be `1` for every `/K true` group; it now counts the **elements** inside
-  one that read the destination back and so could not be given knockout
-  semantics. A knockout group pdfce renders exactly reports **zero**.
-- **`groups_backdrop_reruns`** is a **cost** counter, not a shortfall — the
-  only place in the renderer where one page's content stream is interpreted
-  more than once. Zero is normal and does not mean non-isolated groups were
-  mishandled.
-- **`overprint_images_unsupported`** is new and deliberately **not**
+- **`groups_backdrop_reruns`** — a **cost** counter, not a shortfall. The
+  only place one page's content stream is interpreted more than once. Zero
+  is normal.
+- **`soft_masks_on_group_result`** — masks that reached §11.4.5's place.
+  Folding into the clip is **still correct** for an elementary object
+  (§11.6.4.1's `q_m`); the two are one implementation of two clauses.
+- **`overprint_images_unsupported`** — deliberately **not**
   `overprint_refused`. `refused` = "offered and could not run"; this =
   "never offered this object class at all".
+- **`blend_space_subtractive`** — a **census**. A page can be entirely
+  `DeviceCMYK` and entirely correct.
+- **`blends_in_wrong_space`** — the **shortfall**. This is the one.
+
+And one **changed meaning**: `transparency_groups_knockout_approximated`
+used to be `1` per `/K true` group; it now counts the *elements* inside one
+that read the destination back. **A group pdfce renders exactly reports
+zero.**
 
 ---
 
-## §4 — ★★ TWO FIXES THAT MOVED NOTHING, AND WHY THAT IS THE USEFUL PART
+## §4 — WHAT IS STILL NOT DONE, named so it does not read as done
 
-Both were listed in `docs/compositor-plan.md` as measured-and-confirmed.
-Both were real. Both are inert today.
-
-**`/Indexed` colorant classification.** §8.6.6.3 puts an `/Indexed`
-operand's colour values in the **base** space, and Table 149 keys on which
-colorants the source *names* — so `/Indexed [/DeviceN [/Cyan] /DeviceCMYK …]`
-was classified as "some other process space" and Table 149 decided what
-survives from a colorant list it had never read. Fixed in three places (the
-third — `overprint_would_change` — was **not** in the plan's write-up, and
-it is the predicate that decides whether the composite is called at all).
-
-**Measured A/B, pre- and post-fix binaries, same corpus:**
-`overprint_effective` / `overprint_composited` / `overprint_refused` /
-`overprint_pixels` **identical to the digit** on all four patches that carry
-`/Indexed`. Cause, verified structurally: **every one of those spaces is an
-IMAGE colour space and nothing else** (`1_GWG190`'s two are `/XO1` and
-`/XO2`, both `/Subtype /Image`), and `overprint::composite` has no image
-call site. **The plan listed the `/Indexed` half first and the image half
-second; the dependency runs the other way round.**
-
-**Stage A itself**, same shape at a larger scale — see §1.
-
-★ **The transferable half, and it is now in the engineer's agent memory:**
-a plan's *ordering* of two related items is a claim, and it is the claim
-least likely to have been checked. Keep the previous binary
-(`git worktree add /tmp/x <sha>` + `cargo build --release`, four minutes) —
-it is the only thing that separates *"this fix did nothing"* from *"this fix
-did nothing **yet**"*.
+- **Implicit knockout.** Only explicit `/K true` is honoured. §9.3.8's
+  `/TK` **defaults true** (every text object), §11.7.4.4 makes `B`/`b`
+  knockout, §11.6.7 makes shading patterns knockout. Ranked by likely
+  frequency that is `B`/`b` ≫ `/TK` > explicit `/K` — **the one pdfce
+  implements is the rarest.**
+- **`/TR` on a soft mask** is read, counted, never evaluated. `/TR` is
+  where a mask gets inverted, so an ignored one can leave visible exactly
+  what the document meant to hide.
+- **`f_g` is approximated by `α_g`** for a group used as an element of a
+  knockout group — exact when that group's own elements are opaque, which
+  is §11.4 corpus §7.4's stated safe-skip condition.
+- **`/AIS true` is not distinguished** from `/AIS false` for a group mask.
+- **`overprint::composite` still treats a transparent pixel as white
+  paper** — the convention `Pass 97.0a` removed from the two blend
+  composites. Deliberate: it is Table 149 *decision* logic, and it belongs
+  with the colorant buffer that will replace its input.
 
 ---
 
 ## §5 — AN INSTRUMENT PROBLEM, NAMED AND DELIBERATELY NOT SOLVED
 
 `ghent-check.py` has **no calibrated threshold** for reference-strip
-patches — its own output says so — so the three soft-mask patches stay
-UNRESOLVED at 0.96–0.99 correlation.
+patches, so three soft-mask patches sit at 0.96–0.99 correlation and still
+read UNRESOLVED. There is now a bimodal split to calibrate against:
+**0.962 / 0.978 / 0.986** against **0.039 / 0.053 / 0.062 / 0.406**.
 
-There is now a bimodal split to calibrate against: **0.962 / 0.978 / 0.986**
-for the three soft-mask patches against **0.039 / 0.053 / 0.062 / 0.406** for
-the 16-bit and shading ones.
-
-**It was left alone on purpose.** Calibrating the instrument immediately
-after making it report what you wanted is not a measurement. Do it in its
-own session, with its own justification, and preferably against a patch
-whose expected verdict is known independently — which is exactly how
-`ghent-check`'s *trap* threshold was calibrated in the first place
-(GWG 16.0, 2026-08-17).
+**Left alone on purpose.** Calibrating an instrument immediately after
+making it report what you wanted is not a measurement. Do it in its own
+session, against a patch whose verdict is known independently — which is
+how the *trap* threshold was calibrated (GWG 16.0, 2026-08-17).
 
 ---
 
-## §6 — `3_GWG161`: 14 traps, UNEXPLAINED — with two explanations RULED OUT
+## §6 — THREE STALE-CLAIM FAILURES IN ONE DAY, AND THEY ARE THREE STAGES
 
-This is the largest single unknown left on the board, and it is recorded as
-unknown rather than assumed.
+Worth carrying, because a count of three says *"be more careful"* and three
+named stages are each checkable after the fact:
 
-**Ruled out (1) — GWG's own CMM tolerance.** The patch's ReadMe says in
-terms: *"A faint X is due to differences in the CMM and does not indicate a
-failure."* pdfce **has** a different CMM — its `DeviceCMYK` → sRGB is the
-naive additive conversion, and the parity harness measures `DeviceCMYK`-only
-pages diverging at **5.4×** the clean-page mean against pdfium's
-`AdobeCMYK_to_sRGB1`. So this was the obvious candidate. **Measured:** the
-X-versus-surround worst-channel gap across the fourteen trapping cells is
-**39, 47, 68, 69, 77, 88, 90, 90, 101, 121, 126, 171, 176, 178**. One cell is
-arguably faint. Thirteen are not.
+1. **No sweep.** `Pass 97.0` shipped and four comments plus one
+   operator-facing message still said knockout was unimplemented.
+2. **Wrong key.** A claim phrased as an **absence** — *"…and are **not**
+   counted as `overprint_refused`"* — carries no token tying it to the new
+   name, so a grep for the new counter cannot find it and a grep for the
+   old one finds a sentence that reads deliberate.
+3. **Wrong boundary.** The `/Indexed` claim was corrected in two files and
+   left standing in a third: **the sweep's boundary was the file, the
+   claim's was the feature.** All three copies were born in **one** commit
+   across two files, and `git log -S "<the claim's distinctive fragment>"`
+   would have named them all.
 
-**Ruled out (2) — "the blend never ran."** pdfium's value sits **between**
-pdfce's and the surround on essentially every cell. A blend that never ran
-returns `C_s` unchanged and would put pdfce *at* the source, not past pdfium
-in the same direction. pdfce is applying the blend **harder** than it
-should — a wrong operand, not a missing operation.
-
-**Where to look first.** The ReadMe describes a **three-layer**
-construction: *"Upper object — ICCbased with transparency effect (Fill),
-Lower object — ICCbased, Background object — DeviceCMYK."* **Which form
-XObject pdfce takes as which has never been established.** A wrong operand
-is what the evidence points at, and the operand pairing is the thing nobody
-has checked.
+⇒ *sweep at all → derive the key from meaning → derive the boundary from
+the introducing commit.* The librarian recommends folding this into hard
+rule 11's method paragraph rather than minting; **hard rule 11 lives in the
+engineer's agent file, so that is the engineer's act and it is still owed.**
 
 ---
 
-## §7 — HOUSEKEEPING, and two of these are owed
+## §7 — WHAT THE PREVIOUS HANDOFF GOT WRONG, kept rather than deleted
 
-- **`tools/render-parity/out/summary.json`, the standing gate's RECORDED
-  BASELINE, is STALE and not comparable to a current run.** It records a
-  bucket vocabulary the harness no longer emits (`benign`/`known-gap`
-  against `below-band`/`disclosed-gap-small`). **`--gate` mode is
-  meaningless until it is re-based.** Comparing two current runs is the only
-  thing that means anything today, and that is what was done here.
-- **`check-ledger-numbers.py` was rewritten**, third instance of one class
-  (anchor one decoration-spelling behind — first stars, then more stars, now
-  backticks). The anchor is **gone** rather than widened a third time; a
-  heading declares a Pass iff it is an `###` whose pre-em-dash prefix
-  **leads with** a Pass ID, with parenthesised mentions stripped and
-  struck-through headings excluded. All four refinements were **measured**
-  against `ROADMAP.md`, not assumed. A fifth defect fell out: the
-  staged-ship qualifier regex capped the parenthetical at 40 characters, so
-  `Pass 52.2`'s two legitimate halves matched neither and a correct filing
-  was reported as a collision.
-- **`overprint::composite` still carries the "a transparent pixel is white
-  paper" convention** that `Pass 97.0a` removed from the two blend
-  composites. Deliberate: it is Table 149 *decision* logic rather than a
-  blend function, and changing it belongs with the colorant buffer that will
-  replace its input.
-- **`/TR` on a soft mask is still read, counted and never evaluated.** It
-  needs the §7.10 function machinery inside `pdfce-render`. `/TR` is where a
-  mask gets inverted, so an ignored one can leave visible exactly what the
-  document meant to hide.
-- **Backups are 4 days and ~50 commits stale** (newest bundle 2026-08-17).
-  Librarian-measured, not inferred.
-- **Nothing pushed.** `origin/main` is behind; `v0.7.0` is bumped but **not
-  tagged** (`git tag -l` tops at `v0.6.0`). Standing operator go-ahead for
-  builds/releases since 2026-08-17.
+Its §7 said backups were *"4 days and ~50 commits stale"*, that
+*"`origin/main` is behind"*, and that the tag *"tops at `v0.6.0`"*. All
+three are now false, and the first was **wrong by 3.4× when written** — it
+reused the commits-ahead-of-remote number against a different denominator.
+
+★ **The sentence carrying that error was the one labelled
+*"librarian-measured, not inferred"*.** A **provenance** label is not a
+**freshness** label, and a reader takes it for one. That is the transferable
+half, and it cost three filings to notice.
 
 ---
 
-## §8 — BROTLI, and the operator's condition has NOT fired
+## §8 — BROTLI: the operator's condition has NOT fired
 
-Ken asked, 2026-08-21: *"please note somewhere that we are going to have to
-add brotli compression when it becomes part of the pdf 2.0 standard."*
+`EXTN-BROTLI-1 v1.3`, *Brotli compression in PDF 2.0*, PDF Association,
+announced **2026-08-19** — CC-BY-4.0, filter name **`/BrotliDecode`**. It is
+an **extension** under the `PDFa` developer prefix, **not** on a dated ISO
+path: `brotli` returns **zero hits** in ISO 32000-2:2020's 1,023 pages and
+in 32000-1:2008, §7.4 stops at 7.4.10, and Table 6 lists exactly ten
+filters in both editions.
 
-`pdfce-spec-librarian` established the answer and wrote
-`D:\Dev\Rag-Specialized\PDF_Spec\filters\filter__brotli.md`:
+⇒ *"when it becomes part of the pdf 2.0 standard"* describes an
+**unscheduled** event while an implementable specification already exists.
+**Open operator question `(bq)`; default is wait.**
 
-- **Measured negative from the licensed primary:** `brotli` returns **zero
-  hits** in ISO 32000-2:2020 (1,023 pp) *and* ISO 32000-1:2008. §7.4 ends at
-  7.4.10; **Table 6 enumerates exactly ten filters in both editions**; and a
-  scan of all 2,840 Errata Collection 3 annotations found nothing, so the
-  negative holds for the corrected text too.
-- **But the specification EXISTS and is finished.** `EXTN-BROTLI-1 v1.3`,
-  *Brotli compression in PDF 2.0*, PDF Association PDF TWG, announced
-  **2026-08-19** — two days before he asked. CC-BY-4.0. Filter name
-  **`/BrotliDecode`**. It is an **extension**, registered under the `PDFa`
-  developer prefix, **not** on a dated ISO path.
-
-★ **So his condition describes an event that has not been scheduled, while a
-specification pdfce could implement against already exists.** That is
-**open operator question `(bq)`** and it is his call, not the engineer's.
-Default if unanswered: wait.
-
-Three things a future session should not have to rediscover: **a false
-citation is circulating** — every web-search summary says the filter is in
-"ISO 32000-2:2020 §7.4.11", and **§7.4.11 does not exist** (traced to an
-unmerged pypdf PR); **`FlateDecode`'s predictors apply verbatim**, so
-pdfce's predictor code is reusable as-is; and **`brotli` 8.0.4 is
-BSD-3-Clause AND MIT**, so a read-side addition needs no operator licence
-call. Today pdfce returns `FilterError::UnsupportedFilter("BrotliDecode")`,
-which is correct behaviour and not a bug.
+Three things not to rediscover: the **circulating "§7.4.11" citation is
+false** (that clause does not exist; traced to an unmerged pypdf PR);
+**`FlateDecode`'s predictors apply verbatim**, so pdfce's predictor code is
+reusable; and **`brotli` 8.0.4 is BSD-3-Clause AND MIT**, so a read-side
+addition needs no operator licence call. Full sourcing:
+`D:\Dev\Rag-Specialized\PDF_Spec\filters\filter__brotli.md`.
 
 ---
 
@@ -345,17 +264,13 @@ which is correct behaviour and not a bug.
 ```
 pdfce-cli render-page <a Ghent transparency patch> --page 1 --scale 2 -o out.png
 python tools/ghent-check.py D:\Dev\temp\ghent-patches
-python tools/ghent-cell-probe.py <patch stem> --reference-dir <pdfium renders>
+python D:\Dev\temp\pdfce\work\measure_space.py <a corpus dir>
 ```
 
-`render-page`'s stable stdout line gained three keys this session, all
-appended last: `groups_backdrop_reruns`, `soft_masks_on_group_result`,
-`overprint_images_unsupported`.
-
-**And run it on his real drawing before calling anything shipped** — that
-rule earned itself three defects in one session last week. It has no
-transparency groups, so this session's work could not touch it, and that
-was verified rather than assumed: 0.96 s, both new group counters at zero.
+**And run it on his real drawing before calling anything shipped.** That
+rule earned itself three defects in one week. The CAD sheet has no
+transparency groups, so this session's work could not touch it — verified
+rather than assumed: **0.96 s**, all five new counters at zero.
 
 ---
 
@@ -365,6 +280,6 @@ was verified rather than assumed: 0.96 s, both new group counters at zero.
 
 ★ **Written here once, on its own line, and referenced from everywhere else
 rather than repeated** — a Windows path in prose is the single most reliably
-mangled string this project handles. The engineer's agent memory carries the
-rule: **any shell metacharacter breaks heredoc patching — write the file, or
-use `Edit`.**
+mangled string this project handles. The rule in the engineer's agent
+memory: **any shell metacharacter breaks heredoc patching — write the file,
+or use `Edit`.**

@@ -40,5 +40,50 @@ appears in no fuzz target is findable by grep.
 the harness's list against the module's current public surface. The gap will be
 older than your change.
 
+---
+
+## ★ AMENDED 2026-08-21 — BOTH RECURRED, sixteen days later, IN THE SAME FILE
+
+This memory was correct and did not prevent either recurrence. That is
+worth more than the recurrences themselves, and it is the warrant the
+librarian minted **`R209`** on.
+
+**1 again.** `cargo fuzz build` had been **red for three days** on a
+one-line compile break — `MarkupSpec::Square` gained a `border_effect`
+field (`Pass 82.0`) and `fuzz/fuzz_targets/annot_author.rs`, which
+constructs that variant, was not updated. Found while verifying CI before
+tagging `v0.7.0`, not by any local run.
+
+★ **The mechanism this memory missed, and it is not carelessness.** "Run
+the gates" in this project means `for g in tools/check-*`. That is
+fourteen scripts and **it is ONE of CI's nine jobs.** A green local sweep
+and a red CI were **never a contradiction** — there was simply no place
+where the two were compared. Grepping the fuzz targets, which the "how to
+apply" above tells you to do, would not have caught a *compile* break
+either.
+
+**2 again.** Reading the file to fix the compile error found the dispatch
+at `match c.byte() % 8` against an **eight-variant enum with one arm spent
+twice**, so `MarkupSpec::Cloud` had **never been fuzzed at all**. Exactly
+the `vector_edit.rs` shape, in a different target.
+
+★ **And a sharper form of the check:** the modulo **is** a coverage claim,
+phrased as an integer. A claim asserting a **boundary** rather than a
+**member** — a count, a modulo, an absence, a closed either/or — contains
+no token tying it to what changed, so no grep for the new thing finds it.
+`% 8` and *"…are **not** counted as `overprint_refused`"* are the same
+defect in two spellings.
+
+**How to apply, updated:**
+
+* **`python tools/check-ci-parity.py --list`** prints the local stand-ins
+  for every CI job. The fuzz one is **`cd fuzz && cargo check --bins`** —
+  six seconds, no nightly, no ASan, and it catches the entire class that
+  has ever broken that job.
+* When you touch a fuzz target, **diff its dispatch arity against the
+  enum**, not just its arms against your change.
+
+---
+
 Related: [[run-the-projects-own-gates]] (the gate set is wider than fmt/clippy/
 tests), [[fuzz-asan-dll]] (why running one is not one command on this machine).
