@@ -5,8 +5,8 @@ shipped, this says what to do next. Overwrite it once acted on.
 
 **Written 2026-08-20 (evening)**, replacing the 2026-08-20 (morning) handoff
 whose headline task — `Pass 119.0`, text editing inside form XObjects — **shipped
-this session**, along with `Pass 119.2`, `121.0`, `121.1` and `113.x`, none of
-which were the brief.
+this session**, along with `Pass 119.2`, `121.0`, `121.1`, `113.x` and `120.x`,
+none of which were the brief.
 
 ---
 
@@ -44,6 +44,7 @@ All green at this handoff.
 | `97ed7fa` | **`Pass 121.0`** — a code was reported as colliding with **itself**, falsely refusing his drawing |
 | `bab0a23` | **`Pass 121.1`** — one edit moved **1,676 labels**; reflow's "line" had no end |
 | `e5be7d5` | **`Pass 113.0`/`113.1`/`113.2`** — `transform_objects`, on **every** object kind (§2.5) |
+| `73fa218` | **`Pass 120.0`/`120.1`/`120.3`** — the object clipboard: copy, cut, paste, serialise (§2.6) |
 
 Plus two librarian filings (209th, 210th), `decision 076`, and Backlog
 `119.1` / `119.3` / `119.4` / `120.0`–`120.4`.
@@ -103,17 +104,10 @@ temptation on reading "shipped" is to tick everything.
    (`e5be7d5`, with `113.1` preview and `113.2` CLI). See §2.5 for what it
    decided, including the one thing a consumer must not get wrong.
 
-2. **`Pass 120.0`–`120.4`** — the object clipboard. Newest request, operator-
-   widened (*"oh I might want all cases so we shouldn't be restrictive in our
-   ask"*), and the underlying ask is a fortnight old and repeated: *"can you get
-   cut copy and paste working for objects I select on the canvas?"*
-
-   ★ **Verify their central claim before scoping from it.** They believe
-   `EditSession::import_object` (`edit.rs:19367`) already does the hard half —
-   recursive cross-document graph copy with reference remapping, cycle handling
-   and stream re-staging — so the ask is *"expose the one you have at object
-   granularity"*. **I did not verify that**, and told them so. They asked to be
-   told early if the reading is wrong.
+2. ~~**`Pass 120.0`–`120.4`** — the object clipboard.~~ **`120.0`, `120.1` and
+   `120.3` SHIPPED this session** (`73fa218`). See §2.6. **`120.2` (render a
+   selection as a standalone one-page PDF) and `120.4` (dimensions and widgets)
+   are still open**, and `120.4`'s filed framing needs correcting — see §2.6.
 
 3. **`Pass 119.1`** — `unshare_form` (copy-on-write a shared form onto one
    page). See §2 for why this is a *separate verb* and not a mode of `edit_text`.
@@ -137,6 +131,40 @@ temptation on reading "shipped" is to tick everything.
    handing pdfce the four-way gray/CMYK/`Separation`/`DeviceN` black
    equivalence, bearing directly on `Pass 97.x`. **Not a request — do not triage
    it as one.**
+
+---
+
+## §2.6 — WHAT `Pass 120.x` FOUND, and the two parts still open
+
+**★★ The claim the Backlog entry flagged for verification is CONFIRMED AND
+INSUFFICIENT**, and that distinction is the scoping outcome. `pdfceGUI`
+believed `import_object` already did the hard half. It does — and it is the
+*smaller* half. `import_object` copies **indirect objects**; a page's content
+objects are **byte ranges inside a content stream** whose operators name their
+resources **by page-local name**. On the destination page `/F1` is a different
+font, so pasting verbatim draws the right glyphs in the wrong typeface — **and
+nothing errors**, because a resource name is not a reference and there is
+nothing in the graph to remap.
+
+So the feature is name rebinding: copy records the names each item consumes and
+carries the objects behind them; paste re-binds each to a fresh name and
+**rewrites the names inside the copied bytes**, driven by a 10-operator /
+7-category table.
+
+**The clip owns its resources** (transitive closure by value, payloads as bytes
+not spans), which is why cross-document paste is the same code path and why
+`to_bytes` shipped the same session rather than forcing that structure to be
+invented later.
+
+**Still open, and not quietly closed:**
+- **`Pass 120.2`** — render a selection as a standalone one-page PDF.
+  Deliberately a *different* format from `to_bytes`: a PDF cannot carry which
+  byte range was which object, each item's CTM, or which names its operators
+  consumed. Do not let anyone "simplify" the two into one.
+- **`Pass 120.4`** — dimensions and widgets. ★ **Its filed framing ("refuse
+  loudly") is subtly wrong for the shipped shape**: annotations are not
+  addressable by content-object indices *at all*, so there is nothing to
+  refuse. It needs a different carrier, not a guard.
 
 ---
 

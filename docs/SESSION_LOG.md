@@ -52881,3 +52881,118 @@ plus the bucket residue this filing's closure leaves behind.
 | `docs/FEATURES.md` rows touched | — | **1** (row "Move, resize and rotate a content-stream object…" — core/cli ticked, gui left unticked) |
 
 **Terminology (rule 15):** no "dimension" occurrence in this entry.
+
+## 2026-08-20 (two-hundred-and-thirteenth filing) — `PASS 120.0`/`120.1`/`120.3` (`73fa218`) SHIP THE OBJECT CLIPBOARD; THE REQUESTER'S OWN "`import_object` DOES THE HARD HALF" CLAIM CONFIRMED **AND INSUFFICIENT** — RESOURCE-NAME REBINDING WAS THE ACTUAL FEATURE; THREE TESTS FOUND PASSING WITHOUT COVERING THEIR SUBJECT, A THIRD SAME-DAY INSTANCE, STANDING-RULE MINT DECLINED A THIRD TIME ON A RECONSIDERED (NOT ROTE) READING OF THE PRECEDENT
+
+**Filed by `pdfce-librarian`, fifth filing of the day by this role today
+(two-hundred-and-thirteenth overall, per the running `SESSION_LOG` filing
+count).** No shell this filing (hard rule 8) — commit hash, `cargo test`/
+`fmt`/`clippy` results and the sabotage counts are relayed by the
+dispatching engineer. The structural claims (resource-closure-by-value,
+fresh-name-always rebinding, the name-rewrite table, `cut_objects`'s
+copy-then-delete ordering, the three vacuous-test repairs, and the CLI/verb
+signatures) were **independently confirmed against live source this
+filing** — `crates/pdfce-core/src/vector/clip.rs`, `crates/pdfce-core/
+src/edit.rs` (`copy_objects`, `paste_objects`, `paste_preview`,
+`cut_objects`), `crates/pdfce-cli/src/main.rs` (`object-copy`/
+`object-paste`), and `crates/pdfce-core/tests/object_clipboard.rs`, all
+read directly.
+
+**Shipped:**
+- `Pass 120.0` (`73fa218`) — `ObjectClip`, `copy_objects`/`paste_objects`/
+  `paste_preview`, `at: Matrix` composing with `Pass 113.0`'s matrix
+  contract.
+- `Pass 120.1` (`73fa218`) — `ObjectClip::to_bytes`/`from_bytes`,
+  versioned, refusing a newer-build payload, floats round-tripped
+  bit-exactly.
+- `Pass 120.3` (`73fa218`) — `cut_objects`: copy first, delete second,
+  first error propagated; nothing deleted if the copy half fails.
+- CLI: `object-copy --objects N,N --clip FILE [--cut OUT.pdf]` and
+  `object-paste --clip FILE [--translate/--scale/--rotate] [-o OUT|
+  --preview]` — the CLI's whole clipboard mechanism, a file being the only
+  place a payload can live between two one-shot invocations.
+
+**Findings + decisions:**
+- **★★ The requester's own claim, filed as a claim two filings ago, is
+  CONFIRMED-AND-INSUFFICIENT, not merely confirmed.** `import_object`
+  really does do the recursive-graph-copy half; the genuinely hard part —
+  which the request never named — is that a content-stream object refers
+  to its resources **by page-local name** (`/F1 12 Tf`), so pasting bytes
+  verbatim draws the right shapes in the wrong typeface and neither
+  failure errors. The feature is the name-rebinding half.
+- **The clip owns its resources by value, not by reference** — copy,
+  close the source session, paste still works (pinned by a dedicated
+  test); cross-document paste is the *same* code path as same-document
+  paste; `to_bytes` was a serialisation problem rather than a design
+  problem because of this, which is why `120.1` shipped the same session.
+- **Every resource binding gets a fresh name even when the source's
+  spelling is free on the destination page** — reusing a coincidentally
+  free spelling would make correctness depend on a coincidence the
+  destination page does nothing to preserve.
+- **`cut_objects`'s order is load-bearing**: copy-then-delete means a
+  selection that cannot be copied loses nothing; the reverse order would
+  risk the one outcome the operator cannot recover from by pasting.
+  pdfce holds no clipboard state itself — the verb *returns* the clip.
+- **★★ Three tests passed while disabling the entire resource import** —
+  one of sixteen actually caught it before repair. A fixture-value
+  coincidence (source and destination fonts matching), a substring
+  assertion satisfied by the content stream's own rewritten operand
+  (tautological against itself), and an assertion proving name-rewriting
+  rather than import, all repaired; sabotage now fails five of sixteen.
+- **Standing-rule mint declined a third time — reconsidered, not rote.**
+  Third same-day instance of "a test that exercises its subject without
+  covering it," this time via a distinct mechanism (shared fixture
+  value). Re-examined rather than waved through on the prior two
+  declines: R162's unifying sentence — "evidence that could not have come
+  out differently is not evidence" — covers all three mechanisms at the
+  same level, so a fourth number would fragment coverage `R205` already
+  warns against. Recorded as a new dated section in the existing RAG file
+  instead.
+- **Decision log: none, checked against decision 076's own precedent.**
+  Decision 076's closing note already drew this exact line — a verb-level
+  resource-ownership/name-rebinding policy for one editing surgery is
+  `docs/core-api/`'s territory, not an `ARCHITECTURE.md`-granularity
+  invariant. `docs/core-api/02-editing-and-saving.md` §1.10 was checked,
+  not re-derived — already current, and its 137-verb count is
+  tool-enforced (`tools/check-core-api-verbs.py`).
+- **Sweep for stale "clipboard unbuilt" claims** across `docs/` found
+  none — `docs/NEXT_SESSION.md` (engineer-owned, not edited by this
+  filing) already reflects the ship; every other `clipboard` hit in
+  `docs/` is the unrelated OS text/egui clipboard.
+- **Two limits corrected into decisions rather than left as omissions**:
+  `Pass 120.4`'s original "refuse loudly" acceptance criterion is subtly
+  wrong for the shape that shipped — there is nothing to refuse, since
+  `copy_objects`'s indices cannot address an annotation at all, only
+  content-stream objects. `Pass 120.2` is confirmed as a deliberately
+  *different* format from `ObjectClip`, not a simplification of it.
+
+**Still in flight:** `Pass 120.2` (render selection as standalone
+one-page PDF, for OS-clipboard interop) and `Pass 120.4` (dimensions/
+widgets on the clipboard) remain open Backlog, both re-scoped this
+filing; `Pass 119.1`, `119.3`, `119.4`; `Pass 114.0`–`117.2` (move/
+resize/rotate bucket residue); `Pass 97.x` (colorant compositor).
+
+**For next session:**
+1. `Pass 120.2`/`Pass 120.4` and `Pass 97.x` are now the highest-named
+   open items per `docs/NEXT_SESSION.md`'s own queue.
+2. The GUI box for the new clipboard *Implemented* row stays unticked
+   until `pdfceGUI` confirms it is actually wired, per this project's
+   ticking bar (reachable in a real build, not merely built-and-waiting).
+
+**Ledger effects.**
+
+| ledger (per-item form, denominator stated — hard rule 10) | before | after |
+|---|---|---|
+| Pass family ceiling | **121** | **121** (unchanged — `120.0`/`120.1`/`120.3` were already Backlog IDs; `120.2`/`120.4` remain open) |
+| decision records | **076** | **076** (unchanged — declined, same class as decision 076 itself) |
+| standing rules | **R206** | **R206** (unchanged — declined a third time, reconsidered not rote) |
+| `SESSION_LOG` filings | **212** | **213** |
+| test count, this Pass | — | **21 tests over 1 new file** (`crates/pdfce-core/tests/object_clipboard.rs`) |
+| sabotage yield, whole-import disabled | — | **1 of 16 before 3 repairs; 5 of 16 after** (denominator: the file's pre-repair test count) |
+| `D:\dev\rag\rust\` findings | — | **+2** (1 new dated section, 1 new file) |
+| `C:\personal_rag\pdf\` lessons | — | **+0** |
+| `docs/FEATURES.md` rows touched | — | **2** (1 new Implemented row; 1 Planned row split into 2) |
+
+**Terminology (rule 15):** no "dimension" occurrence in this entry
+describes a ce dimension or pdf dimension — every "dimension" in this
+Pass is `crate::vector::geometry::Bounds`/matrix geometry.
