@@ -42,3 +42,30 @@ said in the same breath to disagree with it and to confirm it.
   equally plainly when it converges independently on the same conclusion —
   that convergence is real evidence. See
   [[feedback-two-modes-one-pattern-is-one-measurement]].
+
+**★ THE FAILURE MODE, NAMED BY KEN HIMSELF (2026-08-21): *"Gemini often
+skims these things and takes claims at face value."*** He said it while
+handing me the source of a claim he had already stopped believing — so
+this is not a rule he needs enforced, it is a shared reading of the tool.
+
+**The measured instance.** Asked for an MIT-licensed Rust library
+implementing **dynamic XFA**, it named `J-F-Liu/lopdf`. That crate is real,
+is MIT, is the most-downloaded Rust PDF crate — and contains **zero**
+occurrences of "XFA" in its source or its README. It satisfies four of the
+claim's five attributes (Rust · PDF · MIT · on GitHub) and the fifth was
+invented.
+
+**The generalisable half is about the ECOSYSTEM, not the model.** The XFA
+corner of GitHub systematically advertises capability in the repository
+*description* and disclaims it in the *source*: one project's blurb says
+"script & fill" while its scripting module `throw`s *"not implemented yet"*;
+another's says "comprehensive XFA support" while its own scope document
+lists the layout engine and script execution as explicit **non-goals**. A
+model summarising metadata reports the blurb, and the blurb is marketing.
+
+⇒ **For an AVAILABILITY claim, fetch the source, not the description.** A
+`curl` of `README.md` and `src/lib.rs` plus a `grep` settles it in seconds
+and is the check the outside model did not run. Full write-up:
+`docs/xfa-implementation-survey.md`; the crate-specific rebuttal lives on
+`PRIOR_ART.md`'s own `lopdf` row, because the row is what gets read at the
+moment somebody proposes the dependency.
