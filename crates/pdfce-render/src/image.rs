@@ -1794,6 +1794,37 @@ fn resolve_space_array(
     }
 }
 
+/// One `/Indexed` palette entry, as **exactly `m`** normalised components.
+///
+/// # Why this is a named function rather than three lines inline
+///
+/// Because the three lines it replaces were wrong for two years in a way
+/// that produced a plausible picture, and a named function can be tested.
+/// They built a fixed `[0.0f32; 4]` and passed the whole thing on, which:
+///
+/// - **broke arity** for a `Separation`/`DeviceN` base, whose tint
+///   transform is a §7.10 function with a declared input count. Four
+///   inputs into a two-input function makes the evaluator refuse, and the
+///   caller falls back to a neutral — a grey palette, a rendered image,
+///   and no counter anywhere saying the document's own transform never
+///   ran; and
+/// - **truncated** any base with more than four components. `DeviceN` is
+///   the only PDF colour space whose component count is not fixed by its
+///   family, and the Ghent suite ships five- and six-colorant patches.
+///
+/// Both were found on 2026-08-21 by an operator reading a test patch's own
+/// caption, not by any gate this project owns.
+///
+/// Short entries pad with zero rather than failing: a lookup table one
+/// byte short is a malformed file, and §8.6.6.3 gives no recovery, so the
+/// choice is between a black component and refusing the whole image. The
+/// caller already reports a short table by stopping the palette early.
+fn palette_entry(entry: &[u8], m: usize) -> Vec<f32> {
+    (0..m)
+        .map(|c| f32::from(entry.get(c).copied().unwrap_or(0)) / 255.0)
+        .collect()
+}
+
 /// Build an [`Space::Indexed`] palette from `[/Indexed base hival lookup]`.
 ///
 /// Per §8.6.6.3: the table is `m × (hival + 1)` bytes where `m` is the
@@ -1876,6 +1907,32 @@ fn resolve_indexed(
     };
 
     let mut table = Vec::with_capacity(hival + 1);
+    // ★ EXACTLY `m` COMPONENTS, AND THE BUFFER IS SIZED FROM `m`.
+    //
+    // This was a fixed `[0.0f32; 4]` passed whole to `to_rgb`, and it was
+    // wrong in two independent ways that both produced a PLAUSIBLE picture
+    // rather than a broken one — which is why it survived until an
+    // operator read a test patch's own caption on 2026-08-21.
+    //
+    // 1. **Arity.** `Space::Special` hands the slice straight to
+    //    `ColorSpace::to_rgb`, and a `Separation`/`DeviceN` tint transform
+    //    is a §7.10 function with a declared input count. Handing a
+    //    two-colorant `DeviceN` four inputs makes `PdfFunction::eval`
+    //    refuse, `tint_through` return `None`, and `device_n_to_rgb` fall
+    //    back to its max-tint NEUTRAL. The palette comes out grey, the
+    //    image renders, and nothing anywhere says the document's own
+    //    transform never ran.
+    //
+    //    Measured on Ghent `GWG 8.2`, whose image space is
+    //    `[/Indexed [/DeviceN [/Cyan /Black] /DeviceCMYK <tint>] 255 …]`:
+    //    pdfce rendered a neutral-grey manta ray where the duotone's cyan
+    //    should be, and the patch's own caption calls that exact outcome
+    //    an ERROR.
+    //
+    // 2. **Width.** Four slots cannot hold a five- or six-colorant
+    //    `DeviceN`, and the suite ships both (`GWG 8.1`, `GWG 8.01`). The
+    //    trailing colorants were silently dropped before any conversion
+    //    was attempted.
     for i in 0..=hival {
         let base_off = i.saturating_mul(m);
         let Some(entry) = lookup.get(base_off..base_off + m) else {
@@ -1883,10 +1940,7 @@ fn resolve_indexed(
             // and set `palette_out_of_range`.
             break;
         };
-        let mut comps = [0.0f32; 4];
-        for (c, slot) in comps.iter_mut().take(m).enumerate() {
-            *slot = f32::from(entry.get(c).copied().unwrap_or(0)) / 255.0;
-        }
+        let comps = palette_entry(entry, m);
         table.push(base.to_rgb(intent, &comps, &mut palette_diag));
     }
     Ok(Space::Indexed(table))
@@ -1901,6 +1955,45 @@ fn resolve_indexed(
 )]
 mod tests {
     use super::*;
+
+    /// ★ THE REGRESSION GUARD FOR A BUG AN OPERATOR FOUND AND NO GATE DID.
+    ///
+    /// A palette entry must be exactly as wide as its base space, because
+    /// `Space::Special` hands the slice straight to a tint transform whose
+    /// input count the document declares. The previous code passed four
+    /// components always; a two-colorant `DeviceN` therefore got four,
+    /// its transform refused, and the palette silently came out neutral
+    /// grey. Ghent `GWG 8.2`'s duotone rendered as a greyscale manta ray
+    /// where it should have been cyan, and the harness called it clean.
+    #[test]
+    fn a_palette_entry_is_exactly_as_wide_as_its_base_space() {
+        let entry = [10u8, 20, 30, 40, 50, 60];
+        for m in 1..=6 {
+            assert_eq!(
+                palette_entry(&entry, m).len(),
+                m,
+                "a {m}-component base must receive {m} components, not 4"
+            );
+        }
+        // And the values are the entry's own bytes, in order, normalised.
+        let two = palette_entry(&entry, 2);
+        assert!((two[0] - 10.0 / 255.0).abs() < 1e-6);
+        assert!((two[1] - 20.0 / 255.0).abs() < 1e-6);
+        // Six colorants are NOT truncated to four -- `DeviceN` is the one
+        // space whose width its family does not fix, and the Ghent suite
+        // ships a six-colorant patch.
+        let six = palette_entry(&entry, 6);
+        assert!((six[5] - 60.0 / 255.0).abs() < 1e-6);
+    }
+
+    /// A short lookup pads with zero rather than panicking. §8.6.6.3 gives
+    /// no recovery for a truncated table, and a black component is a
+    /// visible defect while a panic is a dead renderer.
+    #[test]
+    fn a_short_palette_entry_pads_with_zero() {
+        assert_eq!(palette_entry(&[255u8], 3), vec![1.0, 0.0, 0.0]);
+        assert_eq!(palette_entry(&[], 2), vec![0.0, 0.0]);
+    }
 
     #[test]
     fn row_stride_rounds_up_per_row() {
