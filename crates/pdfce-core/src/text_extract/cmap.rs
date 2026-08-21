@@ -85,7 +85,7 @@
 //! integers plus the destination bytes) precisely so that a hostile
 //! `<0000> <FFFF>` range costs one entry rather than 65,536.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::fontdata;
 use crate::lexer::{Lexer, TokenKind};
@@ -621,11 +621,37 @@ impl ToUnicodeCMap {
         // between a range member and a single is invisible to any
         // point lookup — so there is no way to answer this question without
         // materialising. The ceiling below is what keeps that safe.
-        let mut all: Vec<(u32, String)> = self
-            .singles
-            .iter()
-            .map(|(c, t)| (*c, t.to_string()))
-            .collect();
+        //
+        // ★★ THE CODE SET IS DEDUPLICATED, AND THAT IS A BUG FIX, NOT A
+        // TIDY-UP (`Pass 121.0`). This loop used to push the singles into a
+        // `Vec` and then push `lookup(code)` for every code of every range —
+        // but `lookup` CONSULTS THE SINGLES FIRST (that is its documented
+        // precedence), so a code present as a `bfchar` AND inside a `bfrange`
+        // was pushed TWICE, with identical text both times. The injectivity
+        // check downstream then saw the same character arrive under the same
+        // code and reported a collision **of a code with itself**:
+        //
+        //     codes 361 and 361 both map to 'Ʃ'
+        //
+        // A nonsense sentence, and worse, a FALSE REFUSAL — the font is
+        // perfectly invertible. It fired on the operator's own benchmark CAD
+        // drawing (`.SFNS-Regular`), where it read as "pdfce cannot edit this
+        // text" for a reason that did not exist. Two overlapping RANGES
+        // produced the same false positive by the same route, since `lookup`
+        // resolves overlaps last-wins and would return one range's answer
+        // twice.
+        //
+        // Iterating DISTINCT codes and asking `lookup` once per code makes the
+        // materialised map agree with the lazy one by construction: one code,
+        // one answer, whichever tier supplies it. A genuine collision — two
+        // DIFFERENT codes, one character — is unaffected and still refused.
+        let mut codes: BTreeSet<u32> = self.singles.keys().copied().collect();
+        seen = seen.max(codes.len());
+        if seen > MAX_BF_ENTRIES {
+            return Err(NotInjective::TooLarge {
+                entries: MAX_BF_ENTRIES,
+            });
+        }
         for range in &self.ranges {
             // `lo..=hi` is attacker-controlled and may span the whole 32-bit
             // space. Bounded per range AND in total.
@@ -636,9 +662,12 @@ impl ToUnicodeCMap {
                 });
             }
             for code in range.lo..=range.hi {
-                if let Some(text) = self.lookup(code) {
-                    all.push((code, text));
-                }
+                codes.insert(code);
+                // Counted per code CONSIDERED, not per code stored, so a
+                // document that spends the budget on overlapping ranges is
+                // bounded by the same ceiling as one that spends it on
+                // distinct codes. Deduplication must not become a way to make
+                // the guard cheaper to defeat.
                 seen += 1;
                 if seen > MAX_BF_ENTRIES {
                     return Err(NotInjective::TooLarge {
@@ -647,6 +676,10 @@ impl ToUnicodeCMap {
                 }
             }
         }
+        let all: Vec<(u32, String)> = codes
+            .into_iter()
+            .filter_map(|code| self.lookup(code).map(|text| (code, text)))
+            .collect();
 
         for (code, text) in all {
             let mut chars = text.chars();
@@ -869,6 +902,94 @@ mod tests {
             }
             other => panic!("expected Collision, got {other:?}"),
         }
+    }
+
+    /// ★★ A CODE COVERED BY BOTH A `bfchar` AND A `bfrange` IS ONE CODE, NOT
+    /// A COLLISION (`Pass 121.0`).
+    ///
+    /// The materialising loop used to push the singles and then push
+    /// `lookup(code)` for every code of every range — but `lookup` consults
+    /// the singles FIRST, so a code present in both tiers was pushed twice
+    /// with identical text. The injectivity check then reported a collision
+    /// **of a code with itself**:
+    ///
+    /// ```text
+    /// codes 361 and 361 both map to 'Ʃ'
+    /// ```
+    ///
+    /// A nonsense sentence and a **false refusal** — the map is perfectly
+    /// invertible. It fired on the operator's own benchmark CAD drawing, where
+    /// it read as "pdfce cannot edit this text" for a reason that did not
+    /// exist. Note the shape: the message was *visibly* absurd (the same
+    /// number twice) and had been shipping regardless, because nothing reads a
+    /// refusal message it never expects to see.
+    #[test]
+    fn a_code_in_both_a_bfchar_and_a_bfrange_is_not_a_collision_with_itself() {
+        let body = concat!(
+            "begincmap
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+",
+            "1 beginbfchar
+<0005> <0041>
+endbfchar
+",
+            "1 beginbfrange
+<0005> <0007> <0041>
+endbfrange
+",
+            "endcmap
+"
+        );
+        let cmap = ToUnicodeCMap::parse(body.as_bytes());
+        let inverse = cmap
+            .injective_inverse()
+            .expect("one code in two tiers is one code, not two");
+        // And the answer agrees with `lookup`'s own precedence: the single
+        // wins, so 'A' inverts to 5 rather than to a range-derived code.
+        assert_eq!(inverse.get(&'A'), Some(&5));
+    }
+
+    /// Two OVERLAPPING RANGES produced the same false collision by the same
+    /// route — `lookup` resolves an overlap last-wins and returned one
+    /// range's answer for both iterations. Pinned separately because the two
+    /// share a fix but not a trigger, and a fix verified on one of two
+    /// triggers is a fix verified on one of two triggers.
+    #[test]
+    fn overlapping_bfranges_are_not_a_collision_with_themselves() {
+        let body = concat!(
+            "begincmap
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+",
+            "2 beginbfrange
+<0010> <0012> <0041>
+<0011> <0013> <0042>
+endbfrange
+",
+            "endcmap
+"
+        );
+        let cmap = ToUnicodeCMap::parse(body.as_bytes());
+        // ★ Asserted as a POSITIVE, not as "no self-collision". The first
+        // draft of this test was `if let Err(Collision) { assert_ne!(first,
+        // second) }` — which passes vacuously whenever the call succeeds AND
+        // whenever it fails for any other reason, and it duly passed against
+        // a deliberately re-broken build. A conditional assertion about an
+        // error that may not occur tests nothing.
+        //
+        // The map's own answer is determinate: `lookup` resolves overlaps
+        // last-wins, so 0x11..0x13 come from the SECOND range and 0x10 from
+        // the first — codes 16..19 mapping to 'A'..'D', which is injective.
+        let inverse = cmap
+            .injective_inverse()
+            .expect("overlapping ranges resolve to one answer per code");
+        assert_eq!(inverse.get(&'A'), Some(&0x10));
+        assert_eq!(inverse.get(&'B'), Some(&0x11));
+        assert_eq!(inverse.get(&'C'), Some(&0x12));
+        assert_eq!(inverse.get(&'D'), Some(&0x13));
     }
 
     /// A ligature — one code, several characters — has no single-character
