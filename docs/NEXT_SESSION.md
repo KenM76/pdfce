@@ -69,7 +69,17 @@ differently refutes itself. **Cutting a bundle is the operator's call.**
 
 ## §1 — WHERE THE COMPOSITOR IS, AND WHAT TO DO NEXT
 
-`Pass 97.0` (a–d) and `Pass 97.1` (a–b) shipped. What exists:
+`Pass 97.0` (a–d) and `Pass 97.1` (a–d) shipped. What exists:
+
+⚠ **A Pass-ID collision to know about before citing anything.** `97.1a` and
+`97.1b` were minted four filings earlier for the `/Indexed` colorant work
+and `overprint_images_unsupported`. The compositor work in this session's
+commit subjects therefore carries **the wrong letters** — where a commit
+says `Pass 97.1a`/`97.1b`, `ROADMAP.md` says **`97.1c`** (the subtractive
+arithmetic) and **`97.1d`** (reading the blending space). `ROADMAP.md` is
+authoritative and carries a disambiguation table. The mechanism: the
+minting filing put the IDs in `ROADMAP.md` only, and never into this file
+— which is the one the engineer reads before committing.
 
 | | |
 |---|---|
@@ -81,7 +91,7 @@ differently refutes itself. **Cutting a bundle is the operator's call.**
 
 ### ★★ THE NEXT BUILD, and the measurement that scopes it
 
-`Pass 97.1c` — **a CMYK group buffer**. The arithmetic is done and tested;
+`Pass 97.1e` — **a CMYK group buffer**. The arithmetic is done and tested;
 what is missing is a buffer that holds ink rather than screen colour, so
 the operands reach it un-round-tripped.
 
@@ -110,23 +120,27 @@ authored colorants alongside the sRGB it already bakes — the interpreter
 | corpus | files with a subtractive space | blend modes applied | **in the wrong space** |
 |---|---:|---:|---:|
 | Ghent PDF Output Suite (51) | 13 (25.5 %) | 107 | **107 (100.0 %)** |
-| `fixtures/external` (3,735) | 15 (0.4 %) | 49 | **2 (4.1 %)** |
+| `fixtures/external` (4,012 files, 3,735 rendered) | 15 (0.4 %) | 49 | **2 (4.1 %)** |
 
 **One hundred percent on the suite built to test this; four percent on the
 corpus of files people actually have.**
 
 - The Ghent transparency panels **cannot** be passed without this build.
-- It is a **prepress-shaped** problem, not a general one. It buys
-  conformance and print-site credibility — the stated goal — and will
-  change **almost nothing** about how ordinary documents look. Do not
-  expect the render-parity buckets to move, and do not read that as
-  failure.
+- It is a **prepress-shaped** problem, not a general one — and the claim
+  is stronger than the 4.1 % suggests. **Both** real-world hits are
+  **veraPDF transparency CONFORMANCE fixtures** (PDF/A-4 §6.2.9,
+  PDF/A-2b §6.2.10), so **zero organic documents in a 4,012-file corpus
+  are affected.** The buffer buys conformance and print-site credibility —
+  the stated goal — and will change **nothing** about how ordinary
+  documents look. Do not expect the render-parity buckets to move, and do
+  not read that as failure.
 
 ---
 
 ## §2 — THE QUEUE, in the order I would take it
 
-1. **`Pass 97.1c`** — the CMYK group buffer, above.
+1. **`Pass 97.1e`** — the CMYK group buffer, above. (Next free letter;
+   `a`–`d` are spent — see the collision note in §1.)
 2. **`Pass 119.1`** — `unshare_form` (copy-on-write a shared form onto one
    page). Carried unstarted through three handoffs now; still a *separate
    verb*, not a mode of `edit_text` (`decision 076`).

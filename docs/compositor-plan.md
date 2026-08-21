@@ -170,7 +170,21 @@ appearance for the overprint patches).
 >   per-paint non-separable blends) composite with non-knockout semantics
 >   inside a knockout group, counted on
 >   `transparency_groups_knockout_approximated`.
-> * **`3_GWG161` is unexplained**, and two cheap explanations have now been
+> * ~~**`3_GWG161` is unexplained**~~ **— EXPLAINED 2026-08-21, by a counter
+>   rather than by an argument.** `blends_in_wrong_space` reports **15 of its
+>   15** blend modes computed additively across **18 subtractive groups**. The
+>   mechanism is Table 147's `/CS` row: its own objects are `ICCBased` RGB, but
+>   its cell groups are **non-isolated**, so they **inherit** the page group's
+>   `DeviceCMYK` and every blend on the patch is a §11.3.4 blend performed
+>   additively. The §11.3.4 hypothesis below was recorded as *fitting but
+>   unconfirmed*; it is confirmed, and the operand-pairing lead it recommends
+>   is **not** needed.
+>
+>   The original reasoning is kept because the two eliminations in it are still
+>   sound and still useful — they are what made the remaining hypothesis worth
+>   testing:
+>
+> * **`3_GWG161` was unexplained**, and two cheap explanations had been
 >   RULED OUT rather than left hanging. 14 traps, no knockout groups, no
 >   backdrop reruns triggered (correctly — its groups' interiors are all
 >   `Normal`), and its blend modes sit at the `Do` where `draw_pixmap`

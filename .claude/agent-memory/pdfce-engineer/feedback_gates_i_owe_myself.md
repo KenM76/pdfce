@@ -56,7 +56,7 @@ tagging `v0.7.0`, not by any local run.
 
 ★ **The mechanism this memory missed, and it is not carelessness.** "Run
 the gates" in this project means `for g in tools/check-*`. That is
-fourteen scripts and **it is ONE of CI's nine jobs.** A green local sweep
+**sixteen** scripts and **it is ONE of CI's nine jobs.** A green local sweep
 and a red CI were **never a contradiction** — there was simply no place
 where the two were compared. Grepping the fuzz targets, which the "how to
 apply" above tells you to do, would not have caught a *compile* break
@@ -66,6 +66,16 @@ either.
 at `match c.byte() % 8` against an **eight-variant enum with one arm spent
 twice**, so `MarkupSpec::Cloud` had **never been fuzzed at all**. Exactly
 the `vector_edit.rs` shape, in a different target.
+
+★★ **And this paragraph contained one of its own, which is the best
+evidence in it.** It said *"that is **fourteen** scripts"* — `ls tools/check-*`
+is **sixteen**, and had been since earlier that same day. Worse, **14 was the
+CI-WIRED count one commit earlier**, so the number inverted the sentence's own
+point: the local sweep is the **larger** set, not the smaller one. And the same
+commit message carried "fourteen scripts" and "all 15 CI-wired gates green"
+thirteen lines apart, **neither labelled** — inside the one carrier that cannot
+be amended afterwards. Found by the librarian, not by me, in the amendment that
+names this defect class.
 
 ★ **And a sharper form of the check:** the modulo **is** a coverage claim,
 phrased as an integer. A claim asserting a **boundary** rather than a
