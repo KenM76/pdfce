@@ -1,6 +1,6 @@
 ---
 name: pdf-spec-corpus-state
-description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 50 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
+description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 55 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
 metadata:
   type: project
 ---
@@ -63,6 +63,7 @@ heading (`**<N>. `).**
 | 49 | ★ **THE MODALITY-DECISION dispatch — `shall` vs `should` IS the engineering decision.** **The MODALITY ITSELF can be version-gated** (1.7 hedged writer `shall not ORDINARILY` + a bare-indicative reader consequence → 2.0 writer `should` + explicit processor `shall`), and the later edition's SPLIT is ISO's own reading of the earlier text · a hedged `shall` is a THIRD modality class · **a writer-side "must I clamp?" is answered by the READER's obligation** · default-value chains and containment chains are DIFFERENT GRAPHS · a missing-OPERATION negative needs a document-wide CO-OCCURRENCE regex, not a clause-scoped term count · a figure can illustrate more nesting than any clause requires · **the dispatch's cheap "just confirm this quote" item is where the corpus error was** (Annex C is `(normative)`, not informative) |
 | 50 | ★ **THE TWO-SOURCES-DISAGREE dispatch — and the CORPUS'S OWN COMPRESSION is the ancestor of the error.** A one-line table compression is a CLAIM and it propagates (`Intensity 0–2` → a validator refusing conforming `/I 1.5`); **quote the row, never compress it, when a cell is what an implementer will read** · the enumeration-vs-RANGE drafting idiom contrast lives in the SIBLING ROW of the same table · **THREE of my own counts were wrong, all from `head`-truncated grep listings — run `grep -c`, anchor `^KEY` for TABLE ROWS, and add a pre-report re-measure pass** · grep the RECOVERY VERB (`tolerate`, `adjusted to the nearest`) not the key name · **a key name can be overloaded across two unrelated features** (`/BE` = border effect ∪ multimedia "best effort"; second instance after `/AS` ⇒ a pattern) · **the same key in three tables can carry three different normative forces, and only one has the `shall`** · an ABSENT row is a finding · "meaningful only for X" is a verbatim negative whose CONSEQUENCE is still unstated · the 2.0 delta can NARROW an ambiguity without closing it · **the "confirm rather than re-derive" item is where the omission was — third instance** · bucket-5 deferrals must name their destination bucket |
 | 53 | ★ **THE CONTAINER-SCOPE dispatch** ("feature F works on container A, extend it to B") — the mechanics transfer and the CONTAINER hazards are the whole deliverable; an ABSENT scope banner on the old file lies invisibly · **evidencing an OWNERSHIP negative: find the sibling constructs where the standard DID write the exclusivity `shall not` (4 of them), and better, the normative object class it built FOR the situation (Annex F "shared objects")** · **search the PHENOMENON's phrase, not the negation's** · **★ `grep -c` under-counts multi-word phrases in the 1.7 dump (`s hall`) — 4 counts wrong, the extras were the headline** · **★ a decisive FIGURE can be a RASTER IMAGE — extract with pypdf and Read the PNG** · an edition can DE-DEPRECATE · a table row can MOVE CATEGORY and change what is legal where (q/Q) · a dispatch's table pair can be a CATEGORY ERROR · the varying thing may live in the OBJECT not the CALL SITE · the bare INDICATIVE is a fifth modality rung · my own 2 citations were wrong from line-proximity |
+| 55 | ★ **THE STANDARDISATION-STATUS dispatch** ("note we'll have to add X when it becomes part of the standard") — the operator's sentence contains a PREMISE and auditing it IS the deliverable; **it was wrong in BOTH directions at once** (no ISO work item AND already published elsewhere, two days earlier, as an industry extension) · a dispatch that pre-blesses "not standardised is a complete answer" is naming a SHAPE, not lowering the bar · **measure the negative THREE ways — term count, the clause RUNNING OUT, the table ENUMERATING** — and a fourth against the ERRATA ANNOTATIONS · **★ a false citation with a plausible clause number ("ISO 32000-2 §7.4.11") was in every search summary, traced to an unmerged PR's body — verify the clause EXISTS before verifying what it says, and put the refutation in the corpus** · a source's licence can be BETTER than any you hold (CC-BY-4.0 ⇒ first verbatim-redistributable document here) · **a publisher's `SHALL` is not ISO's**: an extension is an EDIT SCRIPT against the standard, new `spec: pdf_extension` · **four raw-source fetches found THREE vendor divergences from a two-day-old spec**, one of which converts conformance into a producer INTEROP default · check what an extension REUSES (predictors came free) · **closing it changed four other files and the fourth was a TRUE heading that would still have misled** |
 | 51 | ★ **THE TWO-GAPS-NAMED-FROM-OUTSIDE dispatch** (body § 51, line ~3078) — index row added 2026-08-20; the item had been appended without one. "Clause X is ENTIRELY ABSENT" is a coverage HYPOTHESIS; an ID minted by a SIBLING corpus; the refutation is in the OLDER edition; a third clause settles a two-`should` tie; a version-delta negative can be true of the SENTENCE and false of the CONCEPT; a recorded negative is a PREDICTION and expires; UNREMEDIED ≠ PERMANENT; quote the FREE edition of a sentence that exists in both; Write the script, then run it |
 | 52 | ★ **THE SIBLING-CARRIER dispatch** ("build clause C's file, parallel to C′'s"). The dispatch's "clause X is absent" was true of the FILE and false of the COVERAGE — **third instance** · **★ the headline was a CORRECTION to the corpus's own record, and its mechanism is corpus-wide: an ISO 32000-2 erratum's review `/State` is a CHAIN of `/Text` replies linked by `/IRT` — LATEST `/M` wins — and 376 of 547 `Accepted` annots (68.7 %) carry a later `Completed` reply, so an `Accepted` read from the first reply is stale two times in three** · **a table NUMBER can name DIFFERENT TABLES in the two editions** (1.7 T178 = polygon, 2.0 T178 = LINE) · **a `free_primary` table row can be corrupted by COPY-PASTE, and the next edition printing it clean is the proof** · **a key can be VACUOUS in one edition** (1.7's `/IC` fills "line endings" on a shape that has none) **and the later edition's ADDITION proves it** · complementary restrictions in one table are a pattern — grep for the mirror of a recorded one · **"must X bound Y?" can be a true negative whose practical answer is a DIFFERENT clause with a DIFFERENT failure mode** (no clipping; §12.5.5 SCALES the `/AP` to `/Rect`) · three readings can disagree on legality and agree on the decision · **a term with EXACTLY 1 hit per edition IS the headline** · a ~58 kB Bash heredoc dies with `ENAMETOOLONG`, use Write |
 
@@ -3509,3 +3510,88 @@ of the session was entirely in what the dispatch did **not** ask for.
   framing verbatim**, incl. re-relaying clause numbers as unverified leads.
   **Report a correction owed to a foreign corpus in the FINAL MESSAGE every time
   it recurs** — filing it only in my own file did not reach them.
+
+---
+
+**55. ★ THE STANDARDISATION-STATUS dispatch — "note that we'll have to add X
+when it becomes part of the standard".** 2026-08-21, Brotli / `/BrotliDecode`.
+The operator's sentence contains a **premise about the world**, and the whole
+deliverable is auditing it. Nine findings, most generalisable:
+
+1. **★ THE PREMISE WAS WRONG IN BOTH DIRECTIONS AT ONCE, AND THAT IS THE
+   COMMON SHAPE.** "When it becomes part of the PDF 2.0 standard" assumed (a) it
+   is coming to ISO and (b) it is not here yet. **(a) is unevidenced — there is
+   no ISO work item at all; (b) is wrong — it was PUBLISHED two days before the
+   dispatch**, as a PDF Association *extension*. A "not yet" question deserves
+   both halves measured: *is it in the standard?* **and** *does a specification
+   exist somewhere else?* Answering only the first would have produced a
+   confident, useless "no".
+
+2. **A dispatch that says "if the answer is 'not standardised', that is a
+   complete answer" is telling you the SHAPE it expects, not the answer.** Do
+   not let it lower the effort. The correct answer here was *neither* "yes" nor
+   "no" but **"not by ISO; yes by the PDF Association, here is the document"**.
+
+3. **★ MEASURE THE NEGATIVE THREE WAYS, because the source's OWN STRUCTURE is
+   the strongest leg.** Term counts (`brotli` = 0 in both editions) are the
+   weakest — they only prove the word is absent. Add: the **clause runs out**
+   (§7.4 ends at 7.4.10, so the widely-cited "§7.4.11" cannot exist) and the
+   **table enumerates** (Table 6 has exactly ten rows, listed). A structural
+   negative survives an extraction bug; a term count does not.
+
+4. **★ AND MEASURE IT AGAINST THE ERRATA, WHICH ARE ANNOTATIONS.** A whole-file
+   scan of the 2 840 markup annots (`/Contents`+`/T`+`/Subj`+`/RC`, skipping
+   `/Link`/`/Popup`/`/Widget`) for the term — ~20 lines, ~1 min — is what turns
+   "absent from the text as printed" into "absent from the CORRECTED standard".
+   Without it the negative is only about `extract_text()`'s view.
+
+5. **★ A FALSE CITATION WITH A PLAUSIBLE CLAUSE NUMBER IS THE MOST CONVINCING
+   WRONG ANSWER THERE IS — AND IT WAS IN THE SEARCH RESULTS, TWICE.** Every
+   `WebSearch` summary asserted the filter is "specified in ISO 32000-2:2020,
+   Section 7.4.11". Traced to the **body text of an unmerged pypdf PR**; the
+   project's own maintainer-written issue says the opposite and is right.
+   **Verify the clause EXISTS before verifying what it says** — and put the
+   refutation, plus its one-command reproduction, IN the corpus file, because
+   the next session will meet the same search results.
+
+6. **★ THE SOURCE'S LICENCE CAN BE BETTER THAN ANY YOU HOLD.** `EXTN-BROTLI-1`
+   is **CC-BY-4.0** — the first document in this corpus that may be
+   **redistributed verbatim**, where every other `free_primary` is only free to
+   read and quote. Record it in the licensing-verdicts table, not just in the
+   file's frontmatter, and say what the attribution obligation is.
+
+7. **★ A PUBLISHER'S `SHALL` IS NOT ISO'S `SHALL`.** An industry extension is
+   written as an **edit script against the standard's text** ("Append a new row
+   to Table 6…", "Modify the title of sub-clause…"). Its normative language
+   binds conformance **to the extension**, and an ISO-conformance validator has
+   no basis to apply it. New `spec:` value **`pdf_extension`** (do **not** reuse
+   `pdfa` — that means PDF/A). Citation rule: `EXTN-BROTLI-1 §5.2`, **never**
+   "ISO 32000-2 Table 6 row BrotliDecode".
+
+8. **★ THE VENDOR SURVEY IS WHERE THE SPEC GETS TESTED, AND IT FOUND THREE
+   DIVERGENCES FROM A TWO-DAY-OLD SPECIFICATION.** Four raw-source fetches
+   (pdf.js, pdfium, MuPDF, Ghostscript) produced: a reader accepting an
+   abbreviation the spec never defines, a reader decoding the filter on **inline
+   images** where the spec says `SHALL NOT`, and — the one that matters — a
+   reader that **honours `/DecodeParms` predictors for Flate/LZW and silently
+   drops them for the new filter**. That last one converts a *conformance*
+   question into a *producer interop default* and belongs in the ambiguity
+   register as such. Fence the section **BEHAVIOUR, NOT SPECIFICATION** and
+   route the narrative to `personal_rag\pdf`.
+
+9. **A "new filter" file must state where the new thing does NOT go, and the
+   answer is usually one clause away from the one you were reading.** Brotli's
+   whole prohibition (`SHALL NOT` for inline images) lives in §8.9.7, not §7.4 —
+   and its whole `/DecodeParms` surface is inherited by **retitling** §7.4.4.3/
+   §7.4.4.4, so the corpus's existing `filter__predictors.md` was reusable
+   verbatim and needed only a footer. **Check what an extension REUSES before
+   writing anything new.**
+
+10. **Closing this changed FOUR other files, and the fourth is the trap:**
+    `index.md` (prefix count, manifest, triggers, recipes, status, licensing
+    verdicts), `LEGAL_NOTE.md` (a third document class), `_TEMPLATE.md` (the new
+    `spec:` value) — and **`filter__pipeline.md`, whose heading literally reads
+    "Table 6 — the ten standard filters"**. That heading is still *correct* and
+    would still have misled the next reader; it got a dated footer saying so
+    explicitly. **A true statement can need an update.** (Fourth instance of
+    item 48's "the old file's one-line summary is the third thing to change".)

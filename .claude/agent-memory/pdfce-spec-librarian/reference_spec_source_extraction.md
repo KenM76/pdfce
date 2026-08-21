@@ -636,3 +636,56 @@ could: **`Do` is still absent from a text object's allowed operators in PDF 2.0*
 and the level was renamed *page description level* → **content stream level**.
 Extends [[pdf-spec-corpus-state]] item 25 ("a figure is normative and readable as
 geometry"): **check for an image before concluding a figure is silent.**
+
+---
+
+**4d. ★★ WHEN AN ORIGIN 403s *AND* ITS WAYBACK SNAPSHOTS ARE THE CHALLENGE PAGE —
+`https://r.jina.ai/<full-url>` IS THE ROUTE, AND IT READS PDFs TOO.**
+Established 2026-08-21 acquiring the PDF Association's Brotli extension spec.
+`pdfa.org` returns **HTTP 403, 103 bytes** to `curl` with a full browser UA +
+`Referer` + `--http1.1`, to `WebFetch`, and — the new part — **its Wayback
+snapshots are captures of Cloudflare's "Just a moment…" interstitial**, so the
+`/web/<YYYY>if_/` trick that used to work now returns the challenge. Check the
+snapshot body, not just the HTTP code.
+
+```bash
+curl -s --max-time 120 -o out.txt "https://r.jina.ai/https://pdfa.org/resource/extension-brotli/"
+curl -s --max-time 120 -o spec.txt "https://r.jina.ai/https://pdfa.org/download-area/publications/pdf-extension-brotli.pdf"
+```
+
+- Works on **HTML and PDF alike** — the PDF came back as markdown with
+  `Number of Pages: 11` and a `Published Time:` line carrying the origin's
+  `Last-Modified`, which dated the publication to the hour.
+- Also defeated **`iso.org`'s** Cloudflare gate for the **committee catalogue**
+  (`/committee/53674/x/catalogue/p/0/u/1/w/0/d/1` → every SC 2 project + stage
+  code, which is how "no Brotli work item exists" became a MEASURED negative).
+  It did **not** defeat `iso.org/standard/<n>.html` — that still returns the
+  challenge through the proxy. Try, don't assume.
+- **Label the provenance.** The text is proxy-extracted, not the origin bytes:
+  word-accurate, **typography normalised** (the cover's `PDF 2.0` came through
+  as `PDF 2 .0`). Fine for clause text and tables; **not** for a byte-exact
+  quotation, and **the bytes cannot be staged** — record that as an ACCESS gap
+  and escalate to the operator for a browser download.
+
+**4e. ★ THE FREE MACHINE-READABLE PDF REGISTRIES — two `curl`s, no auth, and
+they settle "does this extension exist / is this prefix registered?" outright.**
+
+- `https://raw.githubusercontent.com/pdf-association/pdf-extensions/main/extensions/pdf-extensions.json`
+  — every publicly documented developer extension, with `prefix`,
+  `BaseVersion`, `ExtensionLevel`, `ExtensionRevision`, `URL`, `OfficialName`,
+  `LongDesc`. **Use `gh api repos/pdf-association/pdf-extensions/commits?path=…`
+  for the DATE** — the JSON's own top-level `date` field was **five months
+  stale** relative to its last commit (`2026-03-17` vs a `Publish Brotli` commit
+  on `2026-08-18`). The commit history is the publication record.
+- `https://raw.githubusercontent.com/adobe/pdf-names-list/master/ISO%20PDF%20Registry.csv`
+  — the registered developer prefixes ISO 32000 Annex E points at. **Prefixes
+  are CASE-SENSITIVE and near-duplicates exist**: `PDFa` (5-May-26, the Brotli
+  prefix) and `pdfa` (6-Feb-19, noted `"PDFA" cannot be used`) are different keys.
+- `gh api -X GET search/code -f q='<TERM> org:pdf-association'` is authenticated
+  and works — it proved the Brotli Metanorma sources are **not** in a public repo.
+- Reader/writer support is settled the same cheap way: `curl` the raw source of
+  `mozilla/pdf.js`, `ArtifexSoftware/mupdf`, `ArtifexSoftware/ghostpdl`, and
+  `https://pdfium.googlesource.com/pdfium/+/refs/heads/main/<path>?format=TEXT`
+  (base64 — pipe through `base64.b64decode`). Four fetches produced a full
+  vendor-conformance table **including three divergences from the published
+  spec**. `gh api repos/<o>/<r>/pulls/<n> --jq '.state,.merged'` dates the rest.

@@ -96,6 +96,522 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `0d5fc29` — `PASS 97.1a` + `PASS 97.1b`: OVERPRINT COULD NOT SEE AN `/Indexed` SPACE'S COLORANTS, AND IMAGES WERE NEVER COUNTED AS MISSING OVERPRINT AT ALL — ★★★ THE `/Indexed` FIX IS CORRECT, CITED, TESTED AND **INERT ON THE WHOLE CORPUS**, WHICH IS THE FINDING: THE DEPENDENCY BETWEEN `docs/compositor-plan.md` §7'S TWO ITEMS RUNS THE OPPOSITE WAY ROUND FROM HOW THE PLAN ORDERED THEM — 2026-08-21 (two-hundred-and-seventeenth filing)
+
+**Sub-Pass IDs `97.1a` and `97.1b` are assigned BY THIS FILING** — the
+commit named `Pass 97.1` without sub-letters, and the engineer explicitly
+left the IDs to the librarian. They follow `97.0a`–`97.0d`'s convention.
+**`Pass 97.1` itself does NOT move to *Shipped*:** its leading
+deliverable (§11.3.4's blending colour space) and the colorant planes are
+untouched. Its *Backlog* entry is amended in place, below.
+
+**This filing has a shell; hard rule 8 discharged by looking.**
+`git log --oneline -1 0d5fc29` confirms the hash and subject on `main`;
+`git rev-list --left-right --count origin/main...HEAD` → **`0  48`**, so
+**HEAD is 48 commits ahead of `origin/main` and this Pass is NOT pushed**;
+`git tag -l` still tops out at **`v0.6.0`** (`v0.7.0` bumped-but-untagged,
+third consecutive filing to record it); `ls -lt D:\Dev\pdfce-backups\`
+gives newest bundle **`pdfce-20260817-v060.bundle`, 2026-08-17 20:34** —
+**four days and 48 commits stale**, measured by `stat`, not inferred.
+Verification figures below are **engineer-relayed** and labelled where it
+matters.
+
+#### `97.1a` — `/Indexed` colorant classification (§8.6.6.3, §11.7.4.3 Table 149)
+
+**An `/Indexed` operand is an index into a table, not a colour.** §8.6.6.3
+puts the actual colour values in the **base** space. Everything that
+*paints* already resolves the palette inside `ColorSpace::to_rgb` — **which
+is exactly why the missing resolution was invisible on screen.** It shows
+up only where something asks a question about the **space** rather than
+about the **pixel**, and **overprint is that**: Table 149 keys on which
+colorants the source **names**, so
+`/Indexed [/DeviceN [/Cyan] /DeviceCMYK …]` was classified as *"some other
+process space"* and **Table 149 then decided what survives from a colorant
+list it had never read.**
+
+**Fixed in three places, and the third was not in the plan's write-up:**
+
+1. **`ColorSpace::indexed_entry`** (`crates/pdfce-render/src/color.rs:617`)
+   — new, `pub`, resolves the palette entry into the base space with
+   §8.6.6.3's clamp. **Three tests** (base-space resolution, out-of-range
+   clamp without double-counting, short lookup table). Deliberately does
+   **not** touch `ColorDiagnostics`: `to_rgb` already counts the clamp and
+   the short-table case on the painting path, and **counting in both would
+   make one malformed palette read as two separate findings.**
+2. **`overprint::classify`** recurses into the base — **two tests**.
+3. **BOTH call sites resolve — `paint_overprint` *and*
+   `overprint_would_change`.** ★ **The second matters more than it
+   looks:** `overprint_would_change` is the **predicate that decides
+   whether the composite is called at all**, so an `/Indexed` source was
+   **never even counted as an effective overprint.** The disclosure
+   under-reported by **exactly the set the renderer then failed to
+   honour** — a counter and a behaviour wrong in the same direction, which
+   is the pairing that makes a defect invisible from both ends.
+
+**★★★ AND IT MOVED NOTHING, WHICH IS THE FINDING.** Measured A/B on
+**pre- and post-fix binaries over the same corpus** (engineer-relayed).
+The four counters are **identical to the digit**:
+
+| patch | `overprint_effective` | `overprint_composited` | `overprint_refused` | `overprint_pixels` |
+|---|---|---|---|---|
+| `1_GWG190` | 5 | 5 | 0 | 3607 |
+| `1_GWG191` | 2 | 2 | 0 | 1679 |
+| `1_GWG192` | 3 | 3 | 0 | 2182 |
+| `2_GWG020` | 4 | 4 | 0 | 1654 |
+
+*(Pre-fix and post-fix, same numbers in both columns — the table is the
+after state and the before state simultaneously, which is the claim.)*
+Ghent board unchanged.
+
+**Why, verified STRUCTURALLY rather than assumed** — and this is what
+turns "no change" from a worry into a result: **every
+`/Indexed [/DeviceN …]` space in those patches is an IMAGE colour space
+and nothing else.** `1_GWG190`'s two are **`/XO1` and `/XO2`, both
+`/Subtype /Image`.** So the fix is correct, cited and tested, and
+**inert on the whole corpus until images reach overprint at all** — which
+is `97.1b`'s subject and the colorant buffer's.
+
+**★★ THE DEPENDENCY RUNS THE OPPOSITE WAY ROUND FROM HOW THE PLAN ORDERED
+THE TWO ITEMS.** `docs/compositor-plan.md` §7 listed the `/Indexed`
+classification as a **live defect** to fix *before* the image counter and
+the buffer; it is in fact **unreachable until the image path exists**.
+**Kept anyway, on stated grounds:** a colorant-classification defect does
+not stop being one because today's corpus cannot reach it, and **the
+moment the image path exists it would otherwise be a silent wrong answer
+rather than a missing one.**
+
+**★ SECOND INDEPENDENT DELIVERABLE IN THIS PASS FAMILY TO BE BUILT,
+MEASURED, AND MOVE NOTHING** — `Pass 97.0` delivered **zero of its seven
+patches** for the same underlying reason (the plan's ordering was derived
+before the blocking clause, §11.3.4's blending colour space, was
+identified). **Two for two is a property of the PLAN, not of the two
+Passes.** A session scoping `97.1` should read
+`docs/compositor-plan.md`'s head amendment first and treat §7's ordering
+as **superseded by measurement**.
+
+#### `97.1b` — `overprint_images_unsupported`, a new counter
+
+`overprint::composite` has **exactly one call site**, in the path and
+glyph painter, so **an image XObject never reaches it and nothing counted
+that**: a page full of images under `/OP true` reported **zero overprint
+shortfall.** `docs/compositor-plan.md` §7 called this *"the same
+blind-counter shape as the glyph painter in `bf75351`"* and said to add
+the counter **before** building the buffer. Added:
+**`overprint_images_unsupported`** (`crates/pdfce-render/src/interpret.rs:502`,
+incremented at `:4684`, merged at `:1114`, on `render-page`'s stable
+stdout line at `crates/pdfce-cli/src/main.rs:7637`/`:7905`, and in the
+stable-key **ORDER** test at `crates/pdfce-cli/tests/render_page.rs:501`).
+
+**★ DELIBERATELY NOT FOLDED INTO `overprint_refused`, and this is the
+SECOND COUNTER MEANING-QUESTION IN TWO DAYS — recorded as a PATTERN
+rather than twice as an incident.** The two counters name **different
+failures**:
+
+| counter | means |
+|---|---|
+| `overprint_refused` | *the composite **was offered** this paint and could not run it* — a recording canvas, a degenerate region, a mask that would not allocate |
+| `overprint_images_unsupported` | *the composite was **never offered** this object class at all* |
+
+**Widening the old one would have made a whole missing object class look
+like a run of ordinary failures**, and would have **moved a number an
+operator may already be diffing between runs.** (Hard rule 11's territory:
+a counter that changes meaning silently is worse than a counter that is
+missing, because the old readings stay on screen and stay believed.)
+
+**First measurement — images painted under `/OP true` with no overprint
+path** (engineer-relayed):
+
+| patch | `overprint_images_unsupported` |
+|---|---|
+| `1_GWG190` | 2 |
+| `1_GWG191` | 2 |
+| `1_GWG192` | 2 |
+| `2_GWG020` | 4 |
+| **`2_GWG031`** | **1 — ★ and this patch PASSES the suite** |
+
+**Keep that last row.** *A patch can pass its own trap and still have an
+object class the renderer never offered the feature to.* That is the
+whole argument for a separate counter stated as a measurement rather than
+as a principle — the suite's verdict and the renderer's coverage are
+different facts, and only one of them was being reported.
+
+#### Verification at `0d5fc29` (engineer-relayed)
+
+- `cargo test --workspace` **green**.
+- `cargo fmt --check` and
+  `cargo clippy --all-targets --workspace -- -D warnings` **clean**.
+- **All 14 CI gates green.**
+- **Ghent board unchanged: 26 pass / 14 FAIL / 11 UNRESOLVED, no patch
+  regressed.**
+
+#### Documents amended by the engineer in the same commit
+
+`docs/compositor-plan.md` §7 (engineer-owned, amended in place): item 3's
+**"live defect" claim is struck through** with the measured negative and
+the inverted dependency, and the **image-counter paragraph now carries
+the first measurement.** This filing points at that rather than restating
+it — one plan, one place.
+
+#### What this Pass did NOT do
+
+- **§11.3.4's blending colour space — `Pass 97.1`'s LEADING deliverable —
+  is untouched and still unbuilt.** It is what the 14 remaining Ghent
+  transparency failures are blocked on.
+- **The colorant planes are untouched.** `97.1a`/`97.1b` are the two
+  items §7 listed as owed *before* the buffer, and nothing more.
+- **Images still have no overprint path.** `97.1b` counts the gap; it does
+  not close it. Closing it needs per-sample colorants, i.e. the buffer.
+- **`overprint::composite`'s white-backdrop convention is still
+  untouched**, by the same decision recorded under `97.0a`.
+
+### `7160819`/`9b49ca0`/`86a7b70` — `PASS 97.0` SHIPS IN FOUR SUB-PASSES: PDFCE OWNS THE COMPOSITING ARITHMETIC, AND IT HAD BEEN BLENDING AGAINST IMAGINARY WHITE PAPER; NON-ISOLATED BACKDROPS, §11.4.6 KNOCKOUT AND §11.4.5 SOFT-MASK-ON-THE-GROUP-RESULT ALL LAND — ★★ AND STAGE A CANNOT DELIVER ITS SEVEN PATCHES, BECAUSE THE TRANSPARENCY PANELS ARE BLOCKED ON §11.3.4'S BLENDING COLOUR SPACE, NOT ON THE GROUP MODEL — 2026-08-21 (two-hundred-and-sixteenth filing)
+
+**This filing HAS a shell, so hard rule 8's obligation is discharged by
+looking rather than by disclaiming.** Independently re-derived this
+filing, with the command that produced each: `git log --oneline` confirms
+the three hashes and their subject lines on `main`;
+`git rev-list --left-right --count origin/main...HEAD` → **`0  47`**, so
+**HEAD is 47 commits ahead of `origin/main` (`df97ec2`) and NOTHING in
+this Pass is pushed** (`git ls-remote origin main` agrees); `git tag -l`
+tops out at **`v0.6.0`**, so **`v0.7.0` is bumped-but-untagged**, as the
+two preceding filings recorded; `git status --porcelain` is **empty**
+(clean tree). `ls -lt D:\Dev\pdfce-backups\` shows the newest bundle is
+**`pdfce-20260817-v060.bundle`, 2026-08-17 20:34** — **four days and 47
+commits stale**, reported as measured, not inferred (this is the exact
+claim hard rule 8 was written about, and it is a `stat`, not a reading of
+this file). Everything numeric below that is NOT one of those is
+**relayed by the dispatching engineer** and labelled as such where it
+matters.
+
+**Pass 97.0 moves from *Backlog* to *Shipped*.** Its *Backlog* entry
+(`Pass 97.0`/`97.1`/`97.2`, filed 2026-08-18, hundred-and-sixty-ninth
+filing) is amended in place rather than deleted, because `97.1` and
+`97.2` are still unbuilt and the entry is their scope — see *Backlog*,
+where `97.0`'s paragraph is now struck and `97.1`'s leading deliverable
+is re-ordered by this filing's §11.3.4 finding.
+
+#### What shipped — four sub-passes, three commits
+
+- **`7160819` — `Pass 97.0a`.** `crates/pdfce-render/src/compositor.rs`,
+  new, **~930 lines including 12 unit tests**. pdfce now owns the
+  compositing arithmetic in one place: §11.4.4's element formula
+  (`composite_element`), §11.4.8's knockout variant
+  (`composite_element_knockout`), §11.4.4's backdrop removal
+  (`remove_backdrop`), §11.3.7.3's `Union`, and **all thirteen of Table
+  136's separable blend functions** — transcribed with the **four
+  printing errata the spec corpus records** (`GD-1`..`GD-4`:
+  ColorDodge's and ColorBurn's second branches, SoftLight's `D(x)`, and
+  Difference's missing absolute-value bars, which **every text extractor
+  loses because they are path-drawn**, so a transcription from extracted
+  text is wrong by construction).
+- **`9b49ca0` — `Pass 97.0b` + `Pass 97.0c`.** Non-isolated transparency
+  groups get their backdrop; §11.4.6 knockout groups get implemented.
+- **`86a7b70` — `Pass 97.0d`.** §11.4.5's soft mask is applied to the
+  group **result** instead of to each element inside it.
+
+#### `97.0a` — the defect it was written for, and it is MEASURED
+
+Both hand-written composites shipped in `Pass 85.4b`
+(`blend_nonsep::composite` and `::composite_layer`) **substituted a white
+backdrop wherever the destination was transparent**. That is §11.4.4's
+formula specialised to `α_b = 1`, and it is wrong **precisely where
+§11.4.7 makes transparency common** — the page buffer starts transparent
+and the white medium is composited in once at the end, so "transparent"
+means *no backdrop*, **not *paper***. `Sat(white) = 0` and
+`Lum(white) = 1`, so Hue/Saturation/Color of anything over white **is
+white**.
+
+Ghent `1_GWG162` at scale 2.0, with **pdfium as an independent second
+opinion** (engineer-relayed):
+
+| `1_GWG162` cell (of 16) | before `7160819` | after `7160819` | pdfium |
+|---|---|---|---|
+| Hue | (255,255,255) | (184,184,184) | (184,184,184) |
+| Saturation | (255,255,255) | (184,184,184) | (184,184,184) |
+| Color | (255,255,255) | (184,184,184) | (184,184,184) |
+| Luminosity | (106,106,106) | (255,20,159) | (255,22,158) |
+
+Three cells agree with pdfium **exactly**; the fourth agrees to **2/255 on
+G and 1/255 on B**. **The failure mode is mode-dependent and therefore
+invisible in review**, which is why it survived: for the four modes
+satisfying `B(1, cs) = cs` (Normal, Compatible, Multiply, Darken) the
+white substitution is **harmless**; for Hue/Saturation/Color it produces
+**flat white**, for Luminosity **flat grey**.
+
+**A second bug fell out of the same read.** Accumulated alpha used
+`max(a, b)` where §11.3.7.3 says `Union(a, b) = a + b − ab`.
+`max(0.5, 0.5) = 0.5`; `Union(0.5, 0.5) = 0.75`. **Alpha was
+under-reported on every anti-aliased edge inside a group** — a whole-edge
+defect that no single-cell trap would have caught.
+
+**`overprint::composite` carries the SAME white-backdrop convention and
+was DELIBERATELY LEFT ALONE.** Recorded here as **known-and-deferred, not
+an oversight**: it is Table 149 *decision logic* rather than a blend
+function, and it belongs with the colorant buffer that will replace its
+input in `Pass 97.1`. **A reader who finds that convention in
+`overprint.rs` and "fixes" it in isolation is changing the input to a
+buffer that does not exist yet.**
+
+#### `97.0b` — non-isolated groups get their backdrop
+
+`Canvas::group` replaces `Canvas::layer` for transparency groups. A
+non-isolated group is rendered **over a copy of its own backdrop** and
+then corrected by §11.4.4's backdrop removal. The content stream is
+walked **twice** — once transparent for `α_gn`, once over the backdrop
+for `C_n` — and **the second walk is conditional on §11.4.4 NOTE 5's own
+condition**: with every interior element compositing `Normal`, the
+one-walk answer is **identically exact**, so **only a group that actually
+blended pays the second walk**.
+
+New counter **`groups_backdrop_reruns`** on `render-page`'s stable stdout
+line, **appended last**; the stable-key **ORDER** test in
+`crates/pdfce-cli/tests/render_page.rs` was updated in the same commit.
+
+#### `97.0c` — §11.4.6 knockout groups, and a counter that CHANGED MEANING
+
+`KnockoutTarget` in `canvas.rs`: **four planes where a `Pixmap` has one** —
+frozen initial backdrop, running result, `α_g`, `f_g`. Each element is
+rasterised into a **reused scratch at full opacity** so its alpha comes
+back as **pure coverage (`f_s`)**, with `q_s` taken out of the paint —
+because §11.4.8 scales the destination by `(1 − f_s)` where the ordinary
+formula has `(1 − α_s)`. **§11.4.6 NOTE 6's nesting rule is honoured**: a
+non-isolated group inside a knockout group inherits the **OUTER** group's
+initial backdrop, not the immediate one.
+
+**MEASURED (engineer-relayed): `1_GWG161` went from 14 traps to 2 — twelve
+of sixteen cells now render correctly, i.e. the panel went from 2/16
+correct to 14/16.** `2_GWG120_White_OP-KO` **still passes**. **No patch
+regressed.**
+
+**★ `transparency_groups_knockout_approximated` CHANGED MEANING, and this
+is filed as a first-class fact rather than a footnote, because a silently
+redefined counter reads as an improvement in the wrong thing.**
+
+| | old meaning (through `9b49ca0^`) | new meaning (`9b49ca0` onward) |
+|---|---|---|
+| unit counted | **groups** | **elements inside a group** |
+| increments for | **every** `/K true` group (the whole feature was an approximation) | only elements that **could not be given knockout semantics** because they read the destination back — a shading, an overprint composite, a per-paint non-separable blend |
+| a correctly-rendered knockout group reports | **1** | **0** |
+
+The test that asserted the old meaning was **updated rather than
+deleted**, with the reason in its own doc comment. **The old and new
+numbers are not comparable in either direction** — the pre-`9b49ca0`
+figure of **47 on the Ghent corpus**, quoted in four documents, is a
+count of a different unit and must not be carried forward as a baseline.
+
+**★★ HARD RULE 11 SWEEP — SEVEN SURVIVORS FOUND, ALL REPORTED, FIVE
+OUTSIDE THIS ROLE'S REMIT.** Searching for the **claim** ("knockout is
+approximated" / "composited as ordinary groups" / "not implemented"),
+not for the string. **`crates/` is reported, never edited:**
+
+| # | survivor | where | what it still asserts |
+|---|---|---|---|
+| **1** | ★★ **the counter's own rustdoc** — the primary definition site, therefore the most expensive one | `crates/pdfce-render/src/interpret.rs:495–504` | *"Groups carrying `/K true` … that were **composited as ordinary groups**"* and *"Compositing the group as a unit gets its outer boundary right and its **internal occlusion order wrong** — strictly better than flattening, and **still not correct**."* **Every clause describes the OLD unit and the OLD shortfall.** A reader reaching this field by IDE hover — the commonest route — gets the pre-`9b49ca0` semantics with no marker that they moved. |
+| **2** | ★★ **a 24-line comment block opening *"`/K` (knockout, Table 147) is NOT implemented"*** | `crates/pdfce-render/src/interpret.rs:4318–4341` | First paragraph **false top to bottom**. **NOTE: its other two paragraphs SURVIVE and are still true** — the four-clauses population argument (§9.3.8 `/TK`, §11.6.7, §11.7.4.4) and the **degenerate-fixture warning** (*"knockout and non-knockout are IDENTICAL when every element is opaque … Any knockout test must set `/ca < 1`"*), which is the very trap `97.0c`'s new test was built to dodge. **Do not delete the block; correct its head.** |
+| **3** | **the CLI's disclosure comment** | `crates/pdfce-cli/src/main.rs:~7823–7840` | *"15 and 7 wrong cells out of 16, and each one is counted here as a success. **`Pass 97.0` is the fix; until it lands this number over-reports**"* — `Pass 97.0` **has landed**. And *"`knockout_approx` is a further shortfall inside that: /K groups get their outer boundary right and their internal occlusion order wrong"* — old unit. |
+| **4** | ◐ **a USER-FACING `eprintln!` string** | `crates/pdfce-cli/src/main.rs:~8081–8089` | *"a knockout group composites each element against the group's INITIAL backdrop rather than the accumulated result. **Flattening** gets the backdrop wrong in the first case and the occlusion order wrong in the second."* **Partly still true** — it fires on `transparency_groups_special` and describes **flattening**, which is now only the allocation-failure fallback. It **also carries the `Table 96` citation error `Pass 85.4e` already corrected to Table 147 everywhere else** — a two-defect string, one stale and one never fixed here. |
+| **5** | **the stable-key test's own comment** | `crates/pdfce-cli/tests/render_page.rs:~466` | *"`composited` is the census; `knockout_approx` is the shortfall inside it."* The **key order** was updated for `groups_backdrop_reruns`; **the comment explaining what the key MEANS was not.** |
+| **6** | **`ARCHITECTURE.md`'s render cell** | `docs/ARCHITECTURE.md:~1216–1284` | *"pdfce composites them as ordinary groups today, approximated and counted via `groups_knockout_approx` (**47**)"*, *"`groups_knockout_approx` still counts **every** knockout group as approximated"*, and *"**non-isolated knockout (the common case) is NOT representable**, pending buffer-model work."* **The last is the one that matters: it was a stated blocker, and `97.0c` falsified it by building it.** **FIXED THIS FILING** — amendment appended to the cell (this file is mine). |
+| **7** | **`FEATURES.md` rows 201 and 277** | `docs/FEATURES.md` | both carried the approximation as current. **FIXED THIS FILING.** |
+
+**Survivors 1–5 are owed to the engineer and are listed again in *Next
+up*'s owed-work box so they survive this entry scrolling away.** Note the
+shape hard rule 11 predicts and that held again here: **the two most
+damaging survivors (1 and 2) are the two nearest the code that changed** —
+the field's own rustdoc and the comment thirty lines above the increment.
+
+#### `97.0d` — §11.4.5 soft mask on the group RESULT
+
+The mask is now **lifted back out of the contents' clip at a group `Do`**
+and applied **once** to the composite. Folding into the clip stays
+**correct for an elementary object** (§11.6.4.1 makes the mask value that
+object's `q_m`) and is **wrong for a group**, where it multiplies **once
+per object inside** — so the error grows as `M^n` for `n` overlapping
+objects, which is why it was invisible on single-object fixtures.
+
+Reference-strip correlation on the Ghent soft-mask patches
+(engineer-relayed, three patches):
+
+| patch | before `86a7b70` | after `86a7b70` | Δ |
+|---|---:|---:|---:|
+| `1_GWG1610` Softmasks Text part1 | 0.576 | **0.962** | +0.386 |
+| `1_GWG168` Softmasks Vector part1 | 0.725 | **0.978** | +0.253 |
+| `1_GWG169` Softmasks Vector part2 | 0.905 | **0.986** | +0.081 |
+
+Mean over the three: **0.735 → 0.975**. New counter
+**`soft_masks_on_group_result`**. **The one case a mask cannot be lifted —
+a `W n` clip between the `gs` and the `Do` — keeps the old behaviour and
+is counted on the EXISTING `soft_masks_reset_stale` rather than getting a
+third counter name for one condition**; that counter reads **zero on all
+three patches above**, so none of the figures is contaminated by the
+fallback.
+
+**★ A THIRD INSTANCE OF A KNOWN SHAPE — and this filing MINTS `R208` for
+it, see *Standing rules*.** `outer_is_neutral` (the predicate that lets a
+group paint inline) **did not consider the soft mask**, so a masked group
+with a `Normal` blend and alpha 1 took the inline path and had its mask
+applied per object **with no result to apply it to**. The comment directly
+above that predicate **had already named the mechanism twice, in past
+tense**: *"a new graphics-state field has to be added to every predicate
+that asks 'is the state still default?', and nothing makes those sites
+findable from the field."* First `nonseparable`; then `nonseparable` again
+in the reset list; now `soft_mask`. **A comment that correctly predicts
+its own next defect and is not acted on is a design note, not a
+guard** — that is the reason this one is minted rather than logged.
+
+#### Verification — all run at `86a7b70`
+
+- **`cargo test --workspace`: green.** The transparency suite is **19
+  tests, up from 17**; the two new ones were **both built to dodge a
+  degenerate-fixture trap the spec corpus names by hand**, which is the
+  part worth copying:
+  - `knockout_erases_an_earlier_element_where_a_normal_group_layers` uses
+    **`/ca 0.5`**, because §11.4.6 makes knockout and non-knockout
+    **identical at `q_s = 1`** — *an all-opaque fixture passes under both
+    models*, so it tests nothing.
+  - `a_soft_mask_applies_to_the_group_result_not_to_each_object_inside_it`
+    uses **two OVERLAPPING squares**, because the two models give the
+    **same number for a single object** and diverge only in an overlap,
+    **by `M²`**.
+- **`cargo fmt --check` clean; `cargo clippy --all-targets --workspace
+  -- -D warnings` clean.**
+- **GUI-core separation (project rule 2) holds** —
+  `cargo tree -p pdfce-core` / `-p pdfce-render` show no GUI dependency.
+  **Stronger than a pass: no manifest was touched and no dependency was
+  added, so the property is unchanged BY CONSTRUCTION**, not merely
+  re-observed.
+- **Round-trip/minimal-diff (project rule 3): not engaged.** This Pass is
+  entirely inside `pdfce-render`; no writer path, no object re-emission.
+- **All 14 CI gates green** (`tools/check-*`). The **15th**,
+  `check-image-colorspace-truth.py`, **takes a fixture directory and is
+  deliberately out of CI** — see the `498d045`/`108d0e8`/`5047cb9` entry
+  immediately below, which established that count this same day.
+- **★ FULL-CORPUS RENDER PARITY, 4,023 FILES, RUN TWICE — once on this
+  branch and once on a worktree built at `2e6bb83` (the commit before this
+  work) — IDENTICAL bucket for bucket and band for band:**
+  `below-band 2289 | disclosed-gap-small 1436 | disclosed-gap 3 |
+  unexplained 1 | reference-divergence 1 | reference-aborted 1` (**sums to
+  3,731 of 4,023 files seen; the 292-file remainder is files with no
+  measured page**), band `frac_over_32 = 0.328712` in **both** runs.
+  **That is the INTENDED result, not a null one**: the new arithmetic is
+  confined to the cases that were already wrong, which is why the
+  *isolated* group composite still goes through `tiny_skia::draw_pixmap`.
+  A parity run that MOVED would have meant the compositor had reached
+  documents with no transparency groups at all.
+- **★ THE OPERATOR'S REAL BENCHMARK CAD DRAWING**
+  (`D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf`) renders
+  **unchanged at 0.96 s**, with **`groups_backdrop_reruns = 0`** and
+  **`soft_masks_on_group_result = 0`** — **it contains no transparency
+  groups at all, so this Pass cannot have touched it.** Run per the
+  standing "run it on his real file before calling it shipped" rule; note
+  that this time the rule produced a **confirmation of non-interference**
+  rather than a defect, which is the other half of what it is for. (Three
+  consecutive Passes before this one had it produce a defect —
+  `Pass 120.0`, `121.0`, `121.1`.)
+
+**⚠ ONE VERIFICATION INSTRUMENT IS BROKEN, AND IT IS THE STANDING GATE.**
+`tools/render-parity/out/summary.json` — the **RECORDED BASELINE** — is
+**STALE and not comparable to a current run**. Confirmed independently
+this filing by reading the file (not relayed): it is dated **2026-07-31
+14:51**, records **`files_seen: 2914`** against today's **4,023**, and
+emits the bucket vocabulary **`benign` (2840) / `known-gap` (49) /
+`unexplained` (1) / `reference-divergence` (0)** — a vocabulary **the
+harness no longer emits at all** (current buckets are `below-band`,
+`disclosed-gap-small`, `disclosed-gap`, `unexplained`,
+`reference-divergence`, `reference-aborted`). Its band is
+`frac_over_32 = 0.0294` against today's `0.3287`, an **11× difference**
+that is a **units/method change, not a regression**. **Consequence, filed
+as owed work in *Next up*: the standing render-fidelity gate's `--gate`
+mode is currently MEANINGLESS until the baseline is re-based.** Comparing
+**two current runs**, which is what this Pass did, is the only thing that
+means anything today — and it is a weaker guarantee than a gate, because
+it requires somebody to remember to run both.
+
+#### ★★★ THE SCOPING FINDING — Stage A will NOT deliver its seven patches, and the reason is NOT the group model
+
+**Ghent board UNCHANGED: `26 pass · 14 FAIL · 11 UNRESOLVED` of 51, before
+and after.** Trap count across the failing patches went **67 → 55**, i.e.
+**12 traps cleared over 14 failing patches = 0.86 traps per failing patch
+on average, and 12 of those 12 are `1_GWG161`'s** — *the improvement is
+entirely one panel*, which is exactly the shape a scoping error produces.
+`docs/compositor-plan.md` §4 expects **seven** patches from Stage A and
+**gets zero**.
+
+**Derived by hand on `1_GWG162`'s `Difference` cell**, whose two operands
+are printed in the file — X1 = `DeviceCMYK 0 1 0 0` (magenta),
+X2 = `DeviceCMYK 0 0 0 1` (black), `/BM /Difference`, and the surround a
+correct engine must produce is RGB `(0,165,79)`:
+
+```
+§11.3.4 complement:  cb' = (1,0,1,1)   cs' = (1,1,1,0)
+|cb' − cs'|              = (0,1,0,1)
+complement back          = (1,0,1,0) = DeviceCMYK 1 0 1 0 = GREEN
+```
+
+**That is the surround, exactly.** pdfce renders `(237,1,140)`; **pdfium
+renders `(202,29,108)`** — *both blend in RGB and both are wrong,
+differently*. **The trap is authored on the BLENDING COLOUR SPACE, and no
+amount of group-model correctness reaches it.**
+
+**Every Ghent transparency patch declares `/Group /CS /DeviceCMYK` on the
+PAGE** — including **`3_GWG161`, whose own objects are `ICCBased` RGB**.
+So §11.3.4's subtractive complement
+(`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`) is **`Pass 97.1`'s
+LEADING deliverable, ahead of the spot planes**, and **four of Stage A's
+seven expected patches were waiting on it all along** — they were never
+Stage A's to deliver.
+
+**`docs/compositor-plan.md` already carries this amendment in full**
+(engineer-owned, written this session, head of the file at `:8–179`).
+`Pass 97.1`'s *Backlog* entry is repointed at it by this filing **rather
+than restating it** — one plan, one place, per the standing
+no-second-copy discipline.
+
+**★ RECORDED AS UNCONFIRMED RATHER THAN ASSUMED — and this is the part a
+future session will be tempted to round up.** `3_GWG161`'s **14 traps**:
+no knockout groups, **no backdrop reruns triggered** (correctly — its
+groups' interiors are all `Normal`, which is NOTE 5's condition), blend
+modes sit at the `Do` where `draw_pixmap` already handles them. **The
+§11.3.4 hypothesis FITS but was NOT derived the way `1_GWG162`'s was.**
+A hypothesis that fits and a derivation that closes are different
+evidence, and `1_GWG162`'s arithmetic above is the only one of the two
+that has been done.
+
+**AN INSTRUMENT PROBLEM, NAMED AND DELIBERATELY NOT SOLVED THIS SESSION.**
+`tools/ghent-check.py` has **no calibrated threshold for reference-strip
+patches**, so the three soft-mask patches above stay **UNRESOLVED despite
+0.96–0.99 correlation**. There is now a **bimodal split to calibrate
+against** — 0.96–0.99 for the three fixed patches against 0.04–0.41 for
+the 16-bit patches, a gap of **0.55 with nothing in it**. **It was left
+alone ON PURPOSE, and the reasoning is the finding:** *calibrating the
+instrument immediately after making it report what you wanted is not a
+measurement.* Filed as a *Backlog* item **with that reasoning attached**,
+because an item filed without it reads as a forgotten chore and gets done
+by the next session in the one context where it is least trustworthy.
+
+#### What this Pass did NOT do
+
+- **`Pass 97.1` (colorant planes) and `Pass 97.2` (the collapse) are
+  untouched** — still *Backlog*, `97.1` now re-ordered internally.
+- **The non-explicit knockout population is still not treated as
+  knockout** — §9.3.8's `/TK` default-`true` text, §11.7.4.4's `B`/`b`,
+  §11.6.7's shading patterns. **Only explicit `/K true` groups are.**
+  That population is the larger one by every ranking the spec dispatch
+  produced (`B`/`b` ≫ `/TK` > explicit `/K` ≈ shading patterns), so **the
+  slice implemented is the smallest tier**, and the counter's new
+  element-level zero says nothing about the other three.
+- **`f_g` is approximated by `α_g`** for a group used as an *element* of a
+  knockout group — **exact whenever that group's own elements are
+  opaque**, which is §11.4 corpus §7.4's stated safe-skip condition.
+- **`/AIS true` is not yet distinguished from `/AIS false`** for a group
+  mask.
+- **`/TR` on a soft mask is still read, counted (`soft_mask_tr_ignored`)
+  and NOT evaluated** — unchanged by `97.0d`, and still the case where an
+  ignored transfer function can leave visible exactly what the document
+  meant to hide.
+- **`overprint::composite`'s white-backdrop convention is untouched**, by
+  decision — see `97.0a` above.
+
 ### `498d045`/`108d0e8`/`5047cb9` — THE GATE THAT FINDS UNFILED COMMITS COULD NOT SEE THE WORKFLOW THAT RUNS THE GATES; CI NOW WIRES FOURTEEN OF FIFTEEN `tools/check-*` SCRIPTS, NOT SIX; A TEN-DAY-OLD CI DEFECT (BACKTICK → SILENT COMMAND SUBSTITUTION) RECURRED IN THIS FILING'S OWN COMMIT MESSAGE — `R207` MINTED — no Pass ID; three infrastructure/record commits — 2026-08-21 (two-hundred-and-fifteenth filing)
 
 **This filing has no shell (hard rule 8).** Commit hashes, subject-line
@@ -56373,6 +56889,9 @@ and `crates/`, both outside this role's remit.
 | **5** | **★★ PARTIALLY DISCHARGED 2026-08-19 (189th filing) — `open\2026-08-19-insert-pages-orphan-count-reply.md` answers item 1 of the five (the orphan ruling, with the permanence argument); items 2–5 remain owed and the box above stays open.** Original text: **A REPLY TO `pdfceGUI` IS STILL OWED** — `request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md` | `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` | carried 184th → 185th → **186th** | Third consecutive filing. `e194b46` supplies most of the material verbatim; **it is not the reply.** Channel re-established by `ls` this filing (`R196`): the file is dated **2026-08-18 15:19** and still open. |
 | **6** | **★★ `note_gray_black_routing_is_yours.md` STILL UNREAD** | `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\` | carried forward | `ls` this filing: dated **2026-08-18 01:37**, 13,543 bytes — **the largest open note in that channel.** Named by the engineer in this dispatch as owed. |
 | **7** | ~~**CI runs 5 of 14 `tools/check-*` gates**~~ — **CLOSED by `108d0e8`, 215th filing: 14 of 15 wired, the 15th (`check-image-colorspace-truth.py`) deliberately excluded and named as such in `ci.yml`'s own comment.** | `.github/workflows/*.yml` | 186th sweep; closed 215th | Measured 215th filing by `Glob` (10 `.py` + 5 `.sh` = 15 total) + `Grep -o` over `ci.yml` (14 unique invocations) + reading the exclusion comment — counting, not reading, which is also what the 186th filing's own "5 of 14" did (see the 215th filing's Shipped entry: that figure was correct for its own time, not a second misread — `check-outcome-disclosed.py` did not exist until `Pass 110.0`, 203rd filing). |
+| **8** | **★★★ THE STANDING RENDER-FIDELITY GATE HAS NO USABLE BASELINE — `--gate` MODE IS CURRENTLY MEANINGLESS** | `tools/render-parity/out/summary.json` | 216th filing | Read directly this filing, not relayed. Dated **2026-07-31 14:51**; records **`files_seen: 2914`** against today's **4,023**; emits the bucket vocabulary **`benign` (2840) / `known-gap` (49) / `unexplained` (1) / `reference-divergence` (0)** — **a vocabulary the harness no longer emits at all** (current: `below-band`, `disclosed-gap-small`, `disclosed-gap`, `unexplained`, `reference-divergence`, `reference-aborted`). Band `frac_over_32 = 0.0294` vs today's **0.3287**, an **11× difference that is a units/method change, not a regression**. **Consequence:** the gate cannot compare against it, so **the only thing that means anything today is running the corpus TWICE and diffing** — which `Pass 97.0` did, and which is strictly weaker than a gate because it depends on somebody remembering. **Owed: re-base the baseline at a named commit, and record the commit IN the file** (`R197`). Engineer-owned (`tools/`), therefore reported, not edited. |
+| **9** | **★★★ `check-ledger-numbers.py`'s PASS-HEADING ANCHOR IS BLIND TO A BACKTICKED PASS ID — THE THIRD INSTANCE OF A CLASS ITS OWN COMMENTS DOCUMENT TWICE** | `tools/check-ledger-numbers.py:~205` | 216th filing | The anchor is `^#{2,4} (?:★+ )?Pass `. **This project's current Shipped heading convention writes the ID in BACKTICKS** — `` ### `Pass 120.2`/`Pass 120.4` (`af5989f`) — … `` — and several entries lead with the commit hash instead. **Neither form matches.** Measured consequence, from the gate's own output this filing: *"Pass families with headings: up to **118**"* while **`Pass 121.1` has shipped**, and `113`, `114`, `115`, `116`, `117`, `119`, `120`, `121`, `97` all sit under *"CLAIMED BUT NOT YET HEADED"* — **eight shipped Pass families invisible to the ceiling calculation.** The gate is **not failing** (uniqueness still holds) — it is **reporting less than it appears to**, which is the `R53`–`R57` shape. **★ The file's own comments record this exact class being fixed TWICE** — once to admit `★ Pass`, once widened to `★+ Pass` — and name the transferable lesson each time: *"it repaired the ONE spelling that had been seen rather than the CLASS."* **A third spelling has appeared and the anchor is one spelling behind again.** Suggested widening: allow any run of decoration (`★`, backtick, or both) between the hashes and `Pass`, and scan the heading prefix for a backticked ID as well as a bare one. **Discovered the same way the previous two were** — reading the gate's output against a filing whose Pass ID was known. Engineer-owned (`tools/`), therefore reported, not edited. |
+| **10** | **★★ FIVE `crates/` SURVIVORS OF THE `transparency_groups_knockout_approximated` MEANING CHANGE** (hard rule 11 sweep, 216th filing) | `crates/pdfce-render/src/interpret.rs:495–504` and `:4318–4341`; `crates/pdfce-cli/src/main.rs:~7823–7840` and `~8081–8089`; `crates/pdfce-cli/tests/render_page.rs:~466` | 216th filing | Full table with the exact stale wording is in the `7160819`/`9b49ca0`/`86a7b70` *Shipped* entry, §`97.0c`. **The two most expensive are the two nearest the code that changed**: the counter's **own rustdoc** (the definition site an IDE hover resolves to) and a **24-line comment opening *"`/K` (knockout, Table 147) is NOT implemented"* thirty lines above the increment**. ⚠ **That comment's other two paragraphs are still TRUE and must survive the correction** — the four-clauses population argument and the degenerate-fixture warning (*"Any knockout test must set `/ca < 1`"*), which is the trap `97.0c`'s new test was built to dodge. Survivor 4 is a **user-facing `eprintln!`** carrying **two** defects — stale semantics *and* the `Table 96` citation `Pass 85.4e` corrected to Table 147 everywhere else. **`crates/` is outside this role's remit: reported, not edited.** |
 
 **★ A CORRECTION THIS FILING OWES ITS OWN PREDECESSOR, sourced per hard
 rule 10's corollary (*a correction is a claim, and must name its
@@ -65672,7 +66191,89 @@ added. See that section below.
   hundred-and-sixty-eighth filings' own "For next session" ledgers, both
   independently naming 97 as next free before this filing claims it).
 
-  **Pass 97.0 — the compositor, RGB only.** Replace the group-buffer path
+  > **★★★ AMENDED 2026-08-21 (two-hundred-and-sixteenth filing) —
+  > `PASS 97.0` HAS SHIPPED (`7160819`/`9b49ca0`/`86a7b70`, four
+  > sub-passes `97.0a`–`97.0d`); SEE THE TOP OF *SHIPPED*. `97.1` AND
+  > `97.2` ARE NOT COMPLETE, WHICH IS WHY THIS ENTRY IS AMENDED IN PLACE
+  > RATHER THAN DELETED — it is still their scope.**
+  >
+  > ⚠ **CORRECTION TO THIS FILING'S OWN AMENDMENT, made before publishing
+  > it (hard rule 11's corollary — check a draft claim against live source
+  > first).** This box was drafted saying *"`97.1` and `97.2` remain
+  > UNBUILT"*. **That went false mid-filing:** `0d5fc29` — *"`Pass 97.1`,
+  > first two deliverables: overprint could not see an `/Indexed` space's
+  > colorants"* — landed on `main` while this entry was being written,
+  > verified by `git log` this filing. **It is NOT filed by this dispatch
+  > and is NOT filed anywhere yet** (`tools/check-passes-filed.py`
+  > correctly reports `UNFILED 0d5fc29 Pass 97.1` at `HEAD`); this
+  > dispatch's scope was `Pass 97.0`, and filing `97.1` from a commit
+  > message rather than from measurements would be the relay-as-evidence
+  > error. ~~**Owed to the next filing.**~~ **★ DISCHARGED by the
+  > two-hundred-and-seventeenth filing** — `0d5fc29` is filed at the top
+  > of *Shipped* as **`Pass 97.1a` + `Pass 97.1b`** (sub-Pass IDs
+  > assigned by that filing; the engineer left them unassigned), with the
+  > A/B counter table and the structural `/Subtype /Image` verification
+  > read from the commit rather than relayed from its subject line.
+  > **What it discharges:** the two `/Indexed`-and-images findings added
+  > to `97.1`'s scope by the hundred-and-seventieth filing (below).
+  > **What it does NOT discharge:** the colorant planes, and **the
+  > §11.3.4 blend space, which is still `97.1`'s leading deliverable and
+  > is still unbuilt.**
+  > **★ And its own summary line corroborates this filing's scoping
+  > finding rather than competing with it** — *"fixing that moved
+  > nothing, which is the finding … the dependency runs the opposite way
+  > round from how the plan ordered them."* **Two independent
+  > deliverables in one Pass family have now each been built, measured,
+  > and moved nothing**, for the same underlying reason: the plan's
+  > ordering was derived before the blocking clause was identified.
+  >
+  > **★★ AND `97.0`'S ACCEPTANCE CRITERION IS FALSIFIED, NOT MET: IT
+  > DELIVERED ZERO OF ITS SEVEN PATCHES, AND THE REASON IS NOT THE GROUP
+  > MODEL.** Every mechanism `97.0` promised was built and every one is
+  > measurably correct — Ghent trap count **67 → 55** across the failing
+  > patches, `1_GWG161` **14 traps → 2**, soft-mask strip correlation
+  > **0.735 → 0.975** mean over three patches — and the **board did not
+  > move: `26 pass · 14 FAIL · 11 UNRESOLVED` of 51, before and after.**
+  > **The transparency panels are blocked on §11.3.4's BLENDING COLOUR
+  > SPACE**, derived by hand this session on `1_GWG162`'s `Difference`
+  > cell (full arithmetic in the *Shipped* entry): every Ghent
+  > transparency patch declares `/Group /CS /DeviceCMYK` **on the PAGE**,
+  > including `3_GWG161` whose own objects are `ICCBased` RGB, so a
+  > renderer blending in device sRGB is wrong on all of them **regardless
+  > of what the objects are coloured in**. pdfium fails the same cells
+  > **differently**, which makes it a **peer, not an oracle**, for
+  > anything §11.3.4 governs.
+  > **Consequence for `97.1`, applied below:** §11.3.4's subtractive
+  > complement is now **`97.1`'s LEADING deliverable, ahead of the spot
+  > planes** — four of Stage A's seven expected patches were waiting on
+  > it all along and were never `97.0`'s to deliver.
+  > **The plan of record is `docs/compositor-plan.md`'s head amendment
+  > (`:8–179`, engineer-owned, written 2026-08-21). This entry POINTS at
+  > it and deliberately does not restate it** — one plan, one place. Read
+  > that amendment before scoping `97.1`.
+  >
+  > **Also settled by `97.0`, and worth carrying because it was a STATED
+  > BLOCKER falsified by building the thing:** `ARCHITECTURE.md`'s render
+  > cell and `FEATURES.md` both recorded that **non-isolated knockout
+  > "is NOT representable, pending buffer-model work."** `97.0c`
+  > implemented it — `KnockoutTarget`, four planes where a `Pixmap` has
+  > one — and §11.4.6 NOTE 6's nesting rule with it. Same shape as
+  > `Pass 85.5`'s `iccce` gate and `85.4b`'s "needs `Pass 97.0`'s buffer":
+  > **three blockers now, each retired by someone trying it.**
+  >
+  > **What `97.0` did NOT deliver and is still owed to a later Pass:** the
+  > non-explicit knockout population (§9.3.8 `/TK` default-`true` text,
+  > §11.7.4.4 `B`/`b`, §11.6.7 shading patterns — the three LARGER tiers;
+  > only explicit `/K true` is implemented); `f_g` approximated by `α_g`
+  > for a group used as an element of a knockout group (exact whenever
+  > that group's own elements are opaque — §11.4 corpus §7.4's stated
+  > safe-skip condition); `/AIS true` not distinguished from `/AIS false`
+  > for a group mask; **and `/TR` still read, counted and NOT evaluated**,
+  > which `97.0`'s original scope below promised and did not deliver.
+
+  ~~**Pass 97.0 — the compositor, RGB only.**~~ **SHIPPED 2026-08-21 —
+  original scope kept verbatim below for the record; read it with the
+  amendment above.** Replace the group-buffer path
   with pdfce's own **f32, un-premultiplied** buffer carrying `alpha` and
   `alpha_g`, plus pdfce's own composite/blend implementation. `tiny_skia`
   demoted from "the thing that blends" to "the thing that scan-converts"
@@ -65696,6 +66297,33 @@ added. See that section below.
   51. **See the SIXTH-TOUCH flag on `85.4c`'s remainder, `Pass 85.0–85.5`
   entry, *Next up* — this Pass may subsume that row's non-isolated-
   knockout item; check, do not assume, when this Pass ships.**
+
+  > **★★★ RE-ORDERED 2026-08-21 (two-hundred-and-sixteenth filing).
+  > §11.3.4's SUBTRACTIVE COMPLEMENT IS NOW THIS PASS'S LEADING
+  > DELIVERABLE, AHEAD OF THE SPOT PLANES.** It is listed second in the
+  > paragraph below and that ordering is now wrong: the blend **space**,
+  > not the spot **planes**, is what the Ghent transparency panels are
+  > blocked on, and it is what four of Stage A's seven expected patches
+  > were waiting on. `blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`,
+  > applied whenever the group's blending colour space is subtractive —
+  > **and every Ghent transparency patch declares `/Group /CS
+  > /DeviceCMYK` on the PAGE**, including ones whose artwork is
+  > `ICCBased` RGB. **Derivation, evidence and the pdfium comparison:
+  > `docs/compositor-plan.md`'s head amendment `:8–179` (the plan of
+  > record — read it before scoping this Pass) and the
+  > `7160819`/`9b49ca0`/`86a7b70` entry at the top of *Shipped*.**
+  > **This does not change the Pass's dependency (`97.0` first — now
+  > satisfied) or its acceptance list; it changes what gets built first
+  > inside it, and therefore what the first measurable result will be.**
+  > ⚠ **`3_GWG161`'s 14 traps are an UNCONFIRMED instance of this
+  > hypothesis, not a confirmed one** — it fits, but it was not derived
+  > the way `1_GWG162`'s `Difference` cell was. Do not count it toward
+  > this Pass's acceptance until it is.
+  > **Also inherited from `97.0`:** `overprint::composite` still carries
+  > the **white-backdrop convention** `97.0a` removed from
+  > `blend_nonsep` — deliberately left alone, because it is Table 149
+  > decision logic and belongs with the colorant buffer that will replace
+  > its input **in this Pass**. Fix it here, not before.
 
   **Pass 97.1 — colorant planes.** Same compositor, different pixel: one
   plane per colorant, CMYK + one per spot, sized by pre-scanning the
@@ -65723,6 +66351,27 @@ added. See that section below.
   *Shipped*, top) — recorded here, against the Pass that will fix them,
   rather than only in `docs/compositor-plan.md` §7 where they were first
   written.**
+
+  > **★★ BOTH SHIPPED 2026-08-21 as `Pass 97.1a` / `Pass 97.1b`
+  > (`0d5fc29`) — see the top of *Shipped* for the measurements. Kept
+  > below rather than deleted, because ONE OF THEM WAS WRONG ABOUT
+  > ITSELF and that is the reusable part.**
+  > **Finding 1 (`/Indexed`) is fixed and MOVED NOTHING** — all four
+  > overprint counters identical to the digit across `1_GWG190`/`191`/
+  > `192`/`2_GWG020`, because **every `/Indexed [/DeviceN …]` space in
+  > those patches is an IMAGE colour space**. It was filed as a live
+  > defect blocking the buffer; it is in fact **unreachable until the
+  > image path exists**, so **the dependency runs the opposite way round
+  > from the order written below.** Read finding 1's *"Present in 4 of
+  > the 7 failing overprint patches"* as *present-in-the-file*, **not**
+  > *reachable-by-the-renderer* — that conflation is the whole error.
+  > **Finding 2's counter (`overprint_images_unsupported`) shipped as
+  > specified**, deliberately separate from `overprint_refused`; its
+  > first measurement includes **`2_GWG031` = 1, a patch that PASSES**.
+  > **What is still `97.1`'s and still unbuilt:** §11.3.4's blending
+  > colour space (the leading deliverable), the colorant planes, and the
+  > image overprint path itself — `97.1b` counts that gap, it does not
+  > close it.
   1. **`/Indexed` defeats overprint colorant classification.**
      `overprint::classify` has no `/Indexed` arm, so an `/Indexed` space
      falls to `SourceKind::OtherProcess` and its base's colorant list is
@@ -65948,6 +66597,263 @@ added. See that section below.
   itself (the GWG Reference file is not on this machine per
   `docs/NEXT_SESSION.md` §2) remains owed to whichever session scopes this
   Pass for real.
+
+- **BROTLI COMPRESSION FILTER — CONDITIONAL, filed 2026-08-21
+  (two-hundred-and-sixteenth filing) on a direct operator request. No
+  Pass ID assigned: the trigger has not fired.**
+
+  **Operator, 2026-08-21, verbatim:** *"please note somewhere that we are
+  going to have to add brotli compression when it becomes part of the pdf
+  2.0 standard."*
+
+  > **★★★ SOURCED PROPERLY 2026-08-21 (two-hundred-and-seventeenth
+  > filing). `pdfce-spec-librarian` was dispatched in parallel with the
+  > filing above and has reported. THE RECORD IS NOW
+  > `D:\Dev\Rag-Specialized\PDF_Spec\filters\filter__brotli.md`
+  > (513 lines) — read it before scoping anything; this entry points at
+  > it and deliberately does not restate it.** The scrape caveat below is
+  > **discharged**: the corpus entry is written off the extension
+  > specification itself and off the two licensed ISO primaries, not off
+  > a landing page.
+  >
+  > **What the sourcing changed, and it is not a small change:**
+  >
+  > 1. **The measured negative is now MEASURED, both editions.** `brotli`
+  >    returns **zero hits in ISO 32000-2:2020 (1,023 pp)** *and* **zero
+  >    in ISO 32000-1:2008 (756 pp)**. Structural corroboration: §7.4 ends
+  >    at **7.4.10 (Crypt)**, and **Table 6 enumerates exactly ten
+  >    filters in both editions**. A scan of **all 2,840 Errata
+  >    Collection 3 markup annotations** returned nothing Brotli-related,
+  >    so **the negative holds for the corrected text too** and not
+  >    merely for a text extractor's view of the printed page.
+  > 2. **★★ BUT THE SPECIFICATION EXISTS, IS FINISHED, AND IS TWO DAYS
+  >    OLD.** **`EXTN-BROTLI-1 v1.3`, *Brotli compression in PDF 2.0*,
+  >    PDF Association PDF TWG, announced 2026-08-19** (registry commit
+  >    2026-08-18 — **two days before the operator asked about it**).
+  >    Licence **CC-BY-4.0**. **The filter name is `/BrotliDecode`.**
+  > 3. **It is an EXTENSION, not an amendment, and not on a dated ISO
+  >    path.** Registered under developer prefix **`PDFa`**,
+  >    `BaseVersion 2.0`, `ExtensionLevel 1`, `ExtensionRevision (2026)`.
+  >    **ISO/TC 171/SC 2's catalogue has zero Brotli hits** — there is no
+  >    work item, no amendment, no dated target.
+  >
+  > **★★★ WHICH MEANS THE OPERATOR'S PREMISE NEEDS CORRECTING, GENTLY AND
+  > IN HIS OWN TERMS.** He asked for Brotli *"when it becomes part of the
+  > pdf 2.0 standard"* — **that phrasing describes an event nobody has
+  > scheduled**, while **a specification pdfce could implement against
+  > already exists and is complete.** Waiting for the base standard is
+  > still a perfectly defensible answer; it is just not the *default*
+  > answer it sounds like, because the thing being waited for has no
+  > date. **Filed as open operator question `(bq)`, below, amended by
+  > this filing with these facts. NOT RESOLVED HERE** — and note that
+  > pdfce has answered this *shape* of question before (it implements
+  > ISO 32000-2 material generally, and `ARCHITECTURE.md` §12 has
+  > precedent for edition-gated behaviour), so it is **a real choice,
+  > not a formality.**
+  >
+  > **⚠ A FALSE CITATION IS CIRCULATING, AND IT WILL BE THE FIRST THING
+  > THE NEXT PERSON MEETS.** Every web-search summary asserts the filter
+  > is *"specified in ISO 32000-2:2020 §7.4.11"*. **§7.4.11 DOES NOT
+  > EXIST** — the string `7.4.11` returns **zero hits in 1,023 pages**,
+  > and §7.4 stops at 7.4.10. The corpus entry carries that
+  > one-command refutation. Traced to the **body text of an unmerged
+  > pypdf PR (#3254)**; **pypdf's own maintainer-written issue (#3223)
+  > says the opposite and is correct.** Recorded *in this Backlog entry*
+  > rather than only in the corpus, because the false citation is what a
+  > search returns first.
+  >
+  > **THREE DECODE-CONTRACT RULES THAT WOULD NOT HAVE BEEN GUESSED**, and
+  > one of them makes the work smaller:
+  > - **Large-window Brotli (RFC 9841) `SHALL` be supported** — not
+  >   optional, so a decoder limited to RFC 7932's window is
+  >   non-conformant.
+  > - **RFC 9841's framing format `SHALL NOT` be used** — the stream
+  >   carries raw Brotli, not RFC 9841 frames.
+  > - **★ `FlateDecode`'s predictors apply VERBATIM.** Table 8 is
+  >   retitled to include Brotli, so **pdfce's existing predictor code is
+  >   reusable as-is** — the PNG/TIFF predictor path does not need a
+  >   Brotli variant.
+  > - Placement: **`/BrotliDecode` `SHALL NOT` be used for inline
+  >   images**; otherwise it is legal **wherever `FlateDecode` is**.
+  >
+  > **THREE SHIPPING READERS ALREADY DIVERGE FROM THE TWO-DAY-OLD SPEC**
+  > — recorded as **BEHAVIOUR, not specification**, and the third is the
+  > one that bites a future *writer*:
+  > - **MuPDF** reads a **`/Br` abbreviation that does not exist** in the
+  >   extension.
+  > - **pdfium** decodes Brotli on **inline images**, which the
+  >   extension forbids.
+  > - **★ pdf.js silently IGNORES `/DecodeParms` predictors on Brotli**
+  >   while honouring them for Flate and LZW. A pdfce writer that emits
+  >   Brotli **with** a predictor would produce a file pdf.js renders
+  >   wrong and reports no error about.
+  >
+  > **DEPENDENCY POSTURE — project rule 13 is PRE-ANSWERED for the read
+  > side, not left open.** crates.io `brotli` **8.0.4** is
+  > **BSD-3-Clause AND MIT** (verified live by the dispatch, 2026-08-21),
+  > so a read-side addition needs **no operator licence call**. It still
+  > owes the standing filter obligations below — the **output-size
+  > ceiling** (`ARCHITECTURE.md` §10) and the **`cargo-fuzz` target** —
+  > neither of which the licence finding touches.
+  >
+  > **TODAY'S BEHAVIOUR IS CORRECT, NOT A BUG.** pdfce returns
+  > `FilterError::UnsupportedFilter("BrotliDecode")` on such a stream —
+  > **a conformant refusal, not a mis-render.** Stated here so nobody
+  > files it a second time as a defect.
+  >
+  > **THE WRITE SIDE REMAINS THE LARGER AND SEPARATE QUESTION**, for the
+  > reason already recorded at the foot of this entry: emitting Brotli
+  > interacts with **project rule 3 (round-trip / minimal-diff)**,
+  > because an **untouched Brotli stream must be re-emitted
+  > byte-identical**, which requires byte-copying rather than
+  > decode-and-re-encode. That obligation is unchanged by the sourcing.
+
+  **The condition IS the entry.** Filed as *conditional on Brotli
+  becoming part of the PDF 2.0 standard*, and it stays conditional until
+  somebody can cite the clause. It is **not** a scheduled Pass and must
+  not be promoted to one on the strength of this entry alone.
+
+  **★ STANDARDISATION STATUS — ~~THE SPEC CORPUS HAS NOTHING~~, BUT A
+  PRIMARY SOURCE WAS FOUND IN THE WORKING TREE, AND IT SHARPENS THE
+  CONDITION RATHER THAN SATISFYING IT.** *(The struck clause was true for
+  one filing. The corpus now holds `filters\filter__brotli.md` — see the
+  amendment box above. The conclusion below is unchanged and was reached
+  correctly; only its evidence base has grown.)*
+
+  What this project's own corpus said as of the two-hundred-and-sixteenth
+  filing: `grep -ri brotli` over
+  `D:\Dev\Rag-Specialized\PDF_Spec\` returned **ZERO hits**. The only
+  mentions anywhere in pdfce's docs are **incidental and about a
+  different thing** — `brotli-decompressor` as a *transitive dependency
+  of the rejected `allsorts` font crate* (`PRIOR_ART.md`,
+  `docs/decisions/004`), which is **WOFF2 font compression, not a PDF
+  stream filter**. **Do not read those hits as evidence about the
+  filter.**
+
+  **★★ WHAT WAS FOUND, and it must be read precisely.** An **untracked**
+  file `jina.txt` at the repo root (2026-08-21 06:54, presumably the
+  operator's own scrape, not committed) is the PDF Association's page
+  `https://pdfa.org/resource/extension-brotli/`, *"Brotli compression in
+  PDF"*, **published by the PDF Association © 2026**. Its own words:
+
+  > *"This document specifies an **extension to the PDF 2.0
+  > specification** (ISO 32000-2:2020) to allow the use of Brotli for
+  > compression of PDF stream data. Brotli is a well-standardized,
+  > patent-free specification with several independent implementations."*
+
+  The Brotli extension dictionary is listed on the PDF Association's
+  **PDF extensions page** (`pdfa.org/extensions#brotli-compression`), and
+  the specification is a **PDF Association publication**
+  (`pdf-extension-brotli.pdf`), with technical comments routed to the
+  **PDF TWG**.
+
+  **★★★ THEREFORE THE OPERATOR'S CONDITION HAS *NOT* FIRED, AND THIS IS
+  THE DISTINCTION THE WHOLE ENTRY TURNS ON.** He asked for this *"when it
+  becomes part of the pdf 2.0 standard"*. **A registered PDF Association
+  EXTENSION to ISO 32000-2:2020 is not ISO 32000-2:2020.** It is a
+  published, citable, vendor-neutral specification — materially stronger
+  evidence than "nothing found", and strong enough that adoption is
+  foreseeable — but the base standard has not absorbed it. **Recording it
+  as "now in PDF 2.0" would be exactly the claim-bearing over-read the
+  project's own sourcing rules forbid**, and it would fire a conditional
+  the operator scoped deliberately.
+  **What would fire it:** the extension being folded into ISO 32000-2 (an
+  amendment, or the next edition), or the operator saying the extension
+  itself is enough. **The second is his call, not the engineer's** — see
+  the open question this filing adds below.
+
+  ⚠ **Two caveats on the source, both deliberate — ★ BOTH DISCHARGED
+  2026-08-21 (two-hundred-and-seventeenth filing); kept legible rather
+  than deleted, because the shape of what they warned about is the
+  reusable part.** (1) It is a **scrape in an untracked working-tree
+  file**, not a corpus entry — a dated reading, not a standing fact
+  (`R199`), and it should be re-checked against `pdfa.org` before
+  anything is built on it. → **Superseded**: the corpus entry
+  `filter__brotli.md` is written off the extension specification and the
+  two licensed ISO primaries. **The scrape itself was then swept into a
+  code commit by a `git add -A` and deleted rather than committed** —
+  see this filing's housekeeping note in `SESSION_LOG.md`. (2) **The
+  extension PDF itself was not read** — only the landing page describing
+  it; the filter name, the stream-dictionary key and the parameter set
+  are therefore **unknown to this entry** and must not be guessed. →
+  **Discharged**: the filter name is **`/BrotliDecode`**, the document is
+  **`EXTN-BROTLI-1 v1.3`**, and the parameter set is **`FlateDecode`'s
+  Table 8 predictors verbatim** — see the amendment box at the head of
+  this entry. **The caveat was right to refuse to guess: the guess a
+  search would have supplied was `§7.4.11 of ISO 32000-2:2020`, and that
+  clause does not exist.**
+  `pdfce-spec-librarian` was dispatched in parallel with this filing to
+  establish the status properly and write it into the corpus (that RAG is
+  **not this role's to write** — hard rule 6); **this entry points at
+  whatever that produces, and at the extension document itself, rather
+  than standing as the record.**
+
+  **The shape of the work when it lands** — a new decode filter beside
+  `FlateDecode`/`LZWDecode` in `pdfce-core`'s `filters` module, subject
+  to the same standing rules as every other filter, **none of them
+  optional**:
+  - an **output-size ceiling** (`ARCHITECTURE.md` §10). Brotli's
+    compression ratio makes it a **decompression-bomb carrier by
+    construction**, which is exactly why the ceiling is not a formality
+    here;
+  - a **`cargo-fuzz` target**, same as every other filter;
+  - a **dependency-licence classification under project rule 13 BEFORE
+    any crate is added.** The obvious crate (`brotli`) is
+    **BSD-3-Clause/MIT dual — permissive** — but **that must be
+    re-verified live at adoption time, not taken from this note.** A
+    licence recorded in a roadmap entry is a **dated reading, not a
+    standing fact** (`R199`).
+    **★ DONE ONCE, 2026-08-21 (two-hundred-and-seventeenth filing):**
+    `brotli` **8.0.4** verified live on crates.io as **`BSD-3-Clause AND
+    MIT`**, so a read-side addition needs **no operator licence call**.
+    **That is itself a dated reading** and does not retire the bullet —
+    re-check at adoption. What it *does* retire is the possibility that
+    the licence is the blocker;
+  - **`THIRD_PARTY_LICENSES.md` regenerated by `cargo-about`** the moment
+    the dependency set changes (project rule 13).
+
+  **★ THE WRITE SIDE IS PART OF THIS, AND IT IS THE HALF THAT TOUCHES AN
+  INVARIANT.** Read-only support would let pdfce *open* such a file;
+  **emitting** Brotli-compressed streams is a separate deliverable. And
+  **re-emitting an UNTOUCHED Brotli stream must be byte-identical** —
+  project rule 3, round-trip / minimal-diff. **That is not automatic:**
+  it requires the untouched stream to be **copied as bytes, never
+  decoded-and-re-encoded**, because Brotli encoders are not required to
+  be deterministic across versions or quality settings, and a re-encode
+  would rewrite bytes pdfce did not logically touch. The existing filter
+  architecture already honours this for `FlateDecode`; the obligation is
+  recorded now so it is not rediscovered at implementation time.
+
+- **`tools/ghent-check.py` HAS NO CALIBRATED THRESHOLD FOR
+  REFERENCE-STRIP PATCHES — filed 2026-08-21 (two-hundred-and-sixteenth
+  filing). An INSTRUMENT item, not a feature item.**
+
+  Three Ghent soft-mask patches (`1_GWG1610`, `1_GWG168`, `1_GWG169`) sit
+  at **0.962 / 0.978 / 0.986** reference-strip correlation after
+  `Pass 97.0d` and are **still reported UNRESOLVED**, because the checker
+  has no threshold to resolve them against. **The board therefore
+  understates what shipped** — 11 of 51 patches are UNRESOLVED, and at
+  least these three are UNRESOLVED for want of a number rather than for
+  want of a renderer.
+
+  **There is now a bimodal split to calibrate against, which there was
+  not before**: **0.96–0.99** for the three fixed patches versus
+  **0.04–0.41** for the 16-bit patches — a gap of **≈0.55 with nothing in
+  it**. An unusually clean separation; the calibration is correspondingly
+  cheap.
+
+  **★ IT WAS LEFT ALONE ON PURPOSE, AND THE REASONING IS THE ITEM.**
+  Carried here in full so this does not read as a forgotten chore and get
+  done by the next session in the one context where it is least
+  trustworthy: ***calibrating an instrument immediately after making it
+  report what you wanted is not a measurement.*** The threshold must be
+  derived from something other than the run that motivated it — a
+  separate corpus sweep, the 16-bit cluster's own upper bound, or a
+  pre-registered value — and **the derivation must be filed with the
+  number** (`R197`). Adjacent to `R191` (an instrument failing is not the
+  subject failing) without being an instance of it: here the instrument
+  is not failing, it is **silent**, and the temptation is to give it a
+  voice tuned to today's answer.
 
 - **★★★ NETWORK, filed 2026-08-13 (hundred-and-forty-fourth filing) —
   `pdfce-fetch`: THE ONE FETCH PRIMITIVE, IN A SIBLING CRATE, STRIPPABLE
@@ -69625,10 +70531,78 @@ added. See that section below.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
-**NEW this filing (hundred-and-eighty-second filing, 2026-08-18) — both
+**NEW 2026-08-21 (two-hundred-and-sixteenth filing) — one question, arising
+directly from your own Brotli request. Operator-question ceiling moves
+`(bp)` → `(bq)`, next free `(br)`:**
+
+- **★★ (bq) You said Brotli "when it becomes part of the pdf 2.0
+  standard." It is currently a PDF ASSOCIATION EXTENSION *to* ISO
+  32000-2:2020, not part of ISO 32000-2 itself. Does the extension
+  satisfy your condition, or do you want to wait for the base standard?**
+
+  **The distinction is real, not pedantic.** `pdfa.org/resource/extension-brotli/`
+  (© 2026, PDF Association) says in its own words that the document
+  *"specifies an **extension** to the PDF 2.0 specification (ISO
+  32000-2:2020)"*, and the Brotli dictionary is registered on the PDF
+  Association's **extensions** page. That is a published, citable,
+  vendor-neutral, patent-free specification with several independent
+  implementations — **but ISO 32000-2:2020 as published does not contain
+  it.** (Found in `jina.txt`, an untracked scrape at the repo root, dated
+  2026-08-21 06:54 — presumably yours.)
+
+  **★★★ AMENDED 2026-08-21 (two-hundred-and-seventeenth filing) — THE
+  QUESTION IS UNCHANGED, BUT ONE HALF OF ITS PREMISE TURNS OUT TO BE
+  DIFFERENT FROM HOW YOU PUT IT, AND YOU SHOULD HAVE THAT BEFORE
+  ANSWERING.** `pdfce-spec-librarian` sourced this properly against the
+  licensed ISO primaries and the extension itself
+  (`D:\Dev\Rag-Specialized\PDF_Spec\filters\filter__brotli.md`):
+
+  - **The specification is real, finished, and two days old.**
+    **`EXTN-BROTLI-1 v1.3`, *Brotli compression in PDF 2.0*, PDF
+    Association PDF TWG, announced 2026-08-19**, CC-BY-4.0. The filter
+    is **`/BrotliDecode`**. It reuses `FlateDecode`'s predictors
+    verbatim, so most of the work already exists in pdfce.
+  - **Nothing is scheduled on the ISO side.** Zero Brotli hits in ISO
+    32000-2:2020's 1,023 pages, zero in ISO 32000-1:2008, and **zero
+    Brotli work items in ISO/TC 171/SC 2's catalogue.** No amendment, no
+    dated target.
+
+  **So "wait until it becomes part of the PDF 2.0 standard" is waiting
+  for an event with no date on it.** That may still be exactly what you
+  want — but it is a *decision to wait indefinitely*, not a *decision to
+  wait a while*, and those read very differently. **Eight shipping
+  products already implement it** (pdfium, pdf.js, MuPDF, Ghostscript,
+  iText, BFO, IDRsolutions, PDF-XChange), so "software that does not know
+  the extension" is a shrinking set rather than a fixed one.
+
+  **Two things that do NOT change the question, recorded so they are not
+  mistaken for arguments:** the `brotli` crate is permissive
+  (`BSD-3-Clause AND MIT`, verified 2026-08-21), so **licensing is not a
+  blocker either way**; and pdfce's current behaviour on such a file is
+  **conformant refusal**, not a mis-render — it reports
+  `UnsupportedFilter("BrotliDecode")`.
+
+  **What each answer buys:**
+
+  | you say | consequence |
+  |---|---|
+  | **"the extension is enough"** | pdfce can implement Brotli now, ahead of most readers. **Files pdfce WRITES with it will not open in software that does not know the extension** — an extension is optional by construction, so this is a real interoperability cost you would be choosing, not a risk being hidden from you. Reading such files is pure upside and carries no such cost. |
+  | **"wait for the base standard"** (the default if you do not answer) | the Backlog entry stays conditional and nothing is built. pdfce cannot open a Brotli-compressed PDF in the meantime — it would report an unsupported filter rather than mis-render, which is the conformant behaviour. |
+  | **"read yes, write no"** | the middle option, and probably the honest one: **decoding an extension costs nobody anything**, while **encoding with it decides what other people's software must understand.** Available if you want it; not assumed. |
+
+  **Why it is yours and not the engineer's.** It is a question about what
+  *your* files must be openable by — an interoperability policy, not a
+  technical judgement. The same shape as `(bl)` (whether a CC-BY-SA-4.0
+  model may ship in an MIT folder): the engineering is decided either
+  way, the *commitment* is not.
+
+  **Default if unanswered: wait for the base standard.** Nothing is built
+  and nothing is written that another reader cannot open.
+
+**NEW in the hundred-and-eighty-second filing (2026-08-18) — both
 filed OPEN with `Pass 101.0` / `Pass 101.1`, neither answered by the
-engineer, and both deliberately so. Operator-question ceiling moves
-`(bn)` → `(bp)`, next free `(bq)`:**
+engineer, and both deliberately so. Operator-question ceiling moved
+`(bn)` → `(bp)` at that filing:**
 
 - **★★ (bo) Do you accept that build stamping makes pdfce's builds
   NON-REPRODUCIBLE — two builds of byte-identical source producing
@@ -81097,7 +82071,81 @@ same cause (hashes exist only at commit time), two different failure modes.
   splice-shortened one without an oracle it does not have.
   New RAG file:
   `D:\dev\rag\rust\prose_with_backticks_through_a_shell_string_undergoes_command_substitution_silently.md`.
-  **Ceiling moves `R206` → `R207`; next free `R208`.**
+  ~~**Ceiling moves `R206` → `R207`; next free `R208`.**~~ **Superseded
+  by `R208`, below (2026-08-21, same day).**
+
+- **R208 — A GRAPHICS-STATE FIELD WHOSE DEFAULT MATTERS MUST BE FINDABLE
+  *FROM THE FIELD*. ADDING ONE OBLIGES YOU TO A SINGLE NAMED PREDICATE
+  EVERY "IS THE STATE STILL DEFAULT?" SITE CALLS — NEVER TO REMEMBERING
+  THE SITES (2026-08-21; librarian-minted, two-hundred-and-sixteenth
+  filing; THIRD occurrence, over this project's two-instance promotion
+  bar; the dispatching engineer proposed the mint AND the useful form,
+  both adopted).**
+
+  **The mechanism, and it is not "somebody forgot".** `pdfce-render`'s
+  graphics state has a growing set of fields whose **default value is
+  load-bearing** — a fast path is taken *only if every one of them is
+  still at its initial value*. Each new field must therefore be added to
+  **every predicate that asks "is the state still default?"**, and those
+  predicates are **scattered by construction**: they live at the call
+  sites that benefit from the fast path, not next to the field. **Nothing
+  makes them findable from the field.** So adding a field is a change
+  whose full obligation is **invisible from the place the change is
+  made** — the definition of a defect that recurs.
+
+  **Three occurrences, one shape, all in `pdfce-render`:**
+  1. `nonseparable` omitted from `outer_is_neutral` — a group with a
+     non-separable blend mode took the inline path.
+  2. `nonseparable` omitted **again**, from the **reset list** — a
+     different predicate, same field, same session-class.
+  3. **`soft_mask` omitted from `outer_is_neutral` (`Pass 97.0d`,
+     `86a7b70`)** — a masked group with a `Normal` blend and alpha 1 took
+     the inline path and **had its mask applied per object with no result
+     to apply it to**, which is exactly the §11.4.5 defect `97.0d`
+     existed to fix, re-entering through the predicate that decides
+     whether `97.0d`'s code runs at all.
+
+  **★ WHY THIS IS MINTED AND NOT LOGGED, and it is the whole warrant: the
+  comment directly above `outer_is_neutral` had ALREADY NAMED THE
+  MECHANISM TWICE, IN PAST TENSE** — *"a new graphics-state field has to
+  be added to every predicate that asks 'is the state still default?',
+  and nothing makes those sites findable from the field."* **A comment
+  that correctly predicts its own next defect, and is then not acted on,
+  is a design note, not a guard.** The failure is not that the mechanism
+  was unknown; it is that **knowing it was left as a thing to remember**.
+  This project has ruled repeatedly (`R193`, `R194`, decision 075) that a
+  count alone does not warrant a mint — here the warrant is stronger than
+  the count: **a documented, correctly-stated warning failed to prevent
+  the very instance it described.**
+
+  **THE RULE IS THE REMEDY, NOT THE REMINDER, and that distinction is the
+  engineer's own framing, adopted verbatim:** *"the useful form is not
+  'remember to update the predicate' but 'a graphics-state field whose
+  default matters must be findable FROM the field'."* Concretely: **one
+  `GraphicsState::is_transparency_neutral()` (or equivalently named
+  single predicate) that every such site calls**, so that adding a field
+  means editing **one function whose body enumerates the fields** — a
+  place the compiler and an ordinary reader both reach from the field's
+  own definition. A site that needs a *narrower* question asks it **beside**
+  the shared predicate, never instead of it.
+
+  **What this rule does NOT claim.** It does not say a fast path is wrong,
+  and it does not forbid additional per-site conditions. It says the
+  *neutrality* half must have exactly one definition. **And it is not
+  `R151`** (a core API with no caller): that is about a capability nobody
+  reaches; this is about **one capability reached from several places
+  that must agree**, where the defect is disagreement, not absence.
+
+  **No gate is proposed, and that is deliberate rather than an
+  oversight.** A checker would have to know which fields' defaults are
+  load-bearing — the very judgement the rule exists to centralise. **The
+  centralisation IS the enforcement**: once every site calls one
+  predicate, a missing field is a missing line in one function, which is
+  the kind of omission ordinary review catches. Same warrant hard rule
+  10 and `R207` already give for declining gates whose oracle is the
+  fact being checked.
+
+  **Ceiling moves `R207` → `R208`; next free `R209`.**
 
 ## Update protocol
 

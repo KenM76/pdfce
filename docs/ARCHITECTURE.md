@@ -1533,6 +1533,138 @@ D:\Dev\pdfce\
                                    `Pass 85.5` gap-inventory and
                                    `iccce`-coordination Backlog entries,
                                    both corrected this filing.
+                                   **★★★ AMENDED 2026-08-21
+                                   (two-hundred-and-sixteenth filing,
+                                   `Pass 97.0`,
+                                   `7160819`/`9b49ca0`/`86a7b70`;
+                                   decision 077) — THREE OF THIS CELL'S
+                                   STANDING CLAIMS ARE NOW FALSE AND ARE
+                                   KEPT ABOVE ONLY AS HISTORY.**
+                                   **(1)** *"pdfce composites them as
+                                   ordinary groups today, approximated
+                                   and counted via
+                                   `groups_knockout_approx` (47)"* and
+                                   *"`groups_knockout_approx` still
+                                   counts every knockout group as
+                                   approximated"* — **§11.4.6 knockout
+                                   is IMPLEMENTED.** `KnockoutTarget` in
+                                   `canvas.rs` carries **four planes
+                                   where a `Pixmap` has one**: frozen
+                                   initial backdrop, running result,
+                                   `α_g`, `f_g`. Each element is
+                                   rasterised into a reused scratch at
+                                   full opacity so its alpha returns as
+                                   **pure coverage `f_s`**, with `q_s`
+                                   taken out of the paint — because
+                                   §11.4.8 scales the destination by
+                                   `(1 − f_s)` where the ordinary
+                                   formula has `(1 − α_s)`. §11.4.6
+                                   NOTE 6's nesting rule is honoured: a
+                                   non-isolated group inside a knockout
+                                   group inherits the **OUTER** group's
+                                   initial backdrop. Ghent `1_GWG161`
+                                   **14 traps → 2** (2/16 cells correct
+                                   → 14/16); `2_GWG120_White_OP-KO`
+                                   still passes; no patch regressed.
+                                   **(2)** *"non-isolated knockout (the
+                                   common case) is NOT representable,
+                                   pending buffer-model work"* — **a
+                                   STATED BLOCKER, FALSIFIED BY BUILDING
+                                   IT.** It was true of the single
+                                   premultiplied-alpha `Pixmap` the
+                                   claim was made about, and the claim
+                                   silently generalised from *that
+                                   buffer* to *any buffer pdfce could
+                                   have*. Same shape as `Pass 85.5`'s
+                                   `iccce` gate and `85.4b`'s "needs
+                                   `Pass 97.0`'s buffer": **three
+                                   recorded blockers in this project
+                                   now, each retired by someone trying
+                                   it.** The general lesson is `R199`'s
+                                   — a recorded blocker is a dated
+                                   reading, not a standing fact — and
+                                   this instance adds the sharper half:
+                                   **a representability claim is a claim
+                                   about a NAMED data structure, and
+                                   naming the structure is what stops it
+                                   generalising.**
+                                   **(3)** *"the mask applied
+                                   per-element, not to the group's
+                                   RESULT"* — **fixed** (`Pass 97.0d`).
+                                   The mask is lifted out of the
+                                   contents' clip at a group `Do` and
+                                   applied **once** to the composite;
+                                   folding into the clip remains correct
+                                   for an **elementary** object
+                                   (§11.6.4.1 makes the mask value that
+                                   object's `q_m`) and multiplies **once
+                                   per object** inside a group, so the
+                                   error grew as `M^n` over `n`
+                                   overlapping objects and was invisible
+                                   on single-object fixtures.
+                                   Reference-strip correlation
+                                   `1_GWG1610` 0.576 → **0.962**,
+                                   `1_GWG168` 0.725 → **0.978**,
+                                   `1_GWG169` 0.905 → **0.986** (mean
+                                   over three, 0.735 → 0.975). Counter
+                                   `soft_masks_on_group_result`; the one
+                                   unliftable case (a `W n` clip between
+                                   the `gs` and the `Do`) keeps the old
+                                   behaviour on the **existing**
+                                   `soft_masks_reset_stale` rather than
+                                   getting a third name for one
+                                   condition, and reads **zero** on all
+                                   three patches.
+                                   **UNCHANGED AND NOW THE LOAD-BEARING
+                                   GAP:** this cell's `DeviceCMYK`
+                                   **blending**-space obligation, stated
+                                   in the paragraph above as *"(2) the
+                                   SAME buffer is also where blending
+                                   happens correctly at all when a
+                                   group's blending colour space is
+                                   DeviceCMYK"*. **That paragraph is
+                                   correct and is now the whole
+                                   remainder.** `Pass 97.0` corrected
+                                   every group-model mechanism it set
+                                   out to correct and **the Ghent board
+                                   did not move — 26 pass · 14 FAIL · 11
+                                   UNRESOLVED of 51, before and after**
+                                   (trap count 67 → 55, all 12 of them
+                                   `1_GWG161`'s). Derived by hand on
+                                   `1_GWG162`'s `Difference` cell:
+                                   complement, `|cb′ − cs′|`, complement
+                                   back = `DeviceCMYK 1 0 1 0`, the
+                                   green the trap surround requires;
+                                   pdfce renders `(237,1,140)`, **pdfium
+                                   `(202,29,108)` — both blend in RGB
+                                   and both are wrong, differently**, so
+                                   pdfium is a **peer, not an oracle**,
+                                   for anything §11.3.4 governs. **Every
+                                   Ghent transparency patch declares
+                                   `/Group /CS /DeviceCMYK` on the
+                                   PAGE**, including `3_GWG161` whose own
+                                   objects are `ICCBased` RGB. Full
+                                   derivation:
+                                   `docs/compositor-plan.md`'s head
+                                   amendment (`:8–179`, the plan of
+                                   record) and `ROADMAP.md`'s
+                                   `7160819`/`9b49ca0`/`86a7b70` Shipped
+                                   entry.
+                                   **STILL NOT DONE, so this cell is not
+                                   closed:** only explicit `/K true`
+                                   groups are treated as knockout — the
+                                   three larger tiers this cell itself
+                                   enumerates (§9.3.8 `/TK`, §11.7.4.4
+                                   `B`/`b`, §11.6.7 shading patterns)
+                                   are untouched; `f_g` is approximated
+                                   by `α_g` for a group used as an
+                                   *element* of a knockout group (exact
+                                   whenever that group's own elements
+                                   are opaque); `/AIS` is not
+                                   distinguished; and **`/TR` is still
+                                   read, counted
+                                   (`soft_mask_tr_ignored`) and NOT
+                                   evaluated**, unchanged.
     pdfce-print\                 <- Printing: job planning + spooling. Shipped with
                                    `Pass 55.2` (2026-08-10) but never documented in this
                                    tree until the eighty-fifth filing — a filing gap this
@@ -22657,13 +22789,30 @@ device (`OP-N1`, 0 occurrences in 756 pages of corpus; spec item **C2**).
 The justification for building it is Acrobat-parity: Acrobat enables
 Overprint Preview automatically for PDF/X, so a PDF/X-4 file's *expected*
 on-screen appearance includes it. Because it is a choice, **what pdfce
-chose has to be visible**: `overprint_composited`, `overprint_refused` and
-`overprint_pixels` are on `render-page`'s stable stdout line, and **a
+chose has to be visible**: `overprint_composited`, `overprint_refused`,
+`overprint_pixels` and — since `Pass 97.1b` (`0d5fc29`, 2026-08-21) —
+`overprint_images_unsupported` are on `render-page`'s stable stdout line,
+and **a
 composite that cannot run falls back to a normal paint AND says so**
 (project rule 4 — a silent fallback is the forbidden half). `overprint_
 refused` non-zero means the operator is seeing knocked-out backdrops where
 a press would show ink: a shortfall that **cannot be detected by looking at
 the page**, because the page looks like an ordinary correct render.
+
+**★ The fourth counter is deliberately NOT more `overprint_refused`, and
+the distinction is the point rather than a naming preference.**
+`overprint_refused` means *the composite **was offered** this paint and
+could not run it*; `overprint_images_unsupported` means *the composite was
+**never offered** this object class at all* — `overprint::composite` has
+exactly one call site, in the path and glyph painter, so an image XObject
+never reaches it. Before `97.1b` **nothing counted that**: a page full of
+images under `/OP true` reported **zero** overprint shortfall. Widening the
+older counter would have made a whole missing object class look like a run
+of ordinary failures **and would have moved a number an operator may
+already be diffing between runs.** First measurement includes `2_GWG031`
+= 1 — **a Ghent patch that PASSES the suite**, which is the cleanest
+statement of why the two are separate: a patch can pass its own trap and
+still contain an object class the renderer never offered the feature to.
 
 **4. ★ THE REJECTED ALTERNATIVE, recorded because it was MEASURED, not
 reasoned about.** Table 149's SPOT row preserves the backdrop under
@@ -23368,4 +23517,92 @@ free 072.**
   covers the mechanism; this decision is an *application* of it, with a
   reasoned exception (reason 2) rather than a new case for the rule
   itself.
-  **Ceiling moves 075 → 076; next free 077.**
+  ~~**Ceiling moves 075 → 076; next free 077.**~~ **Superseded by
+  decision 077, below.**
+
+- **2026-08-21 — Decision 077. PDFCE OWNS THE COMPOSITING ARITHMETIC;
+  `tiny_skia` IS DEMOTED FROM "THE THING THAT BLENDS" TO "THE THING THAT
+  SCAN-CONVERTS" FOR GROUP COMPOSITES — AND THE BLENDING COLOUR SPACE
+  (§11.3.4), NOT THE GROUP MODEL, IS WHAT THE GHENT TRANSPARENCY PANELS
+  ARE BLOCKED ON.** `Pass 97.0`,
+  `7160819`/`9b49ca0`/`86a7b70` (`ROADMAP.md` *Shipped*, top).
+
+  **The crate-boundary half.** `crates/pdfce-render/src/compositor.rs`
+  (new, ~930 lines with 12 unit tests) holds §11.4.4's element formula,
+  §11.4.8's knockout variant, §11.4.4's backdrop removal, §11.3.7.3's
+  `Union` and all thirteen of Table 136's separable blend functions.
+  `tiny_skia` keeps scan-conversion (`Mask::fill_path` coverage, scratch
+  pixmaps for images/shadings/patterns) and the *isolated* group
+  composite, which still goes through `draw_pixmap` because it is
+  identical there. **This was decision 068's stated direction; it is now
+  built**, and the reason it had to be built is not performance or
+  elegance: **`tiny_skia`'s `BlendMode` enum cannot express the four
+  non-separable modes, cannot express knockout's `(1 − f_s)`, and cannot
+  express backdrop removal at all.** A library whose type system cannot
+  name the operation is not a library you can call for it.
+
+  **What it fixed, and it was a real defect, not a refactor.** Both
+  hand-written composites from `Pass 85.4b` substituted **a white
+  backdrop wherever the destination was transparent** — §11.4.4
+  specialised to `α_b = 1`, wrong precisely where §11.4.7 makes
+  transparency common, because pdfce's page buffer starts **transparent**
+  and the white medium is composited in **once at the end**.
+  `Sat(white) = 0`, `Lum(white) = 1`, so Hue/Saturation/Color over white
+  **is white**. `1_GWG162`: three cells (255,255,255) → (184,184,184),
+  matching pdfium exactly; Luminosity (106,106,106) → (255,20,159)
+  against pdfium's (255,22,158). **The failure was mode-dependent and
+  therefore invisible in review** — harmless for the four modes
+  satisfying `B(1, cs) = cs`. A second defect fell out of the same read:
+  accumulated alpha used `max(a, b)` where §11.3.7.3 says
+  `Union(a, b) = a + b − ab`, under-reporting alpha on **every**
+  anti-aliased edge inside a group.
+
+  **★ THE SCOPING RULING, which is the part that changes future work.**
+  Every mechanism `Pass 97.0` promised was built and each is measurably
+  correct (Ghent traps 67 → 55; `1_GWG161` 14 → 2; soft-mask strip
+  correlation 0.735 → 0.975 mean over three patches) — **and the board
+  did not move: 26 pass · 14 FAIL · 11 UNRESOLVED of 51, before and
+  after.** `docs/compositor-plan.md` §4 expected **seven** patches from
+  Stage A and got **zero**. **Decided: the blend SPACE, not the spot
+  PLANES, is `Pass 97.1`'s leading deliverable.** Evidence is a hand
+  derivation on `1_GWG162`'s `Difference` cell whose operands the file
+  prints — `DeviceCMYK 0 1 0 0` over `DeviceCMYK 0 0 0 1`, §11.3.4
+  complement, `|cb′ − cs′|`, complement back = `DeviceCMYK 1 0 1 0`,
+  exactly the green the trap surround requires. pdfce renders
+  `(237,1,140)`; **pdfium renders `(202,29,108)`**. **Every Ghent
+  transparency patch declares `/Group /CS /DeviceCMYK` on the PAGE**,
+  including `3_GWG161` whose own objects are `ICCBased` RGB — so *a
+  renderer blending in device sRGB is wrong on all of them regardless of
+  what the objects are coloured in*, and no amount of group-model
+  correctness reaches the trap.
+
+  **★★ AND THE COROLLARY ABOUT ORACLES, recorded because this project
+  uses pdfium as a check routinely.** pdfium agreed with the corrected
+  group model **to within 2/255** and fails the §11.3.4 cells
+  **differently from pdfce**. **It is a peer, not an oracle** — useful as
+  a second opinion on the group model, useless as a verdict on the blend
+  space. **Agreement is only evidence where the two implementations do
+  not share the defect**, which is the same reasoning `972ddbb` recorded
+  when tiny-skia's *narrow* defect gave a correct non-separable
+  implementation a signature.
+
+  **Body sections updated in this same filing:** §4's render-crate cell
+  (three of its standing claims marked false, with the residue kept —
+  see the ★★★ amendment there). **§3's GUI-core separation invariant is
+  untouched and verified**: `cargo tree -p pdfce-core` /
+  `-p pdfce-render` show no GUI dependency, and **no manifest was touched
+  and no dependency added, so the property holds by construction rather
+  than by re-observation.** §5's round-trip invariant is **not engaged** —
+  this Pass is entirely inside `pdfce-render`, with no writer path.
+
+  **One standing rule minted, `R208`** (`ROADMAP.md` *Standing rules*):
+  *a graphics-state field whose default matters must be findable FROM the
+  field.* Third occurrence of one shape (`nonseparable` twice, then
+  `soft_mask` in `Pass 97.0d`), and the warrant is stronger than the
+  count — **the comment directly above the offending predicate had
+  already named the mechanism twice in past tense and did not prevent the
+  instance it described.** Remedy is a single named
+  `GraphicsState::is_transparency_neutral()`-shaped predicate every site
+  calls, not a reminder.
+
+  **Ceiling moves 076 → 077; next free 078.**
