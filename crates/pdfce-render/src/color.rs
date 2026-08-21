@@ -596,8 +596,23 @@ impl ColorSpace {
     /// its a/b pair's `DeviceN` **omits** the backdrop's colorants and its
     /// c/d pair **includes** them at 0 %, and the patch's own ReadMe says
     /// the colorant LIST, not the tint values, decides the outcome.
-    /// `/Indexed` appears in **four of the seven** failing Ghent overprint
-    /// patches.
+    ///
+    /// ★ **`/Indexed` is PRESENT in four of the seven failing Ghent
+    /// overprint patches, and REACHABLE in none of them** — measured
+    /// 2026-08-21: every one of those spaces is an **image** colour space,
+    /// `overprint::composite` has no image call site, and pre- and
+    /// post-fix binaries report identical overprint counters on all four.
+    /// This method is correct, cited and currently **inert**; it stops
+    /// being inert when `overprint_images_unsupported` can fall.
+    ///
+    /// ★★ **This is the THIRD copy of that claim and the last one
+    /// corrected**, which is worth more than the correction. The other two
+    /// are in `crate::overprint` — the `classify` arm and its test — and
+    /// both were fixed in the commit that measured the result. This one
+    /// was missed because **the sweep's boundary was the file and the
+    /// claim's boundary was the feature**, and this is the definition site
+    /// of the function the whole fix hangs on: the one place a reader
+    /// arrives at without meaning to.
     ///
     /// # Returns
     ///
