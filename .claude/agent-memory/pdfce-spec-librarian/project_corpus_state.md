@@ -62,6 +62,7 @@ heading (`**<N>. `).**
 | 46 | ★ **THE DELIBERATELY-NARROWED dispatch.** Honour the scope cut and LABEL the skipped half in THREE places (banner, gap line, index) · when a brief and an existing corpus file disagree on an identifier the CORPUS usually wins · **a brief demanding something "verbatim" that returns 0 hits document-wide means the HEADLINE IS THE NEGATIVE** · check the NEWER EDITION before filing an ambiguity · a NOTE in 1.7 can be a `shall` in 2.0 · an informative NOTE can be the ONLY statement of a load-bearing rule · 2.0's clean Unicode cross-checks a 1.7 scrambled equation |
 | 49 | ★ **THE MODALITY-DECISION dispatch — `shall` vs `should` IS the engineering decision.** **The MODALITY ITSELF can be version-gated** (1.7 hedged writer `shall not ORDINARILY` + a bare-indicative reader consequence → 2.0 writer `should` + explicit processor `shall`), and the later edition's SPLIT is ISO's own reading of the earlier text · a hedged `shall` is a THIRD modality class · **a writer-side "must I clamp?" is answered by the READER's obligation** · default-value chains and containment chains are DIFFERENT GRAPHS · a missing-OPERATION negative needs a document-wide CO-OCCURRENCE regex, not a clause-scoped term count · a figure can illustrate more nesting than any clause requires · **the dispatch's cheap "just confirm this quote" item is where the corpus error was** (Annex C is `(normative)`, not informative) |
 | 50 | ★ **THE TWO-SOURCES-DISAGREE dispatch — and the CORPUS'S OWN COMPRESSION is the ancestor of the error.** A one-line table compression is a CLAIM and it propagates (`Intensity 0–2` → a validator refusing conforming `/I 1.5`); **quote the row, never compress it, when a cell is what an implementer will read** · the enumeration-vs-RANGE drafting idiom contrast lives in the SIBLING ROW of the same table · **THREE of my own counts were wrong, all from `head`-truncated grep listings — run `grep -c`, anchor `^KEY` for TABLE ROWS, and add a pre-report re-measure pass** · grep the RECOVERY VERB (`tolerate`, `adjusted to the nearest`) not the key name · **a key name can be overloaded across two unrelated features** (`/BE` = border effect ∪ multimedia "best effort"; second instance after `/AS` ⇒ a pattern) · **the same key in three tables can carry three different normative forces, and only one has the `shall`** · an ABSENT row is a finding · "meaningful only for X" is a verbatim negative whose CONSEQUENCE is still unstated · the 2.0 delta can NARROW an ambiguity without closing it · **the "confirm rather than re-derive" item is where the omission was — third instance** · bucket-5 deferrals must name their destination bucket |
+| 53 | ★ **THE CONTAINER-SCOPE dispatch** ("feature F works on container A, extend it to B") — the mechanics transfer and the CONTAINER hazards are the whole deliverable; an ABSENT scope banner on the old file lies invisibly · **evidencing an OWNERSHIP negative: find the sibling constructs where the standard DID write the exclusivity `shall not` (4 of them), and better, the normative object class it built FOR the situation (Annex F "shared objects")** · **search the PHENOMENON's phrase, not the negation's** · **★ `grep -c` under-counts multi-word phrases in the 1.7 dump (`s hall`) — 4 counts wrong, the extras were the headline** · **★ a decisive FIGURE can be a RASTER IMAGE — extract with pypdf and Read the PNG** · an edition can DE-DEPRECATE · a table row can MOVE CATEGORY and change what is legal where (q/Q) · a dispatch's table pair can be a CATEGORY ERROR · the varying thing may live in the OBJECT not the CALL SITE · the bare INDICATIVE is a fifth modality rung · my own 2 citations were wrong from line-proximity |
 | 51 | ★ **THE TWO-GAPS-NAMED-FROM-OUTSIDE dispatch** (body § 51, line ~3078) — index row added 2026-08-20; the item had been appended without one. "Clause X is ENTIRELY ABSENT" is a coverage HYPOTHESIS; an ID minted by a SIBLING corpus; the refutation is in the OLDER edition; a third clause settles a two-`should` tie; a version-delta negative can be true of the SENTENCE and false of the CONCEPT; a recorded negative is a PREDICTION and expires; UNREMEDIED ≠ PERMANENT; quote the FREE edition of a sentence that exists in both; Write the script, then run it |
 | 52 | ★ **THE SIBLING-CARRIER dispatch** ("build clause C's file, parallel to C′'s"). The dispatch's "clause X is absent" was true of the FILE and false of the COVERAGE — **third instance** · **★ the headline was a CORRECTION to the corpus's own record, and its mechanism is corpus-wide: an ISO 32000-2 erratum's review `/State` is a CHAIN of `/Text` replies linked by `/IRT` — LATEST `/M` wins — and 376 of 547 `Accepted` annots (68.7 %) carry a later `Completed` reply, so an `Accepted` read from the first reply is stale two times in three** · **a table NUMBER can name DIFFERENT TABLES in the two editions** (1.7 T178 = polygon, 2.0 T178 = LINE) · **a `free_primary` table row can be corrupted by COPY-PASTE, and the next edition printing it clean is the proof** · **a key can be VACUOUS in one edition** (1.7's `/IC` fills "line endings" on a shape that has none) **and the later edition's ADDITION proves it** · complementary restrictions in one table are a pattern — grep for the mirror of a recorded one · **"must X bound Y?" can be a true negative whose practical answer is a DIFFERENT clause with a DIFFERENT failure mode** (no clipping; §12.5.5 SCALES the `/AP` to `/Rect`) · three readings can disagree on legality and agree on the decision · **a term with EXACTLY 1 hit per edition IS the headline** · a ~58 kB Bash heredoc dies with `ENAMETOOLONG`, use Write |
 
@@ -3296,3 +3297,128 @@ clauses **diverge**. Nine findings, several of which generalise past this shape.
   uv_spawn`** — the whole heredoc is part of the spawned command line. **Use the
   Write tool for the file itself**; keep Bash heredocs for the small Python
   patch-scripts that edit `index.md`.
+
+---
+
+**53. ★ THE CONTAINER-SCOPE dispatch ("feature F works on container A; extend it
+to container B") — and the OWNERSHIP-NEGATIVE, evidenced by finding where the
+standard DID legislate exclusivity.** Established 2026-08-20 on the Pass-119.0
+"edit text inside a form XObject" build (new `iso32000__ref__form_xobject_text_edit.md`;
+`## EDIT DIRECTION` = a **THIRD** axis on `iso32000__s__8.10.md`, after READ and
+WRITE/AUTHOR — item 8/11 stacked twice on one clause file).
+
+- **★ THE SHAPE: the mechanics transfer, the CONTAINER-LEVEL hazards do not.**
+  The dispatch asked "do §9.4's text rules apply identically inside a form?" —
+  **yes, and that half is a one-line negative** (`FX-N5`: no clause special-cases
+  text objects by content-stream kind). **The entire deliverable is the second
+  half: what the new container has that the old one did not.** A form has a
+  `/BBox` **clip**, a `/Matrix`, an inherited text state, a `/Group`, a `/Ref`
+  proxy, an `/OC` visibility gate, a `/StructParent` — a page has none of these.
+  **And the existing mechanics file was SILENTLY container-scoped** —
+  `iso32000__ref__text_edit_surgery.md` never said "page `/Contents` only", so an
+  LLM grepping "text edit surgery" got a confidently wrong answer. **Prepending a
+  CONTAINER SCOPE banner to the old file is as load-bearing as the new file**
+  (item 9b's "an untouched banner actively lies", now generalised: an *absent*
+  banner lies too, and the absence is invisible).
+- **★ EVIDENCING AN OWNERSHIP/EXCLUSIVITY NEGATIVE — three moves, in order of
+  strength.** The dispatch expected "there is no rule binding a form to a page"
+  and wanted it stated plainly. Term-frequency absence (item 14) is the *weakest*
+  form of this. Two stronger ones, both found this session:
+  1. **FIND THE SIBLING CONSTRUCTS WHERE THE STANDARD DID WRITE THE
+     EXCLUSIVITY `shall not`** — four of them: Web Capture page sets ("A single
+     page object **shall not belong to more than one page set**", §14.10.4.2),
+     2.0 DParts ("**shall not be referenced by more than one parent**",
+     §14.12.2), Annex F thumbnail shared objects ("**shall not be referenced from
+     any other objects**", §F.3.9), tagged structure content items (§14.7.4.1).
+     The standard demonstrably knows the drafting idiom and declined to use it
+     here. (Same move as item 39's "prove deliberateness with a sibling clause
+     that specifies the analogue", now applied to a PROHIBITION rather than a
+     formula. It worked a second time in the same session for the nesting-depth
+     negative: 2.0 §7.10.5.3 states a 255-deep `{ }` limit for Type 4 functions
+     and states none for form recursion.)
+  2. **★ FIND THE NORMATIVE STRUCTURE THE STANDARD BUILT FOR THE SITUATION YOU
+     ARE SAYING IS UNREGULATED.** Annex F defines an object class whose
+     *definition* is the thing in question — "**shared objects (objects
+     referenced from more than one page**…)", "Part 8 … objects, **primarily
+     named resources**, that are **referenced from more than one page**"
+     (§F.3.1, §F.3.9). The file format has a dedicated *Part* for it. This
+     forecloses every "surely that's an anomaly" reading in a way no absence can.
+- **★ SEARCH THE PHENOMENON'S PHRASE, NOT THE NEGATION'S.** `belongs to`,
+  `owned by`, `used by more than one`, `exclusively` proved only absence.
+  **`more than one page` produced the AFFIRMATIVE evidence** (both the four
+  exclusivity `shall not`s and Annex F's object class). When hunting a negative,
+  also grep the phrase a clause would use to *accommodate* the thing.
+- **★ `grep -c` UNDER-COUNTS MULTI-WORD PHRASES IN THE 1.7 DUMP — three of my
+  counts were wrong.** The extractor injects intra-word spaces (`s hall not
+  invoke`, `Specific t o a`). `shall not invoke` measured 1, is **2**;
+  `belongs to` 2.0 measured 5, is **6**; `owned by` 1.7 measured 6, is **7**;
+  `more than one page` 1.7 measured 4, is **7** — and the three extra hits were
+  **the headline evidence**. **Re-measure every reported count against a
+  whitespace-STRIPPED copy of the source** before it goes in a file. This is the
+  third distinct way a count has been wrong (item 44 unbounded-span, item 48
+  estimated-not-measured, item 50 `head`-truncated) and the first that is a
+  property of the SOURCE rather than the method. Script + a match-locator are in
+  [[spec-source-extraction-toolchain]] item 4b.
+- **★ A DECISIVE FIGURE CAN BE A RASTER IMAGE — EXTRACT IT AND LOOK AT IT.**
+  ISO 32000-1's Figure 9 (graphics-object state machine) extracts as **text**;
+  **ISO 32000-2's Figure 9 is a JPEG** — `pdfminer` returns an `LTImage` and zero
+  glyphs, so a text-only workflow silently reports "the figure says nothing".
+  `pypdf`'s `page.images` → write the bytes → **`Read` the PNG**. It settled two
+  questions nothing else could: `Do` is still absent from a text object's allowed
+  operators in 2.0, and the level was renamed *page description level* →
+  **content stream level**. Extends item 25 (a figure is normative and readable
+  as geometry) to: **a figure may not be readable at all by the usual pipeline —
+  check for an image before concluding the figure is silent.**
+- **★ AN EDITION CAN DE-DEPRECATE, AND THAT INVERTS THE ENGINEERING POSTURE.**
+  ISO 32000-2 **deleted** 1.7's "This construct is obsolete and should not be
+  used by conforming writers" from §7.8.3's form-`/Resources` fallback while
+  keeping the inheritance `shall` verbatim, and added "NOTE The above bulleted
+  list was clarified in this document (2020)." A *deleted* sentence is as big a
+  delta as an added rule: "tolerate a legacy construct" became "support a normal
+  one". **Corroborate from the standard's own EXAMPLE** — 2.0's §8.10.2 example
+  form XObject **omits `/Resources`** where 1.7's had it. (Companion to item 46's
+  "a NOTE in 1.7 can be a `shall` in 2.0" and item 49's "the modality itself can
+  be version-gated": here the *deprecation* was version-gated.)
+- **★ A ROW CAN MOVE BETWEEN CATEGORIES ACROSS EDITIONS AND CHANGE WHAT IS LEGAL
+  WHERE.** 1.7 Table 51 puts `q, Q, cm` under *Special graphics state*; 2.0
+  Table 50 puts `q, Q` under **General graphics state** and leaves `cm` Special.
+  A text object allows General and not Special ⇒ **`BT … q … Q … ET` is
+  non-conforming under 1.7 and conforming under 2.0.** Nothing in either clause's
+  prose says so; it is entirely a table-cell migration, and 2.0's NOTE 1 ("Table
+  50 … and Figure 9 … were updated in this document (2020)") is the only flag.
+  **Diff operator-category tables cell by cell across editions, not by heading.**
+- **A DISPATCH'S TABLE PAIR CAN BE A CATEGORY ERROR, not just a wrong number.**
+  "Table 95/96 in full" assumed 96 continued 95. It does not: 95 is the form
+  dictionary (its "(continued)" header is a page-break artifact) and **96 is the
+  GROUP ATTRIBUTES dictionary — a different, subsidiary object**. Compounded by
+  renumbering: **1.7 T95 = form dict, 2.0 T95 = REFERENCE dict** (form dict is
+  2.0 T93). Third instance of "a table NUMBER names different tables in the two
+  editions" (items 45, 52).
+- **THE VARYING THING MAY NOT BE WHERE THE DISPATCH PUT IT.** The dispatch asked
+  about "a form invoked with DIFFERENT `/Matrix` … at each `Do`". Impossible —
+  `/Matrix` is a form-**dictionary** entry, one per object; only the CTM at the
+  call site varies. **When a dispatch asks "what if X differs per invocation?",
+  first check whether X lives in the OBJECT or at the CALL SITE.**
+- **A CONSISTENCY SENTENCE IN THE BARE INDICATIVE IS NOT AN OBLIGATION, AND ITS
+  QUALIFIER IS THE ESCAPE HATCH.** §8.10.1's "produces the same results each
+  time, **subject only to the graphics state at the time it is invoked**" reads
+  like a guarantee and is a *definition*. Its `subject only to` clause is what
+  makes "the same form at two sizes in two fonts" correct-by-definition rather
+  than a defect ⇒ the right verdict is **REFUSE-and-disclose**, not "file an
+  ambiguity". (Modality ladder, items 6/19, extended: **indicative** is a fifth
+  rung below `may`.)
+- **MY OWN TWO CITATIONS WERE WRONG AND THE PRE-REPORT VERIFY PASS CAUGHT BOTH**
+  — `§F.2.3` was actually **§F.3.1**, and a `shall not invoke` hit I attributed
+  to §9.6.5's Type 3 `d1` is **§8.7.3.1 Table 75** (uncoloured tiling pattern).
+  Both were clause numbers I *inferred from proximity in the dump* rather than
+  read off a heading. **Walking back from the hit line to the nearest preceding
+  clause heading (`awk` on `NR<HIT` + a heading regex, then `tail -1`) is two
+  seconds and is not optional** (item 37: headings are reconstructed — so are
+  clause attributions derived from line order).
+- **The dispatch's own "also worth a look if the corpus is thin" item (`/Group`)
+  produced a real result, for the fourth time in this memory** (items 49/50: the
+  cheap item is where the finding is). A knockout group (`/K true`) makes a
+  **widened** text run *overwrite* what it now overlaps rather than blend, and a
+  **non-isolated** group (`/I` default false) composites the same edited bytes
+  differently at each invocation site — so `/Group` is not "a rendering concern",
+  it changes what the edit DOES.

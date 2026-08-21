@@ -566,3 +566,73 @@ it read-only without touching the repo.
 Also verified this session: `pypdf` is not needed for this route at all — it is a
 *source-extraction* tool; this is an *implementation-behaviour* tool. See
 [[pdf-spec-corpus-state]] § "a STATUS-CORRECTION dispatch" for when to reach for it.
+
+---
+
+**4b. ★ `grep -c` / `grep -n` UNDER-COUNT MULTI-WORD PHRASES IN THE CACHED DUMPS —
+MEASURE AGAINST A WHITESPACE-STRIPPED COPY.** Established 2026-08-20 (form-XObject
+build). The pypdf extraction injects **intra-word spaces**: `s hall not invoke`,
+`Specific t o a Type 1 Form`, `Do op erator`. A phrase search therefore silently
+misses hits, and the misses are not random — they cluster on the exact
+long-sentence normative prose a negative-result claim depends on. **Four counts
+were wrong in one session** (`shall not invoke` 1→2, `belongs to` 2.0 5→6,
+`owned by` 1.7 6→7, `more than one page` 1.7 4→7) and the extra
+`more than one page` hits were the session's **headline evidence**.
+
+Recipe — count:
+
+```python
+import re
+data = re.sub(r"\s+", "", open(DUMP, encoding="utf-8", errors="replace").read().lower())
+print(data.count("morethanonepage"))   # term with all whitespace removed
+```
+
+Recipe — locate (map a stripped-text hit back to a line number + context):
+
+```python
+raw = open(DUMP, encoding="utf-8", errors="replace").read()
+idx = [i for i, ch in enumerate(raw) if not ch.isspace()]
+s   = "".join(raw[i].lower() for i in idx)
+p = s.find(term.replace(" ", "").lower())
+line = raw.count("\n", 0, idx[p]) + 1
+ctx  = " ".join(raw[idx[max(0,p-140)]:idx[p+len(term)+140]].split())
+```
+
+**Single-word terms are safe**; anything with a space is a lower bound until
+re-measured this way. Do the re-measure **before** the count goes in a RAG file
+or a report — it is the fourth distinct way a count has been wrong
+(see [[pdf-spec-corpus-state]] items 44, 48, 50, 53).
+
+**Corollary — do not infer a clause number from line proximity.** Two of my own
+citations were wrong this session for exactly that reason. Walk back to the
+nearest preceding heading instead:
+
+```bash
+awk 'NR<HITLINE && /^F\.[0-9]/{print NR": "$0}' C:/tmp/iso32000_dump.txt | tail -1
+```
+
+---
+
+**4c. ★ A FIGURE MAY BE A RASTER IMAGE — EXTRACT IT AND `Read` THE PNG.**
+Established 2026-08-20. **ISO 32000-1's Figure 9** (the graphics-object state
+machine: which operators are legal at the page-description level vs inside a
+text/path object) extracts as **plain text** in the cached dump. **ISO 32000-2's
+Figure 9 is a JPEG.** `pdfminer` returns an `LTImage` and **zero glyphs** for it,
+so a text-only workflow reports "the 2.0 figure says nothing" — a false negative
+on a **normative** figure.
+
+```python
+import pypdf
+pg = pypdf.PdfReader(SRC).pages[162]          # 0-based physical page
+for i, im in enumerate(pg.images):            # -> [('Im0.jpg', 105221 bytes)]
+    open(f"fig_{i}.png", "wb").write(im.data)
+# then: Read the PNG with the Read tool; upscale 2x with PIL/LANCZOS if small
+```
+
+Detect the case first — `pdfminer.layout.LTImage` present on the page, and the
+figure's caption line in the dump followed immediately by the next paragraph with
+no label text between. Reading the 2.0 figure settled two things nothing else
+could: **`Do` is still absent from a text object's allowed operators in PDF 2.0**,
+and the level was renamed *page description level* → **content stream level**.
+Extends [[pdf-spec-corpus-state]] item 25 ("a figure is normative and readable as
+geometry"): **check for an image before concluding a figure is silent.**

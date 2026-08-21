@@ -82,6 +82,32 @@ made first. If a bulk revert genuinely seems necessary, commit the good work
 first — a throwaway commit costs nothing and is reversible; a checkout is
 not.
 
+**★★★ 2026-08-20 — THREE MORE, IN ONE SESSION, ALL THE SAME PATH.** Even
+with the rule already widened to "any backslash", I put
+`D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf` through a **quoted**
+heredoc (`<<'PY'`) with **doubled** backslashes — the form this file says is
+acceptable — and it still arrived as `D:\Dev<TAB>emp\pdfce<NEWLINE>cored-…`.
+Twice into `docs/NEXT_SESSION.md` and once into an agent-memory file.
+
+**So the escape processing is happening BEFORE bash sees the heredoc, and
+quoting does not stop it.** `<<'PY'` protects against *bash* expansion; it
+does not protect against the tool layer. The mitigation this file offered —
+"double every backslash" — is therefore **not sufficient**, and the sentence
+above about raw strings only helps if the payload survives to Python intact,
+which it does not.
+
+**The rule, with the escape hatch removed: a backslash never goes through the
+Bash tool. Not doubled, not quoted, not raw.** Use `Write` for a new file or
+`Edit` for a change; both take literals end to end.
+
+**And the structural mitigation that actually worked:** the benchmark path now
+appears **once**, on its own line, in `docs/NEXT_SESSION.md` §7, and every
+other mention references that section instead of repeating it. One place to
+get right beats seven places to check.
+
 Related: [[absence-needs-an-unscoped-query]] — same family. Both are cases
 where a tool returned something that *looked* like a normal result, and the
-only defence was checking with an instrument rather than with a glance.
+only defence was checking with an instrument rather than with a glance. Also
+[[splice-end-marker-must-be-searched-from-start]], from the same session:
+another scripted patch, another silent corruption, found by a reader rather
+than a check.
