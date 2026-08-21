@@ -123,6 +123,24 @@ Write the text with `Write` and pass the file (`git commit -F file`), or use
 `Edit`. Every long commit message this session went through `-F` and was
 fine; the ONE that used `-m` because it was "short" is the one that broke.
 
+**★★ AND IT HAD HAPPENED HERE BEFORE — `5047cb9`, 2026-08-11, in CI.** A
+double-quoted shell string in `ci.yml` contained `` `aes` ``, meant as a
+code-span; bash ran it as a command, found nothing, and spliced the empty
+output, so the error message printed *"pdfce-core  enables an extra feature
+on the  crate"* — **losing the single word it existed to say.** `set -e` did
+not catch it, because `echo`'s exit status is 0.
+
+Same root cause, **different medium**: a CI error string then, a commit
+message now. Two occurrences across two media is this project's promotion
+bar, and the pair is more instructive than either alone — *the danger is not
+a file format or a tool, it is that a shell reads its input.*
+
+Note also how each was found: the 2026-08-11 one only because somebody
+deliberately made the gate FAIL to see what it printed; today's only because
+I printed the message back. **Neither would have surfaced from a green
+run**, which is the property they share with the vacuous tests in
+[[splice-end-marker-must-be-searched-from-start]]'s neighbourhood.
+
 Related: [[absence-needs-an-unscoped-query]] — same family. Both are cases
 where a tool returned something that *looked* like a normal result, and the
 only defence was checking with an instrument rather than with a glance. Also

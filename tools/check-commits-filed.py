@@ -141,7 +141,22 @@ RECORD = [ROOT / "docs" / "ROADMAP.md", ROOT / "docs" / "SESSION_LOG.md"]
 BASELINE = ROOT / "tools" / "commits-filed-baseline.txt"
 
 # Paths whose change makes a commit "engineering work the record narrates".
-CODE_PREFIXES = ("crates/", "tools/", "fixtures/")
+# ★ `.github/` ADDED 2026-08-21, and the hole it closes is the funny one:
+# **the workflow that RUNS these gates was not covered by the gate that
+# checks commits are filed.** A CI change is exactly the kind of change that
+# belongs on the record -- 2ddbbbe wired eight previously-unrun gates into CI
+# and would have gone unfiled forever, invisible, because this tuple did not
+# name the directory it touched.
+#
+# Same shape as the `check-outcome-disclosed.py` finding two days earlier: a
+# gate that is green because its INPUT LIST is too narrow, not because its
+# pattern is wrong. Widening a pattern does not fix a list.
+#
+# Measured before changing, not after: seventeen commits in history touch
+# `.github/`, and the sweep below was run to confirm they are already filed
+# rather than assuming it. Any that are not go in the baseline as named debt,
+# never silently.
+CODE_PREFIXES = ("crates/", "tools/", "fixtures/", ".github/")
 
 
 def git(*args: str) -> str:

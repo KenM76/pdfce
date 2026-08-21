@@ -46,7 +46,7 @@ All green at this handoff.
 | `e5be7d5` | **`Pass 113.0`/`113.1`/`113.2`** — `transform_objects`, on **every** object kind (§2.5) |
 | `73fa218` | **`Pass 120.0`/`120.1`/`120.3`** — the object clipboard: copy, cut, paste, serialise (§2.6) |
 | `af5989f` | **`Pass 120.2`/`120.4`** — the clipboard's last two parts, **and a third real-file defect** (§2.6) |
-| `2ddbbbe` | CI ran **six of fifteen** gates; it runs **fourteen** now (§4) |
+| `108d0e8` | CI ran **six of fifteen** gates; it runs **fourteen** now (§4) |
 
 Plus two librarian filings (209th, 210th), `decision 076`, and Backlog
 `119.1` / `119.3` / `119.4` / `120.0`–`120.4`.
@@ -412,7 +412,15 @@ whose mechanism is the SCOPE OF ITS INPUT LIST rather than the spelling of a
 pattern.** The previous four were all "the regex missed a spelling". Widening a
 pattern does not fix a list that was written from one file.
 
-### ★★ AND THE GATES THEMSELVES WERE ONLY HALF-WIRED — fixed 2026-08-21 (`2ddbbbe`)
+### ★★ AND THE GATES THEMSELVES WERE ONLY HALF-WIRED — fixed 2026-08-21 (`108d0e8`)
+
+> ★ **A hash-hygiene note, because this document cited the wrong one for an
+> hour.** That commit was written, cited here as `2ddbbbe`, and then
+> **amended** — which gave it a new hash and left this file pointing at an
+> object that is no longer on `main`. It still *resolves* (git keeps the old
+> object), so nothing looked broken. **Cite a hash after the last amend, not
+> before**, and re-derive from `git log` rather than from memory of what you
+> just typed.
 
 `tools/` held **fifteen** check scripts and CI invoked **six**. The other nine
 ran only when somebody remembered to run them locally — which is exactly the
