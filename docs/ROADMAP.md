@@ -96,6 +96,203 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 113.0` (`e5be7d5`) — `EditSession::transform_objects(page, &[usize], Matrix, TransformOptions) -> TransformOutcome` — SCALE/ROTATE/SHEAR/MOVE A WHOLE SELECTION VIA `q…cm…Q` BYTE-SPAN WRAPPING, KIND-AGNOSTIC; THE OPEN "WRAP VS OPERAND-REWRITING" QUESTION CLOSES BY IMPOSSIBILITY, NOT PREFERENCE — 2026-08-20 (two-hundred-and-twelfth filing)
+
+**This filing has no shell.** Commit hash, `cargo test`/`fmt`/`clippy`
+results, and the real-CAD-file smoke test below are relayed by the
+dispatching engineer. The type definitions, doc comments, error variants,
+the `X = CTM × M × CTM⁻¹` derivation, the mixed-selection/singular-matrix
+defaults, the negative-scale-is-not-singular guard test, and the 16-test
+count were all **independently confirmed against live source this
+filing** — `crates/pdfce-core/src/vector/edit.rs` (`plan_transform_many`,
+`MixedSelection`, `SingularPolicy`, `TransformOptions`, `local_matrix`,
+`resolve_singular`), `crates/pdfce-core/src/edit.rs`
+(`EditSession::transform_objects`/`transform_preview`,
+`TransformOutcome`), `crates/pdfce-core/src/vector/decompose.rs`
+(`TextObject::ctm`), and `crates/pdfce-core/tests/transform_objects.rs`,
+all read directly. Every doc-comment claim quoted below matches the code
+on disk verbatim, not a paraphrase.
+
+**★★ The open implementation question this Pass's own Backlog entry
+carried — "`q…cm…Q` wrap vs operand-rewriting is not decided" — is now
+CLOSED, and closed by IMPOSSIBILITY rather than by preference.**
+`move_objects` rewrites numeric **operands** in place, which can express
+translation and nothing else: `re` carries an origin and a size
+(§8.5.2.1) and has no spelling for a rotated rectangle; `line_width` is a
+user-space scalar a coordinate scale leaves behind (§8.4.3.2); text and
+images carry **no coordinate operands at all** (a placed image is a unit
+square under the CTM, §8.9.5) — exactly why `move_objects` already
+refuses them with `NotAPath`. Wrapping the object's byte span in `q
+<cm> … Q` never looks at an operand, so **kind-agnosticism is a property
+of the mechanism itself**, not a match arm somebody has to remember to
+extend for the next object kind — which is the requesting shell's own
+argument (*"a placed image and a placed text run are the same shape"*)
+granted by construction rather than conceded case by case.
+
+**★★ The finding most worth carrying, because it is invisible and would
+otherwise have shipped wrong: the matrix emitted is NOT the matrix
+passed in.** `cm` composes into the CTM in force **at that point in the
+stream** (§8.3.4: `CTM′ = M × CTM`) — the object's **user** space —
+while the caller gestures in **page** space. Emitting the requested
+matrix directly is correct only where an object's CTM is the identity,
+and silently wrong at every scale or slant a producer left in force: the
+object would land twice as far as the pointer went and nothing would
+error. pdfce emits **`X = CTM × M × CTM⁻¹`**, per object, from that
+object's own captured CTM (`local_matrix`, `vector/edit.rs:998`), so a
+selection spanning two local spaces gets two different `cm` operands for
+one gesture and both land in the same place on the page. An object whose
+CTM is not invertible has no such `X` and is refused
+(`VectorEditError::DegenerateCtm`), refusing the **whole call** per
+`R168` rather than transforming the part of the selection that happened
+to qualify. **Sabotage-verified**: removing the compensation fails
+exactly one of the sixteen tests — the one written for it.
+
+**A structural change worth its own line: `TextObject` gained a `ctm`
+field** (`vector/decompose.rs:728`). `PathObject` and `ImageObject` have
+carried one since decomposition existed; text did not, because every
+prior verb needing a CTM was a path verb and text placement went through
+`Tm` instead. Without it, a text object would have transformed as though
+its CTM were the identity.
+
+**Both `R206` options ship, defaults picked from ordinary-operator
+expectation** — this Pass is `R206`'s founding instance (standing rule
+minted two-hundred-and-seventh filing, above), and it is discharged by
+this shipment (see *Standing rules*' `R206` entry, amended in place
+below):
+
+- **Mixed selection → default `MixedSelection::TransformWhole`.** One
+  command, one undo entry, for a selection holding any mix of kinds.
+  Option: `MixedSelection::RefuseHeterogeneous`, naming both kinds in its
+  `VectorEditError::HeterogeneousSelection` message. `R168` is
+  unaffected — an object that cannot be transformed **at all** still
+  refuses the whole call.
+- **Singular matrix → default `SingularPolicy::Refuse`**
+  (`VectorEditError::SingularTransform`) — a singular transform is
+  irrecoverable, and collapsing an object to a line or a point under a
+  drag is data loss nobody asked for. Option: `SingularPolicy::Clamp {
+  min }`, which clamps and discloses. A clamp on a **sheared** singular
+  matrix is refused by name (`VectorEditError::ClampNotExpressible`)
+  because its degeneracy is a **direction**, not an axis, and inventing
+  a factor would be pdfce choosing a shape the operator did not draw.
+
+**★ A negative scale is not singular, and it has a test whose only job
+is to stop a plausible "fix" from breaking it.**
+`a_negative_scale_is_a_mirror_and_is_not_refused`
+(`tests/transform_objects.rs:317`) pins that `scale(-1, 1)` — a mirror,
+perfectly invertible — is never refused. The obvious guard, "refuse any
+non-positive scale," would break mirroring while still passing every
+singular-matrix test, so the refutation is pinned rather than left to be
+re-derived by a future reader who reasons from the word "singular" to
+the word "negative."
+
+**`transform_preview` shares ONE BODY with the verb** (`edit.rs:7509`,
+the `vertex_edit_preview` shape) — `&self`, side-effect-free, so
+`preview(..).is_ok()` **is** the predicate rather than a second
+implementation that has to be kept in agreement by hand. Pinned equal
+over **four** cases per the dispatch (good transform, singular, stale
+index, refused mixed selection), on the stated reasoning that happy-path
+agreement alone is what a second, independent implementation would also
+manage to get right.
+
+**`TransformOutcome::objects_transformed` is not the caller's index
+count.** Duplicates, and an object whose byte span is contained inside
+another selected object's span, are collapsed before wrapping
+(`vector/edit.rs:963`–`974`, the same containment discipline
+`plan_delete_many` already uses) — wrapping a contained span twice would
+apply the transform to those marks **twice**, the one arithmetic error
+here that would have rendered as *almost* right rather than obviously
+wrong.
+
+**Two infrastructure questions the Backlog entry asked the engineer to
+accept or reject — both accepted as acceptance criteria of `113.0`
+itself, exactly as filed:** `CommandKind::TransformObjects` is a new,
+dedicated undo-log kind (`MoveObject` was already overloaded for
+single/multi move and should not also read "move" in an Undo control
+when the operator rotated something); and no new `PlannedEdit` shape was
+needed for the wrap — it is expressed as two zero-length splice
+insertions at the object's own span boundaries (`edits.push((start,
+start, emit_q_cm(local)))` / `edits.push((end, end, b" Q".to_vec()))`),
+so `PlannedEdit` itself is unchanged.
+
+**Verified on the operator's real CAD drawing** (129,758 objects, per
+the engineer's relayed report — this filing has no shell to re-run it):
+moving a **text** label 20 pt produced 235 changed pixels in a 33×12
+box — a verb `move_objects` could never have applied to that object at
+all; a combined rotate+scale of two objects produced 343 changed pixels,
+zero unsupported operators, and the file still renders;
+`--verify-undo` on a smaller file reported `undo_verified=1
+undo_identical=1`.
+
+**One measured number worth filing in per-item form because a consumer
+will hit the total form of it:** decomposing the operator's benchmark
+page takes **~4 s in a debug build**, and *both* the verb and the
+preview decompose — so a shell calling `transform_preview` **once per
+selection change** costs one decompose; called per frame it would cost
+one every frame. `pdfceGUI` was told to call it on selection change.
+
+**Test results (relayed).** `cargo test --workspace` green (16 new tests
+in `crates/pdfce-core/tests/transform_objects.rs`, confirmed present by
+`Grep` this filing); `cargo fmt --check` and `cargo clippy --all-targets
+--workspace` clean. No `Cargo.toml` touched and no dependency added, so
+the GUI-core-separation invariant (`cargo tree -p pdfce-core` /
+`-p pdfce-render`) is unchanged **by construction** — not independently
+re-run this filing, since no manifest changed to threaten it.
+
+**`docs/FEATURES.md`: row updated in this same filing** — see below.
+`core` and `cli` ticked; `gui` deliberately left unticked (the
+`pdfceGUI` shell side is reported built-and-waiting, not
+wired-and-confirmed — same caution `Pass 119.0`/`119.2` applied to their
+own gui boxes today).
+
+**`docs/ARCHITECTURE.md` §12: no new entry.** The mechanism choice this
+entry closes (`q…cm…Q` wrapping over operand rewriting) was already
+established as **F1** of the Backlog bucket's own survey and explicitly
+filed as an implementation question rather than an architectural
+decision, on the dispatching engineer's own instruction, when the
+bucket was opened (two-hundred-and-fourth filing). Closing that question
+with the reasoning it was always going to be closed with is not a new
+decision to record.
+
+**Terminology (rule 15):** no occurrence of "dimension" in this entry.
+
+---
+
+### `Pass 113.1` (`e5be7d5`) — `transform_preview(&self, page, &[usize], Matrix, TransformOptions) -> Result<TransformOutcome, EditError>` — 2026-08-20 (two-hundred-and-twelfth filing)
+
+**Shipped in the same commit as `Pass 113.0`; full technical record in
+that entry, above** (the "shares ONE BODY" and four-case-pinned
+paragraphs). Filed as its own Pass ID because it was requested and
+scoped separately — third time asked, citing the `adopt_widget` lesson:
+a verb with no preflight makes the UI find out by pressing. Nothing
+further owed here.
+
+---
+
+### `Pass 113.2` (`e5be7d5`) — `pdfce-cli object-transform` — 2026-08-20 (two-hundred-and-twelfth filing)
+
+**CLI subcommand, confirmed on disk this filing**
+(`crates/pdfce-cli/src/main.rs:4385` `Command::ObjectTransform`,
+`cmd_object_transform` at `main.rs:23536`), taking `--scale`, `--rotate`,
+`--translate`, `--objects`, `--on-mixed whole|refuse`, `--on-singular
+refuse|clamp:MIN` and `--preview`. **Naming note, not a defect:** the
+Backlog entry that scoped this Pass named the subcommand
+`transform-objects`; it shipped as `object-transform`. Recorded because
+a future grep for the Backlog's own spelling would find nothing.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **121** | **121** (unchanged — `113.0`/`113.1`/`113.2` already existed as Backlog IDs; this filing ships them, mints no new ID) |
+| decision records | **076** | **076** (unchanged — see `Pass 113.0`'s "no new entry" note, above) |
+| standing rules | **R206** | **R206** (unchanged — DISCHARGED by its founding instance shipping; see `R206`'s entry, amended in place below) |
+| `SESSION_LOG` filings | **211** | **212** |
+| `D:\dev\rag\rust\` / `D:\dev\rag\egui\` findings | — | **+0** (nothing generalizable beyond what the spec corpus and this Pass's own application of it already record — see this filing's report for the reasoning) |
+| `C:\personal_rag\pdf\` lessons | — | **+0** |
+| `docs/FEATURES.md` rows touched | — | **1** (row "Move, resize and rotate a content-stream object…" — core and cli ticked, gui left unticked) |
+
+---
+
 ### `Pass 121.1` (`bab0a23`) — REFLOW'S FOLLOWER-SHIFT SCAN HAD NO LINE BOUNDARY FOR CONTENT WITH NO `Td`/`TD`/`T*`, AND A CAD EXPORTER'S 1,696-RUN FORM IS EXACTLY THAT SHAPE — 1,676 LABELS SILENTLY DISPLACED, NOW 0 — 2026-08-20 (two-hundred-and-eleventh filing)
 
 **Found by, not written for.** `Pass 121.0` (below) unblocked the first
@@ -55536,8 +55733,14 @@ in the "still open" list. Full build record: this file's own
 pointer entry that lived here (two-hundred-and-eighth filing) is removed
 per this project's fully-delete-on-ship convention (`Pass 92.0`/`93.0`
 precedent, reconfirmed 177th filing) — the enduring record is the fresh
-Shipped entry, not relocated *Next up* prose. `Pass 113.0`
-(`transform_objects`) is next in line again.
+Shipped entry, not relocated *Next up* prose. **`Pass 113.0`/`113.1`/
+`113.2` (`transform_objects`/`transform_preview`/CLI `object-transform`)
+also SHIPPED, `e5be7d5`** — see top of *Shipped*, below; the "next in
+line again" sentence this section carried for `113.0` is now stale and
+removed with it. Nothing named next in line by this filing — see
+Backlog's `114.0`-onward move/resize/rotate carriers and the `119.x`/
+`120.x` items `SESSION_LOG.md`'s two-hundred-and-eleventh filing still
+lists as queued.
 
 ### ★★★★★ OWED TO THE NEXT SESSION — the 186th filing's convergence list, put HERE because `docs/NEXT_SESSION.md` is OVERWRITTEN each session and this file is not — opened 2026-08-18 (hundred-and-eighty-sixth filing)
 
@@ -64594,11 +64797,18 @@ anything carrying a `/Rect`" understated core coverage (`move_widget` and
 about rotate for any of the five listed carriers; `Planned` row "Resize a
 vector object" is superseded in shape by 113.0's kind-agnostic mechanism.
 
-**Q…cm…Q vs operand-rewriting is NOT a decision** — the engineer has only
-established that operand rewriting cannot express rotation. This is an
-open implementation question against `Pass 113.0`, not minted as an
+~~**Q…cm…Q vs operand-rewriting is NOT a decision** — the engineer has
+only established that operand rewriting cannot express rotation. This is
+an open implementation question against `Pass 113.0`, not minted as an
 architectural decision (explicit instruction from the dispatching
-engineer).
+engineer).~~ — **CLOSED, by `Pass 113.0`'s own shipment** (`e5be7d5`,
+two-hundred-and-twelfth filing, *Shipped* above): operand rewriting
+cannot merely be shown inconvenient for rotation, it **cannot express**
+a rotated rectangle (`re` has no such spelling, §8.5.2.1), a scaled
+stroke width (`line_width` is a user-space scalar, §8.4.3.2), or any
+text/image transform at all (neither carries a coordinate operand). The
+question closes by **impossibility**, not preference — kept struck
+rather than deleted, per this project's in-place-correction convention.
 
 #### FOUNDATION
 
@@ -64609,77 +64819,19 @@ engineer).
 
 #### CONTENT OBJECTS — the triggering request's actual blocker; first real Backlog Pass, gated only on `Pass 112.0`
 
-- **`Pass 113.0` — `transform_objects(page, &[usize], Matrix) ->
-  TransformOutcome`, via `q…cm…Q` byte-span wrapping, kind-agnostic**
-  (path, text, image XObject, form XObject, inline image). Removes the
-  `NotAPath` refusal for this verb specifically — a mixed selection
-  becomes transformable, closing the triggering request's own complaint.
-  Two named refusals, distinguished because they drive different UI
-  (engineer's own framing, kept verbatim): an object with **no placement
-  to wrap** (don't offer a handle) vs a **singular matrix** — `Matrix::
-  is_invertible` already exists for this exact check (`Pass 112.0`) — ~~(offer
-  the handle, clamp the drag)~~ — **superseded, see the CLOSED ruling below:
-  offer the handle; REFUSE the singular matrix by name is now the default,
-  clamp-and-disclose is the option.** Acceptance criteria also cover the two
-  cross-cutting gaps the dispatch flagged as "worth their own lines": no
-  `PlannedEdit` shape exists yet for "wrapped in `q…cm…Q`" (`vector/
-  edit.rs:380` has no such variant — confirmed by `Grep`, no
-  `QWrap`/`WrapInMatrix`/`CmWrap` symbol anywhere), and `CommandKind` has
-  no transform variant (`MoveObject` is already overloaded for
-  single/multi-object move and should not also carry transform). **Judgment
-  call, flagged for the engineer to accept or reject:** these two are
-  filed as acceptance criteria of `113.0` itself, not as separate Pass
-  IDs — they are prerequisites/components of this one deliverable, not
-  independently shippable, unlike the dispatch's "cross-cutting, worth
-  their own lines" phrasing might suggest a reader mint them separately.
-  Open question against this Pass: `q…cm…Q` wrap vs operand-rewriting is
-  not decided (see above).
-
-  **★ CLOSED 2026-08-20 — operator ruling on this Pass's two named design
-  questions (mixed selection, singular matrix).** Neither had been lettered
-  into *Open operator questions* below — both were filed inline, as
-  acceptance-criteria ambiguity, in this bullet itself (above). The
-  engineer put both to the `pdfceGUI` shell by name in a reply; Ken
-  answered before that reply was read, unprompted, both at once, verbatim:
-  *"make things work both ways as options. default it to your best guess
-  as to what would be normally expected."* Both halves of that ruling
-  bind: **both behaviours ship, as options; the default is the engineer's
-  to pick from ordinary-operator expectation, not the operator's to be
-  asked.** New standing rule **R206**, below, generalizes the shape of
-  this ruling (ship both, default from expectation, don't ask) beyond this
-  one Pass.
-  - **Mixed selection (a path and an image together in one call). Default:
-    transform the WHOLE selection, whatever kinds it holds** — one
-    command, one undo entry. That is what a marquee-then-drag gesture IS;
-    refusing on kind would reopen the `NotAPath` complaint this Pass exists
-    to close. **Option:** refuse a heterogeneous selection by name, for a
-    shell wanting single-kind semantics. **`R168` is unaffected and still
-    governs the boundary case:** if an object in the selection cannot be
-    transformed AT ALL, the default remains all-or-nothing with a stated
-    reason, never a silent subset — a *disclosed* partial application is
-    the option, not the default.
-  - **A singular matrix (a resize handle dragged through exactly zero).
-    Default: REFUSE by name.** A singular transform is irrecoverable — the
-    object collapses to a line or a point and no later transform restores
-    it, because there is no inverse to apply, which is data loss nobody
-    asked for. `Matrix::is_invertible` (`Pass 112.0`, `f8dd31f`) is the
-    existing predicate that lets the verb tell "no placement to wrap"
-    (don't offer a handle) apart from "this drag is degenerate" (offer the
-    handle; refuse on release, by default). **Option:** clamp to a minimum
-    scale and disclose that it did. Two things make the default nearly
-    free: a shell that clamps its own gesture interactively never hands
-    the API a singular matrix at all, so the default costs a well-behaved
-    shell nothing while still catching a gesture that forgets to; and a
-    **negative** scale is NOT singular — `scale(-1, 1)` is a mirror,
-    perfectly invertible — so dragging a handle through the *opposite*
-    edge is not the degenerate case at all, only exactly zero is, which a
-    commit-on-release gesture makes essentially unreachable.
-- **`Pass 113.1` — `transform_preview(&self, …)` preflight**, sharing ONE
-  body with `113.0`'s verb, in the shape `vertex_edit_preview`
-  established. Requested by name, third time asked, citing the
-  `adopt_widget` lesson: a verb with no preflight makes the UI find out by
-  pressing.
-- **`Pass 113.2` — CLI `transform-objects` subcommand.**
+- ~~**`Pass 113.0` — `transform_objects(page, &[usize], Matrix) ->
+  TransformOutcome`, via `q…cm…Q` byte-span wrapping, kind-agnostic.**~~ —
+  **SHIPPED** (`e5be7d5`, filed 2026-08-20, two-hundred-and-twelfth
+  filing — see *Shipped*, above, for the full record: the open
+  wrap-vs-operand-rewriting question closed by impossibility, both
+  `R206` defaults, the `X = CTM × M × CTM⁻¹` finding, the `TextObject::
+  ctm` addition). Not re-listed as Backlog; nothing further owed here.
+- ~~**`Pass 113.1` — `transform_preview(&self, …)` preflight.**~~ —
+  **SHIPPED** (`e5be7d5`, same filing — see *Shipped*, above).
+- ~~**`Pass 113.2` — CLI `transform-objects` subcommand.**~~ — **SHIPPED**
+  as `pdfce-cli object-transform` (`e5be7d5`, same filing — see
+  *Shipped*, above; naming diverged from this Backlog entry's own text,
+  recorded there).
 
 #### RENDERER PREREQUISITE
 
@@ -80027,6 +80179,16 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   other standing rule that already dictates one specific behaviour — it
   applies only where two behaviours are BOTH legitimate and the choice
   between them is genuinely open.
+
+  **★ DISCHARGED BY ITS FOUNDING INSTANCE, 2026-08-20 (two-hundred-and-
+  twelfth filing).** `Pass 113.0` shipped (`e5be7d5`) carrying both
+  named options exactly as ruled: `MixedSelection::TransformWhole`
+  default with `RefuseHeterogeneous` as the option, `SingularPolicy::
+  Refuse` default with `Clamp { min }` as the option. The rule's
+  mechanism is not spent — it still governs any future two-defensible-
+  behaviours question with no spec clause bearing on it — but the
+  specific instance this entry was minted against is no longer
+  hypothetical.
 - **R199 — A RECORDED BLOCKER IS A DATED READING, NOT A STANDING FACT. A
   sentence saying work is gated, needs, requires or awaits something
   carries the date it was reasoned and the condition it turns on — and is

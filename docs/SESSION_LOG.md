@@ -52765,3 +52765,119 @@ follower-shift model), not new architecture.
 qualified — **pdf dimensions** (the CAD title-block/callout content the
 benchmark drawing's edit targeted; the cross-referenced sibling lesson is
 also pdf-dimension material). No ce-dimension code touched this filing.
+
+## 2026-08-20 (two-hundred-and-twelfth filing) — `PASS 113.0`/`113.1`/`113.2` (`e5be7d5`) SHIP: SCALE/ROTATE/SHEAR/MOVE ANY SELECTION VIA `q…cm…Q` WRAPPING; THE WRAP-VS-OPERAND-REWRITING QUESTION CLOSES BY IMPOSSIBILITY; `R206` DISCHARGED BY ITS FOUNDING INSTANCE
+
+**Filed by `pdfce-librarian`, fourth filing of the day by this role
+today (fifth overall counting this one, per the running `SESSION_LOG`
+filing count).** Commit hash, `cargo test`/`fmt`/`clippy` results, and
+the operator's real-CAD-file smoke test are relayed by the dispatching
+engineer — **no shell this filing (hard rule 8).** The type definitions,
+doc comments, error variants, the `X = CTM × M × CTM⁻¹` derivation, both
+`R206` defaults, the negative-scale guard test, and the 16-test count
+were all **independently confirmed against live source this filing** by
+`Read`/`Grep` against `crates/pdfce-core/src/vector/edit.rs`,
+`crates/pdfce-core/src/edit.rs`, `crates/pdfce-core/src/vector/
+decompose.rs` and `crates/pdfce-core/tests/transform_objects.rs` — every
+doc-comment claim relayed by the dispatch matched the code on disk
+verbatim.
+
+**Shipped:**
+- `Pass 113.0` (`e5be7d5`) — `EditSession::transform_objects(page,
+  &[usize], Matrix, TransformOptions) -> TransformOutcome`. Wraps each
+  selected object's byte span in `q <cm> … Q` rather than rewriting
+  operands, which is kind-agnostic by construction (path, text, image
+  XObject, form XObject, inline image all wrap the same way) where
+  operand rewriting is inherently kind-specific and, for text/images,
+  impossible. Full record: `ROADMAP.md`, *Shipped*.
+- `Pass 113.1` (`e5be7d5`) — `transform_preview(&self, …)`, sharing one
+  body with the verb so `preview(..).is_ok()` is the predicate.
+- `Pass 113.2` (`e5be7d5`) — `pdfce-cli object-transform` (shipped under
+  that name; the Backlog entry that scoped it said `transform-objects`).
+
+**Decisions made this session:** none new. `docs/ARCHITECTURE.md` §12
+was checked and declined an entry — the wrap-vs-operand-rewriting
+mechanism choice was already filed as an implementation question rather
+than an architectural decision when the Backlog bucket was opened
+(two-hundred-and-fourth filing), on the dispatching engineer's own
+instruction; closing it with the reasoning it was always going to close
+with is not a new decision.
+
+**Findings + decisions:**
+- **The open "`q…cm…Q` wrap vs operand-rewriting" question closes by
+  IMPOSSIBILITY, not preference.** Operand rewriting cannot merely be
+  shown inconvenient for rotation — it cannot express a rotated
+  rectangle (`re` has no such spelling, §8.5.2.1), a scaled stroke width
+  (`line_width` is a user-space scalar, §8.4.3.2), or any text/image
+  transform at all (neither carries a coordinate operand at all).
+  `ROADMAP.md`'s Backlog framing text for this bucket amended in place,
+  struck rather than deleted.
+- **★★ The matrix emitted is not the matrix requested.** `cm` composes
+  into the CTM in force *at that point in the stream* (§8.3.4), the
+  object's user space, while the caller gestures in page space. pdfce
+  emits `X = CTM × M × CTM⁻¹` per object from that object's own captured
+  CTM — sabotage-verified, removing the compensation fails exactly the
+  one test written for it. Filed as the entry's own headline finding
+  because it is invisible and would otherwise have shipped silently
+  wrong at any non-identity CTM.
+- **`TextObject` gained a `ctm` field** (`vector/decompose.rs:728`) —
+  paths and images always had one; text did not, because no prior verb
+  needed it.
+- **Both `R206` options ship, defaults from ordinary-operator
+  expectation**, discharging `R206`'s founding instance: mixed selection
+  defaults to transforming the whole selection (option: refuse,
+  `R168` unaffected); a singular matrix defaults to refusing by name
+  (option: clamp-and-disclose, refused by name itself when the
+  degeneracy is a shear rather than an axis). `R206`'s own standing-rule
+  entry amended in place with a discharge note.
+- **A negative scale is not singular** — `scale(-1, 1)` is a mirror,
+  perfectly invertible — and a dedicated test exists solely to stop a
+  future "fix" that refuses non-positive scales from breaking mirroring.
+- Verified on the operator's real 129,758-object CAD drawing (relayed):
+  a text-label move produced 235 changed pixels in a 33×12 box — a shape
+  `move_objects` could never have reached at all; a rotate+scale of two
+  objects produced 343 changed pixels and zero unsupported operators;
+  `--verify-undo` reported `undo_verified=1 undo_identical=1`.
+- **Figure filed in both forms (hard rule 10):** decomposing the
+  benchmark page costs ~4 s in a debug build per decompose, and *both*
+  the verb and the preview decompose — so a shell calling the preview
+  once per selection change pays one decompose per selection change, not
+  per frame; `pdfceGUI` was told the difference.
+- **`docs/NEXT_SESSION.md` checked, not edited** (hard rule against
+  touching the engineer's own handoff) — it already correctly marks
+  `Pass 113.0` SHIPPED (struck through, §1 item 1) and the ledger claims
+  in it match what this filing independently found. No stale "113.0
+  unstarted" claim survived a sweep of `docs/core-api/`,
+  `docs/ARCHITECTURE.md` or the decision records — `docs/core-api/
+  02-editing-and-saving.md`'s `transform_objects` section was already
+  current, apparently updated in the same commit.
+
+**Still in flight:** `Pass 119.1`, `Pass 119.3`, `Pass 119.4`,
+`pdfceGUI`'s caret guard, and now `Pass 114.0`–`117.2` (the
+renderer-prerequisite/annotation/widget carriers the same Backlog bucket
+still owes) — unchanged from the two-hundred-and-eleventh filing's list
+plus the bucket residue this filing's closure leaves behind.
+
+**For next session:**
+1. `Pass 120.0`–`120.4` (object clipboard) and `Pass 97.x` (colorant
+   compositor) remain the two highest-named items per
+   `docs/NEXT_SESSION.md`'s own queue — unchanged by this filing.
+2. `Pass 114.0` (renderer `NoZoom`/`NoRotate` placement) is the next
+   move/resize/rotate-bucket item with no code against it yet.
+3. `docs/FEATURES.md`'s gui box for row "Move, resize and rotate a
+   content-stream object…" stays unticked until `pdfceGUI` confirms its
+   shell side is actually wired, not merely built-and-waiting.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **121** | **121** (unchanged — `113.0`/`113.1`/`113.2` were already Backlog IDs) |
+| decision records | **076** | **076** (unchanged — declined, see above) |
+| standing rules | **R206** | **R206** (unchanged — DISCHARGED by its founding instance, not superseded) |
+| `SESSION_LOG` filings | **211** | **212** |
+| `D:\dev\rag\rust\` / `D:\dev\rag\egui\` findings | — | **+0** (the spec-corpus material this Pass rests on is already recorded; the `X = CTM × M × CTM⁻¹` derivation is pdfce's own application of it, not a generalizable RAG finding) |
+| `C:\personal_rag\pdf\` lessons | — | **+0** |
+| `docs/FEATURES.md` rows touched | — | **1** (row "Move, resize and rotate a content-stream object…" — core/cli ticked, gui left unticked) |
+
+**Terminology (rule 15):** no "dimension" occurrence in this entry.

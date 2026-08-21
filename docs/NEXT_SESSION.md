@@ -5,7 +5,8 @@ shipped, this says what to do next. Overwrite it once acted on.
 
 **Written 2026-08-20 (evening)**, replacing the 2026-08-20 (morning) handoff
 whose headline task — `Pass 119.0`, text editing inside form XObjects — **shipped
-this session**, along with `Pass 119.2` which was not asked for.
+this session**, along with `Pass 119.2`, `121.0`, `121.1` and `113.x`, none of
+which were the brief.
 
 ---
 
@@ -42,6 +43,7 @@ All green at this handoff.
 | `a10a5c1` | **`Pass 119.2`** — `format_text` reaches it too, + a document repair (§3) |
 | `97ed7fa` | **`Pass 121.0`** — a code was reported as colliding with **itself**, falsely refusing his drawing |
 | `bab0a23` | **`Pass 121.1`** — one edit moved **1,676 labels**; reflow's "line" had no end |
+| `e5be7d5` | **`Pass 113.0`/`113.1`/`113.2`** — `transform_objects`, on **every** object kind (§2.5) |
 
 Plus two librarian filings (209th, 210th), `decision 076`, and Backlog
 `119.1` / `119.3` / `119.4` / `120.0`–`120.4`.
@@ -97,17 +99,9 @@ temptation on reading "shipped" is to tick everything.
 
 ## §1 — THE QUEUE, in the order I would take it
 
-1. **`Pass 113.0`** — `transform_objects`. It was next before `119.0` jumped it
-   and it is next again. `pdfceGUI` says their whole shell side is built and
-   waiting. **`Pass 112.0` (the `Matrix` foundation) is shipped.**
-
-   ★ Read the open question first: **operand rewriting cannot express
-   rotation**, so this needs a `q…cm…Q` wrap, and that mechanism choice is filed
-   as an OPEN QUESTION rather than decided. **Nothing is owed from `pdfceGUI`** —
-   Ken answered both design questions himself (*"make things work both ways as
-   options. default it to your best guess"*), so both defaults are acceptance
-   criteria: mixed selections transform whole, a singular matrix is refused by
-   name.
+1. ~~**`Pass 113.0`** — `transform_objects`.~~ **SHIPPED this session**
+   (`e5be7d5`, with `113.1` preview and `113.2` CLI). See §2.5 for what it
+   decided, including the one thing a consumer must not get wrong.
 
 2. **`Pass 120.0`–`120.4`** — the object clipboard. Newest request, operator-
    widened (*"oh I might want all cases so we shouldn't be restrictive in our
@@ -143,6 +137,51 @@ temptation on reading "shipped" is to tick everything.
    handing pdfce the four-way gray/CMYK/`Separation`/`DeviceN` black
    equivalence, bearing directly on `Pass 97.x`. **Not a request — do not triage
    it as one.**
+
+---
+
+## §2.5 — WHAT `Pass 113.x` DECIDED, and the one thing not to get wrong
+
+**The open question is closed by IMPOSSIBILITY, not by preference.** `q…cm…Q`
+wrapping beat operand rewriting because operand rewriting *cannot* do the job:
+a rotated rectangle has no `re` spelling, `line_width` is a user-space scalar a
+coordinate scale leaves behind, and text and images carry no coordinate
+operands at all. Wrapping never looks at an operand, so **kind-agnosticism is a
+property of the mechanism** rather than a match arm somebody must remember to
+extend.
+
+**★★ The matrix emitted is NOT the matrix passed in.** `matrix` is page space
+(that is where the operator gestures); `cm` composes into the CTM in force at
+that point, which is the object's *user* space. pdfce emits
+**`X = CTM × M × CTM⁻¹`** from each object's own captured CTM. Emitting the
+request directly is correct only where an object's CTM is the identity and
+**silently wrong everywhere else** — the object lands twice as far as the
+pointer went, with nothing erroring. Sabotage-verified: removing the
+compensation fails exactly one of sixteen tests, the one written for it. **If
+you touch this code, run that test first.**
+
+**`TextObject` gained a `ctm` field.** Paths and images always had one; text did
+not, because until now no verb needed it.
+
+**Both `R206` options ship** — mixed selections **transform whole** (option:
+refuse, naming both kinds); a singular matrix is **refused by name** (option:
+`Clamp { min }`, which clamps and discloses; a *sheared* singular matrix
+refuses the clamp, because its degeneracy is a direction rather than an axis).
+**This Pass is `R206`'s founding instance and discharges it.**
+
+**★ A negative scale is not singular** — a mirror is invertible — and there is
+a test whose only job is to stop somebody "fixing" this by refusing
+non-positive scales, which would break mirroring while passing every other
+test.
+
+**One measured number a consumer will hit:** the operator's CAD page takes
+**~4 s to decompose in a debug build**, and *both* the verb and the preview
+decompose. `pdfceGUI` was told to call the preview on selection change, not per
+frame.
+
+**Still unstarted from that request:** `Pass 114.0`–`117.0` — annotation
+`/NoZoom`/`/NoRotate` placement, markup and redaction-mark transforms,
+per-variant ce-dimension rotate/scale, widget resize.
 
 ---
 
