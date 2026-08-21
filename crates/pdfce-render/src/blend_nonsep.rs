@@ -301,36 +301,24 @@ pub(crate) fn composite(
             let Some(px) = pixmap.pixels().get(idx).copied() else {
                 continue;
             };
-            // `tiny_skia` stores premultiplied; the blend reasons about
-            // demultiplied colour. A fully transparent pixel is white paper.
-            let a = f32::from(px.alpha()) / 255.0;
-            let backdrop = if a <= 0.0 {
-                [1.0, 1.0, 1.0]
-            } else {
-                [
-                    f32::from(px.red()) / 255.0 / a,
-                    f32::from(px.green()) / 255.0 / a,
-                    f32::from(px.blue()) / 255.0 / a,
-                ]
-            };
-
-            let blended = blend(mode, backdrop, source);
-            let out = [
-                t.mul_add(blended[0] - backdrop[0], backdrop[0]),
-                t.mul_add(blended[1] - backdrop[1], backdrop[1]),
-                t.mul_add(blended[2] - backdrop[2], backdrop[2]),
-            ];
-
-            // Opaque out: the source is opaque where it covers, and the
-            // backdrop was already flattened or is paper.
-            let na = a.max(t);
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let q = |v: f32| (v.clamp(0.0, 1.0) * na * 255.0).round() as u8;
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let na8 = (na.clamp(0.0, 1.0) * 255.0).round() as u8;
-            if let Some(newpx) =
-                tiny_skia::PremultipliedColorU8::from_rgba(q(out[0]), q(out[1]), q(out[2]), na8)
-            {
+            // ONE formula, in `crate::compositor` — §11.4.4's element
+            // composite, with the backdrop's own alpha carried explicitly.
+            //
+            // ★ This used to substitute a WHITE backdrop wherever the
+            // destination was transparent, and lerp from white by `t`. That
+            // is the specialisation of §11.4.4 to `α_b = 1`, and it is
+            // wrong in exactly the place the page group makes common:
+            // §11.4.7 starts the page buffer TRANSPARENT and composites the
+            // white medium in once at the end, so "transparent" means "no
+            // backdrop", not "paper". `Sat(white) = 0` and `Lum(white) = 1`
+            // make `Hue`/`Saturation`/`Color` of anything over white
+            // *white*, which is what Ghent `1_GWG162` rendered.
+            let out = crate::compositor::composite_element(
+                crate::compositor::Pixel::from_premultiplied(px),
+                crate::compositor::Pixel { c: source, a: t },
+                crate::compositor::Blend::NonSeparable(mode),
+            );
+            if let Some(newpx) = out.to_premultiplied() {
                 if newpx != px {
                     changed += 1;
                 }
@@ -374,44 +362,22 @@ pub(crate) fn composite_layer(
 ) {
     let n = dest.pixels().len().min(group.pixels().len());
     for idx in 0..n {
-        let g = group.pixels()[idx];
-        let ga = f32::from(g.alpha()) / 255.0;
-        if ga <= 0.0 {
+        let g = crate::compositor::Pixel::from_premultiplied(group.pixels()[idx]);
+        if g.a <= 0.0 {
             continue;
         }
-        let source = [
-            f32::from(g.red()) / 255.0 / ga,
-            f32::from(g.green()) / 255.0 / ga,
-            f32::from(g.blue()) / 255.0 / ga,
-        ];
-
-        let d = dest.pixels()[idx];
-        let da = f32::from(d.alpha()) / 255.0;
-        let backdrop = if da <= 0.0 {
-            [1.0, 1.0, 1.0]
-        } else {
-            [
-                f32::from(d.red()) / 255.0 / da,
-                f32::from(d.green()) / 255.0 / da,
-                f32::from(d.blue()) / 255.0 / da,
-            ]
+        // §11.4.5: the constant alpha in force at the `Do` multiplies the
+        // GROUP'S alpha, giving the source alpha of the group-as-element.
+        let source = crate::compositor::Pixel {
+            c: g.c,
+            a: g.a * opacity.clamp(0.0, 1.0),
         };
-
-        let blended = blend(mode, backdrop, source);
-        let t = ga * opacity;
-        let out = [
-            t.mul_add(blended[0] - backdrop[0], backdrop[0]),
-            t.mul_add(blended[1] - backdrop[1], backdrop[1]),
-            t.mul_add(blended[2] - backdrop[2], backdrop[2]),
-        ];
-        let na = da.max(t);
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let q = |v: f32| (v.clamp(0.0, 1.0) * na * 255.0).round() as u8;
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let na8 = (na.clamp(0.0, 1.0) * 255.0).round() as u8;
-        if let Some(px) =
-            tiny_skia::PremultipliedColorU8::from_rgba(q(out[0]), q(out[1]), q(out[2]), na8)
-        {
+        let out = crate::compositor::composite_element(
+            crate::compositor::Pixel::from_premultiplied(dest.pixels()[idx]),
+            source,
+            crate::compositor::Blend::NonSeparable(mode),
+        );
+        if let Some(px) = out.to_premultiplied() {
             dest.pixels_mut()[idx] = px;
         }
     }

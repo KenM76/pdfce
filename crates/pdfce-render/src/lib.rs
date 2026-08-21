@@ -62,6 +62,7 @@ pub(crate) mod canvas;
 /// own docs for the census that justified it.
 pub(crate) mod clip_cache;
 pub mod color;
+pub mod compositor;
 pub mod display_list;
 pub mod font;
 pub mod gstate;
