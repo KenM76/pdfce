@@ -134,6 +134,60 @@ pub enum Blend {
     NonSeparable(NonSeparableBlend),
 }
 
+/// Which side of §11.3.4 a set of colour components is on.
+///
+/// # Why this is a parameter and not a property of the values
+///
+/// Because the same four numbers mean opposite things depending on the
+/// **group's blending colour space**, and the values carry no tag saying
+/// which. §11.3.4 is unambiguous about the consequence:
+///
+/// > "The blend functions for the various blend modes are defined such
+/// > that the range for each colour component **shall be 0.0 to 1.0** and
+/// > that the colour space **shall be additive**. When performing blending
+/// > operations in **subtractive colour spaces (`DeviceCMYK`,
+/// > `Separation`, and `DeviceN`)**, the colour component values **shall
+/// > be complemented (subtracted from 1.0) before the blend function is
+/// > applied** and the results of the function **shall then be
+/// > complemented back before being used**."
+///
+/// # ★ The measurement that makes this the leading item of `Pass 97.1`
+///
+/// Getting it wrong is not a shade of difference. Worked by hand on Ghent
+/// `1_GWG162`'s `Difference` cell, whose two operands are printed in the
+/// file — magenta `0 1 0 0 k` under black `0 0 0 1 k`, and the surround a
+/// correct engine must produce is RGB `(0, 165, 79)`:
+///
+/// ```text
+/// complement:      cb′ = (1,0,1,1)   cs′ = (1,1,1,0)
+/// |cb′ − cs′|          = (0,1,0,1)
+/// complement back      = (1,0,1,0)  =  DeviceCMYK 1 0 1 0  =  GREEN
+/// ```
+///
+/// That is the surround, exactly. Blending the same two colours in device
+/// sRGB gives `(237,1,140)` in pdfce and `(202,29,108)` in pdfium — **both
+/// wrong, differently**, because both blend on the wrong side of this
+/// switch. **Every Ghent transparency patch declares
+/// `/Group /CS /DeviceCMYK` on the PAGE**, including the one whose own
+/// objects are `ICCBased` RGB, so the switch is `Subtractive` for all of
+/// them regardless of what the artwork is coloured in.
+///
+/// # A consequence worth stating, because it inverts intuition
+///
+/// `Multiply` and `Screen` **swap** under the complement:
+/// `1 − Screen(1−cb, 1−cs) = cb × cs`. So does `Darken`/`Lighten`. A CMYK
+/// `Multiply` is **not** a component-wise multiply of CMYK values, and an
+/// implementation that "just multiplies the inks" has implemented `Screen`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlendSpace {
+    /// `DeviceRGB`, `DeviceGray`, `CalRGB`, `CalGray` and `ICCBased`
+    /// equivalents — the case Table 136's formulas are written for.
+    Additive,
+    /// `DeviceCMYK`, `Separation`, `DeviceN` and calibrated CMYK —
+    /// complement before the blend function and back after it.
+    Subtractive,
+}
+
 impl Blend {
     /// Map a `tiny_skia::BlendMode` that `blend_mode_from_name` produced
     /// back onto this enum.
@@ -193,6 +247,64 @@ impl Blend {
                 blend_separable(self, cb[1], cs[1]),
                 blend_separable(self, cb[2], cs[2]),
             ],
+        }
+    }
+
+    /// Evaluate `B(C_b, C_s)` on **four subtractive** components —
+    /// §11.3.4's complement rule, and §11.3.5.3's CMYK detour for the four
+    /// non-separable modes.
+    ///
+    /// # The two rules, and why they are not the same rule
+    ///
+    /// For a **separable** mode §11.3.4 is the whole story: complement each
+    /// component, apply the scalar function, complement the result back.
+    ///
+    /// For a **non-separable** mode §11.3.5.3 is more specific, and it is
+    /// quoted here because the difference is easy to lose:
+    ///
+    /// > "The formulas in this sub-clause apply to **RGB** spaces. Blending
+    /// > in **CMYK** spaces … **shall** be handled in the following way:
+    /// > the C, M and Y components **shall** be converted to their
+    /// > complementary R, G and B components in the usual way; the
+    /// > preceding formulas **shall** be applied to the RGB colour values;
+    /// > the results **shall** be converted back to C, M and Y. For the
+    /// > **K** component, the result **shall** be the K component of **Cb**
+    /// > for the `Hue`, `Saturation` and `Color` blend modes; it **shall**
+    /// > be the K component of **Cs** for the `Luminosity` blend mode."
+    ///
+    /// ⇒ **K is not blended, it is SELECTED**, and which operand it comes
+    /// from depends on the mode. Running all four channels through the
+    /// non-separable formulas produces entirely plausible output and is
+    /// non-conforming — the failure mode this project exists to catch.
+    ///
+    /// The CMY half is not a second rule: complementing C, M and Y **is**
+    /// §11.3.4's complement for those three. §11.3.5.3 is the
+    /// specialisation, not a competitor.
+    #[must_use]
+    pub fn apply_subtractive(self, cb: [f32; 4], cs: [f32; 4]) -> [f32; 4] {
+        match self {
+            Self::Normal => cs,
+            Self::NonSeparable(m) => {
+                let rb = [1.0 - cb[0], 1.0 - cb[1], 1.0 - cb[2]];
+                let rs = [1.0 - cs[0], 1.0 - cs[1], 1.0 - cs[2]];
+                let out = crate::blend_nonsep::blend(m, rb, rs);
+                // §11.3.5.3's K selection, by mode. `Luminosity` takes the
+                // SOURCE's black; the other three take the BACKDROP's.
+                use crate::blend_nonsep::NonSeparableBlend as N;
+                let k = if matches!(m, N::Luminosity) {
+                    cs[3]
+                } else {
+                    cb[3]
+                };
+                [1.0 - out[0], 1.0 - out[1], 1.0 - out[2], k]
+            }
+            _ => {
+                let mut out = [0.0_f32; 4];
+                for i in 0..4 {
+                    out[i] = 1.0 - blend_separable(self, 1.0 - cb[i], 1.0 - cs[i]);
+                }
+                out
+            }
         }
     }
 }
@@ -427,6 +539,89 @@ pub fn composite_element(backdrop: Pixel, source: Pixel, blend: Blend) -> Pixel 
     }
 }
 
+/// A colour and an alpha in a **subtractive** space — four ink tints,
+/// `0.0` meaning *no ink*.
+///
+/// # Why this is a separate type and not `Pixel` with a flag
+///
+/// Because every formula that touches it needs to know, and a flag is
+/// something a call site can forget to read. `1 − c` is either the
+/// complement §11.3.4 requires or a bug, and the type is what decides
+/// which — the same argument [`Blend::NonSeparable`] makes for keeping the
+/// four Table 137 modes out of `tiny_skia::BlendMode`.
+///
+/// Four components rather than N: `Pass 97.1`'s first deliverable is the
+/// **blending colour space**, which for every file in the Ghent corpus is
+/// `DeviceCMYK`. Spot planes are the *second* deliverable and want a
+/// runtime-N plane-major buffer (measured 3–5× faster than interleaved,
+/// `docs/compositor-plan.md` §3.2). Building N now would fuse two
+/// questions that fail independently.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PixelCmyk {
+    /// Subtractive tints `[C, M, Y, K]`, `0.0..=1.0`.
+    pub c: [f32; 4],
+    /// Alpha, `[0, 1]`.
+    pub a: f32,
+}
+
+impl PixelCmyk {
+    /// A fully transparent pixel.
+    ///
+    /// ★ **Its colour is `[0,0,0,0]` — NO INK — and that is deliberately
+    /// NOT what a zeroed `DeviceCMYK` buffer should be initialised to.**
+    /// §8.6.4.4 gives `DeviceCMYK` an initial colour of `[0 0 0 1]`, so a
+    /// `memset(0)` over a CMYK buffer yields **white**, not black, and
+    /// inverts every luminosity soft mask built over it. That trap is
+    /// correct in sRGB and wrong in CMYK, which is exactly why it belongs
+    /// at the Stage A → Stage B boundary and is named here.
+    ///
+    /// This constant is for a **transparent** pixel, whose colour §11.3.2
+    /// declares undefined and which every formula multiplies by its own
+    /// zero alpha. It is not an initialiser for an opaque one.
+    pub const TRANSPARENT: Self = Self {
+        c: [0.0; 4],
+        a: 0.0,
+    };
+}
+
+/// **§11.4.4's element-compositing formula, in a subtractive space.**
+///
+/// Identical in structure to [`composite_element`] — the compositing
+/// arithmetic itself is space-agnostic, which is §11.3.6's own point: the
+/// weighted average is affine and its weights sum to exactly 1, so
+/// complementation commutes with it. **Only `B()` needs the round trip**,
+/// and that is where [`Blend::apply_subtractive`] does it.
+///
+/// Deliberately a second function rather than a branch inside the first:
+/// the two operate on different-width arrays, and unifying them behind a
+/// const generic would put a type parameter on the one function every
+/// per-pixel loop in this crate calls.
+#[must_use]
+pub fn composite_element_cmyk(backdrop: PixelCmyk, source: PixelCmyk, blend: Blend) -> PixelCmyk {
+    let ab = backdrop.a.clamp(0.0, 1.0);
+    let a_s = source.a.clamp(0.0, 1.0);
+    let ai = union_(ab, a_s);
+    if ai <= 0.0 {
+        return PixelCmyk::TRANSPARENT;
+    }
+    let w = a_s / ai;
+    let blended = if blend.is_normal() || ab <= 0.0 {
+        source.c
+    } else {
+        let b = blend.apply_subtractive(backdrop.c, source.c);
+        let mut m = [0.0_f32; 4];
+        for i in 0..4 {
+            m[i] = ab.mul_add(b[i] - source.c[i], source.c[i]);
+        }
+        m
+    };
+    let mut c = [0.0_f32; 4];
+    for i in 0..4 {
+        c[i] = w.mul_add(blended[i] - backdrop.c[i], backdrop.c[i]);
+    }
+    PixelCmyk { c, a: ai }
+}
+
 /// **§11.4.8's element-compositing formula for a KNOCKOUT group.**
 ///
 /// In a knockout group each element composites against the group's
@@ -588,6 +783,10 @@ mod tests {
 
     fn close(a: [f32; 3], b: [f32; 3]) -> bool {
         (0..3).all(|i| (a[i] - b[i]).abs() < EPS)
+    }
+
+    fn close4(a: [f32; 4], b: [f32; 4]) -> bool {
+        (0..4).all(|i| (a[i] - b[i]).abs() < EPS)
     }
 
     #[test]
@@ -835,6 +1034,187 @@ mod tests {
     fn difference_is_absolute() {
         assert!((blend_separable(Blend::Difference, 0.2, 0.9) - 0.7).abs() < EPS);
         assert!((blend_separable(Blend::Difference, 0.9, 0.2) - 0.7).abs() < EPS);
+    }
+
+    /// ★★★ **THE CASE `Pass 97.1` EXISTS FOR, worked from a real file
+    /// rather than from a formula.**
+    ///
+    /// Ghent `1_GWG162`'s `Difference` cell prints both its operands: a
+    /// magenta `0 1 0 0 k` under a black `0 0 0 1 k`, with `/BM
+    /// /Difference` at the `Do`. The patch is authored so a correct engine
+    /// makes the trap X vanish into its surround, and the surround is
+    /// `DeviceCMYK 1 0 1 0` — green, RGB `(0, 165, 79)` as rendered.
+    ///
+    /// §11.3.4's complement gives exactly that. pdfce rendered
+    /// `(237, 1, 140)` and **pdfium renders `(202, 29, 108)`** — both blend
+    /// in device sRGB, both wrong, and wrong differently, which is what
+    /// told us the trap is authored on the blending colour space rather
+    /// than on the group model.
+    ///
+    /// If this test ever fails, the Ghent transparency panels cannot pass,
+    /// whatever else is correct.
+    #[test]
+    fn ghent_16_2_difference_cell_lands_exactly_on_its_surround() {
+        let magenta = [0.0, 1.0, 0.0, 0.0];
+        let black = [0.0, 0.0, 0.0, 1.0];
+        let got = Blend::Difference.apply_subtractive(magenta, black);
+        assert!(
+            close4(got, [1.0, 0.0, 1.0, 0.0]),
+            "Difference(magenta, black) in DeviceCMYK must be 1 0 1 0 — the \
+             green the patch is authored around. Got {got:?}"
+        );
+        // And the additive answer, which is what both engines produce and
+        // what makes the cell fail. Kept as an assertion rather than a
+        // comment so "the two differ" is checked rather than claimed.
+        let rgb = Blend::Difference.apply([1.0, 0.0, 1.0], [0.0, 0.0, 0.0]);
+        assert!(
+            !close(rgb, [0.0, 1.0, 0.0]),
+            "blending the same pair additively must NOT give the same answer, \
+             or this whole Pass has no premise"
+        );
+    }
+
+    /// ★ `Multiply` and `Screen` **swap** under the complement, and so do
+    /// `Darken` and `Lighten`.
+    ///
+    /// `1 − Screen(1−cb, 1−cs) = 1 − [(1−cb) + (1−cs) − (1−cb)(1−cs)] =
+    /// cb × cs`. So a CMYK `Multiply` is **not** a component-wise multiply
+    /// of CMYK values — an implementation that "just multiplies the inks"
+    /// has implemented `Screen`, and the two are visually opposite.
+    ///
+    /// This is the single most likely way to get §11.3.4 wrong while
+    /// believing it is right, which is why it is asserted rather than
+    /// noted.
+    #[test]
+    fn multiply_and_screen_exchange_under_the_complement() {
+        for (cb, cs) in [
+            ([0.2_f32, 0.4, 0.6, 0.1], [0.7_f32, 0.1, 0.3, 0.8]),
+            ([0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]),
+            ([1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]),
+        ] {
+            let sub_mul = Blend::Multiply.apply_subtractive(cb, cs);
+            let add_scr = [
+                Blend::Screen.apply([cb[0]; 3], [cs[0]; 3])[0],
+                Blend::Screen.apply([cb[1]; 3], [cs[1]; 3])[0],
+                Blend::Screen.apply([cb[2]; 3], [cs[2]; 3])[0],
+                Blend::Screen.apply([cb[3]; 3], [cs[3]; 3])[0],
+            ];
+            assert!(
+                close4(sub_mul, add_scr),
+                "subtractive Multiply must equal additive Screen on the same \
+                 numbers: {sub_mul:?} vs {add_scr:?}"
+            );
+            let sub_dark = Blend::Darken.apply_subtractive(cb, cs);
+            let add_light = [
+                cb[0].max(cs[0]),
+                cb[1].max(cs[1]),
+                cb[2].max(cs[2]),
+                cb[3].max(cs[3]),
+            ];
+            assert!(
+                close4(sub_dark, add_light),
+                "subtractive Darken must equal a component-wise MAX — the \
+                 more ink wins: {sub_dark:?} vs {add_light:?}"
+            );
+        }
+    }
+
+    /// §11.3.5.3 — in a CMYK space the four non-separable modes take the
+    /// **K component from one operand rather than blending it**, and which
+    /// operand depends on the mode.
+    ///
+    /// `Hue`, `Saturation` and `Color` take the **backdrop's** black;
+    /// `Luminosity` takes the **source's**. Running all four channels
+    /// through the non-separable formulas produces entirely plausible
+    /// output and is non-conforming — plausible-and-wrong being the exact
+    /// failure this crate's non-separable module was written to avoid in
+    /// the first place.
+    #[test]
+    fn non_separable_modes_select_k_rather_than_blending_it() {
+        let cb = [0.1_f32, 0.8, 0.3, 0.25];
+        let cs = [0.6_f32, 0.2, 0.9, 0.75];
+        for m in [
+            NonSeparableBlend::Hue,
+            NonSeparableBlend::Saturation,
+            NonSeparableBlend::Color,
+        ] {
+            let out = Blend::NonSeparable(m).apply_subtractive(cb, cs);
+            assert!(
+                (out[3] - cb[3]).abs() < EPS,
+                "{m:?} must take K from the BACKDROP (0.25), got {}",
+                out[3]
+            );
+        }
+        let lum = Blend::NonSeparable(NonSeparableBlend::Luminosity).apply_subtractive(cb, cs);
+        assert!(
+            (lum[3] - cs[3]).abs() < EPS,
+            "Luminosity must take K from the SOURCE (0.75), got {}",
+            lum[3]
+        );
+    }
+
+    /// `Normal` is `Normal` in either space — the one mode the complement
+    /// cannot change, because `1 − (1 − cs) = cs`.
+    ///
+    /// Worth an assertion because it is the guard on the fast path: if
+    /// this were ever false, every `Normal` paint in a CMYK group would
+    /// invert.
+    #[test]
+    fn normal_is_unaffected_by_the_complement() {
+        let cb = [0.2_f32, 0.4, 0.6, 0.8];
+        let cs = [0.9_f32, 0.1, 0.5, 0.3];
+        assert!(close4(Blend::Normal.apply_subtractive(cb, cs), cs));
+    }
+
+    /// The subtractive composite must reduce to the source over a
+    /// transparent backdrop, for every mode — the same property
+    /// [`composite_element`] has, checked independently because it is a
+    /// separate function and "it is the same code" is exactly the
+    /// assumption that let the white-backdrop defect live.
+    #[test]
+    fn subtractive_composite_over_nothing_is_the_source() {
+        let src = PixelCmyk {
+            c: [0.3, 0.7, 0.1, 0.4],
+            a: 1.0,
+        };
+        for mode in [
+            Blend::Normal,
+            Blend::Multiply,
+            Blend::Screen,
+            Blend::Difference,
+            Blend::Exclusion,
+            Blend::ColorBurn,
+            Blend::NonSeparable(NonSeparableBlend::Luminosity),
+        ] {
+            let out = composite_element_cmyk(PixelCmyk::TRANSPARENT, src, mode);
+            assert!(
+                close4(out.c, src.c) && (out.a - 1.0).abs() < EPS,
+                "{mode:?} over nothing must be the source, got {out:?}"
+            );
+        }
+    }
+
+    /// §11.3.2's robustness `shall`, on the subtractive path too: no
+    /// formula may emit NaN or Inf whatever it is handed.
+    #[test]
+    fn the_subtractive_path_emits_no_nan_or_inf() {
+        let corners = [0.0_f32, 1.0];
+        for &b in &corners {
+            for &s in &corners {
+                for mode in [
+                    Blend::ColorDodge,
+                    Blend::ColorBurn,
+                    Blend::SoftLight,
+                    Blend::NonSeparable(NonSeparableBlend::Color),
+                ] {
+                    let out = mode.apply_subtractive([b; 4], [s; 4]);
+                    assert!(
+                        out.iter().all(|v| v.is_finite()),
+                        "{mode:?} cb={b} cs={s} -> {out:?}"
+                    );
+                }
+            }
+        }
     }
 
     /// The premultiplied round trip must be stable to within one 8-bit
