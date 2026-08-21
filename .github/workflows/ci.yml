@@ -381,6 +381,81 @@ jobs:
       - name: check that every code commit is filed
         run: python tools/check-commits-filed.py
 
+      # ------------------------------------------------------------------
+      # ★★ THE EIGHT GATES THAT EXISTED AND CI DID NOT RUN
+      #
+      # Added 2026-08-21, and the gap is worth recording rather than quietly
+      # closing: `tools/` held FIFTEEN check scripts and this workflow
+      # invoked SIX. The other nine ran only when somebody remembered to run
+      # them locally -- which is exactly the "green because nobody looked"
+      # failure these scripts were each written to end, one level up.
+      #
+      # The ratio was itself mis-filed twice before it was measured: one
+      # session recorded "3 of 16", the next corrected it to "5 of 14", and
+      # both were derived by reading rather than by counting. `ls tools/check-*`
+      # and a grep over this file are the only two commands that answer it.
+      #
+      # `check-image-colorspace-truth.py` is deliberately NOT here: it takes a
+      # fixture directory as an argument and checks a corpus, not the repo, so
+      # it is a sweep tool rather than a gate. Naming the omission so the next
+      # person counting does not record a ninth miss.
+      # ------------------------------------------------------------------
+
+      # Every document mutation goes through `EditSession` -- the invariant
+      # that keeps undo, the dirty set and the save-time diff able to see
+      # everything that happened.
+      - name: check no mutation bypasses EditSession
+        run: bash tools/check-bypass-paths.sh
+
+      # A consuming project builds against `docs/core-api/`. A verb missing
+      # from it is a verb whose only description is whatever somebody said
+      # once in chat -- which is how a wrong `insert_pages` disclosure shipped
+      # in the GUI. Also re-derives the stated line counts, because a
+      # published figure nobody re-derives goes stale silently.
+      - name: check every public verb is documented and the counts agree
+        run: python tools/check-core-api-verbs.py
+
+      # Pass IDs, standing rules and decision numbers are hand-assigned across
+      # documents no compiler reads. Duplicate-number detection in
+      # ARCHITECTURE.md §12 is deliberately absent, so the printed ceiling
+      # this produces is the only thing standing between two decisions and the
+      # same number.
+      - name: check the ledger numbers have no duplicates
+        run: python tools/check-ledger-numbers.py
+
+      # One operator gesture is ONE undo entry (R179/R49). A `commit()` inside
+      # a loop is N entries for one gesture, and leaves earlier commits
+      # standing when a later iteration fails -- the `import_form_data` defect
+      # exactly.
+      - name: check a command commits once
+        run: python tools/check-one-commit-per-command.py
+
+      # The sibling of `check-commits-filed.py`, for commits that CLAIM a Pass
+      # ID. Filing a Pass and filing a COMMIT are two different acts and only
+      # the second decays silently; both gates green together is the state
+      # worth defending.
+      - name: check every Pass-claiming commit is filed
+        run: python tools/check-passes-filed.py
+
+      # A setting parsed, validated, defaulted and read by NOTHING is a
+      # preference the operator sets and pdfce ignores. The inbound twin of
+      # the outcome gate above: that one catches values computed and never
+      # told, this one catches values told and never honoured.
+      - name: check every persisted setting is consumed
+        run: python tools/check-settings-consumed.py
+
+      # A baked-in gap in an operator-facing string -- the artefact of a
+      # wrapped Rust literal losing its continuation backslash -- ships as a
+      # sentence with a ten-space hole in it. Nothing else catches it: it
+      # compiles, it formats, and it reads correctly in source.
+      - name: check no operator-facing string has a baked-in gap
+        run: bash tools/check-string-gaps.sh
+
+      # Every colour in the GUI is a named role in theme.rs, so a theme change
+      # cannot leave one hard-coded literal behind at the wrong contrast.
+      - name: check every colour is a named theme role
+        run: bash tools/check-theme-colors.sh
+
   cross-check:
     name: cross-target compile check (macOS / wasm32)
     runs-on: ubuntu-latest
