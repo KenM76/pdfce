@@ -492,6 +492,11 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // what makes the order a contract rather than a convention.
             "nonseparable_composited",
             "nonseparable_pixels",
+            // §11.4.4's second content walk, appended after every
+            // pre-existing key because this list IS the stable contract
+            // and inserting in the middle would break every consumer
+            // parsing it positionally.
+            "groups_backdrop_reruns",
         ],
         "metrics key order is part of the stable contract"
     );

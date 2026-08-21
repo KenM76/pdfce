@@ -502,6 +502,26 @@ pub struct Diagnostics {
     /// its internal occlusion order wrong — strictly better than
     /// flattening, and still not correct.
     pub transparency_groups_knockout_approximated: usize,
+    /// **Non-isolated** transparency groups whose content stream was walked
+    /// a **second time**, over a copy of their own backdrop, so §11.4.4's
+    /// element formula and backdrop removal could be computed against it
+    /// (`crate::canvas::Canvas::group`).
+    ///
+    /// # Why this is a cost counter rather than a shortfall counter
+    ///
+    /// Every other counter here names something pdfce did *not* do. This
+    /// one names something it did, and the reason it is disclosed is that
+    /// it is the only place in the renderer where a page's content stream
+    /// is interpreted more than once. A document whose groups all blend
+    /// pays roughly double for those subtrees, and an operator comparing
+    /// two render timings has no other way to see it.
+    ///
+    /// A zero here does **not** mean non-isolated groups were mishandled:
+    /// §11.4.4 NOTE 5 makes the single-run answer *exact* whenever the
+    /// group's interior composites `Normal` throughout, which is the
+    /// overwhelming majority of real content. The second walk is taken
+    /// only when the interior actually blended against something.
+    pub transparency_groups_backdrop_reruns: usize,
     /// Of those, the ones that are **isolated** (`/I true`) or
     /// **knockout** (`/K true`) — Table 147.
     ///
@@ -1037,6 +1057,7 @@ polarity unverifiable (decision 006 R30)",
         self.overprint_pixels += other.overprint_pixels;
         self.overprint_mode1_requested += other.overprint_mode1_requested;
         self.transparency_groups_composited += other.transparency_groups_composited;
+        self.transparency_groups_backdrop_reruns += other.transparency_groups_backdrop_reruns;
         self.transparency_groups_knockout_approximated +=
             other.transparency_groups_knockout_approximated;
         self.transparency_groups_flattened += other.transparency_groups_flattened;
@@ -4214,13 +4235,8 @@ impl Interpreter<'_> {
         // opaque fills cannot tell a correct implementation from a wrong
         // one. Any knockout test must set `/ca < 1`.
         let is_knockout = group_flag(b"K");
-        if is_transparency_group {
-            if is_knockout || group_flag(b"I") {
-                self.diag.transparency_groups_special += 1;
-            }
-            if is_knockout {
-                self.diag.transparency_groups_knockout_approximated += 1;
-            }
+        if is_transparency_group && (is_knockout || group_flag(b"I")) {
+            self.diag.transparency_groups_special += 1;
         }
 
         let mut active = self.active.clone();
@@ -4314,27 +4330,65 @@ impl Interpreter<'_> {
                 nonseparable: self.gs.current.nonseparable,
             };
             let nested_active = active.clone();
-            canvas.layer(paint, |sub| {
-                run_nested(
+            // §11.4.4 / §11.4.5, through `Canvas::group` rather than
+            // `Canvas::layer`: an ISOLATED group's initial backdrop is
+            // transparent and `layer`'s buffer already is that, but a
+            // NON-isolated group's elements are entitled to see the
+            // backdrop beneath them and `layer` cannot give them one.
+            //
+            // The closure is called ONCE for an isolated group and for a
+            // non-isolated group whose interior never blends, and TWICE
+            // otherwise — see `Canvas::group` for why the second run is
+            // both necessary and conditional. Only the first run's
+            // diagnostics are returned, so nothing here double-counts.
+            canvas.group(paint, group_flag(b"I"), is_knockout, |sub| {
+                let nested = run_nested(
                     doc,
                     &content,
                     form_resources,
                     fonts,
-                    group_state,
+                    group_state.clone(),
                     sub,
                     depth,
-                    nested_active,
+                    nested_active.clone(),
                     cancel,
                     policy,
                     hidden_here,
-                )
+                );
+                // "Did anything inside this group need to read what was
+                // underneath it?" — §11.4.4 NOTE 2's condition, answered
+                // from the run rather than guessed from the dictionary.
+                //
+                // Deliberately CONSERVATIVE in the safe direction: a
+                // nested *isolated* child's own interior blends also land
+                // in these counters, so the outer group can be re-run when
+                // it did not strictly need to be. Over-triggering costs a
+                // second walk; under-triggering silently renders a blend
+                // against nothing, which is the failure this whole path
+                // exists to end.
+                let backdrop_dependent = nested.blend_modes_applied > 0
+                    || nested.nonseparable_composited > 0
+                    || nested.overprint_composited > 0
+                    || nested.transparency_groups_backdrop_reruns > 0;
+                (nested, backdrop_dependent)
             })
         } else {
             None
         };
         match layered {
-            Some(nested) => {
-                self.diag.merge(nested);
+            Some(outcome) => {
+                if outcome.backdrop_rerun {
+                    self.diag.transparency_groups_backdrop_reruns += 1;
+                }
+                // §11.4.6 is IMPLEMENTED now, so this counter changed
+                // meaning: it used to count every `/K true` group (the
+                // whole feature was an approximation) and now counts only
+                // the ELEMENTS inside one that could not be given knockout
+                // semantics, because they read the destination back. A
+                // knockout group that renders exactly reports zero.
+                self.diag.transparency_groups_knockout_approximated +=
+                    outcome.knockout_approximated;
+                self.diag.merge(outcome.result);
                 self.diag.transparency_groups_composited += 1;
             }
             None => {

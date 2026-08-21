@@ -174,4 +174,4 @@ for st in streams:
                             gs_bm.get(cur_gs, "?")))
     if ops:
         for o in sorted(ops, key=lambda z: (z[1], z[0])):
-            print(f"  device~({o[0]:4d},{o[1]:4d})  {o[2]:>4}  {o[3]:>6}  {o[4]}")
+            print(f"  device~({o[0]:4d},{o[1]:4d})  {o[2]:>4}  {str(o[3]):>6}  {o[4]}")

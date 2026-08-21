@@ -5,6 +5,137 @@ Companion to `docs/overprint-architecture-survey.md` (the sourcing record for
 the colorant half) and `docs/ghent-patch-reference.md` (the per-patch expected
 appearance for the overprint patches).
 
+> ## ★★★ AMENDMENT 2026-08-21 — STAGE A SHIPPED, AND IT CANNOT DELIVER ITS
+> ## SEVEN PATCHES. THE TRANSPARENCY PANELS ARE BLOCKED ON §11.3.4, NOT ON
+> ## THE GROUP MODEL. Read this before scoping `Pass 97.1`.
+>
+> `Pass 97.0` shipped: `crates/pdfce-render/src/compositor.rs` (§11.4.4's
+> element formula, §11.4.8's knockout variant, §11.4.4's backdrop removal,
+> Table 136's thirteen separable blend functions), non-isolated groups
+> rendered over their own backdrop, and a real §11.4.6 knockout
+> implementation. **Board before and after: `26 pass · 14 FAIL · 11
+> UNRESOLVED` — unchanged.** Trap count across the failing patches went
+> **67 → 55**.
+>
+> ### What moved, measured
+>
+> | patch | traps before | after | why |
+> |---|---:|---:|---|
+> | `1_GWG161` (non-isolated **knockout**, DeviceCMYK) | 14 | **2** | §11.4.6 implemented |
+> | everything else | — | unchanged | — |
+>
+> `1_GWG161` is the headline and it is the one this plan predicted least
+> confidently: twelve of sixteen cells now render correctly, and the two
+> that remain sit with the residue below. **No patch regressed**, and
+> `2_GWG120_White_OP-KO` — the other `/K`-named patch — still passes.
+>
+> ### ★★ THE FINDING THAT CHANGES THE STAGING, and it is a derivation, not
+> ### a hunch
+>
+> §4's Stage A expects seven patches: `1_GWG161`, `3_GWG161`, `1_GWG162`
+> and the four soft-mask patches. **It will not get them, and the reason is
+> not that the group model is wrong.** Worked by hand on `1_GWG162`'s
+> `Difference` cell, whose two operands are printed in the file:
+>
+> ```text
+> X1  = DeviceCMYK 0 1 0 0   (magenta)      the cell's first element
+> X2  = DeviceCMYK 0 0 0 1   (black)        the second, /BM /Difference
+> surround (what a correct engine must produce) = RGB (0, 165, 79)
+> ```
+>
+> §11.3.4 requires a subtractive space's components to be **complemented
+> before the blend function and complemented back after**:
+>
+> ```text
+> cb' = (1,0,1,1)   cs' = (1,1,1,0)
+> |cb' − cs'|       = (0,1,0,1)
+> complement back   = (1,0,1,0)  =  DeviceCMYK 1 0 1 0  =  GREEN
+> ```
+>
+> **That is the surround, exactly.** pdfce renders `(237, 1, 140)`; pdfium
+> renders `(202, 29, 108)`; both blend in RGB and both are wrong, in
+> different places. The trap is authored on the *blending colour space*,
+> and no amount of group-model correctness reaches it.
+>
+> ⇒ **`Pass 97.1` is the unlock for the transparency panels, not only for
+> overprint**, and its first deliverable is §11.3.4's complement rather
+> than the spot planes. The plan already lists the complement under Stage B
+> (`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`) — what changes is
+> that it is now the **leading** item and it is what four of Stage A's
+> seven expected patches were actually waiting for.
+>
+> Note the shape: **every Ghent transparency patch declares
+> `/Group /CS /DeviceCMYK` on the PAGE** (`3_GWG161` included, whose own
+> objects are `ICCBased` RGB). So the blending space is CMYK for all of
+> them regardless of what the artwork is coloured in, and pdfce blends
+> every one of them in device sRGB.
+>
+> ### A defect this Pass fixed, and the mechanism is worth carrying
+>
+> `blend_nonsep::composite` and `blend_nonsep::composite_layer` both
+> substituted a **white** backdrop wherever the destination was
+> transparent, then lerped from it. That is §11.4.4's formula specialised
+> to `α_b = 1`, and it is wrong precisely where §11.4.7 makes transparency
+> common — the page buffer starts transparent and the white medium is
+> composited in once at the end, so "transparent" means *no backdrop*, not
+> *paper*.
+>
+> `Sat(white) = 0` and `Lum(white) = 1`, so `Hue`/`Saturation`/`Color` of
+> **anything** over white is white. Measured on `1_GWG162` at scale 2.0:
+>
+> | cell | pdfce before | pdfce after | pdfium |
+> |---|---|---|---|
+> | `Hue` | `(255,255,255)` | `(184,184,184)` | `(184,184,184)` |
+> | `Saturation` | `(255,255,255)` | `(184,184,184)` | `(184,184,184)` |
+> | `Color` | `(255,255,255)` | `(184,184,184)` | `(184,184,184)` |
+> | `Luminosity` | `(106,106,106)` | `(255,20,159)` | `(255,22,158)` |
+>
+> Three cells exact against an independent renderer, the fourth within two
+> levels. **The trap still fires on all four** — that is the §11.3.4 gap
+> above, and it is why "matches pdfium" and "passes the suite" are
+> different claims and both had to be measured.
+>
+> `overprint::composite` carries the **same white-backdrop convention** and
+> was left alone: it is Table 149 logic, not a blend function, and changing
+> it belongs with the colorant buffer that will replace its input. Recorded
+> here so it is not read as an oversight.
+>
+> ### What Stage A actually bought
+>
+> 1. **pdfce owns the compositing arithmetic.** `compositor.rs` is the
+>    single place §11.4.4/§11.4.8/Table 136 live, so the three call sites
+>    that need them cannot drift.
+> 2. **Knockout is real** (`KnockoutTarget`), including §11.4.6 NOTE 6's
+>    nesting rule — a non-isolated group inside a knockout group inherits
+>    the *outer* group's initial backdrop, not the immediate one.
+> 3. **Non-isolated groups see their backdrop**, via a second content walk
+>    taken only when the group's interior actually blended (§11.4.4
+>    NOTE 5 makes the single walk exact otherwise). Disclosed as
+>    `groups_backdrop_reruns`.
+> 4. `transparency_groups_knockout_approximated` **changed meaning** —
+>    from "this group is an approximation" to "these elements inside it
+>    were", which is zero for a knockout group pdfce rendered exactly.
+>
+> ### Still owed from Stage A, and named rather than left implicit
+>
+> * **Soft mask on the group RESULT** (§11.4.5) is NOT done. Masks are
+>   still folded into the clip. Four patches (`1_GWG1610`, `1_GWG1611`,
+>   `1_GWG168`, `1_GWG169`) and it is the one Stage A item with no §11.3.4
+>   dependency, so it is the next thing that can move the board on its own.
+> * **`f_g` is approximated by `α_g`** for a group used as an element of a
+>   knockout group — exact whenever that group's own elements are opaque,
+>   which is §11.4 corpus §7.4's stated safe-skip condition.
+> * **Elements that read the destination back** (shadings, overprint,
+>   per-paint non-separable blends) composite with non-knockout semantics
+>   inside a knockout group, counted on
+>   `transparency_groups_knockout_approximated`.
+> * **`3_GWG161` is unexplained.** 14 traps, no knockout groups, no
+>   backdrop reruns triggered (correctly — its groups' interiors are all
+>   `Normal`), and its blend modes sit at the `Do` where `draw_pixmap`
+>   already handles them. The §11.3.4 hypothesis fits but was **not**
+>   confirmed by derivation the way `1_GWG162`'s was, and it is recorded
+>   as unconfirmed rather than assumed.
+
 > ## ★★ AMENDMENT 2026-08-19 — THE DENOMINATOR MOVED AND ONE PROBED PATCH
 > ## NOW PASSES. Re-derive the thesis before scoping `Pass 97.x` from it.
 >

@@ -375,6 +375,17 @@ pub enum PoisonReason {
     /// One of §11.3.5.3's four non-separable blend modes, which pdfce
     /// composites per pixel against the destination (`crate::blend_nonsep`).
     NonSeparableBlend,
+    /// A **non-isolated transparency group whose contents blend against
+    /// their backdrop** (§11.4.4 NOTE 2). Rendering it correctly means
+    /// running the group's content stream a second time over a copy of the
+    /// backdrop and then applying §11.4.4's backdrop removal — both of
+    /// which read the destination, so a recording cannot reproduce it.
+    ///
+    /// A recorded page containing one replays as the *isolated*
+    /// approximation, which is why the recording is refused by name rather
+    /// than quietly kept: the difference is a plausible-looking picture,
+    /// not a visible failure.
+    NonIsolatedGroup,
     /// The recording exceeded [`MAX_DISPLAY_LIST_BYTES`].
     ///
     /// Unlike the others this is not a *capability* limit — the page is
@@ -393,6 +404,7 @@ impl PoisonReason {
             Self::SoftMask => "soft mask",
             Self::TilingPattern => "tiling pattern",
             Self::NonSeparableBlend => "non-separable blend mode",
+            Self::NonIsolatedGroup => "non-isolated transparency group",
             Self::TooLarge => "recording exceeded MAX_DISPLAY_LIST_BYTES",
         }
     }

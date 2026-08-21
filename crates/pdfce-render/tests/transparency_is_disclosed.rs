@@ -457,27 +457,118 @@ fn the_outer_blend_mode_does_not_leak_into_the_groups_contents() {
     );
 }
 
-/// `/I` (isolated) and `/K` (knockout) are still counted, and `/K` gets its
-/// own shortfall counter because compositing a knockout group as an
-/// ordinary one gets the outer boundary right and the INTERNAL occlusion
-/// order wrong: in a knockout group each element composites against the
-/// group's initial backdrop, so later elements REPLACE earlier ones rather
-/// than layering over them.
+/// `/I` (isolated) and `/K` (knockout) are counted, and
+/// `knockout_approximated` is now **zero** for a knockout group pdfce
+/// rendered exactly.
+///
+/// # ★ THIS COUNTER CHANGED MEANING IN `Pass 97.0`, and the previous
+/// # expectation is kept here so the change reads as deliberate
+///
+/// It used to be `1` for every `/K true` group, because the whole feature
+/// was an approximation: pdfce composited a knockout group as an ordinary
+/// one, which gets its outer boundary right and its internal occlusion
+/// order wrong. §11.4.6 now has a real implementation
+/// (`crate::canvas::KnockoutTarget`), so the counter names something
+/// narrower and more useful — the ELEMENTS inside a knockout group that
+/// could not be given knockout semantics, because they read the
+/// destination back (a shading, an overprint composite, a per-paint
+/// non-separable blend).
+///
+/// A silently redefined counter is worse than a renamed one: an operator
+/// diffing two runs would see the number fall to zero and read it as an
+/// improvement in the wrong thing. The rustdoc on the field says so, and
+/// this test is the executable half of that statement.
 #[test]
 fn isolated_and_knockout_groups_are_counted_separately() {
-    for (extra, knockout) in [
-        ("/Group << /S /Transparency /I true >>", 0),
-        ("/Group << /S /Transparency /K true >>", 1),
-        ("/Group << /S /Transparency /I true /K true >>", 1),
+    for extra in [
+        "/Group << /S /Transparency /I true >>",
+        "/Group << /S /Transparency /K true >>",
+        "/Group << /S /Transparency /I true /K true >>",
     ] {
         let d = render(page_with_form(extra)).diagnostics;
         assert_eq!(d.transparency_groups_composited, 1, "{extra}");
         assert_eq!(d.transparency_groups_special, 1, "{extra}");
         assert_eq!(
-            d.transparency_groups_knockout_approximated, knockout,
-            "{extra}"
+            d.transparency_groups_knockout_approximated, 0,
+            "a knockout group of plain fills is rendered exactly, so nothing \\
+             is approximated: {extra}"
         );
     }
+}
+
+/// ★ **§11.4.6, measured — and the fixture sets `/ca 0.5` for the reason
+/// the clause itself gives.**
+///
+/// Knockout and non-knockout are **identical** when every element is
+/// opaque: `q_s = 1` makes `α_s = f_s`, and §11.4.8's `(1 − f_si)`
+/// destination scale collapses onto §11.4.4's `(1 − α_si)` term for term.
+/// So a fixture built from opaque fills passes under the correct
+/// implementation *and* under the collapsed one, and proves nothing. The
+/// corpus states this as a warning in so many words
+/// (`iso32000__s__11.4.md` §6.5): *"A fixture built from opaque fills
+/// cannot distinguish a correct knockout implementation from a wrong one.
+/// Build the test with `/ca < 1`."*
+///
+/// The fixture: two black fills at `/ca 0.5`, exactly overlapping, inside
+/// one group over white paper.
+///
+/// | group | what the second fill does | grey level |
+/// |---|---|---|
+/// | non-knockout | layers over the first ⇒ `1 − 0.5²` | **25 %** |
+/// | knockout | knocks the first out ⇒ `1 − 0.5` | **50 %** |
+///
+/// A 64-level gap, and it is the whole visible content of the feature.
+#[test]
+fn knockout_erases_an_earlier_element_where_a_normal_group_layers() {
+    fn grey(extra: &str) -> u8 {
+        let content = "/Fm0 Do";
+        let stream = format!("{content}\n");
+        // Two identical half-opaque black squares. `/GS0` carries /ca 0.5,
+        // set INSIDE the group so it is the element's own opacity rather
+        // than the group's.
+        let form_body = "/GS0 gs 0 g 10 10 40 40 re f 0 g 10 10 40 40 re f";
+        let form = format!(
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 60 60] {extra} \
+             /Resources << /ExtGState << /GS0 << /Type /ExtGState /ca 0.5 >> >> >> \
+             /Length {} >>\nstream\n{form_body}\nendstream",
+            form_body.len()
+        );
+        let bytes = build(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 60 60] >>",
+            ),
+            (
+                3,
+                "<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+                 /Resources << /XObject << /Fm0 5 0 R >> >> >>",
+            ),
+            (
+                4,
+                &format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
+            ),
+            (5, &form),
+        ]);
+        render(bytes)
+            .pixmap
+            .pixel(30, 30)
+            .expect("in bounds")
+            .demultiply()
+            .red()
+    }
+
+    let normal = grey("/Group << /S /Transparency >>");
+    let knocked = grey("/Group << /S /Transparency /K true >>");
+    assert!(
+        (normal as i32 - 64).abs() <= 3,
+        "two half-opaque blacks layering reach 25% grey (~64), got {normal}"
+    );
+    assert!(
+        (knocked as i32 - 128).abs() <= 3,
+        "in a knockout group the second fill REPLACES the first, so the \\
+         result stays at 50% grey (~128), got {knocked}"
+    );
 }
 
 /// A form with NO `/Group` is an ordinary reusable content stream and is

@@ -7632,7 +7632,8 @@ soft_masks_applied={} soft_mask_tr_ignored={} soft_masks_reset_stale={} \
 groups_flattened={} groups_special={} \
 groups_composited={} groups_knockout_approx={} \
 overprint_requested={} overprint_opm1={} overprint_effective={} \
-overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_composited={} nonseparable_pixels={}",
+overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_composited={} nonseparable_pixels={} \
+groups_backdrop_reruns={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -7875,6 +7876,13 @@ overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_co
         // independently, and a page can exercise one without the other.
         d.nonseparable_composited,
         d.nonseparable_pixels,
+        // §11.4.4's second walk. NOT a shortfall — the only place in the
+        // renderer where one page's content stream is interpreted twice,
+        // disclosed because nothing else makes that visible. Zero is the
+        // normal reading and does not mean non-isolated groups were
+        // mishandled: §11.4.4 NOTE 5 makes the single walk exact whenever
+        // the group's interior composites Normal throughout.
+        d.transparency_groups_backdrop_reruns,
     );
     report_diagnostics(d);
 

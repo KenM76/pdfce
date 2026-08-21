@@ -69,7 +69,7 @@ use tiny_skia::{
 };
 
 use crate::display_list::{
-    ClipDef, ClipId, Op, PoisonReason, Recorder, fill_bounds, stroke_bounds,
+    ClipDef, ClipId, DeviceBounds, Op, PoisonReason, Recorder, fill_bounds, stroke_bounds,
 };
 
 /// What a paint is made of, in **owned** terms.
@@ -195,6 +195,42 @@ impl BrushSpec {
         }
     }
 
+    /// Split this paint into **shape** and **opacity** — the two things
+    /// §11.4.6 refuses to let a knockout group collapse.
+    ///
+    /// Returns a copy of the spec painting at **full opacity**, plus the
+    /// `q_s` that was taken out of it.
+    ///
+    /// # Why a knockout element cannot just be painted normally
+    ///
+    /// §11.4.8 scales the destination by `(1 − f_si)` where the
+    /// non-knockout formula has `(1 − α_si)`. Since `α_s = f_s × q_s`, the
+    /// two coincide **exactly** when `q_s = 1` and diverge otherwise — a
+    /// knockout element erases more of what is under it than an ordinary
+    /// one does. So the compositor needs `f_s` on its own, and the only
+    /// way to obtain it from the rasteriser is to ask for coverage
+    /// **without** the constant alpha folded in: paint at `q_s = 1` and
+    /// read the resulting alpha channel, which is then pure coverage.
+    ///
+    /// Image brushes carry no constant alpha of their own — the shader is
+    /// built at opacity 1 and any `/ca` reaches them through a different
+    /// route — so they report `q_s = 1.0` and are unchanged.
+    pub(crate) fn split_shape_and_opacity(&self) -> (Self, f32) {
+        match &self.brush {
+            Brush::Solid { rgba } => (
+                Self {
+                    brush: Brush::Solid {
+                        rgba: [rgba[0], rgba[1], rgba[2], 255],
+                    },
+                    blend: self.blend,
+                    anti_alias: self.anti_alias,
+                },
+                f32::from(rgba[3]) / 255.0,
+            ),
+            Brush::Image { .. } => (self.clone(), 1.0),
+        }
+    }
+
     /// The 8-bit quadruple this spec paints with, when it is a solid.
     ///
     /// Exists for the round-trip assertions below and for nothing else — a
@@ -268,6 +304,11 @@ pub(crate) enum Canvas<'a> {
     /// Draw nowhere; record what *would* have been drawn, for replay
     /// against a viewport chosen later (`crate::display_list`).
     Record(&'a mut Recorder),
+    /// Draw into a **knockout group** (§11.4.6): every element composites
+    /// against the group's *initial* backdrop rather than against the
+    /// elements beneath it, so each one has to be rasterised on its own
+    /// before it can be accumulated. See [`KnockoutTarget`].
+    Knockout(&'a mut KnockoutTarget),
 }
 
 impl<'a> Canvas<'a> {
@@ -300,7 +341,7 @@ impl<'a> Canvas<'a> {
     /// builds a real mask instead.
     pub(crate) fn record_clip(&mut self, def: ClipDef) -> Option<ClipId> {
         match self {
-            Self::Paint(_) => None,
+            Self::Paint(_) | Self::Knockout(_) => None,
             Self::Record(r) => Some(r.push_clip(def)),
         }
     }
@@ -315,6 +356,7 @@ impl<'a> Canvas<'a> {
         match self {
             Self::Paint(p) => p.width(),
             Self::Record(r) => r.width,
+            Self::Knockout(k) => k.accum.width(),
         }
     }
 
@@ -323,6 +365,7 @@ impl<'a> Canvas<'a> {
         match self {
             Self::Paint(p) => p.height(),
             Self::Record(r) => r.height,
+            Self::Knockout(k) => k.accum.height(),
         }
     }
 
@@ -337,6 +380,13 @@ impl<'a> Canvas<'a> {
     ) {
         match self {
             Self::Paint(p) => p.fill_path(path, &brush.to_paint(), rule, ctm, clip.mask),
+            Self::Knockout(k) => {
+                let bounds = fill_bounds(path, ctm);
+                let (opaque, q_s) = brush.split_shape_and_opacity();
+                k.element(bounds, q_s, brush.blend, |scratch| {
+                    scratch.fill_path(path, &opaque.to_paint(), rule, ctm, clip.mask);
+                });
+            }
             Self::Record(r) => r.push(Op::Fill {
                 bounds: fill_bounds(path, ctm),
                 path: Arc::new(path.clone()),
@@ -360,6 +410,13 @@ impl<'a> Canvas<'a> {
     ) {
         match self {
             Self::Paint(p) => p.stroke_path(path, &brush.to_paint(), stroke, ctm, clip.mask),
+            Self::Knockout(k) => {
+                let bounds = stroke_bounds(path, stroke, ctm);
+                let (opaque, q_s) = brush.split_shape_and_opacity();
+                k.element(bounds, q_s, brush.blend, |scratch| {
+                    scratch.stroke_path(path, &opaque.to_paint(), stroke, ctm, clip.mask);
+                });
+            }
             Self::Record(r) => r.push(Op::Stroke {
                 bounds: stroke_bounds(path, stroke, ctm),
                 path: Arc::new(path.clone()),
@@ -443,6 +500,29 @@ impl<'a> Canvas<'a> {
                 };
                 p.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
             }
+            Self::Knockout(k) => {
+                // An image carries its own per-sample alpha, and that alpha
+                // is SHAPE here, not opacity: §11.6.4.2 makes an image's
+                // `/SMask` an object-shape input unless `/AIS` says
+                // otherwise. So `q_s = 1` and the scratch's alpha channel
+                // is `f_s` directly.
+                let bounds = fill_bounds(path, ctm);
+                k.element(bounds, 1.0, blend, |scratch| {
+                    let paint = Paint {
+                        shader: Pattern::new(
+                            texels.as_ref(),
+                            SpreadMode::Pad,
+                            quality,
+                            1.0,
+                            image_to_user,
+                        ),
+                        blend_mode: blend,
+                        anti_alias,
+                        force_hq_pipeline: false,
+                    };
+                    scratch.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
+                });
+            }
         }
     }
 
@@ -464,6 +544,24 @@ impl<'a> Canvas<'a> {
         match self {
             Self::Paint(p) => Some(p),
             Self::Record(_) => None,
+            // ★ A DISCLOSED SHORTFALL, not an oversight. The three callers
+            // here read the destination back — a shading, an overprint
+            // composite, a non-separable per-paint blend — and there is no
+            // formulation of "read what is already there" that also yields
+            // the element's own shape in isolation. Handing over the
+            // accumulator lets those operators run and paint the right
+            // marks; what they lose is the knockout semantics for that one
+            // element, which then layers instead of knocking out.
+            //
+            // Counted by the caller as `knockout_approximated`, and wrong
+            // in a bounded, nameable way: it is the answer a NON-knockout
+            // group would have given, which is also the answer every
+            // element gives when its opacity is 1 (§11.4.6 — the two
+            // recurrences coincide at `q_s = 1`).
+            Self::Knockout(k) => {
+                k.approximated += 1;
+                Some(&mut k.accum)
+            }
         }
     }
 
@@ -491,6 +589,23 @@ impl<'a> Canvas<'a> {
         f: impl FnOnce(&mut Canvas<'_>) -> R,
     ) -> Option<R> {
         match self {
+            Self::Knockout(k) => {
+                // A child of a knockout group is ONE element, and its own
+                // buffer is where the recursion bottoms out. Rendering it
+                // into a transparent buffer is exact whenever its interior
+                // composites `Normal` (§11.4.4 NOTE 5) — which is what an
+                // annotation's `/CA` layer always is, and what a group
+                // element usually is — and its result is then accumulated
+                // by §11.4.8's own formula rather than painted over.
+                let mut buf = Pixmap::new(k.accum.width(), k.accum.height())?;
+                let result = {
+                    let mut sub = Canvas::Paint(&mut buf);
+                    f(&mut sub)
+                };
+                let blend = layer_blend(paint);
+                k.element_from_pixmap(&buf, paint.opacity.clamp(0.0, 1.0), blend);
+                Some(result)
+            }
             Self::Paint(p) => {
                 // Same size as the parent, deliberately, and not the
                 // sub-drawing's bounding box: the contents are drawn under
@@ -554,6 +669,693 @@ impl<'a> Canvas<'a> {
                 r.push(Op::Layer { paint, ops });
                 Some(result)
             }
+        }
+    }
+
+    /// Draw a **transparency group** and composite its result per
+    /// ISO 32000-1 §11.4.4 — including the initial backdrop a
+    /// **non-isolated** group's elements are entitled to see.
+    ///
+    /// # Why this is not [`Canvas::layer`]
+    ///
+    /// [`Canvas::layer`] models *"composite this sub-drawing as one
+    /// object"*, which is exactly right for an annotation's `/CA` and for
+    /// an **isolated** group — both start from a fully transparent buffer,
+    /// because that is what §11.4.5 says an isolated group's initial
+    /// backdrop *is*.
+    ///
+    /// A **non-isolated** group is a different computation, and §11.4.4
+    /// NOTE 2 gives the reason in one sentence: *"The elements of a group
+    /// are composited onto a backdrop that includes the group's initial
+    /// backdrop. This is done to achieve the correct effects of the blend
+    /// modes, most of which are dependent on both the backdrop and source
+    /// colours being blended."* Painting such a group into a transparent
+    /// buffer hands every interior blend a backdrop of **nothing**, and
+    /// `B(nothing, C_s)` degenerates to `C_s` — which is why Ghent's
+    /// `3_GWG161` renders as a grid of saturated primaries.
+    ///
+    /// # The two runs, and why the second is conditional
+    ///
+    /// The standard's model needs two per-pixel quantities the group's own
+    /// buffer cannot both hold (`iso32000__s__11.4.md` §8): `C_n`, the
+    /// colour accumulated **over** the backdrop, and `α_gn`, the group's
+    /// own alpha **excluding** it. A `tiny_skia::Pixmap` has one alpha
+    /// channel.
+    ///
+    /// So the contents are run twice:
+    ///
+    /// | run | initial buffer | what it yields |
+    /// |---|---|---|
+    /// | 1 | transparent | `α_gn` — and `C` itself, when it is exact |
+    /// | 2 | a copy of the backdrop | `C_n` |
+    ///
+    /// **Run 2 is skipped whenever run 1's answer is already exact**, and
+    /// that is not a heuristic — it is §11.4.4 NOTE 5's own condition. With
+    /// every interior element compositing `Normal`, the backdrop's
+    /// contribution to `C_n` is precisely what backdrop removal takes back
+    /// out, so `C = C_iso` identically. The closure therefore reports
+    /// whether its contents blended against anything, and only a group that
+    /// did pays for a second walk. On ordinary documents — where a `/BM`
+    /// other than `/Normal` is rare — this costs nothing at all.
+    ///
+    /// It is also skipped when the backdrop is **empty**: `α_0 = 0`
+    /// everywhere makes the group isolated by §11.4.5's own substitution,
+    /// with no branch needed.
+    ///
+    /// # Arguments
+    ///
+    /// * `paint` — the outer state at the `Do`: constant alpha, blend mode,
+    ///   and a non-separable mode if the state carries one. §11.4.5: these
+    ///   apply to the group's **result**, never to its contents.
+    /// * `isolated` — the group's `/I` flag (Table 147). Expressed
+    ///   downstream entirely as `α_0 = 0`, which is the whole of the
+    ///   normative change §11.4.5 makes.
+    /// * `f` — runs the group's content stream into the canvas it is
+    ///   handed, and returns `(result, backdrop_dependent)`. It may be
+    ///   called **twice**; the second call's `result` is discarded, so a
+    ///   caller accumulating diagnostics must merge only the returned one.
+    ///
+    /// # Returns
+    ///
+    /// `None` when the buffer could not be allocated at all, with the same
+    /// contract [`Canvas::layer`] has: `f` was never called and the caller
+    /// decides what to do instead.
+    pub(crate) fn group<R>(
+        &mut self,
+        paint: LayerPaint,
+        isolated: bool,
+        knockout: bool,
+        mut f: impl FnMut(&mut Canvas<'_>) -> (R, bool),
+    ) -> Option<GroupOutcome<R>> {
+        // §11.4.6 is orthogonal to §11.4.5 — *"isolated and knockout are
+        // independent attributes"* — so knockout is dispatched first and
+        // `isolated` is carried into it as the initial backdrop's identity
+        // rather than as a second branch.
+        if knockout && !matches!(self, Self::Record(_)) {
+            return self.knockout_group(paint, isolated, f);
+        }
+        match self {
+            Self::Paint(p) => {
+                let mut iso = Pixmap::new(p.width(), p.height())?;
+                let (result, backdrop_dependent) = {
+                    let mut sub = Canvas::Paint(&mut iso);
+                    f(&mut sub)
+                };
+                // §11.4.5's substitution, applied as a test rather than a
+                // branch: a backdrop that is transparent everywhere IS an
+                // isolated group's backdrop, so there is nothing to run
+                // twice and nothing to remove.
+                let backdrop_present = p.pixels().iter().any(|px| px.alpha() > 0);
+                if isolated || !backdrop_dependent || !backdrop_present {
+                    composite_group_result(p, &iso, paint);
+                    return Some(GroupOutcome {
+                        result,
+                        backdrop_rerun: false,
+                        knockout_approximated: 0,
+                    });
+                }
+                // Run 2: the same content stream, over the group's own
+                // initial backdrop. `p` is untouched until the composite
+                // below, so it is the frozen backdrop the removal needs.
+                let mut nis = (*p).clone();
+                {
+                    let mut sub = Canvas::Paint(&mut nis);
+                    let _ = f(&mut sub);
+                }
+                composite_non_isolated_group(p, &iso, &nis, paint);
+                Some(GroupOutcome {
+                    result,
+                    backdrop_rerun: true,
+                    knockout_approximated: 0,
+                })
+            }
+            Self::Knockout(k) => {
+                // ★ §11.4.6 NOTE 6 / §11.6.6 — THE NESTING TRAP, and it is
+                // the one an implementation reaches for the wrong buffer
+                // on: *"When a non-isolated group is nested within a
+                // knockout group, the initial backdrop of the inner group
+                // is the same as that of the outer group; it is not the
+                // immediate backdrop of the inner group."*
+                //
+                // So the child is handed `initial`, NOT `accum`. Handing
+                // it the accumulator is what a "just pass the current
+                // buffer down" implementation does, and it is wrong in a
+                // way that only shows where a knockout group has more than
+                // one overlapping child — i.e. exactly where knockout is
+                // the feature under test.
+                let mut iso = Pixmap::new(k.accum.width(), k.accum.height())?;
+                let (result, backdrop_dependent) = {
+                    let mut sub = Canvas::Paint(&mut iso);
+                    f(&mut sub)
+                };
+                let blend = layer_blend(paint);
+                let opacity = paint.opacity.clamp(0.0, 1.0);
+                let initial_present = k.initial.pixels().iter().any(|px| px.alpha() > 0);
+                if isolated || !backdrop_dependent || !initial_present {
+                    k.element_from_pixmap(&iso, opacity, blend);
+                    return Some(GroupOutcome {
+                        result,
+                        backdrop_rerun: false,
+                        knockout_approximated: 0,
+                    });
+                }
+                let mut nis = k.initial.clone();
+                {
+                    let mut sub = Canvas::Paint(&mut nis);
+                    let _ = f(&mut sub);
+                }
+                k.element_from_non_isolated(&iso, &nis, opacity, blend);
+                Some(GroupOutcome {
+                    result,
+                    backdrop_rerun: true,
+                    knockout_approximated: 0,
+                })
+            }
+            Self::Record(r) => {
+                r.frames.push(Vec::new());
+                let (result, backdrop_dependent) = {
+                    let mut sub = Canvas::Record(r);
+                    f(&mut sub)
+                };
+                let ops = r.frames.pop().unwrap_or_default();
+                r.push(Op::Layer { paint, ops });
+                if !isolated && backdrop_dependent {
+                    // Replay would give the isolated approximation. Refuse
+                    // the recording by name rather than keep a plausible
+                    // wrong one — the same contract every other
+                    // destination-reading operator here has.
+                    r.poison(PoisonReason::NonIsolatedGroup);
+                }
+                Some(GroupOutcome {
+                    result,
+                    backdrop_rerun: false,
+                    knockout_approximated: 0,
+                })
+            }
+        }
+    }
+}
+
+impl Canvas<'_> {
+    /// Render a **knockout group** (§11.4.6) and composite its result.
+    ///
+    /// # Why this is a separate entry point rather than a flag inside
+    /// [`Canvas::group`]
+    ///
+    /// Because the two differ in *where the elements are composited*, not
+    /// in how the result is composited afterwards. An ordinary group's
+    /// elements go into one buffer and the group's own code never sees
+    /// them individually; a knockout group's elements each need their own
+    /// rasterisation, their own shape, and a read of a backdrop the buffer
+    /// no longer holds. That is a different target type
+    /// ([`KnockoutTarget`]), and swapping the target is the whole change.
+    ///
+    /// # The initial backdrop
+    ///
+    /// * **isolated** — fully transparent, per §11.4.5.
+    /// * **non-isolated** — a frozen copy of the parent at group entry.
+    ///   A copy, not a view: §11.4.6's `b = 0` means every element reads
+    ///   the *same* backdrop, and the parent is about to be written to.
+    ///
+    /// Inside another knockout group the copy is taken from **that**
+    /// group's initial backdrop, not from its accumulator — §11.4.6
+    /// NOTE 6's nesting rule, handled where the copy is made so a caller
+    /// cannot get it wrong.
+    ///
+    /// # Why the content stream is walked ONCE here
+    ///
+    /// [`Canvas::group`] runs a non-isolated group twice to recover
+    /// `α_gn`. A knockout target does not need that: it accumulates
+    /// `α_gi` as its own plane while the elements arrive, because it has
+    /// to see them individually anyway. The second walk was always a
+    /// consequence of *not* seeing them.
+    fn knockout_group<R>(
+        &mut self,
+        paint: LayerPaint,
+        isolated: bool,
+        mut f: impl FnMut(&mut Canvas<'_>) -> (R, bool),
+    ) -> Option<GroupOutcome<R>> {
+        let (w, h) = (self.width(), self.height());
+        let initial = if isolated {
+            Pixmap::new(w, h)?
+        } else {
+            match self {
+                Self::Paint(p) => (*p).clone(),
+                // §11.4.6 NOTE 6: the inner group inherits the OUTER
+                // group's initial backdrop, not its accumulated result.
+                Self::Knockout(k) => k.initial.clone(),
+                Self::Record(_) => Pixmap::new(w, h)?,
+            }
+        };
+        let mut target = KnockoutTarget::new(initial)?;
+        let (result, _dependent) = {
+            let mut sub = Canvas::Knockout(&mut target);
+            f(&mut sub)
+        };
+        let approximated = target.approximated;
+        match self {
+            Self::Paint(p) => target.finish(p, paint),
+            Self::Knockout(k) => {
+                let r = target.result_pixmap();
+                k.element_from_pixmap(&r, paint.opacity.clamp(0.0, 1.0), layer_blend(paint));
+            }
+            Self::Record(_) => {}
+        }
+        Some(GroupOutcome {
+            result,
+            backdrop_rerun: false,
+            knockout_approximated: approximated,
+        })
+    }
+}
+
+/// A **knockout group**'s accumulation state — ISO 32000-1 §11.4.6 /
+/// §11.4.8.
+///
+/// # Why a knockout group needs a type and an isolated one does not
+///
+/// In an ordinary group every element composites onto the result of the
+/// elements beneath it, which is exactly what painting into one buffer
+/// *is*. In a knockout group every element composites onto the group's
+/// **initial** backdrop instead, and the accumulated result is a weighted
+/// average taken with the element's own **shape** as the weight. Neither
+/// quantity survives being painted into a shared buffer: the initial
+/// backdrop is overwritten by the first element, and the shape is fused
+/// with the opacity the moment the two are multiplied into one alpha.
+///
+/// So this type holds four planes where a `Pixmap` holds one:
+///
+/// | field | standard's name | why it cannot be folded into `accum` |
+/// |---|---|---|
+/// | [`Self::initial`] | `⟨C_0, α_0⟩` | read by **every** element; `accum` no longer holds it after the first |
+/// | [`Self::accum`] | `⟨C_i, α_i⟩` | the running result, including the backdrop |
+/// | [`Self::group_alpha`] | `α_gi` | excludes the backdrop; `α_i` includes it, and `α_i > α_gi` whenever `α_0 > 0` |
+/// | [`Self::group_shape`] | `f_gi` | `f ≠ α` for any element with `q < 1`, and §11.4.6 makes computing it a `shall` for a group used inside another knockout group |
+///
+/// # ★ Why the fixtures for this must set `/ca < 1`
+///
+/// Knockout and non-knockout are **identical** when every element is
+/// opaque: `q_s = 1` gives `α_s = f_s`, and the two recurrences coincide
+/// term for term (§11.4.6). A test built from opaque fills therefore
+/// passes under both the correct implementation and the collapsed one,
+/// which is why every knockout test in this crate sets a fractional alpha.
+pub(crate) struct KnockoutTarget {
+    /// `⟨C_0, α_0⟩` — the group's initial backdrop, frozen at group entry.
+    /// Fully transparent for an isolated knockout group, which is the
+    /// whole of what `/I` changes here.
+    initial: Pixmap,
+    /// `⟨C_i, α_i⟩` — the accumulated result, **including** the initial
+    /// backdrop.
+    accum: Pixmap,
+    /// `α_gi` — the group's own accumulated alpha, **excluding** the
+    /// initial backdrop. This is what the group returns as its `α`.
+    group_alpha: Vec<f32>,
+    /// `f_gi` — the group's own accumulated shape. Returned as the group's
+    /// `f`, which matters when this group is itself an element of another
+    /// knockout group (§11.4.6's `shall`).
+    group_shape: Vec<f32>,
+    /// Reused per element, so a group with a thousand elements allocates
+    /// one page-sized buffer rather than a thousand. Cleared over each
+    /// element's own device bounds only.
+    scratch: Pixmap,
+    /// Elements that could not be given knockout semantics because they
+    /// read the destination back (`Canvas::pixmap_mut`). Surfaced by the
+    /// caller; never silently zero.
+    approximated: usize,
+}
+
+impl KnockoutTarget {
+    /// Build the state for a knockout group whose initial backdrop is
+    /// `initial`.
+    ///
+    /// Returns `None` if either page-sized buffer cannot be allocated, with
+    /// the same contract [`Canvas::group`] has: the caller falls back and
+    /// discloses rather than dropping content.
+    pub(crate) fn new(initial: Pixmap) -> Option<Self> {
+        let scratch = Pixmap::new(initial.width(), initial.height())?;
+        let n = (initial.width() as usize) * (initial.height() as usize);
+        Some(Self {
+            accum: initial.clone(),
+            group_alpha: vec![0.0; n],
+            group_shape: vec![0.0; n],
+            scratch,
+            initial,
+            approximated: 0,
+        })
+    }
+
+    /// Device-pixel bounds to touch, from a paint's `f32` bounds.
+    ///
+    /// One pixel of padding on every side, because anti-aliased coverage
+    /// reaches a fraction outside the geometric bound and a knockout
+    /// element that stops one pixel short leaves a seam of the element
+    /// beneath it showing — the exact artefact knockout exists to prevent.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn region(&self, bounds: Option<DeviceBounds>) -> (u32, u32, u32, u32) {
+        let (w, h) = (self.accum.width(), self.accum.height());
+        bounds.map_or((0, 0, w, h), |b| {
+            (
+                (b.left - 1.0).floor().max(0.0) as u32,
+                (b.top - 1.0).floor().max(0.0) as u32,
+                (((b.right + 1.0).ceil().max(0.0)) as u32).min(w),
+                (((b.bottom + 1.0).ceil().max(0.0)) as u32).min(h),
+            )
+        })
+    }
+
+    /// Rasterise one element into the scratch buffer and accumulate it by
+    /// §11.4.8.
+    ///
+    /// `paint_into` must draw at **full opacity**, so the scratch's alpha
+    /// channel comes back as pure coverage — `f_s`. `q_s` is the constant
+    /// opacity that was taken out of the paint to make that true.
+    fn element(
+        &mut self,
+        bounds: Option<DeviceBounds>,
+        q_s: f32,
+        blend: BlendMode,
+        paint_into: impl FnOnce(&mut Pixmap),
+    ) {
+        let (x0, y0, x1, y1) = self.region(bounds);
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        // Clear only what will be read. A page-sized clear per element is
+        // the difference between a knockout group costing what its marks
+        // cost and costing what the page costs, times the element count.
+        clear_region(&mut self.scratch, (x0, y0, x1, y1));
+        paint_into(&mut self.scratch);
+        let blend = crate::compositor::Blend::from_tiny_skia(blend)
+            .unwrap_or(crate::compositor::Blend::Normal);
+        self.accumulate((x0, y0, x1, y1), q_s, blend, |k, idx| {
+            let px = crate::compositor::Pixel::from_premultiplied(k.scratch.pixels()[idx]);
+            (px.c, px.a)
+        });
+    }
+
+    /// Accumulate an already-rendered buffer as one element — the child
+    /// group / annotation-layer case.
+    ///
+    /// `f_s` comes from the buffer's alpha, which for a group is `α_gn`;
+    /// using it as the shape too is the `f_g ≈ α_g` approximation §11.4.6
+    /// permits exactly when every element inside that child had `q = 1`.
+    /// pdfce takes it because the alternative is a fifth plane threaded
+    /// through every nested group for a difference that only appears when a
+    /// translucent element sits inside a translucent group inside a
+    /// knockout group.
+    fn element_from_pixmap(&mut self, buf: &Pixmap, q_s: f32, blend: crate::compositor::Blend) {
+        let region = (0, 0, self.accum.width(), self.accum.height());
+        self.accumulate_from(region, q_s, blend, buf, None);
+    }
+
+    /// The child-group case where the child is **non-isolated** and its
+    /// interior blended against something: §11.4.4's backdrop removal is
+    /// applied against **this group's** initial backdrop before the result
+    /// is accumulated.
+    fn element_from_non_isolated(
+        &mut self,
+        iso: &Pixmap,
+        nis: &Pixmap,
+        q_s: f32,
+        blend: crate::compositor::Blend,
+    ) {
+        let region = (0, 0, self.accum.width(), self.accum.height());
+        self.accumulate_from(region, q_s, blend, iso, Some(nis));
+    }
+
+    /// Shared body of the two buffer-sourced element paths.
+    fn accumulate_from(
+        &mut self,
+        region: (u32, u32, u32, u32),
+        q_s: f32,
+        blend: crate::compositor::Blend,
+        shape_source: &Pixmap,
+        colour_over_backdrop: Option<&Pixmap>,
+    ) {
+        use crate::compositor::{Pixel, remove_backdrop};
+        let width = self.accum.width();
+        let (x0, y0, x1, y1) = region;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let idx = (y * width + x) as usize;
+                let s = Pixel::from_premultiplied(shape_source.pixels()[idx]);
+                if s.a <= 0.0 {
+                    continue;
+                }
+                let c = match colour_over_backdrop {
+                    None => s.c,
+                    Some(nis) => {
+                        let initial = Pixel::from_premultiplied(self.initial.pixels()[idx]);
+                        let over = Pixel::from_premultiplied(nis.pixels()[idx]);
+                        remove_backdrop(over, initial, s.a)
+                    }
+                };
+                self.accumulate_one(idx, c, s.a, q_s, blend);
+            }
+        }
+    }
+
+    /// Per-pixel accumulation shared by every element kind.
+    fn accumulate(
+        &mut self,
+        region: (u32, u32, u32, u32),
+        q_s: f32,
+        blend: crate::compositor::Blend,
+        read: impl Fn(&Self, usize) -> ([f32; 3], f32),
+    ) {
+        let width = self.accum.width();
+        let (x0, y0, x1, y1) = region;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let idx = (y * width + x) as usize;
+                let (c, f_s) = read(self, idx);
+                if f_s <= 0.0 {
+                    continue;
+                }
+                self.accumulate_one(idx, c, f_s, q_s, blend);
+            }
+        }
+    }
+
+    /// §11.4.8, one pixel.
+    fn accumulate_one(
+        &mut self,
+        idx: usize,
+        c: [f32; 3],
+        f_s: f32,
+        q_s: f32,
+        blend: crate::compositor::Blend,
+    ) {
+        use crate::compositor::{Pixel, composite_element_knockout, union_};
+        let source = Pixel { c, a: f_s * q_s };
+        let (out, ag) = composite_element_knockout(
+            Pixel::from_premultiplied(self.initial.pixels()[idx]),
+            Pixel::from_premultiplied(self.accum.pixels()[idx]),
+            source,
+            f_s,
+            self.group_alpha[idx],
+            blend,
+        );
+        if let Some(px) = out.to_premultiplied() {
+            self.accum.pixels_mut()[idx] = px;
+        }
+        self.group_alpha[idx] = ag;
+        self.group_shape[idx] = union_(self.group_shape[idx], f_s);
+    }
+
+    /// The group's **result** as a plain pixmap: colour after §11.4.4's
+    /// backdrop removal, alpha `α_gn`.
+    ///
+    /// Backdrop removal runs against [`Self::initial`] with `α_gn` — which
+    /// is why `group_alpha` had to be a plane and not the accumulator's
+    /// alpha channel. For an isolated knockout group `α_0 = 0` makes the
+    /// removal the identity, exactly as §11.4.5 NOTE 2 says, with no
+    /// branch.
+    ///
+    /// Returns an all-transparent pixmap if allocation fails, which is the
+    /// same visible outcome as a group that marked nothing — the honest
+    /// degradation, since the alternative is dropping the caller's whole
+    /// page.
+    fn result_pixmap(&self) -> Pixmap {
+        use crate::compositor::{Pixel, remove_backdrop};
+        let Some(mut out) = Pixmap::new(self.accum.width(), self.accum.height()) else {
+            return self.accum.clone();
+        };
+        for idx in 0..self.group_alpha.len().min(self.accum.pixels().len()) {
+            let agn = self.group_alpha[idx];
+            if agn <= 0.0 {
+                continue;
+            }
+            let initial = Pixel::from_premultiplied(self.initial.pixels()[idx]);
+            let over = Pixel::from_premultiplied(self.accum.pixels()[idx]);
+            let c = remove_backdrop(over, initial, agn);
+            if let Some(px) = (Pixel { c, a: agn }).to_premultiplied() {
+                out.pixels_mut()[idx] = px;
+            }
+        }
+        out
+    }
+
+    /// Composite this group's result onto its parent, by §11.4.4's element
+    /// formula.
+    fn finish(&self, dest: &mut Pixmap, paint: LayerPaint) {
+        use crate::compositor::{Pixel, composite_element};
+        let blend = layer_blend(paint);
+        let opacity = paint.opacity.clamp(0.0, 1.0);
+        let result = self.result_pixmap();
+        let n = dest.pixels().len().min(result.pixels().len());
+        for idx in 0..n {
+            let g = Pixel::from_premultiplied(result.pixels()[idx]);
+            if g.a <= 0.0 {
+                continue;
+            }
+            let backdrop = Pixel::from_premultiplied(dest.pixels()[idx]);
+            let source = Pixel {
+                c: g.c,
+                a: g.a * opacity,
+            };
+            if let Some(px) = composite_element(backdrop, source, blend).to_premultiplied() {
+                dest.pixels_mut()[idx] = px;
+            }
+        }
+    }
+}
+
+/// Zero one rectangle of a pixmap.
+///
+/// `Pixmap::fill` clears the whole buffer, which is the wrong cost for a
+/// per-element scratch, and `Pixmap` exposes no sub-rectangle clear — so
+/// the rows are zeroed directly.
+fn clear_region(p: &mut Pixmap, region: (u32, u32, u32, u32)) {
+    let width = p.width();
+    let (x0, y0, x1, y1) = region;
+    let blank = tiny_skia::PremultipliedColorU8::TRANSPARENT;
+    let px = p.pixels_mut();
+    for y in y0..y1 {
+        let row = (y * width) as usize;
+        for x in x0..x1 {
+            px[row + x as usize] = blank;
+        }
+    }
+}
+
+/// What [`Canvas::group`] did, alongside whatever the content run returned.
+#[derive(Debug)]
+pub(crate) struct GroupOutcome<R> {
+    /// The value the **first** content run returned.
+    pub result: R,
+    /// The group's contents were re-run over a copy of their own backdrop
+    /// (§11.4.4). Counted by the caller so the cost is visible rather than
+    /// inferred from a stopwatch.
+    pub backdrop_rerun: bool,
+    /// Elements of a **knockout** group that had to be composited with
+    /// non-knockout semantics because they read the destination back — a
+    /// shading, an overprint composite, a per-paint non-separable blend.
+    /// Zero for every non-knockout group.
+    pub knockout_approximated: usize,
+}
+
+/// Resolve a [`LayerPaint`] to the compositor's own blend type.
+///
+/// The two fields cannot both be set — `nonseparable` is `Some` exactly
+/// when `blend` was parked at `SourceOver` — so this is a resolution, not a
+/// merge. An unrecognised `tiny_skia::BlendMode` (one no PDF `/BM` name
+/// produces) falls to `Normal`, which is what an unknown mode composites as
+/// everywhere else in this crate.
+fn layer_blend(paint: LayerPaint) -> crate::compositor::Blend {
+    paint.nonseparable.map_or_else(
+        || {
+            crate::compositor::Blend::from_tiny_skia(paint.blend)
+                .unwrap_or(crate::compositor::Blend::Normal)
+        },
+        crate::compositor::Blend::NonSeparable,
+    )
+}
+
+/// Composite an **isolated** group's result — the path this crate has
+/// always taken, kept byte-for-byte.
+///
+/// # Why this is not routed through `crate::compositor` too
+///
+/// Because it does not need to be, and routing it would move every
+/// anti-aliased edge in the corpus by a quantisation step. `tiny_skia`'s
+/// `draw_pixmap` already computes §11.4.4's formula for the isolated case
+/// in 8-bit premultiplied arithmetic; pdfce's `f32` version is the same
+/// function with different rounding. The new arithmetic is therefore
+/// confined to the case that is currently **wrong**, which keeps the
+/// pdfium parity gate a signal about correctness rather than about
+/// rounding.
+fn composite_group_result(dest: &mut Pixmap, group: &Pixmap, paint: LayerPaint) {
+    if let Some(mode) = paint.nonseparable {
+        crate::blend_nonsep::composite_layer(dest, group, mode, paint.opacity.clamp(0.0, 1.0));
+    } else {
+        dest.draw_pixmap(
+            0,
+            0,
+            group.as_ref(),
+            &PixmapPaint {
+                opacity: paint.opacity.clamp(0.0, 1.0),
+                blend_mode: paint.blend,
+                quality: FilterQuality::Nearest,
+            },
+            Transform::identity(),
+            // No mask: the contents were already clipped while being
+            // drawn, so re-applying the clip here would double-multiply
+            // its anti-aliased edge.
+            None,
+        );
+    }
+}
+
+/// Composite a **non-isolated** group's result: §11.4.4's backdrop removal,
+/// then §11.4.4's element formula, both in `f32`.
+///
+/// * `dest` — on entry the frozen initial backdrop; on exit the composited
+///   result.
+/// * `iso` — run 1's buffer. Only its **alpha** is read, and it is `α_gn`:
+///   the group's own accumulated alpha, excluding the backdrop.
+/// * `nis` — run 2's buffer: the group's colour accumulated **over** that
+///   backdrop.
+///
+/// # Why `f32` here is not fastidiousness
+///
+/// Backdrop removal contains a single `1/α_gn`, which amplifies whatever
+/// error its input carries by that factor. At `α_gn = 0.02` a half-level
+/// 8-bit error becomes 25 levels — visible, and exactly the magnitude the
+/// Ghent transparency panels trap on. The *inputs* are still 8-bit (the
+/// elements were rasterised by `tiny_skia` into a `Pixmap`), and that
+/// remaining quantisation is a documented shortfall of this stage rather
+/// than a solved problem: `Pass 97.1`'s colorant buffer is where the
+/// accumulation itself becomes `f32`.
+fn composite_non_isolated_group(dest: &mut Pixmap, iso: &Pixmap, nis: &Pixmap, paint: LayerPaint) {
+    use crate::compositor::{Pixel, composite_element, remove_backdrop};
+
+    let blend = layer_blend(paint);
+    let opacity = paint.opacity.clamp(0.0, 1.0);
+    let n = dest
+        .pixels()
+        .len()
+        .min(iso.pixels().len())
+        .min(nis.pixels().len());
+    for idx in 0..n {
+        // The group's OWN alpha. Zero means the group marked nothing here,
+        // and §11.4.4's result is then unreachable whatever its colour:
+        // leave the backdrop alone.
+        let agn = f32::from(iso.pixels()[idx].alpha()) / 255.0;
+        if agn <= 0.0 {
+            continue;
+        }
+        let backdrop = Pixel::from_premultiplied(dest.pixels()[idx]);
+        let over = Pixel::from_premultiplied(nis.pixels()[idx]);
+        let c = remove_backdrop(over, backdrop, agn);
+        // §11.4.5: the constant alpha at the `Do` multiplies the group's
+        // own alpha to give the source alpha of the group-as-element.
+        let source = Pixel {
+            c,
+            a: agn * opacity,
+        };
+        if let Some(px) = composite_element(backdrop, source, blend).to_premultiplied() {
+            dest.pixels_mut()[idx] = px;
         }
     }
 }
