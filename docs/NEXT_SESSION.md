@@ -40,9 +40,40 @@ All green at this handoff.
 |---|---|
 | `cc57080` | **`Pass 119.0`** — text inside a form XObject is editable |
 | `a10a5c1` | **`Pass 119.2`** — `format_text` reaches it too, + a document repair (§3) |
+| `97ed7fa` | **`Pass 121.0`** — a code was reported as colliding with **itself**, falsely refusing his drawing |
+| `bab0a23` | **`Pass 121.1`** — one edit moved **1,676 labels**; reflow's "line" had no end |
 
 Plus two librarian filings (209th, 210th), `decision 076`, and Backlog
-`119.1` / `119.3` / `120.0`–`120.4`.
+`119.1` / `119.3` / `119.4` / `120.0`–`120.4`.
+
+### ★★ THE TWO DEFECTS ONLY THE REAL FILE COULD FIND — read §6 first
+
+`119.0` and `119.2` were green on 20 tests and a fixture corpus. Then I ran
+them on **the operator's actual benchmark CAD drawing**
+(`D:\Dev	emp\pdfce
+cored-benchmark-cad-drawing.pdf`) and found two defects
+in a row, **neither of them in the code I had just written**:
+
+1. **`Pass 121.0`** — it refused outright, with *"codes 361 and 361 both map
+   to 'Ʃ'"*. **The same number twice.** A code present in both a `bfchar` and
+   a `bfrange` was materialised twice (because `lookup` consults the singles
+   first), and the injectivity check reported a code colliding with **itself**.
+   A **false refusal** on a perfectly invertible font. That sentence had been
+   shippable since `R110` landed, because *a refusal message is the one string
+   a developer never expects to see*.
+2. **`Pass 121.1`** — with that fixed it edited, and reported
+   **`followers_repositioned=1676`**. Render diff: **34,059 changed pixels
+   across the whole page** versus **42 pixels in a 20×7 box** after the fix.
+   Reflow shifted every following `Tm` until a `Td`-family boundary, and a CAD
+   stream positions everything with `Tm` and **never emits `Td`** — so there
+   was no boundary and one edit slid the rest of the drawing sideways. **The
+   bug is `Pass 14.1`-era.** `119.0` is simply what first let the surgery reach
+   a stream shaped that way.
+
+**The transferable half:** a reach extension does not only find new text, **it
+finds old assumptions**. Both defects were in code years older than the Pass
+that exposed them, and no fixture in the corpus has the shape that triggers
+either. **Run the new capability on his real file before calling it shipped.**
 
 **The operator's own framing, which is why this jumped the queue:** *"I need
 that editing capability as it is 99% of the text I will want to edit."*
@@ -271,7 +302,13 @@ shipped. Hoisted.
 
 ---
 
-## §6 — TRY IT
+## §6 — TRY IT (and this is where the two 121.x defects came from)
+
+**Run it on a real drawing before believing a green test run.** Both defects
+above were invisible to 20 passing tests and a fixture corpus, and both
+surfaced within two commands of pointing the binary at
+`D:\Dev	emp\pdfce
+cored-benchmark-cad-drawing.pdf`.
 
 ```
 pdfce-cli inspect --forms  <a CAD drawing>
@@ -281,3 +318,9 @@ pdfce-cli format-text      <in> --find "OLD" --set-size 14   -o <out>
 
 `inspect --forms` is the one to run first on a real drawing — the `paints`
 column is the fan-out, and it is the number to look at before any batch edit.
+On his drawing it reports `/Fm3 object=23 depth=0 paints=1` — object 23, which
+is the exact form the original request measured at 1,696 show operators.
+
+**And check `followers_repositioned` on the way past.** It is now the cheapest
+tell that a reflow has over-reached: on absolutely-placed CAD content it should
+be `0`, and a large number means the edited "line" ran further than the line.
