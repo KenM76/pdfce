@@ -527,15 +527,60 @@ pub struct Diagnostics {
     /// commit written to fix "a claim duplicated across sites, corrected at
     /// one of them". Found by the librarian on filing, not by the sweep.
     pub transparency_groups_composited: usize,
-    /// Groups carrying `/K true` (knockout, Table 147) that were composited
-    /// as ordinary groups.
+    /// **Elements inside a knockout group** (`/K true`, Table 147) that
+    /// could not be given §11.4.6 semantics, because they read the
+    /// destination back.
     ///
-    /// In a knockout group each element composites against the group's
-    /// INITIAL backdrop rather than the accumulated result, so later
-    /// elements REPLACE earlier ones instead of layering over them.
-    /// Compositing the group as a unit gets its outer boundary right and
-    /// its internal occlusion order wrong — strictly better than
-    /// flattening, and still not correct.
+    /// # ★ THIS COUNTER CHANGED MEANING IN `Pass 97.0`, and the old
+    /// # wording is quoted rather than deleted
+    ///
+    /// It used to read: *"Groups carrying `/K true` that were composited
+    /// as ordinary groups… Compositing the group as a unit gets its outer
+    /// boundary right and its internal occlusion order wrong."* That was
+    /// true while knockout was unimplemented. §11.4.6 now has a real
+    /// implementation (`crate::canvas::KnockoutTarget`), so a knockout
+    /// group pdfce renders exactly reports **zero** here.
+    ///
+    /// A silently redefined counter is worse than a renamed one: an
+    /// operator diffing two runs would watch this fall to zero and read it
+    /// as an improvement in the wrong thing.
+    ///
+    /// # What still lands here
+    ///
+    /// Exactly three operator kinds, and all three for one reason — they
+    /// read the destination back, and there is no formulation of *"read
+    /// what is already there"* that also yields the element's own shape in
+    /// isolation, which §11.4.8 needs because it scales the destination by
+    /// `(1 − f_s)` rather than `(1 − α_s)`:
+    ///
+    /// * a shading (`sh`, or a shading pattern),
+    /// * an overprint composite (§11.7.4.3),
+    /// * a per-paint non-separable blend (§11.3.5.3).
+    ///
+    /// Those elements layer instead of knocking out — the answer a
+    /// **non**-knockout group would have given, which is also the answer
+    /// every element gives at `q_s = 1`, so the shortfall is bounded and
+    /// nameable rather than uncharacterised.
+    ///
+    /// # What this counter has NEVER measured, and it is the larger half
+    ///
+    /// Only **explicit `/K true`** groups. Four clauses establish a
+    /// knockout group with no `/K` key anywhere in the file, and three of
+    /// them are non-isolated:
+    ///
+    /// * **§9.3.8's `/TK`**, whose **initial value is `true`** — every text
+    ///   object is an implicit knockout group;
+    /// * **§11.6.7** — shading patterns are knockout (tiling patterns are
+    ///   not);
+    /// * **§11.7.4.4** — `B`/`B*`/`b`/`b*` and text rendering modes 2 and
+    ///   6. Its NOTE 2 names the visible symptom outright: the **double
+    ///   border** on a semi-transparent fill-then-stroke is missing
+    ///   knockout.
+    ///
+    /// Ranked by likely frequency in real files that is `B`/`b` ≫ `/TK` >
+    /// explicit `/K`. **None of them is treated as knockout today**, and
+    /// none of them reaches this counter either — so a zero here does not
+    /// mean a page had no knockout semantics to get wrong.
     pub transparency_groups_knockout_approximated: usize,
     /// **Non-isolated** transparency groups whose content stream was walked
     /// a **second time**, over a copy of their own backdrop, so §11.4.4's
@@ -609,23 +654,30 @@ pub struct Diagnostics {
     pub soft_masks_ignored: usize,
     /// Soft masks BUILT and applied (§11.6.5).
     ///
-    /// **★ "Applied" overstates it, and this doc said "A census, not a
-    /// shortfall" until 2026-08-18.** Construction is right — the mask
-    /// groups and the folded clips were dumped to PNG and inspected as
-    /// correct, properly-placed soft gradients. **Application is not**:
-    /// §11.4.5 applies the mask to a transparency group's **RESULT**,
-    /// whereas pdfce folds it into the clip, which applies it to each
-    /// element *inside* the group. Those differ wherever the group's
-    /// elements overlap.
+    /// **★ "Applied" used to overstate it, and no longer does.** This doc
+    /// said, until `Pass 97.0`: *"Application is not [right]: §11.4.5
+    /// applies the mask to a transparency group's RESULT, whereas pdfce
+    /// folds it into the clip, which applies it to each element inside the
+    /// group."* That was true and is now false — see
+    /// [`Self::soft_masks_on_group_result`], which counts the groups where
+    /// the mask reached the place §11.4.5 puts it.
     ///
-    /// Measured on Ghent after the soft-mask work landed, against the
-    /// reference engine's score on the same strip: `1_GWG1610` 0.575 vs
-    /// 0.966, `1_GWG168` 0.725 vs 0.981, `1_GWG169` 0.905 vs 0.983 — all
-    /// improved, none passing.
+    /// **Folding into the clip is still what happens to an ELEMENTARY
+    /// object, and that is correct rather than a leftover**: §11.6.4.1
+    /// makes the mask value that object's `q_m`, and a `q_m` multiplies
+    /// coverage exactly as a clip does. The two behaviours are one
+    /// implementation of two different clauses, not a fix half-applied.
+    ///
+    /// Measured on Ghent, reference-strip correlation on the same strip
+    /// before and after: `1_GWG1610` 0.576 → **0.962**, `1_GWG168`
+    /// 0.725 → **0.978**, `1_GWG169` 0.905 → **0.986**. Still counted as
+    /// UNRESOLVED by `tools/ghent-check.py`, which has no calibrated
+    /// threshold for reference-strip patches — that is an instrument gap,
+    /// not a render result.
     ///
     /// See also [`Self::soft_mask_transfer_ignored`], which is the other
-    /// half. `Pass 97.0` is the fix: there is nowhere to apply a mask to a
-    /// group's result until that result is a value pdfce owns.
+    /// half and is **still owed**: `/TR` is read, counted and never
+    /// evaluated.
     pub soft_masks_applied: usize,
     /// Soft masks carrying a `/TR` transfer function that was not applied.
     ///
@@ -4371,16 +4423,22 @@ impl Interpreter<'_> {
                 )
             })
         };
-        // `/K` (knockout, Table 147) is NOT implemented. In a knockout
-        // group each element composites against the group's INITIAL
-        // backdrop rather than the accumulated result, so later elements
-        // REPLACE earlier ones instead of layering over them. Compositing
-        // the group as a unit gets its outer boundary right and its
-        // internal occlusion order wrong, which is still strictly better
-        // than flattening — but it is not correct, and it is counted.
+        // `/K` (knockout, Table 147). ★ IMPLEMENTED SINCE `Pass 97.0` —
+        // `crate::canvas::KnockoutTarget` — and this comment used to open
+        // "is NOT implemented", with three sentences explaining that
+        // compositing a knockout group as an ordinary one "gets its outer
+        // boundary right and its internal occlusion order wrong". Deleted
+        // rather than kept, because it described the code that is no
+        // longer here.
         //
-        // ★ IT IS NOT A CORNER CASE, which is the thing to know before
-        // dismissing this counter. FOUR clauses establish a knockout group
+        // What follows is the part that SURVIVES the implementation, and
+        // both paragraphs are still load-bearing: the first because pdfce
+        // still honours only the EXPLICIT `/K` slice, and the second
+        // because it is the trap any test of this feature falls into.
+        //
+        // ★ IT IS NOT A CORNER CASE, and the explicit `/K` groups pdfce
+        // now renders correctly are the SMALLEST of the four populations.
+        // FOUR clauses establish a knockout group
         // with no `/K` key anywhere in the file: §9.3.8's `/TK`, whose
         // INITIAL VALUE IS `true`, making every text object one; §11.6.7,
         // which makes shading patterns knockout (tiling patterns are not);
@@ -4388,13 +4446,18 @@ impl Interpreter<'_> {
         // modes 2 and 6 knockout. §11.7.4.4's NOTE 2 names the visible
         // symptom outright: the DOUBLE BORDER on a semi-transparent
         // fill-then-stroke is missing knockout. Ranked by likely frequency
-        // that is `B`/`b` >> `/TK` > explicit `/K`.
+        // that is `B`/`b` >> `/TK` > explicit `/K` — so the one pdfce
+        // implements is the rarest, and `transparency_groups_knockout_
+        // approximated` reading zero says nothing about the other three.
         //
         // ★ AND THE FIXTURE WARNING, because it is the degenerate-fixture
         // trap again: knockout and non-knockout are IDENTICAL when every
         // element is opaque (`q_s = 1` implies `α_s = f_s`). A fixture of
         // opaque fills cannot tell a correct implementation from a wrong
-        // one. Any knockout test must set `/ca < 1`.
+        // one. Any knockout test must set `/ca < 1` — which is what
+        // `tests/transparency_is_disclosed.rs`'s
+        // `knockout_erases_an_earlier_element_where_a_normal_group_layers`
+        // does, and why it does it.
         let is_knockout = group_flag(b"K");
         if is_transparency_group && (is_knockout || group_flag(b"I")) {
             self.diag.transparency_groups_special += 1;

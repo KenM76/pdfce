@@ -202,9 +202,96 @@ def collect_passes(lines: list[str], secs):
         # uses everywhere (one to three stars by weight) was still half
         # invisible. A gate anchored on a decorative prefix must accept every
         # spelling of that decoration, not the one in front of it that day.
-        if not re.match(r"^#{2,4} (?:★+ )?Pass ", ln):
+        #
+        # ★★★ AND IT RECURRED A THIRD TIME, 2026-08-21 — this time BACKTICKS.
+        # The Shipped convention now writes ``### `Pass 120.2`/…``, so the
+        # `★+` anchor missed EIGHT families: the gate reported the ceiling at
+        # 118 while 121.1 had shipped. Same discovery route all three times:
+        # somebody predicted the delta and the gate disagreed.
+        #
+        # ★ SO THE ANCHOR IS GONE, not widened again. Twice now a fix has
+        # enumerated the decorations that had been SEEN, and twice the next
+        # convention was one nobody had thought of — because the set of ways
+        # a human decorates a heading is not enumerable in advance. The
+        # anchor is therefore no longer a prefix pattern at all:
+        #
+        #   a heading is a Pass heading IFF it is an h2-h4 AND its
+        #   pre-em-dash prefix declares a Pass ID.
+        #
+        # That is decoration-agnostic BY CONSTRUCTION. Stars, backticks,
+        # bold markers, an emoji — anything can sit between the hashes and
+        # the word "Pass" and the gate still sees it, because it no longer
+        # looks there. The extraction below was already doing the real work;
+        # the anchor was only ever a pre-filter, and a pre-filter that can
+        # be defeated by punctuation is worse than none.
+        #
+        # TWO precisions replace it, and BOTH were measured against
+        # `ROADMAP.md` rather than assumed, because dropping an anchor
+        # widens what a gate sees and a gate that cries wolf is worse than
+        # one that under-reports:
+        #
+        # 1. **`###` EXACTLY.** Counted over the whole file: 261 headings
+        #    declare a Pass and every one of them is an h3. The 17 h4s and
+        #    4 h5s that name a Pass are sub-headings INSIDE an entry —
+        #    "#### `Pass 76.0` — what actually shipped in `d24c1df`",
+        #    "##### What is STILL owed on Pass 20.1" — which describe a
+        #    declaration made above them rather than making one. Accepting
+        #    h2-h4 (as the old anchor did) reported those as re-declarations
+        #    the moment the anchor stopped requiring "Pass" immediately
+        #    after the hashes.
+        #
+        # 2. **A Pass ID inside PARENTHESES is a mention, not a
+        #    declaration.** The multi-declaration form this checker exists
+        #    to support puts each ID OUTSIDE its own parenthetical
+        #    ("`Pass 52.0` (core DXF writer) + `Pass 52.1` (…) + …"),
+        #    while a heading that names a FAMILY in its descriptive
+        #    parenthetical ("`Pass 52.2` (GUI half: … the `Pass 52.0`–`52.3`
+        #    family closes …)") declares only the first. Stripping
+        #    parenthesised spans separates the two exactly, and it is the
+        #    difference between 15 reported duplicates and 0.
+        #
+        # The split on the em dash still confines the search to the
+        # DECLARING half of the heading, so a descriptive tail naming other
+        # Passes ("… extends the Pass 19.0 consolidation") is excluded as
+        # it always was.
+        # 3. **A DECLARATION LEADS WITH ITS Pass ID.** Measured the same
+        #    way, and it is what separates a new entry from an incremental
+        #    filing against an existing one. `ROADMAP.md` writes those as
+        #    "### ★ `21910fa` filed against `Pass 56.0`: …" and
+        #    "### ★★ `6171313` COMPLETES `Pass 56.0`: …" — headings that
+        #    LEAD WITH A COMMIT HASH and name the Pass they extend. Those
+        #    are mentions; the declaration is the `### ★ `Pass 56.0` — …`
+        #    entry elsewhere in the file. Without this the gate reported
+        #    six such families as re-declared.
+        #
+        #    "Leads with" is decoration-agnostic in the same way as the
+        #    anchor: strip everything before the first alphanumeric —
+        #    stars, backticks, tildes, a ✅, whatever tomorrow's convention
+        #    adds — and require the word `Pass` there. `~~★★★★ Pass 86.0`
+        #    leads with it; `` `21910fa` filed against `Pass 56.0` `` does
+        #    not.
+        # 4. **A STRUCK-THROUGH heading is retired, not declared.**
+        #    `ROADMAP.md` marks a superseded entry by wrapping its heading
+        #    in `~~`, and leaves it in place rather than deleting it —
+        #    which is the append-only discipline working. `Pass 86.0` has
+        #    exactly that pair in *Next up*: a live "✅ … SHIPPED, MOVED TO
+        #    *Shipped*" pointer and, immediately below it, the original
+        #    `~~★★★★ Pass 86.0 — HIGH PRIORITY …~~`. Counting both makes a
+        #    correctly-retired entry look like a re-used ID.
+        #
+        #    Note this is the ONLY one of the four refinements that reads a
+        #    convention rather than a structure, so it is the one most
+        #    likely to need revisiting: if the project ever retires an
+        #    entry some other way, this stops seeing it. That is stated
+        #    here rather than discovered later, which is the whole lesson
+        #    of the three anchor fixes above.
+        if not re.match(r"^###\s", ln) or "~~" in ln.split("—")[0]:
             continue
-        prefix = ln.split("—")[0]
+        prefix = re.sub(r"\([^)]*\)", " ", ln.split("—")[0])
+        if not re.match(r"Pass\s", re.sub(r"^#+\s*[^A-Za-z0-9]*", "", prefix)):
+            continue
+        if not re.search(rf"Pass ({PASS_ID})", prefix):
+            continue
         # A STAGED-SHIP QUALIFIER makes two entries for one Pass legitimate.
         #
         # `Pass 32.0 (core + CLI)` and `Pass 32.0 (GUI half)` are ONE Pass
@@ -227,9 +314,33 @@ def collect_passes(lines: list[str], secs):
         # shape R106 has been amended four times over. A qualifier must be
         # PRESENT and DISTINCT to earn the exemption.
         qualifier = ""
-        q = re.search(r"Pass " + PASS_ID + r"\s*\(([^)]{1,40})\)", prefix)
+        # The staged-ship qualifier lives INSIDE the parentheses this
+        # anchor just stripped, so it is read from the raw heading. Two
+        # different questions, two different strings, deliberately: "which
+        # IDs does this heading DECLARE" is answered without parentheses,
+        # "is this one of two staged halves" is answered with them.
+        #
+        # ★ THE LENGTH CAP WAS 40 CHARACTERS AND THAT WAS ITS OWN BUG,
+        # found 2026-08-21 by the same widening that found the anchor's.
+        # `Pass 52.2` is filed twice with the qualifiers "GUI half: File ▸
+        # Export ▸ Export DXF…, and the `Pass 52.0`–`52.3` DXF-export
+        # family closes COMPLETE across core+CLI+GUI" and "core + CLI
+        # substrate: the drawing's OWN calibration reaches the DXF export,
+        # …". Both are perfectly good staged-ship qualifiers and both are
+        # far longer than 40 characters, so NEITHER matched and the pair
+        # was reported as an unqualified collision — the gate calling a
+        # correct filing an error, which is the failure mode that gets a
+        # gate ignored.
+        #
+        # The cap is now 200 and the KEY is the first 60 characters. Those
+        # are two different numbers on purpose: the first is how much of a
+        # qualifier the regex will read, the second is how much of it has
+        # to DIFFER. Keying on the whole string would make two entries
+        # distinct because their trailing prose differs, which is looser
+        # than the check wants.
+        q = re.search(r"Pass " + PASS_ID + r"\s*[`]?\s*\(([^)]{1,200})\)", ln.split("—")[0])
         if q:
-            qualifier = " ".join(q.group(1).split()).lower()
+            qualifier = " ".join(q.group(1).split()).lower()[:60]
         for pid in re.findall(rf"Pass ({PASS_ID})", prefix):
             found[(section_of(secs, n), pid, qualifier)].append((n, ln.strip()[:100]))
     return found

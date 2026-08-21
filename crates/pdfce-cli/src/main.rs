@@ -7798,9 +7798,13 @@ overprint_images_unsupported={}",
         //    EIGHTH copy of the claim, and it survived the commit that
         //    announced it was fixing the eighth — the sweep report and the
         //    sweep discharge drifted apart.
-        //  * SOFT MASKS — built correctly, but folded into the clip rather
-        //    than applied to the group's RESULT (§11.4.5), and `/TR` is
-        //    counted and never evaluated.
+        //  * SOFT MASKS — built correctly, and since `Pass 97.0` applied
+        //    to a transparency group's RESULT (§11.4.5) rather than folded
+        //    into its contents' clip; see `soft_masks_on_group_result`
+        //    below. Folding into the clip is still what happens to an
+        //    ELEMENTARY object and is correct there (§11.6.4.1 makes the
+        //    mask value that object's `q_m`). `/TR` is still counted and
+        //    never evaluated.
         //
         // `soft_masks_ignored` is still the one to watch: an ignored mask
         // paints MORE than the document asked for.
@@ -7836,9 +7840,16 @@ overprint_images_unsupported={}",
         // a success. `Pass 97.0` is the fix; until it lands this number
         // over-reports.
         //
-        // `knockout_approx` is a further shortfall inside that: /K groups
-        // get their outer boundary right and their internal occlusion
-        // order wrong.
+        // `knockout_approx` CHANGED MEANING in `Pass 97.0`. It used to
+        // read "/K groups get their outer boundary right and their
+        // internal occlusion order wrong", because knockout was
+        // unimplemented. §11.4.6 is implemented now, so this counts only
+        // the ELEMENTS inside a knockout group that read the destination
+        // back and therefore could not be given knockout semantics — a
+        // group pdfce renders exactly reports zero. What it has never
+        // counted is the implicit knockout population (§9.3.8 `/TK` text,
+        // §11.7.4.4 `B`/`b`, §11.6.7 shading patterns), none of which is
+        // treated as knockout at all.
         d.transparency_groups_composited,
         d.transparency_groups_knockout_approximated,
         // §8.6.7 overprint. SIMULATED since `bf75351`, per-pixel, through
@@ -8087,11 +8098,15 @@ blending looks wrong while every blend-mode counter looks right is explained by 
     }
     if d.transparency_groups_special > 0 {
         eprintln!(
-            "pdfce-cli: note: {} of those are ISOLATED (/I true) or KNOCKOUT (/K true) groups \
-(Table 96), which is where flattening stops being a good approximation: an isolated group blends \
+            "pdfce-cli: note: {} transparency group(s) on this page are ISOLATED (/I true) or \
+KNOCKOUT (/K true) — Table 147, NOT Table 96, which is the table of entries COMMON to all group \
+dictionaries. Both are rendered per ISO 32000-1 11.4.5 and 11.4.6: an isolated group blends \
 against a TRANSPARENT initial backdrop rather than the page, and a knockout group composites each \
-element against the group's INITIAL backdrop rather than the accumulated result. Flattening gets \
-the backdrop wrong in the first case and the occlusion order wrong in the second",
+element against the group's INITIAL backdrop rather than the accumulated result. This is a census, \
+not a shortfall — it is here because these two are where FLATTENING (the number above, if it is \
+non-zero) stops being a usable approximation, and because knockout is honoured only for an \
+explicit /K true: implicit knockout from 9.3.8's /TK default, from 11.7.4.4's B/b, and from \
+11.6.7's shading patterns is not",
             d.transparency_groups_special
         );
     }

@@ -170,12 +170,45 @@ appearance for the overprint patches).
 >   per-paint non-separable blends) composite with non-knockout semantics
 >   inside a knockout group, counted on
 >   `transparency_groups_knockout_approximated`.
-> * **`3_GWG161` is unexplained.** 14 traps, no knockout groups, no
+> * **`3_GWG161` is unexplained**, and two cheap explanations have now been
+>   RULED OUT rather than left hanging. 14 traps, no knockout groups, no
 >   backdrop reruns triggered (correctly — its groups' interiors are all
 >   `Normal`), and its blend modes sit at the `Do` where `draw_pixmap`
 >   already handles them. The §11.3.4 hypothesis fits but was **not**
->   confirmed by derivation the way `1_GWG162`'s was, and it is recorded
->   as unconfirmed rather than assumed.
+>   confirmed by derivation the way `1_GWG162`'s was.
+>
+>   **Ruled out (1) — GWG's own CMM tolerance.** The patch's ReadMe
+>   (`GWG161-164_Transp_Basic_BM_ICCBased_README.txt`) says in terms:
+>   *"A faint X is due to differences in the CMM and does not indicate a
+>   failure. A clearly visible X indicates that this blend mode is not
+>   supported properly which is a failure."* pdfce **has** a different CMM
+>   — its `DeviceCMYK` → sRGB is the naive additive conversion, and the
+>   parity harness measures `DeviceCMYK`-only pages diverging at 5.4× the
+>   clean-page mean against pdfium's `AdobeCMYK_to_sRGB1` — so this was the
+>   obvious candidate. **Measured and rejected:** the X-versus-surround
+>   worst-channel gap across the fourteen trapping cells is
+>   **39, 47, 68, 69, 77, 88, 90, 90, 101, 121, 126, 171, 176, 178**. One
+>   cell is arguably faint; thirteen are not. Same instrument and same
+>   argument as §7 item 1, which measured the overprint patches and reached
+>   the same verdict there.
+>
+>   **Ruled out (2) — "the blend is not being applied at all."** pdfium's
+>   value sits **between** pdfce's and the surround on essentially every
+>   cell (e.g. `(255,0,255)` pdfce, `(34,13,226)` pdfium, `(129,45,156)`
+>   surround). A blend that never ran returns `C_s` unchanged and would put
+>   pdfce **at** the source, not past pdfium in the same direction. The
+>   signature is pdfce applying the blend **harder** than it should — which
+>   is what a wrong operand, not a missing operation, looks like.
+>
+>   ⇒ The remaining candidates, in the order they are worth testing:
+>   the blending colour space (§11.3.4, as for `1_GWG162`); the `ICCBased`
+>   → alternate fallback changing what `0 1 1 scn` means; or the patch's
+>   three-layer structure — its ReadMe describes **"Upper object ICCbased
+>   with transparency effect (Fill), Lower object ICCbased, Background
+>   object DeviceCMYK"**, and pdfce's reading of which form XObject is
+>   which was **not** established. Establish that first: a wrong operand is
+>   what the evidence points at, and the operand pairing is the thing
+>   nobody has checked.
 
 > ## ★★ AMENDMENT 2026-08-19 — THE DENOMINATOR MOVED AND ONE PROBED PATCH
 > ## NOW PASSES. Re-derive the thesis before scoping `Pass 97.x` from it.
