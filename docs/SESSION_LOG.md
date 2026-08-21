@@ -54739,3 +54739,266 @@ or bare, in this entry or in `26c6fad`'s diff — not applicable.
 4. **The `CODE_PREFIXES` complement** — still owed, still `tools/`-side,
    carried forward from the 218th and 219th.
 
+## 2026-08-21 (two-hundred-and-twenty-first filing) — ★★★ `v0.7.0` IS RELEASED: TAG AT `3bc8fbe`, PUSHED, PUBLISHED, ASSET UPLOADED, `verify-release.py` **7 OF 7 OK, EXIT 0** — the 219th filing's eight failed preconditions are all discharged; ★★★ **`R209`'S FIRST LIVE APPLICATION, AND THE ORDERING IS THE WHOLE FACT** — CI OBSERVED GREEN ON THE EXACT COMMIT *BEFORE* THE TAG WAS PLACED, ENDING **NINE CONSECUTIVE RED RUNS** OVER 3 d 2 h; ★★ **THE DISPATCH'S HEADLINE FIGURE IS WRONG FOR THE FOURTH FILING RUNNING — "166 commits" DISPATCHED, 169 MEASURED**, and it is the release's own number this time; ★★ THREE OWED ITEMS DISCHARGED — the 219th's release record, the 160th's NEVER-PUBLISHED `v0.6.0` NOTES CORRECTION (`v0.6.1` was skipped), and the 159th's *"confirm the CI job set is unchanged"* (62 filings later, by running the command); ★★ AND THE BACKUP FIGURE IS FILED WITH THE IDENTITY THAT MAKES IT SELF-CHECKING — **the bundle's head IS `v0.6.0^{}`**, so "commits since backup" and "commits in this release" are the SAME **169**
+
+**Sourcing.** Shell held; **every figure below was produced here by the
+command named beside it**, including the three dispatched figures that are
+corrected. Hard rule 8 discharged by looking. **Nothing was committed by
+this role**, per the dispatch.
+
+**Scope.** Same session as the 216th–220th filings. This is a **release
+record** and deliberately **does not duplicate the published release
+notes** — those are the operator-facing artefact and carry the prose, the
+worked §11.3.4 derivation and the before/after cell tables. This entry
+carries what the notes cannot: hashes, verification output, the CI run id,
+and the **order** the steps happened in.
+
+**Shipped:**
+- **No Pass ID — `v0.7.0`, the seventh release in project history.**
+  Annotated tag object `84024b2`, tagged commit
+  `3bc8fbe0eee142d0ee5b5406d47add640e351d95`; `origin/main` is **at** the
+  tag, not merely containing it; `refs/tags/v0.7.0` on the remote is the
+  **same tag object**, not a re-created one. Published
+  `2026-08-21T13:38:23Z`, not draft, not prerelease, titled *"pdfce v0.7.0
+  — transparency composites for real"*.
+- **Asset `pdfce-v0.7.0-portable-win64.zip`, 10,906,752 B, SHA-256
+  `25bdbb11d81b273ead4aad8b74cc462170a372a28e969fbc7bb76bf5e1042afe`** —
+  and the local `sha256sum` **equals the `digest` GitHub reports for the
+  uploaded asset**, so the artefact is verified from both ends rather than
+  from one.
+- **`tools/verify-release.py v0.7.0` — all seven checks ok, exit 0.**
+  The 219th entry's note that the tool *"was not run before this
+  dispatch"* is discharged: it was run, here, and its seven checks are
+  exactly the seven rows that were **NO** three filings ago.
+- **Contents, by cross-reference not re-narrated:** `Pass 97.0a–d` (the
+  compositor), `97.1a/b`, `119.x` (text inside form XObjects), `120.x`
+  (object clipboard), `113.x` (`transform_objects`), `121.0/121.1`, plus
+  `106.2`, `107.x`, `108.0`, `110.0`, `111.0`, `112.0`, `118.0` and the
+  CI/gate work up to `R209`. Each has its own `ROADMAP.md` entry with the
+  measurements.
+
+**Decisions made this session:**
+- **The record does NOT duplicate the release notes** — dispatch
+  instruction, and the right call for a reason worth keeping: the notes
+  are a **published, immutable artefact with its own URL**, so copying
+  them here creates a second copy that can drift from a frozen original,
+  which is the exact failure hard rule 11 exists to catch. The record
+  **names and links** them and holds only the non-duplicable half.
+- **No Pass ID, no decision, no standing rule minted** — consistent with
+  every prior release entry (`v0.6.0`'s 159th made the same ruling).
+- **Cutting a new backup bundle is NOT taken as this role's call** — it is
+  surfaced to the operator, per hard rule 8's boundary.
+
+**Findings + decisions:**
+- **★★★ `R209`'s first live application, and the ordering is the finding,
+  not the greenness.** Run **`32486133822`**, head `3bc8fbe`, conclusion
+  `success`, **all ten runs green** — `gui-core-separation`, `ui-strings`,
+  `clippy`, `third-party-licenses`, `fmt`, `test (windows-latest)`,
+  `cross-check`, `test (ubuntu-latest)`, `no-network`, **`fuzz-smoke`**.
+  **The tag was placed only AFTER that run was observed on the exact
+  commit being tagged.** A tag placed first and verified after would have
+  produced the same ten green jobs and been a **weaker act** — which is
+  precisely what `R209` says: *a CI job with no local runner is
+  unobserved, not passing.* **None of the three preceding
+  release-adjacent filings could have claimed this** (218th: `fuzz-smoke`
+  red; 219th: CI red at the last pushed commit; 220th: nothing pushed).
+- **★★ The red gap, with its denominator.** Previous fully-green run:
+  **`32123522176`, `2026-08-18T09:48:25Z`** at `18a0f15`. Between them,
+  **nine consecutive `failure` runs**, `2026-08-18T10:23:39Z` →
+  `2026-08-21T12:16:31Z` — **9 red runs over 3 d 2 h 27 m = one red run
+  every ~8.2 hours.** *"First green since 2026-08-18"* is exact; the
+  useful form is **nine tries**.
+- **★★ The commits-since figure, corrected — fourth consecutive filing to
+  carry a stale one.** Dispatched **166**; `git rev-list --count
+  v0.6.0..v0.7.0` = **169** — **tag-anchored, not `HEAD`-anchored, and
+  that distinction turned out to matter within this filing (see below).**
+  166 was true at `5884ed1`, **three commits ago** (the 219th's own
+  figure); `eefb1af`, `26c6fad` and `3bc8fbe` landed after it. Same failure mode as the previous three filings'
+  backup denominators — **a figure measured correctly ONCE and then
+  carried**. The escalation worth naming: **the number being corrected is
+  now the release's own headline number**, i.e. a carried figure
+  eventually lands somewhere it gets quoted. Per-item form: **169 commits
+  over 3.54 days = 47.7 commits/day.**
+- **★★★ The backup figure now carries an identity that makes it
+  self-refuting if wrong.** `git bundle list-heads` on
+  `pdfce-20260817-v060.bundle` → head `3c4c00e`; `git rev-parse v0.6.0^{}`
+  → **also `3c4c00e`**. The bundle's head **is** the `v0.6.0` tag commit,
+  so *"commits since the last backup"* and *"commits in this release"* are
+  **the same 169** — two independently derived figures that **must**
+  agree. That is hard rule 10's mechanism working exactly as designed:
+  the set-property became a single-claim property, so ordinary review
+  catches it. **Filed this way deliberately, because this figure has been
+  dispatched wrong four filings running** (~55 → 47/48 → 168 → and a ~50
+  still live in `NEXT_SESSION.md`).
+- **★ `refs/tags/v0.7.0` is NOT in any bundle on disk.** `v0.6.0` was
+  recoverable from backup alone, tag object included (159th entry). **This
+  release is not.**
+- **★★ The 159th filing's owed CI-job-set confirmation, discharged 62
+  filings later by running one command.** It had written: *"Job names not
+  individually relayed… a future filing with the actual `gh run view`
+  output should confirm the set is unchanged."* Run on both:
+  `32083880016` (`v0.6.0`) and `32486133822` (`v0.7.0`) return the **same
+  ten job names**, differing only in ordering. **An owed check that names
+  its own command is cheap; this one waited because nobody ran it.**
+- **★★ The version banner is a free staleness check nobody was reading as
+  one.** The staged build reported `revision: v0.6.0-164-g67ad7ea`; the
+  released build reports **`revision: v0.7.0`, bare**. A tag-relative
+  revision string **IS a commit count** — a bare tag means built at a
+  tagged commit, an offset means not. The binary had been reporting its
+  own staleness in a field treated as decoration.
+- **★ The byte deltas corroborate `FEATURES.md`'s unticked gui column.**
+  `pdfce-cli.exe` **+1,114,624 B (+10.4 %)** against `pdfce-gui.exe`
+  **+121,344 B (+0.76 %)** — **the CLI grew 9× what the GUI did**, the
+  expected signature of a release that is engine work reached through CLI
+  subcommands while the GUI surface stays deliberately paused. Folder
+  **27,067,242 → 28,296,836 B (+4.5 %)**, zip **10,464,533 → 10,906,752 B
+  (+4.2 %)**; the six per-file counts **sum exactly** to the folder total
+  (hard rule 10a).
+- **★ The `v0.6.0` release-notes correction, owed since the 160th filing,
+  is discharged by SHIPPING — it was never dischargeable any other way.**
+  `v0.6.0`'s published notes say *"Transparency-group compositing and soft
+  masks are not implemented… do not read this release as 'transparency
+  works'."* That stopped being true at `86a7b70` (`Pass 97.0d`), and
+  **`v0.6.1` was skipped** (`30b0375` bumped straight to `0.7.0`), so the
+  correction **had no publication route except cutting this release.**
+  The debt was not *"edit a sentence"*; it was *"ship"*.
+- **The honest half, restated because a release entry listing only wins is
+  the kind nobody trusts.** The **Ghent board did not move — 26 pass / 14
+  fail / 11 unresolved of 51, before and after** — while the trap count
+  across the failing patches fell **67 → 55** = **12 traps over 14 failing
+  patches = 0.86 per failing patch**. **The transparency panels are
+  blocked on §11.3.4's blending colour space, not on the group model.**
+  Full-corpus render parity (**4,023 files**) run **twice** — this tree and
+  a worktree at `2e6bb83` — **identical bucket for bucket**. Cited from the
+  216th/218th entries, not re-derived.
+
+**Hard rule 11 sweep — 2 survivors, both outside this role's remit, 0
+edited:**
+- **`docs/NEXT_SESSION.md:300–304` — three false clauses in five lines.**
+  *"Backups are 4 days and ~50 commits stale… **Librarian-measured, not
+  inferred**"* (measured now: **169**, wrong by **3.4×**); *"Nothing
+  pushed. `origin/main` is behind"* (it is **at** `3bc8fbe`); *"`v0.7.0`
+  is bumped but not tagged (`git tag -l` tops at `v0.6.0`)"* (it tops at
+  **`v0.7.0`**). ★ **The sentence labelled *"librarian-measured, not
+  inferred"* is the one carrying the 3.4× error, and this role wrote it.**
+  A **provenance label is not a freshness label** — the measurement was
+  honest when made and the label outlived it. Engineer-owned file.
+- **`README.md:48–49` — *"The current release is **[v0.3.0]**"*, four
+  releases stale, on a PUBLIC repository.** The href is
+  `/releases/latest`, so **the link resolves correctly and only the label
+  lies** — the shape that survives review, because anyone who clicks sees
+  the right page. Never previously filed (`grep "current release is"
+  docs/ROADMAP.md` → nothing). **Highest-visibility stale claim in the
+  tree**, and the first thing a stranger arriving at the release reads.
+- **Nothing in `crates/`, `tools/` or `.github/` carries the claim** —
+  checked by reading.
+- **★ A self-correction, filed rather than quietly fixed.** An earlier
+  draft justified the line above with *"`git status --porcelain` is empty
+  at `3bc8fbe`"*. **True when measured, false ~10 minutes later** — a
+  re-run inside this same filing returned `M compositor.rs` (+43) and
+  `M interpret.rs` (+180), **concurrent engineer work unrelated to the
+  release, landing while the record about it was being written.** The
+  claim is withdrawn; the `THIRD_PARTY_LICENSES.md` byte-identity is now
+  evidenced by `git log -1 -- THIRD_PARTY_LICENSES.md` → **`25b7c7d`**
+  (untouched by any of the release's 169 commits) plus a `cmp` against the
+  shipped copy — **two facts that do not decay, replacing one that did.**
+  ★★ **This is the `NEXT_SESSION.md` survivor's own mechanism, reproduced
+  by this filing against itself, inside the entry that names it.** A
+  working-tree state is the most perishable fact this role can cite.
+- **★★★ And it happened a THIRD time, to `HEAD` itself — which yields the
+  one rule worth taking from this filing.** An earlier draft spelled two
+  release figures as `v0.6.0..HEAD` and asserted *"`HEAD` = `3bc8fbe` = the
+  tag"*. True at 09:38; **`cbb1ede` was committed to `main` at 09:43:00**
+  (`Pass 97.1`'s ink-blending deliverable — post-release engineer work),
+  and `git describe --tags` now reads **`v0.7.0-1-gcbb1ede`**. **Nothing
+  about the release changed** — tag, `origin/main`, asset, CI run and
+  `verify-release.py`'s seven checks were all measured against `3bc8fbe`
+  and remain true of it — but `verify-release.py`'s *"tag is at `HEAD`"*
+  check would now correctly report otherwise, and the backup denominator
+  spelled against `HEAD` already reads **170**.
+  **★ THE RULE: a release record anchors every figure to the TAG, never to
+  `HEAD`.** `HEAD` is a moving reference and a release is a fixed object;
+  they agree for exactly as long as nobody works. Tag-anchored, the
+  numbers are true forever — the only useful property an append-only
+  record has. Every figure in this filing was rewritten accordingly. **Not
+  proposed as a standing rule** — it is an instance of hard rule 8's
+  *know-the-edge-of-your-evidence* discipline applied to a ref rather than
+  to a document, and one filing is not a pattern.
+
+**Ledger (per-item form, denominators stated — hard rule 10):** Pass
+ceiling **121** unchanged, next free **122** · decisions **077**, next free
+**078** · standing rules **R209**, next free **R210** — **`R209` applied
+for the first time**, cited not re-minted (`R15` and decision **003** also
+cited, via the smoke test) · filings **220 → 221** · commits filed by this
+entry **0** (release record; the release's 169 commits are filed by the
+211th–220th) · releases **6 → 7**, ten tags, and **`v0.7.0` is the fourth
+CI-verified-green-at-its-tagged-commit release** after `v0.5.2`, `v0.5.3`,
+`v0.6.0` · `git describe --tags` **`v0.6.0-168-g26c6fad` → `v0.7.0`**
+(bare, at the tag) **→ `v0.7.0-1-gcbb1ede`** by this entry's close · ahead
+of `origin/main` **4 → 0 → 1** (`cbb1ede`, post-release) · `v0.7.0` tagged
+**YES**, after **six** consecutive filings reporting *no* · CI at the
+tagged commit **green, 10 of 10 runs**, ending **9 consecutive red** ·
+`verify-release.py` **7 of 7, exit 0 at `3bc8fbe`** · unfiled code commits
+**0 → 1** (`cbb1ede`, owed a filing, **not** part of `v0.7.0`, and **not**
+to be added to `tools/commits-filed-baseline.txt` — that file is debt, not
+an allowlist) · newest bundle `pdfce-20260817-v060.bundle` (23,439,275 B,
+2026-08-17 20:34:30), head `3c4c00e` = `v0.6.0^{}`, **169 commits / 3.54
+days stale, and it does NOT contain `refs/tags/v0.7.0`** ·
+`THIRD_PARTY_LICENSES.md` **376,103 B, byte-identical to `v0.6.0`** —
+evidenced by `git log -1` → **`25b7c7d`** (untouched across all **169**
+commits) and `cmp` against the shipped copy, **not** by a working-tree
+observation · `Cargo.toml` **`0.7.0`**, next bump a separate act · `tools/check-*`
+**16** unchanged · `D:\dev\rag\rust\` **200 findings**, **+0** ·
+`C:\personal_rag\pdf\` **138 lessons**, **+0** · `FEATURES.md` rows touched
+**0** · hard-rule-11 survivors **2 reported, 0 edited**.
+
+**Terminology (project rule 15):** no occurrence of "dimension", qualified
+or bare, in this entry — `Pass 121.x` and the ce-dimension half of the
+clipboard work are named by Pass ID only, and their own entries carry the
+qualification. Not applicable here.
+
+**`docs/FEATURES.md` — 0 rows touched**, confirmed by reading rather than
+relayed. Every capability in this release was ticked by the 211th–217th
+filings **as it landed**, per the operator's standing *"a finished feature
+updates `FEATURES.md`"* rule. **A release record moves no capability** —
+that is what distinguishes it from a Pass entry.
+
+**Still in flight:**
+- **★ `cbb1ede` is unfiled and post-release.** Committed to `main` at
+  09:43 during this filing — `Pass 97.1`'s ink-blending deliverable, the
+  §11.3.4 blend-space fix this very release names as the thing the Ghent
+  transparency panels are blocked on. **It is not part of `v0.7.0`** and
+  it needs its own filing with its full commit message, per
+  `check-commits-filed.py`'s own instruction. `crates/pdfce-render/`'s
+  `compositor.rs` (+43) and `interpret.rs` (+180) are also modified in the
+  working tree beyond it.
+- **Backups.** 169 commits / 3.54 days stale **at the tag** (170 at
+  `HEAD`), and **the `v0.7.0` tag is not in any bundle**. Cutting one is
+  the **operator's call** — surfaced, not taken.
+- **Two hard-rule-11 survivors** above, both engineer-owned files.
+  `README.md`'s is public-facing.
+- **The transparency work is not finished** — the Ghent panels need
+  §11.3.4's blending colour space, which needs the per-colorant buffer
+  (`FEATURES.md` *Planned*). Also unimplemented: implicit knockout
+  (§9.3.8 `/TK`, §11.7.4.4 `B`/`b`, §11.6.7 shading patterns — only
+  explicit `/K true` is honoured), `/TR` on a soft mask, per-sample
+  overprint on images (counted as `overprint_images_unsupported`).
+- **The `CODE_PREFIXES` complement** — still owed, `tools/`-side, carried
+  from the 218th, 219th and 220th.
+
+**For next session:**
+0. **File `cbb1ede`** — dispatch this role with its full commit message.
+   It is `Pass 97.1`'s leading deliverable and the answer to the gap this
+   release documents; a one-line subject will not carry it.
+1. **Fix the two survivors.** `README.md:48–49` first — it is public and a
+   stranger reads it before anything else in the repo.
+   `docs/NEXT_SESSION.md:300–304` is stale in three clauses and should be
+   **overwritten wholesale**, as its own header instructs, rather than
+   patched.
+2. **Decide the backup**, with the tag now outside every bundle on disk.
+3. **Merge the two hard-rule-11 method amendments into one denominator
+   sentence** (carried from the 220th, still owed) — with the `git log -S`
+   limit stated so it is not read as covering the absence case.
+4. **Lead survivor reports with the claim and its site count** before
+   naming files (carried from the 220th) — this filing did so, and it is
+   the convention that should stick.
