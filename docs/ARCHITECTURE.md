@@ -1650,6 +1650,36 @@ D:\Dev\pdfce\
                                    record) and `ROADMAP.md`'s
                                    `7160819`/`9b49ca0`/`86a7b70` Shipped
                                    entry.
+                                   **★ UPDATED 2026-08-21 (`cbb1ede`,
+                                   `90739d7` — `Pass 97.1c`/`97.1d`,
+                                   decision 078): THE GAP IS NOW READ,
+                                   MEASURED AND DISCLOSED, AND STILL
+                                   NOT CLOSED.** `page_blend_space`
+                                   (§11.4.7) and `do_form` resolve the
+                                   space, honouring **Table 147's rule
+                                   that a NON-ISOLATED group ignores its
+                                   own `/CS` and inherits the parent's**
+                                   — which is *why* `3_GWG161` blends in
+                                   `DeviceCMYK`, and which discharged
+                                   that patch's "unconfirmed" flag by
+                                   counter (**15 of its 15 blends
+                                   wrong**). §11.3.4's arithmetic
+                                   (`BlendSpace`,
+                                   `Blend::apply_subtractive`,
+                                   `PixelCmyk`) is written and tested
+                                   but **unwired**. Counters
+                                   `blend_space_subtractive` (census)
+                                   and `blends_in_wrong_space`
+                                   (shortfall) ship on the CLI's stable
+                                   line. **Measured: Ghent 107/107
+                                   blends wrong (100.0 %, 13 of 51
+                                   files); `fixtures/external` 2/49
+                                   (4.1 %, 15 of 3,735 rendered), both
+                                   hits being veraPDF transparency
+                                   conformance fixtures.** The colorant
+                                   buffer is the only missing piece and
+                                   is a **conformance** deliverable, not
+                                   an appearance one.
                                    **STILL NOT DONE, so this cell is not
                                    closed:** only explicit `/K true`
                                    groups are treated as knockout — the
@@ -23575,6 +23605,10 @@ free 072.**
   renderer blending in device sRGB is wrong on all of them regardless of
   what the objects are coloured in*, and no amount of group-model
   correctness reaches the trap.
+  **→ Confirmed and given its mechanism by decision 078 (2026-08-21):**
+  the route is **Table 147's inheritance row**, and `3_GWG161`'s share of
+  it is **15 of 15 blends** — the "fits but not derived" caveat this
+  decision recorded is discharged there.
 
   **★★ AND THE COROLLARY ABOUT ORACLES, recorded because this project
   uses pdfium as a check routinely.** pdfium agreed with the corrected
@@ -23605,4 +23639,75 @@ free 072.**
   `GraphicsState::is_transparency_neutral()`-shaped predicate every site
   calls, not a reminder.
 
-  **Ceiling moves 076 → 077; next free 078.**
+  ~~**Ceiling moves 076 → 077; next free 078.**~~ **Superseded by
+  decision 078, below.**
+
+- **2026-08-21 — Decision 078. THE BLENDING COLOUR SPACE IS A PROPERTY OF
+  THE GROUP NESTING, NOT OF THE GRAPHICS STATE — SO IT LIVES ON THE
+  `Interpreter` AND `q`/`Q` CANNOT TOUCH IT; AND THE COLORANT BUFFER IS
+  RE-SCOPED FROM AN APPEARANCE FIX TO A CONFORMANCE FIX BY MEASUREMENT.**
+  Filed with `Pass 97.1c`/`Pass 97.1d` (`cbb1ede`, `90739d7`;
+  `ROADMAP.md`'s top *Shipped* entry, 222nd filing).
+
+  **(a) Where the space lives, and why the obvious home is wrong.**
+  ISO 32000-1 §11.4.7 makes the page a transparency group, so the page has
+  a blending colour space; §11.3.4 makes that space decide whether every
+  blend on the page is complemented. pdfce had **never read it** — before
+  `90739d7` the only dictionary `/CS` access in `pdfce-render` was
+  `contains_key(b"CS")`, an existence check for a soft mask's `/BC`
+  polarity that never looked at the value.
+
+  `GraphicsState` is the reflexive home for a new rendering parameter and
+  it is **wrong** here. **A group establishes a blending space at its
+  boundary and every element inside blends in that space until the next
+  boundary** — the scope is the *group*, not the `q`/`Q` stack. On
+  `GraphicsState`, a `Q` inside a group silently restores the enclosing
+  page's space **mid-group**, producing a plausible wrong picture with no
+  counter able to see it. **Decided: the space is `Interpreter` state,
+  established by `page_blend_space` at page entry and by `do_form` at each
+  group boundary.**
+
+  **Table 147's `/CS` row is honoured, and it is the part an
+  implementation skips:** *if the group is **non-isolated**, `CS` shall be
+  **ignored** and the colour space shall be inherited from the group's
+  parent.* ISO 32000-2 §11.6.6 states it from the other side —
+  *"non-isolated groups shall inherit their colour space from the nearest
+  ancestor isolated parent group"* — **and gives the reason**: converting a
+  backdrop into another space is not always possible, and would be an
+  excessive number of conversions where it is. **This rule is why
+  `3_GWG161` blends in `DeviceCMYK` while its own objects are `ICCBased`
+  RGB**, and it discharged that patch's "unconfirmed" flag by counter
+  (15 of its 15 blends wrong).
+
+  **Two counters, not one, and the second is why there are two.**
+  `blend_space_subtractive` is a **census** (the page plus every group
+  whose space is `DeviceCMYK`/`Separation`/`DeviceN`, or a four-component
+  `ICCBased` resolving to one); `blends_in_wrong_space` is the
+  **shortfall** (non-`Normal` modes computed additively inside one).
+  **A subtractive space is not by itself an error** — the complement is
+  applied to the blend *function* and `Normal` is `c_s` on either side of
+  it — so counting the space alone would report every CMYK print file in
+  the world as broken. **Two of the thirteen subtractive Ghent patches are
+  in exactly that state**, so this is a live distinction, not a
+  hypothetical one, and a test exists whose only job is to hold the line.
+
+  **(b) The colorant buffer is re-scoped by its own measurement.**
+  Re-measured on two corpora (222nd filing): **Ghent PDF Output Suite —
+  13 of 51 files subtractive, 107 blends applied, 107 in the wrong space
+  (100.0 %)**; **`fixtures/external` — 15 of 3,735 rendered files (of
+  4,012 on disk) subtractive, 49 blends applied, 2 in the wrong space
+  (4.1 %)**, and **both of those two files are veraPDF transparency
+  conformance fixtures**. Subtractive groups: **181 over 51 Ghent patches
+  vs 16 over 3,735 real files — 3.55 vs 0.004 per file, ~830×.**
+
+  **Decided: `Pass 97.1`'s colorant buffer is a CONFORMANCE and
+  print-credibility deliverable, not an appearance one.** It is required —
+  the Ghent transparency panels cannot pass without it — and it will
+  change **nothing** about how ordinary documents render. **A Pass
+  justified on the Ghent number alone would have been mis-sold**, because
+  a conformance suite is by construction 100 % of whatever it tests.
+  **The consequence is on JUDGEMENT, not on scope:** when the buffer
+  lands, the real-world corpus is expected not to move, and that must not
+  be read as failure.
+
+  **Ceiling moves 077 → 078; next free 079.**

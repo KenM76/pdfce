@@ -96,6 +96,744 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `74c5f2c` — THE HANDOFF LEVELLED WITH THE MEASUREMENT, THE INSTRUMENT PROMOTED INTO `tools/`, AND A MEMORY THAT WAS RIGHT AND DID NOT PREVENT ITS OWN RECURRENCE — no Pass ID; infrastructure and record; ★★ **THE 222ND FILING'S OWED ITEM IS DISCHARGED IN THE COMMIT THAT PRECEDED THE FILING REPORTING IT** — `tools/measure-blend-space.py` is tracked; ★★ **HARD-RULE-11 SURVIVOR #2 DISCHARGED BY WHOLESALE REWRITE, AND ITS THREE FALSE CLAUSES KEPT QUOTED RATHER THAN DELETED**; ★★★ **AND THE AMENDMENT THAT NAMES BOUNDARY-CLAIMS AS THE DEFECT CLASS CONTAINS ONE — "fourteen scripts", TWO SUPERSESSIONS STALE, THIRTEEN LINES FROM "All 15 CI-wired gates green" IN ITS OWN COMMIT MESSAGE**; gate inventory filed in the form that stops the next miscount — **16 `check-*` on disk / 15 CI-wired / 2 sweeps, one of which is not `check-`-prefixed at all** — 2026-08-21 (two-hundred-and-twenty-third filing, **session close**)
+
+**Sourcing.** Shell held (hard rule 8) and used for every figure below; the
+command is named beside each one. **Nothing was committed by this role.**
+
+**Scope.** The last filing of the 2026-08-21 session, and deliberately a
+short one: `74c5f2c` touches `docs/`, `tools/` and
+`.claude/agent-memory/`, no `crates/`, so `check-commits-filed.py` was red
+on it and on nothing else. The session wrap is in `SESSION_LOG.md`'s entry
+of the same number.
+
+---
+
+#### What is in the commit — three things, none of them a Pass
+
+**1. `docs/NEXT_SESSION.md` rewritten** (engineer-owned). Its load-bearing
+half is the pair of corpus figures that scope the rest of `Pass 97.1`, and
+they are the 222nd filing's re-measured ones:
+
+| corpus | subtractive files | blends wrong | rate |
+|---|---:|---:|---|
+| Ghent PDF Output Suite | **13 of 51** | **107 of 107** | **100.0 %** |
+| `fixtures/external` (rendered) | **15 of 3,735** | **2 of 49** | **4.1 %** |
+
+**So the CMYK buffer is REQUIRED for the Ghent transparency panels and
+will change almost nothing about how ordinary documents look.** The
+handoff states the second half as an instruction — *do not expect the
+render-parity buckets to move, and do not read that as failure* — which is
+the right place for it, because that judgement has to survive to the
+session that ships the buffer, not merely to the one that measured it.
+
+**★ This discharges hard-rule-11 survivor #2**, the one the 222nd filing
+had to record as *not verified, dirty in the working tree*. The remedy was
+the **wholesale rewrite** its own header prescribes, not a patch — and the
+previous handoff's three false clauses are **kept quoted** in a §7 headed
+*"what the previous handoff got wrong, kept rather than deleted"*: backups
+*"4 days and ~50 commits stale"* (**wrong by 3.4× when written** — it reused
+the commits-ahead-of-remote number against a different denominator),
+*"`origin/main` is behind"*, and the tag *"tops at `v0.6.0`"*.
+
+**★★ And it carries this role's own observation forward verbatim: the
+sentence holding the worst of the three was the one labelled
+*"librarian-measured, not inferred"*. A PROVENANCE label is not a
+FRESHNESS label, and a reader takes it for one.** That is a general
+statement about every label this project writes, including the ones in this
+entry — *re-measured by this filing* dates a measurement, it does not
+extend its shelf life.
+
+**2. `tools/measure-blend-space.py` — 112 lines, tracked.** The instrument
+that produced every figure in the 222nd filing, promoted out of a temp
+folder with a docstring saying what the two counters mean and why there are
+two: `blend_space_subtractive` is a **census** (exposure — a page can be
+entirely `DeviceCMYK` and entirely correct, because the complement applies
+to the blend *function* and `Normal` is `c_s` on either side of it), and
+`blends_in_wrong_space` is the **shortfall**. The first measurement is
+recorded **inline in the docstring** so a later run has something to differ
+from.
+
+**★ The 222nd filing's owed item — *"`git add tools/measure-blend-space.py`
+and commit it. One command."* — is DISCHARGED, and the ordering is worth
+recording rather than smoothing over: `74c5f2c` (10:16:59) added the file
+BEFORE the filing that reported it missing was written.** The report was
+correct when drafted and stale when read. Same species as everything else
+this session has been filing, arriving from the other direction: not a
+claim that went stale inside a document, but a claim that went stale
+**between draft and delivery**. It cost nothing here only because the owed
+action and the action already taken were identical.
+
+**3. `.claude/agent-memory/pdfce-engineer/feedback_gates_i_owe_myself.md`
+amended.** The file said, on **2026-08-05**, (1) that `cargo fuzz` is the
+gate that gets skipped and (2) that a harness enumerating a module's entry
+points goes stale silently. **Both halves recurred on 2026-08-21, in the
+same file, sixteen days later** — `MarkupSpec::Square` gained a
+`border_effect` field and broke `fuzz/fuzz_targets/annot_author.rs`'s
+compile; reading that file to fix it found `match c.byte() % 8` against an
+**eight-variant enum with one arm spent twice**, so `MarkupSpec::Cloud` had
+**never been fuzzed at all**.
+
+**That recurrence is the warrant `R209` was minted on** (218th filing), now
+recorded on the engineer's side too. The memory's own diagnosis of why it
+did not fire is the transferable part, and it is not carelessness: *"run
+the gates"* means `for g in tools/check-*`, which is **one of CI's nine
+jobs**, so **a green local sweep and a red CI were never a contradiction —
+there was no place where the two were compared.**
+`tools/check-ci-parity.py` is that place, and `cd fuzz && cargo check
+--bins` is the six-second local stand-in it names.
+
+**★ The sharper form the amendment records, and it belongs in the
+hard-rule-11 method amendment this role has now recommended twice:**
+
+> **A modulo IS a coverage claim, phrased as an integer.** A claim asserting
+> a **BOUNDARY** rather than a **MEMBER** — a count, a modulo, an absence, a
+> closed either/or — contains no token tying it to what changed, so **no
+> grep for the new thing finds it.** `% 8` against an eight-variant enum and
+> *"…are **not** counted as `overprint_refused`"* are the same defect in two
+> spellings.
+
+**Three instances, three media, one shape** — a `match` dispatch arity in
+Rust (`% 8`), a doc sentence phrased as an absence (218th filing), and a
+sweep boundary drawn at the file rather than the feature (220th filing).
+The generalisation now stands at n = 3 across `crates/`, `docs/` and
+`fuzz/`, which is what the 220th filing said it was waiting for before the
+merged amendment stops being a recommendation.
+
+---
+
+#### ★★★ THE AMENDMENT NAMING THE DEFECT CLASS CONTAINS AN INSTANCE OF IT
+
+**`feedback_gates_i_owe_myself.md:59`, in the paragraph immediately above
+the block quoted just now, reads:**
+
+> *"'Run the gates' in this project means `for g in tools/check-*`. That is
+> **fourteen scripts** and it is ONE of CI's nine jobs."*
+
+**`ls tools/check-* | wc -l` = 16.** Measured here, this filing.
+
+**It is two supersessions stale, both of them this week, and both already
+filed in this very document:**
+
+| date | commit | `ls tools/check-*` | what landed |
+|---|---|---:|---|
+| ≤ 2026-08-19 | — | **14** | the figure the amendment still uses |
+| 2026-08-20 | `1c169ba` | **15** | `check-outcome-disclosed.py` (`Pass 110.0`) |
+| 2026-08-21 | `5884ed1` | **16** | `check-ci-parity.py` |
+
+`git log --diff-filter=A -1 -- tools/check-outcome-disclosed.py`, and the
+same for `check-ci-parity.py`, are the two commands; the 215th and 219th
+filings already record both counts.
+
+**★ Why this rates ★★★ rather than a footnote: the count INVERTS the
+sentence it sits in.** The paragraph's entire point is that **the local set
+and the CI set are different sets**. It sizes the local set with **14** —
+which was, one commit earlier, the *CI-wired* count (`108d0e8`: *"CI now
+wires 14 of 15"*). So the sentence drawing the distinction **measures one
+set with the other's number**, and it errs in the misleading direction: the
+local sweep is the **larger** set (16), not the smaller.
+
+**★★ And the same commit message carries both figures thirteen lines apart,
+neither labelled with a date or a set** — line 38 *"fourteen scripts"*,
+line 51 *"All 15 CI-wired gates green"*
+(`git log -1 --format=%B 74c5f2c | grep -n`). **Two counts of two
+overlapping sets at two different times, in one message, with nothing in
+either to say which is which.** That is hard rule 10(b) exactly — the
+qualifier belongs *in the label*, not in the reader's inference — and it is
+the first time this role has found the failure inside a **commit message**
+rather than a doc, a table or a code comment. A commit message is the one
+carrier that **cannot** be amended, which makes the label the only fix
+available and makes it available only before the commit.
+
+**Reported, not edited.** `.claude/agent-memory/pdfce-engineer/` is the
+engineer's file and hard rule 11's scope is *report, do not edit*.
+**Owed: one word — `fourteen` → `sixteen` — plus the set it belongs to.**
+
+---
+
+#### THE GATE INVENTORY, FILED IN THE FORM THAT STOPS THE NEXT MISCOUNT
+
+The dispatch reported *"17 on disk / 15 wired"*. **Both halves are
+defensible and the first is not what `ls tools/check-*` returns**, so the
+inventory is filed in every form a later count might be taken in:
+
+| question | command | answer |
+|---|---|---:|
+| `check-*` scripts on disk | `ls tools/check-*` | **16** (11 `.py` + 5 `.sh`) |
+| distinct `check-*` invoked by CI | grep over `.github/workflows/*.yml`, `sort -u` | **15** (93.8 % of 16) |
+| `check-*` on disk but **not** a gate | — | **1** — `check-image-colorspace-truth.py` |
+| sweeps in the family **not** `check-`-prefixed | — | **1** — `measure-blend-space.py` |
+| the whole check-and-sweep family | — | **17** |
+
+**★ The distinction the dispatch asked to have recorded, stated so it is
+checkable rather than remembered.** Two scripts in `tools/` are **corpus
+sweeps, not gates** — they take a corpus or fixture directory as an argument
+and answer a question *about a set of files*, where a gate answers a
+question *about the repository* and exits non-zero:
+
+- **`check-image-colorspace-truth.py`** — closed-form ground truth for
+  `/Lab`, `/CalGray` and `/CalRGB` (ISO 32000-1 §8.6.5.2–§8.6.5.4 plus IEC
+  61966-2-1's sRGB encode), an **independent oracle** rather than a second
+  opinion. It **is** `check-`-prefixed, so it **does** appear in
+  `ls tools/check-*`, which is why `ci.yml` names its omission in its own
+  comment: *"deliberately NOT here: it takes a fixture directory as an
+  argument and checks a corpus, not the repo, so it is a sweep tool rather
+  than a gate."* **That comment is the reason 16-on-disk / 15-wired is not
+  a miss**, and it is the pattern to copy — an exclusion that names itself
+  where the counting happens.
+- **`measure-blend-space.py`** — new in this commit and **not
+  `check-`-prefixed**, so it does **not** appear in `ls tools/check-*` at
+  all. **A future count of 16 is therefore still correct and still
+  complete**; only a count of the *sweep family* reaches 17. It has no
+  self-naming exclusion because it needs none — the prefix is the
+  exclusion.
+
+**Neither is a gate and neither should be wired.** The next person counting
+now has the numerator, the denominator and both exclusions by name, which
+is hard rule 10(a) applied to an inventory rather than to a measurement.
+
+---
+
+#### Verification
+
+- **`python tools/check-commits-filed.py`** — run here, **before** this
+  entry: *"1 code commit(s) are in no filing"*, `74c5f2c`, and no other.
+  Green on everything else, so this entry is the only thing between the
+  gate and a clean sweep.
+- **15 CI-wired gates green and `cargo fmt --all --check` clean** —
+  **engineer-supplied, not re-run by this role.** Labelled, per §7's own
+  lesson about labels.
+- **`git describe --tags` → `v0.7.0-4-g74c5f2c`**;
+  **`git rev-list --count origin/main..HEAD` = 4** — `cbb1ede`, `90739d7`,
+  `1a871a5`, `74c5f2c`: none pushed, none in `v0.7.0`.
+- **Backup, checked not inferred** (`ls -t D:\Dev\pdfce-backups\`): the
+  newest bundle is still **`pdfce-20260817-v060.bundle`**, head
+  `v0.6.0^{}`. **`git rev-list --count v0.6.0..HEAD` = 173**, so the bundle
+  is **173 commits stale** — the 222nd filing's 172 plus this one commit,
+  and the self-checking identity still holds: *commits since backup* and
+  *commits since `v0.6.0`* are the **same number** while the bundle head is
+  that tag. ⚠ **`v0.7.0`'s tag is in no bundle on disk — this release is
+  not recoverable from backup. Cutting one is the operator's call.**
+- **`git status --porcelain` at the time of writing:** `docs/ROADMAP.md`,
+  `docs/FEATURES.md` and `docs/ARCHITECTURE.md` modified — **the 222nd
+  filing's own uncommitted work, being completed by a concurrent instance
+  of this role while this entry was written.** This filing touched
+  `ROADMAP.md` (this entry, at the head of *Shipped*) and `SESSION_LOG.md`
+  only, and deliberately **did not open** `FEATURES.md` or
+  `ARCHITECTURE.md`.
+- **`FEATURES.md` is deliberately UNCHANGED by this filing, and that is a
+  ruling rather than a skip.** `74c5f2c` ships no capability — a handoff, a
+  sweep script and an agent-memory amendment — so there is no box to tick
+  and no *Planned* row to move. The maintenance contract is discharged by
+  the 222nd filing's own `FEATURES.md` edit (the blend-modes row and the
+  per-colorant-buffer row), sitting in the working tree beside this entry.
+
+#### What this filing declined to mint
+
+**No standing rule, no decision.** The stale-count finding above is a third
+instance of a class `R209` and hard rule 11 already cover between them, and
+its remedy is the **merged hard-rule-11 method amendment** the 220th filing
+recommended and the 222nd repeated — **still owed, and now with its third
+and best-worded instance available to fold in.** Minting a fourth rule
+instead would split one mechanism across four records, which is the failure
+this project keeps filing rather than one it should commit.
+**Ceiling unchanged: `R209` stands, next free `R210`.** The decision ceiling
+is the 222nd filing's to move.
+
+---
+
+### `cbb1ede` + `90739d7` — `PASS 97.1c` + `PASS 97.1d`: PDFCE READS THE BLENDING COLOUR SPACE IT COMPOSITES IN, AND ON THE GHENT SUITE IT HAS NEVER ONCE BEEN THE RIGHT ONE — **107 OF 107 BLEND MODES, 100.0%**; ★★★ **THE 216TH FILING'S OWN "UNCONFIRMED" FLAG ON `3_GWG161` IS DISCHARGED BY A COUNTER RATHER THAN AN ARGUMENT — 15 OF ITS 15 BLENDS, AND TABLE 147'S INHERITANCE ROW IS THE REASON**; ★★★ **PASS-ID COLLISION — `97.1a`/`97.1b` WERE ALREADY SPENT BY THE 217TH FILING ON DIFFERENT DELIVERABLES**, so this work is filed as `97.1c`/`97.1d` and `90739d7`'S OWN SUBJECT LINE IS WRONG (hard rule 2, first live instance); ★★★ **THE SCOPING FACT THE GHENT NUMBERS ALONE COULD NOT HAVE PRODUCED — 100.0 % ON THE CONFORMANCE SUITE, 4.1 % ON THE REAL CORPUS, AND THIS FILING'S RE-MEASUREMENT MAKES IT 0 %**: both affected "real-world" files are **veraPDF transparency conformance fixtures**, so the colorant buffer buys conformance and print-site credibility and will change **nothing** about how ordinary documents look — the dispatch's own conclusion was under-stated by its own data; ★★ **HARD-RULE-11 SURVIVOR #1 DISCHARGED BY REMOVAL, NOT CORRECTION** — README's `v0.3.0` label is **gone**, not updated; ★★ **AND THE INSTRUMENT WAS UNTRACKED** — `tools/measure-blend-space.py`, which produced every figure below, was in no commit and in no gate's view, and **was committed by `74c5f2c` DURING this filing**; ★ **`74c5f2c` IS FILED BY THE CONCURRENT 223rd ENTRY, NOT THIS ONE** — but survivor #2's discharge is **verified here by grep**, and **two figures in that commit's own handoff are under-stated by this filing's re-measurement** — 2026-08-21 (two-hundred-and-twenty-second filing)
+
+**This filing HAS a shell (hard rule 8), and used it.** **Both corpora
+were re-measured here**, not taken on report — 51 Ghent patches and 4,012
+`fixtures/external` PDFs, through `tools/measure-blend-space.py` against
+`target/release/pdfce-cli.exe`. **All seven of the dispatch's headline
+figures reproduced exactly.** Everything below is labelled *re-measured*
+or *engineer-supplied*, and the command is named beside the number.
+
+---
+
+#### ★★★ FIRST: THE PASS IDs `97.1a` AND `97.1b` WERE ALREADY SPENT, AND THIS ENTRY DOES NOT RE-SPEND THEM
+
+**`90739d7`'s subject line reads `Pass 97.1b`. That ID belongs to a
+different deliverable, filed four filings ago.** The 217th filing
+(`0d5fc29`, above) minted **`Pass 97.1a` = `/Indexed` colorant
+classification** and **`Pass 97.1b` = the `overprint_images_unsupported`
+counter**, and said so in terms: *"Sub-Pass IDs `97.1a` and `97.1b` are
+assigned BY THIS FILING"*.
+
+**Hard rule 2 — Pass IDs are stable and never reused for a different
+feature — decides this, and it decides it in only one direction.** The
+earlier assignment is in *Shipped*, which is append-only (hard rule 1);
+re-lettering it to free the letters for newer work is precisely the
+history rewrite that rule forbids. So:
+
+| ID | Deliverable | Commit | Assigned by |
+|---|---|---|---|
+| `Pass 97.1a` | `/Indexed` colorant classification (§8.6.6.3, Table 149) | `0d5fc29` | 217th filing |
+| `Pass 97.1b` | `overprint_images_unsupported` counter | `0d5fc29` | 217th filing |
+| **`Pass 97.1c`** | **§11.3.4 subtractive blend arithmetic** (`BlendSpace`, `Blend::apply_subtractive`, `PixelCmyk`, `composite_element_cmyk`) | **`cbb1ede`** | **this filing** |
+| **`Pass 97.1d`** | **the blending-colour-space READER + its two counters** | **`90739d7`** | **this filing** |
+
+**★ A COMMIT SUBJECT IS IMMUTABLE AND THIS ONE IS WRONG, so the
+disambiguation is recorded rather than hidden:** a future reader who greps
+git history for `Pass 97.1b` gets **two** results with different meanings.
+**In `90739d7`'s subject line, the string `Pass 97.1b` means what this
+entry calls `Pass 97.1d`.** Nowhere else.
+
+**★★ THE MECHANISM, because it is cheap to prevent and will otherwise
+recur.** The 217th filing minted those two letters **into `ROADMAP.md`
+only**. The engineer's own working record — `docs/NEXT_SESSION.md`, the
+file he reads at session start — never received them, so the next commits
+minted the same letters from scratch, correctly by their own lights. **A
+sub-Pass ID assigned BY A FILING lives in exactly one place the engineer
+does not read before committing.** Same species as this session's three
+stale-claim cases (*no sweep / wrong key / wrong boundary*, 220th filing)
+one step earlier: not a claim that went stale, but **an identifier that was
+never delivered to the party who allocates the next one**. Recommended
+remedy is one line, and it is the engineer's to accept: **when a filing
+mints a Pass ID the commit did not name, the report back says so and the
+handoff carries it.** No rule minted — see *What this filing declined to
+mint*, below.
+
+---
+
+#### `Pass 97.1c` (`cbb1ede`) — the arithmetic, 380 lines, no wiring
+
+ISO 32000-1 **§11.3.4**: the blend functions assume **additive**
+components, and in a **subtractive** space (`DeviceCMYK`, `Separation`,
+`DeviceN`) the components **shall** be complemented before the blend
+function and complemented back after it. pdfce blended everything in
+device sRGB.
+
+What shipped, all in `crates/pdfce-render/src/compositor.rs`:
+
+- **`BlendSpace`** — `Additive` | `Subtractive`. **A parameter, not a
+  property of the values**, because the same four numbers mean opposite
+  things depending on the *group's* blending colour space and carry no tag
+  saying which.
+- **`Blend::apply_subtractive`** — §11.3.4's complement for the eleven
+  separable modes, and **§11.3.5.3's CMYK detour** for the four
+  non-separable ones, where **K is SELECTED rather than blended**: the
+  backdrop's black for `Hue`, `Saturation` and `Color`, the source's for
+  `Luminosity`. Running all four channels through the non-separable
+  formulas produces entirely plausible output and is non-conforming.
+- **`PixelCmyk` + `composite_element_cmyk`** — §11.4.4's element formula
+  in a subtractive space. **The compositing arithmetic itself is
+  space-agnostic**, which is §11.3.6's own point: its weighted average is
+  affine and its three weights sum to exactly 1, so complementation
+  commutes with it. **Only `B()` needs the round trip.**
+
+**Six tests, and two of them carry the Pass.** The `1_GWG162` `Difference`
+cell is asserted directly **with its own negative control** — the additive
+answer is asserted to *differ*, so the test cannot pass by the complement
+being a no-op. And **`Multiply` and `Screen` are asserted to EXCHANGE**
+under the complement, as are `Darken` and `Lighten`:
+`1 − Screen(1−cb, 1−cs) = cb × cs`. **So a CMYK `Multiply` is NOT a
+component-wise multiply of CMYK values — an implementation that "just
+multiplies the inks" has implemented `Screen`, and the two are visually
+opposite.** That is the single most likely way to get §11.3.4 wrong while
+believing it is right, and it now has a test.
+
+**Four components rather than N, on purpose.** The leading deliverable is
+the blending colour SPACE, which for every file in the Ghent corpus is
+`DeviceCMYK`. Spot planes are the second deliverable and want a runtime-N
+**plane-major** buffer (measured 3–5× faster than interleaved, `Pass 97.0`
+research). Building N now would fuse two questions that fail
+independently.
+
+**★ A trap recorded at the boundary this Pass crosses:**
+`PixelCmyk::TRANSPARENT` is `[0,0,0,0]` — *no ink* — and its doc says in
+terms that this is **NOT** what an opaque CMYK buffer should be
+initialised to. `DeviceCMYK`'s initial colour is `[0 0 0 1]`, so a
+`memset(0)` over a CMYK buffer yields **white** and **inverts every
+luminosity soft mask built over it**. Correct in sRGB, wrong in CMYK.
+
+---
+
+#### `Pass 97.1d` (`90739d7`) — the reader, and what it measured
+
+**pdfce had never read a group's `/CS`.** Verified by this filing, not
+taken on report: at `cbb1ede`, `git grep '"CS"' -- crates/pdfce-render/`
+returns **three** hits, of which two are the content-stream `cs`/`CS`
+*operator* (`interpret.rs:1947–1948`) and the third
+(`interpret.rs:3590`) is `.is_some_and(|g| g.contains_key(b"CS"))` — **an
+existence check for a soft mask's `/BC` polarity, which never looks at
+the value.** At `HEAD` the same grep returns six.
+
+What now happens:
+
+- **`page_blend_space(doc, page_id, resources, &mut ColorDiagnostics)`**
+  reads the page dictionary's `/Group /CS`. **§11.4.7 makes the page a
+  transparency group**, so the page *has* a blending colour space; there is
+  no "no group" case to fall through.
+- **`do_form` resolves each transparency group's**, **honouring Table
+  147's `/CS` row**: *"if the group is non-isolated, `CS` shall be
+  **ignored** and the colour space shall be inherited from the group's
+  parent."* **ISO 32000-2 §11.6.6 states it from the other side** —
+  *"non-isolated groups shall inherit their colour space from the nearest
+  ancestor isolated parent group"* — **and gives the reason**: converting a
+  backdrop into another space is not always possible, and would be an
+  excessive number of conversions where it is.
+- **`display_list::record_page` resolves it too**, by the same call. A
+  recording that captured the wrong space would replay a *plausible wrong
+  picture*, which is the one outcome that module refuses everywhere else
+  by poisoning.
+
+**★ THE SPACE LIVES ON THE `Interpreter`, NOT ON `GraphicsState` — and
+that is a correctness choice, not a tidiness one.** The blending space is a
+property of the group **nesting**, not of the graphics state, so **`q`/`Q`
+must not be able to change it**: a group establishes one at its boundary
+and every element inside blends in that space until the next boundary. Put
+it on `GraphicsState` and a `Q` inside a group silently restores the
+enclosing page's space mid-group. Filed as **decision 078**
+(`ARCHITECTURE.md` §12).
+
+**Four cases in one inheritance test, because the interesting ones are the
+pairs** (`the_blending_space_is_inherited_unless_the_group_is_isolated`):
+RGB page + RGB group → nothing subtractive; CMYK page + **non-isolated**
+group declaring RGB → **both count**, because Table 147 says to ignore the
+declaration; CMYK page + **isolated** group declaring RGB → **only the
+page**, the group genuinely escapes; RGB page + isolated CMYK group → only
+the group.
+
+---
+
+#### ★★★ `3_GWG161`'S 14 TRAPS: THE 216TH FILING'S "UNCONFIRMED" FLAG IS DISCHARGED
+
+**The 216th filing recorded this deliberately and correctly** — *"the
+§11.3.4 hypothesis FITS but was NOT derived the way `1_GWG162`'s was. A
+hypothesis that fits and a derivation that closes are different evidence"*
+— and the `Pass 97.1` *Backlog* entry carried the matching ⚠ *"do not count
+it toward this Pass's acceptance until it is."*
+
+**It is confirmed now, and by a counter rather than by an argument.**
+Table 147's inheritance row is the whole mechanism: `3_GWG161`'s own
+objects are `ICCBased` **RGB**, its cell groups declare **nothing
+subtractive**, and it blends in **`DeviceCMYK`** anyway — because **the
+declaration is on the PAGE group and its cell groups inherit it.** The
+hypothesis was right; what was missing was the *route*, and the route is a
+spec row nobody had read.
+
+**Re-measured by this filing**, not taken on report —
+`python tools/measure-blend-space.py "D:\Dev\temp\ghent-patches"`:
+
+```
+3_GWG161_Transp_Basic_BM_ICCBasedRGB_x4.pdf    15 wrong / 18 subtractive groups
+```
+
+**15 of 15 blend modes in the wrong space.** Note the two counts are
+different quantities and must not be merged: **15 blend modes** (this
+Pass's counter) against **14 trap cells of 16** (`ghent-check.py`'s
+measure, after `85.4b` took it from 15). The patch's *acceptance* is still
+14 traps; its *cause* is now 15 of 15.
+
+**The ⚠ in `Pass 97.1`'s Backlog entry and the ★ in the 216th filing's
+Shipped entry are both amended in this same filing** (dated footers, not
+rewrites).
+
+---
+
+#### ★★★ THE MEASUREMENT, AND IT REDIRECTS THE REST OF `Pass 97.1`
+
+**Ghent PDF Output Suite — re-measured by this filing** (51 patch PDFs at
+`D:\Dev\temp\ghent-patches`, `pdfce-cli render-page --page 1 --scale 1`):
+
+| Ghent PDF Output Suite (51 patch PDFs, **re-measured**) | count | of denominator |
+|---|---:|---|
+| files with a subtractive blending space | **13** | 25.5 % of 51 |
+| files with **at least one** wrong-space blend | **11** | 21.6 % of 51 |
+| subtractive groups (page + groups), total | **181** | 3.55 per file over 51 |
+| blend modes applied | **107** | 2.10 per file over 51 |
+| of those, computed in the **wrong space** | **107** | **100.0 % of 107** |
+
+**Every one of the engineer's three Ghent figures reproduced exactly**
+(13, 107, 107). **Two figures this filing adds that the dispatch did not
+carry, and the second is the more useful one:**
+
+- **11 files, not 13, actually blend wrong.** The census is 13; **two
+  subtractive-space Ghent patches composite nothing but `Normal` and are
+  therefore entirely correct.** That is the census-vs-shortfall
+  distinction **occurring in live data**, in the very corpus the test was
+  written to defend — the test that "holds that line"
+  (`a_cmyk_page_that_only_composites_normal_is_not_counted_as_wrong`) is
+  not defending a hypothetical.
+- **181 subtractive groups over 51 files.** The dispatch filed only the
+  file-level count; **the group-level denominator is what the colorant
+  buffer's cost will be paid per**, so it is the one a later performance
+  measurement will need to differ from.
+
+Worst offenders, re-measured (wrong blends / subtractive groups):
+
+```
+ 31 /  50   1_GWG162_Transp_Basic_BM_DeviceCMYK_Isolate_X4.pdf   ← the derivation cell
+ 15 /  49   1_GWG161_Transp_Basic_BM_DeviceCMYK_Knockout_X4.pdf
+ 15 /  18   3_GWG161_Transp_Basic_BM_ICCBasedRGB_x4.pdf          ← the confirmation above
+ 15 /  17   3_GWG164_Transp_Basic_BM_ICCbasedCMYK_x4.pdf
+ 15 /  17   1_GWG160_Transp_Basic_BM_DeviceCMYK_Non-knockout_X4.pdf
+  6 /   7   1_GWG1610_Softmasks_Text_part1_X4.pdf
+  5 /   6   1_GWG168_Softmasks_Vector_part1_X4.pdf
+  2 /   6   1_GWG1611_Softmasks_Text_part2_X4.pdf
+  1 /   5   1_GWG169_Softmasks_Vector_part2_X4.pdf
+  1 /   2   3_GWG221_OutputIntentChangeIndicator_x4.pdf
+```
+
+**★ `3_GWG221` is on that list and is NOT on `Pass 97.1`'s acceptance
+list.** One wrong blend, in an OutputIntent patch. Not scoped here; noted
+so a later acceptance re-count is not surprised by it.
+
+**`fixtures/external` — re-measured by this filing** (same command, corpus
+root `D:\Dev\pdfce\fixtures\external`):
+
+| `fixtures/external` (**re-measured**) | count | of denominator |
+|---|---:|---|
+| PDFs on disk (`find -name '*.pdf' \| wc -l`) | **4,012** | — |
+| of those, page 1 rendered and reported | **3,735** | 93.1 % of 4,012 |
+| files with a subtractive blending space | **15** | **0.4 % of 3,735** |
+| files with **at least one** wrong-space blend | **2** | **0.1 % of 3,735** |
+| subtractive groups (page + groups), total | **16** | 1.07 per subtractive file |
+| blend modes applied | **49** | 0.013 per rendered file |
+| of those, computed in the **wrong space** | **2** | **4.1 % of 49** |
+
+**All four of the engineer's external figures reproduced exactly** (3,735
+· 15 · 49 · 2). **Two corrections and one sharpening this filing adds:**
+
+**★ (1) The commit message calls this corpus "3,735 real-world files". It
+is 4,012 files, of which 3,735 rendered.** Hard rule 10(a): the denominator
+belongs to the *measurement*, not to the *corpus*, and the 277-file
+difference is a render-coverage fact hiding inside a blend-space table.
+Neither figure is wrong; only one of them was written down.
+
+**★ (2) 16 subtractive groups over 3,735 files, against 181 over 51 Ghent
+patches.** Per *rendered file* that is **0.004 vs 3.55 — a factor of ~830**.
+That ratio, not the file percentages, is the honest size of the
+prepress/general gap, and it is the number a colorant-buffer cost estimate
+will be paid against.
+
+**★★★ (3) THE SHARPENING, AND IT MAKES THE SCOPING FACT STRONGER THAN THE
+DISPATCH CLAIMED. Both affected files are themselves CONFORMANCE TEST
+FILES**, named by the re-measurement:
+
+```
+1 wrong / 1 groups   veraPDF-corpus\PDF_A-4\6.2 Graphics\6.2.9 Transparency\…
+1 wrong / 1 groups   veraPDF-corpus\PDF_A-2b\6.2 Graphics\6.2.10 Transparency\…
+```
+
+**PDF/A-4 §6.2.9 "Transparency" and PDF/A-2b §6.2.10 "Transparency" — two
+files whose entire purpose is to exercise this clause.** So the true
+statement is not *"4.1 % of real-world blends are affected"*; it is
+**"zero organic documents in a 3,735-file corpus are affected, and the
+only two hits are transparency conformance fixtures."** **The dispatch's
+own conclusion was under-stated by its own data**, and the correction runs
+in the direction that makes the scoping ruling firmer, not weaker.
+
+**★★★ WHAT THE TWO CORPORA SAY, AND THEY SAY DIFFERENT THINGS.**
+
+- **100.0 % on the suite built to test this.** The Ghent transparency
+  panels **cannot** be passed without the colorant buffer. The previous
+  handoff derived that by hand for **one cell**; it is now true of **every
+  blend on every one of those patches**.
+- **4.1 % on the corpus of files people actually have — and on closer
+  reading, 0 %.** **This is a PREPRESS-SHAPED problem, not a general
+  one.** 15 of 3,735 rendered files declare a subtractive blending space
+  at all; **2 blends** inside them are affected; and **both of those two
+  files are veraPDF transparency conformance fixtures**, not documents
+  anybody authored to read. **So the colorant buffer buys conformance and
+  print-site credibility — which is the stated goal — and will change
+  nothing whatsoever about how ordinary documents look.**
+
+**Filed as a SCOPING FACT against `Pass 97.1`'s remaining work, not as a
+statistic**, and the *Backlog* entry is amended with it in this same
+filing. It is the kind of fact that is only available before the work:
+**the Ghent numbers alone could not have produced it**, because a
+conformance suite is by construction 100 % of whatever it tests. A Pass
+justified on Ghent alone would have been sold as a rendering fix; it is a
+conformance fix, and that changes how its result should be judged when it
+lands — **do not expect the real-world corpus to move, and do not read
+that as failure.**
+
+---
+
+#### ★★ HARD-RULE-11 SURVIVOR #1 — DISCHARGED BY **REMOVAL**, WHICH IS A DIFFERENT OUTCOME FROM "CORRECTED"
+
+`README.md` said **"The current release is v0.3.0"** through `v0.4.0`,
+`v0.5.x`, `v0.6.0` and `v0.7.0` — **four releases**, on a public
+repository, as the **first concrete claim a stranger reads**.
+
+**Why it survived every review, which is the transferable half:** the
+**link** beside it was always `/releases/latest`, so clicking it went
+somewhere correct and **only the label lied**. **A wrong claim beside a
+right link reads as a right claim.**
+
+**The remedy chosen was REMOVAL, and this entry records which — because
+"we corrected it" and "we removed the thing that goes stale" are different
+outcomes and only the second stays fixed.** The label is gone; the
+`/releases/latest` link stays and **cannot go stale by construction**. A
+20-line HTML comment is left in its place explaining why the number is
+deliberately absent, so a future editor does not helpfully re-add it.
+
+**This is the shape to reach for whenever hard rule 11 finds a survivor:**
+ask whether the claim needs to exist at all before agreeing to maintain it.
+*"Remember to update the README"* is a **reminder**, not a **remedy**.
+
+**Survivor #2, `docs/NEXT_SESSION.md`, is being rewritten wholesale by the
+engineer as this session's handoff** — its own header names that as the
+right remedy for it. **Not verified by this filing**: the file is dirty in
+the working tree (`git status --porcelain` → ` M docs/NEXT_SESSION.md`) and
+uncommitted at the time of writing.
+
+---
+
+#### ★★ THE INSTRUMENT THAT PRODUCED EVERY FIGURE ABOVE WAS NOT IN GIT — **AND WAS COMMITTED WHILE THIS ENTRY WAS BEING WRITTEN**
+
+> **★★★ CORRECTED IN PLACE, 2026-08-21, BEFORE THIS ENTRY WAS COMMITTED.
+> Source: `git show --stat 74c5f2c`, run at the close of this filing.**
+> The engineer committed **`74c5f2c` at 10:16:59** — *after* this filing
+> began — and it **promotes `tools/measure-blend-space.py` into the
+> repository** (112 lines, docstring and inline baseline included).
+> **The finding below was TRUE when this filing started and is FALSE
+> now.** It is kept, rather than deleted, for two reasons: the reasoning
+> about *why* an untracked instrument is a hole is unchanged and worth
+> carrying, and **a correction is a claim** — deleting the original would
+> leave the corrected state unsourced. **Nothing is owed.** See the
+> `74c5f2c` addendum at the foot of this entry.
+
+`tools/measure-blend-space.py` — 4,341 bytes, mtime **2026-08-21 10:08**,
+three minutes **after** `90739d7` was committed at 10:05:38 — **was**
+untracked (`git status --porcelain` → `?? tools/measure-blend-space.py`,
+run at the start of this filing).
+Three consequences, in ascending order of cost:
+
+1. **The measurement is not reproducible from a clone.** The two headline
+   percentages in this entry and in `90739d7`'s message have no instrument
+   in the repository that produced them.
+2. **Its own docstring declares itself a baseline** — *"THE FIRST
+   MEASUREMENT, 2026-08-21, so a later run has something to differ from"* —
+   and **a baseline that exists only in an untracked working-tree file is
+   not a baseline**, it is a number somebody happens to still have.
+3. **It is invisible to every gate.** `check-commits-filed.py` reasons
+   about commits that touch `crates/`, `tools/` or `fixtures/`; a file
+   that is in none of them **because it was never added** is not a commit
+   at all. This is the **`.github/` hole and the `fuzz/` hole one step
+   further out**: those were paths the gate did not look at, this is a path
+   the gate cannot look at.
+
+~~**Owed:** `git add tools/measure-blend-space.py` and commit it. **One
+command.** Reported, not done — this role does not commit.~~ **DONE by
+`74c5f2c`, concurrently and independently** — the engineer reached the
+same conclusion from the other side while this was being written.
+
+---
+
+#### ADDENDUM — `74c5f2c` ARRIVED **DURING** THIS FILING (10:16:59), AND IS FILED BY THE **223rd** ENTRY, NOT THIS ONE
+
+**★ CONCURRENCY, RESOLVED IN FAVOUR OF THE OTHER INSTANCE.** A second
+librarian instance filed `74c5f2c` as the **223rd filing** while this entry
+was being written — its `ROADMAP.md` entry sits immediately **above** this
+one and its `SESSION_LOG.md` entry is the session wrap. **That entry is
+authoritative for `74c5f2c`; this section deliberately does not restate
+it** (hard rule 4, and the same no-second-copy discipline the 216th filing
+applied to `docs/compositor-plan.md`). Second consecutive concurrent pair
+this session, after the 219th/221st.
+
+**Verified here rather than assumed**, because it discharges an item this
+entry raised: `grep -n "3_GWG161\|unexplained\|UNCONFIRMED"
+docs/NEXT_SESSION.md` at `74c5f2c` returns **zero hits** — **hard-rule-11
+survivor #2 is discharged by wholesale rewrite**, and
+`tools/measure-blend-space.py` is now tracked.
+
+**★★ WHAT THIS ENTRY ADDS THAT THE 223rd DOES NOT: TWO CLAIMS IN
+`74c5f2c` ARE UNDER-STATED BY THIS FILING'S OWN RE-MEASUREMENT, and they
+are now in the file the next session reads first.** Reported, not edited —
+`docs/NEXT_SESSION.md` is engineer-owned:
+
+1. **`docs/NEXT_SESSION.md:113`** — the table reads
+   `` `fixtures/external` (3,735) ``. **The corpus is 4,012 PDFs, of which
+   3,735 rendered** (hard rule 10(a): the denominator belongs to the
+   measurement, not the corpus).
+2. **`docs/NEXT_SESSION.md:121`** — *"will change **almost nothing** about
+   how ordinary documents look"*. **It will change nothing:** both
+   `fixtures/external` hits are **veraPDF transparency conformance
+   fixtures**, so no organic document in the corpus is affected. The
+   correction runs in the direction that makes the handoff's own scoping
+   ruling **firmer**.
+
+---
+
+#### Verification (engineer-supplied, spot-checked by this filing)
+
+- `cargo test --workspace` **green**; the transparency suite is **21
+  tests, +2** (`the_blending_space_is_inherited_unless_the_group_is_isolated`,
+  `a_cmyk_page_that_only_composites_normal_is_not_counted_as_wrong`).
+- `cargo fmt --check` and
+  `cargo clippy --all-targets --workspace -- -D warnings` **clean**.
+- **The stable stdout line gained two keys, appended LAST**
+  (`blend_space_subtractive=`, `blends_in_wrong_space=`), **with its order
+  test updated** — the append-only stdout contract (`R117`) honoured.
+- **Re-measured by this filing:** both corpora above, and
+  `git grep '"CS"'` at `cbb1ede` vs `HEAD` (3 hits → 6).
+- **★ Binary provenance, checked because it was checkable.** The
+  `target/release/pdfce-cli.exe` that produced the first pass of both
+  measurements was built at **09:53**, *twelve minutes before* `90739d7`
+  was committed at **10:05:38** — i.e. from the working tree, not
+  demonstrably from the commit. `cargo build --release -p pdfce-cli` at
+  `HEAD` **did recompile** (3 m 26 s) and produced a binary of **byte-
+  identical size** (11,885,568), and **the Ghent measurement re-run
+  against it is identical in all six figures**. So the numbers are HEAD's,
+  and the question is closed rather than assumed away.
+- **`git status --porcelain` at the time of writing:** one modified file
+  (`docs/NEXT_SESSION.md`, the engineer's live handoff rewrite) and one
+  untracked (`tools/measure-blend-space.py`). **No filing-owned file was
+  dirty.**
+- **Backup, checked not inferred** (`ls -t D:\Dev\pdfce-backups\`): newest
+  bundle is **`pdfce-20260817-v060.bundle`**, whose head is the `v0.6.0`
+  tag commit. **`git rev-list --count v0.6.0..HEAD` = 172**, so the bundle
+  is **172 commits stale** — the 221st filing's 169 plus this session's
+  three (`cbb1ede`, `90739d7`, `1a871a5`). Same self-checking identity that
+  filing established: *commits since backup* and *commits since `v0.6.0`*
+  are the **same number** while the bundle head is that tag.
+- `git describe --tags` → **`v0.7.0-3-g1a871a5`**; `git rev-list --count
+  origin/main..HEAD` → **3**. **Neither `cbb1ede` nor `90739d7` is in
+  `v0.7.0`**, and neither is pushed.
+
+#### What this Pass did **NOT** do
+
+- **Nothing renders differently.** `Pass 97.1c` ships arithmetic with **no
+  wiring**; `Pass 97.1d` ships a **reader and two counters**. Every blend
+  is still computed in device sRGB. **This is the third consecutive `97.x`
+  deliverable to move zero Ghent patches** (`97.0`: seven expected, zero
+  delivered; `97.1a`: correct, cited, tested and inert; `97.1c`/`97.1d`:
+  measurement only) — **and unlike the first two, this one was designed to
+  move nothing.** A measurement is not a regression.
+- **The colorant buffer is not built.** That is `Pass 97.1`'s remaining
+  work and the thing both counters exist to make observable.
+- **`Separation` and `DeviceN` are classified but not planed.** The census
+  counts them; nothing composites in them.
+- **The four-component `ICCBased` test is a component count**, not an ICC
+  profile-class read. A four-component `ICCBased` resolving to a
+  non-`DeviceCMYK` alternate is classified subtractive on `N`, which is
+  right for every file in both corpora and is not proven in general.
+- **`overprint::composite`'s white-backdrop convention is still
+  untouched** — inherited from `97.0a`, still deliberately waiting for the
+  buffer that will replace its input.
+- **The Ghent board did not move**: still **26 pass · 14 FAIL · 11
+  UNRESOLVED of 51**, unchanged since `97.0`.
+
+#### What this filing declined to mint
+
+**No standing rule for the Pass-ID collision, at n = 1.** The mechanism is
+real and the remedy is one line in a report, which is a *procedural*
+commitment of exactly the kind hard rule 11 already is — and this project
+has now three times declined a mint on the better warrant that **a
+mechanical gate cannot check the thing** (a gate would have to know which
+IDs a filing intends to mint, which is the fact the filing exists to
+create). **Recommended instead: one sentence added to this role's report
+protocol** — *a filing that mints a Pass ID the commit did not name says
+so in its report back, and the engineer carries it into
+`docs/NEXT_SESSION.md`*. **The amendment is the engineer's act, not this
+role's** — same posture as hard rule 11's own adoption on 2026-08-18.
+**Ceiling unchanged: `R209` stands, next free `R210`.**
+
 ### ★★★ `v0.7.0` IS RELEASED — TAG AT `3bc8fbe`, PUBLISHED, ASSET UPLOADED, `verify-release.py` **ALL SEVEN OK**; ★★★ **`R209`'S FIRST LIVE APPLICATION, AND THE ORDERING IS THE POINT** — CI WAS OBSERVED GREEN ON THE EXACT COMMIT *BEFORE* THE TAG WAS PLACED, ENDING **NINE CONSECUTIVE RED RUNS** OVER THREE DAYS; ★★ **THE DISPATCH'S OWN HEADLINE FIGURE IS WRONG FOR THE FOURTH CONSECUTIVE FILING — "166 commits since `v0.6.0`" DISPATCHED, `git rev-list --count v0.6.0..v0.7.0` = 169** (166 was true at `5884ed1`, three commits ago, and this is the release's own number); ★★ DISCHARGES **THREE** ITEMS OWED BY EARLIER FILINGS — the 219th's release record, the 160th's `v0.6.0` release-notes correction (never published, `v0.6.1` skipped), and the 159th's *"a future filing should confirm the CI job set is unchanged"*; ★★ AND THE BACKUP DENOMINATOR IS FILED WITH THE IDENTITY THAT MAKES IT CHECKABLE — **the bundle's head IS the `v0.6.0` tag commit**, so "commits since backup" and "commits in this release" are the SAME 169 — no Pass ID; release record — 2026-08-21 (two-hundred-and-twenty-first filing)
 
 **Sourcing.** This filing has a shell. **Every figure below was produced
@@ -2217,6 +2955,22 @@ modes sit at the `Do` where `draw_pixmap` already handles them. **The
 A hypothesis that fits and a derivation that closes are different
 evidence, and `1_GWG162`'s arithmetic above is the only one of the two
 that has been done.
+
+> **★★★ AMENDED 2026-08-21 (two-hundred-and-twenty-second filing) — THIS
+> FLAG IS DISCHARGED. `3_GWG161` IS CONFIRMED, AND BY A COUNTER RATHER
+> THAN BY AN ARGUMENT.** `Pass 97.1d` (`90739d7`) reads the blending
+> colour space, and re-measured by that filing:
+> **15 of `3_GWG161`'s 15 blend modes are computed in the wrong space**,
+> across 18 subtractive groups. **The route the caution above was right to
+> demand is Table 147's `/CS` row**: a **non-isolated** group's `/CS`
+> *shall be ignored* and the space *inherited from the parent*, so
+> `ICCBased` RGB artwork inside a `DeviceCMYK` **page** group blends in
+> `DeviceCMYK` whatever its own cell groups declare. **The hypothesis was
+> right and the mechanism was a spec row nobody had read** — which is
+> exactly why "fits" and "derived" were correctly kept apart here.
+> **Keep the two counts distinct:** 15 **blend modes** (this measure)
+> against 14 **trap cells of 16** (`ghent-check.py`'s measure). Full
+> record: the `cbb1ede` + `90739d7` entry at the top of *Shipped*.
 
 **AN INSTRUMENT PROBLEM, NAMED AND DELIBERATELY NOT SOLVED THIS SESSION.**
 `tools/ghent-check.py` has **no calibrated threshold for reference-strip
@@ -67956,15 +68710,67 @@ added. See that section below.
   > **This does not change the Pass's dependency (`97.0` first — now
   > satisfied) or its acceptance list; it changes what gets built first
   > inside it, and therefore what the first measurable result will be.**
-  > ⚠ **`3_GWG161`'s 14 traps are an UNCONFIRMED instance of this
+  > ~~⚠ **`3_GWG161`'s 14 traps are an UNCONFIRMED instance of this
   > hypothesis, not a confirmed one** — it fits, but it was not derived
   > the way `1_GWG162`'s `Difference` cell was. Do not count it toward
-  > this Pass's acceptance until it is.
+  > this Pass's acceptance until it is.~~
+  > **★ DISCHARGED 2026-08-21 (222nd filing).** `Pass 97.1d` (`90739d7`)
+  > confirms it by counter: **15 of `3_GWG161`'s 15 blend modes are in the
+  > wrong space**, over 18 subtractive groups, and **Table 147's
+  > inheritance row is the mechanism** — a non-isolated group's `/CS` is
+  > ignored and the space comes from the parent, so `ICCBased` RGB
+  > artwork under a `DeviceCMYK` page group blends in `DeviceCMYK`.
+  > **`3_GWG161` may now be counted toward this Pass's acceptance.**
   > **Also inherited from `97.0`:** `overprint::composite` still carries
   > the **white-backdrop convention** `97.0a` removed from
   > `blend_nonsep` — deliberately left alone, because it is Table 149
   > decision logic and belongs with the colorant buffer that will replace
   > its input **in this Pass**. Fix it here, not before.
+
+  > **★★★ PROGRESS + A SCOPING FACT — 2026-08-21 (222nd filing),
+  > `cbb1ede` + `90739d7`, filed as `Pass 97.1c` + `Pass 97.1d`.**
+  >
+  > **Two of the leading deliverable's three parts are now BUILT and
+  > TESTED, and neither is wired:**
+  > - **`97.1c` — the arithmetic.** `BlendSpace`,
+  >   `Blend::apply_subtractive` (§11.3.4's complement for the eleven
+  >   separable modes, §11.3.5.3's CMYK detour with **K selected by mode**
+  >   for the four non-separable ones), `PixelCmyk`,
+  >   `composite_element_cmyk`. Six tests, including `1_GWG162`'s
+  >   `Difference` cell **with a negative control**, and the
+  >   `Multiply`↔`Screen` exchange under the complement.
+  > - **`97.1d` — the space READER.** `page_blend_space` (§11.4.7) plus
+  >   `do_form`'s per-group resolution **honouring Table 147's `/CS`
+  >   row**, on the `Interpreter` rather than on `GraphicsState`
+  >   (decision **078**). Two counters: `blend_space_subtractive` (a
+  >   CENSUS) and `blends_in_wrong_space` (the SHORTFALL).
+  >
+  > **What remains of this Pass is the BUFFER** — the plane-major
+  > runtime-N pixel the two above are waiting for.
+  >
+  > **★★ THE SCOPING FACT, and it should change how this Pass's result is
+  > JUDGED rather than whether it is done.** Measured on two corpora and
+  > **re-measured by the 222nd filing**:
+  >
+  > | corpus | files subtractive | blends applied | in the wrong space |
+  > |---|---:|---:|---:|
+  > | **Ghent PDF Output Suite** (51 patches) | 13 (25.5 %) | 107 | **107 (100.0 %)** |
+  > | **`fixtures/external`** (3,735 rendered of 4,012 on disk) | 15 (0.4 %) | 49 | **2 (4.1 %)** |
+  >
+  > **100 % on the suite built to test this; 4.1 % on the corpus of files
+  > people actually have — and both of those two files are veraPDF
+  > transparency CONFORMANCE fixtures** (PDF/A-4 §6.2.9, PDF/A-2b
+  > §6.2.10), so **no organic document in 3,735 is affected.**
+  > **Subtractive groups: 181 over 51 Ghent patches vs 16 over 3,735 real
+  > files — 3.55 vs 0.004 per file, a factor of ~830.**
+  >
+  > **Therefore: this Pass buys CONFORMANCE and print-site credibility,
+  > which is the stated goal, and will change nothing about how ordinary
+  > documents look. Do not expect the real-world corpus to move when it
+  > lands, and do not read that as failure.** The Ghent numbers alone
+  > could not have produced this — a conformance suite is by construction
+  > 100 % of whatever it tests. Full record: the `cbb1ede` + `90739d7`
+  > entry at the top of *Shipped*.
 
   **Pass 97.1 — colorant planes.** Same compositor, different pixel: one
   plane per colorant, CMYK + one per spot, sized by pre-scanning the
