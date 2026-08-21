@@ -45,6 +45,8 @@ All green at this handoff.
 | `bab0a23` | **`Pass 121.1`** — one edit moved **1,676 labels**; reflow's "line" had no end |
 | `e5be7d5` | **`Pass 113.0`/`113.1`/`113.2`** — `transform_objects`, on **every** object kind (§2.5) |
 | `73fa218` | **`Pass 120.0`/`120.1`/`120.3`** — the object clipboard: copy, cut, paste, serialise (§2.6) |
+| `af5989f` | **`Pass 120.2`/`120.4`** — the clipboard's last two parts, **and a third real-file defect** (§2.6) |
+| `2ddbbbe` | CI ran **six of fifteen** gates; it runs **fourteen** now (§4) |
 
 Plus two librarian filings (209th, 210th), `decision 076`, and Backlog
 `119.1` / `119.3` / `119.4` / `120.0`–`120.4`.
@@ -100,14 +102,21 @@ temptation on reading "shipped" is to tick everything.
 
 ## §1 — THE QUEUE, in the order I would take it
 
+**★ The operator's standing instruction this session was
+*"fix the housekeeping items first before moving on to the color compositor.
+loop until done."*** The housekeeping is done: the clipboard family is closed,
+CI runs fourteen of fifteen gates, and the iccce note is read and answered.
+**`Pass 97.x`, the compositor, is next** — and §2.7 changes how it must be
+scoped, so read that before anything else.
+
 1. ~~**`Pass 113.0`** — `transform_objects`.~~ **SHIPPED this session**
    (`e5be7d5`, with `113.1` preview and `113.2` CLI). See §2.5 for what it
    decided, including the one thing a consumer must not get wrong.
 
-2. ~~**`Pass 120.0`–`120.4`** — the object clipboard.~~ **`120.0`, `120.1` and
-   `120.3` SHIPPED this session** (`73fa218`). See §2.6. **`120.2` (render a
-   selection as a standalone one-page PDF) and `120.4` (dimensions and widgets)
-   are still open**, and `120.4`'s filed framing needs correcting — see §2.6.
+2. ~~**`Pass 120.0`–`120.4`** — the object clipboard.~~ **THE WHOLE FAMILY
+   SHIPPED** (`73fa218`, `af5989f`). See §2.6, including the third real-file
+   defect it turned up. Only *serialising annotations* remains, filed on its
+   own.
 
 3. **`Pass 119.1`** — `unshare_form` (copy-on-write a shared form onto one
    page). See §2 for why this is a *separate verb* and not a mode of `edit_text`.
@@ -126,11 +135,55 @@ temptation on reading "shipped" is to tick everything.
 6. **`Pass 119.3`** — align `pdfce-render`'s nested-form resource fallback with
    `text_edit::forms`. Small, and see §2 for exactly what diverges.
 
-7. **The `iccce` channel** — **`note_gray_black_routing_is_yours.md` is still
-   unread**, and is still the highest-value unread file there. A boundary ruling
-   handing pdfce the four-way gray/CMYK/`Separation`/`DeviceN` black
-   equivalence, bearing directly on `Pass 97.x`. **Not a request — do not triage
-   it as one.**
+7. ~~**The `iccce` channel** — `note_gray_black_routing_is_yours.md`~~ **READ
+   2026-08-21, and answered.** See §2.7 — it changes how `Pass 97.x` must be
+   scoped, and the reply is
+   `open/2026-08-21-reply-gray-routing-we-never-noticed-and-here-is-why.md`.
+
+---
+
+## §2.7 — ★★ WHAT THE iccce NOTE CHANGES ABOUT THE COMPOSITOR — read before scoping `Pass 97.x`
+
+**Their question to us was: does pdfce route `DeviceGray` → CMYK per ISO
+32000-2 cl. 10.3.2 (inside the colour-managed branch) or per cl. 10.4.2.1 (the
+less-capable processor's fallback)?**
+
+**Answered by measurement, not memory: NEITHER, because pdfce has no
+`DeviceGray` → CMYK conversion at all.** Every device space converts to
+**sRGB** — `gray_to_srgb`, `rgb_to_srgb`, `cmyk_to_srgb`, and there is no
+fourth function. The render target is a `tiny_skia::Pixmap` (RGBA8) and there
+is **no CMYK-native output path anywhere in the workspace.**
+
+★ **So the routing decision belongs INSIDE the compositor Pass**, because
+`97.x` is the first thing that gives pdfce a CMYK-native destination. On the
+day it lands, the clause stops being a question and becomes a line somebody
+writes. **Make it deliberately; do not let it arrive as a side effect.**
+
+Three things from that note are now compositor input:
+
+- **§8.6.5.7 NOTE 2** — a 4→3→4 conversion *"is unnecessary and results in a
+  loss of fidelity in the black component"*. That is the standard's own warrant
+  for not round-tripping `DeviceCMYK` through a PCS, i.e. **a conformance
+  argument rather than a taste one**, which the compositor plan lacked.
+- **The corrected GWG 23.0 panel values**: `DeviceGray` **25 %**, `DeviceCMYK`
+  **0/0/0/75**, `Separation` **75**, `DeviceN` **75**. The note's *earlier*
+  figures (50 % / 0/0/0/50) were wrong and were wrong **in our inbox**. Do not
+  build a fixture from anything but these.
+- **★ `1 − 0.25 = 0.75`** — GWG authored the patch on the device-space rule
+  itself, so the artwork is independent evidence for the whole conclusion,
+  arriving from a direction neither project used to reach it.
+
+**A `pdfce-spec-librarian` dispatch is in flight** to ingest **clause 10**,
+which our corpus does not hold *at all* — a gap iccce found from outside it —
+plus §8.6.5.6/§8.6.5.7. It was asked to **evaluate** iccce's A52 resolution
+rather than adopt it, because two projects agreeing because one relayed it to
+the other is not corroboration. **Check its result before scoping `97.x`.**
+
+★ **A licence constraint that binds anyone touching this**: the ISO 32000-2
+source in `_sources/` is a **single-user PDF Association copy licensed to the
+operator**, watermarked *"copying and networking prohibited"*. Short quotation
+with citation is fine; **no bulk transcription into any repository** — both
+this one and `iccce` are MIT and public.
 
 ---
 
@@ -156,15 +209,46 @@ not spans), which is why cross-document paste is the same code path and why
 `to_bytes` shipped the same session rather than forcing that structure to be
 invented later.
 
-**Still open, and not quietly closed:**
-- **`Pass 120.2`** — render a selection as a standalone one-page PDF.
-  Deliberately a *different* format from `to_bytes`: a PDF cannot carry which
-  byte range was which object, each item's CTM, or which names its operators
-  consumed. Do not let anyone "simplify" the two into one.
-- **`Pass 120.4`** — dimensions and widgets. ★ **Its filed framing ("refuse
-  loudly") is subtly wrong for the shipped shape**: annotations are not
-  addressable by content-object indices *at all*, so there is nothing to
-  refuse. It needs a different carrier, not a guard.
+**`Pass 120.2` and `120.4` shipped 2026-08-21 (`af5989f`) — the family is
+CLOSED.**
+
+- **`120.2`** — `ObjectClip::to_pdf()`. The page **is** the selection. Still a
+  *different* format from `to_bytes`, and **a test now enforces it**:
+  `from_bytes` refuses a PDF by name, so a future "simplify these into one"
+  cannot pass quietly.
+- **`120.4`** — annotations got their own address space (`copy_annotations`,
+  `copy_selection`). ★ **The filed "refuse loudly" framing was aimed at a hole
+  that did not exist** — content indices could not *name* an annotation to
+  refuse it. Once the address space existed, markup and ce dimensions turned
+  out **paste-able**, copied through pdfce's own models (a ce dimension carries
+  its group's **name and unit**, matched or created on paste). **Widgets are
+  refused by name**: a renamed field is a *different* field.
+- **Still open, filed as its own item:** serialising annotations into a clip
+  payload. It needs a second versioned encoding beside the content one.
+
+### ★★★ AND HIS REAL DRAWING FOUND A THIRD DEFECT — read this before the next reach extension
+
+Exporting a selection from the operator's CAD file produced a PDF whose text
+**pdfce's own extractor** read as `chars=0 codes=4 failed=4`:
+
+> *a show operator appeared with no font selected (§9.4.1 requires Tf first)*
+
+**Text state is graphics state (§8.4.1 Table 52).** A producer may set
+`/F8 12 Tf` **once** and emit many `BT`…`ET` blocks that inherit it — which is
+what a CAD exporter does. A text object's byte span is its `BT`…`ET`, so **the
+`Tf` is not in it.** Copy bound no font, paste emitted fontless text, and
+**nothing errored at either end.** Same argument for a path stroked after
+`0.5 g 2 w`: it would have pasted black and hairline.
+
+Fixed with a **prelude** — the inherited state, captured at copy time, emitted
+inside the paste wrapper. `ClipItem::bytes` stays verbatim so *what the
+producer wrote* and *what pdfce re-established* stay distinguishable.
+
+**★ THREE CONSECUTIVE PASSES, THREE DEFECTS, NONE FOUND BY A FIXTURE.** The
+false font refusal, the reflow that moved 1,676 labels, and this. All three
+were in code older than the Pass that exposed them. **Run it on his file
+before calling anything shipped** — it is now the last step, not an optional
+one.
 
 ---
 
@@ -327,6 +411,27 @@ exactly those two. Both now print. `FormatReport` followed. The gate covers
 whose mechanism is the SCOPE OF ITS INPUT LIST rather than the spelling of a
 pattern.** The previous four were all "the regex missed a spelling". Widening a
 pattern does not fix a list that was written from one file.
+
+### ★★ AND THE GATES THEMSELVES WERE ONLY HALF-WIRED — fixed 2026-08-21 (`2ddbbbe`)
+
+`tools/` held **fifteen** check scripts and CI invoked **six**. The other nine
+ran only when somebody remembered to run them locally — which is exactly the
+"green because nobody looked" failure each of those scripts was written to end,
+one level up.
+
+**The ratio had been mis-filed twice before anyone counted it**: one session
+recorded "3 of 16", the next corrected it to "5 of 14", and both were derived
+by *reading* rather than by counting. `ls tools/check-*` plus one grep over
+`ci.yml` are the only two commands that answer it.
+
+Fourteen are wired now. The fifteenth, `check-image-colorspace-truth.py`, is
+**deliberately** out — it takes a fixture directory and checks a corpus, not
+the repo, so it is a sweep tool rather than a gate. Named in `ci.yml` so the
+next person counting does not record it as a ninth miss.
+
+They went into the `ui-strings` job on purpose: it already checks out with
+`fetch-depth: 0`, which `passes-filed` needs to walk history, and **a shallow
+clone would have made it pass vacuously.**
 
 **`tools/check-one-commit-per-command.py` earned its keep the same day** — the
 new session-path form loop committed per iteration. Harmless while the loop
