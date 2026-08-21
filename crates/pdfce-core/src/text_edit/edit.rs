@@ -1732,14 +1732,43 @@ pub(crate) fn plan_edit_target(
     let mut edits: Vec<(usize, usize, Vec<u8>)> = vec![(*a_start, *a_end, new_op_bytes)];
 
     // --- reflow: shift following absolute Tm(s) on the same line by ΔA ---
+    //
+    // ★★ "ON THE SAME LINE" IS ENFORCED HERE, AND IT USED NOT TO BE
+    // (`Pass 121.1`). This loop shifted EVERY following `Tm` until a
+    // `Td`/`TD`/`T*`/`'`/`"` boundary — and a content stream that positions
+    // every run with `Tm` and never emits `Td` has no boundary at all, so one
+    // edit moved the entire rest of the text object sideways.
+    //
+    // That is not a hypothetical: on the operator's own benchmark CAD drawing
+    // a four-character edit reported **1,676 followers repositioned**. Every
+    // label, dimension callout and title-block field after the edited one
+    // would have slid by the advance delta — an edit that wrecks the drawing,
+    // which is worse than the "editing does nothing" it replaced. The defect
+    // predates `Pass 119.0`; that Pass is simply what first let the surgery
+    // reach a stream shaped this way.
+    //
+    // The model's own words are "the rest of the LINE"
+    // (`iso32000__ref__text_edit_surgery.md` §3), and a line is a BASELINE. A
+    // following `Tm` continues the edited line only if it differs from the
+    // anchor's in `e` ALONE — same orientation, same scale, same `f`. Anything
+    // else re-anchors somewhere new, so the line is over and the scan stops.
+    //
+    // Deliberately strict: a same-line `Tm` that also changes scale is treated
+    // as a new line and left alone. **Leaving text where the producer put it
+    // is always recoverable; moving it is not**, and a conservative miss shows
+    // up as an overlap the operator can see, while a permissive hit shows up
+    // as 1,676 silently displaced labels.
     let mut followers = 0u64;
     if matches!(opts.disposition, FollowerDisposition::Reflow) && delta != 0.0 {
         for r in recs.iter().skip(anchor_index + 1) {
             match &r.rec {
                 Rec::Boundary => break,
                 Rec::Show(s) if matches!(s.op, ShowOp::Quote | ShowOp::DoubleQuote) => break,
-                Rec::Tm([a, b, c, d, e, f]) => {
-                    let moved = emit_tm([*a, *b, *c, *d, *e + delta, *f]);
+                Rec::Tm(m) => {
+                    if !same_line(anchor, m) {
+                        break;
+                    }
+                    let moved = emit_tm([m[0], m[1], m[2], m[3], m[4] + delta, m[5]]);
                     edits.push((r.start, r.end, moved));
                     followers += 1;
                 }
@@ -1972,6 +2001,42 @@ pub(crate) fn plan_edit_anywhere(
         }
     }
     Err(first_locational.unwrap_or_else(|| EditError::NoMatch(req.find.clone())))
+}
+
+/// Whether a following absolute `Tm` continues the anchor's line, and is
+/// therefore a *follower* the reflow must shift by `ΔA` (`Pass 121.1`).
+///
+/// True only when the two matrices differ in `e` — the horizontal translation
+/// — **and nothing else**. Same `a`/`b`/`c`/`d` means same orientation and
+/// scale; same `f` means same baseline. A `Tm` that changes any of those is
+/// re-anchoring somewhere new, which ends the line.
+///
+/// # Why an unknown anchor matrix answers `false`
+///
+/// [`ShowData::matrix_known`] is false when the walk could not track `Tm`
+/// across the operators before the anchor. Without it there is no way to tell
+/// a same-line follower from a new line, and the two answers are not equally
+/// wrong: leaving a follower where the producer put it shows up as text that
+/// may overlap — visible, and recoverable by undo — while shifting one that
+/// should not move silently relocates content the operator was not editing.
+/// So an unknown matrix shifts nothing, and `FollowerDisposition::Pin`
+/// remains available for a caller that wants the tail explicitly held.
+fn same_line(anchor: &ShowData, follower: &[f64; 6]) -> bool {
+    if !anchor.matrix_known {
+        return false;
+    }
+    let a = &anchor.text_matrix;
+    // Exact equality is correct here rather than an epsilon compare: both
+    // sides are the producer's own operands, parsed from the same file and
+    // never arithmetic'd on. A same-line `Tm` written by a producer carries
+    // byte-identical scale and baseline operands to the one before it; a
+    // near-miss means the producer wrote a different number, which is a
+    // different line by the only evidence available.
+    a[0] == follower[0]
+        && a[1] == follower[1]
+        && a[2] == follower[2]
+        && a[3] == follower[3]
+        && a[5] == follower[5]
 }
 
 /// Whether an error means "not in *this* buffer" rather than "not editable".
@@ -3034,6 +3099,88 @@ mod tests {
         let text = extract_first_page_text(&out.bytes);
         assert!(text.contains("Hi"));
         assert!(text.contains("World"));
+    }
+
+    /// ★★ A `Tm` ON A DIFFERENT BASELINE IS A NEW LINE, AND MUST NOT SHIFT
+    /// (`Pass 121.1`).
+    ///
+    /// The reflow used to shift every following `Tm` until a
+    /// `Td`/`TD`/`T*`/`'`/`"` boundary — and a content stream that positions
+    /// every run with `Tm` and never emits `Td` has **no boundary at all**, so
+    /// one edit slid the entire rest of the text object sideways.
+    ///
+    /// Measured on the operator's own benchmark CAD drawing: a four-character
+    /// edit reported **1,676 followers repositioned**, and a render diff put
+    /// **34,059 changed pixels across the whole page**. After the fix: 0
+    /// followers, **42 changed pixels** in a 20x7 box — one label. An edit
+    /// that wrecks a drawing is worse than the "editing does nothing" it
+    /// replaced, and this is the assertion that keeps it fixed.
+    #[test]
+    fn a_tm_on_another_baseline_is_a_new_line_and_does_not_shift() {
+        // Two runs, each absolutely placed, on DIFFERENT baselines -- the
+        // shape of every CAD label set. Nothing follows "Hello" on its line.
+        let src = helvetica_pdf(
+            "BT /F1 12 Tf 1 0 0 1 100 700 Tm (Hello ) Tj 1 0 0 1 240 400 Tm (World) Tj ET
+",
+        );
+        let doc = Document::from_bytes(src).unwrap();
+        let out = edit_text(
+            &doc,
+            &EditRequest::find_replace(0, "Hello", "Hi"),
+            &EditOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            out.report.followers_repositioned, 0,
+            "a run on another baseline is not part of the edited line"
+        );
+        // The follower's own operands survive verbatim -- the strongest form
+        // of "it did not move", since a shifted `Tm` is re-emitted and a
+        // left-alone one is spliced past.
+        let bytes = String::from_utf8_lossy(&out.bytes).into_owned();
+        assert!(
+            bytes.contains("240") && bytes.contains("400"),
+            "the untouched Tm must be re-emitted byte-verbatim"
+        );
+        let text = extract_first_page_text(&out.bytes);
+        assert!(text.contains("Hi") && text.contains("World"));
+    }
+
+    /// The same-line case is unaffected by the fix above, and a scale change
+    /// ends the line.
+    ///
+    /// Written as ONE test over two streams because the property is a
+    /// boundary: `same_line` must say yes to the first and no to the second,
+    /// and asserting only the "yes" half would pass against a predicate that
+    /// always says yes -- which is exactly the pre-fix behaviour.
+    #[test]
+    fn same_line_shifts_and_a_scale_change_ends_the_line() {
+        let same = helvetica_pdf(
+            "BT /F1 12 Tf 1 0 0 1 100 700 Tm (Hello ) Tj 1 0 0 1 240 700 Tm (World) Tj ET
+",
+        );
+        let out = edit_text(
+            &Document::from_bytes(same).unwrap(),
+            &EditRequest::find_replace(0, "Hello", "Hi"),
+            &EditOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(out.report.followers_repositioned, 1, "same baseline shifts");
+
+        let scaled = helvetica_pdf(
+            "BT /F1 12 Tf 1 0 0 1 100 700 Tm (Hello ) Tj 2 0 0 2 240 700 Tm (World) Tj ET
+",
+        );
+        let out = edit_text(
+            &Document::from_bytes(scaled).unwrap(),
+            &EditRequest::find_replace(0, "Hello", "Hi"),
+            &EditOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            out.report.followers_repositioned, 0,
+            "a scale change re-anchors: treated as a new line, deliberately conservative"
+        );
     }
 
     #[test]

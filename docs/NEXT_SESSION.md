@@ -3,9 +3,9 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
-**Written 2026-08-20**, replacing the 2026-08-18 handoff whose headline task
-(the `pdfceGUI` reply + the orphan count) shipped as `Pass 102.x`/`103.x` and
-whose queue is now three items shorter.
+**Written 2026-08-20 (evening)**, replacing the 2026-08-20 (morning) handoff
+whose headline task — `Pass 119.0`, text editing inside form XObjects — **shipped
+this session**, along with `Pass 119.2` which was not asked for.
 
 ---
 
@@ -20,511 +20,264 @@ D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\
 D:\Dev\FeatureRequests\iccce_FeatureRequests\open\
 ```
 
-`R196` exists because a handoff said the pdfce channel was empty and it was
-not. **Today's session found the newest request by `ls`, three lines into the
-session, before reading anything else.** That is the whole procedure.
+`R196` exists because a handoff said the pdfce channel was empty and it was not.
+**This session found `request_an_object_clipboard_the_whole_capability_not_the_convenient_subset.md`
+(2026-08-20 16:57) that way** — it had landed *after* the previous handoff was
+written, was in no document, and `grep ROADMAP.md` for "clipboard" returned
+**zero**. It is now filed as `Pass 120.0`–`120.4`.
 
-**2. Run the gates, all of them — do not trust a handoff's list.** The previous
-handoff's §6 said *"Gates all clean"* and named eight. Running the full set
-today found **three that were red**, and **none of the three was among the
-eight it named.** The claim was true about the set it listed and false about
-the set that exists. **A handoff that enumerates gates by name ages badly the
-moment one is added.**
+**2. Run the gates — `ls tools/check-*`, do not trust any list.** There are 15
+today. The previous handoff hard-coded 14 and warned, correctly, that its own
+list was already the thing it was warning about.
 
-```
-bash tools/check-ui-strings.sh          bash tools/check-disclosure-channel.sh
-bash tools/check-theme-colors.sh        bash tools/check-bypass-paths.sh
-bash tools/check-string-gaps.sh         python tools/check-ledger-numbers.py
-python tools/check-core-api-verbs.py    python tools/check-settings-consumed.py
-python tools/check-fmt-excluded.py      python tools/check-shipped-assets.py
-python tools/check-passes-filed.py      python tools/check-commits-filed.py
-python tools/check-one-commit-per-command.py
-python tools/check-outcome-disclosed.py
-```
-
-**That last one is new today (`Pass 110.0`), and this list is already the thing
-§0 warns about** — it is a snapshot, and the next gate added makes it incomplete
-without changing a word of it. Prefer `ls tools/check-*` over reading this
-block.
-
-All three that were red this morning are green, and so is everything else:
-`check-fmt-excluded` (`tools/tw-census` unformatted), `check-settings-consumed`
-(→ `Pass 108.0`) and `check-passes-filed` (→ four unfiled 2026-08-19 commits,
-now filed). **`check-commits-filed.py` reports clean across all 489 code
-commits** — the first time both record gates have been green together in this
-session.
+All green at this handoff.
 
 ---
 
-## §0.5 — ★★★ THE TASK: `Pass 119.0`, TEXT EDITING INSIDE FORM XObjects
-
-**The operator escalated this himself, 2026-08-20, and cleared a session for
-it.** Verbatim:
-
-> *"I need that editing capability as it is 99% of the text I will want to
-> edit."*
-
-**That reorders the queue.** It was item 2 behind the transform verb; it is now
-the task. `Pass 113.0` (`transform_objects`) waits.
-
-### Why it is 99% of his text, measured not assumed
-
-`pdfceGUI` measured the operator's own benchmark CAD drawing
-(`D:\Dev	emp\pdfce
-cored-benchmark-cad-drawing.pdf`):
-
-| where | what is there |
-|---|---|
-| the **page** content stream | 3,007 single-character `Tj` spelling `GSPublisherVersion 0.0.100.100BRV1F1d160d110d63L1L1…` — **producer metadata** |
-| a **form XObject** (obj 23, own `/Font`) | **1,696 show operators** — every drawing label, the title block, every dimension callout |
-
-So today's `edit_text` reaches only the watermark, and refuses on everything an
-operator would click. **That is the whole of "editing text does nothing on my
-drawings."** He has raised it at least three times.
-
-### What already exists, so this does not start cold
-
-- **Extraction already recurses into forms correctly** — `text_extract`
-  executes a form's content with its own `/Resources` and `/Matrix`. The
-  *reading* half is done and right.
-- **`TextRun::editability()` (`Pass 118.0`, `075b1c7`) is the published
-  boundary** and is already the routing key: it answers
-  `Editable | InsideForm { object } | NoAnchor | Unknown`. When this Pass lands,
-  it starts answering `Editable` for form text and **every caller improves
-  without changing** — that was the design intent, so do not add a second
-  predicate.
-- **`EditError::PinnedSpanNotFound`** already distinguishes "the pin named
-  nothing" from "the text is not here", which is what made this diagnosable.
-- **`GlyphProvenance::content_stream`** already names *which* buffer a glyph
-  came from. The information needed to AIM the edit is published and correct.
-
-### ★ The design question that decides everything, and it is not a small one
-
-**A form XObject can be invoked from more than one page, and more than once on
-one page.** So editing text inside one **changes every place it appears.**
-
-That is either the correct behaviour or a refusal, and **it must be decided
-before the first line of surgery is written**, not discovered afterwards.
-
-**This is the same shape `Pass 111.0` decided the same day** for a
-possibly-shared `/Contents` array object: pdfce spliced the page dictionary
-rather than rewriting the shared array, precisely so an edit could not reach a
-page nobody touched. Decision 075 records the placement half of that. Whether
-the same instinct applies here — *never mutate a shared object; copy-on-write a
-private form for this page* — or whether an operator editing a title block that
-appears on six sheets **wants** all six to change, is the call to make.
-
-★ **R206 (minted today) governs the shape of the answer**: if both behaviours
-are defensible, **ship both as options and pick the default from what a normal
-operator would expect — do not come back to ask.** My instinct, not yet a
-decision: an operator editing a label on the sheet in front of him expects to
-change *that* sheet, so **copy-on-write is the likely default** with
-edit-in-place as the option — but a title block is the counter-example and
-deserves weighing before this is fixed.
-
-### The rest of the known shape
-
-- **The surgery operates on ONE buffer** — the page's concatenated `/Contents`.
-  A form is a **different stream object**; editing inside one means splicing
-  *that* object.
-- **The font lives in the FORM's `/Resources`**, not the page's, so every
-  coverage/classification check must resolve against the right dictionary — and
-  `/Resources` inheritance means "the right one" is not always obvious.
-- **`vector_surgery` and `text_edit_command` both assume `page.contents.first()`**
-  and blank the remaining page streams on first edit. Neither has a concept of
-  editing a stream that is not a page content stream. That plumbing is the bulk
-  of the work.
-
-### A `pdfce-spec-librarian` dispatch was sent 2026-08-20 for this
-
-It covers §8.10.1 Tables 95/96 (`/BBox` as clip-or-advisory, `/Matrix`
-composition order, `/LastModified`/`/PieceInfo` obligations), the
-**shared-invocation** question above, whether text state and the text matrix are
-reset at `Do`, and `/Resources` fallback when a form omits its own. **Check the
-corpus for `iso32000__s__8.10*` before re-deriving any of it** — the answers may
-already be filed.
-
-`Pass 119.0`'s acceptance criteria are deliberately **UNSCOPED** in `ROADMAP.md`
-pending that. Scope them from the corpus, then build.
-
----
-
-## §1 — WHAT SHIPPED 2026-08-20
+## §0.5 — WHAT SHIPPED, AND THE ONE THING IT LEAVES ON THE TABLE
 
 | commit | |
 |---|---|
-| `ae06440` | `check-string-gaps.sh` widened inside `#[error(…)]` · `tw-census` fmt |
-| `9940acf` | **`Pass 107.0` / `107.1` / `107.2`** — the perimeter ce dimension |
-| `4a1416e` | librarian: `107.x` filed · **decision 074** · **`R204`** |
-| `07c8c22` | `check-ledger-numbers.py`'s decision ceiling was wrong by three |
-| `186a983` | **`Pass 108.0`** — `quad_point_order` was a setting that did nothing |
-| `860d540` | librarian: `108.0` + the genuinely-unfiled `Pass 106.1` · **`R205`** |
-| `3329202` | **`Pass 106.2`** — `merge-document` printed none of its three disclosures |
-| `5d1a579` | the handoff + two agent-memory lessons |
-| `e265f43` | librarian: the four unfiled 2026-08-19 commits · **`Pass 109.0`** |
-| `1c169ba` | **`Pass 110.0`** — `check-outcome-disclosed.py`, the class gate |
-| `720cb6f` | librarian: `106.2` + `110.0` filed |
-| `4c96985` | the handoff, level with the eight commits after it |
-| `e5ef2a0` | **`Pass 111.0`** — the `/Contents` corruption, in TWO copies |
-| `f8dd31f` | **`Pass 112.0`** — `Matrix::scale`/`rotate`/`about`/`is_invertible` |
-| `57b67c5` | librarian: `111.0` · **decision 075** · Backlog `113`–`117` |
-| `b32635a` | the core-api stated line count moved with `111.0` |
-| `472af76` | librarian: `112.0` filed, the owed line discharged |
+| `cc57080` | **`Pass 119.0`** — text inside a form XObject is editable |
+| `a10a5c1` | **`Pass 119.2`** — `format_text` reaches it too, + a document repair (§3) |
 
-### ★★ THREE pdfceGUI REQUESTS LANDED ON 2026-08-20, NOT ONE
+Plus two librarian filings (209th, 210th), `decision 076`, and Backlog
+`119.1` / `119.3` / `120.0`–`120.4`.
 
-Found by `ls`-ing the channel, per §0. **One was a CORRUPTION** and was taken
-first. **All three are now answered, with a reply and an `INDEX.md` row each.**
+**The operator's own framing, which is why this jumped the queue:** *"I need
+that editing capability as it is 99% of the text I will want to edit."*
+Measured on his benchmark CAD drawing, that is if anything low — the page's own
+`/Contents` holds 3,007 single-character `Tj` of producer watermark, and **one
+form XObject holds 1,696 show operators** carrying every label, the title block
+and every *pdf dimension* callout.
 
-| request | state |
-|---|---|
-| `request_add_image_corrupts_a_page_whose_contents_is_an_indirect_array.md` | **FIXED — `Pass 111.0`.** Replied, INDEX row added. |
-| `request_no_verb_transforms_a_non_path_object_so_a_placed_image_cannot_be_moved.md` | **SCOPED + widened on the operator's instruction.** Foundation shipped (`112.0`); `113`–`117` filed. Replied. |
-| `request_text_inside_a_form_xobject_cannot_be_edited_and_the_error_blames_the_text.md` | **Asks 1 + 2 SHIPPED — `Pass 118.0`.** Ask 3 (the real work) filed as `Pass 119.0`, not started. Replied, INDEX row added. |
+### ★★ THE THING THAT IS NOT DONE, AND IT IS NOT CODE
 
-### `Pass 111.0` — the corruption, and the part worth carrying
+**`pdfceGUI` still has a caret guard that refuses form text.** Until they delete
+it, none of this reaches the operator. The reply telling them so is
+`open/2026-08-20-form-xobject-text-is-editable-and-your-caret-guard-is-now-wrong.md`,
+and `Editability::InsideForm` is now `#[deprecated]` **specifically** so their
+build tells them where the arm is.
 
-`add_image` wrote files **pdfce itself could not reopen**, on any page whose
-`/Contents` is an indirect reference to an ARRAY — Qt and every CAD exporter.
-It returned `Ok`, the save returned `Ok`.
-
-**It was written TWICE** — `append_page_content` and
-`text_edit::addtext::append_contents`, two independent implementations of the
-same six lines, wrong the same way, from the same wrong assumption at different
-times. Now ONE function in `page_tree`, beside the **reader** that decides the
-same question. **Decision 075**: *the writer's model of a structure lives beside
-the reader's, not beside the verb that uses it.*
-
-**Already-damaged files now open** — read-side flatten, depth-guarded, disclosed
-via `Page::contents_flattened` and `pdfce-cli inspect`. The repair is exact and
-was **proved, not argued**: damaged and healthy `EMPC.pdf` render to
-byte-identical PNGs.
-
-★ **The postcondition in `commit()` would NOT catch this bug today**, because
-the healing means the page still reads. That is in its own doc comment rather
-than implied. Its value is the *other* structural breakages.
-
-### ★ THE RECORD GATES ARE CLEAN FOR THE FIRST TIME THIS SESSION
-
-`check-commits-filed.py` started the day reporting **seven** unfiled code
-commits and now reports **clean across all 489**; `check-passes-filed.py` is
-clean. **Four of the seven were left by the 2026-08-19 session**, whose handoff
-said the gates were clean.
-
-**The shape is worth more than the cleanup.** `check-passes-filed.py` was green
-that entire time, because every one of those four belongs to work that *did*
-reach `ROADMAP.md`. **Filing a Pass and filing a COMMIT are two different
-acts**, and only the second decays silently. Two gates, adjacent names, and only
-one of them was looking.
-
-One of the four (`f93f8da`, the commit that *introduced* `quad_point_order`)
-**had no Pass ID at all** and is now `Pass 109.0` — so today's `Pass 108.0`
-wired a setting whose own introduction was unfiled.
-
-### `Pass 107.x` — the perimeter tool, whole, in one session
-
-`pdfceGUI` asked for a perimeter measuring tool with vertex editing and *"all
-the scaling options of the other dimension tools"*. All seven sections of the
-request are answered; nothing was deferred. Reply written into the channel and
-an `INDEX.md` row added **in the same edit as the reply**, per that folder's own
-rule.
-
-**`DimensionKind::Perimeter { points: Vec<Point>, closed, offset, text_along }`.**
-Open and closed are ONE kind with a flag — they differ by exactly the closing
-segment. Authored as `/Polygon` + `/IT /PolygonDimension` or `/PolyLine` +
-`/IT /PolyLineDimension` with a flat `/Vertices`, ISO 32000-1 §12.5.6.9
-Table 178.
-
-**`DimensionKind` and `DimensionRecord` are no longer `Copy`** (decision 074).
-The requester's own id-reference alternative was heard and declined. Blast
-radius measured: 7 errors in core, 9 across the shells, all mechanical.
-
-Three vertex verbs plus `vertex_edit_preview`, sharing **one** plan body, so
-`preview(..).err()` **is** the refusal predicate. **The first ce-dimension verb
-that deliberately re-measures.**
-
-**Three numbers worth keeping**, because they are the answers to questions that
-will be asked again:
-
-- **It cannot refuse for a shape reason.** Self-intersection and zero-length
-  segments are legal; every refusal is structural and knowable before the drag.
-  **The shell's drag preview may always be drawn** — that is on the record and
-  the shell was told.
-- **The label anchors on the vertex CENTROID**, not the CAD-conventional
-  longest segment, because a corner drag can change *which* segment is longest
-  and the label would teleport. Vertex editing is this kind's headline feature.
-- **`/Rect` must equal the `/AP` `/BBox`.** §12.5.5 step (b) **scales** the
-  appearance to fill `/Rect`; nothing clips. A mismatch renders a perimeter at a
-  length that disagrees with the number printed inside it, and is **invisible in
-  an object dump**. The spec corpus calls it *"the single highest-risk authoring
-  bug for a ce dimension"*. Now pinned by a test.
-
-### ★ The defect that nearly shipped silently, and the rule it minted
-
-`set_markup_style` refuses a ce dimension by name. The guard tested the literal
-string `LineDimension`. **A perimeter is a `/Polygon`** — stroked, coloured,
-byte-shaped exactly like a markup polygon pdfce can author — so **adding the
-variant silently un-gated the refusal**, and a restyle would have reduced a
-measurement to a bare outline with nothing reporting it.
-
-**`R204`: widening the world past a refusal is the same act as removing the
-refusal.** The mirror of `R143`/`R144`/`R147`. Operationally: *when a Pass adds
-a variant to an enum that any refusal matches on, grep every match site for that
-enum and re-verify each one covers the new case.*
-
-`is_ce_dimension` now asks **twice** — the three `/IT` intents **OR** the
-sidecar — because they fail in opposite directions. **Each arm has its own
-isolated test and each was sabotage-verified to fail with the other arm
-intact**, which was not true of the first test written: a real perimeter carries
-both, so the obvious test passed with either arm deleted and proved nothing.
-
-### `Pass 108.0` — a setting that did nothing
-
-`Settings::quad_point_order` was parsed, validated, defaulted, documented in the
-generated file's own comments, and **read by nothing**. Now session state
-(`EditSession::set_quad_point_order`) rather than a second `add_markup_with`
-entry point (decision 062), with the **shell** reading the store. Both call
-sites — `add_markup` and `set_markup_style`'s regeneration.
-
-The test asserts **what must not change** as well: the baked `/AP` is
-byte-identical under both orders. If that ever diverged, a preference change
-would silently alter how already-shipped markup *looks*.
+**Do not tick `FEATURES.md`'s gui box for either verb until they confirm.** The
+librarian was told this explicitly and complied; it is repeated here because the
+temptation on reading "shipped" is to tick everything.
 
 ---
 
-## §2 — THE QUEUE, in the order I would take it
+## §1 — THE QUEUE, in the order I would take it
 
-1. **`Pass 119.0`** — **see §0.5. This is the task.** Everything below waits.
+1. **`Pass 113.0`** — `transform_objects`. It was next before `119.0` jumped it
+   and it is next again. `pdfceGUI` says their whole shell side is built and
+   waiting. **`Pass 112.0` (the `Matrix` foundation) is shipped.**
 
-2. **`Pass 113.0`** — `transform_objects`, the verb `pdfceGUI` is blocked on and
-   says its whole shell side is built and waiting for. `Pass 112.0` is the
-   foundation and is shipped.
+   ★ Read the open question first: **operand rewriting cannot express
+   rotation**, so this needs a `q…cm…Q` wrap, and that mechanism choice is filed
+   as an OPEN QUESTION rather than decided. **Nothing is owed from `pdfceGUI`** —
+   Ken answered both design questions himself (*"make things work both ways as
+   options. default it to your best guess"*), so both defaults are acceptance
+   criteria: mixed selections transform whole, a singular matrix is refused by
+   name.
 
-   **★ Read the one remaining open question first**: operand rewriting **cannot
-   express rotation**, so this needs a `q…cm…Q` wrap — and that mechanism choice
-   is filed as an OPEN QUESTION rather than decided. Only the impossibility is
-   established.
+2. **`Pass 120.0`–`120.4`** — the object clipboard. Newest request, operator-
+   widened (*"oh I might want all cases so we shouldn't be restrictive in our
+   ask"*), and the underlying ask is a fortnight old and repeated: *"can you get
+   cut copy and paste working for objects I select on the canvas?"*
 
-   **★★ NOTHING IS OWED FROM `pdfceGUI`.** I had asked them two design
-   questions; **Ken answered both himself** before they read the reply
-   (*"make things work both ways as options. default it to your best guess as
-   to what would be normally expected"*), and the reply has been amended in
-   place to say so. Both defaults are now acceptance criteria:
-   **mixed selections transform whole** (the option is refuse-by-name;
-   `R168`'s no-silent-subset still governs), and **a singular matrix is refused
-   by name** (the option is clamp-and-disclose) because a singular transform is
-   irrecoverable and a *negative* scale is not singular anyway.
+   ★ **Verify their central claim before scoping from it.** They believe
+   `EditSession::import_object` (`edit.rs:19367`) already does the hard half —
+   recursive cross-document graph copy with reference remapping, cycle handling
+   and stream re-staging — so the ask is *"expose the one you have at object
+   granularity"*. **I did not verify that**, and told them so. They asked to be
+   told early if the reading is wrong.
 
-3. **`Pass 97.0 / 97.1 / 97.2`** — the colorant compositor. Still the
-   highest-impact item by Ghent count. Plan of record:
-   `docs/compositor-plan.md`; collapse model in
-   `docs/collapse-model-survey.md`. **★ Its "16 of the 18 remaining Ghent
-   failures" thesis is AMENDED and owes a re-derivation before the Pass is
-   scoped from it** — see §3. This is also where the **iccce dependency edge
-   appears** (§4), so `Pass 101.1` unblocks at the same moment.
+3. **`Pass 119.1`** — `unshare_form` (copy-on-write a shared form onto one
+   page). See §2 for why this is a *separate verb* and not a mode of `edit_text`.
 
-4. **`Pass 80.0`** (note text on markup) and **`Pass 81.1`** (markup opacity,
+4. **`Pass 97.0/97.1/97.2`** — the colorant compositor. Still the highest-impact
+   item by Ghent count. Plan of record `docs/compositor-plan.md`. ★ Its "16 of
+   the 18 remaining Ghent failures" thesis is **AMENDED and owes a
+   re-derivation** before the Pass is scoped from it. This is also where the
+   **iccce dependency edge appears**, so `Pass 101.1` unblocks at the same
+   moment. **Ghent standing has not been re-measured since 2026-08-19**
+   (26 pass / 14 FAIL / 11 UNRESOLVED of 51) — re-measure rather than quoting.
+
+5. **`Pass 80.0`** (note text on markup) and **`Pass 81.1`** (markup opacity,
    write half) — both `pdfceGUI` requests, both already scoped.
 
-5. **`Pass 98.0`** — read a foreign `/BE` back into `MarkupSpec`.
+6. **`Pass 119.3`** — align `pdfce-render`'s nested-form resource fallback with
+   `text_edit::forms`. Small, and see §2 for exactly what diverges.
 
-6. **`Pass 103.2` / `103.3`** — page labels for inserted pages, and named
-   destinations so a carried bookmark resolves. `103.2` **needs a
-   `pdfce-acrobat-librarian` dispatch before it is scoped**. Note that the
-   2026-08-20 Acrobat dispatch **did** measure the adjacent junction: Acrobat
-   overwrites every inserted page with a static copy of the preceding page's
-   label, and pdfce deliberately does not match that (decision 072).
-
-7. **The `iccce` channel** — 16 files, two requests genuinely owed, and
-   **`note_gray_black_routing_is_yours.md` is still the highest-value unread
-   file there.** A boundary ruling handing pdfce the four-way
-   gray/CMYK/`Separation`/`DeviceN` black equivalence, bearing directly on
-   `Pass 97.x`. Not a request — do not triage it as one.
-
-**★ Ghent standing, unchanged since 2026-08-19 and NOT re-measured since:
-26 pass / 14 FAIL / 11 UNRESOLVED of 51.** Re-measure rather than quoting this
-line. The GWG Reference file is still not on this machine.
-
-### ★ The 43 gaps, because the number is the finding
-
-A crate-wide survey for the transform work found **43 (object kind × operation)
-pairs with no verb**. `pdfceGUI`'s request covers ten. The rest is Backlog
-`113`–`117`, dependency-ordered, with two **open questions** filed rather than
-decided: the `q…cm…Q`-versus-operand-rewriting mechanism, and whether a single
-**heterogeneous-selection** verb should exist at all (paths + text + images +
-annotations + dimensions + widgets in one gesture). Every existing verb is
-single-kind. That is a real architectural question, not a given.
+7. **The `iccce` channel** — **`note_gray_black_routing_is_yours.md` is still
+   unread**, and is still the highest-value unread file there. A boundary ruling
+   handing pdfce the four-way gray/CMYK/`Separation`/`DeviceN` black
+   equivalence, bearing directly on `Pass 97.x`. **Not a request — do not triage
+   it as one.**
 
 ---
 
-## §3 — WHAT TODAY SAYS ABOUT GATES, because it happened three times
+## §2 — WHAT `Pass 119.x` DECIDED, so it is not re-litigated
 
-**A gate that under-reports is byte-indistinguishable from a green one.** The
-only detector is an independent forecast — the exact labour a gate exists to
-remove. Today produced two more instances, bringing the count to **four across
-two files**:
+**Shared forms: edit-in-place, disclosed. `decision 076`.** A form XObject may
+legally be painted from several pages (§8.10.1 states it as the *purpose* of the
+feature) and **no clause in either ISO edition binds one to a page** (`FX-N1`,
+permanent, argued three ways). So an edit changes every sheet, and there is
+exactly one stream — pdfce cannot prevent it, only disclose it.
 
-- **`check-string-gaps.sh` reported TWO of THREE** gaps one Pass introduced.
-  The invisible one had `{minimum}` after the gap; the class required a letter.
-  Found because I knew there were three and the report listed two.
-- **`check-ledger-numbers.py` printed `071 -> next free is 072` while decisions
-  072, 073 AND 074 all existed.** All three are written as a dated list item, a
-  spelling the declaration pattern could not see. **This was a live hazard**:
-  §12 duplicate detection is deliberately absent, so the printed ceiling was the
-  only thing preventing a duplicate. Found because the librarian reported
-  minting 074 and the gate disagreed — neither was lying and only one could be
-  right.
+**Copy-on-write was weighed and declined as a default**, for two reasons and the
+second is decisive:
 
-**★ Both prior fixes to these two files had already been written about this
-exact failure, and both expired.** The star-anchor fix repaired the one spelling
-that had been seen. The 2026-08-11 decision-ceiling fix added `ARCHITECTURE.md`
-as a second **source** while keeping a declaration-shaped **pattern** — so the
-hole reopened the moment the prevailing spelling changed. **Fixing a source
-while leaving the pattern spelling-dependent is a fix that expires.** Prefer a
-rule that *cannot* under-report over one that matches the instance you saw.
+1. Text in a shared form is **identical on every sheet by construction**, so
+   wanting one sheet different is wanting to *break the sharing* — a distinct
+   act, not a mode of "edit text".
+2. **CoW is not always expressible.** A form invoked from inside another form
+   cannot be re-bound without editing the parent, which may itself be shared. A
+   default whose semantics silently depend on nesting structure is worse than one
+   that always means the same thing.
 
-**And the first widening was wrong in the other direction.** Widening the
-string-gap class globally took the tree from 0 findings to ~60, every one a
-deliberately aligned report column in a dev tool. The distinguishing property is
-not the characters — a `thiserror` message is PROSE, a `println!` in a sweep
-tool is a TABLE. **The false-positive shape is now pinned in the gate's CLEAN
-self-test**, which is the half that stops the next widening re-breaking it.
+**★ Acrobat's behaviour here is unsourceable, and that is a *sourced* result.**
+Fifty tool calls across Adobe Community, the Acrobat SDK docs, Enfocus/PitStop,
+Apryse and prepressure.com found nobody documenting what Acrobat does to a
+shared form's stream — **including Acrobat's own competitors**. Recorded in
+`Acrobat_Features\text_edit__form_xobject_shared_content_editing.md`, which also
+flags a trap **by name**: a well-indexed forum thread titled almost exactly
+*"text edits appear on every page"* is root-caused by AcroForm field-name
+collisions, **not** shared form XObjects. Do not re-run that search expecting a
+different answer.
 
-**A librarian ruling on whether this earns a standing rule was requested and is
-pending** — check `ROADMAP.md` before proposing one.
+**★ Two resource-merge tolerances were built and reverted before shipping.**
+Merging a form's resources per *name*, then the weaker per-*category* version.
+Both made the edit path resolve a font **`pdfce-render`'s interpreter does not**
+(its `Do` handler takes the form's own `/Resources` when present and the
+caller's only when absent), so the advance would be computed from `/Widths`
+nothing else consults and text would land **visibly wrong while every internal
+check reported success**. `text_extract` agrees with the renderer independently.
+Settled on whole-dictionary, own-wins-entirely. **If you ever meet a
+partially-declared form on real producer output, that measurement reopens the
+decision** — there is a `personal_rag/pdf` entry waiting for it.
 
----
+**The one divergence that survives, stated rather than hidden:** for a *nested*
+resource-less form, `text_edit::forms` inherits the **page's** resources (the
+clause's actual words) and `pdfce-render` inherits the **caller's** (the common
+implementation). Identical at depth 0, which is every real file.
+`FormRef::resource_tier` records which tier resolved. `Pass 119.3`.
 
-## §4 — iccce: PENDING INTEGRATION, unchanged and still true
-
-`iccce`'s `README.md`, second sentence: ***"Its first consumer is `pdfce`."***
-Decision 064's status line: **"DECIDED (boundary), NOT STARTED (either
-consumer)."** The absence is a **task, not an architecture** — the two look
-identical in a one-word banner, which is how a previous session came to ask the
-operator a question decision 064 already answers.
-
-The edge appears when the compositor does (`docs/compositor-plan.md` ~line 355:
-the ICC hop is iccce's, and iccce has already shipped the exact call
-`Chain::with_destination(&src, Destination::None, intent)`). **There is no
-separate "adopt iccce" Pass to schedule.**
-
-`iccce` is at `D:\Dev\iccce`. **`--version` says
-`not-linked-yet (integration pending -- Pass 97.x)`**, not `not-linked`, and the
-difference is the whole point.
+**Deliberate non-goals, so they read as decisions:** `reflow_block` and
+`add_text` still reach page-stream text only. `add_text` is **not merely
+unfinished** — appending to a form's content stream changes what *every*
+invocation site paints, a different disclosure from an in-place edit's.
+`editability()` reports `edit_text`'s reach, so it is **optimistic** for those
+two.
 
 ---
 
-## §5 — THE THREE PASSES NOBODY ASKED FOR, AND THE ONE SHAPE BEHIND THEM
+## §3 — ★★ THE DEFECT I SHIPPED, AND WHAT CAUGHT IT
 
-`Pass 106.2`, `108.0` and `110.0` were none of them the session's brief. They
-belong together because they are **one shape, seen three times in one day**: a
-value that is computed and never consumed.
+`cc57080` **duplicated 141 lines of `docs/core-api/02-editing-and-saving.md`** —
+the document `pdfceGUI` builds against. Sections 1.4 through 1.9 existed twice,
+and **the second copy still carried the stale "refuse a caret on form text"
+warning the commit was written to reverse.**
 
-- **`Pass 108.0`** — a SETTING parsed, validated, written back and read by
-  nothing. *Inbound*: a caller fills it, nobody honours it.
-- **`Pass 106.2`** — three OUTCOME fields computed, returned, dropped.
-  *Outbound*: core fills them, no shell tells anybody.
-- **`Pass 110.0`** — the gate for the outbound class, because `106.2` was found
-  by the librarian **by luck**, while filing something else, and luck is not a
-  detection mechanism. Nothing in Rust catches it: `#[must_use]` is about the
-  struct, so reading ONE field satisfies the compiler forever.
+The cause was one missing argument:
 
-**`110.0` is the one to read before writing any gate.** Its output was
-**forecast before it was built** — 58 fields, 8 unread. Had it come back 50 it
-would have been this morning's string-gap mistake again, where a global widening
-produced ~60 findings that were all correct as written. *8 is a gate; 50 is a
-wall nobody reads.*
+```python
+end = s.index(TABLE_MARKER)        # searches from 0
+# should have been s.index(TABLE_MARKER, start)
+```
 
-★ **And its self-test found a broken regex in `check-settings-consumed.py` on
-its first run.** Both gates filter assignments out of `.field` matches, and the
-spelling both used lets the whitespace **backtrack to zero**, so
-`settings.field = true` — an assignment, with a space — was counted as a READ.
-The no-space form was correctly rejected, which is how it survived. That gate's
-comment says it was sabotage-verified, **and it was** — against a defect whose
-write form was a `&mut` borrow, caught by a *separate* filter beside it. **The
-`=` filter was never the thing under test.** Fixed in both; the sibling stays
-clean afterwards, so it was latent rather than hiding a live defect.
+`"| I want to… | Call | Line | Returns |"` appears in nearly every section, so
+`end` resolved ~200 lines *before* `start` and the splice re-appended everything
+from §1.3 onward.
 
-**Two transferable halves:** *sabotage-verifying a script proves the branch you
-sabotaged, not the branch you documented*; and *the cheapest way to test an old
-tool is to write a new one that shares its mechanism and hand it the inputs
-nobody thought to try.*
+**Three things worth carrying, and the second is the one that matters:**
 
-The librarian **declined** to grow `R205` to cover this (a resemblance, not a
-shared mechanism) and **declined** a new rule (the content reduces to a truism
-once both files' doc comments carry the reasoning). Both refusals are on the
-record — do not re-litigate without new evidence. The regex finding itself was
-handed to `troubleshooting-librarian` for `C:\personal_rag\`, being a general
-Python gotcha rather than a pdfce one.
+- **The failure mode is silent by construction.** A bad splice end does not
+  error, lose content or reorder anything — it **duplicates**, and a duplicated
+  Markdown section is invisible to every check this project owns.
+  `check-core-api-verbs.py` was **green** (it counts verbs and line-count
+  claims; a duplicated section has the same verbs). `cargo test` was green. The
+  commit's `+205 lines` looked plausible for a rewrite meant to add a hundred.
+- **★ It was caught by a READER, not a check** — `pdfce-librarian`, reading the
+  document while filing the Pass it had just been told about. That is the
+  argument for the post-commit librarian dispatch being a *read* and not a
+  transcription, and it is the second time this month an omission has lived
+  precisely in the gap where nothing was looking.
+- **Recorded, not promoted.** One occurrence against this project's two-instance
+  bar, so no standing rule was minted. It is in the engineer's agent memory
+  (`feedback_splice_end_marker_must_be_searched_from_start.md`) and escalated to
+  `C:\personal_rag\claude_code\`. **A second instance changes that.**
+
+Prefer the `Edit` tool for structured documents: it fails loudly on a non-unique
+`old_string` instead of guessing.
 
 ---
 
-## §6 — TRAPS THAT COST TIME TODAY
+## §4 — GATES: the same lesson, from the other side
 
-- **★ A SURVEY FINDING IS TRUE AS OF A MEASUREMENT.** I dispatched the librarian
-  with a finding stating that `Matrix` had no `scale`/`rotate` constructors —
-  and then built them **while that dispatch was in flight**. It caught the
-  contradiction, refused to file the Pass as either Backlog (not unbuilt) or
-  Shipped (no shell to confirm a commit), skipped the number so nothing would
-  collide, and handed the question back. Right on every count. **Second
-  same-session instance of a subagent correcting a dispatch rather than filing
-  it as given** — the first was `Pass 106.2`'s "promoted out of the token line".
-  Deliberately NOT named as a pattern: the two share no mechanism, only the
-  shape "read before filing."
-- **★ Anchoring a code insertion on `fn foo(` or on an enum variant splits it
-  from its doc comment.** Happened **twice**, in the same file, in one session.
-  The first instance **shipped a wrong `--help`**: `clap` derives its
-  description from the doc comment, so `dimension-vertex` displayed
-  `dimension-offset`'s text and `dimension-offset` displayed nothing. **Caught
-  by running the binary — not by fmt, clippy, any test or any gate.** Anchor on
-  the blank line *before* the doc comment, and read `--help` either side of a
-  new subcommand.
-- **The bash heredoc still eats backslashes**, and it produced all three of the
-  `#[error(…)]` gaps above. `\\b` inside a `<<'PY'` heredoc reached Python as a
-  **backspace character**. Write the script with `Write`, or use `Edit`. The
-  safe form for a Rust string that would need a continuation is **one long
-  line** — `rustfmt` leaves it alone.
-- **A test that exercises a guard is not a test that covers it.** The first
-  `is_ce_dimension` test used a real perimeter, which trips *both* arms — so it
-  passed with either arm deleted. Isolating each arm took two more tests and
-  two sabotage runs, and only then did the widening actually have coverage.
-- **My own arithmetic in a test is a fixture, not an oracle.** Asserting `400.0`
-  for a corner drag on a rectangle was wrong (a corner drag changes *two*
-  segments, and one becomes a slant). Write the arithmetic out in the assertion
-  so the test states its own reasoning.
+`tools/check-outcome-disclosed.py` reported **clean** the whole time it could
+not see `EditReport`. Its `OUTCOME_STRUCTS` list had been written from `edit.rs`
+alone, so **every report type in a submodule was outside it.** Three fields were
+added to `EditReport` this session — one of them `form_invocations`, whose only
+purpose is to stop a shell changing six sheets while showing one — and the gate
+would have stayed green if all three had been dropped on the floor.
+
+**The finding was forecast before the gate ran**: 13 fields, 11 printed ⇒ two
+problems, specifically `disposition` and `extra_objects_emptied`. It reported
+exactly those two. Both now print. `FormatReport` followed. The gate covers
+**100 fields across 14 structs**, up from 58 across 12.
+
+★ **This is the fifth instance of the under-reporting-gate class and the first
+whose mechanism is the SCOPE OF ITS INPUT LIST rather than the spelling of a
+pattern.** The previous four were all "the regex missed a spelling". Widening a
+pattern does not fix a list that was written from one file.
+
+**`tools/check-one-commit-per-command.py` earned its keep the same day** — the
+new session-path form loop committed per iteration. Harmless while the loop
+returned on first success, and the exact latent shape `import_form_data`
+shipped. Hoisted.
 
 ---
 
-## §7 — STATE AT HANDOFF
+## §5 — STATE AT HANDOFF
 
-- **Working tree clean**; seventeen commits today, listed in §1. **Nothing pushed.**
-  `github.com/KenM76/pdfce` is public and has a remote — a careless `git push`
-  reaches the world.
-- `cargo fmt --check`, `clippy --all-targets --workspace -D warnings`, and
-  `cargo test --workspace` (**106 suites, 0 failures**) all green.
-- `cargo tree -p pdfce-core` / `-p pdfce-render` / `-p pdfce-cli`: **no**
-  egui/eframe/winit/wgpu/glow. **No manifest was touched and no dependency was
-  added this session.**
+- **Working tree clean apart from agent-memory files.** Two code commits today
+  (`cc57080`, `a10a5c1`) plus the librarian's filings. **Nothing pushed.**
+  `github.com/KenM76/pdfce` is public and has a remote — a careless
+  `git push` reaches the world.
+- `cargo test --workspace` green; `cargo fmt --check` clean;
+  `clippy --all-targets --workspace` clean.
+- `cargo tree -p pdfce-core` / `-p pdfce-render` / `-p pdfce-cli`: **no manifest
+  was touched and no dependency was added this session**, so the GUI-free
+  property is unchanged by construction.
+- **One new wall-clock read in `pdfce-core`, the crate's first.** `cfg`-guarded
+  off on `wasm32` (where `SystemTime::now` panics); the fallback is "leave
+  `/LastModified` alone", never a fabricated constant. Worth knowing before the
+  web fork.
 - **`v0.7.0` is bumped but NOT tagged.** Standing operator go-ahead for
   builds/releases since 2026-08-17. Verify CI green on `HEAD`, then
   `verify-release.py` → tag → portable package → GitHub release → librarian
   release record. A CI-built release reports `revision: unknown` unless that
   workflow gets `fetch-depth: 0`.
-- **Ledger, re-measured at end of session** — next free Pass family **118**
-  (`113`–`117` are SPOKEN FOR by the transform Backlog), decision **076**,
-  standing rule **R206**, filing ordinal **206**.
-  **Re-measure with `tools/check-ledger-numbers.py` rather than trusting this
-  line; it has been wrong before and was wrong by three this morning.**
-- New spec corpus file: `iso32000__s__12.5.6.9.md` (58 kB). It also **corrected
-  the corpus**: Errata Issue #444 is `Completed`, not `Accepted` — the review
-  state is a chain of `/IRT`-linked replies and only the first had been read.
-  **376 of 547 `Accepted` state annotations carry a later `Completed` reply
-  (68.7 %)**, so a state read from the first reply is stale two times in three.
-  **One open `GAP` left behind:** `iso32000__delta__pdf20_encryption.md`'s
-  Algorithm 2.B step-(a) `Accepted` claim needs the same `/IRT` walk.
-- New Acrobat corpus file: `measure__perimeter_and_area_tools.md`. Its
-  load-bearing finding: **Acrobat cannot insert or delete vertices on a
-  committed Perimeter/Area measurement**, sourced from Adobe's own forum with an
-  Adobe expert confirming scripting is the only route. **`Pass 107.1` is an
-  exceed of the parity reference, not a catch-up**, and that divergence is on
-  the record.
+- **Ledger, re-measure with `tools/check-ledger-numbers.py` rather than trusting
+  this line** — it has been wrong before, by three, this same week.
+- New spec corpus file: `iso32000__ref__form_xobject_text_edit.md` (68 kB),
+  which did not exist before this Pass. It also **corrected the corpus**:
+  `iso32000__ref__text_edit_surgery.md` had been silently page-`/Contents`-only,
+  so an LLM grepping "text edit surgery" would have got a confidently wrong
+  answer.
+- New Acrobat corpus file:
+  `text_edit__form_xobject_shared_content_editing.md` — a file whose finding is
+  an **absence**.
+
+---
+
+## §6 — TRY IT
+
+```
+pdfce-cli inspect --forms  <a CAD drawing>
+pdfce-cli edit-text        <in> --find "OLD" --replace "NEW" -o <out>
+pdfce-cli format-text      <in> --find "OLD" --set-size 14   -o <out>
+```
+
+`inspect --forms` is the one to run first on a real drawing — the `paints`
+column is the fan-out, and it is the number to look at before any batch edit.
