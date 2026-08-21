@@ -1,61 +1,70 @@
 ---
 name: compositor-state
-description: 2026-08-21 — Pass 97.0 (the group model) shipped in four sub-passes; the Ghent transparency panels are blocked on §11.3.4's blending colour space, not on the group model
+description: 2026-08-21 evening — the CMYK colorant buffer SHIPPED (Pass 97.1e/f); the Ghent transparency panels are no longer blocked on the blending space, and every remaining FAIL is an overprint/spot/ICC patch
 metadata:
   type: project
 ---
 
-**`Pass 97.0` — Stage A of `docs/compositor-plan.md` — shipped 2026-08-21**
-in `7160819`, `9b49ca0`, `86a7b70`. `Pass 97.1`'s first two deliverables in
-`0d5fc29`.
+**Supersedes the 2026-08-21 morning entry**, which said the Ghent
+transparency panels were blocked on §11.3.4's blending colour space. They
+were. They are not any more.
 
-**Why:** the plan expected 7 Ghent patches from Stage A. It delivered **0
-patch verdicts** and a great deal of real correctness. The gap is the
-finding, and it re-scopes `Pass 97.1`.
+**`Pass 97.1e` (`a277931`) and `Pass 97.1f` (`ff4b4bf`) shipped 2026-08-21.**
+A page whose group declares a subtractive blending space is composited in a
+four-plane `f32` colorant buffer end to end, then converted to screen colour
+once at the end.
+
+**Measured against a worktree build of the parent commit `06aaad3`, not
+against a documented number:**
+
+| Ghent suite | baseline | 97.1e | **97.1f** |
+|---|---:|---:|---:|
+| pass | 26 | 28 | **29** |
+| FAIL | 14 | 11 | **10** |
+| trap marks | 55 | 45 | **41** |
+| blends in the wrong space | 107/107 | 15/107 | **0/107** |
+
+★ **THE RE-SCOPING FACT: every remaining Ghent FAIL is an overprint, spot or
+ICC patch.** The next gains in this family are the n-channel spot buffer,
+not more compositing work.
 
 **What exists now, so it is not rebuilt:**
 
-- **`crates/pdfce-render/src/compositor.rs`** — pdfce owns §11.4.4's
-  element formula, §11.4.8's knockout variant, backdrop removal, `Union`,
-  and all thirteen Table 136 separable blend functions (with the corpus's
-  four printing errata `GD-1`…`GD-4`).
-- **`Canvas::group`** — non-isolated groups render over their own backdrop.
-  The content stream is walked **twice**, and the second walk is skipped
-  under §11.4.4 NOTE 5's own condition (interior all-`Normal` ⇒ one walk is
-  exact). Counter `groups_backdrop_reruns`.
-- **`KnockoutTarget`** — real §11.4.6, four planes, §11.4.6 NOTE 6's
-  nesting rule honoured. **Explicit `/K true` only**; the implicit
-  population (§9.3.8 `/TK` default-`true` text, §11.7.4.4 `B`/`b`, §11.6.7
-  shading patterns) is still not knockout.
-- **Soft mask on the group RESULT** (§11.4.5), lifted out of the contents'
-  clip. Counter `soft_masks_on_group_result`. Folding into the clip is
-  still correct for an *elementary* object (§11.6.4.1's `q_m`).
+- `crates/pdfce-render/src/cmyk_buffer.rs` — plane-major `C,M,Y,K,α`;
+  `Chan = f32` is the single place the element-type decision lives; a byte
+  ceiling that **refuses and discloses** rather than failing; native Table
+  149 overprint (no round trip); §11.4.7's collapse in the required
+  convert-then-flatten order; knockout planes (`α_g`, `f_g` separate).
+- `crates/pdfce-render/src/cmyk_paint.rs` — rasterise to a coverage mask
+  with the same `tiny_skia` call an sRGB paint uses, composite here.
+- `BrushSpec::cmyk` + `overprint::authored_tints` — one shared rule for
+  "what colorants did the file state", read by both the buffer and Table 149.
+- `compositor::{composite_element_knockout_cmyk, remove_backdrop_cmyk}`.
 
-**★ THE BLOCKER, derived by hand and reproducible.** `1_GWG162`'s
-`Difference` cell: magenta `0 1 0 0 k` under black `0 0 0 1 k`. §11.3.4's
-complement gives `1 − |cb′ − cs′|` = `DeviceCMYK 1 0 1 0` = the surround
-colour **exactly**. pdfce renders `(237,1,140)`, pdfium `(202,29,108)` —
-both blend in RGB, both wrong, differently. **Every Ghent transparency
-patch declares `/Group /CS /DeviceCMYK` on the PAGE**, including
-`3_GWG161`, whose own objects are ICCBased RGB. So §11.3.4's subtractive
-complement is `Pass 97.1`'s **leading** deliverable, ahead of spot planes,
-and it needs a real colorant buffer — the 4→3→4 reconstruction is measurably
-lossy (`0 1 0 0` comes back as `0, .995, .409, .071`).
+**Still approximated, and counted:** non-isolated ORDINARY groups on a
+subtractive page are composited as if isolated (`cmyk_groups_approximated`);
+images and shadings bridge through sRGB (`cmyk_bridged_pixels`) because their
+colour is resolved to sRGB one layer above the canvas.
 
-**Measured state at the handoff:** Ghent `26 pass · 14 FAIL · 11
-UNRESOLVED`, unchanged; traps `67 → 55`; `1_GWG161` `14 → 2`; soft-mask
-strip correlations `0.576→0.962`, `0.725→0.978`, `0.905→0.986`. Full-corpus
-render parity (4,023 files) **identical** to a `2e6bb83` worktree build,
-bucket for bucket.
+**★ Three mistakes made and fixed in this build, each measured in traps —
+do not re-make them:**
 
-**How to apply:** read `docs/compositor-plan.md`'s 2026-08-21 amendment
-before scoping anything in this family — it carries the derivation, the
-instrument gap (`ghent-check.py` has no calibrated reference-strip
-threshold, deliberately not added in the session that moved those numbers),
-and the `3_GWG161` diagnosis with two explanations ruled out.
+1. **A transparent initial backdrop for a knockout group is WORSE than no
+   knockout at all** (`1_GWG161`: 2 → 15 traps).
+2. **The two CMYK↔sRGB transforms are for different jobs.** Terminal
+   conversion wants the *calibrated* lattice; a ROUND TRIP wants the
+   *invertible* max-GCR pair and does not care about accuracy, because the
+   value never reaches a screen in that form (10 → 4 traps).
+3. **`blends_in_wrong_space` had to be narrowed or the Pass read as a
+   no-op.** It counted the blending SPACE, so `tools/measure-blend-space.py`
+   still said 107/107 wrong after two patches started passing.
 
-⚠ **`tools/render-parity/out/summary.json` is STALE** — it records a bucket
-vocabulary the harness no longer emits, so `--gate` mode is meaningless
-until re-based. Compare two current runs instead.
+**How to apply:** re-measure with a worktree build of the parent commit
+before claiming any movement — the Ghent harness numbers in documents drift,
+and this session's baseline run cost five minutes and settled two
+contradictions. `docs/NEXT_SESSION.md` (2026-08-21 evening) carries the
+queue; item 1 is `97.1g`, the non-isolated group, which is a **port** of an
+existing additive path rather than a design.
 
-See [[a-correct-fix-can-be-unreachable]].
+See [[a-correct-fix-can-be-unreachable]] and
+[[feedback_a_gate_that_underreports_looks_green]].
