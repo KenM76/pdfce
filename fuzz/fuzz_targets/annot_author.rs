@@ -102,9 +102,26 @@ impl<'a> Cursor<'a> {
 }
 
 /// Derive one markup spec from the cursor.
+///
+/// ★ **THE MODULO IS A COVERAGE CLAIM, and it went stale.** It read `% 8`
+/// against an eight-variant enum while one arm was spent on a second
+/// `TextMarkup` kind — so `MarkupSpec::Cloud`, which bakes a scalloped
+/// appearance from a free-form vertex list and takes a **continuous**
+/// intensity, was **never fuzzed at all**. Nothing said so: the target
+/// compiled, ran, and reported coverage over the variants it happened to
+/// name.
+///
+/// Found 2026-08-21 by CI failing to *compile* this file — `Square` had
+/// gained a `border_effect` field it was not passing — which is the only
+/// reason anybody read the dispatch. **A compile break is the loudest
+/// failure a fuzz target has; a missing variant is silent.**
+///
+/// If a variant is added to `MarkupSpec`, this modulo and the arm count
+/// below must move with it. There is no check that enforces that, which is
+/// stated here rather than assumed away.
 fn spec(c: &mut Cursor<'_>) -> MarkupSpec {
     let width = f64::from(c.byte() % 12);
-    match c.byte() % 8 {
+    match c.byte() % 9 {
         0 => MarkupSpec::Square {
             rect: c.rect(),
             border: Some(c.color()),
@@ -114,6 +131,17 @@ fn spec(c: &mut Cursor<'_>) -> MarkupSpec {
                 None
             },
             border_width: width,
+            // `/BE` (§12.5.4 Table 167). Driven from the cursor rather
+            // than pinned, and deliberately allowed OUT OF RANGE: the
+            // documented intensity is a continuous `0.0..=2.0`, so the
+            // values worth fuzzing are the ones outside it, the boundary
+            // itself, and `None` — which writes no `/BE` key at all and is
+            // a different code path rather than a zero.
+            border_effect: if c.byte() % 3 == 0 {
+                None
+            } else {
+                Some(f64::from(c.byte()) / 64.0 - 1.0)
+            },
         },
         1 => MarkupSpec::Circle {
             rect: c.rect(),
@@ -164,6 +192,29 @@ fn spec(c: &mut Cursor<'_>) -> MarkupSpec {
                 kind: TextMarkupKind::Highlight,
                 quads,
                 color: c.color(),
+            }
+        }
+        7 => {
+            // The variant that had no arm at all. A revision cloud bakes a
+            // scalloped appearance from an arbitrary vertex list, so it is
+            // the markup spec with the most arithmetic between the input
+            // bytes and the emitted path — exactly what a fuzz target is
+            // for. Two and three vertices are included on purpose: a
+            // "cloud" with too few points to enclose anything is the
+            // degenerate case, and `intensity` is swept across and beyond
+            // its documented `0.0..=2.0` for the same reason as `/BE`
+            // above.
+            let n = 2 + usize::from(c.byte() % 6);
+            MarkupSpec::Cloud {
+                vertices: c.points(n),
+                border: Some(c.color()),
+                interior: if c.byte() % 2 == 0 {
+                    Some(c.color())
+                } else {
+                    None
+                },
+                width,
+                intensity: f64::from(c.byte()) / 64.0 - 1.0,
             }
         }
         _ => {
