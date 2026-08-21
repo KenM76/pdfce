@@ -96,6 +96,292 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 121.1` (`bab0a23`) — REFLOW'S FOLLOWER-SHIFT SCAN HAD NO LINE BOUNDARY FOR CONTENT WITH NO `Td`/`TD`/`T*`, AND A CAD EXPORTER'S 1,696-RUN FORM IS EXACTLY THAT SHAPE — 1,676 LABELS SILENTLY DISPLACED, NOW 0 — 2026-08-20 (two-hundred-and-eleventh filing)
+
+**Found by, not written for.** `Pass 121.0` (below) unblocked the first
+edit attempt against the operator's own benchmark CAD drawing
+(`D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf`); the edit
+*succeeded* and the report read `followers_repositioned=1676`. A render
+diff, not an argument, is what caught it:
+
+| | changed pixels | bounding box |
+|---|---|---|
+| before this fix | **34,059** | x 62–858, y 34–795 — the whole page |
+| after this fix | **42** | x 542–561, y 378–384 — one label |
+
+An edit that visibly wrecks a drawing is a worse outcome than `Pass
+119.0`'s starting point ("editing does nothing"), and it would have
+shipped as this session's headline feature.
+
+**The defect, `Pass 14.1`-era.** Reflow's model is "shift the rest of the
+line by the advance delta," implemented as a forward scan that shifts
+every absolute `Tm` it meets until a `Td`/`TD`/`T*`/`'`/`"` operator ends
+the line. **A content stream that positions every run with `Tm` and never
+emits one of those operators has no boundary at all** — which is exactly
+what this exporter writes: the form the reach extension targeted has
+**1,696 show-text operators in one text object, each placed by its own
+absolute `Tm`, none of them a line continuation in the producer's own
+intent** (each is an independent CAD label). The scan therefore ran to
+the end of the stream: **1,676 of 1,696** show operators in the form
+(98.8%) were followers of the one edited run and all shifted.
+
+**The fix.** "The rest of the line" is read literally as "the rest of the
+**baseline**." [`same_line`](../crates/pdfce-core/src/text_edit/edit.rs)
+(new, `pub(crate)`) says a following absolute `Tm` continues the anchor's
+line **only if it differs from the anchor's matrix in `e` alone** — same
+`a`/`b`/`c`/`d` (orientation, scale), same `f` (baseline). Anything else
+re-anchors, so the line is over and the scan **stops** there.
+**Deliberately asymmetric, and the asymmetry is the argument, not an
+oversight:** a same-line `Tm` that also changes scale is now treated as a
+new line and left untouched (conservative — a same-line-but-scaled
+follower stays exactly where the producer put it, which shows up at worst
+as a visible, undo-recoverable overlap); an anchor whose matrix could not
+be tracked (`ShowData::matrix_known == false`) shifts **nothing**, on the
+same reasoning. **Leaving text where the producer put it is always
+recoverable; silently moving it is not.**
+`FollowerDisposition::Pin` remains available for a caller that wants the
+tail explicitly held regardless.
+
+**Test, sabotage-verified as a boundary, not as a single case.** One test,
+two streams, on purpose — the property under test is a *boundary*
+(`same_line` must say yes to one shape and no to the other), and asserting
+only the "yes" half would pass against a predicate that always answers
+yes, which is precisely the pre-fix behaviour:
+`same_line_shifts_and_a_scale_change_ends_the_line` — a same-baseline
+follower after a `Tm` differing only in `e` shifts (`followers_repositioned
+== 1`); an otherwise-identical follower whose `Tm` also doubles scale does
+not (`followers_repositioned == 0`, "a scale change re-anchors: treated as
+a new line, deliberately conservative").
+
+**Confirmed against live source this filing** —
+`crates/pdfce-core/src/text_edit/edit.rs` `same_line` (comment block
+explicitly citing `Pass 121.1` and the "unknown anchor matrix answers
+false" rationale) and the two-stream boundary test, both read directly.
+
+**No `docs/FEATURES.md` row changed.** Row 107 ("Edit existing text runs
+in place…") and row 110 ("Reflow within a block…") both already carry
+ticked core/cli boxes for the general capability; neither claimed
+correctness on absolutely-positioned, `Td`-free content specifically, so
+neither was false before this fix and neither newly becomes true in a way
+a checkbox can register. Recorded here rather than silently passed over,
+per this filing's dispatch instruction to check rather than assume.
+
+---
+
+### `Pass 121.0` (`97ed7fa`) — `ToUnicodeCMap::injective_inverse` REPORTED A CODE COLLIDING WITH ITSELF (`"codes 361 and 361 both map to 'Ʃ'"`) — A FALSE REFUSAL FROM DOUBLE-COUNTING A CODE PRESENT IN BOTH A `bfchar` AND A `bfrange` — 2026-08-20 (two-hundred-and-eleventh filing)
+
+**The first edit attempt against the operator's own benchmark CAD
+drawing refused**, quoting `R-INV-4`: *"font '.SFNS-Regular' … codes 361
+and 361 both map to 'Ʃ', so mapping that character back to a code has no
+single answer."* **The same number, printed twice.** The font is
+perfectly invertible; pdfce told the operator his text could not be
+edited for a reason that did not exist.
+
+**Root cause.** `injective_inverse` materialises the whole map because
+injectivity is a property of the map as a whole, invisible to any point
+lookup. It pushed every `bfchar` single into a working set, then pushed
+`lookup(code)` for every code of every `bfrange` — but `lookup` **consults
+the singles first**, its documented precedence. A code present in both
+tiers was therefore pushed **twice with identical text**, and the
+injectivity check reported that code colliding with itself. Two
+**overlapping** `bfrange`s produced the identical false positive by the
+same route: `lookup` resolves an overlap last-wins and returned one
+range's answer for both iterations.
+
+**★ The transferable half.** This sentence had been shippable since
+`R110` landed, because a refusal message is close to the one string a
+developer never expects to actually read: printing the same number twice
+is visibly absurd, and it shipped anyway. A refusal for a case nobody
+hits is not read by anybody, until an operator's real file hits it.
+
+**The fix.** Iterate **distinct codes** (`BTreeSet<u32>`, singles ∪ every
+range member) and call `lookup` **once per code**, so the materialised map
+agrees with the lazy `lookup` by construction — one code, one answer,
+whichever tier supplies it. A genuine collision (two *different* codes,
+one character) is unaffected and still refused. `MAX_BF_ENTRIES` now
+counts codes **considered**, not codes **stored**, so deduplication cannot
+become a cheaper way to defeat the resource guard (an attacker spending
+the budget on overlapping ranges is bounded the same as one spending it on
+distinct codes).
+
+**★ A test was wrong first, and the wrongness is worth carrying as its
+own finding.** The regression test's first draft read:
+
+```rust
+if let Err(NotInjective::Collision { first, second, .. }) = cmap.injective_inverse() {
+    assert_ne!(first, second);
+}
+```
+
+— a conditional assertion about an error that **may not occur**, which
+passes vacuously both when the call *succeeds* and when it *fails for any
+other reason*. It duly passed, unmodified, against a deliberately
+re-broken build. Rewritten as a **positive** assertion of the whole
+inverse (`injective_inverse().expect(...)`, then `assert_eq!` on all four
+resolved codes) and re-sabotaged; it now fails as expected. **Same lesson
+as `Pass 107.1`'s `is_ce_dimension` test, arrived at from the opposite
+direction**: that test's risk was a fixture that happened to satisfy two
+independent arms of a disjunction at once (guarded against there by
+isolating each arm with its own sabotage-verified test); this one's risk
+was an assertion nested inside a conditional branch that the passing case
+never enters at all.
+
+**Standing-rule judgement, asked for explicitly this dispatch — DECLINED,
+on precedent.** Two same-session instances of "a test that passes without
+exercising its subject" were offered as a possible new number. Declined:
+this project's own **R162** family already names the exact mechanism —
+*"could my assertion ever have come out false?"* — and its unifying
+sentence (*"evidence that could not have come out differently is not
+evidence"*) covers a conditional assertion inside a branch that may not
+execute as cleanly as it covers R162's own instance (a loop body over an
+empty collection executing zero times): both are a quantifier or
+condition ranging over nothing. Minting a new number here would fragment
+coverage that already exists across R162, R164 and
+`D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`,
+which is precisely the kind of narrow-spelling fix R205 itself warns
+against (fix the class, not the one shape that happened to fail). This
+instance is recorded as a new dated occurrence in that RAG file instead
+(below) — a confirming instance, not a gap.
+
+**Test results.** `crates/pdfce-core/src/text_extract/cmap.rs`'s test
+module gains `overlapping_bfranges_are_not_a_collision_with_themselves`
+(the boundary test above) plus coverage confirming a `bfchar`/`bfrange`
+duplicate no longer double-counts. `cargo test --workspace` green,
+`cargo fmt --check` / `cargo clippy --all-targets --workspace` clean
+(relayed; independently confirmed by reading the fixed function and its
+tests directly on disk this filing).
+
+**Confirmed against live source this filing** —
+`crates/pdfce-core/src/text_extract/cmap.rs`, `injective_inverse` and its
+test module, both read directly; the `codes 361 and 361` false-refusal
+text matches the doc comment verbatim.
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **120** (`119.4` sub-ID, `120.0`–`120.4` Backlog) | **121** |
+| decision records | **076** | **076** (unchanged) |
+| standing rules | **R206** | **R206** (unchanged — R162/R164/RAG-file coverage judged adequate, see above; declined, not minted) |
+| `SESSION_LOG` filings | **210** | **211** |
+| `D:\dev\rag\rust\` findings | — | **+1 instance** (existing file, new dated section) |
+| `C:\personal_rag\pdf\` lessons | — | **+1** |
+| `docs/FEATURES.md` rows touched | — | **0** (checked, not assumed — see `Pass 121.1`'s entry above) |
+
+---
+
+### `Pass 119.2` (`a10a5c1`) — `format_text` RETARGETED INTO FORM XOBJECTS; `reflow_block`/`add_text` REMAIN DELIBERATE NON-GOALS AND ARE SPLIT OUT AS `Pass 119.4`; A SILENT 141-LINE DOC DUPLICATION FROM `Pass 119.0`'S OWN COMMIT WAS FOUND AND REPAIRED — 2026-08-20 (two-hundred-and-tenth filing)
+
+**Scope note, stated up front because the Backlog entry this closes was
+bundled.** The Backlog entry (below, now deleted per ship-and-delete)
+read *"retarget `format_text` (and then `reflow_block` / `add_text`)"*.
+**Only `format_text` shipped.** `reflow_block` and `add_text` are **not**
+retargeted and remain deliberate non-goals — `add_text` especially,
+because appending to a form's content stream changes what *every*
+invocation site paints, a different disclosure shape than an in-place
+edit's. That residue is filed fresh as `Pass 119.4` (Backlog, below)
+rather than closed along with this entry.
+
+**What shipped.** `FormatRequest::target`, carrying the **identical
+`EditTarget` type** `EditRequest` already uses — deliberately, so a
+shell that has decided which stream a caret is in does not have to
+translate that decision between two verbs acting on the same run. Same
+default (`Auto`), same `Do`-order candidate search, same
+`form_object`/`form_invocations`/`form_pages` on `FormatReport`, same
+`"SHARED CONTENT: ..."` disclosure, same `--target auto|page|form:N` on
+`pdfce-cli format-text`. Session path (`EditSession::format_text`)
+included, one undoable command, commit hoisted out of the search loop
+per `R179`/`R49`.
+
+**Why it could not wait.** `Pass 119.0` left the asymmetry *named* as a
+non-goal, but naming it does not make it acceptable — an operator meets
+it as "I can change the words but not the size" on every CAD drawing,
+the same half-working shape `Pass 119.0` existed to remove, one verb
+over.
+
+**Why retargeting is safe for `format_text` specifically.** A family
+change (`set_font`) must *find* the target face in a resource
+dictionary — it is **read-only** about that (a face that does not
+resolve is `FormatError::TargetFontMissing`, never an insertion), so
+retargeting cannot make this verb write to a form's `/Resources`. The
+selector resolves against the **form's own** dictionary, correctly —
+`/F1` inside a form is a different font from `/F1` on the page
+(§8.10.1).
+
+**Test results.** `crates/pdfce-core/tests/form_xobject_text_edit.rs` is
+now **20 tests** (confirmed on disk this filing), up from `Pass 119.0`'s
+16. `cargo test --workspace` green. `cargo fmt --check` and
+`cargo clippy --all-targets --workspace` clean. No manifest touched, no
+dependency added.
+
+**The test worth naming: `both_verbs_target_the_same_stream_for_the_same
+_run`.** `edit_text` and `format_text` now have two independent search
+implementations (different plan/error types, kept textually parallel
+rather than merged behind a generic seam — the indirection would cost
+more than two error enums save) and parallel code drifts. This test
+asserts the two verbs agree, on both form text and page text, since a
+regression could go either way.
+
+**Gate growth.** `FormatReport` joined `EditReport` in
+`tools/check-outcome-disclosed.py`'s `OUTCOME_STRUCTS` list (confirmed
+present on disk this filing) — **100 fields across 14 outcome structs**,
+up from **58 across 12** before this session pointed the gate at
+anything outside `edit.rs`.
+
+**★★ A silent 141-line doc duplication from `Pass 119.0`'s own commit
+was found and repaired this filing — cause was the splice tool, not the
+prose.** `docs/core-api/02-editing-and-saving.md` had **two copies** of
+§1.4 through §1.9, the second retaining the stale *"refuse a caret on
+form text"* warning that `cc57080` was written to reverse. Root cause:
+the rewrite script located its splice end-marker with `s.index(marker)`
+— unqualified `str.index()` always searches from position zero, and the
+marker (a generic table-header string) recurred throughout the file, so
+`end` resolved to an occurrence roughly two hundred lines *before*
+`start`. The result is **duplication**, not an error, a reorder, or a
+loss — invisible to every mechanical gate in the project: valid
+Markdown, a plausible line-count delta for a rewrite, and
+`check-core-api-verbs.py` green (it counts verbs and line-count claims;
+a duplicated section has the same verbs). **Caught only by a downstream
+read** — this librarian, reading the document while filing the Pass it
+concerned, not by any gate. Repaired in `a10a5c1`; §1.1–§1.24 each
+verified to appear exactly once, matching `cc57080`'s parent commit's
+structure (the duplication was entirely `cc57080`'s own, not
+pre-existing). Tool-level fix (one argument): `s.index(marker, start)`,
+never a bare `s.index(marker)`, for any splice end-marker search. Full
+write-up, escalated to the correct tier because this is an agent-tooling
+gotcha rather than a PDF or Rust one:
+`C:\personal_rag\claude_code\lesson_20260820_str_index_splice_end_marker_searches_from_zero_not_from_start.md`.
+**Not minted as a standing rule** — one occurrence, below this project's
+own two-occurrence bar; escalate if a second instance surfaces.
+
+**`docs/ROADMAP.md`: `Pass 119.2`'s Backlog entry (below) is deleted**
+per this project's ship-and-delete convention — this entry is the
+enduring record. Residue (`reflow_block`/`add_text`) filed fresh as
+`Pass 119.4` (Backlog, below).
+
+**`docs/FEATURES.md`:** row 109 ("Text formatting...") rewritten in
+place — core/cli now reach form-XObject text via `format-text
+--target`, phrased in parallel with row 107's edit-in-place wording; gui
+unchanged (same reason as `Pass 119.0` — the reply telling `pdfceGUI` to
+drop its caret guard was sent today, not yet acted on). Planned row for
+"restyle text inside a form XObject" (`Pass 119.2`) moved to
+*Implemented* for its `format_text` half; a new *Planned* row added for
+`reflow_block`/`add_text` retargeting (`Pass 119.4`).
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **120** | **120** (`119.4` is a sub-ID, no ceiling move) |
+| decision records | **076** | **076** (unchanged — no new architectural decision this filing) |
+| standing rules | **R206** | **R206** (unchanged — one-occurrence doc-splice finding recorded, not minted) |
+| `SESSION_LOG` filings | **209** | **210** |
+| `personal_rag/claude_code` lessons | **+0** | **+1** (doc-splice finding, above) |
+| `docs/FEATURES.md` rows touched | — | **2** (row 109 rewritten; one Planned row split into implemented-half + new residue row) |
+
+**Terminology (rule 15):** every "dimension" occurrence in this entry is
+qualified — **pdf dimensions** (title-block/CAD-exported callouts, the
+`format_text` target this Pass reaches inside forms); no ce-dimension
+material touched.
+
 ### `Pass 119.0` (`cc57080`) — TEXT INSIDE A FORM XOBJECT IS EDITABLE; THE SHARED-FORM PROBLEM HAS NO FIX, ONLY A DISCLOSURE; DECISION 076 DECIDES EDIT-IN-PLACE AS DEFAULT; `check-outcome-disclosed.py`'S OWN INPUT LIST FOUND UNDER-SCOPED, FIFTH INSTANCE OF THE UNDER-REPORTING-GATE CLASS — 2026-08-20 (two-hundred-and-ninth filing)
 
 **Escalated by the operator himself** (two-hundred-and-eighth filing,
@@ -64171,17 +64457,20 @@ means the same thing (decision 076). Acceptance criterion: an unshare
 followed by an edit changes exactly one page (verified by render), every
 other invocation site byte-identical.
 
-### `Pass 119.2` — retarget `format_text` (and then `reflow_block` / `add_text`) into form XObjects
+### `Pass 119.4` — retarget `reflow_block` / `add_text` into form XObjects
 
-**Filed 2026-08-20 (two-hundred-and-ninth filing).** `Pass 119.0` gave
-`plan_edit` a target-resolution layer (`EditPlanTarget`: stream object,
-resource dictionary, sibling-collapse count) that `plan_format` needs the
-identical three values for and currently reads straight off the `Page`.
-An operator can now *edit* form text but not *restyle* it — this Pass
-closes that asymmetry. `add_text`'s extra hazard, named so it is not
-discovered mid-surgery: appending to a form's content stream changes
-every invocation site that paints it, a different disclosure shape than
-`edit_text`'s single-target report.
+**Filed 2026-08-20 (two-hundred-and-tenth filing), split off from
+`Pass 119.2`'s Backlog entry when that entry shipped (`a10a5c1`) with
+only its `format_text` half built** — see `Pass 119.2`'s Shipped entry,
+above, for the scope note. `Pass 119.2` gave `plan_format` the same
+target-resolution layer (`EditPlanTarget`: stream object, resource
+dictionary, sibling-collapse count) `plan_edit` already had;
+`reflow_block` needs the identical three values and does not yet have
+them. `add_text`'s hazard, named so it is not discovered mid-surgery:
+appending to a form's content stream changes **every** invocation site
+that paints it, a different disclosure shape than `edit_text`'s or
+`format_text`'s single-target report — this is not merely unfinished
+work, it needs its own disclosure design before it can ship safely.
 
 ### `Pass 119.3` — align `pdfce-render`'s nested-form resource fallback with `text_edit::forms`
 

@@ -52547,3 +52547,221 @@ rule 8 — this filing has no shell of its own this dispatch).
 **Terminology (rule 15):** every "dimension" above is qualified — **pdf
 dimensions** for the CAD-exported callouts this Pass makes editable; **ce
 dimensions** named once, only to state this Pass does not touch them.
+
+## 2026-08-20 (two-hundred-and-tenth filing) — `PASS 119.2` (`a10a5c1`) SHIPS `format_text` RETARGETING INTO FORM XOBJECTS; `reflow_block`/`add_text` SPLIT OUT AS `PASS 119.4`; A SILENT 141-LINE DOC DUPLICATION FROM `PASS 119.0`'S OWN COMMIT FOUND AND REPAIRED, ESCALATED TO `personal_rag/claude_code`
+
+**Filed by `pdfce-librarian`.** Relayed dispatch, engineer's own shell —
+commit `a10a5c1` reported; test count (20), gate-list membership
+(`FormatReport` in `OUTCOME_STRUCTS`), the CLI `--target` flag, and the
+document-duplication repair were all independently confirmed this
+filing by reading the affected files on disk (`crates/pdfce-core/tests/
+form_xobject_text_edit.rs`, `tools/check-outcome-disclosed.py`,
+`crates/pdfce-cli/src/main.rs`, `docs/core-api/02-editing-and-saving.md`)
+— hash provenance itself not independently verified, no shell of its own
+this dispatch (hard rule 8).
+
+**Shipped:**
+- `Pass 119.2` (`a10a5c1`) — `FormatRequest::target`, reusing
+  `EditTarget` exactly as `EditRequest` already does; `format_text` (free
+  function and `EditSession::format_text`) now searches the page's
+  content then each form XObject in `Do` order, same as `edit_text`.
+  `--target auto|page|form:N` on `pdfce-cli format-text`. 4 new tests
+  (16 -> 20). `cargo test --workspace` green, `fmt`/`clippy` clean, no
+  manifest touched. Full record: `ROADMAP.md`, top of *Shipped*.
+
+**Decisions made this session:** none — no new architectural decision;
+decision 076 (shared-form edit-in-place default) already covers this
+verb by extension, restated nowhere new.
+
+**Findings + decisions:**
+- **`format_text`'s retargeting is safe by construction, distinct from a
+  hypothetical `add_text` retargeting** — a family change (`set_font`)
+  is read-only about resolving the target face (`FormatError::
+  TargetFontMissing`, never a write), so it cannot touch a form's
+  `/Resources`. This is why `format_text` shipped alone this session
+  while `add_text`, which would append to a shared stream, was held
+  back.
+- **★★ A silent 141-line document duplication, introduced by `Pass
+  119.0`'s own commit (`cc57080`), found and repaired this filing.**
+  `docs/core-api/02-editing-and-saving.md` carried two copies of §1.4
+  through §1.9; the surviving-until-repair copy retained the exact
+  stale sentence (*"refuse a caret on form text"*) `cc57080` was written
+  to reverse. Root cause: a Python splice script located its end marker
+  with unqualified `s.index(marker)`, which always searches from
+  position zero — a generic, non-unique table-header marker resolved to
+  an occurrence ~200 lines before the intended one, so `s[end:]` began
+  before `s[:start]` ended and the difference got duplicated rather than
+  lost or reordered. **Every mechanical gate in the project stayed
+  green** (valid Markdown, plausible line-count delta,
+  `check-core-api-verbs.py`'s verb/line-count check reporting the same
+  content twice identically) — caught only by this librarian reading the
+  document while filing the Pass it concerned. Repaired in `a10a5c1`;
+  §1.1–§1.24 verified to each appear exactly once. Escalated as a
+  `claude_code` (agent-tooling), not `pdf` or `rust`, finding:
+  `C:\personal_rag\claude_code\lesson_20260820_str_index_splice_end_marker_searches_from_zero_not_from_start.md`.
+  Not minted as a project standing rule — one occurrence, below this
+  project's own two-instance bar.
+
+**Still in flight:**
+- `Pass 119.4` (`reflow_block`/`add_text` retargeting) — filed fresh to
+  *Backlog*, split off `Pass 119.2`'s original bundled scope; none
+  started.
+- `Pass 119.1` (`unshare_form`) and `Pass 119.3` (nested-form resource
+  fallback alignment) — unchanged, still unstarted.
+- `pdfceGUI`'s caret guard for form-XObject text is still unactioned —
+  now blocks both `edit_text` and `format_text` reachability in that
+  shell; `docs/FEATURES.md`'s `gui` boxes for both stay keyed to
+  page-stream reachability only.
+- `Pass 113.0` (`transform_objects`) still next in line, unchanged by
+  this filing.
+
+**For next session:**
+1. Confirm `pdfceGUI` has acted on the caret-guard removal before
+   ticking any form-XObject-text `gui` box.
+2. Decide `Pass 119.1` vs `119.4` vs `120.0` ordering, or start `113.0`
+   — still no operator priority ruling.
+3. `Pass 117.2` (`/MK /R` widget rotation) still needs a
+   `pdfce-spec-librarian` dispatch, carried unchanged.
+4. If a second instance of the `str.index()` splice-duplication defect
+   surfaces anywhere, revisit whether it warrants a project standing
+   rule (currently declined at one occurrence).
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **120** | **120** (`119.4` is a sub-ID, no ceiling move) |
+| decision records | **076** | **076** (unchanged) |
+| standing rules | **R206** | **R206** (unchanged — doc-splice finding recorded, not minted) |
+| `SESSION_LOG` filings | **209** | **210** |
+| `personal_rag/claude_code` lessons | **+0** | **+1** |
+| `docs/FEATURES.md` rows touched | — | **2** (row 109 rewritten; one Planned row replaced) |
+
+**Terminology (rule 15):** the one "dimension" occurrence in this entry
+is qualified — **pdf dimensions** (title-block/CAD-exported callouts,
+the `format_text` target reached inside forms this session); no
+ce-dimension material touched.
+
+## 2026-08-20 (two-hundred-and-eleventh filing) — `PASS 121.0` (`97ed7fa`) AND `PASS 121.1` (`bab0a23`): TWO DEFECTS YEARS OLDER THAN `PASS 119.0`, BOTH FOUND ONLY BY RUNNING THE JUST-SHIPPED FORM-XOBJECT TEXT EDIT AGAINST THE OPERATOR'S OWN REAL CAD DRAWING — NO FIXTURE IN THE CORPUS HAS EITHER SHAPE; STANDING-RULE MINT ASKED FOR, DECLINED ON PRECEDENT
+
+**Filed by `pdfce-librarian`.** Relayed dispatch; commit hashes and
+measurements reported by the engineer, **independently confirmed this
+filing by reading the fixed functions and their tests directly on disk**
+(`crates/pdfce-core/src/text_extract/cmap.rs`'s `injective_inverse` and
+`crates/pdfce-core/src/text_edit/edit.rs`'s `same_line`, both read in
+full, doc comments and sabotage-verified tests alike). Benchmark file
+path verified present at exactly `D:\Dev\temp\pdfce\
+ncored-benchmark-cad-drawing.pdf` via `Glob` — no tab or newline
+corruption found this filing (third time this path has been checked;
+clean all three times). No shell of my own this dispatch (hard rule 8);
+commit-hash provenance itself relayed, not independently verified.
+
+**The frame, stated up front because it is the finding, not just a
+grouping convenience.** Neither defect is in code written this session —
+`Pass 121.0`'s bug is `ToUnicodeCMap`-era, `Pass 121.1`'s is `Pass
+14.1`-era. `Pass 119.0` was green on 20 tests and the whole fixture
+corpus. **Two commands against the operator's real benchmark drawing
+produced two defects in a row, and no fixture in the corpus has the shape
+that triggers either one.** A reach extension does not only find new
+text — it finds old assumptions the fixture corpus was never shaped to
+challenge.
+
+**Shipped:**
+- `Pass 121.0` (`97ed7fa`) — `ToUnicodeCMap::injective_inverse` reported
+  a code colliding **with itself** (`"codes 361 and 361 both map to
+  'Ʃ'"`) — a code present in both a `bfchar` single and a `bfrange` was
+  pushed twice with identical text, because the materialising loop did
+  not know `lookup` consults singles first. **A false refusal**: the
+  font was perfectly invertible. Fixed by iterating distinct codes and
+  calling `lookup` once each; `MAX_BF_ENTRIES` now counts codes
+  *considered*, not *stored*, so the fix cannot cheapen the resource
+  guard. Full record: `ROADMAP.md`, *Shipped*.
+- `Pass 121.1` (`bab0a23`) — reflow's follower-shift scan had no line
+  boundary for content with no `Td`/`TD`/`T*`, and the operator's
+  benchmark form is exactly that shape: **1,696 show operators, each
+  placed by its own absolute `Tm`**. One edit moved **1,676 of 1,696**
+  (98.8%) show operators — render diff **34,059 changed px over the
+  whole page (bbox 62–858 × 34–795) before the fix, 42 px over one label
+  (bbox 542–561 × 378–384) after**. Fixed by defining "same line" as
+  "next `Tm` differs from the anchor's only in `e`" — same
+  scale/orientation/baseline continues the line, anything else re-anchors
+  and ends the scan. Deliberately asymmetric toward leaving text in
+  place: an unknown anchor matrix or a same-baseline-but-rescaled
+  follower both shift nothing. Full record: `ROADMAP.md`, *Shipped*.
+
+**Decisions made this session:** none — both are defect fixes to
+already-decided behaviour (`ToUnicodeCMap` inversion, reflow's
+follower-shift model), not new architecture.
+
+**Findings + decisions:**
+- **A false-injectivity refusal was shippable since `R110`** — the
+  doubled-number sentence ("codes 361 and 361…") is visibly absurd on
+  sight, and shipped anyway, because a refusal for a case nobody hit in
+  the fixture corpus is a refusal nobody reads.
+- **The `if let Err(...) { assert }` shape tests nothing when the branch
+  may not execute.** `Pass 121.0`'s first test draft asserted inside a
+  conditional on an error that may not occur — passes vacuously on
+  success AND on any unrelated failure — and duly passed against a
+  deliberately re-broken build. Rewritten as a positive assertion,
+  re-sabotaged, now fails correctly.
+- **Standing-rule mint asked for explicitly this dispatch, on the
+  question of whether this and `Pass 107.1`'s `is_ce_dimension`
+  both-arms-fixture finding are one class — DECLINED, on precedent.**
+  This project's own **R162** family ("could my assertion ever have come
+  out false?" / "evidence that could not have come out differently is
+  not evidence") already covers a conditional or quantifier ranging over
+  nothing, whether the empty range is a collection (R162's own instance)
+  or a branch that success never enters (this instance). Minting a new
+  number would fragment coverage already spread across R162, R164 and
+  `D:\dev\rag\rust\
+  prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
+  — exactly the narrow-spelling-fix R205 itself warns against. Recorded
+  as a new dated instance in that RAG file instead (below), not as a
+  gap in coverage.
+- **Real CAD exporters emit one enormous text object with an absolute
+  `Tm` per run and no `Td`/`TD`/`T*` at all** — the shape that broke
+  reflow's line-boundary scan. New `personal_rag/pdf` lesson (below);
+  cross-references the existing `lesson_20260804_cad_export_one_text_
+  object_holds_every_dimension_label.md` (same producer pattern, a
+  different specific consequence — hit-testing there, reflow-boundary
+  detection here).
+- **`docs/FEATURES.md` checked, not assumed, per this dispatch's own
+  instruction — no row changed.** Row 107 ("Edit existing text runs in
+  place…") and row 110 ("Reflow within a block…") were already ticked
+  core/cli for the general capability and never claimed correctness on
+  `Td`-free absolutely-positioned content specifically, so neither
+  reads as having been false before `121.1` nor newly true after it in
+  a way a checkbox tracks.
+
+**Still in flight:** unchanged from the two-hundred-and-tenth filing —
+`Pass 119.4`, `Pass 119.1`, `Pass 119.3`, `pdfceGUI`'s caret guard, and
+`Pass 113.0` all still queued exactly as recorded there.
+
+**For next session:**
+1. All four items carried from the two-hundred-and-tenth filing's own
+   list remain open, unchanged.
+2. If a third instance of "assertion nested inside a branch success
+   never enters" surfaces anywhere in this project, re-open the
+   declined-mint question above with that instance in hand — this
+   filing declined on **coverage**, not on occurrence count, so a third
+   instance doesn't automatically flip the answer, but is worth
+   re-checking against R162's actual text rather than assumed to fit.
+3. `docs/NEXT_SESSION.md` already reflects all four of today's commits
+   per the dispatching engineer — not re-edited by this filing.
+
+**Ledger effects.**
+
+| ledger | before | after |
+|---|---|---|
+| Pass family ceiling | **120** | **121** |
+| decision records | **076** | **076** (unchanged) |
+| standing rules | **R206** | **R206** (unchanged — declined, see above) |
+| `SESSION_LOG` filings | **210** | **211** |
+| `D:\dev\rag\rust\` findings | — | **+1 instance** in an existing file, no new file |
+| `C:\personal_rag\pdf\` lessons | — | **+1** |
+| `docs/FEATURES.md` rows touched | — | **0** (checked, see above) |
+
+**Terminology (rule 15):** two "dimension" occurrences this entry, both
+qualified — **pdf dimensions** (the CAD title-block/callout content the
+benchmark drawing's edit targeted; the cross-referenced sibling lesson is
+also pdf-dimension material). No ce-dimension code touched this filing.
