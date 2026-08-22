@@ -99,7 +99,7 @@
 //!               promoted=<N>
 //! render-page:  rendered <input> page <N> -> <output> <W>x<H>; \
 //!               substituted=<K> notdef=<L> unsupported=<J> unknown=<M> deferred=<P> \
-//!               images=<Q> images_unsupported=<R> forms=<S> \
+//!               images=<Q> images_unsupported=<R> forms=<S> forms_culled=<S2> \
 //!               images_codec_unsupported=<T> codec_features=<U> \
 //!               codec_geometry_mismatch=<V> dct_cmyk=<W> lzw_anomalies=<X> \
 //!               dct_cmyk_unverifiable=<Y> jpx_preblended=<Z> \
@@ -130,10 +130,29 @@
 //!   single spaces, in the **fixed order shown**, with no spaces inside a
 //!   pair. A script parses it with
 //!   `line.split("; ").nth(1)` then `split(' ')` then `split('=')` —
-//!   robust regardless of what the paths contain. New counters may be
-//!   **appended** in later Passes; existing keys never change meaning,
-//!   never move, and never disappear, so a parser that reads keys by name
-//!   (rather than by position) keeps working.
+//!   robust regardless of what the paths contain.
+//!
+//!   New counters are normally **appended**, and no existing key ever
+//!   changes meaning or disappears — so a parser that reads keys BY NAME
+//!   keeps working. That is the guarantee that actually matters, and the
+//!   one this project makes.
+//!
+//!   ★ **What is NOT promised, corrected here: that a key never moves.**
+//!   This paragraph used to say existing keys "never move", and `Pass
+//!   74.4` broke it by inserting `forms_culled` directly after `forms`
+//!   instead of at the end of the line. That was deliberate — "342 forms
+//!   executed, 0 culled" only reads as a pair when the two are adjacent,
+//!   and this line's second audience is a human scanning it. The promise
+//!   worth keeping is name-stability, not ordinal stability. The five
+//!   keys before `images` are the only ones whose POSITION is fixed, and
+//!   `tests/render_page.rs` is what enforces that any addition is a
+//!   decision somebody made on purpose rather than a drift.
+//!
+//!   Note the shape rather than only the correction: the narrower,
+//!   correct version of this rule was written into
+//!   `tests/render_page.rs` at the moment the key was added, and THIS
+//!   copy — the published one, the one a consumer reads — did not get
+//!   it. A contract restated in two places gets changed in one.
 //!
 //! The counters are `pdfce_render::Diagnostics`'s honesty report
 //! (decision 004 §6.4, rule R20) and their presence on stdout is
