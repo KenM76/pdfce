@@ -271,13 +271,25 @@ them.
 
 - **`origin/main` is level** and the repository is public. Anything
   committed is published by default.
-- **Backups are ~190 commits behind** — newest bundle
+- **Backups are 193 commits behind** — newest bundle
   `pdfce-20260817-v060.bundle` at `3c4c00e`. `v0.7.0`'s tag is in no bundle
   on disk. **Cutting one is the operator's call.**
-- A librarian filing for `bd9844d`, `71f7055` and `83409b3` was dispatched
+  *(Measured 2026-08-22, 227th filing: `git rev-list --count 3c4c00e..HEAD`.
+  Was written "~190" here.)*
+- ~~A librarian filing for `bd9844d`, `71f7055` and `83409b3` was dispatched
   in the same window as this file. If `check-commits-filed.py` is red when
   you start, that filing did not land — re-dispatch rather than adding to
-  the baseline.
+  the baseline.~~
+  **CORRECTED 2026-08-22 (227th filing) — the strikethrough above would have
+  cost you a duplicate filing.** That filing **did** land, as `c24ad7a`, and
+  it filed all three commits as `Pass 74.1`/`74.2`/`74.3`. The gate was then
+  red **for a different reason the sentence never enumerated: `c24ad7a`
+  itself**, which bundled three code repairs into a filing commit and so
+  became a code commit in no filing. It is filed by the **227th** entry.
+  ⇒ **A conditional instruction goes stale when its condition comes true for
+  a cause the author did not list.** If `check-commits-filed.py` is red when
+  you start, **read its output for the hash** — do not assume which commit it
+  means, and never extend `tools/commits-filed-baseline.txt`.
 - ★ **A claim in `bd9844d`'s commit message is WRONG and stands corrected
   only in the filing.** It says `tools/check-string-gaps.sh` *"has caught
   it every time"*. It has not: `ae06440` (2026-08-20) is titled *"the

@@ -56165,3 +56165,185 @@ append-only record, and the note makes the repair visible rather than silent.
 same defect in **this role's own agent file**, where it has been since
 2026-08-18. ⇒ **Write Windows paths with forward slashes in any text that may
 pass through a shell.**
+
+## 2026-08-22 (two-hundred-and-twenty-seventh filing) — `c24ad7a` FILED: THE 226TH FILING'S OWN COMMIT, UNFILED BECAUSE IT BUNDLED THREE CODE REPAIRS INTO THE FILING THAT WAS SUPPOSED TO MAKE THE GATE GREEN; ★★★ **A LIBRARIAN FILING THAT CARRIES A CODE CHANGE CANNOT FILE ITSELF AND MANUFACTURES EXACTLY ONE MORE UNFILED COMMIT PER FILING — THE REMEDY IS THE ENGINEER'S (*repairs go in their own commit*) AND HE HAS ALREADY WRITTEN IT DOWN, UNTRACKED**; ★★ **MINT DECLINED AT n=1, AND THE DECLINE NAMES ITS OWN WEAKNESS — unlike four of the five candidates declined this week, THIS ONE HAS A MECHANICAL ORACLE**, so only the instance count is holding it back and the gate predicate is written out ready to wire; ★★ **THE DISPATCH'S SHAPE QUESTION ANSWERED — REPEATED, NOT COINCIDENCE, AND THE ANSWER IS AN AMENDMENT TO `R210`'S SCOPE RATHER THAN `R212`**: the Ghent over-count and *"the string-gap gate has caught it every time"* are one mechanism — an instrument's misses live inside its own denominator, so its self-report is valid for DIFFERENCES and invalid for ABSOLUTES; ★ **THREE SELF-CLAIMS CHECKED AGAINST BYTES AND ALL THREE HOLD** (`od -c` finds the two real `\r`, `git log -S` names `38b0330`, `ls` resolves the repaired path) — **the first self-claim sweep in three filings to come back clean**; ★ **ONE HARD-RULE-11 SURVIVOR, IN THIS SESSION'S OWN HANDOFF, AND IT WOULD HAVE COST THE NEXT SESSION A DUPLICATE FILING**
+
+**Filed:**
+
+- **`c24ad7a`** — no Pass ID. The 226th filing's commit: `ROADMAP.md`,
+  `SESSION_LOG.md`, `ARCHITECTURE.md`, `FEATURES.md` and a rewritten
+  `NEXT_SESSION.md`, **plus three hard-rule-11 repairs** — the scale-demo
+  README's wrong Pass family, `--region`'s superseded 20,000× ceiling in
+  `crates/pdfce-cli/src/main.rs`, and the carriage-return-corrupted RAG path in
+  `.claude/agents/pdfce-librarian.md`. **All three are described in full in
+  `c24ad7a`'s own commit message, so this filing points at it rather than
+  restating them** (`git log -1 --format=%B c24ad7a`) — two accounts of one
+  fact is how drift starts.
+
+**No `FEATURES.md` row, and that is a ruling rather than a skip.** `c24ad7a`
+ships **no capability** — a filing, a handoff and three documentation repairs.
+The three Passes it *files* had their rows ticked **inside `c24ad7a` itself**
+(`docs/FEATURES.md`, `+4 / -4` in its `--stat`), which is the maintenance
+contract discharged in the same filing exactly as written. Nothing to tick,
+nothing to move, no row to create. Stated out loud because *"did not open the
+file"* and *"judged there was nothing to change"* are different facts and a
+silent absence cannot tell them apart.
+
+**Findings + decisions:**
+
+- **★★★ A filing commit that also carries a code change CANNOT FILE ITSELF.**
+  `check-commits-filed.py` counts any commit touching `crates/`, `tools/` or
+  `fixtures/` as owing a filing. A filing's text is written **before** the
+  commit exists, so the hash it would need to cite does not exist yet. Bundling
+  a repair into a filing therefore **manufactures exactly one new unfiled
+  commit per filing**, and the loop does not terminate — the next filing
+  inherits it. **Not a false positive:** the gate's docstring predicted this
+  case in its 2026-08-11 correction (*"a commit with code in it is checked
+  whatever else it touches — a mixed commit is precisely where code hides"*),
+  written after `b4a66ed` **self-certified by containing the record files it
+  was never described in**. `c24ad7a` is that shape with the roles reversed.
+- **The remedy is PROCEDURAL and it belongs to the ENGINEER.** `crates/`,
+  `tools/` and `.claude/` are outside this role's remit by construction, so a
+  sweep can only *report* survivors there — and the engineer then chooses
+  **when** to commit the fix. Whole remedy: **repairs go in their own commit;
+  before the filing is fine, after is fine, inside is not.** A docs-only filing
+  is not counted at all and the loop closes in one step.
+- **★ He has already written it down, and it is UNTRACKED.**
+  `.claude/agent-memory/pdfce-engineer/feedback_never_bundle_code_into_a_filing_commit.md`
+  is in the working tree (`git status --porcelain` → `??`) and states the rule,
+  the instance and the correct refusal (*"do not reach for
+  `tools/commits-filed-baseline.txt`"*). **A memory file that is untracked is
+  one `git clean` from not existing.** `.claude/` is not code, so committing it
+  cannot trip the gate it describes. **Owed, not done.**
+- **★★ Standing-rule mint DECLINED at n = 1 — and this decline is WEAKER than
+  the five before it, which is worth saying rather than hiding.** Four of the
+  past week's declines rested on **impossibility** (*"no artefact to check"*,
+  *"no gate can content-check a disclosure"*). **That warrant does not apply
+  here:** *"does this commit's diff touch code while its subject says
+  `librarian:`?"* is answerable from artefacts alone. So only the instance
+  count is holding it back. **What would convert it:** a second instance → mint
+  and wire the gate together; or the engineer wires the check now and needs no
+  number. **Predicate, written out so nobody re-derives it:** *fail when a
+  commit's subject begins `librarian:` (or its diff contains both
+  `docs/SESSION_LOG.md` and `docs/ROADMAP.md`) **and** its name-only diff
+  contains any path under `crates/`, `tools/` or `fixtures/`.*
+- **★★ The shape question: REPEATED, not coincidence — and the answer is an
+  amendment to `R210` rather than `R212`.** `bd9844d` said
+  `tools/check-string-gaps.sh` *"has caught it every time"*; `ae06440` is
+  titled *"the string-gap gate reported two of three"*, and that miss was found
+  by a human who knew the count independently. **Three episodes, one
+  under-report — the ordinal survives, the absolute does not.** Lined up
+  against the Ghent `29 of 51` over-count of four days earlier, **every step
+  matches**: the figure comes from the instrument scoring itself; the misses are
+  emitted as `clean`; re-running cannot find them because an instrument that
+  agrees with itself returns the same number forever; a **human** found both;
+  and in both cases the **relative/ordinal** claim survives while the
+  **absolute** dies. One sentence: *an instrument's misses live inside its own
+  denominator, so its silence is emitted as success.* **`R210` already carries
+  that mechanism in full** — the only thing excluding the gate instance was its
+  own scope note, and a scope note is exactly the part of a rule a new instance
+  is entitled to widen. **`R210` amended in place, original scope note kept
+  quoted, clause (d) added** (*a claim about a gate's own hit rate is a claim
+  about `git log` — cite it or drop the absolute; ask what a MISS would have
+  looked like, and if the answer is "exactly like a pass", the absolute is
+  unearned*). **Ceiling unmoved.**
+- **★ And the interval is itself the finding.** The Ghent correction was
+  written down 2026-08-21; *"caught it every time"* was written **the next
+  day**, by the same project, in a commit message. **A rule recorded is not a
+  rule internalised** — and the second instance escaped because the shape was
+  filed under a heading (*conformance figures*) narrow enough that nobody
+  recognised it in a different setting. That is the argument for widening a
+  scope note at the **second** setting rather than waiting for a third.
+- **★ Three claims this session made about its own output, checked against
+  bytes — all three hold.** (1) *"TWO REAL CARRIAGE RETURNS"*: `git show
+  c24ad7a^:.claude/agents/pdfce-librarian.md | od -c` prints
+  `D : \ d e v \r a g \r u s t \ d i s c …` — two `\r` bytes at exactly the two
+  positions the `\r` of *rag* and *rust* belonged. (2) *"since 2026-08-18"*:
+  `git log -S'D:\dev' -- .claude/agents/pdfce-librarian.md` names **`38b0330`,
+  2026-08-18** as the introducing commit. (3) the repaired forward-slash path
+  **resolves** (`ls`). ★ **This is the first self-claim sweep in three filings
+  to come back clean** — the 224th found five survivors, the 226th found two.
+  Evidence that the sweep is not a formality that always fires.
+
+**Hard-rule-11 sweep — ONE SURVIVOR, corrected here:**
+
+| # | site | stale claim | disposition |
+|---|---|---|---|
+| 1 | `docs/NEXT_SESSION.md` §7 | *"If `check-commits-filed.py` is red when you start, that filing did not land — **re-dispatch**"* | **CORRECTED.** The filing landed (`c24ad7a`); the gate is red **because of `c24ad7a` itself**. As written it sends the next session to re-file three already-filed commits. |
+| 2 | same bullet's neighbour | *"Backups are ~190 commits behind"* | corrected to the measured **193** in the same dated note |
+
+★ **A mechanism new to this project's collection: a CONDITIONAL instruction
+goes stale when its condition comes true for a reason the author did not
+enumerate.** *"If X is red, conclude Y"* is not a claim a grep can find — it is
+a claim about the **only possible cause** of a future observation, and the
+author was the person about to create the second cause. ⇒ **Write a conditional
+with its alternative causes named, or write it as an observation instead.**
+
+**Still in flight:**
+
+- **The engineer's `feedback_never_bundle_code_into_a_filing_commit.md` is
+  untracked** — committing it is one docs/`.claude/` commit and cannot trip any
+  gate. ★ **Updated at the close of this filing:** while it was being written
+  the engineer added the index line to
+  `.claude/agent-memory/pdfce-engineer/MEMORY.md` (*"Never bundle code into a
+  filing commit — it cannot file itself; the gate goes red on the commit meant
+  to make it green"*), so **the index entry now exists but is also
+  uncommitted**, and the lesson file itself is still `??`. Both halves need the
+  one commit. Checked by `git status --porcelain` and `git diff`, not inferred.
+- **Three Pass IDs minted by the 226th filing (`74.1`/`74.2`/`74.3`) appear in
+  no commit message**, so the next commit in that family must start at
+  **`74.4`** — carried forward, still undischarged.
+- Everything the 226th filing left queued is untouched: **`Pass 122.2`** (the
+  Ghent harness's positive criterion, on which every Ghent figure waits),
+  `97.1g` reserved and unbuilt, `97.1k`, `122.0`, `122.1`, `122.3`;
+  `MAX_CMYK_BUFFER_BYTES` still owes an arithmetic justification;
+  `resolve_indexed`'s discarded `ColorDiagnostics` still owed.
+- **The operator's stated first task next session is refining the banana PDF**
+  (`tools/gen-scale-demo/`), and `docs/NEXT_SESSION.md` leads with it.
+
+**For next session:**
+
+1. **Commit the engineer's untracked memory note**, and consider wiring the
+   librarian-commit predicate above — cheap, artefact-only, no rule needed.
+2. **Refine the banana PDF** — unchanged, the operator's own first task.
+3. **`Pass 122.2` first among the Ghent items** — unchanged from the 226th.
+4. **A backup bundle is 193 commits behind** and `v0.7.0`'s tag is in none;
+   cutting one is the operator's call.
+
+**Backup currency, checked rather than inferred.** `ls -lt
+D:/Dev/pdfce-backups/` → newest bundle **`pdfce-20260817-v060.bundle`,
+2026-08-17 20:34**; `git bundle list-heads` puts its `refs/heads/main` at
+**`3c4c00e`**; `git rev-list --count 3c4c00e..HEAD` = **193**, and
+`git rev-list --count v0.6.0..HEAD` = **193** as well — the self-checking
+identity still holds because the bundle head *is* `v0.6.0^{}`. `HEAD` is
+**`c24ad7a`** (`git describe --tags` = `v0.7.0-24-gc24ad7a`) and
+**`origin/main` is level with it** (`git rev-list --count origin/main..HEAD`
+= 0) — which is why `bd9844d`'s wrong claim had to be corrected in the record
+rather than amended in the message.
+
+**Ledger.** **No Pass shipped and none minted** — next in the `74` family
+**`74.4`**, next free in the `122` family **`122.4`**. Decisions **081**
+unchanged, next free **082**. Standing rules **`R211`** unchanged (**mint
+declined**; **`R210` amended in place**), next free **`R212`**. `SESSION_LOG`
+filings **226 → 227**, next free **228**.
+
+**RAG files written: none.** Both findings are this project's own filing
+procedure and its standing-rule taxonomy — neither generalises to any Rust
+project nor to the PDF domain, the only two tiers this role escalates to. The
+cross-project half is already on disk and **verified present by `ls`**:
+`D:/dev/rag/rust/a_gate_whose_input_is_the_commit_list_is_vacuous_when_the_pre_commit_sweep_runs_it.md`,
+which records the same *"anything that both reports and is reported on needs
+its two roles in separate commits"* shape.
+
+**Gates, re-run at the end of this filing** (working tree carries this filing's
+`docs/` edits and nothing else):
+
+| gate | result |
+|---|---|
+| `check-commits-filed.py` | **clean** — `c24ad7a` was the only red and this entry files it |
+| `check-passes-filed.py` | **clean** — every Pass-claiming commit filed |
+| `check-ledger-numbers.py` | **clean** — ceilings `R211 → next free R212`, `081 → next free 082`, `SESSION_LOG filings 227 → next free 228` |
+
+**`cargo fmt` / `cargo clippy` / `cargo test` were NOT run by this role** —
+this filing touches `docs/` only, by design: the commit it files was red
+precisely because a filing reached outside `docs/`.
