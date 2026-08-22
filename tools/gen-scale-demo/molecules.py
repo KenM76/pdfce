@@ -434,17 +434,45 @@ def _protein(o):
 # rather than implying a chain has a diameter.
 
 TEN = [
-    ("water", "1 water", "0.37 nm", _water),
-    ("starch", "2 starch", "1.3 nm helix", None),
-    ("sucrose", "3 sucrose", "1.68 nm", _sucrose),
-    ("glucose", "4 glucose", "1.00 nm", None),
-    ("fructose", "5 fructose", "0.83 nm", None),
-    ("pectin", "6 pectin", "1.5 nm chain", None),
-    ("cellulose", "7 cellulose", "3.5 nm fibril", None),
-    ("protein", "8 protein", "5.5 nm globule", None),
-    ("malic", "9 malic acid", "0.98 nm", _malic),
-    ("potassium", "10 potassium ion", "0.28 nm", _potassium),
+    ("water", "1 water", "74.9 % of the fruit", "0.37 nm"),
+    ("starch", "2 starch", "5.4 % of the fruit", "1.3 nm helix"),
+    ("glucose", "3 glucose", "5.0 % of the fruit", "1.00 nm"),
+    ("fructose", "4 fructose", "4.9 % of the fruit", "0.83 nm"),
+    ("sucrose", "5 sucrose", "2.4 % of the fruit", "1.68 nm"),
+    ("cellulose", "6 cellulose", "1.2 % of the fruit", "3.5 nm fibril"),
+    ("protein", "7 protein", "1.1 % of the fruit", "5.5 nm globule"),
+    ("pectin", "8 pectin", "0.7 % of the fruit", "1.5 nm chain"),
+    ("malic", "9 malic acid", "0.4 % of the fruit", "0.98 nm"),
+    ("potassium", "10 potassium ion", "0.36 % of the fruit", "0.28 nm"),
 ]
+
+# The ten sum to 96.4 % of a banana's fresh mass. The missing ~3.6 % is
+# fat, ash, hemicellulose, the other organic acids, and everything present
+# in milligrams.
+TEN_TOTAL = 96.4
+
+# ★ THESE PERCENTAGES ARE FOR A RIPE BANANA, and the ranking follows from
+# them rather than the other way round -- which is why this list is in a
+# different order than it was when the numbers were absent.
+#
+# Composition per 100 g of raw banana flesh: water 74.9, starch ~5.4,
+# glucose 4.98, fructose 4.85, sucrose 2.39, dietary fibre 2.6 (of which
+# cellulose ~1.2, pectin ~0.7, hemicellulose ~0.7), protein 1.09, malic
+# acid ~0.4, potassium 0.358.
+#
+# ★★ AN UNRIPE BANANA IS A COMPLETELY DIFFERENT LIST, and the difference
+# is the single largest fact about this fruit. Green pulp is roughly
+# 20-25 % STARCH and 1-2 % sugars; ripening converts almost all of it, so
+# starch falls by a factor of four while glucose and fructose rise by a
+# factor of ten. Rows 2 through 5 are the same carbon, before and after.
+#
+# That leaves a tension inside this document, and it is disclosed rather
+# than tidied away: the banana at the top of the page is drawn YELLOW, so
+# these ripe figures match it -- but the two cells are drawn with green
+# chloroplasts and starch grains, which is an UNRIPE section. Both are
+# deliberate (the starch grains are the thing that makes the pulp cell
+# recognisably a banana), and the box's subtitle says which state its
+# numbers describe so a reader can see the seam rather than trip over it.
 
 # ★ EVERY SIZE HERE IS THE DRAWN VAN DER WAALS ENVELOPE, and that is why
 # water reads 0.37 nm rather than the 0.28 nm everybody quotes.
@@ -514,7 +542,8 @@ MARGIN = 1700.0
 # before its contents are measured.
 MOL_ZONE = 6400.0                     # tallest molecule is the 5.8 nm protein
 LABEL_GAP = 900.0                     # molecule underside to first label baseline
-LABEL_BLOCK = NAME_SIZE * 1.45 + SIZE_SIZE * 1.45
+LABEL_LINES = 3                       # name, share of the fruit, size
+LABEL_BLOCK = NAME_SIZE * 1.45 * LABEL_LINES
 ROW_PITCH = MOL_ZONE + LABEL_GAP + LABEL_BLOCK + 1500.0
 HEADER = MARGIN + TITLE_SIZE * 1.25 + SUB_SIZE * 1.5 * 2 + 1300.0
 FOOTER = MARGIN + SIZE_SIZE * 2.0     # the scale bar sits in here
@@ -554,27 +583,32 @@ def box_content(form_names):
              f"(the ten most abundant molecules in these cells) Tj ET")
     o.append("0.36 0.36 0.40 rg")
     o.append(f"BT /F1 {SUB_SIZE:.0f} Tf {x0 + MARGIN:.0f} {top - SUB_SIZE * 1.6:.0f} Td "
-             f"(drawn 1:1, like the banana. sizes are the van der Waals envelope,) Tj ET")
+             f"(drawn 1:1, like the banana. sizes are the van der Waals envelope. shares are) Tj ET")
     o.append(f"BT /F1 {SUB_SIZE:.0f} Tf {x0 + MARGIN:.0f} {top - SUB_SIZE * 3.1:.0f} Td "
-             f"(ranked by share of fresh mass. by COUNT, water is ~99.5 % of them) Tj ET")
+             f"(% of fresh mass in RIPE pulp - green pulp is ~22 % starch and ~1 % sugar) Tj ET")
 
     # The grid, laid out from the top of the box downward, so that every
     # row's label block is placed inside a budget that was reserved for it
     # rather than wherever the previous row happened to end.
     grid_top = y0 + BOX_H - HEADER
 
-    for n, (key, name, size, _b) in enumerate(TEN):
+    for n, (key, name, share, size) in enumerate(TEN):
         col, row = n % 5, n // 5
         cx = x0 + MARGIN + COL_PITCH * (col + 0.5)
         cy = grid_top - ROW_PITCH * row - MOL_ZONE / 2.0
         o.append("q")
         o.append(f"1 0 0 1 {cx:.0f} {cy:.0f} cm /{form_names[key]} Do")
         o.append("Q")
-        # two label lines, centred under the molecule
+        # Three label lines, centred under the molecule: what it is, how
+        # much of the fruit it is, and how big it is. The SHARE sits
+        # second, above the size, because it is what orders the grid --
+        # a reader who wonders why cellulose comes before protein finds
+        # the answer on the line under both of them.
         base = cy - MOL_ZONE / 2.0 - LABEL_GAP
         for k, (txt, sz, col_rgb) in enumerate((
             (name, NAME_SIZE, (0.16, 0.16, 0.19)),
-            (size, SIZE_SIZE, (0.42, 0.42, 0.46)),
+            (share, SIZE_SIZE, (0.30, 0.34, 0.44)),
+            (size, SIZE_SIZE, (0.46, 0.46, 0.50)),
         )):
             w = len(txt) * sz * 0.53
             ly = base - k * NAME_SIZE * 1.45
@@ -596,7 +630,8 @@ def box_content(form_names):
     # the sentence -- the same two-copies-of-one-fact shape that `R212`
     # names, reproduced inside a caption.
     o.append(f"BT /F1 {SIZE_SIZE:.0f} Tf {sb_x + 1300:.0f} {sb_y - 40:.0f} Td "
-             f"(1 nm. this whole box is {BOX_W / 1000.0:.0f} nm wide) Tj ET")
+             f"(1 nm. box is {BOX_W / 1000.0:.0f} nm wide. these ten are "
+             f"{TEN_TOTAL:.1f} % of a banana) Tj ET")
     # Also derived, and for a sharper reason than the width above: the
     # first version said 546 000 000, which is the banana measured in
     # 0.28 nm water molecules -- correct against the KINETIC diameter and

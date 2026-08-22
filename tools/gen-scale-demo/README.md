@@ -240,13 +240,35 @@ table. 0.37 nm is how much space the molecule actually occupies. This box
 draws at 1:1 and invites you to measure it, so a label quoting a number
 the drawing disproves would be worse than useless.
 
-**The ranking is by share of fresh mass**, which is the sense in which
-these "make up" the cell: water ~75 %, starch ~20 % in an unripe fruit,
-then the sugars it becomes, then wall (pectin, cellulose), protein, malic
-acid, potassium. ★ By molecule **count** the ranking is not close and not
-interesting — water is about 99.5 % of them, and everything else competes
-for the remaining half percent. The box says which measure it is using,
-because a "top ten" with no unit is a claim with no content.
+**Every molecule's label carries its share of the fruit**, and the
+ranking follows from those numbers rather than the other way round:
+
+| | | | | |
+|---|---|---|---|---|
+| 1 water 74.9 % | 2 starch 5.4 % | 3 glucose 5.0 % | 4 fructose 4.9 % | 5 sucrose 2.4 % |
+| 6 cellulose 1.2 % | 7 protein 1.1 % | 8 pectin 0.7 % | 9 malic acid 0.4 % | 10 potassium 0.36 % |
+
+The ten come to **96.4 %** of a banana's fresh mass; the missing 3.6 % is
+fat, ash, hemicellulose, the other organic acids and everything present in
+milligrams.
+
+★ **These are RIPE figures, and an unripe banana is a completely
+different list** — green pulp is roughly 20–25 % starch and 1–2 % sugars,
+so ripening drops starch by a factor of four while glucose and fructose
+rise by a factor of ten. Rows 2 through 5 are the same carbon, before and
+after. That leaves a seam inside this document, disclosed rather than
+tidied away: the banana at the top of the page is drawn **yellow**, which
+these figures match, while the two cells are drawn with green
+chloroplasts and packed starch grains, which is an **unripe** section.
+Both are deliberate — the starch grains are what make the pulp cell
+recognisably a *banana* — and the box's subtitle names which state its
+numbers describe, so a reader can see the seam instead of tripping over
+it.
+
+★ By molecule **count** the ranking is not close and not interesting —
+water is about 99.5 % of them, and everything else competes for the
+remaining half percent. The box says which measure it is using, because a
+"top ten" with no unit is a claim with no content.
 
 Four of the ten are polymers with no single size at all. Each is drawn as
 a representative segment or cross-section and its label names the
@@ -306,6 +328,31 @@ Confirmed **not** to be the Form XObject path and **not** the `Pass 74.4`
 cull: a synthetic page with the same square drawn three ways — absolute
 coordinates, a `cm` translation, and a scaled `cm` — loses all three at
 the same magnification, including the one that uses no `cm` and no form.
+
+★ **And confirmed a second way, by accident, which is the more convincing
+of the two.** The molecule box renders off-centre in its frame, so the
+obvious move is to nudge `--region` by the observed offset. It does
+**nothing** — two successive nudges produced byte-identical framing, the
+box's bounds landing on the same pixels each time.
+
+`--region` is parsed as `f64` and stays `f64` through
+`region_base_geometry_of`, so the viewport really did move. What did not
+move is the *content*: its device translation is
+`540 × scale` (huge, rounded to its own `f32` ulp) plus a small offset,
+and at `scale = 8.1e6` that ulp is **512 px**. A 76-pixel correction is
+swallowed whole by the rounding of the sum. So the content's position is
+**quantised in ~500 px steps** at this magnification — which is the same
+drift stated as a resolution rather than as an error, and is why the
+saved render of the box sits up and to the right in its frame instead of
+centred. That framing is evidence, not sloppiness, and it is left as it
+came out.
+
+Reproduce it with:
+
+```
+pdfce-cli render-page banana-at-scale.pdf --page 1 --scale 8104752 \
+  --region "539.9998919,558.8519467,540.0001633,558.8521277" -o box.png
+```
 
 ⇒ **The whole box is readable at about 1 500 000 000 %**, which is what it
 was built for and is where every screenshot of it is taken. A single
