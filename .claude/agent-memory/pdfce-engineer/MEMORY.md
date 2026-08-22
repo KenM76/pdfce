@@ -18,6 +18,7 @@
 - [CAD exports are one object per view](project_cad_export_structure.md) — SolidWorks emits a whole view as ONE path with 1194 subpaths; sub-object selection is required, not a refinement
 - [Engineer does the observing](feedback_engineer_does_the_observing.md) — Ken won't beta-test; verify operator-facing behavior in the running app yourself, never stall waiting on him
 - [Librarian needs exact hashes](feedback_librarian_needs_exact_hashes.md) — doc agents have no shell; paste real commit hashes, never placeholders or "see git log"
+- [Never bundle code into a filing commit](feedback_never_bundle_code_into_a_filing_commit.md) — it cannot file itself; the gate goes red on the commit meant to make it green
 - [Pass 17 live-edit rendering](project_pass17_live_edit_rendering.md) — GUI rendered base revision not edit overlay, hiding 14 Passes of editing work; decisions 017 (egui_tiles adopted) + 018 (fix)
 - [Editing arc state](project_editing_arc_state.md) — 2026-08-05 snapshot: composite text/re corners/handles/Node rung shipped; per-run text deletion + reflow width still open, with the fix shape known
 - [Keep the error catching](feedback_keep_the_error_catching.md) — Ken rejects changes that trade error-detection for speed; declined splitting into per-crate sessions for that reason
