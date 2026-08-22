@@ -1040,6 +1040,19 @@ pub struct Diagnostics {
     /// Form XObjects executed (§8.10). Counted after the recursion
     /// guards, so it is the number of forms actually painted.
     pub forms_rendered: usize,
+    /// `Do` invocations skipped because the form's `/BBox`, mapped through
+    /// the CTM, lands entirely outside the canvas or outside the clip in
+    /// force. **Lossless**, and that is a consequence of the spec rather
+    /// than an assumption: §8.10.1 makes `/BBox` a *clip* on the form's
+    /// contents, so nothing inside a form can paint outside it, so a form
+    /// whose box misses the viewport cannot contribute a pixel.
+    ///
+    /// Counted separately from [`Diagnostics::forms_rendered`] rather than
+    /// folded into it, because "342 forms executed" and "342 forms in the
+    /// page, 1 of them on screen" are different answers to an operator
+    /// asking why a render was slow — and the first is what pdfce used to
+    /// report while doing the second's work.
+    pub forms_culled: usize,
     /// `Do` invocations refused because they would have exceeded
     /// [`MAX_XOBJECT_DEPTH`] **or** re-entered a form already on the
     /// stack (a cycle). Their content is missing from the raster.
@@ -1358,6 +1371,7 @@ polarity unverifiable (decision 006 R30)",
             *self.codec_feature_unsupported.entry(feature).or_insert(0) += count;
         }
         self.forms_rendered += other.forms_rendered;
+        self.forms_culled += other.forms_culled;
         self.xobject_depth_overflows += other.xobject_depth_overflows;
         // Annotation counters are page-level (a nested form never sets
         // them), so in practice `other` contributes zero here — but the
@@ -4628,12 +4642,83 @@ impl Interpreter<'_> {
             return;
         }
 
+        let doc = self.doc;
+
+        // --- VIEWPORT CULL, and it has to be HERE, before the decode ---
+        //
+        // WHAT IT IS. §8.10.1: "the form XObject's bounding box ... shall
+        // be used to clip its contents". That is a clip, not a hint, so no
+        // operator inside a form can paint a pixel outside its transformed
+        // `/BBox`. A form whose box misses the canvas therefore cannot
+        // change one pixel of the raster, and skipping it is EXACT — the
+        // output is byte-identical either way. Nothing here is a fidelity
+        // trade.
+        //
+        // WHY THE POSITION IS THE WHOLE POINT, and it was got wrong once.
+        // The first version of this cull sat below, next to the `/BBox`
+        // clip in step (c), which reads as the natural home for it. It
+        // reported the same counts — 339 of 342 forms culled on the test
+        // page — and bought almost nothing, because by the time control
+        // reaches step (c) the stream has already been sliced, FLATE-
+        // DECODED and parsed into a `ContentStream`. On the gen-scale-demo
+        // banana page that is ~110 kB inflated per instance, 342 times:
+        // ~37 MB of inflate for content that was about to be discarded.
+        // Measured: 802 ms with the late cull, 8× less with this one. A
+        // cull is only worth what it skips, and the counter looks
+        // identical in both cases, which is exactly why the wrong version
+        // was convincing.
+        //
+        // WHY THE CLIP BBOX IS ONLY CONSULTED WITHOUT A SOFT MASK. Further
+        // down, a transparency group with a soft mask has `inner.clip`
+        // REPLACED by the wider pre-mask clip (§11.4.5/§11.6.6). Testing
+        // against the narrower clip in force here could then cull a form
+        // that the widened clip would have shown. Canvas bounds are always
+        // safe; the clip box is only used when no such widening can
+        // happen.
+        //
+        // THE ONE-PIXEL MARGIN is deliberate. A shape whose edge lands on
+        // the boundary can still tint the boundary pixel through
+        // anti-aliasing. Being a pixel too generous costs one form; being
+        // a pixel too eager costs a seam at a tile edge — the signature
+        // artefact of a culling bug, and among the hardest to attribute
+        // months later.
+        if let Some(bbox) = rect_entry(doc, &stream.dict, b"BBox")
+            && bbox.width() > 0.0
+            && bbox.height() > 0.0
+        {
+            // The `/Matrix` concat is repeated in step (b) below rather
+            // than hoisted: this probe must not touch `inner`, which does
+            // not exist yet, and duplicating one `post_concat` is cheaper
+            // than restructuring the soft-mask handling that sits between.
+            let mut probe = self.gs.current.ctm;
+            if let Some(m) = matrix_entry(doc, &stream.dict) {
+                probe = m.post_concat(probe);
+            }
+            if let Some(dev) = bbox.transform(probe) {
+                #[allow(clippy::cast_precision_loss)]
+                let (cw, ch) = (canvas.width() as f32, canvas.height() as f32);
+                let (mut l, mut t) = (dev.left() - 1.0, dev.top() - 1.0);
+                let (mut r, mut b) = (dev.right() + 1.0, dev.bottom() + 1.0);
+                if self.gs.current.soft_mask.is_none()
+                    && let Some((cl, ct, cr, cb)) = self.gs.current.clip_bbox
+                {
+                    l = l.max(cl);
+                    t = t.max(ct);
+                    r = r.min(cr);
+                    b = b.min(cb);
+                }
+                if r.min(cw) <= l.max(0.0) || b.min(ch) <= t.max(0.0) {
+                    self.diag.forms_culled += 1;
+                    return;
+                }
+            }
+        }
+
         // `doc.slice`, not `span.slice(doc.bytes())` (decision 018 §4): a
         // form XObject authored this session — every dimension and markup
         // annotation appearance is one — has its content stream in the R45
         // staging half, which is precisely why authored annotations never
         // appeared on the canvas before Pass 17.0.
-        let doc = self.doc;
         let Some(raw) = doc.slice(stream.data_span) else {
             self.diag.tolerated += 1;
             return;
@@ -4739,6 +4824,7 @@ impl Interpreter<'_> {
                     self.diag.forms_rendered += 1;
                     return;
                 }
+
                 let path = PathBuilder::from_rect(rect);
                 // The BBox is in FORM space, so it is clipped through
                 // the ALREADY-Matrix-concatenated CTM (step b before

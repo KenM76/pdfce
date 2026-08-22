@@ -154,6 +154,7 @@
 //! | `images_unsupported` | `images_unsupported` | "how many images are simply MISSING from the raster?" |
 //! | `contents_unresolved` | `contents_streams_unresolved` | "how many of this page's `/Contents` streams are not in the file at all, so their marks are MISSING from the raster?" (§7.3.10 + Table 30 — legal, but the page is incomplete) |
 //! | `forms` | `forms_rendered` | "how many form XObjects were executed?" |
+//! | `forms_culled` | `forms_culled` | "how many were skipped because their `/BBox` missed the viewport?" |
 //! | `images_codec_unsupported` | `images_codec_unsupported` | "how many images need a codec this build doesn't have?" |
 //! | `codec_features` | `codec_feature_unsupported` (summed) | "how many images need a codec *variant* this build doesn't have?" |
 //! | `codec_geometry_mismatch` | `codec_geometry_mismatch` | "how many images disagree with their own codestream?" |
@@ -7743,7 +7744,7 @@ numbered 1..={})",
     println!(
         "rendered {} page {page_number} -> {} {}x{}; \
 substituted={} notdef={} unsupported={} unknown={} deferred={} \
-images={} images_unsupported={} forms={} \
+images={} images_unsupported={} forms={} forms_culled={} \
 images_codec_unsupported={} codec_features={} codec_geometry_mismatch={} \
 dct_cmyk={} lzw_anomalies={} dct_cmyk_unverifiable={} jpx_preblended={} \
 annots={} annots_painted={} annots_no_ap={} annots_hidden={} \
@@ -7782,6 +7783,7 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         d.images_rendered,
         d.images_unsupported,
         d.forms_rendered,
+        d.forms_culled,
         d.images_codec_unsupported,
         d.codec_feature_unsupported.values().sum::<usize>(),
         d.codec_geometry_mismatch,

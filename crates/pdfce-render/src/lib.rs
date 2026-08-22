@@ -1868,6 +1868,67 @@ mod tests {
     }
 
     #[test]
+    fn form_whose_bbox_misses_the_canvas_is_culled_not_executed() {
+        // The cull in `do_form` is an OPTIMISATION that must not be
+        // observable in the raster, so this test asserts both halves:
+        // the form is counted as culled rather than rendered, AND the
+        // page is byte-identical to the same page with no `Do` at all.
+        //
+        // §8.10.1 makes `/BBox` a clip on the form's contents, so a form
+        // painting far outside its own box paints nothing wherever the
+        // box lands. Here the box is translated a page-width away, so it
+        // cannot touch a pixel and skipping the whole stream is exact.
+        let (doc, page) = doc_with_xobject(
+            "/X1 Do",
+            &form_dict("/BBox [0 0 10 10] /Matrix [1 0 0 1 900 900] /Resources << >>"),
+            b"0 0 0 rg 0 0 100 100 re f",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert_eq!(out.diagnostics.forms_culled, 1, "off-canvas form culled");
+        assert_eq!(
+            out.diagnostics.forms_rendered, 0,
+            "a culled form is not a rendered form; conflating the two is \
+             how a slow render reports as a fast one"
+        );
+
+        // The byte-identity half. Rendered against the same page with the
+        // `Do` removed entirely — if the cull ever became approximate,
+        // this is the assertion that would catch it.
+        let (doc2, page2) = doc_with_xobject(
+            " ",
+            &form_dict("/BBox [0 0 10 10] /Resources << >>"),
+            b"0 0 0 rg 0 0 100 100 re f",
+        );
+        let bare = render_page(&doc2, &page2, 1.0).unwrap();
+        assert_eq!(
+            out.pixmap.data(),
+            bare.pixmap.data(),
+            "culling must be invisible in the raster"
+        );
+    }
+
+    #[test]
+    fn form_partly_on_canvas_is_not_culled() {
+        // The complement of the test above, and the one that would fail
+        // if the cull were made greedier than §8.10.1 allows. The BBox
+        // straddles the left edge, so part of it is on the canvas and the
+        // form must run.
+        let (doc, page) = doc_with_xobject(
+            "/X1 Do",
+            &form_dict("/BBox [0 0 40 40] /Matrix [1 0 0 1 -20 -20] /Resources << >>"),
+            b"0 0 0 rg 0 0 100 100 re f",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert_eq!(out.diagnostics.forms_culled, 0);
+        assert_eq!(out.diagnostics.forms_rendered, 1);
+        assert_eq!(
+            pixel(&out.pixmap, 5, 95),
+            (0, 0, 0),
+            "the on-canvas part of the form still paints"
+        );
+    }
+
+    #[test]
     fn form_bbox_clips_the_form_content() {
         // §8.10.1 step (c): "clip according to the form dictionary's
         // BBox entry." The form tries to fill the whole page.

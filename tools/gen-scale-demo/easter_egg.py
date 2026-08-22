@@ -32,6 +32,8 @@ mitochondria in the strokes resolve at about 250 000 %.
 
 import math
 
+import mitochondrion
+
 UM = 1.0 / (25.4 / 72.0 * 1000.0)
 
 
@@ -113,33 +115,34 @@ def _resample(pts, spacing):
     return out
 
 
-def draw_mito(d, cx, cy, rot, rx=0.75, ry=0.35, cristae=2):
-    """One mitochondrion: outer membrane plus a couple of cristae."""
-    d.fill(0.74, 0.52, 0.47)
-    d.stroke(0.48, 0.30, 0.27)
-    d.width(0.10)
-    d.ellipse(cx, cy, rx, ry, rot)
-    d.op("B")
-    if cristae:
-        d.stroke(0.48, 0.30, 0.27)
-        d.width(0.07)
-        for i in range(cristae):
-            t = (i + 1) / (cristae + 1.0) * 2 - 1
-            t *= rx * 0.62
-            x0 = cx + math.cos(rot) * t - math.sin(rot) * ry * 0.72
-            y0 = cy + math.sin(rot) * t + math.cos(rot) * ry * 0.72
-            x1 = cx + math.cos(rot) * t + math.sin(rot) * ry * 0.72
-            y1 = cy + math.sin(rot) * t - math.cos(rot) * ry * 0.72
-            d.moveto(x0, y0)
-            d.lineto(x1, y1)
-            d.op("S")
+def draw_mito(d, cx, cy, rot, rx=0.75, ry=0.35, cristae=5, variant=0, flip=False):
+    """Place one fully-detailed mitochondrion, centred at (cx, cy) in the
+    cell's micrometre space.
+
+    This used to draw the organelle inline as an ellipse plus one or two
+    chords. It now places a shared Form XObject from `mitochondrion`, whose
+    interior carries the real compartment topology -- two membranes, crista
+    junctions, ATP synthase, ribosomes, a nucleoid. The beads in the heart
+    and the letters get the SAME anatomy as the big ones in the cytoplasm;
+    they are smaller organelles, not simpler ones.
+    """
+    px, py = d.p(cx, cy)
+    d.op(mitochondrion.place(px, py, rot, rx * 1000.0, ry * 1000.0,
+                             cristae, variant, flip))
 
 
 def chain(d, polylines, spacing, **kw):
+    """Bead mitochondria along polylines at even arc-length spacing.
+
+    `variant`/`flip` cycle so consecutive beads are not identical. With
+    three variants and a mirror that is six apparent organelles before the
+    pattern repeats, which at this bead pitch is far enough apart that the
+    eye reads tissue rather than a stamp.
+    """
     n = 0
     for pl in polylines:
         for x, y, a in _resample(pl, spacing):
-            draw_mito(d, x, y, a, **kw)
+            draw_mito(d, x, y, a, variant=n % 3, flip=bool((n // 3) % 2), **kw)
             n += 1
     return n
 
@@ -149,14 +152,15 @@ def draw(d, cx=152.0, cy=158.0):
     total = 0
 
     # the outer heart
-    total += chain(d, [heart_points(cx, cy + 6, 140.0, 125.0, 260)], 2.3)
+    total += chain(d, [heart_points(cx, cy + 6, 140.0, 125.0, 260)], 2.3,
+                   cristae=7)
 
     # KEN <3 EMILY, centred, 12 um capitals
     line = "KEN <3 EMILY"
     size = 12.0
     w = string_width(line, size)
     polys, _ = string_polylines(line, cx - w / 2.0, cy - size / 2.0 + 2.0, size)
-    total += chain(d, polys, 1.75, rx=0.62, ry=0.30, cristae=1)
+    total += chain(d, polys, 1.75, rx=0.62, ry=0.30, cristae=6)
 
     # the anniversary line, in ordinary type below the heart. Ordinary
     # rather than beaded on purpose: at 7 um a mitochondria-built letter

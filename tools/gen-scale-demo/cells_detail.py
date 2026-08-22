@@ -20,7 +20,13 @@ above it:
     starch grains, nucleus      25-45 um    0.07-0.13 pt  ~12 000 %
     organelle labels            8 um        0.023 pt      ~45 000 %
     chloroplasts, plasmodesmata 1-5 um      0.003-0.014   ~60 000 %
-    mitochondria, cristae       0.7-1.5 um  0.002-0.004   ~250 000 %
+    whole mitochondria          1.2-3 um    0.003-0.009   ~250 000 %
+    cristae, nucleoids          25-210 nm   7e-5 - 6e-4   ~3 000 000 %
+    ATP synthase particles      10 nm       2.8e-5 pt     ~35 000 000 %
+
+The last two tiers are `mitochondrion.py`, which is why they are stated
+in nanometres: past the whole-organelle tier the natural unit changes,
+and so does the authoring coordinate system.
 
 THE BIOLOGY, and where it is a simplification
 =============================================
@@ -34,9 +40,18 @@ THE BIOLOGY, and where it is a simplification
   that become carotenoid-loaded chromoplasts as it ripens. Drawn green,
   i.e. unripe.
 * Simplified deliberately: no endoplasmic-reticulum network beyond a few
-  strands, no ribosomes, no accurate membrane bilayers. Organelle COUNTS
-  are illustrative; a real section would show far more mitochondria.
+  strands, no cytosolic ribosomes, no accurate membrane bilayers.
+  Organelle COUNTS are illustrative; a real section would show far more
+  mitochondria.
+* The one organelle that is NOT simplified is the mitochondrion. Every
+  one on the page -- in both cells and in the easter egg -- is drawn to
+  its real internal anatomy by `mitochondrion.py`: two membranes, crista
+  junctions, ATP synthase particles, mitoribosomes, an mtDNA nucleoid.
+  That module owns the biology and the nanometre coordinate system; this
+  one only says where they go.
 """
+
+import mitochondrion
 
 UM = 1.0 / (25.4 / 72.0 * 1000.0)  # points per micrometre
 
@@ -228,25 +243,14 @@ def draw_pulp(ox, oy):
         d.ellipse(nx + dx, ny + dy, r, r * 0.85, 0)
         d.op("f")
 
-    # mitochondria in the peripheral cytoplasm, each with a cristae line
-    for cx, cy, rot in MITOS:
-        d.fill(0.72, 0.55, 0.50)
-        d.stroke(0.50, 0.34, 0.30)
-        d.width(0.18)
-        d.ellipse(cx, cy, 1.5, 0.72, rot)
-        d.op("B")
-        import math
-
-        d.stroke(0.50, 0.34, 0.30)
-        d.width(0.13)
-        for t in (-0.6, 0.0, 0.6):
-            x0 = cx + math.cos(rot) * t - math.sin(rot) * 0.55
-            y0 = cy + math.sin(rot) * t + math.cos(rot) * 0.55
-            x1 = cx + math.cos(rot) * t + math.sin(rot) * 0.55
-            y1 = cy + math.sin(rot) * t - math.cos(rot) * 0.55
-            d.moveto(x0, y0)
-            d.lineto(x1, y1)
-            d.op("S")
+    # mitochondria in the peripheral cytoplasm. These are the largest on
+    # the page -- 3.0 x 1.44 um, a normal size for plant parenchyma -- so
+    # they carry the most cristae and are the tier at which ATP synthase
+    # particles first become countable.
+    for i, (cx, cy, rot) in enumerate(MITOS):
+        px, py = d.p(cx, cy)
+        d.op(mitochondrion.place(px, py, rot, 1500.0, 720.0, 15,
+                                 variant=i % 3, flip=bool((i // 3) % 2)))
 
     # a Golgi stack and a few ER strands
     d.stroke(0.42, 0.55, 0.62)
@@ -385,13 +389,15 @@ def draw_skin(ox, oy, w=60.0, h=35.0):
     d.ellipse(w * 0.28 + 1.2, h * 0.62 - 0.6, 1.7, 1.5, 0)
     d.op("f")
 
-    # mitochondria
-    for cx, cy, rot in ((38, 18, 0.4), (48, 13, -0.3), (8, 26, 0.2)):
-        d.fill(0.72, 0.55, 0.50)
-        d.stroke(0.50, 0.34, 0.30)
-        d.width(0.12)
-        d.ellipse(cx, cy, 1.1, 0.55, rot)
-        d.op("B")
+    # mitochondria. These had NO internal structure at all before -- the
+    # same organelle drawn three different ways in one document is what
+    # prompted the rewrite. They now share the anatomy of every other
+    # mitochondrion on the page, at 2.2 x 1.1 um.
+    for i, (cx, cy, rot) in enumerate(((38, 18, 0.4), (48, 13, -0.3),
+                                       (8, 26, 0.2))):
+        px, py = d.p(cx, cy)
+        d.op(mitochondrion.place(px, py, rot, 1100.0, 550.0, 12,
+                                 variant=i % 3, flip=bool(i % 2)))
 
     # plasmodesmata through the side walls
     d.stroke(0.33, 0.45, 0.30)

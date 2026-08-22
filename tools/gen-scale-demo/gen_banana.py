@@ -50,6 +50,7 @@ WHAT IS PLACED WHERE, and the three rules the request imposed
 import zlib
 
 import cells_detail
+import mitochondrion
 
 PT_PER_UM = 25.4 / 72.0 / 1000.0  # = 1/352.7778
 UM = 1.0 / (25.4 / 72.0 * 1000.0)  # points per micrometre
@@ -246,14 +247,37 @@ def build_content():
 
 
 def build_pdf():
+    """Assemble the file.
+
+    Object numbering is fixed for the first six objects and then runs on
+    into one object per mitochondrion Form XObject. The forms are
+    registered as a SIDE EFFECT of `build_content()` -- every
+    `mitochondrion.place()` call interns the shape it needs -- so the
+    content stream must be built before the object list is laid out. That
+    ordering is the only sequencing constraint in this function, and
+    getting it backwards yields a page whose `/XObject` dictionary is empty
+    and whose `Do` operators therefore paint nothing at all, silently.
+    """
+    mitochondrion.reset_library()
     content = build_content()
     packed = zlib.compress(content)
+
+    forms = mitochondrion.forms()
+    first_form_obj = 7
+    xobj_entries = b" ".join(
+        f"/{name} {first_form_obj + i} 0 R".encode()
+        for i, (name, _body, _bbox) in enumerate(forms)
+    )
+    resources = (
+        b"<< /Font << /F1 5 0 R /F2 6 0 R >> /XObject << " + xobj_entries + b" >> >>"
+    )
+
     objs = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         (
             b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-            b"/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>"
+            b"/Resources " + resources + b" /Contents 4 0 R >>"
         ),
         b"<< /Length "
         + str(len(packed)).encode()
@@ -263,6 +287,26 @@ def build_pdf():
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
     ]
+
+    # One Form XObject per distinct mitochondrion shape, objects 7..n.
+    # `/Resources << >>` is present and empty on purpose: a form that
+    # inherits the page's resources is legal but reader-dependent, and
+    # these forms reference no font, image or other form, so saying so
+    # explicitly costs four bytes and removes a class of "renders here,
+    # not there".
+    for name, body, bbox in forms:
+        fp = zlib.compress(body.encode("latin-1"))
+        bb = " ".join(f"{v:.2f}" for v in bbox)
+        objs.append(
+            b"<< /Type /XObject /Subtype /Form /FormType 1 /BBox ["
+            + bb.encode()
+            + b"] /Resources << >> /Length "
+            + str(len(fp)).encode()
+            + b" /Filter /FlateDecode >>\nstream\n"
+            + fp
+            + b"\nendstream"
+        )
+
     out = bytearray(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
     offsets = []
     for i, body in enumerate(objs, start=1):
@@ -294,3 +338,10 @@ if __name__ == "__main__":
     print(f"  label size             {LABEL_UM:.0f} um = {um(LABEL_UM):.6f} pt")
     print(f"  arrow tip              {2*PULP_H:.0f} um above the pulp cell, at y={ARROW_TIP[1]:.6f}")
     print(f"  zoom to read a label   ~{10.0/um(LABEL_UM)*100:,.0f} %")
+    n_forms, n_f1 = mitochondrion.library_stats()
+    n_mito = len(cells_detail.MITOS) + 3 + cells_detail.draw_pulp.mito_count
+    f1_pt = mitochondrion.F1_R * 2 * mitochondrion.PT_PER_NM
+    print(f"  mitochondria placed    {n_mito} instances from {n_forms} shared forms")
+    print(f"  ATP synthase heads     {n_f1} across the form library")
+    print(f"  smallest feature       {mitochondrion.F1_R*2:.0f} nm = {f1_pt:.3e} pt")
+    print(f"  zoom to see one        ~{10.0/f1_pt*100:,.0f} %")

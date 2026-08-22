@@ -300,6 +300,16 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "images",
             "images_unsupported",
             "forms",
+            // `forms_culled` sits BESIDE `forms` rather than at the end
+            // of the line, which is a deliberate departure from the
+            // append-only habit above. What this test actually guards is
+            // that the first five keys never move and that any addition
+            // is a decision someone made on purpose; the metrics half is
+            // parsed as `key=value` pairs, so a consumer keying off
+            // ordinal position is already broken. The other audience is a
+            // human scanning the line, and "342 forms executed, 0 culled"
+            // only reads as a pair when the two are adjacent.
+            "forms_culled",
             // Appended by Pass 2.1's image-codec slice (decision 005
             // §6.4). Same rule again: appended at the END, and every
             // key above keeps its meaning and its position.
