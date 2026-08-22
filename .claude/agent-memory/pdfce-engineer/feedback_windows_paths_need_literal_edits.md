@@ -141,6 +141,30 @@ I printed the message back. **Neither would have surfaced from a green
 run**, which is the property they share with the vacuous tests in
 [[splice-end-marker-must-be-searched-from-start]]'s neighbourhood.
 
+**★ 2026-08-22 — THREE MORE, and the new information is about the RETRY,
+not the failure.** Writing the mitochondrion module and its README, three
+`python - <<'EOF'` heredocs went wrong in two distinct modes:
+
+- **Loud:** two heredocs whose payload was ordinary English prose died with
+  `unexpected EOF while looking for matching "'"`. The payload contained
+  nothing but an apostrophe in a word like *"cell's"*. Quoting the delimiter
+  did not help, consistent with the 2026-08-20 finding that the escape
+  processing happens above bash.
+- **Silent:** a `\\n` written inside a Python string arrived as a **real
+  newline**, so an anchor built from a Rust source line never matched and
+  the `assert` fired. That is the 2026-08-17 mode again, unchanged.
+
+**What is actually new: I retried instead of switching.** After the first
+heredoc failed I re-ran a variant of the same approach, then debugged *why*
+the anchor did not match, then finally used `Edit`. That cost four tool
+calls to reach a conclusion this file already states in bold.
+
+**How to apply — a reflex, not a judgement: the FIRST time a heredoc
+misbehaves, stop and use `Write`/`Edit`.** Do not diagnose it, do not try a
+different quoting form, do not double anything. The diagnosis is already
+written above and it never changes. The loud mode is the lucky one; the same
+call could have half-applied.
+
 Related: [[absence-needs-an-unscoped-query]] — same family. Both are cases
 where a tool returned something that *looked* like a normal result, and the
 only defence was checking with an instrument rather than with a glance. Also

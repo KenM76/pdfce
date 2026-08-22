@@ -48,4 +48,5 @@
 - [A correct fix can be unreachable](feedback_a_correct_fix_can_be_unreachable.md) — A/B the counters on a pre-fix binary; a plan's ORDERING of two items is its least-checked claim
 - [`git add -A` is unsafe with live subagents](feedback_git_add_all_is_unsafe_with_live_subagents.md) — their scratch files and mid-flight doc edits land in your code commit, and this repo is public
 - [Compositor state](project_compositor_state.md) — 2026-08-21 evening: the CMYK colorant buffer SHIPPED; wrong-space blends 107→0; the harness's own pass count is an OVER-COUNT (it implements one of the suite's two criteria)
+- [The banana scale demo is a showpiece AND an instrument](project_banana_scale_demo.md) — Ken's own artefact with a personal easter egg; it found a renderer defect and two silent geometry bugs in one session
 - [f32 and no threads in the engine](project_compositor_element_type_and_threading.md) — decided 2026-08-21; `rayon` and `std::thread` BOTH compile for wasm32, so the wasm gate cannot catch a threading regression
