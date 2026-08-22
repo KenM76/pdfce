@@ -4689,6 +4689,68 @@ magnification. **156 sheets in 29 s = ~186 ms per sheet** after the fix.
 instruction. `R151`'s callable-and-uncalled hazard applies to the GUI
 half of this surface and is recorded rather than smoothed over.
 
+### (AA) `e36f96e` — `pdfce_render::Diagnostics` gains `forms_culled`, and `forms_rendered` CHANGES WHAT IT COUNTS without changing its type or its name — 2026-08-22
+
+**`Pass 74.4`.** A `pdfce-render` entry, filed in this §4.1 sync for the
+same reason (W) and (Z) were: **this section is where the actual shipped
+surface of the headless crates is kept true, and a downstream project
+(`D:\dev\pdfceGUI`) builds against it.** Architectural position:
+**decision 082** (§12).
+
+#### New public surface
+
+```rust
+// crates/pdfce-render/src/interpret.rs — pub struct Diagnostics
+pub forms_culled: usize,
+```
+
+One additive field. `Diagnostics` is aggregated across nested
+interpretations, and `forms_culled` is summed in the same merge as every
+other counter, so a form culled inside a nested form is counted once at
+the top.
+
+#### ★ The part a signature cannot record: `forms_rendered` narrowed
+
+`forms_rendered` is unchanged in name, type and position, and **it now
+counts fewer things.** Before `e36f96e` every `Do` that cleared the
+recursion and depth guards was counted; now a `Do` whose transformed
+`/BBox` misses the canvas or the clip returns **before** that point and
+increments `forms_culled` instead.
+
+**This is a contract change with no compile-time signal**, which is the
+hazard `a_shortfall_counter_encodes_the_world_in_which_the_shortfall_was_unfixable.md`
+(`D:/dev/rag/rust/`) names: a consumer reading `forms_rendered` as *"how
+many form XObjects does this page paint"* is now wrong on any page where
+anything is off screen, and nothing in its build will say so. The
+mitigation shipped in the same commit is the **companion key** that
+finding prescribes — `forms_culled` is emitted beside `forms` rather than
+appended at the end of `pdfce-cli render-page`'s stable metrics line,
+precisely so the pair reads as a pair:
+
+```
+… images=<Q> images_unsupported=<R> forms=<S> forms_culled=<S'> …
+```
+
+`forms + forms_culled` is the quantity that used to be `forms` alone
+(modulo the depth/cycle refusals, which have always been counted
+separately as `xobject_depth_overflows`).
+
+**Two survivors of that narrowing are recorded as owed, not done** —
+`crates/pdfce-cli/src/main.rs`'s module-docstring line template (which
+still stops at `forms=<S>`) and the same block's *"new counters may be
+appended … existing keys never move"* promise (which `forms_culled`'s
+deliberate mid-line insertion over-states). Both are `crates/`, therefore
+the engineer's, in their own commit. See `ROADMAP.md`'s
+two-hundred-and-twenty-eighth filing, hard-rule-11 sweep.
+
+#### What is NOT in this entry
+
+No `pdfce-core` surface changed. No trait, no error variant, no
+`EditSession` verb. `render_page` / `render_page_region` / `record_page` /
+`replay_region` keep their signatures exactly; the cull is interior to
+`do_form` and **observable only through the counter**, never through the
+raster — which is the whole of decision 082.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -24143,3 +24205,70 @@ free 072.**
   reasons stated in the head of this entry.
 
   **Ceiling moves 080 → 081; next free 082.**
+
+---
+
+- **2026-08-22 — Decision 082. `pdfce-render` may skip work ONLY where
+  skipping is EXACT. A speed-up that changes the raster is the OPERATOR's
+  decision, not the engineer's — and it is asked as an open question, never
+  taken as an optimisation.** `Pass 74.4` (`e36f96e`) added a viewport cull
+  to `do_form`: a `Do` whose `/BBox`, mapped through the CTM, lands entirely
+  outside the canvas or the clip in force is skipped without decoding its
+  stream. **The warrant is a spec clause, not a heuristic** — ISO 32000-1
+  **§8.10.1** says the form XObject's bounding box *"shall be used to clip
+  its contents"*, so no operator inside a form can mark a pixel outside its
+  transformed `/BBox`, so a form whose box misses the viewport **cannot
+  contribute a pixel.** The acceptance criterion is stated as an identity
+  rather than as a tolerance: `form_whose_bbox_misses_the_canvas_is_culled_not_executed`
+  asserts the raster is **byte-identical** to the same page with the `Do`
+  removed entirely, and `form_partly_on_canvas_is_not_culled` asserts the
+  cull has not become greedier than §8.10.1 allows. Measured: the deepest
+  tier of the `gen-scale-demo` banana page, 339 of 342 forms culled,
+  **802 ms → 120 ms** once the cull was hoisted above the flate-decode.
+  **The boundary this decision draws, and why it is architectural rather
+  than a preference.** The same commit measured a *second*, larger cost that
+  the cull cannot touch: at page-fit zoom **all 342 forms ARE on the
+  canvas**, each ~1/70th of a pixel across, and every path inside every one
+  of them is still rasterised — **~1.5 s**, against ~110 ms before that page
+  gained ~1 000 000 path operators. Skipping sub-pixel geometry would fix it
+  and **would be lossy**: those paths contribute anti-aliased coverage, so
+  the raster would change. It was **not built**, and the reason is not that
+  it is hard. Two distinct kinds of skip were available in one afternoon,
+  and only one of them is a thing an engineer may take:
+  | | warrant | observable in the raster? | whose call |
+  |---|---|---|---|
+  | `/BBox` viewport cull | ISO 32000-1 §8.10.1 makes `/BBox` a clip | **no — byte-identical** | engineer's, and it shipped |
+  | sub-pixel geometry skip | none; a judgement that the coverage is small enough not to matter | **yes** | **operator's** — `ROADMAP.md` open question **`(br)`** |
+  **Why this needs saying at all, given rules 3 and 4 already exist.**
+  `CLAUDE.md` rule 3 (round-trip / minimal-diff) governs the **writer** —
+  what bytes a save emits. Rule 4 (fuzzy, never sneaky) governs
+  **inference** — what pdfce guesses about a document's content. Neither
+  reaches the **renderer's** freedom to draw a page approximately, and a
+  rasteriser is exactly where "it is only a few pixels" arguments are
+  cheapest to make and hardest to falsify: nobody diffs a page they have not
+  seen the correct version of. Without this decision the sub-pixel skip is
+  an ordinary performance ticket that any session could pick up on a
+  measured 10× win. **With it, the win is not the criterion.**
+  **Corollary on instrumentation, carried because it is what nearly got this
+  wrong.** The first version of the cull sat beside the `/BBox` clip, after
+  the stream had been sliced, flate-decoded and parsed. It reported the
+  **same `339 of 342`** and bought almost nothing (~110 kB of inflate ×
+  342 instances ≈ **37 MB of decompression per render for content about to
+  be discarded**). ⇒ **A cull's counter is invariant to the cull's
+  placement, so the instrument added to prove the optimisation works cannot
+  detect that it barely works.** Accept an early-out on a **wall-clock
+  delta**, never on a hit rate. Full derivation, ecosystem-wide:
+  `D:/dev/rag/rust/a_cull_placed_after_the_decode_reports_the_same_count_and_buys_almost_nothing.md`.
+  **Body-section updates:** §4.1 gains sync entry **(AA)** —
+  `Diagnostics::forms_culled` added, and `forms_rendered`'s narrowing
+  recorded as a contract change with no compile-time signal. **§3 and §5 are
+  not engaged**: no crate boundary moved, and nothing here writes a
+  document.
+  **No standing rule minted**, and the decline is argued in `ROADMAP.md`'s
+  two-hundred-and-twenty-eighth filing: *"place the early-out above the work
+  it makes unnecessary"* has **no artefact-only oracle** — deciding it
+  requires knowing which work the predicate needs in order to be evaluated,
+  which is the per-call-site data-flow judgement itself. That is `R210`'s
+  own minting test, answered in the negative, on the same day `R211` was
+  minted five commits earlier for answering it in the positive.
+  **Ceiling moves 081 → 082; next free 083.**

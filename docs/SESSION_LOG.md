@@ -56347,3 +56347,216 @@ its two roles in separate commits"* shape.
 **`cargo fmt` / `cargo clippy` / `cargo test` were NOT run by this role** —
 this filing touches `docs/` only, by design: the commit it files was red
 precisely because a filing reached outside `docs/`.
+
+## 2026-08-22 (two-hundred-and-twenty-eighth filing) — `PASS 74.4` + `PASS 74.5` (`e36f96e`): THE RENDERER STOPS EXECUTING FORMS IT CANNOT SEE, AND EVERY MITOCHONDRION ON THE DEMO PAGE IS DRAWN TO ITS REAL ANATOMY; ★★★★ **THE POSITION OF THE CULL MATTERED MORE THAN THE CULL, AND THE COUNTER COULD NOT TELL THE TWO APART — `339 of 342` culled and `802 ms` beside the `/BBox` clip, `339 of 342` culled and `120 ms` hoisted above the flate-decode, ~37 MB of inflate per render for content about to be discarded**; ★★★ **DECISION 082 MINTED — A RENDER MAY SKIP WORK ONLY WHERE SKIPPING IS *EXACT*; A LOSSY SPEED-UP IS THE OPERATOR'S CALL**, which is what turns the un-done sub-pixel work into open question **`(br)`** instead of a performance ticket any session could pick up on a measured 10× win; ★★ **TWO SILENT GEOMETRY BUGS, BOTH FOUND BY RENDERING RATHER THAN BY READING, BOTH PRODUCING A *PLAUSIBLE PICTURE*** — a unit constant inverted by 8.03× that left every organelle correctly placed, correctly shaped and an eighth of its size, and a self-crossing subpath whose stroke was perfect while nonzero winding filled every crista lumen with matrix colour; ★★ **THREE COPIES OF ONE DRAWING HAD DRIFTED TO THREE CRISTAE / ONE OR TWO / NONE AT ALL, AND NOTHING COULD HAVE CAUGHT IT** — no compiler, no test, no diff anybody reads, and no two of the three were ever on screen at the same magnification; ★ **MINT DECLINED on an IMPOSSIBILITY warrant, not an instance count** — the opposite answer to `R210`'s minting test from the one `R211` got five commits ago; ★ **ALL FOUR GATES GREEN**
+
+**Shipped:**
+
+- **`Pass 74.4`** — **Form XObject viewport culling** in `pdfce-render`.
+  `do_form` skips a `Do` whose `/BBox`, mapped through the CTM, lands entirely
+  outside the canvas or the clip in force, **without decoding its stream**.
+  Exact by spec warrant, not by estimate: ISO 32000-1 **§8.10.1** makes
+  `/BBox` a *clip*, so such a form cannot mark a pixel. New counter
+  `Diagnostics::forms_culled`, surfaced as **`forms_culled` beside `forms`**
+  on `pdfce-cli render-page`'s stable metrics line.
+- **`Pass 74.5`** — **`tools/gen-scale-demo/mitochondrion.py`**, 603 lines,
+  one shared organelle module replacing three drifted copy-pastes. Authored
+  in **nanometres**, emitted as shared Form XObjects; **342 instances from 12
+  shared forms, 7 571 ATP synthase F1 heads** across the form library.
+  Smallest feature **10 nm = 2.835 × 10⁻⁵ pt**, first readable at
+  **~35 000 000 %**; the demo's scale chain went **from six tiers to eight**.
+
+Both Pass IDs are **minted by this filing** — `e36f96e`'s message claims none.
+
+**Also landed, checked rather than assumed** (`git diff-tree --no-commit-id
+--name-only -r`): `d4721d8` touches `.claude/` only and `dd47cd0` touches
+`docs/` only, so **neither owes a filing** and
+`python tools/check-commits-filed.py` named exactly one commit, `e36f96e`.
+Recorded anyway, because `d4721d8` **discharges the 227th filing's one owed
+item** — the engineer's never-bundle-code-into-a-filing memory file is now
+tracked instead of one `git clean` from not existing.
+
+**Decisions made this session:**
+
+- **Decision 082** (`ARCHITECTURE.md` §12) — **`pdfce-render` may skip work
+  only where skipping is EXACT; a speed-up that changes the raster is the
+  operator's decision, not the engineer's.** The commit measured two
+  available skips in one afternoon and shipped only one of them:
+
+  | | warrant | observable in the raster? | whose call |
+  |---|---|---|---|
+  | `/BBox` viewport cull | §8.10.1 makes `/BBox` a clip | **no — byte-identical** | engineer's, shipped |
+  | sub-pixel geometry skip | none; a judgement that the coverage is small enough | **yes** | **operator's** — question `(br)` |
+
+  **Why it needed saying at all:** rule 3 governs the *writer*, rule 4 governs
+  *inference*, and **neither reaches the renderer's freedom to draw a page
+  approximately** — which is exactly where "it is only a few pixels" arguments
+  are cheapest to make and hardest to falsify, because nobody diffs a page
+  they have not seen the correct version of.
+- **`ARCHITECTURE.md` §4.1 sync entry (AA)** — `Diagnostics::forms_culled`
+  added, **and `forms_rendered`'s narrowing recorded as a contract change with
+  no compile-time signal**: same name, same type, fewer things counted.
+  `forms + forms_culled` is what `forms` alone used to mean.
+- **Standing rule: MINT DECLINED, on an impossibility warrant.** *"A cull is
+  worth only what it skips"* has **no artefact-only oracle** — judging an
+  early-out's placement requires knowing which work its predicate needs in
+  order to be evaluated, i.e. the per-call-site data-flow, which is the
+  judgement itself. Note the asymmetry with **`R211`**, minted five commits
+  ago: *"do these two paths still produce the same bytes?"* had an oracle
+  already in the tree. Sixth consecutive filing to decline on an argued
+  warrant rather than a shrug.
+
+**Findings + decisions:**
+
+- ★★★ **A cull's counter is invariant to the cull's placement.** The first
+  version sat beside the `/BBox` clip — one concept in one place, the
+  natural-looking home, passes review — and reported **339 of 342** at
+  **802 ms**. Hoisted above the stream slice it reported **339 of 342** at
+  **120 ms**. Same predicate, same count, same output bytes, **6.7× apart**;
+  the late placement was paying **~110 kB of inflate × 342 instances ≈ 37 MB
+  of decompression per render for content about to be discarded**. ⇒ **The
+  instrument added to prove the optimisation works is structurally incapable
+  of detecting that it barely works.** Accept an early-out on a wall-clock
+  delta, never on a hit rate.
+- ★★ **An inverted unit constant renders as a drawing choice.**
+  `25.4/72/1_000_000` where `1/(25.4/72*1_000_000)` was meant — off by
+  `0.3528²` = **8.03×**, not a round number, so the one cue that usually
+  betrays a unit slip is absent. Everything correctly placed, shaped and
+  coloured, uniformly an eighth of its size. **PDF's user space has no
+  declared unit**, so nothing in the file and **no downstream validator —
+  veraPDF, `qpdf --check`, pdfium — can flag a shape as the wrong physical
+  size**, because size is the thing being asserted.
+- ★★ **A self-crossing subpath strokes perfectly and fills wrong.** The crista
+  path left one lip of its 18 nm junction and dived in on the wrong lateral
+  side, crossing its own mouth twice — a bow tie. Under `S` every membrane was
+  the right shape with the right joins; under nonzero winding (§8.5.3.3.2,
+  `f`'s default) **every crista lumen filled with matrix colour** — *the exact
+  compartment error the module exists to correct, one layer down.* Required a
+  **160 000 000 % render of a single crista**, because below that the wrong
+  colour is a sub-pixel band that anti-aliases into the stroke and is **not
+  present in the raster as a distinguishable value**. ⇒ **Stroke and fill read
+  one path object through two unrelated rules, so reviewing the outlined
+  drawing is not evidence about the filled drawing** — and the outlined
+  drawing is the one that looks diagnostic.
+- ★★ **Three copies of one drawing drifted to three cristae, one or two, and
+  none at all**, without anybody deciding anything, and **no mechanism in the
+  project could have caught it**: a duplicated *drawing* has no compiler, no
+  test and no diff that anybody reads, and no two of the three were ever on
+  screen at the same magnification at the same time. Sharing the module is the
+  only thing that makes the three agree.
+- ★ **Cost falls as magnification rises.** The tiers where the cull fires are
+  the *fast* ones — skin cell **120 ms** (339 culled), one organelle **182 ms**
+  (341 culled) — while the rows still at ~1.5 s are those where every form is
+  genuinely on screen. **Deep zoom is no longer the expensive case; page-fit
+  is.**
+- ★ **Form XObjects rather than inline geometry, for precision as much as
+  size:** a 10 nm feature as an absolute page coordinate near `x = 540` needs
+  **eleven significant figures**, past the **five** ISO 32000-1 **Annex C**
+  requires.
+
+**Hard-rule-11 sweep — searched for the CLAIM, not for a string:**
+
+The trigger is real — **`forms` / `forms_rendered` changed meaning**, from
+*"how many form XObjects does this page paint"* to *"how many were
+executed"*. **Two survivors, both `crates/`, both REPORTED AND NEITHER
+EDITED**, which is the constraint the 227th filing exists to enforce:
+
+| # | site | the stale claim |
+|---|---|---|
+| 1 | `crates/pdfce-cli/src/main.rs`, module docstring, the `render-page:` line template (~line 102) | shows `… forms=<S> \` and stops — **`forms_culled` is missing**, while the table 55 lines below and the actual `println!` both have it. The same block calls this *"the **fixed order shown**"*, so the template is the published contract, not decoration |
+| 2 | same file, same doc block (~lines 130–136) | *"New counters may be **appended** … existing keys never change meaning, never move, and never disappear"* — **`forms_culled` was INSERTED beside `forms`**, so every later key's ordinal index moved. The correct narrower version is already argued in `crates/pdfce-cli/tests/render_page.rs`; **this docstring is the copy that did not get it** |
+
+Both are one file, one doc block, one edit — the engineer's, in its own
+commit. **Checked and clean:** `tools/gen-scale-demo/README.md` (current, and
+the 227th filing's survivor #1 there is **discharged**),
+`tools/corpus-report/src/main.rs`, `tools/render-parity/render_parity.py`, and
+`FEATURES.md`'s `inspect --forms` row (a different counter about a page's form
+population as *parsed*, not as *painted*).
+
+★ **The shape, and it differs from the last two filings'.** The 226th and
+227th survivors were *claims a commit made about its own place in the plan* —
+an ID, a ceiling. **These are claims a module made about its own OUTPUT
+FORMAT**, and they went stale because the change was made **on purpose, with
+an argument, in a test comment nobody propagated back to the docstring.** The
+reasoning was written down — just not where the contract is published. **A
+well-argued change is not a self-propagating one.**
+
+**`FEATURES.md` rows changed:**
+
+- **ONE row ADDED** to *Fonts & rendering*, immediately after the display-list
+  row: **Form XObject viewport culling**, `[x]` core / `[x]` cli / `[ ]` gui /
+  `—` Acrobat. **The `gui` box is deliberately NOT rounded up** — the counter
+  exists and no GUI code path reads it (`D:\dev\pdfceGUI` ticking bar, decision
+  073). **The Acrobat column is `—`, not `?`**: this is an internal render
+  economy with no operator-facing capability to have parity *with*, which is a
+  shape mismatch rather than a gap.
+- **NO row for `Pass 74.5`, and the ruling is deliberate.** `FEATURES.md`
+  answers *"what can pdfce do?"*; `tools/gen-scale-demo/` ships **nothing** —
+  it is a demonstration harness that produces a PDF, not a capability of the
+  product, and every capability it exercises (region rendering, form XObjects,
+  deep zoom) already has its own row. A row for it would be `—` in all three
+  shell columns and would make the file **longer without making it answer its
+  one question**, which is the drift the file's own header forbids. The
+  *renderer* half is the capability; that is the row that was added.
+
+**Still in flight:**
+
+- **Nothing mid-Pass.** `git status --porcelain` empty before this filing;
+  after it, `docs/` edits only.
+- **`origin/main` is at `c24ad7a`, three commits BEHIND `HEAD`** — `d4721d8`,
+  `dd47cd0` and `e36f96e` are **local only**. Pushing is the operator's act
+  (`CLAUDE.md` rule 8) and this role did not.
+- **No bundle on disk contains any commit filed here.** Newest is
+  `pdfce-20260817-v060.bundle` (2026-08-17 20:34, `ls -lt`), its
+  `refs/heads/main` at `3c4c00e` (`git bundle list-heads`),
+  `git rev-list --count 3c4c00e..HEAD` = **196** (was 192 four commits ago).
+  Cutting one is the operator's call.
+
+**For next session:**
+
+- **`docs/NEXT_SESSION.md` was rewritten by THIS role in this filing** (the
+  engineer's dispatch asked for it), so **the two Pass IDs minted here reach
+  the file the next session reads first.** That closes — rather than merely
+  flags — the hazard the 225th, 226th and 227th filings each named: *an ID
+  minted by a filing that no commit message contains.* **Next free in the
+  family is `74.6`.**
+- **Open operator question `(br)`** is the one thing waiting on Ken: may pdfce
+  skip sub-pixel geometry (lossy, ~10× on a page-fit render of a form-dense
+  page)? Default if unanswered: **never skip**.
+- Ken's stated first task — refining the banana PDF — is **done**. Nine
+  numbered renders in `C:\Users\Ken\OneDrive\pdfTests\`.
+
+**Ledger.** Pass IDs **`74.4`**, **`74.5`** shipped; next free in the family
+**`74.6`**, next free in the `122` family **`122.4`**; **`97.1g` stays
+reserved and unbuilt**. Decisions **081 → 082**, next free **083**. Standing
+rules **`R211`** unchanged (**mint declined**), next free **`R212`**. Open
+operator questions **`(bq)` → `(br)`**, next free **`(bs)`**. `SESSION_LOG`
+filings **227 → 228**, next free **229**.
+
+**RAG files written — three, all verified on disk by `ls` after writing:**
+
+| tier | full path (grep this, not the filename alone) |
+|---|---|
+| ecosystem (Rust) | `D:/dev/rag/rust/a_cull_placed_after_the_decode_reports_the_same_count_and_buys_almost_nothing.md` |
+| PDF domain | `C:/personal_rag/pdf/lesson_20260822_a_unit_constant_wrong_by_a_plausible_factor_renders_as_a_drawing_choice.md` |
+| PDF domain | `C:/personal_rag/pdf/lesson_20260822_a_self_crossing_subpath_strokes_perfectly_and_fills_wrong_under_nonzero_winding.md` |
+
+Both subject indexes and the master `C:/personal_rag/index.md` updated in the
+same pass. (Forward slashes deliberately — hard rule 11's own note.)
+
+**Gates, run at the end of this filing** (working tree carries this filing's
+`docs/` edits and nothing else):
+
+| gate | result |
+|---|---|
+| `check-commits-filed.py` | **clean, exit 0** — 536 code commits checked, whole history; 5 known-unfiled carried in the baseline (debt, not an allowlist) |
+| `check-passes-filed.py` | **clean, exit 0** — every Pass-claiming commit filed |
+| `check-ledger-numbers.py` | **clean, exit 0** — live ceilings read back `R211 → next free R212`, `082 → next free 083`, `SESSION_LOG filings 227 → next free 228` |
+| `check-core-api-verbs.py` | **PASS, exit 0** — 139 public `EditSession` methods, every verb documented, count agrees. Run although this commit touches no `pdfce-core` verb, because the dispatch asked "if relevant" and a green run costs less than the judgement |
+
+**`cargo fmt` / `cargo clippy` / `cargo test` were NOT run by this role** —
+this filing touches `docs/` only, by design. The engineer's figures
+(**110 suites green, 0 failures**; `fmt` and `clippy -D warnings` clean;
+`cargo tree` showing no egui/eframe/winit/wgpu/glow in `pdfce-core` or
+`pdfce-render`) are recorded in the `ROADMAP.md` entry as **his**, not
+reproduced here.
