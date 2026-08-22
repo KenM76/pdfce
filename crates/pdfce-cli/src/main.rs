@@ -11719,9 +11719,20 @@ fn poster_sheets_for_page(
         // Where the region's own pixel (0,0) sits in page-device space —
         // read from the SAME function the renderer uses to place it, never
         // recomputed here, so the two cannot disagree about the origin.
-        let Some((_, _, rx0, ry0)) = pdfce_render::region_device_geometry(page_ctm, region) else {
+        //
+        // ★ AND THAT SENTENCE IS THE WHOLE TEST. When the renderer moved to
+        // `region_base_geometry` for its `f64` deep-zoom arithmetic, this
+        // call was left on `region_device_geometry` — two functions that
+        // agree at ordinary scales to within a pixel and therefore produce
+        // a tile whose CONTENT is right and whose WINDOW is one pixel off.
+        // `tiles_rendered_as_regions_match_the_whole_page_crop` caught it
+        // immediately, with 5,841 of 7,487,472 bytes differing and its own
+        // message correctly reading that count as an offset rather than a
+        // drawing error.
+        let Some(rg) = pdfce_render::region_base_geometry(page, render_scale, region) else {
             return Err("a tile's region does not map onto the page".to_owned());
         };
+        let (rx0, ry0) = (rg.x0, rg.y0);
 
         let rendered = match &list {
             Some(list) => list.replay_region(list.key(), region),

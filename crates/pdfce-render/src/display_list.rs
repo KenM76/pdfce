@@ -496,11 +496,28 @@ pub struct DisplayList {
     key: DisplayListKey,
     /// Page-device geometry at the list's scale: the base CTM every
     /// recorded op's own CTM already includes.
+    ///
+    /// Kept for its documentary value and for `page_ctm()`'s consumers even
+    /// though `replay_region` no longer derives a region's geometry from it
+    /// — see [`Self::page_box`] for why that derivation moved.
+    #[allow(dead_code)]
     page_ctm: Transform,
     /// Full-page device size at the list's scale. Not a raster size — no
     /// pixmap of this size is ever allocated — but the size every recorded
     /// clip bbox was clamped against.
     page_size: (u32, u32),
+    /// The page's `CropBox` and `/Rotate`, kept so a replay can recompute
+    /// a region's device geometry from the SAME `f64` arithmetic a fresh
+    /// render uses.
+    ///
+    /// ★ Not redundant with [`Self::page_ctm`], and the difference is the
+    /// point: that transform is `f32`, so recovering the page box from it
+    /// at a scale of two million recovers it to the nearest ~128 device
+    /// pixels. A recorded list outlives its `Page`, so the box has to be
+    /// carried rather than re-read.
+    page_box: pdfce_core::page_tree::Rect,
+    /// See [`Self::page_box`].
+    page_rotate: u16,
     ops: Vec<Op>,
     clips: Vec<ClipDef>,
     /// The recorder's running total — see `RecorderState::approx_bytes`.
@@ -623,12 +640,20 @@ impl DisplayList {
         // second place for the `/Rotate` axis swap to be got wrong, and
         // "byte-identical to a fresh region render" would then be a claim
         // about two different rectangles.
-        let (width, height, x0, y0) = crate::region_device_geometry(self.page_ctm, region).ok_or(
-            RenderError::BadRasterSize {
-                width: 0,
-                height: 0,
-            },
-        )?;
+        // ★ `region_base_geometry_of`, in `f64`, which is what a fresh
+        // region render now calls. The comment above is a claim about the
+        // two paths agreeing, and it stopped being true the moment the
+        // direct path moved to `f64` -- so this call is what keeps it a
+        // fact rather than a wish. See that function for the measured
+        // table: at a scale of 2.15 M a requested 800x600 viewport came
+        // back as 800x512 through the `f32` route.
+        let g =
+            crate::region_base_geometry_of(self.page_box, self.page_rotate, self.key.scale, region)
+                .ok_or(RenderError::BadRasterSize {
+                    width: 0,
+                    height: 0,
+                })?;
+        let (width, height, x0, y0) = (g.width, g.height, g.x0, g.y0);
         if width == 0
             || height == 0
             || width > crate::MAX_PIXMAP_EDGE
@@ -783,6 +808,12 @@ pub fn record_page(
     let bytes = recorder.approx_bytes;
     let (ops, clips) = recorder.finish();
     Ok(DisplayList {
+        // Carried, not derived: see the field docs. A recorded list
+        // outlives the `Page` it came from, and recovering the box from
+        // the `f32` `page_ctm` at deep zoom recovers it to the nearest
+        // ~128 device pixels.
+        page_box: page.crop_box,
+        page_rotate: page.rotate,
         key: DisplayListKey {
             page: page.id,
             epoch,

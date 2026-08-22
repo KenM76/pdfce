@@ -406,15 +406,20 @@ fn render_impl(
     let (width, height, base_ctm) = match region {
         None => (page_w, page_h, page_ctm),
         Some(r) => {
-            let Some((w, h, x0, y0)) = region_device_geometry(page_ctm, r) else {
+            // ★ `region_base_geometry`, not `region_device_geometry` +
+            // `post_translate`. The two agree exactly at ordinary
+            // magnifications and diverge at deep zoom, where the old pair
+            // did its arithmetic at the magnitude of the device coordinate
+            // instead of the magnitude of the answer -- see that function
+            // for the measured table (a requested 800x600 viewport came
+            // back as 800x512 at a scale of 2.15 M).
+            let Some(g) = region_base_geometry(page, scale, r) else {
                 return Err(RenderError::BadRasterSize {
                     width: 0,
                     height: 0,
                 });
             };
-            // Device-space translation. Post-multiplied, so it composes with
-            // whatever rotation `page_device_geometry` already encoded.
-            (w, h, page_ctm.post_translate(-x0, -y0))
+            (g.width, g.height, g.ctm)
         }
     };
 
@@ -770,6 +775,217 @@ pub fn region_device_geometry(
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let h = (max_y.ceil() - y0).max(0.0) as u32;
     Some((w, h, x0, y0))
+}
+
+/// The device pixmap size and base CTM for a **region** of a page, with
+/// every intermediate computed in `f64`.
+///
+/// # ★ Why this exists rather than composing two `Transform`s
+///
+/// [`region_device_geometry`] maps the region's corners through the page's
+/// `f32` `Transform` and the caller then `post_translate`s by the result.
+/// Both steps are exact at ordinary magnifications and **both fail in the
+/// same way at deep zoom**, because they do their arithmetic at the
+/// magnitude of the device coordinate rather than at the magnitude of the
+/// answer.
+///
+/// `f32` carries 24 bits of significand, so above 16.7 M the gap between
+/// representable values exceeds 1. At a scale of 2.15 M a point 700 units
+/// up the page lands at `y = 1.5e9`, where that gap is **128 pixels** — so
+/// a 600-pixel-tall viewport is measured as the difference of two numbers
+/// quantised to multiples of 128 and comes out **512**. Measured, on a
+/// requested 800×600 viewport:
+///
+/// | scale | raster returned |
+/// |---:|---|
+/// | 10 000 | 800×602 |
+/// | 100 000 | 800×592 |
+/// | 1 000 000 | 800×640 |
+/// | 2 152 300 | **800×512** |
+///
+/// The width holds because that test point is near `x = 100`; the height
+/// collapses because it is near `y = 700`. **Deep-zoom fidelity therefore
+/// depends on where you are on the page**, which is not a property anyone
+/// would guess and is the whole reason this is worth a separate function.
+///
+/// # What the `f64` buys, and where `f32` is still fine
+///
+/// The rasteriser is `f32` and stays `f32` — that is `tiny_skia`'s type and
+/// changing it is not on the table. What matters is that the numbers handed
+/// TO it are small: this function subtracts the region's device origin
+/// **before** narrowing, so the translation `tiny_skia` receives is the
+/// distance from the region's own corner (a few hundred) rather than from
+/// the page's (a few billion). The large magnitudes exist only inside `f64`
+/// arithmetic here and never reach the transform.
+///
+/// # Returns
+///
+/// `(width, height, base_ctm)`, or `None` if the mapping is not finite or
+/// the region is empty in device space.
+#[must_use]
+pub fn region_base_geometry(
+    page: &Page,
+    scale: f32,
+    region: pdfce_core::page_tree::Rect,
+) -> Option<RegionGeometry> {
+    region_base_geometry_of(page.crop_box, page.rotate, scale, region)
+}
+
+/// Everything a caller needs to rasterise one region of a page.
+///
+/// A struct rather than a tuple because two of the five fields are only
+/// meaningful together with a third: `x0`/`y0` are the region's origin in
+/// **page-device** space, which is the space a recorded display list's op
+/// bounds and clip masks live in, while `ctm` has already had that origin
+/// subtracted out. Handing back five positional values invites a caller to
+/// apply the offset twice, and that mistake renders a plausible picture of
+/// the wrong part of the page.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RegionGeometry {
+    /// Raster width in device pixels.
+    pub width: u32,
+    /// Raster height in device pixels.
+    pub height: u32,
+    /// User space → **region-local** device space. The translation is the
+    /// distance from the region's own corner, so it stays small at any
+    /// magnification; see [`region_base_geometry_of`].
+    pub ctm: Transform,
+    /// The region's left edge in page-device space.
+    pub x0: f32,
+    /// The region's top edge in page-device space.
+    pub y0: f32,
+}
+
+/// [`region_base_geometry`] against a page box and rotation given
+/// directly, for callers that hold those rather than a [`Page`].
+///
+/// # Why this split exists
+///
+/// A [`crate::display_list::DisplayList`] outlives the `Page` it was
+/// recorded from, and its `replay_region` must compute **exactly** the
+/// rectangle a fresh region render would — its own comment says so, and
+/// says why: *"a second implementation of the corner mapping is a second
+/// place for the `/Rotate` axis swap to be got wrong, and 'byte-identical
+/// to a fresh region render' would then be a claim about two different
+/// rectangles."*
+///
+/// That comment was written when both paths called
+/// [`region_device_geometry`]. Moving the direct path to `f64` **broke the
+/// invariant it asserts**, silently, in the direction the comment predicts
+/// — so the fix is this shared entry point rather than a second `f64`
+/// implementation on the replay side.
+#[must_use]
+pub fn region_base_geometry_of(
+    crop: pdfce_core::page_tree::Rect,
+    rotate: u16,
+    scale: f32,
+    region: pdfce_core::page_tree::Rect,
+) -> Option<RegionGeometry> {
+    // ★ NARROW TO `f32` FIRST, EXACTLY AS `page_device_geometry` DOES, then
+    // widen. This looks like a pointless round trip and is the difference
+    // between a fix and a regression.
+    //
+    // The whole-page path truncates the `CropBox` to `f32` before it
+    // multiplies. Computing here from the `f64` box instead produces
+    // slightly different corner positions, which floor/ceil to a different
+    // pixel on some pages — and poster tiling asserts that tiles rendered
+    // as regions REASSEMBLE into the whole-page crop. That test went red on
+    // the first version of this function, which is exactly what it is for.
+    //
+    // So the coefficients here are bit-for-bit the page path's. The `f64`
+    // is spent on the two places it actually buys something: mapping the
+    // corners, and subtracting the region origin from the translation.
+    let (llx, lly, urx, ury) = (
+        f64::from(crop.llx as f32),
+        f64::from(crop.lly as f32),
+        f64::from(crop.urx as f32),
+        f64::from(crop.ury as f32),
+    );
+    let s = f64::from(scale.max(0.0));
+
+    // The same four derivations `page_device_geometry` encodes, in `f64`.
+    // Kept as explicit coefficient tuples rather than reusing that
+    // function's `Transform`, because narrowing to `f32` is exactly the
+    // step this function exists to postpone.
+    let (sx, ky, kx, sy, tx, ty) = match rotate {
+        90 => (0.0, s, s, 0.0, -lly * s, -llx * s),
+        180 => (-s, 0.0, 0.0, s, urx * s, -lly * s),
+        270 => (0.0, -s, -s, 0.0, ury * s, urx * s),
+        _ => (s, 0.0, 0.0, -s, -llx * s, ury * s),
+    };
+    // Plain multiply-add, NOT `mul_add`. The fused form rounds once where
+    // this rounds twice, and `tiny_skia::Transform::map_points` — which the
+    // previous implementation used and which poster tiling's whole-page
+    // comparison is calibrated against — is unfused. A fused intermediate
+    // differs in the last bit, which floors to a different pixel often
+    // enough to shift a tile.
+    let map = |x: f64, y: f64| (sx * x + kx * y + tx, ky * x + sy * y + ty);
+    // ★ THE REGION'S CORNERS STAY `f64`, and this is the opposite of the
+    // treatment the PAGE BOX gets six lines above. The asymmetry is the
+    // measurement:
+    //
+    // A deep-zoom region is a TINY INTERVAL AROUND A LARGE COORDINATE. At
+    // a scale of 4.3 M an 800-pixel viewport is 1.86e-4 pt wide, so its
+    // corners are 100.0 ± 9.3e-5 — and `f32` near 100 has a spacing of
+    // 7.6e-6, which resolves that half-width to about one part in twelve.
+    // Narrowing here was tried and cost the viewport its shape again
+    // (a requested 800x600 came back as 790x526 at 4.3 M).
+    //
+    // The page BOX is different in kind: its corners are the page's own
+    // extent, which is what `page_device_geometry` narrows, and matching
+    // that bit-for-bit is what keeps a region render byte-identical to a
+    // crop of the whole page.
+    //
+    // ⇒ Narrow what the other path narrows; keep full precision on what
+    // only this path sees.
+    let corners = [
+        map(region.llx, region.lly),
+        map(region.urx, region.lly),
+        map(region.urx, region.ury),
+        map(region.llx, region.ury),
+    ];
+    let min_x = corners.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+    let max_x = corners
+        .iter()
+        .map(|p| p.0)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = corners.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+    let max_y = corners
+        .iter()
+        .map(|p| p.1)
+        .fold(f64::NEG_INFINITY, f64::max);
+    if !min_x.is_finite() || !min_y.is_finite() || !max_x.is_finite() || !max_y.is_finite() {
+        return None;
+    }
+    let (x0, y0) = (min_x.floor(), min_y.floor());
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let w = (max_x.ceil() - x0).max(0.0) as u32;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let h = (max_y.ceil() - y0).max(0.0) as u32;
+    if w == 0 || h == 0 {
+        return None;
+    }
+    // ★ The subtraction happens HERE, in `f64`, and only its small result
+    // is narrowed. Doing it the other way round -- narrowing `tx` and `x0`
+    // and subtracting in `f32` -- is arithmetically identical and
+    // numerically useless, because both operands are the large number.
+    #[allow(clippy::cast_possible_truncation)]
+    let ctm = Transform::from_row(
+        sx as f32,
+        ky as f32,
+        kx as f32,
+        sy as f32,
+        (tx - x0) as f32,
+        (ty - y0) as f32,
+    );
+    #[allow(clippy::cast_possible_truncation)]
+    Some(RegionGeometry {
+        width: w,
+        height: h,
+        ctm,
+        x0: x0 as f32,
+        y0: y0 as f32,
+    })
 }
 
 /// Compute the device pixmap size and base CTM for a page at `scale`
