@@ -26,7 +26,28 @@ removes "but a library exists" from the discussion.
 - **crates.io** — `xfa`, `xdp`, `formcalc`, `xfa-forms`, `pdf-xfa`: nothing
   that implements XFA.
 - **GitHub, Rust** — the only MIT Rust codebase containing real XFA code
-  **disclaims dynamic XFA in its own manifest**.
+  **disclaims dynamic XFA in its own manifest**, and it is worth being
+  precise about what it *does* have, because "nothing exists" is the wrong
+  summary. Its XFA module's own header reads:
+
+  > *"Bounded XFA packet discovery, static extraction, minimal dynamic
+  > layout, and active-content sandbox policy. This module deliberately
+  > implements a useful subset rather than an Adobe LiveCycle/AEM
+  > compatibility claim. XML is parsed without DTDs or external entities;
+  > scripts are disabled by default; JavaScript is always inventory only;
+  > and every recursive or generated structure is capped."*
+
+  Its capability struct then declares `dynamic_xfa: false` and
+  `dynamic_reflowing_subforms: false`. ★ **So the honest finding is not
+  "no Rust project touches XFA" — it is that the one which does says NO to
+  the dynamic half itself, in a field, in its own source.** That is a
+  well-behaved project stating its limits, and it is the opposite of the
+  description-versus-source mismatch in §2.
+
+  ⚠ **The crate is not on crates.io** (a `crates.io` API fetch for the name
+  its error type implies returns nothing), so the licence claim above is
+  the researching agent's reading of a `LICENSE` file and has **not** been
+  re-verified here. Do not act on the licence without checking it.
 - **GitHub, "FormCalc", all languages** — 61 repositories, **none** of them
   an XFA FormCalc implementation. Every hit is either the Feynman-diagram
   physics package of the same name or a generic form calculator.
