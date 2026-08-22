@@ -2163,8 +2163,15 @@ enum Command {
         /// Numerical, not spatial, and far away.
         /// `examples/zoom_ceiling.rs` measures the `f32` transform error
         /// against a bar 2,999.7373 pt from the origin and finds it stays
-        /// under one device pixel out past **20,000x**. Deep zoom stops
-        /// being faithful long after it stops being useful.
+        /// under one device pixel out past **20,000x**.
+        ///
+        /// That was the ceiling when this flag shipped, and `Pass 74.2`
+        /// moved it: a region's device geometry is now derived in `f64`
+        /// with the region's origin subtracted BEFORE narrowing, so a
+        /// requested 800x600 viewport holds its shape out to a scale of
+        /// 10,000,000,000 -- one trillion percent. The `f32` bar
+        /// measurement above still describes the RASTERISER's limit; it is
+        /// no longer the limit a viewer meets first.
         ///
         /// # Coordinates
         ///

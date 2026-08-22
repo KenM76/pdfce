@@ -55891,3 +55891,277 @@ message claims any of them, so nothing can collide). Decisions **079 → 080**,
 next free **081**. Standing rules **`R209` → `R210`**, next free **`R211`**.
 
 **Gates, re-run at the end of this filing:** reported below.
+
+## 2026-08-22 (two-hundred-and-twenty-sixth filing) — `PASS 74.1` (`bd9844d`) + `PASS 74.2` (`71f7055`) + `PASS 74.3` (`83409b3`): DEEP ZOOM BECOMES A **VIEWPORT** QUESTION AND HOLDS ITS VIEWPORT TO **A TRILLION PERCENT**; ★★★★ **THE HEADLINE IS A PROPERTY NOBODY WOULD GUESS — DEEP-ZOOM FIDELITY DEPENDED ON *WHERE YOU WERE ON THE PAGE*: an `f32` error is a MAGNITUDE problem, exact near `x = 100` and 128 PIXELS wrong near `y = 700`, so a requested 800×600 viewport came back 800×512**; ★★★ **THREE ROUNDING-LEVEL FIXES AND THE FAILURE COUNT DID NOT MOVE BY A SINGLE BYTE — `5,841 of 7,487,472`, THREE TIMES** — the real defect was a poster-tiling call site using the OLD function while the renderer used the new one, **breaking a comment that promised the two could never disagree, in a file the change never touched**; ★★ **DECISION 081 MINTED** (`DisplayList` carries the page box so region geometry has ONE `f64` entry point) and **`R211` MINTED** (narrow what the other path narrows, keep full precision on what only you see, and a *"cannot disagree"* comment names its test); ★★ **MINT DECLINED for the identical-failure-count finding, argued** — no artefact-only oracle, filed to `D:\dev\rag\rust\` instead; ★ **A CLAIM IN A COMMIT MESSAGE FILED HERE IS CORRECTED BY ITS OWN GATE'S `git log`** — `bd9844d` says the string-gap gate *"has caught it every time"*, and `ae06440` (2026-08-20) is the counter-example where it reported **two of three**; ★ `PASS 74.3` — a banana at life size and two of its cells at the SAME scale, **46–73 ms across a 26,000× zoom range**
+
+**Shipped:**
+
+- **`Pass 74.1`** (`bd9844d`) — **`pdfce-cli render-page --region LLX,LLY,URX,URY`**,
+  the first direct shell caller `render_page_region` has ever had. Until now
+  poster tiling reached it only through a display list and on the fallback, so
+  **the path a viewer needs at high zoom could not be exercised, measured or
+  demonstrated from outside the crate** (`R151`'s core-only shape, closed).
+  Cost is **flat in zoom** — one 1600 × 1000 viewport is **272 / 288 / 320 /
+  340 ms at 3 200 / 6 400 / 12 800 / 25 600 %**, a **1.25× spread over an 8×
+  zoom range** — against a whole-page raster that grows with the **square** of
+  the zoom (US-Letter at 1600 % = **124 M pixels**). **The whole-page zoom
+  ceiling is SPATIAL, not numerical.**
+- **`Pass 74.2`** (`71f7055`) — `region_base_geometry_of`: a region's device
+  geometry derived in `f64`, **subtracting the region's device origin BEFORE
+  narrowing**. A requested **800 × 600** viewport, before → after:
+  **800 × 592 → 800 × 600** at 10⁷ %, **800 × 512 → 800 × 600** at 2.15 × 10⁸ %,
+  **failed → 802 × 600** at 2 × 10⁹ %, **failed → 800 × 600** at 10¹¹ % and at
+  **1 × 10¹² %**. Three new public items in `pdfce-render`
+  (`RegionGeometry`, `region_base_geometry`, `region_base_geometry_of`); the
+  rasteriser stays `f32` and always will. **462 µs per pan frame** at depth.
+- **`Pass 74.3`** (`83409b3`) — `tools/gen-scale-demo/`, four files, 1,004
+  lines. **A demonstration generator, not a fixture:** nothing ships, nothing
+  in `fixtures/`, no test loads it, `cargo test` never runs it. A letter-size
+  PDF with a banana at **life size (153 mm = 433 pt)** and **two of its cells
+  at that same scale**; six tiers, each ~10× the zoom of the one above, and
+  **the render time does not grow — 46–73 ms from 100 % to 2,600,000 %**, with
+  no trend in the spread (the fastest row is the second-deepest).
+  **No `FEATURES.md` row**, deliberately: a demo generator is not a pdfce
+  capability, and the capability it demonstrates is the region row, ticked
+  above.
+
+**ID decision, because the dispatch proposed a different one.** It suggested
+`71f7055` *"plausibly belongs with the `122.x` deep-zoom family"*. **There is
+no `122.x` deep-zoom family** — `122.0`–`122.3` are threading, per-sample image
+overprint, the Ghent harness's positive criterion and the colorant buffer's
+byte ceiling, four unrelated items that share a filing date. **`Pass 74.0`
+(`2fe6216`) minted `render_page_region` as a family in its own commit**, and
+all three commits here are that function. So **`74.1`/`74.2`/`74.3`**.
+
+**Decisions made this session:**
+
+- **Decision 081 — a `DisplayList` carries the page box and rotation, so region
+  geometry has exactly ONE `f64` entry point.** A list **outlives the `Page` it
+  was recorded from**, so `replay_region` had nothing to derive from; the
+  choice was a second `f64` implementation on the replay side or widening the
+  recorded state (**private** fields, no public-surface change). The second
+  implementation was refused **using the argument already written in
+  `replay_region`'s own comment** — *"a second place for the `/Rotate` axis
+  swap to be got wrong"*. Entirely inside `pdfce-render`: **§5's round-trip
+  invariant is not engaged and §3's GUI-core separation is untouched.**
+- **`R211` minted — when two code paths owe each other byte-identical output,
+  that is a PRECISION contract, not only an arithmetic one.** Narrow **exactly**
+  what the other path narrows; keep full precision on the interval only this
+  path sees; and **a comment asserting two callers "cannot disagree" names the
+  test that would go red if they did.** Minted rather than filed as a finding
+  because it **has an oracle already in the tree** —
+  `tiles_rendered_as_regions_match_the_whole_page_crop` answers *"do these two
+  paths still produce the same bytes?"* deterministically, from artefacts.
+- **Mint DECLINED for the second finding, and the decline is argued.**
+  *"An identical failure count across three different fixes means you are
+  fixing the wrong thing"* is **engineering method, not project policy**, with
+  **no artefact to check** — nothing can grep for "the same number twice".
+  Same warrant on which the 224th and 225th filings declined four candidates
+  between them. Filed to `D:\dev\rag\rust\`, where any project can reach it.
+  **`R210`'s minting test applied twice in one filing, to opposite answers.**
+
+**Findings + decisions:**
+
+- **★★★★ An `f32` error is a MAGNITUDE problem, not a precision one — and the
+  consequence is that the same computation was exact at one place on the page
+  and 128 pixels wrong at another.** `f32` carries **24 bits of significand**,
+  so above **16.7 M** the gap between representable values exceeds 1; a point
+  **700 units up the page at scale 2.15 M lands at `y = 1.5e9`, where that gap
+  is 128 PIXELS**. A 600-pixel viewport measured as the difference of two
+  numbers each quantised to a multiple of 128 comes out **512**. **The width
+  held throughout because the test point is near `x = 100`; the height
+  collapsed because it is near `y = 700`.** ⇒ **A per-axis asymmetry with no
+  per-axis code is a magnitude symptom** — it reads as an axis swap or a
+  `/Rotate` fault, which is the wrong neighbourhood entirely. Filed to
+  `D:\dev\rag\rust\`.
+- **★★ The precision fix is ASYMMETRIC, and both halves cost a red test.** The
+  **page box is narrowed to `f32` FIRST**, deliberately, because
+  `page_device_geometry` does and a region render must stay **byte-identical to
+  a crop of the whole page** — computing from the `f64` box instead is *more
+  accurate and wrong*, shifting corners by a pixel on some pages. The
+  **region's corners keep full `f64`**, because a deep-zoom region is **a tiny
+  interval around a large coordinate**: at 4.3 M an 800-pixel viewport is
+  **1.86e-4 pt** wide and `f32` near 100 has a spacing of **7.6e-6**, one part
+  in twelve of the half-width; narrowing there returned **790 × 526**.
+  ⇒ **Narrow what the other path narrows; keep full precision on what only this
+  path sees.** More precision is not the fix and is sometimes the regression.
+- **★★★ An identical failure count across three different fixes means you are
+  fixing the wrong thing — and the clue is in the number NOT MOVING, not in its
+  size.** `tiles_rendered_as_regions_match_the_whole_page_crop` failed with
+  **5,841 of 7,487,472 bytes (0.078 %)**, three times, unchanged across three
+  rounding-level attempts. **The test's own assertion message had already named
+  the defect class** — *"A count in the thousands with the right sheet size
+  means the window is OFFSET, not that the drawing is wrong."* It was: poster
+  tiling computed a tile origin with the **old** function while the renderer
+  used the new one. Filed to `D:\dev\rag\rust\`.
+- **★★ Two comments promised these paths could not disagree, and moving one
+  caller falsified both without touching either file.** Poster tiling's said
+  the origin is *"read from the SAME function the renderer uses to place it,
+  never recomputed here, so the two cannot disagree"*; `replay_region`'s made
+  the same claim. **A shared-implementation claim is invalidated by moving a
+  caller, and a caller moves in a different file from the comment** — nothing
+  in review looks at the comment when the caller changes. → decision 081,
+  `R211`'s second clause.
+- **★ A gate's success claim is a claim about the GATE'S OWN HISTORY, and that
+  history is in `git log`.** `bd9844d` records the string-gap gate catching a
+  14-space hole in a refusal message — *"Third time this project has hit that;
+  the gate has caught it every time."* **The ordinal survives on one reading**
+  (`git log -- tools/check-string-gaps.sh`: ported **2026-08-18 `2aa1066`**,
+  finding 44 on its porting sweep; widened **2026-08-20 `ae06440`**; this is
+  the third episode since it existed — earlier pdfce episodes, `Pass 96.0`,
+  `cb20770`, `Pass 75.0`, all predate the port). **"Caught it every time" is
+  false:** `ae06440`'s own subject is *"the string-gap gate reported two of
+  three, and the one it could not see had a `{placeholder}` on the other side
+  of the gap"*, and the 200th filing recorded that ***"an under-reporting gate
+  is byte-indistinguishable from a green one"*** — the miss was found **by a
+  human who knew there were three**. Record: **three episodes, one
+  under-report.** One command separates *"it has always worked"* from *"it has
+  worked since we fixed it."*
+- **★ A constraint on a tip's POSITION became a constraint on the tip's
+  DESIGN.** `Pass 74.3`'s brief put the arrow's point **two cell lengths
+  (600 µm = 1.70 pt)** above the cells; **a conventional arrowhead visible at
+  page scale is ~8 pt — nine times wider than the thing it points at**, so it
+  would bury the cells at the only zoom where they matter. It is a tapered dart
+  with a **250 µm** head. ⇒ **Once two elements are specified at scales three
+  orders of magnitude apart, ordinary chrome — arrowheads, leaders, rules,
+  callout boxes — stops being neutral and becomes an occluder, because chrome
+  is drawn at the scale of the READER, not of the SUBJECT.** Same shape a
+  second time in the same file: the beaded lettering's binding constraint is
+  **legibility, not space** (eight beads per stroke reads; below that letters
+  become dotted lines), which is why the line beneath it is ordinary type.
+- **The `--region` flag needed two non-obvious things.** **`allow_hyphen_values`**
+  — a viewer scrolled past the left edge asks for negative coordinates as a
+  matter of course, and without it `clap` reads `--region -760,…` as a flag
+  named `-760,…` and answers with a usage message that says nothing about
+  coordinates, **which reads as "the region flag is broken"**. And **an
+  explicit refusal for an origin-and-size quadruple**, which parses fine as
+  four numbers, is the most likely mistake, and **would render *something* —
+  indistinguishable from a blank part of the page**. ★ **Its exact reach,
+  checked in source rather than taken from the message** (`parse_region`,
+  `crates/pdfce-cli/src/main.rs:7470`): it fires on
+  `urx <= llx || ury <= lly`, so it catches every origin-and-size whose size is
+  smaller than its origin and **cannot** catch `100,100,600,400`. A real limit,
+  not a defect — no parser can separate those two intentions from four numbers.
+
+**Hard-rule-11 sweep — searched for the CLAIM (*"`Pass 122.x`"* as a reference
+to the deep-zoom work, *"no shell caller"*, *"zoom ceiling"*), not for a
+string. TWO SURVIVORS OUTSIDE THIS ROLE'S REMIT, BOTH REPORTED, NEITHER
+EDITED:**
+
+| # | site | the stale claim | severity |
+|---|---|---|---|
+| 1 | `tools/gen-scale-demo/README.md` §1 | *"`Pass 122.x`'s deep-zoom work"* — the deep-zoom work is `Pass 74.1`/`74.2`, minted by **this** filing | **highest** — it shipped in one of the three commits filed here and names an ID belonging to four unrelated Backlog items |
+| 2 | `crates/pdfce-cli/src/main.rs`, `render-page --region`'s doc block | correct about purpose but predates `74.2`, so it carries `74.1`'s **20,000×** numerical ceiling with no note that the region path now holds a viewport to **1 × 10¹² %** | medium — reachable by an operator through `--help` |
+
+Corrected **in this filing** (files this role owns): `ROADMAP.md` (Shipped
+entry, `R211`, ledger), `FEATURES.md`'s region row and display-list row,
+`ARCHITECTURE.md` §4 entry (W) + the `region_device_geometry` note + §12.
+
+★ **The shape, one line:** both survivors are **claims a commit made about its
+own place in the plan** — an ID and a ceiling — and both went stale because a
+**later commit in the same session** moved the thing they named. **The hazard
+is not forgetting to sweep; it is that a session's own output is the freshest
+and therefore the least suspected.** Same shape as `06aaad3`'s four stale
+self-claims yesterday: **twice in two days.**
+
+**Still in flight:**
+
+- **`docs/NEXT_SESSION.md` is being rewritten by the ENGINEER in the same
+  window as this filing, and this role did not touch it.** ★ **The operator's
+  stated first task next session is REFINING THE BANANA PDF** (`Pass 74.3`,
+  `tools/gen-scale-demo/`), so the handoff leads with that rather than with the
+  compositor queue.
+- **Three Pass IDs are minted here that no commit message contains**, so the
+  next commit in this family must start at **`74.4`** — the same hazard the
+  225th filing named and it is still undischarged, because the only place that
+  says so is `ROADMAP.md`.
+- **Working tree is clean.** The 225th filing's in-flight
+  ` M crates/pdfce-cli/src/main.rs` (the unfinished `--region` flag) **shipped
+  as `Pass 74.1`**; that note is discharged.
+- Everything the 225th filing left queued is untouched by this one:
+  **`Pass 122.2`** (the Ghent harness's positive criterion, on which every
+  Ghent figure in the repository waits), `97.1g` reserved and unbuilt,
+  `97.1k`, `122.0`, `122.1`, `122.3`.
+
+**For next session:**
+
+1. **Refine the banana PDF** — the operator's own first task, and
+   `docs/NEXT_SESSION.md` (engineer-owned, rewritten in this window) leads with
+   it. `tools/gen-scale-demo/`, `python tools/gen-scale-demo/gen_banana.py <out.pdf>`.
+2. **Fix the two hard-rule-11 survivors above** — one line each,
+   engineer-owned. Survivor 1 is in a file that shipped hours ago.
+3. **`Pass 122.2` first among the Ghent items**, unchanged from yesterday.
+4. **A backup bundle is 192 commits behind** (measured, below) and cutting one
+   is the operator's call.
+5. **`MAX_CMYK_BUFFER_BYTES` still needs an arithmetic justification** and
+   `resolve_indexed`'s discarded `ColorDiagnostics` is still owed — both
+   carried forward from the 225th filing, neither touched here.
+
+**Backup currency, checked rather than inferred.** `ls -lt
+D:\Dev\pdfce-backups\` → newest bundle **`pdfce-20260817-v060.bundle`,
+2026-08-17 20:34**; `git bundle list-heads` puts its `refs/heads/main` at
+**`3c4c00e`**; `git rev-list --count 3c4c00e..HEAD` = **192** (was 187 five
+commits ago). `HEAD` is **`83409b3`** (`git describe` = `v0.7.0-23-g83409b3`)
+and **`origin/main` is level with it**. **No bundle on disk contains any commit
+filed here.**
+
+**Ledger.** Pass IDs **`74.1`/`74.2`/`74.3`** shipped, **all minted by this
+filing** — no commit message claims a Pass ID, so nothing can collide; next in
+family **`74.4`**, next free in the `122` family **`122.4`**. Decisions
+**080 → 081**, next free **082**. Standing rules **`R210` → `R211`**, next free
+**`R212`**.
+
+**RAG files written (2):**
+`D:\dev\rag\rust\an_f32_error_is_a_magnitude_problem_not_a_precision_one.md` and
+`D:\dev\rag\rust\an_identical_failure_count_across_three_different_fixes_means_you_are_fixing_the_wrong_thing.md`,
+both indexed in `D:\dev\rag\rust\index.md` in this same filing. **Nothing filed
+to `C:\personal_rag\pdf\`** — both findings are float-arithmetic and debugging
+method, not PDF-domain behaviour.
+
+**Gates, re-run at the end of this filing** (all 16 `tools/check-*` on disk,
+run at `83409b3` with this filing's edits in the working tree):
+
+| gate | result |
+|---|---|
+| `check-commits-filed.py` | **clean** — 534 code commits checked, whole history; 5 known-unfiled carried in the baseline (debt, not an allowlist) |
+| `check-passes-filed.py` | **clean** — every Pass-claiming commit filed |
+| `check-ledger-numbers.py` | **clean** — no duplicate Pass, rule or decision numbers; its own live ceilings now read `R211 -> next free R212`, `081 -> next free 082`, `SESSION_LOG filings 226 -> next free 227` |
+| `check-ci-parity.py`, `check-core-api-verbs.py`, `check-fmt-excluded.py`, `check-one-commit-per-command.py`, `check-outcome-disclosed.py`, `check-settings-consumed.py`, `check-shipped-assets.py` | **all exit 0** |
+| `check-bypass-paths.sh`, `check-disclosure-channel.sh`, `check-string-gaps.sh`, `check-theme-colors.sh`, `check-ui-strings.sh` | **all exit 0** |
+| `check-image-colorspace-truth.py` | **not runnable bare** — it takes `<fixture-dir>` and prints usage with exit 1 when invoked with no argument. **Reported as "needs an argument", NOT as red**, because calling that a failure is the miscount `R209` exists to prevent. |
+
+**`cargo fmt` / `cargo clippy` / `cargo test` were NOT run by this role** —
+this filing touches only `docs/` and the Rust cross-project RAG at
+`D:/dev/rag/rust/`, and the three commits it files were the engineer's to gate
+before committing.
+
+★ **And a live instance of a lesson this repository already owns, caught in
+this filing's own text.** The sentence above originally carried a Windows path
+written through a shell heredoc; the heredoc ate the escapes and baked a
+literal **carriage return** where each backslash-r of *rag* / *rust* had been,
+so the path read as one mangled word. Found by grepping the file for a CR, not
+by reading it. **The RAG file
+`a_multiline_string_literal_that_loses_its_trailing_backslash_bakes_a_visible_gap_mid_sentence.md`
+already states the general rule** — *"any content containing backslashes must
+not round-trip through a shell heredoc — not just string-literal repairs, and
+not just Rust"* — and it was violated by the role that cites it, in the very
+paragraph reporting the gates, **and then violated a SECOND time by the repair
+itself**, which is the same "the fix carried the bug" instance that file
+records for 2026-08-18. Fixed by writing the text with a file-writing tool
+instead.
+
+★★ **And the sweep it prompted found the SAME corruption already shipped, from
+the same trap yesterday.** `ARCHITECTURE.md`'s **decision 080** — filed by this
+role on 2026-08-21 — carried its RAG cross-reference **broken across three
+lines**: `` `D:\dev `` / `ag` / `` ust\…` ``, each `\r` of *rag*/*rust* turned
+into a real line break. **The path was unusable and no gate can see it**,
+because a mangled path is legal Markdown. **Repaired in this filing with a
+dated inline note that quotes the broken form** — a path corruption is a
+transcription fault, not a claim, so repairing it is not rewriting an
+append-only record, and the note makes the repair visible rather than silent.
+**A third live instance is reported, not edited:**
+`.claude/agents/pdfce-librarian.md`'s hard rule 11 ends with
+`D:\devagust\disclosure_text_must_be_tested_against_producing_branch.md` — the
+same defect in **this role's own agent file**, where it has been since
+2026-08-18. ⇒ **Write Windows paths with forward slashes in any text that may
+pass through a shell.**

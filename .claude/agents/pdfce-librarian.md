@@ -516,7 +516,13 @@ has both a subject-index entry and a master-index entry, and that
     **checking it is what turned up the real survivor at `main.rs:7027`.**
 
     **Full derivation:**
-    `D:\devagust\disclosure_text_must_be_tested_against_producing_branch.md`
+    `D:/dev/rag/rust/disclosure_text_must_be_tested_against_producing_branch.md`
+    (FORWARD SLASHES DELIBERATELY. From 2026-08-18 to 2026-08-22 this
+    path held two REAL CARRIAGE RETURNS where its backslash-r escapes
+    should have been, so it read as `D:\dev` / `ag` / `ust\...` and
+    resolved to nothing. No gate can catch that: a gate cannot know a
+    path was meant to exist. Use forward slashes for every Windows
+    path in an agent file or a doc.)
     (six occurrences recorded as of 2026-08-18).
 
 ## Coordinating with other librarians / the spec-librarian

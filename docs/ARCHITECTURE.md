@@ -4241,6 +4241,47 @@ and region. **All four corners of the region are mapped through the
 CTM**, not two — a two-corner mapping is correct unrotated and
 **silently transposed at `/Rotate` 90/270**.
 
+##### ★ AMENDED 2026-08-22 (`Pass 74.1` + `Pass 74.2`, `bd9844d` + `71f7055`, 226th filing) — the CLI surface, and THREE new public items
+
+**`Pass 74.1` gives this function its first direct shell caller**:
+`pdfce-cli render-page --region LLX,LLY,URX,URY`. Until then poster tiling
+reached it only through a display list and on the fallback path, so **the
+path a viewer needs at high zoom could not be exercised or measured from
+outside the crate** — `R151`'s core-only-capability shape, closed.
+
+**`Pass 74.2` adds three public items to `pdfce-render`**, verified against
+`git show 71f7055 -- crates/pdfce-render/src/lib.rs`:
+
+```rust
+pub struct RegionGeometry { pub width: u32, pub height: u32,
+                            pub ctm: Transform, pub x0: f32, pub y0: f32 }
+pub fn region_base_geometry(page: &Page, scale: f32, region: Rect)
+    -> Option<RegionGeometry>;
+pub fn region_base_geometry_of(crop: Rect, rotate: u16, scale: f32,
+                               region: Rect) -> Option<RegionGeometry>;
+```
+
+**A struct rather than a tuple, and the API-guidelines reason is in its own
+doc comment:** `x0`/`y0` are the region's origin in **page-device** space —
+the space a recorded display list's op bounds and clip masks live in — while
+`ctm` has **already had that origin subtracted out**. Five positional return
+values invite a caller to **apply the offset twice**, which *"renders a
+plausible picture of the wrong part of the page"*.
+
+**The `_of` split exists because a `DisplayList` OUTLIVES the `Page` it was
+recorded from**, and `replay_region` must compute **exactly** the rectangle a
+fresh region render would. See **decision 081** (§12) for why that is a shared
+entry point rather than a second `f64` implementation on the replay side, and
+`ROADMAP.md`'s **`R211`** for the precision contract it encodes: the page box
+is narrowed to `f32` *first*, exactly as `page_device_geometry` does, while the
+region's corners keep full `f64`.
+
+**Numerical reach, measured (`Pass 74.2`):** a requested 800 × 600 viewport
+returns 800 × 600 out to **1 × 10¹² %** zoom; before the fix it returned
+**800 × 512** at 2.15 × 10⁸ % and **failed** above 2 × 10⁹ %. Cost is flat in
+zoom — one 1600 × 1000 viewport is **272 / 288 / 320 / 340 ms** at
+3 200 / 6 400 / 12 800 / 25 600 % — because the pixel count is fixed.
+
 #### ★ `MAX_PIXMAP_EDGE`'s SUBJECT changed — this is the semantic part
 
 **The constant is unchanged at 16,384 (exactly 1.00 GiB of RGBA). What
@@ -4538,6 +4579,11 @@ pub fn record_page(/* … */) -> Result<DisplayList, RenderError>;
 
 // crates/pdfce-render/src/lib.rs
 pub fn region_device_geometry(/* … */) -> Option<(u32, u32, i32, i32)>;
+// ★ 2026-08-22, Pass 74.2: superseded for region geometry by
+//   region_base_geometry_of, which derives in f64 — see entry (W) and
+//   decision 081. DisplayList now stores the page box + rotation
+//   (PRIVATE fields, no public-surface change) so replay_region calls
+//   that same entry point instead of re-deriving.
 
 pub enum RenderError {
     // … existing variants …
@@ -23965,9 +24011,17 @@ free 072.**
   on the target that does the wrong thing there. ⇒ **A runtime setting is a
   promise; a target gate is a proof. Ship both.** Same shape as `R209` (an
   unobserved property reading as a passing one) in a new place. Full
-  write-up: `D:\dev
-ag
-ust\std_thread_and_rayon_both_compile_for_wasm32_so_a_cross_check_gate_cannot_catch_a_threading_regression.md`.
+  write-up:
+  `D:/dev/rag/rust/std_thread_and_rayon_both_compile_for_wasm32_so_a_cross_check_gate_cannot_catch_a_threading_regression.md`.
+  *(★ Path repaired 2026-08-22, 226th filing. As filed on 2026-08-21 it was
+  broken across three lines — `D:\dev` / `ag` / `ust\…` — because the
+  backslashes were written through a shell heredoc, which turned each `\r` of
+  `rag`/`rust` into a real line break. **The cross-reference was unusable and
+  no gate can see it**, since a mangled path is legal Markdown. Repaired as
+  forward slashes so the trap cannot recur. Nothing about the decision's
+  content is changed. The same corruption is live in
+  `.claude/agents/pdfce-librarian.md`'s hard rule 11 — reported to the
+  engineer, not edited by this role.)*
 
   **★ This is a §3 (GUI-core separation / web-fork) decision, not a
   performance one.** The invariant §3 protects is that the web fork is a
@@ -24011,4 +24065,81 @@ ust\std_thread_and_rayon_both_compile_for_wasm32_so_a_cross_check_gate_cannot_ca
   engaged** — nothing here touches a writer path — and **(d) is the form the
   round-trip discipline takes for a renderer.**
 
-  **Ceiling moves 079 → 080; next free 081.**
+  ~~**Ceiling moves 079 → 080; next free 081.**~~ **Superseded by decision
+  081, below.**
+
+- **2026-08-22 — Decision 081. A `DisplayList` CARRIES THE PAGE BOX AND
+  ROTATION, SO REGION GEOMETRY HAS EXACTLY ONE `f64` ENTRY POINT — BECAUSE
+  *"THEY SHARE ONE IMPLEMENTATION, SO THEY CANNOT DISAGREE"* IS A CLAIM ABOUT
+  TODAY'S CALL GRAPH, NOT AN INVARIANT.** Filed with `Pass 74.2` (`71f7055`),
+  226th filing. **Entirely inside `pdfce-render`; no writer path, so §5's
+  round-trip invariant is not engaged, and §3's GUI-core separation is
+  untouched — the new items are headless and `Copy`.**
+
+  **(a) What changed, and it is a data-structure change made to support an
+  arithmetic one.** `region_base_geometry_of(crop, rotate, scale, region)`
+  derives a region's device geometry in `f64`, subtracting the region's device
+  origin **before** narrowing to `f32` (the *why* is `ROADMAP.md`'s **`R211`**
+  and `Pass 74.2`'s Shipped entry: an `f32` error is a magnitude problem, and a
+  600-pixel viewport measured as the difference of two numbers quantised to 128
+  comes out 512). A `DisplayList`, however, **outlives the `Page` it was
+  recorded from**, so `replay_region` had no `Page` to derive from. **The
+  choice was between a second `f64` implementation on the replay side and
+  widening the recorded state.** The list now stores the page box and rotation
+  as **private** fields — **no public-surface change** — and `replay_region`
+  calls the same entry point a fresh region render calls.
+
+  **(b) ★ WHY A SECOND IMPLEMENTATION WAS REFUSED, in the words of the comment
+  that was already there.** `replay_region`'s own comment said a second copy of
+  the corner mapping would be *"a second place for the `/Rotate` axis swap to
+  be got wrong, and 'byte-identical to a fresh region render' would then be a
+  claim about two different rectangles."* **That argument was correct and was
+  written before the bug existed.** The fix honours it rather than trading it
+  away for a smaller diff.
+
+  **(c) ★★ THE FINDING THAT MAKES THIS A DECISION AND NOT A REFACTOR: TWO
+  SEPARATE COMMENTS PROMISED THESE PATHS COULD NOT DISAGREE, AND MOVING ONE
+  CALLER FALSIFIED BOTH WITHOUT TOUCHING EITHER FILE.** Poster tiling computes
+  a tile's pixel (0,0) with a function documented as *"read from the SAME
+  function the renderer uses to place it, never recomputed here, so the two
+  cannot disagree about the origin"*. Moving the renderer to `f64` **made that
+  sentence false while leaving it in place**, and the test caught it:
+  `tiles_rendered_as_regions_match_the_whole_page_crop`, **5,841 of 7,487,472
+  bytes differing (0.078 %)**, with its own assertion message reading *"A count
+  in the thousands with the right sheet size means the window is OFFSET, not
+  that the drawing is wrong."*
+
+  ⇒ **A shared-implementation claim is invalidated by MOVING A CALLER, and a
+  caller moves in a different file from the comment.** Nothing in review looks
+  at the comment when the caller changes. **The generalisation, minted as
+  `R211`'s second clause:** a comment asserting two callers cannot disagree
+  **names the test that would go red if they did**; if no such test exists, the
+  sentence is deleted rather than kept, because an assurance nothing can refute
+  discourages the check it claims to replace.
+
+  **(d) The diagnostic cost, recorded because it is the reusable part.**
+  **Three rounding-level fixes were tried before the call-site defect was
+  found, and the failure count did not move by a single byte** — 5,841, three
+  times. **An identical failure count across three different arithmetic changes
+  is not an arithmetic problem.** Filed to
+  `D:\dev\rag\rust\an_identical_failure_count_across_three_different_fixes_means_you_are_fixing_the_wrong_thing.md`;
+  **standing-rule mint declined** (no artefact-only oracle — see `Pass 74.2`'s
+  *Standing-rule disposition*).
+
+  **(e) What this decision does NOT do.** It does not make `f64` the
+  rasteriser's arithmetic — **the rasteriser stays `f32` and always will.** The
+  `f64` is spent on exactly two places that buy something: mapping the corners,
+  and subtracting the region origin from the translation. And the page box is
+  still narrowed to `f32` **first**, matching `page_device_geometry`
+  bit-for-bit, because a region render must stay byte-identical to a crop of
+  the whole page — **more precision there is a regression, and a red test
+  established it.**
+
+  **Body sections updated in this same filing:** §4's entry (W) gains an
+  amendment recording `Pass 74.1`'s CLI surface and `Pass 74.2`'s three new
+  public items (`RegionGeometry`, `region_base_geometry`,
+  `region_base_geometry_of`), plus a note on `region_device_geometry`'s
+  supersession for region geometry. **§3 and §5 are not engaged**, for the
+  reasons stated in the head of this entry.
+
+  **Ceiling moves 080 → 081; next free 082.**

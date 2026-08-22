@@ -17,7 +17,7 @@ it is not in `fixtures/`, no test loads it, and `cargo test` never runs it.
 
 ## 1. Why it exists
 
-`Pass 122.x`'s deep-zoom work made region rendering flat across
+`Pass 74.1`/`74.2`'s deep-zoom work made region rendering flat across
 magnification and pushed the numerical ceiling out past a **trillion
 percent**. That is a claim about arithmetic. This file is the claim made
 visible: a document you cannot read without exercising it.

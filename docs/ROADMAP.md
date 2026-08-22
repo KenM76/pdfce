@@ -96,6 +96,435 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `bd9844d` + `71f7055` + `83409b3` — `PASS 74.1` (`render-page --region`, the CLI surface `render_page_region` never had), `PASS 74.2` (deep zoom holds its viewport to a trillion percent), `PASS 74.3` (`tools/gen-scale-demo/`, the arithmetic claim turned into a document) — ★★★★ **THE HEADLINE IS A PROPERTY NOBODY WOULD GUESS: DEEP-ZOOM FIDELITY DEPENDED ON *WHERE YOU WERE ON THE PAGE*** — an `f32` error is a **MAGNITUDE** problem, not a precision one, so the same computation was exact near `x = 100` and **128 PIXELS** wrong near `y = 700` at scale 2.15 M, and a requested **800×600** viewport came back **800×512**; ★★★ **THREE ROUNDING-LEVEL FIXES WERE TRIED AND THE FAILURE COUNT DID NOT MOVE BY A SINGLE BYTE — `5,841 of 7,487,472`, THREE TIMES** — an identical failure across three different arithmetic changes is not an arithmetic problem, and the real defect was a poster-tiling call site computing a tile origin with the **OLD** function while the renderer used the new one, **breaking a comment that promised the two could never disagree**; ★★ **DECISION 081 MINTED** — `DisplayList` now carries the page box so region geometry has **ONE `f64` entry point**, because *"they share one implementation, so they cannot disagree"* is a claim that decays the moment one caller moves; ★★ **`R211` MINTED** — narrow **exactly** what the path you must stay byte-identical with narrows, keep full precision on the interval only you see, and a comment asserting two callers cannot disagree **names the test that would go red if they did**; ★ **AND THIS FILING CORRECTS A CLAIM IN ONE OF THE COMMIT MESSAGES IT IS FILING:** `bd9844d` says the string-gap gate *"has caught it every time"* — **`ae06440` (2026-08-20) is the counter-example, where it reported TWO OF THREE** and the third was found by a human who knew how many there were — 2026-08-22 (two-hundred-and-twenty-sixth filing)
+
+**Sourcing.** Shell held and used (hard rule 8); the command is named beside
+every figure this role produced itself. **Every timing, raster-size and
+byte-count figure below is the engineer's, carried from the three commit
+messages named in the heading** — this role re-read all three with
+`git log -1 --format=%B` and did not re-run the renders. **What this role did
+check itself** is named where it appears: the public-surface diff
+(`git show 71f7055 -- crates/pdfce-render/src/lib.rs`), the `parse_region`
+refusal's actual condition, the string-gap gate's own history
+(`git log -- tools/check-string-gaps.sh`), git/backup state, and both filing
+gates. **Nothing was committed by this role.**
+
+**Scope.** Three commits, three Passes, one deliverable in three layers: the
+CLI surface (`74.1`), the arithmetic that makes it hold at depth (`74.2`), and
+the document that demonstrates it (`74.3`).
+
+**Verified before writing** (`python tools/check-commits-filed.py`, run at
+`83409b3`): the gate listed **exactly these three commits and nothing else**.
+`check-passes-filed.py` was already `clean`. Re-run after this filing is
+reported at the foot of this entry.
+
+---
+
+## ★ FIRST, THE ID DECISION, BECAUSE THE DISPATCH PROPOSED A DIFFERENT ONE
+
+The dispatch suggested `71f7055` *"plausibly belongs with the `122.x`
+deep-zoom family"*. **There is no `122.x` deep-zoom family.** `122.0`–`122.3`
+were all filed on 2026-08-21 by the 225th filing and are threading, per-sample
+image overprint, the Ghent harness's positive criterion, and the colorant
+buffer's byte ceiling — **four unrelated items sharing a filing date**, not a
+family.
+
+**`Pass 74.0` (`2fe6216`, 2026-08-13) minted `render_page_region` as a new Pass
+family in its own commit**, and all three commits filed here are that function:
+`74.1` is its CLI surface, `74.2` is a defect **inside** it, `74.3`
+demonstrates what `74.1` and `74.2` together bought. So **`74.1`/`74.2`/`74.3`**
+are minted, and the `122` family is left as the grab-bag it already is.
+
+**★★ THE COST OF THAT CHOICE, NAMED RATHER THAN HOPED ABOUT.**
+`tools/gen-scale-demo/README.md` §1 — shipped in `83409b3`, one of the commits
+filed here — says ***"`Pass 122.x`'s deep-zoom work"***. **That sentence is
+stale the moment this entry is written**, and it is a `tools/` file, outside
+this role's remit to edit. **Reported as owed work** in the hard-rule-11 sweep
+below. This is the 222nd filing's collision mechanism running the other way: a
+commit named an ID the record had not minted, and the record has now minted a
+different one.
+
+---
+
+## `PASS 74.1` (`bd9844d`) — `render-page --region`: the flag that makes deep zoom a VIEWPORT question instead of a PAGE-SIZE one
+
+**`render_page_region` had existed in `pdfce-render` since `Pass 74.0` with no
+shell caller at all** — poster tiling reached it only indirectly, through a
+display list and on the fallback path — **so the path a viewer needs at high
+zoom could not be exercised, measured or demonstrated from outside the crate.**
+This is `R151`'s core-only-capability shape (a core API no shell reaches) closed
+by giving it a shell.
+
+**WHY IT IS THE WHOLE ZOOM STORY.** Without it, magnifying means rasterising
+the **whole page** at that scale, and the raster grows with the **SQUARE** of
+the zoom: US-Letter at 1600 % is **9,792 × 12,672 = 124 M pixels**, about half a
+gigabyte of RGBA before any compositing buffer is allocated on top. **That is
+what makes a whole-page renderer feel like it has a zoom ceiling, and the
+ceiling is SPATIAL, not numerical.**
+
+With it, cost is the size of **what you are looking at**. Measured by the
+engineer, **one 1600 × 1000 viewport on a Ghent patch**:
+
+| zoom (viewport held at 1600 × 1000 px) | region (pt) | raster | time |
+|---:|---:|---:|---:|
+| 3 200 % | 50.00 × 31.25 | 1600 × 1001 | **272 ms** |
+| 6 400 % | 25.00 × 15.62 | 1600 × 1001 | **288 ms** |
+| 12 800 % | 12.50 × 7.81 | 1600 × 1001 | **320 ms** |
+| 25 600 % | 6.25 × 3.91 | 1600 × 1001 | **340 ms** |
+
+**Flat across an 8× zoom range, because the pixel count never changes** — 272 →
+340 ms is 1.25× for 8× the magnification, and the residue is page
+interpretation, not fill. **Deep zoom is not expensive; a big raster is.**
+
+**WHERE THE REAL CEILING IS, and it is not where the superseded GUI's
+`MAX_ZOOM = 8.0` said.** `examples/zoom_ceiling.rs` measures `f32` transform
+error against a bar **2,999.7373 pt** from the origin: error stays **under one
+device pixel past 20,000×** and reaches **2.6 px at 43,047×**. The 800 %
+constant in the in-repo GUI was **a viewer choice, not an engine limit**, and
+the engine was roughly **three orders of magnitude** from its own — before
+`74.2` moved it another eight.
+
+### Two things the flag needed that are not obvious
+
+- **`allow_hyphen_values`.** A viewer scrolled past the left edge asks for
+  negative coordinates **as a matter of course**, and a `/MediaBox` may
+  legitimately have a negative origin. Without it, `clap` reads
+  `--region -760,-437,840,562` as **a flag named `-760,...`** and answers with
+  a usage message that says nothing about coordinates — **which reads as "the
+  region flag is broken"**, not as "the minus sign was eaten".
+- **An explicit refusal for an ORIGIN-AND-SIZE quadruple.** `100,100,50,50`
+  **parses fine as four numbers**, is the single most likely mistake, and would
+  render *something* — **and something is indistinguishable from a blank part
+  of the page.** The message refuses it by name: *"Note these are two CORNERS
+  in PDF user space, not an origin and a size"*.
+
+  **★ Its exact reach, checked in source by this role rather than taken from
+  the message** (`parse_region`, `crates/pdfce-cli/src/main.rs:7470`): the
+  refusal fires on `urx <= llx || ury <= lly`. So it catches every
+  origin-and-size whose "size" is smaller than its origin — **the common
+  case, and the one the commit message cites** — and **cannot** catch
+  `100,100,600,400`, which is an origin-and-size that also happens to be a
+  valid corner pair. **A real limit, stated so nobody reads the refusal as
+  total.** Not filed as a defect: no parser can distinguish those two
+  intentions from four numbers.
+
+### ★ And the gate caught a defect in the refusal's own message
+
+`tools/check-string-gaps.sh` found a **14-space hole in the middle of that
+sentence**, from a line-continuation backslash that did not survive an edit.
+The message is now on **one source line on purpose**.
+
+**★★ THE COMMIT MESSAGE'S CLAIM ABOUT THIS IS TWO-THIRDS RIGHT, AND THIS ROLE
+CHECKED THE THIRD.** It says *"Third time this project has hit that; the gate
+has caught it every time."*
+
+- **The ordinal survives, on one reading.** `git log -- tools/check-string-gaps.sh`
+  gives the gate's whole history in pdfce: **ported 2026-08-18 (`2aa1066`,
+  which found 44 instances on its porting sweep)**, widened **2026-08-20
+  (`ae06440`)**, and this is the third episode since it existed. (Counting
+  *all* pdfce episodes, the RAG file records more — `Pass 96.0`'s six messages,
+  `cb20770`, `Pass 75.0`/`6af5655` — all of them **before** the gate was
+  ported, which is why the reading matters.)
+- **★ "Caught it every time" is FALSE, and the counter-example is the reason
+  the gate was widened.** `ae06440`'s own subject line: *"the string-gap gate
+  reported two of three, and the one it could not see had a `{placeholder}` on
+  the other side of the gap"*. The **200th filing's** session log states it
+  plainly —
+  ***"an under-reporting gate is byte-indistinguishable from a green one"*** —
+  and the missed gap **was found by a human who knew there were three**, not by
+  the gate. The gate's record is **three episodes, one under-report**.
+
+  ⇒ **A gate's success claim is a claim about the gate's OWN history, and that
+  history is in `git log`, not in memory.** One command separates "it has
+  always worked" from "it has worked since we fixed it."
+
+---
+
+## `PASS 74.2` (`71f7055`) — deep zoom holds its viewport to a trillion percent, and the fix is one subtraction moved into `f64`
+
+A requested **800 × 600** viewport, before and after:
+
+| zoom factor | zoom % | raster BEFORE | raster AFTER |
+|---:|---:|---:|---:|
+| 1 | 100 | 800 × 600 | 800 × 600 |
+| 100,000 | 10,000,000 | 800 × **592** | 800 × 600 |
+| 1,000,000 | 100,000,000 | 800 × **640** | 800 × 600 |
+| 2,152,300 | 215,230,000 | 800 × **512** | 800 × 600 |
+| 20,000,000 | 2,000,000,000 | *failed* | **802** × 600 |
+| 1,000,000,000 | 100,000,000,000 | *failed* | 800 × 600 |
+| 10,000,000,000 | 1 × 10¹² % | *failed* | 800 × 600 |
+
+**Six of seven rows exact; the 2 × 10⁹ % row is 802 × 600**, and it is filed as
+802 rather than rounded to "correct" because a two-pixel residue at two billion
+percent is a fact and a rounding is a wish.
+
+### ★★★★ THE BUG, AND IT IS A MAGNITUDE PROBLEM RATHER THAN A PRECISION ONE
+
+A region's device geometry was computed by mapping its corners through the
+page's `f32` transform and **then post-translating by the result**. Both steps
+do their arithmetic **at the magnitude of the DEVICE coordinate rather than at
+the magnitude of the ANSWER**.
+
+`f32` carries **24 bits of significand**, so above **16.7 M** the gap between
+representable values exceeds 1 — and **a point 700 units up the page at a scale
+of 2.15 M lands at `y = 1.5e9`, where that gap is 128 PIXELS.** A 600-pixel
+viewport measured as the **difference of two numbers each quantised to a
+multiple of 128** comes out **512**.
+
+**★★★★ THE PROPERTY NOBODY WOULD GUESS, AND THE MOST TRANSFERABLE THING IN THE
+COMMIT: the width held throughout and the height collapsed — because the test
+point is near `x = 100` and near `y = 700`.** ⇒ **DEEP-ZOOM FIDELITY DEPENDED
+ON WHERE YOU WERE ON THE PAGE.** The same code, the same zoom, the same
+viewport size: **exact in one axis and 128 px wrong in the other, decided by
+the coordinate's magnitude alone.** A bug that reproduces on one axis and not
+the other reads as an axis-swap or a `/Rotate` fault, which is the wrong
+neighbourhood entirely.
+
+### The fix, and why its asymmetry is the whole difficulty
+
+`region_base_geometry_of` — the same four `/Rotate` derivations, all in `f64`,
+**subtracting the region's device origin BEFORE narrowing**. The rasteriser
+stays `f32` and always will; **what changes is that the numbers reaching it are
+the distance from the region's own corner (a few hundred) instead of from the
+page's (a few billion).**
+
+**★★ WHAT PRECISION TO KEEP AND WHAT TO THROW AWAY IS NOT SYMMETRIC, and both
+halves were established by a test going red rather than by reasoning:**
+
+- **The PAGE BOX is narrowed to `f32` FIRST, deliberately**, because
+  `page_device_geometry` does and **a region render must stay byte-identical to
+  a crop of the whole page**. Computing from the `f64` box instead shifts
+  corners by a pixel on some pages. The function's own comment says this looks
+  like a pointless round trip and *"is the difference between a fix and a
+  regression"*.
+- **The REGION's corners keep full `f64`**, because a deep-zoom region is **a
+  tiny interval around a large coordinate**: at 4.3 M an 800-pixel viewport is
+  **1.86e-4 pt** wide, and **`f32` near 100 has a spacing of 7.6e-6**, which
+  resolves that half-width to **one part in twelve**. Narrowing here was tried
+  and put the viewport back to **790 × 526**.
+
+⇒ **Narrow what the other path narrows; keep full precision on what only this
+path sees.** Minted as **`R211`**, below.
+
+### ★★★ AND THE TEST THAT CAUGHT THE REAL MISTAKE SAID WHAT IT WAS BEFORE THE ENGINEER DID
+
+`tiles_rendered_as_regions_match_the_whole_page_crop` failed with **5,841 of
+7,487,472 bytes differing (0.078 %)**, and **its own assertion message reads**:
+
+> *"A count in the thousands with the right sheet size means the window is
+> OFFSET, not that the drawing is wrong."*
+
+**It was.** Poster tiling computes where a tile's pixel (0,0) sits using a
+function whose comment says it is *"read from the SAME function the renderer
+uses to place it, never recomputed here, so the two cannot disagree about the
+origin"* — **and moving the renderer to `f64` made that sentence false while
+leaving it in place.**
+
+**★★★ THREE ROUNDING-LEVEL FIXES WERE TRIED FIRST AND THE FAILURE COUNT DID
+NOT MOVE BY A SINGLE BYTE.** 5,841, three times, unchanged. **That is the
+clue, and it is in the number NOT MOVING rather than in the number's size:**
+three different arithmetic changes producing one identical failure count means
+the arithmetic is not what is being measured. Filed to `D:\dev\rag\rust\`;
+**mint declined**, argued below.
+
+**Also, and it is the same defect one layer over:** `DisplayList` now **carries
+the page box and rotation** so `replay_region` computes region geometry from
+**the same `f64` entry point**. Its own comment made **the same "one
+implementation, so they cannot disagree" claim**, and the same change would
+have broken it the same way. **Two carriers of one false assurance, in one
+commit.** → **Decision 081**.
+
+**Replay cost at depth:** **462 µs per pan frame** on an ordinary page.
+
+### New public surface in `pdfce-render` (checked by `git show`, not assumed)
+
+```rust
+pub struct RegionGeometry { pub width: u32, pub height: u32,
+                            pub ctm: Transform, pub x0: f32, pub y0: f32 }
+pub fn region_base_geometry(page: &Page, scale: f32, region: Rect)
+    -> Option<RegionGeometry>;
+pub fn region_base_geometry_of(crop: Rect, rotate: u16, scale: f32,
+                               region: Rect) -> Option<RegionGeometry>;
+```
+
+**A struct rather than a tuple, and the doc comment argues it:** `x0`/`y0` are
+the region's origin in **page-device** space while `ctm` has **already had that
+origin subtracted out**, so five positional values invite a caller to **apply
+the offset twice** — *"and that mistake renders a plausible picture of the
+wrong part of the page"*, which is the same failure class as the
+origin-and-size quadruple in `74.1`. `ARCHITECTURE.md` §4 updated in this same
+filing.
+
+---
+
+## `PASS 74.3` (`83409b3`) — `tools/gen-scale-demo/`: a banana at life size, two of its cells at the SAME scale
+
+**A demonstration generator, not a fixture, and the distinction is stated in
+its own README:** nothing ships, nothing is in `fixtures/`, no test loads it,
+`cargo test` never runs it. Four files, 1,004 lines, all under `tools/`.
+
+It writes a letter-size PDF holding a banana at **life size (153 mm = 433 pt)**
+and **two of its cells at that same scale** — nothing enlarged for clarity,
+which is the point. **Six tiers, each roughly 10× the zoom of the one above**,
+measured with `pdfce-cli render-page --region` at a **1600 × 1000 viewport**:
+
+| tier | true size | as points | readable from | render (1600 × 1000 viewport) |
+|---|---:|---:|---:|---:|
+| banana | 153 mm | 433 pt | 100 % | **47 ms** |
+| cell outlines | 300 µm | 0.85 pt | ~2 000 % | — |
+| cell labels, starch grains | 30–45 µm | 0.07–0.13 pt | ~12 000 % | **61 ms** |
+| organelle labels | 8 µm | 0.023 pt | ~45 000 % | **73 ms** |
+| chloroplast grana, plasmodesmata | 1–5 µm | 0.003–0.014 pt | ~400 000 % | **46 ms** |
+| mitochondrial cristae | 0.7 µm | 0.002 pt | ~2 600 000 % | **50 ms** |
+
+**46–73 ms across 100 % → 2,600,000 % — a 26,000× zoom range for a 1.6×
+spread in time**, and the spread has no trend in it (the fastest row is the
+second-deepest). **A viewport is a fixed pixel count whatever the page behind
+it is doing.** ⇒ **This is `74.1`'s flat table re-measured on a different
+document, at four more orders of magnitude, by a different route.**
+
+**★ AND THE DESIGN FINDING, WHICH IS WHY THIS IS FILED AS ENGINEERING RATHER
+THAN AS A JOKE.** The brief required the arrow to end **two cell lengths
+(2 × 300 µm = 600 µm = 1.70 pt)** above the cells — its point at
+`y = 562.125984` against a cell top edge of `560.425197`. **A conventional
+arrowhead visible at page scale is about 8 pt across: NINE TIMES WIDER than the
+thing it points at**, so it would bury the cells at the only zoom where they
+matter. It is a **tapered dart with a 250 µm head** — an arrow from across the
+room, an arrowhead under magnification.
+
+⇒ **A constraint on the tip's POSITION turned into a constraint on the tip's
+DESIGN.** The general form, and it is a real one for any document meant to be
+read at more than one scale: **once two elements are specified at scales three
+orders of magnitude apart, ordinary chrome — arrowheads, leader lines, rules,
+callout boxes — stops being neutral and becomes an occluder**, because chrome
+is drawn at the scale of the READER, not at the scale of the SUBJECT.
+
+**A second instance of the same shape, from the same file:** the easter egg's
+lettering is beaded from mitochondria, and its binding constraint turned out to
+be **LEGIBILITY, not space** — **eight beads per vertical stroke** is enough to
+read and not enough to look smooth, below which letters become dotted lines,
+which is why the anniversary line beneath is ordinary type (**at 7 µm a beaded
+letter would be four mitochondria tall and stop being a letter**).
+
+**The page discloses its own liberties on its face** — organelle counts are
+illustrative and it says so — which is rule 4's obligation applied to a
+generated document rather than to an inference.
+
+---
+
+## Decision minted
+
+**Decision 081 — a `DisplayList` carries the page box, because *"one
+implementation, so they cannot disagree"* is a CLAIM, not an invariant.** Full
+text in `ARCHITECTURE.md` §12; §4's `pdfce-render` surface updated in the same
+filing.
+
+## Standing rule minted — `R211`
+
+Full text in *Standing rules*. One line: **narrow exactly what the path you
+must stay byte-identical with narrows, keep full precision on the interval only
+you see — and a comment asserting two callers cannot disagree names the test
+that would go red if they did.**
+
+## ★ Standing-rule disposition for the second finding — MINT DECLINED, and the decline is argued
+
+***"An identical failure count across three different fixes means you are
+fixing the wrong thing"*** is **engineering method, not project policy**, and
+it has **no enforcement layer in this repository** — nothing can grep for "the
+same number twice", and the observation is only available to whoever is
+watching the counter. Same warrant on which the 224th filing declined two
+candidates and the 225th declined two more. **Filed to `D:\dev\rag\rust\`,
+where it is reachable by any project**, and cross-referenced from `R211`, whose
+worked instance is the same commit.
+
+**Why `R211` clears the bar the same day this one does not:** the question
+*"do these two paths still produce the same bytes?"* **has an oracle that is
+already in the tree** — `tiles_rendered_as_regions_match_the_whole_page_crop`
+answers it deterministically, from artefacts, with no knowledge of intent. The
+question *"is this failure count the same one as last time?"* has no artefact
+at all. That is `R210`'s own minting test applied twice in one filing, to
+opposite answers.
+
+---
+
+## ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string
+
+Searched for: *"`Pass 122.x`"* as a **reference to the deep-zoom work**;
+*"no shell caller"* / *"no GUI code path calls it"* as claims about
+`render_page_region`'s reachability; and *"zoom ceiling"* as a claim about
+where the limit is. **Two survivors outside this role's remit, both reported,
+neither edited:**
+
+| # | site | the stale claim | severity |
+|---|---|---|---|
+| 1 | `tools/gen-scale-demo/README.md` §1 | *"`Pass 122.x`'s deep-zoom work"* — the deep-zoom work is `Pass 74.1`/`74.2`, minted by **this** filing | **highest** — it is the README of the artefact this entry files, it shipped in one of the three commits, and it names an ID belonging to four unrelated Backlog items |
+| 2 | `crates/pdfce-cli/src/main.rs` (`render-page`'s `--region` doc block) | describes the flag's *purpose* correctly but predates `74.2`, so it carries `74.1`'s **20,000×** numerical ceiling with no note that the region path now holds a viewport to **1 × 10¹² %** | medium — a doc comment an operator reaches through `--help` |
+
+**Corrected in this filing (files this role owns):** `FEATURES.md`'s region row
+and display-list row, `ARCHITECTURE.md` §4's `render_page_region` entry (W) and
+§12.
+
+**★★ A THIRD FINDING OF A DIFFERENT SPECIES, FOUND BY THIS FILING BREAKING ITS
+OWN TEXT FIRST.** A Windows path in this entry's `SESSION_LOG.md` twin was
+written through a shell heredoc, which turned each `\r` of `rag`/`rust` into a
+**literal carriage return**; **the repair reproduced the same defect**, and it
+took writing the text with a file-writing tool to clear it — the *"the fix
+carried the bug"* instance
+`a_multiline_string_literal_that_loses_its_trailing_backslash_bakes_a_visible_gap_mid_sentence.md`
+already records for 2026-08-18. **The sweep it prompted found the same
+corruption already SHIPPED, twice:**
+
+| # | site | what | disposition |
+|---|---|---|---|
+| 3 | `ARCHITECTURE.md` decision **080** | its RAG cross-reference broken across three lines — `` `D:\dev `` / `ag` / `` ust\…` `` — filed by this role on 2026-08-21 | **REPAIRED here**, with a dated inline note quoting the broken form. A path corruption is a **transcription fault, not a claim**, so repairing it is not rewriting an append-only record — and the note keeps the repair visible rather than silent |
+| 4 | `.claude/agents/pdfce-librarian.md`, hard rule 11's *"Full derivation"* | `D:\devagust\disclosure_text_must_be_tested_against_producing_branch.md` — same defect, in **this role's own agent file**, since 2026-08-18 | **REPORTED, not edited** — agent files are the engineer's |
+
+⇒ **No gate can see this: a mangled path is legal Markdown, and the reference
+it destroys is the one a future session would have followed.** Practice, one
+line: **write Windows paths with forward slashes in any text that may pass
+through a shell.**
+
+★ **The shape, one line:** both survivors are **claims a commit made about its
+own place in the plan** — an ID and a ceiling — and both went stale because a
+*later commit in the same session* moved the thing they named. **The hazard is
+not forgetting to sweep; it is that a session's own output is the freshest and
+therefore the least suspected.** Same shape as `06aaad3`'s four stale
+self-claims (2026-08-21), and that is now twice in two days.
+
+---
+
+## Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `74.0` (family), `97.1j`, `122.3` | **`74.1`**, **`74.2`**, **`74.3`** shipped (**all minted by THIS filing** — no commit message claims a Pass ID, so nothing can collide). `122.4` remains the next free `122`; **`97.1g` stays reserved and unbuilt** |
+| decisions (`ARCHITECTURE.md` §12) | **080** | **081** (**MINTED** — *a `DisplayList` carries the page box, because "one implementation, so they cannot disagree" is a claim, not an invariant*). Next free **082**. |
+| standing rules | **`R210`** | **`R211`** (**MINTED** — *narrow what the other path narrows, keep full precision on what only you see, and a "cannot disagree" comment names its test*). Next free **`R212`**. |
+
+**★ The same hazard the 225th filing named, named again because it has not been
+discharged:** three IDs are minted here that **no commit message contains**, so
+the next commit in this family must start at **`74.4`** and the only place that
+says so is this file. `docs/NEXT_SESSION.md` is being rewritten by the engineer
+in the same window as this filing — **this role did not touch it** — so the IDs
+reach it only if he carries them.
+
+**Backup currency, checked rather than inferred.** `ls -lt D:\Dev\pdfce-backups\`
+gives the newest bundle as **`pdfce-20260817-v060.bundle`, 2026-08-17 20:34**;
+`git bundle list-heads` puts its `refs/heads/main` at **`3c4c00e`**; and
+`git rev-list --count 3c4c00e..HEAD` = **192 commits** (was 187 at the 225th
+filing, five commits ago). `HEAD` is **`83409b3`** (`git describe` =
+`v0.7.0-23-g83409b3`), and **`origin/main` is level with it**. **No bundle on
+disk contains any commit filed here.** Cutting one is the operator's call and
+this role did not.
+
+**Working tree:** `git status --porcelain` is **empty** — the 225th filing's
+in-flight ` M crates/pdfce-cli/src/main.rs` (the unfinished `--region` flag) is
+**shipped as `Pass 74.1`** and that in-flight note is discharged.
+
+**Gates, re-run after this filing** — reported at the foot of this entry's
+`SESSION_LOG.md` twin.
+
+
 ### `2c5ec1d` + `9838c58` + `00ae8b9` + `62cf4e6`/`8372f20`/`4fca888` + `6a2c13f` — `PASS 97.1h` (the `/Indexed`-over-`/DeviceN` palette), `PASS 97.1i` + `PASS 97.1j` (two constant-factor fixes, the first of which repairs a regression `97.1e` shipped this morning), the XFA availability survey, and the engineer's discharge of the 224th filing's five survivors — ★★★★★ **AND THE HEADLINE OF THIS ENTRY IS A CORRECTION TO A NUMBER THIS ROLE FILED EARLIER TODAY: THE GHENT BOARD'S `29 pass of 51` IS AN OVER-COUNT AND THE CORRECTED FIGURE IS `26 pass AT MINIMUM`** — `tools/ghent-check.py` implements **ONE of the suite's TWO pass criteria** and has reported `clean` for the other **for its entire life**; ★★★ **THE CORRECTION CAME FROM THE OPERATOR READING THE RENDER CELL BY CELL — THE FIRST INDEPENDENT JUDGEMENT OF PDFCE'S GHENT OUTPUT THAT HAS EVER BEEN TAKEN**, and every prior number on this board was the harness scoring itself; ★★ **`R210` MINTED** — *a conformance figure is filed with the CRITERIA the harness implements, not only its denominator*; ★★ **DECISION 080 MINTED** — threading is gated at COMPILE TIME on the target, not only at runtime by a setting, because both `std::thread::spawn` and `rayon` `cargo check` **cleanly** for `wasm32-unknown-unknown`; ★ **the operator's *"put multithread in the plan for later"* is filed as `Pass 122.0` with his design intact and one constraint added** — 2026-08-21 (two-hundred-and-twenty-fifth filing)
 
 **Sourcing.** Shell held and used (hard rule 8); the command is named beside
@@ -85923,6 +86352,89 @@ same cause (hashes exist only at commit time), two different failure modes.
   and corpus figures** — Ghent, veraPDF, `fixtures/external` — not on ordinary
   test counts, where the criterion is the assertion and there is nothing to
   omit.
+
+- **R211 — WHEN TWO CODE PATHS OWE EACH OTHER BYTE-IDENTICAL OUTPUT, THAT IS A
+  *PRECISION* CONTRACT, NOT ONLY AN ARITHMETIC ONE: NARROW EXACTLY WHAT THE
+  OTHER PATH NARROWS, KEEP FULL PRECISION ON THE INTERVAL ONLY THIS PATH SEES —
+  AND A COMMENT ASSERTING THAT TWO CALLERS *"CANNOT DISAGREE"* MUST NAME THE
+  TEST THAT WOULD GO RED IF THEY DID (2026-08-22; librarian-minted,
+  two-hundred-and-twenty-sixth filing; `Pass 74.2`, `71f7055`).**
+
+  **The mechanism, in three sentences.** A byte-identity obligation between a
+  narrow path (one region) and a broad one (the whole page) is usually written
+  down as an *arithmetic* claim — *"same formula, same answer"* — and it is
+  not. **The two paths see numbers of different MAGNITUDE**, and a float's
+  error is a function of magnitude, so identical arithmetic on differently
+  scaled inputs is **not** identical output. The contract is therefore about
+  **where each path narrows**, and it is **asymmetric by construction**.
+
+  **The worked instance, and both halves cost a red test to establish.**
+  `region_base_geometry_of` must produce a rectangle byte-identical to a crop
+  of `page_device_geometry`'s output:
+
+  - **The PAGE BOX is narrowed to `f32` FIRST**, deliberately, *because the
+    other path does*. Computing from the `f64` box instead is **more accurate
+    and wrong** — it shifts corners by a pixel on some pages, and the poster
+    tiling test that asserts reassembly went red on exactly that.
+  - **The REGION's corners keep full `f64`**, because a deep-zoom region is **a
+    tiny interval around a large coordinate**: at scale 4.3 M an 800-pixel
+    viewport is **1.86e-4 pt** wide, while `f32` near 100 has a spacing of
+    **7.6e-6** — one part in twelve of the half-width. Narrowing there was
+    tried and returned a **790 × 526** raster for a requested 800 × 600.
+
+  ⇒ **Narrow what the other path narrows; keep full precision on what only this
+  path sees.** *More precision* is not the fix and is sometimes the regression.
+
+  **★ WHY THE SECOND CLAUSE IS PART OF THE SAME RULE RATHER THAN A SEPARATE
+  ONE.** The commit that introduced the `f64` path broke **two** call sites
+  that each carried a comment promising they could not break — poster tiling's
+  *"read from the SAME function the renderer uses to place it, never recomputed
+  here, so the two cannot disagree about the origin"*, and `replay_region`'s
+  equivalent. **Both sentences stayed true-looking and became false in the same
+  edit**, because a shared-implementation claim is invalidated by **moving a
+  caller**, not by editing the comment's own file. **A comment is not an
+  invariant; a test is.** So the comment must cite the test — which converts an
+  unfalsifiable assurance into a grep that leads somewhere.
+
+  **What the rule obliges, in three lines.**
+  (a) **Name the path you must match, and match its NARROWING, not only its
+  formula** — in the code, in a comment at the narrowing site.
+  (b) **State which quantity keeps full precision and why**, in terms of the
+  magnitude it must resolve (*"a tiny interval around a large coordinate"*),
+  not in terms of "being careful".
+  (c) **Every *"these cannot disagree"* comment names the test.** If no test
+  exists, the sentence is deleted rather than kept — an assurance nothing can
+  refute is worse than silence, because it discourages the check.
+
+  **★★ ENFORCEMENT LAYER, which is why this was minted while its sibling
+  finding was DECLINED the same day.** The question *"do these two paths still
+  produce the same bytes?"* **has an oracle already in the tree** —
+  `tiles_rendered_as_regions_match_the_whole_page_crop` — and it answers
+  deterministically from artefacts, with no knowledge of intent or of current
+  behaviour. That is `R210`'s minting test satisfied. The sibling finding
+  (*"an identical failure count across three different fixes means you are
+  fixing the wrong thing"* — 5,841 bytes, three times, unmoved) has **no
+  artefact to check at all** and was filed to `D:\dev\rag\rust\` instead, on the
+  same warrant the 224th and 225th filings declined four candidates.
+
+  **★ The transferable half, which is the part a future session will need and
+  is not about floats at all.** The defect's signature was that **the width was
+  exact and the height was 128 px wrong — because the test point was near
+  `x = 100` and near `y = 700`.** **Fidelity depended on WHERE YOU WERE**, so
+  the bug reproduced on one axis and not the other, which reads as an axis-swap
+  or a `/Rotate` fault. ⇒ **A per-axis asymmetry with no per-axis code is a
+  MAGNITUDE symptom, and the first thing to print is the coordinate, not the
+  formula.**
+
+  Cross-references: `R210` (the minting test this rule satisfies and its
+  sibling fails), `R193`/`Pass 74.0` (a limit justified by a prediction about
+  use), `R151` (a core API no shell reaches — `Pass 74.1` closes one). New RAG
+  files:
+  `D:\dev\rag\rust\an_f32_error_is_a_magnitude_problem_not_a_precision_one.md`
+  and
+  `D:\dev\rag\rust\an_identical_failure_count_across_three_different_fixes_means_you_are_fixing_the_wrong_thing.md`.
+
+  **Ceiling moves `R210` → `R211`; next free `R212`.**
 
 
 ## Update protocol
