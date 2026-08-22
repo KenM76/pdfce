@@ -62,8 +62,25 @@ memory entry's disagreed, and only a rebuild could say which was right.
 | Ghent PDF Output Suite | baseline | 97.1e | **97.1f** |
 |---|---:|---:|---:|
 | pass | 26 | 28 | **29** |
+| ⚠ pass, corrected | — | — | **26 at most** |
 | FAIL | 14 | 11 | **10** |
 | UNRESOLVED | 11 | 12 | **12** |
+
+★★ **THE `pass` ROW IS AN OVER-COUNT AND SO IS EVERY OTHER ONE THIS PROJECT
+HAS EVER FILED.** The operator read the annotated render cell by cell on
+2026-08-21 and found failures `tools/ghent-check.py` **structurally cannot
+see**: it implements ONE of the suite's two pass criteria. It hunts for a
+**cross that should not be there**; seven patches instead mark failure by
+the **absence of a check mark** (GWG 050, 080, 081, 082, 150, 151, 152) and
+have scored `clean` since the harness was written. At least three are
+failures. A second fault — the contrast floor has no **area** term — puts
+`GWG 1.0` in the same category.
+
+**The DELTAS in the table survive; the LEVELS do not.** Every column is
+over-counted by the same family, so a before/after comparison is still
+sound and any absolute "N of 51" is not. Full record and the operator's
+cell-level calls, which are the calibration set for fixing the harness:
+`docs/ghent-operator-review-2026-08-21.md`. The fix is `Pass 122.2`.
 | trap marks | 55 | 45 | **41** |
 
 | blend-space census (Ghent) | baseline | **97.1f** |

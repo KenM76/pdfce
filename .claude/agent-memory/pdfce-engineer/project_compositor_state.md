@@ -24,9 +24,21 @@ against a documented number:**
 | trap marks | 55 | 45 | **41** |
 | blends in the wrong space | 107/107 | 15/107 | **0/107** |
 
-★ **THE RE-SCOPING FACT: every remaining Ghent FAIL is an overprint, spot or
-ICC patch.** The next gains in this family are the n-channel spot buffer,
-not more compositing work.
+★★ **THE PASS COUNTS ABOVE ARE AN OVER-COUNT, AND SO IS EVERY ONE THIS
+PROJECT HAS FILED.** The operator read the render cell by cell the same
+evening and found failures `tools/ghent-check.py` **structurally cannot
+see** — it implements ONE of the suite's two criteria (a cross that should
+not be there) and is blind to the other (a **check mark that should be
+there and is not**, which is how seven patches score). Corrected standing:
+**26 at most**. **The DELTAS survive, the LEVELS do not** — every column is
+over-counted by the same family, so before/after is sound and any absolute
+"N of 51" is not. See `docs/ghent-operator-review-2026-08-21.md`, the
+operator's cell-level calls, which are the calibration set. Fix is
+`Pass 122.2`.
+
+★ **The re-scoping fact still holds for what the harness CAN see:** every
+remaining trap-criterion FAIL is an overprint, spot or ICC patch. The next
+gains in this family are the n-channel spot buffer, not more compositing.
 
 **What exists now, so it is not rebuilt:**
 
