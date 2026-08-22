@@ -1,4 +1,4 @@
-# gen-scale-demo — one page, eight orders of magnitude
+# gen-scale-demo — one page, nine orders of magnitude
 
 Generates a letter-size PDF holding a **banana at life size** and **two of
 its cells at that same scale**. Nothing on the page is enlarged for
@@ -41,6 +41,8 @@ with `pdfce-cli render-page --region`, each view a ~1600 × 1000 viewport:
 | whole mitochondria | 1.2–3 µm | 0.003–0.009 pt | ~2 600 000 % | 243 ms |
 | cristae, junctions, nucleoids | 18–210 nm | 5e-5 – 6e-4 pt | ~16 000 000 % | 182 ms |
 | ATP synthase particles | 10 nm | 2.8e-5 pt | ~35 000 000 % | 190 ms |
+| the molecule box | 50 nm | 1.4e-4 pt | ~1 500 000 000 % | 158 ms |
+| a water molecule | 0.37 nm | 1.0e-6 pt | *past the ceiling* — §9 | — |
 
 ★ **Render time still does not grow with magnification — it falls**, and
 the reason is worth stating plainly. A viewport is a fixed number of
@@ -83,6 +85,7 @@ interesting ones.
 | `cells_detail.py` | both cell interiors, authored in **micrometres** — a `Pen` converts to points at the last moment, so no drawing code ever sees a conversion factor |
 | `easter_egg.py` | a stroke font and a path-to-mitochondria chainer |
 | `mitochondrion.py` | **one mitochondrion, drawn to its real anatomy**, authored in **nanometres** and emitted as a shared Form XObject. Every mitochondrion on the page comes from here |
+| `molecules.py` | **the ten most abundant molecules in the cells, at 1:1**, authored in **picometres** with real van der Waals radii and bond lengths, in a labelled box below the cells |
 
 ## 5. The biology, and where it is a simplification
 
@@ -203,7 +206,116 @@ anti-aliased coverage, and pdfce does not silently trade fidelity for
 speed. That is an operator decision, not an engineering one, and it is
 left open rather than quietly taken.
 
-## 8. The easter egg, and the arithmetic that said it would fit
+## 8. The molecule box, and the units it is drawn in
+
+Below the cells, at the end of a tapering dart of the same kind that
+points at them, sits a **50 nm** box holding the ten most abundant
+molecules in a banana cell — at the same 1:1 scale as everything else.
+
+```
+banana                 153 mm
+water molecule           0.37 nm
+ratio             412 585 829 : 1
+```
+
+`molecules.py` authors in **picometres**, because that is the unit bond
+lengths and atomic radii are published in, and using the published unit
+means every number in the file can be checked against a reference table
+without arithmetic: O–H is `96`, C–C is `154`, oxygen's van der Waals
+radius is `152`, potassium's ionic radius is `138`.
+
+**Space-filling, not ball-and-stick, and that is a correctness call.** A
+stick model of glucose is mostly empty space, and this box exists to say
+how big these things are; the van der Waals envelope IS the molecule's
+size. So every atom is drawn at its full radius and every label quotes
+the envelope. The cost is stated rather than hidden: the rings come out
+as lumpy blobs, and connectivity is sacrificed. Bonds are drawn
+underneath as sticks so they still show in the gaps.
+
+**Why water's label says 0.37 nm and not the 0.28 nm everyone quotes.**
+Both are right and they measure different things. 0.28 nm is water's
+*kinetic* diameter — the hole it can squeeze through, which is what
+membrane and zeolite work cares about and therefore what is in every
+table. 0.37 nm is how much space the molecule actually occupies. This box
+draws at 1:1 and invites you to measure it, so a label quoting a number
+the drawing disproves would be worse than useless.
+
+**The ranking is by share of fresh mass**, which is the sense in which
+these "make up" the cell: water ~75 %, starch ~20 % in an unripe fruit,
+then the sugars it becomes, then wall (pectin, cellulose), protein, malic
+acid, potassium. ★ By molecule **count** the ranking is not close and not
+interesting — water is about 99.5 % of them, and everything else competes
+for the remaining half percent. The box says which measure it is using,
+because a "top ten" with no unit is a claim with no content.
+
+Four of the ten are polymers with no single size at all. Each is drawn as
+a representative segment or cross-section and its label names the
+dimension being quoted — "1.3 nm helix", "3.5 nm fibril" — rather than
+pretending a chain has a diameter. Cellulose is drawn in **cross
+section** because lengthwise it would run off the box, off the page, and
+out of the building.
+
+**The labels are bigger than the things they label**, by up to 22:1 —
+"10 potassium ion" is 6.3 nm of text over a 0.28 nm ion, and the column
+pitch of the whole box is set by the text, not the chemistry. That is the
+same finding §3 records about the arrowhead, arrived at independently
+four orders of magnitude further down.
+
+## 9. The ceiling this box found, which is NOT the one that was claimed
+
+`Pass 74.1`/`74.2` pushed the deep-zoom ceiling past a **trillion
+percent**. That claim is true and it is about the **viewport**: the
+region rectangle, its corners, and the base CTM are computed in `f64` and
+survive being multiplied by 1e12.
+
+**It was never a claim about page-space geometry, and this box is what
+made the difference measurable.** Two `f32` limits sit under the content:
+
+1. **Path coordinates.** A point near `x = 540` has an `f32` spacing of
+   `6.1e-5 pt`, which is **21.5 µm**. Any feature smaller than that,
+   written as an absolute page coordinate, is quantised away. This is why
+   everything small on this page lives in a Form XObject with small local
+   coordinates — the mitochondria in nanometres, the molecules in
+   picometres — and it is not a workaround but the only representation
+   that works.
+2. **The placement matrix.** Concatenating a `cm` that carries a page
+   coordinate leaves the CTM's translation as the difference of two large
+   nearly-equal `f32` values. The drift is about
+
+   ```
+   page_x × scale / 16 700 000   pixels
+   ```
+
+   which is ~5 px at the mitochondrion tier (invisible), ~400 px at the
+   molecule-box tier (the box lands off-centre but internally perfect,
+   because every part of it drifts together), and past the viewport above
+   roughly `scale = 5e6`.
+
+Measured, on the box's own molecules, framing a 1600 px viewport on the
+water molecule:
+
+| scale | forms rendered of 11 |
+|---|---|
+| 2 000 000 | 11 |
+| 5 000 000 | 11 |
+| 12 500 000 | 7 |
+| 25 000 000 | 3 |
+| 50 000 000 | 1 (the box only) |
+
+Confirmed **not** to be the Form XObject path and **not** the `Pass 74.4`
+cull: a synthetic page with the same square drawn three ways — absolute
+coordinates, a `cm` translation, and a scaled `cm` — loses all three at
+the same magnification, including the one that uses no `cm` and no form.
+
+⇒ **The whole box is readable at about 1 500 000 000 %**, which is what it
+was built for and is where every screenshot of it is taken. A single
+molecule filling the viewport is past the ceiling. Raising it means
+carrying the CTM in `f64` through content-stream concatenation and
+narrowing only at paint — the same trick `Pass 74.2` used for the base
+CTM, extended one level down. That is a real Pass, not a tweak, and it is
+not taken here.
+
+## 10. The easter egg, and the arithmetic that said it would fit
 
 Inside the pulp cell's vacuole: a heart drawn from mitochondria, with
 `KEN ♥ EMILY` inside it also drawn from mitochondria — the ♥ is itself a

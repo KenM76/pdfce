@@ -51,6 +51,12 @@ import zlib
 
 import cells_detail
 import mitochondrion
+import molecules
+
+# Interned once, at import, because `build_content()` needs the box's
+# XObject name while it writes the page and `build_pdf()` needs the same
+# registry afterwards to lay the objects out.
+MOL_BOX_NAME = molecules.register()
 
 PT_PER_UM = 25.4 / 72.0 / 1000.0  # = 1/352.7778
 UM = 1.0 / (25.4 / 72.0 * 1000.0)  # points per micrometre
@@ -211,6 +217,53 @@ def build_content():
     A(f"BT /F1 {fs:.6f} Tf {skin_l:.6f} {lab_y1:.6f} Td (skin cell \\(epidermis\\)) Tj ET")
     A(f"BT /F1 {fs:.6f} Tf {skin_l:.6f} {lab_y2:.6f} Td (60 \\265m across) Tj ET")
 
+    # ---- the molecule box, BELOW the cells, also at 1:1 ------------------
+    #
+    # 46 nm wide. That is 0.00013 pt -- one seven-thousandth of a point,
+    # and about a two-millionth of the pulp cell sitting above it. It
+    # cannot be seen at any zoom where the cells are visible, so it gets
+    # the same treatment the cells themselves get from the dart: a caption
+    # at a size that IS readable, and a tapered pointer that narrows to
+    # nothing as it approaches the thing it points at.
+    #
+    # The caption is 6 um -- between the 30 um cell labels and the 8 um
+    # organelle labels -- so the ladder down the page reads in order:
+    # 11 pt title, 30 um cell labels, 8 um organelle labels, 6 um this
+    # caption, then 1.45 nm inside the box. Five type sizes spanning
+    # 7 500 : 1, all set on the same page in the same units.
+    mol_cx = PULP_CX
+    mol_cy = pulp_b - um(255)
+    cap = um(6.0)
+    A("0.16 0.16 0.19 rg")
+    A(
+        f"BT /F2 {cap:.7f} Tf {mol_cx - um(150):.6f} {pulp_b - um(190):.6f} Td "
+        f"(and below THIS, the ten molecules those cells are made of) Tj ET"
+    )
+    A("0.40 0.40 0.45 rg")
+    A(
+        f"BT /F1 {cap*0.8:.7f} Tf {mol_cx - um(150):.6f} {pulp_b - um(202):.6f} Td "
+        f"(also 1:1. a water molecule is 0.37 nm, so zoom to about 1 300 000 000 %) Tj ET"
+    )
+    # the pointer: a dart again, for the reason the first one exists --
+    # an arrowhead big enough to see here would be 1000x the box.
+    A("0.20 0.35 0.62 rg")
+    A(f"{mol_cx - um(30):.6f} {pulp_b - um(212):.6f} m")
+    A(
+        f"{mol_cx - um(12):.6f} {pulp_b - um(228):.6f} "
+        f"{mol_cx - um(2):.6f} {pulp_b - um(240):.6f} "
+        f"{mol_cx:.6f} {mol_cy + um(0.4):.6f} c"
+    )
+    A(
+        f"{mol_cx + um(3):.6f} {pulp_b - um(238):.6f} "
+        f"{mol_cx + um(16):.6f} {pulp_b - um(226):.6f} "
+        f"{mol_cx + um(30):.6f} {pulp_b - um(212):.6f} l"
+    )
+    A("h f")
+    A("q")
+    A(molecules.instance_matrix(mol_cx, mol_cy))
+    A(f"/{MOL_BOX_NAME} Do")
+    A("Q")
+
     # a 100 um scale bar beside the cells, at true scale
     A("0.15 0.15 0.18 rg")
     sb_x, sb_y = pulp_l, pulp_t + um(60)
@@ -259,15 +312,25 @@ def build_pdf():
     and whose `Do` operators therefore paint nothing at all, silently.
     """
     mitochondrion.reset_library()
+    # The molecule box quotes the banana's length in water molecules. Hand
+    # it the measured centreline rather than letting it hold a copy.
+    molecules.BANANA_PT = centreline_length()
     content = build_content()
     packed = zlib.compress(content)
 
-    forms = mitochondrion.forms()
+    # Two form libraries, laid out end to end from object 7. Mitochondria
+    # first (flat: no form references another), then the molecules, whose
+    # last entry is the BOX and is the one nested form in the file -- it
+    # invokes the ten molecule forms that precede it, so their object
+    # numbers have to be known before it can be serialised, which is why
+    # it is emitted last rather than first.
+    mito = [(n, b, bb, None) for n, b, bb in mitochondrion.forms()]
+    mols = molecules.forms()
+    forms = mito + mols
+
     first_form_obj = 7
-    xobj_entries = b" ".join(
-        f"/{name} {first_form_obj + i} 0 R".encode()
-        for i, (name, _body, _bbox) in enumerate(forms)
-    )
+    obj_of = {name: first_form_obj + i for i, (name, _b, _bb, _r) in enumerate(forms)}
+    xobj_entries = b" ".join(f"/{n} {obj_of[n]} 0 R".encode() for n in obj_of)
     resources = (
         b"<< /Font << /F1 5 0 R /F2 6 0 R >> /XObject << " + xobj_entries + b" >> >>"
     )
@@ -288,19 +351,31 @@ def build_pdf():
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
     ]
 
-    # One Form XObject per distinct mitochondrion shape, objects 7..n.
-    # `/Resources << >>` is present and empty on purpose: a form that
-    # inherits the page's resources is legal but reader-dependent, and
-    # these forms reference no font, image or other form, so saying so
-    # explicitly costs four bytes and removes a class of "renders here,
-    # not there".
-    for name, body, bbox in forms:
+    # One Form XObject per shape, objects 7..n.
+    #
+    # `/Resources` is written EXPLICITLY on every form, empty where the
+    # form needs nothing. A form that inherits the page's resources is
+    # legal but reader-dependent (§7.8.3 case 3, which §8.10 calls
+    # obsolete), so declaring the truth costs four bytes and removes a
+    # class of "renders here, not there". The molecule box is the one form
+    # with a non-empty dictionary: it invokes the ten molecules and sets
+    # type, so it needs both fonts and ten XObject entries.
+    for name, body, bbox, refs in forms:
+        if refs:
+            inner = b" ".join(f"/{r} {obj_of[r]} 0 R".encode() for r in refs)
+            res = (
+                b"<< /Font << /F1 5 0 R /F2 6 0 R >> /XObject << " + inner + b" >> >>"
+            )
+        else:
+            res = b"<< >>"
         fp = zlib.compress(body.encode("latin-1"))
         bb = " ".join(f"{v:.2f}" for v in bbox)
         objs.append(
             b"<< /Type /XObject /Subtype /Form /FormType 1 /BBox ["
             + bb.encode()
-            + b"] /Resources << >> /Length "
+            + b"] /Resources "
+            + res
+            + b" /Length "
             + str(len(fp)).encode()
             + b" /Filter /FlateDecode >>\nstream\n"
             + fp
@@ -345,3 +420,8 @@ if __name__ == "__main__":
     print(f"  ATP synthase heads     {n_f1} across the form library")
     print(f"  smallest feature       {mitochondrion.F1_R*2:.0f} nm = {f1_pt:.3e} pt")
     print(f"  zoom to see one        ~{10.0/f1_pt*100:,.0f} %")
+    wat = 370.0 * molecules.PT_PER_PM
+    print(f"  molecule box           {molecules.BOX_W/1000:.0f} x {molecules.BOX_H/1000:.0f} nm"
+          f" = {molecules.BOX_W*molecules.PT_PER_PM:.6f} pt wide, {len(molecules.TEN)} molecules")
+    print(f"  smallest molecule      water, 0.37 nm = {wat:.3e} pt")
+    print(f"  banana : water         {centreline_length()/wat:,.0f} : 1")
