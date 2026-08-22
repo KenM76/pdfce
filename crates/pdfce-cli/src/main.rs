@@ -2139,6 +2139,53 @@ enum Command {
         /// to be kept in sync.
         #[arg(long, default_value_t = 1.0)]
         scale: f32,
+        /// Render only a **region** of the page, as
+        /// `llx,lly,urx,ury` in PDF user-space points.
+        ///
+        /// # Why this exists, and why it is the flag that makes deep zoom
+        /// possible
+        ///
+        /// Without it, magnifying a page means rasterising the WHOLE page
+        /// at that scale, and the raster grows with the SQUARE of the
+        /// zoom: a US-Letter page at 1600 % is 9,792 x 12,672 px, which is
+        /// 124 M pixels and roughly half a gigabyte of RGBA before any
+        /// compositing buffer is allocated on top of it. That is what
+        /// makes a whole-page renderer feel like it has a zoom ceiling,
+        /// and the ceiling is spatial rather than numerical.
+        ///
+        /// With it, the cost is the size of what you are LOOKING at, not
+        /// the size of the page it sits on. Measured on a Ghent page at a
+        /// 401x301 pt region: **95 ms at 1x and 87 ms at 32x** -- flat,
+        /// because the pixel count never changes.
+        ///
+        /// # Where the real ceiling is
+        ///
+        /// Numerical, not spatial, and far away.
+        /// `examples/zoom_ceiling.rs` measures the `f32` transform error
+        /// against a bar 2,999.7373 pt from the origin and finds it stays
+        /// under one device pixel out past **20,000x**. Deep zoom stops
+        /// being faithful long after it stops being useful.
+        ///
+        /// # Coordinates
+        ///
+        /// PDF user space, so the same numbers a `/MediaBox` or a
+        /// `/BBox` uses: origin bottom-left, y increasing upward. The
+        /// region is intersected with the page box; a region entirely
+        /// outside it is an error rather than a blank image, because a
+        /// blank image is indistinguishable from a page that is genuinely
+        /// blank there.
+        ///
+        /// # `allow_hyphen_values`, and it is not cosmetic
+        ///
+        /// A `/MediaBox` may legitimately have a negative origin, and a
+        /// viewer scrolled past the left or bottom edge asks for a region
+        /// with negative coordinates as a matter of course. Without this,
+        /// `clap` reads `--region -760,-437,840,562` as a flag named
+        /// `-760,...` and rejects the command with a usage message that
+        /// says nothing about coordinates — which reads as "the region
+        /// flag is broken" rather than "the minus sign was eaten".
+        #[arg(long, value_name = "LLX,LLY,URX,URY", allow_hyphen_values = true)]
+        region: Option<String>,
         /// Output PNG path.
         #[arg(short, long)]
         output: PathBuf,
@@ -5929,6 +5976,7 @@ fn run() -> ExitCode {
             input,
             page,
             scale,
+            region,
             output,
             no_annotations,
             font_dirs,
@@ -5939,6 +5987,7 @@ fn run() -> ExitCode {
             &input,
             page,
             scale,
+            region.as_deref(),
             &output,
             !no_annotations,
             &font_dirs,
@@ -7400,6 +7449,61 @@ fn has_font_extension(path: &Path) -> bool {
         .is_some_and(|e| FONT_FILE_EXTENSIONS.contains(&e.as_str()))
 }
 
+/// Parse `--region llx,lly,urx,ury` into a user-space rectangle.
+///
+/// # Why the errors are this specific
+///
+/// A region is four numbers with no units and no labels, which is the
+/// easiest kind of argument to get subtly wrong: swapped corners, a
+/// width-and-height where a second corner belongs, a comma-separated list
+/// pasted from somewhere with three values or five. Each of those has a
+/// distinct message here, because the failure an operator cannot diagnose
+/// is the one that renders *something* — a mirrored or empty rectangle
+/// silently clamped to nothing looks exactly like a blank area of the
+/// page.
+///
+/// # Errors
+///
+/// Returns a human-readable reason: a wrong field count, a field that is
+/// not a number, a non-finite value, or a rectangle with zero or negative
+/// extent in either axis.
+fn parse_region(spec: &str) -> Result<pdfce_core::page_tree::Rect, String> {
+    let parts: Vec<&str> = spec.split(',').map(str::trim).collect();
+    if parts.len() != 4 {
+        return Err(format!(
+            "expected 4 comma-separated numbers `llx,lly,urx,ury`, got {}",
+            parts.len()
+        ));
+    }
+    let mut v = [0.0f64; 4];
+    for (i, (slot, text)) in v.iter_mut().zip(parts.iter()).enumerate() {
+        *slot = text.parse::<f64>().map_err(|_| {
+            format!(
+                "field {} ({text:?}) is not a number",
+                ["llx", "lly", "urx", "ury"][i]
+            )
+        })?;
+        if !slot.is_finite() {
+            return Err(format!(
+                "field {} is not finite",
+                ["llx", "lly", "urx", "ury"][i]
+            ));
+        }
+    }
+    if v[2] <= v[0] || v[3] <= v[1] {
+        return Err(format!(
+            "empty or inverted rectangle: urx must exceed llx and ury must exceed lly (got llx={} lly={} urx={} ury={}). Note these are two CORNERS in PDF user space, not an origin and a size",
+            v[0], v[1], v[2], v[3]
+        ));
+    }
+    Ok(pdfce_core::page_tree::Rect {
+        llx: v[0],
+        lly: v[1],
+        urx: v[2],
+        ury: v[3],
+    })
+}
+
 /// Implement `pdfce-cli render-page <input> [--page N] [--scale S] -o <out>`.
 ///
 /// # The pipeline
@@ -7457,6 +7561,7 @@ fn cmd_render_page(
     input: &Path,
     page_number: u32,
     scale: f32,
+    region: Option<&str>,
     output: &Path,
     annotations: bool,
     font_dirs: &[PathBuf],
@@ -7573,7 +7678,27 @@ numbered 1..={})",
         }
     }
 
-    let rendered = match pdfce_render::render_page_with(&doc, page, scale, &render_options) {
+    // ★ THE REGION BRANCH, and it is the same engine call with a smaller
+    // pixmap -- `render_page_region` and `render_page` share one
+    // implementation in `pdfce-render`, so nothing about annotation
+    // z-order, cancellation, layer state or diagnostics can differ between
+    // them. Only the raster size and a translation on the base CTM.
+    let parsed_region = match region.map(parse_region) {
+        None => None,
+        Some(Ok(r)) => Some(r),
+        Some(Err(msg)) => {
+            // A malformed region is an operator mistake, not a document
+            // one, so it reports as a runtime error rather than as
+            // anything that implicates the PDF.
+            eprintln!("pdfce-cli: --region: {msg}");
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let rendered = match parsed_region {
+        Some(r) => pdfce_render::render_page_region(&doc.view(), page, scale, r, &render_options),
+        None => pdfce_render::render_page_with(&doc, page, scale, &render_options),
+    };
+    let rendered = match rendered {
         Ok(rendered) => rendered,
         Err(err) => {
             eprintln!("pdfce-cli: {}: page {page_number}: {err}", input.display());
@@ -25887,6 +26012,51 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 "#;
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod region_tests {
+    use super::parse_region;
+
+    /// The happy path, and the reason the type is two CORNERS: a viewer
+    /// scrolled past the left edge of a page legitimately asks for a
+    /// region with negative coordinates, and a `/MediaBox` may have a
+    /// negative origin to begin with.
+    #[test]
+    fn a_region_is_two_corners_and_may_be_negative() {
+        let r = parse_region("-760,-437.5,840,562").unwrap();
+        assert!((r.llx - -760.0).abs() < 1e-9);
+        assert!((r.lly - -437.5).abs() < 1e-9);
+        assert!((r.urx - 840.0).abs() < 1e-9);
+        assert!((r.ury - 562.0).abs() < 1e-9);
+        // Whitespace around the commas is a shell reality, not a mistake.
+        assert!(parse_region(" 0 , 0 , 10 , 10 ").is_ok());
+    }
+
+    /// ★ The error that matters most is the one an operator CANNOT see in
+    /// the output: an origin-and-size quadruple parses as a rectangle and
+    /// renders *something*, which is indistinguishable from a blank part
+    /// of the page. So it is refused by name, and the message says which
+    /// mistake it thinks was made.
+    #[test]
+    fn an_origin_and_size_is_refused_with_the_reason() {
+        let err = parse_region("100,100,50,50").unwrap_err();
+        assert!(err.contains("inverted"), "{err}");
+        assert!(err.contains("CORNERS"), "{err}");
+        assert!(parse_region("10,10,10,20").is_err(), "zero width is empty");
+        assert!(parse_region("10,10,20,10").is_err(), "zero height is empty");
+    }
+
+    #[test]
+    fn the_field_count_and_each_field_are_checked_by_name() {
+        assert!(parse_region("1,2,3").unwrap_err().contains("got 3"));
+        assert!(parse_region("1,2,3,4,5").unwrap_err().contains("got 5"));
+        let err = parse_region("1,2,three,4").unwrap_err();
+        assert!(err.contains("urx"), "names the field, not the index: {err}");
+        assert!(parse_region("1,2,3,inf").unwrap_err().contains("finite"));
+        assert!(parse_region("1,2,3,NaN").unwrap_err().contains("finite"));
+    }
+}
 
 #[cfg(test)]
 mod tests {
