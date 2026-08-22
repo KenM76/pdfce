@@ -98,28 +98,72 @@
 //!               raster_compared=<0|1> raster_identical=<0|1> delinearized=<0|1> \
 //!               promoted=<N>
 //! render-page:  rendered <input> page <N> -> <output> <W>x<H>; \
-//!               substituted=<K> notdef=<L> unsupported=<J> unknown=<M> deferred=<P> \
-//!               images=<Q> images_unsupported=<R> forms=<S> forms_culled=<S2> \
-//!               images_codec_unsupported=<T> codec_features=<U> \
-//!               codec_geometry_mismatch=<V> dct_cmyk=<W> lzw_anomalies=<X> \
-//!               dct_cmyk_unverifiable=<Y> jpx_preblended=<Z> \
-//!               annots=… need_appearances=<0|1> \
-//!               unsupported_type3=<a> unsupported_noncmap=<b> \
-//!               unsupported_vertical=<c> unsupported_composite_not_embedded=<d> \
-//!               unsupported_unknown_subtype=<e> unsupported_unusable_program=<f> \
-//!               supplied=<g> supplied_registered=<h> contents_unresolved=<i> \
-//!               images_masked=<j> images_mask_unsupported=<k> masks_resampled=<l> \
-//!               mattes_undone=<m> mattes_not_undone=<n> \
-//!               oc_hidden=<o> \
-//!               cs_unresolved=<p> colors_not_set=<q> icc_alternate=<r> \
-//!               icc_device_fallback=<s> tint_applied=<t> tint_not_applied=<u> \
-//!               sep_all_approximated=<v> sep_none_suppressed=<w> \
-//!               pattern_spaces=<x> patterns_unpainted=<y> \
-//!               indexed_clamped=<z> indexed_short=<aa> \
-//!               shadings=<ab> shadings_via_sh=<ac> shadings_paintable=<ad> \
-//!               shadings_painted=<ae> shadings_refused=<af> shadings_mesh=<ag> \
-//!               img_colorant_none=<ah> img_uncalibrated=<ai>
+//!               substituted=<n> notdef=<n> unsupported=<n> unknown=<n> \
+//!               deferred=<n> images=<n> images_unsupported=<n> forms=<n> \
+//!               forms_culled=<n> images_codec_unsupported=<n> \
+//!               codec_features=<n> codec_geometry_mismatch=<n> dct_cmyk=<n> \
+//!               lzw_anomalies=<n> dct_cmyk_unverifiable=<n> jpx_preblended=<n> \
+//!               annots=<n> annots_painted=<n> annots_no_ap=<n> \
+//!               annots_hidden=<n> annots_state_missing=<n> annots_widget=<n> \
+//!               annots_degenerate=<n> need_appearances=<0|1> \
+//!               unsupported_type3=<n> unsupported_noncmap=<n> \
+//!               unsupported_vertical=<n> \
+//!               unsupported_composite_not_embedded=<n> \
+//!               unsupported_unknown_subtype=<n> \
+//!               unsupported_unusable_program=<n> supplied=<n> \
+//!               supplied_registered=<n> contents_unresolved=<n> \
+//!               images_masked=<n> images_mask_unsupported=<n> \
+//!               masks_resampled=<n> mattes_undone=<n> mattes_not_undone=<n> \
+//!               oc_hidden=<n> cs_unresolved=<n> colors_not_set=<n> \
+//!               icc_alternate=<n> icc_device_fallback=<n> tint_applied=<n> \
+//!               tint_not_applied=<n> sep_all_approximated=<n> \
+//!               sep_none_suppressed=<n> pattern_spaces=<n> \
+//!               patterns_unpainted=<n> indexed_clamped=<n> indexed_short=<n> \
+//!               shadings=<n> shadings_via_sh=<n> shadings_paintable=<n> \
+//!               shadings_painted=<n> shadings_refused=<n> shadings_mesh=<n> \
+//!               img_colorant_none=<n> img_uncalibrated=<n> \
+//!               blend_modes_applied=<n> blend_modes_ignored=<n> \
+//!               soft_masks_ignored=<n> soft_masks_applied=<n> \
+//!               soft_mask_tr_ignored=<n> soft_masks_reset_stale=<n> \
+//!               groups_flattened=<n> groups_special=<n> groups_composited=<n> \
+//!               groups_knockout_approx=<n> overprint_requested=<n> \
+//!               overprint_opm1=<n> overprint_effective=<n> \
+//!               overprint_composited=<n> overprint_refused=<n> \
+//!               overprint_pixels=<n> nonseparable_composited=<n> \
+//!               nonseparable_pixels=<n> groups_backdrop_reruns=<n> \
+//!               soft_masks_on_group_result=<n> \
+//!               overprint_images_unsupported=<n> blend_space_subtractive=<n> \
+//!               blends_in_wrong_space=<n> cmyk_buffer=<n> \
+//!               cmyk_buffer_refused=<n> cmyk_bridged_pixels=<n> \
+//!               cmyk_groups_approximated=<n> cmyk_unbridged_images=<n>
 //! ```
+//!
+//! ★ **All 87 keys are now listed, and the placeholders are uniform.** Two
+//! things were wrong with the previous version of that block, and only the
+//! second was cosmetic.
+//!
+//! **It stopped at `img_uncalibrated`, omitting the last 28 keys** — the
+//! whole blend-mode, soft-mask, transparency-group, overprint and CMYK
+//! families, 32 % of the line. The template's last extension was
+//! `1e7a0be` (2026-08-17, the colour slice); the very next slice,
+//! `bd244d9`, the SAME DAY, added counters and did not touch it, and
+//! sixteen commits then edited the key list in `tests/render_page.rs`
+//! without one of them updating this block. That is standing rule `R212`
+//! in one sentence: **a contract written down in two places, one of which
+//! is under test, drifts in the other — and always in the same direction,
+//! because the test forces its copy and nothing forces this one.** The
+//! remedy is not vigilance, it is `tools/check-metrics-line-contract.py`,
+//! which now compares this block against the `println!` and fails if they
+//! disagree.
+//!
+//! **The placeholders used to be `<K>`, `<L>`, `<J>` … `<ai>`**, a
+//! distinct letter per counter to signal "these are all different
+//! integers". At 87 keys that scheme had exhausted the alphabet and gone
+//! two-letter, which stopped conveying anything and made the block
+//! painful to extend correctly — which is a small part of why nobody did.
+//! Every counter is now `<n>`, meaning *a non-negative integer*, with
+//! `need_appearances=<0|1>` kept distinct because it genuinely is a flag.
+//! `annots=…` was also an elision hiding six real keys; it is expanded.
 //!
 //! `render-page`'s line is deliberately split by the first `"; "` into a
 //! **narrative half** and a **metrics half**:
@@ -186,6 +230,86 @@
 //! | `masks_resampled` | `masks_resampled` | "how many masks had different pixel dimensions from their base image and were point-sampled across it?" (§8.9.6.3 / Table 145 — conformant and common; it exists so a pixel-parity investigation can tell resampling apart from decoding) |
 //! | `mattes_undone` | `mattes_undone` | "how many `/Matte` preblends were inverted?" (§11.6.5.3 — census, but the inversion amplifies quantisation error by `1/α`, so a near-transparent fringe that disagrees with another engine is expected rather than a bug) |
 //! | `mattes_not_undone` | `mattes_not_undone` | "how many `/Matte` preblends were NOT inverted, leaving colours shifted toward the matte colour?" (alpha still applied; the reason is in the image divergences) |
+//!
+//! ★ The rows below were absent until 2026-08-22. The table stopped
+//! at `mattes_not_undone` and documented 44 of the 87 keys the line
+//! emits, so 43 of them -- every annotation, colour-space, shading,
+//! blend-mode, soft-mask, transparency-group, overprint and CMYK
+//! counter -- had no explanation anywhere a consumer of this CLI would
+//! look. Their `Diagnostics` field docs were thorough throughout; the
+//! gap was entirely in the SHELL that publishes them, which is the
+//! `R212` shape again with a different pair of copies.
+//!
+//! Each row says which of three kinds of number it is, because that is
+//! the thing an operator scanning ten thousand pages actually needs and
+//! the thing a bare count cannot convey:
+//!
+//! - a **census** -- this happened, it is fine, and a non-zero value is
+//!   not a problem (`images`, `annots_widget`, `blend_modes_applied`);
+//! - a **divergence** -- pdfce did NOT do what the file asked, so the
+//!   raster differs from a conforming render (`blend_modes_ignored`,
+//!   `overprint_refused`, `blends_in_wrong_space`);
+//! - a **pair half** -- meaningless alone, and misleading if read alone.
+//!   `shadings` without `shadings_painted`, or `blends_in_wrong_space`
+//!   without `cmyk_buffer`, will be read as the opposite of the truth.
+//!
+//! | `annots` | `annotations_total` | "how many annotations does this page carry at all?" (census denominator, and it is taken under EVERY annotation scope — a narrowed or suppressed render still discloses what it is not showing. Meaningless alone: the gap between this and `annots_painted` is what the `/Annots` array asked for and did not get) |
+//! | `annots_painted` | `annotations_painted` | "how many of them actually reached the raster?" (a §12.5.5 placement succeeded. Read against `annots`; the shortfall is apportioned across `annots_no_ap`, `annots_hidden`, `annots_state_missing` and `annots_degenerate`, plus scope withholdings this line does not carry — see the note on `annotations_out_of_scope` below the table) |
+//! | `annots_no_ap` | (sum of `annotations_without_ap`) | "how many annotations have NO usable appearance at all — no `/AP`, no `/N`, or an `/N` that is neither stream nor subdictionary?" (a SUM, because the field is a per-`/Subtype` `BTreeMap` and this line's contract is `key=<integer>`; the per-subtype breakdown goes to stderr where a new key cannot break a parser. Under R43 these are named-not-painted and never synthesised, so the number is also the measured demand signal for the appearance-generation Passes) |
+//! | `annots_hidden` | `annotations_hidden` | "how many annotations did the DOCUMENT suppress?" (§12.5.3 Table 165's Hidden and NoView flags — a census of pdfce obeying the file, not a shortfall, honoured AND counted under R50 because content the operator cannot see is still disclosed) |
+//! | `annots_state_missing` | `annotations_appearance_state_missing` | "how many annotations carry a state subdictionary whose state could not be selected?" (§12.5.5 NOTE 3 — `/AS` absent against a multi-entry subdictionary, or naming a state that is not in it. Displayed as NOTHING, never guessed: a checkbox that should read "on" reads as blank, and this is the only thing that says why) |
+//! | `annots_widget` | `annotations_widget` | "how much of this page's annotation load is FORM FIELDS?" (§12.5.6.19 — census, a subset of `annots`. Widgets are ~88 % of organic annotations, so their share is what drives forms prioritisation rather than anything about this page's correctness) |
+//! | `annots_degenerate` | `annotations_placement_degenerate` | "how many annotations HAVE an appearance that could not be put anywhere?" (a missing `/Rect` or `/BBox` — the §12.5.5 placement inputs — or a transformed appearance box of zero width or height, which makes the step-b fit matrix singular. A named refusal, never a divide-by-zero and never a fabricated placement (risk X2); the specific reason is in the stderr annotation notes) |
+//! | `need_appearances` | (shell) | "is this document telling me its field appearances are STALE?" (§12.7.2's `/AcroForm` `/NeedAppearances`. DOCUMENT-scoped, not page-scoped, so it prints `0`/`1` rather than a count and is read from the catalog rather than from `Diagnostics`. R51: pdfce reports the condition and never silently regenerates on load — that would rewrite objects the operator never touched and pick appearances for them. A widget with an `/AP` `/N` is still painted from it regardless) |
+//! | `oc_hidden` | `oc_sections_hidden` | "is something on this page deliberately NOT being shown?" (§8.11.3.2 — census of pdfce obeying an OFF optional-content group, counted per SECTION entered rather than per operator suppressed, because one section can hide a whole drawing. R183: this is the disclosure channel for the one feature whose correct behaviour is "draw less", and without it a layer turned off is indistinguishable from a render that failed) |
+//! | `cs_unresolved` | `color.spaces_unresolved` | "did any `cs`/`CS` name a colour space pdfce could not resolve?" (§8.6 — DIVERGENCE. Counts DISTINCT resource names, not occurrences, on the same policy as `unsupported`: one broken resource used ten thousand times is one problem. The space is left UNSET rather than defaulted to `DeviceGray`, because a silent `DeviceGray` paints black marks that look exactly like a correct render — so read this beside `colors_not_set`, which is the residue it leaves) |
+//! | `colors_not_set` | `color.colors_not_set` | "how many marks were painted in the PREVIOUS colour because a colour operator could not be honoured?" (`sc`/`scn`/`SC`/`SCN` against an unresolved space, or an operand count that did not match the space's component count. Counts OCCURRENCES, not names — each one is a potentially stale-coloured mark, and this is the half of the `cs_unresolved` pair that says whether the unresolved space mattered) |
+//! | `icc_alternate` | `color.icc_alternate_used` | "how much of this page's colour went through the file's own `/Alternate` instead of its ICC profile?" (§8.6.5.5 Table 66 — a FIDELITY counter, not a shortfall: this is the spec's own fallback and it is visually close for the sRGB-like profiles that dominate real files. Distinct RESOLUTIONS, not paints. pdfce is not colour-managing, so an operator matching a brand colour should not treat this render as colour-managed) |
+//! | `icc_device_fallback` | `color.icc_device_fallback_used` | "how many `ICCBased` spaces had no usable `/Alternate` at all, so pdfce fell to the device space `/N` implies?" (Table 66's `Alternate` row, second sentence: 1 → Gray, 3 → RGB, 4 → CMYK. The weaker half of the pair above — read the two together for how much of this page's colour is profile-free) |
+//! | `tint_applied` | `color.tint_transforms_applied` | "are this page's spot colours the DOCUMENT's own?" (§7.10 tint transforms that WERE evaluated — census, and the positive twin of `tint_not_applied`. It exists so a shell can say the spot colours are the document's and not pdfce's stand-in, which is the difference an operator checking a brand colour needs) |
+//! | `tint_not_applied` | `color.tint_transform_not_applied` | "how many `Separation`/`DeviceN` conversions painted pdfce's stand-in instead of the document's colour?" (DIVERGENCE, but a property of the FILE rather than a gap in pdfce — the §7.10 evaluator is wired into both conversions, and this fires only when `/tintTransform` is absent, malformed, or of the wrong arity. What paints is a neutral in the alternate space: right lightness, WRONG HUE. A drawing whose spot colours look grey has its explanation here) |
+//! | `sep_all_approximated` | `color.separation_all_approximated` | "how many `Separation /All` conversions were rendered as pdfce's screen approximation?" (§8.6.6.4 says painting shall apply the tint to all available colorants at once; on an additive display pdfce renders that as a neutral of luminance `1 − tint`. That is a CHOICE — the standard describes an ink behaviour, not a screen appearance — so it is disclosed rather than assumed) |
+//! | `sep_none_suppressed` | `color.separation_none_suppressed` | "how many paints drew NOTHING because their colour space was `Separation /None` or an all-`/None` `DeviceN`?" (§8.6.6.4/.5 — CENSUS of pdfce obeying the standard, not a shortfall. On the line because a page missing content for a CONFORMANT reason is otherwise indistinguishable from one that failed, which is the distinction the diagnostics exist to make. `img_colorant_none` is the image-side twin) |
+//! | `pattern_spaces` | `color.pattern_spaces_selected` | "did this page's content select the `Pattern` colour space at all?" (§8.6.6.2 — census of SELECTIONS, which is all a `cs`/`CS` can tell you. Which kind of pattern was then named, and whether it drew, is decided at the paint site and lands on `patterns_unpainted` and `shadings_painted`. Meaningless alone; the trio is the story) |
+//! | `patterns_unpainted` | `color.patterns_unpainted` | "how many `scn`/`SCN` pattern selections put NOTHING on the page?" (DIVERGENCE — and the counter that once caught a page reporting a clean render while every gradient fill in it painted nothing, which is precisely the silence rule 4 forbids. Since shading patterns began painting this is the REMAINDER: tiling patterns, a name with no matching `/Pattern` resource, a degenerate pattern matrix, or a shading pdfce models but cannot draw. Nothing is drawn in its place deliberately — Table 74's initial `Pattern` colour "causes nothing to be painted", and an invented solid fill would be worse than a gap) |
+//! | `indexed_clamped` | `color.indexed_index_clamped` | "how many `/Indexed` lookups ran off the end of their own range?" (§8.6.6.3 makes the clamp NORMATIVE — "if it is outside the range 0 to `hival`, it shall be adjusted to the nearest value within that range" — and it is a clamp, not a modulo. So this is a census of conformant behaviour, useful only because a stream that keeps hitting it is usually a producer bug) |
+//! | `indexed_short` | `color.indexed_lookup_short` | "how many `/Indexed` lookups fell past the end of a SHORT lookup table and painted BLACK?" (producers routinely trim trailing unused entries, so it is tolerated rather than fatal — but the colour IS wrong where it fires, which makes this the named cause behind an unexpectedly black palette entry) |
+//! | `shadings` | `shading.encountered` | "does this page have gradients at all?" (§8.7.4 — the inventory denominator, incremented by BOTH routes and incremented even for a shading that is then refused, so a page whose every gradient is malformed does not report the same zero as a page with no gradients. The load-bearing pair on this line is this beside `shadings_painted`) |
+//! | `shadings_via_sh` | `shading.via_sh` | "how many of them arrived through the `sh` operator rather than a `PatternType 2` pattern fill?" (the two ANCHOR differently — `sh` in current user space, a shading pattern in pattern space (§8.7.4.5 SH1/SH6) — so a page that renders wrong in only one of them is a different bug, and this is what tells the two apart without opening the file) |
+//! | `shadings_paintable` | `shading.paintable` | "will an update fix MY file?" (the question an operator actually has, and why this sits between the census and the result: a page whose shadings are all type-7 meshes reports `shadings_paintable=0` and needs a different answer from one where paintable equals `shadings`) |
+//! | `shadings_painted` | `shading.painted` | "how many gradients actually reached the raster?" (the right half of this line's load-bearing pair — `shadings` non-zero beside `shadings_painted` zero is the honest statement that pdfce found the gradients, understood them, and drew none. An unpainted shading leaves whatever was underneath it showing through. Read either number alone and you get the wrong answer) |
+//! | `shadings_refused` | `shading.refused` | "how many shading dictionaries were rejected outright, with a named reason?" (DIVERGENCE. The finer counters behind it — no usable `/Function`, a `/Function` that would not load, a `/Function` output count disagreeing with the colour space's component count (§8.7.4.4), an incomplete colour ramp — are NOT on this line; they and the reason strings go to stderr, where a new key cannot break a parser) |
+//! | `shadings_mesh` | (derived — `shading.mesh()`, `by_type[3..7]` summed) | "how much of this page needs the mesh work rather than the parametric work?" (types 4–7, §8.7.4 — DERIVED at print time from the per-`ShadingType` census, which is itself not on the line. A subset of `shadings`; what remains after subtracting it is the function-based, axial and radial population) |
+//! | `img_colorant_none` | `images_colorant_none` | "how many images were correctly painted as NOTHING?" (§8.6.6.4/.5 — a `/Separation /None` or all-`/None` `/DeviceN` image colour space. CENSUS of pdfce's CORRECTNESS, and it is on the machine line rather than only in a note because a pixel-parity harness reads this line and nothing else: pdfium paints such an image BLACK (measured 2026-08-17), so the divergence will be maximal and it is pdfce that is right) |
+//! | `img_uncalibrated` | `images_uncalibrated_colorimetry` | "how many images went through pdfce's OWN XYZ→sRGB rather than a colour-management engine?" (`Lab`, `CalGray`, `CalRGB` — Bradford to D65, no rendering intent. Defensible, not colour-managed. On the line rather than only in a note because a `Lab` image landed in a parity harness's *unexplained* bucket while a perfectly good stderr sentence explained it — a disclosure that reached a human and not a machine) |
+//! | `blend_modes_applied` | `blend_modes_applied` | "how many `gs` operators selected a non-Normal blend mode that pdfce APPLIED?" (§11.3.5 — a CENSUS of what ran, and applied is NOT applied correctly: an additive page's blends are computed in device sRGB, which is what §8.6.6.4 specifies for an additive device, while a subtractive page's go through §11.3.4's complement only when the colorant buffer engaged. Read it with `blend_space_subtractive`, `blends_in_wrong_space` and `cmyk_buffer` before calling it a pass. The four non-separable modes increment this AND `nonseparable_composited`) |
+//! | `blend_modes_ignored` | `blend_modes_ignored` | "were any marks composited as `Normal` when the document asked for something else?" (DIVERGENCE, and the INVISIBLE kind — a blend that fell back to Normal produces a perfectly ordinary-looking opaque overlay, where a missing image leaves a hole somebody notices. One reason reaches it now: a `/BM` name outside Tables 136 and 137, i.e. a typo or an extension mode. The four non-separable modes used to land here and no longer do, so a non-zero value no longer implicates them) |
+//! | `soft_masks_ignored` | `soft_masks_ignored` | "were any marks painted UNMASKED that the document wanted faded or hidden?" (§11.6.5 — DIVERGENCE, and the FAILURE DIRECTION is what makes it the one to watch: an ignored soft mask paints MORE than the document asked for, so on a page whose design relies on a mask to hide something this is the difference between a rendering artefact and showing what was meant to be hidden) |
+//! | `soft_masks_applied` | `soft_masks_applied` | "how many soft masks were BUILT and applied?" (§11.6.5 — census. It says a mask exists and multiplied coverage; it does NOT say where it was applied, which is `soft_masks_on_group_result`'s question, nor whether its `/TR` was honoured, which is `soft_mask_tr_ignored`'s. Three keys, one mechanism, and none of them answers the others) |
+//! | `soft_mask_tr_ignored` | `soft_mask_transfer_ignored` | "did a mask carry a transfer function pdfce read and never evaluated?" (§11.6.5's `/TR` — DIVERGENCE, and one the operator cannot see by looking: `/TR` is the natural place to INVERT a mask, so an ignored one can show exactly the content that should have been hidden) |
+//! | `soft_masks_reset_stale` | `soft_masks_reset_stale` | "did a `gs /SMask /None` fail to restore the clip it found?" (fires when a `W n` intervened while the mask was in force, so the pre-mask clip no longer describes the geometry — counted rather than silently mis-clipped. It has a SECOND way to fire since group masks landed: a group whose mask could not be lifted out of the clip keeps the old per-element behaviour and lands here rather than on `soft_masks_on_group_result`, so read those two together) |
+//! | `groups_flattened` | `transparency_groups_flattened` | "how many transparency groups were painted straight onto the page instead of composited as a UNIT?" (§11.4.7 Table 147 — DIVERGENCE that no blend-mode counter can express. A group is a compositing SCOPE: its contents render into a separate buffer and the group's RESULT is composited with the blend, alpha and soft mask in force at the `Do`. Flattening applies those to each object INSIDE instead — the same answer for a group holding one opaque object, a different answer for almost anything else) |
+//! | `groups_special` | `transparency_groups_special` | "how many of the flattened groups were the ones where flattening stops being a good approximation?" (`/I true` isolated or `/K true` knockout — Table 147, NOT Table 96 which is the COMMON group-attributes table, and note that clause-11 table numbers shift by −2 in ISO 32000-2. An isolated group blends against a transparent initial backdrop rather than the page; a knockout group composites each element against the group's INITIAL backdrop, so flattening reverses the intended occlusion) |
+//! | `groups_composited` | `transparency_groups_composited` | "how many groups were rendered into their own buffer and applied as a unit?" (§11.4.5 — the positive twin of `groups_flattened`, and NOT a clean census: a `tiny_skia::Pixmap` starts TRANSPARENT and a transparent initial backdrop IS isolated semantics (§11.4.7), so a non-isolated group under a `/BM` used to become an isolated one silently and count here as a success. Fixed on the additive path; it survives on a SUBTRACTIVE page, where the residue is counted as `cmyk_groups_approximated`) |
+//! | `groups_knockout_approx` | `transparency_groups_knockout_approximated` | "inside a knockout group, how many ELEMENTS could not be given §11.4.6 semantics?" (exactly three kinds — a shading, an overprint composite (§11.7.4.3), a per-paint non-separable blend (§11.3.5.3) — all for one reason: they read the destination back, and §11.4.8 needs the element's own shape in isolation because it scales the destination by `(1 − f_s)` rather than `(1 − α_s)`. They layer instead of knocking out, which is the answer a NON-knockout group would give and also the answer every element gives at `q_s = 1`, so the shortfall is bounded. ★ A ZERO DOES NOT MEAN THE PAGE HAD NO KNOCKOUT TO GET WRONG: only explicit `/K true` reaches this counter, while §9.3.8's `/TK` (initial value TRUE — every text object), §11.6.7's shading patterns and §11.7.4.4's `B`/`b` and text rendering modes 2 and 6 establish knockout with no `/K` key anywhere, and none of those is treated as knockout today) |
+//! | `overprint_requested` | `overprint_requested` | "how many `gs` operators turned overprint ON?" (§8.6.7's `/OP` or `/op` — a CENSUS of demand that overstates the problem badly: producers set `/OP true` across whole documents as a default and most of those paints are no-ops. This is the denominator; `overprint_effective` is the honest measure) |
+//! | `overprint_opm1` | `overprint_mode1_requested` | "how many of those also selected overprint mode 1?" (`/OPM 1`, §8.6.7's nonzero overprint mode — separated because mode 1 is where overprint stops being a component-SET question and becomes a per-component VALUE one: a zero `DeviceCMYK` component leaves the backdrop unchanged. §8.6.7 also makes it inert off `DeviceCMYK`, so a non-zero count is the clearest signal that a document expects an ink model) |
+//! | `overprint_effective` | `overprint_effective` | "how many paints would actually LOOK different if overprint were honoured?" (the subset of `overprint_requested` that is a real visual difference: a source space specifying FEWER components than the backdrop has — a `Separation` or one-component `DeviceN` over CMYK — or mode 1 with a zero-valued component. §11.7.4.3's `CompatibleOverprint` picks the source component for every component the current space specifies and the backdrop's for the rest, so a `DeviceCMYK` fill over a `DeviceCMYK` backdrop at mode 0 is IDENTICAL to Normal) |
+//! | `overprint_composited` | `overprint_composited` | "how many paints actually went through `CompatibleOverprint` rather than a `Normal` blend?" (§11.7.4.3 Table 149. Should equal `overprint_effective` minus `overprint_refused` — kept as its own counter rather than derived, because a derived number cannot disagree with reality and therefore cannot report a bug. A disagreement across the three is the signal worth chasing) |
+//! | `overprint_refused` | `overprint_refused` | "how many paints fell back to a normal blend when overprint applied?" (DIVERGENCE, and the one to watch in this block: non-zero means the operator is looking at KNOCKED-OUT backdrops where a press would show overprinted ink, which is not detectable by looking at the page. Distinct from `overprint_images_unsupported` — this is "the composite was offered this paint and could not run it", that one is "the composite was never offered this object at all") |
+//! | `overprint_pixels` | `overprint_pixels` | "did the overprint composites MOVE anything?" (the measurement that separates "overprint ran and mattered" from "overprint ran and was a no-op on this geometry" — two facts a paint count alone conflates. Meaningless without `overprint_composited` beside it, and vice versa) |
+//! | `nonseparable_composited` | `nonseparable_composited` | "how many paints went through `Hue`/`Saturation`/`Color`/`Luminosity`?" (§11.3.5.3 Table 137 — a census of a SECOND code path: pdfce computes these four per pixel rather than handing the mode to the rasteriser, whose implementations are measurably wrong (decision 066). They also increment `blend_modes_applied`, so this is a subset of it, and the two paths fail independently) |
+//! | `nonseparable_pixels` | `nonseparable_pixels` | "did those composites move anything?" (the same companion relationship `overprint_pixels` has to `overprint_composited`: a composite that ran on zero pixels and one that repainted a whole swatch are both "1" on the count above, and only this distinguishes them) |
+//! | `groups_backdrop_reruns` | `transparency_groups_backdrop_reruns` | "why did this page take twice as long as its neighbour?" (§11.4.4 — a COST counter, not a shortfall, and the only one on this line that names something pdfce DID: a non-isolated group whose content stream was walked a SECOND time over a copy of its own backdrop, so the element formula and backdrop removal could be computed against it. It is the only place in the renderer where a page's content is interpreted more than once. Zero is the normal reading and does NOT mean non-isolated groups were mishandled — §11.4.4 NOTE 5 makes the single walk exact whenever the group's interior composites `Normal` throughout) |
+//! | `soft_masks_on_group_result` | `soft_masks_on_group_result` | "were group soft masks applied ONCE to the composite, or once per object inside it?" (§11.4.5 — read against `soft_masks_applied`, which counts masks BUILT while this counts the ones that reached where the clause puts them. The difference is not a shortfall on its own: a mask on an ELEMENTARY object belongs in the clip, because §11.6.4.1 makes the mask value that object's `q_m` and a `q_m` multiplies coverage exactly as a clip does. What to look for is a document WITH transparency groups where this stays at zero while `soft_masks_reset_stale` climbs — that page's group masks are multiplying once per object, visible wherever two of them overlap) |
+//! | `overprint_images_unsupported` | `overprint_images_unsupported` | "how many IMAGES were painted under overprint that `CompatibleOverprint` was never offered?" (DIVERGENCE, and a whole OBJECT CLASS rather than a run of ordinary failures — `overprint::composite` has exactly one call site, in the path and glyph painter, and an image XObject does not reach it. It cannot be fixed at the call site: per-sample overprint needs per-sample colorants, and an image's colorant identity is gone by the time its texels composite. Counted first deliberately — a counter blind to a whole object class reports a SMALLER problem than exists, which this project has already paid for once in the glyph painter) |
+//! | `blend_space_subtractive` | `blend_space_subtractive` | "is this page's compositing governed by §11.3.4 at all?" (the page itself and every transparency group whose blending colour space is `DeviceCMYK`, `Separation`, `DeviceN`, or a four-component `ICCBased` resolving to one. A CENSUS OF EXPOSURE, not a shortfall — a page can be entirely `DeviceCMYK` and entirely correct, because `Normal` is `c_s` on either side of the complement. Not a small class: every patch in the Ghent transparency panel declares `/Group /CS /DeviceCMYK` on the PAGE, including one whose own objects are `ICCBased` RGB, because a non-isolated group inherits its blending space (Table 147's `/CS` row). Whether §11.3.4 was HONOURED is `cmyk_buffer`; what it cost when it was not is `blends_in_wrong_space`. Three numbers, three questions, and reading any one alone gets a wrong answer) |
+//! | `blends_in_wrong_space` | `blends_in_wrong_space` | "how many blends were computed on the WRONG SIDE of §11.3.4's complement?" (DIVERGENCE, and the number that says a rendering is actually AFFECTED rather than merely exposed. The worked case is Ghent `1_GWG162`'s `Difference` cell: magenta under black gives `DeviceCMYK 1 0 1 0` — the green the patch is authored around — under §11.3.4, and `(237, 1, 140)` without it. ★ It now fires ONLY where the colorant buffer did not run, so a subtractive page that composited in ink reports zero here — read it with `cmyk_buffer`, never alone) |
+//! | `cmyk_buffer` | `cmyk_buffer_engaged` (a `bool`, printed `0`/`1`) | "did this page composite in INK, or in sRGB?" (THE KEY THAT CHANGES WHAT THE PREVIOUS ONE MEANS, and the only non-count on this half of the line — a parser treating every metrics key as a magnitude will misread it. At `1`, the blends `blends_in_wrong_space` counted were PERFORMED subtractively: that counter is fixed at `/BM`-selection time and measures exposure to §11.3.4, not failure. Read the pair, never the second alone) |
+//! | `cmyk_buffer_refused` | `cmyk_buffer_refused` | "did the page ask for ink and not get it?" (DIVERGENCE with a named cause — the colorant buffer would not fit under `MAX_CMYK_BUFFER_BYTES`, a page-size ceiling. Non-zero means this render is the pre-colorant-buffer approximation and SAYS SO rather than failing, and it is the reason `cmyk_buffer=0` on a page whose `blend_space_subtractive` is non-zero) |
+//! | `cmyk_bridged_pixels` | `cmyk_bridged_pixels` | "how much of this ink page was never authored as ink?" (pixels that entered the colorant buffer through the sRGB BRIDGE — images, shadings, and the results of transparency groups. A DISCLOSURE, not a shortfall: an image's samples were flattened to sRGB inside the decode loop long before any canvas saw them, so bridging is the only information that reaches the compositor. It exists so that "this page composited in ink" cannot be read as "every colour on this page was authored ink") |
+//! | `cmyk_groups_approximated` | `cmyk_groups_approximated` | "how many groups on an ink page had their RESULT composited in ink and their INTERIOR not?" (DIVERGENCE, two cases: a KNOCKOUT group, whose §11.4.6 semantics are preserved but whose interior runs in sRGB, and a NON-ISOLATED group, composited as if isolated with §11.4.4's backdrop removal skipped. An ordinary isolated group is NOT counted — it gets a child colorant buffer and crosses no conversion at all) |
+//! | `cmyk_unbridged_images` | `cmyk_unbridged_images` | "did an image reach a subtractive paint with no bridge and therefore not get painted AT ALL?" (should always be zero: the only route is a replayed display list, and a subtractive page is refused for recording outright. Counted rather than asserted because a claim of unreachability decays as the code around it changes, and a counter that stays zero costs one `u64` and one line of output. Non-zero here is a bug report, not a document property) |
 //!
 //! `images` and `forms` are *volume*, not shortfall — they are non-zero
 //! on a perfectly faithful render and exist so a batch pipeline can tell

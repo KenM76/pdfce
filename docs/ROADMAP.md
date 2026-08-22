@@ -96,6 +96,198 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `f9dc007` — THE PUBLISHED METRICS CONTRACT SAID KEYS NEVER MOVE, ONE COMMIT AFTER ONE MOVED: the engineer's discharge of the 228th filing's two hard-rule-11 survivors — **no Pass ID; an amendment to `PASS 74.4`'s own published documentation** — ★★★★ **AND THE FILING'S OWN PROTOTYPE GATE FOUND A THIRD SURVIVOR TWENTY-EIGHT TIMES LARGER THAN THE TWO IT WAS BUILT TO CATCH: `render-page`'s doc template documents `59 of the 87` keys the `println!` emits, and the missing `28` are contiguous at the tail** — the template's last extension is `1e7a0be` (2026-08-17, the colour slice, ending at `img_uncalibrated`) and **16 commits have edited the test's key list since, none the template**; ★★★ **`R212` MINTED — A CONTRACT WITH A TEST-ENFORCED COPY AND A PUBLISHED COPY DRIFTS IN THE PUBLISHED ONE, ALWAYS AND IN ONE DIRECTION**, because the test *forces* its copy to be updated and **nothing forces the other**; ★★ **THE GATE IS RECOMMENDED AND IS RED AT BASELINE, WHICH IS STATED AS A SEQUENCING CONSTRAINT RATHER THAN BURIED** — wire it *after* the 28-key repair, never before (`ci_gate_red_at_baseline_enforces_nothing.md`); ★★ **`R210`'S MINTING TEST ANSWERED "YES" HERE AND "NO" ONE FILING AGO ON THE SAME DAY**, and the difference is the whole of the warrant: this question is answerable from two spans of one file with no knowledge of current behaviour; ★ **NO `FEATURES.md` ROW, AND THAT IS A RULING** — 2026-08-22 (two-hundred-and-twenty-ninth filing)
+
+**Sourcing.** Shell held and used (hard rule 8). **Every figure the engineer
+supplied is marked as his; every figure this role produced names the command or
+the script that produced it.** Nothing under `crates/` or `tools/` was opened
+for editing — this filing is `docs/` plus one `D:/dev/rag/rust/` finding, so
+`check-commits-filed.py`'s loop terminates in one step, which is `d4721d8`'s
+rule and the 227th filing's entry.
+
+**What `f9dc007` changed** — `crates/pdfce-cli/src/main.rs` only, **+24 / −5**,
+one file (`git log -1 --stat f9dc007`). Two edits, both inside the module doc
+block:
+
+1. The `render-page:` stable-line template gained `forms_culled=<S2>` after
+   `forms=<S>`, matching the per-key table 55 lines below it and the actual
+   `println!`.
+2. The contract paragraph that promised existing keys *"never change meaning,
+   never move, and never disappear"* was replaced by what is actually promised:
+   **name**-stability, not **ordinal** stability; only the five keys before
+   `images` have a fixed position; `crates/pdfce-cli/tests/render_page.rs` is
+   named as the enforcement.
+
+**The reasoning is in the commit message and is not restated here**
+(`git log -1 --format=%B f9dc007`) — two accounts of one fact is how drift
+starts, which is the same discipline the 227th filing applied to `c24ad7a`.
+
+---
+
+#### ★★★★ THE FINDING THIS FILING ADDS, AND IT IS NOT THE REPAIR
+
+The dispatch asked whether a specific gate predicate is worth building:
+*"does the `render-page` stable-line template in `main.rs` list exactly the
+keys the `println!` emits?"* **It is, and the answer is not a judgement — the
+predicate was written and RUN, and it found a third survivor.**
+
+| quantity | value | how it was obtained |
+|---|---|---|
+| keys the `println!` emits | **87** | `re.finditer(r"([a-z0-9_]+)=\{\}", …)` over the format string at `crates/pdfce-cli/src/main.rs:7764–7792` |
+| keys the test asserts, in order | **87** | the `let keys: Vec<&str>` list in `crates/pdfce-cli/tests/render_page.rs` |
+| keys the **published template** shows | **59** = 53 named + 6 covered by the single elision `annots=…` | the `//! render-page:` continuation block, `main.rs:100–121` |
+| **undocumented** | **28 of 87 = 32.2 %**, contiguous, `blend_modes_applied` → `cmyk_unbridged_images` | set difference of the two lists above |
+
+**The drift window, and it is the part that makes this a rule rather than a
+tidy-up.** The template's last extension is **`1e7a0be` (2026-08-17)**, the
+colour slice, which ended it at `img_uncalibrated`
+(`git log -L 121,121:crates/pdfce-cli/src/main.rs`). The **very next** slice —
+`bd244d9`, *"blend modes composite for real"*, the **same day** — added keys to
+the `println!` and to the test and **not** to the template. **16 commits have
+touched `crates/pdfce-cli/tests/render_page.rs` since `1e7a0be`**
+(`git log --oneline 1e7a0be..HEAD -- crates/pdfce-cli/tests/render_page.rs`),
+spanning `Pass 97.0b`–`97.1e` and `Pass 74.4`, **and not one of them touched
+the template.** Five days, 28 keys, 16 opportunities, zero propagations.
+
+★ **Why that is a one-directional law and not bad luck.** The test asserts the
+key list by equality, so **adding a key to the `println!` without adding it to
+the test turns `render_page.rs` red.** The test's copy is therefore updated
+*by force*. The template's copy is updated only *by care*. **The two copies do
+not drift apart at random — they drift in exactly one direction, and it is
+always the published one**, which is the copy a consuming script's author
+actually reads and the only copy with the words *"the **fixed order shown**"*
+next to it.
+
+---
+
+#### ★★★ STANDING RULE `R212` — MINTED, AND THE WARRANT IS STATED IN BOTH DIRECTIONS
+
+Full text under *Standing rules*. **Ceiling moves `R211` → `R212`; next free
+`R213`.**
+
+**Why this was minted where five candidates in the past five filings were
+declined**, checked against `R210`'s minting test rather than against a feeling:
+
+- **It is not n = 1.** The 227th filing declined at n = 1 *on the instance
+  count alone*, and said so. Here the count is **28 un-propagated key additions
+  across 16 commits and five days**, plus the two survivors the 228th filing
+  reported by reading. **The mechanism has never once produced the other
+  outcome in this instrument's history.**
+- **It has an artefact-only oracle, and the oracle was RUN rather than
+  imagined.** `R210`: *"the test is whether the question can be answered from
+  artefacts alone."* Two spans of one file, one regex each, no knowledge of
+  pdfce's current behaviour required. This is the **opposite** answer from the
+  228th filing's decline one commit earlier — that one asked *"does a doc block
+  state a contract that a test file also states?"*, which is **not** decidable
+  by grep in general. **The generic question is undecidable and the specific
+  one is trivial**, and mistaking the first for the second is what would have
+  lost this.
+- **It is not a re-statement of an existing rule.** `R210` is about an
+  *instrument's* silence being emitted as success. Hard rule 11 (this role's)
+  is about sweeping when a counter **changes meaning**. **`R212` is about the
+  asymmetry between two copies of one contract when only one of them is under
+  test** — it fires on an ordinary *addition*, where nothing changed meaning
+  and no instrument reported anything, which is precisely the case the other
+  two do not reach.
+
+---
+
+#### ★★ THE GATE — RECOMMENDED, WRITTEN OUT, AND RED AT BASELINE
+
+**`tools/check-metrics-line-contract.py`** (name suggested, not created — this
+role does not write to `tools/`).
+
+**Predicate**, ready to wire:
+
+> Extract two ordered key lists from `crates/pdfce-cli/src/main.rs`.
+> **(A)** From the `//! render-page:` doc-comment block and its `\`-continued
+> lines: every whitespace-separated token matching `^([a-z0-9_]+)=`, taken
+> after the first `;`, in order — with `…` (U+2026), whether standalone or as
+> a token's value (`annots=…`), recorded as a **wildcard matching one or more
+> keys**.
+> **(B)** From the `println!` whose format string begins
+> `rendered {} page {page_number} -> {} {}x{}; `: every `([a-z0-9_]+)=\{\}`,
+> after the first `"; "`, in order.
+> **FAIL** unless (A) matches (B) exactly under that single wildcard rule.
+> Exit `0` clean, `1` on any mismatch, printing the first differing index and
+> any tail (B) carries that (A) never shows.
+
+**Why it is buildable where four of this project's declines were not:** it
+needs no knowledge of what pdfce *does* — only that two spans of one file agree
+about a list of identifiers. That is the same class as `R210`'s ReadMe grep and
+`R211`'s byte-identity oracle, and a different class from *"is this disclosure
+true?"*, which hard rule 11 and `R207` correctly refuse to gate.
+
+**★★ IT IS RED AT BASELINE, AND THAT IS A SEQUENCING CONSTRAINT, NOT A
+FOOTNOTE.** Run against `HEAD` it reports the 28-key tail immediately.
+`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md` is this project's
+own finding on exactly that shape. **So: repair the template first, wire the
+gate second.** Wiring it red would make it a warning nobody reads inside a
+week, which is the failure the finding names.
+
+**What the repair costs, so it is not open-ended:** 28 key names, contiguous,
+already in the correct order in `crates/pdfce-cli/tests/render_page.rs`'s
+assertion list — a copy, not a derivation. The per-key table further down the
+same doc block is missing the same 28 (`grep -n blend_modes_applied
+crates/pdfce-cli/src/main.rs` returns the `println!` and nothing in the doc
+block), so that table is a second, larger edit and is **reported here as owed,
+not done**.
+
+---
+
+#### Hard-rule-11 sweep for this commit — ONE SURVIVOR, INSIDE THIS ROLE'S OWN REMIT, AND IT IS REPAIRED IN THIS FILING
+
+`f9dc007` changes what a **contract sentence** claims, so the claim swept for
+was *"existing keys never move"* and *"new counters are appended"* — as a claim
+about the metrics line's stability, across `crates/`, `tools/` and `docs/`.
+
+| # | site | the stale claim | disposition |
+|---|---|---|---|
+| 1 | `docs/ARCHITECTURE.md` §(H) | *"Two survivors of that narrowing are recorded as **owed, not done** … Both are `crates/`, therefore the engineer's, in their own commit."* — **both are now done, in `f9dc007`** | **REPAIRED IN THIS FILING** — `docs/` is this role's remit, and an "owed" flag that outlives its discharge is the same defect class this entry is about |
+
+**Checked and CLEAN, recorded so the negatives are visible too:**
+`docs/ROADMAP.md`'s colour-slice Shipped entry (*"fixed order, append-never-reorder honoured"*, `grep -n "append-never-reorder honoured"`, the
+colour-slice Shipped entry) — **true when written and still true of that
+Pass**, which appended twelve keys at the end and extended the template; it is
+a dated, append-only entry and is not touched. `docs/SESSION_LOG.md:56466–7`
+(the 228th filing's own survivor table) — dated, append-only, correct as a
+record of what was owed then. `docs/FEATURES.md` row 203 — describes
+`forms_culled` as *"beside `forms`"*, which is what the code does and what the
+corrected docstring now says; unaffected. `docs/NEXT_SESSION.md` §0.5 — **not a
+survivor but a discharged queue item**, removed by this filing per the
+dispatch.
+
+---
+
+#### `FEATURES.md` — NO ROW, AND THAT IS A RULING RATHER THAN A SKIP
+
+`f9dc007` ships **no capability**. It corrects a doc block's accuracy about a
+line the code already printed. Row 203 (`Pass 74.4`, form XObject viewport
+culling) already reads *"Reported as **`forms_culled` beside `forms`** on
+`render-page`'s stable metrics line"* — which was true before this commit and
+is true after it. **Nothing to tick, nothing to move, no row to create.** Said
+out loud because *"did not open the file"* and *"opened it and judged there was
+nothing to change"* are different facts and a silent absence cannot tell them
+apart.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `74.5` shipped; next free in family **`74.6`** | **unchanged — no Pass minted.** `f9dc007` is an amendment to `PASS 74.4`'s published documentation, not new work, and giving it a number would claim a scope it does not have. Next free in the family stays **`74.6`**; `122.4` stays the next free `122`; **`97.1g` stays reserved and unbuilt** |
+| decisions (`ARCHITECTURE.md` §12) | **082** | **082** (unchanged — no architectural choice was made). Next free **083**. |
+| standing rules | **`R211`** | **`R212`** (**MINTED** — *a contract with a test-enforced copy and a published copy drifts in the published one; name the authoritative copy and either generate or gate the other*). Next free **`R213`**. |
+| open operator questions | ceiling `(br)` | **`(br)`** (unchanged — still the one thing awaiting Ken). Next free **`(bs)`**. |
+| SESSION_LOG filing ordinals | **228** | **229** |
+
+**Owed work, recorded as owed:** the 28-key template tail and the per-key
+table's matching 28-row gap, both in `crates/pdfce-cli/src/main.rs`, both the
+engineer's, both **in their own commit** — and the gate wired *after* them.
+
+---
+
 ### `e36f96e` — `PASS 74.4` (Form XObject **viewport culling** in `pdfce-render`, `forms_culled` on the metrics line) + `PASS 74.5` (`tools/gen-scale-demo/mitochondrion.py`, one shared organelle module replacing three drifted copy-pastes) — ★★★ **THE POSITION OF THE CULL MATTERED MORE THAN THE CULL, AND THE COUNTER COULD NOT TELL THE TWO APART: the same predicate beside the `/BBox` clip reported the SAME `339 of 342` and ran in `802 ms`; hoisted above the flate-decode it reported `339 of 342` and ran in `120 ms`** — 6.7× on an instrument that reads identical either way; ★★ **DECISION 082 MINTED — `pdfce-render` MAY SKIP WORK ONLY WHERE SKIPPING IS EXACT; A LOSSY SPEED-UP IS AN OPERATOR DECISION, NOT AN ENGINEERING ONE**, which is what converts the un-done sub-pixel work from a backlog item into open operator question **`(br)`**; ★★ **TWO SILENT GEOMETRY BUGS FOUND BY RENDERING, NOT BY READING** — a unit constant inverted by 8.03× that left every organelle correctly placed, correctly shaped and an eighth of its size, and a self-crossing subpath that stroked perfectly while nonzero winding filled every crista lumen with matrix colour; ★ **MINT DECLINED for the cull-instrumentation finding, and the decline names its warrant** — 2026-08-22 (two-hundred-and-twenty-eighth filing)
 
 **Sourcing.** Shell held and used (hard rule 8); every figure this role produced
@@ -87212,6 +87404,110 @@ same cause (hashes exist only at commit time), two different failure modes.
   `D:\dev\rag\rust\an_identical_failure_count_across_three_different_fixes_means_you_are_fixing_the_wrong_thing.md`.
 
   **Ceiling moves `R210` → `R211`; next free `R212`.**
+
+- **R212 — A CONTRACT WRITTEN DOWN IN TWO PLACES, ONE OF WHICH IS UNDER TEST,
+  DRIFTS IN THE OTHER — ALWAYS, AND IN ONE DIRECTION: THE TEST *FORCES* ITS
+  COPY TO BE UPDATED AND NOTHING FORCES THE PUBLISHED ONE. NAME WHICH COPY IS
+  AUTHORITATIVE, AND EITHER GENERATE THE OTHER FROM IT OR GATE THE TWO AGAINST
+  EACH OTHER (2026-08-22; librarian-minted, two-hundred-and-twenty-ninth
+  filing; `f9dc007`, discharging `Pass 74.4`'s two survivors).**
+
+  **The mechanism, in three sentences.** When one copy of a contract lives in
+  an assertion, changing the contract **turns a test red**, so that copy is
+  updated as a condition of the change landing at all. When the other copy
+  lives in a doc comment, a README or a published template, **nothing goes red**
+  and it is updated only if somebody remembers. The two copies therefore do not
+  drift apart at random — **they drift in exactly one direction, and it is
+  always toward the copy that is enforced**, leaving the *published* copy — the
+  one a consumer actually reads — as the stale one.
+
+  **★ Why this is worse than ordinary duplication, and it is the load-bearing
+  half.** The updated copy is **evidence of nothing.** A reviewer sees the test
+  change in the diff and reads it as *"the change was propagated"*; it is
+  actually *"the change was compelled."* **A well-argued change is not a
+  self-propagating one** — and the better argued it is, the more convincing the
+  test comment that carries the argument looks, and the less anyone thinks to
+  ask where else the same sentence lives.
+
+  **The worked instance, and the numbers are the warrant.** `pdfce-cli
+  render-page`'s stable metrics line has **two** written contracts: the module
+  doc block's `//! render-page:` template (published; the same block calls it
+  *"the **fixed order shown**"*) and `crates/pdfce-cli/tests/render_page.rs`'s
+  ordered `keys` assertion (enforced).
+
+  - `Pass 74.4` inserted `forms_culled` **beside** `forms` rather than
+    appending it. The reasoning — *"342 executed, 0 culled only reads as a pair
+    when the two are adjacent"* — was written out **in the test comment**,
+    correctly and at length. The doc block's *"existing keys … never move"*
+    sentence, which that reasoning refutes, was not touched.
+  - Sweeping for the same shape found it is not an incident but a **regime**:
+    the `println!` emits **87** keys, the test asserts **87**, and the published
+    template shows **59** (53 named plus six covered by its one `annots=…`
+    elision). **28 of 87 — 32.2 % — are undocumented**, contiguous at the tail,
+    `blend_modes_applied` → `cmyk_unbridged_images`.
+  - The template's last extension is **`1e7a0be` (2026-08-17)**. The very next
+    slice, **`bd244d9` the same day**, added keys to the `println!` and the test
+    and not to the template. **16 commits have edited the test's key list
+    since; none edited the template**
+    (`git log --oneline 1e7a0be..HEAD -- crates/pdfce-cli/tests/render_page.rs`).
+    **Sixteen opportunities, zero propagations, and no red anywhere.**
+
+  **What the rule obliges, in three lines.**
+  (a) **When you change a contract, the test edit does not count as
+  propagation.** Ask separately, before the commit: *where is this contract
+  PUBLISHED?* — doc comment, README, `--help` text, a template a script author
+  reads.
+  (b) **Name the authoritative copy IN the other copy.** `f9dc007` does this
+  and it is the minimum: the docstring now says `tests/render_page.rs` is what
+  enforces the order, so a reader who needs certainty has a route instead of a
+  promise.
+  (c) **Where the published copy is a literal template of what the code emits,
+  GATE IT** — that is generation's cheap cousin and it is mechanical. Where it
+  is prose, (a) and (b) are the whole of the remedy; do not pretend otherwise.
+
+  **★★ ENFORCEMENT LAYER — the reason this was minted while the 228th filing
+  declined its sibling one commit earlier, on the same day.** `R210`'s minting
+  test is *"can the question be answered from artefacts alone?"* The **generic**
+  question — *"does this doc block state a contract that some test file also
+  states?"* — **cannot**, and the 228th filing was right to decline it. The
+  **specific** question — *"does the `render-page` template list exactly the
+  keys the `println!` emits?"* — is two regexes over two spans of **one file**,
+  with no knowledge of pdfce's behaviour required. **The predicate was written
+  and run before this rule was minted, and it found the 28-key tail that
+  reading had missed.** ⇒ **A finding whose general form is undecidable can
+  still have a decidable instance, and the instance is where the gate goes.**
+  Do not let an undecidable generalisation talk you out of a two-regex check.
+
+  **★ And the sequencing constraint, which is part of the rule rather than an
+  aside.** The gate is **RED at baseline** — 28 keys missing at `HEAD`. Wiring
+  it before the repair would make it a permanent warning, which is
+  `D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`, this project's
+  own finding. **Repair first, wire second.** A rule that prescribes a gate
+  owes the order in which it becomes real.
+
+  **★ Scope, so it is not over-read.** This binds where a contract has **two
+  written copies and one is asserted by a test** — stable output lines, wire
+  formats, `--help` text against `clap` definitions, a schema doc against a
+  serde struct. It does **not** bind on ordinary duplicated prose, which is
+  hard rule 11's territory (sweep on a *meaning change*), nor on an instrument
+  under-reporting itself, which is `R210`'s. **`R212` fires on an ordinary
+  ADDITION** — nothing changed meaning, no instrument said anything, and that
+  is exactly why the other two do not reach it.
+
+  Cross-references: `R210` (the minting test this rule satisfies, and the
+  decline it is the counterpart to), `R211` (minted on the same test five
+  commits earlier), hard rule 11 in `.claude/agents/pdfce-librarian.md` (the
+  neighbouring obligation, on meaning changes rather than additions),
+  `docs/decisions/004` §6.4 / `R20` (why the metrics line exists at all). New
+  RAG file:
+  `D:/dev/rag/rust/a_contract_with_a_tested_copy_and_a_published_copy_drifts_in_the_published_one.md`.
+  Related and deliberately not merged with:
+  `D:/dev/rag/rust/the_cheapest_moment_to_delete_a_duplicated_formula_is_while_it_still_agrees.md`
+  (that one is about two copies of an *implementation*; this is about two copies
+  of a *contract*, where deletion is not available because one copy's job is to
+  be readable by someone who will never run the test).
+
+  **Ceiling moves `R211` → `R212`; next free `R213`.**
 
 
 ## Update protocol

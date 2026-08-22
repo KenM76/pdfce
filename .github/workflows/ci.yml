@@ -415,6 +415,16 @@ jobs:
       - name: check every public verb is documented and the counts agree
         run: python tools/check-core-api-verbs.py
 
+      # `render-page`'s stdout line is a published contract written down three
+      # times: the `println!` that emits it, the `//!` template a consumer
+      # reads, and an `assert_eq!` in the tests. Only the test copy is under
+      # test, so only the test copy could not drift -- and the template drifted
+      # by 28 of 87 keys before anyone noticed, in a run that stayed green the
+      # whole time. R212: the updated copy is evidence of nothing, because the
+      # test FORCES its copy while nothing forces the published one.
+      - name: check the metrics line matches its published template
+        run: python tools/check-metrics-line-contract.py
+
       # Pass IDs, standing rules and decision numbers are hand-assigned across
       # documents no compiler reads. Duplicate-number detection in
       # ARCHITECTURE.md §12 is deliberately absent, so the printed ceiling

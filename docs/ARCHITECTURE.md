@@ -4735,13 +4735,31 @@ precisely so the pair reads as a pair:
 (modulo the depth/cycle refusals, which have always been counted
 separately as `xobject_depth_overflows`).
 
-**Two survivors of that narrowing are recorded as owed, not done** —
+**Two survivors of that narrowing were recorded here as owed, not done** —
 `crates/pdfce-cli/src/main.rs`'s module-docstring line template (which
-still stops at `forms=<S>`) and the same block's *"new counters may be
+stopped at `forms=<S>`) and the same block's *"new counters may be
 appended … existing keys never move"* promise (which `forms_culled`'s
 deliberate mid-line insertion over-states). Both are `crates/`, therefore
 the engineer's, in their own commit. See `ROADMAP.md`'s
 two-hundred-and-twenty-eighth filing, hard-rule-11 sweep.
+
+**★ BOTH ARE DISCHARGED as of 2026-08-22 by `f9dc007`** (`crates/pdfce-cli/src/main.rs`
+only, **+24 / −5**): the template carries `forms_culled=<S2>`, and the contract
+paragraph now promises **name**-stability rather than **ordinal** stability,
+naming `crates/pdfce-cli/tests/render_page.rs` as the enforcement. The "owed"
+sentence above is kept rather than deleted because the record of what was owed
+is the audit trail; **this paragraph is the part that is current.**
+
+**★★ And the discharge surfaced a larger instance of the same defect, recorded
+here because §(H) is where a reader of this counter arrives.** The published
+template documents **59 of the 87 keys** the `render-page` `println!` emits;
+the missing **28** are contiguous at the tail (`blend_modes_applied` →
+`cmyk_unbridged_images`) and have been absent since **`bd244d9`, 2026-08-17**,
+across **16 commits that each edited the test's key list**. That is
+**owed work, not done** — the engineer's, in its own commit. The general form
+is standing rule **`R212`**, minted by the two-hundred-and-twenty-ninth filing:
+*a contract with a test-enforced copy and a published copy drifts in the
+published one, because the test forces its copy and nothing forces the other.*
 
 #### What is NOT in this entry
 

@@ -5,7 +5,10 @@ shipped, this says what to do next. Overwrite it once acted on.
 
 **Written 2026-08-22 (evening), by `pdfce-librarian` at the engineer's
 request** during the 228th filing, replacing the 2026-08-22 (afternoon)
-handoff.
+handoff. **Amended 2026-08-22 (229th filing):** §0.5's two doc repairs are
+**discharged** by `f9dc007`; what stands there now is the 28-key gap that
+checking the repair uncovered, plus the gate to wire after it. **`(br)` in §0
+is the only thing awaiting Ken.**
 
 ---
 
@@ -107,34 +110,56 @@ pdfce-cli render-page banana.pdf --page 1 --scale 1.6 -o page.png
 
 ---
 
-## §0.5 — TWO REPAIRS OWED IN `crates/`, REPORTED BY THE FILING AND NOT MADE BY IT
+## §0.5 — THE TWO DOC REPAIRS ARE **DONE**. WHAT REPLACED THEM IS TWENTY-EIGHT TIMES BIGGER.
 
-Both are in **one file, one doc block, one edit** —
-`crates/pdfce-cli/src/main.rs`'s module docstring:
+**Discharged by `f9dc007`** (2026-08-22, `crates/pdfce-cli/src/main.rs` only,
++24 / −5), filed as the 229th filing: the `render-page:` template carries
+`forms_culled=<S2>`, and the *"existing keys never move"* sentence now
+promises **name**-stability rather than **ordinal** stability and names
+`crates/pdfce-cli/tests/render_page.rs` as the enforcement. **Do not redo
+this.**
 
-1. **The `render-page:` stable-line template (~line 102) is missing
-   `forms_culled`.** It shows `… images_unsupported=<R> forms=<S> \` and
-   stops; the table 55 lines below it and the actual `println!` both have
-   the new key. The same doc block calls this *"the **fixed order shown**"*,
-   so the template is the published contract, not decoration.
-2. **The same block's contract sentence over-states** — *"New counters may
-   be **appended** in later Passes; existing keys never change meaning,
-   never move, and never disappear."* `forms_culled` was **inserted beside
-   `forms`** on purpose (it only reads as a pair when adjacent), so every
-   later key's ordinal index moved. The correct narrower version is already
-   argued in `crates/pdfce-cli/tests/render_page.rs` — **this docstring is
-   the copy that did not get it.**
+### ★★★★ What the 229th filing found while checking that repair
+
+It built the gate predicate the engineer asked about and **ran** it. The
+published doc template shows **59 of the 87 keys** the `render-page`
+`println!` emits. **28 are missing**, contiguous at the tail —
+`blend_modes_applied` → `cmyk_unbridged_images` — and the per-key table
+further down the same doc block is missing the same 28.
+
+- Template's last extension: **`1e7a0be`, 2026-08-17** (the colour slice,
+  ending at `img_uncalibrated`).
+- The **next** slice, `bd244d9`, the **same day**, added keys and skipped it.
+- **16 commits have edited `crates/pdfce-cli/tests/render_page.rs` since; none
+  edited the template.** Five days, 28 keys, sixteen opportunities, zero
+  propagations.
+
+**Why only one direction:** the test asserts the key list by equality, so an
+addition that skips the test **goes red**. The published copy has nothing that
+goes red. That is standing rule **`R212`**, minted by this filing.
+
+### What is owed, and the ORDER matters
+
+1. **Repair the template** — 28 names, already in the right order in the
+   test's assertion list. A copy, not a derivation.
+2. **Repair the per-key table** in the same doc block — same 28, one row each.
+3. **THEN** wire `tools/check-metrics-line-contract.py`. The predicate is
+   written out in `ROADMAP.md`'s `f9dc007` entry, ready to take. **It is RED at
+   baseline** — wiring it before steps 1–2 makes it a warning nobody reads
+   inside a week
+   (`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`).
 
 **Take these in their OWN commit, not bundled into anything else.** A
 filing commit that touches `crates/` or `tools/` becomes a code commit in
 no filing and turns `check-commits-filed.py` red on the commit meant to
 make it green — that is `d4721d8`'s memory file, and it is why the
-librarian reported these instead of fixing them.
+librarian reports these instead of fixing them.
 
-★ **The shape worth carrying:** the change that invalidated both was made
-**deliberately, with an argument, in a test comment.** The reasoning was
-written down — just not where the contract is published. **A well-argued
-change is not a self-propagating one.**
+★ **The shape worth carrying:** the change that invalidated the original two
+was made **deliberately, with an argument, in a test comment.** The reasoning
+was written down — just not where the contract is published. **A well-argued
+change is not a self-propagating one**, and a test edit in a diff is
+**compulsion**, not evidence of diligence.
 
 ---
 
@@ -162,7 +187,11 @@ not the set CI runs; a CI job with no local runner is UNOBSERVED, not
 passing.*
 *(All four gates the 228th filing ran — `check-commits-filed`,
 `check-passes-filed`, `check-ledger-numbers`, `check-core-api-verbs` —
-were green at exit 0 with only this filing's `docs/` edits in the tree.)*
+were green at exit 0 with only that filing's `docs/` edits in the tree.
+**The 229th filing ran FIVE** — those four plus `check-ui-strings.sh` —
+all exit 0. Note the set grew by one between two filings on the same day,
+which is `R209`'s point: **"all gates green" names a set, and the set
+somebody runs is not the set CI runs.**)*
 
 **3. Read `docs/compositor-plan.md`** before scoping anything in `97.x`.
 
