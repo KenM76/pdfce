@@ -96,6 +96,382 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `2c5ec1d` + `9838c58` + `00ae8b9` + `62cf4e6`/`8372f20`/`4fca888` + `6a2c13f` — `PASS 97.1h` (the `/Indexed`-over-`/DeviceN` palette), `PASS 97.1i` + `PASS 97.1j` (two constant-factor fixes, the first of which repairs a regression `97.1e` shipped this morning), the XFA availability survey, and the engineer's discharge of the 224th filing's five survivors — ★★★★★ **AND THE HEADLINE OF THIS ENTRY IS A CORRECTION TO A NUMBER THIS ROLE FILED EARLIER TODAY: THE GHENT BOARD'S `29 pass of 51` IS AN OVER-COUNT AND THE CORRECTED FIGURE IS `26 pass AT MINIMUM`** — `tools/ghent-check.py` implements **ONE of the suite's TWO pass criteria** and has reported `clean` for the other **for its entire life**; ★★★ **THE CORRECTION CAME FROM THE OPERATOR READING THE RENDER CELL BY CELL — THE FIRST INDEPENDENT JUDGEMENT OF PDFCE'S GHENT OUTPUT THAT HAS EVER BEEN TAKEN**, and every prior number on this board was the harness scoring itself; ★★ **`R210` MINTED** — *a conformance figure is filed with the CRITERIA the harness implements, not only its denominator*; ★★ **DECISION 080 MINTED** — threading is gated at COMPILE TIME on the target, not only at runtime by a setting, because both `std::thread::spawn` and `rayon` `cargo check` **cleanly** for `wasm32-unknown-unknown`; ★ **the operator's *"put multithread in the plan for later"* is filed as `Pass 122.0` with his design intact and one constraint added** — 2026-08-21 (two-hundred-and-twenty-fifth filing)
+
+**Sourcing.** Shell held and used (hard rule 8); the command is named beside
+every figure this role produced itself. **Every Ghent, timing and corpus figure
+below is the engineer's, taken this session** — none is carried from a
+document, and the one figure that *was* carried from a document is the one this
+entry corrects. **Nothing was committed by this role.**
+
+**Scope.** Six commits, three Passes. `check-commits-filed.py` listed **four**
+before this filing — the three Pass commits plus `6a2c13f`, which is the
+engineer's own commit applying the 224th filing's `crates/` survivors and is
+filed here rather than left to a gate nobody reads twice.
+
+---
+
+## ★★★★★ FIRST, THE CORRECTION, BECAUSE IT INVALIDATES A NUMBER IN THE ENTRY DIRECTLY BELOW THIS ONE
+
+**`docs/ghent-operator-review-2026-08-21.md`** (committed in `2c5ec1d`,
+engineer-owned, **not edited by this role** — it is the calibration set) records
+the operator reading the annotated Ghent render **cell by cell** and finding
+defects the harness **structurally cannot see**.
+
+| the claim | status |
+|---|---|
+| **`29 pass of 51`**, filed by this role in the 224th filing, four hours ago | **OVER-COUNT** |
+| **`26 pass of 51` AT MINIMUM**, pending three unchecked optional-content patches | **the corrected figure** |
+
+**Two instrument faults, and each is a class.**
+
+**Fault 1 — the harness implements ONE of the suite's TWO pass criteria.**
+The suite marks failure two ways and its own artwork says so: a **negative
+marker** (a cross a correct renderer makes vanish — `ghent-check.py` implements
+this thoroughly) and a **positive marker** (*"if a check mark is visible …
+then DeviceN is respected; if no check mark appears then DeviceN colour was
+transformed to CMYK (= ERROR)"*). **The harness has no notion of a mark that
+should be there and is not.** **Seven of the 51 patches score this way** — GWG
+`050`, `080`, `081`, `082`, `150`, `151`, `152` — and every one has been
+reported `clean` for the harness's whole life. **At least three of them (8.2,
+8.1, 8.01) are failures.**
+
+⇢ **An absence is invisible to a detector built to find a presence, and a gate
+that looks for the wrong thing does not report *"I cannot tell"* — it reports
+`clean`, which is indistinguishable from a pass.**
+
+**Fault 2 — the contrast floor has no area term.** `CONTRAST_MIN = 12.0`
+(8-bit levels) implements the suite's *"a **clear** X … judged by a human at
+0.5 m"* as a fixed number **regardless of how big the mark is**. Patch
+`GWG 1.0`'s cells `d` and `i` carry crosses roughly **three times the linear
+size** of the calibration patch's at a measured contrast of **9.8** — below the
+floor and unmistakable to the eye; box 11's cells sit at **1.3–3.1** and
+genuinely are invisible. **Lowering the number would drag box 11 in with it**;
+the threshold has to be a function of the mark's size.
+
+**The cell-level dispositions the operator supplied**, which are what makes
+this a calibration set rather than a complaint:
+
+| GWG | harness said | corrected |
+|---|---|---|
+| `1.0` CMYK Overprint Test | pass | **FAIL** (cells `d`,`e`,`i`,`j`) |
+| `1.1` CMYK Overprint Mode | FAIL, 1 cross | **PASS** (faint outline only) |
+| `19.0` DeviceN Overprint (Black) | FAIL, 1 cross | FAIL, 1 cell (`d`) |
+| `19.1` DeviceN Overprint (Yellow) | FAIL, 4 crosses | FAIL, **2** cells (`b`,`d`) |
+| `8.2` DeviceN Support (4 colours) | pass | **FAIL** (check marks absent) |
+| `8.1` DeviceN Support (5 colours) | pass | **FAIL** (check marks absent) |
+| `8.01` DeviceN Support (6 colours) | pass | **FAIL** (check marks absent) |
+| `5.0` Font Substitution | pass | PASS (confirmed) |
+
+**Net: four patches pass → fail, one fail → pass. 29 → 26.** Three more
+(`15.0`, `15.1`, `15.2`, optional content) use the same positive criterion, are
+not on the combined pages, and **nobody has looked at them** — which is why the
+corrected figure is *at minimum*.
+
+**★★ WHAT THIS DOES NOT CHANGE, stated so the correction is not over-read.**
+Nothing about the compositing work. The blending-colour-space census (**107
+wrong → 0**) counts **blend operations**, not traps, and is unaffected by either
+fault. Patches `16.0`/`16.1`/`16.2` and 36/37 are cross-criterion patches and
+the operator confirmed the first three read correctly. **What moves is the
+scoreboard, and only the scoreboard.**
+
+**★★★ AND THE HONEST SHAPE OF THE ERROR, because it is not "the harness was
+buggy".** Every Ghent figure this project has ever filed came from **the harness
+scoring itself**; its thresholds were calibrated against **one** patch
+(`GWG 16.0`, 2026-08-17) whose answer was already known from a code change.
+**That is self-consistency, not ground truth.** The board carried a caveat
+saying a document has no access to staleness and *"only re-measuring does"* —
+and **re-measuring with the same instrument is exactly what does not help
+here**, because the instrument agreed with itself every time. What was missing
+was an **oracle**, and today one arrived.
+
+**★ This is also the SECOND time this exact instrument has produced a headline
+that was too high, and the first time is already in this file.** The 148th
+filing records `ghent-check.py`'s **first run reporting `29 of 51`**, corrected
+before publication when 13 reference-strip patches turned out not to be
+adjudicable by an X-detector. **Same shape, same number, four days apart** — the
+first was caught before it was filed and the second was not. `R210` is minted
+on that pair, below.
+
+**Every sentence of the form *"N of 51 Ghent patches pass"* in this file,
+`FEATURES.md` and `SESSION_LOG.md` is over-counted by the check-mark family,
+including the historical ones** — the seven positive-criterion patches have been
+scored `clean` since the harness was written, so **no** figure on this board has
+ever excluded them. **Historical entries are NOT rewritten** (Shipped is
+append-only): the *Ghent standing board* under *Next up* carries the correction
+once, at the top, and it governs every figure below it.
+
+---
+
+## `PASS 97.1h` (`2c5ec1d`) — an `/Indexed` palette over a `/DeviceN` base rendered GREY, and the operator found it by reading a test patch's own caption
+
+`GWG 8.2`'s duotone manta ray came out neutral greyscale. It should be
+cyan-and-black; **the patch's caption says so in as many words**, and pdfce had
+rendered it wrong for as long as it had rendered it.
+
+**The colour space** is
+`[/Indexed [/DeviceN [/Cyan /Black] /DeviceCMYK <tint>] 255 <lookup>]`.
+Building the palette, `resolve_indexed` filled a fixed `[0.0f32; 4]` and passed
+the whole thing to `to_rgb`. **Three lines, two independent faults:**
+
+1. **ARITY.** A tint transform is a **§7.10 function with a DECLARED input
+   count**. Four inputs into a two-input function makes `PdfFunction::eval`
+   refuse; `tint_through` returns `None`; `device_n_to_rgb` falls back to its
+   **max-tint NEUTRAL**. Grey palette, image renders, page looks fine.
+2. **WIDTH.** Four slots cannot hold a five- or six-colorant `DeviceN`, and the
+   suite ships both (`GWG 8.1`, `GWG 8.01`). Trailing colorants were dropped
+   **before any conversion was attempted**.
+
+**Ships:** `palette_entry(entry, m)` — exactly `m` components, sized from the
+base space — plus two tests. **It is a named function rather than three lines
+inline precisely because three lines inline cannot be tested, and these three
+were wrong for the whole life of the feature.**
+
+**VERIFIED AGAINST AN INDEPENDENT RENDERER, not against expectation.** pdfium
+renders the duotone in cyan and shows the cyan patch on the animal's back;
+pdfce before showed neither, after shows both, **and the two engines now
+agree**. On `GWG 8.01` the pixels differing from pdfium by more than 40 levels
+drop **28,305 → 11,694**.
+
+**Real-world A/B, both builds over `fixtures/external`: 3,735 identical, 0
+changed, of 4,023 files.** The combination **does not occur** in real-world
+documents — so the fix is safe, and **its only positive evidence is the Ghent
+patches plus a second renderer**. That is the honest form of the claim: a
+corpus that cannot exercise a construct is not evidence the construct works.
+
+**★ ALSO NAMED AND NOT FIXED, so it does not read as done.** `resolve_indexed`
+builds its palette with a **scratch `ColorDiagnostics` that is then DISCARDED**,
+so a tint failure inside a palette never reaches the operator: the CLI reported
+`tint_applied=0 tint_not_applied=0`, which **reads as "no tint transforms on
+this page" and actually meant "two of them failed where you cannot see"**. Owed.
+
+**★★ WHY NO GATE CAUGHT IT — three concealments, each a class:** the harness
+scores the wrong criterion for this patch (fault 1, above); the diagnostic that
+would have said so was discarded; and **the fallback is a NEUTRAL**, so a wrong
+colour that is grey looks like a greyscale image, which is a thing documents
+legitimately contain. **The only thing that saw through all three was a human
+reading the test's own instructions.**
+
+**`GWG 8.2` still fails after the fix** — see `Pass 122.1`, below: its check
+mark is painted in **yellow underneath the images**, which overprint it, so the
+patch tests **image overprint**, not `DeviceN` colour as its caption says.
+**pdfium fails it too.** A smaller wrongness honestly stated, not a fixed one.
+
+---
+
+## `PASS 97.1i` (`9838c58`) + `PASS 97.1j` (`00ae8b9`) — TWO CONSTANT-FACTOR FIXES, AND THE FIRST REPAIRS A REGRESSION `97.1e` SHIPPED THIS MORNING
+
+Measured on the Ghent combined document at scale 2 (**1224×1584**), **all six
+pages byte-identical throughout, Ghent verdict unchanged**:
+
+| page, Ghent combined doc at scale 2 | pre-Pass `06aaad3` | after `97.1e` | after both fixes | vs pre-Pass |
+|---|---:|---:|---:|---:|
+| 1 | 632 ms | **3,713 ms** | **320 ms** | **0.51×** |
+| 2 | 4,086 ms | 7,689 ms | **2,486 ms** | **0.61×** |
+| 5 | 1,823 ms | 5,830 ms | **1,364 ms** | **0.75×** |
+
+**The ink path is now faster than the sRGB path it replaced**, on all three
+measured pages — which was not a claim `97.1e` made or needed to make.
+
+**`Pass 97.1i` — one reusable coverage mask.** A **page-sized coverage `Mask`
+was allocated per paint, and every glyph is a paint.** Four page-sized passes
+per mark: allocate, zero (the allocation does it), `to_vec` the clip, multiply
+the clip. Now **one mask allocated with the buffer for the life of the page**,
+cleared only over the mark's own bounding box, with the clip multiplied only
+over that box and **read in place instead of copied**.
+
+★★ **THE PART WORTH KEEPING, AND IT IS NOT "SOMEBODY MISSED IT".**
+`cmyk_paint.rs`'s module doc **had documented this exact cost and deferred it**,
+in this Pass's own first commit:
+
+> The coverage mask is page-sized … pdfce has measured a page-sized `Mask::new`
+> plus `fill_path` at **259 microseconds** … That change is NOT made in this
+> Pass on purpose: it alters the indexing relationship the composite depends
+> on, and bundling a layout optimisation into the Pass that first makes the
+> arithmetic correct is how a performance regression and a correctness
+> regression become indistinguishable.
+
+**Every clause of that is true and the conclusion is still wrong**, because
+nobody multiplied 259 µs by **the number of marks on a page**.
+
+⇢ ***"Defer the optimisation, it is only a constant factor" is a decision about
+a PRODUCT — per-unit cost × unit count — and a deferral that states only the
+first term is not a measurement, it is a hope.*** Filed to `D:\dev\rag\rust\`;
+it is the same move hard rule 10 makes for a *measurement*, applied to a
+*deferral*: **file the count beside the unit cost and the multiplication becomes
+available to whoever reads it next.**
+
+★ **How it was found matters as much as the fix.** Nobody re-read the doc
+comment. It surfaced because **the operator asked whether threading could be
+enabled off the web target**, and answering honestly meant timing what was
+actually slow first. **Threading a 3.7-second page would have hidden a 5.9×
+constant factor behind eight cores** — the parallelism would have "worked".
+
+**`Pass 97.1j` — one spare child buffer, reused between sibling groups.** A
+**page-sized child buffer — five `f32` planes, 38.8 MB — was allocated, zeroed
+and dropped per transparency group**, 142 of them on page 2. That is **2.4 s of
+2.66 s**.
+
+★★ **THE FIRST HYPOTHESIS WAS WRONG, AND THAT IS THE FINDING.** Per-group cost
+was ≈20 ms and the assumed cause was the **full-page MERGE** — `composite_buffer`
+walking every pixel per group, testing and skipping the transparent majority.
+A dirty rectangle was built to bound it. **It bought 9 %.** The real cause came
+from asking the hypothesis to predict **something else**:
+
+| scale | page area | ms per group |
+|---:|---:|---:|
+| 0.5 | 1× | 2.76 |
+| 1.0 | 4× | 4.49 |
+| 2.0 | 16× | 16.68 |
+
+**Sub-linear in area is the signature of ALLOCATION and page-faulting, not of a
+per-pixel loop** — a per-pixel loop is linear in area by construction.
+
+⇢ ***A plausible explanation that predicts the right ORDER OF MAGNITUDE is not a
+diagnosis.*** Both hypotheses predicted *"≈20 ms per group, scaling with page
+size"*; only one survived being asked about the **exponent**. **The
+discriminating question was cheap — three renders at three scales — and it was
+not the obvious one.** Filed to `D:\dev\rag\rust\`.
+
+★ **And the failed experiment is what makes the fix possible.** Handing a buffer
+back means **clearing** it, and clearing a page-sized buffer is the cost being
+avoided — affordable **only because the dirty rectangle says which rectangle was
+actually written**, so the clear is O(mark). **The measurement was
+mis-attributed, not useless.**
+
+Groups on a page are overwhelmingly **siblings** (142 in sequence, not 142
+deep), so one spare covers the common case exactly and nesting still allocates
+once per level — **O(depth)**, which is what clause 11's own memory discussion
+says to expect. Reuse resets the dirty rectangle, **the knockout planes (whose
+PRESENCE selects §11.4.8 over §11.4.4)** and the disclosure counters — each a
+way for one group to inherit another's state, **enumerated in the doc comment
+rather than left to the reader, because that is the bug class reuse
+introduces.**
+
+---
+
+## `62cf4e6` + `8372f20` + `4fca888` — the XFA availability survey, and a `PRIOR_ART.md` row corrected
+
+**No Pass ID; a document answering an operator question**, who had been told by
+another model that an MIT Rust dynamic-XFA library exists on GitHub.
+`docs/xfa-implementation-survey.md`:
+
+- **There is no Rust dynamic-XFA library under ANY licence**, and **no complete
+  FormCalc implementation in Rust in any licence.**
+- **PDFium's is the only complete FormCalc in open source anywhere**, and its
+  build file says why nobody has copied it: `pdf_enable_xfa = $ENABLE_V8`.
+  Every FormCalc expression node declares `ToJavaScript()` — 88 implementations.
+  **PDFium compiles FormCalc to JavaScript and runs it on V8**, so *"add XFA"*
+  means *"ship a JS engine"*, in a project whose engine crates must also compile
+  to `wasm32`. BSD-3-Clause, so **not a licence blocker; a C++ and a V8 one.**
+- ★ **The pattern that produced the false claim:** projects advertise XFA in the
+  repository **DESCRIPTION** and disclaim it in the **SOURCE** — `quorbe/xfa.js`
+  says *"script & fill"* and `throw`s *"not implemented yet (Phase 3)"*;
+  `benedoc-inc/pdfer` says *"comprehensive XFA support"* and its own scope
+  document lists *"Layout engine"* and *"Script execution"* as explicit
+  non-goals. **A model summarising repository metadata reports the first column,
+  and the first column is marketing.** ⇢ *Check the second column before
+  repeating an availability claim.*
+- **Sharpened by `8372f20`, and the sharper version is more useful:** one Rust
+  project **does** implement bounded XFA packet discovery, static extraction and
+  "minimal dynamic layout", with scripts disabled by default — and its own
+  capability struct carries **`dynamic_xfa: false`** and
+  **`dynamic_reflowing_subforms: false`**. **A project stating its limits in a
+  field is the exact opposite of the pattern above**, and worth naming as the
+  counter-example rather than leaving the ecosystem characterised only by its
+  worst members. **Flagged unverified:** not on crates.io, so its licence is one
+  agent reading a `LICENSE` file and has not been re-checked.
+- **Two things recorded because they cut the other way:** Chromium's XFA is
+  **live work**, compiled in on four desktop platforms behind a runtime flag
+  with an enterprise policy landed 2025-11-11 and codec fuzzers landed
+  2026-08-10; and LibreOffice/macOS Preview **could not be verified**, so
+  *"no XFA support"* for those two is **inference and is labelled as such**.
+  Adobe's own *"nothing but Acrobat supports XFA"* is demonstrably overstated.
+- **The commercial column is the most persuasive:** Apryse/PDFTron's
+  **documented** workaround for dynamic XFA is to **shell out to Adobe Reader**;
+  Foxit is the only independently-built implementation; Datalogics licenses
+  Adobe's own engine; iText flattens; PDFBox logs *"Flatten for a dynamix XFA
+  form is not supported"* [sic].
+
+**`PRIOR_ART.md`'s `lopdf` row corrected (`4fca888`).** The crate an external
+model named as *"an MIT Rust dynamic-XFA library"* is real, is MIT, and contains
+**zero occurrences of "XFA"** in source or README (verified by fetching both).
+It is what a metadata-level search lands on because it satisfies **four of the
+five attributes in the claim; the fifth was invented.** And a fact found on the
+way: **`lopdf` enables `rayon` BY DEFAULT.** Depending on it without
+`default-features = false` puts a thread pool inside `pdfce-core` — and **rayon
+compiles cleanly for `wasm32-unknown-unknown`**, so the CI wasm cross-check
+would stay green while the web build acquired a runtime failure. **Recorded on
+the row rather than in a session log, because the row is what gets read at the
+moment somebody proposes the dependency.**
+
+**What this survey does and does not settle.** It answers **AVAILABILITY only**.
+Whether pdfce wants the feature was decided in **decision 020 §3.2.1**
+(`out_of_scope`, four independent grounds) and **open operator question (p)**
+remains Ken's. **What it removes from that discussion is *"but a library
+exists"*.**
+
+---
+
+## `6a2c13f` — the engineer's discharge of the 224th filing's five survivors
+
+**No Pass ID.** The 224th filing reported five stale `crates/`/`tools/` claims
+and edited none (that boundary is this role's remit, not a preference). The
+engineer closed all five in this commit, and his own message records the shape
+rather than the list:
+
+> The pattern across all five is not *"I forgot to sweep"*. It is that **a claim
+> about a FUTURE fix has no token tying it to the fix once the fix exists**:
+> grepping for the new thing does not find a sentence that names only the old
+> one. What worked was grepping for the **OLD** claim's distinctive phrases —
+> *"device sRGB"*, *"is the fix"* — which is the reverse direction and the one
+> hard rule 11 should say out loud.
+
+**Two corrections he made to his own dispatch, both recorded because they cut
+against the dispatcher:** he named a RAG sibling
+(`a_gate_that_underreports_looks_green.md`) that **does not exist**, and this
+role cross-referenced the real ones instead; and he asked for a wasm32 finding
+to be **relayed**, and it was **re-run** instead. *"That is the correct response
+to being handed a measurement."*
+
+---
+
+## Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `97.1f` | **`97.1h`**, **`97.1i`**, **`97.1j`** shipped (**minted by THIS filing** — none of the three commits claims an ID, so nothing can collide with `97.1g`, which stays **reserved and unbuilt**); **`97.1g`**, **`97.1k`**, **`122.0`–`122.3`** filed to *Backlog* |
+| decisions (`ARCHITECTURE.md` §12) | **079** | **080** (**MINTED** — *threading is gated at COMPILE TIME on the target, not only at runtime by a setting*). Next free **081**. |
+| standing rules | **`R209`** | **`R210`** (**MINTED** — *a conformance figure is filed with the CRITERIA the harness implements, not only its denominator*). Next free **`R211`**. |
+
+**★ A hazard this filing creates and is naming rather than hoping about.** The
+222nd filing's `97.1a`/`97.1b` collision happened because **a filing-minted ID
+never reached the file the engineer reads before committing**. Three IDs are
+minted here the same way. **`97.1g` is deliberately skipped and left reserved**
+for the non-isolated-group port already named in the entry below and in
+`docs/NEXT_SESSION.md`, so the next commit in this family must start at
+**`97.1k`** — which is why `97.1k` is filed with a Backlog entry rather than
+left as a gap.
+
+**Backup currency, checked rather than inferred.** `ls -lt D:\Dev\pdfce-backups\`
+gives the newest bundle as **`pdfce-20260817-v060.bundle`, 2026-08-17 20:34**;
+`git bundle list-heads` puts its `refs/heads/main` at **`3c4c00e`**; and
+`git rev-list --count 3c4c00e..HEAD` = **187 commits**. `HEAD` is **`8372f20`**
+(`git describe` = `v0.7.0-18-g8372f20`), and **`origin/main` is level with it**.
+**No bundle on disk contains any commit filed here.** Cutting one is the
+operator's call and this role did not.
+
+**Working tree is DIRTY and this role did not touch it:**
+`git status --porcelain` shows **` M crates/pdfce-cli/src/main.rs`**, +113
+lines, an unfinished `render-page --region` flag with a full doc comment
+(measured `95 ms at 1× / 87 ms at 32×`, and a numerical zoom ceiling past
+`20,000×` from `examples/zoom_ceiling.rs`). **Reported as in-flight, not as
+shipped** — no Pass ID is minted for it and no `FEATURES.md` box is ticked.
+
+**Gates, re-run after this filing** — reported at the foot of this entry's
+`SESSION_LOG.md` twin.
+
+
 ### `a277931` + `ff4b4bf` — `PASS 97.1e` + `PASS 97.1f`: PDFCE COMPOSITES A CMYK PAGE IN INK FROM THE FIRST OPERATOR TO THE LAST, AND THE GHENT BLEND-SPACE CENSUS GOES **107 OF 107 WRONG → 0 OF 107**; ★★★ **THE RE-SCOPING FACT, AND IT IS THE HALF THAT OUTLIVES THE NUMBERS — EVERY REMAINING FAIL ON THE SUITE IS AN OVERPRINT, SPOT OR ICC PATCH; NOT ONE IS A BLENDING-SPACE FAILURE ANY MORE**, so the next Ghent gains are `85.5`'s n-channel spot remainder, not more compositing; ★★★ **THE BASELINE WAS BUILT, NOT QUOTED** — `06aaad3` compiled in a worktree and run through the harness, which is the only reason the `1_GWG161` REGRESSION `97.1e` shipped was visible to be closed by `97.1f`; ★★ **AN INSTRUMENT FIX WITHOUT WHICH THIS PASS WOULD HAVE READ AS A NO-OP** — `blends_in_wrong_space` was narrowed, and **the counter's own docstring at the definition site was updated while the SAME CLAIM three fields above it and the DOCSTRING OF THE SCRIPT THAT READS IT were not** (hard-rule-11 sweep: **5 survivors reported, 0 edited by this role**); ★★ **THE COMPOSITOR RAG'S TWO LOAD-BEARING FINDINGS ARE NOW PROVED IN TRAPS AND RECORDED ON THE CONSUMING SIDE**, worth 13 trap marks between them; ★ **REAL-WORLD A/B: 463 IDENTICAL PNGs OF 500 SAMPLED, 0 CHANGED** — the prediction decision 078 filed, confirmed on a sample and **deliberately not extrapolated to the 4,012-file corpus, whose run was still executing when this was dispatched** — 2026-08-21 (two-hundred-and-twenty-fourth filing)
 
 **Sourcing.** Shell held and used (hard rule 8); the command is named beside
@@ -189,6 +565,24 @@ a git worktree:
 | UNRESOLVED | 11 (21.6 %) | 12 (23.5 %) | **12 (23.5 %)** |
 | render errors | 0 | 0 | **0** |
 | trap marks, **total over the 51** | 55 | 45 | **41** |
+
+> ★★★ **AMENDED 2026-08-21 (225th filing, HOURS LATER) — THE `pass` ROW OF
+> THIS TABLE IS AN OVER-COUNT IN EVERY COLUMN, AND THE TABLE IS KEPT VERBATIM
+> RATHER THAN REWRITTEN BECAUSE THE INSTRUMENT, NOT THE MEASUREMENT, IS WHAT
+> WAS WRONG.** `tools/ghent-check.py` implements **one of the suite's two pass
+> criteria** — it hunts for a **cross that should not be there** and has no
+> notion of a **check mark that should be there and is not**. **Seven patches
+> score by the second criterion** (GWG `050`, `080`, `081`, `082`, `150`,
+> `151`, `152`) and have been reported `clean` for the harness's entire life;
+> **at least three are failures**. Its contrast floor (`CONTRAST_MIN = 12.0`)
+> also has **no area term**, so `GWG 1.0`'s over-sized crosses at contrast
+> **9.8** read clean while being obvious to the eye. **Corrected standing: 26
+> pass at minimum**, pending three unchecked optional-content patches
+> (`15.0`/`15.1`/`15.2`). **Every column of this table is affected equally**,
+> so the **deltas** it reports — `+3 pass`, `55 → 41` traps — are unaffected;
+> **the levels are not.** Source: `docs/ghent-operator-review-2026-08-21.md`
+> (engineer-owned, the operator's own cell-level judgements). Full disposition
+> in the 225th filing's entry, top of *Shipped*.
 
 | blend-space census, **Ghent, 51 patches** (`tools/measure-blend-space.py`) | baseline | `97.1e` | **`97.1f`** |
 |---|---:|---:|---:|
@@ -60522,7 +60916,91 @@ parallel one).
 
 ---
 
-### ★★★★★ THE GHENT STANDING BOARD — **29 pass / 10 FAIL / 12 UNRESOLVED / 0 render errors, of 51 patches (56.9 % / 19.6 % / 23.5 %)** — ★★★ **RE-MEASURED 2026-08-21 (224th filing, `Pass 97.1e`/`97.1f`, `a277931`+`ff4b4bf`) AGAINST A BINARY BUILT FROM `06aaad3` IN A WORKTREE; the previous figure (**26 / 14 / 11**) is kept below as history and was NOT stale — it was correct at its own commit, and this is a SHIP moving it, not a correction** — ★★ **AND THE COMPOSITION OF THE REMAINING 10 FAILs IS NOW THE BOARD'S MOST USEFUL FACT: every one of them is an OVERPRINT, SPOT or ICC patch. Not one is a blending-space failure any more** — ★★ **FIGURE CORRECTED TWICE OVER 2026-08-19 (189th filing): once by a SHIP and once because the PREVIOUS FIGURE WAS ALREADY STALE** — the ONE architectural item that unblocks the largest cluster — opened 2026-08-18 (hundred-and-sixty-sixth filing)
+### ★★★★★ THE GHENT STANDING BOARD — **26 pass AT MINIMUM, of 51 patches** (harness-reported `29 / 10 / 12`, CORRECTED DOWNWARD 2026-08-21 by the 225th filing; three optional-content patches still unchecked) — ★★★★★ **THE HARNESS IMPLEMENTS ONE OF THE SUITE'S TWO PASS CRITERIA, AND THE OTHER HAS BEEN REPORTED `clean` FOR ITS ENTIRE LIFE — SO EVERY FIGURE BELOW THIS LINE, INCLUDING ALL THE HISTORICAL ONES, IS OVER-COUNTED BY THE SAME FAMILY OF SEVEN PATCHES. THE DELTAS ARE UNAFFECTED; THE LEVELS ARE NOT** — see the correction block immediately below — ★★★ **RE-MEASURED 2026-08-21 (224th filing, `Pass 97.1e`/`97.1f`, `a277931`+`ff4b4bf`) AGAINST A BINARY BUILT FROM `06aaad3` IN A WORKTREE; the previous figure (**26 / 14 / 11**) is kept below as history and was NOT stale — it was correct at its own commit, and this is a SHIP moving it, not a correction** — ★★ **AND THE COMPOSITION OF THE REMAINING 10 FAILs IS NOW THE BOARD'S MOST USEFUL FACT: every one of them is an OVERPRINT, SPOT or ICC patch. Not one is a blending-space failure any more** — ★★ **FIGURE CORRECTED TWICE OVER 2026-08-19 (189th filing): once by a SHIP and once because the PREVIOUS FIGURE WAS ALREADY STALE** — the ONE architectural item that unblocks the largest cluster — opened 2026-08-18 (hundred-and-sixty-sixth filing)
+
+#### ★★★★★ CORRECTED 2026-08-21 (two-hundred-and-twenty-fifth filing) — **BY AN ORACLE, NOT BY A RE-MEASUREMENT, AND THAT DISTINCTION IS THE WHOLE FINDING**
+
+**Corrected standing: `26 pass of 51` AT MINIMUM.** The harness reports
+`29 / 10 / 12`. Four patches move **pass → fail** and one moves **fail →
+pass**; three more are **unchecked**, which is why the corrected figure is a
+floor rather than a number.
+
+**Source:** `docs/ghent-operator-review-2026-08-21.md` — the operator read the
+annotated render **cell by cell**. **These are the first independent judgements
+of pdfce's Ghent output that have ever been taken.** Engineer-owned; **this
+role does not edit it** — it is the calibration set for repairing the harness.
+
+| GWG | harness said | corrected | why |
+|---|---|---|---|
+| `1.0` CMYK Overprint Test | pass | **FAIL** | cells `d`,`e`,`i`,`j` carry large crosses at contrast **9.8**, below a floor with no area term |
+| `1.1` CMYK Overprint Mode | FAIL, 1 cross | **PASS** | no cross at any contrast; a faint outline only |
+| `19.0` DeviceN Overprint (Black) | FAIL, 1 cross | FAIL, 1 cell (`d`) | `b` is outline-only — the operation is right, the edge rounding differs |
+| `19.1` DeviceN Overprint (Yellow) | FAIL, 4 crosses | FAIL, **2** cells | `a`,`c` pass; 4 was an over-count |
+| `8.2` DeviceN Support (4 col.) | pass | **FAIL** | both check marks absent |
+| `8.1` DeviceN Support (5 col.) | pass | **FAIL** | check marks absent |
+| `8.01` DeviceN Support (6 col.) | pass | **FAIL** | check marks absent |
+| `5.0` Font Substitution | pass | PASS | confirmed present and correct |
+| `15.0` / `15.1` / `15.2` optional content | pass | **UNCHECKED** | same positive criterion, not on the combined pages, nobody has looked |
+
+**TWO INSTRUMENT FAULTS.**
+
+**(1) The harness implements ONE of the suite's TWO pass criteria.** The suite
+marks failure with a **negative marker** (a cross a correct renderer makes
+vanish — implemented thoroughly) **and** with a **positive marker** (*"if a
+check mark is visible … then DeviceN is respected; if no check mark appears
+then DeviceN colour was transformed to CMYK (= ERROR)"*). **The harness has no
+notion of a mark that should be there and is not.** Seven of 51 patches score
+this way — GWG `050`, `080`, `081`, `082`, `150`, `151`, `152`. ⇢ **A gate
+that looks for the wrong thing does not report *"I cannot tell"*; it reports
+`clean`, which is indistinguishable from a pass.**
+
+**(2) The contrast floor has no area term.** `CONTRAST_MIN = 12.0` implements
+the suite's *"a **clear** X … judged by a human at 0.5 m"* as a fixed number
+**regardless of mark size**. `GWG 1.0`'s cells `d`/`i` are ~**3× the linear
+size** of the calibration patch's at contrast **9.8**; box 11's cells sit at
+**1.3–3.1** and genuinely are invisible. **Lowering the number drags box 11 in;
+the threshold has to be a function of the mark's size.** The operator also
+distinguished **outline-only** from **filled** twice by name (*"just an issue
+with the layer edge"*, *"the math for the edges of the x differs slightly with
+rounding"*) — a distinction the harness cannot currently express.
+
+**★★★ WHY RE-MEASURING COULD NEVER HAVE CAUGHT THIS, which is what makes it
+different from every other correction on this board.** The box's own caveat
+below says a document has no access to staleness and **"only re-measuring
+does"**. That is true of a **stale** figure and false of a **mis-scored** one:
+every figure this project has filed came from **the harness scoring itself**,
+its thresholds calibrated against **one** patch (`GWG 16.0`, 2026-08-17) whose
+answer was already known from a code change. **Re-running an instrument that
+agrees with itself produces the same number forever.** What was missing was an
+**ORACLE**, and one arrived today from outside the machine.
+
+**★★ SECOND OCCURRENCE, SAME INSTRUMENT, SAME NUMBER.** The 148th filing
+records `ghent-check.py`'s **first run reporting `29 of 51`**, corrected before
+publication when **13 reference-strip patches** turned out not to be adjudicable
+by an X-detector. **Four days apart; the first was caught before it was filed,
+the second was published and propagated for a day.** `R210` is minted on that
+pair (*Standing rules*).
+
+**WHAT IS UNAFFECTED, so the correction is not over-read.** The
+blending-colour-space census (**107 wrong → 0**) counts **blend operations**,
+not traps. Patches `16.0`/`16.1`/`16.2` and 36/37 are cross-criterion and the
+operator confirmed the first three read correctly. **The re-scoping fact —
+every remaining FAIL is an overprint, spot or ICC patch — survives**, and the
+check-mark family sharpens it: `8.2`, `8.1` and `8.01` fail for **image
+overprint** (`Pass 122.1`), which is the same cluster.
+
+**HISTORY IS NOT REWRITTEN.** The seven positive-criterion patches have scored
+`clean` since the harness was written, so **no** figure below this line ever
+excluded them — the `25 / 18 / 8`, `26 / 14 / 11` and `29 / 10 / 12` boards are
+**all** over-counted by the same family, and **their deltas remain valid while
+their levels do not**. The correction is stated once, here, and governs
+everything below.
+
+**Owed:** `Pass 122.2` (teach the harness the positive criterion and give the
+floor an area term, calibrated against the table above), then **re-measure and
+re-file**, then **check `15.0`/`15.1`/`15.2`**.
+
+---
 
 **This box exists so the corpus figure has ONE home that is not a
 per-Pass entry.** Before this filing the number lived only inside
@@ -68568,6 +69046,217 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+### `Pass 122.0` — MULTITHREADING, behind a runtime max-cores setting AND a compile-time target gate — **the operator asked for this by name**
+
+**Filed 2026-08-21 (two-hundred-and-twenty-fifth filing).** Operator, verbatim:
+***"put multithread in the plan for later"***. Scoped from **his** design, which
+is the right one, plus one constraint the engineer measured the same day.
+
+**HIS DESIGN, kept intact.** A **runtime max-cores setting** the GUI or CLI sets
+before a command, with **cores = 1 preserving web compatibility**. It fits the
+existing mechanism exactly — **14 persisted settings today**, with
+`tools/check-settings-consumed.py` already enforcing that each one is **parsed,
+written AND read**, so a max-cores setting that is stored and never consulted
+fails a gate that exists.
+
+**★ WHAT MUST BE *ADDED* TO HIS DESIGN, NOT SUBSTITUTED FOR IT.** A
+**compile-time target gate on the dependency**:
+
+```toml
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rayon = "1"     # or whatever the threading crate turns out to be
+```
+
+so the **wasm build cannot name the threading crate**, and a future parallel
+loop that ignores the runtime setting becomes a **BUILD ERROR** rather than a
+browser crash.
+
+**★★ THE MEASUREMENT THAT MAKES THE GATE NECESSARY, taken 2026-08-21:
+`std::thread::spawn` AND `rayon` BOTH `cargo check` CLEANLY for
+`wasm32-unknown-unknown`.** `std::thread` **exists** on that target — it
+type-checks and links; only the *runtime* has no threads to give it. **So the
+existing CI wasm cross-check cannot catch a threading regression**: it stays
+green while the web build acquires a runtime failure. The gate's premise
+(*"compiles for wasm32 ⇒ runs on wasm32"*) holds for `std::fs`, `mio` and
+platform `libc` and **fails exactly here**. Full write-up:
+`D:\dev\rag\rust\std_thread_and_rayon_both_compile_for_wasm32_so_a_cross_check_gate_cannot_catch_a_threading_regression.md`.
+**A runtime setting is a promise; a target gate is a proof — ship both.**
+
+**ONE HELPER, NOT AN `if` PER CALL SITE.** Two code paths producing one result
+means the serial one rots, and the serial one is the web fork's only path.
+
+**★★★ HARD ACCEPTANCE CRITERION: OUTPUT MUST BE BYTE-IDENTICAL AT ANY CORE
+COUNT.** Not "visually identical", not "within tolerance". **Every measurement
+this project makes depends on it** — the 4,023-file corpus A/B, the six-page
+render-identity checks, every Ghent verdict. Testable for pennies: render at 1
+core and at N, compare hashes. **This criterion is what stops parallelism from
+quietly retiring the project's whole regression apparatus.**
+
+**WHERE THE WIN ACTUALLY IS, measured 2026-08-21 rather than assumed.** A page
+is now **~0.3 s** (`Pass 97.1i`/`97.1j`), so intra-page parallelism is not the
+prize it would have been this morning. **Batch- and page-level parallelism live
+in the SHELLS, where wasm never applies** — `pdfce-cli` over many files,
+`pdfceGUI` over many pages. **Intra-page work is memory-bandwidth-bound and
+wants BANDING first** (see `Pass 122.3`), because banding is what makes the
+working set fit cache and is a prerequisite for splitting a page across cores
+without multiplying the buffer count.
+
+**★ And the reason this entry exists at all is a cautionary one worth carrying
+into it:** the question *"can we thread this?"* is what surfaced a **5.9×
+constant-factor regression** (`Pass 97.1i`), because answering it honestly meant
+timing the page first. **Threading a 3.7-second page would have hidden that
+behind eight cores and called it a win.** ⇢ *Measure before you parallelise;
+parallelism is the one change that makes a bad constant factor look solved.*
+
+**Decision 080** (`ARCHITECTURE.md` §12) records the compile-time-gate half.
+
+---
+
+### `Pass 97.1g` — non-isolated ORDINARY groups on a subtractive page: the second content walk
+
+**Filed 2026-08-21 (two-hundred-and-twenty-fifth filing) as a real Backlog
+entry**, having been named in three documents since the 224th filing without
+having one. **Reserved and unbuilt; `97.1h`/`97.1i`/`97.1j` deliberately skipped
+over it.**
+
+A **non-isolated ordinary** group on a subtractive page is still composited **as
+if isolated** — backdrop dropped, §11.4.4's removal skipped — and counted as
+`cmyk_groups_approximated`. **The arithmetic already exists**
+(`compositor::remove_backdrop_cmyk`, shipped in `97.1f`); **the second content
+walk does not.** The additive path already performs that walk, so this is **a
+port, not a design**.
+
+**Acceptance:** `cmyk_groups_approximated` reaches 0 on the Ghent suite; all six
+pages of the combined document byte-identical except where the removal
+legitimately changes them; corpus A/B run before/after.
+
+---
+
+### `Pass 97.1k` — native colorant paths for IMAGES and SHADINGS (they bridge through sRGB today)
+
+**Filed 2026-08-21 (two-hundred-and-twenty-fifth filing).** Both reach the
+colorant buffer as **resolved sRGB** and are bridged back per pixel — disclosed,
+not assumed away, as `cmyk_bridged_pixels` and `cmyk_unbridged_images`.
+
+**Why it is not trivial:** fixing either means **widening a type one layer up**.
+`DecodedImage` holds a `Pixmap`; `ColorRamp::at` returns three-channel sRGB
+because the ramp is resolved when it is **built**, not when it is sampled.
+
+**This is the prerequisite for `Pass 122.1`** (per-sample image overprint) — an
+image cannot overprint until its samples carry colorants.
+
+**Acceptance:** `cmyk_bridged_pixels` and `cmyk_unbridged_images` both reach 0
+on a subtractive page carrying an image and a shading; byte-identical output on
+additive pages; corpus A/B.
+
+---
+
+### `Pass 122.1` — PER-SAMPLE IMAGE OVERPRINT — ★ now DIAGNOSED, not merely listed
+
+**Filed 2026-08-21 (two-hundred-and-twenty-fifth filing).** `overprint::composite`
+has **exactly one call site**, in the path and glyph painter, so an image under
+`/OP true` is painted normally and merely counted
+(`overprint_images_unsupported`).
+
+**★ THE DIAGNOSIS, which is what this entry adds: this is why Ghent `GWG 8.2`'s
+check mark does not appear.** The check mark is painted in **YELLOW UNDERNEATH
+the images**, and the images are drawn over it with `/OP true /op true`, so a
+press adds cyan and black **without erasing the yellow** — **cyan over yellow
+reads green**, and that green *is* the check mark. pdfce paints the image
+normally and covers it (`overprint_images_unsupported = 2`). **pdfium fails it
+too.**
+
+⇢ **The patch's caption says "DeviceN" and the thing it exercises is
+OVERPRINT.** `Pass 97.1h` fixed the `DeviceN` half — the duotone now renders in
+the right colorants — and **the check mark is still absent**, which is the
+distinction between a smaller wrongness and a fix.
+
+**Depends on `Pass 97.1k`**: per-sample overprint needs per-sample colorants,
+i.e. the colorant buffer extended to images. Sibling of `Pass 85.5`'s n-channel
+spot remainder, and it lands with it or after it, never before.
+
+**Acceptance:** `GWG 8.2`'s check mark visible; `overprint_images_unsupported`
+reaches 0 on the suite; corpus A/B.
+
+---
+
+### `Pass 122.2` — teach `tools/ghent-check.py` the POSITIVE criterion, and give its contrast floor an AREA term
+
+**Filed 2026-08-21 (two-hundred-and-twenty-fifth filing).** The harness scores
+**one of the suite's two pass criteria**; full statement of both faults in the
+*Ghent standing board*, under *Next up*. **This is the instrument repair every
+Ghent figure in the repository is currently waiting on.**
+
+**Four items, in order:**
+
+1. **The positive criterion.** Per-patch, from each ReadMe: **which** marker,
+   **where**, **what colour**. Seven patches use it — GWG `050`, `080`, `081`,
+   `082`, `150`, `151`, `152` (`grep` the ReadMes for *"check mark"*).
+   **Report a missing mark as its OWN verdict** (`MISSING-MARK`), **not folded
+   into `X`** — the two are different facts and a reader who cannot tell them
+   apart will chase the wrong defect.
+2. **An area term on the contrast floor.** `CONTRAST_MIN = 12.0` is calibrated
+   for one mark size. **Do not lower it** — that drags box 11's genuinely
+   invisible 1.3–3.1 population in. Make the threshold a function of the mark's
+   size.
+3. **Express outline-vs-fill.** The operator gave the mechanism twice by name
+   (*"just an issue with the layer edge"*, *"the math for the edges of the x
+   differs slightly with rounding"*). **A mark present in OUTLINE only is a
+   different fact from a mark present in FILL**, and the harness has no way to
+   say so today.
+4. **Re-measure and re-file**, then **check `15.0`/`15.1`/`15.2`**, which no one
+   has looked at.
+
+**★ THE CALIBRATION SET.** `docs/ghent-operator-review-2026-08-21.md` — the
+operator's cell-level judgements, **the first independent calibration this
+harness has ever had**. Every prior threshold came from `GWG 16.0` alone
+(2026-08-17), whose answer was already known from a code change: **that is
+self-consistency, not ground truth.** ★★ **Do not edit that file** — it is the
+oracle, and an oracle amended to agree with the instrument is not an oracle.
+
+**Acceptance:** the harness reproduces all eight of the operator's rows in §1 of
+that document, `MISSING-MARK` is a distinct verdict, and the re-measured board
+is filed with `R210`'s criteria statement attached.
+
+---
+
+### `Pass 122.3` — the colorant buffer's BYTE CEILING is under-argued, and the same page renders in a different colour space at a different zoom
+
+**Filed 2026-08-21 (two-hundred-and-twenty-fifth filing).**
+
+**The defect in the argument, before the defect in the behaviour.**
+`MAX_CMYK_BUFFER_BYTES` was set to **256 MiB by ANALOGY** with
+`MAX_DISPLAY_LIST_BYTES` — the doc comment says the two are *"matched
+deliberately so they agree"*, which is **aesthetic, not arithmetic**. At
+**20 B/px** that is **13.4 Mpx ≈ US-Letter at 375 DPI**, and **prepress is the
+audience for this feature.**
+
+**Measured 2026-08-21:** a full-page render at **scale 6 (17 Mpx)** **refuses
+the buffer and silently renders in the wrong colour space** — so **the same page
+has different colours at different zoom levels**, which is the shape of defect
+this project treats as worse than a refusal.
+
+**Raising the number is NOT obviously right.** Peak usage is a **multiple** of
+nominal — parent + child + spare (`Pass 97.1j`'s reuse holds one spare per
+level, O(depth)) — so a ceiling that admits a 17 Mpx page admits three of them.
+**Banding is the real answer**, and it is also the prerequisite for splitting a
+page across cores (`Pass 122.0`).
+
+**★ INTERACTIVE USE IS NOT AFFECTED, and this is the fact that sets the
+priority.** `render_page_region` sizes the buffer to the **viewport**, and is
+**flat across zoom: 87–95 ms at scale 1 AND at scale 32** (measured). The defect
+is confined to whole-page renders at high scale — export, poster printing,
+proofing — which is exactly the prepress path, so it is not urgent and it is not
+cosmetic either.
+
+**Acceptance:** no whole-page render silently changes colour space with scale;
+either the page bands or the refusal is **disclosed on the stable stdout line**
+with the scale at which it fired; the ceiling's value is justified in its own
+doc comment **by an arithmetic argument naming DPI and page size**, not by
+agreement with a sibling constant.
+
+---
 
 ### `Pass 119.1` — `unshare_form`: copy-on-write a shared form XObject onto one page
 
@@ -85163,6 +85852,78 @@ same cause (hashes exist only at commit time), two different failure modes.
   filing's RAG section.)
 
   **Ceiling moves `R208` → `R209`; next free `R210`.**
+
+- **R210 — A CONFORMANCE FIGURE IS FILED WITH THE *CRITERIA* THE HARNESS
+  IMPLEMENTS, NOT ONLY ITS DENOMINATOR. A HARNESS THAT SCORES A SUBSET OF A
+  SUITE'S PASS CRITERIA REPORTS `clean` FOR THE REST, WHICH IS
+  INDISTINGUISHABLE FROM A PASS (2026-08-21; librarian-minted,
+  two-hundred-and-twenty-fifth filing; instrument rule, SECOND confirmed
+  occurrence on the SAME instrument producing the SAME headline number four
+  days apart).**
+
+  **The mechanism.** Hard rule 10 already forces the **denominator** — the
+  figure is `X of 51`, never bare `X` — and a denominator answers *"out of how
+  many?"*. It does **not** answer *"by what test?"*, and a harness that
+  implements one of a suite's criteria is **not wrong about the patches it
+  scores**; it is silent about the ones it does not, and **silence is emitted
+  as `clean`**. Nothing in the figure, the denominator, or a re-run
+  distinguishes *"this patch passed"* from *"this patch was never
+  adjudicated"*.
+
+  **Two instances, same instrument, same number, four days apart:**
+  1. **2026-08-17, `tools/ghent-check.py`'s FIRST RUN — `29 of 51`.**
+     **13 of the 51 patches use REFERENCE STRIPS, not X-shaped traps**, and an
+     X-detector cannot adjudicate them. **Caught before the number was
+     reported as final** (148th filing) — a near-miss, not an incident.
+  2. **2026-08-21, the same harness — `29 of 51` again.** **Seven patches use
+     the suite's POSITIVE marker** (*"if no check mark appears then DeviceN
+     colour was transformed to CMYK (= ERROR)"*) — GWG `050`, `080`, `081`,
+     `082`, `150`, `151`, `152` — and the harness **hunts only for a cross that
+     should not be there**. All seven have been reported `clean` **for the
+     harness's entire life**; at least three are failures. Filed, published and
+     propagated across three documents for a day before the **operator** read
+     the render cell by cell. Corrected standing: **26 pass at minimum**.
+
+  **★ WHY A RE-MEASUREMENT CANNOT DISCHARGE THIS, and why that makes it a rule
+  rather than a caution.** The *Ghent standing board* already carries the right
+  caveat for a **stale** figure — *"staleness is a relation to the world and a
+  document has no access to that; only re-measuring does"*. **That is false for
+  a MIS-SCORED figure.** Every Ghent number this project has filed came from
+  **the harness scoring itself**, with thresholds calibrated against **one**
+  patch whose answer was already known from a code change. **An instrument that
+  agrees with itself returns the same number forever.** Re-measurement checks
+  freshness; only an **oracle** checks correctness, and R210's job is to make
+  the *absence* of one visible in the figure itself.
+
+  **What the rule obliges, in three lines.**
+  (a) **State the criteria beside the count** — *"26 pass of 51 **by the
+  negative-marker criterion**; 7 patches use the positive criterion and are
+  **unadjudicated**"* — so a reader can see the gap without reading the
+  harness.
+  (b) **An unadjudicated patch gets its OWN verdict**, never folded into
+  `pass` and never into `FAIL`. `Pass 122.2` builds `MISSING-MARK` for exactly
+  this.
+  (c) **Name the calibration source of every threshold**, and **how many
+  independent cases it was calibrated against.** *"Calibrated on one patch
+  whose answer was known"* is a sentence that would have prevented both
+  instances, and it is one line.
+
+  **★★ THIS HAS AN ENFORCEMENT LAYER, which is why it was minted rather than
+  filed only as a finding** — the test this project applies before minting
+  (see the 224th filing's two declines, and `R209`'s own §on when a gate is
+  possible). **The question *"which criteria does this harness implement?"* has
+  an ORACLE: the suite's own ReadMes.** `grep`ping them for *"check mark"*
+  returns the seven-patch family mechanically, with no knowledge of pdfce's
+  current behaviour required — unlike a disclosure's *truth*, which is what
+  hard rule 11 and `R207` correctly refuse to gate. **Do not generalise those
+  refusals into a policy against gates; the test is whether the question can be
+  answered from artefacts alone, and this one can.**
+
+  **★ Scope note, so it is not over-read.** This binds on **conformance-suite
+  and corpus figures** — Ghent, veraPDF, `fixtures/external` — not on ordinary
+  test counts, where the criterion is the assertion and there is nothing to
+  omit.
+
 
 ## Update protocol
 

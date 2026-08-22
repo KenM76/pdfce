@@ -55650,3 +55650,244 @@ correct throughout and was read, not touched.
 **Gates, re-run at the end of this filing:** `python tools/check-passes-filed.py`
 and `python tools/check-commits-filed.py` both **green** — the two commits
 above were the only entries either listed before it.
+
+> ### ★★★ AMENDMENT 2026-08-21 (two-hundred-and-twenty-fifth filing, ~4 h later) — **THE `29 pass of 51` IN THIS ENTRY'S TITLE AND TABLES IS AN OVER-COUNT. CORRECTED STANDING: `26 pass of 51` AT MINIMUM.**
+>
+> The entry is **kept verbatim** and not rewritten, because **the
+> measurement was taken correctly and the INSTRUMENT was wrong** —
+> `tools/ghent-check.py` implements **one of the Ghent suite's two pass
+> criteria**. It hunts for a **cross that should not be there**; **seven**
+> patches (GWG `050`, `080`, `081`, `082`, `150`, `151`, `152`) instead fail
+> by the **absence of a check mark**, and have been reported `clean` **for
+> the harness's entire life**. At least three of them (`8.2`, `8.1`, `8.01`)
+> are failures. Its contrast floor (`CONTRAST_MIN = 12.0`) additionally has
+> **no area term**, so `GWG 1.0`'s over-sized crosses at contrast **9.8** read
+> clean while being obvious to the eye.
+>
+> **Every column of this entry's Ghent table is affected equally**, so its
+> **deltas** (`+3 pass`, traps `55 → 41`) stand; its **levels** do not. The
+> blend-space census (**107 → 0**) counts blend operations, not traps, and is
+> **unaffected**; so is the re-scoping fact.
+>
+> **Source:** `docs/ghent-operator-review-2026-08-21.md` — the operator's own
+> cell-level reading, the first independent judgement of pdfce's Ghent output
+> ever taken. Full disposition: this session's **225th filing**, below, and
+> `ROADMAP.md`'s *Ghent standing board*.
+
+## 2026-08-21 (two-hundred-and-twenty-fifth filing) — ★★★★★ **A NUMBER THIS ROLE FILED FOUR HOURS AGO IS CORRECTED BY THE OPERATOR'S OWN EYES: GHENT `29 pass of 51` → `26 AT MINIMUM`, BECAUSE THE HARNESS IMPLEMENTS ONE OF THE SUITE'S TWO PASS CRITERIA AND HAS REPORTED `clean` FOR THE OTHER SINCE IT WAS WRITTEN**; ★★★ **RE-MEASURING COULD NEVER HAVE CAUGHT IT — EVERY GHENT FIGURE THIS PROJECT HAS FILED CAME FROM THE HARNESS SCORING ITSELF, CALIBRATED AGAINST ONE PATCH WHOSE ANSWER WAS ALREADY KNOWN; WHAT ARRIVED TODAY WAS AN *ORACLE*, AND `R210` IS MINTED ON IT**; `PASS 97.1h` (`2c5ec1d`) — AN `/Indexed` PALETTE OVER A `/DeviceN` BASE RENDERED **GREY**, ARITY AND WIDTH, FOUND BY THE OPERATOR READING A TEST PATCH'S CAPTION; `PASS 97.1i` + `PASS 97.1j` (`9838c58`, `00ae8b9`) — **TWO CONSTANT-FACTOR FIXES, THE FIRST REPAIRING A 5.9× REGRESSION `97.1e` SHIPPED THIS MORNING**, AND ★★ **THE DEFERRAL THAT CAUSED IT WAS DOCUMENTED, ARGUED AND CORRECTLY MEASURED — IT SIMPLY NEVER STATED THE UNIT COUNT**; ★★ **A FIRST HYPOTHESIS THAT PREDICTED THE RIGHT ORDER OF MAGNITUDE AND WAS STILL WRONG, SEPARATED BY ASKING IT ABOUT PAGE *AREA***; THE XFA SURVEY (`62cf4e6`/`8372f20`/`4fca888`) — **NO RUST DYNAMIC-XFA LIBRARY EXISTS IN ANY LICENCE, AND PDFIUM'S FORMCALC COMPILES TO JAVASCRIPT AND RUNS ON V8**; **DECISION 080 MINTED** — THREADING IS GATED AT COMPILE TIME ON THE TARGET, NOT ONLY BY A RUNTIME SETTING; ★ THE OPERATOR'S *"put multithread in the plan for later"* FILED AS `PASS 122.0`
+
+**Shipped:**
+
+- **`Pass 97.1h`** (`2c5ec1d`) — `/Indexed`-over-`/DeviceN` palette entries
+  are built at the **base space's own component count**. Two independent
+  faults in three lines: **arity** (four inputs into a two-colorant tint
+  transform ⇒ `PdfFunction::eval` refuses ⇒ silent fallback to a max-tint
+  **NEUTRAL**, i.e. a grey palette that looks like a legitimate greyscale
+  image) and **width** (four slots cannot hold a five- or six-colorant
+  `DeviceN`; the suite ships both). Verified against **pdfium**, which now
+  agrees; on `GWG 8.01` pixels differing by >40 levels dropped **28,305 →
+  11,694**. Corpus A/B: **3,735 identical, 0 changed of 4,023** — the
+  construct does not occur in real documents, so **its only positive evidence
+  is conformance patches plus a second renderer**, and that is the honest form
+  of the claim.
+- **`Pass 97.1i`** (`9838c58`) — one reusable coverage mask instead of a
+  **page-sized `Mask` allocated per paint**, cleared and clip-multiplied only
+  over the mark's own bbox. **Every glyph is a paint.**
+- **`Pass 97.1j`** (`00ae8b9`) — one spare child buffer reused between sibling
+  transparency groups instead of a **38.8 MB page-sized buffer allocated,
+  zeroed and dropped per group**, 142 times on one page.
+
+| Ghent combined doc, scale 2 (1224×1584) | pre-Pass `06aaad3` | after `97.1e` | after both fixes |
+|---|---:|---:|---:|
+| page 1 | 632 ms | 3,713 ms | **320 ms** |
+| page 2 | 4,086 ms | 7,689 ms | **2,486 ms** |
+| page 5 | 1,823 ms | 5,830 ms | **1,364 ms** |
+
+**All six pages byte-identical throughout; Ghent verdict unchanged.** The ink
+path is now **faster than the sRGB path it replaced** on all three measured
+pages.
+
+**Also filed, no Pass ID:** `docs/xfa-implementation-survey.md`
+(`62cf4e6` + `8372f20`), the `lopdf` `PRIOR_ART.md` row correction
+(`4fca888`), and `6a2c13f` — the engineer's discharge of the 224th filing's
+five hard-rule-11 survivors.
+
+**Decisions made this session:**
+
+- **Decision 080 — threading is gated at COMPILE TIME on the target, not only
+  at runtime by a setting.** The operator's design (a runtime **max-cores**
+  setting, `cores = 1` preserving web compatibility) is adopted **unchanged**
+  and one constraint is added: the threading dependency is declared under
+  `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]`, so the wasm
+  build **cannot name it**. **Warrant, measured today: `std::thread::spawn`
+  AND `rayon` both `cargo check` cleanly for `wasm32-unknown-unknown`** —
+  `std::thread` *exists* on that target and only the runtime has no threads to
+  give it, so **CI's wasm cross-check stays green while the web build acquires
+  a runtime failure**. A runtime setting is a promise; a target gate is a
+  proof. **Hard acceptance criterion: output byte-identical at any core
+  count** — every corpus A/B and render-identity check this project runs
+  depends on it. `ARCHITECTURE.md` §3 amended in the same filing.
+- **`R210` minted — a conformance figure is filed with the CRITERIA the
+  harness implements, not only its denominator.** Hard rule 10 forces the
+  denominator and answers *"out of how many?"*; it does not answer *"by what
+  test?"*. **Second occurrence on the same instrument, same number, four days
+  apart** (the 148th filing's first run also reported `29 of 51`, corrected
+  before publication when 13 reference-strip patches turned out not to be
+  adjudicable). Minted rather than filed only as a finding **because it has an
+  oracle** — *"which criteria does this harness implement?"* is answerable from
+  the suite's own ReadMes, with no knowledge of pdfce's behaviour required,
+  unlike the disclosure-truth questions `R207` and hard rule 11 correctly
+  refuse to gate.
+- **Mint DECLINED for the perf findings, argued rather than left silent.**
+  *"State the unit count when you defer an optimisation"* and *"ask a
+  hypothesis to predict a second axis"* are **engineering method, not project
+  policy**, with no enforcement layer in this repository — the same warrant on
+  which the 224th filing declined two candidates. Both are filed to
+  `D:\dev\rag\rust\`, where they are reachable by any project.
+
+**Findings + decisions:**
+
+- **★★★ The correction, and the reason it is a different species from every
+  other correction on this board.** The *Ghent standing board* has always
+  carried the right caveat for a **stale** figure — *"staleness is a relation
+  to the world and a document has no access to that; only re-measuring does"*.
+  **That is false for a MIS-SCORED figure.** Every Ghent number this project
+  has ever filed came from **the harness scoring itself**, its thresholds
+  calibrated against **one** patch (`GWG 16.0`, 2026-08-17) whose answer was
+  already known from a code change. **An instrument that agrees with itself
+  returns the same number forever.** Re-measurement checks freshness; only an
+  **oracle** checks correctness — and today one arrived from outside the
+  machine, in the form of the operator reading the render cell by cell.
+- **An absence is invisible to a detector built to find a presence**, and the
+  detector does not report *"I cannot tell"* — it reports `clean`, which is
+  indistinguishable from a pass. Seven of 51 patches, for the harness's whole
+  life.
+- **`GWG 8.2` is an IMAGE-OVERPRINT test, not a `DeviceN` colour test**, and
+  its own caption says the opposite. The check mark is painted in **yellow
+  underneath the images**, which are drawn over it with `/OP true /op true`, so
+  cyan over yellow should read green. pdfce paints the image normally and
+  covers it; **pdfium fails it too.** `Pass 97.1h` fixed the `DeviceN` half and
+  **the mark is still absent** — a smaller wrongness honestly stated, not a
+  fix. Filed to `C:\personal_rag\pdf\`.
+- **★★ *"Defer the optimisation, it is only a constant factor"* is a decision
+  about a PRODUCT — per-unit cost × unit count — and a deferral that states
+  only the first term is a hope, not a measurement.** `cmyk_paint.rs`'s module
+  doc **documented** the 259 µs page-sized mask cost and deferred it on
+  correct grounds (do not bundle a layout change into the Pass that first makes
+  the arithmetic right). **Every clause was true and the conclusion was still
+  wrong**, because nobody multiplied by the number of marks on a page. Same
+  move hard rule 10 makes for a measurement, applied to a **deferral**. Filed
+  to `D:\dev\rag\rust\`.
+- **★★ A plausible explanation that predicts the right ORDER OF MAGNITUDE is
+  not a diagnosis.** Two hypotheses both predicted *"≈20 ms per group, scaling
+  with page size"*; the dirty-rectangle fix built on the first bought **9 %**.
+  Cost vs page **AREA** (2.76 / 4.49 / 16.68 ms at 1×/4×/16×) is **sub-linear**
+  — the signature of **allocation and page-faulting**, not of a per-pixel loop.
+  **The discriminating question was cheap and was not the obvious one.** And
+  **the failed experiment is what makes the fix affordable**: buffer reuse must
+  clear, and the dirty rectangle makes the clear O(mark). Filed to
+  `D:\dev\rag\rust\`.
+- **★ The threading question is what found the regression.** Timing what was
+  actually slow before answering *"can we thread this?"* is the only reason a
+  **5.9×** constant factor surfaced. **Threading a 3.7-second page would have
+  hidden it behind eight cores and called it a win.**
+- **Projects advertise XFA in the repository DESCRIPTION and disclaim it in
+  the SOURCE** — `quorbe/xfa.js` says *"script & fill"* and `throw`s *"not
+  implemented yet"*; `benedoc-inc/pdfer` says *"comprehensive XFA support"* and
+  its own scope document lists *"Layout engine"* and *"Script execution"* as
+  non-goals. **A model summarising repository metadata reports the first
+  column, and the first column is marketing.** The counter-example is recorded
+  too: one Rust project declares **`dynamic_xfa: false`** in its own capability
+  struct, which is the opposite behaviour and worth naming.
+- **PDFium's FormCalc compiles to JavaScript and runs on V8**
+  (`pdf_enable_xfa = $ENABLE_V8`, 88 `ToJavaScript()` implementations), so
+  *"add XFA"* means *"ship a JS engine"* — **not a licence blocker
+  (BSD-3-Clause); a C++ and a V8 one**, in a project whose engine crates must
+  compile to `wasm32`.
+- **`lopdf` enables `rayon` BY DEFAULT.** Depending on it without
+  `default-features = false` puts a thread pool inside `pdfce-core` **with no
+  parallel code written at all** — and rayon compiles cleanly for wasm32, so
+  nothing would go red. Recorded **on the `PRIOR_ART.md` row**, because the row
+  is what gets read at the moment somebody proposes the dependency.
+- **★ A THIRD `git add -A` near-miss, second of the scratch-file variant.** A
+  research subagent left **158 KB of a third-party project's Rust source**,
+  licence unverified, untracked in this **public MIT repo's root**. Removed,
+  not committed. **What prevented it was the habit of adding files by name** —
+  no check, no hook, no noticing. The existing lesson
+  (`C:\personal_rag\claude_code\lesson_20260807_git_add_all_in_a_fork_mislabels_another_agents_work.md`)
+  was **amended that same morning** and did not prevent an instance that
+  afternoon: **every mitigation that requires remembering something at commit
+  time has now failed three times.**
+
+**Hard-rule-11 sweep — searched for the CLAIM (*"29 pass"*, *"of 51"*,
+*"56.9 %"*, *"26 → 29"*), not for a counter's name. THREE SURVIVORS OUTSIDE
+THIS ROLE'S REMIT, ALL REPORTED, NONE EDITED:**
+
+| # | site | the stale claim | severity |
+|---|---|---|---|
+| 1 | `docs/NEXT_SESSION.md:64` | the Ghent table's `pass … **29**` column | **highest** — engineer-owned, and it is **the file the next session reads first** |
+| 2 | `.claude/agent-memory/pdfce-engineer/MEMORY.md:49` | *"Ghent 26→29 pass"* | high — agent memory outlives the session that wrote it |
+| 3 | `.claude/agent-memory/pdfce-engineer/project_compositor_state.md` | same figure, same claim | high — the compositor state file is the one a resumed session trusts |
+
+Corrected **in this filing** (files this role owns): `ROADMAP.md`'s *Ghent
+standing board* heading and a new correction block, an amendment footer on the
+224th filing's table, `ARCHITECTURE.md` §4's `pdfce-render` cell,
+`FEATURES.md`'s header caveat. **`tools/ghent-check.py` itself is `Pass 122.2`
+and is not a documentation fix.**
+
+★ **The shape, worth one line:** the survivors are **all three in
+engineer-owned or agent-memory files**, none in `docs/` this role maintains —
+the inverse of the 224th filing, where all five were in `crates/`/`tools/`.
+**The sweep finds what the sweeper does not own, in both directions**, which
+is the whole reason it is a report rather than an edit.
+
+**Still in flight:**
+
+- **The working tree is DIRTY, and this role did not touch it.**
+  `git status --porcelain` shows ` M crates/pdfce-cli/src/main.rs`, **+113
+  lines**: an unfinished `render-page --region` flag with a full doc comment
+  (measured **95 ms at 1× and 87 ms at 32×** on a 401×301 pt region, flat
+  because the pixel count never changes; and a **numerical** zoom ceiling past
+  **20,000×** from `examples/zoom_ceiling.rs`). **No Pass ID minted, no
+  `FEATURES.md` box ticked** — it is not shipped.
+- **`Pass 97.1g` stays reserved and unbuilt** (non-isolated ordinary groups on
+  a subtractive page). The three IDs minted here deliberately skip it, so the
+  next commit in this family starts at **`97.1k`**.
+- **Six Backlog entries filed:** `122.0` (multithreading), `97.1g`, `97.1k`
+  (native colorant paths for images and shadings), `122.1` (per-sample image
+  overprint), `122.2` (teach `ghent-check.py` the positive criterion + an area
+  term), `122.3` (the colorant buffer's byte ceiling and banding).
+
+**For next session:**
+
+1. **Read `docs/ghent-operator-review-2026-08-21.md` before quoting any Ghent
+   figure.** ★ **Do not edit it** — it is the oracle, and an oracle amended to
+   agree with the instrument is not an oracle.
+2. **`Pass 122.2` first among the Ghent items**, because every other Ghent
+   number in the repository is currently waiting on it — including the three
+   optional-content patches (`15.0`/`15.1`/`15.2`) nobody has ever checked.
+3. **Fix `docs/NEXT_SESSION.md:64` and the two agent-memory files** (survivors
+   above) — engineer-owned, one edit each.
+4. **`MAX_CMYK_BUFFER_BYTES` needs an arithmetic justification, not an
+   analogy.** It is 256 MiB *"matched deliberately"* to `MAX_DISPLAY_LIST_BYTES`,
+   which is aesthetic; at 20 B/px that is 13.4 Mpx ≈ US-Letter at 375 DPI, and
+   **prepress is this feature's audience**. A scale-6 whole-page render
+   **silently renders in the wrong colour space** today.
+5. **`resolve_indexed`'s discarded `ColorDiagnostics` is owed** — a tint
+   failure inside a palette still reaches nobody.
+6. **A backup bundle is 187 commits behind** (measured, below) and cutting one
+   is the operator's call.
+
+**Backup currency, checked rather than inferred.** `ls -lt
+D:\Dev\pdfce-backups\` → newest bundle **`pdfce-20260817-v060.bundle`,
+2026-08-17 20:34**; `git bundle list-heads` puts its `refs/heads/main` at
+**`3c4c00e`**; `git rev-list --count 3c4c00e..HEAD` = **187**. `HEAD` is
+**`8372f20`** (`git describe` = `v0.7.0-18-g8372f20`) and **`origin/main` is
+level with it**. **No bundle on disk contains any commit filed here.**
+
+**Ledger.** Pass IDs `97.1h`/`97.1i`/`97.1j` shipped and `97.1g`/`97.1k`/
+`122.0`–`122.3` filed to Backlog (**all minted by this filing** — no commit
+message claims any of them, so nothing can collide). Decisions **079 → 080**,
+next free **081**. Standing rules **`R209` → `R210`**, next free **`R211`**.
+
+**Gates, re-run at the end of this filing:** reported below.

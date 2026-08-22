@@ -1741,6 +1741,19 @@ D:\Dev\pdfce\
                                    spot or ICC patch, and not one is a
                                    blending-space failure.** Ghent **26 →
                                    29 pass of 51**, trap marks **55 → 41**.
+                                   ★ **CORRECTED 2026-08-21 (225th
+                                   filing): BOTH LEVELS ARE
+                                   OVER-COUNTS — `tools/ghent-check.py`
+                                   implements one of the suite's two
+                                   pass criteria and has reported
+                                   `clean` for the other since it was
+                                   written (seven patches). Corrected
+                                   standing: **26 pass of 51 at
+                                   minimum**. The DELTA (+3) and the
+                                   trap counts are unaffected; the
+                                   levels are not. See `ROADMAP.md`'s
+                                   *Ghent standing board* and
+                                   `docs/ghent-operator-review-2026-08-21.md`.**
                                    **(4)** *"the `iccce` boundary (decision
                                    064) still owns the final conversion"* —
                                    **unchanged as a BOUNDARY and no longer
@@ -2111,6 +2124,30 @@ is checked, not just hoped for — `cargo tree -p pdfce-core` and
 `pdfce-render` is fine; a *windowing* dependency is not). This is the
 single invariant that keeps the future web fork a "swap the shell
 crate" job instead of a rewrite.
+
+**★★ AND `cargo tree` IS NOT SUFFICIENT FOR ONE SPECIFIC HAZARD — THREADING
+(added 2026-08-21, decision 080).** A windowing crate is caught because it
+**fails to compile** for `wasm32-unknown-unknown`. **A threading crate is
+not: both `std::thread::spawn` and `rayon` `cargo check` CLEANLY for
+`wasm32-unknown-unknown`** (measured 2026-08-21, rustc 1.97.1, rayon
+1.12.0). `std::thread` **exists** on that target — it type-checks and links;
+only the runtime has no threads to give it. **So the wasm32 leg of CI's
+`cross-check` job stays green while the web build acquires a runtime
+failure**, and a thread pool can enter `pdfce-core` without any gate
+objecting. Two obligations follow, and they are cheap:
+
+1. **Any threading dependency is declared under
+   `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]`**, so the wasm
+   build cannot name it and a parallel loop that ignores the runtime
+   max-cores setting is a **build error**, not a browser crash.
+2. **A dependency's DEFAULT features are checked for one.** `lopdf` enables
+   `rayon` **by default** (`PRIOR_ART.md`, `4fca888`), so adding it without
+   `default-features = false` puts a thread pool in `pdfce-core` **with no
+   parallel code written at all.**
+
+Full reasoning, the operator's runtime max-cores design, and the
+byte-identical-output acceptance criterion: **decision 080** (§12) and
+`ROADMAP.md`'s `Pass 122.0`.
 
 **★ ABOUT TO BE VALIDATED BY AN INDEPENDENT IMPLEMENTATION, 2026-08-13
 (decision 058, hundred-and-thirty-seventh filing).** The operator has
@@ -23893,4 +23930,85 @@ free 072.**
   construction. **§5's round-trip invariant is not engaged** — both Passes
   are entirely inside `pdfce-render`, with no writer path.
 
-  **Ceiling moves 078 → 079; next free 080.**
+  ~~**Ceiling moves 078 → 079; next free 080.**~~ **Superseded by decision
+  080, below.**
+
+- **2026-08-21 — Decision 080. THREADING IS GATED AT COMPILE TIME ON THE
+  TARGET, NOT ONLY AT RUNTIME BY A SETTING — BECAUSE BOTH
+  `std::thread::spawn` AND `rayon` `cargo check` CLEANLY FOR
+  `wasm32-unknown-unknown`, SO THE EXISTING CI WASM JOB CANNOT CATCH A
+  THREADING REGRESSION.** Filed with `Pass 122.0`'s *Backlog* entry
+  (`ROADMAP.md`), which the operator opened with ***"put multithread in the
+  plan for later"*** on 2026-08-21. **Nothing is built; this records the shape
+  the work must take, before anybody writes the first parallel loop.**
+
+  **(a) The operator's design, adopted unchanged.** A **runtime max-cores
+  setting**, set by the GUI or the CLI before a command, with **cores = 1
+  preserving web compatibility**. It fits the existing mechanism exactly —
+  **14 persisted settings today**, and `tools/check-settings-consumed.py`
+  already enforces that each is **parsed, written AND read**, so a setting
+  stored and never consulted fails a gate that already exists.
+
+  **(b) What is ADDED to it, and why a runtime setting alone is insufficient.**
+  A **compile-time target gate on the dependency** —
+  `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` — so the wasm
+  build **cannot name the threading crate**, and a future parallel loop that
+  ignores the setting is a **BUILD ERROR** rather than a browser crash.
+  **Measured 2026-08-21 (rustc 1.97.1, rayon 1.12.0/rayon-core 1.13.0): a
+  throwaway crate using `std::thread::spawn`, and the same crate with
+  `cargo add rayon`, BOTH `cargo check --target wasm32-unknown-unknown` at
+  exit 0.** `std::thread` **exists** on that target — it type-checks and links;
+  only the *runtime* has no threads to give it. **So `cross-check`'s wasm leg
+  stays green while the web build acquires a runtime failure.** The gate's
+  premise (*"compiles for wasm32 ⇒ runs on wasm32"*) holds for `std::fs`,
+  `mio` and platform `libc`, and **fails exactly here** — a `std` API present
+  on the target that does the wrong thing there. ⇒ **A runtime setting is a
+  promise; a target gate is a proof. Ship both.** Same shape as `R209` (an
+  unobserved property reading as a passing one) in a new place. Full
+  write-up: `D:\dev
+ag
+ust\std_thread_and_rayon_both_compile_for_wasm32_so_a_cross_check_gate_cannot_catch_a_threading_regression.md`.
+
+  **★ This is a §3 (GUI-core separation / web-fork) decision, not a
+  performance one.** The invariant §3 protects is that the web fork is a
+  **shell-crate swap, not a rewrite**. A thread pool inside `pdfce-core` or
+  `pdfce-render` breaks that silently — nothing fails to compile, nothing fails
+  CI, and the failure surfaces in a browser. **`lopdf`'s row in
+  `PRIOR_ART.md` carries the same hazard from the other direction** (`4fca888`,
+  2026-08-21): it enables **`rayon` by default**, so depending on it without
+  `default-features = false` puts a thread pool in `pdfce-core` **without
+  anybody writing a parallel loop at all.**
+
+  **(c) One helper, not an `if` per call site.** Two code paths producing one
+  result means the serial one rots — and the serial one is the web fork's
+  **only** path.
+
+  **(d) ★★ A HARD ACCEPTANCE CRITERION: output must be BYTE-IDENTICAL at any
+  core count.** Not *visually* identical, not *within tolerance*. **Every
+  measurement this project makes depends on it** — the 4,023-file corpus A/B,
+  the six-page render-identity checks, every Ghent verdict, every
+  `PoisonReason` argument about a cached page rendering a *different* picture.
+  Testable for pennies: render at 1 core and at N, compare hashes. **Without
+  this criterion, parallelism quietly retires the project's entire regression
+  apparatus.**
+
+  **(e) Where the win is, measured rather than assumed (2026-08-21).** A page
+  is now **~0.3 s** after `Pass 97.1i`/`97.1j`, so intra-page parallelism is a
+  much smaller prize than it was that morning. **Batch- and page-level
+  parallelism live in the SHELLS**, where wasm never applies. **Intra-page work
+  is memory-bandwidth-bound and wants BANDING first** (`Pass 122.3`), which is
+  also the prerequisite for splitting a page across cores without multiplying
+  the buffer count.
+
+  **★ And the cautionary half, which is why this decision names measurement
+  before design.** The question *"can we thread this?"* is what surfaced a
+  **5.9× constant-factor regression** in the colorant buffer, because answering
+  it honestly meant timing the page first. **Threading a 3.7-second page would
+  have hidden that behind eight cores and called it a win.**
+
+  **Body sections updated in this same filing:** §3's web-fork paragraph gains
+  the compile-time-gate obligation. **§5's round-trip invariant is not
+  engaged** — nothing here touches a writer path — and **(d) is the form the
+  round-trip discipline takes for a renderer.**
+
+  **Ceiling moves 079 → 080; next free 081.**
