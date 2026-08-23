@@ -353,12 +353,21 @@ saved render of the box sits up and to the right in its frame instead of
 centred. That framing is evidence, not sloppiness, and it is left as it
 came out.
 
-Reproduce it with:
+★ **And the nudged coordinates are gone.** That framing came from a region
+hand-corrected twice against the drift; after `Pass 74.7` the box lands
+within **one pixel** of where the arithmetic says, so the region can just
+be computed:
 
 ```
-pdfce-cli render-page banana-at-scale.pdf --page 1 --scale 8104752 \
-  --region "539.9998919,558.8519467,540.0001633,558.8521277" -o box.png
+pdfce-cli render-page banana-at-scale.pdf --page 1 --scale 13749133 \
+  --region "539.9999200,558.8519152,540.0000800,558.8520218" -o box.png
 ```
+
+Measured on exactly that command: the box's centre falls at pixel
+`(1100, 732)` of a 2200 × 1467 raster, against a geometric centre of
+`(1100, 733)`. Before the fix, the same computed region put it **76 px out
+horizontally and 288 px vertically** — which is where the "just nudge it"
+instinct came from, and why the nudge not working was the clue.
 
 ⇒ **That was the state on 2026-08-22.** `Pass 74.7` took it the next day,
 and everything above is now the record of a solved problem rather than a
