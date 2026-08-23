@@ -57617,3 +57617,216 @@ correct as written, **not touched**).
 - **RAG files written by this filing:**
   `D:/dev/rag/rust/two_paths_that_must_agree_share_the_predicate_that_decides_when_they_can.md`,
   `D:/dev/rag/rust/a_differential_test_proves_agreement_only_over_the_range_it_samples.md`.
+
+## 2026-08-23 (two-hundred-and-thirty-fourth filing) — `4af0c08`: the 233rd filing's three `tools/gen-scale-demo/README.md` §9 survivors discharged (**no Pass ID**); ★★★★★ **A NUMBER IDENTIFIED AS WRONG IN AN *EXPECTATION* CAME BACK, HOURS LATER AND IN A THIRD DOCUMENT, AS A MEASURED *RESULT*** — `11 of 11` was minted into `R215` as a defective acceptance criterion, was recorded **correctly as `2`** in two other documents the same day, and reappeared in README prose as an outcome, because ***an expectation invites checking and a result does not***; ★★★★★ **`R215` AMENDED, CLAUSE (d), CEILING UNMOVED AT `R215`** — *the correction is the artefact, not the corrected value*: publish *"this said X; X is impossible because Y; it is Z"* and **keep X visible**, because a bare `Z` is re-derived back to `X` by the next reader with the same faulty intuition, **including yourself an hour later**; ★★★★ **THE DISPATCH'S SECOND QUESTION ANSWERED YES AT n=2 — A MINTED RULE PROTECTS THE DOCUMENT IT WAS MINTED IN, NOT THE ONES THAT QUOTE IT**: `R215`'s founding number escaped forward in two consecutive filings because **the mint's sweep covered `docs/` and the number was in `tools/`** ⇒ recommended amendment to hard rule 11 of `.claude/agents/pdfce-librarian.md` (**the engineer's act**), since *a rule mint is itself a meaning-change event*; ★★★ **TWO NEW SURVIVORS, BOTH CREATED OR LEFT BY THE REPAIR ITSELF, BOTH FOUND BY READING THE FILE AFTER IT** — §9 now carries **two** positional pre/post boundary claims, the older one **uncorrected and contradicted by the newer one in the *"⇒ That was the state on 2026-08-22"* paragraph**, and the newer one **drawn below two current-behaviour paragraphs**; ★★ **`R214` CLAUSE (a) GETS A SECOND LIVE INSTANCE AND IT IS A REPAIR, NOT A BREAK — a positional pointer was repaired WITH ANOTHER POSITIONAL POINTER**, which is exactly what clause (c) forbids; ★ **`FEATURES.md`: NO ROW ADDED AND NO ROW REPAIRED — swept for all four figures and confirmed clean**; ★ **ALL 16 GATES EXIT 0 AFTER THIS ENTRY; METRICS LINE UNCHANGED AT `90` KEYS; NO CODE CHANGED**
+
+**Shipped:**
+
+- **`4af0c08` — no Pass ID.** 48 insertions, 17 deletions, **one file**:
+  `tools/gen-scale-demo/README.md`. Ruled hash-keyed rather than numbered for
+  the same reason `ea413a4` was: **a Pass is a unit of work with acceptance
+  criteria**, and this has none — it corrects three sentences to match
+  measurements already filed correctly elsewhere. **Not an amendment to
+  `PASS 74.10`'s entry either**: `74.10` is a refusal in `pdfce-render`; this is
+  documentation of `74.7`'s effect. Next free ID in the family is still
+  **`74.11`**.
+- Two later commits are named in the filing **so nobody re-files them**:
+  **`aa06a45`** is the 233rd filing itself, and **`9b1d7b6`** is an
+  engineer-memory note under `.claude/`, which `check-commits-filed.py` does not
+  count. Confirmed by running the gate: it named **`4af0c08` and nothing else**.
+
+**The three corrections, and their species:**
+
+1. **`R215`'s founding wrong number, restated as a result.** *"The table above
+   is superseded: **11 of 11 forms survive at every scale tested**"* → **`2`**
+   from `1.25 × 10⁷` up, the box plus the one molecule in frame; the other nine
+   leave the viewport and `Pass 74.4`'s exact `/BBox` cull removes them
+   (ISO 32000-1 §8.10.1). **The table's own header was wrong too — *"forms
+   rendered of 11"*, which makes `11` the target at every row** — and the
+   engineer found and fixed that while repairing the prose. It is now four
+   columns (`scale` / before / after / correct) with a starred note saying why
+   the third is not `11`. **The report named the claim; repairing the claim
+   found its second copy**, which is the outcome hard rule 11 aims at.
+2. **`R214`'s species.** *"Everything above is now the record of a solved
+   problem"* was false for the second half of its own section. Reworded to name
+   where the boundary falls — **and see the survivors below, because the new
+   boundary is in the wrong place and the ORIGINAL positional claim is still
+   there.**
+3. **A ratio that refuted itself in one sentence.** *"23× faster … 93 s to
+   1.3 s"* (`93 / 1.3 = 71.5`) → **`31 s → 1.3 s` = `23.8×`**, with an explicit
+   paragraph stating that `93 s` is the **rejected** device-space attempt, so the
+   figure has a home wherever else it appears. **Visible only because hard rule
+   10 (a) had put the operands beside the ratio.**
+
+**★★★ None of the three contained a stale word, a stale identifier or a stale
+Pass number, so no grep in any sweep could have reached any of them.** All three
+were found by **reading the file**. Worth recording as a fact about the method
+rather than as praise: the 233rd filing read §9 because the failure `1af75a1`
+repairs is a **silently lost edit**, and the only check for that is reading the
+artefact rather than the diff — and the reading found three claims a grep could
+not have.
+
+**Decisions made this session:**
+
+- **`R215` AMENDED with clause (d); ceiling UNMOVED; `R216` still free.**
+  *When a filed number is found wrong, publish the CORRECTION, not the corrected
+  value — and keep the wrong value visible.* Full text under *Standing rules*.
+- **Ruled against minting `R216`, and against declining as already-covered.**
+  The warrant, in three lines: **(i)** the closest neighbours — hard rule 10's
+  corollary (*a correction is a claim; name its world-source*) and `R214` clause
+  (c) (*repair at the referent*) — both bind a correction's **sourcing** and
+  neither binds its **form**, so *keep the wrong value visible* was **practised
+  twice and stated nowhere**; **(ii)** the precedent set one filing ago, when
+  `R211` was amended rather than `R216` minted, applies **more** strongly here,
+  because the instance is `R215`'s **own founding number**; **(iii)** the two
+  clauses govern **one number's lifecycle at two times** — (a)–(c) when the
+  expectation is *written*, (d) when it is *corrected* — and the reader who
+  discharges the first is the same person who later writes the results-up, so a
+  separate `R216` would sit where that reader has no reason to look.
+- **And ruled that it is nonetheless new text, not a restatement.** `R215`
+  (a)–(c) are about **how the expected value is derived** (attribution); clause
+  (d) is about **where the number later lands** (a genre change). **The remedies
+  do not imply one another**: *re-derive from first principles* versus *publish
+  the correction rather than the corrected value*. A reader can discharge either
+  while failing the other.
+- **The cost of amending rather than minting is recorded, not hidden** — the
+  same disclosure `R211`'s amendment made. Clause (d)'s general form reaches
+  **past acceptance oracles** (a typo, a unit error, a re-measurement can each
+  come back as a result), and burying it inside `R215` hides it from someone
+  correcting a figure that was never an oracle. **Mitigated the way `R211`
+  mitigated its own:** filed as a fact in `D:/dev/rag/rust/`.
+- **No decision record.** A rule amendment is not an architectural decision;
+  `ARCHITECTURE.md` §12 stays at **084**, next free **085**.
+- **RECOMMENDED (not applied): amend hard rule 11 of
+  `.claude/agents/pdfce-librarian.md`** so that **minting or amending a standing
+  rule is itself a meaning-change event**, whose sweep covers **every tree the
+  project writes prose in** — `docs/`, `crates/`, `tools/`, `.github/`,
+  `README.md` — reported, not edited. That file is the engineer's to amend; the
+  precedent is hard rule 11's own text, which records this role proposing it and
+  *"correctly declining to amend this file unilaterally."*
+
+**Findings + decisions:**
+
+- **★★★★★ THE MECHANISM, WHICH IS THE TRANSFERABLE HALF.** A number written as
+  an **expectation** is identified as wrong; the correct value is recorded
+  correctly in the documents that file the fix; and then the write-up is
+  composed — **and writing up a fix, you reach for the criterion you were
+  working against and report it as met.** The same wrong number lands in a third
+  document **as an outcome**. ⇒ ***An expectation invites checking; a result does
+  not.*** Moving a number from the first slot to the second **removes the only
+  mechanism that would have caught it**, and the move happens **naturally**,
+  which is why neither review nor a gate saw it.
+- **★★★★★ THE REMEDY IS A FORM, NOT A DILIGENCE REQUEST. The correction is the
+  artefact, not the corrected value.** Record *"this said X; X is impossible
+  because Y; it is Z"* and keep **X** visible: a bare `Z` gets re-derived back to
+  `X` by the next person reasoning from the same faulty intuition, **including
+  yourself an hour later**, because the intuition that produced `X` still sounds
+  correct and nothing beside `Z` disputes it. **`4af0c08` obeys this in its own
+  text** — it quotes the sentence it replaces, dates it, and says why `11` was
+  never achievable.
+- **★★★★ A MINTED RULE PROTECTS THE DOCUMENT IT WAS MINTED IN, NOT THE ONES
+  THAT QUOTE IT — n=2, in consecutive filings.** The 232nd filing minted `R215`
+  and swept `docs/`; `11 of 11` was in `tools/`. The 233rd found it by reading
+  and could not repair it (`tools/` is outside this role's remit). The 234th —
+  this one — found **the table header** and **two more positional claims** in
+  the same section, again by reading. **The diagnosis is actionable rather than
+  rueful: a mint is a meaning-change event and hard rule 11 already obliges the
+  sweep; it was never read as applying to a mint.**
+- **★★★ THE REPAIR OF A POSITIONAL REFERENCE CREATED A NEW POSITIONAL
+  REFERENCE.** `R214` clause (a) says *name the referent*; clause (c) says
+  *repair at the referent, never at the neighbour*. **Moving a boundary sentence
+  is a repair at the neighbour**, and §9 now has two boundary sentences with
+  opposite scopes. **This is not carelessness — it is what repairing a positional
+  reference positionally always does**, which is why the rule's remedy is *name*,
+  rather than *re-point*.
+- **★★ Hard rule 10 (a) paid for itself a third time, in a file nobody wrote it
+  for.** *"23× faster … 93 s to 1.3 s"* is **self-refuting on its face** only
+  because the ratio and its operands were both written down. The repaired text
+  keeps that property: `31 s → 1.3 s` = `23.8×`, all three figures present.
+- **★ `ARCHITECTURE.md` §4.1 was correct throughout and needed nothing** — it
+  states the post-fix counts as *"`11 of 11` at `2 × 10⁶` and `2 of 11` at every
+  scale from `1.25 × 10⁷` up, and `2` is the correct answer"*, with the mechanism
+  named. **The right number was in a file the README's author had open the same
+  day.** That is the finding, not a coincidence.
+
+**Survivors (reported, not edited — `tools/` is outside this role's remit):**
+
+**Two, and they are one defect: `tools/gen-scale-demo/README.md` §9 now carries
+TWO positional pre/post boundary claims and neither is true.**
+
+1. **★★★ The original positional claim is still there, uncorrected, and is now
+   contradicted by its own repair.** The ★ fix notice that opens *"FIXED 2026-08-23 by `Pass 74.7`"* — named rather than located, per `R214` clause (a) — still
+   reads *"Everything **below** describes the behaviour before that Pass … What
+   follows is the evidence, not the current state."* **That is the exact sentence
+   the 233rd filing quoted as survivor #2.** The commit repaired a **different,
+   later** sentence — a true repair, but of the mirror. ⇒ §9 says *"everything
+   below is pre-fix"* in its `FIXED 2026-08-23` notice and *"what follows describes the current
+   behaviour"* in its *"⇒ That was the state on 2026-08-22"* paragraph. **Worse than before the commit**,
+   because the second sentence lends the first its credibility.
+2. **★★ The new boundary is drawn in the wrong place.** *"Everything from the
+   top of this section down to here is the record of a solved problem"* places
+   the cut **below** two paragraphs of **current** behaviour, both named as
+   current by the 233rd filing's own survivor text: the ★ *"And the nudged
+   coordinates are gone"* paragraph (*"after `Pass 74.7` the box lands within one
+   pixel"*) and the **`(1100, 732)` of a 2200 × 1467 raster** measurement taken
+   on the repaired command.
+
+⇒ **Repair by splitting §9 into two headed subsections — *how the ceiling was
+found* and *what the behaviour is now* — so the boundary is structural and
+cannot be mis-scoped by a later edit.** That is the recommendation the 233rd
+filing already made, and it is now the only one that works.
+
+**Checked and CLEAN, recorded so the negatives are visible:** `ARCHITECTURE.md`
+§4.1, the `PASS 74.7` Shipped entry and the 232nd `SESSION_LOG.md` entry all
+state `2` and state that `2` is correct. **`11 of 11` survives in `R215`'s own
+text on purpose**, as preserved evidence — clause (d) being obeyed before it was
+written down. `docs/render-region-measurements.md` needs no second amendment.
+**`docs/FEATURES.md` swept for `11 of 11`, `93`, `71.5` and `23.8`** — rows 201,
+202, 204 and 212 match, every figure correct, **nothing to repair**.
+
+**`FEATURES.md` ruling — NO ROW, and NO ROW REPAIRED:** `4af0c08` adds **no
+capability an operator can ask for**; it corrects prose in a demo generator's
+README. Same test that gave `ea413a4` no row, gave `PASS 74.8` no row, and gave
+`--fast-subpixel` one. **No box changes anywhere.**
+
+**Still in flight:**
+
+- **The two §9 boundary claims above** — the highest-value repair is the
+  structural split, not another reworded sentence.
+- **The recommended hard-rule-11 amendment** to
+  `.claude/agents/pdfce-librarian.md`. **The engineer's act.**
+- **`R215`'s retro-application**, carried forward unstarted for a **third**
+  filing: any Pass filed with a *"required after"* column should be re-read
+  against the rule before that column is used as a gate — **now with clause (d)
+  attached**, so a column found wrong is *published as a correction*, not
+  silently replaced.
+- Everything else in the queue is unchanged: `R214`'s positional-reference gate
+  (measure the baseline first), `Pass 97.1g`, `97.1k`, `122.2`, `122.1`,
+  `122.0`, `119.1`, `122.3`.
+- **Nothing is owed to Ken** except pushing and cutting a backup, both his acts.
+
+**For next session:**
+
+- **`docs/NEXT_SESSION.md` is updated by this filing.** §5's three-item survivor
+  list is **discharged and replaced** by the two boundary claims above; §4's
+  queue item 1 is **done**.
+- **Backup and remote currency — CHECKED, not inferred (hard rule 8).**
+  `git remote -v` → `origin  https://github.com/KenM76/pdfce.git`.
+  `git rev-list --count origin/main..main` → **`21`** (was `18` one filing ago;
+  three commits since), with the local remote-tracking ref still at **`c24ad7a`**;
+  **no `git fetch` was run**, so that is the tracking ref's position, not a live
+  query. `ls -lt D:\Dev\pdfce-backups\` → newest bundle
+  **`pdfce-20260817-v060.bundle`** (2026-08-17 20:34), `refs/heads/main` at
+  **`3c4c00e`** by `git bundle list-heads`; `git rev-list --count 3c4c00e..main`
+  → **`214`** (was `211`), and `git merge-base --is-ancestor` confirms **`HEAD`
+  is NOT in that bundle**. ⇒ **the newest backup is 214 commits and six days
+  behind `HEAD`.** `git worktree list | wc -l` → **`9`**.
+- **Gates: 17 `tools/check-*` on disk (12 `.py` + 5 `.sh`), 16 runnable as bare
+  gates**, re-measured by `ls` and by running each. **Before this entry, 15 of 16
+  exit 0** and `check-commits-filed.py` exited **1**, naming exactly `4af0c08`.
+  **After: all 16 exit 0.** The 17th, `check-image-colorspace-truth.py`, exits 1
+  bare **because it requires a fixture-directory argument** — *"`check-*` on disk
+  but not a gate"*, still true. **`check-metrics-line-contract.py` → exit 0,
+  `90 keys`, unchanged** — a commit that changes no code moves no key.
+- **RAG file written by this filing:**
+  `D:/dev/rag/rust/a_number_identified_as_wrong_in_an_expectation_comes_back_as_a_measured_result.md`.

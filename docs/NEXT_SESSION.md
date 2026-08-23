@@ -3,14 +3,18 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
-**REWRITTEN 2026-08-23 by `pdfce-librarian` (two-hundred-and-thirty-third
-filing).** **`PASS 74.10` shipped** (`d8f3020`, plus `1af75a1` with no Pass ID).
-**The previous handoff's queue item 1 — *"check this FIRST, because it is the
-only item that could be a live defect rather than new work"* — was a live
-defect, and it is closed.** **`decision 084` minted; `R211` amended (clauses (d)
-and (e)); no new standing rule — the ceiling stays `R215`.** **Nothing is
-awaiting Ken except pushing and cutting a backup**, both of which are his acts,
-not an agent's.
+**UPDATED 2026-08-23 by `pdfce-librarian` (two-hundred-and-thirty-fourth
+filing).** **`4af0c08` filed with NO Pass ID** — the previous handoff's §5
+three-item survivor list is **discharged**, and queue item 1 is **done**.
+**`R215` AMENDED (clause (d): *the correction is the artefact, not the corrected
+value*); ceiling UNMOVED at `R215`, `R216` still free; no new decision — §12
+stays at `084`.** **★ Two NEW survivors in the same README section, both left or
+created by the repair itself — §5 item 1.** **Nothing is awaiting Ken except
+pushing and cutting a backup**, both of which are his acts, not an agent's.
+
+*(The 233rd filing's rewrite is preserved below and still current for
+`PASS 74.10`: `decision 084` minted, `R211` amended with clauses (d) and (e),
+and the display-list precision defect closed.)*
 
 ---
 
@@ -123,9 +127,9 @@ Three sessions running, that `ls` found something a document said was not there.
 `python tools/check-ci-parity.py --list` prints the local stand-ins.
 **`R209`:** *"all gates green" names a set, and the set somebody runs is not the
 set CI runs; a CI job with no local runner is UNOBSERVED, not passing.*
-*(★★ **Measured 2026-08-23, 233rd filing, by `ls tools/check-*` and by running
-each: 17 scripts on disk (12 `.py` + 5 `.sh`), 16 runnable as bare gates, ALL 16
-EXIT 0.** The 17th, `check-image-colorspace-truth.py`, exits 1 on a bare
+*(★★ **Re-measured 2026-08-23, 234th filing, by `ls tools/check-*` and by
+running each: 17 scripts on disk (12 `.py` + 5 `.sh`), 16 runnable as bare
+gates, ALL 16 EXIT 0 after that filing's edits.** The 17th, `check-image-colorspace-truth.py`, exits 1 on a bare
 invocation **because it takes a fixture-directory argument** and is not a gate.
 **Count them; do not quote a count.**)*
 
@@ -165,10 +169,12 @@ harness has ever had**, and the calibration set for fixing it (`Pass 122.2`).
 | `296a23e` | `74.9` | `--fast-subpixel`, the opt-in lossy cull; closes `(br)` |
 | **`d8f3020`** | **`74.10`** | **the display list REFUSES a scale it cannot render truthfully — closes the second rendering path `74.7` opened** |
 | **`1af75a1`** | **—** | **README repair: a heredoc silently ate a line-continuation backslash in `d8f3020`** |
+| **`4af0c08`** | **—** | **the demo README's three stale claims discharged — `11 of 11` → `2`, the boundary sentence scoped, `93 s → 1.3 s` corrected to `31 s → 1.3 s = 23.8×`** |
 
 **Ledger after this filing:** next free Pass in the `74` family **`74.11`**;
 decisions **084**, next free **085**; standing rules **`R215`** (ceiling
-**unmoved** — `R211` was **amended**, not superseded), next free **`R216`**;
+**unmoved** — `R211` was amended by the 233rd filing and **`R215` itself by the
+234th, clause (d)**; neither superseded), next free **`R216`**;
 operator questions ceiling **`(br)`, CLOSED**, next free **`(bs)`**;
 **`render-page` metrics line at `90` keys, unchanged**, measured by running
 `tools/check-metrics-line-contract.py`.
@@ -181,10 +187,13 @@ operator questions ceiling **`(br)`, CLOSED**, next free **`(bs)`**;
 shipped, and the display-list precision question turned out to be a live defect
 and is fixed. **Nothing in this queue is blocked on anybody.**
 
-1. **★ Repair `tools/gen-scale-demo/README.md` §9 — THREE stale claims, and the
-   first one is `R215`'s own wrong number wearing a result's clothes.** Details
-   in §5. Small, and the first item is the kind of error this project has now
-   minted a rule about.
+1. **★ SPLIT `tools/gen-scale-demo/README.md` §9 INTO TWO HEADED SUBSECTIONS —
+   *how the ceiling was found* and *what the behaviour is now*.** The three
+   stale claims the previous handoff listed here are **discharged** by
+   `4af0c08`; what is left is **two positional boundary claims that cannot both
+   be true**, one of them the ORIGINAL sentence and one of them created by the
+   repair. Details in §5. **Do not reword a third boundary sentence — make the
+   boundary structural**, per `R214` clause (a): *name the referent*.
 2. **Build `R214`'s positional-reference gate** — a grep over a closed
    vocabulary (*of those*, *the above*, *this slice*, *the next slice*, *the
    former*, *the latter*, *as above*, *see below*, *the previous field*) in doc
@@ -229,38 +238,48 @@ and is fixed. **Nothing in this queue is blocked on anybody.**
 
 ## §5 — STILL NOT DONE, named so it does not read as done
 
-**★★★ `tools/gen-scale-demo/README.md` §9 CARRIES THREE STALE CLAIMS.** All
-three were found by **reading** the section, not by grep — the 233rd filing read
-it precisely because the failure `1af75a1` repairs is a **silently lost edit**,
-and the only check for that is reading the artefact rather than the diff.
-**Reported, not edited — the librarian does not touch `crates/` or `tools/`.**
+**★★★ THE THREE STALE CLAIMS IN `tools/gen-scale-demo/README.md` §9 ARE
+DISCHARGED** by `4af0c08` — `11 of 11` → **`2`** (with the table rebuilt as
+before / after / **correct** and a note saying why the third column is not
+`11`), the boundary sentence scoped, and *"93 s to 1.3 s"* corrected to
+**`31 s → 1.3 s` = `23.8×`** with an explicit paragraph saying `93 s` is the
+**rejected** device-space attempt. **The table's own header — *"forms rendered
+of 11"* — was wrong too and was fixed in the same edit; nobody had reported it.**
 
-1. **★★★ `R215`'s FOUNDING WRONG NUMBER HAS PROPAGATED FORWARD AS A MEASURED
-   RESULT — fix this one first.** §9's *"What changed"* paragraph reads: *"The
-   table above is superseded: **11 of 11 forms survive at every scale tested**."*
-   **The correct post-fix answer is `2 of 11` from `1.25 × 10⁷` up** — the box
-   plus the one molecule actually in frame; the other nine leave the viewport
-   and **`Pass 74.4`'s `/BBox` cull removes them exactly** (ISO 32000-1
-   §8.10.1). Both the `PASS 74.7` Shipped entry and the 232nd `SESSION_LOG.md`
-   entry state `2` **and** state that `2` is correct. **`11 of 11` is the number
-   `R215` was minted about, now dressed as an outcome rather than as an
-   expectation — which is strictly worse, because an expectation invites
-   checking and a result does not.**
-2. **★★ A POSITIONAL REFERENCE THAT IS NOW WRONG RATHER THAN BROKEN — `R214`'s
-   exact species.** §9's fix notice says *"Everything **below** describes the
-   behaviour before that Pass … What follows is the evidence, not the current
-   state."* **The second half of the section describes the CURRENT state** — the
-   computed region, the `(1100, 732)` measurement, *"What changed"*, and the
-   `1.6e9` result. The reference names nothing, so it cannot tell a reader it
-   has gone stale. **Repair at the referent**: scope the sentence to the
-   paragraphs it actually covers, or split §9 into *how it was found* and *what
-   it is now*.
-3. **★ THE `93 s` FIGURE IS SELF-REFUTING THERE.** §9's last paragraph reads
-   *"the same change made deep zoom **23× FASTER**. A stroke-heavy CAD region at
-   100 000× went from **93 s to 1.3 s**."* **`93 / 1.3 = 71.5`, not `23`** — the
-   ratio and its own operands disagree **in one sentence**. With the provenance
-   now known the correct before-figure is **`31 s`**. ⇒ **`31 s → 1.3 s`,
-   `23.8×`.**
+**★★★ BUT §9 NOW CARRIES *TWO* POSITIONAL PRE/POST BOUNDARY CLAIMS AND NEITHER
+IS TRUE.** Found by the 234th filing **reading the file after the repair**, which
+is the check hard rule 11's corollary obliges. **Reported, not edited — the
+librarian does not touch `crates/` or `tools/`.**
+
+1. **★★★ THE ORIGINAL POSITIONAL CLAIM IS STILL THERE, UNCORRECTED, AND IS NOW
+   CONTRADICTED BY ITS OWN REPAIR.** The ★ fix notice that opens *"FIXED 2026-08-23 by `Pass 74.7`"* — named rather than located, per `R214` clause (a) — still
+   reads *"Everything **below** describes the behaviour before that Pass … What
+   follows is the evidence, not the current state."* **That is the exact sentence
+   the previous handoff quoted as survivor #2.** The commit repaired a
+   **different, later** sentence (*"everything above is now the record of a
+   solved problem"*) — a true repair, but of the mirror. ⇒ **§9 says "everything
+   below is pre-fix" in its `FIXED 2026-08-23` notice and "what follows describes the current
+   behaviour" in its *"⇒ That was the state on 2026-08-22"* paragraph.** Worse than the state before the commit,
+   because the second sentence lends the first its credibility.
+2. **★★ THE NEW BOUNDARY IS DRAWN IN THE WRONG PLACE.** *"Everything from the
+   top of this section down to here is the record of a solved problem"* puts the
+   cut **below** two paragraphs of **current** behaviour: the ★ *"And the nudged
+   coordinates are gone"* paragraph (*"after `Pass 74.7` the box lands within
+   **one pixel**"*) and the **`(1100, 732)` of a 2200 × 1467 raster**
+   measurement, taken on the repaired command. Both are post-`74.7` results
+   sitting inside the span the sentence declares historical.
+
+⇒ **THE FIX IS STRUCTURAL, NOT VERBAL: split §9 into two headed subsections —
+*how the ceiling was found* and *what the behaviour is now*.** `R214` clause (a)
+says *name the referent*; clause (c) says *repair at the referent, never at the
+neighbour*. **Moving a boundary sentence is a repair at the neighbour**, and it
+is what produced item 2. **A third reworded boundary sentence will do the same
+thing again.**
+
+**★★ RECORDED AS A CLASS, because it is the reusable half: THIS SURVIVOR WAS
+CREATED BY THE REPAIR OF THE SURVIVOR.** The commit is correct on all three
+reported items and introduced a fourth. That is not carelessness — **it is what
+repairing a positional reference positionally always does.**
 
 **★★ The `93 s` provenance itself is CLOSED** (it was an owed item here for one
 filing). At `100 000×`: **`31 s`** = the same region with algorithm B disabled
@@ -347,15 +366,32 @@ places.
    **Move the SUBTRACTION into the wide type; do not move the COORDINATES into a
    big space.**
    `D:/dev/rag/rust/tiny_skia_flattens_curves_to_a_tolerance_in_the_paths_own_units.md`
-10. **★★ AN ACCEPTANCE ORACLE BUILT FROM THE BROKEN SYSTEM'S OWN OUTPUT ENCODES
-    THE DEFECT AS THE REQUIREMENT.** `R215`. ★ **And it can propagate FORWARD**:
-    §5 item 1 is that same `11 of 11` now written as a *result*.
-11. **★ A FLOAT-PRECISION TEST WITH ROUND-NUMBER OPERANDS CANNOT FAIL.** Two
+10. **★★★★★ A NUMBER IDENTIFIED AS WRONG IN AN *EXPECTATION* COMES BACK AS A
+    MEASURED *RESULT*, AND THE GENRE CHANGE IS WHY IT SURVIVES.** *An
+    expectation invites checking; a result does not.* It happens **naturally**:
+    writing up a fix, you reach for the criterion you were working against and
+    report it as met. ⇒ **THE CORRECTION IS THE ARTEFACT, NOT THE CORRECTED
+    VALUE** — record *"this said **X**; **X** is impossible because **Y**; it is
+    **Z**"* and **keep X visible**, because a bare `Z` is re-derived back to `X`
+    by the next reader with the same faulty intuition, **including yourself an
+    hour later**. `R215` **clause (d)**, added 2026-08-23.
+    `D:/dev/rag/rust/a_number_identified_as_wrong_in_an_expectation_comes_back_as_a_measured_result.md`
+11. **★★★ A MINTED RULE PROTECTS THE DOCUMENT IT WAS MINTED IN, NOT THE ONES
+    THAT QUOTE IT.** `R215`'s founding number escaped forward in **two
+    consecutive filings** — the mint swept `docs/`, and `11 of 11` was sitting in
+    `tools/`. **Minting a rule about a number is itself a meaning-change event**
+    and owes hard rule 11's sweep across **every** tree. Recommended as an
+    amendment to `.claude/agents/pdfce-librarian.md`; **the engineer's act.**
+12. **★★ AN ACCEPTANCE ORACLE BUILT FROM THE BROKEN SYSTEM'S OWN OUTPUT ENCODES
+    THE DEFECT AS THE REQUIREMENT.** `R215` (a)–(c).
+13. **★ A FLOAT-PRECISION TEST WITH ROUND-NUMBER OPERANDS CANNOT FAIL.** Two
     **equal** large `f32` values cancel **perfectly**.
-12. **★ A reference by POSITION cannot tell you whether it is BROKEN or WRONG.**
-    `R214`. Name the referent; repair at the referent. §5 item 2 is a fresh
-    instance.
-13. **★ A limitation justified by "beyond any plausible use" is a PREDICTION,
+14. **★★ A reference by POSITION cannot tell you whether it is BROKEN or WRONG,
+    AND REPAIRING ONE POSITIONALLY JUST MAKES ANOTHER.** `R214` — name the
+    referent; repair at the referent. **§5's two survivors are one instance and
+    its own repair**: the boundary sentence was moved rather than named, so §9 now
+    holds two boundary claims with opposite scopes.
+15. **★ A limitation justified by "beyond any plausible use" is a PREDICTION,
     not a fact** — `R193`. **An error curve measured over the range you consider
     plausible cannot tell you the range is plausible** — which is §0.5's finding
     from the other direction.
@@ -367,17 +403,19 @@ places.
 **All four figures below were MEASURED on 2026-08-23 by the commands named
 beside them (hard rule 8). Re-run them; do not quote these lines.**
 
-- **`origin/main` is at `c24ad7a`, and `main` is `18` commits ahead** —
+- **`origin/main` is at `c24ad7a`, and `main` is `21` commits ahead** —
   `git remote -v` → `origin  https://github.com/KenM76/pdfce.git`;
-  `git rev-list --count origin/main..main` → **`18`**. **No `git fetch` was
+  `git rev-list --count origin/main..main` → **`21`** (re-measured by the
+  234th filing; was `18` one filing ago). **No `git fetch` was
   run**, so that is the local remote-tracking ref's position, **not a live query
   of the remote.** Pushing is the operator's act and needs a current go-ahead
   (`CLAUDE.md` rule 8). **The repository is public, so anything committed is
   published by default.**
-- **Backups are `211` commits and six days behind `HEAD`.** Newest bundle
+- **Backups are `214` commits and six days behind `HEAD`** (re-measured by the
+  234th filing; was `211` one filing ago). Newest bundle
   `pdfce-20260817-v060.bundle` (2026-08-17 20:34) with `refs/heads/main` at
   **`3c4c00e`** (by `git bundle list-heads`);
-  `git rev-list --count 3c4c00e..main` → **`211`**;
+  `git rev-list --count 3c4c00e..main` → **`214`**;
   `git merge-base --is-ancestor` confirms **`HEAD` is NOT in that bundle**.
   `v0.7.0`'s tag is in no bundle on disk. **Cutting one is the operator's
   call** — and it is now the *only* outstanding item that is his rather than an
