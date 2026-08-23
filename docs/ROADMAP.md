@@ -96,6 +96,416 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `eca07ee` — **`PASS 74.8`** (`render-page --no-annotations` now says how many annotations it withheld) **plus the 230th filing's nine-survivor sweep discharged in full** — ★★★★★ **A COUNTER THAT EXISTS AND IS NOT SURFACED IS WORSE THAN ONE THAT DOES NOT EXIST, BECAUSE IT MAKES THE GAP LOOK MEASURED**: `annotations_out_of_scope` and `page_content_suppressed` were computed, merged across pages and unit-tested in `pdfce-render` and printed by **no** `pdfce-cli` path, so `--no-annotations` showed `annots=1 annots_painted=0` and **nothing separated "withheld on request" from "tried and failed"** — the two reactions the split exists to distinguish; ★★★★ **`R214` MINTED — A DOC COMMENT THAT POINTS BY POSITION IS A DANGLING POINTER, AND BECAUSE IT NAMES NOTHING IT CANNOT TELL A *BROKEN* REFERENCE FROM A *WRONG* ONE**: `transparency_groups_special`'s *"Of those"* was **both**, and the obvious repair silently converted the second into the first; ★★★ **`tools/check-metrics-line-contract.py`'s FIRST LIVE CATCH — it forced all three copies (template, per-key table, contract test) on a change that had nothing to do with the debt it was built for**, which is the only evidence a gate constrains anything beyond its founding case; ★★ **THE LINE IS NOW `89` KEYS, FROM `87`, measured by running the gate** — and `docs/ARCHITECTURE.md` §(H) still recorded the 28-key tail as *"owed work, not done"*, which is **this filing's own hard-rule-11 survivor and is repaired here**; ★★ **NINE STALE CLAIMS, NONE CONTAINING A STALE WORD** — found by reading, unreachable by grep or gate, and four of them are references that broke because something *else* moved; ★ **`FEATURES.md`: NO NEW ROW, ROW 161 REPAIRED, AND THE `gui` BOX DELIBERATELY NOT ROUNDED UP** — the counters live in `pdfce-render` and reach `pdfce-cli` only; ★ **`PASS 74.7` UNTOUCHED AND STILL BACKLOG** — 2026-08-22 (two-hundred-and-thirty-first filing)
+
+**Commits filed by this entry**
+
+| commit | touches | Pass ID |
+|---|---|---|
+| `eca07ee` — *`--no-annotations` now says how much it withheld, and nine doc claims that had outlived their subject* | `crates/pdfce-cli/`, `crates/pdfce-render/`, `docs/` | **`PASS 74.8`** |
+
+---
+
+#### ★ THE ID RULING, AND A SECOND RULING ABOUT THE COMMIT'S SHAPE
+
+**`PASS 74.8` was claimed in Backlog by the 230th filing and is discharged
+here**, so no ID is minted; the Backlog entry is removed and this entry
+supersedes it. Next free in the family stays **`74.9`**.
+
+**★ The commit is code *and* the nine doc-comment repairs together, and that is
+CORRECT rather than a violation of `d4721d8`'s rule.** `NEXT_SESSION.md` said
+*"take these in their OWN commit, not bundled into anything else"*, and a
+future session will read that literally. **What `d4721d8` forbids is code
+inside a LIBRARIAN FILING** — a filing commit that touches `crates/` becomes a
+code commit in no filing and turns `check-commits-filed.py` red on the very
+commit meant to make it green. `eca07ee` is a code commit; bundling doc-comment
+repairs into it costs nothing and the gate counts it exactly once. **The rule is
+about which side of the report/reported-on boundary a diff sits on, not about
+diff size.**
+
+**★★ AND THE MIRROR IMAGE HAPPENED HERE, MEASURED RATHER THAN INFERRED —
+`git show --numstat eca07ee` puts `docs/ROADMAP.md` **+808/−2** and
+`docs/SESSION_LOG.md` **+233/−0** inside this commit.** Those are the **230th
+filing's own text**, written to the working tree and then committed along with
+the engineer's code. **No gate went red** — `check-commits-filed.py` counts
+*code* commits, and the three commits that filing covers (`ea413a4`, `950e3af`,
+`65e1910`) are filed by text that is now on disk, wherever it was committed.
+**The cost is archaeological, not mechanical:** `git show <hash>` no longer
+isolates a filing, and a reader asking *"which commit filed `ea413a4`?"* lands
+on a commit whose subject is about annotations. **Mint DECLINED** — no gate can
+see it, the cost was zero this time, and `d4721d8`'s memory file already owns
+the topic. **Reported to the engineer as a one-line addendum owed to that memory
+file** (`.claude/` is his, not this role's): *the rule has two directions — no
+code in a filing, and no filing inside a code commit.*
+
+---
+
+#### ★★★★★ `PASS 74.8` — THE DISCLOSURE GAP, AND WHY IT WAS A RULE-4 DEFECT RATHER THAN A MISSING FEATURE
+
+**What was wrong.** `Diagnostics::annotations_out_of_scope` and
+`Diagnostics::page_content_suppressed` existed, were incremented, were merged
+across pages, were documented in rustdoc **and were covered by unit tests in
+`pdfce-render`** — and appeared in **no** `pdfce-cli` output at all: not on the
+stable metrics line, not on stderr. So the operator running
+`render-page --no-annotations` saw:
+
+```
+annots=1 annots_painted=0
+```
+
+and **that line is identical to the line a file with one broken annotation
+produces.** *"I withheld it because you asked"* and *"I tried and could not
+paint it"* want **opposite** reactions from the operator — one is the flag
+working, one is a bug report — **and separating them is the entire reason the
+two counters are split in the first place.**
+
+**Why rule 4 and not tidiness.** Project rule 4 binds hardest on *"inferences
+the operator cannot see by definition"*, and **content that was deliberately not
+drawn is the limiting case**: there is no artefact on the page to notice, no
+glyph to squint at, no outline to hover. In the CLI *"the invocation IS the
+commit"* (rule 11 / `ARCHITECTURE.md` §7), so the CLI **prints** or it is
+silent, and silence is the one thing the rule forbids. ⇒ **A counter that
+exists, is merged, is documented and is never emitted is worse than one that
+was never written: it makes the gap look measured.** The rustdoc says the
+number is available; nothing downstream says it is unreachable.
+
+**What shipped.** Both keys print, **inserted beside the annotation family
+rather than appended at the tail** — which matters because the metrics line's
+published contract promises **name**-stability, not ordinal stability
+(`f9dc007`, `R212`), so grouping by meaning is free and grouping by
+chronology is not. Regression test
+**`no_annotations_says_how_many_it_withheld`** asserts the withheld annotation
+**stays in the census AND is attributed** — i.e. it pins the conjunction, not
+either half, which is the assertion that would have caught the original defect.
+
+**Measured, on `fixtures/synthetic/annot/ap-resources-own-font.pdf`** (the
+engineer's figures, marked as his):
+
+| invocation | census | painted | withheld |
+|---|---|---|---|
+| default | `annots=1` | `annots_painted=1` | `annots_out_of_scope=0` |
+| `--no-annotations` | `annots=1` | `annots_painted=0` | **`annots_out_of_scope=1`** |
+
+**The census does not move.** That is the property worth naming: the file's
+annotation count is a fact about the file and must not change because a flag
+changed, so the withheld count is an **additional** number rather than a
+subtraction from an existing one. A shell that subtracted instead would have
+made `--no-annotations` report a *different document*.
+
+**★ One key spelling is recorded and one is deliberately NOT.**
+`annots_out_of_scope=<n>` is quoted above because it appears in the engineer's
+measured output. **The metrics-line spelling of `page_content_suppressed`'s key
+is not printed anywhere in this entry, because this role did not open
+`crates/`** (docs-only filing, `d4721d8`) and the gate reports a *count*, not
+a key list. Field name: `Diagnostics::page_content_suppressed`. **Naming the
+edge of the evidence rather than guessing the string** — hard rule 8's
+discipline pointed at a two-word claim.
+
+---
+
+#### ★★★ THE GATE'S FIRST LIVE CATCH — WHICH IS DISTINCT EVIDENCE FROM ITS FOUNDING CASE, AND THE DISTINCTION IS THE POINT
+
+`tools/check-metrics-line-contract.py` was built by `ea413a4` (230th filing) to
+close a **known** gap: 28 template keys missing, 43 table rows missing, all of
+it debt that already existed when the gate was written. **A gate built against
+known debt and then run against that debt has demonstrated exactly one thing —
+that it can see what its author was looking at.**
+
+**`PASS 74.8` is the first change it acted on that it was not built for**, and
+it forced **all three copies** of the contract — the doc template, the per-key
+explanation table, and the test's key list — on an ordinary two-key addition.
+**87 → 89 keys**, measured by running it:
+
+```
+metrics-line-contract: OK — 89 keys; the template matches the println and every key has a table row.
+```
+
+**★ Why this is worth a record rather than a shrug.** `R212`'s whole mechanism
+is that *the test forces its copy and nothing forces the other*. A gate that
+has only ever run against its founding debt is **indistinguishable from a gate
+that hard-codes that debt's shape** — both are green afterwards, and neither
+has been asked a question it did not already know the answer to. **The first
+unrelated change is the first evidence the gate generalises**, and it is cheap
+to record and impossible to reconstruct later. Cross-reference
+`ci_gate_red_at_baseline_enforces_nothing.md` (this project's own finding): that
+one says a gate red at baseline enforces nothing; **this one says a gate that
+has only ever been green at baseline has not yet been shown to enforce
+anything either.** The two are the same axis, at opposite ends. Escalated:
+`D:/dev/rag/rust/a_gates_first_live_catch_is_the_first_evidence_it_generalises_beyond_its_founding_debt.md`.
+
+---
+
+#### ★★ THE NINE STALE CLAIMS — AND THE PROPERTY THEY SHARE IS NOT STALENESS
+
+All nine came from the 230th filing's owed-work list plus the `--region` doc
+block, and **all nine were found by READING**, which the previous filing already
+recorded. What this filing adds is **why no grep could have found them**: not
+one of the nine **contains a stale word, number or identifier**. There is no
+string to search for. A grep is a search for a *token you remember writing*;
+these are defects in what a sentence *means* once its surroundings move.
+
+**Discharged, all nine:**
+
+| # | site | the defect | mechanism |
+|---|---|---|---|
+| 1 | `--region`'s doc block | named **one** ceiling where there are **three** | a magnitude claim with an unstated subject — `R213` |
+| 2 | `shading.rs` module header | *"It does not paint … Painting lands in the next slice"* — **the first thing a reader of the module sees**, contradicting a struct field forty lines away | a reference to **the future**, resolved from *when* it was written |
+| 3 | `ShadingDiagnostics::painted` | *"Zero in this slice, by construction"* long after it became non-zero — **a reader who trusted it would read a CORRECT count as a bug** | same |
+| 4 | `ShadingDiagnostics::paintable` | still promised *"once the geometry slice lands"* | same |
+| 5 | `ColorDiagnostics::patterns_unpainted` | said pdfce does not paint patterns **while a comment 300 lines below in the same file exists specifically to refute that sentence**, and the CLI's stderr note already described it correctly — **three copies, two right, and the wrong one was the field's own doc** | the definition site is what an IDE hover resolves to |
+| 6 | `overprint_requested` | head sentence *"while pdfce does not simulate it"*, corrected at length by its own body — **and the head sentence is what a tooltip and a doc-search snippet show** | position within a doc block is not neutral |
+| 7 | `transparency_groups_composited` | *"over-reports until `Pass 97.0` lands"* — **the day after `97.0` landed** | a deadline that passed |
+| 8 | `transparency_groups_special` | *"Of those"* — **doubly wrong, see below** | a reference by **position** |
+| 9 | `--region`'s doc block, third quantity | `examples/zoom_ceiling.rs`'s rasteriser error at a fixed coordinate — kept as **what it is** rather than promoted to *"the"* ceiling | `R213`, applied |
+
+**★ Item 1 is `R213`'s first application after minting**, and it is the shape
+the rule predicted: the block now separates **three** quantities by name — the
+**viewport's** trillion percent (`PASS 74.2`), the **content's** ~100× lower
+`f32` limit with the drift formula (`PASS 74.7`, unbuilt), and
+**`examples/zoom_ceiling.rs`'s** rasteriser error at a fixed coordinate, which
+is a **third** quantity again and belongs to a harness rather than to the
+renderer. A rule minted one filing ago, applied to a live doc block, produced
+three labelled numbers where one unlabelled number stood. **That is the whole
+of `R213` working.**
+
+**★★ Items 2–4 are one mechanism and it is worth separating from staleness.**
+*"this slice"*, *"the next slice"*, *"once the geometry slice lands"* — each
+resolves against **when the sentence was written**, and each broke because time
+moved rather than because anyone edited them. They are `R214`'s temporal form:
+a pointer whose target is *now*, in a document that outlives *now*. This
+project already owns the sibling finding for constants —
+*a limit justified by "beyond any plausible use" is a prediction, not a fact*
+(`Pass 74.0`, `R193`) — and these are the same defect in prose.
+
+---
+
+#### ★★★★ STANDING RULE `R214` — MINTED, AND THE ENGINEER'S OWN READING IS CONFIRMED
+
+Full text under *Standing rules*. **Ceiling moves `R213` → `R214`; next free
+`R215`.**
+
+**The dispatch asked for a ruling and offered three options — a rule, an
+amendment to `R212`, or a decline — and volunteered that it might be splitting
+too finely.** It is not. **Minted, and here is the warrant, argued rather than
+asserted.**
+
+**What happened.** `transparency_groups_special`'s doc opened **"Of those"** — a
+back-reference to whichever field happened to be declared before it. The 230th
+filing reported it as a **broken** back-reference: a later field
+(`soft_masks_on_group_result`) had been declared in between, so the antecedent
+had moved. **That report was true and it was half the defect.** Checking the
+increment site (`is_transparency_group && (knockout || isolated)`, **no
+flattening condition**) showed **the original antecedent was wrong too** — the
+counter was **never** a subset of the flattened count. **The first repair
+restored the "obvious" neighbour and had to be corrected by reading the code.**
+
+**⇒ The generalisable half, in one sentence:** **a doc that cites a NEIGHBOUR
+rather than a NAME gives no way to tell a broken reference from a wrong one —
+and repairing the reference without checking the referent silently converts the
+second into the first**, producing a sentence that is *newly* wrong, *looks*
+repaired, and now has a plausible antecedent to protect it from the next reader.
+
+**Why it is NOT `R212`, which is the ruling the dispatch specifically asked
+for.** `R212` requires **two written copies of one contract, one of them
+asserted by a test**, and its remedy is to name the authoritative copy or gate
+the other. **"Of those" has no second copy and no test asserts anything about
+it.** Its defect is a pointer with **no target written down anywhere** — the
+opposite failure from duplication, which has the target written down *twice*.
+Amending `R212` to reach it would also break its own scope paragraph (*"does
+not bind on ordinary duplicated prose"*) one filing after that paragraph was
+written. **The engineer's reading is confirmed: distinct mechanism, distinct
+remedy.**
+
+**Why it is not `R213` either, which is the closer call and the reason a future
+session will try to fold them.** The resemblance is real — both are *the subject
+went unstated and the reader supplied it from context, and nothing disagrees*.
+But `R213`'s scope binds it to **bounds and magnitudes**, stated explicitly one
+filing ago precisely so it would not be over-read; and `R213`'s remedy — *name
+the quantity in the label* — has **nothing to say about the repair**, which is
+where this defect does its real damage. **`R213` prevents; `R214` prevents AND
+governs the fix.** Recorded as neighbours with a cross-reference in both
+directions rather than merged.
+
+**Why it clears `R210`'s minting test, and clears it more cleanly than `R213`
+did.** The question *"does this doc comment resolve its referent by NAME?"* is
+answerable from **one span of one file**, with **no knowledge of current
+behaviour** — the same standard that minted `R211` and `R212` and that the 228th
+filing's declined sibling failed. Note the split, because it is `R212`'s
+enforcement-layer clause exactly: **whether the reference is RIGHT is
+undecidable** (it requires reading the increment site, which is behaviour);
+**whether it is NAMED is a grep over a closed vocabulary** — *of those*, *the
+above*, *the former*, *the latter*, *this slice*, *the next slice*, *as above*,
+*see below*, *the previous field*. ⇒ **A gate is available and is recommended,
+not built here** (`tools/` is outside this role's remit). **Sequencing, per
+`ci_gate_red_at_baseline_enforces_nothing.md`: the baseline is UNMEASURED from
+this side** — this filing did not open `crates/` — **so measure the baseline
+first, repair, then wire. Do not wire it red.**
+
+**Occurrence warrant, stated honestly rather than inflated.** **n = 1 for the
+doubly-wrong form** (`transparency_groups_special`), **n = 4 in this commit
+alone for the pointing-without-naming mechanism** (items 2, 3, 4 and 8 of the
+table above), with a named prior cousin already on disk in this project's
+record: `Pass 74.0`'s `MAX_PIXMAP_EDGE` doc comment, justified by *"beyond any
+plausible viewing zoom"* — a pointer at a predicted future rather than a named
+fact. **The mint rests on the decidability warrant and on the demonstrated
+repair hazard, not on the count**, which is the standard this project set when
+it declined three mints *"on a better warrant than an occurrence count"*.
+
+**★ And the repair-hazard half is NOT new — it is two existing corollaries
+meeting a new surface, which is why `R214` cites them instead of restating
+them.** Hard rule 10's corollary: **a correction is a claim**, and it must name
+its world-source *in the correction itself*. Hard rule 11's corollary: **check a
+draft claim of your own against live source before publishing it** — earned when
+a draft asserting a survivor at `main.rs:7057` was wrong and checking it turned
+up the real one at `main.rs:7027`. **Both fired here, on the engineer's side,
+and both were paid before the commit rather than after it.** What `R214` adds
+that neither says: *with a positional reference you cannot even tell which kind
+of correction you are making*, so the check is not optional diligence — it is
+the only thing that distinguishes a repair from a new defect.
+
+---
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string, and this filing's own documents held one
+
+**What changed meaning in `eca07ee`:** (1) the two counters went from *reaches
+no shell* to *printed on the metrics line*; (2) the metrics line went from **87
+keys to 89**; (3) the eight `Diagnostics` doc comments went from *owed* to
+*discharged*.
+
+| # | site | the claim | disposition |
+|---|---|---|---|
+| **1** | `docs/FEATURES.md` row 161 | *"**Gap, disclosed:** what is WITHHELD is not counted anywhere a shell can see it … printed by no `pdfce-cli` path"* | **REPAIRED IN THIS FILING** — replaced, not appended (the file's own rule); the `gui` qualification is kept and argued below |
+| **2** | `docs/ARCHITECTURE.md` §(H) | *"The published template documents **59 of the 87 keys** … That is **owed work, not done**"* | **REPAIRED IN THIS FILING** — dated discharge paragraph appended beneath it, the original kept as the audit trail, exactly the pattern the paragraph **immediately above it** already established for `f9dc007` |
+| **3** | `docs/NEXT_SESSION.md` §0.5 | the whole *"owed to `crates/`, in its OWN commit — eight stale `Diagnostics` doc comments"* block, plus *"exit 0, **87 keys**"* | **REPAIRED** — that file is rewritten by this filing per the dispatch |
+| **4** | `docs/ROADMAP.md` Backlog, `Pass 74.8` | the entire entry, now shipped | **REMOVED** — superseded by this Shipped entry |
+
+**★ Survivor 2 is this role's own document and it is the one worth noticing.**
+`ARCHITECTURE.md` §(H) carried *"owed work, not done"* about a 28-key tail that
+`ea413a4` repaired **in the filing immediately before this one** — and the
+230th filing edited `ARCHITECTURE.md` §4 in that same session **without the §(H)
+paragraph coming up**, because the edit was driven by the ceiling finding and
+this claim contains no ceiling and no stale word. ⇒ **A sweep scoped by the
+finding that prompted it will miss a claim that changed for a different
+reason in the same commit.** Hard rule 11 says *sweep on a meaning change*; the
+refinement earned here is **sweep on EVERY meaning change in the commit, not
+only the one the entry is about**.
+
+**Checked and CLEAN, recorded so the negatives are visible too:**
+`docs/core-api/03-capabilities.md` §7.5 item 5 names `page_content_suppressed`
+as something *"the UI must disclose"* — **that is advice to a shell and it is
+still exactly right**; if anything `PASS 74.8` is the CLI finally taking it.
+the `87`-key figures in the 229th and 230th filings' Shipped entries, in
+`R212`'s standing-rule text and throughout `docs/SESSION_LOG.md` are **dated
+records, correct for their dates, append-only, not touched** — **line numbers
+are deliberately not quoted for them**, because this entry displaces every line
+below it and a self-referential line number is stale the moment it is written. `docs/FEATURES.md` rows 201/202/203 carry the deep-zoom ceilings and
+**already name their quantities** (repaired last filing); **row 201 was
+re-read and deliberately NOT extended with `zoom_ceiling.rs`'s third
+quantity** — that number is a property of an `examples/` harness, not of a
+shipped capability, and a features row that grows a harness's error bar has
+stopped being a scan.
+
+---
+
+#### ★ OWED WORK IN `crates/` — NONE. The list is empty for the first time in four filings.
+
+The 230th filing handed back **eight `Diagnostics` survivors plus the
+`--region` doc block**. **All nine are discharged by `eca07ee`** and this
+filing found **no new `crates/` survivor** — which is a weaker statement than it
+looks and is marked as such: **this role did not open `crates/` this filing**
+(docs-only, `d4721d8`), so *"none found"* means *"none reported by the engineer
+and none inferable from the docs"*, **not** *"the tree was read and is clean"*.
+The next filing that does open `crates/` should treat the
+positional-reference vocabulary in `R214` as its first grep.
+
+---
+
+#### `FEATURES.md` — NO NEW ROW, ROW 161 REPAIRED, AND THE `gui` BOX IS NOT ROUNDED UP
+
+**The dispatch's reading is confirmed and the ruling is stated out loud**,
+because *"did not open the file"* and *"opened it and judged"* are different
+facts a silent absence cannot tell apart.
+
+- **No new row.** `PASS 74.8` did not add a capability to the project; it made
+  an existing one **honest**. pdfce could already narrow annotation scope, and
+  could already count what it withheld — **what it could not do was say so.**
+  A disclosure is part of the capability it discloses, not a capability of its
+  own, and giving it a row would imply pdfce has *two* annotation-scope
+  features. Precedent followed, not re-argued: `ea413a4` got no row on the
+  same reasoning (*"a gate is not a capability"*).
+- **Row 161 repaired — the sentence REPLACED, never appended to**, per the
+  file's own header rule. It said *"Gap, disclosed: what is WITHHELD is not
+  counted anywhere a shell can see it"*; it now says the withheld count is
+  reported on `render-page`'s metrics line beside the census, and that the
+  census **does not move** when the flag does.
+- **★ BOXES: `core [x] · cli [x] · gui [x] · Acrobat [x]` — UNCHANGED, and the
+  `gui` box is NOT a claim about the new counters.** The dispatch asked for this
+  explicitly and it is the right call. The row's headline capability —
+  *render and count annotations* — **is** reachable in a real `pdfceGUI` build,
+  which is what ticks the box under this file's stated bar. **The counters are
+  not**: they are computed in `pdfce-render` and read only by `pdfce-cli`. So
+  the qualification goes **in the sentence**, where rows 202/203/207/216
+  already put it (*"no GUI code path reads the counter"*), rather than by
+  unticking a box that is true of the row's subject. **Unticking `gui` would
+  have been the other error** — it would report a working GUI capability as
+  missing, which is precisely the `[ ]`-versus-`—` confusion this file's legend
+  exists to prevent, in its third form.
+
+**No new row; one row now says what a narrowed scope reports and who can read
+it.**
+
+---
+
+#### Verification (the engineer's, this session, marked as his)
+
+`cargo fmt --all` clean · `cargo clippy --workspace --all-targets -- -D warnings`
+clean · `cargo test --workspace --release` green ·
+`cargo tree -p pdfce-render` **zero GUI dependencies** · **no new dependency**,
+`THIRD_PARTY_LICENSES.md` unaffected.
+
+#### Gate sweep (this role's, run at `HEAD` after this filing's own edits)
+
+**17 `tools/check-*` scripts on disk (12 `.py` + 5 `.sh`); 16 runnable as bare
+gates**, re-measured by `ls tools/check-*` and by running each one — **not
+relayed from the 230th filing's figure**, per hard rule 10's corollary. **All
+16 exit 0.** `check-commits-filed.py` exited **1** before this entry, naming
+exactly `eca07ee`, and **0** after it. The 17th,
+`check-image-colorspace-truth.py`, exits 1 on a bare invocation **because it
+requires a fixture-directory argument**; it is recorded in this file as
+*"`check-*` on disk but not a gate"* and that is still true.
+
+**`tools/check-metrics-line-contract.py` → exit 0, `89 keys`** — the figure in
+this entry's headline, sourced by running the gate rather than by reading a
+document.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `74.6`/`74.6b` shipped; `74.7` + `74.8` claimed in Backlog, neither built | **`PASS 74.8` SHIPPED** (`eca07ee`). **`PASS 74.7` UNTOUCHED and still Backlog** — the `f64` CTM through `cm` concatenation, acceptance baseline already measured. Next free in family **`74.9`**; `122.4` stays the next free `122`; **`97.1g` stays reserved and unbuilt** |
+| decisions (`ARCHITECTURE.md` §12) | **082** | **082** (unchanged — **no architectural choice was made**; a counter reaching a shell is rule 4 being honoured, not a boundary being redrawn). Next free **083**. |
+| standing rules | **`R213`** | **`R214`** (**MINTED** — *a doc comment that points by position is a dangling pointer; it cannot distinguish a broken reference from a wrong one, so repair at the referent*). Next free **`R215`**. |
+| open operator questions | ceiling `(br)` | **`(br)`** (unchanged — still the one thing awaiting Ken). Next free **`(bs)`**. |
+| SESSION_LOG filing ordinals | **230** | **231** |
+| `tools/check-*` gates | 17 on disk, 16 runnable | **17 on disk, 16 runnable** (unchanged, re-measured by `ls` + running each) |
+| `render-page` metrics-line keys | **87** | **89** (`annots_out_of_scope` + `page_content_suppressed`'s key), measured by running `tools/check-metrics-line-contract.py` |
+
+**Owed work, recorded as owed:** **`crates/` survivor list is EMPTY** for the
+first time since the 227th filing — with the caveat above that this role did not
+read the tree. **Two items are owed to the ENGINEER's own files and are reported
+rather than edited**: (1) a one-line addendum to
+`.claude/agent-memory/pdfce-engineer/`'s never-bundle memory noting the rule's
+**mirror image** (no filing inside a code commit); (2) the `R214` gate —
+measure its baseline **before** wiring it.
+
+**RAG files written by this filing:**
+`D:/dev/rag/rust/a_doc_that_cites_a_neighbour_rather_than_a_name_cannot_tell_a_broken_reference_from_a_wrong_one.md`,
+`D:/dev/rag/rust/a_gates_first_live_catch_is_the_first_evidence_it_generalises_beyond_its_founding_debt.md`.
+
+---
+
 ### `ea413a4` + `950e3af` + `65e1910` — the metrics contract repaired end-to-end and gated (**no Pass ID**), plus `PASS 74.6` / `PASS 74.6b` (`tools/gen-scale-demo/molecules.py`, ten molecules at 1:1 below the cells) — ★★★★★ **THE HEADLINE IS A CEILING THAT WAS FILED AGAINST THE WRONG QUANTITY, AND NOTHING WAS EVER WRONG: `PASS 74.2`'s "deep zoom holds to a TRILLION PERCENT" is true, and it is a claim about the VIEWPORT — three `f32` limits sit under the CONTENT and nothing in four documents distinguished the two until one artefact needed both**; ★★★★ **`R213` MINTED — A MAGNITUDE CLAIM IS A CLAIM ABOUT ONE QUANTITY, AND THE QUANTITY IS THE HALF THAT GETS LOST**, at n=2 with `mask.fill_path`'s 217 µs-vs-8.3 µs as the first instance; ★★★ **THE DRIFT WAS CONFIRMED A SECOND TIME BY ACCIDENT AND THE ACCIDENT IS THE BETTER EVIDENCE — two successive `--region` nudges produced BYTE-IDENTICAL framing**, because `--region` is `f64` all the way through and a 76-pixel correction is below the `f32` ulp of the `540 × scale` term it is added to (**~500 px quantisation at `scale = 8.1×10⁶`**); ★★★ **THE METRICS CONTRACT IS NOW WHOLE — `87 of 87` KEYS IN THE TEMPLATE AND `87 of 87` IN THE PER-KEY TABLE, FROM `59` AND `44`** — and the table gap was **larger than the one the 229th filing measured and a DIFFERENT gap**; ★★ **THE GATE'S OWN FIRST VERSION REFUSED TO CHECK THE TABLE ON A TRUE DISTINCTION** — a missing row is an incomplete explanation, a missing template key is a wrong published specification — **and the true distinction argued for a better REPORT and was used to justify NO report**, which is the same substitution the template gap was made of; ★★ **EIGHT `crates/` SURVIVORS REPORTED, ONE OF THEM A RULE-4 DISCLOSURE GAP RATHER THAN A STALE COMMENT** — `--no-annotations` withholds annotations and prints **no number saying how many**, promoted to **`PASS 74.8`** in Backlog rather than left as a comment fix; ★ **`PASS 74.7` OPENED IN BACKLOG WITH ITS ACCEPTANCE BASELINE ALREADY MEASURED**, and ruled the engineer's to take, not Ken's; ★ **`FEATURES.md`: NO NEW ROW FOR ANY OF THE THREE, AND ONE EXISTING ROW REPAIRED** — 2026-08-22 (two-hundred-and-thirtieth filing)
 
 **Sourcing.** Shell held and used (hard rule 8). **Every figure the engineer
@@ -70969,40 +71379,13 @@ up* only because the operator should know the size of it before it starts**;
 
 ---
 
-### `Pass 74.8` — `render-page --no-annotations` MUST SAY HOW MANY IT WITHHELD — **a rule-4 disclosure gap, not a stale comment**
+### `Pass 74.8` — **SHIPPED 2026-08-22 (`eca07ee`)** — moved to *Shipped*
 
-**Filed 2026-08-22 (two-hundred-and-thirtieth filing)**, promoted out of the
-engineer's owed-comment list because it is not a documentation defect.
-
-**THE GAP.** `pdfce-render`'s `Diagnostics` computes, merges and documents
-**`annotations_out_of_scope`** and **`page_content_suppressed`** — and **neither
-appears anywhere in `pdfce-cli`.** Not on `render-page`'s stable metrics line,
-not on stderr. **So `render-page --no-annotations` withholds annotations and
-prints no number saying how many**, and `--only-annotations`' mirror case
-withholds page content the same way.
-
-**WHY THIS IS RULE 4 AND NOT TIDINESS.** Project rule 4 (*fuzzy, never sneaky*)
-binds hardest on *"inferences the operator cannot see by definition"*, and
-**content that was deliberately not drawn is the limiting case of that**: there
-is no artefact on the page to notice. In the CLI *"the invocation IS the
-commit — no session, no undo — so the CLI PRINTS what it inferred on the way
-past"* (rule 11 / `ARCHITECTURE.md` §7). **The number exists. It is merged. It
-is documented. It is simply never emitted.**
-
-**ACCEPTANCE.** Both counters reach a shell. **The metrics line is the natural
-route** — it is the machine-readable channel and `tools/check-metrics-line-contract.py`
-now holds the template, the `println!` and the per-key table together, so
-adding a key is a three-place edit **that a gate will fail if you do two of
-them**. A stderr note is the alternative and is weaker (`check-string-gaps.sh`
-and `check-disclosure-channel.sh` verify a note's *route*, not that it fires).
-**Two keys, two table rows, two template entries, one test-list extension.**
-
-**★ HOW IT WAS FOUND, which is the transferable half.** Not by a gate and not
-by a grep — by the librarian **drafting 57 per-key table rows** for `ea413a4`
-and reaching two documented counters with no key to write a row for. **The
-exhaustive pass over a contract is what found the hole in it**, which is the
-same mechanism that found the 28-key tail one filing earlier. Cross-reference
-`R212`.
+The full entry is in *Shipped* under `eca07ee`. This stub is left in place
+for one filing only so a reader following a `PASS 74.8` reference from
+`NEXT_SESSION.md` or from the 230th filing lands somewhere rather than
+nowhere; the next filing may delete it. **`Pass 74.7` immediately above is
+UNTOUCHED and still Backlog.**
 
 ---
 
@@ -88314,7 +88697,134 @@ same cause (hashes exist only at commit time), two different failure modes.
   for any renderer rather than for pdfce:
   `C:/personal_rag/pdf/lesson_20260822_f32_limits_under_pdf_content_rendering.md`.
 
-  **Ceiling moves `R212` → `R213`; next free `R214`.**
+  **Ceiling moves `R212` → `R213`; next free `R214`.** *(Superseded 2026-08-22
+  by `R214`'s mint — next free is now `R215`. Left in place because this line
+  is a record of what was true when `R213` was written, per the append-only
+  convention.)*
+
+- **R214 — A DOC COMMENT THAT POINTS AT ITS REFERENT BY *POSITION* — *"of
+  those"*, *"the above"*, *"this slice"*, *"the next slice"*, *"the former"* —
+  IS A DANGLING POINTER. IT BREAKS WHEN SOMETHING **ELSE** MOVES, IT CONTAINS NO
+  STALE TOKEN, AND BECAUSE IT NAMES NOTHING IT GIVES **NO WAY TO TELL A *BROKEN*
+  REFERENCE FROM A *WRONG* ONE**. NAME THE REFERENT; AND WHEN REPAIRING ONE,
+  REPAIR AT THE **REFERENT**, NEVER AT THE NEIGHBOUR (2026-08-22;
+  librarian-minted, two-hundred-and-thirty-first filing; `eca07ee`,
+  `PASS 74.8`; **n=1 for the doubly-wrong form, n=4 in one commit for the
+  mechanism**).**
+
+  **The mechanism, in four sentences.** A doc comment that says *"Of those, N
+  were …"* resolves its subject from **whatever is declared before it**, and a
+  doc comment that says *"in this slice"* resolves it from **when it was
+  written**. Neither subject is written down. **Something else moving — a new
+  field declared in between, a slice shipping — invalidates the sentence without
+  editing a single character of it**, so there is no stale word, no stale number
+  and no stale identifier for a grep or a gate to find. And the second-order
+  failure is the expensive one: **when the reference is discovered to be broken,
+  the obvious repair is to re-point it at the current neighbour** — which is a
+  claim about behaviour made without checking behaviour.
+
+  **The worked instance, and both halves cost a code read to establish.**
+  `pdfce-render`'s `Diagnostics::transparency_groups_special` opened
+  **"Of those"**.
+
+  - **It was BROKEN**: `soft_masks_on_group_result` had since been declared
+    between it and its intended antecedent, so *"those"* pointed at the wrong
+    field. (Reported by the 230th filing, found by **reading the struct in
+    declaration order** — hard rule 11's discipline, not a search.)
+  - **It was ALSO WRONG**: the increment site is
+    `is_transparency_group && (knockout || isolated)` — **no flattening
+    condition at all** — so the counter was **never** a subset of the flattened
+    count it was originally written against.
+  - **The first repair restored the "obvious" antecedent and had to be corrected
+    by reading the increment site.** Had it stood, a *wrong* reference would have
+    become a *plausible* one, and the next reader would have had less reason to
+    check it than the one before.
+
+  ⇒ **Repairing the reference without checking the referent silently converts a
+  WRONG reference into a BROKEN-THEN-PLAUSIBLY-REPAIRED one.** The defect
+  survives and its evidence is destroyed.
+
+  **What the rule obliges, in three lines.**
+  (a) **Name the referent.** *"Of the `transparency_groups_composited` count"*,
+  not *"Of those"*. One identifier, and the sentence becomes greppable, movable
+  and checkable.
+  (b) **Never resolve a reference against NOW.** *"in this slice"*, *"the next
+  slice"*, *"once X lands"* are pointers at a moving target; write the Pass ID
+  and the condition, or write nothing. A document outlives the *now* it was
+  written in — this is the prose form of `R193`/`Pass 74.0` (*a limit justified
+  by "beyond any plausible use" is a prediction, not a fact*).
+  (c) **When you repair a positional reference, go to the REFERENT — the
+  increment site, the producing branch, the code — not to the neighbour.** The
+  repair is a **new claim** and earns hard rule 10's corollary (*a correction is
+  a claim; name its world-source*) and hard rule 11's corollary (*check a draft
+  claim of your own against live source*). **With a positional reference you
+  cannot even tell which kind of correction you are making**, so this check is
+  not diligence — it is the only thing separating a repair from a fresh defect.
+
+  **★★ ENFORCEMENT LAYER — the split is decidable on one half and undecidable on
+  the other, and the decidable half is where the gate goes.** *"Is this reference
+  RIGHT?"* requires reading the increment site — that is knowledge of current
+  behaviour, and `R210`'s minting test refuses it. *"Is this reference NAMED?"*
+  is **a grep over a closed vocabulary** in doc comments — *of those*, *the
+  above*, *the below*, *the former*, *the latter*, *this slice*, *the next
+  slice*, *as above*, *see below*, *the previous field*, *the field above* —
+  answerable from **one span of one file with no knowledge of pdfce's
+  behaviour**. That is `R212`'s enforcement-layer clause applied verbatim: *a
+  finding whose general form is undecidable can still have a decidable instance,
+  and the instance is where the gate goes.*
+
+  **★ The gate is RECOMMENDED, NOT BUILT, and the sequencing is part of the
+  rule.** `tools/` is outside the librarian's remit, and **the baseline is
+  UNMEASURED** — the filing that minted this rule was docs-only and did not open
+  `crates/`. **Measure the baseline, repair, then wire.** Wiring it red would
+  make it a permanent warning, which is
+  `D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`, this project's
+  own finding. A rule that prescribes a gate owes the order in which it becomes
+  real.
+
+  **★ Scope, so it is not over-read.** This binds on **references inside prose
+  that a reader must resolve** — doc comments, module headers, `--help` text,
+  RAG entries, roadmap prose. It does **not** bind on ordinary duplicated prose
+  (hard rule 11), on two written copies of one contract (`R212`), or on a
+  magnitude with an unstated subject (`R213`). **The distinction from `R213` is
+  the one a future session will try to collapse, so it is stated here:** both are
+  *the subject went unstated and the reader supplied it, and nothing disagrees* —
+  but `R213` binds **bounds and magnitudes** and its remedy is *name the quantity
+  in the label*, which says nothing about repair; `R214` binds **references** and
+  **governs the fix**, which is where its instance did its damage. `R213`
+  prevents; `R214` prevents **and** repairs. Recorded as neighbours, deliberately
+  not merged.
+
+  **★ Why this was minted rather than folded into `R212`, since that was the
+  dispatch's own question.** `R212` requires **two written copies of one
+  contract, one asserted by a test**. *"Of those"* has **no second copy and no
+  test**; its defect is a pointer with **no target written down anywhere**, which
+  is the opposite failure from duplication (where the target is written down
+  twice). Folding it in would also contradict `R212`'s own scope paragraph
+  (*"does not bind on ordinary duplicated prose"*) one filing after that
+  paragraph was written.
+
+  **Occurrence warrant, stated rather than inflated.** **n=1** for the
+  doubly-wrong form (`transparency_groups_special`). **n=4 in `eca07ee` alone**
+  for the pointing-without-naming mechanism — `shading.rs`'s module header
+  (*"Painting lands in the next slice"*), `ShadingDiagnostics::painted`
+  (*"Zero in this slice, by construction"*), `::paintable` (*"once the geometry
+  slice lands"*) and `transparency_groups_special`. Named prior cousin already on
+  disk: `Pass 74.0`'s `MAX_PIXMAP_EDGE` doc comment. **The mint rests on the
+  decidability warrant and the demonstrated repair hazard, not on the count** —
+  the standard this project set when it declined three mints *"on a better
+  warrant than an occurrence count"*.
+
+  Cross-references: `R210` (the minting test this satisfies), `R212` (the
+  enforcement-layer clause reused, and the rule this is NOT), `R213` (the
+  nearest neighbour, on magnitudes rather than references), `R193`/`Pass 74.0`
+  (a limit justified by a prediction — clause (b)'s ancestor), hard rule 10's
+  corollary and hard rule 11's corollary in
+  `.claude/agents/pdfce-librarian.md` (both fired on the repair here). New RAG
+  file:
+  `D:/dev/rag/rust/a_doc_that_cites_a_neighbour_rather_than_a_name_cannot_tell_a_broken_reference_from_a_wrong_one.md`.
+
+  **Ceiling moves `R213` → `R214`; next free `R215`.**
 
 ## Update protocol
 

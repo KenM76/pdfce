@@ -4,12 +4,13 @@ Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
 **Written 2026-08-22 (evening), by `pdfce-librarian` at the engineer's
-request** during the 228th filing. **Amended 2026-08-22 (229th filing)**, then
-**REWRITTEN 2026-08-22 (230th filing)**: §0.5's metrics-contract repair is
-**fully discharged and gated** by `ea413a4`, the banana page has gained a
-molecule box at 1:1 (`PASS 74.6`/`74.6b`), and the deep-zoom ceiling turned out
-to have been filed against the wrong quantity. **`(br)` in §0 is still the only
-thing awaiting Ken.**
+request** during the 228th filing. **Amended 2026-08-22 (229th filing)**,
+**REWRITTEN 2026-08-22 (230th filing)**, and **AMENDED AGAIN 2026-08-22
+(231st filing)**: **`PASS 74.8` shipped** (`eca07ee`) — `--no-annotations` now
+says how many annotations it withheld — and **the whole nine-item survivor list
+in §0.5 is DISCHARGED**, so the `crates/` owed column is empty for the first
+time in four filings. **`R214` minted.** **`(br)` in §0 is still the only thing
+awaiting Ken**, and **`PASS 74.7` is still Backlog and still untouched.**
 
 ---
 
@@ -143,7 +144,9 @@ its first run, exit 1, before anyone had thought to add it.** The placeholder
 scheme went from `<K>`…`<ai>` to a uniform `<n>`, with `need_appearances=<0|1>`
 kept distinct because it is the one field that is not a count, and the
 `annots=…` elision that hid six real keys is expanded.
-**`python tools/check-metrics-line-contract.py` → exit 0, 87 keys.**
+**`python tools/check-metrics-line-contract.py` → exit 0, `89` keys** (87 when
+`ea413a4` wired it; `eca07ee` added the two annotation-scope keys — measured
+2026-08-22 by running the gate, not read from a document).
 
 ★ **One thing to carry from building it**, recorded against `R212`: the gate's
 **first** version refused to check per-key table coverage, arguing that a
@@ -151,6 +154,16 @@ missing row is an *incomplete explanation* while a missing template key is a
 *wrong published specification*. **True — and the half it discarded was the
 LARGER gap and a disjoint set.** A scope argument that is **correct** passes
 review and stops it. The fix is one word: **`and`**.
+
+★★ **And a second thing, earned one commit later (231st filing): `PASS 74.8`
+was the gate's FIRST LIVE CATCH.** It forced all three copies — template,
+per-key table, test key list — on a change that had **nothing to do with the
+debt it was built for**. That matters because a gate built against known debt
+and then run against that debt has demonstrated exactly one thing: **that it
+can see what its author was looking at.** The first unrelated change is the
+first evidence it generalises. Same axis as
+`ci_gate_red_at_baseline_enforces_nothing.md`, opposite end:
+`D:/dev/rag/rust/a_gates_first_live_catch_is_the_first_evidence_it_generalises_beyond_its_founding_debt.md`.
 
 ### ★★★★★ THE CEILING WAS FILED AGAINST THE WRONG QUANTITY — read this before quoting any deep-zoom figure
 
@@ -204,42 +217,62 @@ as its acceptance baseline**.
 - **Limit 1 is a SEPARATE defect and `74.7` does not fix it.** A coordinate
   already written into the content stream at `f32` resolution is lost before
   any matrix applies. Say so in the Pass's own disclosure.
-- **`PASS 74.8` is opened beside it and is small**: `annotations_out_of_scope`
-  and `page_content_suppressed` are computed, merged and documented in
-  `pdfce-render` and **printed NOWHERE**, so `render-page --no-annotations`
-  withholds annotations and prints **no number saying how many**. **That is a
-  rule-4 disclosure gap, not a stale comment.** Two keys, two table rows, two
-  template entries, one test-list extension — and the new gate will fail you
-  for doing two of the three.
+- **`PASS 74.8` SHIPPED (`eca07ee`, 231st filing) — do not redo it.**
+  `annotations_out_of_scope` and `page_content_suppressed` now print on
+  `render-page`'s metrics line, **inserted beside the annotation family rather
+  than appended** (the contract promises name-stability, not ordinal
+  stability). `--no-annotations` gives
+  `annots=1 annots_painted=0 annots_out_of_scope=1` on
+  `fixtures/synthetic/annot/ap-resources-own-font.pdf`, and **the census does
+  not move** — the file's annotation count is a fact about the file, not about
+  the flag. Regression test `no_annotations_says_how_many_it_withheld` pins the
+  **conjunction**: the withheld annotation stays in the census **and** is
+  attributed.
 
-### Owed to `crates/`, in its OWN commit — eight stale `Diagnostics` doc comments
+### The nine `crates/` doc claims — **ALL DISCHARGED** by `eca07ee`. The owed column is EMPTY.
 
-Found by the engineer while drafting the 57 table rows. Full list in
-`ROADMAP.md` / `SESSION_LOG.md`; the three that matter:
+The eight `Diagnostics` survivors plus the `--region` doc block are **all
+repaired**. Do not go looking for them. **The caveat, so the emptiness is not
+over-read:** the 231st filing was **docs-only and did not read `crates/`**, so
+*"no survivors"* means *"none reported and none inferable from the docs"*, not
+*"the tree was read and is clean"*.
 
-1. `ColorDiagnostics::patterns_unpainted` says pdfce *"does not paint"* tiling
-   and shading patterns — **a comment ~300 lines below it in the same file
-   exists specifically to refute that sentence**, and the CLI's stderr note
-   describes the counter as the remainder after shading patterns paint.
-2. The *"shadings are found but never painted"* narrative survives in **three**
-   places after the analytic painting slice shipped
-   (`ShadingDiagnostics::painted`, `::paintable`, `Diagnostics::shading`).
-3. `transparency_groups_special`'s *"Of those"* now sits **after**
-   `soft_masks_on_group_result` in declaration order, so **its antecedent reads
-   wrong**. ★ **No word in it is stale — it broke because something else moved,
-   and no grep or gate can find that.**
+★★★★ **What came OUT of that sweep is the thing to carry — `R214`, minted from
+one of the nine.** `transparency_groups_special`'s *"Of those"* was reported as
+a **broken** back-reference (a later field declared in between moved its
+antecedent). True, and **half the defect**: the increment site is
+`is_transparency_group && (knockout || isolated)` with **no flattening
+condition**, so the counter was **never** a subset of the flattened count —
+**the original antecedent was wrong too.** The first repair restored the
+"obvious" neighbour and had to be corrected by reading the increment site.
 
-Also: `overprint_requested`'s head sentence still says *"while pdfce does not
-simulate it"* while its own body corrects that; `transparency_groups_composited`
-still says *"over-reports until `Pass 97.0` lands"* and 97.0 shipped
-2026-08-21; and `render-page --region`'s doc block now owes a **third** number
-(it still carries `74.1`'s 20 000× ceiling, never gained `74.2`'s, and now owes
-the content-side one too).
+⇒ **A doc that cites a NEIGHBOUR rather than a NAME gives no way to tell a
+BROKEN reference from a WRONG one, and repairing the reference without checking
+the referent silently converts the second into the first** — leaving a sentence
+that is newly wrong, *looks* repaired, and now has a plausible antecedent
+shielding it from the next reader. **`R214`: name the referent; and when
+repairing one, repair at the REFERENT, never at the neighbour.**
 
-**Take these in their OWN commit, not bundled into anything else.** A filing
-commit that touches `crates/` or `tools/` becomes a code commit in no filing
-and turns `check-commits-filed.py` red on the commit meant to make it green —
-`d4721d8`'s memory file.
+**A gate is available and is RECOMMENDED, not built.** *"Is this reference
+right?"* is undecidable (it needs the increment site). *"Is this reference
+NAMED?"* is a **grep over a closed vocabulary** in doc comments — *of those*,
+*the above*, *the former*, *the latter*, *this slice*, *the next slice*, *as
+above*, *see below*, *the previous field*. **Its baseline is UNMEASURED.
+Measure, repair, then wire — never wire it red.**
+
+★ **And note what `d4721d8`'s rule does and does not say, because the previous
+version of this section said "take these in their OWN commit" and that was read
+narrowly.** `eca07ee` bundled all nine repairs **with** `PASS 74.8`'s code and
+that is **fine**: what the rule forbids is code inside a **librarian filing** —
+such a commit becomes a code commit in no filing and turns
+`check-commits-filed.py` red on the very commit meant to make it green. **The
+rule is about which side of the report/reported-on boundary a diff sits on, not
+about diff size.** ★★ **Its mirror image DID happen here**, measured by
+`git show --numstat eca07ee`: the 230th filing's own `docs/ROADMAP.md`
+**+808/−2** and `docs/SESSION_LOG.md` **+233/−0** rode along inside the code
+commit. No gate went red; the cost is archaeological — `git show <hash>` no
+longer isolates a filing. **Owed to the engineer: a one-line addendum to the
+never-bundle memory noting the rule runs in two directions.**
 
 ---
 
@@ -358,12 +391,22 @@ with no counter anywhere. pdfium now agrees with us pixel for pixel.
 
 **The metrics contract** (`ea413a4`, **no Pass ID**): §0.5.
 
+**`PASS 74.8` — `--no-annotations` now says how much it withheld** (`eca07ee`):
+§0.5. Two counters that were computed, merged, documented **and unit-tested**
+in `pdfce-render` reached no shell at all, so the operator saw
+`annots=1 annots_painted=0` with **nothing separating "withheld on request"
+from "tried and failed"** — the two reactions the split exists to distinguish.
+★ **A counter that exists and is not surfaced is worse than one that does not
+exist: it makes the gap look measured.** Nine stale doc claims went with it, in
+the same commit.
+
 **Pass IDs, and this is the sentence that matters when you commit:**
 `74.1`–`74.6b` were all **minted by filings**, not by commit messages.
-**`74.7` and `74.8` are CLAIMED under *Backlog* and not built, so the next
-free in this family is `74.9`.** Next free elsewhere: `122.4`; `97.1g` is
-reserved and unbuilt. Decisions next free **083**; standing rules next free
-**`R214`**; open operator questions next free **`(bs)`**.
+**`74.8` is now SHIPPED; `74.7` is CLAIMED under *Backlog* and NOT built, so
+the next free in this family is `74.9`.** Next free elsewhere: `122.4`;
+`97.1g` is reserved and unbuilt. Decisions next free **083**; standing rules
+next free **`R215`** (`R214` minted by the 231st filing); open operator
+questions next free **`(bs)`**.
 
 ---
 
@@ -373,11 +416,13 @@ reserved and unbuilt. Decisions next free **083**; standing rules next free
    them behind a setting", that becomes the top item and it is a
    `pdfce-render` Pass with a **disclosure obligation** (a counter on the
    metrics line, off by default if it is a setting).
-1. **The eight `crates/` `Diagnostics` doc repairs in §0.5** — one commit,
-   and they are the freshest stale claims in the tree. **Item 3 of that list is
-   NOT a comment fix**: it is `PASS 74.8`, a rule-4 disclosure gap
-   (`--no-annotations` says nothing about how many it withheld), and it wants
-   its own commit and its own metrics-line keys.
+1. ~~**The eight `crates/` `Diagnostics` doc repairs**~~ — **DONE** (`eca07ee`),
+   along with `PASS 74.8` and the `--region` doc block. **The `crates/` owed
+   column is empty.** What replaced it is a *recommendation*, not a Pass:
+   **build `R214`'s positional-reference gate** — a grep over a closed
+   vocabulary in doc comments — **measuring its baseline first**, and repair
+   before wiring. Small, and it is the only defence against the one class of
+   stale claim that contains no stale word.
 1b. **`PASS 74.7`** — the `f64` CTM through content-stream `cm`
    concatenation. **Ruled the engineer's call, not Ken's** (§0.5), acceptance
    baseline already measured, and **large**. Rank it against the `97.x` items
@@ -434,13 +479,18 @@ reserved and unbuilt. Decisions next free **083**; standing rules next free
 - **Per-paint rendering intent** (§11.7.5.3) — pdfce carries one per page.
   `iccce` costed the alternative and asked for the consumer fact; **no
   corpus measurement of mid-page intent switching has been taken.**
-- **No GUI code path reads `forms_culled`**, `render_page_region` or the
-  display list. GUI work is paused; recorded so the `[ ] gui` boxes in
-  `FEATURES.md` are not mistaken for oversights.
+- **No GUI code path reads `forms_culled`**, `render_page_region`, the
+  display list, or — as of `PASS 74.8` — **`annots_out_of_scope` /
+  `page_content_suppressed`**. GUI work is paused; recorded so the `[ ] gui`
+  boxes in `FEATURES.md` are not mistaken for oversights. ★ **`FEATURES.md`
+  row 161 keeps its `gui` tick deliberately**: the row's subject is *render and
+  count annotations*, which **is** reachable in a real `pdfceGUI` build; the
+  counters are qualified **in the sentence** instead, the way rows 202/203/207/
+  216 do it. Unticking would report a working GUI capability as missing.
 
 ---
 
-## §6 — SIX LESSONS FROM THIS RUN THAT ARE CLASSES, NOT INCIDENTS
+## §6 — EIGHT LESSONS FROM THIS RUN THAT ARE CLASSES, NOT INCIDENTS
 
 1. **A cull is worth only what it skips.** Its hit counter is **invariant
    to its placement**, so the instrument you add to prove the optimisation
@@ -471,23 +521,41 @@ reserved and unbuilt. Decisions next free **083**; standing rules next free
    A false justification fails review; a correct one **passes** it, and nothing
    prompts the next question. The fix is one word: **`and`**.
    `D:/dev/rag/rust/a_true_scope_distinction_is_the_hardest_argument_against_checking_both.md`.
+7. **★★ A reference by POSITION cannot tell you whether it is BROKEN or
+   WRONG.** *"Of those"*, *"this slice"*, *"the above"* resolve against
+   whatever is nearby or whatever is *now*, so they break when something
+   **else** moves and contain **no stale token** for any grep to find. Worse:
+   the obvious repair — re-point it at the current neighbour — is a claim about
+   behaviour made without checking behaviour, and it **converts a wrong
+   reference into a plausible one**. Name the referent; repair at the referent.
+   `D:/dev/rag/rust/a_doc_that_cites_a_neighbour_rather_than_a_name_cannot_tell_a_broken_reference_from_a_wrong_one.md`,
+   `R214`.
+8. **★ A gate's FIRST LIVE CATCH is separate evidence from its founding case.**
+   A gate built against known debt and run against that debt has shown only
+   that it can see what its author was looking at. **The first unrelated change
+   it forces is the first evidence it constrains anything.** Record it — cheap
+   now, impossible to reconstruct later.
+   `D:/dev/rag/rust/a_gates_first_live_catch_is_the_first_evidence_it_generalises_beyond_its_founding_debt.md`.
 
 ---
 
 ## §7 — HOUSEKEEPING
 
-- **`origin/main` is at `c24ad7a`, NINE COMMITS BEHIND `HEAD`.** Pushing is
-  the operator's act and needs a current go-ahead (`CLAUDE.md` rule 8). The
-  repository is public, so **anything committed is published by default.**
-  *(Measured 2026-08-22, 230th filing: `git remote -v`,
+- **`origin/main` is still at `c24ad7a`, ELEVEN COMMITS BEHIND `HEAD`** once
+  this filing's own commit lands. Pushing is the operator's act and needs a
+  current go-ahead (`CLAUDE.md` rule 8). The repository is public, so
+  **anything committed is published by default.**
+  *(Measured 2026-08-22, 231st filing: `git remote -v`,
   `git rev-parse --short origin/main`, `git rev-list --count origin/main..HEAD`
-  → **9**. The 228th filing's "three" was correct for its own time.)*
-- **Backups are 202 commits behind** — newest bundle
+  → **10** at `eca07ee`, **+1** for this filing. The 230th filing's "nine" was
+  correct for its own time; **re-run it rather than quoting this line.**)*
+- **Backups are 204 commits behind** once this filing lands — newest bundle
   `pdfce-20260817-v060.bundle` (2026-08-17 20:34) at `3c4c00e`. `v0.7.0`'s
   tag is in no bundle on disk. **Cutting one is the operator's call.**
-  *(Measured 2026-08-22, 230th filing: `ls -lt D:\Dev\pdfce-backups\` and
-  `git rev-list --count 3c4c00e..HEAD` → **202**. Re-measured rather than
-  carried forward: the 228th filing said 196, and that was right then.)*
+  *(Measured 2026-08-22, 231st filing: `ls -lt D:\Dev\pdfce-backups\` and
+  `git rev-list --count 3c4c00e..HEAD` → **203** at `eca07ee`, **+1** for this
+  filing. Re-measured rather than carried forward: the 230th filing said 202,
+  and that was right then.)*
 - **If `check-commits-filed.py` is red when you start, READ ITS OUTPUT FOR
   THE HASH.** Do not assume which commit it means, and **never extend
   `tools/commits-filed-baseline.txt`** — that file is pre-existing debt,

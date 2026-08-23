@@ -4795,6 +4795,25 @@ is standing rule **`R212`**, minted by the two-hundred-and-twenty-ninth filing:
 *a contract with a test-enforced copy and a published copy drifts in the
 published one, because the test forces its copy and nothing forces the other.*
 
+**★ DISCHARGED 2026-08-22 by `ea413a4`, and the line has GROWN since — this
+paragraph is the part that is current; the "owed" paragraph above is kept as the
+audit trail, same convention as the `f9dc007` note above it.** `ea413a4` brought
+the doc template from **59 → 87 of 87** keys and the per-key explanation table
+from **44 → 87 of 87** (57 rows added), then wired
+**`tools/check-metrics-line-contract.py`** into `.github/workflows/ci.yml` and
+registered it in `tools/check-ci-parity.py`, so template, per-key table and the
+test's key list are now held together and **an edit to fewer than all three
+fails a gate.** `eca07ee` (`PASS 74.8`) then added the two annotation-scope
+keys, and the gate forced all three copies on that change — **its first catch on
+work it was not built for.**
+
+**The line is now `89` keys**, measured 2026-08-22 by running
+`python tools/check-metrics-line-contract.py` (*"OK — 89 keys; the template
+matches the println and every key has a table row"*), **not by reading a
+document** — any figure elsewhere in this file or in `docs/ROADMAP.md` that says
+**87** is a dated record of an earlier state, correct for its date. Filed by the
+two-hundred-and-thirty-first filing.
+
 #### What is NOT in this entry
 
 No `pdfce-core` surface changed. No trait, no error variant, no
