@@ -290,9 +290,19 @@ measured, and how two of the three were confirmed by accident.** pdfce no
 longer behaves this way — `Pass 74.7` (2026-08-23) took these limits, and
 §10 is what it does now. Nothing here is a live limitation.
 
-The measurement tables carry **before and after columns**, because a
-before-figure alone says nothing about whether it moved; where they do,
-the after-figure is current and labelled as such.
+Its one measurement table — the forms-rendered counts under *"Measured,
+on the box's own molecules"* — carries **three post-fix columns**:
+`after`, `correct`, and the note explaining why `correct` is not `11`.
+They are here rather than in §10 because a before-figure alone says
+nothing about whether it moved, and because the gap between `after` and
+`correct` is the whole subject of §9's last paragraph.
+
+*(That sentence read "The measurement **tables** carry before and after
+columns … **where they do**" until it was checked: a universal beside an
+existential hedge, over a set of exactly one, naming two of the three
+post-fix columns and omitting `correct` — the one `R215` was minted
+about. Quantifiers written to repair a quantifier defect are worth
+re-reading.)*
 
 **Why the pre/post boundary is a HEADING and not a sentence.** It was a
 sentence, twice — *"everything below describes the behaviour before that
@@ -303,14 +313,19 @@ pointer is what produced the second wrong one (`R214` clauses (a) and
 (c)). A heading cannot drift, because the thing it delimits is the thing
 that would have to move it.
 
-★ **And the sentence above it had to be narrowed too, which is the part
-worth keeping.** The first version of this scope statement read
-*"Everything in this section describes pdfce BEFORE `Pass 74.7`"* — and
-that was **false of the section's own tables**, which show the after
-figures beside the before ones. Splitting the section bought immunity to
-positional drift and **not** to over-scoping: a heading-bound claim is
-still a claim about a set, and it can be wrong about what is in it. The
-form got safer; the quantifier still had to be true.
+★ **And this section's own scope statement — the starred paragraph that
+opens §9 — had to be narrowed too, which is the part worth keeping.** It
+first read *"Everything in this section describes pdfce BEFORE
+`Pass 74.7`"*, and that was **false of §9's measurement table**, which
+shows the after figures beside the before ones. Splitting the section
+bought immunity to positional drift and **not** to over-scoping: a
+heading-bound claim is still a claim about a set, and it can be wrong
+about what is in it. The form got safer; the quantifier still had to be
+true.
+
+*(This paragraph opened "the sentence above it" — a positional pointer, at
+the head of the paragraph explaining why positional pointers fail, with no
+written antecedent for "it". It is named now.)*
 
 ### The ceiling that was claimed, and the one that bit
 
@@ -387,9 +402,19 @@ came out.
 
 ## 10. Where the ceiling is now
 
-★ **Everything in this section describes pdfce as it stands.** `Pass 74.7`
-(2026-08-23) took the limits §9 measured; `Pass 74.10` closed the second
-rendering path behind it.
+★ **This section is what pdfce does NOW.** `Pass 74.7` (2026-08-23) took
+the limits §9 measured; `Pass 74.10` closed the second rendering path
+behind it.
+
+It quotes before-figures throughout — `76 px / 288 px`, `93 s`, the
+wording a sentence carried until it was corrected — because a current
+figure alone says nothing about what changed. **Each is labelled where it
+appears.** This paragraph used to read *"Everything in this section
+describes pdfce as it stands"*, which was false of every one of them, and
+it is the second scope sentence in one commit to over-claim (`R214`
+clause (d)): promoting a boundary to a heading manufactures a sentence
+about a SET, and a claim about a set is a new assertion nobody has
+checked.
 
 **The nudged coordinates are gone.** §9's framing came from a region
 hand-corrected twice against the drift; the box now lands within **one
@@ -416,7 +441,7 @@ narrowed. Ordinary rendering takes neither route and pays nothing.
 **A single water molecule now renders sharply at a scale of `1.6e9` —
 about 190 billion percent.**
 
-★★ **And the count in §9's forms-rendered table is superseded by `2`, not
+★★ **And the count in §9's measurement table is superseded by `2`, not
 by `11`.**
 This paragraph said "11 of 11 forms survive at every scale tested" until
 2026-08-23, and that is **the same wrong number the table itself carried**,
