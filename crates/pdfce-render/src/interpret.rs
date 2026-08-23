@@ -176,6 +176,21 @@ use pdfce_core::settings::MinifyFilter;
 /// 256 levels [`crate::gstate::MAX_Q_DEPTH`] already permits per level.
 pub const MAX_XOBJECT_DEPTH: usize = 64;
 
+/// The width, in device pixels, below which
+/// [`RenderOptions::subpixel_culling`] considers a form invisible.
+///
+/// Half a pixel, in BOTH axes, so a form has to be smaller than the
+/// sampling grid in every direction before it is dropped — a thin but
+/// long form still paints, because a hairline is exactly the kind of
+/// thing an operator would notice missing.
+///
+/// It is a threshold on the OBJECT, not on its contribution: a form this
+/// small can still tint the pixel it sits in, and dropping it is a
+/// visible change on a page carrying hundreds of them. That is why the
+/// option defaults off; the constant only says where "too small to see"
+/// begins once the operator has accepted the trade.
+pub const SUBPIXEL_CULL_PX: f32 = 0.5;
+
 /// Cap on the number of distinct sample strings retained in
 /// [`Diagnostics::sample_ops`] / [`Diagnostics::image_notes`].
 ///
@@ -1075,6 +1090,20 @@ pub struct Diagnostics {
     /// asking why a render was slow — and the first is what pdfce used to
     /// report while doing the second's work.
     pub forms_culled: usize,
+    /// `Do` invocations skipped because the form was smaller than
+    /// [`SUBPIXEL_CULL_PX`] in both axes and
+    /// [`RenderOptions::subpixel_culling`] was on.
+    ///
+    /// **LOSSY**, and counted separately from [`Self::forms_culled`] for
+    /// exactly that reason: that one is an exact consequence of §8.10.1's
+    /// `/BBox` clip and changes no pixel, this one drops coverage the
+    /// document asked for. Reporting them as one number would let a
+    /// fidelity trade hide inside a correctness optimisation.
+    ///
+    /// Emitted on the metrics line whether the option is on or off, so a
+    /// raster carries the count of what it left out rather than the
+    /// operator having to remember which flags produced it (rule 4).
+    pub subpixel_culled: usize,
     /// `Do` invocations refused because they would have exceeded
     /// [`MAX_XOBJECT_DEPTH`] **or** re-entered a form already on the
     /// stack (a cycle). Their content is missing from the raster.
@@ -1394,6 +1423,7 @@ polarity unverifiable (decision 006 R30)",
         }
         self.forms_rendered += other.forms_rendered;
         self.forms_culled += other.forms_culled;
+        self.subpixel_culled += other.subpixel_culled;
         self.xobject_depth_overflows += other.xobject_depth_overflows;
         // Annotation counters are page-level (a nested form never sets
         // them), so in practice `other` contributes zero here — but the
@@ -1669,6 +1699,7 @@ pub fn trace_paths(
         // claim about the document.
         blend_space: crate::compositor::BlendSpace::Additive,
         path: PathBuilder::new(),
+        subpixel_culling: policy.subpixel_culling,
         path_precise: false,
         path_ctm64: Mat64::IDENTITY,
         path_origin: None,
@@ -1750,6 +1781,7 @@ fn run_nested(
         diag: Diagnostics::default(),
         blend_space,
         path: PathBuilder::new(),
+        subpixel_culling: policy.subpixel_culling,
         path_precise: false,
         path_ctm64: Mat64::IDENTITY,
         path_origin: None,
@@ -1897,6 +1929,7 @@ pub(crate) fn run_form_at_on(
         // ink rather than on screen.
         blend_space: crate::compositor::BlendSpace::Additive,
         path: PathBuilder::new(),
+        subpixel_culling: policy.subpixel_culling,
         path_precise: false,
         path_ctm64: Mat64::IDENTITY,
         path_origin: None,
@@ -2090,6 +2123,9 @@ struct Interpreter<'a> {
     /// object-model cross-check oracle ([`trace_paths`]). `None` for
     /// ordinary rendering, so the render path is byte-for-byte unchanged.
     trace: Option<Vec<TracedPath>>,
+    /// [`RenderOptions::subpixel_culling`], carried down so `do_form` can
+    /// consult it without reaching back for the options.
+    subpixel_culling: bool,
 }
 
 impl Interpreter<'_> {
@@ -4877,6 +4913,22 @@ impl Interpreter<'_> {
                 }
                 if r.min(cw) <= l.max(0.0) || b.min(ch) <= t.max(0.0) {
                     self.diag.forms_culled += 1;
+                    return;
+                }
+                // The OPT-IN, lossy half. Tested after the exact cull, and
+                // counted separately, so a fidelity trade can never be
+                // mistaken for the correctness optimisation above.
+                //
+                // Both axes, so a hairline -- thin but long -- still
+                // paints. `dev` is used rather than the clipped `l/t/r/b`
+                // because the question is how big the FORM is, not how
+                // much of it survives the clip: a large form mostly
+                // clipped away is not a small form.
+                if self.subpixel_culling
+                    && dev.width() < SUBPIXEL_CULL_PX
+                    && dev.height() < SUBPIXEL_CULL_PX
+                {
+                    self.diag.subpixel_culled += 1;
                     return;
                 }
             }

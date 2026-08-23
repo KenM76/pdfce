@@ -100,7 +100,8 @@
 //! render-page:  rendered <input> page <N> -> <output> <W>x<H>; \
 //!               substituted=<n> notdef=<n> unsupported=<n> unknown=<n> \
 //!               deferred=<n> images=<n> images_unsupported=<n> forms=<n> \
-//!               forms_culled=<n> images_codec_unsupported=<n> \
+//!               forms_culled=<n> subpixel_culled=<n> \
+//!               images_codec_unsupported=<n> \
 //!               codec_features=<n> codec_geometry_mismatch=<n> dct_cmyk=<n> \
 //!               lzw_anomalies=<n> dct_cmyk_unverifiable=<n> jpx_preblended=<n> \
 //!               annots=<n> annots_painted=<n> annots_no_ap=<n> \
@@ -218,7 +219,8 @@
 //! | `images_unsupported` | `images_unsupported` | "how many images are simply MISSING from the raster?" |
 //! | `contents_unresolved` | `contents_streams_unresolved` | "how many of this page's `/Contents` streams are not in the file at all, so their marks are MISSING from the raster?" (§7.3.10 + Table 30 — legal, but the page is incomplete) |
 //! | `forms` | `forms_rendered` | "how many form XObjects were executed?" |
-//! | `forms_culled` | `forms_culled` | "how many were skipped because their `/BBox` missed the viewport?" |
+//! | `forms_culled` | `forms_culled` | "how many were skipped because their `/BBox` missed the viewport?" (§8.10.1 makes `/BBox` a clip, so such a form cannot paint a pixel — EXACT, always on, and the raster is byte-identical with or without it) |
+//! | `subpixel_culled` | `subpixel_culled` | "how many objects did `--fast-subpixel` DROP?" (the one LOSSY number on this line. Zero unless the flag is set, and printed either way so a raster always carries the count of what it left out. Those objects were not invisible — each contributed anti-aliased coverage, and a page carrying hundreds of them renders measurably lighter without them, so a non-zero value here means this raster is not the reference one. Read against `forms_culled`, which is the exact cull and changes nothing) |
 //! | `images_codec_unsupported` | `images_codec_unsupported` | "how many images need a codec this build doesn't have?" |
 //! | `codec_features` | `codec_feature_unsupported` (summed) | "how many images need a codec *variant* this build doesn't have?" |
 //! | `codec_geometry_mismatch` | `codec_geometry_mismatch` | "how many images disagree with their own codestream?" |
@@ -2381,6 +2383,33 @@ enum Command {
         /// render still discloses how many annotations the page carries.
         #[arg(long)]
         no_annotations: bool,
+        /// Skip geometry smaller than half a device pixel, trading a
+        /// little fidelity for speed at low zoom.
+        ///
+        /// OFF by default, because it is LOSSY: a form that small is not
+        /// invisible, it contributes anti-aliased coverage, and a page
+        /// carrying hundreds of them looks measurably lighter without
+        /// them. pdfce does not trade fidelity for speed on its own
+        /// account (decision 082) -- the exact `/BBox` cull is always on
+        /// and needs no flag; this is the inexact one, so it is yours to
+        /// ask for.
+        ///
+        /// Worth it when a page holds a great deal of detail far below
+        /// the resolution you are viewing it at -- a CAD sheet or a map at
+        /// page-fit zoom. Measured on the gen-scale-demo banana, whole
+        /// page: 1 468 ms -> 108 ms, with ZERO pixels different, because
+        /// at that zoom the dropped objects are 1/70th of a pixel each.
+        ///
+        /// The loss shows up in between, not at the bottom: on the same
+        /// page in a 1 pt window it changes 18 of 400 pixels at 20x and 82
+        /// of 3 600 at 60x, by up to a quarter of a channel. Largest
+        /// exactly where the speed-up is smallest.
+        ///
+        /// `subpixel_culled` on the result line reports how many objects
+        /// were dropped, and is printed whether or not the flag is set --
+        /// so a raster always carries the count of what it left out.
+        #[arg(long)]
+        fast_subpixel: bool,
         /// Directory of font files to supply for the document's
         /// NON-embedded fonts (decision 012). Repeatable. pdfce walks each
         /// directory, registers every readable `.ttf`/`.otf`/`.ttc`/`.cff`/
@@ -6162,6 +6191,7 @@ fn run() -> ExitCode {
             region,
             output,
             no_annotations,
+            fast_subpixel,
             font_dirs,
             show_layers,
             hide_layers,
@@ -6173,6 +6203,7 @@ fn run() -> ExitCode {
             region.as_deref(),
             &output,
             !no_annotations,
+            fast_subpixel,
             &font_dirs,
             &show_layers,
             &hide_layers,
@@ -7747,6 +7778,7 @@ fn cmd_render_page(
     region: Option<&str>,
     output: &Path,
     annotations: bool,
+    fast_subpixel: bool,
     font_dirs: &[PathBuf],
     show_layers: &[String],
     hide_layers: &[String],
@@ -7822,6 +7854,10 @@ numbered 1..={})",
         .with_cmyk_jpeg_polarity(settings.cmyk_jpeg_polarity)
         .with_missing_as(settings.missing_as);
     render_options.fonts = font_env;
+    // `--fast-subpixel`. Assigned rather than set through a builder for
+    // the reason `RenderOptions`'s own docs give: the type is
+    // `#[non_exhaustive]`, so field assignment is the documented way in.
+    render_options.subpixel_culling = fast_subpixel;
     // `render-page` produces a raster for LOOKING AT, so it is a viewer
     // under §8.11.4.5 and applies `View`-event `/AS` usage at the
     // requested scale. The print path is the one the clause forbids this
@@ -7919,7 +7955,7 @@ numbered 1..={})",
     println!(
         "rendered {} page {page_number} -> {} {}x{}; \
 substituted={} notdef={} unsupported={} unknown={} deferred={} \
-images={} images_unsupported={} forms={} forms_culled={} \
+images={} images_unsupported={} forms={} forms_culled={} subpixel_culled={} \
 images_codec_unsupported={} codec_features={} codec_geometry_mismatch={} \
 dct_cmyk={} lzw_anomalies={} dct_cmyk_unverifiable={} jpx_preblended={} \
 annots={} annots_painted={} annots_no_ap={} annots_hidden={} \
@@ -7960,6 +7996,7 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         d.images_unsupported,
         d.forms_rendered,
         d.forms_culled,
+        d.subpixel_culled,
         d.images_codec_unsupported,
         d.codec_feature_unsupported.values().sum::<usize>(),
         d.codec_geometry_mismatch,

@@ -2098,6 +2098,60 @@ mod tests {
     }
 
     #[test]
+    fn subpixel_culling_is_off_by_default_and_counted_when_on() {
+        // The OPT-IN, lossy cull. Three things are asserted and the third
+        // is the one that matters: that the default renders it, that the
+        // flag drops it AND says so, and that the two rasters DIFFER.
+        //
+        // Without the last assertion this test would pass against an
+        // implementation that counted the form and painted it anyway --
+        // which is the failure mode a "did the counter go up?" test
+        // cannot see, and the opposite of the one where a silent
+        // optimisation drops content without counting it.
+        let (doc, page) = doc_with_xobject(
+            // 0.4 x 0.4 device px at scale 1.0: under the half-pixel bar
+            // in both axes, and dark enough that its coverage shows.
+            "q 0.4 0 0 0.4 20 20 cm /X1 Do Q",
+            &form_dict("/BBox [0 0 1 1] /Resources << >>"),
+            b"0 0 0 rg 0 0 1 1 re f",
+        );
+
+        let on = RenderOptions {
+            subpixel_culling: true,
+            ..Default::default()
+        };
+
+        let off =
+            render_page_with_view(&doc.view(), &page, 1.0, &RenderOptions::default()).unwrap();
+        let fast = render_page_with_view(&doc.view(), &page, 1.0, &on).unwrap();
+
+        assert_eq!(
+            off.diagnostics.subpixel_culled, 0,
+            "the default must not drop anything -- decision 082 puts a lossy trade with the operator, so it cannot be the default"
+        );
+        assert_eq!(off.diagnostics.forms_rendered, 1);
+
+        assert_eq!(
+            fast.diagnostics.subpixel_culled, 1,
+            "with the option on, the form is dropped AND counted"
+        );
+        assert_eq!(
+            fast.diagnostics.forms_rendered, 0,
+            "a dropped form is not a rendered one"
+        );
+        assert_eq!(
+            fast.diagnostics.forms_culled, 0,
+            "and it is NOT reported as the exact /BBox cull -- that one changes no pixel and this one does, so merging the counters would let a fidelity trade hide inside a correctness optimisation"
+        );
+
+        assert_ne!(
+            off.pixmap.data(),
+            fast.pixmap.data(),
+            "the rasters must DIFFER. If they do not, either the form was painted anyway or the fixture is too small to contribute coverage -- and in both cases this test is asserting nothing about lossiness"
+        );
+    }
+
+    #[test]
     fn form_partly_on_canvas_is_not_culled() {
         // The complement of the test above, and the one that would fail
         // if the cull were made greedier than §8.10.1 allows. The BBox

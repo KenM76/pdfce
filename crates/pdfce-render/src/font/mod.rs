@@ -468,6 +468,57 @@ pub struct RenderOptions {
     /// every existing caller — including any this crate cannot see —
     /// compiling and rendering exactly as before.
     pub annotations: bool,
+    /// Skip geometry too small to be seen, trading a little fidelity for a
+    /// large speed-up at page-fit zoom. **Default `false`.**
+    ///
+    /// # What it does
+    ///
+    /// A Form XObject whose transformed `/BBox` is narrower than
+    /// [`SUBPIXEL_CULL_PX`] in BOTH axes is not executed at all, and is
+    /// counted on `Diagnostics::subpixel_culled`.
+    ///
+    /// # Why it is off by default, and why it exists at all
+    ///
+    /// It is **lossy**. Those forms are not invisible — each contributes
+    /// anti-aliased coverage, and hundreds of them contribute a visible
+    /// tint. Decision 082 says a render may skip work only where skipping
+    /// is EXACT, and a lossy speed-up is the operator's call, so it is
+    /// offered rather than taken: `Pass 74.4`'s `/BBox` cull is exact and
+    /// always on; this one is neither.
+    ///
+    /// # Measured, on `tools/gen-scale-demo`
+    ///
+    /// 342 mitochondria, each a full section of ~2 500 path operators, at
+    /// a page-fit zoom where every one is about 1/70th of a pixel across.
+    /// All the work, none of the picture:
+    ///
+    /// | render | time off | time on | pixels differing |
+    /// |---|---|---|---|
+    /// | whole page, 1.6x | 1 468 ms | **108 ms** | **0** of 1 242 640 |
+    ///
+    /// ★ And the number that keeps this honest, because "zero" above
+    /// would otherwise read as "free". The loss appears as the objects
+    /// approach the threshold rather than sitting far below it — same
+    /// page, a 1 pt window, ~339 forms dropped each time:
+    ///
+    /// | scale | pixels differing | worst channel delta |
+    /// |---|---|---|
+    /// | 20 | 18 of 400 | 16 |
+    /// | 35 | 47 of 1 296 | 54 |
+    /// | 60 | 82 of 3 600 | **62** — about a quarter of a channel |
+    ///
+    /// So it is genuinely lossy, the loss is largest exactly where the
+    /// speed-up is smallest, and at the zoom where the speed-up is
+    /// enormous the loss happens to be nil. That shape is why this is a
+    /// switch and not a heuristic.
+    ///
+    /// # It is DISCLOSED, not silent (rule 4)
+    ///
+    /// The counter is on the metrics line whether the option is on or
+    /// off, so a raster produced this way carries the number of things it
+    /// left out. An operator comparing two renders can see which one paid
+    /// for its speed and how much.
+    pub subpixel_culling: bool,
     /// **Which classes** of annotation to paint when [`Self::annotations`]
     /// permits any — the four-way Acrobat print scope (Document / Document
     /// and Markups / Document and Stamps / Form fields only) plus pdfce's
@@ -635,6 +686,9 @@ pub struct RenderPolicy<'a> {
     pub layers: Option<&'a crate::LayerVisibility>,
     /// See [`RenderOptions::view_magnification`].
     pub view_magnification: Option<f32>,
+    /// See [`RenderOptions::subpixel_culling`]. The only LOSSY entry in
+    /// this bundle, which is why its counter is reported separately.
+    pub subpixel_culling: bool,
 }
 
 impl Default for RenderOptions {
@@ -646,6 +700,10 @@ impl Default for RenderOptions {
         Self {
             fonts: FontEnvironment::default(),
             annotations: true,
+            // OFF. The one lossy knob in this struct, and decision 082
+            // puts that choice with the operator rather than with the
+            // default.
+            subpixel_culling: false,
             // Every class painted — the pre-existing "annotations on"
             // behaviour, spelled as a scope. See `AnnotationScope`'s type
             // docs for why the default is Acrobat Pro's rather than
@@ -850,6 +908,7 @@ impl RenderOptions {
             missing_as: self.missing_as,
             layers: self.layers.as_ref(),
             view_magnification: self.view_magnification,
+            subpixel_culling: self.subpixel_culling,
         }
     }
 }
@@ -904,6 +963,11 @@ mod render_policy_tests {
                 missing_as: pdfce_core::settings::MissingAppearanceState::FirstEntry,
                 layers: Some(&hidden),
                 view_magnification: Some(2.5),
+                // Not set by any `with_*` above, so it must still be the
+                // default. That is the assertion, not the boilerplate:
+                // this test exists to catch a knob that reaches
+                // `RenderOptions` and never reaches `RenderPolicy`.
+                subpixel_culling: false,
             }
         );
         assert_ne!(options.policy(), RenderPolicy::default());

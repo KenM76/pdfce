@@ -310,6 +310,10 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // human scanning the line, and "342 forms executed, 0 culled"
             // only reads as a pair when the two are adjacent.
             "forms_culled",
+            // `Pass 74.9`: the opt-in lossy cull. Beside its exact
+            // sibling on purpose -- the pair is only readable together,
+            // since one changes no pixel and the other does.
+            "subpixel_culled",
             // Appended by Pass 2.1's image-codec slice (decision 005
             // §6.4). Same rule again: appended at the END, and every
             // key above keeps its meaning and its position.
