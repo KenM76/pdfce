@@ -27,6 +27,7 @@
 - [Priority is a measurement](feedback_priority_is_a_measurement.md) — check the target file actually exercises the feature before spending a Pass; an uncounted gap can't compete
 - [Two modes, one pattern, is one measurement](feedback_two_modes_one_pattern_is_one_measurement.md) — R188; same-pattern agreement isn't verification, and don't override an independently-derived result with a more confident one
 - [Absence needs an unscoped query](feedback_absence_needs_an_unscoped_query.md) — `git log --all -- path` feels exhaustive but is path-scoped; a wrong path reads exactly like a true negative
+- [A wrong expectation returns as a result](feedback_a_wrong_expectation_returns_as_a_result.md) — I restated an impossible acceptance criterion as a measured outcome hours after having it named; record the correction, not the corrected value
 - [Gates I owe myself](feedback_gates_i_owe_myself.md) — the cargo-fuzz gate is the one I skip; BOTH halves recurred 2026-08-21, and the local sweep is one of CI's nine jobs (R209)
 - [Rungs: click-out commits, and the three-rung ladder](project_rung_ladder_state.md) — 2026-08-05: Passes 34.0/36.0/36.1/36.2 shipped; what commits implicitly and what still doesn't
 - [Screenshot when the question is visual](feedback_screenshot_when_the_question_is_visual.md) — `drawn=true` in a trace hid a 680px coordinate-space bug; use gui-shot.ps1 for "I can't see X"
