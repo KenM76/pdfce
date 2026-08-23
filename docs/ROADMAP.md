@@ -96,6 +96,443 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `a68498b` — the 236th filing's four survivors discharged, and ★★★★★ **THE RE-SEEDING IS MEASURED AT `n=3` AND THIS ROLE'S OWN REPORT IS ONE OF THE VECTORS** (**no Pass ID**) — ★★★★★ **ALL FOUR SURVIVORS ARE REPAIRED AND THE REPAIR EMITTED THREE MORE, ONE OF THEM A WRONG COUNT THIS ROLE'S OWN FILING SUPPLIED THE DENOMINATOR FOR**: §9's replacement sentence says the measurement table *"carries **three post-fix columns**: `after`, `correct`, and the note explaining why `correct` is not `11`"* — **the table has FOUR columns (`scale`/`before`/`after`/`correct`) of which TWO are post-fix**, and the third item enumerated **is not a column at all**, it is the ★ paragraph below the table; ★★★★★ **AND THE DENOMINATOR IS THIS ROLE'S, MEASURED RATHER THAN INFERRED — THE 236th FILING'S OWN RAG FINDING SAYS *"THE THIRD POST-FIX COLUMN"* IN SO MANY WORDS**: `git log -S "three post-fix"` over the repository returns exactly `a68498b`, but `D:/dev/rag/rust/the_defect_class_left_after_repeated_repair_rounds_is_the_stopping_signal.md` — **written by the 236th filing, the same day, as the record of this very defect class** — carries *"while omitting **the third** post-fix column entirely"*, and the same filing's `ROADMAP.md`/`SESSION_LOG.md`/`NEXT_SESSION.md` all close the survivor with *"two-thirds of the evidence that falsified it"* (the falsifying evidence was **two** columns; the replacement names **one** ⇒ **one-half**), **two lines above this role's own *"None of the four is a wrong number"***, which it falsifies; ★★★★★ **⇒ THE RECORD OF THE FINDING RE-SEEDED THE ARTEFACT — a finding written to warn that repairs propagate their own defects propagated one, into the next repair, through the report that cited it**; ★★★★ **A POSITIONAL POINTER IS BACK, IN THE COMMIT THAT REMOVED ONE, TWENTY LINES ABOVE THE PARAGRAPH WHOSE SUBJECT IS THAT POSITIONAL POINTERS DRIFT** — *"the gap between `after` and `correct` is the whole subject of §9's last paragraph"* is wrong twice: **`after` and `correct` are IDENTICAL in 5 of 5 rows so the named gap does not exist** (the real gap is `correct` vs `11`), and **§9's last paragraph is the ~500 px quantisation paragraph**, not the ★ note; ★★★★ **⇒ THE CONVERGENCE PRACTICE IS AMENDED, NOT MERELY CAUTIONED**: its counter-caution said the residue re-seeds itself; **round 6 measures the re-seeding at `n=3` consecutive rounds AND returns two classes the practice had recorded as swept** — a wrong count and a wrong positional pointer — so **the *values → pointers → quantifiers → antecedents* sequence describes what each round FOUND FIRST, not what the document CONTAINS, and the classes recur rather than retire**; ★★★ **NO RULE MINTED, AND THE DECLINE IS THE STRONGER ANSWER** — `R214` clauses (c) and (d) **already** bind on the repair's own sentence; three rounds of evidence that they were not applied to the repair text is **non-application, not a gap in the rules**, and an `R216` reading *"apply `R214` to your repairs"* would restate `R214` under a second number, which is the detachment clause (d) was written to prevent; ★★★ **ITEM 7 ANSWERED AS A MEASURED FINDING AND THE ANSWER IS *YES, FOUR***: this role's own documents carry the same shapes — `ROADMAP.md`'s *"why **the third** is not `11`"* names the **fourth** of the four columns it enumerated one clause earlier; the *"two-thirds"* fraction in **all three** of this role's documents; **`NEXT_SESSION.md`'s *"Everything below this line is unchanged from the previous handoff"*, FALSE IN THE COMMIT THAT WROTE IT** — two hunks below it were rewritten by that same commit (§6 gained items 16–17, §7's four figures went `21 → 26` and `214 → 219`) — **`R214` clause (d)'s exact construction, in the filing that minted clause (d)**; and ★★★★★ **the wrong denominator itself in this practice's OWN RAG finding (*"the third post-fix column"*), which is the copy that PROPAGATED into the repair**; ★★ **THE WEAKEST SURVIVOR IS A LABEL THAT MOVED RATHER THAN LEFT** — survivor D's *"forms-rendered"* was removed from §10 and **re-created 110 lines earlier in §9** in the same commit (*"the forms-rendered counts"*), so live occurrences of the deleted label are unchanged at **1**; ★★ **§10's REPAIRED SCOPE SENTENCE COVERS THREE OF THE FOUR PASSAGES THE 236th FILING NAMED** — the roadmap-provenance paragraph is neither a before-figure nor a quoted prior wording, and *"Each is labelled where it appears"* is itself a universal over a set of three; ★ **`FEATURES.md`: NO ROW, AND NO ROW REPAIRED — CONFIRMED BY SWEEP, NOT ASSUMED**; ★ **THE METRICS LINE IS UNCHANGED AT `90` KEYS AND NO CODE CHANGED — measured by running the gate**; ★ **SESSION CLOSE — `NEXT_SESSION.md` rewritten for a cold reader** — 2026-08-23 (two-hundred-and-thirty-seventh filing)
+
+**One commit, docs-only in effect: `a68498b`, 40 insertions and 15 deletions in
+`tools/gen-scale-demo/README.md` and nothing else** (`git show --stat`). No
+crate, no test, no gate, no dependency. `HEAD` is `a68498b`; beneath it are
+`d879cfd` (the 236th filing) and `39b449f` (its subject), both already filed.
+
+#### Why no Pass ID, ruled rather than assumed
+
+**Fifth consecutive commit in this family to get the same disposition**, on the
+same ground as `ea413a4`, `4af0c08`, `641deb9` and `39b449f`: **a Pass is a unit
+of work with acceptance criteria**, and this commit has none — it rewrites four
+sentences in a demo generator's README. Numbering it would rank it beside
+`74.7`/`74.9`/`74.10` in every later *"what shipped in the `74` family"* read.
+⇒ **Hash-keyed, no Pass ID; the `74` family's next free ID is still `74.11`.**
+
+---
+
+#### The four survivors, and each one's disposition — ALL FOUR DISCHARGED
+
+Verified against `a68498b`'s result, not against its message.
+
+**Survivor A — §10's scope sentence**, `R214` (d)'s founding second instance. Was
+*"Everything in this section describes pdfce as it stands"*; is now *"This
+section is what pdfce does NOW"*, followed by *"It quotes before-figures
+throughout — `76 px / 288 px`, `93 s`, the wording a sentence carried until it
+was corrected … **Each is labelled where it appears**."* **DISCHARGED**, with a
+residue — three of the four falsifying passages are covered; see survivor H.
+
+**Survivor B — the missing antecedent.** Was *"And **the sentence above it** had
+to be narrowed too"*; is now *"And **this section's own scope statement — the
+starred paragraph that opens §9** — had to be narrowed too"*. **DISCHARGED, and
+well.** The referent is **named in the first sentence** and anchored to a
+**heading**, which is clause (a)'s remedy rather than a reworded pointer.
+
+**Survivor C — the tables sentence.** Was *"The measurement **tables** carry
+before and after columns … **where they do**"*; is now *"**Its one measurement
+table** … carries **three post-fix columns**: `after`, `correct`, and the note
+…"*. **The plural and the hedge are DISCHARGED** — *"its one measurement table"*
+is **true**, measured: §9 spans README lines 286–402 and holds exactly one table
+separator, at line 364. **The count is NEW and WRONG**; see the finding below.
+
+**Survivor D — the deleted label.** §10 was *"the count in §9's
+**forms-rendered** table"*; is now *"the count in §9's **measurement** table"*.
+**DISCHARGED AT ITS SITE**, and **re-created 110 lines earlier**; see survivor F.
+
+**★ THREE of the four corrections keep their prior wording visible, and the
+fourth does not — checked site by site rather than taken from the commit
+message**, which claims *"Each correction keeps the wrong wording visible, per
+R215 (d)"*. §9 carries two parenthetical *"(That sentence read … until it was
+checked)"* notes (survivors B and C) and §10 carries *"This paragraph used to
+read …"* (survivor A). **Survivor D's repair carries nothing** — §10 now reads
+*"§9's measurement table"* with no record that it read *"forms-rendered table"*.
+
+**⇒ This is NOT a defect, and the reason is a practice this project already
+wrote down.** The 235th filing's companion to `R215` (d): **PRESERVE WRONG
+VALUES, DELETE WRONG POINTERS** — *"a positional pointer has no value to
+preserve; the evidence is that the form fails, and that is kept."* Survivor D
+was a wrong **label**, not a wrong **value**. ⇒ **clause (d) is satisfied on
+all four, and the commit message's universal is the only over-claim.** ★ Noted
+because this filing's own first draft repeated that universal verbatim before
+checking it.
+
+---
+
+#### ★★★★★ THE FINDING — THE REPAIR EMITTED THREE MORE, AND THE WRONG COUNT CAME FROM THIS ROLE
+
+**Survivor E — the column count, and it is the third consecutive generation of a
+quantifier defect inside a quantifier repair.**
+
+> *"Its one measurement table … carries **three post-fix columns**: `after`,
+> `correct`, and the note explaining why `correct` is not `11`."*
+
+**Measured against the table itself** (README line 363):
+
+- The header row is `scale`, `before`, `after`, `correct` — **four columns, of
+  which TWO are post-fix.** `scale` is the parameter; `before` is pre-fix.
+- The third item enumerated, *"the note explaining why `correct` is not `11`"*,
+  is the **★ paragraph at line 371** — prose **below** the table. **A note is not
+  a column.**
+
+⇒ **The sentence written to repair a quantifier defect carries a wrong count, for
+the third round running.** `641deb9`'s scope sentence over-scoped; `39b449f`'s
+replacement paired a universal with an existential hedge; `a68498b`'s replacement
+miscounts the set. **`n=3`, consecutive, same file, same sentence lineage.**
+
+**★★★★★ And the denominator is this role's own — MEASURED, after a draft of this
+very entry got it wrong.**
+
+**This paragraph's first draft said the denominator *"enters the record in this
+commit and nowhere earlier"*, on the strength of `git log -S "three post-fix"`
+returning exactly `a68498b`, and offered the *"two-thirds"* fraction as a
+labelled INFERENCE about how it got there.** Checking that draft claim against
+live source before publishing it — hard rule 11's corollary, the same move that
+turned up the real survivor at `main.rs:7027` on 2026-08-18 — **refuted it.**
+`git log -S` searches the **repository**, and this role's RAG tier is not in it.
+
+**What is actually on disk, and it is stronger than the inference it replaces:**
+
+1. **`D:/dev/rag/rust/the_defect_class_left_after_repeated_repair_rounds_is_the_stopping_signal.md`,
+   written by the 236th filing the same day as the record of this exact defect
+   class, said *"while omitting **the third** post-fix column entirely."***
+   **There is no third.** The denominator was published, in prose, in the finding
+   that exists to warn about this mechanism.
+2. **The same filing's three project documents carry a matching fraction.**
+   `ROADMAP.md`, `SESSION_LOG.md` and `NEXT_SESSION.md` all close the survivor
+   with *"⇒ **the replacement narrows the claim to two-thirds of the evidence
+   that falsified it**"*. **Wrong:** the falsifying evidence was **two** columns
+   (`after`, `correct`) and the replacement names **one**. **One-half.**
+3. **The same filing also stated the CORRECT count, twice** — *"the table has
+   four columns and **two** of them are post-fix"* and *"the **other** post-fix
+   column"*. ⇒ **the report held both figures, and the wrong one is the one that
+   reached the artefact.** A **count** invites checking against the thing
+   counted; a **fraction** and an **ordinal** carry their denominator silently.
+   That is the 234th filing's expectation-versus-result asymmetry, one level
+   down.
+
+⇒ **★★★★★ THE RECORD OF THE FINDING RE-SEEDED THE ARTEFACT.** A finding written
+to warn that repairs propagate their own defects **propagated one**, into the
+next repair, through the report that cited it. **Both the RAG file and its
+`index.md` bullet are corrected by this filing, wrong wording preserved.**
+
+⇒ **Repair:** *"§9's one measurement table has four columns — `scale`, `before`,
+`after`, `correct` — of which `after` and `correct` are post-fix; the ★ note
+below it says why `correct` is not `11`."* **The engineer's edit; this role does
+not touch `tools/`.**
+
+---
+
+**Survivor G — a positional pointer is back, and both halves of it are false.**
+
+> *"They are here rather than in §10 because a before-figure alone says nothing
+> about whether it moved, and because **the gap between `after` and `correct` is
+> the whole subject of §9's last paragraph**."*
+
+- **The named gap does not exist.** The table's `after` and `correct` values are
+  **identical in 5 of 5 rows** — `11`/`11`, `11`/`11`, `2`/`2`, `2`/`2`, `2`/`2`.
+  The gap the ★ note is actually about is between **`correct` and `11`**, which
+  is `R215`'s founding subject.
+- **The positional pointer resolves to the wrong paragraph.** §9's **last**
+  paragraph is the *"`--region` is parsed as `f64` … quantised in ~500 px
+  steps"* paragraph at README lines 391–402. The ★ note is the paragraph
+  **immediately after the table**, at 371–378 — four paragraphs earlier.
+
+★★★★ **Where it sits is the whole point.** This clause is **twenty lines above**
+the paragraph headed *"Why the pre/post boundary is a HEADING and not a
+sentence"* — the paragraph whose entire subject is that **a prose pointer into a
+growing document drifts** — and it is **in the same commit that removed survivor
+B, a positional pointer, from that very paragraph's first sentence.**
+⇒ **Repair:** *"…and because the ★ note directly below the table explains why
+`correct` is not `11`."*
+
+---
+
+**Survivor H — §10's repaired scope sentence covers three of the four passages,
+and asserts a universal over the three.** The 236th filing named **four**
+passages that falsified §10's old sentence. The replacement enumerates
+*"`76 px / 288 px`, `93 s`, the wording a sentence carried until it was
+corrected"* — **items 1, 3 and 2.** **Item 4 is not covered**: *"The number began
+as an **expectation** in a roadmap table"* is neither a before-figure nor a
+quoted prior wording; its subject is a **different document's history**. And
+*"**Each** is labelled where it appears"* is itself a universal quantifier over
+the enumerated set — `R214` (d)'s own construction, written into the paragraph
+that cites `R214` (d). ★★ **Filed as modest**: the passage is self-labelling in
+context, and the section-level claim is far narrower than the one it replaced.
+⇒ **Repair:** add *"and one paragraph whose subject is the number's own travel
+through this project's roadmap"* to the enumeration.
+
+---
+
+**Survivor F — the deleted label moved rather than left.** `a68498b` removes
+*"forms-rendered"* from §10 (survivor D's repair) and **adds it at line 293** in
+the same commit: *"the **forms-rendered** counts under *Measured, on the box's
+own molecules*"*. **Measured by grep:** the file holds two occurrences of the
+string, at **293** (live prose) and **372** (the preserved evidence of the header
+`4af0c08` deleted for being wrong) — **the same two-occurrence state as before
+the commit, one of them relocated.** ★ **Materially better than D was**, because
+line 293 carries a **true, live anchor** beside it (the table's actual lead-in
+sentence), so a reader who lands there is not stranded. ★ **But `R215` (d)'s
+namespace tension is unresolved, not removed:** a grep for the deleted label
+still returns live prose and preserved evidence side by side.
+⇒ **Repair (optional, weakest of the four):** *"the forms-rendered counts"* →
+*"the form counts"*.
+
+---
+
+#### ★★★★ THE PRACTICE JUDGEMENT — the dispatch's item 4, and the answer is AMEND, not "already covered"
+
+**What the practice says today** (*Update protocol*, *"How you know a document is
+converging"*, added by the 236th filing): five rounds against one file left
+**wrong quantifiers and wrong references, and no wrong values**; the residue
+class is the stopping signal; **counter-caution — the residue re-seeds itself.**
+
+**Round 6 falsifies two of its three components and strengthens the third.**
+
+| the practice's claim | round 6's measurement |
+|---|---|
+| *"no wrong values left"* — the number-shaped defects are swept out | **FALSE.** Survivor E is a **wrong count** (`three` for `two`), and this role's own *"two-thirds"* is a **wrong fraction**. Two wrong values in one round, one of them in the report that prompted it |
+| the residue is *"wrong quantifiers and wrong references"*, the class only reading catches | **Half true, and it is not a residue — it is production.** Round 6 emitted a **fresh** wrong reference (survivor G), of the class round 5 declared **structurally** fixed by promoting the boundary to a heading |
+| **counter-caution:** *"the residue re-seeds itself"* | **CONFIRMED AND MEASURED AT `n=3`** — three consecutive rounds in which the sentence written to repair a quantifier defect carried a new one. **This is the dominant source of the residue, not a caveat on it** |
+
+★★★★★ **The amendment, in one line: a stable defect class after repeated rounds
+is evidence that the REPAIR PROCESS is generating its own input, not evidence
+that the document is approaching a fixed point.**
+
+★★★ **And the trajectory is retired.** The dispatch offered a summary of the
+sequence — *wrong **values** → wrong **pointers** → wrong **quantifiers** → wrong
+**antecedents***, each round finding fewer and sharper defects. **It is a true
+description of what each round FOUND FIRST. It is not a description of what the
+document CONTAINS.** Round 6 produced a wrong count **and** a wrong positional
+pointer **simultaneously**, so the classes **recur rather than retire**, and a
+reader who takes the ladder literally stops looking one rung down. **The
+observation is kept with its refutation attached rather than deleted** — which is
+`R215` (d) applied to a practice instead of to a number.
+
+**⇒ Practice AMENDED in place** (append-only: the original text stays, the
+amendment is dated and marked). **Cross-project finding amended in the same
+filing:**
+`D:/dev/rag/rust/the_defect_class_left_after_repeated_repair_rounds_is_the_stopping_signal.md`.
+
+---
+
+#### ★★★ THE RULE JUDGEMENT — NO MINT, AND THE DECLINE IS THE STRONGER ANSWER
+
+**The candidate**, stated as strongly as it can be: *a repair's own sentence is
+subject to the rule it is repairing, and must be re-read as a claim before it
+ships.*
+
+**Declined on coverage rather than on instance count** — `n=3` would clear
+`R210`'s minting test comfortably if a gap existed:
+
+1. **`R214` clause (c) already says it.** *"A repair is a new claim"*, earning
+   hard rule 10's corollary and hard rule 11's corollary. Clause (d), minted one
+   filing ago, extends that to the **quantifier** a structural repair emits.
+   **Between them they cover every one of round 6's three new survivors.**
+2. **The defect is NON-APPLICATION, not absence.** Three rounds of evidence that
+   a rule was not applied is evidence about **practice**, and this project's bar
+   refuses a rule that *"commissions WORK, not CARE"*. A second rule saying
+   *"really apply `R214`"* obliges nothing the first did not.
+3. **★ A second number would DETACH the warning from the remedy that causes it** —
+   verbatim the reason clause (d) was filed as a clause **one filing ago**.
+   Minting `R216` here would undo that argument inside the same sequence that
+   produced it.
+
+⇒ **NO MINT. CEILING UNMOVED AT `R215`; `R216` STILL FREE.** `R214` gains **no
+new clause** either; its clause (d) worked-instance table gains a **third row**
+instead, which is the cheapest form of evidence accumulation this record has.
+
+---
+
+#### ★★★ THE DISPATCH'S ITEM 7 — THE SWEEP OF THIS ROLE'S OWN DOCUMENTS
+
+**The question:** *"You have been filing about these all day; the question is
+whether your own entries carry any."*
+
+**The answer is YES, FOUR — one of them in three documents at once, and the
+fourth found only because the sweep was widened past the dispatch's own scope.**
+Swept: `ROADMAP.md` (the 232nd–237th Shipped entries, *Update protocol*, and
+`R214`/`R215` under *Standing rules*), `SESSION_LOG.md` (the same filings),
+`FEATURES.md` (whole file, 384 lines), `ARCHITECTURE.md` §12's 2026-08-22/23
+entries, `NEXT_SESSION.md` (whole file, 634 lines), **and — added mid-filing —
+`D:/dev/rag/rust/` and `C:/personal_rag/pdf/`.**
+
+★★★★ **The widening is itself the finding, and it is a repeat.** The dispatch
+named five documents, all in `docs/`. **Hard rule 11 was amended THIS MORNING
+(`1a60e73`) precisely because a sweep scoped to `docs/` misses the RAG tiers** —
+and the 235th filing's first exercise of that amendment found **three** survivors
+outside `docs/`. **This filing reproduced the same hole in the first sweep after
+the amendment**, and only caught it by checking a draft claim of its own against
+live source. ⇒ **defect 4 below exists because the widened scope is not yet a
+reflex.**
+
+**Defect 1 — a wrong value carried by a positional pointer, in the 234th
+filing's correction table.** The cell reads *"**four columns** — `scale` /
+`before` / `after` / `correct` — plus a starred note saying why **the third** is
+not `11`"*. The ★ note says why **`correct`** is not `11`, and `correct` is the
+**fourth** of the four the same cell had enumerated one clause earlier. **An
+ordinal pointer that names the wrong item, immediately after listing the items.**
+★★ **Repaired below, wrong wording preserved.**
+
+**Defect 2 — a wrong fraction, in all three of this role's documents, from the
+236th filing.** *"⇒ the replacement narrows the claim to **two-thirds** of the
+evidence that falsified it."* The falsifying evidence was **two** columns; the
+replacement names **one**. **One-half.** ★★ **And it sits two lines above the
+same filing's own *"None of the four is a wrong number"*, which it falsifies.**
+★★★ **And it is the probable source of survivor E's denominator** — see the
+finding above. ★★★★ **Repaired below in all three files, wrong wording
+preserved.**
+
+**Defect 3 — an over-scoped quantifier, in the handoff, in the filing that
+minted the rule against it.** `NEXT_SESSION.md` carried *"**Everything below this
+line is unchanged from the previous handoff.**"* **False in the commit that wrote
+it:** `git show d879cfd -- docs/NEXT_SESSION.md` has **two hunks below that
+line** — §6 gained items **16–17**, and §7's four figures were rewritten
+(`21 → 26` ahead of the tracking ref, `214 → 219` behind the bundle). ★★★ **This
+is `R214` clause (d)'s exact construction — a universal quantifier over
+delimited contents, unchecked — written by the filing that minted clause (d).**
+**Repaired by this filing's `NEXT_SESSION.md` rewrite.**
+
+**Defect 4 — ★★★★★ the wrong denominator itself, in this role's own RAG finding,
+and it is the one that PROPAGATED.**
+`D:/dev/rag/rust/the_defect_class_left_after_repeated_repair_rounds_is_the_stopping_signal.md`
+— written by the 236th filing as the record of this exact defect class — said
+*"a universal followed by an existential hedge … while omitting **the third**
+post-fix column entirely."* **There is no third post-fix column.** The table has
+four columns and two of them are post-fix, which the same filing states correctly
+in `ROADMAP.md`. ★★★★★ **This is the source the survivor-E finding was looking
+for**, and it is worse than the inference it replaces: **the denominator was
+published in prose, in the finding that exists to warn about this mechanism, and
+the next repair enumerated a prose NOTE as a third column to make it come out.**
+⇒ **the record of the finding re-seeded the artefact.** **Repaired in this
+filing** — the file and its `index.md` bullet both, wrong wording preserved.
+
+**The fourth shape — an unwritten antecedent — was NOT found**, and that is
+reported as a negative result rather than as silence. **Method:** read the 236th
+filing's three entries and `NEXT_SESSION.md` §A and §5 for paragraph-opening
+pronouns; every *"it"* and *"this"* at a paragraph head resolves to a referent
+named in the same sentence or the one before it. **A grep cannot answer this
+question**, which makes it the shape most likely to be under-reported here, and
+that limitation is stated rather than hidden by the negative result.
+
+★★★★ **The shape of the result is the finding.** This role spent the session
+filing about four defect shapes **and carries three of them, in four places**,
+including the one it wrote a rule clause about **in the filing that wrote the
+clause** and the one that **propagated into the artefact** through its own RAG
+finding. That is not
+irony — it is the practice amendment's evidence from the other side: **the
+reviewer's output is produced by the same process as the artefact's, and nothing
+in an append-only record reviews the reviewer.**
+
+---
+
+#### `FEATURES.md` — **NO ROW, AND NO ROW REPAIRED**, confirmed by sweep
+
+- **No new row.** `a68498b` adds **no capability an operator can ask for** — it
+  rewrites four sentences in a demo generator's README. Same test that gave
+  `ea413a4`, `PASS 74.8`, `4af0c08`, `641deb9` and `39b449f` no row.
+- **No existing row repaired, and this was measured**, by grepping the whole
+  384-line file for `11 of 11`, `93 s`, `71.5`, `forms rendered`,
+  `forms-rendered`, `the table above` and `post-fix`: **zero hits on all seven.**
+  The only `column` hits are `FEATURES.md`'s own documentation of its `Acrobat`
+  and `pdfceGUI` columns, unrelated.
+- **No box changes anywhere.** Nothing shipped in any shell.
+
+---
+
+#### Verification
+
+`git show --stat a68498b` → one file, `tools/gen-scale-demo/README.md`, **`40`
+insertions / `15` deletions**. **No code changed in this commit**, so
+`cargo tree` is not engaged, the GUI-core separation invariant is untouched, and
+`THIRD_PARTY_LICENSES.md` is unaffected. **No test was run and none is claimed.**
+
+#### Gate sweep (this role's, run at `HEAD` before this filing's edits)
+
+**17 `tools/check-*` scripts on disk (12 `.py` + 5 `.sh`); 16 runnable as bare
+gates** — re-measured by `ls tools/check-* | wc -l` and by running each,
+**counted, not quoted**, per `R209`.
+
+**Before this entry: 15 of 16 exit 0**, and `check-commits-filed.py` exited
+**`1`**, naming exactly **`a68498b`** — this dispatch, and **only** this
+dispatch, which confirms `d879cfd` and `39b449f` are both already accounted for.
+**After this entry: all 16 exit 0** (re-run recorded in the session log). The
+17th, `check-image-colorspace-truth.py`, exits `1` on a bare invocation **because
+it requires a fixture-directory argument**; recorded again as *"`check-*` on disk
+but not a gate"*, still true.
+
+**`tools/check-metrics-line-contract.py` → exit 0, `90 keys`** — **unchanged**,
+sourced by running the gate. A commit that changes no code moves no key.
+
+#### Backup and remote currency — CHECKED, not inferred (hard rule 8)
+
+- **`git remote -v`** → `origin  https://github.com/KenM76/pdfce.git`.
+- **`git rev-list --count origin/main..main`** → **`28`** (was `26` one filing
+  ago; two commits since — `a68498b` and the 236th filing's own `d879cfd`). The
+  local remote-tracking ref `origin/main` is still at **`c24ad7a`**. **No
+  `git fetch` was run**, so this is the tracking ref's position, **not a live
+  query of the remote.**
+- **`ls -lt D:/Dev/pdfce-backups/`** → newest bundle
+  **`pdfce-20260817-v060.bundle`**, 2026-08-17 20:34, whose `refs/heads/main` is
+  **`3c4c00e`** (by `git bundle list-heads`). **`git rev-list --count
+  3c4c00e..main` → `221`** (was `219`), and `git merge-base --is-ancestor`
+  reports **`HEAD` is NOT in that bundle.** ⇒ **the newest backup is 221 commits
+  and six days behind `HEAD`.** Both figures produced by the commands named
+  beside them.
+- **`git worktree list | wc -l`** → **`9`**, unchanged.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `74.10` shipped; next free in family `74.11` | **unchanged — `a68498b` takes NO Pass ID** (ruled above). Next free in family **`74.11`**; `122.4` stays the next free `122`; **`97.1g` stays reserved and unbuilt** |
+| decisions (`ARCHITECTURE.md` §12) | **084** | **084 — unchanged.** A README rewording and a practice amendment produce no artefact in any crate. Next free **085** |
+| standing rules | **`R215`** (`R214` amended with clause (d) one filing ago) | **`R215` — CEILING UNMOVED, AND NO CLAUSE ADDED. Mint DECLINED, argued on coverage rather than on `n`.** `R214` (d)'s worked-instance table gains a **third row**. Next free **`R216`** |
+| librarian hard rules (`.claude/agents/pdfce-librarian.md`) | **11 rules; rule 11 last amended 2026-08-23 (`1a60e73`)** | **unchanged — 11 rules, no amendment recommended by this filing** |
+| open operator questions | ceiling `(br)`, **CLOSED** | **unchanged — `(br)`, CLOSED. Nothing is awaiting Ken** except pushing and cutting a backup, both his acts. Next free **`(bs)`** |
+| SESSION_LOG filing ordinals | **236** | **237** |
+| `tools/check-*` gates | 17 on disk, 16 runnable | **17 on disk, 16 runnable** (unchanged, re-measured by `ls` + running each) |
+| `render-page` metrics-line keys | **90** | **90 — unchanged**, measured by running `tools/check-metrics-line-contract.py`. No code changed |
+| *Update protocol* practices | 4 | **4 — none added; *"How you know a document is converging"* AMENDED** (its *"no wrong values"* component falsified, its ladder retired, its counter-caution promoted to the main finding at `n=3`) |
+| this role's own defects | never swept as a category before | **4 found, 4 repaired in this filing** (item 7 above) — three in `docs/`, one in `D:/dev/rag/rust/`, and the RAG one is the copy that **propagated** |
+
+**Owed work, recorded as owed:**
+
+1. **§9's *"three post-fix columns"*** (survivor E) — four columns, two post-fix,
+   and a note is not a column. **The engineer's edit.**
+2. **§9's *"the gap between `after` and `correct` … §9's last paragraph"***
+   (survivor G) — the gap is `correct` vs `11`, and the paragraph is the one
+   directly below the table. **The engineer's edit.**
+3. **§10's enumeration** (survivor H) — three of the four passages named; add the
+   roadmap-provenance one. **The engineer's edit.**
+4. **§9's *"the forms-rendered counts"*** (survivor F) — the weakest; *"the form
+   counts"*. **The engineer's edit.**
+5. **`R214`'s positional-reference gate** — still recommended, still unbuilt,
+   baseline still unmeasured. **Measure, repair, then wire.** ★ Survivor G is a
+   fresh instance of exactly what it would catch, and this filing's own defect 1
+   is one in this role's tree.
+6. **`R215`'s retro-application**, carried forward unstarted for a **sixth**
+   filing: any Pass filed with a *"required after"* column should be re-read
+   against the rule before that column is used as a gate, **over `docs/` and both
+   RAG tiers**.
+
+**Nothing is owed to Ken** except the two acts that are his by definition:
+**pushing** (`28` ahead of the tracking ref) and **cutting a backup** (`221`
+behind).
+
+**RAG files written by this filing:** none new; **one amended, twice over** —
+`D:/dev/rag/rust/the_defect_class_left_after_repeated_repair_rounds_is_the_stopping_signal.md`,
+whose **central claim round 6 falsifies** and whose **counter-caution carried the
+wrong denominator that reached the artefact**. Its `index.md` bullet is amended
+in the same filing. **No `C:/personal_rag/pdf/` file needed amending** — grepped
+for `three post-fix`, `two-thirds` and the form counts: zero hits.
+
+---
+
 ### `39b449f` — the 235th filing's two survivors discharged, and the DECLINE OVERTURNED (**no Pass ID**) — ★★★★★ **`R214` AMENDED WITH CLAUSE (d) — THE ENGINEER RECOMMENDED A DECLINE AT `n=1` AND THE SECOND INSTANCE WAS ALREADY LIVE, TWO SECTIONS AWAY, UNREPAIRED**: §9's over-scoped *"Everything in this section describes pdfce BEFORE `Pass 74.7`"* was fixed here; **§10's twin — *"Everything in this section describes pdfce as it stands"* — is FALSE of four of its own passages and was not touched**, which takes the warrant from *one instance and close to platitude* to *the repair's own remedy reliably manufacturing this defect in every section it creates*; ★★★★★ **THE CLAUSE, STATED SO IT IS CHECKABLE: A STRUCTURAL REPAIR EMITS A NEW CLAIM OF A DIFFERENT KIND — A *SCOPE STATEMENT*, WHICH IS A UNIVERSAL QUANTIFIER OVER THE DELIMITED CONTENTS — AND IT IS AN ASSERTION NOBODY HAS CHECKED**; promoting a boundary to a heading removes positional **drift** and buys **nothing** against **over-scoping**: the heading fixes where the claim's edge *is*, the sentence beneath it still asserts what is *inside*, and **the two are independent**; ★★★★ **THE SURVIVOR IS §10's SCOPE SENTENCE AND IT IS THE SAME DEFECT IN THE MIRROR SECTION** — falsified by a *before*-figure (*"Before the fix … 76 px out horizontally and 288 px vertically"*), by its own correction history (*"This paragraph said … until 2026-08-23"*), by the `93 s` rejected-attempt provenance, and by a paragraph whose subject is a roadmap table rather than pdfce at all; ★★★ **TWO LESSER SURVIVORS INSIDE THE REPAIR ITSELF**: the new paragraph explaining why positional pointers fail **opens with one** (*"the sentence above it"*, which on a literal reading resolves to the wrong paragraph and is rescued only by the next sentence naming it), and the new tables sentence carries **a universal and an existential hedge about the same set** (*"The measurement tables carry before and after columns … where they do"*) over a set with **exactly one member**, while omitting the **`correct`** column — the other post-fix column, and one of the two that falsified the sentence being replaced; ★★ **THE REPAIRED REFERENCE NAMES ITS TARGET BY A LABEL THAT WAS DELETED FOR BEING WRONG** — §10 now says *"§9's forms-rendered table"*, and the only occurrence of *"forms rendered"* in §9 is the **quoted evidence** of the header `4af0c08` removed; **the reference resolves (§9 has one table) so this is filed as the weakest of the four**, but a future reader greping the phrase lands on preserved evidence and may read it as live; ★★ **THE CONVERGENCE OBSERVATION IS ADOPTED AS STANDING PRACTICE, NOT A RULE** — *the defect CLASS left after repeated repair rounds is the stopping signal*: five rounds against this file have left **wrong quantifiers and wrong references, and no wrong values**, which says the number-shaped defects are swept out and the residue is the class only reading catches; filed under *Update protocol* and as a new `D:/dev/rag/rust/` finding; ★ **`FEATURES.md`: NO ROW, AND NO ROW REPAIRED — CONFIRMED BY SWEEP, NOT ASSUMED**; ★ **THE METRICS LINE IS UNCHANGED AT `90` KEYS AND NO CODE CHANGED — measured by running the gate** — 2026-08-23 (two-hundred-and-thirty-sixth filing)
 
 **One commit, docs-only in effect: `39b449f`, 28 insertions and 14 deletions in
@@ -232,7 +669,23 @@ Three problems, in ascending order of interest:
   columns and **two** of them are post-fix. The `correct` column is the one
   `R215` was minted about, and it is the column the 235th filing named **first**
   when it falsified the sentence being replaced here. ⇒ **the replacement
-  narrows the claim to two-thirds of the evidence that falsified it.**
+  narrows the claim to ~~two-thirds~~ **ONE-HALF** of the evidence that falsified
+  it.**
+
+  > **★★★★ CORRECTED 2026-08-23 (237th filing), and the wrong wording is kept
+  > per `R215` (d).** This bullet read *"⇒ the replacement narrows the claim to
+  > **two-thirds** of the evidence that falsified it"*. **The fraction is
+  > wrong.** The evidence that falsified the replaced sentence was **two**
+  > columns — `after` and `correct` — and the replacement names **one** of them.
+  > **One-half.** ★★★ **And the wrong denominator is the part that travelled:**
+  > `git log -S "three post-fix"` returns exactly one commit, `a68498b`, whose
+  > repair of this very survivor says the table *"carries **three post-fix
+  > columns**"* — **it has four columns, two of them post-fix**, the correct
+  > figure stated in this same bullet one sentence earlier. ⇒ **the report
+  > carried the right count and a three-denominated fraction, and the fraction
+  > is what reached the artefact.** ★★ **The next line down — *"None of the four
+  > is a wrong number"* — is falsified by this bullet**, two lines above it, in
+  > the same filing.
 
 ⇒ **Repair: singular and definite** — *"§9's one measurement table carries
 `before`, `after` and `correct` columns side by side; the `after` and `correct`
@@ -743,9 +1196,17 @@ discharges were reported by the filing of `74.10` rather than created by it.
 | # | the claim as it stood | corrected to | species |
 |---|---|---|---|
 | **1** | *"The table above is superseded: **11 of 11 forms survive at every scale tested**"* | **`2`**, from `1.25 × 10⁷` up — the box plus the one molecule in frame; the other nine leave the viewport and `Pass 74.4`'s exact `/BBox` cull removes them (ISO 32000-1 §8.10.1). **The prior wording is quoted in the repaired text**, with the date it stood until | **`R215`'s founding number, re-entering as a result** |
-| **1b** | the table's own header, *"forms rendered of 11"* | **four columns — `scale` / before / after / correct** — plus a starred note saying **why the third is not `11`** | the same claim in the **label** (hard rule 10 (b)) — **not separately reported, and it did not need to be** |
+| **1b** | the table's own header, *"forms rendered of 11"* | **four columns — `scale` / before / after / correct** — plus a starred note saying **why ~~the third~~ `correct`, the FOURTH, is not `11`** *(corrected 2026-08-23, 237th filing — see the note under this table)* | the same claim in the **label** (hard rule 10 (b)) — **not separately reported, and it did not need to be** |
 | **2** | *"everything above is now the record of a solved problem"* | scoped: *"Everything from the top of this section down to here … **What follows describes the current behaviour**"* | **`R214`** — a positional claim that broke when something else moved |
 | **3** | *"deep zoom **23× FASTER** … from **93 s to 1.3 s**"* (`93 / 1.3 = 71.5`) | **`31 s → 1.3 s` = `23.8×`**, with an explicit paragraph saying `93 s` is the **rejected** device-space attempt so the figure has a home wherever else it appears | a ratio that **refuted itself in one sentence**, visible only because hard rule 10 (a) put the operands beside it |
+
+> **★★ CORRECTION to row 1b, 2026-08-23 (237th filing), wrong wording kept per
+> `R215` (d).** The cell said *"plus a starred note saying why **the third** is
+> not `11`"*. The ★ note says why **`correct`** is not `11`, and `correct` is
+> the **fourth** of the four columns **this same cell enumerates one clause
+> earlier**. ⇒ **an ordinal pointer that names the wrong item, immediately after
+> listing the items** — `R214`'s defect in its cheapest possible form, in this
+> role's own tree, found by the 237th filing's sweep of its own documents.
 
 **★ Item 1b is worth naming even though nobody filed it.** The 233rd filing
 reported the *prose*; the engineer found the **table header** while repairing it
@@ -90821,7 +91282,8 @@ same cause (hashes exist only at commit time), two different failure modes.
   | section | the scope sentence it emitted | falsified by |
   |---|---|---|
   | **§9** | *"Everything in this section describes pdfce BEFORE `Pass 74.7`"* | its own table's **`after` and `correct`** columns — post-fix measurements. **Repaired by `39b449f`** |
-  | **§10** | *"Everything in this section describes pdfce as it stands"* | a **before**-figure (*"76 px out horizontally and 288 px vertically"*), a preserved prior wording (*"said … until 2026-08-23"*), the `93 s` **rejected**-attempt provenance, and a paragraph whose subject is a roadmap table's history. **Found 2026-08-23 by the 236th filing; still owed** |
+  | **§10** | *"Everything in this section describes pdfce as it stands"* | a **before**-figure (*"76 px out horizontally and 288 px vertically"*), a preserved prior wording (*"said … until 2026-08-23"*), the `93 s` **rejected**-attempt provenance, and a paragraph whose subject is a roadmap table's history. **Repaired by `a68498b`** |
+  | **★ `NEXT_SESSION.md`** *(added 2026-08-23, 237th filing)* | *"Everything below this line is unchanged from the previous handoff"* | **two hunks below that line in the very commit that wrote it** — §6 gained items 16–17 and §7's four figures were rewritten (`21 → 26`, `214 → 219`). ★★ **Written by the filing that minted this clause**, in this role's own tree, and found only by a sweep aimed at somebody else's document. ⇒ the clause binds on `docs/` exactly as it binds on `tools/` |
 
   ⇒ **`n=2`, both produced by the same remedy, in the same commit, in adjacent
   sections.** The engineer's dispatch recommended a **decline at `n=1`** on the
@@ -91408,6 +91870,60 @@ read.
 **Sibling in this section:** *"How a figure is filed"* — that one makes a
 contradiction land inside a single expression so ordinary review can catch it;
 this one tells you when ordinary review has caught everything it is capable of.
+
+---
+
+#### ★★★★★ AMENDED 2026-08-23 (two-hundred-and-thirty-seventh filing, `a68498b`) — ROUND 6 FALSIFIES TWO OF THE THREE COMPONENTS ABOVE, AND PROMOTES THE COUNTER-CAUTION TO THE MAIN FINDING
+
+**The text above is left standing**, per the append-only convention and per
+`R215` (d): it is the record of what the practice claimed when it was adopted,
+**and it was adopted one filing before the round that refuted it**, which is
+itself the point.
+
+| the practice's claim, above | round 6 (`a68498b`) |
+|---|---|
+| *"The number-shaped defects are swept out"* — **no wrong values left** | **FALSE.** Round 6 produced a **wrong count** (§9's *"three post-fix columns"*; the table has **four** columns, **two** post-fix, and the third item enumerated is a **note**, not a column) and a **wrong fraction** (this role's own *"two-thirds"*, where the answer is **one-half**) |
+| the residue is *"wrong QUANTIFIERS + wrong REFERENCES"*, a stable class | **Half true, and it is not a RESIDUE — it is PRODUCTION.** Round 6 emitted a **fresh** wrong reference (*"the gap between `after` and `correct` is the whole subject of §9's last paragraph"* — the gap does not exist, `after` and `correct` are identical in **5 of 5** rows, and §9's last paragraph is a different one), of the class **round 5 declared structurally fixed** by promoting the boundary to a heading |
+| ★★ counter-caution: *"each round's repair re-seeds the residue class"* | **CONFIRMED, AND MEASURED AT `n=3` CONSECUTIVE ROUNDS** — `641deb9` over-scoped, `39b449f` paired a universal with an existential hedge, `a68498b` miscounted the set. Same file, same sentence lineage, three generations |
+
+**★★★★★ THE AMENDED FINDING, WHICH REPLACES THE HEADLINE ABOVE RATHER THAN
+QUALIFYING IT: a stable defect class after repeated rounds is evidence that the
+REPAIR PROCESS IS GENERATING ITS OWN INPUT, not evidence that the document is
+approaching a fixed point.** The counter-caution was filed as a caveat; at `n=3`
+it is **the dominant mechanism**, and the original headline reads as its
+optimistic special case.
+
+**★★★★ The class LADDER is retired.** The sequence was summarised as *wrong
+**values** → wrong **pointers** → wrong **quantifiers** → wrong **antecedents***,
+each round finding fewer and sharper defects. **That is a true description of
+what each round FOUND FIRST. It is not a description of what the document
+CONTAINS**, and the two were being conflated. Round 6 produced a wrong **count**
+and a wrong **positional pointer** *simultaneously* — classes one and two, both
+recorded as swept. ⇒ **the classes RECUR; they do not RETIRE**, and a reader who
+takes the ladder literally stops looking one rung down, which is the failure
+mode a stopping signal is most likely to cause.
+
+**★★★ And the reviewer is inside the process, not outside it.** The 237th
+filing's sweep of **its own** documents (the dispatch's item 7) found **four**
+instances of the same shapes it had spent the day filing about: an ordinal
+pointer naming the wrong column in the 234th filing's correction table, the
+*"two-thirds"* fraction in **all three** of this role's documents, and
+*"Everything below this line is unchanged from the previous handoff"* in
+`NEXT_SESSION.md` — **false in the commit that wrote it**, and `R214` clause
+(d)'s exact construction, **written by the filing that minted clause (d)** — and
+★★★★★ **`"the third post-fix column"` in this practice's OWN RAG finding, which
+is the copy that PROPAGATED into the next repair.**
+⇒ **nothing in an append-only record reviews the reviewer**, so *"the residue
+is the class only reading catches"* is incomplete: **it is the class only
+reading catches, in a document nobody is reading with the same intent.**
+
+**Still true, and not weakened:** grep, gates and arithmetic cross-checks
+**have** found everything they can find in this file, and the remaining work
+still cannot be delegated to any of them. **Still practice, not a rule** — it
+prescribes no action, and the mint was **declined again** at `n=3` on coverage
+rather than on instance count: `R214` clauses (c) and (d) already bind on a
+repair's own sentence, so what round 6 shows is **non-application, not a gap**.
+**`R216` stays free.**
 
 ### Librarian filing commits stay docs-only (added 2026-08-18, hundred-and-sixty-eighth filing — FLAGGED PRACTICE, NOT A NUMBERED RULE, FIRST OCCURRENCE)
 
