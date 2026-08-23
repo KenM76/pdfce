@@ -96,6 +96,268 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `8522167` — the round-7 note's own ordinals DELETED, and ★★★★★ **THE DISPOSITION REVERSES WITHOUT THE RULING REVERSING, WHICH IS THE WHOLE CONTENT OF THIS ENTRY** (**no Pass ID**) — ★★★★★ **THE 238th FILING RECORDED THIS DEFECT AND DECLINED TO REPAIR IT; THE ENGINEER REPAIRED IT; BOTH ARE CORRECT, BECAUSE THE DECLINE WAS AGAINST *CORRECTION* AND THE REPAIR WAS A *DELETION***: the note's ladder (*"Round 1 fixed wrong values … Rounds 5 and 6 produced fresh instances of classes 1 and 2"*) pinned round 1 to the first correction while every other record in this project numbers that commit **round 3**, so *"rounds 5 and 6"* named **this note's own commit and one that does not exist** — and the 238th filing's stated ground for not repairing it was that *"repairing it writes an eighth sentence about a seventh correction, which is the generator by definition"*, **which is an argument against a REWORDING and not against a REMOVAL**; ★★★★★ **THE ORDINALS ARE GONE, NOT CORRECTED** — the list is now of defect **SHAPES** (*wrong values; wrong pointers; wrong quantifiers; an unwritten antecedent*) closed by *"the later rounds produced fresh instances of the earlier kinds, so the list is of shapes rather than of stages"*, and a short parenthetical states the rule and says why the ordinals are absent; ★★★★ **THE APPLIED EDIT IS STRICTLY STRONGER THAN THE REMEDY THIS ROLE PRESCRIBED, AND THE DIFFERENCE IS ONE WORD**: the prescription kept *"**Six** rounds of correction ran against this file"*, which drops the per-round ordinals but **retains the count** — and the count is the very axis the two numberings disagreed on; the applied text says *"**Several** rounds"* and **asserts nothing anybody has to maintain**; ★★★★ **THE `110 lines earlier` DISTANCE IS GONE IN THE SAME PASS**, on this role's other prescription — *a distance is a claim; a relation is not* — **the same claim in a different unit**, and both remedies this session produced were **deletions**; ★★★★★ **THE RULING ASKED FOR — *for a SELF-REFERENTIAL claim, prefer DELETION to CORRECTION, because a correction is drawn from the same class as the defect* — IS ACCEPTED AS A SHARPENING OF THE RAG FINDING'S CONSEQUENCE 1, NOT AS A NEW RULE AND NOT AS ALREADY-IMPLIED**, with the boundary that makes it safe written beside it; ★★★ **THE SWEEP FOUND TWO SURVIVORS IN THIS ROLE'S OWN TREES AND BOTH ARE THE SAME DEFECT** — a *"deliberately NOT repaired"* disposition, present-tense, in `ROADMAP.md`'s convergence practice **and** in the new RAG finding's consequence 2, **both falsified by the commit under filing**; ★★★★★ **AND IT FOUND THE THING THAT FIRED A TRIGGER: `R216` IS MINTED, CEILING `R215` → `R216`** — the convergence practice's own promotion trigger (*"a SECOND document that grows a layer of sentences about its own corrections; at `n=2`, mint it"*, written one filing earlier) **fired on `docs/NEXT_SESSION.md`**, which carried **three** *"this paragraph read X until 2026-08-23"* annotations; ★★★★★ **AND THE MECHANISM IS A TENSION BETWEEN TWO RULES, NOT CARELESSNESS — `R215` (d) obliges preserving wrong wording, which is FREE in an append-only file and means HAND-CARRYING IT INTO EVERY REWRITE of an overwritten one**, so the obligation is discharged by the append-only record on the overwritten document's behalf; ★ **`FEATURES.md`: NO ROW, CONFIRMED BY SWEEP** — no capability moved; ★ **`render-page` metrics line unchanged at `90` keys, no code changed, measured by running the gate**; ★ **SESSION CLOSE — `NEXT_SESSION.md` rewritten for a cold reader, and the sweep is STOPPED here by the engineer's instruction rather than by an empty result** — 2026-08-23 (two-hundred-and-thirty-ninth filing)
+
+**One commit, docs-only in effect: `8522167`, 14 insertions and 7 deletions in
+`tools/gen-scale-demo/README.md` and nothing else** (`git show --stat`). No
+crate, no test, no gate, no dependency. `HEAD` is `8522167`; beneath it are
+`15030f2` (the 238th filing) and `bc6c818` (its subject), both already filed.
+
+#### Why no Pass ID, ruled rather than assumed
+
+**Seventh consecutive commit in this family to get the same disposition**, on the
+same ground as `ea413a4`, `4af0c08`, `641deb9`, `39b449f`, `a68498b` and
+`bc6c818`: **a Pass is a unit of work with acceptance criteria**, and this commit
+has none — it deletes four ordinals and one distance from a demo generator's
+README. Numbering it would rank it beside `74.7`/`74.9`/`74.10` in every later
+*"what shipped in the `74` family"* read. ⇒ **Hash-keyed, no Pass ID; the `74`
+family's next free ID is still `74.11`.**
+
+---
+
+#### ★★★★★ THE DISPOSITION REVERSED AND THE RULING DID NOT — READ THIS BEFORE TREATING THE 238th FILING AS OVERTURNED
+
+The 238th filing found the defect, recorded it in the `bc6c818` Shipped entry
+under the heading **"DISPOSITION: RECORDED HERE. NOT REPAIRED, AND NOT OWED"**,
+and gave two reasons. One filing later the engineer repaired it. **That is not a
+reversal of the ruling, and reading it as one would mislead the next session in
+the expensive direction** — it would license repairing self-referential claims by
+rewording, which is the practice the whole sequence was about.
+
+| the 238th filing's reason | status after `8522167` |
+|---|---|
+| *"Repairing it writes an eighth sentence about a seventh correction, which is the generator by definition"* | **Correct, and untouched.** It is an argument about what a **rewording** costs. `8522167` wrote no eighth sentence — it **removed** four ordinals and a distance and left one short parenthetical in their place, whose content is a **rule** (*an ordinal is a claim*) rather than a claim about this document's edit history |
+| *"`ROADMAP.md` and `SESSION_LOG.md` are where it belongs, which is the finding's own remedy"* | **Correct, and still where it lives.** The full round-by-round numbering, both ladders, and the reason they disagree are in this file and in `SESSION_LOG.md`; **none of it went back into the README** |
+| ★★ *"If the paragraph is ever touched for another reason, the remedy is DELETION OF THE ORDINALS, not correction of them"* | ★★★★★ **This is the clause the engineer executed.** The 238th filing wrote the remedy down **in the same breath as declining to apply it**, which is why the next session could apply it without re-deriving anything |
+
+⇒ **The record was doing its job.** A disposition of *"recorded, not repaired,
+and here is the remedy if you ever touch it"* is a **hand-off**, not a refusal,
+and it terminated in one round because the remedy was written beside the decline
+rather than left to be inferred.
+
+**★★★★ Where the applied edit exceeded the prescription, measured.** The
+238th filing's suggested replacement text was:
+
+> *"**Six rounds** of correction ran against this file, finding first wrong
+> values, then wrong pointers, then wrong quantifiers, then an unwritten
+> antecedent, and finally fresh instances of the first two."*
+
+The engineer wrote *"**Several** rounds …"* instead. **The difference is the
+count, and the count is the disputed quantity** — the two numberings in this
+project disagreed by exactly two, so `six` is true on the project's ladder and
+false on the note's own. **A sequence with a count attached is still a claim
+somebody has to maintain**; a sequence without one is not. ⇒ **the prescription
+removed the ordinals and left the cardinal; the edit removed both.** Recorded
+because this role wrote the weaker version, not because the engineer needs
+telling.
+
+---
+
+#### ★★★★★ THE RULING ASKED FOR — accepted, as a SHARPENING and not as a duplicate
+
+**The question, verbatim from the dispatch:** *"If that generalises — for a
+self-referential claim, prefer deletion to correction, because a correction is
+another instance of the class — it may belong beside the finding you filed rather
+than inside it. Your call, including 'already implied by it'."*
+
+**Ruling: it is NOT already implied, it DOES generalise, and it belongs INSIDE
+the finding as a sharpening of its consequence 1 — not beside it, and not as
+`R216`.** Three parts, and the third is the one that keeps it honest.
+
+**(1) Not already implied.** The RAG finding's consequence 1 currently reads
+*"prefer DELETION to a seventh rewording — a deletion is the only repair that
+emits **no new claim**"*. That warrant is **true of every deletion anywhere** and
+says nothing about self-reference. The proposed version supplies the **mechanism**
+consequence 1 asserts without stating: **a correction to a self-referential claim
+is drawn from the same distribution as the defect**, because the only way to say
+*where* or *how many* is another coordinate or another count. ⇒ the existing
+sentence says *deletion is cheap*; the sharpening says *correction is
+specifically, mechanically expensive here*. **A reader who has only the first
+will reword and believe they have complied.**
+
+**(2) It generalises, and this project has now measured it.** Both remedies this
+session produced were deletions, arrived at independently — the five *"two lines
+above"* distances (`bc6c818`'s filing) and these ordinals (`8522167`). Both were
+reached by the same route: an attempt to write the corrected version produced a
+sentence of the same shape, and the shape was the defect. **`n=2` remedies, one
+document.**
+
+**(3) ★★★★★ THE BOUNDARY, WITHOUT WHICH THIS IS A LICENCE TO DELETE CORRECTIONS
+GENERALLY — and it is already this project's practice under another name.**
+*Preserve wrong VALUES, delete wrong POINTERS* (filed at `641deb9`). The two
+statements are the same statement:
+
+- **A self-referential claim has no value to preserve.** Its entire content is a
+  coordinate into the document — a position, a distance, an ordinal, a count of
+  the document's own parts. Delete it and **nothing is lost**, because the thing
+  it pointed at is still there and can be named.
+- **A wrong VALUE must be preserved** (`R215` (d)), because a bare corrected
+  number gets re-derived back to the wrong one by the next reader with the same
+  faulty intuition. **A deletion there destroys the evidence.**
+
+⇒ **The rule is not "prefer deletion". It is "prefer deletion WHEN THE CLAIM'S
+CONTENT IS A COORDINATE", and the test is whether anything is lost by removing
+it.** `11 of 11` may never be deleted; *"rounds 5 and 6"* may never be corrected.
+
+**Filed as:** a sharpening of consequence 1 of
+`D:/dev/rag/rust/a_document_that_annotates_its_own_corrections_has_made_its_edit_history_part_of_its_content.md`,
+with the boundary written beside it. **NOT minted as a rule of its own** — it
+prescribes **how to word a repair**, which `R214` (a)–(d) already govern and which
+the *Update protocol* practice already carries; and a rule saying *"prefer
+deletion"* would commission **work, not care**. **`R214` and `R215` NOT amended.**
+
+★★ **What DID earn a number in this filing is a different claim, and the pair is
+recorded together so the dispositions are legible:** `R216` binds **which file a
+class of content may appear in** — a **placement** obligation, with a named
+trigger that fired, a measured cost and **two documents** behind it. **Placement
+earned a number; wording did not.** See the sweep section below and `R216` in
+*Standing rules*.
+
+---
+
+#### This filing's own-document sweep — TWO SURVIVORS, BOTH THE SAME DEFECT, BOTH REPAIRED
+
+Run per librarian hard rule 11, and **stopped here by the dispatch's own
+instruction** rather than by an empty result: *"if your sweep this round comes
+back non-empty, please repair and report but do NOT dispatch further work back to
+me unless something is actually wrong in `crates/` or `tools/`."* Nothing is
+wrong in `crates/` or `tools/`. **Both survivors are in this role's trees and
+both are repaired in this filing.**
+
+**★★★ Survivor 1 — `ROADMAP.md`'s convergence practice, third amendment.** It
+reads *"It is recorded in the `bc6c818` Shipped entry and **deliberately NOT
+repaired**"* — **present tense, falsified by `8522167`.** Repaired by a dated
+forward pointer, wording kept per `R215` (d).
+
+**★★★ Survivor 2 — the new RAG finding's consequence 2**
+(`a_document_that_annotates_its_own_corrections_has_made_its_edit_history_part_of_its_content.md`).
+It reads *"**The round-7 note in the founding instance carries a wrong ordinal**
+for exactly this reason"* — **present tense, same falsification, in the copy that
+travels furthest.** Repaired by a dated correction in place, wording kept.
+
+**★★★★★ AND THE SWEEP FOUND THE THING THAT FIRED A TRIGGER — `docs/NEXT_SESSION.md`
+IS THE SECOND DOCUMENT, AND `R216` IS MINTED.** The convergence practice's second
+amendment (`bc6c818`, one filing earlier) wrote its own promotion condition down
+*"so it can fire without anybody remembering"*: **a second document that grows a
+layer of sentences about its own corrections.** Measured in `NEXT_SESSION.md`
+immediately before it was rewritten: **three** parenthetical *"this paragraph
+read X until 2026-08-23"* annotations (§5 twice, §6 item 17), plus a running
+sweep-results narrative.
+
+★★★★★ **The mechanism is a TENSION BETWEEN TWO RULES, not carelessness, and that
+is what makes it worth a number.** `R215` (d) **obliges** preserving the wrong
+wording beside a correction. That obligation is **free in an append-only file**
+— written once, dated, never touched again — and in an **overwritten** file it
+means **hand-carrying the wording into every rewrite**, where each carry is a
+fresh unchecked claim about the document's own current contents. ⇒ **the
+obligation is discharged by the append-only record on the overwritten document's
+behalf**: preserve it in `ROADMAP.md`/`SESSION_LOG.md`, once; in the overwritten
+document write a **pointer**, or nothing. **`R215` (d) is unchanged and
+unweakened — `R216` says WHERE, not whether.** ★ The measured cost of not having
+it: `NEXT_SESSION.md`'s *"Everything below this line is unchanged from the
+previous handoff"*, **false in the commit that wrote it**, carried forward as
+boilerplate by successive rewrites. **The layer is DELETED in this filing's
+rewrite, not corrected** — `R216` (c), which is clause (c) applied to the
+document that founded it.
+
+**★★★★★ The shape, and it is the third consecutive filing to hit it: A
+DISPOSITION IS A CLAIM ABOUT A DOCUMENT'S CURRENT STATE, AND IT AGES LIKE ONE.**
+*"Not repaired"*, *"still owed"*, *"unbuilt"*, *"carried forward unstarted"* are
+all self-referential in exactly the sense this session's finding names — their
+truth depends on the state of something outside the record, and **the record has
+no mechanism that revisits them.** They are the same species as *"the table
+above"*, one indirection out. ⇒ **write a disposition with its date and its
+subject's hash attached** (*"not repaired as of `bc6c818`"*), which makes it
+**static** and unfalsifiable by any later event, instead of a standing assertion
+about the present. **Both repairs above apply that form.**
+
+★ **Checked and NOT reported as defects**, because a filing that manufactures
+survivors is worse than one that misses them:
+
+- **The preserved quotations of the old note text** (this file's `bc6c818` entry,
+  `SESSION_LOG.md`) — **correct as preserved evidence**, per `R215` (d). They are
+  static: *"the note said X"* is true forever.
+- **The sibling RAG's** *"Both were applied as the repair for round 7's own
+  defects — by deleting the figure, not re-measuring it"* — **now MORE true, not
+  less**: at the time it named the five distances only; `8522167` applies the
+  ordinal half too.
+- **`FEATURES.md`** — swept for any row this commit could touch. **None.** A
+  prose deletion in a demo generator's README moves no capability, and no
+  `core`/`cli`/`gui` box changes. **Confirmed by sweep, not assumed.**
+- **`ARCHITECTURE.md` §12** — no architectural decision. **Stays at `084`.**
+
+---
+
+#### Gates — measured 2026-08-23 by running each
+
+**`17` scripts on disk** (`ls tools/check-* | wc -l` → `17`; 12 `.py` + 5 `.sh`),
+**`16` runnable as bare gates.** The 17th,
+`check-image-colorspace-truth.py`, exits `1` on a bare invocation **because it
+takes a fixture-directory argument** and is not a gate.
+
+**`15` of the `16` exit `0`.** The one red is
+**`check-commits-filed.py`, exit `1`, naming exactly `8522167`** — the commit
+this entry files, which is the gate working as designed: a code-or-tools commit
+is unfiled until a filing cites its hash. **It goes green on this filing's own
+commit.** `tools/commits-filed-baseline.txt` **not** touched.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `74.10` shipped; next free in family `74.11` | **unchanged — `8522167` takes NO Pass ID** (ruled above). Next free in family **`74.11`**; `122.4` stays the next free `122`; **`97.1g` stays reserved and unbuilt** |
+| decisions (`ARCHITECTURE.md` §12) | **084** | **084 — unchanged.** A README deletion produces no artefact in any crate. Next free **085** |
+| standing rules | **`R215`** | ★★★★★ **`R216` MINTED — CEILING MOVES `R215` → `R216`.** *Preserved wrong wording and edit history belong in the **append-only** record; a document that is **overwritten** carries a pointer or nothing.* **The trigger fired rather than being judged**: the convergence practice wrote its own promotion condition one filing earlier, and this filing's sweep found the second document. **No clause added to any existing rule; `R214` and `R215` unamended.** Next free **`R217`** |
+| librarian hard rules (`.claude/agents/pdfce-librarian.md`) | **11 rules; rule 11 last amended 2026-08-23 (`1a60e73`)** | **unchanged — 11 rules, no amendment recommended by this filing** |
+| open operator questions | ceiling `(br)`, **CLOSED** | **unchanged — `(br)`, CLOSED. Nothing is awaiting Ken** except pushing and cutting a backup, both his acts. Next free **`(bs)`** |
+| SESSION_LOG filing ordinals | **238** | **239** |
+| `tools/check-*` gates | 17 on disk, 16 runnable | **17 on disk, 16 runnable; 15 of 16 exit `0`**, the red one being `check-commits-filed.py` on `8522167` itself |
+| `render-page` metrics-line keys | **90** | **90 — unchanged**, measured by running `tools/check-metrics-line-contract.py`. No code changed |
+| *Update protocol* practices | 4 | **4 — none added; *"How you know a document is converging"* AMENDED A THIRD TIME** (the round-7 disposition discharged; the deletion-over-correction sharpening and its boundary recorded) |
+| owed README repairs | **0** | **0 — and the one defect the 238th filing recorded as *not owed* is now DISCHARGED anyway.** The `tools/gen-scale-demo/README.md` list is empty and has nothing recorded against it |
+| this role's own defects | 3 found, 3 repaired (238th filing) | **2 found, 2 repaired** — both the same shape (**a present-tense disposition falsified by the commit under filing**), one in `ROADMAP.md` and one in the RAG finding. **Sweep STOPPED here per the dispatch's instruction, not because it came back empty** |
+
+**Owed work, recorded as owed:**
+
+1. **`R214`'s positional-reference gate** — still recommended, still unbuilt,
+   baseline still unmeasured. **Measure, repair, then wire; never wire it red**
+   (`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`).
+2. **`R215`'s retro-application**, carried forward unstarted for an **eighth**
+   filing: any Pass filed with a *"required after"* column should be re-read
+   against the rule before that column is used as a gate, **over `docs/` and both
+   RAG tiers**.
+3. ★ **NEW, and it is this filing's own recommendation rather than a defect:**
+   **a sweep of standing dispositions** — *"not repaired"*, *"unbuilt"*,
+   *"unstarted"*, *"carried forward"* — **for the date-and-hash form** described
+   in the sweep section above. **Baseline unmeasured; recorded, not started.**
+   It is the same instrument as item 1 pointed at a different vocabulary, and
+   **item 2 is itself written in the defective form** (*"carried forward
+   unstarted"*, present tense, eight filings running).
+
+**Nothing is owed to Ken** except the two acts that are his by definition:
+**pushing** and **cutting a backup**. Both figures are re-measured in this
+filing's `SESSION_LOG.md` entry and in `NEXT_SESSION.md` §A, by the commands
+named beside them.
+
+**RAG files written by this filing: one amended, none new.**
+**Amended:** `D:/dev/rag/rust/a_document_that_annotates_its_own_corrections_has_made_its_edit_history_part_of_its_content.md`
+— consequence 2's stale present-tense disposition corrected, and the
+deletion-over-correction sharpening plus its *coordinate-versus-value* boundary
+added to consequence 1. **No new file:** the sharpening belongs **inside** the
+finding it sharpens, per this tree's one-finding-per-file rule; a second file
+would split one claim across two. **`index.md` bullet EXTENDED**, not left
+alone: the file's headline claim did not move, but the *append-only vs
+overwritten* section and the `R216` promotion are new facts a grep of the index
+must be able to reach. ★ *This sentence first read "`index.md` bullet unchanged"
+and was corrected before publishing by checking the file rather than the
+intention — the corollary that has now found something three filings running.* **No `C:/personal_rag/pdf/` file needed amending** —
+this is a record-keeping finding, not a PDF-domain one.
+
+---
+
+
 ### `bc6c818` — the annotation layer DELETED rather than repaired a seventh time, and ★★★★★ **THE GENERATOR IS NAMED, WHICH IS WHAT ENDED THE SEQUENCE** (**no Pass ID**) — ★★★★★ **ALL FOUR OWED README ITEMS ARE DISCHARGED, THREE OF THEM BY DELETION AND NONE BY A SEVENTH REWORDING**: survivors E (*"three post-fix columns"*), G (*"the gap between `after` and `correct` … §9's last paragraph"*) and F (*"the forms-rendered counts"*) are **gone from the file**, and survivor H's enumeration is replaced by a conditional (*"Where a before-figure appears here it is labelled as one"*) which **checks out against all three of §10's before-figures**; ★★★★★ **THE FINDING, AND IT EXPLAINS THE OTHER SIX ROUNDS RATHER THAN JOINING THEM — a document that annotates its own corrections has made its correction history part of its CONTENT, and that part has no tests, no measurements and no reader who would notice**; the engineering content — the arithmetic, the measurements, the three `f32` limits — **was correct from round 1 and never moved**, and **every defect across six rounds lived in a sentence ABOUT a previous correction**, so class stability was not the document converging but **the generator running at a steady rate**; ★★★★★ **SHARPENED HERE, BECAUSE THE COMMIT MESSAGE'S FORM IS SLIGHTLY TOO WIDE: THE GENERATOR IS NOT EDIT HISTORY, IT IS *SELF-REFERENTIAL* CLAIMS — claims whose truth depends on the document's own CURRENT contents** (a set, a position, a count), which must be re-verified on every edit and never are; a **static** history claim (*"the acceptance criterion said `11`"*) is fixed forever and generates nothing, **and that distinction is what makes the surviving `R215` note safe**; ★★★★ **THE KEPT `R215` NOTE — RULED CORRECT, AND THE LINE IS DRAWN IN THE RIGHT PLACE**: `2`-not-`11` is a fact about the **artefact** that a reader of the table needs (three rows read `2` under a column headed `correct`, and nothing on the page says that is right rather than residual), its mechanism is checkable against the table three lines above it, and its two history sentences are **static, not self-referential** ⇒ **keep as written; changing it would BE the seventh round**; ★★★★ **THE SEVENTH ROUND'S DEFECT EXISTS AND IT IS IN THE REPLACEMENT NOTE, NOT IN THE KEPT ONE** — *"Rounds 5 and 6 produced fresh instances of classes 1 and 2"* sits under a ladder that pins **round 1 to the first correction**, while `ROADMAP.md`, the convergence practice **and** the RAG finding all number that same first correction **round 3** and name `a68498b` **round 6**; ⇒ **the paragraph uses two round-numberings two sentences apart**, and under its own, *"rounds 5 and 6"* are this commit and one that does not exist; ★★★★ **DISPOSITION: RECORDED HERE, NOT REPAIRED — the finding applied to itself.** The remedy if it is ever touched is **deletion of the ordinals, not correction of them**: *an ordinal is a claim; a sequence is not*; ★★★★ **ITEM 8 — THE SWEEP OF THIS ROLE'S OWN DOCUMENTS, RE-RUN — RETURNS *YES, THREE*, AND THE STRONG ONE IS IN THE CORRECTION FOOTERS THEMSELVES**: the 237th filing's repair of the *"two-thirds"* fraction asserts, in **five places across two documents**, that *"None of the four is a wrong number"* sits **two lines** from the fraction it falsifies — **measured: 35 lines in `ROADMAP.md` and 16 in `SESSION_LOG.md`**, with survivor D's whole block in between, so *"the next line down"* and *"the line above it"* both resolve to **survivor D** ⇒ **a positional pointer AND a wrong count, emitted by a correction, in the filing whose entire subject was corrections emitting those two shapes — `n=4` for the generator, in this role's tree**; ★★★★★ **AND THE THIRD WAS FOUND ONLY BECAUSE THE DRAFT SENTENCE REPORTING THAT SHAPE AS *NOT FOUND* WAS CHECKED INSTEAD OF QUOTED — a universal over seven `FEATURES.md` `column` hits that is wrong about one of them, carried by three consecutive filings because **it is attached to a TRUE conclusion and so was never re-read***; ★★ **AND THE FOUR REPAIRS FROM LAST ROUND ALL STAYED REPAIRED — measured by grep, not assumed**; ★★★ **NO RULE MINTED; `R214` UNAMENDED; THE CONVERGENCE PRACTICE AMENDED A SECOND TIME AND ITS HEADLINE REPLACED**; ★★★ **ONE NEW RAG FILE — the generator is a DIFFERENT claim with a DIFFERENT remedy from the stopping-signal file, and this tree's house style is one finding per file**; ★ **`FEATURES.md`: NO ROW, AND NO ROW REPAIRED — CONFIRMED BY SWEEP, NOT ASSUMED**; ★ **THE METRICS LINE IS UNCHANGED AT `90` KEYS AND NO CODE CHANGED — measured by running the gate**; ★ **SESSION CLOSE — `NEXT_SESSION.md` rewritten for a cold reader** — 2026-08-23 (two-hundred-and-thirty-eighth filing)
 
 **One commit, docs-only in effect: `bc6c818`, 55 insertions and 64 deletions in
@@ -341,9 +603,13 @@ that deleted four paragraphs for carrying exactly those defects. ⇒ **`n=4` for
 the generator in `tools/`, and the seventh round produced one while announcing
 that there would not be a seventh round.**
 
-**★★★★★ DISPOSITION: RECORDED HERE. NOT REPAIRED, AND NOT OWED.** This is the
-finding applied to itself, and it is the first time in seven rounds that the
-disposition has been anything other than *"the engineer's edit"*:
+**★★★★★ DISPOSITION: RECORDED HERE. NOT REPAIRED, AND NOT OWED** *(as of
+`bc6c818`, 2026-08-23 — **DISCHARGED ONE FILING LATER BY `8522167`**, whose
+Shipped entry is above; the engineer executed the third bullet's remedy. The
+wording here is kept per `R215` (d) and hard rule 1, and it is **not overturned**:
+the decline was against a **rewording**, and the repair was a **deletion**.)*
+This is the finding applied to itself, and it is the first time in seven rounds
+that the disposition has been anything other than *"the engineer's edit"*:
 
 - **Repairing it writes an eighth sentence about a seventh correction**, which is
   the generator by definition. The previous six rounds are the evidence that this
@@ -92197,6 +92463,123 @@ same cause (hashes exist only at commit time), two different failure modes.
   the negative.
 
   **Ceiling moves `R214` → `R215`; next free `R216`.**
+  *(★ Superseded as a ceiling statement by `R216` below, 2026-08-23, 239th
+  filing. The line is kept because it is `R215`'s own record of where the
+  ceiling stood when it was minted.)*
+
+- **R216 — PRESERVED WRONG WORDING AND EDIT HISTORY BELONG IN THE
+  **APPEND-ONLY** RECORD. A DOCUMENT THAT IS **OVERWRITTEN** RATHER THAN
+  APPENDED MUST NOT CARRY THEM — IT CARRIES A POINTER, OR NOTHING. IN AN
+  APPEND-ONLY FILE `R215` (d)'S PRESERVATION IS FREE, BECAUSE THE OLD ENTRY
+  STAYS WHERE IT WAS WRITTEN AND NO LATER EDIT TOUCHES IT; IN AN OVERWRITTEN
+  FILE THE SAME OBLIGATION MEANS **HAND-CARRYING** THE WORDING FORWARD ON EVERY
+  REWRITE, AND EVERY CARRY IS A FRESH UNCHECKED CLAIM ABOUT THE DOCUMENT'S OWN
+  HISTORY** (2026-08-23; librarian-minted, two-hundred-and-thirty-ninth filing;
+  `8522167`; **`n=2` documents, and the trigger that fired was written down one
+  filing earlier for exactly this purpose**).
+
+  **Why this exists as a rule and not as a fifth *Update protocol* practice.**
+  The practice *"How you know a document is converging"* carries, in its second
+  amendment (2026-08-23, `bc6c818`), a **promotion trigger written so it could
+  fire without anybody remembering**: *"a SECOND document that grows a layer of
+  sentences about its own corrections. At `n=2`, mint it."* **The 239th filing's
+  own-document sweep found the second document.** Firing a trigger you wrote
+  yourself, on your own document, is the least comfortable way for a rule to
+  arrive and the most reliable one — see `R198`, promoted after **five**
+  occurrences of a practice that was correct, written down, phrased as an
+  imperative, sitting in the *Standing rules* section, **and not binding.**
+
+  **The two instances, measured.**
+
+  | document | what grew | how it was found |
+  |---|---|---|
+  | `tools/gen-scale-demo/README.md` | a four-paragraph annotation of its own correction rounds, across seven commits (`bd9844d` → `8522167`) | **every defect in all seven rounds lived in that layer**; the engineering content was correct from the first round and never moved |
+  | `docs/NEXT_SESSION.md` | **three** parenthetical *"this paragraph read X until 2026-08-23"* annotations, plus a running sweep-results narrative | the 239th filing's hard-rule-11 sweep, immediately before rewriting the file |
+
+  **★★★★★ THE MECHANISM, AND IT IS A TENSION BETWEEN TWO RULES RATHER THAN
+  CARELESSNESS — which is why naming it is worth a number.** `R215` (d)
+  **obliges** preserving the wrong wording beside a correction, so a bare
+  corrected value is not re-derived back to the wrong one by the next reader.
+  That obligation has **different costs in different kinds of file**:
+
+  - **Append-only** (`ROADMAP.md`, `SESSION_LOG.md`, `ARCHITECTURE.md` §12): the
+    preserved wording is written **once**, into an entry that is **dated** and
+    that **no later edit touches**. It is a **static** claim — *"the note said
+    X"* is true forever. **Cost: nothing.**
+  - **Overwritten** (`NEXT_SESSION.md`, and any artefact rewritten in place): the
+    preserved wording must be **re-copied by hand into every rewrite**, along
+    with a sentence saying what it was and when. **Each carry is a new claim
+    about the document's own current contents**, of exactly the class that must
+    be re-verified on every edit and never is.
+
+  ⇒ **The obligation is discharged by the append-only record on the overwritten
+  document's behalf.** Preserve the wording **there**, once, dated; in the
+  overwritten document write the current truth and, if a reader would re-derive
+  the wrong value without it, **a pointer to where the correction is filed.**
+
+  **★★★ The measured cost of not having this rule.** `NEXT_SESSION.md`'s
+  standing-list heading read *"Everything below this line is unchanged from the
+  previous handoff"* — **false in the commit that wrote it**, which rewrote two
+  sections below that line — and it survived because it was carried forward as
+  boilerplate by successive rewrites. It is `R214` clause (d)'s exact
+  construction (a universal quantifier over delimited contents), **written by the
+  filing that minted clause (d)**, and it was found by a sweep rather than by
+  anyone reading the handoff.
+
+  **What the rule obliges, in three lines.**
+  (a) **Before writing a preserved-wording annotation, ask whether the file is
+  append-only.** If it is, write it. If it is overwritten, **write the correction
+  into `ROADMAP.md`/`SESSION_LOG.md` instead** and leave the overwritten document
+  saying only what is true now.
+  (b) **A pointer, not a copy.** Where the wrong value would otherwise be
+  re-derived, the overwritten document may say *"corrected 2026-08-23; the prior
+  figure and why it was wrong are in `ROADMAP.md`'s `<hash>` entry"* — one
+  sentence, no quantifier, nothing that ages.
+  (c) **Where the layer already exists, DELETE it rather than correct it** — a
+  correction to a self-referential claim is drawn from the same distribution as
+  the defect, and the deletion is the only repair that emits no new claim. The
+  boundary is *preserve wrong **values**, delete wrong **pointers***: a
+  self-referential claim's whole content is a coordinate, so nothing is lost by
+  removing it.
+
+  **★ Scope, so it is not over-read.** This binds on **preserved wording, edit
+  history and correction narrative** — the *"this used to say X"* layer. It does
+  **not** bind on:
+  - **`R215` (d) itself, which is unchanged and unweakened.** The wrong value is
+    still preserved; the rule says **where**.
+  - **Static factual history in an artefact.** *"The acceptance criterion for
+    this Pass was `11 of 11`; the correct answer is `2` because §8.10.1 culls the
+    other nine"* is a fact about the **artefact** that a reader needs, is true
+    forever, and is **not** an annotation of the document's own edit history. The
+    surviving note in `tools/gen-scale-demo/README.md` §9 is the worked example
+    of what stays.
+  - **`ROADMAP.md`, `SESSION_LOG.md` and `ARCHITECTURE.md` §12**, which are
+    append-only by construction and are where all of it goes.
+
+  **★ Why no gate, stated as a ruling rather than an omission.** *"Is this
+  sentence an annotation of this document's own corrections?"* requires reading
+  for meaning — the same answer `R210`'s minting test gave `R214`'s and
+  `R215`'s candidates. **The decidable sub-question is weaker but real and is
+  RECOMMENDED, not built:** *does any file outside the append-only set contain
+  the strings `this paragraph read`, `this line read`, `this item read`, `until
+  2026-`, `kept per R215`?* — a closed vocabulary over a known file set, and the
+  same instrument `R214`'s recommended gate needs. **Measure its baseline first,
+  repair, then wire; never wire it red**
+  (`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`).
+
+  **★ The decline this rule sits beside, recorded so the pair is legible.** The
+  **same filing** declined to mint the *deletion-over-correction* sharpening,
+  and the two dispositions are consistent: that one prescribes **how to word a
+  repair**, which `R214` (a)–(d) already govern and which the *Update protocol*
+  practice already carries; this one prescribes **which file a class of content
+  may appear in**, which is a placement obligation with a named trigger, a
+  measured cost and two documents behind it. **Placement earns a number; wording
+  did not.**
+
+  **Full derivation:**
+  `D:/dev/rag/rust/a_document_that_annotates_its_own_corrections_has_made_its_edit_history_part_of_its_content.md`.
+
+  **Ceiling moves `R215` → `R216`; next free `R217`.**
 
 ## Update protocol
 
@@ -92621,6 +93004,89 @@ same argument that declined `R216` one filing ago, pointed the other way.
 (new, 2026-08-23). **Its sibling**, amended in the same filing with round 7 and a
 forward pointer:
 `D:/dev/rag/rust/the_defect_class_left_after_repeated_repair_rounds_is_the_stopping_signal.md`.
+
+---
+
+#### ★★★★★ AMENDED A THIRD TIME 2026-08-23 (two-hundred-and-thirty-ninth filing, `8522167`) — THE COROLLARY'S DISPOSITION IS DISCHARGED, AND DELETION-OVER-CORRECTION GETS ITS BOUNDARY
+
+**All three texts above are left standing** — the original practice and its two
+amendments — per the append-only convention and `R215` (d).
+
+**★★★ The corollary above is stale in one clause, and it is this role's own
+defect.** It reads *"**It is recorded in the `bc6c818` Shipped entry and
+deliberately NOT repaired**, because repairing it writes an eighth sentence about
+a seventh correction."* **`8522167` repaired it** — by **deleting** the ordinals,
+which is the remedy the same paragraph prescribes two sentences later. **The
+wording is kept**; what it now means is *"not repaired **as of `bc6c818`**"*.
+
+**★★★★★ The shape, because it is the same one this practice is about, one
+indirection out: A DISPOSITION IS A CLAIM ABOUT A DOCUMENT'S CURRENT STATE, AND
+IT AGES LIKE ONE.** *"Not repaired"*, *"still owed"*, *"unbuilt"*, *"carried
+forward unstarted"* are self-referential in exactly the sense named above — their
+truth depends on the state of something the record does not revisit. ⇒ **write a
+disposition with its DATE and its subject's HASH attached** (*"not repaired as of
+`bc6c818`"*), which makes it **static** and unfalsifiable by any later event.
+**The same repair as the ordinals: convert a standing assertion into a dated
+one.**
+
+**★★★★★ AND THE SHARPENING THE ENGINEER ASKED FOR, ACCEPTED WITH ITS BOUNDARY:
+for a SELF-REFERENTIAL claim, prefer DELETION to CORRECTION — because a
+correction is drawn from the same distribution as the defect.** The only way to
+say *where* or *how many* is another coordinate or another count, so a reworded
+self-referential claim is a **fresh sample from the class being repaired**. This
+is **not** the same statement as *"a deletion emits no new claim"*, which is true
+of every deletion anywhere and supplies no mechanism.
+
+**★★★★ THE BOUNDARY, WITHOUT WHICH IT IS A LICENCE TO DELETE CORRECTIONS
+GENERALLY — and this project already holds it under another name:** *preserve
+wrong VALUES, delete wrong POINTERS* (`641deb9`).
+
+- **A self-referential claim has no value to preserve.** Its whole content is a
+  coordinate into the document. Delete it and **nothing is lost** — the thing it
+  pointed at is still there and can be **named**.
+- **A wrong VALUE must be preserved** (`R215` (d)): a bare corrected number is
+  re-derived back to the wrong one by the next reader with the same faulty
+  intuition, so deleting it **destroys the evidence**.
+
+⇒ **The rule is not *prefer deletion*. It is *prefer deletion WHEN THE CLAIM'S
+CONTENT IS A COORDINATE*, and the test is whether anything is lost by removing
+it.** `11 of 11` may never be deleted; *"rounds 5 and 6"* may never be corrected.
+
+**★★ `n=2` remedies, one document** — the five *"two lines above"* distances
+(`bc6c818`'s filing) and these ordinals (`8522167`), each reached the same way:
+an attempt to write the corrected version produced a sentence of the same shape.
+**The deletion-over-correction sharpening stays practice, not a rule; `R214` and
+`R215` still not amended**, on the same placement-versus-reference ground as the
+declines above.
+
+**★★★★★ BUT THIS PRACTICE'S OWN PROMOTION TRIGGER HAS FIRED, AND THE PLACEMENT
+HALF IS NOW `R216`.** The second amendment above wrote the condition down *"so it
+can fire without anybody remembering"*: **a SECOND document that grows a layer of
+sentences about its own corrections. At `n=2`, mint it.** The 239th filing's
+own-document sweep found it: **`docs/NEXT_SESSION.md`**, carrying **three**
+*"this paragraph read X until 2026-08-23"* annotations plus a running
+sweep-results narrative, measured immediately before that file was rewritten.
+
+★★★★ **And the mint says something the practice could not, because the second
+instance exposed a tension between two rules rather than carelessness.** `R215`
+(d) **obliges** preserving wrong wording; that is **free in an append-only file**
+and means **hand-carrying it into every rewrite** of an overwritten one. ⇒
+**`R216`: preserved wording and edit history belong in the append-only record; an
+overwritten document carries a pointer, or nothing.** `R215` (d) is unchanged —
+`R216` says **where**, not whether. **Ceiling moves `R215` → `R216`; next free
+`R217`.** *(This paragraph is where the trigger's firing is recorded; the rule's
+full text, its two-instance table and its scope are in **Standing rules → `R216`**.)*
+
+**★ This practice is NOT retired by the mint.** `R216` binds **placement of a
+class of content**; the practice tells you **what to look for after a repair
+round** and why class stability is evidence about the repair process. They answer
+different questions, and the practice's three amendments are the derivation
+`R216` rests on.
+
+**Filed into the derivation** as a sharpening of consequence 1 of
+`D:/dev/rag/rust/a_document_that_annotates_its_own_corrections_has_made_its_edit_history_part_of_its_content.md`,
+with the boundary beside it. **No new RAG file** — one finding per file, and this
+is the same finding at higher resolution.
 
 ### Librarian filing commits stay docs-only (added 2026-08-18, hundred-and-sixty-eighth filing — FLAGGED PRACTICE, NOT A NUMBERED RULE, FIRST OCCURRENCE)
 
