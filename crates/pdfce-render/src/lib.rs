@@ -403,8 +403,13 @@ fn render_impl(
 ) -> Result<RenderedPage, RenderError> {
     let (page_w, page_h, page_ctm) = page_device_geometry(page, scale);
 
-    let (width, height, base_ctm) = match region {
-        None => (page_w, page_h, page_ctm),
+    // `base_ctm64` is the one the interpreter composes `cm` against;
+    // `base_ctm` is the narrowed copy every `tiny_skia` call takes. They
+    // are produced together and must not be derived from each other in
+    // the wrong direction -- widening the `f32` back to `f64` would carry
+    // its rounding forward and is exactly the bug this pair removes.
+    let (width, height, base_ctm, base_ctm64) = match region {
+        None => (page_w, page_h, page_ctm, gstate::Mat64::from_f32(page_ctm)),
         Some(r) => {
             // ★ `region_base_geometry`, not `region_device_geometry` +
             // `post_translate`. The two agree exactly at ordinary
@@ -419,7 +424,7 @@ fn render_impl(
                     height: 0,
                 });
             };
-            (g.width, g.height, g.ctm)
+            (g.width, g.height, g.ctm, g.ctm64)
         }
     };
 
@@ -525,7 +530,7 @@ fn render_impl(
         };
         let mut diagnostics = if scope.paints_page_content() {
             let content = ContentStream::from_page(doc, page)?;
-            let initial = gstate::GraphicsState::default_with_ctm(base_ctm);
+            let initial = gstate::GraphicsState::default_with_ctm64(base_ctm64);
             // §11.4.7 / §11.3.4 — THE PAGE'S BLENDING COLOUR SPACE, read
             // before anything is painted, because every element on the page
             // and every non-isolated group inside it composites in it.
@@ -846,10 +851,30 @@ pub struct RegionGeometry {
     pub width: u32,
     /// Raster height in device pixels.
     pub height: u32,
-    /// User space → **region-local** device space. The translation is the
-    /// distance from the region's own corner, so it stays small at any
-    /// magnification; see [`region_base_geometry_of`].
+    /// User space → **region-local** device space.
+    ///
+    /// ★ This said "the translation is the distance from the region's own
+    /// corner, so it stays small at any magnification". **It is not
+    /// small.** For the usual case of a `CropBox` whose origin is `(0,0)`,
+    /// the translation IS `-x0` — the region's device origin — which at a
+    /// scale of 8 million is about `-4.4e9`. What stays small is the
+    /// RESULT of applying it to a point inside the region, which is a
+    /// different quantity and is the one the sentence was reaching for.
+    ///
+    /// The distinction is not pedantic: a translation of `-4.4e9` in `f32`
+    /// is quantised in steps of **512 device pixels**, so a page seeded
+    /// from this field alone lands hundreds of pixels from where it
+    /// belongs. Use [`Self::ctm64`] for that; this field is for callers
+    /// that hand a transform straight to `tiny_skia`.
     pub ctm: Transform,
+    /// The same transform in `f64`, un-narrowed.
+    ///
+    /// The coefficients here are what [`region_base_geometry_of`] computes
+    /// before it narrows — so seeding a graphics state from this rather
+    /// than from [`Self::ctm`] is the difference between composing a
+    /// deep-zoom page against an exact origin and composing it against one
+    /// rounded to the nearest 512 pixels.
+    pub ctm64: crate::gstate::Mat64,
     /// The region's left edge in page-device space.
     pub x0: f32,
     /// The region's top edge in page-device space.
@@ -969,20 +994,19 @@ pub fn region_base_geometry_of(
     // is narrowed. Doing it the other way round -- narrowing `tx` and `x0`
     // and subtracting in `f32` -- is arithmetically identical and
     // numerically useless, because both operands are the large number.
-    #[allow(clippy::cast_possible_truncation)]
-    let ctm = Transform::from_row(
-        sx as f32,
-        ky as f32,
-        kx as f32,
-        sy as f32,
-        (tx - x0) as f32,
-        (ty - y0) as f32,
-    );
+    let ctm64 = crate::gstate::Mat64::from_row(sx, ky, kx, sy, tx - x0, ty - y0);
+    // Narrowed here, and ALSO kept whole. The `f32` copy is what
+    // `tiny_skia` consumes at the leaves; the `f64` copy is what a
+    // content stream's own `cm` operators compose against, and composing
+    // against the narrowed one throws away the precision this function
+    // spent its whole body protecting, one call later.
+    let ctm = ctm64.to_f32();
     #[allow(clippy::cast_possible_truncation)]
     Some(RegionGeometry {
         width: w,
         height: h,
         ctm,
+        ctm64,
         x0: x0 as f32,
         y0: y0 as f32,
     })
@@ -1865,6 +1889,117 @@ mod tests {
         assert_eq!(pixel(&out.pixmap, 5, 95), (255, 255, 255));
         assert_eq!(out.diagnostics.forms_rendered, 1);
         assert_eq!(out.diagnostics.deferred_ops, 0, "Do is no longer deferred");
+    }
+
+    #[test]
+    fn deep_zoom_places_content_from_a_large_page_coordinate() {
+        // THE REGRESSION TEST FOR `Mat64`, and it is written as a
+        // PLACEMENT assertion rather than a matrix one on purpose: the
+        // defect it guards never produced a wrong-looking matrix, it
+        // produced a correct-looking one whose translation was rounded to
+        // the nearest 512 device pixels, and the only visible symptom was
+        // content sitting somewhere else.
+        //
+        // The fixture is the shape that broke: a form placed by a `cm`
+        // carrying a PAGE COORDINATE, holding geometry whose own
+        // coordinates are small, viewed as a tiny region at a scale where
+        // `f32` cannot hold the intermediate product. Before `Pass 74.7`
+        // the black square landed off-canvas and the render came back
+        // blank.
+        let (doc, page) = doc_with_xobject(
+            // 1 unit of form space = 2e-8 pt, placed at (90, 90) -- so the
+            // form's 1000x1000 box is 2e-5 pt across, about 7 nanometres.
+            "q 0.00000002 0 0 0.00000002 90 90 cm /X1 Do Q",
+            &form_dict("/BBox [0 0 1000 1000] /Resources << >>"),
+            b"0 0 0 rg 200 200 600 600 re f",
+        );
+
+        // A 2e-5 pt window on the form at 2e7 device pixels per point:
+        // 400 x 400 px. The intermediate product is 90 * 2e7 = 1.8e9,
+        // where `f32`'s spacing is **128 pixels** -- a third of the
+        // viewport -- and the region origin is another number of the same
+        // size, so the cancellation is the whole game.
+        //
+        // ★ THE SCALE IS 19 999 993, NOT 20 000 000, AND THAT IS NOT
+        // FUSSINESS. The first draft used round numbers and the test
+        // passed against a deliberately sabotaged build -- because
+        // `90 * 2e7 = 1.8e9` is exactly representable in `f32` (it is
+        // 14 062 500 x 2^7), so the two large operands cancelled
+        // perfectly and `f32` got the right answer for the wrong reason.
+        // A cancellation only loses precision when the operands are large
+        // and merely NEARLY equal. Adjusting these constants without
+        // re-running the sabotage check is how this test becomes
+        // decorative.
+        //
+        // With the scale as written: `90 * 19 999 993 = 1 799 999 370`,
+        // which is not a multiple of 128, so `f32` must round it -- and
+        // 128 device pixels is a third of this 400 px viewport.
+        let region = pdfce_core::page_tree::Rect {
+            llx: 90.0,
+            lly: 90.0,
+            urx: 90.000_02,
+            ury: 90.000_02,
+        };
+        let out = render_page_region(
+            &doc.view(),
+            &page,
+            19_999_993.0,
+            region,
+            &RenderOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            out.diagnostics.forms_rendered, 1,
+            "the form must not be culled"
+        );
+
+        // ★ MEASURE THE SQUARE'S EDGES, do not sample a few points.
+        //
+        // The first version asserted "black at 45%, white at 5%" and
+        // passed against a build with **half** the fix removed, because
+        // that half leaves ~10 px of error and 10 px does not flip a
+        // sample taken 160 px from the edge. A placement test whose
+        // tolerance is a third of the picture is a test of almost
+        // nothing.
+        //
+        // The square is form-space [200,800] of a [0,1000] box, and the
+        // region is exactly that box -- so its edges must land at 20 % and
+        // 80 % of the viewport, and the tolerance is THREE PIXELS.
+        let (w, h) = (out.pixmap.width(), out.pixmap.height());
+        assert!(
+            w >= 200 && h >= 200,
+            "expected a real viewport, got {w}x{h}"
+        );
+
+        let black_at = |x: u32, y: u32| pixel(&out.pixmap, x, y) == (0, 0, 0);
+        let row = h / 2;
+        let col = w / 2;
+        let left = (0..w).find(|&x| black_at(x, row));
+        let right = (0..w).rev().find(|&x| black_at(x, row));
+        let top = (0..h).find(|&y| black_at(col, y));
+        let bottom = (0..h).rev().find(|&y| black_at(col, y));
+
+        #[allow(clippy::cast_precision_loss)]
+        let (wf, hf) = (w as f32, h as f32);
+        for (got, want, what) in [
+            (left, 0.20 * wf, "left edge"),
+            (right, 0.80 * wf, "right edge"),
+            (top, 0.20 * hf, "top edge"),
+            (bottom, 0.80 * hf, "bottom edge"),
+        ] {
+            let Some(got) = got else {
+                panic!(
+                    "{what}: no black pixel found at all -- the square is off canvas, which is what an f32 translation at this magnitude does"
+                );
+            };
+            #[allow(clippy::cast_precision_loss)]
+            let delta = (got as f32 - want).abs();
+            assert!(
+                delta <= 3.0,
+                "{what}: found at {got}, expected {want} (off by {delta} px). The square is misplaced, which is the symptom of composing this CTM in f32."
+            );
+        }
     }
 
     #[test]

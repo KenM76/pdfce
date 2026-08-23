@@ -60,6 +60,194 @@
 use pdfce_core::settings::CmykIntent;
 use tiny_skia::Transform;
 
+/// A 2-D affine transform in `f64`, kept alongside the `f32`
+/// [`GraphicsState::ctm`] that `tiny_skia` actually consumes.
+///
+/// # Why this exists, and what goes wrong without it
+///
+/// `tiny_skia::Transform` is `f32`. Composing a content-stream `cm` that
+/// carries a **page coordinate** with a deep-zoom base CTM produces a
+/// translation that is the difference of two large, nearly equal numbers:
+///
+/// ```text
+///   base:  sx = 8_100_000            tx = -4_374_000_000
+///   cm:    sx = 2.8e-9               tx = 540
+///   =>     tx' = 540 * 8_100_000 + (-4_374_000_000) = a few hundred
+/// ```
+///
+/// The **answer** is small; both **operands** are ~4.4e9, where `f32`'s
+/// spacing is **512**. So `tx'` came out quantised in 512-pixel steps —
+/// and because a translation error moves every point of the form
+/// equally, the symptom was not distortion but a whole drawing sitting
+/// hundreds of pixels from where it belonged, or off the canvas
+/// entirely. Measured on `tools/gen-scale-demo`: of eleven Form XObjects
+/// framed on one molecule, **11 rendered at scale 2e6, 7 at 1.25e7, 3 at
+/// 2.5e7, and 1 at 5e7**.
+///
+/// Computing the composition in `f64` and narrowing **the small result**
+/// removes it entirely: `f64`'s spacing at 4.4e9 is 1e-6, so the
+/// cancellation is exact to far below a pixel, and the `f32` value handed
+/// to `tiny_skia` is then a few hundred — a magnitude `f32` represents to
+/// seven digits.
+///
+/// This is the same trick `Pass 74.2` used for the base CTM
+/// (`crate::region_base_geometry_of` — "the subtraction happens HERE, in
+/// `f64`, and only its small result is narrowed"), pushed one level down
+/// to content-stream composition, which is where it was still missing.
+///
+/// # What this does NOT fix
+///
+/// Path points that are themselves large page coordinates. A point near
+/// `x = 540` has an `f32` spacing of `6.1e-5 pt` — **21.5 µm** — so any
+/// feature smaller than that, written as an absolute page coordinate, is
+/// quantised before any matrix touches it. That is a separate mechanism
+/// with a separate remedy (device-space path construction, gated on
+/// [`GraphicsState::needs_precise_paths`]), because it costs per point
+/// while this costs per `cm`.
+///
+/// # Convention
+///
+/// PDF's row-vector convention, matching `tiny_skia`: a point is a row
+/// `[x y 1]` multiplied on the LEFT of the matrix, and
+/// [`Self::post_concat`] means *apply `self` first, then `other`* — the
+/// same sense as `Transform::post_concat`, verified against it by
+/// `mat64_post_concat_matches_tiny_skia`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Mat64 {
+    /// Row 1 column 1 — x scale.
+    pub sx: f64,
+    /// Row 1 column 2 — y shear.
+    pub ky: f64,
+    /// Row 2 column 1 — x shear.
+    pub kx: f64,
+    /// Row 2 column 2 — y scale.
+    pub sy: f64,
+    /// Row 3 column 1 — x translation.
+    pub tx: f64,
+    /// Row 3 column 2 — y translation.
+    pub ty: f64,
+}
+
+impl Mat64 {
+    /// The identity.
+    pub const IDENTITY: Self = Self {
+        sx: 1.0,
+        ky: 0.0,
+        kx: 0.0,
+        sy: 1.0,
+        tx: 0.0,
+        ty: 0.0,
+    };
+
+    /// From the six numbers of a PDF matrix `[a b c d e f]`, in that
+    /// order — which is `from_row(sx, ky, kx, sy, tx, ty)`, the same
+    /// argument order `tiny_skia::Transform::from_row` uses.
+    #[must_use]
+    pub const fn from_row(sx: f64, ky: f64, kx: f64, sy: f64, tx: f64, ty: f64) -> Self {
+        Self {
+            sx,
+            ky,
+            kx,
+            sy,
+            tx,
+            ty,
+        }
+    }
+
+    /// Widen an `f32` transform. Lossless — every `f32` is an `f64`.
+    #[must_use]
+    pub fn from_f32(t: Transform) -> Self {
+        Self {
+            sx: f64::from(t.sx),
+            ky: f64::from(t.ky),
+            kx: f64::from(t.kx),
+            sy: f64::from(t.sy),
+            tx: f64::from(t.tx),
+            ty: f64::from(t.ty),
+        }
+    }
+
+    /// Narrow to the `f32` transform `tiny_skia` consumes.
+    ///
+    /// The precision that matters is spent BEFORE this call, not saved by
+    /// avoiding it: the composition happened in `f64`, so what is narrowed
+    /// here is the small result rather than the large operands.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn to_f32(self) -> Transform {
+        Transform::from_row(
+            self.sx as f32,
+            self.ky as f32,
+            self.kx as f32,
+            self.sy as f32,
+            self.tx as f32,
+            self.ty as f32,
+        )
+    }
+
+    /// Apply `self`, then `other` — PDF's `CTM' = M × CTM` for `cm`
+    /// (§8.3.4), and the same sense as `Transform::post_concat`.
+    #[must_use]
+    pub fn post_concat(self, other: Self) -> Self {
+        Self {
+            sx: self.sx * other.sx + self.ky * other.kx,
+            ky: self.sx * other.ky + self.ky * other.sy,
+            kx: self.kx * other.sx + self.sy * other.kx,
+            sy: self.kx * other.ky + self.sy * other.sy,
+            tx: self.tx * other.sx + self.ty * other.kx + other.tx,
+            ty: self.tx * other.ky + self.ty * other.sy + other.ty,
+        }
+    }
+
+    /// Map a point.
+    #[must_use]
+    pub fn map(self, x: f64, y: f64) -> (f64, f64) {
+        (
+            x * self.sx + y * self.kx + self.tx,
+            x * self.ky + y * self.sy + self.ty,
+        )
+    }
+
+    /// Does painting through this transform need `f64` PATH COORDINATES,
+    /// not merely an `f64` composition?
+    ///
+    /// # The predicate, and why one number covers both mechanisms
+    ///
+    /// A device coordinate is `point * scale + translation`. When the
+    /// result is small — which it is, or it would not be on the canvas —
+    /// the two terms are nearly equal and opposite, so **both** are about
+    /// `|translation|`. That makes `|translation|` the magnitude at which
+    /// the cancellation happens, whichever operand carries it:
+    ///
+    /// - a large `tx` composed into the matrix (fixed by `Mat64` itself), and
+    /// - a large path coordinate scaled up (fixed only by building the
+    ///   path in device space),
+    ///
+    /// both lose about `|translation| * 2^-23` device pixels. One
+    /// comparison therefore answers for both.
+    ///
+    /// The threshold is **1/20 of a device pixel**, giving
+    /// `|t| > 0.05 * 2^23 ≈ 419_000`. Worked through:
+    ///
+    /// | render | `max(|tx|,|ty|)` | error | precise? |
+    /// |---|---|---|---|---|
+    /// | whole page at 1.6x | ~1 300 | 0.0002 px | no |
+    /// | the two cells, ~62 000 % | ~334 000 | 0.04 px | no |
+    /// | one mitochondrion, ~16 M % | ~8.5e7 | 10 px | **yes** |
+    /// | the molecule box, ~1.5 G % | ~4.4e9 | 524 px | **yes** |
+    ///
+    /// So ordinary rendering never pays for it, which is the requirement
+    /// this method exists to satisfy: *fix the precision without
+    /// affecting speed where the precision is not needed*.
+    #[must_use]
+    pub fn needs_precise_paths(self) -> bool {
+        // 2^-23 is the relative spacing of `f32`'s 24-bit significand.
+        const F32_REL: f64 = 1.0 / 8_388_608.0;
+        const MAX_DEVICE_ERROR_PX: f64 = 0.05;
+        self.tx.abs().max(self.ty.abs()) * F32_REL > MAX_DEVICE_ERROR_PX
+    }
+}
+
 /// Line cap style (Table 54: 0 butt, 1 round, 2 projecting square).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineCap {
@@ -142,7 +330,21 @@ pub struct GraphicsState {
     /// Current transformation matrix: user space → device space
     /// (§8.3.4; initial value is device-dependent, supplied by the
     /// caller from page geometry + zoom).
+    ///
+    /// **Derived from [`Self::ctm64`], never composed directly.** Every
+    /// write is `ctm64.to_f32()`; composing here instead would reinstate
+    /// the cancellation [`Mat64`] exists to prevent. Read freely — this
+    /// is the value `tiny_skia` consumes.
     pub ctm: Transform,
+    /// The same transform in `f64`, and the one composition happens in.
+    ///
+    /// Kept as a second field rather than replacing [`Self::ctm`] because
+    /// every painting call takes a `tiny_skia::Transform` and would
+    /// otherwise narrow at each of two dozen call sites. One narrowing,
+    /// at the point of composition, is both cheaper and easier to reason
+    /// about: there is exactly one place where precision is lost, and it
+    /// is after the arithmetic that needed it.
+    pub ctm64: Mat64,
     /// Stroking colour (used by `S`/`s` and the stroke half of `B`…).
     pub stroke_color: Rgb,
     /// Non-stroking colour (fills, and the fill half of `B`…).
@@ -367,11 +569,36 @@ pub struct GraphicsState {
 }
 
 impl GraphicsState {
+    /// Set the CTM from its `f64` form, keeping the `f32` copy in step.
+    ///
+    /// The ONLY sanctioned way to change the CTM. `ctm` and `ctm64` are a
+    /// pair whose whole value is that they agree; assigning `ctm`
+    /// directly would let them diverge silently, and the divergence would
+    /// show up as content drawn in the wrong place at high zoom — a
+    /// symptom nobody would trace back to a field assignment.
+    pub fn set_ctm64(&mut self, m: Mat64) {
+        self.ctm64 = m;
+        self.ctm = m.to_f32();
+    }
+
     /// The §8.4/§8.6 initial state over a caller-supplied device CTM.
     #[must_use]
     pub fn default_with_ctm(ctm: Transform) -> Self {
+        Self::default_with_ctm64(Mat64::from_f32(ctm))
+    }
+
+    /// The same, seeded from an `f64` base transform.
+    ///
+    /// Preferred at every entry point that HAS the `f64` coefficients —
+    /// a region render computes them that way (`Pass 74.2`) and then
+    /// narrows, so going through [`Self::default_with_ctm`] there throws
+    /// away precision one line before the code that needs it.
+    #[must_use]
+    pub fn default_with_ctm64(ctm64: Mat64) -> Self {
+        let ctm = ctm64.to_f32();
         Self {
             ctm,
+            ctm64,
             stroke_color: Rgb::BLACK,
             fill_color: Rgb::BLACK,
             line_width: 1.0,
@@ -540,4 +767,137 @@ pub fn blend_mode_from_name(name: &[u8]) -> Option<tiny_skia::BlendMode> {
         // the person who would have checked.
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod mat64_tests {
+    use super::Mat64;
+    use tiny_skia::Transform;
+
+    /// `Mat64::post_concat` must mean exactly what
+    /// `Transform::post_concat` means.
+    ///
+    /// Asserted rather than assumed, because the convention is the one
+    /// thing here that cannot be checked by reading: PDF's matrix is a
+    /// row-vector form, `tiny_skia`'s argument order interleaves the
+    /// shears (`from_row(sx, ky, kx, sy, tx, ty)`), and getting either
+    /// backwards produces a transform that is still plausible — shears
+    /// transposed, or the two operands applied in the wrong order — and
+    /// only shows up as content in the wrong place on documents that use
+    /// a non-axis-aligned `cm`.
+    #[test]
+    fn mat64_post_concat_matches_tiny_skia() {
+        // Deliberately asymmetric: a matrix with equal shears, or a pure
+        // scale, cannot distinguish a transpose from the truth.
+        let cases = [
+            (
+                [1.0f32, 0.0, 0.0, 1.0, 0.0, 0.0],
+                [2.0f32, 0.0, 0.0, 3.0, 5.0, 7.0],
+            ),
+            (
+                [2.0, 0.5, -0.25, 3.0, 11.0, -4.0],
+                [0.5, -1.5, 0.75, 0.25, -3.0, 8.0],
+            ),
+            (
+                [0.0, 1.0, -1.0, 0.0, 100.0, 0.0],
+                [1.0, 0.0, 0.0, -1.0, 0.0, 792.0],
+            ),
+            // The shape this type exists for: a tiny scale with a large
+            // translation, composed with a large scale.
+            (
+                [2.834_645_7e-9, 0.0, 0.0, 2.834_645_7e-9, 540.0, 558.85],
+                [8.1e6, 0.0, 0.0, -8.1e6, -4.374e9, 4.527e9],
+            ),
+        ];
+        for (m, n) in cases {
+            let tm = Transform::from_row(m[0], m[1], m[2], m[3], m[4], m[5]);
+            let tn = Transform::from_row(n[0], n[1], n[2], n[3], n[4], n[5]);
+            let want = tm.post_concat(tn);
+            let got = Mat64::from_f32(tm)
+                .post_concat(Mat64::from_f32(tn))
+                .to_f32();
+            // The LINEAR part must agree to `f32` rounding: no
+            // cancellation happens there, so any difference is a
+            // convention error, not a precision one.
+            for (a, b, what) in [
+                (want.sx, got.sx, "sx"),
+                (want.ky, got.ky, "ky"),
+                (want.kx, got.kx, "kx"),
+                (want.sy, got.sy, "sy"),
+            ] {
+                assert!(
+                    (a - b).abs() <= a.abs().max(1.0) * 1e-5,
+                    "{what}: tiny_skia {a} vs Mat64 {b} for {m:?} x {n:?}"
+                );
+            }
+        }
+    }
+
+    /// And the translation must be BETTER, not merely equal — which is
+    /// the entire point, and is why the test above checks only the linear
+    /// part for agreement.
+    ///
+    /// ★ The first version of this test used round numbers — a form at
+    /// `x = 540` and a device origin of exactly `540 * scale` — and the
+    /// `f32` route produced **exactly 0**, i.e. the right answer. Two
+    /// large numbers that are equal cancel perfectly in any precision;
+    /// the failure needs them to be large and *nearly* equal. The
+    /// self-check at the bottom is what caught it, and is kept for the
+    /// next person who adjusts these constants.
+    #[test]
+    fn mat64_translation_survives_a_cancellation_f32_cannot() {
+        // The real numbers from `tools/gen-scale-demo`'s molecule box.
+        let scale = 8_104_752.0_f64;
+        let form_x = 540.0_f64; // where the `cm` puts the form
+        let region_llx = 539.999_891_9_f64; // where the viewport starts
+        let origin = (region_llx * scale).floor(); // the base CTM's -tx
+
+        let cm = Mat64::from_row(2.834_645_7e-9, 0.0, 0.0, 2.834_645_7e-9, form_x, 0.0);
+        let base = Mat64::from_row(scale, 0.0, 0.0, scale, -origin, 0.0);
+        let exact = cm.post_concat(base).tx;
+
+        // Truth, computed independently of the type under test.
+        let truth = form_x * scale - origin;
+        assert!(
+            (exact - truth).abs() < 0.01,
+            "f64 composition should be exact to well under a pixel: got {exact}, truth {truth}"
+        );
+
+        // The same composition entirely in `f32`, which is what the
+        // renderer did before this type existed.
+        #[allow(clippy::cast_possible_truncation)]
+        let f32_way = Transform::from_row(2.834_645_7e-9, 0.0, 0.0, 2.834_645_7e-9, 540.0, 0.0)
+            .post_concat(Transform::from_row(
+                scale as f32,
+                0.0,
+                0.0,
+                scale as f32,
+                -origin as f32,
+                0.0,
+            ))
+            .tx;
+        let f32_error = (f64::from(f32_way) - truth).abs();
+        assert!(
+            f32_error > 50.0,
+            "this test is only meaningful if the f32 route is visibly wrong; its error was {f32_error} px, so either the fixture stopped exercising the cancellation or f32 got better. Round numbers cancel EXACTLY -- the operands have to be large and merely NEARLY equal."
+        );
+    }
+
+    /// The gate that keeps ordinary rendering on the fast path.
+    #[test]
+    fn needs_precise_paths_only_fires_at_deep_zoom() {
+        let at = |tx: f64| Mat64::from_row(1.0, 0.0, 0.0, 1.0, tx, 0.0).needs_precise_paths();
+        assert!(!at(0.0), "whole page");
+        assert!(!at(1_300.0), "a page-fit render's translation");
+        assert!(
+            !at(334_000.0),
+            "the two cells at ~62 000 %: 0.04 px of error"
+        );
+        assert!(at(8.5e7), "one mitochondrion at ~16 M %: 10 px of error");
+        assert!(at(4.4e9), "the molecule box at ~1.5 G %: 524 px of error");
+        // The y component counts too — a page rotated 90 degrees puts the
+        // magnitude there instead, and a predicate that only looked at x
+        // would silently stop working on landscape scans.
+        assert!(Mat64::from_row(1.0, 0.0, 0.0, 1.0, 0.0, 8.5e7).needs_precise_paths());
+    }
 }

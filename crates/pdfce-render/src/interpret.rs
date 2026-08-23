@@ -142,7 +142,7 @@ use crate::canvas::{BrushSpec, Canvas, ClipRef, LayerPaint};
 use crate::display_list::{ClipDef, PoisonReason};
 use crate::font::program::FontProgram;
 use crate::font::{FontEnvironment, RenderPolicy};
-use crate::gstate::{GStateStack, GraphicsState, LineCap, LineJoin, Rgb};
+use crate::gstate::{GStateStack, GraphicsState, LineCap, LineJoin, Mat64, Rgb};
 use crate::image::{self, ImageError, ImageNotes, ImageOrigin};
 use crate::text::{LoadedFont, TextObject};
 use pdfce_core::settings::MinifyFilter;
@@ -2110,10 +2110,28 @@ impl Interpreter<'_> {
                 }
             }
             b"cm" => {
-                if let &[a, b, c, d, e, f] = nums.as_slice() {
-                    let m = Transform::from_row(a, b, c, d, e, f);
+                // ★ Composed in `f64`, from the operands' OWN `f64` values
+                // rather than from the `f32` copies in `nums`.
+                //
+                // Both halves matter and the second is easy to miss. A
+                // `cm` on a deep-zoom page routinely carries a page
+                // coordinate — `540` — and composing it with a base CTM
+                // whose scale is millions produces a translation that is
+                // the difference of two ~4e9 numbers. In `f32`, whose
+                // spacing there is 512, the answer came out quantised in
+                // 512-pixel steps; see `Mat64`'s docs for the measured
+                // consequence. Reading `nums` here would also narrow `e`
+                // and `f` to `f32` BEFORE the multiply, which reinstates
+                // the problem from the other end for a page whose `cm`
+                // needs more than seven digits.
+                if nums.len() == 6
+                    && let Some(v) = operand_f64s(op, 6)
+                {
+                    let m = Mat64::from_row(v[0], v[1], v[2], v[3], v[4], v[5]);
                     // PRE-multiply: CTM' = M × CTM (§8.3.4).
-                    self.gs.current.ctm = m.post_concat(self.gs.current.ctm);
+                    self.gs
+                        .current
+                        .set_ctm64(m.post_concat(self.gs.current.ctm64));
                 } else {
                     self.diag.tolerated += 1;
                 }
@@ -3774,8 +3792,8 @@ impl Interpreter<'_> {
         let mut inner = GraphicsState::default_with_ctm(self.gs.current.ctm);
         // §8.10.2 step (b): concatenate /Matrix, THEN clip to /BBox in the
         // already-transformed space. Same order as `do_form`.
-        if let Some(m) = matrix_entry(doc, &g_dict) {
-            inner.ctm = m.post_concat(inner.ctm);
+        if let Some(m) = matrix_entry64(doc, &g_dict) {
+            inner.set_ctm64(m.post_concat(inner.ctm64));
         }
         if let Some(rect) = rect_entry(doc, &g_dict, b"BBox") {
             if rect.width() <= 0.0 || rect.height() <= 0.0 {
@@ -4712,11 +4730,16 @@ impl Interpreter<'_> {
             // than hoisted: this probe must not touch `inner`, which does
             // not exist yet, and duplicating one `post_concat` is cheaper
             // than restructuring the soft-mask handling that sits between.
-            let mut probe = self.gs.current.ctm;
-            if let Some(m) = matrix_entry(doc, &stream.dict) {
+            // In `f64`, for the same reason the real composition below
+            // is: a probe that disagrees with the CTM the form will
+            // actually be painted under would cull a form that renders,
+            // or keep one that does not, and both failures look like a
+            // renderer bug rather than an arithmetic one.
+            let mut probe = self.gs.current.ctm64;
+            if let Some(m) = matrix_entry64(doc, &stream.dict) {
                 probe = m.post_concat(probe);
             }
-            if let Some(dev) = bbox.transform(probe) {
+            if let Some(dev) = bbox.transform(probe.to_f32()) {
                 #[allow(clippy::cast_precision_loss)]
                 let (cw, ch) = (canvas.width() as f32, canvas.height() as f32);
                 let (mut l, mut t) = (dev.left() - 1.0, dev.top() - 1.0);
@@ -4763,8 +4786,8 @@ impl Interpreter<'_> {
         let mut inner = self.gs.current.clone();
 
         // --- (b) concatenate /Matrix (Table 95; default identity) ---
-        if let Some(m) = matrix_entry(doc, &stream.dict) {
-            inner.ctm = m.post_concat(inner.ctm);
+        if let Some(m) = matrix_entry64(doc, &stream.dict) {
+            inner.set_ctm64(m.post_concat(inner.ctm64));
         }
 
         // §11.4.5 / §11.6.6 — THE SOFT MASK, DECIDED BEFORE THE CLIP
@@ -6123,22 +6146,51 @@ fn intersect_clip(
     state.clip = Some(built);
 }
 
-/// Read a six-number `/Matrix` entry (Table 95) as a [`Transform`].
+/// Read a six-number `/Matrix` entry (Table 95), in `f64`.
 ///
 /// Returns `None` when absent or malformed, which the caller treats as
 /// Table 95's documented default — the identity matrix. Note this is an
 /// **array** operand, unlike `cm`/`Tm`, whose six numbers are loose
 /// operands.
-fn matrix_entry(doc: &DocumentView<'_>, dict: &Dict) -> Option<Transform> {
+///
+/// A form's `/Matrix` is the other place a page coordinate enters the CTM
+/// (§8.10.1 step b), and it composes with the same deep-zoom base a `cm`
+/// does — so it loses precision the same way and is repaired the same way.
+/// See [`Mat64`].
+///
+/// **There is deliberately no `f32` sibling.** One existed, for about ten
+/// minutes, as a narrowing wrapper — and `-D dead-code` observed that
+/// nothing called it: every consumer wants the `f64` value and narrows at
+/// its own leaf, which is the discipline `Mat64` exists to impose. A
+/// convenience wrapper would have been a second, lossier reader of one
+/// dictionary entry, sitting there to be picked by accident.
+fn matrix_entry64(doc: &DocumentView<'_>, dict: &Dict) -> Option<Mat64> {
     let items = doc.resolve(dict.get(b"Matrix")?).as_array()?;
-    let n: Vec<f32> = items
-        .iter()
-        .filter_map(|o| o.as_number().map(|v| v as f32))
-        .collect();
+    let n: Vec<f64> = items.iter().filter_map(Object::as_number).collect();
     match n.as_slice() {
-        &[a, b, c, d, e, f] => Some(Transform::from_row(a, b, c, d, e, f)),
+        &[a, b, c, d, e, f] => Some(Mat64::from_row(a, b, c, d, e, f)),
         _ => None,
     }
+}
+
+/// The first `n` operands of an operation as `f64`.
+///
+/// `Interpreter::apply` narrows every operand to `f32` up front, which is
+/// right for colours, widths and dash phases and wrong for a matrix: `cm`
+/// and `/Matrix` carry page coordinates that then get multiplied by a
+/// deep-zoom scale, and seven digits is not enough to survive the
+/// cancellation that follows. This reads the same operands again without
+/// that narrowing, and is called only from the two matrix sites.
+fn operand_f64s(op: &Operation<'_>, n: usize) -> Option<Vec<f64>> {
+    let v: Vec<f64> = op
+        .operands
+        .iter()
+        .filter_map(|t| match &t.kind {
+            ContentTokenKind::Operand(o) => o.as_number(),
+            _ => None,
+        })
+        .collect();
+    (v.len() == n).then_some(v)
 }
 
 /// Read a four-number rectangle entry, **normalized** per §7.9.5.
