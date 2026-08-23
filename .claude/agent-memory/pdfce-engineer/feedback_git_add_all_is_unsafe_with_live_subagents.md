@@ -33,3 +33,33 @@ attributable to it.
 **Related:** the subagent working directory is the repo root, not a temp
 dir. Anything a dispatched agent writes lands where your commit will find
 it.
+
+**★ IT RECURRED ON 2026-08-22, and the reason it did is the useful part:
+the librarian was NOT LIVE.** It had reported back, complete, some time
+earlier — and had **written its documents without committing them**. So
+`git status` was quiet in the way a finished agent looks quiet, and
+`git add -A` swept **+808 `ROADMAP.md`, +233 `SESSION_LOG.md`, +236
+`NEXT_SESSION.md`, +39 `ARCHITECTURE.md`** into a commit about
+`--no-annotations`.
+
+The rule above says *"with live subagents"* and *"made after the agent
+reports back"* — and both of those were satisfied. **The hazard is not the
+agent running; it is uncommitted work in the tree that is not yours**, and
+a finished agent leaves exactly that.
+
+**Nothing went red.** `check-commits-filed.py` counts *code* commits, and
+this was one, correctly. No gate can see it. It was caught by the
+librarian reading `git show --numstat` on the commit it was asked to file
+— a second reader, after the fact.
+
+**What it costs is attribution, in both directions.** `git show <hash>` no
+longer isolates that filing, and `git log -- docs/ROADMAP.md` credits an
+engineering commit with 808 lines of librarian prose. It also inverts
+`d4721d8`'s rule — that one forbids *code inside a filing*; this is a
+*filing inside code*, same damage, opposite direction.
+
+**How to apply, with the scope taken off:** run `git status --short`
+before every commit and stage explicit paths — **not because an agent is
+running, but always.** If `docs/` appears in the list of a code commit and
+you did not edit `docs/`, a librarian left it there: commit that
+separately, first, with a `librarian:` subject.

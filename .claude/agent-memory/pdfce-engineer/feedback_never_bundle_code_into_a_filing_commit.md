@@ -43,4 +43,29 @@ own remedy. This project has met that shape before — see
 Anything that both *reports* and *is reported on* needs its two roles kept
 in separate commits.
 
+**★ THE RULE RUNS IN BOTH DIRECTIONS, learned 2026-08-22.** Everything
+above is about *code inside a filing*. The mirror image happened the same
+day: `eca07ee`, a commit about `--no-annotations`, swallowed a completed
+librarian's uncommitted output — **+808 `ROADMAP.md`, +233
+`SESSION_LOG.md`** — via `git add -A`.
+
+**No gate went red, and none can:** `check-commits-filed.py` counts *code*
+commits, and that was one, correctly. The damage is attribution rather
+than enforcement — `git show <hash>` no longer isolates the filing, and
+`git log -- docs/ROADMAP.md` credits an engineering commit with 808 lines
+of librarian prose.
+
+So the pair is: **a filing must contain no code, and a code commit must
+contain no filing.** Only the first has a gate. The second is caught by
+running `git status --short` and staging explicit paths — see
+[[git-add-all-is-unsafe-with-live-subagents]], which now carries the
+detail that a *finished* agent leaves exactly the same hazard as a live
+one.
+
+**And the converse, ruled explicitly so it is not over-applied:** bundling
+nine unrelated stale-doc repairs *into* `PASS 74.8`'s code commit was
+**correct**. `d4721d8` forbids code in a librarian filing; it says nothing
+against grouping repairs in a code commit, and grouping them there is what
+keeps the filing docs-only.
+
 See [[librarian-needs-exact-hashes]] and [[run-the-projects-own-gates]].
