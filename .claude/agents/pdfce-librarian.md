@@ -479,6 +479,41 @@ has both a subject-index entry and a master-index entry, and that
     rustdoc, and `FEATURES.md` rows that name the counter or the capability.
     Report; do not edit `crates/` — that remains outside your remit.
 
+    **★ AMENDED 2026-08-23 by the engineer, again at your recommendation:
+    MINTING A RULE ABOUT A NUMBER IS ITSELF A MEANING-CHANGE EVENT, and
+    the sweep it triggers must reach `tools/` and `docs/` alike.**
+
+    The trigger above says *"a counter or capability"*, and that scoping is
+    what let the next instance through. `R215` was minted because an
+    acceptance criterion — *"11 of 11 forms at every scale"* — was
+    impossible: the correct answer is `2`, and a change producing `11`
+    would have been a regression. The mint swept `docs/`, which is where
+    the criterion lived. **Hours later the same wrong number appeared in
+    `tools/gen-scale-demo/README.md`, restated as a measured result**, and
+    a filing later a *second* survivor was found in the same file — the
+    table header `"forms rendered of 11"`, a fourth copy of the claim that
+    nobody had reported.
+
+    **The shape, because it recurred at n=2 in two filings:** *a minted
+    rule protects the document it was minted in.* Deciding a number is
+    wrong changes what every other copy of it means, exactly as a counter's
+    redefinition does — so the mint is a meaning change, and the sweep it
+    owes runs over every tree this project writes to, not only the one
+    holding the rule.
+
+    **Two additions to what the sweep must look for**, both learned from
+    survivors it missed:
+
+    - **A wrong number reappearing as a RESULT rather than an
+      expectation.** *"The table above is superseded: 11 of 11 forms
+      survive at every scale tested"* is the shape — an expectation
+      invites checking, a result does not. `R215` clause (d) now covers
+      writing the correction; this covers finding where it did not reach.
+    - **The claim in a TABLE HEADER or a column label**, not only in prose.
+      `"forms rendered of 11"` makes `11` the target on every row without
+      asserting it in a sentence, which is why three readings of that
+      section walked past it.
+
     **Why searching for the CLAIM rather than the string is the whole
     rule.** The engineer greps for the wording he remembers writing; that
     finds the copies he wrote and misses the ones phrased differently. On
