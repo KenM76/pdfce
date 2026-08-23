@@ -105,7 +105,8 @@
 //!               lzw_anomalies=<n> dct_cmyk_unverifiable=<n> jpx_preblended=<n> \
 //!               annots=<n> annots_painted=<n> annots_no_ap=<n> \
 //!               annots_hidden=<n> annots_state_missing=<n> annots_widget=<n> \
-//!               annots_degenerate=<n> need_appearances=<0|1> \
+//!               annots_degenerate=<n> annots_out_of_scope=<n> \
+//!               page_content_suppressed=<0|1> need_appearances=<0|1> \
 //!               unsupported_type3=<n> unsupported_noncmap=<n> \
 //!               unsupported_vertical=<n> \
 //!               unsupported_composite_not_embedded=<n> \
@@ -260,6 +261,8 @@
 //! | `annots_state_missing` | `annotations_appearance_state_missing` | "how many annotations carry a state subdictionary whose state could not be selected?" (§12.5.5 NOTE 3 — `/AS` absent against a multi-entry subdictionary, or naming a state that is not in it. Displayed as NOTHING, never guessed: a checkbox that should read "on" reads as blank, and this is the only thing that says why) |
 //! | `annots_widget` | `annotations_widget` | "how much of this page's annotation load is FORM FIELDS?" (§12.5.6.19 — census, a subset of `annots`. Widgets are ~88 % of organic annotations, so their share is what drives forms prioritisation rather than anything about this page's correctness) |
 //! | `annots_degenerate` | `annotations_placement_degenerate` | "how many annotations HAVE an appearance that could not be put anywhere?" (a missing `/Rect` or `/BBox` — the §12.5.5 placement inputs — or a transformed appearance box of zero width or height, which makes the step-b fit matrix singular. A named refusal, never a divide-by-zero and never a fabricated placement (risk X2); the specific reason is in the stderr annotation notes) |
+//! | `annots_out_of_scope` | `annotations_out_of_scope` | "how many annotations did THIS RENDER withhold, as opposed to the document hiding them?" (the `--no-annotations` and form-fields-only scopes. A divergence from the file that the OPERATOR chose, not one pdfce chose — but a divergence, and until 2026-08-22 it was computed, merged and unit-tested while being printed nowhere at all, so `--no-annotations` withheld content and reported no number saying how much. Distinct from `annots_hidden`, which is the document's own suppression) |
+//! | `page_content_suppressed` | `page_content_suppressed` | "was the PAGE'S OWN content withheld?" (`0`/`1`, the only flag on this line besides `need_appearances`. `1` under the print-onto-pre-printed-paper scope, where the background is physical paper and drawing it again would double-print it — so a near-empty raster is the requested output rather than a failure, and this is the only thing that says which) |
 //! | `need_appearances` | (shell) | "is this document telling me its field appearances are STALE?" (§12.7.2's `/AcroForm` `/NeedAppearances`. DOCUMENT-scoped, not page-scoped, so it prints `0`/`1` rather than a count and is read from the catalog rather than from `Diagnostics`. R51: pdfce reports the condition and never silently regenerates on load — that would rewrite objects the operator never touched and pick appearances for them. A widget with an `/AP` `/N` is still painted from it regardless) |
 //! | `oc_hidden` | `oc_sections_hidden` | "is something on this page deliberately NOT being shown?" (§8.11.3.2 — census of pdfce obeying an OFF optional-content group, counted per SECTION entered rather than per operator suppressed, because one section can hide a whole drawing. R183: this is the disclosure channel for the one feature whose correct behaviour is "draw less", and without it a layer turned off is indistinguishable from a render that failed) |
 //! | `cs_unresolved` | `color.spaces_unresolved` | "did any `cs`/`CS` name a colour space pdfce could not resolve?" (§8.6 — DIVERGENCE. Counts DISTINCT resource names, not occurrences, on the same policy as `unsupported`: one broken resource used ten thousand times is one problem. The space is left UNSET rather than defaulted to `DeviceGray`, because a silent `DeviceGray` paints black marks that look exactly like a correct render — so read this beside `colors_not_set`, which is the residue it leaves) |
@@ -2302,20 +2305,49 @@ enum Command {
         /// 401x301 pt region: **95 ms at 1x and 87 ms at 32x** -- flat,
         /// because the pixel count never changes.
         ///
-        /// # Where the real ceiling is
+        /// # Where the real ceiling is, and WHICH ceiling
         ///
-        /// Numerical, not spatial, and far away.
-        /// `examples/zoom_ceiling.rs` measures the `f32` transform error
-        /// against a bar 2,999.7373 pt from the origin and finds it stays
-        /// under one device pixel out past **20,000x**.
+        /// ★ There are **two**, they differ by four orders of magnitude,
+        /// and this block used to name only the higher one. Standing rule
+        /// `R213`: a magnitude claim is a claim about ONE quantity, and
+        /// the quantity has to be in the sentence.
         ///
-        /// That was the ceiling when this flag shipped, and `Pass 74.2`
-        /// moved it: a region's device geometry is now derived in `f64`
-        /// with the region's origin subtracted BEFORE narrowing, so a
-        /// requested 800x600 viewport holds its shape out to a scale of
-        /// 10,000,000,000 -- one trillion percent. The `f32` bar
-        /// measurement above still describes the RASTERISER's limit; it is
-        /// no longer the limit a viewer meets first.
+        /// **The VIEWPORT's ceiling — one trillion percent.** A region's
+        /// device geometry is derived in `f64` with the region's origin
+        /// subtracted BEFORE narrowing (`Pass 74.2`), so a requested
+        /// 800x600 viewport comes back at 800x600 out to a scale of
+        /// `1e10`. That is a claim about the RECTANGLE: its size, its
+        /// shape, and the arithmetic that computes it.
+        ///
+        /// **The CONTENT's ceiling — about a hundred times lower**, and
+        /// it is the one a viewer meets first when a page carries small
+        /// geometry. Two `f32` limits sit under the drawing itself, both
+        /// measured on `tools/gen-scale-demo`:
+        ///
+        /// - **Path coordinates.** A point near `x = 540` has an `f32`
+        ///   spacing of `6.1e-5 pt`, i.e. **21.5 um**. Anything smaller
+        ///   than that written as an absolute page coordinate is
+        ///   quantised away, whatever the scale.
+        /// - **The placement matrix.** A `cm` carrying a page coordinate
+        ///   leaves the CTM's translation as the difference of two large
+        ///   nearly-equal `f32` values, so content DRIFTS by roughly
+        ///   `page_x * scale / 16,700,000` pixels — about 5 px at a scale
+        ///   of `1.6e5`, ~400 px at `8e6`, and past the viewport entirely
+        ///   above `5e6`. Equivalently, the content's device position is
+        ///   quantised: at `8.1e6` it moves in ~500 px steps, so nudging
+        ///   `--region` by less than that does nothing at all.
+        ///
+        /// ⇒ `--region` will hand you a correctly-sized viewport far past
+        /// the point where what is inside it stops being correctly placed.
+        /// `Pass 74.7` is the fix for the second half — the `f64` trick
+        /// above, carried through content-stream `cm` concatenation.
+        ///
+        /// The older `examples/zoom_ceiling.rs` measurement — `f32`
+        /// transform error against a bar 2,999.7373 pt from the origin,
+        /// under one device pixel out past **20,000x** — is a THIRD
+        /// quantity again, the rasteriser's own error at a fixed
+        /// coordinate, and is kept for what it is rather than as "the"
+        /// ceiling.
         ///
         /// # Coordinates
         ///
@@ -7891,7 +7923,8 @@ images={} images_unsupported={} forms={} forms_culled={} \
 images_codec_unsupported={} codec_features={} codec_geometry_mismatch={} \
 dct_cmyk={} lzw_anomalies={} dct_cmyk_unverifiable={} jpx_preblended={} \
 annots={} annots_painted={} annots_no_ap={} annots_hidden={} \
-annots_state_missing={} annots_widget={} annots_degenerate={} need_appearances={} \
+annots_state_missing={} annots_widget={} annots_degenerate={} \
+annots_out_of_scope={} page_content_suppressed={} need_appearances={} \
 unsupported_type3={} unsupported_noncmap={} unsupported_vertical={} \
 unsupported_composite_not_embedded={} unsupported_unknown_subtype={} \
 unsupported_unusable_program={} supplied={} supplied_registered={} \
@@ -7941,6 +7974,8 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         d.annotations_appearance_state_missing,
         d.annotations_widget,
         d.annotations_placement_degenerate,
+        d.annotations_out_of_scope,
+        usize::from(d.page_content_suppressed),
         need_appearances,
         // Per-reason breakdown of `unsupported` (R20): always emitted in
         // a fixed order, even at zero, so the line stays diffable. Sum ==

@@ -44,7 +44,7 @@
 //! | `ICCBased` | **The spec's own fallback**, not an approximation pdfce invented — see [`ColorSpace::IccBased`]. |
 //! | `Indexed` | Full §8.6.6.3, string *and* stream lookups, normative index clamp. |
 //! | `Separation`, `DeviceN` | Parsed in full, **tint transform evaluated** via [`pdfce_core::function`] — [`ColorDiagnostics::tint_transforms_applied`] counts the successes, [`ColorDiagnostics::tint_transform_not_applied`] the residue (a missing or unusable `/tintTransform`). |
-//! | `Pattern` | Recognised; nothing is painted, and it is counted. See [`ColorDiagnostics::patterns_unpainted`]. |
+//! | `Pattern` | Recognised. `PatternType 2` (shading) is **painted**; tiling patterns and unresolvable names are not, and the residue is counted. See [`ColorDiagnostics::patterns_unpainted`]. |
 //!
 //! ### Why `Separation`/`DeviceN` stop short of the transform
 //!
@@ -781,9 +781,22 @@ pub struct ColorDiagnostics {
     pub separation_none_suppressed: usize,
     /// `cs`/`CS` selections of a `Pattern` colour space.
     pub pattern_spaces_selected: usize,
-    /// `scn`/`SCN` operations that named a **pattern**, which pdfce does
-    /// not paint (tiling and shading patterns, §8.7, are later work).
-    /// Nothing was drawn in its place — deliberately, since Table 74's own
+    /// `scn`/`SCN` operations that named a **pattern pdfce did not
+    /// paint** — the REMAINDER after shading patterns are painted.
+    ///
+    /// ★ This read "which pdfce does not paint (tiling and shading
+    /// patterns, §8.7, are later work)" long after `PatternType 2` shading
+    /// patterns started painting. A comment ~300 lines below in this same
+    /// file exists **specifically to refute that sentence** ("NOT 'pdfce
+    /// does not paint patterns' — it does, for `PatternType 2`"), and the
+    /// CLI's own stderr note already described this counter correctly. So
+    /// three copies of the fact existed, two right and one wrong, and the
+    /// wrong one was the field's own doc — the copy every consumer reads
+    /// first. `R212`.
+    ///
+    /// What it now counts: TILING patterns, a `/Pattern` name with no
+    /// matching entry, and any shading pattern refused for its own reason.
+    /// Nothing is drawn in their place — deliberately, since Table 74's
     /// initial `Pattern` colour "causes nothing to be painted" and an
     /// invented solid fill would be worse than a gap.
     pub patterns_unpainted: usize,

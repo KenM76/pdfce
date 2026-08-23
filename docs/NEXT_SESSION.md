@@ -4,54 +4,74 @@ Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
 **Written 2026-08-22 (evening), by `pdfce-librarian` at the engineer's
-request** during the 228th filing, replacing the 2026-08-22 (afternoon)
-handoff. **Amended 2026-08-22 (229th filing):** §0.5's two doc repairs are
-**discharged** by `f9dc007`; what stands there now is the 28-key gap that
-checking the repair uncovered, plus the gate to wire after it. **`(br)` in §0
-is the only thing awaiting Ken.**
+request** during the 228th filing. **Amended 2026-08-22 (229th filing)**, then
+**REWRITTEN 2026-08-22 (230th filing)**: §0.5's metrics-contract repair is
+**fully discharged and gated** by `ea413a4`, the banana page has gained a
+molecule box at 1:1 (`PASS 74.6`/`74.6b`), and the deep-zoom ceiling turned out
+to have been filed against the wrong quantity. **`(br)` in §0 is still the only
+thing awaiting Ken.**
 
 ---
 
-## §0 — THE BANANA IS DONE. GO LOOK AT IT, THEN ANSWER ONE QUESTION
+## §0 — THE BANANA IS DONE, AND IT NOW GOES DOWN TO MOLECULES. GO LOOK, THEN ANSWER ONE QUESTION
 
 The operator's stated first task — *"the first thing I am going to do is
-refine the banana.pdf"* — **shipped** as `Pass 74.4` + `Pass 74.5`
-(`e36f96e`).
+refine the banana.pdf"* — **shipped** as `Pass 74.4` + `Pass 74.5` (`e36f96e`)
+and again as **`PASS 74.6` + `PASS 74.6b`** (`950e3af`, `65e1910`).
 
 ### What to look at, first thing
 
-**`C:\Users\Ken\OneDrive\pdfTests\`** — `banana-at-scale.pdf` (**684 kB**,
-was 53 kB) and **NINE numbered renders**, `_1-whole-page` through
-`_9-one-crista-atp-synthase`. The old set had six; **tiers 7, 8 and 9 are
-new**, and they are the ones worth opening first.
+**`C:\Users\Ken\OneDrive\pdfTests\`** — `banana-at-scale.pdf` and **ELEVEN
+numbered renders**, `_1-whole-page` through `_11-ten-molecules`. **Tiers 10 and
+11 are new** (`_10-molecule-box-pointer`, `_11-ten-molecules`) and they are the
+two to open first.
 
-The scale chain went **from six tiers to eight**. Smallest feature is a
-**10 nm ATP synthase F1 head = 2.835 × 10⁻⁵ pt**, first readable at
-**~35 000 000 %**.
+**Below the cells, at the end of a tapering dart, a 50 × 35 nm box holding the
+ten most abundant molecules in a banana cell — at the SAME 1:1 scale as
+everything else on the page.** The banana is **412 585 829 water molecules
+long**, and both are drawn in one coordinate system with **no scale break
+anywhere between them**.
 
-### What changed in the drawing
+- **Authored in picometres**, because that is the unit bond lengths and atomic
+  radii are published in — O–H `96`, C–C `154`, oxygen's van der Waals radius
+  `152`, potassium's ionic radius `138`. Every number is checkable against a
+  reference table **without arithmetic**.
+- **Eleven Form XObjects** (ten molecules plus the box that invokes them), so
+  the page now contains **nested forms** for the first time.
+- **Space-filling rather than ball-and-stick**, deliberately: a stick model is
+  mostly empty space and this box exists to say **how big these things are**.
+  The cost is stated rather than hidden — rings come out as lumpy blobs,
+  connectivity is sacrificed, and bonds are drawn underneath so they still show
+  in the gaps.
+- **Three label lines each**: name, **share of the fruit by mass**, size.
+  **Adding the shares RE-ORDERED the list** — water 74.9, starch 5.4, glucose
+  5.0, fructose 4.9, sucrose 2.4, cellulose 1.2, protein 1.1, pectin 0.7, malic
+  acid 0.4, potassium 0.36, summing to **96.4 %** of the fruit. **Five of ten
+  moved** from the prior remembered ranking.
+- **Ripe figures, and the subtitle says so** — green pulp is ~20–25 % starch and
+  ~1–2 % sugars. The page draws a **yellow** banana beside cells with **green**
+  chloroplasts and packed starch grains; **that seam is disclosed, not tidied**.
+- **Water's label reads 0.37 nm, not the 0.28 nm everybody quotes.** `0.28` is
+  the kinetic diameter (the hole it fits through); `0.37` is the space it
+  occupies. The box draws at 1:1 and invites you to measure it, so the label
+  the drawing disproves is the wrong one to print.
 
-Every mitochondrion is now drawn to its **real internal anatomy** instead
-of an ellipse with a chord or three ruled across it — because a crista is
-not a chord, it is an **invagination of the inner membrane** joined through
-a narrow neck, and the space inside it is continuous with the intermembrane
-space rather than the matrix. **Chords get the compartment topology
-backwards**, which is the one thing a section view is for.
+### ★★★ THE RENDER IS OFF-CENTRE ON PURPOSE. That framing is EVIDENCE.
 
-`tools/gen-scale-demo/mitochondrion.py` (603 lines, authored in
-**nanometres**, emitted as shared Form XObjects): outer membrane 5 nm,
-intermembrane space 24 nm, an inner membrane that is **one closed path**
-running the boundary and diving in through each 18 nm crista junction to a
-26 nm lumen, ATP synthase F1 heads at the real density gradient (11.5 nm
-pitch on crista faces and rims, 62 nm on the flat boundary), mitoribosomes
-26 nm, matrix granules 36 nm, mtDNA nucleoids 210 nm as tangled loops.
+**Do not "fix" it.** `tools/gen-scale-demo/README.md` carries the command to
+reproduce it. Nudging `--region` does **nothing**: two successive nudges give
+**byte-identical framing**, because `--region` is `f64` all the way through
+`region_base_geometry_of` while the content's device translation is `f32` and
+**quantised in ~500 px steps at `scale = 8.1×10⁶`**. See §0.5.
 
-**All four populations share the module** — 14 in the pulp cytoplasm, 3 in
-the skin cell, 325 beaded into the easter-egg heart and letters; **342
-instances from 12 shared forms, 7 571 F1 heads** across the library.
-Before this they were **three copy-pastes that had drifted**: three cristae
-in the pulp cell, one or two in the easter egg, **none at all in the skin
-cell**.
+### What changed on the page before this (`Pass 74.5`, still current)
+
+Every mitochondrion is drawn to its **real internal anatomy** rather than an
+ellipse with chords — a crista is an **invagination of the inner membrane**
+joined through a narrow neck, and the space inside it is continuous with the
+intermembrane space, not the matrix. **342 instances from 12 shared forms,
+7 571 F1 heads**, all four populations sharing one module. Before that they
+were three copy-pastes that had drifted to three cristae / one or two / none.
 
 ### ★★ THE ONE THING WAITING ON KEN — open question `(br)`
 
@@ -110,56 +130,116 @@ pdfce-cli render-page banana.pdf --page 1 --scale 1.6 -o page.png
 
 ---
 
-## §0.5 — THE TWO DOC REPAIRS ARE **DONE**. WHAT REPLACED THEM IS TWENTY-EIGHT TIMES BIGGER.
+## §0.5 — THE METRICS CONTRACT IS **DONE AND GATED**. WHAT REPLACED IT IS A CEILING IN THE WRONG PLACE.
 
-**Discharged by `f9dc007`** (2026-08-22, `crates/pdfce-cli/src/main.rs` only,
-+24 / −5), filed as the 229th filing: the `render-page:` template carries
-`forms_culled=<S2>`, and the *"existing keys never move"* sentence now
-promises **name**-stability rather than **ordinal** stability and names
-`crates/pdfce-cli/tests/render_page.rs` as the enforcement. **Do not redo
-this.**
+### The metrics contract — CLOSED, do not redo any of it
 
-### ★★★★ What the 229th filing found while checking that repair
+**`ea413a4`** discharged all three steps the 229th filing owed, **in the
+required order**: template repaired (**59 → 87 of 87**), per-key table repaired
+(**44 → 87 of 87**, **57 rows added**), **then**
+`tools/check-metrics-line-contract.py` wired into `.github/workflows/ci.yml`
+and registered in `tools/check-ci-parity.py` — **which caught the omission on
+its first run, exit 1, before anyone had thought to add it.** The placeholder
+scheme went from `<K>`…`<ai>` to a uniform `<n>`, with `need_appearances=<0|1>`
+kept distinct because it is the one field that is not a count, and the
+`annots=…` elision that hid six real keys is expanded.
+**`python tools/check-metrics-line-contract.py` → exit 0, 87 keys.**
 
-It built the gate predicate the engineer asked about and **ran** it. The
-published doc template shows **59 of the 87 keys** the `render-page`
-`println!` emits. **28 are missing**, contiguous at the tail —
-`blend_modes_applied` → `cmyk_unbridged_images` — and the per-key table
-further down the same doc block is missing the same 28.
+★ **One thing to carry from building it**, recorded against `R212`: the gate's
+**first** version refused to check per-key table coverage, arguing that a
+missing row is an *incomplete explanation* while a missing template key is a
+*wrong published specification*. **True — and the half it discarded was the
+LARGER gap and a disjoint set.** A scope argument that is **correct** passes
+review and stops it. The fix is one word: **`and`**.
 
-- Template's last extension: **`1e7a0be`, 2026-08-17** (the colour slice,
-  ending at `img_uncalibrated`).
-- The **next** slice, `bd244d9`, the **same day**, added keys and skipped it.
-- **16 commits have edited `crates/pdfce-cli/tests/render_page.rs` since; none
-  edited the template.** Five days, 28 keys, sixteen opportunities, zero
-  propagations.
+### ★★★★★ THE CEILING WAS FILED AGAINST THE WRONG QUANTITY — read this before quoting any deep-zoom figure
 
-**Why only one direction:** the test asserts the key list by equality, so an
-addition that skips the test **goes red**. The published copy has nothing that
-goes red. That is standing rule **`R212`**, minted by this filing.
+**`Pass 74.1`/`74.2` pushed deep zoom past a trillion percent. That claim is
+TRUE and it is about the VIEWPORT.** It was never a claim about page-space
+geometry, and **nothing in four documents distinguished the two** until the
+molecule box needed both. **Nothing was wrong.** That is what made it survive.
 
-### What is owed, and the ORDER matters
+**Three `f32` limits sit under the CONTENT:**
 
-1. **Repair the template** — 28 names, already in the right order in the
-   test's assertion list. A copy, not a derivation.
-2. **Repair the per-key table** in the same doc block — same 28, one row each.
-3. **THEN** wire `tools/check-metrics-line-contract.py`. The predicate is
-   written out in `ROADMAP.md`'s `f9dc007` entry, ready to take. **It is RED at
-   baseline** — wiring it before steps 1–2 makes it a warning nobody reads
-   inside a week
-   (`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`).
+1. **Path coordinates.** An `f32` near `x = 540 pt` has a spacing of
+   `6.1×10⁻⁵ pt` = **21.5 µm**. Anything smaller written as an **absolute page
+   coordinate** is quantised away. **This is why everything small on this page
+   lives in a Form XObject with small local coordinates — not a workaround, the
+   only representation that works.**
+2. **The placement matrix.** Concatenating a `cm` carrying a page coordinate
+   leaves the CTM's translation as the difference of two large nearly-equal
+   `f32`s. Drift ≈ `page_x × scale / 16 700 000` px — **~5 px** at the
+   mitochondrion tier, **~400 px** at the box tier, **past the viewport above
+   `scale = 5×10⁶`**.
+3. **Consequently device position is QUANTISED** — ~500 px steps at
+   `scale = 8.1×10⁶`.
 
-**Take these in their OWN commit, not bundled into anything else.** A
-filing commit that touches `crates/` or `tools/` becomes a code commit in
-no filing and turns `check-commits-filed.py` red on the commit meant to
-make it green — that is `d4721d8`'s memory file, and it is why the
-librarian reports these instead of fixing them.
+**Measured**, 1600 px framed on the water molecule, on the box's eleven forms:
+**11/11 forms at `scale` 2e6 and 5e6, 7 at 1.25e7, 3 at 2.5e7, 1 at 5e7.**
+Confirmed **not** the Form XObject path and **not** `Pass 74.4`'s cull: a
+synthetic page drawing the same square three ways loses all three at the same
+magnification, **including the one using neither `cm` nor a form**.
 
-★ **The shape worth carrying:** the change that invalidated the original two
-was made **deliberately, with an argument, in a test comment.** The reasoning
-was written down — just not where the contract is published. **A well-argued
-change is not a self-propagating one**, and a test edit in a diff is
-**compulsion**, not evidence of diligence.
+**Standing rule `R213` was minted from this** — *a magnitude claim is a claim
+about ONE quantity; name the quantity in the LABEL*. Two `docs/` survivors were
+repaired in the same filing: `FEATURES.md` row 201, and `ARCHITECTURE.md`'s
+sub-heading **"Numerical reach"** (the paragraph under it was always correct;
+the heading named nothing, and **the heading is what gets quoted**).
+
+### What is owed: `PASS 74.7`, and it is the ENGINEER'S CALL, not Ken's
+
+**Carry the CTM in `f64` through content-stream `cm` concatenation and narrow
+only at paint** — the same trick `Pass 74.2` used for the base CTM, one level
+down. Full entry under `ROADMAP.md` *Backlog*, **with the measured table above
+as its acceptance baseline**.
+
+- **Decision 082 does NOT gate it.** 082 governs *lossy* speed-ups. `74.7`
+  **removes** a fidelity loss rather than trading one, so no choice is being
+  made and no operator ruling is needed. **It is not `(bs)`.**
+- **But it is BIG**, which is why Ken is being told it is queued: every `cm`
+  concatenation in the interpreter, the narrowing point moved, and **`R211`
+  binds where that narrowing happens** because of the round-trip invariant — a
+  blanket `f32 → f64` can change a rasterised byte on a page nobody edited.
+  Owed-item 8 (the stale render-parity baseline) is a **soft prerequisite**.
+- **Limit 1 is a SEPARATE defect and `74.7` does not fix it.** A coordinate
+  already written into the content stream at `f32` resolution is lost before
+  any matrix applies. Say so in the Pass's own disclosure.
+- **`PASS 74.8` is opened beside it and is small**: `annotations_out_of_scope`
+  and `page_content_suppressed` are computed, merged and documented in
+  `pdfce-render` and **printed NOWHERE**, so `render-page --no-annotations`
+  withholds annotations and prints **no number saying how many**. **That is a
+  rule-4 disclosure gap, not a stale comment.** Two keys, two table rows, two
+  template entries, one test-list extension — and the new gate will fail you
+  for doing two of the three.
+
+### Owed to `crates/`, in its OWN commit — eight stale `Diagnostics` doc comments
+
+Found by the engineer while drafting the 57 table rows. Full list in
+`ROADMAP.md` / `SESSION_LOG.md`; the three that matter:
+
+1. `ColorDiagnostics::patterns_unpainted` says pdfce *"does not paint"* tiling
+   and shading patterns — **a comment ~300 lines below it in the same file
+   exists specifically to refute that sentence**, and the CLI's stderr note
+   describes the counter as the remainder after shading patterns paint.
+2. The *"shadings are found but never painted"* narrative survives in **three**
+   places after the analytic painting slice shipped
+   (`ShadingDiagnostics::painted`, `::paintable`, `Diagnostics::shading`).
+3. `transparency_groups_special`'s *"Of those"* now sits **after**
+   `soft_masks_on_group_result` in declaration order, so **its antecedent reads
+   wrong**. ★ **No word in it is stale — it broke because something else moved,
+   and no grep or gate can find that.**
+
+Also: `overprint_requested`'s head sentence still says *"while pdfce does not
+simulate it"* while its own body corrects that; `transparency_groups_composited`
+still says *"over-reports until `Pass 97.0` lands"* and 97.0 shipped
+2026-08-21; and `render-page --region`'s doc block now owes a **third** number
+(it still carries `74.1`'s 20 000× ceiling, never gained `74.2`'s, and now owes
+the content-side one too).
+
+**Take these in their OWN commit, not bundled into anything else.** A filing
+commit that touches `crates/` or `tools/` becomes a code commit in no filing
+and turns `check-commits-filed.py` red on the commit meant to make it green —
+`d4721d8`'s memory file.
 
 ---
 
@@ -185,13 +265,17 @@ one corrected a design sentence before it was implemented, and another —
 **`R209`:** *"all gates green" names a set, and the set somebody runs is
 not the set CI runs; a CI job with no local runner is UNOBSERVED, not
 passing.*
-*(All four gates the 228th filing ran — `check-commits-filed`,
-`check-passes-filed`, `check-ledger-numbers`, `check-core-api-verbs` —
-were green at exit 0 with only that filing's `docs/` edits in the tree.
-**The 229th filing ran FIVE** — those four plus `check-ui-strings.sh` —
-all exit 0. Note the set grew by one between two filings on the same day,
-which is `R209`'s point: **"all gates green" names a set, and the set
-somebody runs is not the set CI runs.**)*
+*(★★ **THE 230th FILING RAN THE WHOLE SET AND COUNTED IT: 17 `tools/check-*`
+scripts on disk (12 `.py` + 5 `.sh`), 16 runnable as bare gates, ALL 16 EXIT
+0.** The 17th, `check-image-colorspace-truth.py`, exits 1 on a bare invocation
+**because it takes a fixture-directory argument** and is not a gate. ★ **The
+dispatch that commissioned that filing said "all fifteen local gates" —
+fifteen was the 215th filing's figure, and TWO gates have landed since**:
+`check-ci-parity.py` (`5884ed1`) and `check-metrics-line-contract.py`
+(`ea413a4`, in the very commit being filed). The 228th filing ran four, the
+229th ran five, the 230th ran sixteen. **That progression IS `R209`'s point:
+"all gates green" names a set, and the set somebody runs is not the set CI
+runs. Count them; do not quote a count.**)*
 
 **3. Read `docs/compositor-plan.md`** before scoping anything in `97.x`.
 
@@ -246,8 +330,11 @@ filled every lumen with matrix colour. Catching the second took a
 
 **Deep zoom** (`bd9844d`, `71f7055` — `Pass 74.1`/`74.2`): `--region` on
 the CLI, and a region's device geometry computed in `f64`. A requested
-800×600 viewport used to come back **800×512** at 215 million percent; it
-now holds to a trillion.
+800×600 viewport used to come back **800×512** at 215 million percent; **the
+VIEWPORT now holds to a trillion percent.** ★★ **That sentence's last three
+words are load-bearing and used not to be there** — the claim is about the
+returned pixmap, **not** about page-space geometry, which has three much lower
+`f32` ceilings of its own (§0.5, `R213`, `PASS 74.7`).
 
 **The colorant buffer** (`97.1e`, `97.1f`): a page whose group declares a
 subtractive blending space composites in four ink planes end to end. Ghent
@@ -267,12 +354,16 @@ operator reading a test patch's caption: a two-colorant tint transform was
 handed four inputs, refused, and fell back to a neutral — a grey palette,
 with no counter anywhere. pdfium now agrees with us pixel for pixel.
 
+**The molecule box** (`950e3af`, `65e1910` — `PASS 74.6`/`74.6b`): §0.
+
+**The metrics contract** (`ea413a4`, **no Pass ID**): §0.5.
+
 **Pass IDs, and this is the sentence that matters when you commit:**
-`74.1`–`74.5` were all **minted by filings**, not by commit messages.
-**The next commit in this family must start at `74.6`.** Next free
-elsewhere: `122.4`; `97.1g` is reserved and unbuilt. Decisions next free
-**083**; standing rules next free **`R212`**; open operator questions next
-free **`(bs)`**.
+`74.1`–`74.6b` were all **minted by filings**, not by commit messages.
+**`74.7` and `74.8` are CLAIMED under *Backlog* and not built, so the next
+free in this family is `74.9`.** Next free elsewhere: `122.4`; `97.1g` is
+reserved and unbuilt. Decisions next free **083**; standing rules next free
+**`R214`**; open operator questions next free **`(bs)`**.
 
 ---
 
@@ -282,8 +373,15 @@ free **`(bs)`**.
    them behind a setting", that becomes the top item and it is a
    `pdfce-render` Pass with a **disclosure obligation** (a counter on the
    metrics line, off by default if it is a setting).
-1. **The two `crates/` doc repairs in §0.5** — one commit, five minutes,
-   and they are the freshest stale claims in the tree.
+1. **The eight `crates/` `Diagnostics` doc repairs in §0.5** — one commit,
+   and they are the freshest stale claims in the tree. **Item 3 of that list is
+   NOT a comment fix**: it is `PASS 74.8`, a rule-4 disclosure gap
+   (`--no-annotations` says nothing about how many it withheld), and it wants
+   its own commit and its own metrics-line keys.
+1b. **`PASS 74.7`** — the `f64` CTM through content-stream `cm`
+   concatenation. **Ruled the engineer's call, not Ken's** (§0.5), acceptance
+   baseline already measured, and **large**. Rank it against the `97.x` items
+   below on how much deep-zoom work is actually wanted; nothing blocks it.
 2. **`Pass 97.1g`** — non-isolated ordinary groups on a subtractive page
    are composited as if isolated. The arithmetic exists
    (`remove_backdrop_cmyk`); the second content walk does not. **A port of
@@ -319,6 +417,10 @@ free **`(bs)`**.
 
 - **Sub-pixel geometry is still rasterised** at page-fit zoom — ~1.5 s on
   the banana page. **Blocked on `(br)`, deliberately.**
+- **Page-space geometry is still `f32`** — 21.5 µm coordinate quantisation
+  near `x = 540`, `cm` drift ≈ `page_x × scale / 16 700 000` px, device
+  position quantised in ~500 px steps at `scale = 8.1×10⁶`. **`PASS 74.7`,
+  unbuilt.** Not blocked on anything — just not taken.
 - `resolve_indexed` builds its palette with a **scratch
   `ColorDiagnostics` that is discarded**, so a tint failure inside a
   palette never reaches the operator.
@@ -338,7 +440,7 @@ free **`(bs)`**.
 
 ---
 
-## §6 — FOUR LESSONS FROM THIS RUN THAT ARE CLASSES, NOT INCIDENTS
+## §6 — SIX LESSONS FROM THIS RUN THAT ARE CLASSES, NOT INCIDENTS
 
 1. **A cull is worth only what it skips.** Its hit counter is **invariant
    to its placement**, so the instrument you add to prove the optimisation
@@ -356,22 +458,36 @@ free **`(bs)`**.
 4. **Three copies of one drawing drift silently**, because a duplicated
    *drawing* has no compiler, no test and no diff anybody reads, and no two
    copies are ever on screen at the same magnification at the same time.
+5. **★★ A ceiling is a claim about ONE quantity, and the quantity is the half
+   that gets lost.** Unlike every other stale-claim failure this project has
+   numbered, **this one leaves no disagreement behind** — the measurement was
+   right, the sentence was true, and review answers *"is this true?"* with
+   *yes*. It surfaces only when one artefact needs both quantities at once.
+   n=2: `mask.fill_path`'s 217 µs-vs-8.3 µs, and *"holds to a trillion
+   percent"*. **A claim loses its qualifier as it PROPAGATES, not as it is
+   made** — so sweep what repeated it, and read the LABELS.
+   `D:/dev/rag/rust/a_ceiling_is_a_claim_about_one_quantity.md`, `R213`.
+6. **A TRUE scope distinction is the hardest argument against checking both.**
+   A false justification fails review; a correct one **passes** it, and nothing
+   prompts the next question. The fix is one word: **`and`**.
+   `D:/dev/rag/rust/a_true_scope_distinction_is_the_hardest_argument_against_checking_both.md`.
 
 ---
 
 ## §7 — HOUSEKEEPING
 
-- **`origin/main` is at `c24ad7a`, THREE COMMITS BEHIND `HEAD`.**
-  `d4721d8`, `dd47cd0` and `e36f96e` are **local only**. Pushing is the
-  operator's act and needs a current go-ahead (`CLAUDE.md` rule 8). The
+- **`origin/main` is at `c24ad7a`, NINE COMMITS BEHIND `HEAD`.** Pushing is
+  the operator's act and needs a current go-ahead (`CLAUDE.md` rule 8). The
   repository is public, so **anything committed is published by default.**
-  *(Measured 2026-08-22, 228th filing: `git remote -v`,
-  `git rev-parse --short origin/main`.)*
-- **Backups are 196 commits behind** — newest bundle
+  *(Measured 2026-08-22, 230th filing: `git remote -v`,
+  `git rev-parse --short origin/main`, `git rev-list --count origin/main..HEAD`
+  → **9**. The 228th filing's "three" was correct for its own time.)*
+- **Backups are 202 commits behind** — newest bundle
   `pdfce-20260817-v060.bundle` (2026-08-17 20:34) at `3c4c00e`. `v0.7.0`'s
   tag is in no bundle on disk. **Cutting one is the operator's call.**
-  *(Measured 2026-08-22, 228th filing: `ls -lt D:\Dev\pdfce-backups\`,
-  `git bundle list-heads`, `git rev-list --count 3c4c00e..HEAD`.)*
+  *(Measured 2026-08-22, 230th filing: `ls -lt D:\Dev\pdfce-backups\` and
+  `git rev-list --count 3c4c00e..HEAD` → **202**. Re-measured rather than
+  carried forward: the 228th filing said 196, and that was right then.)*
 - **If `check-commits-filed.py` is red when you start, READ ITS OUTPUT FOR
   THE HASH.** Do not assume which commit it means, and **never extend
   `tools/commits-filed-baseline.txt`** — that file is pre-existing debt,
@@ -384,5 +500,8 @@ free **`(bs)`**.
   string-gap gate reported two of three"*, and that miss was found by a
   human who knew there were three. The ordinal ("third time") survives; the
   "every time" does not.
-- **Two measurement worktrees may still be on disk** under `%TEMP%`
-  (`pdfce-base`, `pdfce-head`). `git worktree list` is authoritative.
+- **Worktrees, measured 2026-08-22 (230th filing) by `git worktree list`:
+  NINE entries.** `pdfce-base` is **gone**; **`pdfce-head` is still there**
+  (`%TEMP%\pdfce-head`, detached at `0eff831`), plus **seven agent worktrees**
+  under `.claude/worktrees/`. `git worktree list` is authoritative — do not
+  quote this line, re-run it.

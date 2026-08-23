@@ -4276,11 +4276,45 @@ entry point rather than a second `f64` implementation on the replay side, and
 is narrowed to `f32` *first*, exactly as `page_device_geometry` does, while the
 region's corners keep full `f64`.
 
-**Numerical reach, measured (`Pass 74.2`):** a requested 800 × 600 viewport
-returns 800 × 600 out to **1 × 10¹² %** zoom; before the fix it returned
-**800 × 512** at 2.15 × 10⁸ % and **failed** above 2 × 10⁹ %. Cost is flat in
-zoom — one 1600 × 1000 viewport is **272 / 288 / 320 / 340 ms** at
-3 200 / 6 400 / 12 800 / 25 600 % — because the pixel count is fixed.
+**Numerical reach OF THE RETURNED VIEWPORT, measured (`Pass 74.2`):** a
+requested 800 × 600 viewport returns 800 × 600 out to **1 × 10¹² %** zoom;
+before the fix it returned **800 × 512** at 2.15 × 10⁸ % and **failed** above
+2 × 10⁹ %. Cost is flat in zoom — one 1600 × 1000 viewport is
+**272 / 288 / 320 / 340 ms** at 3 200 / 6 400 / 12 800 / 25 600 % — because the
+pixel count is fixed.
+
+★ **The subject of that heading is load-bearing and it used to read only
+"Numerical reach"** (corrected 2026-08-22, 230th filing, hard rule 10 (b) —
+*the label is what gets quoted*). The paragraph below it was always correct and
+the label had no subject at all, so the figure travelled as pdfce's deep-zoom
+ceiling. It is not. **See `ROADMAP.md`'s `R213`.**
+
+**Numerical reach of PAGE-SPACE CONTENT, measured 2026-08-22 — SEPARATE, MUCH
+LOWER, AND UNFIXED (`PASS 74.7`, Backlog).** Three `f32` limits sit under the
+content the viewport frames, none of them touched by `Pass 74.2`:
+
+1. **Path coordinates.** An `f32` near `x = 540 pt` has a spacing of
+   `6.1 × 10⁻⁵ pt` = **21.5 µm**, so any feature smaller than that written as an
+   absolute page coordinate is quantised away before rendering begins. Small
+   geometry must live in a **Form XObject with small local coordinates** — the
+   only representation that survives.
+2. **The placement matrix.** Concatenating a `cm` that carries a page
+   coordinate leaves the CTM's translation as the difference of two large
+   nearly-equal `f32` values; drift ≈ `page_x × scale / 16 700 000` px, which is
+   past the viewport entirely above `scale = 5 × 10⁶`.
+3. **Consequently the content's device position is QUANTISED** — ~500 px steps
+   at `scale = 8.1 × 10⁶`, so a `--region` nudge smaller than one step moves the
+   viewport and leaves the content exactly where it was. **That is how the
+   limit was confirmed**: two successive nudges produced byte-identical
+   framing, because `--region` is `f64` all the way through
+   `region_base_geometry_of` and the content path is not.
+
+Measured on an eleven-Form-XObject artefact, 1600 px framed on its smallest
+element: **11 of 11 forms render at `scale` 2 × 10⁶ and 5 × 10⁶, 7 at
+1.25 × 10⁷, 3 at 2.5 × 10⁷, 1 at 5 × 10⁷.** Confirmed **not** the Form XObject
+path and **not** `Pass 74.4`'s cull: a synthetic page drawing the same square
+three ways loses all three at the same magnification, including the one using
+neither `cm` nor a form.
 
 #### ★ `MAX_PIXMAP_EDGE`'s SUBJECT changed — this is the semantic part
 

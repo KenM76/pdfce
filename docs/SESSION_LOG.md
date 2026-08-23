@@ -56716,3 +56716,236 @@ assertion about the metrics line's stability, across `crates/`, `tools/` and
   own figures for `f9dc007` (`cargo fmt --all` clean, `cargo clippy --workspace
   --all-targets -- -D warnings` clean, `cargo test --workspace --release` green
   with no failures) are recorded as **his**, not reproduced here.
+
+
+## 2026-08-22 (two-hundred-and-thirtieth filing) — `ea413a4` (the metrics contract whole, and gated) + `PASS 74.6`/`74.6b` (`950e3af`, `65e1910`: ten molecules at 1:1 below the cells); ★★★★★ **THE HEADLINE IS A CEILING FILED AGAINST THE WRONG QUANTITY, AND NOTHING WAS EVER WRONG — `PASS 74.2`'s "deep zoom holds to a trillion percent" is TRUE and it is about the VIEWPORT; three `f32` limits sit under the CONTENT and no document distinguished the two until one artefact needed both**; ★★★★ **`R213` MINTED at n=2** — *a magnitude claim is a claim about ONE quantity; name the quantity in the LABEL* — with `mask.fill_path`'s 217 µs-vs-8.3 µs as the first instance; ★★★ **CONFIRMED A SECOND TIME BY ACCIDENT, WHICH IS THE BETTER EVIDENCE: two successive `--region` nudges gave BYTE-IDENTICAL framing**, the `f64` viewport moving while the `f32` content could not (**~500 px quantisation at `scale = 8.1×10⁶`**); ★★★ **THE METRICS CONTRACT IS WHOLE — `87 of 87` in the template and `87 of 87` in the per-key table, from `59` and `44`** — and `tools/check-metrics-line-contract.py` holds it, exit 0; ★★ **THE GATE'S FIRST VERSION REFUSED THE TABLE CHECK ON A *TRUE* DISTINCTION** — mint DECLINED because `R212`'s enforcement-layer clause already carries it, and that clause gains a dated second instance instead; ★★ **EIGHT `crates/` SURVIVORS REPORTED AND ONE OF THEM IS NOT A COMMENT** — `render-page --no-annotations` withholds annotations and prints no number saying how many, promoted to **`PASS 74.8`**; ★ **`PASS 74.7` OPENED WITH ITS ACCEPTANCE BASELINE ALREADY MEASURED**, ruled the engineer's call and not `(bs)`; ★ **A LEDGER CORRECTION SOURCED BY RUNNING THINGS: "fifteen local gates" is stale — 17 on disk, 16 runnable, and one of the two that landed since is this filing's own subject**
+
+**Shipped:**
+
+- **`PASS 74.6`** (`950e3af`) — **`tools/gen-scale-demo/molecules.py`**: a
+  **50 × 35 nm** box below the cells, reached by a tapering dart, holding the
+  **ten most abundant molecules in a banana cell at 1:1 with everything else on
+  the page**. Authored in **picometres** (O–H `96`, C–C `154`, oxygen vdW
+  `152`, potassium ionic `138`) so every number is checkable against a
+  reference table **without arithmetic**. **Eleven Form XObjects** — ten
+  molecules plus the box that invokes them — so the page now contains **nested
+  forms**, which it did not exercise before. **Space-filling rather than
+  ball-and-stick**, a correctness call: a stick model is mostly empty space and
+  this box exists to state size; the cost (lumpy rings, sacrificed
+  connectivity) is stated rather than hidden. **The banana is 412 585 829 water
+  molecules long and both are in one coordinate system with no scale break.**
+- **`PASS 74.6b`** (`65e1910`) — **three label lines per molecule**: name,
+  **share of the fruit by mass**, size. **Adding the shares RE-ORDERED the
+  list**, which is the point of adding them: water 74.9, starch 5.4, glucose
+  5.0, fructose 4.9, sucrose 2.4, cellulose 1.2, protein 1.1, pectin 0.7,
+  malic acid 0.4, potassium 0.36 — **five of ten moved** from the prior
+  remembered ranking, and the ten sum to **96.4 %** of the fruit (checked by
+  addition at filing time: `96.36`, displayed `96.4`). **Ripe figures**, and
+  the subtitle says so, noting green pulp is ~20–25 % starch and ~1–2 % sugar —
+  the page draws a yellow banana beside green cells and **that seam is
+  disclosed rather than tidied**.
+- **`ea413a4`** — **no Pass ID** (ruled in `ROADMAP.md`). The `render-page`
+  metrics contract repaired end to end: **template `59 → 87 of 87`**, **per-key
+  table `44 → 87 of 87` (57 rows added)**, placeholder scheme collapsed from
+  `<K>`…`<ai>` to a uniform `<n>` with `need_appearances=<0|1>` kept distinct,
+  and the `annots=…` elision that hid six real keys expanded.
+  **`tools/check-metrics-line-contract.py`** built, wired into
+  `.github/workflows/ci.yml`, registered in `tools/check-ci-parity.py` —
+  **which caught the omission on its first run, exit 1, before the engineer had
+  thought to add it.**
+
+**Decisions made this session:**
+
+- **No decision minted; `082` stands, next free `083`.** `PASS 74.7` (the `f64`
+  CTM) **removes** a fidelity loss rather than trading one, so decision 082 —
+  *skip only where skipping is exact; a lossy speed-up is the operator's call* —
+  **does not gate it**, and no choice is being made because nobody wants the
+  quantisation. **Ruled the engineer's to take, not an operator question**, with
+  the cost surfaced to Ken in `NEXT_SESSION.md` rather than turned into `(bs)`.
+- **`R213` MINTED.** *A magnitude claim is a claim about ONE quantity; name the
+  quantity in the claim itself — in the label, not in the prose beside it.*
+  n=2. Checked against `R210`'s minting test and the honest answer is **no
+  mechanical oracle exists** — the mint survives because `R213` is a rule about
+  **how a record is written**, the same species as `R210` and hard rule 10,
+  both of which are deliberately un-gated. `R211`/`R212` are the gateable
+  species; this is not one.
+- **Second mint DECLINED** (the gate-scope finding). **`R212`'s
+  enforcement-layer clause already says it**, minted one commit earlier by this
+  same role. A new number would split one mechanism across two, which is the
+  warrant the 227th filing used to amend `R210` rather than mint. **`R212`
+  gains a dated second instance; the ceiling does not move on its account.**
+- **ID ruling for `ea413a4`: no Pass ID, and the dispatch's "amendment to
+  `Pass 74.4`" framing declined** — `74.4` owns **one** of the 87 keys; the
+  28-key tail came from `97.0b`–`97.1j` and the colour slice. The defect lived
+  **between** Passes, which is `R212`'s whole point. Precedent pair: `Pass 110.0`
+  (a *planned* gate on a *product* obligation) got an ID; `5884ed1`
+  (`check-ci-parity.py`, *reactive* infrastructure holding two **records**
+  together) did not. `ea413a4` is the second kind.
+- **`FEATURES.md` ruling: NO NEW ROW for any of the three, stated explicitly** —
+  a gate is not a capability, and `tools/gen-scale-demo/` ships nothing
+  (`PASS 74.3`/`74.5` precedent). **But one EXISTING row was repaired**: row
+  201's *"a requested viewport comes back at the requested size out to
+  1×10¹² %"* is survivor 1 of the hard-rule-11 sweep, and a features row is the
+  document a reader plans against. **Row 161 was repaired too** — *"render and
+  count annotations"* is true about what is rendered and silent about what is
+  withheld, which is `PASS 74.8`'s shape exactly.
+
+**Findings + decisions:**
+
+- **★★★★★ THREE `f32` LIMITS SIT UNDER PDF CONTENT, AND NONE OF THEM WAS
+  TOUCHED BY `PASS 74.2`.** (1) A path coordinate near `x = 540 pt` has an
+  `f32` spacing of **`6.1 × 10⁻⁵ pt` = 21.5 µm** — anything smaller written as
+  an absolute page coordinate is quantised away; small geometry must live in a
+  Form XObject with small local coordinates, **not as a workaround but as the
+  only representation that works**. (2) Concatenating a `cm` carrying a page
+  coordinate leaves the CTM's translation as the **difference of two large
+  nearly-equal `f32` values**, drifting by ≈ **`page_x × scale / 16 700 000`
+  px** — ~5 px at the mitochondrion tier, ~400 px at the box tier, **past the
+  viewport above `scale = 5 × 10⁶`**. (3) Consequently the content's device
+  position is **quantised in ~500 px steps at `scale = 8.1 × 10⁶`**. **Both ulp
+  derivations re-checked by this role rather than relayed**: `ulp(540) = 2⁹ ×
+  2⁻²³ = 6.104e-5 pt = 21.53 µm`; `ulp(540 × 8.1e6) = 2³² × 2⁻²³ = 512 px`.
+- **Measured** (the engineer's), 1600 px framed on the water molecule, on the
+  box's eleven forms: **11/11 at `scale` 2e6 and 5e6, 7 at 1.25e7, 3 at 2.5e7,
+  1 at 5e7.** Confirmed **not** the Form XObject path and **not** `PASS 74.4`'s
+  cull — a synthetic page drawing the same square three ways loses all three at
+  the same magnification, **including the one using neither `cm` nor a form**.
+- **★★★ CONFIRMED A SECOND WAY, BY ACCIDENT.** The box renders off-centre, so
+  the engineer nudged `--region`; **two successive nudges gave byte-identical
+  framing.** `--region` is `f64` and stays `f64` through
+  `region_base_geometry_of`, so **the viewport moved and the content did not** —
+  a 76-pixel correction is below the `f32` ulp of the `540 × scale` term it is
+  added to. **The saved render is left off-centre deliberately: that framing is
+  the evidence**, and `tools/gen-scale-demo/README.md` carries the reproducing
+  command. ★ **The accident is better evidence than the designed test**, because
+  an instrument built to test a hypothesis shares the hypothesis's blind spots —
+  `R210`'s mechanism arriving from the other direction, twice in one week.
+- **★★ TWO FILINGS GAVE TWO NUMBERS FOR ONE FACT AND BOTH ARE RIGHT.** The
+  229th filing measured the template at **59 of 87**; `ea413a4`'s commit message
+  says **52 of 87**. Resolved by measuring the blobs (`git show ea413a4^:` and
+  `ea413a4:`, tokens matching `([a-z0-9_]+)=` in the `//! render-page:`
+  continuation block): **53 `key=` tokens present, 52 of them carrying a real
+  placeholder** (`annots=…` is the exception), **one `…` elision covering
+  `annots` + its six siblings**, ⇒ **59 keys covered.** Post-repair: **87 named,
+  0 elisions.** The shortfall is 35, 34 or 28 depending on the reading, and the
+  engineer's *"35 keys short"* is the `52` reading. **Nothing was wrong; the
+  denominator's definition was unstated** — `R213`'s mechanism at small scale,
+  which is why it was reconciled in a table rather than argued about. The six
+  hidden keys, named so they are greppable: `annots_painted`, `annots_no_ap`,
+  `annots_hidden`, `annots_state_missing`, `annots_widget`, `annots_degenerate`.
+- **★★ A TRUE SCOPE DISTINCTION IS THE HARDEST ARGUMENT AGAINST CHECKING BOTH.**
+  The gate's first version refused table coverage because *a missing row is an
+  incomplete explanation while a missing template key is a wrong published
+  specification*. **True — and a reason to report them separately, not to check
+  only one.** The table gap was the **larger** of the two. Reviewing a correct
+  scope argument returns "correct" and stops; the fix is one word, **`and`**.
+- **`R213`'s first instance is already on disk**: `mask.fill_path` filed as
+  **5.24 s over 24 128 clips = 217 µs each** in one RAG file and **8.3 µs
+  page-sized** in another — a 26× contradiction carried for two filings, 217
+  lines apart in one `index.md`, which ranked a work order and dispatched a fork
+  on a false premise for six hours. **Hard rule 10's remedy catches that one and
+  cannot catch the trillion-percent one**, because a viewport size and a
+  coordinate precision are not two forms of one number. What they share is that
+  **the SUBJECT of the bound went unstated.**
+- **A claim loses its qualifier as it PROPAGATES, not as it is made.** Every
+  original statement of the trillion-percent figure — `ROADMAP.md:950`, `:1094`,
+  `SESSION_LOG.md`, `FEATURES.md` row 202 — says *"holds its **viewport**"*.
+  **The two that dropped the subject were the derived, forward-looking
+  documents** (`FEATURES.md` row 201, `ARCHITECTURE.md`'s *"Numerical reach"*
+  heading), both repaired this filing. **So the sweep target is not the entry
+  that made the claim; it is everything that repeated it.**
+- **Water's label reads `0.37 nm`, not the `0.28 nm` everybody quotes** — `0.28`
+  is the kinetic diameter (the hole it fits through), `0.37` the space it
+  occupies. ★ **The same defect class as the headline, caught before it
+  shipped**: two correct numbers about two different quantities, and the box
+  draws at 1:1 so the label the drawing disproves is the wrong one to quote.
+- **Ranked by mass because a top ten with no unit is a claim with no content.**
+  By molecule **count** water is ~99.5 % and the ranking is neither close nor
+  interesting. **The box names its measure** — `R213`'s obligation honoured
+  inside the artefact on the day it was minted from a failure to honour it in
+  the record.
+
+**Hard-rule-11 sweep — searched for the CLAIM, not for a string:**
+
+| # | site | disposition |
+|---|---|---|
+| 1 | `docs/FEATURES.md` row 201 — *"a requested viewport comes back at the requested size out to 1×10¹² % zoom"*, in a row about rasterizing a region | **REPAIRED** — quantity named; content-side ceiling stated beside it with its numbers |
+| 2 | `docs/ARCHITECTURE.md` §4 — the heading **"Numerical reach, measured"** over a scrupulously correct paragraph. **Hard rule 10 (b) as a live defect: the label is what gets quoted, and this label had no subject at all** | **REPAIRED** — retitled *"Numerical reach OF THE RETURNED VIEWPORT"*, with the page-space ceiling added as its own subsection and a pointer to `PASS 74.7` |
+| 3 | `docs/NEXT_SESSION.md:250` — *"now holds to a trillion"* | **REPAIRED** — file rewritten this filing |
+| 4 | `crates/pdfce-cli/src/main.rs`, `--region` doc block — the 226th filing already reported it carrying `74.1`'s 20 000× ceiling; **it now owes a THIRD number** | **REPORTED, NOT EDITED** — `crates/` |
+
+**Checked and CLEAN, recorded so the negatives are visible:** `FEATURES.md` row
+202 (*"holds its **viewport**"* — already names its quantity, and is the
+counter-example proving the row-201 fix is a one-clause class of repair);
+`ROADMAP.md:950` / `:1094` and `SESSION_LOG.md:55914` (dated, append-only,
+correct as written, **not touched**).
+
+**Owed to the engineer, `crates/`, in its own commit:**
+
+1. `ColorDiagnostics::patterns_unpainted` rustdoc says pdfce *"does not paint"*
+   tiling and shading patterns — **a comment ~300 lines below it in the same
+   file exists specifically to refute that sentence**, and the CLI's stderr note
+   describes the counter as the remainder after shading patterns paint.
+2. The *"shadings are found but never painted"* narrative survives in **three**
+   places after the analytic painting slice shipped: `ShadingDiagnostics::painted`
+   (*"Zero in this slice, by construction"*), `::paintable` (*"once the geometry
+   slice lands"*), and `Diagnostics::shading`'s block doc.
+3. **`annotations_out_of_scope` / `page_content_suppressed` — PROMOTED TO
+   `PASS 74.8`, not a comment fix.** Computed, merged, documented, and emitted
+   **nowhere** in `pdfce-cli`. `render-page --no-annotations` withholds
+   annotations and prints no number saying how many. **Rule-4 disclosure gap.**
+4. `overprint_requested`'s head sentence still says *"while pdfce does not
+   simulate it"* while its own body corrects that at length.
+5. `transparency_groups_composited` says *"over-reports until `Pass 97.0`
+   lands"*; **97.0 shipped 2026-08-21**.
+6. `transparency_groups_special`'s *"Of those"* now sits **after**
+   `soft_masks_on_group_result` in declaration order, so **its antecedent reads
+   wrong**. ★ **No word in it is stale — it broke because something else moved,
+   and no grep or gate can find that.** Found by reading the struct in
+   declaration order, which is what hard rule 11 asks for.
+7–8. Two further sites in the same struct family, per the engineer's list.
+9. The `--region` doc block's third missing number (sweep survivor 4).
+
+**Still in flight:**
+
+- **`PASS 74.7`** — the `f64` CTM through content-stream `cm` concatenation.
+  **Backlog, scoped, with its acceptance baseline already measured.** Ruled the
+  engineer's call (decision 082 does not gate it — it removes a loss rather than
+  trading one), but **large**: every `cm` concatenation, the narrowing point
+  moved, and `R211` binds where that narrowing happens because of the
+  round-trip invariant. **The render-parity baseline being stale (owed-item 8)
+  is a soft prerequisite.**
+- **`PASS 74.8`** — the `--no-annotations` disclosure gap. Small: two keys, two
+  table rows, two template entries, one test-list extension — and the new gate
+  will fail you for doing two of the three.
+- **Awaiting Ken:** open operator question **`(br)`** — may pdfce skip
+  sub-pixel geometry, which is lossy, to make a page-fit render of a form-dense
+  page fast? Default if unanswered: **never skip** (decision 082).
+
+**For next session:**
+
+- Read `docs/NEXT_SESSION.md` first. **§0 is now "go look at the eleven
+  renders"**, and `(br)` is still the one thing awaiting Ken.
+- **Gates, this filing, after all edits** — **17 `tools/check-*` scripts on
+  disk (12 `.py` + 5 `.sh`), 16 runnable as bare gates, ALL 16 EXIT 0.**
+  `check-commits-filed.py` went from **1** (naming exactly `ea413a4`,
+  `950e3af`, `65e1910`) to **0** with this entry. The 17th,
+  `check-image-colorspace-truth.py`, exits 1 on a bare invocation **because it
+  requires a fixture-directory argument** and is recorded in `ROADMAP.md` as
+  *"`check-*` on disk but not a gate"*.
+  ★ **Correction, sourced by `ls` and by running each one rather than from a
+  document:** the dispatch said *"all fifteen local gates"*. **Fifteen was the
+  215th filing's figure and two gates have landed since** —
+  `check-ci-parity.py` (`5884ed1`) and `check-metrics-line-contract.py`
+  (`ea413a4`, this filing's own subject). The *Next up* owed-box item 7 is
+  amended in place.
+- **`cargo fmt` / `cargo clippy` / `cargo test` were NOT run by this role** —
+  this filing touches `docs/` and three RAG files only, by design. The
+  engineer's figures (`cargo fmt --all` clean, `cargo clippy --workspace
+  --all-targets -- -D warnings` clean, `cargo test --workspace --release`
+  green, `cargo tree -p pdfce-core` / `-p pdfce-render` zero GUI deps, no new
+  dependency) are recorded as **his**.
+- **RAG files written this filing:**
+  `D:/dev/rag/rust/a_ceiling_is_a_claim_about_one_quantity.md`,
+  `D:/dev/rag/rust/a_true_scope_distinction_is_the_hardest_argument_against_checking_both.md`,
+  `C:/personal_rag/pdf/lesson_20260822_f32_limits_under_pdf_content_rendering.md`.

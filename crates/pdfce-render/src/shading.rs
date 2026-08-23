@@ -12,10 +12,22 @@
 //!
 //! ## What this slice does, and what it deliberately does not
 //!
-//! **It does not paint.** This slice builds the *model*: it resolves a
-//! shading dictionary, classifies it, loads its colour space and its
-//! function, pre-samples the colour ramp, and **reports precisely what it
-//! found**. Painting lands in the next slice.
+//! **It paints the analytic types.** This module builds the *model* --
+//! it resolves a shading dictionary, classifies it, loads its colour space
+//! and its function, pre-samples the colour ramp, and **reports precisely
+//! what it found** -- and then rasterises types 1, 2 and 3.
+//!
+//! This paragraph opened "**It does not paint.** ... Painting lands in the
+//! next slice" for as long as it took that slice to land and longer. The
+//! sentence was true when written and became the most misleading line in
+//! the file, because it is the first thing a reader of this module sees
+//! and it contradicts `ShadingDiagnostics::painted` forty lines of struct
+//! away. Kept visible rather than quietly swapped: a module header is a
+//! claim about the module, and claims that outlive their subject are what
+//! standing rule `R212` is about.
+//!
+//! What is still true: the **mesh** types (4-7) are modelled and refused,
+//! never painted.
 //!
 //! The geometry it needs — §8.7.4.5, ISO 32000-1 Tables 79–84 — is now in
 //! the corpus **for the analytic types only**
@@ -828,10 +840,20 @@ pub struct ShadingDiagnostics {
     pub via_sh: usize,
     /// Per-`ShadingType` census, indexed 1..=7 at positions 0..=6.
     pub by_type: [usize; 7],
-    /// Shadings whose model loaded completely enough to paint once the
-    /// geometry slice lands.
+    /// Shadings whose model loaded completely enough to paint.
+    ///
+    /// This said "once the geometry slice lands" until 2026-08-22. That
+    /// slice landed; the sentence did not notice. Read against
+    /// [`Self::painted`] -- the gap between the two is shadings pdfce
+    /// understood and still did not put on the page.
     pub paintable: usize,
-    /// Shadings actually painted. **Zero in this slice, by construction.**
+    /// Shadings actually painted.
+    ///
+    /// This said "**Zero in this slice, by construction**" long after the
+    /// analytic painting slice made it non-zero, which is worse than a
+    /// stale comment: a reader who trusted it would have taken a correct
+    /// non-zero count for a bug. Meaningless alone -- it is half of a pair
+    /// with [`Self::paintable`].
     pub painted: usize,
     /// Shading dictionaries refused outright, with a named reason.
     pub refused: usize,

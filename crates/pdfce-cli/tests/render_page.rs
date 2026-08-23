@@ -342,6 +342,13 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "annots_state_missing",
             "annots_widget",
             "annots_degenerate",
+            // `Pass 74.8`: both were computed, merged and unit-tested in
+            // `pdfce-render` while being printed nowhere, so
+            // `--no-annotations` withheld content and reported no number
+            // saying how much. Inserted beside the annotation family for
+            // the same reason `forms_culled` sits beside `forms`.
+            "annots_out_of_scope",
+            "page_content_suppressed",
             "need_appearances",
             // Appended by the font-diagnostics by-reason split: the
             // per-reason breakdown of `unsupported`
@@ -1582,5 +1589,88 @@ gradients at all: {line:?}"
     assert!(
         err.contains("the file is malformed"),
         "stderr must distinguish a broken file from a pending feature: {err:?}"
+    );
+}
+
+#[test]
+fn no_annotations_says_how_many_it_withheld() {
+    // Rule 4, "fuzzy never sneaky", applied to a WITHHOLDING rather than
+    // an inference. `--no-annotations` is the operator asking pdfce not to
+    // paint something the file contains; the answer is allowed, the
+    // silence is not.
+    //
+    // Until `Pass 74.8` the count existed -- `Diagnostics::
+    // annotations_out_of_scope`, computed, merged across pages and covered
+    // by unit tests in `pdfce-render` -- and `pdfce-cli` printed it
+    // NOWHERE, neither on the line nor on stderr. So the operator saw
+    // `annots=1 annots_painted=0` and had nothing to tell "withheld on
+    // request" apart from "tried and failed". Those need different
+    // reactions, which is the whole reason the counters are split.
+    //
+    // A counter that exists and is not surfaced is worse than one that
+    // does not exist: it makes the gap look measured.
+    let dir = TempDir::new("no-annots-discloses");
+    let pdf = dir.write(
+        "a.pdf",
+        &build_pdf(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>".into()),
+            (2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into()),
+            (
+                3,
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R /Annots [5 0 R] /Resources << >> >>"
+                    .into(),
+            ),
+            (4, "<< /Length 0 >>
+stream
+
+endstream".into()),
+            (
+                5,
+                "<< /Type /Annot /Subtype /Square /Rect [10 10 60 60] /AP << /N 6 0 R >> >>"
+                    .into(),
+            ),
+            (
+                6,
+                "<< /Type /XObject /Subtype /Form /BBox [0 0 50 50] /Resources << >> /Length 23 >>
+stream
+0 0 1 rg 0 0 50 50 re f
+endstream"
+                    .into(),
+            ),
+        ]),
+    );
+    let png = dir.join("a.png");
+
+    let out = run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "-o",
+        png.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    let with = stdout(&out);
+    assert!(
+        with.contains(" annots=1 ") && with.contains(" annots_out_of_scope=0 "),
+        "nothing is out of scope when no scope was narrowed: {with:?}"
+    );
+
+    let without = stdout(&run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "--no-annotations",
+        "-o",
+        png.to_str().unwrap(),
+    ]));
+    assert!(
+        without.contains(" annots=1 "),
+        "the annotation is still COUNTED -- a withheld annotation that vanishes from the census is indistinguishable from a file that never had one: {without:?}"
+    );
+    assert!(
+        without.contains(" annots_painted=0 "),
+        "and it was not painted: {without:?}"
+    );
+    assert!(
+        without.contains(" annots_out_of_scope=1 "),
+        "THE POINT OF THIS TEST: the shortfall is attributed. Without this key, `annots=1 annots_painted=0` reads exactly like a failure: {without:?}"
     );
 }

@@ -362,8 +362,12 @@ pub struct Diagnostics {
     /// Non-zero here means the page's transparency is approximate in a way
     /// no blend-mode counter can express.
     pub transparency_groups_flattened: usize,
-    /// `gs` operators that turned OVERPRINT on (`/OP` or `/op`, §8.6.7)
-    /// while pdfce does not simulate it.
+    /// `gs` operators that turned OVERPRINT on (`/OP` or `/op`, §8.6.7).
+    ///
+    /// ★ This sentence ended "**while pdfce does not simulate it**" while
+    /// the section immediately below it corrected that at length. A head
+    /// sentence is what a hover tooltip and a doc-search snippet show, so
+    /// the correction was invisible exactly where the claim was loudest.
     ///
     /// # Why this is counted, and what it does NOT mean
     ///
@@ -660,7 +664,11 @@ pub struct Diagnostics {
     ///
     /// Measured on the Ghent transparency patches, which set `/BM` at every
     /// `Do`: **14, 15 and 7** wrong cells out of 16, each counted here as a
-    /// success. **This number over-reports until `Pass 97.0` lands.**
+    /// success. That measurement predates `Pass 97.0`, which **shipped on
+    /// 2026-08-21**; this doc still said the number "over-reports until
+    /// `Pass 97.0` lands" the day after it landed. The over-report is
+    /// resolved; the figures above are kept as the record of what it was,
+    /// labelled as history rather than as current behaviour.
     ///
     /// Recorded shape, because it is the fifth time on this one narrative:
     /// the print-site comment beside this counter was corrected in
@@ -765,8 +773,22 @@ pub struct Diagnostics {
     /// gave it a second way to fire rather than inventing a third name for
     /// one condition.
     pub soft_masks_on_group_result: usize,
-    /// Of those, the ones that are **isolated** (`/I true`) or
-    /// **knockout** (`/K true`) — Table 147.
+    /// Transparency groups that are **isolated** (`/I true`) or
+    /// **knockout** (`/K true`) — Table 147. Counted at every such group,
+    /// whether or not it was flattened.
+    ///
+    /// ★ This opened "**Of those**, the ones that are..." — a back
+    /// reference to whichever field happened to precede it. Two things
+    /// were wrong with that and only one is obvious. The obvious one:
+    /// `soft_masks_on_group_result` was later declared in between, so the
+    /// antecedent silently became a different counter. The one worth
+    /// remembering: **the original antecedent was wrong too.** The
+    /// increment site is `is_transparency_group && (knockout || isolated)`
+    /// with no flattening condition at all, so this was never a subset of
+    /// the flattened count. The first repair of this comment restored the
+    /// "obvious" antecedent and had to be corrected again by reading the
+    /// increment site — a doc that cites a NEIGHBOUR rather than a NAME
+    /// gives no way to tell a broken reference from a wrong one.
     ///
     /// NOT Table 96, which is the COMMON group-attributes table; `/K`, `/I`
     /// and `/CS` belong to the transparency-group subtype's own table.
