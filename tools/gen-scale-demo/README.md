@@ -283,7 +283,23 @@ pitch of the whole box is set by the text, not the chemistry. That is the
 same finding §3 records about the arrowhead, arrived at independently
 four orders of magnitude further down.
 
-## 9. The ceiling this box found, which is NOT the one that was claimed
+## 9. How the ceiling was found — history, not current behaviour
+
+★ **Everything in this section describes pdfce BEFORE `Pass 74.7`
+(2026-08-23).** For what it does now, see §10. Nothing here is a live
+limitation; it is kept because how the ceiling was found is the more
+useful half, and because two of the three confirmations were accidents
+that would not survive being paraphrased.
+
+**Why this is a section boundary and not a sentence.** It WAS a sentence,
+twice — *"everything below describes the behaviour before that Pass"* —
+and both times it stopped being true when the section grew underneath it.
+A pre/post boundary living in prose is a positional pointer, and repairing
+a positional pointer with another positional pointer is what produced the
+second wrong one (`R214` clauses (a) and (c)). A heading cannot drift,
+because the thing it delimits is the thing that would have to move it.
+
+### The ceiling that was claimed, and the one that bit
 
 `Pass 74.1`/`74.2` pushed the deep-zoom ceiling past a **trillion
 percent**. That claim is true and it is about the **viewport**: the
@@ -338,12 +354,6 @@ cull: a synthetic page with the same square drawn three ways — absolute
 coordinates, a `cm` translation, and a scaled `cm` — loses all three at
 the same magnification, including the one that uses no `cm` and no form.
 
-★ **FIXED 2026-08-23 by `Pass 74.7`, and this section is kept as the
-record of how it was found rather than as a live limitation.** Everything
-below describes the behaviour before that Pass; a water molecule now
-renders sharply at a scale of `1.6e9`, and the saved render of the box is
-centred. What follows is the evidence, not the current state.
-
 ★ **Confirmed a second way, by accident, which was the more convincing of
 the two.** The molecule box rendered off-centre in its frame, so the
 obvious move was to nudge `--region` by the observed offset. It did
@@ -362,10 +372,15 @@ saved render of the box sits up and to the right in its frame instead of
 centred. That framing is evidence, not sloppiness, and it is left as it
 came out.
 
-★ **And the nudged coordinates are gone.** That framing came from a region
-hand-corrected twice against the drift; after `Pass 74.7` the box lands
-within **one pixel** of where the arithmetic says, so the region can just
-be computed:
+## 10. Where the ceiling is now
+
+★ **Everything in this section describes pdfce as it stands.** `Pass 74.7`
+(2026-08-23) took the limits §9 measured; `Pass 74.10` closed the second
+rendering path behind it.
+
+**The nudged coordinates are gone.** §9's framing came from a region
+hand-corrected twice against the drift; the box now lands within **one
+pixel** of where the arithmetic says, so the region can just be computed:
 
 ```
 pdfce-cli render-page banana-at-scale.pdf --page 1 --scale 13749133 \
@@ -377,11 +392,6 @@ Measured on exactly that command: the box's centre falls at pixel
 `(1100, 733)`. Before the fix, the same computed region put it **76 px out
 horizontally and 288 px vertically** — which is where the "just nudge it"
 instinct came from, and why the nudge not working was the clue.
-
-⇒ **That was the state on 2026-08-22.** `Pass 74.7` took it the next day.
-Everything from the top of this section down to here is the record of a
-solved problem — kept because how the ceiling was found is the more useful
-half. **What follows describes the current behaviour.**
 
 **What changed.** The CTM is carried in `f64` through content-stream
 composition and narrowed only at the leaf, which fixes limit 2. Limit 1 is
@@ -424,7 +434,7 @@ Deep zoom was never slow *because* it was imprecise — it was slow for the
 to a tolerance measured in the path's own units. One cause, two symptoms,
 and only the precision one was ever attributed correctly.
 
-## 10. The easter egg, and the arithmetic that said it would fit
+## 11. The easter egg, and the arithmetic that said it would fit
 
 Inside the pulp cell's vacuole: a heart drawn from mitochondria, with
 `KEN ♥ EMILY` inside it also drawn from mitochondria — the ♥ is itself a
