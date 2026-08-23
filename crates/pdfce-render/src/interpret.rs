@@ -1669,6 +1669,9 @@ pub fn trace_paths(
         // claim about the document.
         blend_space: crate::compositor::BlendSpace::Additive,
         path: PathBuilder::new(),
+        path_precise: false,
+        path_ctm64: Mat64::IDENTITY,
+        path_origin: None,
         path_ctm: None,
         current: None,
         subpath_start: None,
@@ -1747,6 +1750,9 @@ fn run_nested(
         diag: Diagnostics::default(),
         blend_space,
         path: PathBuilder::new(),
+        path_precise: false,
+        path_ctm64: Mat64::IDENTITY,
+        path_origin: None,
         path_ctm: None,
         current: None,
         subpath_start: None,
@@ -1891,6 +1897,9 @@ pub(crate) fn run_form_at_on(
         // ink rather than on screen.
         blend_space: crate::compositor::BlendSpace::Additive,
         path: PathBuilder::new(),
+        path_precise: false,
+        path_ctm64: Mat64::IDENTITY,
+        path_origin: None,
         path_ctm: None,
         current: None,
         subpath_start: None,
@@ -1946,11 +1955,42 @@ struct Interpreter<'a> {
     /// a different space is not always possible, and would be an excessive
     /// number of conversions where it is.
     blend_space: crate::compositor::BlendSpace,
-    /// The path under construction, in USER space (module docs).
+    /// The path under construction — in USER space normally, in DEVICE
+    /// space when [`Self::path_precise`] is set (module docs).
     path: PathBuilder,
     /// CTM captured at the path's first construction op.
     path_ctm: Option<Transform>,
-    /// Current point in user space (§8.5.2.1), `None` = undefined.
+    /// Is the path under construction being built in DEVICE space?
+    ///
+    /// The second of `Pass 74.7`'s two algorithms, and the one with a
+    /// per-point cost, so it is decided once per path in
+    /// [`Interpreter::capture_path_ctm`] and never re-asked.
+    ///
+    /// Set when the CTM's translation is large enough that narrowing a
+    /// page coordinate to `f32` before transforming it would move the
+    /// point by more than 1/20 of a device pixel
+    /// ([`Mat64::needs_precise_paths`]).
+    ///
+    /// When set, coordinates are stored RELATIVE to [`Self::path_origin`]
+    /// and the difference is taken in `f64` — so the path holds small
+    /// offsets rather than nearly-equal large numbers, and `tiny_skia`
+    /// still receives the CTM's linear part and can stroke normally.
+    path_precise: bool,
+    /// The `f64` CTM captured with [`Self::path_ctm`], used to place the
+    /// path when [`Self::path_precise`] is set.
+    path_ctm64: Mat64,
+    /// The path's own FIRST POINT, in user space, when
+    /// [`Self::path_precise`] is set — the origin every later coordinate
+    /// is expressed relative to.
+    path_origin: Option<(f64, f64)>,
+    /// Current point (§8.5.2.1), `None` = undefined.
+    ///
+    /// In the SAME space as [`Self::path`] — user space normally, device
+    /// space under [`Self::path_precise`]. It is only ever fed back into
+    /// the path (as `v`'s implicit control point, as `h`'s subpath
+    /// return, as the move a segment operator needs), so keeping it in
+    /// path space keeps it consistent by construction; a copy in user
+    /// space would need converting at every one of those uses.
     current: Option<(f32, f32)>,
     /// Start point of the current subpath (for `h` and the
     /// after-`h`-new-subpath rule).
@@ -2263,8 +2303,13 @@ impl Interpreter<'_> {
 
             // ---- path construction (Table 59) ----
             b"m" => {
-                if let &[x, y] = nums.as_slice() {
+                if nums.len() == 2 {
                     self.capture_path_ctm();
+                    let Some(v) = self.path_coords(op, &nums, 2) else {
+                        self.diag.tolerated += 1;
+                        return;
+                    };
+                    let (x, y) = (v[0], v[1]);
                     // Consecutive-`m` override (Table 59): PathBuilder
                     // naturally collapses a move_to followed by
                     // another move_to into the latter (no empty
@@ -2276,39 +2321,53 @@ impl Interpreter<'_> {
                 }
             }
             b"l" => {
-                if let &[x, y] = nums.as_slice()
-                    && self.begin_segment()
-                {
-                    self.path.line_to(x, y);
-                    self.current = Some((x, y));
+                if nums.len() == 2 && self.begin_segment() {
+                    let Some(v) = self.path_coords(op, &nums, 2) else {
+                        self.diag.tolerated += 1;
+                        return;
+                    };
+                    self.path.line_to(v[0], v[1]);
+                    self.current = Some((v[0], v[1]));
                 }
             }
             b"c" => {
-                if let &[x1, y1, x2, y2, x3, y3] = nums.as_slice()
-                    && self.begin_segment()
-                {
-                    self.path.cubic_to(x1, y1, x2, y2, x3, y3);
-                    self.current = Some((x3, y3));
+                if nums.len() == 6 && self.begin_segment() {
+                    let Some(v) = self.path_coords(op, &nums, 6) else {
+                        self.diag.tolerated += 1;
+                        return;
+                    };
+                    self.path.cubic_to(v[0], v[1], v[2], v[3], v[4], v[5]);
+                    self.current = Some((v[4], v[5]));
                 }
             }
             b"v" => {
                 // First control point = CURRENT POINT (the v/y trap,
                 // §8.5.2.2 Table 59).
-                if let &[x2, y2, x3, y3] = nums.as_slice()
+                if nums.len() == 4
                     && self.begin_segment()
                     && let Some((cx, cy)) = self.current
                 {
-                    self.path.cubic_to(cx, cy, x2, y2, x3, y3);
-                    self.current = Some((x3, y3));
+                    let Some(v) = self.path_coords(op, &nums, 4) else {
+                        self.diag.tolerated += 1;
+                        return;
+                    };
+                    // `cx, cy` is already in path space, which is why
+                    // `current` is kept there — an affine map takes
+                    // control points to control points, so a Bezier
+                    // mapped point-by-point is the mapped Bezier.
+                    self.path.cubic_to(cx, cy, v[0], v[1], v[2], v[3]);
+                    self.current = Some((v[2], v[3]));
                 }
             }
             b"y" => {
                 // Second control point = ENDPOINT.
-                if let &[x1, y1, x3, y3] = nums.as_slice()
-                    && self.begin_segment()
-                {
-                    self.path.cubic_to(x1, y1, x3, y3, x3, y3);
-                    self.current = Some((x3, y3));
+                if nums.len() == 4 && self.begin_segment() {
+                    let Some(v) = self.path_coords(op, &nums, 4) else {
+                        self.diag.tolerated += 1;
+                        return;
+                    };
+                    self.path.cubic_to(v[0], v[1], v[2], v[3], v[2], v[3]);
+                    self.current = Some((v[2], v[3]));
                 }
             }
             b"h" => {
@@ -2320,18 +2379,38 @@ impl Interpreter<'_> {
                 self.needs_move = true;
             }
             b"re" => {
-                if let &[x, y, w, h] = nums.as_slice() {
+                if let &[_x, _y, _w, _h] = nums.as_slice() {
                     self.capture_path_ctm();
+                    // `re`'s operands are an ORIGIN AND A SIZE, not two
+                    // corners, so its four corner points have to be
+                    // formed by addition BEFORE the transform — the sum
+                    // is what carries the page magnitude, and adding
+                    // after narrowing would put the quantisation back.
+                    let Some(c) = (if self.path_precise {
+                        operand_f64s(op, 4).map(|v| {
+                            let (x, y, w, h) = (v[0], v[1], v[2], v[3]);
+                            let (ox, oy) = *self.path_origin.get_or_insert((x, y));
+                            #[allow(clippy::cast_possible_truncation)]
+                            [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+                                .map(|(a, b)| ((a - ox) as f32, (b - oy) as f32))
+                        })
+                    } else {
+                        let (x, y, w, h) = (nums[0], nums[1], nums[2], nums[3]);
+                        Some([(x, y), (x + w, y), (x + w, y + h), (x, y + h)])
+                    }) else {
+                        self.diag.tolerated += 1;
+                        return;
+                    };
                     // Table 59's defined expansion: m, l, l, l, h — a
                     // COMPLETE subpath (a following segment op starts
                     // a new subpath at (x, y) per the h rule).
-                    self.path.move_to(x, y);
-                    self.path.line_to(x + w, y);
-                    self.path.line_to(x + w, y + h);
-                    self.path.line_to(x, y + h);
+                    self.path.move_to(c[0].0, c[0].1);
+                    self.path.line_to(c[1].0, c[1].1);
+                    self.path.line_to(c[2].0, c[2].1);
+                    self.path.line_to(c[3].0, c[3].1);
                     self.path.close();
-                    self.current = Some((x, y));
-                    self.subpath_start = Some((x, y));
+                    self.current = Some(c[0]);
+                    self.subpath_start = Some(c[0]);
                     self.needs_move = true;
                 }
             }
@@ -2927,13 +3006,57 @@ impl Interpreter<'_> {
     /// mid-path `cm` (module docs).
     fn capture_path_ctm(&mut self) {
         match self.path_ctm {
-            None => self.path_ctm = Some(self.gs.current.ctm),
+            None => {
+                self.path_ctm = Some(self.gs.current.ctm);
+                self.path_ctm64 = self.gs.current.ctm64;
+                // DECIDED ONCE, HERE, and not re-asked per coordinate.
+                //
+                // One condition, and it is about MAGNITUDE, not about
+                // the shape of the transform: any affine CTM is
+                // admissible, because the path keeps its user-space
+                // linear part and only its ORIGIN moves. `path_origin` is
+                // cleared here so the next path picks its own.
+                self.path_precise = self.path_ctm64.needs_precise_paths();
+                self.path_origin = None;
+            }
             Some(m) if m != self.gs.current.ctm => {
                 // Path already begun under a different CTM.
                 self.diag.tolerated += 1;
             }
             Some(_) => {}
         }
+    }
+
+    /// Path-operator coordinates, in whatever space the current path is
+    /// being built in.
+    ///
+    /// Normally this is just the already-narrowed `nums` — no work, no
+    /// allocation, and the fast route is the default. Under
+    /// [`Self::path_precise`] it re-reads the operands as `f64` and maps
+    /// each `(x, y)` pair through the `f64` CTM, so the point reaches
+    /// `tiny_skia` as a DEVICE coordinate that was never rounded at page
+    /// magnitude.
+    ///
+    /// Re-reading rather than widening `nums` is deliberate: `nums` has
+    /// already lost the digits this exists to keep. A point near
+    /// `x = 540` has an `f32` spacing of `6.1e-5 pt` — 21.5 µm — so a
+    /// 30 µm feature written in page coordinates is barely more than one
+    /// representable step wide before any matrix touches it.
+    fn path_coords(&mut self, op: &Operation<'_>, nums: &[f32], n: usize) -> Option<Vec<f32>> {
+        if nums.len() != n {
+            return None;
+        }
+        if !self.path_precise {
+            return Some(nums.to_vec());
+        }
+        let v = operand_f64s(op, n)?;
+        let (ox, oy) = *self.path_origin.get_or_insert((v[0], v[1]));
+        #[allow(clippy::cast_possible_truncation)]
+        Some(
+            v.chunks_exact(2)
+                .flat_map(|p| [(p[0] - ox) as f32, (p[1] - oy) as f32])
+                .collect(),
+        )
     }
 
     /// Common preamble for segment operators (`l c v y`): a segment
@@ -5584,7 +5707,33 @@ impl Interpreter<'_> {
         fill_rule: Option<FillRule>,
     ) {
         let builder = std::mem::replace(&mut self.path, PathBuilder::new());
-        let ctm = self.path_ctm.take().unwrap_or(self.gs.current.ctm);
+        // A device-space path has already been through the CTM, so the
+        // transform handed to `tiny_skia` is the IDENTITY. Taken rather
+        // than peeked so the flag cannot leak into the next path, which
+        // would paint it unscaled at the canvas origin.
+        let precise = std::mem::take(&mut self.path_precise);
+        let origin = self.path_origin.take();
+        let captured = self.path_ctm.take();
+        let ctm = match (precise, origin) {
+            // The path was built RELATIVE to its own first point, so the
+            // transform keeps the CTM's linear part unchanged and carries
+            // a translation of where that point lands -- computed in
+            // `f64`, so the cancellation happens before the narrowing.
+            (true, Some((ox, oy))) => {
+                let m = self.path_ctm64;
+                let (dx, dy) = m.map(ox, oy);
+                #[allow(clippy::cast_possible_truncation)]
+                Transform::from_row(
+                    m.sx as f32,
+                    m.ky as f32,
+                    m.kx as f32,
+                    m.sy as f32,
+                    dx as f32,
+                    dy as f32,
+                )
+            }
+            _ => captured.unwrap_or(self.gs.current.ctm),
+        };
         self.current = None;
         self.subpath_start = None;
         self.needs_move = false;

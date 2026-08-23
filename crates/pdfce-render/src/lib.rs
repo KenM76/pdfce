@@ -2003,6 +2003,61 @@ mod tests {
     }
 
     #[test]
+    fn deep_zoom_keeps_a_feature_smaller_than_an_f32_step_at_a_page_coordinate() {
+        // `Pass 74.7`'s SECOND algorithm, and the case the first one
+        // cannot reach. Here the damage is done before any matrix is
+        // involved: an `f32` near `x = 90` has a spacing of 7.6e-6, so a
+        // rectangle 8e-6 wide -- about one representable step -- is
+        // already destroyed by the time the operands are narrowed. No
+        // amount of precision in the CTM recovers it.
+        //
+        // The remedy is to build the path RELATIVE TO ITS OWN FIRST
+        // POINT, in `f64`, so what reaches `tiny_skia` is a set of small
+        // differences rather than a set of nearly-equal large numbers.
+        //
+        // Note what is NOT being asserted: that the rectangle is in the
+        // right PLACE. That is the first algorithm's job and its own test
+        // covers it. This one asserts the rectangle still has a SIZE.
+        let (doc, page) =
+            doc_with_content("0 0 0 rg 90.000002 90.000002 0.000008 0.000008 re f", "");
+
+        let region = pdfce_core::page_tree::Rect {
+            llx: 90.0,
+            lly: 90.0,
+            urx: 90.000_02,
+            ury: 90.000_02,
+        };
+        let out = render_page_region(
+            &doc.view(),
+            &page,
+            20_000_000.0,
+            region,
+            &RenderOptions::default(),
+        )
+        .unwrap();
+
+        // 8e-6 pt at 2e7 px/pt = 160 px.
+        let (w, h) = (out.pixmap.width(), out.pixmap.height());
+        // Scanned over the WHOLE raster rather than one row: the
+        // rectangle sits in a corner of this viewport, and the first
+        // version sampled the middle row, which lands exactly on its
+        // edge. A test that depends on where you happened to look is a
+        // test of where you happened to look.
+        let black_at = |x: u32, y: u32| pixel(&out.pixmap, x, y) == (0, 0, 0);
+        let xs: Vec<u32> = (0..w).filter(|&x| (0..h).any(|y| black_at(x, y))).collect();
+        assert!(
+            !xs.is_empty(),
+            "the rectangle vanished entirely -- which is what happens when both of its x coordinates round to the same f32"
+        );
+        #[allow(clippy::cast_precision_loss)]
+        let width = (xs[xs.len() - 1] - xs[0] + 1) as f32;
+        assert!(
+            (width - 160.0).abs() <= 3.0,
+            "expected a 160 px rectangle, measured {width} px. Anything much narrower means the two page coordinates collapsed onto the same f32 step; anything much wider means they landed on different ones and the size is an artefact of the rounding rather than the document."
+        );
+    }
+
+    #[test]
     fn form_whose_bbox_misses_the_canvas_is_culled_not_executed() {
         // The cull in `do_form` is an OPTIMISATION that must not be
         // observable in the raster, so this test asserts both halves:

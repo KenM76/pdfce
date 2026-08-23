@@ -95,15 +95,38 @@ use tiny_skia::Transform;
 /// `f64`, and only its small result is narrowed"), pushed one level down
 /// to content-stream composition, which is where it was still missing.
 ///
-/// # What this does NOT fix
+/// # What this does NOT fix, and what does
 ///
 /// Path points that are themselves large page coordinates. A point near
 /// `x = 540` has an `f32` spacing of `6.1e-5 pt` — **21.5 µm** — so any
 /// feature smaller than that, written as an absolute page coordinate, is
-/// quantised before any matrix touches it. That is a separate mechanism
-/// with a separate remedy (device-space path construction, gated on
-/// [`GraphicsState::needs_precise_paths`]), because it costs per point
-/// while this costs per `cm`.
+/// quantised before any matrix touches it. No amount of precision in the
+/// matrix recovers it.
+///
+/// That is the SECOND of `Pass 74.7`'s two algorithms, gated on
+/// [`Self::needs_precise_paths`] because it costs per point while this
+/// costs per `cm`: when the gate fires, the interpreter builds the path
+/// **relative to its own first point**, differencing in `f64` so what
+/// reaches `tiny_skia` is a set of small offsets instead of a set of
+/// nearly-equal large numbers. The CTM handed alongside keeps its linear
+/// part and carries the origin's own mapped position.
+///
+/// ★ The first attempt built the path in DEVICE space instead, with an
+/// identity transform. It was correct, and it was **three times slower**
+/// at extreme zoom on a stroke-heavy CAD sheet (93 s against 31 s),
+/// because `tiny_skia` flattens curves to a tolerance measured in the
+/// path's own units — and a path whose coordinates are millions gets
+/// subdivided accordingly. It also forced a similarity restriction, since
+/// an identity transform cannot scale a pen, and a helper existed here to
+/// test for one.
+///
+/// Differencing instead of transforming removed all three problems at
+/// once: coordinates stay at user-space magnitude so flattening is
+/// unchanged, the linear part still reaches `tiny_skia` so strokes and
+/// dashes need no adjustment, and any affine CTM is admissible. The same
+/// CAD region went from 31 s to **1.3 s** — the deep-zoom cost was never
+/// really about precision, it was the same large magnitudes hurting the
+/// rasteriser in a different way.
 ///
 /// # Convention
 ///
