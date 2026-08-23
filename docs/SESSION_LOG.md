@@ -58016,3 +58016,189 @@ carries **`23.8×`** with **`31 s → 1.3 s`** beside it per hard rule 10 (a), a
   `C:/personal_rag/pdf/lesson_20260822_f32_limits_under_pdf_content_rendering.md`,
   `C:/personal_rag/pdf/index.md`,
   `D:/dev/rag/rust/a_ceiling_is_a_claim_about_one_quantity.md`.
+
+## 2026-08-23 (two-hundred-and-thirty-sixth filing) — `39b449f` FILED, NO PASS ID; ★ THE ENGINEER RECOMMENDED A DECLINE AND IT IS OVERTURNED — `R214` AMENDED WITH CLAUSE (d), BECAUSE THE SECOND INSTANCE WAS ALREADY LIVE TWO SECTIONS AWAY; FOUR NEW SURVIVORS, ALL IN `tools/`, NONE A WRONG NUMBER; THE CONVERGENCE OBSERVATION ADOPTED AS PRACTICE
+
+**Shipped:**
+
+- **`39b449f`** — *"Splitting the section fixed the pointer and not the
+  quantifier"*. **No Pass ID** (fourth consecutive commit in this family with
+  that disposition — a Pass is a unit of work with acceptance criteria, and
+  this has none). **One file, `tools/gen-scale-demo/README.md`, 28 insertions /
+  14 deletions**, by `git show --stat`. Discharges both of the 235th filing's
+  survivors: §9's over-scoped *"Everything in this section describes pdfce
+  BEFORE `Pass 74.7`"* is reworded to say what the section **is** — the
+  investigation — and to state that its tables show both sides; §10's *"the
+  table above"* now names *"§9's forms-rendered table"*. **No code changed and
+  no test was run or claimed.**
+
+**Decisions made this session:**
+
+- **`R214` AMENDED with clause (d) — CEILING UNMOVED at `R215`, `R216` still
+  free.** *A structural repair emits a new claim of a different kind — a **scope
+  statement**, which is a universal quantifier over the delimited contents — and
+  it is an assertion nobody has checked. Verify it against them.*
+- **★ The dispatch recommended a DECLINE and the decline is OVERTURNED**, on
+  evidence the dispatch could not have had. Its reasoning was *"it is one
+  instance, and the general shape is close to platitude"*. **The general shape
+  is indeed platitude and is not what was filed.** The narrow form — *when you
+  convert prose into structure, re-read the structure's own boundary statements
+  as claims* — is what was filed, and **`n` is 2, not 1**: §10's twin sentence
+  *"Everything in this section describes pdfce as it stands"* is **false of four
+  of its own passages and was never touched.** Both instances were produced by
+  the **same remedy**, in the **same commit**, in **adjacent sections**.
+- **Why a clause of `R214` and not `R216`, ruled rather than defaulted:** the
+  defect is a **rider on `R214`'s own prescribed remedy** (clause (a): *promote
+  the boundary to a heading*), and that remedy is what **manufactures** a scope
+  sentence. Filing the warning under a separate number **detaches it from the
+  remedy that causes it**, so the next reader applies clause (a) and repeats the
+  defect — which is precisely what happened, twice, in one commit. Clause (c)
+  already says *a repair is a new claim*; it does not say **what kind** of claim
+  a **structural** repair makes, and its remedy vocabulary (*name the referent*)
+  gives no instruction for a **quantifier**. Clause (d) supplies the missing half.
+- **Decidability, on the stronger side of `R214`'s own enforcement test:** *"is
+  this scope sentence true of this section's contents?"* is answerable **from
+  one span of one file with no knowledge of pdfce's behaviour** — you need only
+  see an `after` column, the words *"before the fix"*, or a quoted prior wording.
+  That is **more** decidable than clause (c)'s *"is this reference right?"*.
+  **It is not greppable** (a scope sentence carries no stale token), so **no gate
+  is proposed** and it belongs in the reading, alongside hard rule 11.
+- **The convergence observation is ADOPTED AS STANDING PRACTICE, not minted.**
+  Filed under `ROADMAP.md`'s *Update protocol* as **"How you know a document is
+  converging"**, beside *"How a figure is filed"*. It **prescribes no action**,
+  so there is nothing to oblige; its value is that it is **free**.
+  **`R216` stays free.**
+- **No `ARCHITECTURE.md` §12 decision.** A standing-rule amendment about how
+  documents are worded produces no artefact in any crate. **Counter stays at
+  `084`.**
+
+**Findings + decisions:**
+
+**★★★★ SURVIVOR A — §10's SCOPE SENTENCE IS THE AMENDMENT'S SECOND INSTANCE, AND
+IT IS LIVE.** §10 opens *"Everything in this section describes pdfce as it
+stands"*, and four of its own passages are not that:
+
+| # | the passage | why it is not "pdfce as it stands" |
+|---|---|---|
+| 1 | *"Before the fix, the same computed region put it **76 px out horizontally and 288 px vertically**"* | a **before**-figure — structurally identical to the `after`/`correct` columns that falsified §9's sentence |
+| 2 | *"This paragraph said "11 of 11 forms survive at every scale tested" until 2026-08-23"* | preserved evidence under `R215` (d) — what the document said, not what pdfce does |
+| 3 | *"The figure `93 s` … is the **rejected** device-space attempt"* | the provenance of a discarded draft |
+| 4 | *"Note which direction the error travelled … began as an **expectation** in a roadmap table"* | subject is a roadmap table's history, not pdfce at all |
+
+**The symmetry is the argument.** Every defence available to §10's sentence
+(*"it means the section is ABOUT current behaviour"*) was equally available to
+§9's and was rejected one commit ago by the engineer's own hand.
+
+**★★★ SURVIVOR B — the paragraph explaining why positional pointers fail OPENS
+WITH ONE.** §9's new ★ paragraph begins *"And the sentence above it had to be
+narrowed too"*. **"it"** has no written antecedent; read literally, *"the
+sentence above it"* resolves against the preceding paragraph, whose preceding
+sentence is the **tables** sentence, not the scope sentence that was actually
+narrowed. **Rescued one sentence late** by *"The first version of this **scope
+statement** read …"*. ⇒ `R214` clause (a) satisfied, late. **Repair: name it in
+the first sentence.**
+
+**★★★ SURVIVOR C — the new tables sentence quantifies twice, in opposite
+directions, over a set of one.** *"The measurement tables carry **before and
+after columns** … **where they do**, the after-figure is current"*. §9 has
+**exactly one** table. A universal (*carry*) beside an existential hedge (*where
+they do*); which is redundant depends on a fact the sentence does not state.
+**★★ And it names `before` and `after` while omitting `correct`** — the table has
+four columns, **two** are post-fix, and `correct` is the column `R215` was minted
+about and the one the 235th filing named **first** when it falsified the sentence
+being replaced. ⇒ **the replacement narrows the claim to two-thirds of the
+evidence that falsified it.** ★ **This is a quantifier defect introduced by the
+repair of a quantifier defect**, and it is the counter-caution attached to the
+convergence practice.
+
+**★★ SURVIVOR D — the repaired reference names its target by a label deleted for
+being wrong.** §10 now says *"§9's **forms-rendered** table"*, and the only
+occurrence of *"forms rendered"* in §9 is the **quoted evidence** of the header
+`4af0c08` removed (*"its header read "forms rendered of 11""*). **The reference
+resolves — §9 has one table — so this is the weakest of the four.** But a future
+reader greping the phrase lands on preserved evidence of a wrong label with one
+plausible reading in which it is live. **Repair: *"§9's measurement table"*.**
+★ The transferable shape: **naming a referent after a label you deleted
+re-creates the string you removed** — preserved evidence and live text share a
+namespace, which is the grep-visible tension inside `R215` (d).
+
+**★ None of the four is a wrong number**, which is the fifth consecutive round
+where that holds. See the convergence practice.
+
+**★ SWEEP (hard rule 11) — what was searched and found CLEAN, reported as a
+measured result.** `Everything in this section` / `everything below describes` /
+`the table above` across `docs/`, `tools/`, `.claude/`, `crates/`, and both RAG
+tiers:
+
+- **`docs/ROADMAP.md`, `docs/SESSION_LOG.md`** — every *"the table above"* hit
+  resolves **within its own append-only entry**, where the table is immediately
+  above. Not survivors; frozen by construction.
+- **`docs/NEXT_SESSION.md`** — the hits are quotations of the survivors being
+  discharged. **Rewritten by this filing.**
+- **`docs/decisions/004-text-rendering-fonts.md:121`** — *"Everything in this
+  section was verified today"*. **Not a survivor:** the record carries
+  `**Date:** 2026-07-30` in its own header, so *"today"* resolves. Recorded
+  because it is the nearest miss the sweep produced.
+- **`docs/core-api/`** — two within-section table references in a stable
+  document; both resolve. Not chased.
+- **`crates/`** — read, not edited (outside this remit). No scope-sentence
+  instances.
+- **`C:/personal_rag/pdf/`, `D:/dev/rag/rust/`, `D:/dev/rag/egui/`** — one hit,
+  a within-entry *"the table above"* in a verapdf lesson. Resolves. Nothing.
+- **`.claude/worktrees/`** — out of scope by construction (nine transient
+  detached copies); `rg` skips them, a bare `grep -r` does not.
+
+**`FEATURES.md` ruling — NO ROW, and NO ROW REPAIRED.** `39b449f` adds **no
+capability an operator can ask for** — it narrows two sentences in a demo
+generator's README. Same test that gave `ea413a4`, `PASS 74.8`, `4af0c08` and
+`641deb9` no row. **Measured, not assumed:** grepped for `11 of 11`, `93 s`,
+`71.5`, `forms rendered`, `the table above` and `this section` — **zero hits,
+all six.** Rows **201–204** are the deep-zoom family, all four describe
+`PASS 74.7` in the past tense as shipped, row 201 carries **`23.8×`** beside
+**`31 s → 1.3 s`** per hard rule 10 (a). **No box changes anywhere.**
+
+**Still in flight:**
+
+- **The four `tools/gen-scale-demo/README.md` survivors above.** **The
+  engineer's edits** — this role does not touch `tools/` or `crates/`.
+  Survivor A is the `R214` (d) instance and is the one that matters.
+- **`R214`'s positional-reference gate** — recommended, unbuilt, baseline
+  unmeasured. **Measure, repair, then wire.** Survivors B and D are fresh
+  instances of what it would catch, in prose rather than doc comments.
+- **`R215`'s retro-application**, carried forward unstarted for a **fifth**
+  filing, over `docs/` **and both RAG tiers**.
+- Queue otherwise unchanged: `Pass 97.1g`, `97.1k`, `122.2`, `122.1`, `122.0`,
+  `119.1`, `122.3`.
+- **Nothing is owed to Ken** except the two acts that are his by definition:
+  **pushing** and **cutting a backup**.
+
+**For next session:**
+
+- **`docs/NEXT_SESSION.md` is rewritten by this filing** so a cold reader can
+  resume: what shipped today, what is open, and the two items that are Ken's.
+  **This is the last filing of the session unless something new surfaces.**
+- **Backup and remote currency — CHECKED, not inferred (hard rule 8).**
+  `git remote -v` → `origin  https://github.com/KenM76/pdfce.git`.
+  `git rev-list --count origin/main..main` → **`26`** (was `24` one filing ago;
+  two commits since — `39b449f` and `d2eacbf`), with the local remote-tracking
+  ref still at **`c24ad7a`**; **no `git fetch` was run**, so that is the tracking
+  ref's position, not a live query. `ls -lt D:/Dev/pdfce-backups/` → newest
+  bundle **`pdfce-20260817-v060.bundle`** (2026-08-17 20:34), `refs/heads/main`
+  at **`3c4c00e`** by `git bundle list-heads`; `git rev-list --count
+  3c4c00e..main` → **`219`** (was `217`), and `git merge-base --is-ancestor`
+  reports **`HEAD` is NOT in that bundle**. ⇒ **the newest backup is 219 commits
+  and six days behind `HEAD`.** `git worktree list | wc -l` → **`9`**.
+- **Gates: 17 `tools/check-*` on disk (12 `.py` + 5 `.sh`), 16 runnable as bare
+  gates**, re-measured by `ls tools/check-* | wc -l` and by running each.
+  **Before this entry, 15 of 16 exit 0** and `check-commits-filed.py` exited
+  **1**, naming exactly `39b449f` and nothing else — the measurement confirming
+  `d2eacbf` and `1a60e73` are both already accounted for. **After: all 16 exit
+  0.** The 17th, `check-image-colorspace-truth.py`, exits 1 bare **because it
+  requires a fixture-directory argument** — *"`check-*` on disk but not a gate"*,
+  still true. **`check-metrics-line-contract.py` → exit 0, `90 keys`,
+  unchanged** — a commit that changes no code moves no key.
+- **RAG files WRITTEN by this filing:** one new,
+  `D:/dev/rag/rust/the_defect_class_left_after_repeated_repair_rounds_is_the_stopping_signal.md`,
+  with its `index.md` bullet added in the same edit. **No existing RAG file
+  needed amending** — the three the 235th filing repaired were re-read and are
+  correct as filed.
