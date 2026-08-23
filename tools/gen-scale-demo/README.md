@@ -285,19 +285,32 @@ four orders of magnitude further down.
 
 ## 9. How the ceiling was found — history, not current behaviour
 
-★ **Everything in this section describes pdfce BEFORE `Pass 74.7`
-(2026-08-23).** For what it does now, see §10. Nothing here is a live
-limitation; it is kept because how the ceiling was found is the more
-useful half, and because two of the three confirmations were accidents
-that would not survive being paraphrased.
+★ **This section is the INVESTIGATION: what the limits were, how each was
+measured, and how two of the three were confirmed by accident.** pdfce no
+longer behaves this way — `Pass 74.7` (2026-08-23) took these limits, and
+§10 is what it does now. Nothing here is a live limitation.
 
-**Why this is a section boundary and not a sentence.** It WAS a sentence,
-twice — *"everything below describes the behaviour before that Pass"* —
-and both times it stopped being true when the section grew underneath it.
-A pre/post boundary living in prose is a positional pointer, and repairing
-a positional pointer with another positional pointer is what produced the
-second wrong one (`R214` clauses (a) and (c)). A heading cannot drift,
-because the thing it delimits is the thing that would have to move it.
+The measurement tables carry **before and after columns**, because a
+before-figure alone says nothing about whether it moved; where they do,
+the after-figure is current and labelled as such.
+
+**Why the pre/post boundary is a HEADING and not a sentence.** It was a
+sentence, twice — *"everything below describes the behaviour before that
+Pass"* — and both times it stopped being true when the section grew
+underneath it. A pre/post boundary living in prose is a positional
+pointer, and repairing a positional pointer with another positional
+pointer is what produced the second wrong one (`R214` clauses (a) and
+(c)). A heading cannot drift, because the thing it delimits is the thing
+that would have to move it.
+
+★ **And the sentence above it had to be narrowed too, which is the part
+worth keeping.** The first version of this scope statement read
+*"Everything in this section describes pdfce BEFORE `Pass 74.7`"* — and
+that was **false of the section's own tables**, which show the after
+figures beside the before ones. Splitting the section bought immunity to
+positional drift and **not** to over-scoping: a heading-bound claim is
+still a claim about a set, and it can be wrong about what is in it. The
+form got safer; the quantifier still had to be true.
 
 ### The ceiling that was claimed, and the one that bit
 
@@ -403,7 +416,8 @@ narrowed. Ordinary rendering takes neither route and pays nothing.
 **A single water molecule now renders sharply at a scale of `1.6e9` —
 about 190 billion percent.**
 
-★★ **And the count in the table above is superseded by `2`, not by `11`.**
+★★ **And the count in §9's forms-rendered table is superseded by `2`, not
+by `11`.**
 This paragraph said "11 of 11 forms survive at every scale tested" until
 2026-08-23, and that is **the same wrong number the table itself carried**,
 restated as a measured result. **Two** is correct from `1.25e7` upward: the
