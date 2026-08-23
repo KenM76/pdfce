@@ -290,42 +290,48 @@ measured, and how two of the three were confirmed by accident.** pdfce no
 longer behaves this way — `Pass 74.7` (2026-08-23) took these limits, and
 §10 is what it does now. Nothing here is a live limitation.
 
-Its one measurement table — the forms-rendered counts under *"Measured,
-on the box's own molecules"* — carries **three post-fix columns**:
-`after`, `correct`, and the note explaining why `correct` is not `11`.
-They are here rather than in §10 because a before-figure alone says
-nothing about whether it moved, and because the gap between `after` and
-`correct` is the whole subject of §9's last paragraph.
+The measurement table below shows before and after side by side, and a
+`correct` column, because a before-figure alone says nothing about whether
+it moved and because `correct` is not what anyone would guess.
 
-*(That sentence read "The measurement **tables** carry before and after
-columns … **where they do**" until it was checked: a universal beside an
-existential hedge, over a set of exactly one, naming two of the three
-post-fix columns and omitting `correct` — the one `R215` was minted
-about. Quantifiers written to repair a quantifier defect are worth
-re-reading.)*
+---
 
-**Why the pre/post boundary is a HEADING and not a sentence.** It was a
-sentence, twice — *"everything below describes the behaviour before that
-Pass"* — and both times it stopped being true when the section grew
-underneath it. A pre/post boundary living in prose is a positional
-pointer, and repairing a positional pointer with another positional
-pointer is what produced the second wrong one (`R214` clauses (a) and
-(c)). A heading cannot drift, because the thing it delimits is the thing
-that would have to move it.
+**A note on how this section was written, kept short on purpose.**
 
-★ **And this section's own scope statement — the starred paragraph that
-opens §9 — had to be narrowed too, which is the part worth keeping.** It
-first read *"Everything in this section describes pdfce BEFORE
-`Pass 74.7`"*, and that was **false of §9's measurement table**, which
-shows the after figures beside the before ones. Splitting the section
-bought immunity to positional drift and **not** to over-scoping: a
-heading-bound claim is still a claim about a set, and it can be wrong
-about what is in it. The form got safer; the quantifier still had to be
-true.
+Six rounds of correction ran against this file. Round 1 fixed wrong
+**values**; round 2, wrong **pointers** (*"the table above"*); round 3,
+wrong **quantifiers** (*"everything in this section"*); round 4, an
+**unwritten antecedent** (*"the sentence above it"* — opening the very
+paragraph that explained why such pointers fail). Rounds 5 and 6 produced
+fresh instances of classes 1 and 2.
 
-*(This paragraph opened "the sentence above it" — a positional pointer, at
-the head of the paragraph explaining why positional pointers fail, with no
-written antecedent for "it". It is named now.)*
+★ **Every one of those defects lived in a sentence ABOUT a previous
+correction, not in the engineering content.** The substance — the
+arithmetic, the measurements, the three `f32` limits — was correct from
+round 1 and never moved. What kept breaking was the commentary layer each
+round added to explain the round before it: a running annotation of its
+own edit history, in which each new sentence was an unchecked claim about
+a set, a position, or a count.
+
+⇒ **So that layer is deleted rather than corrected again.** The previous
+version of this passage carried four paragraphs of it and had three live
+defects in them at the time of writing — including a table described as
+having *"three post-fix columns"* when it has two, the third item
+enumerated being a prose note.
+
+**The general form, which is the only part worth carrying elsewhere:** *a
+document that annotates its own corrections has made its correction
+history part of its content, and that part has no tests, no measurements
+and no reader who would notice.* It generates defects at a steady rate and
+each repair adds another sentence to the generator. `ROADMAP.md` and
+`SESSION_LOG.md` are where this project's edit history belongs; they are
+append-only, dated, and read by someone looking for exactly that. This
+file is for the artefact.
+
+The substantive lessons the rounds produced are kept — in `R214`, `R215`,
+and `D:/dev/rag/rust/`, where they are one claim each and get swept.
+
+---
 
 ### The ceiling that was claimed, and the one that bit
 
@@ -404,17 +410,8 @@ came out.
 
 ★ **This section is what pdfce does NOW.** `Pass 74.7` (2026-08-23) took
 the limits §9 measured; `Pass 74.10` closed the second rendering path
-behind it.
-
-It quotes before-figures throughout — `76 px / 288 px`, `93 s`, the
-wording a sentence carried until it was corrected — because a current
-figure alone says nothing about what changed. **Each is labelled where it
-appears.** This paragraph used to read *"Everything in this section
-describes pdfce as it stands"*, which was false of every one of them, and
-it is the second scope sentence in one commit to over-claim (`R214`
-clause (d)): promoting a boundary to a heading manufactures a sentence
-about a SET, and a claim about a set is a new assertion nobody has
-checked.
+behind it. Where a before-figure appears here it is labelled as one, since
+a current number alone says nothing about what changed.
 
 **The nudged coordinates are gone.** §9's framing came from a region
 hand-corrected twice against the drift; the box now lands within **one
@@ -441,23 +438,17 @@ narrowed. Ordinary rendering takes neither route and pays nothing.
 **A single water molecule now renders sharply at a scale of `1.6e9` —
 about 190 billion percent.**
 
-★★ **And the count in §9's measurement table is superseded by `2`, not
-by `11`.**
-This paragraph said "11 of 11 forms survive at every scale tested" until
-2026-08-23, and that is **the same wrong number the table itself carried**,
-restated as a measured result. **Two** is correct from `1.25e7` upward: the
-box plus the one molecule actually in frame. The other nine are removed by
-`Pass 74.4`'s exact `/BBox` cull, which is not a defect and does not go
-away — so `11 of 11` was never achievable and a change that produced it
-would have been a bug.
+★★ **The count in §9's measurement table goes to `2`, not to `11`** — and
+`11` is worth stating, because it is the number this Pass was originally
+given as its acceptance criterion.
 
-Note which direction the error travelled, because it is the reason this
-correction is starred twice. The number began as an **expectation** in a
-roadmap table, was identified there as wrong, was recorded correctly in
-two other documents on the same day — and then reappeared **here**, in
-prose, as an outcome. *An expectation invites checking; a result does
-not.* That is standing rule `R215`, propagating forward past its own
-minting.
+**Two** is correct from `1.25e7` upward: the box, plus the one molecule
+actually in frame. The other nine are removed by `Pass 74.4`'s exact
+`/BBox` cull, which is not a defect and does not go away. So *"11 of 11"*
+was never achievable, and a change that produced it would have been a bug.
+
+That criterion was written by reading the broken system's output and
+assuming the whole of it was the defect. Standing rule `R215`.
 
 ★ **The part nobody predicted: the same change made deep zoom 23× faster.**
 A stroke-heavy CAD region at 100 000× went from **31 s to 1.3 s**.
