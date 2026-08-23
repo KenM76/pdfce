@@ -42,7 +42,7 @@ with `pdfce-cli render-page --region`, each view a ~1600 × 1000 viewport:
 | cristae, junctions, nucleoids | 18–210 nm | 5e-5 – 6e-4 pt | ~16 000 000 % | 182 ms |
 | ATP synthase particles | 10 nm | 2.8e-5 pt | ~35 000 000 % | 190 ms |
 | the molecule box | 50 nm | 1.4e-4 pt | ~1 500 000 000 % | 158 ms |
-| a water molecule | 0.37 nm | 1.0e-6 pt | *past the ceiling* — §9 | — |
+| a water molecule | 0.37 nm | 1.0e-6 pt | ~190 000 000 000 % | 60 ms |
 
 ★ **Render time still does not grow with magnification — it falls**, and
 the reason is worth stating plainly. A viewport is a fixed number of
@@ -329,9 +329,15 @@ cull: a synthetic page with the same square drawn three ways — absolute
 coordinates, a `cm` translation, and a scaled `cm` — loses all three at
 the same magnification, including the one that uses no `cm` and no form.
 
-★ **And confirmed a second way, by accident, which is the more convincing
-of the two.** The molecule box renders off-centre in its frame, so the
-obvious move is to nudge `--region` by the observed offset. It does
+★ **FIXED 2026-08-23 by `Pass 74.7`, and this section is kept as the
+record of how it was found rather than as a live limitation.** Everything
+below describes the behaviour before that Pass; a water molecule now
+renders sharply at a scale of `1.6e9`, and the saved render of the box is
+centred. What follows is the evidence, not the current state.
+
+★ **Confirmed a second way, by accident, which was the more convincing of
+the two.** The molecule box rendered off-centre in its frame, so the
+obvious move was to nudge `--region` by the observed offset. It did
 **nothing** — two successive nudges produced byte-identical framing, the
 box's bounds landing on the same pixels each time.
 
@@ -354,13 +360,29 @@ pdfce-cli render-page banana-at-scale.pdf --page 1 --scale 8104752 \
   --region "539.9998919,558.8519467,540.0001633,558.8521277" -o box.png
 ```
 
-⇒ **The whole box is readable at about 1 500 000 000 %**, which is what it
-was built for and is where every screenshot of it is taken. A single
-molecule filling the viewport is past the ceiling. Raising it means
-carrying the CTM in `f64` through content-stream concatenation and
-narrowing only at paint — the same trick `Pass 74.2` used for the base
-CTM, extended one level down. That is a real Pass, not a tweak, and it is
-not taken here.
+⇒ **That was the state on 2026-08-22.** `Pass 74.7` took it the next day,
+and everything above is now the record of a solved problem rather than a
+live limitation — kept because how the ceiling was found is the more
+useful half.
+
+**What changed.** The CTM is carried in `f64` through content-stream
+composition and narrowed only at the leaf, which fixes limit 2. Limit 1 is
+fixed separately and only where it bites: past a magnitude threshold the
+interpreter builds each path **relative to its own first point**,
+differencing in `f64`, so a page coordinate never has to survive being
+narrowed. Ordinary rendering takes neither route and pays nothing.
+
+**A single water molecule now renders sharply at a scale of `1.6e9` —
+about 190 billion percent.** The table above is superseded: 11 of 11 forms
+survive at every scale tested, and the "forms rendered" counts in it are
+the pre-fix measurement.
+
+★ **And the part nobody predicted: the same change made deep zoom 23×
+FASTER.** A stroke-heavy CAD region at 100 000× went from 93 s to 1.3 s.
+Deep zoom was never slow *because* it was imprecise — it was slow for the
+*same reason*, large magnitudes reaching a rasteriser that flattens curves
+to a tolerance measured in the path's own units. One cause, two symptoms,
+and only the precision one was ever attributed correctly.
 
 ## 10. The easter egg, and the arithmetic that said it would fit
 

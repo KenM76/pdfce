@@ -386,6 +386,38 @@ pub enum PoisonReason {
     /// than quietly kept: the difference is a plausible-looking picture,
     /// not a visible failure.
     NonIsolatedGroup,
+    /// The recording **scale** puts the page's own transform past what
+    /// `f32` can hold, so a recorded list could not agree with a direct
+    /// render.
+    ///
+    /// # Why this exists, and why the threshold is not a new one
+    ///
+    /// A display list stores each op's CTM as a `tiny_skia::Transform`,
+    /// which is `f32`, and `replay_region` shifts it by the region's
+    /// device origin. Both are fine while the numbers are small. At a
+    /// recording scale of 5 000 a letter page's transform already carries
+    /// a translation of ~4e6, where `f32`'s spacing costs half a device
+    /// pixel; at 500 000 it costs 47.
+    ///
+    /// `Pass 74.7` fixed exactly that arithmetic **on the direct path**,
+    /// which carries the CTM in `f64`
+    /// ([`crate::gstate::Mat64`]). It did not fix it here, and a
+    /// recording that is half a pixel out from the render it is supposed
+    /// to substitute for is the module's own stated nightmare: *"a display
+    /// list that is subtly wrong is strictly worse than no display list"*.
+    ///
+    /// ★ **The threshold is [`Mat64::needs_precise_paths`] — the SAME one
+    /// the direct path uses to decide whether it needs its precise
+    /// route.** That is what makes this a boundary rather than a
+    /// compromise: below it both paths do identical `f32` arithmetic and
+    /// agree exactly; above it the direct path switches to `f64` and this
+    /// one refuses. There is no scale at which the two disagree, which is
+    /// the property `R211` asks of any second rendering path.
+    ///
+    /// For a US-Letter page this fires above a recording scale of roughly
+    /// **530** — far beyond any zoom a list is worth caching for, and the
+    /// fallback is a direct render that is correct at any scale.
+    ScaleBeyondF32,
     /// The recording exceeded [`MAX_DISPLAY_LIST_BYTES`].
     ///
     /// Unlike the others this is not a *capability* limit — the page is
@@ -426,6 +458,7 @@ impl PoisonReason {
             Self::NonSeparableBlend => "non-separable blend mode",
             Self::NonIsolatedGroup => "non-isolated transparency group",
             Self::TooLarge => "recording exceeded MAX_DISPLAY_LIST_BYTES",
+            Self::ScaleBeyondF32 => "recording scale past f32 transform precision",
         }
     }
 }
@@ -723,6 +756,28 @@ pub fn record_page(
         return Err(RenderError::BadRasterSize {
             width: page_w,
             height: page_h,
+        });
+    }
+    // ★ AND THE PRECISION CEILING, which is the other half of "recording at
+    // a deep zoom" and was missing until `Pass 74.7` gave the direct path a
+    // precision this one does not have.
+    //
+    // Everything in a recorded list is `f32`: each op's CTM, and the
+    // `post_translate` `replay_region` applies to move it into the region's
+    // space. Past the point where that arithmetic costs a twentieth of a
+    // pixel, a replay and a direct render of the same page stop agreeing —
+    // and this module's whole posture is that a list which is subtly wrong
+    // is worse than no list.
+    //
+    // The test is `Mat64::needs_precise_paths`, the SAME predicate the
+    // interpreter uses to decide whether it needs its `f64` path. Below it,
+    // both paths do identical `f32` arithmetic and agree exactly; above it,
+    // one switches to `f64` and the other refuses. No scale exists at which
+    // they quietly disagree, which is what `R211` asks of a second
+    // rendering path.
+    if crate::gstate::Mat64::from_f32(page_ctm).needs_precise_paths() {
+        return Err(RenderError::PageNotRecordable {
+            reason: PoisonReason::ScaleBeyondF32,
         });
     }
 

@@ -615,3 +615,44 @@ fn a_key_survives_a_hash_map_round_trip() {
         "a scale that differs at all is a different key"
     );
 }
+
+/// A recording scale past `f32`'s usable range is refused BY NAME, and one
+/// below it still records.
+///
+/// ★ This is a `R211` boundary test, not a resource-limit test, and the
+/// second half is the load-bearing one. `Pass 74.7` gave the DIRECT render
+/// path an `f64` CTM; a display list is still `f32` throughout. If both
+/// were allowed to operate above the point where that difference shows,
+/// pdfce would have two rendering paths that quietly disagree at deep zoom
+/// — the exact hazard `R211` names, and the thing this module's own docs
+/// call "strictly worse than no display list".
+///
+/// The refusal threshold is `Mat64::needs_precise_paths`, the SAME
+/// predicate the interpreter uses to switch to its precise route. So below
+/// it both paths are `f32` and identical; above it one goes `f64` and the
+/// other refuses. There is no scale at which they differ.
+#[test]
+fn a_recording_scale_past_f32_precision_is_refused_by_name() {
+    let doc = Document::load(&fixture("addtext/plain.pdf")).expect("fixture loads");
+    let page = page_tree::pages(&doc).expect("page tree").remove(0);
+
+    // A US-Letter page's transform carries `ury * scale`, so the ceiling
+    // lands near 530. Recording is deliberately NOT bounded by
+    // MAX_PIXMAP_EDGE -- a list allocates no raster -- so nothing else
+    // would have stopped this.
+    match record_page(&doc.view(), &page, 5_000.0, 1, &RenderOptions::default()) {
+        Err(RenderError::PageNotRecordable {
+            reason: PoisonReason::ScaleBeyondF32,
+        }) => {}
+        Err(other) => panic!("wrong refusal for an out-of-range scale: {other}"),
+        Ok(_) => panic!(
+            "a display list recorded at scale 5 000, where its own f32 transforms are half a device pixel out. It would have replayed a picture that disagrees with a direct render of the same page, with nothing at the call site to say so."
+        ),
+    }
+
+    // And the half that keeps the ceiling from being a silent feature
+    // removal: an ordinary scale still records.
+    record_page(&doc.view(), &page, 4.0, 1, &RenderOptions::default()).expect(
+        "an ordinary scale must still record -- a guard that refuses everything is not a guard",
+    );
+}
