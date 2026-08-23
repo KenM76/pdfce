@@ -298,18 +298,25 @@ it moved and because `correct` is not what anyone would guess.
 
 **A note on how this section was written, kept short on purpose.**
 
-Six rounds of correction ran against this file. Round 1 fixed wrong
-**values**; round 2, wrong **pointers** (*"the table above"*); round 3,
-wrong **quantifiers** (*"everything in this section"*); round 4, an
+Several rounds of correction ran against this file, and between them they
+turned up wrong **values**; wrong **pointers** (*"the table above"*);
+wrong **quantifiers** (*"everything in this section"*); and an
 **unwritten antecedent** (*"the sentence above it"* — opening the very
-paragraph that explained why such pointers fail). Rounds 5 and 6 produced
-fresh instances of classes 1 and 2.
+paragraph that explained why such pointers fail). The later rounds
+produced fresh instances of the earlier kinds, so the list is of shapes
+rather than of stages.
+
+*(No ordinals, deliberately. An earlier draft numbered the rounds and
+disagreed with `ROADMAP.md`'s numbering of the same commits two sentences
+later. **An ordinal is a claim; a sequence is not** — and this note's
+whole subject is claims nobody checks.)*
 
 ★ **Every one of those defects lived in a sentence ABOUT a previous
 correction, not in the engineering content.** The substance — the
 arithmetic, the measurements, the three `f32` limits — was correct from
-round 1 and never moved. What kept breaking was the commentary layer each
-round added to explain the round before it: a running annotation of its
+the start and never moved. What kept breaking was the commentary layer
+each round added to explain the round before it: a running annotation of
+its
 own edit history, in which each new sentence was an unchecked claim about
 a set, a position, or a count.
 
