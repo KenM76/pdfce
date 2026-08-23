@@ -303,6 +303,54 @@ measured above. Setting it from `f32` would be picking a number for a reason
 that does not apply — the same class of error `MAX_PIXMAP_EDGE`'s original
 justification made.
 
+---
+
+## ★★ AMENDMENT 2026-08-23 — the MEASUREMENTS above are unchanged; the CONCLUSION was a PREDICTION and it has been refuted
+
+**Nothing measured on 2026-08-13 is wrong, and no number in this file is
+corrected.** What is amended is the section immediately above, and the defect is
+one clause: ***"three orders of magnitude beyond any plausible viewing zoom."***
+
+**That is `R193`/`Pass 74.0`'s exact anti-pattern** — *a limit justified by
+"beyond any plausible use" is a prediction, not a fact* — and the prediction was
+falsified within eleven days by this project's own artefact. `tools/gen-scale-demo`
+draws a banana and, at 1:1 with no scale break anywhere between them, the water
+molecules inside one of its cells. **Reading that page requires `scale` up to
+`1.6 × 10⁹`**, five and a half orders of magnitude past the `~5,000×` this file
+calls the outer edge of plausibility. **The plausible viewing zoom was a
+property of the documents that existed when the sentence was written.**
+
+**So the headline sentence — *"numerical precision is not the binding constraint
+on magnification, and is not close to being one"* — is FALSE above roughly
+`5 × 10⁶`, and was false when written for any document finer than its own page
+units.** Three `f32` limits were subsequently measured under page-space content
+(`ARCHITECTURE.md` §4, *Numerical reach of PAGE-SPACE CONTENT*): a path
+coordinate near `x = 540 pt` quantised to **21.5 µm**; a `cm` carrying a page
+coordinate drifting by `≈ page_x × scale / 16 700 000` px; and the content's
+device position moving in **~500 px steps at `scale = 8.1 × 10⁶`**. **All three
+were raised on 2026-08-23 by `PASS 74.7`** (`1d6db9e` + `5b0d885`), in two
+algorithms.
+
+**★ Why this file's method could not have seen it, which is the transferable
+half.** The measurement above is **error in pixels against zoom on one CAD
+sheet**, and its own reading section is careful and correct: sub-pixel wander
+below `~5,000×`, then doubling past `~43,000×`. **The extrapolation it refuses
+to make is the one that mattered** — it stops at the zooms it measured and then
+declares the region beyond them uninteresting. **An error curve measured over
+the range you consider plausible cannot tell you the range is plausible.**
+
+**What is still exactly right and should not be discarded:** the per-render
+interpretation floor, the cost model, the region-vs-whole-page arithmetic, and
+the ruling that `MAX_ZOOM` is set from **performance and usability** rather than
+from numerics. That ruling survives its stated reason — the numerics were the
+binding constraint after all, and are no longer, so the conclusion is now true
+for a better reason than the one given.
+
+**Cross-references:** `ROADMAP.md` `R213` (a magnitude claim is a claim about
+one quantity — this file's original defect was the *subject* of its ceiling),
+`R193`/`Pass 74.0` (a prediction filed as a fact), `ARCHITECTURE.md` §4 and
+§4.1 (AB). Filed by the two-hundred-and-thirty-second filing.
+
 ## What is still NOT covered here
 
 Hairline strokes (`0 w`), which render at a device-minimum width regardless of

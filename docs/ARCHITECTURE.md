@@ -4316,6 +4316,80 @@ path and **not** `Pass 74.4`'s cull: a synthetic page drawing the same square
 three ways loses all three at the same magnification, including the one using
 neither `cm` nor a form.
 
+**★★★ DISCHARGED 2026-08-23 by `PASS 74.7` (`1d6db9e` + `5b0d885`) — ALL THREE
+LIMITS RAISED, IN TWO ALGORITHMS. This paragraph is the part that is current;
+the three-limit paragraph above is kept as the audit trail, same convention as
+§(H)'s `f9dc007` / `ea413a4` notes.** The two algorithms are separate because
+they answer separate causes, and neither alone raises the ceiling:
+
+1. **`Mat64` — the CTM carried in `f64` through composition, narrowed only at
+   the leaf.** Discharges limits **2 and 3** (the placement matrix and the
+   quantised device position). **Three sites had to change together and each
+   was load-bearing alone**: `cm` concatenation, a Form XObject's `/Matrix`, and
+   **the BASE transform**, which `RegionGeometry` was handing over **already
+   narrowed** — and **widening an `f32` back to `f64` carries its rounding
+   forward**, so the fix is to keep the `f64` coefficients, never to widen the
+   `f32` ones. Same trick `Pass 74.2` used one level up.
+2. **Path differencing — when the magnitude gate `needs_precise_paths` fires,
+   the interpreter builds the path RELATIVE TO ITS OWN FIRST POINT, differencing
+   in `f64`.** Discharges limit **1**, which the Backlog entry had explicitly
+   recorded as *out of `74.7`'s scope* — a coordinate written into the content
+   stream is destroyed before any CTM applies, so no precision in the matrix
+   recovers it. What reaches `tiny_skia` is a set of **small offsets** instead of
+   nearly-equal large numbers; the CTM alongside keeps its linear part and
+   carries the origin's mapped position.
+
+**Measured after: a single water molecule renders sharply at `scale`
+1.6 × 10⁹ — ≈ 190 billion percent** — where before, everything above ≈ 5 × 10⁶
+vanished. On the same eleven-form artefact the post-fix counts are **11 of 11 at
+2 × 10⁶ and `2 of 11` at every scale from 1.25 × 10⁷ up**, and **`2` is the
+correct answer**: the box plus the one molecule in frame, the other nine having
+left the viewport where `Pass 74.4`'s exact §8.10.1 cull drops them. **The
+synthetic three-ways page now renders all three squares at 200 million percent
+at identical size, including the absolute-coordinate one neither fix had reached
+before**, and a `2 × 10⁻⁶ pt` stroke comes out **200 px thick and 800 px long at
+1 × 10⁸**, matching the arithmetic exactly, by both routes.
+
+**★ Limit 3's confirmation is now inverted, and the record of the old behaviour
+must not be read as current: a `--region` nudge MOVES THE CONTENT.** The
+byte-identical-framing observation above is a **dated** fact about the state
+before `1d6db9e`. Anything describing the off-centre saved render in
+`C:\Users\Ken\OneDrive\pdfTests\` as *evidence that must not be fixed* is
+describing spent evidence.
+
+**★★ ORDINARY RENDERING PAYS NOTHING, which was the operator's own stated
+constraint** (*"without affecting speed where that precision isn't needed"*).
+Both algorithms are **gated on magnitude and decided once** — the `f64`
+composition happens once per `cm`, not once per pixel, and the path gate is
+evaluated once per path. Measured: banana whole page **1430 / 1458 ms against
+1487 / 1532 ms before**; CAD at `scale` 1.0 **1086 ms against a 980–1040 ms
+baseline**; banana page **1442 ms against a 1430–1538 ms baseline**.
+
+**★★★ AND A RESULT THAT WAS NOT THE GOAL: the same CAD region went `31 s →
+1.3 s` = `23.8×`.** Deep zoom was never slow **because** it was imprecise; it
+was slow **for the same reason** — large magnitudes reaching a rasteriser that
+reasons in **relative** tolerances. The rejected first attempt makes the
+mechanism explicit: **building the path in DEVICE space with an identity
+transform was correct and `3×` SLOWER** (`93 s` against `31 s` on a stroke-heavy
+CAD sheet), **because `tiny_skia` flattens curves to a tolerance expressed in
+the PATH'S OWN UNITS**, so million-magnitude coordinates get subdivided
+accordingly. Differencing keeps coordinates at user-space magnitude, leaves
+flattening unchanged, leaves the linear part reaching `tiny_skia` (so strokes
+and dashes need no adjustment) and admits **any** affine CTM rather than only a
+similarity — which is why the `similarity_scale` helper, the stroke-width
+multiplier and the dash rebuild the device-space route required were **deleted
+rather than left as archaeology**. Full derivation, ecosystem-wide:
+`D:/dev/rag/rust/tiny_skia_flattens_curves_to_a_tolerance_in_the_paths_own_units.md`
+and
+`D:/dev/rag/rust/a_precision_defect_and_a_performance_defect_with_one_cause_look_unrelated_until_one_is_fixed.md`.
+
+**★ The acceptance oracle this project filed in advance for `Pass 74.7` demanded
+`11 of 11` at every scale and the correct answer is `2`** — because a **second,
+correct** mechanism (`Pass 74.4`'s cull) moves the same number and the oracle
+attributed the whole decline to the defect. **A fix satisfying it would have
+been a bug.** Standing rule **`R215`** in `ROADMAP.md` carries the full
+derivation and preserves the wrong column verbatim.
+
 #### ★ `MAX_PIXMAP_EDGE`'s SUBJECT changed — this is the semantic part
 
 **The constant is unchanged at 16,384 (exactly 1.00 GiB of RGBA). What
@@ -4814,6 +4888,26 @@ document** — any figure elsewhere in this file or in `docs/ROADMAP.md` that sa
 **87** is a dated record of an earlier state, correct for its date. Filed by the
 two-hundred-and-thirty-first filing.
 
+**★ UPDATED 2026-08-23 — the line is now `90` keys**, measured the same way
+(`python tools/check-metrics-line-contract.py` → *"OK — 90 keys; the template
+matches the println and every key has a table row"*, exit 0). `296a23e`
+(**`PASS 74.9`**) added **`subpixel_culled`**, and the gate again forced all
+three copies — template, per-key table, test key list. **That is the gate's
+SECOND and THIRD live catches** (`eca07ee` was the first), both on a gate four
+commits old, and both on work it was not built for. Any figure above saying
+**89** is a dated record, correct for its date. Filed by the
+two-hundred-and-thirty-second filing.
+
+**★★ `subpixel_culled` is deliberately a SEPARATE key from `forms_culled`, and
+that separation is now `decision 083` rather than a style choice.**
+`forms_culled` counts an **exact** skip (ISO 32000-1 §8.10.1 — the raster is
+byte-identical); `subpixel_culled` counts a **lossy** one. Merging them would
+let a fidelity trade hide inside a correctness optimisation, and a reader asking
+the only question these counters exist to answer — *did this render change my
+picture?* — would get an unanswerable number. **`subpixel_culled` prints whether
+or not `--fast-subpixel` is set** (rule 4), so a raster always carries the count
+of what it left out.
+
 #### What is NOT in this entry
 
 No `pdfce-core` surface changed. No trait, no error variant, no
@@ -4821,6 +4915,76 @@ No `pdfce-core` surface changed. No trait, no error variant, no
 `replay_region` keep their signatures exactly; the cull is interior to
 `do_form` and **observable only through the counter**, never through the
 raster — which is the whole of decision 082.
+
+### (AB) `1d6db9e` + `5b0d885` + `296a23e` — `pdfce_render::RenderOptions` gains its FIRST FIDELITY-AFFECTING FLAG, `Diagnostics` gains `subpixel_culled`, and the CONTENT-side `f32` ceiling is raised — 2026-08-23
+
+**`Pass 74.7` + `Pass 74.9`.** Filed here for the reason (W), (Z) and (AA)
+were: **this section is where the shipped surface of the headless crates is
+kept true, and a downstream project (`D:\dev\pdfceGUI`) builds against it.**
+Architectural position: **decision 083** (§12), with **082** as its parent.
+
+#### New public surface, as reported by the engineer
+
+```rust
+// crates/pdfce-render — pub struct RenderOptions
+pub subpixel_culling: bool,   // OFF by default
+
+// crates/pdfce-render — pub struct Diagnostics
+pub subpixel_culled: usize,
+```
+
+One additive option and one additive counter. **`subpixel_culled` is summed in
+the same merge as every other counter**, so a form culled inside a nested form
+is counted once at the top — same aggregation contract as `forms_culled`.
+
+**★ Recorded as REPORTED, not as READ.** The two-hundred-and-thirty-second
+filing was **docs-only** (`d4721d8`) and did not open `crates/`. The **names**
+are the engineer's, from `296a23e`'s own message. **Field-level attributes —
+whether `RenderOptions` is `#[non_exhaustive]`, and therefore whether this
+addition is source-breaking for a downstream struct-literal construction — were
+NOT verified by this role.** Per (R)'s rule an optional-with-default field owes
+no bump; per (T)'s refinement that holds only where the struct cannot be
+exhaustively constructed downstream. **Flagged to the engineer rather than
+asserted.**
+
+#### ★ The part a signature cannot record: `RenderOptions` now carries FIDELITY, not only framing
+
+Every prior `RenderOptions` field describes **what to draw and where** — the
+region, the scale, whether annotations are in scope. `subpixel_culling`
+describes **how faithfully**, and that is a different kind of option: two
+renders of one document with identical framing can now differ in their pixels.
+
+**Three properties make that safe, and all three are `decision 083`:** the flag
+**defaults off**, so nothing changes for a caller that does not ask; it has
+**its own counter**, never merged with the exact `forms_culled`; and that
+counter **prints unconditionally**, so a raster always carries the count of what
+it left out even when the flag is unset.
+
+#### ★★ The part no signature records at all: the CONTENT-side numerical ceiling moved
+
+`Mat64` (interior; the CTM carried in `f64` through composition, narrowed at the
+leaf) and the `needs_precise_paths` differencing route change **no signature and
+no type** — and they change the set of documents that render correctly, by
+roughly **two and a half orders of magnitude** of zoom. **A single water
+molecule renders sharply at `scale` 1.6 × 10⁹ where before everything above
+≈ 5 × 10⁶ vanished.** §4's *Numerical reach of PAGE-SPACE CONTENT* paragraph
+carries the measurements; this entry exists so a downstream reader of §4.1 alone
+does not conclude the render surface was unchanged because no signature moved.
+
+**And the side effect that is not visible from the API either: `31 s → 1.3 s` =
+`23.8×`** on a stroke-heavy CAD region at deep zoom.
+
+#### What is NOT in this entry
+
+No `pdfce-core` surface changed. No trait, no error variant, no `EditSession`
+verb. `render_page` / `render_page_region` / `record_page` / `replay_region`
+keep their signatures exactly. **One genuine open item, reported not resolved:
+whether the DISPLAY-LIST replay path carries the same content-side precision as
+the fresh-render path.** `Pass 74.7` changed the interpreter; a recorded list
+replays through `Canvas`. If recorded ops carry `f32` coordinates, the list is a
+**second rendering path at a different precision**, which is `R211`'s exact
+subject and decision **081**'s. This role could not tell which, and
+`FEATURES.md` row 202 is deliberately left unchanged until someone can.
 
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
@@ -24343,3 +24507,103 @@ free 072.**
   own minting test, answered in the negative, on the same day `R211` was
   minted five commits earlier for answering it in the positive.
   **Ceiling moves 081 → 082; next free 083.**
+
+  > **★ AMENDED 2026-08-23 (two-hundred-and-thirty-second filing) — THE
+  > OPERATOR ANSWERED, AND 082 IS SATISFIED RATHER THAN OVERRIDDEN.** The table
+  > above says the sub-pixel geometry skip is *"the operator's — `ROADMAP.md`
+  > open question `(br)`"*. **`(br)` is now CLOSED.** Ken, 2026-08-23, verbatim:
+  > *"we'll make the image quality trade an optional option. also if you can fix
+  > the drawing precision without affecting speed where that percsion isn't
+  > needed then we should do it. this might require 2 algorithms though
+  > depending on what is needed."* He chose the third of the three costed
+  > options — **a switch, off by default, disclosed as a counter** — and it
+  > shipped the same day as **`PASS 74.9`** (`296a23e`, `--fast-subpixel` /
+  > `RenderOptions::subpixel_culling`). **082's own text is unchanged and
+  > remains correct**: it said whose call this was, the call was made by that
+  > person, and the row above is now a record of a question that has an answer.
+  > **What the answer LOOKS LIKE is decision 083 below** — 082 did not specify
+  > it and the two available shapes (a flag, or a merged counter with a
+  > threshold) were genuinely different.
+
+- **2026-08-23 — Decision 083. A LOSSY render option is carried in
+  `RenderOptions`, DEFAULTS OFF, and gets its OWN metrics key; an EXACT skip
+  and a LOSSY skip never share a counter.** (`296a23e`, `PASS 74.9`;
+  `ROADMAP.md` open question `(br)`, closed the same day.)
+
+  **The decision, in one line.** When the operator authorises a fidelity trade
+  under decision **082**, the authorisation takes exactly one shape: **a boolean
+  on `RenderOptions` whose default is `false`, a `pdfce-cli` flag that sets it,
+  and a dedicated `Diagnostics` counter that prints on the metrics line
+  WHETHER OR NOT the flag is set.**
+
+  **Why this is not already 082, which is the obvious objection and the reason
+  the entry exists.** **082 answers WHO DECIDES** — *a render may skip work only
+  where skipping is exact; a lossy speed-up is the operator's call.* It says
+  **nothing about what the answer looks like once the operator says yes**, and
+  the merge **was available and was refused with a reason**: `--fast-subpixel`
+  could have incremented `forms_culled`, which already counts skipped forms and
+  would have needed no new key, no new table row and no gate churn. **That
+  refusal is a choice, which is what a decision record is for.** 082 is *whose
+  call*; 083 is *what the call produces*. Cross-referenced in both directions,
+  deliberately not merged — the same disposition `R213`/`R214` got one filing
+  ago.
+
+  **The three clauses, each with its own warrant.**
+
+  1. **DEFAULTS OFF.** A fidelity trade that is on by default is a trade the
+     operator did not make. This is 082 restated at the API boundary: the
+     default is the only setting nobody chose, so it must be the one that
+     changes nothing.
+  2. **ITS OWN COUNTER — never merged with an exact skip's.** `forms_culled`
+     counts a skip that **cannot** change a pixel (ISO 32000-1 §8.10.1 makes
+     `/BBox` a clip; the raster is byte-identical). `subpixel_culled` counts one
+     that **does**. **A single number summing both is unanswerable for the only
+     question these counters exist to answer** — *did this render change my
+     picture?* — and merging them would let a fidelity trade hide inside a
+     correctness optimisation, in the one place (a rasteriser) where *"it is
+     only a few pixels"* arguments are cheapest to make and hardest to falsify.
+  3. **PRINTS UNCONDITIONALLY** (`CLAUDE.md` rule 4). The count appears whether
+     or not the flag is set, so **a raster always carries the count of what it
+     left out** and an operator comparing two renders can see which one paid for
+     its speed. A counter that appears only when the feature is on cannot
+     distinguish *"not enabled"* from *"enabled and nothing qualified"*.
+
+  **The measurement that makes clause 2 load-bearing rather than tidy**, and it
+  is the reason this is a switch and not a heuristic. On the `gen-scale-demo`
+  banana, whole page: **`1 468 ms → 108 ms` = `13.6×`, with ZERO of `1 242 640`
+  pixels different (`0.0 %`)** — each dropped object is `1/70` of a pixel and
+  contributes nothing a raster can hold. But *"zero"* would read as *"free"*,
+  and it is not; the loss appears as objects **approach** the threshold:
+
+  | `scale` (× ; 1 pt window, ≈ 339 of 342 forms dropped each row) | pixels differing, of the window | share of window | worst channel delta, of 255 |
+  |---:|---:|---:|---:|
+  | `20` | 18 of 400 | 4.5 % | 16 (6.3 %) |
+  | `35` | 47 of 1 296 | 3.6 % | 54 (21 %) |
+  | `60` | 82 of 3 600 | 2.3 % | **62 (24 % — a quarter of a channel)** |
+  | whole page, page-fit | **0 of 1 242 640** | **0.0 %** | 0 |
+
+  ⇒ **the error and the benefit are ANTI-CORRELATED across the same parameter
+  that triggers both**: loss largest exactly where the speed-up is smallest, nil
+  where the speed-up is enormous. **A heuristic must pick a threshold, and every
+  threshold sits somewhere on that curve** — which is precisely why the choice
+  belongs to the operator (082) and why the mechanism is a switch (083).
+
+  **Scope, so it is not over-read.** 083 binds on **render-time fidelity
+  trades** — skipping, approximating or downsampling content the file asks to be
+  drawn. It does **not** bind on the writer (`CLAUDE.md` rule 3 governs that),
+  on inference (rule 4), or on exact optimisations, which need no flag at all
+  and ship on the engineer's own authority under 082.
+
+  **Body-section updates:** §4.1 gains sync entry **(AB)** —
+  `RenderOptions::subpixel_culling` and `Diagnostics::subpixel_culled`, plus the
+  content-side ceiling that no signature records. §(H) records the metrics line
+  at **90 keys**, from 89, and why the two cull counters stay separate. **§3 and
+  §5 are not engaged**: no crate boundary moved, and nothing here writes a
+  document.
+
+  **No standing rule minted from this decision.** `R215` was minted in the same
+  filing but from a different finding (`PASS 74.7`'s acceptance oracle); the
+  separate-counter principle is recorded **here**, as a decision, because it
+  constrains an API shape rather than naming a condition a reader must detect.
+
+  **Ceiling moves 082 → 083; next free 084.**
