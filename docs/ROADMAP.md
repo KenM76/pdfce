@@ -96,6 +96,330 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `641deb9` — the 234th filing's two §9 boundary survivors discharged **STRUCTURALLY**, by promoting the boundary to a heading (**no Pass ID**) — ★★★★★ **A POSITIONAL CLAIM WAS REPAIRED WITH ANOTHER POSITIONAL CLAIM AND THE REPLACEMENT WAS ALREADY FALSE — SO THE THIRD REWORDING WAS DECLINED, ON THIS ROLE'S ADVICE, AND THE FIX IS A SECTION SPLIT**: *"everything below describes the behaviour before that Pass"* and *"what follows describes the current behaviour"* stood four paragraphs apart pointing at different lines, with the real boundary at neither; **both sentences are DELETED rather than reworded**, §9 becomes *"How the ceiling was found — history, not current behaviour"* and §10 *"Where the ceiling is now"*, each opening by naming its own scope; ★★★★★ **THE REUSABLE HALF IS THE DECLINE, NOT THE SPLIT — `R214` CLAUSE (a) HAS ITS FIRST *ARGUED* APPLICATION**: two verbal repairs of a positional claim both failed, and **the failure is INTRINSIC rather than a matter of wording harder** — a prose pre/post boundary is a pointer into a document that grows, so every rewording buys only the interval until the next paragraph lands; **a heading cannot drift, because the thing it delimits is the thing that would have to move it**; ★★★★ **HARD RULE 11 AMENDED (`1a60e73`) — THE TRIGGER NOW FIRES ON *MINTING A RULE ABOUT A NUMBER*, AND THE SWEEP RUNS OVER EVERY TREE**: recommended by this role at `n=2` (*a minted rule protects the document it was minted in*), applied by the engineer, with two additions drawn from survivors the old scoping missed — **a wrong number returning as a RESULT rather than an expectation**, and **the claim living in a TABLE HEADER or column label** rather than in prose; ★★★★ **THE WIDENED SWEEP'S FIRST EXERCISE FOUND THREE SURVIVORS, ALL OUTSIDE `docs/`, ALL THE SAME STALE CLAIM — AND NONE OF THEM WAS THE NUMBER IT WENT LOOKING FOR**: `PASS 74.7` is recorded as **unfixed / Backlog** in `C:/personal_rag/pdf/` (a lesson body **and** its index bullet) and in `D:/dev/rag/rust/a_ceiling_is_a_claim_about_one_quantity.md`, three days after it shipped — **the RAG tiers were never in any previous sweep's scope, which is precisely what the amendment widened**; ★★★ **ONE OF THE THREE CARRIED `R215`'s FOUNDING ERROR IN ITS *STRUCTURAL* FORM**: the lesson called its `11/7/3/1` table *"that Pass's acceptance baseline"* — **the exact sentence `R215` was minted to forbid**, in a tree the mint never reached, under a bare column label reading *"forms rendered"*; ★★ **TWO NEW SURVIVORS IN THE REPAIRED FILE, BOTH IN `tools/` AND BOTH REPORTED NOT EDITED — AND THE FIRST IS THE SAME DEFECT ONE ABSTRACTION UP**: §9's new scope sentence says *"Everything in this section describes pdfce BEFORE `Pass 74.7`"* while §9's own table carries **`after` and `correct` columns** that are post-`74.7`; ★ **`FEATURES.md`: NO ROW, AND NO ROW REPAIRED — CONFIRMED BY SWEEP, NOT ASSUMED**; ★ **THE METRICS LINE IS UNCHANGED AT `90` KEYS AND NO CODE CHANGED — measured by running the gate** — 2026-08-23 (two-hundred-and-thirty-fifth filing)
+
+**One commit, docs-only in effect: `641deb9`, 27 insertions and 17 deletions in
+`tools/gen-scale-demo/README.md` and nothing else** (`git show --stat`). No
+crate, no test, no gate, no dependency.
+
+**★ The companion commit's hash, corrected against `git log` rather than
+carried from the dispatch.** The dispatch named the agent-file amendment as
+*"`d76d1e0` (or whatever hash carries it)"*; the commit that actually carries it
+is **`1a60e73`** — *"librarian hard rule 11: minting a rule about a number is
+itself a meaning-change event"*. It touches `.claude/` only and
+`tools/check-commits-filed.py` does not count it, which this filing **measured**
+rather than assumed: the gate ran red naming **`641deb9` and nothing else**
+(see *Gate sweep*). Recording the correction rather than the dispatch's
+placeholder is hard rule 8's discipline pointed at a hash — *a hash is a claim
+about disk.*
+
+#### Why no Pass ID, ruled rather than assumed
+
+Third consecutive commit in this family to get the same disposition, and for the
+same reason `ea413a4` and `4af0c08` got it: **a Pass is a unit of work with
+acceptance criteria**, and this commit has none. It restructures one section of
+a demo tool's README so a boundary claim cannot go stale again. Numbering it
+would rank it alongside `74.7`/`74.9`/`74.10` in every later *"what shipped in
+the `74` family"* read — the distortion the hash-keyed form exists to avoid.
+⇒ **Hash-keyed, no Pass ID; the `74` family's next free ID is still `74.11`.**
+
+---
+
+#### ★★★★★ THE DECLINE IS THE ARTEFACT — why a THIRD reworded sentence was refused
+
+The 234th filing reported two survivors in `tools/gen-scale-demo/README.md` §9
+and prescribed the remedy structurally rather than verbally. **The engineer
+applied the prescription verbatim, and the reasoning is worth preserving
+separately from the diff**, because the diff shows only what was done.
+
+**What stood before, and why it is one defect and not two:**
+
+| | the sentence | where it pointed | truth at `641deb9`'s parent |
+|---|---|---|---|
+| **older** | *"Everything below describes the behaviour before that Pass"* | everything under a `★` mid-section | **FALSE** — post-fix material had grown beneath it |
+| **newer** | *"Everything from the top of this section down to here … **What follows describes the current behaviour**"* | a line ~40 lines further down | **FALSE** — two current-behaviour paragraphs sat *above* it |
+
+The newer sentence was **written as the repair of the older one**, and it was
+already wrong when it was written. That is `R214` twice in one section: a
+positional pointer (clause (a)), and a repair made at the neighbour rather than
+at the referent (clause (c)).
+
+**The ruling: reword nothing, split the section.** Stated as the rule the next
+session needs:
+
+> **A pre/post boundary written in prose is a pointer into a document that
+> grows. Rewording it buys the interval until the next paragraph lands, and
+> nothing more.** The failure is **intrinsic to the form**, not a symptom of
+> imprecise wording — so a third rewording is not a better repair, it is the
+> same repair with a shorter fuse.
+>
+> **Promote the boundary to a section heading.** A heading cannot drift,
+> **because the thing it delimits is the thing that would have to move it** —
+> the boundary and the content are the same object, so they cannot get out of
+> step. The commit says this out loud inside §9 rather than only in its message,
+> which is the part that survives a future reader who never reads `git log`.
+
+**Both sentences DELETED, not reworded** — the second half of the ruling, and
+the half a hurried fix would skip. A reworded survivor left in place is a third
+copy of the claim, and this file's own history says copies are what propagate.
+
+**Why deleting these is not the destruction `R214` (c) warns about, nor an
+`R215` (d) violation.** `R215` (d) requires a wrong **value** to stay visible
+beside its correction, because a bare corrected number gets re-derived back to
+the wrong one. **A positional pointer has no value to preserve** — the evidence
+is *that the form fails*, not *what the sentence said* — and that evidence is
+preserved, in §9's own text, in `641deb9`'s message, and in the table above.
+**The distinction is worth carrying: preserve wrong VALUES, delete wrong
+POINTERS.**
+
+---
+
+#### ★★★★ HARD RULE 11 AMENDED — `1a60e73`, and it is this role's own procedure
+
+**Recorded here because a procedural commitment that lives only in an agent file
+is invisible to anyone auditing the project's history**, and because the last
+such amendment (2026-08-18) is recorded in the rule's own text with no
+project-side entry — a gap this entry closes for both.
+
+**Trigger widened.** It fired on *"a counter or capability changed meaning"*. It
+now **also fires on minting a rule about a number**, and the sweep it owes runs
+over **every tree this project writes to** — `docs/`, `tools/`, `.claude/`,
+`D:/dev/rag/rust/`, `D:/dev/rag/egui/`, `C:/personal_rag/pdf/` — not only the
+tree holding the rule.
+
+**The warrant, quoted in the amendment, is this role's `n=2` observation:**
+*a minted rule protects the document it was minted in, not the ones that quote
+it.* `R215` was minted because *"11 of 11 forms at every scale"* was an
+impossible acceptance criterion; the mint swept `docs/`, where the criterion
+lived; **the same wrong number then surfaced twice in `tools/`** — once as a
+measured result, once as a table header — in two consecutive filings.
+
+**Two additions to what the sweep must look for**, both from survivors that got
+past three readings:
+
+1. **A wrong number reappearing as a RESULT rather than an expectation.** *An
+   expectation invites checking; a result does not.*
+2. **The claim in a TABLE HEADER or column label**, not only in prose. *"forms
+   rendered of 11"* made `11` the target on every row without asserting it in a
+   sentence.
+
+**Disposition, ruled:** this is **not** an `ARCHITECTURE.md` §12 decision and
+does not consume `085`. §12 records decisions about **the program** — crate
+boundaries, invariants, library choices. This changes **how a librarian reads**,
+and it produces no artefact in any crate. It is filed here, in the
+`SESSION_LOG.md` entry, and in the rule's own text — the three places a future
+instance actually reads. **The decision counter stays at `084`.**
+
+**Note the division of labour, because it recurred:** this role **recommended**
+the amendment and **declined to apply it to its own file**, exactly as at the
+2026-08-18 amendment. An agent editing its own governing rules is not an
+amendment, it is a rewrite; the engineer's signature is what makes it one.
+
+---
+
+#### ★★★★ THE WIDENED SWEEP, RUN AS ITS FIRST EXERCISE — three survivors, all outside `docs/`
+
+**Searched for the CLAIM, in every tree, in prose, in tables, and in column
+labels.** Targets: the `11`-forms claim, and the `93 s` / `71.5×` ratio.
+
+**The result is not what the dispatch expected, and that is the finding.**
+Neither target survived anywhere. **Three survivors of a DIFFERENT stale claim
+did** — `PASS 74.7` recorded as unfixed — and all three sit in the two RAG
+tiers, which no previous sweep had ever entered.
+
+| # | file | the claim as it stood | species | disposition |
+|---|---|---|---|---|
+| **1** | `C:/personal_rag/pdf/lesson_20260822_f32_limits_under_pdf_content_rendering.md` | *"The **content** half is **unfixed** and filed as pdfce `PASS 74.7` (Backlog) … The measured table above is that Pass's acceptance baseline"* | **stale capability status + `R215`'s founding error in structural form** | **REPAIRED** — prior wording quoted per `R215` (d) |
+| **1b** | the same file's table header | *"forms rendered"*, bare | **hard rule 10 (b)** — a bare count column supplies `11` as the implied target | **LABEL QUALIFIED** — *"BROKEN system, 2026-08-22; NOT a post-fix target"* |
+| **2** | `C:/personal_rag/pdf/index.md` | *"pdfce `PASS 74.7` (unfixed)"* | the same claim **in the index bullet** — the label form again, and the copy most likely to be read alone | **REPAIRED** |
+| **3** | `D:/dev/rag/rust/a_ceiling_is_a_claim_about_one_quantity.md` | *"`PASS 74.7` (Backlog — the content-side fix)"* | stale capability status in a cross-reference list | **REPAIRED**, plus a note that the fix does **not** retire the finding |
+
+**★★★ Survivor 1 is the one that matters, and it is `R215` in a tree `R215`
+never reached.** The lesson called its `11 / 7 / 3 / 1` table *"that Pass's
+acceptance baseline"* — **the precise construction `R215` was minted to
+forbid**: a curve measured across the broken system, with its healthy end read
+as the requirement. The correct post-fix answer at the deep rows is **`2`**, not
+`11`, because `Pass 74.4`'s exact `/BBox` cull removes the other nine by design
+(ISO 32000-1 §8.10.1). **`R215` was minted on 2026-08-23 and this sentence was
+written on 2026-08-22 in a different tree; no sweep before the amendment would
+have looked there.** That is the amendment's warrant, demonstrated on its first
+run rather than argued.
+
+**★★ What was searched and found CLEAN — reported as a measured result, not an
+assumption**, because the dispatch asked for exactly that distinction:
+
+- **`docs/`** — every `11 of 11` occurrence is one of three legitimate kinds:
+  a **correct** measurement (`11` really is right at `2 × 10⁶`, where all eleven
+  forms are in frame), **preserved evidence** under `R215` (d) and `R214` (c),
+  or an **append-only historical entry** carrying a dated amendment. Verified
+  case by case, not by count. `ARCHITECTURE.md` §4.1's *"UNFIXED (`PASS 74.7`,
+  Backlog)"* paragraph **already carries its dated discharge appended beneath**,
+  the convention `f9dc007` established — **not a survivor.**
+- **`crates/`** — one hit, `pdfce-render/src/gstate.rs:116`, and it is
+  **correct**: *"three times slower … (93 s against 31 s)"* names `93 s` as the
+  **rejected** device-space attempt, which is the provenance the 233rd filing
+  established. **Read, not edited** — `crates/` remains outside this remit.
+- **`D:/dev/rag/rust/`** — the `11 of 11` occurrences are the two lessons whose
+  **subject is that the number is wrong**; preserved evidence, correct as filed.
+- **`D:/dev/rag/egui/`** — two deep-zoom findings, **neither carrying a status
+  claim about `74.7`**. Nothing to repair.
+- **`.claude/`** — the number appears only in hard rule 11's own text and in an
+  engineer-memory feedback note whose subject is the error. Correct.
+- **`D:/Dev/Rag-Specialized/`** — swept; the only hits are unrelated numerals in
+  a vendored W3C colour-spec HTML source. **Nothing.**
+- **The `93 s` / `71.5×` ratio** — every surviving occurrence in every tree
+  either **names `93 s` as the rejected attempt**, or is a historical entry with
+  the dated amendment attached. **Fully discharged, confirmed by re-reading each
+  site rather than by trusting the 234th filing's report of it.**
+
+**★ The transferable half, and it is uncomfortable.** The sweep was dispatched
+to hunt one number and found none of it; **what it found was a different claim
+entirely, in the two trees the widening had just added.** A sweep scoped to *the
+number that prompted it* would have returned clean and been believed. **Sweep
+the TREE, not the STRING** — the amendment's *search-for-the-claim* clause, one
+level up: the claim you are hunting is not necessarily the claim that is stale
+in the place you have not looked before.
+
+---
+
+#### ★★ TWO NEW SURVIVORS IN THE REPAIRED FILE — reported, not edited (`tools/`)
+
+Both found by **reading `641deb9`'s result**, not its diff — the method that
+found the 234th filing's pair.
+
+**Survivor A — §9's new scope sentence over-claims, and it is the SAME defect
+one abstraction up.** §9 opens *"Everything in this section describes pdfce
+BEFORE `Pass 74.7`"*, and §9's own table (rebuilt by `4af0c08`) carries
+**`after` and `correct` columns whose values are post-`74.7` measurements**.
+
+**Why this is worth a star rather than a shrug.** The structural fix removed
+**positional** drift and did not remove **over-scoping**. A heading-bound claim
+*cannot point at the wrong place* — that is real and it is what was bought — but
+it is **still a claim about a set**, and it can be wrong about its own contents.
+`641deb9` fixed the pointer and inherited a quantifier from the sentence it
+replaced. ⇒ **Suggested repair: scope the sentence to the narrative rather than
+to the section** — *"the limits this section describes were pdfce's behaviour
+before `Pass 74.7`; the table's `after` and `correct` columns are post-fix and
+are labelled as such"* — or move the two post-fix columns to §10. **The
+engineer's call; this role does not edit `tools/`.**
+
+**Survivor B — §10 says *"the count in the table above is superseded"*, and
+"the table above" now lives in a DIFFERENT SECTION.** It is not false today, so
+it is filed as the weaker of the two. But it is a positional pointer in the very
+file whose thesis is that positional pointers drift, **and it now crosses a
+section boundary**, which is exactly the distance at which the previous two
+failed. ⇒ **Suggested repair: name it — *"§9's table"*.** One word, and it
+becomes immune to the failure the commit was written to end.
+
+**Neither survivor is a wrong number.** That is itself the observation: after
+four filings against this one file, **what is left is wrong *quantifiers* and
+wrong *references*, not wrong values.** The number-shaped defects have been
+swept out; the pointer-shaped ones are the residue.
+
+---
+
+#### `FEATURES.md` — **NO ROW, AND NO ROW REPAIRED**, confirmed by sweep
+
+**Confirmed explicitly, because the dispatch asked and because the maintenance
+contract makes silence here indistinguishable from drift.**
+
+- **No new row.** `641deb9` adds **no capability an operator can ask for** — it
+  restructures prose in a demo generator's README. Same test that gave
+  `ea413a4`, `PASS 74.8` and `4af0c08` no row: *is there something an operator
+  types, or asks for, that there was not before?* There is not.
+- **No existing row repaired, and this was measured.** Rows **201, 202, 203,
+  204** are the deep-zoom family; all four describe `PASS 74.7` in the past
+  tense as shipped, row 201 carries **`23.8×`** with its operands
+  (**`31 s → 1.3 s`**) beside it per hard rule 10 (a), and **no row anywhere in
+  the file mentions a form count, `93 s`, `71.5×`, or `11 of 11`.**
+- **No box changes anywhere.** Nothing shipped in any shell.
+
+---
+
+#### Verification
+
+`git show --stat 641deb9` → one file, `tools/gen-scale-demo/README.md`,
+`27` insertions / `17` deletions. **No code changed in this commit**, so
+`cargo tree` is not engaged, the GUI-core separation invariant is untouched, and
+`THIRD_PARTY_LICENSES.md` is unaffected. The engineer's `cargo test --workspace
+--release` / `cargo fmt --check` / `cargo clippy -- -D warnings` results are
+**his to report** and are not restated here as though this role had run them.
+
+#### Gate sweep (this role's, run at `HEAD` before this filing's edits)
+
+**17 `tools/check-*` scripts on disk (12 `.py` + 5 `.sh`); 16 runnable as bare
+gates** — re-measured by `ls tools/check-* | wc -l` and by running each,
+**counted, not quoted**, per `R209`.
+
+**Before this entry: 15 of 16 exit 0**, and `check-commits-filed.py` exited
+**`1`**, naming exactly **`641deb9`** — this dispatch, and **only** this
+dispatch. **That is the measurement that confirms `1a60e73` is not counted** —
+which the dispatch asserted and this role verified rather than repeated.
+**After this entry: all 16 exit 0** (re-run below). The 17th, `check-image-colorspace-truth.py`, exits `1` on a bare
+invocation **because it requires a fixture-directory argument**; recorded again
+as *"`check-*` on disk but not a gate"*, still true.
+
+**`tools/check-metrics-line-contract.py` → exit 0, `90 keys`** — **unchanged**,
+sourced by running the gate. A commit that changes no code moves no key.
+
+#### Backup and remote currency — CHECKED, not inferred (hard rule 8)
+
+- **`git remote -v`** → `origin  https://github.com/KenM76/pdfce.git`.
+- **`git rev-list --count origin/main..main`** → **`24`** (was `21` one filing
+  ago; three commits since — `641deb9`, `1a60e73`, and the 234th filing's own
+  docs commit). The local remote-tracking ref `origin/main` is still at
+  **`c24ad7a`**. **No `git fetch` was run**, so this is the tracking ref's
+  position, **not a live query of the remote**.
+- **`ls -lt D:/Dev/pdfce-backups/`** → newest bundle
+  **`pdfce-20260817-v060.bundle`**, 2026-08-17 20:34, whose `refs/heads/main` is
+  **`3c4c00e`** (by `git bundle list-heads`). **`git rev-list --count
+  3c4c00e..main` → `217`** (was `214`), and `git merge-base --is-ancestor`
+  reports **`HEAD` is NOT in that bundle.** ⇒ **the newest backup is 217 commits
+  and six days behind `HEAD`.** Both figures produced by the commands named
+  beside them.
+- **`git worktree list | wc -l`** → **`9`**, unchanged.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `74.10` shipped; next free in family `74.11` | **unchanged — `641deb9` takes NO Pass ID** (ruled above). Next free in family **`74.11`**; `122.4` stays the next free `122`; **`97.1g` stays reserved and unbuilt** |
+| decisions (`ARCHITECTURE.md` §12) | **084** | **084 — unchanged, RULED not defaulted.** A librarian-procedure amendment is not an architectural decision; it produces no artefact in any crate. Next free **085**. |
+| standing rules | **`R215`** | **`R215` — CEILING UNMOVED.** Nothing minted and nothing amended; `641deb9` is `R214` clause (a) being *applied*, which is what a rule existing looks like. Next free **`R216`**. |
+| librarian hard rules (`.claude/agents/pdfce-librarian.md`) | **11 rules; rule 11 last amended 2026-08-18** | **11 rules; rule 11 AMENDED 2026-08-23 (`1a60e73`)** — trigger widened to rule-minting, sweep scope widened to every tree, two new survivor shapes named |
+| open operator questions | ceiling `(br)`, **CLOSED** | **unchanged — `(br)`, CLOSED. Nothing is awaiting Ken** except pushing and cutting a backup, both his acts. Next free **`(bs)`**. |
+| SESSION_LOG filing ordinals | **234** | **235** |
+| `tools/check-*` gates | 17 on disk, 16 runnable | **17 on disk, 16 runnable** (unchanged, re-measured by `ls` + running each) |
+| `render-page` metrics-line keys | **90** | **90 — unchanged**, measured by running `tools/check-metrics-line-contract.py`. No code changed |
+
+**Owed work, recorded as owed:**
+
+1. **`tools/gen-scale-demo/README.md` §9's over-scoped sentence** (survivor A
+   above) — *"Everything in this section describes pdfce BEFORE `Pass 74.7`"*
+   against a table holding post-fix `after` and `correct` columns. **The
+   engineer's edit.**
+2. **`tools/gen-scale-demo/README.md` §10's *"the table above"*** (survivor B) —
+   name it *"§9's table"*. **The engineer's edit.**
+3. **`R215`'s retro-application**, carried forward unstarted for a **fourth**
+   filing: any Pass filed with a *"required after"* column should be re-read
+   against the rule before that column is used as a gate. **★ This filing found
+   the first instance OUTSIDE `docs/`** — a `personal_rag/pdf` lesson calling a
+   broken-system curve *"that Pass's acceptance baseline"* — so the
+   retro-application's scope is now known to be wider than the roadmap, and it
+   should be run over both RAG tiers as well.
+
+**Nothing is owed to Ken.**
+
+**RAG files AMENDED by this filing** (no new file written; three existing files
+corrected with dated amendments per hard rule 4):
+`C:/personal_rag/pdf/lesson_20260822_f32_limits_under_pdf_content_rendering.md`,
+`C:/personal_rag/pdf/index.md`,
+`D:/dev/rag/rust/a_ceiling_is_a_claim_about_one_quantity.md`.
+
+---
+
 ### `4af0c08` — the 233rd filing's three `tools/gen-scale-demo/README.md` survivors discharged (**no Pass ID**) — ★★★★★ **A NUMBER IDENTIFIED AS WRONG IN AN *EXPECTATION* CAME BACK, HOURS LATER AND IN A THIRD DOCUMENT, AS A MEASURED *RESULT* — AND THAT GENRE CHANGE IS WHY IT SURVIVED**: `11 of 11` was minted into `R215` as a defective acceptance criterion, was recorded **correctly** as `2` in two other documents the same day, and reappeared in README prose as an outcome, where *an expectation invites checking and a result does not*; ★★★★★ **`R215` AMENDED WITH CLAUSE (d) — CEILING UNMOVED, `R216` STILL FREE**: the ruling is that **the correction is the artefact, not the corrected value** — publish *"this said X; X is impossible because Y; it is Z"* and keep **X visible**, because a bare `Z` gets re-derived back to `X` by the next reader reasoning from the same faulty intuition, **including the same person an hour later**; ★★★★ **THE SECOND QUESTION THE DISPATCH ASKED IS THE MORE UNCOMFORTABLE ONE, AND THE ANSWER IS *YES, TWICE***: `R215`'s founding number has now escaped forward in **two consecutive filings**, so **a mint protects the document it was minted in, not the ones that quote it** — filed as a recommended amendment to hard rule 11 of `.claude/agents/pdfce-librarian.md` (**the engineer's act, not this role's**), because *minting a rule about a number is itself a meaning-change event and owes the sweep*; ★★★ **TWO NEW SURVIVORS, BOTH FOUND BY READING THE REPAIRED FILE RATHER THAN THE DIFF, AND BOTH ARE THE *SAME* SURVIVOR THE COMMIT SET OUT TO FIX**: §9 now carries **two** positional pre/post boundary claims, the older one **uncorrected and now contradicted by the newer one 40 lines below it**, and the newer one **drawn in the wrong place** — the *"nudged coordinates are gone"* paragraph and the `(1100, 732)` measurement are post-`74.7` current behaviour and sit **above** it; ★★ **`R214` CLAUSE (c) HAS A SECOND INSTANCE AND IT IS A REPAIR, NOT A BREAK** — a positional pointer was repaired **with another positional pointer**, which is the remedy clause (a) forbids by name; ★ **`FEATURES.md`: NO ROW, AND NO ROW REPAIRED — CONFIRMED BY SWEEP, NOT ASSUMED**; ★ **THE METRICS LINE IS UNCHANGED AT `90` KEYS AND NO CODE CHANGED — measured by running the gate** — 2026-08-23 (two-hundred-and-thirty-fourth filing)
 
 **One commit, docs-only in effect: `4af0c08`, 48 insertions and 17 deletions in

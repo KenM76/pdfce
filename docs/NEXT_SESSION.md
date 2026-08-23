@@ -3,14 +3,20 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
-**UPDATED 2026-08-23 by `pdfce-librarian` (two-hundred-and-thirty-fourth
-filing).** **`4af0c08` filed with NO Pass ID** — the previous handoff's §5
-three-item survivor list is **discharged**, and queue item 1 is **done**.
-**`R215` AMENDED (clause (d): *the correction is the artefact, not the corrected
-value*); ceiling UNMOVED at `R215`, `R216` still free; no new decision — §12
-stays at `084`.** **★ Two NEW survivors in the same README section, both left or
-created by the repair itself — §5 item 1.** **Nothing is awaiting Ken except
-pushing and cutting a backup**, both of which are his acts, not an agent's.
+**UPDATED 2026-08-23 by `pdfce-librarian` (two-hundred-and-thirty-fifth
+filing).** **`641deb9` filed with NO Pass ID** — the previous handoff's §5
+boundary survivors are **discharged STRUCTURALLY**: the pre/post boundary is now
+a **section heading**, both old sentences DELETED, and **a third rewording was
+declined** because repairing a positional pointer positionally always produces
+another wrong one. **`1a60e73` amends librarian hard rule 11** — *minting a rule
+about a number is itself a meaning-change event, and its sweep runs over EVERY
+tree*. **Ceiling UNMOVED at `R215`, `R216` still free; nothing minted; no new
+decision — §12 stays at `084`.** **★ The widened sweep's first run found three
+survivors, all OUTSIDE `docs/`, and none of them was the number it went looking
+for — all three repaired (§5).** **★ Two NEW survivors in the same README
+section, both in `tools/`, both reported not edited — §5.** **Nothing is
+awaiting Ken except pushing and cutting a backup**, both of which are his acts,
+not an agent's.
 
 *(The 233rd filing's rewrite is preserved below and still current for
 `PASS 74.10`: `decision 084` minted, `R211` amended with clauses (d) and (e),
@@ -127,8 +133,8 @@ Three sessions running, that `ls` found something a document said was not there.
 `python tools/check-ci-parity.py --list` prints the local stand-ins.
 **`R209`:** *"all gates green" names a set, and the set somebody runs is not the
 set CI runs; a CI job with no local runner is UNOBSERVED, not passing.*
-*(★★ **Re-measured 2026-08-23, 234th filing, by `ls tools/check-*` and by
-running each: 17 scripts on disk (12 `.py` + 5 `.sh`), 16 runnable as bare
+*(★★ **Re-measured 2026-08-23, 235th filing, by `ls tools/check-* | wc -l` and
+by running each: 17 scripts on disk (12 `.py` + 5 `.sh`), 16 runnable as bare
 gates, ALL 16 EXIT 0 after that filing's edits.** The 17th, `check-image-colorspace-truth.py`, exits 1 on a bare
 invocation **because it takes a fixture-directory argument** and is not a gate.
 **Count them; do not quote a count.**)*
@@ -170,11 +176,15 @@ harness has ever had**, and the calibration set for fixing it (`Pass 122.2`).
 | **`d8f3020`** | **`74.10`** | **the display list REFUSES a scale it cannot render truthfully — closes the second rendering path `74.7` opened** |
 | **`1af75a1`** | **—** | **README repair: a heredoc silently ate a line-continuation backslash in `d8f3020`** |
 | **`4af0c08`** | **—** | **the demo README's three stale claims discharged — `11 of 11` → `2`, the boundary sentence scoped, `93 s → 1.3 s` corrected to `31 s → 1.3 s = 23.8×`** |
+| **`641deb9`** | **—** | **the §9 pre/post boundary promoted from a SENTENCE to a SECTION HEADING — §9 *"How the ceiling was found — history, not current behaviour"*, §10 *"Where the ceiling is now"*, both old boundary sentences DELETED. A third rewording was declined: repairing a positional pointer positionally always produces another wrong one** |
+| **`1a60e73`** | **—** | **librarian hard rule 11 amended (`.claude/`, uncounted by the commits gate): MINTING A RULE ABOUT A NUMBER is itself a meaning-change event, and the sweep it owes runs over EVERY tree — `docs/`, `tools/`, `.claude/`, and both RAG tiers** |
 
 **Ledger after this filing:** next free Pass in the `74` family **`74.11`**;
 decisions **084**, next free **085**; standing rules **`R215`** (ceiling
 **unmoved** — `R211` was amended by the 233rd filing and **`R215` itself by the
-234th, clause (d)**; neither superseded), next free **`R216`**;
+234th, clause (d)**; the 235th minted and amended **nothing** in `ROADMAP.md`,
+amending **librarian hard rule 11** instead, which is a procedural commitment
+and not a standing rule), next free **`R216`**;
 operator questions ceiling **`(br)`, CLOSED**, next free **`(bs)`**;
 **`render-page` metrics line at `90` keys, unchanged**, measured by running
 `tools/check-metrics-line-contract.py`.
@@ -187,13 +197,17 @@ operator questions ceiling **`(br)`, CLOSED**, next free **`(bs)`**;
 shipped, and the display-list precision question turned out to be a live defect
 and is fixed. **Nothing in this queue is blocked on anybody.**
 
-1. **★ SPLIT `tools/gen-scale-demo/README.md` §9 INTO TWO HEADED SUBSECTIONS —
-   *how the ceiling was found* and *what the behaviour is now*.** The three
-   stale claims the previous handoff listed here are **discharged** by
-   `4af0c08`; what is left is **two positional boundary claims that cannot both
-   be true**, one of them the ORIGINAL sentence and one of them created by the
-   repair. Details in §5. **Do not reword a third boundary sentence — make the
-   boundary structural**, per `R214` clause (a): *name the referent*.
+1. **★ TWO SMALL REPAIRS LEFT IN `tools/gen-scale-demo/README.md`, both about
+   SCOPE and REFERENCE rather than about any number.** The section split is
+   **done** (`641deb9`) and the two positional boundary claims are **deleted**;
+   what the 235th filing found by reading the result is: **(a)** §9's new scope
+   sentence says *"Everything in this section describes pdfce BEFORE
+   `Pass 74.7`"* while §9's own table carries post-fix `after` and `correct`
+   columns — **scope the sentence to the narrative, or move those two columns to
+   §10**; **(b)** §10's *"the count in the table above is superseded"* now points
+   across a section boundary — **name it *"§9's table"***. Details in §5.
+   **Note that the split bought immunity to POSITIONAL drift and not to
+   OVER-SCOPING** — a heading-bound claim is still a claim about a set.
 2. **Build `R214`'s positional-reference gate** — a grep over a closed
    vocabulary (*of those*, *the above*, *this slice*, *the next slice*, *the
    former*, *the latter*, *as above*, *see below*, *the previous field*) in doc
@@ -238,63 +252,109 @@ and is fixed. **Nothing in this queue is blocked on anybody.**
 
 ## §5 — STILL NOT DONE, named so it does not read as done
 
-**★★★ THE THREE STALE CLAIMS IN `tools/gen-scale-demo/README.md` §9 ARE
-DISCHARGED** by `4af0c08` — `11 of 11` → **`2`** (with the table rebuilt as
-before / after / **correct** and a note saying why the third column is not
-`11`), the boundary sentence scoped, and *"93 s to 1.3 s"* corrected to
-**`31 s → 1.3 s` = `23.8×`** with an explicit paragraph saying `93 s` is the
-**rejected** device-space attempt. **The table's own header — *"forms rendered
-of 11"* — was wrong too and was fixed in the same edit; nobody had reported it.**
+**★★★ THE §9 BOUNDARY SURVIVORS ARE DISCHARGED — STRUCTURALLY, BY `641deb9`.**
+Both positional pre/post boundary sentences are **DELETED, not reworded**. §9 is
+now **"How the ceiling was found — history, not current behaviour"**, §10 is
+**"Where the ceiling is now"**, the easter egg is §11, and each section opens by
+naming its own scope.
 
-**★★★ BUT §9 NOW CARRIES *TWO* POSITIONAL PRE/POST BOUNDARY CLAIMS AND NEITHER
-IS TRUE.** Found by the 234th filing **reading the file after the repair**, which
-is the check hard rule 11's corollary obliges. **Reported, not edited — the
-librarian does not touch `crates/` or `tools/`.**
+**★★★★★ THE PART TO CARRY FORWARD IS THE DECLINE, NOT THE SPLIT.** A third
+reworded boundary sentence was **refused**, on the librarian's advice, and the
+warrant is a general one:
 
-1. **★★★ THE ORIGINAL POSITIONAL CLAIM IS STILL THERE, UNCORRECTED, AND IS NOW
-   CONTRADICTED BY ITS OWN REPAIR.** The ★ fix notice that opens *"FIXED 2026-08-23 by `Pass 74.7`"* — named rather than located, per `R214` clause (a) — still
-   reads *"Everything **below** describes the behaviour before that Pass … What
-   follows is the evidence, not the current state."* **That is the exact sentence
-   the previous handoff quoted as survivor #2.** The commit repaired a
-   **different, later** sentence (*"everything above is now the record of a
-   solved problem"*) — a true repair, but of the mirror. ⇒ **§9 says "everything
-   below is pre-fix" in its `FIXED 2026-08-23` notice and "what follows describes the current
-   behaviour" in its *"⇒ That was the state on 2026-08-22"* paragraph.** Worse than the state before the commit,
-   because the second sentence lends the first its credibility.
-2. **★★ THE NEW BOUNDARY IS DRAWN IN THE WRONG PLACE.** *"Everything from the
-   top of this section down to here is the record of a solved problem"* puts the
-   cut **below** two paragraphs of **current** behaviour: the ★ *"And the nudged
-   coordinates are gone"* paragraph (*"after `Pass 74.7` the box lands within
-   **one pixel**"*) and the **`(1100, 732)` of a 2200 × 1467 raster**
-   measurement, taken on the repaired command. Both are post-`74.7` results
-   sitting inside the span the sentence declares historical.
+> **A pre/post boundary written in prose is a pointer into a document that
+> grows.** Rewording it buys the interval until the next paragraph lands, and
+> nothing more. Two verbal repairs of the same claim had already failed, the
+> second one **already false when it was written**. ⇒ **The failure is
+> INTRINSIC to the form, not a symptom of imprecise wording.**
+>
+> **Promote the boundary to a section heading.** A heading cannot drift,
+> **because the thing it delimits is the thing that would have to move it** —
+> delimiter and content are the same object and cannot get out of step. §9 says
+> this out loud in its own text, not only in `git log`.
 
-⇒ **THE FIX IS STRUCTURAL, NOT VERBAL: split §9 into two headed subsections —
-*how the ceiling was found* and *what the behaviour is now*.** `R214` clause (a)
-says *name the referent*; clause (c) says *repair at the referent, never at the
-neighbour*. **Moving a boundary sentence is a repair at the neighbour**, and it
-is what produced item 2. **A third reworded boundary sentence will do the same
-thing again.**
+**★★ And the companion rule: PRESERVE WRONG VALUES, DELETE WRONG POINTERS.**
+Deleting the two sentences is not an `R215` (d) violation. `R215` (d) protects a
+wrong **value**, because a bare corrected number gets re-derived back to the
+wrong one by the next reader. **A positional pointer has no value to preserve** —
+the evidence is *that the form fails*, and that is kept.
 
-**★★ RECORDED AS A CLASS, because it is the reusable half: THIS SURVIVOR WAS
-CREATED BY THE REPAIR OF THE SURVIVOR.** The commit is correct on all three
-reported items and introduced a fourth. That is not carelessness — **it is what
-repairing a positional reference positionally always does.**
+**★★★ TWO NEW SURVIVORS IN THE SAME FILE, both found by the 235th filing reading
+`641deb9`'s RESULT rather than its diff. Reported, not edited — the librarian
+does not touch `crates/` or `tools/`.**
 
-**★★ The `93 s` provenance itself is CLOSED** (it was an owed item here for one
-filing). At `100 000×`: **`31 s`** = the same region with algorithm B disabled
-entirely — **the baseline**; **`93 s`** = the **rejected device-space attempt**;
-**`1.3 s`** = shipped. ⇒ `23.8×` is the speed-up; `3×` is the rejected attempt's
-penalty; and **`93 s → 1.3 s` = `71.5×`, which the 232nd filing published as a
-second speed-up, compares the shipped result against a rejected implementation
-rather than against a baseline.** Dated amendments are in `ROADMAP.md` in both
-places.
+1. **★★ §9's NEW SCOPE SENTENCE OVER-CLAIMS, AND IT IS THE SAME DEFECT ONE
+   ABSTRACTION UP.** §9 opens *"Everything in this section describes pdfce
+   BEFORE `Pass 74.7`"*, and §9's own table — rebuilt by `4af0c08` — carries
+   **`after` and `correct` columns whose values are post-`74.7` measurements**.
+   **The structural fix removed *positional* drift and did not remove
+   *over-scoping*.** A heading-bound claim cannot point at the wrong place, which
+   is real and is what was bought; but it is **still a claim about a SET**, and
+   it can be wrong about its own contents. ⇒ **Repair: scope the sentence to the
+   narrative** — *"the limits this section describes were pdfce's behaviour
+   before `Pass 74.7`; the table's `after` and `correct` columns are post-fix
+   and are labelled as such"* — **or move those two columns into §10.**
+2. **★ §10 SAYS *"the count in the table above is superseded"*, AND THAT TABLE
+   NOW LIVES IN A DIFFERENT SECTION.** Not false today, so it is the weaker of
+   the two — but it is a positional pointer in the very file whose thesis is that
+   positional pointers drift, **and it now crosses a section boundary**, which is
+   the distance at which the previous two failed. ⇒ **Repair: name it — *"§9's
+   table"*.** One word.
+
+**★ Note what is left, because it is a state change worth seeing.** After four
+filings against this one file, **the residue is wrong QUANTIFIERS and wrong
+REFERENCES, not wrong VALUES.** The number-shaped defects are swept out.
+
+**★★★★ HARD RULE 11 IS AMENDED AND THE AMENDMENT HAS BEEN EXERCISED ONCE
+(`1a60e73`).** The trigger now fires on **minting a rule about a number**, and
+the sweep runs over **every tree this project writes to**, not only the one
+holding the rule. Two new survivor shapes are named: **a wrong number returning
+as a RESULT rather than an expectation**, and **the claim living in a TABLE
+HEADER or column label**.
+
+**★★★ Its first run found three survivors, ALL OUTSIDE `docs/`, AND NONE OF THEM
+WAS THE NUMBER IT WENT LOOKING FOR.** The `11`-forms claim and the `93 s` /
+`71.5×` ratio are **fully discharged everywhere** — measured, site by site, not
+assumed. What survived was **`PASS 74.7` recorded as *unfixed / Backlog*, three
+days after it shipped**, in `C:/personal_rag/pdf/` (a lesson body **and** its
+index bullet) and in `D:/dev/rag/rust/a_ceiling_is_a_claim_about_one_quantity.md`.
+**All three repaired by the 235th filing**, with prior wording preserved per
+`R215` (d).
+
+**★★ One of the three carried `R215`'s founding error in its STRUCTURAL form, in
+a tree `R215` never reached** — the lesson called its `11/7/3/1` broken-system
+curve *"that Pass's acceptance baseline"*, under a bare column label reading
+*"forms rendered"*. `R215` was minted 2026-08-23; that sentence was written
+2026-08-22 in a different tree.
+
+**⇒ THE TRANSFERABLE LESSON: SWEEP THE TREE, NOT THE STRING.** A sweep scoped to
+*the number that prompted it* would have returned clean and been believed. **The
+claim you are hunting is not necessarily the claim that is stale in the place you
+have not looked before.**
+
+**★ Sweep scope, ruled so it is not re-litigated:** `.claude/worktrees/` holds
+nine detached agent working copies, each a full stale snapshot of `docs/` and
+`crates/`. **They are out of scope by definition** — a worktree is a transient
+copy, not a tree this project writes to, and its staleness is by construction.
+`rg` skips them (they are gitignored) and a bare `grep -r` does not; **`rg` is
+therefore the correct instrument.** Recorded so a future filing does not
+"discover" hundreds of survivors there and report a crisis.
+
+**★★ The `93 s` provenance itself is CLOSED.** At `100 000×`: **`31 s`** = the
+same region with algorithm B disabled entirely — **the baseline**; **`93 s`** =
+the **rejected device-space attempt**; **`1.3 s`** = shipped. ⇒ `23.8×` is the
+speed-up; `3×` is the rejected attempt's penalty; and **`93 s → 1.3 s` = `71.5×`
+compares the shipped result against a rejected implementation rather than against
+a baseline.** Dated amendments are in `ROADMAP.md` in both places, and
+`crates/pdfce-render/src/gstate.rs` states it correctly at the source.
 
 **Everything below this line is unchanged from the previous handoff.**
 
 - **`R215`'s retro-application** — any Pass filed with a *"required after"*
   column should be re-read against the rule before that column is used as a
-  gate. **Carried forward unstarted.**
+  gate. **Carried forward unstarted, for a fourth filing — and its scope is now
+  known to be WIDER than the roadmap**: the 235th filing found the first
+  instance outside `docs/`, so the re-read should run over both RAG tiers too.
 - `resolve_indexed` builds its palette with a **scratch `ColorDiagnostics` that
   is discarded**, so a tint failure inside a palette never reaches the operator.
 - **Implicit knockout**: only explicit `/K true` is honoured. `/TK` defaults true
