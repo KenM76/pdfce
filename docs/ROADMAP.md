@@ -96,6 +96,445 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `d8f3020` + `1af75a1` — **`PASS 74.10`** (the display list REFUSES a scale it cannot render truthfully, closing the second rendering path `PASS 74.7` opened) — ★★★★★ **`PASS 74.7` FIXED ONE RENDERING PATH AND SILENTLY CREATED A DIVERGENCE WITH THE OTHER: a recorded display list stores every op's CTM as an `f32` `Transform` and `replay_region` post-translates it by the region's device origin, also in `f32` — so after `74.7` the interpreter and the replay agreed at ordinary scales and disagreed at deep zoom, which is `R211`'s exact subject**; ★★★★★ **THE 232nd FILING'S OWN SURVIVOR #1 WAS A LIVE DEFECT — it was filed as *"either it is already handled and owes one line, or it is a real gap; this role cannot tell which"*, and it was the second, worse than unclear: `record_page`'s own comment says the `MAX_PIXMAP_EDGE` ceiling *"does NOT apply here — that is the point of recording at a deep zoom"*, so deep zoom was the INTENDED use and nothing bounded it**; ★★★★★ **THE FIX IS A REFUSAL, NOT A REFACTOR, AND THE THRESHOLD IS `Mat64::needs_precise_paths` — THE *SAME* PREDICATE THE INTERPRETER USES TO DECIDE IT NEEDS ITS `f64` ROUTE**: below it both paths do identical `f32` arithmetic and agree exactly, above it one switches to `f64` and the other refuses, so **no scale exists at which they quietly disagree** — a shared predicate is a stronger guarantee than two independently-chosen limits, and that construction is the transferable half; ★★★★ **`R211` AMENDED, NOT `R216` MINTED — clauses (d) and (e) added, ceiling UNMOVED at `R215`**: the trigger condition is `R211`'s own sentence verbatim, `R211` already names `replay_region` as one of the two call sites it was minted on, and *"name the test"* (clause (c)) under-delivered here because **the test was named, ran, and was silent**; ★★★★ **AN ORACLE'S SAMPLING RANGE IS PART OF ITS CLAIM — `region_matches_full_page.rs` samples scales up to `220`; the divergence begins near `530`. Every assertion in it is correct, non-vacuous and independent — it simply never asked at a scale where the answer changed**, which is a DIFFERENT mechanism from `R215` (whose rows demanded a wrong *value*) and is why it lands as an `R211` clause rather than a new number; ★★★ **THE `93 s` AMBIGUITY THE 232nd FILING DECLINED TO GUESS IS ANSWERED BY THE ENGINEER, AND IT INVALIDATES A RATIO THIS FILE PUBLISHED**: `93 s` is the **rejected device-space attempt at `100 000×`**, `31 s` is the **same region with algorithm B disabled entirely**, and both are superseded by the shipped `1.3 s` — so `31 s → 1.3 s` = **`23.8×`** is the speed-up and **`93 s → 1.3 s` = `71.5×` compares the shipped result against a REJECTED IMPLEMENTATION, not against a baseline**; ★★★ **`DECISION 084` MINTED — WHERE A SECOND RENDERING PATH CANNOT MEET A PRECISION CONTRACT AT SOME MAGNITUDES, IT REFUSES ON THE FIRST PATH'S OWN PREDICATE AND THE CALLER FALLS BACK**, extending `decision 081`'s refusal set from *capability* refusals to a *precision* refusal; ★★★ **THREE HARD-RULE-11 SURVIVORS, ALL THREE IN ONE README SECTION AND ALL THREE FOUND BY READING IT — one of them is `R215`'s founding wrong number PROPAGATED FORWARD AS A MEASURED RESULT** (*"11 of 11 forms survive at every scale tested"*, where the correct post-fix answer is `2 of 11` from `1.25 × 10⁷` up); ★★ **`1af75a1` EXISTS BECAUSE A HEREDOC ATE A LINE-CONTINUATION BACKSLASH AND THE EDIT FAILED SILENTLY — fifth instance in a week, and it produced a document that contradicted itself in ADJACENT PARAGRAPHS**; ★ **`FEATURES.md` ROW 202 IS DECIDED — the 232nd filing left it alone because it could not tell whether replay carried the precision. It does not, and it now refuses**; ★ **THE METRICS LINE IS UNCHANGED AT `90` KEYS, measured by running the gate** — 2026-08-23 (two-hundred-and-thirty-third filing)
+
+**Commits filed by this entry**
+
+| commit | touches | Pass ID |
+|---|---|---|
+| `d8f3020` — *The display list refuses a scale it cannot render truthfully, and the banana's ceiling section becomes history* | `crates/pdfce-render/`, `tools/gen-scale-demo/` | **`PASS 74.10`** |
+| `1af75a1` — *The demo's reproduction command no longer needs hand-nudged coordinates* | `tools/gen-scale-demo/` | **no Pass ID** — repair of an edit that failed silently inside `d8f3020` |
+
+**Both commit messages carry the full derivation** — the `ulp` arithmetic at
+each recording scale, the shared-predicate argument, and the measured
+`(1100, 732)` against a geometric `(1100, 733)`. This entry points at them
+rather than restating them, per the update protocol.
+
+---
+
+#### ★ THE ID RULING — A **NEW** ID (`74.10`), NOT AN AMENDMENT TO `74.7`, AND THE DISPATCH LEANED THE OTHER WAY
+
+**The engineer wrote *"I lean amendment, but you have the better view of the
+numbering."* The ruling is a new ID**, and it is worth arguing because the
+amendment case is genuinely strong: `d8f3020` completes a guarantee `74.7`
+stated, and `74.7`'s own entry two commits ago set the precedent that *"the
+scope grew to cover its own stated exclusion inside one Pass, so one ID covers
+both."*
+
+**Three grounds decide it the other way.**
+
+1. **`PASS 74.7` IS ALREADY FILED AS SHIPPED, WITH A COMMIT TABLE AND A LEDGER
+   ROW.** `74.7` grew across two commits *before it shipped*, at filing time,
+   which is grouping. Growing a **shipped** entry two filings later makes
+   *"`Pass 74.7`"* a moving target: a reader who cited *"`74.7`, shipped
+   2026-08-23 across `1d6db9e` + `5b0d885`"* would find a third commit under the
+   same name and no way to tell when it arrived. Hard rule 1 (*Shipped is
+   append-only; history does not get rewritten*) and hard rule 2 (*Pass IDs are
+   stable*) both point here.
+2. **★★ THE SEQUENCE IS THE LESSON, AND FOLDING IT IN DESTROYS IT.** `74.7`
+   **created** this defect — it moved the interpreter to `f64` and left the
+   recorder in `f32`. Filed as one Pass, *"a precision fix opened a precision
+   divergence"* becomes invisible: the entry would read as one clean piece of
+   work. Filed as two, the sequence is legible and checkable — `74.7` shipped,
+   it left a second path behind, **the filing of `74.7` flagged the question**,
+   and `74.10` closed it. **That is the audit trail the append-only rule exists
+   to produce**, and it is exactly the shape `R211` and `decision 081` are
+   about: *moving one caller falsifies a claim in a file nobody edited.*
+3. **The two Passes deliver different kinds of thing.** `74.7` **raises** a
+   ceiling; `74.10` **refuses** past one. A reader following *"see `74.7`"*
+   wants *how deep zoom became precise*; a reader following *"why did the
+   recorder refuse at scale 5 000?"* wants a different story, with a different
+   mechanism and a different caller obligation (fall back).
+
+**`74.10` was the next free in the family** and the two-digit sub-ID is house
+style (`Pass 47.10`/`47.11`, already on disk). **Next free in the family is now
+`74.11`.** **A dated amendment is appended to `PASS 74.7`'s Shipped entry**
+pointing forward to this one, so neither entry can be read alone and get the
+wrong picture — the same forward-pointer convention the decision log uses for a
+superseded decision.
+
+---
+
+#### ★★★★★ THE DEFECT — TWO RENDERING PATHS, ONE `f64` AND ONE `f32`, AGREEING EVERYWHERE ANYONE LOOKED
+
+**What `PASS 74.7` changed:** the interpreter carries the CTM in `f64` through
+content-stream composition (`Mat64`) and builds paths relative to their own first
+point when `needs_precise_paths` fires.
+
+**What it did not change:** a recorded `DisplayList` stores **every op's CTM as
+an `f32` `Transform`**, and `replay_region` post-translates that by the region's
+device origin, **also in `f32`**. Neither narrowing has anything to widen back
+to — the precision is gone at record time.
+
+**★ And nothing bounded the recorder, deliberately.** `record_page`'s own
+comment reads:
+
+> *"a recording allocates no raster, so the `MAX_PIXMAP_EDGE` ceiling does NOT
+> apply here — that is the point of recording at a deep zoom."*
+
+**Deep zoom is the INTENDED use of a recording**, which is why the absence of a
+bound is a defect rather than an untested corner.
+
+**Measured cost of the `f32` translation, filed per-scale beside its cause (hard
+rule 10 (a)):**
+
+| recording `scale` | letter-page translation carried in the op's CTM | error in device pixels |
+|---:|---:|---:|
+| `5 000` | `~4 × 10⁶` | **half a device pixel** |
+| `500 000` | `~4 × 10⁸` | **47 px** |
+
+⇒ **after `74.7`, a page replayed from a list and the same page rendered fresh
+were the same picture at ordinary scales and different pictures at deep zoom**,
+with nothing on either path saying so. That is `R211`'s condition — *two code
+paths that owe each other byte-identical output* — and `decision 081`'s subject,
+one level down: `081` gave the two paths **one `f64` entry point for region
+GEOMETRY**; nothing had been said about **content**.
+
+---
+
+#### ★★★★★ THE FIX — A REFUSAL, AND THE THRESHOLD IS A **SHARED PREDICATE** RATHER THAN A CHOSEN LIMIT
+
+**`PoisonReason::ScaleBeyondF32`.** `record_page` returns
+`RenderError::PageNotRecordable`, and the caller falls back to a direct render
+that is correct at any scale — **the same fallback `pdfce-cli` already performs
+for the seven capability refusals** (`sh`, shading patterns, overprint composites,
+soft masks and the rest). No new caller shape, no new failure mode for a consumer
+to learn.
+
+**The module's own documentation had already argued for exactly this**, before
+the defect existed:
+
+> *"a display list that is subtly wrong is strictly worse than no display list.
+> Refusing is loud, cheap, and correct."*
+
+**★★ THE CONSTRUCTION THAT MAKES IT A BOUNDARY RATHER THAN A COMPROMISE, AND IT
+IS THE PART TO CARRY FORWARD.** The threshold is **`Mat64::needs_precise_paths`
+— the SAME predicate the interpreter consults to decide whether it needs its
+`f64` route.** Consequently:
+
+- **Below the predicate**, both paths do **identical `f32` arithmetic** and agree
+  exactly — the recording is admissible because the thing it would have to match
+  is itself `f32`.
+- **Above the predicate**, one path switches to `f64` and the other **refuses**.
+
+⇒ **There is no scale at which they quietly disagree.** That is the property
+`R211` asks of a second rendering path, and it is obtained **by construction
+rather than by testing**.
+
+**★ Why a shared predicate beats two limits that happen to match.** Two
+independently-chosen constants can agree today and drift apart in either
+direction on any later edit, and **the band between them is a region where one
+path is precise, the other is not, and both believe they are in agreement**.
+Nothing reports that band; it has no error message and no counter. A shared
+predicate makes the band **not exist** — it cannot open, because there is one
+number and one place it is decided. **The next person adding a third rendering
+path should reach for this**: *two paths that must agree share the predicate that
+decides when they CAN, rather than each picking a limit.* Escalated to
+`D:/dev/rag/rust/` (file named in the RAG list below) and minted as **decision
+084**.
+
+**★ The test asserts BOTH halves — refused by name at `5 000`, and still records
+at `4.0`** — *because a guard that refuses everything is not a guard*, and the
+engineer **verified it bites by disabling the condition**. That is `R162`'s
+obligation (establish the positive case over the same container) met on a refusal
+rather than on an absence.
+
+---
+
+#### ★★★★ THE ORACLE THAT SHOULD HAVE CAUGHT IT, AND THE RULE JUDGEMENT THE DISPATCH ASKED FOR
+
+**`crates/pdfce-render/tests/region_matches_full_page.rs` is the differential
+oracle for exactly this contract** — it is the artefact `R211` was minted on the
+strength of. **It runs at scales up to `220`. The divergence begins near `530`.**
+So it agreed everywhere it was asked, and everywhere it was asked it was right.
+
+**The engineer asked whether this earns a rule or an `R215` amendment, and
+recorded honest uncertainty about whether it is one mechanism or two.** It is
+**two**, and the ruling is **neither of those**: it is an **amendment to `R211`**.
+
+**Why it is NOT `R215`.** `R215` binds the **target** a test is written against,
+and its mechanism is a **wrong expected value** produced by attribution — *the
+oracle demands a number that a correct fix cannot produce*. Its failure mode is a
+**false alarm on a correct fix**. Here every expected value is **right**; the
+failure mode is the opposite — **a silent pass over a broken system** — and it is
+produced by the **sampled domain**, not by the expectations. `R215`'s own scope
+paragraph already refuses this: *"it does not bind on tests themselves."*
+
+**Why it is not a new number either, which is the closer call.** The condition
+that makes the sampling gap dangerous is **`R211`'s condition, verbatim** — two
+code paths that owe each other byte-identical output. And `R211` already **names
+`replay_region`** as one of the two call sites whose *"these cannot disagree"*
+comment went false when a caller moved. **This is not a new surface for `R211`;
+it is the surface `R211` was minted on, and did not finish.** Specifically,
+**clause (c) under-delivered**: it obliges a *"cannot disagree"* comment to
+**name the test that would go red**. Here the test was named, it existed, it ran,
+it was green — **and it was silent**, because naming a test says nothing about
+the domain the test samples. **A rule whose remedy can be satisfied while the
+defect ships is an incomplete rule**, and the completion belongs in the rule, not
+beside it.
+
+**Minting `R216` would also split one mechanism across two numbers** — a reader
+holding `R211` would have discharged it by naming a test, and a reader holding
+`R216` would have no reason to consult `R211`'s asymmetric-narrowing analysis to
+know **where** to sample. **They are the same obligation**: the narrowing
+boundary is what must be sampled across.
+
+⇒ **`R211` AMENDED with clauses (d) and (e). Ceiling UNMOVED — `R215` stands,
+next free `R216`.** Full text under *Standing rules*; in one line: **(d)** where
+one path *cannot* meet the contract past some magnitude, **both consult the SAME
+predicate** to decide where, and the losing path **refuses** rather than
+approximating; **(e)** the differential test that guards the contract **samples
+on both sides of that predicate** — *it proves agreement only over the range it
+samples, and a range is a claim.*
+
+**★ The honest cost of amending rather than minting, recorded so it is a ruling
+and not an oversight.** The (e) half **generalises past precision** — any
+parameterised differential test (page sizes, colour spaces, font sizes, core
+counts) proves agreement only over its sampled domain, and binding it inside
+`R211` hides it from someone writing a non-precision differential test.
+**Mitigated the way `R211` mitigated its own declined sibling**: the general form
+is filed as a fact in `D:/dev/rag/rust/`, where the test-methodology findings
+already live, rather than as a rule nobody's condition matches. **★★ And
+`Pass 122.0` is where it will bite next** — *"byte-identical output at any core
+count"* is a differential contract over a parameter, and *"any"* is the word this
+finding is about.
+
+---
+
+#### ★★★ THE `93 s` PROVENANCE — ANSWERED, AND IT INVALIDATES A RATIO THIS FILE PUBLISHED ONE FILING AGO
+
+**The 232nd filing flagged `93 s` as a figure it could not disambiguate, filed
+both ratios beside their pairs, and reported it as owing one sentence.** The
+engineer supplied it. **Stated once, here, so the number has a home:**
+
+| figure | what it is | zoom |
+|---:|---|---:|
+| **`31 s`** | the same CAD region with **algorithm B disabled entirely** — i.e. the **baseline** | `100 000×` |
+| **`93 s`** | the **REJECTED device-space attempt** | `100 000×` |
+| **`1.3 s`** | **shipped** | `100 000×` |
+
+⇒ **`31 s → 1.3 s` = `23.8×` is the speed-up**, and it is the figure the 232nd
+filing headlined. **`93 s` against `31 s` = `3×` is the rejected attempt's
+penalty**, and it is the figure that justified deleting the device-space
+scaffolding.
+
+**★★ AND THE PART THAT IS A CORRECTION RATHER THAN A COMPLETION.** The `PASS
+74.7` entry below also filed **`93 s → 1.3 s` = `71.5×`** as a second speed-up
+*"at `100 000×` zoom"*. **With the provenance known, that ratio compares the
+shipped result against a REJECTED IMPLEMENTATION, not against a baseline** — it
+is not a speed-up of the feature at all, and reads as one. **A dated amendment is
+appended to that entry**; the entry itself is append-only and the original
+sentence stays, per hard rule 1. **The `23.8×` headline is unaffected**, exactly
+as the 232nd filing predicted — but *"unaffected either way"* was true of the
+headline and **not** of the second ratio, and that distinction is the reason the
+figure was worth chasing.
+
+**★ This is hard rule 10 working in the shape it was written for.** The ambiguity
+was survivable for one filing precisely because **both ratios were filed beside
+their operands** — `93 s → 1.3 s = 71.5×` and `31 s → 1.3 s = 23.8×` — so the
+correction required **no new measurement, only the referent**. Had either been
+filed as a bare *"`71.5×` faster"*, nothing in the record could have been
+repaired without re-running a `93`-second render.
+
+---
+
+#### ★★ `1af75a1` — A HEREDOC ATE A LINE-CONTINUATION BACKSLASH, AND THE DOCUMENT CONTRADICTED ITSELF IN ADJACENT PARAGRAPHS
+
+**`d8f3020` intended to replace the README's reproduction command with a computed
+region. The edit failed silently** — a heredoc consumed the shell snippet's
+line-continuation backslash — **so the README kept its old hand-nudged command
+while the prose immediately around it said the drift was fixed.** `1af75a1` is
+the repair.
+
+**This is the failure mode
+`.claude/agent-memory/pdfce-engineer/feedback_windows_paths_need_literal_edits.md`
+documents, recurring for the FIFTH time in a week.** That file is the engineer's,
+not this role's, and is not edited here. **It is recorded in this entry because
+the dispatch offered it as a dated instance for the *"a correction is a claim"*
+family, and it is a clean one** — cleaner than most, because the damage is not
+that the edit was lost but that **the surrounding prose had already been
+updated**, so the artefact asserted two incompatible things **a few lines apart**.
+A reader would have believed whichever half they read first.
+
+⇒ **The transferable shape: an edit that silently drops one hunk of a multi-hunk
+change is worse than one that fails loudly, because the OTHER hunks land** and
+lend the missing one their credibility. **The check is to re-read the artefact,
+not the diff** — the diff showed exactly what was applied and looked fine.
+
+**★ Recorded for the amusement value and the confirmation: this filing hit the
+same failure on its first attempt.** The `bash` heredoc carrying this entry's
+draft aborted with *"unexpected EOF while looking for matching quote"*; the entry
+was written with a literal file write instead. **The feedback file's prescription
+is correct and it applies to this role too.**
+
+---
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string
+
+**What changed meaning across the two commits:** (1) the display-list replay path
+went from *an open question* to *bounded by refusal*; (2) `record_page` gained a
+refusal that is **not** a capability refusal; (3) the `93 s` figure gained a
+referent; (4) `tools/gen-scale-demo/README.md` §9 went from *live limitation* to
+*record of a solved problem*.
+
+| # | site | the claim | disposition |
+|---|---|---|---|
+| **1** | `docs/FEATURES.md` row 202 | *"a replayed region is computed from the **same** `f64` entry point a fresh region render uses"*, and the refusal list naming only the seven capability refusals | **REPAIRED** — the sentence was and remains **true about region GEOMETRY**; what was missing is that **content** was not covered. The precision refusal is added to the row's refusal list. Ruling below |
+| **2** | `docs/ARCHITECTURE.md` §4.1 **(AB)**, *"What is NOT in this entry"* | *"One genuine open item, reported not resolved: whether the DISPLAY-LIST replay path carries the same content-side precision … This role could not tell which"* | **REPAIRED** by a dated amendment — it **could not**, and it now refuses. Original kept as the audit trail |
+| **3** | `docs/ARCHITECTURE.md` §4.1 **(AB)**, *"Recorded as REPORTED, not as READ"* | *"whether `RenderOptions` is `#[non_exhaustive]` … were NOT verified by this role"* | **REPAIRED — and VERIFIED BY READING THE SOURCE**, not relayed: `crates/pdfce-render/src/font/mod.rs:427` carries `#[non_exhaustive]` immediately above `pub struct RenderOptions`. ⇒ **`subpixel_culling` is NOT source-breaking downstream.** `PoisonReason` is `#[non_exhaustive]` too (`crates/pdfce-render/src/display_list.rs:362`), so `ScaleBeyondF32` is not source-breaking either |
+| **4** | `docs/ROADMAP.md` `PASS 74.7` Shipped entry | *"at `100 000×` zoom, `93 s → 1.3 s` = `71.5×`"* | **DATED AMENDMENT APPENDED** — append-only; the ratio's operands were filed, so the referent is all that was missing |
+| **5** | `docs/NEXT_SESSION.md` §4 queue item 1 | *"check this FIRST, because it is the only item that could be a live defect rather than new work"* | **DISCHARGED** — it was a live defect. Queue rewritten |
+| **6** | `docs/NEXT_SESSION.md` §5, three bullets | the spent-evidence README; the `93 s` provenance; the `#[non_exhaustive]` question | **ALL THREE REMOVED** — discharged by this filing and by `d8f3020`/`1af75a1` |
+| **7** | `docs/NEXT_SESSION.md` §7 | remote/backup/worktree figures dated 2026-08-23, 232nd filing | **RE-MEASURED**, not relayed — figures and commands below |
+
+**★★★ SURVIVORS IN `tools/`, REPORTED NOT EDITED — ALL THREE IN ONE README
+SECTION, ALL THREE FOUND BY READING IT.** This role does not edit `crates/` or
+`tools/`; `tools/gen-scale-demo/README.md` §9 was **read** (not merely inferred
+from the commit message) precisely because the failure mode `1af75a1` repairs is
+a **silently lost edit**, and the only check for that is reading the artefact.
+
+1. **★★★ `R215`'S FOUNDING WRONG NUMBER HAS PROPAGATED FORWARD AS A MEASURED
+   RESULT.** §9's *"What changed"* paragraph reads: *"The table above is
+   superseded: **11 of 11 forms survive at every scale tested**."* **The correct
+   post-fix answer is `2 of 11` from `1.25 × 10⁷` up** — the box plus the one
+   molecule actually in frame; the other nine leave the viewport and
+   `Pass 74.4`'s `/BBox` cull removes them **exactly**, per ISO 32000-1 §8.10.1.
+   Both the `PASS 74.7` Shipped entry and the 232nd `SESSION_LOG.md` entry state
+   `2` and state that `2` is correct. **The README states the number `R215` was
+   minted about**, now dressed as an outcome rather than as an expectation, which
+   is strictly worse: an expectation invites checking and a result does not.
+   **Highest-priority item in this list.**
+2. **★★ A POSITIONAL REFERENCE THAT IS NOW WRONG RATHER THAN BROKEN — `R214`'s
+   exact species.** §9's fix notice says *"Everything **below** describes the
+   behaviour before that Pass … What follows is the evidence, not the current
+   state."* **That is false for the second half of the section**, which describes
+   the **current** state — the computed region, the `(1100, 732)` measurement,
+   *"What changed"*, and the `1.6e9` result. The reference names nothing, so it
+   cannot tell a reader it has gone stale. **Repair at the referent** (`R214`):
+   scope the sentence to the paragraphs it actually covers, or split §9 into *how
+   it was found* and *what it is now*.
+3. **★ THE `93 s` FIGURE IS IN `tools/` TOO, AND THERE IT IS SELF-REFUTING.**
+   §9's last paragraph reads *"the same change made deep zoom **23× FASTER**. A
+   stroke-heavy CAD region at 100 000× went from **93 s to 1.3 s**."*
+   **`93 / 1.3 = 71.5`, not `23`** — the ratio and its own operands disagree **in
+   one sentence**, and with the provenance now known the correct before-figure
+   for that comparison is **`31 s`**. ⇒ **`31 s → 1.3 s`, `23.8×`.** ★ Note this
+   is hard rule 10 (a) paying for itself in a file nobody wrote it for: **the
+   contradiction is visible because both the ratio and its operands were written
+   down.**
+
+**Checked and CLEAN, recorded so the negatives are visible.** `docs/FEATURES.md`
+**row 201** (`--region`) is about the interpreter's content path and is
+**unaffected** — `74.10` changes no interpreter behaviour and no `--region`
+behaviour. **Rows 203/204** (the two culls) are untouched: a cull decides *what to
+paint*, this decides *whether a recording may exist*.
+`docs/render-region-measurements.md` already carries the 232nd filing's dated
+amendment about deep zoom and needs no second one. The `90`-key metrics figure is
+**unchanged** — this Pass adds no counter, and that is itself worth stating: **a
+refusal that falls back is disclosed through `PoisonReason`'s own message, which
+is the channel `decision 081` already established**, not through a new metrics
+key.
+
+---
+
+#### `FEATURES.md` — ROW 202 IS **DECIDED**, WHICH IS THE THING THE LAST FILING COULD NOT DO
+
+**The 232nd filing left row 202 alone and said so out loud**, on the ground that
+it could not tell whether replay carried the content-side precision and that a
+claim in either direction would be a guess. **The answer is in**, and it is
+recorded as a ruling rather than only as an edit:
+
+- **Replay does NOT carry the content-side precision.** Recorded ops hold `f32`
+  transforms; `replay_region` post-translates in `f32`. **Row 202's existing
+  sentence about the `f64` entry point stays, unchanged and still correct** — it
+  is a claim about **region geometry** (`decision 081`), and this finding is
+  about **content**. Two different quantities, which is `R213`'s whole subject,
+  and the row now names both.
+- **The row gains the precision refusal.** Its refusal list previously named only
+  the **seven capability refusals** (`sh`, shading patterns, overprint
+  composites, soft masks …) with their measured `77 of 3,222` fallback rate.
+  **`ScaleBeyondF32` is a different KIND of refusal** — not *"this page contains
+  an operator I cannot record"* but *"this SCALE is one I cannot record
+  truthfully"* — and a reader scanning for *"when do I not get a list?"* must
+  find both. **The `77 of 3,222` figure is left untouched and its scope named**,
+  because it measures capability refusals over a corpus at ordinary scale and is
+  **not** a measurement of the new refusal's frequency.
+- **No box changes.** `[x] core · [x] cli · [ ] gui`. The refusal ships in
+  `pdfce-render` and is reached by `pdfce-cli`'s existing fallback; **no GUI code
+  path calls the display list at all**, which was already the row's stated
+  position and is not rounded up.
+- **No new row.** `74.10` adds no capability an operator can *ask for* — it
+  removes a way to get a wrong picture. That is the same test that gave
+  `Pass 74.8` no row and gave `--fast-subpixel` one: **`--fast-subpixel` is
+  something an operator types; this is not.**
+
+---
+
+#### Verification (the engineer's, this session, marked as his)
+
+`cargo fmt --all` clean · `cargo clippy --workspace --all-targets -- -D warnings`
+clean · `cargo test --workspace --release` green · **no new dependency**,
+`THIRD_PARTY_LICENSES.md` unaffected. **`cargo tree` is not engaged** — the change
+is entirely inside `pdfce-render` and adds no dependency.
+
+#### Gate sweep (this role's, run at `HEAD` before and after this filing's edits)
+
+**17 `tools/check-*` scripts on disk (12 `.py` + 5 `.sh`); 16 runnable as bare
+gates**, re-measured by `ls tools/check-*` and by running each — **counted, not
+quoted**, per `R209`.
+
+**Before this entry: 15 of 16 exit 0**, and `check-commits-filed.py` exited **1**,
+naming exactly `d8f3020` and `1af75a1` — this dispatch. **After: all 16 exit 0.**
+The 17th, `check-image-colorspace-truth.py`, exits 1 on a bare invocation
+**because it requires a fixture-directory argument**; recorded again as
+*"`check-*` on disk but not a gate"*, still true.
+
+**`tools/check-metrics-line-contract.py` → exit 0, `90 keys`** — **unchanged**,
+sourced by running the gate rather than by reading a document.
+
+#### Backup and remote currency — CHECKED, not inferred (hard rule 8)
+
+- **`git remote -v`** → `origin  https://github.com/KenM76/pdfce.git`.
+- **`git rev-list --count origin/main..main`** → **`18`** (was `15` one filing
+  ago; three commits since). The local remote-tracking ref `origin/main` is at
+  **`c24ad7a`** (2026-08-22 16:00 −0400). **No `git fetch` was run**, so this is
+  the tracking ref's position, **not a live query of the remote**.
+- **`ls -lt D:\Dev\pdfce-backups\`** → newest bundle
+  **`pdfce-20260817-v060.bundle`**, 2026-08-17 20:34, whose `refs/heads/main` is
+  **`3c4c00e`** (by `git bundle list-heads`). **`git rev-list --count
+  3c4c00e..main` → `211`**, and `git merge-base --is-ancestor` confirms **`HEAD`
+  is NOT in that bundle.** ⇒ **the newest backup is 211 commits and six days
+  behind `HEAD`.** Both figures produced by the commands named beside them.
+- **`git worktree list | wc -l`** → **`9`**.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `74.7` + `74.9` shipped; next free in family `74.10` | **`PASS 74.10` SHIPPED** (`d8f3020`). Next free in family **`74.11`**; `122.4` stays the next free `122`; **`97.1g` stays reserved and unbuilt** |
+| decisions (`ARCHITECTURE.md` §12) | **083** | **084** (**MINTED** — *where a second rendering path cannot meet a precision contract past some magnitude, it refuses on the FIRST path's own predicate and the caller falls back; the two never each pick a limit*). Next free **085**. |
+| standing rules | **`R215`** | **`R215` — CEILING UNMOVED.** `R211` **AMENDED** (clauses (d) and (e): the shared predicate, and the differential test's sampled range). Next free **`R216`**. |
+| open operator questions | ceiling `(br)`, **CLOSED** | **unchanged — `(br)`, CLOSED. Nothing is awaiting Ken** except pushing and cutting a backup, both his acts. Next free **`(bs)`**. |
+| SESSION_LOG filing ordinals | **232** | **233** |
+| `tools/check-*` gates | 17 on disk, 16 runnable | **17 on disk, 16 runnable** (unchanged, re-measured by `ls` + running each) |
+| `render-page` metrics-line keys | **90** | **90 — unchanged**, measured by running `tools/check-metrics-line-contract.py`. A refusal that falls back needs no counter |
+
+**Owed work, recorded as owed:** the **three `tools/gen-scale-demo/README.md` §9
+survivors** above — the `11 of 11` claim (highest priority; it is `R215`'s own
+wrong number wearing a result's clothes), the *"everything below"* positional
+reference, and the self-refuting `93 s / 23×` sentence. Plus **`R215`'s
+retro-application**, carried forward unstarted from the 232nd filing: any Pass
+filed with a *"required after"* column should be re-read against the rule before
+that column is used as a gate. **Nothing is owed to Ken.**
+
+**RAG files written by this filing:**
+`D:/dev/rag/rust/two_paths_that_must_agree_share_the_predicate_that_decides_when_they_can.md`,
+`D:/dev/rag/rust/a_differential_test_proves_agreement_only_over_the_range_it_samples.md`.
+
+---
+
 ### `1d6db9e` + `5b0d885` + `296a23e` — **`PASS 74.7`** (the content-side `f32` ceiling raised, in **two** algorithms) and **`PASS 74.9`** (`--fast-subpixel`, the opt-in lossy cull that closes open question `(br)`) — ★★★★★ **KEN ANSWERED `(br)` AND HIS ANSWER CONTAINED A TECHNICAL PREDICTION THAT TURNED OUT TO BE EXACTLY RIGHT** — *"this might require 2 algorithms though depending on what is needed"* — and the fix **did** decompose into two, with different triggers, different costs and different failure modes; ★★★★★ **`R215` MINTED — AN ACCEPTANCE ORACLE WRITTEN IN ADVANCE, FROM THE BROKEN SYSTEM'S OWN OUTPUT, ATTRIBUTES THE WHOLE OBSERVABLE TO THE DEFECT IT IS HUNTING: this file's own pre-measured table demanded `11 of 11` forms at every scale and the CORRECT answer is `2`**, because a *second, correct* mechanism (`Pass 74.4`'s exact viewport cull) moves the same number — **the oracle would have failed the correct fix, and the 230th filing praised it for existing in advance**; ★★★★ **A PRECISION DEFECT AND A PERFORMANCE DEFECT WITH ONE CAUSE LOOK UNRELATED UNTIL ONE IS FIXED, AND THE PERFORMANCE ONE IS THE HALF NOBODY ATTRIBUTES: the same CAD region went `31 s → 1.3 s` (`23.8×`) as a SIDE EFFECT of a precision fix** — deep zoom was never slow *because* it was imprecise, it was slow *for the same reason*; ★★★ **THE REJECTED FIRST ATTEMPT IS THE MORE USEFUL RECORD — building the path in DEVICE space was CORRECT and `3×` SLOWER (`93 s` against `31 s`), because `tiny_skia` flattens curves to a tolerance in the PATH'S OWN UNITS**, and it dragged in a similarity restriction, a `similarity_scale` helper, a stroke-width multiplier and a dash rebuild; differencing in `f64` removed all four at once and the helper was **deleted rather than left as archaeology**; ★★★ **`DECISION 083` MINTED — A LOSSY RENDER OPTION IS CARRIED IN `RenderOptions`, DEFAULTS OFF, AND GETS ITS **OWN** METRICS KEY; AN EXACT SKIP AND A LOSSY SKIP NEVER SHARE A COUNTER**, which is the shape `082` said the operator's answer would have to take but did not itself specify; ★★ **THE LOSSY TRADE IS MEASURED IN BOTH DIRECTIONS AND THE SECOND MEASUREMENT IS THE HONEST ONE — `1 468 ms → 108 ms` (`13.6×`) with **zero of 1 242 640** pixels different, AND `82 of 3 600` pixels different with a worst channel delta of `62 of 255` at scale 60**: the loss is largest exactly where the speed-up is smallest, which is why it is a switch and not a heuristic; ★★ **MINT DECLINED for *"a regression test is not a regression test until you have watched it fail"*, and the decline names three rules and one RAG file that already carry it**; ★ **`FEATURES.md`: ONE NEW ROW (`--fast-subpixel`, `[x] core · [x] cli · [ ] gui`, NOT rounded up) AND TWO ROWS REPAIRED**; ★ **THE METRICS LINE IS NOW `90` KEYS, FROM `89`, measured by running the gate** — 2026-08-23 (two-hundred-and-thirty-second filing)
 
 **Commits filed by this entry**
@@ -109,6 +548,37 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 **The three commit messages carry the full derivation** — the `ulp` arithmetic,
 the rejected attempt, the per-scale tables and the four sabotaged tests. This
 entry points at them rather than restating them, per the update protocol.
+
+**★★ AMENDED 2026-08-23 (two-hundred-and-thirty-third filing) — TWO ITEMS, AND
+THE FIRST IS THE ONE A READER OF THIS ENTRY ALONE WOULD GET WRONG.** This entry
+stands as filed; nothing below is retracted. Both amendments are appended here,
+at the head, because that is where a reader arrives.
+
+1. **★★★ THIS PASS CREATED A SECOND RENDERING PATH AT A DIFFERENT PRECISION, AND
+   `PASS 74.10` (`d8f3020`) CLOSES IT.** `74.7` moved the **interpreter** to
+   `f64` and left the **display-list recorder** in `f32` — recorded ops carry an
+   `f32` `Transform` and `replay_region` post-translates in `f32`. So from
+   `74.7` until `74.10`, a page replayed from a list and the same page rendered
+   fresh **agreed at ordinary scales and diverged at deep zoom** (half a device
+   pixel at recording scale `5 000`; `47 px` at `500 000`). This entry's own
+   *Owed work* item 3 flagged the question and could not answer it; the answer
+   was that it was a live defect. **`74.10` makes `record_page` refuse above
+   `Mat64::needs_precise_paths` — the same predicate this Pass gave the
+   interpreter — and the caller falls back.** See `PASS 74.10`'s Shipped entry,
+   above.
+2. **★★ THE `93 s → 1.3 s` = `71.5×` FIGURE BELOW IS NOT A SPEED-UP OF THIS
+   FEATURE.** This entry filed that ratio *"at `100 000×` zoom"* beside the
+   `31 s → 1.3 s` = `23.8×` headline, and **flagged that it could not decide
+   which measurement `93 s` was.** The engineer supplied the provenance on
+   2026-08-23: **`93 s` is the REJECTED device-space attempt** at `100 000×`;
+   **`31 s` is the same region with algorithm B disabled entirely — the
+   baseline**; **`1.3 s` is shipped.** ⇒ **`93 s → 1.3 s` compares the shipped
+   result against a REJECTED IMPLEMENTATION, not against a baseline**, and reads
+   as a second speed-up when it is not one. **`23.8×` is and remains the
+   speed-up**, exactly as this entry predicted for the headline. Full table in
+   `PASS 74.10`'s entry. **Nothing here is deleted**, per hard rule 1 — and the
+   correction was possible *without re-measuring anything* only because both
+   ratios were filed beside their operands (hard rule 10 (a)).
 
 ---
 
@@ -295,6 +765,14 @@ reader as a live constraint.
 **The same CAD region went `31 s → 1.3 s`.** Divided: **`23.8×`**. And at
 `100 000×` zoom, **`93 s → 1.3 s` = `71.5×`**. The engineer's headline figure is
 the conservative one, **`23×`**.
+
+> **★★ AMENDED 2026-08-23 (233rd filing): the `71.5×` in the sentence above is
+> NOT a second speed-up.** The engineer supplied `93 s`'s provenance — it is the
+> **rejected device-space attempt** at `100 000×`, not a baseline; the baseline
+> at that zoom is **`31 s`** (the same region with algorithm B disabled
+> entirely). ⇒ **`31 s → 1.3 s` = `23.8×` is the speed-up**, at both zooms;
+> **`93 s` against `31 s` = `3×` is the rejected attempt's penalty.** Nothing
+> above is deleted, per hard rule 1. Full table in `PASS 74.10`'s Shipped entry.
 
 **Deep zoom was never slow BECAUSE it was imprecise — it was slow FOR THE SAME
 REASON**: large magnitudes reaching a rasteriser that reasons in **relative**
@@ -88977,7 +89455,129 @@ same cause (hashes exist only at commit time), two different failure modes.
   and
   `D:\dev\rag\rust\an_identical_failure_count_across_three_different_fixes_means_you_are_fixing_the_wrong_thing.md`.
 
-  **Ceiling moves `R210` → `R211`; next free `R212`.**
+  **Ceiling moves `R210` → `R211`; next free `R212`.** *(Superseded by later
+  mints — next free is now `R216`. Left in place because this line is a record
+  of what was true when `R211` was written, per the append-only convention.)*
+
+  ---
+
+  **★★★★ AMENDED 2026-08-23 (librarian-amended, two-hundred-and-thirty-third
+  filing; `PASS 74.10`, `d8f3020`). TWO CLAUSES ADDED — (d) and (e) — AND THE
+  CEILING DOES NOT MOVE. `R215` STANDS; NEXT FREE IS STILL `R216`.**
+
+  **What forced the amendment.** `PASS 74.7` moved the **interpreter** to `f64`
+  and left the **display-list recorder** in `f32`: a recorded op stores its CTM
+  as an `f32` `Transform`, and `replay_region` post-translates by the region's
+  device origin, **also in `f32`**. The two paths then agreed at ordinary scales
+  and disagreed at deep zoom — **half a device pixel at recording scale
+  `5 000`, `47 px` at `500 000`** — which is **this rule's condition, exactly**.
+  `R211` was already in force, was already cited by `decision 081`, and
+  **already names `replay_region` by name** as one of the two call sites whose
+  *"these cannot disagree"* comment went false when a caller moved. It did not
+  prevent this. **The two clauses below are why.**
+
+  **(d) ★★ WHERE ONE PATH CANNOT MEET THE CONTRACT PAST SOME MAGNITUDE, BOTH
+  PATHS CONSULT THE *SAME* PREDICATE TO DECIDE WHERE — AND THE PATH THAT CANNOT
+  MATCH *REFUSES* RATHER THAN APPROXIMATING.** `R211`'s original three clauses
+  all assume the contract **can** be met and ask *where to narrow*. Sometimes it
+  cannot: a recorded display list has **no `f64` to keep** — the precision is
+  gone at record time and no later care recovers it. The obligation in that case
+  is **not** "pick a sensible limit". It is:
+
+  - **One predicate, consulted by both paths.** `PASS 74.10`'s threshold is
+    `Mat64::needs_precise_paths`, the **same** predicate the interpreter uses to
+    decide it needs its `f64` route. **Below it, both paths do identical `f32`
+    arithmetic and agree exactly. Above it, one switches to `f64` and the other
+    refuses.** ⇒ **No magnitude exists at which they quietly disagree.**
+  - **The losing path refuses by name and the caller falls back.**
+    `PoisonReason::ScaleBeyondF32` → `RenderError::PageNotRecordable` → a direct
+    render that is correct at any scale. The module's own doc block had already
+    argued it: *"a display list that is subtly wrong is strictly worse than no
+    display list. Refusing is loud, cheap, and correct."*
+
+  **★ Why a shared predicate is strictly stronger than two limits that happen to
+  agree, which is the transferable half.** Two independently-chosen constants
+  can match today and drift apart in either direction on any later edit, and
+  **the band between them is a magnitude range in which one path is precise, the
+  other is not, and both believe they agree.** Nothing reports that band: it has
+  no error, no counter, no failing test — it is defined by the *absence* of a
+  disagreement anybody checks for. A shared predicate makes the band **unable to
+  open**, because there is one number and one place it is decided. ⇒ **Two paths
+  that must agree share the predicate that decides when they CAN, rather than
+  each picking a limit.**
+
+  **(e) ★★ THE DIFFERENTIAL TEST THAT GUARDS THIS CONTRACT SAMPLES ON BOTH SIDES
+  OF THAT PREDICATE. A TEST PROVES AGREEMENT ONLY OVER THE RANGE IT SAMPLES, AND
+  THE RANGE IS PART OF THE CLAIM.** `crates/pdfce-render/tests/region_matches_full_page.rs`
+  is the oracle this rule was minted on the strength of. **It runs at scales up
+  to `220`. The divergence begins near `530`.** Every assertion in it is
+  correct, non-vacuous and independent — **it simply never asked at a magnitude
+  where the answer changed.** So a *"these cannot disagree"* comment naming that
+  test was **true about the test and false about the world**.
+
+  **★ This is why clause (c) was not enough, and the distinction is the reason
+  this is an amendment rather than a new number.** Clause (c) obliges the
+  comment to **name the test that would go red**. Here the test was named, it
+  existed, it ran, and it was **green** — naming a test says nothing about the
+  **domain** the test samples. **A rule whose remedy can be satisfied while the
+  defect ships is an incomplete rule.** (d) supplies the sampling point (the
+  shared predicate) and (e) obliges the test to straddle it, which is the only
+  form of "sample more" that is bounded rather than infinite.
+
+  **★★ WHY THIS IS NOT `R215`, AND NOT `R216`, STATED SO THE RULING IS
+  CHECKABLE.**
+  - **Not `R215`.** `R215` binds the **target** (an acceptance table's expected
+    values) and its mechanism is **attribution producing a WRONG expected
+    value**; its failure mode is a **false alarm that would reject a correct
+    fix**. Here every expected value is **right** and the failure mode is the
+    **opposite** — a **silent pass over a broken system**, produced by the
+    sampled domain. `R215`'s own scope paragraph disclaims tests: *"it does not
+    bind on tests themselves."*
+  - **Not a new number.** The **trigger condition is this rule's own opening
+    sentence, verbatim** — *two code paths that owe each other byte-identical
+    output* — and nothing new has to be defined to state it. Minting `R216`
+    would **split one mechanism across two numbers**: a reader holding `R211`
+    would discharge it by naming a test, and a reader holding `R216` would have
+    no reason to consult `R211`'s asymmetric-narrowing analysis to learn **where
+    to sample.** They are one obligation; the narrowing boundary is the thing to
+    sample across.
+  - **Not `R87`/`R162`/`R164`.** `R87` asks *was the instrument pointed at the
+    thing?* — it was. `R162` asks *could the assertion ever come out false?* —
+    it could, and did, once asked. `R164` asks *does this verdict depend on its
+    neighbours?* — it does not. **All three were satisfied.**
+
+  **★ The honest cost, recorded so this is a ruling and not an oversight.**
+  Clause (e) **generalises past precision** — any parameterised differential
+  test (page sizes, colour spaces, font sizes, **core counts**) proves agreement
+  only over its sampled domain — and burying it inside a precision rule hides it
+  from someone writing a non-precision differential test. **Mitigated the way
+  this rule mitigated its own declined sibling**: the general form is filed as a
+  fact in `D:/dev/rag/rust/a_differential_test_proves_agreement_only_over_the_range_it_samples.md`,
+  where the test-methodology findings already live. **★★ `Pass 122.0` is where
+  it bites next** — its acceptance criterion is *"byte-identical output at any
+  core count"*, which is a differential contract over a parameter, and **"any"
+  is the word this clause is about.**
+
+  **Enforcement layer, per `R210`'s minting test.** (d) is **decidable from
+  artefacts**: *do the two paths reference the same predicate, or two constants?*
+  — a grep, no knowledge of intent. (e) is **weakly decidable**: *does the
+  differential test sample a value on each side of that predicate?* — decidable
+  once the predicate is named, which (d) guarantees. **Neither is wired as a
+  gate and neither should be wired red**
+  (`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`); recorded as
+  decidable so a future session knows the option exists.
+
+  **Cross-references added by this amendment:** **decision 084** (§12 —
+  the same construction as an architectural decision, with `decision 081` as its
+  parent), `R215` (the neighbour it is deliberately **not**), `R214` (the
+  positional-reference species that turned up in the same sweep), `PASS 74.10`
+  (`d8f3020`). New RAG files:
+  `D:/dev/rag/rust/two_paths_that_must_agree_share_the_predicate_that_decides_when_they_can.md`
+  and
+  `D:/dev/rag/rust/a_differential_test_proves_agreement_only_over_the_range_it_samples.md`.
+
+  **★ CEILING UNMOVED: `R215` STANDS, NEXT FREE `R216`.** An amendment that
+  moved the ceiling would be a mint wearing an amendment's name.
 
 - **R212 — A CONTRACT WRITTEN DOWN IN TWO PLACES, ONE OF WHICH IS UNDER TEST,
   DRIFTS IN THE OTHER — ALWAYS, AND IN ONE DIRECTION: THE TEST *FORCES* ITS

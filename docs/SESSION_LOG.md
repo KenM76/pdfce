@@ -57405,3 +57405,215 @@ correct as written, **not touched**).
   `D:/dev/rag/rust/a_float_precision_test_with_round_number_operands_cannot_fail_because_equal_values_cancel_exactly.md`;
   dated addendum to
   `D:/dev/rag/rust/a_gates_first_live_catch_is_the_first_evidence_it_generalises_beyond_its_founding_debt.md`.
+
+---
+
+## 2026-08-23 (two-hundred-and-thirty-third filing) — `d8f3020`: **`PASS 74.10`**, the display list REFUSES a scale it cannot render truthfully, closing the second rendering path `PASS 74.7` opened; `1af75a1`: the README repair after a heredoc silently ate a line-continuation backslash; ★★★★★ **THE 232nd FILING'S OWN SURVIVOR #1 WAS A LIVE DEFECT — `PASS 74.7` MOVED THE INTERPRETER TO `f64` AND LEFT THE RECORDER IN `f32`**, so for two commits pdfce had two rendering paths agreeing at ordinary scales and diverging at deep zoom (half a device pixel at recording scale `5 000`; `47 px` at `500 000`), and `record_page`'s own comment made deep zoom the **intended** use of a recording; ★★★★★ **THE THRESHOLD IS A *SHARED PREDICATE*, `Mat64::needs_precise_paths` — THE SAME ONE THE INTERPRETER USES TO SWITCH TO `f64`** — so below it both paths do identical `f32` arithmetic and agree exactly, above it one switches and the other refuses, and **no scale exists at which they quietly disagree**: a boundary by construction rather than a compromise; ★★★★ **`R211` AMENDED (clauses (d) + (e)), CEILING UNMOVED AT `R215`** — the trigger condition is `R211`'s own sentence verbatim and `R211` already names `replay_region`; ★★★★ **AN ORACLE'S SAMPLING RANGE IS PART OF ITS CLAIM — the differential test runs to scale `220` and the divergence begins near `530`**: every assertion correct, non-vacuous and independent, and it simply never asked where the answer changed — a **different** mechanism from `R215` (wrong *value* → false alarm) because this is a **silent pass** produced by the sampled **domain**; ★★★ **`DECISION 084` MINTED — a second rendering path that cannot meet a precision contract refuses on the FIRST path's own predicate and the caller falls back; the two never each pick a limit**; ★★★ **THE `93 s` AMBIGUITY IS ANSWERED AND IT INVALIDATES A RATIO THE 232nd FILING PUBLISHED** — `93 s` is the **rejected device-space attempt**, `31 s` the **baseline**, so `93 s → 1.3 s = 71.5×` compares the shipped result against a **rejected implementation**, not against a baseline; `23.8×` stands; ★★★ **THREE SURVIVORS, ALL IN ONE README SECTION, ALL FOUND BY READING IT — and one is `R215`'s FOUNDING WRONG NUMBER PROPAGATED FORWARD AS A MEASURED RESULT** (*"11 of 11 forms survive at every scale tested"*, where the correct post-fix answer is `2 of 11`); ★★ **A HEREDOC ATE A LINE-CONTINUATION BACKSLASH AND THE DOCUMENT CONTRADICTED ITSELF IN ADJACENT PARAGRAPHS — fifth instance in a week, and THIS FILING HIT IT TOO on its first attempt**; ★ **`FEATURES.md` ROW 202 DECIDED, the one thing the last filing could not do**; ★ **ALL 16 GATES EXIT 0; METRICS LINE UNCHANGED AT `90` KEYS**
+
+**Shipped:**
+
+- **`PASS 74.10`** (`d8f3020`) — **the display list refuses a scale it cannot
+  render truthfully.**
+  - **The defect, and it was created by `PASS 74.7` two commits earlier.** A
+    recorded `DisplayList` stores **every op's CTM as an `f32` `Transform`**,
+    and `replay_region` post-translates by the region's device origin **also in
+    `f32`**. `74.7` moved the **interpreter** to `f64`; the recorder stayed
+    behind. ⇒ **two rendering paths agreeing at ordinary scales and diverging at
+    deep zoom** — `R211`'s exact condition.
+  - **Nothing bounded it, deliberately.** `record_page`'s own comment: *"a
+    recording allocates no raster, so the `MAX_PIXMAP_EDGE` ceiling does NOT
+    apply here — that is the point of recording at a deep zoom."* **Deep zoom is
+    the INTENDED use**, which is what makes this a defect rather than an
+    untested corner.
+  - **Measured, per scale, beside its cause:** at a recording `scale` of
+    **`5 000`** a letter page's transform carries a translation of **`~4 × 10⁶`**,
+    where `f32` costs **half a device pixel**; at **`500 000`**, **`47 px`**.
+  - **The fix is a refusal, not a refactor.** `PoisonReason::ScaleBeyondF32`;
+    `record_page` returns `RenderError::PageNotRecordable`; the caller falls back
+    to a direct render correct at any scale — **the same fallback `pdfce-cli`
+    already performs for the seven capability refusals.** The module's doc block
+    had already argued it: *"a display list that is subtly wrong is strictly
+    worse than no display list. Refusing is loud, cheap, and correct."*
+  - **★★ The threshold is `Mat64::needs_precise_paths` — the SAME predicate the
+    interpreter uses to decide it needs its `f64` route.** Below it both paths do
+    **identical `f32` arithmetic** and agree exactly; above it one switches to
+    `f64` and the other refuses. ⇒ **no scale exists at which they quietly
+    disagree.** A boundary **by construction**, not a compromise.
+  - **The test asserts both halves** — refused by name at `5 000`, **still
+    records at `4.0`** — *because a guard that refuses everything is not a
+    guard*, and it was **verified to bite by disabling the condition** (`R162`
+    applied to a refusal rather than to an absence).
+  - **No new counter and the metrics line stays at `90` keys**, which is itself
+    a ruling: *a refusal that costs performance is logged through
+    `PoisonReason`'s message; a refusal that costs fidelity is counted* (contrast
+    `decision 083`'s `subpixel_culled`).
+- **`1af75a1`** — **no Pass ID.** Repair of an edit that failed **silently**
+  inside `d8f3020`: a heredoc ate the shell snippet's line-continuation
+  backslash, so `tools/gen-scale-demo/README.md` kept its old hand-nudged
+  reproduction command **while the prose immediately around it said the drift was
+  fixed.** The command now uses a computed region and carries its measurement —
+  the box's centre lands at pixel **`(1100, 732)`** of a **2200 × 1467** raster
+  against a geometric **`(1100, 733)`**, where the same computed region
+  previously put it **76 px out horizontally and 288 px vertically**.
+
+**Decisions made this session:**
+
+- **★★★ Decision 084 MINTED** — *where a second rendering path cannot meet a
+  precision contract past some magnitude, it **refuses** on the **first** path's
+  own predicate and the caller falls back; the two never each pick a limit.*
+  **Parent: decision 081** (which gave the two paths one `f64` entry point for
+  region **geometry** and said nothing about **content**). Widens the display
+  list's refusal set from **capability** (*"this page contains an operator I
+  cannot record"* — a property of the DOCUMENT) to **capability-or-precision**
+  (*"this SCALE is one I cannot record truthfully"* — a property of the
+  REQUEST); a caller caching a refusal per page would now be wrong. **Ceiling
+  083 → 084; next free 085.**
+- **★★★★ `R211` AMENDED, `R216` NOT MINTED. Ceiling UNMOVED at `R215`.** Two
+  clauses added:
+  **(d)** where one path cannot meet the contract past some magnitude, **both
+  consult the SAME predicate** to decide where, and the losing path **refuses**
+  rather than approximating;
+  **(e)** the differential test guarding the contract **samples on both sides of
+  that predicate** — *it proves agreement only over the range it samples, and a
+  range is part of the claim.*
+- **★★ THE RULE JUDGEMENT, WITH ITS WARRANT, because the dispatch asked for it
+  explicitly and was honestly unsure whether it was one mechanism or two.**
+  - **Not `R215`.** `R215` binds the **target** and its mechanism is a **wrong
+    expected value**, whose failure mode is a **false alarm rejecting a correct
+    fix**. Here every expected value is **right**; the failure mode is the
+    **opposite** — a **silent pass over a broken system** — produced by the
+    **sampled domain**. `R215`'s own scope paragraph disclaims tests. **Two
+    mechanisms, not one.**
+  - **Not a new number.** The trigger condition is `R211`'s **opening sentence,
+    verbatim**, and `R211` **already names `replay_region`** as one of the two
+    call sites it was minted on. **This is not a new surface for `R211`; it is
+    the surface `R211` was minted on and did not finish.** Specifically **clause
+    (c) under-delivered**: it obliges a *"cannot disagree"* comment to **name the
+    test that would go red**, and here the test was **named, existed, ran, and
+    was green** — naming a test says nothing about the domain it samples. **A
+    rule whose remedy can be satisfied while the defect ships is incomplete**,
+    and the completion belongs in the rule.
+  - **Minting `R216` would split one mechanism across two numbers** — a reader
+    holding `R211` discharges it by naming a test; a reader holding `R216` has no
+    reason to consult `R211`'s asymmetric-narrowing analysis to learn **where**
+    to sample.
+  - **Not `R87`/`R162`/`R164` either — all three were satisfied.** The
+    instrument was pointed at the thing; the assertions could come out false and
+    did once asked; no verdict depended on a neighbour.
+  - **The honest cost, recorded:** clause (e) generalises **past precision** —
+    any parameterised differential test — and burying it in a precision rule
+    hides it. **Mitigated as `R211` mitigated its own declined sibling**: the
+    general form is filed as a fact in `D:/dev/rag/rust/`.
+- **★ ID ruling: a NEW ID (`74.10`), not an amendment to `74.7`, against the
+  dispatch's lean.** Three grounds: (1) `74.7` is **already filed as Shipped**
+  with a commit table and a ledger row, and growing a shipped entry makes the ID
+  a moving target (hard rules 1 and 2); (2) **`74.7` CREATED this defect**, and
+  folding the fix in destroys the sequence that is the lesson — *a precision fix
+  opened a precision divergence, the filing of `74.7` flagged it, `74.10` closed
+  it*; (3) they deliver different kinds of thing — `74.7` **raises** a ceiling,
+  `74.10` **refuses** past one. **A dated amendment on `74.7` points forward**,
+  the decision log's convention for a superseded entry.
+
+**Findings + decisions:**
+
+- **★★★ The `93 s` provenance, supplied by the engineer, and it corrects a
+  published ratio.** At `100 000×`: **`31 s`** = the same CAD region with
+  algorithm B disabled entirely (**the baseline**); **`93 s`** = the **rejected
+  device-space attempt**; **`1.3 s`** = shipped. ⇒ **`31 s → 1.3 s` = `23.8×` is
+  the speed-up** (the 232nd filing's headline, unaffected); **`93 s` against
+  `31 s` = `3×` is the rejected attempt's penalty**; and **`93 s → 1.3 s` =
+  `71.5×`, filed by the 232nd entry as a second speed-up "at `100 000×` zoom",
+  compares the shipped result against a REJECTED IMPLEMENTATION rather than
+  against a baseline.** Dated amendments appended in two places in `ROADMAP.md`.
+  ★ **The correction needed no new measurement, only the referent — because both
+  ratios were filed beside their operands (hard rule 10 (a)).** Had either been
+  filed as a bare *"`71.5×` faster"*, repairing the record would have meant
+  re-running a 93-second render.
+- **★★★ THREE SURVIVORS IN `tools/gen-scale-demo/README.md` §9 — reported, not
+  edited (this role does not touch `crates/` or `tools/`), and all three found by
+  READING the section** rather than by grepping or by inferring from the commit
+  message. The section was read **because** the failure `1af75a1` repairs is a
+  **silently lost edit**, and the only check for that is reading the artefact.
+  1. **★★★ `R215`'s founding wrong number has propagated forward AS A MEASURED
+     RESULT.** §9 reads *"The table above is superseded: **11 of 11 forms survive
+     at every scale tested**."* **The correct post-fix answer is `2 of 11` from
+     `1.25 × 10⁷` up** — the box plus the one molecule in frame; the other nine
+     leave the viewport and `Pass 74.4`'s `/BBox` cull removes them **exactly**
+     (ISO 32000-1 §8.10.1). Both the `74.7` Shipped entry and the 232nd
+     `SESSION_LOG.md` entry state `2` **and** state that `2` is correct.
+     **Dressing the wrong number as an outcome is strictly worse than filing it
+     as an expectation: an expectation invites checking and a result does not.**
+     Highest priority.
+  2. **★★ A positional reference now WRONG rather than broken — `R214`'s exact
+     species.** §9's fix notice says *"Everything **below** describes the
+     behaviour before that Pass … What follows is the evidence, not the current
+     state"*, and the **second half of the section describes the current state**
+     (the computed region, the `(1100, 732)` measurement, *"What changed"*, the
+     `1.6e9` result). **Repair at the referent.**
+  3. **★ The `93 s` figure is in `tools/` too, and there it is SELF-REFUTING.**
+     §9 reads *"deep zoom **23× FASTER** … went from **93 s to 1.3 s**"*.
+     **`93 / 1.3 = 71.5`, not `23`** — the ratio and its own operands disagree
+     **in one sentence** — and the correct before-figure is **`31 s`**. ★ Hard
+     rule 10 (a) paying for itself in a file nobody wrote it for.
+- **★★ The heredoc failure, offered by the dispatch as a dated instance for the
+  *"a correction is a claim"* family, recorded as one.** Fifth occurrence in a
+  week of what
+  `.claude/agent-memory/pdfce-engineer/feedback_windows_paths_need_literal_edits.md`
+  documents (the engineer's file; not edited here). ⇒ **an edit that silently
+  drops one hunk of a multi-hunk change is worse than one that fails loudly,
+  because the OTHER hunks land and lend the missing one their credibility.** The
+  check is **re-read the artefact, not the diff** — the diff showed exactly what
+  was applied and looked fine. ★ **This filing hit the same failure on its first
+  attempt**: the `bash` heredoc carrying the ROADMAP draft aborted with
+  *"unexpected EOF while looking for matching quote"*, and the entry was written
+  with a literal file write instead. **The prescription applies to this role
+  too.**
+- **★★ `RenderOptions` and `PoisonReason` are BOTH `#[non_exhaustive]` — VERIFIED
+  BY READING THE SOURCE, not relayed.** `crates/pdfce-render/src/font/mod.rs:427`
+  and `crates/pdfce-render/src/display_list.rs:362`. ⇒ **neither
+  `subpixel_culling` nor `ScaleBeyondF32` is source-breaking downstream**, and
+  §4.1 (R)'s optional-with-default rule applies unqualified with (T)'s refinement
+  **satisfied rather than assumed**. §4.1 (AB)'s *"Recorded as REPORTED, not as
+  READ"* paragraph is amended accordingly. **The 232nd filing was right to flag
+  it rather than assert it; a correction is a claim and this one names its
+  world-source.**
+
+**Still in flight:**
+
+- **Owed, reported to the engineer:** the **three `tools/gen-scale-demo/README.md`
+  §9 survivors** above, in priority order — the `11 of 11` claim first.
+- **`R215`'s retro-application**, carried forward unstarted from the 232nd
+  filing: any Pass filed with a *"required after"* column should be re-read
+  against the rule before that column is used as a gate. **★ `Pass 122.0` is
+  where both `R215` and `R211` clause (e) bite next** — its acceptance criterion
+  is *"byte-identical output at any core count"*, a differential contract over a
+  parameter, and **"any" is the word clause (e) is about.**
+- **Nothing is owed to Ken.** `(br)` stays closed; ceiling `(br)`, next free
+  `(bs)`.
+
+**For next session:**
+
+- **`docs/NEXT_SESSION.md` is rewritten by this filing.** Queue item 1 (*the
+  display-list replay path's precision — check this FIRST, it could be a live
+  defect*) is **discharged: it was one.**
+- **Backup and remote currency — CHECKED, not inferred (hard rule 8).**
+  `git remote -v` → `origin  https://github.com/KenM76/pdfce.git`.
+  `git rev-list --count origin/main..main` → **`18`** (was `15` one filing ago),
+  with the local remote-tracking ref at **`c24ad7a`** (2026-08-22 16:00 −0400);
+  **no `git fetch` was run**, so that is the tracking ref's position, not a live
+  query. `ls -lt D:\Dev\pdfce-backups\` → newest bundle
+  **`pdfce-20260817-v060.bundle`** (2026-08-17 20:34), `refs/heads/main` at
+  **`3c4c00e`** by `git bundle list-heads`; `git rev-list --count 3c4c00e..main`
+  → **`211`**, and `git merge-base --is-ancestor` confirms **`HEAD` is NOT in
+  that bundle**. ⇒ **the newest backup is 211 commits and six days behind
+  `HEAD`.** `git worktree list | wc -l` → **`9`**.
+- **Gates: 17 `tools/check-*` on disk (12 `.py` + 5 `.sh`), 16 runnable as bare
+  gates**, re-measured by `ls` and by running each. **Before this entry, 15 of 16
+  exit 0** and `check-commits-filed.py` exited **1**, naming exactly `d8f3020`
+  and `1af75a1`. **After: all 16 exit 0.** The 17th,
+  `check-image-colorspace-truth.py`, exits 1 bare **because it requires a
+  fixture-directory argument** — *"`check-*` on disk but not a gate"*, still
+  true. **`check-metrics-line-contract.py` → exit 0, `90 keys`, unchanged.**
+- **RAG files written by this filing:**
+  `D:/dev/rag/rust/two_paths_that_must_agree_share_the_predicate_that_decides_when_they_can.md`,
+  `D:/dev/rag/rust/a_differential_test_proves_agreement_only_over_the_range_it_samples.md`.

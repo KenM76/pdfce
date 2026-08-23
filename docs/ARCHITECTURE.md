@@ -4276,6 +4276,20 @@ entry point rather than a second `f64` implementation on the replay side, and
 is narrowed to `f32` *first*, exactly as `page_device_geometry` does, while the
 region's corners keep full `f64`.
 
+**★★ THAT SHARED ENTRY POINT COVERS REGION *GEOMETRY*, AND NOT PAGE *CONTENT* —
+the two are different quantities and the distinction is `R213`'s subject.**
+A recorded op stores its CTM as an `f32` `Transform`, and `replay_region`
+post-translates by the region's device origin **also in `f32`**, so the replay
+path does **not** carry the content-side `f64` precision `Pass 74.7` gave the
+interpreter. Since **`Pass 74.10`** (2026-08-23) `record_page` **refuses**
+rather than replaying at lower precision — `PoisonReason::ScaleBeyondF32`,
+thresholded on **`Mat64::needs_precise_paths`, the same predicate the
+interpreter uses to switch to its `f64` route** — and the caller falls back to a
+direct render correct at any scale. **Below the predicate both paths do
+identical `f32` arithmetic and agree exactly; above it one switches and the
+other refuses; no scale exists at which they quietly disagree.** See
+**decision 084** (§12) and `R211` clauses (d)/(e).
+
 **Numerical reach OF THE RETURNED VIEWPORT, measured (`Pass 74.2`):** a
 requested 800 × 600 viewport returns 800 × 600 out to **1 × 10¹² %** zoom;
 before the fix it returned **800 × 512** at 2.15 × 10⁸ % and **failed** above
@@ -4947,6 +4961,24 @@ no bump; per (T)'s refinement that holds only where the struct cannot be
 exhaustively constructed downstream. **Flagged to the engineer rather than
 asserted.**
 
+> **★★ AMENDED 2026-08-23 (233rd filing) — THE FLAGGED ITEM IS ANSWERED, AND IT
+> WAS ANSWERED BY READING THE SOURCE, NOT BY RELAY.**
+> **`RenderOptions` IS `#[non_exhaustive]`** — `crates/pdfce-render/src/font/mod.rs:427`
+> carries the attribute immediately above `pub struct RenderOptions`, and the
+> type's own doc block at line 416 says *"`#[non_exhaustive]` so later Passes can
+> add image, annotation and …"*. ⇒ **adding `subpixel_culling` is NOT
+> source-breaking for a downstream struct-literal construction**: an out-of-crate
+> caller cannot construct it exhaustively, so (R)'s optional-with-default rule
+> applies unqualified and (T)'s refinement is satisfied rather than merely
+> assumed. **No version bump is owed on this account.**
+> **Same question, same answer, for `PASS 74.10`'s new variant:** `PoisonReason`
+> is `#[non_exhaustive]` (`crates/pdfce-render/src/display_list.rs:362`), so
+> **`PoisonReason::ScaleBeyondF32` is not source-breaking either** — a downstream
+> `match` already required a wildcard arm.
+> **Sourced by reading those two files** (hard rule 10's corollary — *a
+> correction is a claim, and it names its world-source*), not from a commit
+> message and not from this document.
+
 #### ★ The part a signature cannot record: `RenderOptions` now carries FIDELITY, not only framing
 
 Every prior `RenderOptions` field describes **what to draw and where** — the
@@ -4985,6 +5017,30 @@ replays through `Canvas`. If recorded ops carry `f32` coordinates, the list is a
 **second rendering path at a different precision**, which is `R211`'s exact
 subject and decision **081**'s. This role could not tell which, and
 `FEATURES.md` row 202 is deliberately left unchanged until someone can.
+
+> **★★★ AMENDED 2026-08-23 (233rd filing) — IT WAS THE SECOND. THE OPEN ITEM
+> ABOVE IS RESOLVED, AND THE ANSWER WAS A LIVE DEFECT.**
+> **Recorded ops DO carry `f32` transforms**, and `replay_region`
+> post-translates by the region's device origin **also in `f32`**. So from
+> `PASS 74.7` until `PASS 74.10` (`d8f3020`, same day) pdfce had two rendering
+> paths that **agreed at ordinary scales and diverged at deep zoom** — half a
+> device pixel at recording scale `5 000`, `47 px` at `500 000`. `record_page`'s
+> own comment made deep zoom the **intended** use of a recording (*"a recording
+> allocates no raster, so the `MAX_PIXMAP_EDGE` ceiling does NOT apply here"*),
+> so nothing bounded it.
+> **The resolution is a refusal, and its architectural position is `decision
+> 084` (§12), with `081` as its parent:** `record_page` returns
+> `RenderError::PageNotRecordable` with the **new** `PoisonReason::ScaleBeyondF32`
+> above `Mat64::needs_precise_paths` — **the same predicate the interpreter uses
+> to decide it needs its `f64` route** — and the caller falls back to a direct
+> render, the fallback `pdfce-cli` already performs for the seven capability
+> refusals. **Signatures are unchanged**; the only public-surface delta is the
+> new `PoisonReason` variant, and that enum is `#[non_exhaustive]` (see the
+> amendment above), so it is not source-breaking.
+> **`FEATURES.md` row 202 is no longer "left unchanged until someone can" — it
+> is decided**, and now names both quantities: the `f64` entry point (region
+> **geometry**, `decision 081`, still exactly right) and the `f32` recording
+> (**content**, refused past the predicate).
 
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
@@ -24607,3 +24663,122 @@ free 072.**
   constrains an API shape rather than naming a condition a reader must detect.
 
   **Ceiling moves 082 → 083; next free 084.**
+
+---
+
+- **2026-08-23 — Decision 084. WHERE A SECOND RENDERING PATH CANNOT MEET A
+  PRECISION CONTRACT PAST SOME MAGNITUDE, IT **REFUSES** ON THE *FIRST* PATH'S
+  OWN PREDICATE AND THE CALLER FALLS BACK — THE TWO NEVER EACH PICK A LIMIT.**
+  Filed with `Pass 74.10` (`d8f3020`), 233rd filing. **Parent: decision 081**
+  (a `DisplayList` carries the page box and rotation so region geometry has one
+  `f64` entry point). **Entirely inside `pdfce-render`; no writer path, so §5's
+  round-trip invariant is not engaged, and §3's GUI-core separation is
+  untouched.**
+
+  **(a) The situation this decides, which `081` did not reach.** `081` gave the
+  fresh-render path and the display-list replay path **one shared `f64` entry
+  point for region GEOMETRY**. It said nothing about **CONTENT**, and `Pass
+  74.7` then moved the interpreter's content path to `f64` (`Mat64`, plus path
+  differencing) while **a recorded op continued to store its CTM as an `f32`
+  `Transform`**, with `replay_region` post-translating by the region's device
+  origin **also in `f32`**. **A recording has no `f64` to keep** — the precision
+  is destroyed at record time, so `081`'s remedy (share the implementation) is
+  not available: there is nothing to share.
+
+  **Measured, so the decision is not taken on a hunch** — letter page, the
+  translation carried in each op's CTM:
+
+  | recording `scale` | translation | error in device pixels |
+  |---:|---:|---:|
+  | `5 000` | `~4 × 10⁶` | **half a device pixel** |
+  | `500 000` | `~4 × 10⁸` | **47 px** |
+
+  **And deep zoom is the INTENDED use of a recording**, which is what makes this
+  a defect rather than an untested corner: `record_page`'s own comment reads *"a
+  recording allocates no raster, so the `MAX_PIXMAP_EDGE` ceiling does NOT apply
+  here — that is the point of recording at a deep zoom."* **Nothing bounded it.**
+
+  **(b) The decision — refuse, do not approximate.** `record_page` returns
+  `RenderError::PageNotRecordable` with a **new** `PoisonReason::ScaleBeyondF32`,
+  and the caller falls back to a direct render that is correct at any scale —
+  **the same fallback `pdfce-cli` already performs for the seven capability
+  refusals** (`sh`, shading patterns, overprint composites, soft masks …). **No
+  new caller shape and no new failure mode for a consumer to learn**; only the
+  *reason* is new. The module's doc block had already argued exactly this before
+  the defect existed: *"a display list that is subtly wrong is strictly worse
+  than no display list. Refusing is loud, cheap, and correct."*
+
+  **★ This widens the refusal set from CAPABILITY to CAPABILITY-OR-PRECISION**,
+  and that is the part a downstream reader must take on board. Before `74.10`,
+  *"the recorder refused"* meant **"this page contains an operator I cannot
+  record"** — a property of the DOCUMENT. It now also means **"this SCALE is one
+  I cannot record truthfully"** — a property of the REQUEST. A caller that
+  treated a refusal as *"this document is unusual"* and cached that verdict per
+  page would now be wrong, because the same page records fine at a lower scale.
+
+  **(c) ★★ THE CONSTRUCTION, WHICH IS THE REUSABLE HALF: THE THRESHOLD IS A
+  *SHARED PREDICATE*, NOT A CHOSEN CONSTANT.** The refusal fires on
+  **`Mat64::needs_precise_paths` — the SAME predicate the interpreter consults
+  to decide whether it needs its `f64` route.** Therefore:
+
+  - **below it**, both paths perform **identical `f32` arithmetic** and agree
+    exactly — the recording is admissible precisely because the thing it must
+    match is itself `f32`; and
+  - **above it**, one path switches to `f64` and the other **refuses**.
+
+  ⇒ **No magnitude exists at which the two quietly disagree.** That is the
+  property `R211` demands of a second rendering path, obtained **by construction
+  rather than by testing.**
+
+  **★ Why this is stronger than two limits that happen to match, stated because
+  the weaker version is the one a hurried edit produces.** Independently-chosen
+  constants can agree today and drift apart in either direction later, and **the
+  band between them is a magnitude range where one path is precise, the other is
+  not, and both believe they agree.** That band emits nothing — no error, no
+  counter, no red test — because it is defined by the **absence** of a
+  disagreement anybody checks for. A shared predicate makes the band **unable to
+  open**: one number, one place it is decided. Generalised as `R211` clause (d)
+  and escalated to
+  `D:/dev/rag/rust/two_paths_that_must_agree_share_the_predicate_that_decides_when_they_can.md`.
+
+  **(d) Why no counter, since every other refusal in this crate has one.** A
+  refusal that **falls back to a correct render** is disclosed through
+  `PoisonReason`'s own message — the channel `081` established — and the operator
+  gets the right picture either way. **The metrics line stays at `90` keys.**
+  Contrast `decision 083`: `subpixel_culled` needs a key because that refusal
+  **changes the picture**. ⇒ *a refusal that costs performance is logged; a
+  refusal that costs fidelity is counted.*
+
+  **(e) The test, and why it asserts two things.** The regression test asserts
+  **both** halves — **refused by name at scale `5 000`, and still records at
+  `4.0`** — *because a guard that refuses everything is not a guard*, and it was
+  **verified to bite by disabling the condition**. That is `R162`'s obligation
+  (establish the positive case over the same container) applied to a refusal
+  rather than to an absence.
+
+  **(f) ★ The diagnostic record, because it is the part that generalises to
+  review.** The existing differential oracle,
+  `crates/pdfce-render/tests/region_matches_full_page.rs`, **runs at scales up to
+  `220`; the divergence begins near `530`.** Every assertion in it is correct,
+  non-vacuous and independent — **it never asked at a magnitude where the answer
+  changed.** ⇒ *a differential test proves agreement only over the range it
+  samples.* Minted as `R211` clause (e), with the general form filed in
+  `D:/dev/rag/rust/a_differential_test_proves_agreement_only_over_the_range_it_samples.md`.
+
+  **(g) What this decision does NOT do.** It does **not** make the recorder
+  `f64` — the recorded representation stays `f32` and should, because widening it
+  would multiply the `~240 B` per-op footprint for a case that falls back
+  correctly today. It does **not** change the interpreter, `--region`, or any
+  cull. And it does **not** make refusal the general answer to a precision
+  contract: refusal is correct **here** because a correct fallback exists and is
+  already wired. Where no fallback exists, `R211` clauses (a)–(c) still govern.
+
+  **Body sections updated in this same filing:** §4.1 entry **(AB)** gains two
+  dated amendments — one resolving its own *"genuine open item, reported not
+  resolved"* about the replay path's precision, and one recording that
+  `RenderOptions` **and** `PoisonReason` are both `#[non_exhaustive]`, **verified
+  by reading `crates/pdfce-render/src/font/mod.rs:427` and
+  `crates/pdfce-render/src/display_list.rs:362`** rather than relayed. **§3 and
+  §5 are not engaged**, for the reasons stated at the head of this entry.
+
+  **Ceiling moves 083 → 084; next free 085.**
