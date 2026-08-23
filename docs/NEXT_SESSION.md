@@ -3,7 +3,7 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. Overwrite it once acted on.
 
-**UPDATED 2026-08-23 by `pdfce-librarian` (two-hundred-and-thirty-seventh
+**UPDATED 2026-08-23 by `pdfce-librarian` (two-hundred-and-thirty-eighth
 filing). ★ THIS IS THE SESSION-CLOSING PASS FOR 2026-08-22/23 — the last filing
 of the run.** §A is written so a **cold reader needs nothing else**: no prior
 conversation, no scrollback, no other document. **§A is self-contained** — the
@@ -13,8 +13,9 @@ sections after it carry detail and evidence, and §A does not depend on them.
 
 ## §A — COLD START: everything you need, in one screen
 
-**`HEAD` is `a68498b`. The working tree is clean. All 16 bare-runnable gates
-exit 0. Nothing is blocked on anybody. No decision is waiting on Ken except the
+**`HEAD` is `bc6c818`. The working tree holds this filing's docs-only edits and
+nothing else (`git status --short` → three `docs/` files) — it is clean once they
+are committed. All 16 bare-runnable gates exit 0. Nothing is blocked on anybody. No decision is waiting on Ken except the
 two acts that are his by definition — pushing and cutting a backup.**
 
 ### What this run built (2026-08-22 → 2026-08-23)
@@ -35,25 +36,34 @@ landed:
 
 **Also this run, with no Pass ID:** `ea413a4` (the `render-page` metrics contract
 made whole and gated — `87 of 87`, now `90`), `1af75a1`, `4af0c08`, `641deb9`,
-`39b449f`, `a68498b` (six rounds of repair on **one** README — see §5), and
-`1a60e73` (librarian hard rule 11 amended).
+`39b449f`, `a68498b`, `bc6c818` (**the repair sequence against ONE README, now
+finished** — see the boxed section below and §5), and `1a60e73` (librarian hard
+rule 11 amended).
+
+★ *No round count is given here on purpose. Two documents number these rounds
+differently — `ROADMAP.md`'s practice table counts from `d8f3020`, the README's
+own note counts from the first correction — and an ordinal is a claim nobody
+maintains. The sequence is what matters; see the boxed section below.*
 
 ### What is OPEN, in one list
 
-1. **Four owed edits in `tools/gen-scale-demo/README.md`** — all prose, all the
-   engineer's, **§5 has the exact repair for each.** The one that matters is
-   **§9's *"three post-fix columns"***: the table has **four** columns of which
-   **two** are post-fix, and the third item the sentence enumerates is a prose
-   note, not a column.
-2. **`R214`'s positional-reference gate** — recommended, unbuilt, **baseline
-   unmeasured**. Measure, repair, then wire. **Never wire it red**
+**★ The demo-README repair list is EMPTY.** All four owed edits are discharged by
+`bc6c818` — three of them by **deleting** the sentences that carried them. It is
+the first time since the 233rd filing that this list has had nothing on it. **§4
+item 1 and §5's survivor list are superseded and marked as such; do not work
+them.**
+
+1. **`R214`'s positional-reference gate** — recommended, unbuilt, **baseline
+   unmeasured**. A grep over a closed vocabulary (*of those*, *the above*, *this
+   slice*, *the next slice*, *the former*, *the latter*, *as above*, *see below*)
+   in doc comments. **Measure, repair, then wire. Never wire it red**
    (`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`).
-3. **`R215`'s retro-application** — unstarted for a **sixth** filing. Any Pass
+2. **`R215`'s retro-application** — unstarted for a **seventh** filing. Any Pass
    filed with a *"required after"* column must be re-read against `R215` before
    that column is used as a gate. Runs over `docs/` **and both RAG tiers**.
-4. **The engineering queue** — §4, unchanged in order: `97.1g`, `97.1k`,
-   `122.2`, `122.1`, `122.0` (threading, the operator's own request), `119.1`,
-   `122.3`.
+3. **The engineering queue** — §4 items 3 onward, unchanged in order: `97.1g`,
+   `97.1k`, `122.2`, `122.1`, `122.0` (threading, the operator's own request),
+   `119.1`, `122.3`.
 
 ### ★★ THE TWO ITEMS THAT ARE KEN'S, AND THEY ARE THE ONLY THINGS AWAITING HIM
 
@@ -61,57 +71,96 @@ Both are his acts by definition, not an agent's. **Both figures below were
 measured on 2026-08-23 by the commands named beside them — re-run them, do not
 quote them.**
 
-- **PUSHING.** `git rev-list --count origin/main..main` → **`28`**. The local
+- **PUSHING.** `git rev-list --count origin/main..main` → **`30`**. The local
   `origin/main` tracking ref is still at **`c24ad7a`**; **no `git fetch` was
   run**, so that is the tracking ref's position, **not a live query of the
   remote**. Pushing needs a **current** go-ahead (`CLAUDE.md` rule 8), and
   **the repository is public — an agent must not push.**
 - **CUTTING A BACKUP.** The newest bundle in `D:/Dev/pdfce-backups/` is
   `pdfce-20260817-v060.bundle` (2026-08-17 20:34), whose `refs/heads/main` is
-  **`3c4c00e`**. `git rev-list --count 3c4c00e..main` → **`221`**, and
-  `git merge-base --is-ancestor` confirms **`HEAD` is not in it**. ⇒ **221
+  **`3c4c00e`**. `git rev-list --count 3c4c00e..main` → **`223`**, and
+  `git merge-base --is-ancestor` confirms **`HEAD` is not in it**. ⇒ **223
   commits and six days behind.** `v0.7.0`'s tag is in **no** bundle on disk.
 
 ### Ledger at end of session
 
 Next free Pass in the `74` family **`74.11`**; `122.4` the next free `122`;
 **`97.1g` reserved and unbuilt**. Decisions **`084`**, next free **`085`**.
-Standing rules **`R215`**, next free **`R216`** — `R214` was amended today with
-clause (d) and **no rule was minted by the closing filing**. Operator questions
-**`(br)`, CLOSED**, next free **`(bs)`**. `render-page` metrics line at **`90`
-keys**. **17 `tools/check-*` on disk, 16 runnable as bare gates.** Filing
-ordinal **237**.
+Standing rules **`R215`**, next free **`R216`** — `R214` was amended on 2026-08-23
+with clause (d), and **the two closing filings each declined a mint**. Operator
+questions **`(br)`, CLOSED**, next free **`(bs)`**. `render-page` metrics line at
+**`90` keys**. **17 `tools/check-*` on disk, 16 runnable as bare gates.** Filing
+ordinal **238**.
 
 ### ★★★★★ The one thing to read before repairing any document here
 
-**Six rounds of repair against one README (`4af0c08` → `a68498b`) produced a
-measured result that generalises: EACH ROUND'S REPAIR SEEDED THE NEXT ROUND'S
-DEFECT.** Three consecutive rounds ended with a **quantifier defect introduced by
-the repair of a quantifier defect**. And the closing filing's sweep of its **own**
-documents found **four** instances of the same shapes it had spent the day
-filing about — including **the wrong denominator that caused the current
-survivor, published in the RAG finding written to warn about this mechanism.**
+**A sequence of repair commits ran against one README, ending with `bc6c818`,
+which DELETED the annotation layer instead of correcting it — and that is what
+stopped the sequence.** The measured result:
 
-⇒ **A stable defect class after repeated rounds is evidence that the repair
-process is generating its own input, not evidence that the document is
-converging.** Full text: `ROADMAP.md`'s *Update protocol* →
-*"How you know a document is converging"*, and
-`D:/dev/rag/rust/the_defect_class_left_after_repeated_repair_rounds_is_the_stopping_signal.md`.
-**Practical form: when you repair a sentence, re-read the sentence you wrote —
-its quantifiers against the set, its references against the target — before you
-commit it.** That is `R214` (c) and (d); nothing new is needed.
+- **Zero defects were ever found in the engineering content.** The arithmetic,
+  the three `f32` limits, the drift formula and the measurement table's values
+  were correct from the first round and never moved.
+- **Every defect lived in a sentence ABOUT a previous correction** — a running
+  annotation of the file's own edit history, in which each new sentence was an
+  unchecked claim about a **set**, a **position** or a **count**.
+- **`n=4` rounds emitted a fresh defect of the class they were repairing**, and
+  the fourth was in the **librarian's own correction footer**.
+
+⇒ **A DOCUMENT THAT ANNOTATES ITS OWN CORRECTIONS HAS MADE ITS CORRECTION
+HISTORY PART OF ITS CONTENT — and that part has no tests, no measurements and no
+reader who would notice.**
+
+★★ **The sharpening, which is the part you act on: the hazard is
+SELF-REFERENCE, not HISTORICITY.** *"Three post-fix columns"*, *"§9's last
+paragraph"*, *"Everything in this section"*, *"two lines above"* all depend on
+the document's **current** contents and must be re-verified on every edit.
+*"The acceptance criterion was `11 of 11`"* is **static** — true when written,
+unfalsifiable by any later edit. **A per-form rule cannot close the hole**,
+because each names one syntactic form and the supply of forms is not enumerable.
+**Placement is enumerable; syntax is not.**
+
+**⇒ WHAT TO DO, in three lines.**
+**(1) Edit history goes in `ROADMAP.md` and `SESSION_LOG.md`**, which are
+append-only, dated, and read by someone looking for exactly that. **The artefact
+is for the artefact.**
+**(2) Prefer DELETION to a rewording** — it is the only repair that emits no new
+claim, and it discharged three of the four outstanding items at once.
+**(3) An ORDINAL is a claim; a SEQUENCE is not. A DISTANCE is a claim; a RELATION
+is not.** Write *"first values, then pointers, then quantifiers"*, never
+*"round 3"*; write *"is falsified by it"*, never *"two lines above"*.
+
+Full text: `ROADMAP.md`'s *Update protocol* → *"How you know a document is
+converging"* (original + two amendments), and
+`D:/dev/rag/rust/a_document_that_annotates_its_own_corrections_has_made_its_edit_history_part_of_its_content.md`
+(new 2026-08-23), whose sibling
+`D:/dev/rag/rust/the_defect_class_left_after_repeated_repair_rounds_is_the_stopping_signal.md`
+carries the review-instrument half.
 
 ---
 
 ### What the last filing decided, in four lines
 
-**`a68498b` filed with NO Pass ID** — the 236th filing's four survivors are all
-discharged, and **the repair emitted three more**, one of them a **wrong column
-count**. **No rule minted** (declined on coverage, not on `n`: `R214` (c)+(d)
-already bind on a repair's own sentence). **`ROADMAP.md`'s convergence practice
-is AMENDED** — its *"no wrong values left"* component is falsified, its class
-ladder retired, its counter-caution promoted to the main finding at `n=3`.
-**Ceiling unmoved at `R215`; `R216` still free; §12 stays at `084`.**
+**`bc6c818` filed with NO Pass ID** — sixth consecutive commit in this family to
+get that disposition. **All four owed README repairs discharged**, three by
+deletion. **NO RULE MINTED and `R214` NOT amended** — the finding prescribes
+**placement**, not a fifth way of writing a self-referential claim, and it is
+`n=1` document; the convergence practice in `ROADMAP.md`'s *Update protocol* is
+amended a second time instead, **with a promotion trigger written into it (a
+second document that grows the same layer ⇒ mint it)**. **Ceiling unmoved at
+`R215`; `R216` still free; §12 stays at `084`.** ★ **One new RAG file and one
+amended.**
+
+★ **The closing filing also swept its own documents and found three defects in
+them.** The strongest: the previous filing's correction footers claimed two
+sentences sat *"two lines"* apart when they are **35** and **16** apart, at
+**five sites across two documents** — **all five repaired, by deleting the
+distance rather than re-measuring it.** ★★ **And the third was found only because
+the draft sentence saying that shape was absent got checked instead of quoted** —
+a *"the only `column` hits are …"* universal, wrong about one of seven, carried by
+three consecutive filings **because it is attached to a TRUE conclusion and so
+was never re-read**. ⇒ *nothing in an append-only record reviews the reviewer*,
+and that is now a measured cost rather than an aphorism.
 
 *(The 233rd filing's rewrite is preserved below and still current for
 `PASS 74.10`: `decision 084` minted, `R211` amended with clauses (d) and (e),
@@ -294,8 +343,16 @@ operator questions ceiling **`(br)`, CLOSED**, next free **`(bs)`**;
 shipped, and the display-list precision question turned out to be a live defect
 and is fixed. **Nothing in this queue is blocked on anybody.**
 
-1. **★ FOUR SMALL REPAIRS LEFT IN `tools/gen-scale-demo/README.md`, all about
-   SCOPE and REFERENCE, and NOT ONE OF THEM IS A NUMBER.** The 235th filing's
+1. **~~★ FOUR SMALL REPAIRS LEFT IN `tools/gen-scale-demo/README.md`~~ — ★★★★★
+   DISCHARGED 2026-08-23 BY `bc6c818`. DO NOT WORK THIS ITEM.** All four are
+   gone: three of them because the sentences that carried them were **deleted**,
+   and the fourth because its enumeration was replaced by a conditional that
+   checks out against all three of §10's before-figures. **The list below is kept
+   as the record of what was owed**, per the append-only convention and
+   `R215` (d) — it is history, not work. **The demo README's repair list is
+   empty.** See `ROADMAP.md`'s `bc6c818` entry.
+
+   ~~The 235th filing's
    two are **discharged** (`39b449f`); the 236th found four more by reading the
    result. **Full text and the exact repair for each is in §5.** In one line
    each: **(A)** §10's scope sentence *"Everything in this section describes
@@ -304,9 +361,12 @@ and is fixed. **Nothing in this queue is blocked on anybody.**
    **(B)** §9's *"the sentence above it"* has no written antecedent; **(C)** §9's
    new tables sentence carries a universal **and** an existential hedge over a
    set of **one**, and omits the `correct` column; **(D)** §10 names its target
-   *"§9's forms-rendered table"* — a label deleted for being wrong.
-   ★ **The theme: the split bought immunity to POSITIONAL drift and NOT to
-   OVER-SCOPING.** A heading-bound claim is still a claim about a set.
+   *"§9's forms-rendered table"* — a label deleted for being wrong.~~
+   ★ **The theme, which outlived the items: the split bought immunity to
+   POSITIONAL drift and NOT to OVER-SCOPING.** A heading-bound claim is still a
+   claim about a set. ★★ **And the theme after that one, which is why the items
+   are gone rather than repaired: every defect across all seven rounds lived in a
+   sentence about a previous correction, so the layer was deleted.** See §A.
 2. **Build `R214`'s positional-reference gate** — a grep over a closed
    vocabulary (*of those*, *the above*, *this slice*, *the next slice*, *the
    former*, *the latter*, *as above*, *see below*, *the previous field*) in doc
@@ -422,6 +482,19 @@ visible at three of the four sites, per `R215` (d)** — the fourth was a wrong
 Four survivors owed, all in `tools/`, all the engineer's, all reported and none
 edited.** Found by reading `a68498b`'s **result**, not its diff — the method that
 has now found survivors four filings running.
+
+> **★★★★★ ALL FOUR DISCHARGED 2026-08-23 BY `bc6c818` (238th filing) — THIS LIST
+> IS HISTORY, NOT WORK.** Survivors 1, 2 and 4 are **gone because the sentences
+> carrying them were DELETED** (`grep post-fix` over the file → **zero hits**;
+> live occurrences of *"forms-rendered"* → **1 → 0**, leaving only the preserved
+> evidence). Survivor 3's enumeration is replaced by a **conditional** —
+> *"Where a before-figure appears here it is labelled as one"* — **true of all
+> three of §10's before-figures**, and the fourth falsifying passage was deleted
+> too, closing the gap from both ends. **The list is kept per `R215` (d)** as the
+> record of what was owed. ★★ **Note the disposition: three of four were closed
+> by NO SENTENCE rather than a better one — a deletion is the only repair that
+> emits no new claim, which is why round 7 is the first to close its owed list
+> without opening one.** See §A and `ROADMAP.md`'s `bc6c818` entry.
 
 1. **★★★★ §9's *"THREE POST-FIX COLUMNS"* — A WRONG COUNT, AND THE THIRD
    CONSECUTIVE GENERATION OF A QUANTIFIER DEFECT INSIDE A QUANTIFIER REPAIR.**
@@ -707,19 +780,19 @@ filing that minted clause (d). Wrong wording kept per `R215` (d).)*
 **All four figures below were MEASURED on 2026-08-23 by the commands named
 beside them (hard rule 8). Re-run them; do not quote these lines.**
 
-- **`origin/main` is at `c24ad7a`, and `main` is `28` commits ahead** —
+- **`origin/main` is at `c24ad7a`, and `main` is `30` commits ahead** —
   `git remote -v` → `origin  https://github.com/KenM76/pdfce.git`;
-  `git rev-list --count origin/main..main` → **`28`** (re-measured by the
-  237th filing; was `26` one filing ago, `24` two ago). **No `git fetch` was
+  `git rev-list --count origin/main..main` → **`30`** (re-measured by the
+  238th filing; was `28` one filing ago, `26` two ago). **No `git fetch` was
   run**, so that is the local remote-tracking ref's position, **not a live query
   of the remote.** Pushing is the operator's act and needs a current go-ahead
   (`CLAUDE.md` rule 8). **The repository is public, so anything committed is
   published by default.**
-- **Backups are `221` commits and six days behind `HEAD`** (re-measured by the
-  237th filing; was `219` one filing ago, `217` two ago). Newest bundle
+- **Backups are `223` commits and six days behind `HEAD`** (re-measured by the
+  238th filing; was `221` one filing ago, `219` two ago). Newest bundle
   `pdfce-20260817-v060.bundle` (2026-08-17 20:34) with `refs/heads/main` at
   **`3c4c00e`** (by `git bundle list-heads`);
-  `git rev-list --count 3c4c00e..main` → **`221`**;
+  `git rev-list --count 3c4c00e..main` → **`223`**;
   `git merge-base --is-ancestor` confirms **`HEAD` is NOT in that bundle**.
   `v0.7.0`'s tag is in no bundle on disk. **Cutting one is the operator's
   call** — and it is, alongside pushing, one of the only two outstanding items
