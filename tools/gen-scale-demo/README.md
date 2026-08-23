@@ -316,13 +316,22 @@ made the difference measurable.** Two `f32` limits sit under the content:
 Measured, on the box's own molecules, framing a 1600 px viewport on the
 water molecule:
 
-| scale | forms rendered of 11 |
-|---|---|
-| 2 000 000 | 11 |
-| 5 000 000 | 11 |
-| 12 500 000 | 7 |
-| 25 000 000 | 3 |
-| 50 000 000 | 1 (the box only) |
+| scale | before | after | correct |
+|---|---|---|---|
+| 2 000 000 | 11 | 11 | 11 |
+| 5 000 000 | 11 | 11 | 11 |
+| 12 500 000 | 7 | **2** | **2** |
+| 25 000 000 | 3 | **2** | **2** |
+| 50 000 000 | 1 (the box only) | **2** | **2** |
+
+★ **The "correct" column is not `11` all the way down, and this table
+originally implied it was** — its header read *"forms rendered of 11"*,
+which quietly makes 11 the target at every row. It is not. Above
+`1.25e7` the viewport is small enough that only the box and **one**
+molecule are in it, and `Pass 74.4`'s exact `/BBox` cull removes the other
+nine *by design*. A fix that produced 11 there would have been a
+regression, so the obvious-looking acceptance criterion was one that only
+a broken build could meet. See standing rule `R215`.
 
 Confirmed **not** to be the Form XObject path and **not** the `Pass 74.4`
 cull: a synthetic page with the same square drawn three ways — absolute
@@ -369,10 +378,10 @@ Measured on exactly that command: the box's centre falls at pixel
 horizontally and 288 px vertically** — which is where the "just nudge it"
 instinct came from, and why the nudge not working was the clue.
 
-⇒ **That was the state on 2026-08-22.** `Pass 74.7` took it the next day,
-and everything above is now the record of a solved problem rather than a
-live limitation — kept because how the ceiling was found is the more
-useful half.
+⇒ **That was the state on 2026-08-22.** `Pass 74.7` took it the next day.
+Everything from the top of this section down to here is the record of a
+solved problem — kept because how the ceiling was found is the more useful
+half. **What follows describes the current behaviour.**
 
 **What changed.** The CTM is carried in `f64` through content-stream
 composition and narrowed only at the leaf, which fixes limit 2. Limit 1 is
@@ -382,14 +391,36 @@ differencing in `f64`, so a page coordinate never has to survive being
 narrowed. Ordinary rendering takes neither route and pays nothing.
 
 **A single water molecule now renders sharply at a scale of `1.6e9` —
-about 190 billion percent.** The table above is superseded: 11 of 11 forms
-survive at every scale tested, and the "forms rendered" counts in it are
-the pre-fix measurement.
+about 190 billion percent.**
 
-★ **And the part nobody predicted: the same change made deep zoom 23×
-FASTER.** A stroke-heavy CAD region at 100 000× went from 93 s to 1.3 s.
+★★ **And the count in the table above is superseded by `2`, not by `11`.**
+This paragraph said "11 of 11 forms survive at every scale tested" until
+2026-08-23, and that is **the same wrong number the table itself carried**,
+restated as a measured result. **Two** is correct from `1.25e7` upward: the
+box plus the one molecule actually in frame. The other nine are removed by
+`Pass 74.4`'s exact `/BBox` cull, which is not a defect and does not go
+away — so `11 of 11` was never achievable and a change that produced it
+would have been a bug.
+
+Note which direction the error travelled, because it is the reason this
+correction is starred twice. The number began as an **expectation** in a
+roadmap table, was identified there as wrong, was recorded correctly in
+two other documents on the same day — and then reappeared **here**, in
+prose, as an outcome. *An expectation invites checking; a result does
+not.* That is standing rule `R215`, propagating forward past its own
+minting.
+
+★ **The part nobody predicted: the same change made deep zoom 23× faster.**
+A stroke-heavy CAD region at 100 000× went from **31 s to 1.3 s**.
+
+The figure `93 s` appears elsewhere for the same region and is **not** the
+baseline: it is the **rejected** device-space attempt, which was three
+times slower than doing nothing. Quoting `93 → 1.3` gives `71.5×`, which
+measures the shipped code against a discarded draft rather than against
+what was there before. The honest ratio is **23.8×**.
+
 Deep zoom was never slow *because* it was imprecise — it was slow for the
-*same reason*, large magnitudes reaching a rasteriser that flattens curves
+*same reason*: large magnitudes reaching a rasteriser that flattens curves
 to a tolerance measured in the path's own units. One cause, two symptoms,
 and only the precision one was ever attributed correctly.
 
