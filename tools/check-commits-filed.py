@@ -79,6 +79,60 @@ WHAT IS SKIPPED, AND WHY EACH EXCLUSION IS PRINCIPLED
    the whole of the 2026-08-11 correction: a mixed commit is precisely where
    code hides.
 
+3. **THE TIP COMMIT — the one being tested — is DEFERRED, not failed.**
+   Added 2026-08-24, and it is exclusion 1's own argument applied one step
+   further out. Exclusion 1 says a filing commit cannot cite its own hash,
+   so requiring it would make the gate unsatisfiable by construction. That
+   is equally true of *any* code commit at the moment of its own CI run:
+   **its filing is necessarily a LATER commit, which does not exist yet.**
+
+   What that cost, measured on 2026-08-23: **CI had been red for FOURTEEN
+   consecutive runs on this one step**, last green `32493456093`. Two
+   different things were producing that red and the record conflated them:
+
+   | cause | example | is it real debt? |
+   |---|---|---|
+   | the tip cannot cite itself | run `32679353296` at `08a88bd`, `32520914981` at `6a2c13f`, `32595460670` at `c24ad7a` — **the only hash printed was the tip** | **no — unsatisfiable** |
+   | code pushed before its filing | run `32586077737`: tip **plus** `71f7055` and `bd9844d`, both older, both genuinely unnarrated | **yes — the gate working** |
+
+   Only the first is structural. The second is transient debt that clears
+   the moment the librarian files, and it stays a hard failure here.
+
+   ★ **THE CONSEQUENCE THAT MATTERS MOST IS NOT THE RED ITSELF.** A gate
+   whose output is constant carries no information, and everyone who sees
+   it learns to skip it — the exact failure `check-ui-strings.sh`'s header
+   records (an inline CI grep red on 140 hits for so long it was concealing
+   a genuine violation) and the exact reason
+   `ci_gate_red_at_baseline_enforces_nothing.md` exists. **Fourteen runs of
+   red meant fourteen runs during which no OTHER job's failure would have
+   been noticed either**, because the run badge was already red.
+
+   ★★ **AND IT DISSOLVES THE RELEASE HAZARD AT THE ROOT.**
+   `tools/verify-release.py` asks *"is CI green at the tagged commit?"*, so
+   a tag on a code commit could never satisfy it, while `v0.7.0`'s tag
+   happened to land on a librarian filing commit and passed **by accident
+   of what was `HEAD` at tagging time**. The remedy on record was an
+   ordering — *file first, watch CI, then tag* — and an ordering is a thing
+   somebody must remember. It had already failed once: `v0.7.0` got it
+   right by discipline and `v0.8.0`, the very next release, regressed
+   immediately. **A rule that lives in a memory of an ordering is not a
+   fix.** With the tip deferred, a release tag on a code commit is green
+   whenever the history behind it is filed, and nobody has to remember
+   anything.
+
+   **What is NOT exempted, so this is not read as a weakening:** the tip is
+   deferred by exactly ONE commit, not forgiven. The moment anything else
+   lands it stops being the tip and is checked like everything else. The
+   only permanently-unchecked state is *"the final commit in the project's
+   entire history is code and was never filed"*, which any subsequent
+   commit ends. And the deferral is **printed on every run, in both the
+   clean and the failing path** — it is disclosed, never silent, which is
+   this project's rule 4 applied to its own tooling.
+
+   `--strict-tip` restores the old behaviour for a caller that genuinely
+   wants it (a librarian's final self-check after filing, where the tip IS
+   the filing and should cite the code behind it).
+
 THE RATCHET, AND WHY IT IS NOT A WEAKENING
 ------------------------------------------
 Eleven commits were already unfiled when this gate was written. A gate
@@ -100,12 +154,14 @@ false-green shape R106 has been amended four times over.
 
 EXIT CODES
 ----------
-0  clean — every code commit outside the baseline is cited in the record.
+0  clean — every code commit outside the baseline, EXCEPT THE TIP, is cited
+   in the record. A deferred tip is printed and does not change this.
 1  one or more unfiled; each printed with its date and subject.
+2  refused — shallow clone, so commit classification would be meaningless.
 
 USAGE
 -----
-    python tools/check-commits-filed.py [--since 2026-08-01]
+    python tools/check-commits-filed.py [--since 2026-08-01] [--strict-tip]
 """
 
 from __future__ import annotations
@@ -199,6 +255,18 @@ def main() -> int:
     # "clean" most reliably when there is most to find. 0.5 s over 323
     # commits buys nothing worth that.
     ap.add_argument("--since", default="")
+    # Restores the pre-2026-08-24 behaviour of demanding that the tip commit
+    # cite itself. Exists for the one caller that can actually satisfy it: a
+    # librarian running the gate AFTER writing the filing, where the tip IS
+    # the filing and the code behind it is what must be cited. Every other
+    # caller -- CI on a push, a developer mid-session -- is asking a commit to
+    # reference a commit that does not exist yet.
+    ap.add_argument(
+        "--strict-tip",
+        action="store_true",
+        help="also require the tip commit itself to be cited "
+        "(see docstring exclusion 3)",
+    )
     args = ap.parse_args()
 
     # ★ REFUSE TO RUN ON A SHALLOW CLONE.
@@ -261,7 +329,17 @@ def main() -> int:
     if args.since:
         log_args.append(f"--since={args.since}")
     hashes = [h for h in git(*log_args).split() if h]
+    # `git log` prints newest first, so element 0 is the commit under test.
+    #
+    # Captured BEFORE the loop rather than derived inside it, because the loop
+    # `continue`s past docs-only commits and a 'is this the first one I
+    # actually checked' test would then drift: on a run whose tip is a pure
+    # filing, the first CHECKED commit is an OLDER code commit that genuinely
+    # should be cited, and deferring that one would be a real false green.
+    # The tip is a property of the history, not of the walk.
+    tip = hashes[0] if hashes else ""
     unfiled: list[tuple[str, str]] = []
+    deferred: list[tuple[str, str]] = []
     checked = 0
 
     for h in hashes:
@@ -289,7 +367,32 @@ def main() -> int:
             continue
         if h not in record:
             subject = git("log", "-1", "--format=%ci %s", h).strip()
-            unfiled.append((h, subject))
+            # The tip's filing is necessarily a LATER commit, so demanding it
+            # here is unsatisfiable by construction -- docstring exclusion 3.
+            # Deferred by exactly one commit, printed, and checked in full on
+            # the next run, when it is no longer the tip.
+            if h == tip and not args.strict_tip:
+                deferred.append((h, subject))
+            else:
+                unfiled.append((h, subject))
+
+    # Printed FIRST and on BOTH paths. A deferral shown only on the failing
+    # path would be invisible exactly when the gate is green -- which is when
+    # a reader concludes "everything is filed". That is the no-silent-caps
+    # rule (a bounded gate says what it dropped) applied to this project's own
+    # tooling, and it is what keeps this exclusion an exclusion rather than a
+    # blind spot.
+    for h, subject in deferred:
+        print(f"commits-filed: tip {h} is DEFERRED, not yet filed.")
+        print(f"    {subject[:90]}")
+        print(
+            "  A commit cannot cite its own hash; its filing is a later "
+            "commit. It is checked"
+        )
+        print(
+            "  in full on the next run. Pass --strict-tip to demand it "
+            "anyway."
+        )
 
     if unfiled:
         print(f"commits-filed: {len(unfiled)} code commit(s) are in no filing.\n")

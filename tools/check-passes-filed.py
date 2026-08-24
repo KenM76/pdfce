@@ -110,6 +110,12 @@ def git(*args: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default=None, help="a git rev to scan from")
+    ap.add_argument(
+        "--strict-tip",
+        action="store_true",
+        help="also require the tip commit itself to be filed "
+        "(see the tip-deferral comment in main)",
+    )
     ap.add_argument("--stats", action="store_true")
     args = ap.parse_args()
 
@@ -193,7 +199,37 @@ def main() -> int:
         files = git("show", "--pretty=", "--name-only", short).split()
         return bool(files) and all(f.startswith("docs/") for f in files)
 
-    unfiled = [c for c in claimed if c[0] not in roadmap and not is_docs_only(c[0])]
+    # ★ THE TIP IS DEFERRED, for the reason the block above already gives.
+    #
+    # Added 2026-08-24 as a CLASS fix, not an incident fix. The comment
+    # above exempts docs-only commits because a commit that WRITES
+    # ROADMAP.md cannot contain its own hash. That argument is not about
+    # docs at all -- it is about a commit being unable to cite a hash that
+    # does not exist until it exists -- and it applies verbatim to a CODE
+    # commit subjected `Pass N.N: ...` at the moment of its own CI run.
+    #
+    # This hole had never fired, and the reason is luck rather than design:
+    # 120 commits in this history claim a Pass ID, but pushes usually batch
+    # several commits so the tip is usually the librarian's filing, which is
+    # docs-only and already exempt. `ff4b4bf` (`Pass 97.1f: a knockout group
+    # in ink`) is a code commit claiming a Pass ID; had it been pushed alone
+    # it would have failed this gate for a condition it could not satisfy.
+    #
+    # Fixed here at the same time as `check-commits-filed.py`'s identical
+    # hole rather than after this one bites, because the two gates are
+    # siblings by design and a fix applied to only the instance that was
+    # OBSERVED is how the same defect gets found twice. (`check-commits-
+    # filed.py`'s own header records that exact shape one stream over: a
+    # stdout reconfigure applied where the problem had been SEEN rather than
+    # to every stream that could have it.)
+    #
+    # `--all` is the scan range, so the tip is taken from HEAD explicitly
+    # rather than from the first line of the log, which under `--all` is the
+    # newest commit on ANY ref and need not be the commit under test.
+    tip = git("rev-parse", "--short", "HEAD").strip()
+    pending = [c for c in claimed if c[0] not in roadmap and not is_docs_only(c[0])]
+    deferred = [c for c in pending if c[0] == tip and not args.strict_tip]
+    unfiled = [c for c in pending if c not in deferred]
 
     # Multiple commits per Pass is NORMAL and correct here — Pass 34.1
     # shipped in four slices, Pass 27.2 in two ticks — so a repeated ID is
@@ -218,6 +254,15 @@ def main() -> int:
         print(f"unfiled (hash not in doc): {len(unfiled)}")
         print(f"IDs claimed by >1 commit : {len(collisions)}")
 
+    # Printed on BOTH paths -- see the twin note in check-commits-filed.py.
+    # A deferral visible only when the gate already fails is invisible in
+    # exactly the run whose reader concludes everything is filed.
+    for short, pid, subject in deferred:
+        print(f"DEFERRED {short}  Pass {pid}  {subject[:88]}")
+        print(
+            "         tip commit: its filing is a later commit, so it "
+            "cannot cite itself."
+        )
     for short, pid, subject in unfiled:
         print(f"UNFILED  {short}  Pass {pid}  {subject[:88]}")
     for pid, shorts in sorted(collisions.items()):

@@ -221,9 +221,32 @@ def main(tag: str) -> int:
     # and anyone opening that commit on GitHub sees a red X against a shipped
     # release.
     #
-    # The lesson is an ORDERING one and the check encodes it: file, let CI go
-    # green, THEN tag. A release verifier that never consults CI is verifying
-    # that the paperwork is self-consistent, not that the thing works.
+    # The lesson was recorded as an ORDERING one -- file, let CI go green,
+    # THEN tag. A release verifier that never consults CI is verifying that
+    # the paperwork is self-consistent, not that the thing works, and that
+    # half stands.
+    #
+    # ★ THE ORDERING HALF IS OBSOLETE AS OF 2026-08-24, and the reason is
+    # worth more than the correction. An ordering is a rule that lives in
+    # somebody's memory, and this one had already failed on its second
+    # outing: `v0.7.0` was tagged on a filing commit and passed, `v0.8.0`
+    # -- the very next release -- was tagged on a code commit and failed.
+    # The check below then reported `6 of 7, exit 1` for a tag that was
+    # otherwise sound, and could NEVER be cleared by re-running anything,
+    # because a re-run checks out the tagged commit, where the filing that
+    # would satisfy the gate does not exist.
+    #
+    # `check-commits-filed.py` and `check-passes-filed.py` now DEFER the
+    # tip commit instead of failing on it: a commit cannot cite its own
+    # hash, so demanding it was unsatisfiable by construction rather than a
+    # finding. With that fixed, a tag on a code commit is green whenever
+    # the history BEHIND it is filed, and no ordering has to be remembered.
+    #
+    # What did NOT change, so this is not read as the check being weakened:
+    # a filing gate red at a tagged commit is still a hard failure here,
+    # and now it means something sharper than it used to -- a commit OTHER
+    # than the tip is unnarrated. That is real debt, and the fix is to file
+    # it, not to move the tag.
     #
     # `in_progress` is reported distinctly from `failure`. A run still going
     # is not a pass, and silently treating "not yet failed" as "succeeded" is
@@ -260,9 +283,10 @@ def main(tag: str) -> int:
                 "failing run(s): "
                 + ", ".join(f"{r.get('name', '?')}={r.get('conclusion')}"
                             for r in failed)
-                + " -- the tag points at a commit CI rejected. If the failure "
-                  "is a filing/bookkeeping gate, the fix is ordering: file "
-                  "first, let CI go green, then tag.",
+                + " -- the tag points at a commit CI rejected. A filing gate "
+                  "red here no longer means the tag landed on the wrong "
+                  "commit (the tip is deferred since 2026-08-24); it means a "
+                  "commit BEHIND the tag is unnarrated. File it.",
             )
 
     if problems:
