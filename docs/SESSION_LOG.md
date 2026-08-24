@@ -58930,3 +58930,142 @@ session-closing pass and is the cold-start document — read it before this file
 that are his by definition: **pushing** (`32` ahead of the tracking ref; the
 repository is public, so an agent must not) and **cutting a backup** (`225`
 behind).
+
+---
+
+## 2026-08-23 — `v0.8.0` released; the release gate found a CI step red for fourteen runs (two-hundred-and-fortieth filing)
+
+**Shipped:**
+- **`08a88bd` — `v0.8.0`, released to GitHub with two assets.** No Pass ID;
+  hash-keyed release record, same form as `v0.7.0`'s. Version 0.7.0 → 0.8.0,
+  additive only (every public item added since `v0.7.0` is a field or variant
+  on an already-`#[non_exhaustive]` type: `RenderOptions`, `PoisonReason`,
+  `Diagnostics`); `Cargo.lock` moved six own-crate version lines and **no
+  dependency**, so `THIRD_PARTY_LICENSES.md` is unchanged and was **not**
+  regenerated — established by reading the lock diff, not by assuming.
+  `tools/gen-scale-demo/banana-at-scale.pdf` checked in (695 208 B, generator
+  determinism verified with `cmp` after regenerating), and the demo README's
+  *"Nothing ships"* corrected in the same commit rather than left to
+  contradict the file beside it.
+
+**Decisions made this session:**
+- **★ The authorisation is recorded, by name, because `CLAUDE.md` rule 8 makes
+  each publication its own act.** Operator, verbatim: *"Relese everything to
+  github and include the banana pdf"*. An explicit, current go-ahead from Ken.
+  It does not generalise — `v0.8.1` needs its own.
+- **No rule minted, no decision minted.** The CI-ordering consequence below is
+  `R209` applied, and its remedy is already printed by `verify-release.py` at
+  the moment of failure, which is a better carrier than a rule nobody greps.
+
+**Findings + decisions:**
+- **★★★★★ CI has been red for FOURTEEN consecutive runs on one step, not two.**
+  The dispatch named `c24ad7a` and `83409b3`. Measured with `gh run list
+  --limit 25` then `gh run view <id> --json jobs` on each: **14 consecutive
+  failures, last green run `32493456093` at `06aaad3`**, and every one of the
+  13 opened individually fails on the identical step **`check that every code
+  commit is filed`**. The failing *job* is named `verify pdfce-gui strings live
+  in ui_text.rs` — a fresh instance of
+  `D:/dev/rag/rust/a_ci_job_name_describes_its_first_step_not_the_gate_that_failed.md`.
+  The dispatch's reading — *a gate that is already red teaches people to ignore
+  it* — is right and understated by a factor of seven.
+- **★★★★★ The mechanism is structural.** `check-commits-filed.py` correctly
+  exempts docs-only commits, so it is **red by construction on every CODE
+  commit's own CI run** (that commit's filing is necessarily a later commit)
+  and green on the filing commit that follows. **A run of interleaved code
+  commits produces a run of red CI**, and the signal degenerates into a
+  constant: what the gate reports is not *"is the repo filed?"* but *"was the
+  last pushed head a filing commit?"*.
+- **★★★★★ Consequence for releases, and it is why this is a release record.**
+  **`v0.7.0`'s tag sat on a librarian filing commit (`3bc8fbe`), and run
+  `32486133822` there is `success`. `v0.8.0`'s tag sits on a code commit.** ⇒
+  **a re-run of CI at `08a88bd` will still be red** — a re-run checks out
+  `08a88bd`, and this filing is not in `08a88bd`. **Substantiated, not
+  inferred:** `check-commits-filed.py` returned `0` in this session **with the
+  filing still uncommitted in the working tree**, which is what shows it reads
+  the tree it is given. The seventh `verify-release.py` check is therefore
+  **unsatisfiable for this tag, permanently**. Three options are tabled in
+  `ROADMAP.md`; the recommended one is **C — from `v0.8.1` on, file, watch CI
+  go green, *then* tag** — costs nothing and rewrites nothing.
+- **★★★ `verify-release.py` is what surfaced both failures.** A release gate
+  that READS CI found what a CI gate could not make anyone READ. That is the
+  generalisable half and it is now a RAG file.
+- **★★★★★ AND IT IS A RECURRENCE, NOT A DISCOVERY — found by the sweep, not by
+  the dispatch.** This project already recorded the same hazard, twice, **with a
+  rate**: *"three of the four releases before `v0.5.2` were tagged at commits CI
+  had rejected"*, amended 2026-08-12 to **`5 of 8` (62.5 %) across all eight
+  tags to date**, plus one release published with failing tests. It was then
+  fixed **once, by discipline** — `v0.7.0` was tagged only after CI was observed
+  green at the exact commit, which the 221st filing records as the whole point.
+  **`v0.8.0` is the very next release and it regressed.** ⇒ **a hazard that is
+  recorded, rated and fixed once by discipline recurs at the first opportunity,
+  because the fix lived in a memory of an ordering rather than in the
+  procedure.** The instrument worked; the enforcement does not exist. A real fix
+  makes the release procedure **tag from a filing commit by construction**, and
+  **nothing in this filing supplies that.** `v0.6.0`'s status is deliberately
+  **not** re-measured — Actions retention makes a 2026-08-17 run unreliable to
+  query, and a number this role cannot produce is one it does not assert.
+- **★★★ Disk: a release cannot be built on a full disk.** The first packaging
+  attempt died on **`"There is not enough space on the disk (os error 112)"`**
+  with `D:` at **100 % used, 0 bytes free**; `target/` was **110 GB**, of which
+  `target/debug` was **103 GB** (94 %). Deleting `target/debug` freed it to
+  89 % / **112 GB free** and the build succeeded. At filing time `df -h /d`
+  reports **86 % used, 137 GB free of 954 GB**. `.claude/worktrees` holds a
+  further **28 GB across seven stale agent worktrees** and was **left alone**.
+  Standing hazard, not an incident: the debug tree grows without bound and the
+  failure lands on the one step an operator is waiting on.
+- **Two figures from the dispatch re-based onto their real denominators**
+  (hard rule 10). *"34 commits pushed"* is a **push** count for the session;
+  the release's own number is **58** (`git rev-list --count v0.7.0..v0.8.0`),
+  which went out over **16 push events** per `git reflog show origin/main`.
+  *"28.5 MB portable build"* is the **unzipped folder**; the **published asset
+  is 10 974 419 B ≈ 10.5 MiB zipped**. Both dispatch figures are true; neither
+  is a property of `v0.8.0` in the way the sentence implies.
+
+**`FEATURES.md`:**
+- **NO CAPABILITY ROW MOVES — confirmed by sweep, not assumed.** A release
+  publishes already-shipped capability; nothing became reachable at `08a88bd`
+  that was not reachable at `08a88bd^`.
+- **One stale literal repaired.** Row 266 read *"`-V` stays the bare parseable
+  `pdfce-cli 0.7.0`"*, falsified by root `Cargo.toml:77` (`version = "0.8.0"`)
+  and by the smoke test's own `pdfce-cli 0.8.0`. **Repaired to a
+  version-agnostic form**, not to `0.8.0` — a hand-maintained version number in
+  a document is one that goes stale again at the next bump. Same argument
+  `README.md`'s own comment block already makes.
+- **Three near-survivors ruled correct and left alone.** `README.md:57`'s
+  *"`v0.3.0` … `v0.7.0` — FOUR releases"* is a **static** historical claim
+  about what the README used to say — unfalsifiable by a fifth release, and
+  editing it would be the defect (`R216`'s static-versus-self-referential
+  line). `ARCHITECTURE.md:7719` is `hayro-write`'s version, a different crate.
+  `FEATURES.md:339` *"Release and distribution channel"* stays unticked: four
+  prior releases shipped with it unticked, so whatever it means it is not
+  *"a GitHub release exists"* — **never tick a box you cannot substantiate**;
+  what it does mean is carried to `NEXT_SESSION.md` as an owed question.
+
+**Gates, measured after this filing's edits, before commit:**
+- **`17` `tools/check-*` on disk; `16` runnable as bare gates; all `16` exit
+  `0`** — including `check-commits-filed.py`, which named exactly `08a88bd`
+  before this filing and is silent after it. The 17th,
+  `check-image-colorspace-truth.py`, exits `1` on a bare invocation **because
+  it takes a fixture-directory argument** and is not a gate.
+- **`tools/verify-release.py v0.8.0` → exit `1`.** **Six of seven on the clean
+  tree** (measured before this filing's edits); the single FAIL is *"CI is GREEN
+  at the tagged commit"*, which per the finding above **cannot be cleared for
+  this tag** by anything short of moving it. **Run again with this filing
+  uncommitted it reports two problems**, the second being *"working tree
+  clean — 4 uncommitted path(s)"* — that one is this filing itself and clears
+  on commit. Recording both readings so a future session does not read "two
+  problems" as a regression.
+
+**Still in flight:**
+- Nothing engineering-side. The queue in `NEXT_SESSION.md` §5 is unchanged and
+  nothing in it is blocked.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` was **rewritten** and is the cold-start document —
+  read it before this file. **`v0.8.0` is out and pushed; `origin/main` equals
+  `HEAD` equals the tag.** The push item is discharged. **The backup item is
+  NOT** — a GitHub release is offsite copy but it is **not a `git bundle`**,
+  and no bundle on disk contains `v0.7.0`'s tag or `v0.8.0`'s. Three things
+  are owed: the **tag-after-filing ordering** for `v0.8.1`, what
+  `FEATURES.md`'s *"Release and distribution channel"* row actually claims,
+  and a **disk pre-flight** before any packaging run.

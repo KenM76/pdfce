@@ -3,11 +3,11 @@
 Engineer-owned handoff. Read this **before** `ROADMAP.md` — that says what
 shipped, this says what to do next. **Overwrite it once acted on.**
 
-**UPDATED 2026-08-23 by `pdfce-librarian` (two-hundred-and-thirty-ninth filing).
-★ THIS IS THE SESSION-CLOSING PASS FOR 2026-08-22/23 — the last filing of the
-run.** §A is written so a **cold reader needs nothing else**: no prior
-conversation, no scrollback, no other document. The sections after it carry
-detail and evidence, and §A does not depend on them.
+**UPDATED 2026-08-23 by `pdfce-librarian` (two-hundred-and-fortieth filing).
+★ `v0.8.0` IS RELEASED. This is the release filing.** §A is written so a **cold
+reader needs nothing else**: no prior conversation, no scrollback, no other
+document. The sections after it carry detail and evidence, and §A does not
+depend on them.
 
 > ★★★ **This file carries NO edit-history layer, by rule.** It used to explain
 > its own corrections in place (*"this paragraph read X until …"*), and that layer
@@ -23,10 +23,56 @@ detail and evidence, and §A does not depend on them.
 
 ## §A — COLD START: everything you need, in one screen
 
-**`HEAD` is `8522167`. The working tree holds this filing's docs-only edits and
-nothing else. `tools/check-commits-filed.py` goes green on this filing's own
-commit. Nothing is blocked on anybody. No decision is waiting on Ken except the
-two acts that are his by definition — pushing and cutting a backup.**
+**`HEAD` is `08a88bd`, which is `origin/main`, which is the `v0.8.0` tag.
+`v0.8.0` IS RELEASED — pushed, tagged, two assets on GitHub, authorised by Ken
+in this session by name. The working tree holds this filing's docs-only edits
+and nothing else. Nothing is blocked on anybody.**
+
+**★ ONE THING IS KNOWN-BROKEN AND IT IS NOT A CODE DEFECT.
+`tools/verify-release.py v0.8.0` is `6 of 7, exit 1` — *"CI is GREEN at the
+tagged commit"* FAILS, and it **cannot be cleared for this tag by re-running
+anything**. Read §0 before touching it. The fix is an ordering for `v0.8.1`,
+not a repair.**
+
+### ★★★★★ §0 — READ THIS BEFORE THE NEXT RELEASE, IT IS THE ONLY NEW HAZARD
+
+**File first. Watch CI go green. THEN tag.**
+
+The filing gate `tools/check-commits-filed.py` exempts docs-only commits — it
+has to, or a filing commit could not satisfy it. So it is **red by construction
+on every CODE commit's own CI run**, because that commit's filing is
+necessarily a *later* commit. Consequences, both measured on 2026-08-23:
+
+- **`v0.8.0`'s tag is on a code commit** (`Cargo.toml` bump + the checked-in
+  demo PDF). Its CI run `32679353296` is `failure`. **A re-run checks out
+  `08a88bd`, where the filing does not exist**, so it will fail again. The
+  seventh `verify-release.py` check is unsatisfiable for this tag, permanently.
+- **`v0.7.0`'s tag was on a librarian FILING commit** (`3bc8fbe`) and its run
+  `32486133822` is `success`. **That was an accident of which commit was `HEAD`
+  at tagging time, not a rule anybody had written.** Now it is a rule.
+- **CI had been red for FOURTEEN consecutive runs on that one step**, last
+  green `32493456093` at `06aaad3`, and nobody noticed. A gate red by
+  construction has a constant output, and a constant carries no information.
+  **What surfaced it was `verify-release.py` — a release gate that reads CI
+  found what a CI gate could not make anyone read.**
+
+★★★★★ **AND THIS IS A RECURRENCE, NOT A DISCOVERY.** The record already holds
+*"three of the four releases before `v0.5.2` were tagged at commits CI had
+rejected"*, amended to **`5 of 8` (62.5 %) across the first eight tags**, plus
+one release published with failing tests. It was fixed **once, by discipline**
+at `v0.7.0` — and **`v0.8.0`, the very next release, regressed.** ⇒ **the fix
+lived in a memory of an ordering, not in the procedure.** The durable remedy is
+to **make the release step tag from a filing commit by construction**; nothing
+in this filing does that, and it is the one piece of real work this hazard is
+owed.
+
+**Three options for `v0.8.0` itself, and the choice is Ken's / the engineer's:**
+**(A)** leave it — the release is sound, the red run is recorded and explained
+in `ROADMAP.md`; **(B)** move the tag to the filing commit and force-push —
+**rewrites a published tag on a public repo, do not do this casually**;
+**(C)** adopt the ordering from `v0.8.1` on. **(C) is the recommendation and it
+costs nothing.** Full derivation:
+`D:/dev/rag/rust/a_release_tag_on_a_code_commit_cannot_satisfy_a_filing_gate_so_file_first_then_tag.md`.
 
 ### What this run built (2026-08-22 → 2026-08-23)
 
@@ -71,33 +117,48 @@ is in `ROADMAP.md` and `SESSION_LOG.md`, which is where it belongs.
 **The `tools/gen-scale-demo/README.md` repair list is EMPTY.** Nothing is
 recorded against that file.
 
-### ★★ THE TWO ITEMS THAT ARE KEN'S, AND THEY ARE THE ONLY THINGS AWAITING HIM
+### ★★ THE TWO OPERATOR ITEMS — ONE IS DISCHARGED, ONE IS NOT, AND THE DIFFERENCE MATTERS
 
-Both are his acts by definition, not an agent's. **Both figures were measured on
-2026-08-23 by the commands named beside them — re-run them, do not quote them.**
-
-- **PUSHING.** `git rev-list --count origin/main..main` → **`32`**. The local
-  `origin/main` tracking ref is at **`c24ad7a`**; **no `git fetch` was run**, so
-  that is the tracking ref's position, **not a live query of the remote**.
-  `git remote -v` → `origin  https://github.com/KenM76/pdfce.git`. Pushing needs
-  a **current** go-ahead (`CLAUDE.md` rule 8), and **the repository is public —
-  an agent must not push.**
-- **CUTTING A BACKUP.** The newest bundle in `D:/Dev/pdfce-backups/` is
-  `pdfce-20260817-v060.bundle` (2026-08-17 20:34), whose `refs/heads/main` is
-  **`3c4c00e`** (`git bundle list-heads`). `git rev-list --count 3c4c00e..main`
-  → **`225`**, and `git merge-base --is-ancestor` confirms **`HEAD` is not in
-  it.** ⇒ **225 commits and six days behind.** `v0.7.0`'s tag is in **no** bundle
-  on disk.
+- **PUSHING — ★ DISCHARGED.** Ken authorised it in this session, verbatim:
+  *"Relese everything to github and include the banana pdf"*. That is the
+  explicit, current go-ahead `CLAUDE.md` rule 8 requires. **`git rev-parse HEAD`
+  and `git rev-parse origin/main` both return `08a88bd`**, and
+  `git ls-remote --tags origin v0.8.0` returns the same tag object
+  `2ed21e4` that `git rev-parse v0.8.0` does. Nothing is unpushed.
+  **★ The authorisation does not carry forward** — `v0.8.1` needs its own.
+- **CUTTING A BACKUP — ★ NOT DISCHARGED, and do not let the release read as
+  one.** A GitHub release is an offsite copy of *one build and one PDF*; it is
+  **not a `git bundle`** and it does not contain the history. **No bundle on
+  disk contains `v0.7.0`'s tag or `v0.8.0`'s.** The push does mean the remote
+  now holds the full history, which is a real improvement on last session's
+  position — but a remote is not a backup you control. **Re-measure before
+  quoting**: `ls D:/Dev/pdfce-backups/`, `git bundle list-heads <newest>`,
+  `git rev-list --count <bundle-head>..main`. Do not carry forward the previous
+  handoff's `225`; it was true at a different `HEAD`.
 
 ### Ledger at end of session
 
 Next free Pass in the `74` family **`74.11`**; `122.4` the next free `122`;
 **`97.1g` reserved and unbuilt**. Decisions **`084`**, next free **`085`**.
-Standing rules **`R216`**, next free **`R217`** — `R216` minted 2026-08-23;
-`R211` gained clauses (d)/(e), `R214` clause (d) and `R215` clause (d) earlier
-the same day. Operator questions **`(br)`, CLOSED**, next free **`(bs)`**.
+Standing rules **`R216`**, next free **`R217`** — nothing minted by the release
+filing. Operator questions **`(br)`, CLOSED**, next free **`(bs)`**.
 `render-page` metrics line at **`90` keys**. **17 `tools/check-*` on disk, 16
-runnable as bare gates.** Filing ordinal **239**.
+runnable as bare gates; all 16 exit `0` after this filing's edits.**
+**Version `0.8.0`** (root `Cargo.toml:77`). Filing ordinal **240**.
+
+### ★ OWED BY THIS FILING — three items, none blocking
+
+1. **The tag-after-filing ordering for `v0.8.1` — and better, MAKE IT
+   STRUCTURAL.** §0. Writing it down has already failed once (`v0.7.0` got it
+   right by discipline, `v0.8.0` regressed immediately), so the item worth
+   building is a release step that **tags a filing commit by construction**
+   rather than a sentence asking someone to remember.
+2. **What `FEATURES.md`'s *"Release and distribution channel"* row actually
+   claims.** It reads `[ ] core · [ ] cli · — gui` and stayed unticked through
+   four prior releases, so it cannot mean *"a GitHub release with a portable
+   asset exists"* — that has been true since `v0.1.0`. Left unticked rather
+   than guessed at. **Decide what it means or delete it.**
+3. **A disk pre-flight before any packaging run.** §3 item 5.
 
 ---
 
@@ -220,7 +281,28 @@ quote a count.**
 **4. If `check-commits-filed.py` is red when you start, READ ITS OUTPUT FOR THE
 HASH.** Do not assume which commit it means, and **never extend
 `tools/commits-filed-baseline.txt`** — that file is pre-existing debt, not an
-allowlist.
+allowlist. ★ **And do not read a red CI badge as "still the same failure"** —
+that assumption is exactly what let this gate stay red for fourteen runs (§0).
+
+**5. ★ BEFORE ANY PACKAGING OR RELEASE BUILD, CHECK FREE SPACE.** One command,
+cheaper than the failure it prevents:
+
+```bash
+df -h .  &&  du -sh target target/debug
+```
+
+On 2026-08-23 the first packaging attempt died with **`"There is not enough
+space on the disk (os error 112)"`** — `D:` at **100 % used, 0 bytes free**,
+`target/` at **110 GB** of which **`target/debug` was 103 GB**. Deleting
+**`target/debug` only** (never `cargo clean`, which also drops the warm
+`target/release` you are about to need) freed it to 89 % / 112 GB and the same
+build succeeded unchanged. `df -h /d` at filing time: **86 % used, 137 GB free
+of 954 GB**. ★ **Ordinary incremental builds keep working long past the point
+where the disk is nearly full, so the failure lands on the RELEASE build** —
+the step nobody wants to retry. `.claude/worktrees` holds a further **28 GB
+across seven stale worktrees**; **report that figure, do not reclaim it** —
+a worktree may hold uncommitted work.
+`D:/dev/rag/rust/a_full_disk_fails_the_release_build_and_cargos_debug_tree_is_usually_the_reason.md`.
 
 ---
 
@@ -452,24 +534,37 @@ carries the review-instrument half.
 **Every figure below was MEASURED on 2026-08-23 by the command named beside it
 (librarian hard rule 8). Re-run them; do not quote these lines.**
 
-- **`git remote -v`** → `origin  https://github.com/KenM76/pdfce.git`;
-  **`git rev-list --count origin/main..main` → `32`**; `origin/main` at
-  **`c24ad7a`**. **No `git fetch` was run** — that is the tracking ref's
-  position, not a live query of the remote. **The repository is public, so
-  anything committed is published by default.**
-- **Backups `225` commits and six days behind `HEAD`.** Newest bundle
-  `pdfce-20260817-v060.bundle` (2026-08-17 20:34), `refs/heads/main` at
-  **`3c4c00e`** (`git bundle list-heads`); `git rev-list --count 3c4c00e..main`
-  → **`225`**; `git merge-base --is-ancestor` confirms **`HEAD` is NOT in that
-  bundle**. `v0.7.0`'s tag is in no bundle on disk.
-- **Worktrees: `9` entries**, by `git worktree list | wc -l`. **★ They are OUT OF
-  SCOPE for every sweep** — each is a transient detached copy of `docs/` and
-  `crates/`, stale by construction. `rg` skips them (gitignored); a bare
-  `grep -r` does not. **`rg` is the correct instrument**, so a future filing does
-  not "discover" hundreds of survivors there and report a crisis.
+- **`git remote -v`** → `origin  https://github.com/KenM76/pdfce.git`.
+  **`git rev-parse HEAD` = `git rev-parse origin/main` = `git rev-parse
+  v0.8.0^{}` = `08a88bd`** — nothing unpushed, tag at `HEAD`.
+  `git rev-list --count v0.7.0..v0.8.0` → **`58`** commits in the release
+  (`git reflog show origin/main` shows they went out over **16** push events —
+  a push count and a release count are different denominators). **The
+  repository is public, so anything committed is published by default.**
+- **The release, measured:** tag object `2ed21e4` (annotated, `git cat-file -t`
+  → `tag`), same object on the remote (`git ls-remote --tags origin v0.8.0`).
+  GitHub release published `2026-08-24T01:33:49Z`, not a draft, not a
+  prerelease, **two assets** — `pdfce-v0.8.0-windows-x64-portable.zip`
+  (**10 974 419 B**) and `banana-at-scale.pdf` (**695 208 B**, the same byte
+  count as the checked-in file, so they are the same artefact). The unzipped
+  portable folder at `D:\builds\pdfce-20260823-2127-08a88bd` is **28.5 MB** —
+  a folder size, not the asset size.
+- **Backups NOT cut, and the release is not one.** Re-measure, do not quote:
+  `ls D:/Dev/pdfce-backups/`, `git bundle list-heads <newest>`,
+  `git rev-list --count <bundle-head>..main`. **No bundle on disk contains
+  `v0.7.0`'s tag or `v0.8.0`'s.**
+- **Worktrees: `7` stale agent worktrees holding `28 GB`**, left alone. **★
+  They are OUT OF SCOPE for every sweep** — each is a transient detached copy
+  of `docs/` and `crates/`, stale by construction. `rg` skips them
+  (gitignored); a bare `grep -r` does not. **`rg` is the correct instrument**,
+  so a future filing does not "discover" hundreds of survivors there and report
+  a crisis.
 - **Gates: `17` `tools/check-*` on disk, `16` runnable as bare gates; all `16`
-  exit `0` after this filing's commit.** Before it, `check-commits-filed.py`
-  exited `1` naming exactly `8522167`, which is the gate working as designed.
+  exit `0` after this filing's edits.** Before them, `check-commits-filed.py`
+  exited `1` naming exactly `08a88bd`, which is the gate working as designed.
+  The 17th, `check-image-colorspace-truth.py`, exits `1` bare **because it takes
+  a fixture-directory argument** and is not a gate. **`verify-release.py v0.8.0`
+  → exit `1`, six of seven — see §0; that one is expected and explained.**
 - **A commit may bundle doc-comment repairs; a FILING may not bundle code**
   (`R198`). The second direction is the one that is easy to miss: a librarian
   filing carrying a code change cannot file itself and manufactures one more

@@ -96,6 +96,278 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `08a88bd` — ★★★★★ **`v0.8.0` IS RELEASED — TAG `2ed21e4` AT `08a88bd`, PUSHED, TWO ASSETS, AND THE OPERATOR'S AUTHORISATION IS RECORDED BY NAME** (`CLAUDE.md` rule 8 makes each publication its own act); ★★★★★ **AND THE RELEASE GATE FOUND THAT CI HAS BEEN RED FOR *FOURTEEN* CONSECUTIVE RUNS ON ONE STEP — the dispatch reported two** (`c24ad7a`, `83409b3`); the last green run is `32493456093` at `06aaad3`, and **all fourteen fail on the identical step `check that every code commit is filed`**, measured by `gh run view --json jobs` on each; ★★★★★ **THE ORDERING IS THE WHOLE FINDING, AND `verify-release.py` SAYS IT ITSELF: *"If the failure is a filing/bookkeeping gate, the fix is ordering: file first, let CI go green, then tag."*** — **`v0.7.0`'s tag sat on a librarian FILING commit (`3bc8fbe`) and its run was GREEN; `v0.8.0`'s tag sits on a CODE commit whose own filing cannot exist in its own tree**, so ★★ **the run at the tagged commit CANNOT be made green by re-running it** — a re-run checks out `08a88bd`, and this entry is not in `08a88bd`; ★★★ **`verify-release.py v0.8.0` = 6 of 7 ok, exit 1**, and it is the instrument that surfaced both failures — **a release gate that READS CI found what a CI gate could not make anyone READ**; ★★★ **DISK: the first packaging attempt died on `os error 112` with `D:` at 100 % / 0 bytes free**, `target/` at **110 GB** of which `target/debug` was **103 GB**; ★★ **`FEATURES.md`: NO CAPABILITY ROW MOVES — ONE STALE LITERAL REPAIRED** (`pdfce-cli 0.7.0` → a version-agnostic form); ★ **README's `v0.3.0…v0.7.0` / "FOUR releases" passage RULED CORRECT AND LEFT ALONE** — it is a *static* history claim, not a self-referential one (`R216`) — no Pass ID; release record — 2026-08-23 (two-hundred-and-fortieth filing)
+
+**Sourcing.** This filing has a shell. **Every figure below was produced
+here by the command named beside it**, including the two the dispatch
+supplied that turned out to be measured on a different denominator. Hard
+rule 8 discharged by looking.
+
+---
+
+#### ★★★★★ The authorisation, first, because rule 8 makes it the load-bearing fact
+
+**Operator, verbatim, 2026-08-23:** *"Relese everything to github and
+include the banana pdf"*.
+
+That is an **explicit, current go-ahead from Ken**, which is exactly what
+`CLAUDE.md` rule 8 requires and **which had never been given before** in
+this wording. **Publishing is the operator's act, not the agent's**, and
+it does not generalise: `v0.8.1` will need its own.
+
+---
+
+#### The release, as eight measured identities
+
+| what | measured | command |
+|---|---|---|
+| tag `v0.8.0`, annotated | tag object `2ed21e43c8baa025f8af7a57c61b815c04647767` | `git rev-parse v0.8.0`; `git cat-file -t v0.8.0` → `tag` |
+| tagged commit | `08a88bd8d159d6e80dbd3f789f84344c7605ee30` | `git rev-parse v0.8.0^{}` |
+| tag on the remote | `refs/tags/v0.8.0` → `2ed21e4` — **the same tag object**, not a re-created one | `git ls-remote --tags origin v0.8.0` |
+| `origin/main` | `08a88bd` — **at** the tag, not merely containing it | `git rev-parse origin/main` vs `git rev-parse HEAD` |
+| `git describe --tags` | **`v0.8.0`**, bare — no offset, which is itself the check | `git describe --tags` |
+| commits in the release | **58** — `v0.7.0..v0.8.0` | `git rev-list --count v0.7.0..v0.8.0` |
+| GitHub release | published `2026-08-24T01:33:49Z`, `isDraft: false`, `isPrerelease: false`, titled *"pdfce v0.8.0 — deep zoom that holds its content, and a banana at 190 billion percent"* | `gh release view v0.8.0 --json isDraft,isPrerelease,publishedAt,name,tagName` |
+| assets, **two** | `pdfce-v0.8.0-windows-x64-portable.zip` **10 974 419 B**, sha256 `d2a53f30d6c75574d0e6b218e4e1fee1a1a5f6977b2269fe036f04101bc1353a`; `banana-at-scale.pdf` **695 208 B**, sha256 `f9ea04beb843248f075a45b7e6265b544a29a0dc3128bef4e882d72c07b4ec67` | `gh release view v0.8.0 --json assets` |
+
+★ **THE DISPATCH'S TWO FIGURES — BOTH TRUE, BOTH ON A DIFFERENT
+DENOMINATOR FROM THE ONE THE SENTENCE IMPLIES** (hard rule 10: file a
+figure beside its operands):
+
+- *"34 commits pushed"* — a **push** count for this session, not a
+  release count. **The release's own number is 58**
+  (`git rev-list --count v0.7.0..v0.8.0`), and `git reflog show
+  origin/main` shows those commits went out over **16 separate push
+  events**, not one. Both numbers are right about different things; only
+  the second is a property of `v0.8.0`.
+- *"portable build 28.5 MB"* — the **unzipped folder**
+  (`D:\builds\pdfce-20260823-2127-08a88bd`). The **published asset is
+  10 974 419 B ≈ 10.5 MiB zipped**. A folder size and an asset size are
+  not the same measurement and neither is wrong; a reader who meets only
+  one of them will believe the wrong thing about a download.
+
+**Contents of the commit** (`git show --stat 08a88bd`): `Cargo.lock`
+(six own-crate version lines, **no dependency**), `Cargo.toml` (0.7.0 →
+0.8.0), `tools/gen-scale-demo/README.md`, and
+`tools/gen-scale-demo/banana-at-scale.pdf` **added, 695 208 B** — the
+**same byte count as the published asset**, so the checked-in file and
+the release asset are the same artefact. `THIRD_PARTY_LICENSES.md`
+unchanged and **not** regenerated, which the lock diff substantiates
+rather than assumes. The bump is **additive only**: every public item
+added since `v0.7.0` is a field or a variant on an
+already-`#[non_exhaustive]` type (`RenderOptions`, `PoisonReason`,
+`Diagnostics`).
+
+**Generator determinism** — the checked-in PDF was verified by
+**regenerating and comparing bytes with `cmp`**, per the engineer, not
+asserted from the script's shape. **Packaging smoke test — run and
+passed**: the portable folder copied to a fresh temp directory,
+`pdfce-cli.exe` rendered `banana-at-scale.pdf` from there (980×1268,
+`forms=353`) and reported `pdfce-cli 0.8.0`; `pdfce-gui.exe` launched
+from the packaged folder with the banana open, window title confirmed.
+
+---
+
+#### ★★★★★ `tools/verify-release.py v0.8.0` — SIX OF SEVEN, exit `1`
+
+```
+ok    working tree clean
+ok    tag v0.8.0 exists locally
+ok    tag is at HEAD
+ok    tag v0.8.0 is pushed
+ok    origin/main CONTAINS the tagged commit
+ok    GitHub release has at least one asset
+FAIL  CI is GREEN at the tagged commit
+```
+
+**Its own failure message names the remedy**, quoted in full because it
+is the finding: *"failing run(s): CI=failure -- the tag points at a
+commit CI rejected. If the failure is a filing/bookkeeping gate, the fix
+is ordering: file first, let CI go green, then tag."*
+
+---
+
+#### ★★★★★ THE CI FINDING — 14 red runs, one step, and a gate nobody was reading
+
+**Measured** (`gh run list --limit 25 --json databaseId,conclusion,headSha`,
+then `gh run view <id> --json jobs` on each):
+
+| what | measured |
+|---|---|
+| consecutive failed runs, newest at `08a88bd` | **14** |
+| last **green** run | **`32493456093`**, head `06aaad3` |
+| of those 14, how many fail on the step `check that every code commit is filed` | **13 opened individually, all 13; the 14th is the same job in the same workflow** |
+| the failing **job**'s name | `verify pdfce-gui strings live in ui_text.rs` — **the job name describes its first step, not the gate that failed**, a fresh instance of `D:/dev/rag/rust/a_ci_job_name_describes_its_first_step_not_the_gate_that_failed.md` |
+
+**The dispatch reported two** (`c24ad7a`, `83409b3`). **It is fourteen.**
+The dispatch's *reading* — *a gate that is already red teaches people to
+ignore it, and the second failure hid behind the first* — is **correct,
+and understated by a factor of seven.**
+
+★★★★★ **THE MECHANISM, AND IT IS STRUCTURAL RATHER THAN CARELESS.**
+`check-commits-filed.py` exempts docs-only commits, correctly (that
+exemption is itself a recorded finding —
+`D:/dev/rag/rust/a_gate_joining_on_a_hash_the_commit_itself_writes_is_unsatisfiable.md`).
+So the gate is **red by construction on every CODE commit's own CI run**,
+because that commit's filing is necessarily a *later* commit; it goes
+green on the filing commit that follows. **A run of interleaved code
+commits therefore produces a run of red CI**, and the signal degenerates
+into a constant. ⇒ **What the gate actually reports is not "is the repo
+filed?" but "was the last pushed head a filing commit?"** — and nobody
+had asked it that question, so nobody noticed it had stopped answering
+the first one.
+
+★★★★★ **THE CONSEQUENCE FOR RELEASES, WHICH IS WHY THIS IS A RELEASE
+RECORD AND NOT A HOUSEKEEPING NOTE.** **`v0.7.0`'s tag was placed on
+`3bc8fbe` — a librarian FILING commit (*"librarian: the third copy filed
+…"*) — and run `32486133822` at that commit is `success`.** `v0.8.0`'s
+tag is on a **code** commit. ⇒ **a re-run of CI at `08a88bd` will still
+be red**, because a re-run checks out `08a88bd` and this filing is not in
+`08a88bd`. **The seventh check is unsatisfiable for this tag,
+permanently**, and no amount of re-running fixes it. That `v0.7.0` came
+out green was not luck exactly, but it was not a decision either — it was
+a property of which commit happened to be `HEAD` at tagging time.
+
+**The remedies. The choice is the engineer's and the operator's, not this
+role's:**
+
+| option | effect | cost |
+|---|---|---|
+| **A. Leave it** — `v0.8.0` ships with a known-red CI run and this entry is the record of why | honest, append-only, nothing rewritten | `verify-release.py v0.8.0` stays at 6/7 forever |
+| **B. Move the tag** to the filing commit and force-push it | 7/7 | **rewrites a published tag on a public repo**; anyone who already fetched `v0.8.0` gets a different commit. `D:/dev/rag/rust/a_lightweight_git_tag_is_a_mutable_label_not_a_pin.md` is the neighbouring hazard |
+| **C. Adopt the ordering from `v0.8.1` on** — file, watch CI go green, *then* tag | 7/7 from now on, nothing rewritten | one step of discipline, and **`R209` already says it** |
+
+**C is what this role would take and it costs nothing.** Recorded in
+`NEXT_SESSION.md` as owed. **No rule minted:** `R209` (*a CI job with no
+local runner is unobserved, not passing*) already carries the observation
+half, and the ordering half is now written into `verify-release.py`'s own
+failure text — **a message printed at the moment of failure is a better
+carrier than a rule nobody greps.**
+
+##### ★★★★★ AND THIS IS NOT NEW — THE SWEEP FOUND IT ALREADY RECORDED, WITH A RATE
+
+**The hard-rule-11 sweep turned this up and it changes the entry's
+claim, so it is written here rather than quietly dropped.** This project
+has recorded the same hazard before, twice, and **with a measured rate**:
+
+> *"`v0.5.2` was the **first release in this project's history tagged at
+> a commit CI had already accepted** … Three of the four releases before
+> it were tagged at commits CI had rejected, and `v0.3.0` was published
+> with failing tests."* — and its own 2026-08-12 amendment: **"Full-history
+> figure: `5 of 8` (62.5 %) across all eight tags to date."**
+
+**Updated denominator, and it is the part that stings.** `v0.7.0` was
+the release where `R209` was applied for the first time and CI was
+**observed green before the tag was placed** — the 221st filing records
+that explicitly as the point of the exercise. **`v0.8.0` is the very next
+release, and it regressed.** ⇒ **the practice did not survive one
+release.**
+
+**So the transferable finding is NOT "we discovered a hazard".** It is:
+**a hazard recorded three times, with a rate, and fixed once by
+discipline, recurred at the first opportunity — because the fix lived in
+a person's memory of an ordering rather than in the procedure.** That is
+why remedy **C** above is written as a step in the release procedure and
+carried in `NEXT_SESSION.md` §0, not as a rule number. **`verify-release.py`
+catching it is the machinery working**; what is missing is the ordering
+being *enforced* rather than *remembered*, and **nothing in this filing
+supplies that** — a future session that wants a real fix should make the
+release procedure tag from a filing commit by construction.
+
+**Rate, filed with its denominator (hard rule 10):** `5 of 8` tags as of
+`v0.5.3` (recorded 2026-08-12); `v0.7.0` green (recorded 2026-08-21);
+`v0.8.0` red (this entry). `v0.6.0`'s status is **not re-measured here** —
+GitHub Actions retention makes a 2026-08-17 run unreliable to query, and
+a number this role cannot produce is one it does not assert.
+
+---
+
+#### ★★★ THE DISK INCIDENT — a release cannot be built on a full disk
+
+| what | measured |
+|---|---|
+| first packaging attempt | failed: **`"There is not enough space on the disk (os error 112)"`** |
+| `D:` at that moment | **100 % used, 0 bytes free** |
+| `target/` | **110 GB**, of which `target/debug` = **103 GB** (94 %) |
+| after deleting `target/debug` | 89 % used, **112 GB free** — and the packaging succeeded |
+| `D:` **at the time of this filing** | **86 % used, 137 GB free of 954 GB** (`df -h /d`) — more has been freed since |
+| `.claude/worktrees` | **28 GB across seven stale agent worktrees**, **left alone** |
+
+**This is a standing hazard, not an incident.** `target/debug` grows
+without bound across a long run of `cargo test` / `cargo run` sessions,
+and the failure it produces lands on the **release build** — the one step
+that cannot be retried cheaply and the one an operator is waiting on.
+The 28 GB of stale worktrees is a second, independent reservoir that
+nothing currently reclaims.
+
+Filed to `D:/dev/rag/rust/` as an ecosystem fact (nothing about it is
+pdfce-specific) and to `NEXT_SESSION.md` as a pre-flight check.
+
+---
+
+#### `FEATURES.md` — NO CAPABILITY ROW MOVES; ONE STALE LITERAL REPAIRED
+
+**The ruling, stated explicitly because the dispatch asked for it: a
+release changes no capability row, and this one did not.** `v0.8.0`
+publishes already-shipped capability under a new version number; nothing
+became reachable at `08a88bd` that was not reachable at `08a88bd^`.
+
+**But the hard-rule-11 sweep — searching for the CLAIM, not for a string
+— found one survivor, and it is a version literal:**
+
+- **`docs/FEATURES.md:266`** read *"`-V` stays the bare parseable
+  **`pdfce-cli 0.7.0`**"*. **Falsified by this commit**: root
+  `Cargo.toml:77` is `version = "0.8.0"`, and the packaging smoke test
+  printed `pdfce-cli 0.8.0`. **Repaired to a version-agnostic form rather
+  than to `0.8.0`** — a hand-maintained version number in a document is a
+  number that will be stale again at the next bump, and *"remember to
+  update it"* is a reminder rather than a remedy. That is **the same
+  argument `README.md`'s own comment block makes** about the version
+  label it deleted. Deletion of the claim, not correction of it
+  (`R216`).
+
+**Three near-survivors RULED CORRECT and deliberately NOT edited:**
+
+- **`README.md:57`** — *"it said `v0.3.0` through `v0.4.0`, `v0.5.x`,
+  `v0.6.0` and `v0.7.0` — **FOUR releases**"*. There are now **five**
+  releases, so a string-grep flags this. **It is not a survivor.** The
+  sentence is a **static historical claim** about what the README used to
+  say — true when written, unfalsifiable by any later release — which is
+  exactly the distinction `R216` draws between *static* and
+  *self-referential*. **Editing it would be the defect, not the repair.**
+- **`docs/ARCHITECTURE.md:7719`** — `hayro-write` 0.7.0. A different
+  crate's version number. Not a survivor.
+- **`docs/FEATURES.md:339`** — *"Release and distribution channel"*,
+  `[ ] core · [ ] cli · — gui`. **Left unticked, and that is a
+  judgement, not an oversight.** Four prior releases (`v0.5.1` …
+  `v0.7.0`) shipped while this row stayed unticked, so whatever the row
+  means, it does not mean *"a GitHub release with a portable asset
+  exists"* — that has been true since `v0.1.0`. **Never tick a box you
+  cannot substantiate.** What the row actually claims is carried to
+  `NEXT_SESSION.md` as an owed question.
+
+---
+
+#### Ledger
+
+**No Pass ID** — a release is not a Pass, and this entry is hash-keyed
+for the same reason `v0.7.0`'s was. **No decision minted**: the ordering
+consequence is `R209` applied, not a new architectural choice. **No
+standing rule minted** — next free stays **`R217`**. Decisions next free
+**`085`**. Operator questions next free **`(bs)`**. Next free Pass in the
+`74` family **`74.11`**; `122.4` the next free `122`; `97.1g` reserved
+and unbuilt. `render-page` metrics line unchanged at **`90` keys** — no
+code changed in this filing. Filing ordinal **240**.
+
+**Two RAG files written**, both to `D:/dev/rag/rust/` (ecosystem-wide;
+nothing pdfce-specific in either):
+`a_full_disk_fails_the_release_build_and_cargos_debug_tree_is_usually_the_reason.md`
+and
+`a_release_tag_on_a_code_commit_cannot_satisfy_a_filing_gate_so_file_first_then_tag.md`.
+
+**Gate exit codes after this filing's edits** are recorded in today's
+`SESSION_LOG.md` entry.
+
 ### `8522167` — the round-7 note's own ordinals DELETED, and ★★★★★ **THE DISPOSITION REVERSES WITHOUT THE RULING REVERSING, WHICH IS THE WHOLE CONTENT OF THIS ENTRY** (**no Pass ID**) — ★★★★★ **THE 238th FILING RECORDED THIS DEFECT AND DECLINED TO REPAIR IT; THE ENGINEER REPAIRED IT; BOTH ARE CORRECT, BECAUSE THE DECLINE WAS AGAINST *CORRECTION* AND THE REPAIR WAS A *DELETION***: the note's ladder (*"Round 1 fixed wrong values … Rounds 5 and 6 produced fresh instances of classes 1 and 2"*) pinned round 1 to the first correction while every other record in this project numbers that commit **round 3**, so *"rounds 5 and 6"* named **this note's own commit and one that does not exist** — and the 238th filing's stated ground for not repairing it was that *"repairing it writes an eighth sentence about a seventh correction, which is the generator by definition"*, **which is an argument against a REWORDING and not against a REMOVAL**; ★★★★★ **THE ORDINALS ARE GONE, NOT CORRECTED** — the list is now of defect **SHAPES** (*wrong values; wrong pointers; wrong quantifiers; an unwritten antecedent*) closed by *"the later rounds produced fresh instances of the earlier kinds, so the list is of shapes rather than of stages"*, and a short parenthetical states the rule and says why the ordinals are absent; ★★★★ **THE APPLIED EDIT IS STRICTLY STRONGER THAN THE REMEDY THIS ROLE PRESCRIBED, AND THE DIFFERENCE IS ONE WORD**: the prescription kept *"**Six** rounds of correction ran against this file"*, which drops the per-round ordinals but **retains the count** — and the count is the very axis the two numberings disagreed on; the applied text says *"**Several** rounds"* and **asserts nothing anybody has to maintain**; ★★★★ **THE `110 lines earlier` DISTANCE IS GONE IN THE SAME PASS**, on this role's other prescription — *a distance is a claim; a relation is not* — **the same claim in a different unit**, and both remedies this session produced were **deletions**; ★★★★★ **THE RULING ASKED FOR — *for a SELF-REFERENTIAL claim, prefer DELETION to CORRECTION, because a correction is drawn from the same class as the defect* — IS ACCEPTED AS A SHARPENING OF THE RAG FINDING'S CONSEQUENCE 1, NOT AS A NEW RULE AND NOT AS ALREADY-IMPLIED**, with the boundary that makes it safe written beside it; ★★★ **THE SWEEP FOUND TWO SURVIVORS IN THIS ROLE'S OWN TREES AND BOTH ARE THE SAME DEFECT** — a *"deliberately NOT repaired"* disposition, present-tense, in `ROADMAP.md`'s convergence practice **and** in the new RAG finding's consequence 2, **both falsified by the commit under filing**; ★★★★★ **AND IT FOUND THE THING THAT FIRED A TRIGGER: `R216` IS MINTED, CEILING `R215` → `R216`** — the convergence practice's own promotion trigger (*"a SECOND document that grows a layer of sentences about its own corrections; at `n=2`, mint it"*, written one filing earlier) **fired on `docs/NEXT_SESSION.md`**, which carried **three** *"this paragraph read X until 2026-08-23"* annotations; ★★★★★ **AND THE MECHANISM IS A TENSION BETWEEN TWO RULES, NOT CARELESSNESS — `R215` (d) obliges preserving wrong wording, which is FREE in an append-only file and means HAND-CARRYING IT INTO EVERY REWRITE of an overwritten one**, so the obligation is discharged by the append-only record on the overwritten document's behalf; ★ **`FEATURES.md`: NO ROW, CONFIRMED BY SWEEP** — no capability moved; ★ **`render-page` metrics line unchanged at `90` keys, no code changed, measured by running the gate**; ★ **SESSION CLOSE — `NEXT_SESSION.md` rewritten for a cold reader, and the sweep is STOPPED here by the engineer's instruction rather than by an empty result** — 2026-08-23 (two-hundred-and-thirty-ninth filing)
 
 **One commit, docs-only in effect: `8522167`, 14 insertions and 7 deletions in
