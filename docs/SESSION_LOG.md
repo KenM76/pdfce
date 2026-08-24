@@ -59069,3 +59069,91 @@ behind).
   are owed: the **tag-after-filing ordering** for `v0.8.1`, what
   `FEATURES.md`'s *"Release and distribution channel"* row actually claims,
   and a **disk pre-flight** before any packaging run.
+
+## 2026-08-24 — infrastructure commit `bb154ed`: both filing gates now DEFER their own tip commit instead of failing on it; `R217` minted; two facts in yesterday's release entry corrected
+
+**Shipped:**
+- **`bb154ed` — no Pass ID, infrastructure.** `tools/check-commits-filed.py`
+  and `tools/check-passes-filed.py` both joined on *"this commit's hash
+  appears in `ROADMAP.md`/`SESSION_LOG.md`"* — a join no commit's own CI
+  run can ever satisfy, because the filing that would satisfy it is
+  necessarily a **later** commit. The existing docs-only exemption
+  (2026-08-07) only ever covered the ledger-writing commit itself, not an
+  ordinary code commit whose filing is merely scheduled. Fix: both gates
+  now **defer the join for `HEAD` alone**, on every run, disclosed on
+  both the passing and failing path, evaporating the instant a following
+  commit exists. Real debt behind the tip still hard-fails, unchanged.
+  `--strict-tip` restores the old behaviour for a librarian's own
+  pre-filing self-check. `verify-release.py`'s comment and failure hint
+  corrected in the same commit.
+
+**Decisions made this session:**
+- No architectural decision — this is a gate-implementation fix, not a
+  crate-boundary/library/invariant choice, so nothing added to
+  `ARCHITECTURE.md` §12.
+- **`R217` minted**, ceiling `R216` → `R217`, next free `R218`. Full text
+  in `ROADMAP.md`'s *Standing rules*. Accepted at **three** occurrences of
+  one shape: the 2026-08-07 docs-only exemption (founding, narrower),
+  `check-commits-filed.py` firing 14 runs (2026-08-23), and
+  `check-passes-filed.py`'s identical, **dormant** defect found and fixed
+  the same day, before it ever bit, verified at `ff4b4bf`.
+
+**Findings + decisions:**
+- **★★★★ "CI has been red for FOURTEEN consecutive runs by construction"
+  (yesterday's entry) overstated by roughly 4.7×.** Replaying the new gate
+  at all fourteen historical `headSha` values: only **three** were
+  purely structural (tip-only) — `32679353296`@`08a88bd`,
+  `32595460670`@`c24ad7a`, `32520914981`@`6a2c13f` — and all three now
+  exit `0`. **The other eleven also named genuinely unfiled older commits
+  behind the tip** (one to five each; e.g. `32586077737`@`83409b3` named
+  `71f7055` and `bd9844d` in addition to its own tip) and **still exit
+  `1`, correctly**, under the fixed gate. The gate was doing real work 11
+  times out of 14, not zero. Corrected in `ROADMAP.md`'s `08a88bd` entry
+  via a dated footer, per this project's amendment convention — the
+  original entry is not rewritten.
+- **★★★★★ The `v0.8.0` tag has MOVED since it was recorded.** `HEAD` and
+  `origin/main` are now both `5661d86` (the 240th filing's own commit,
+  beneath `bb154ed`); the `v0.8.0` tag object is now `2e613a9`, pointing
+  at `5661d86` — both locally and on the remote. This is option (B) from
+  `NEXT_SESSION.md` §0 (move the tag to the filing commit), **taken**,
+  without §0 itself being updated to record it. **Consequence: the
+  release-gate hazard for this specific tag is discharged** — the tag now
+  sits on a commit that can cite its own filing, because it *is* the
+  filing — accomplished by moving the tag rather than by the ordering
+  discipline (option C) the handoff recommended for `v0.8.1`. Both routes
+  now work for different reasons; `R217`'s structural fix means an
+  ordinary code-commit tag is fine too, as long as its filing lands before
+  CI is read at that commit.
+- **All 16 runnable `tools/check-*` gates exit `0` at `HEAD`.**
+  `python tools/verify-release.py v0.8.0` is now **7 of 7**, apart from
+  "working tree clean" measured mid-edit (the engineer's own uncommitted
+  changes at the time, cleared on commit).
+- **Sourcing discipline note.** This filing has no shell; every git/CI
+  figure above was relayed from the engineer's own dispatch, which does
+  have one and stated the command beside each figure. Recorded per hard
+  rule 8 as relayed, not independently checked.
+
+**`FEATURES.md`:**
+- **No rows affected** — this is repository infrastructure, not a pdfce
+  capability. Confirmed, not overlooked.
+
+**RAG:**
+- New: `D:/dev/rag/rust/a_gate_whose_evidence_only_a_later_commit_can_produce_should_defer_the_tip_not_fail_it.md`.
+- Amended with dated footers: `D:/dev/rag/rust/a_gate_joining_on_a_hash_the_commit_itself_writes_is_unsatisfiable.md`.
+- Marked **superseded** at its own top, not deleted: `D:/dev/rag/rust/a_release_tag_on_a_code_commit_cannot_satisfy_a_filing_gate_so_file_first_then_tag.md` — its measured history (the 14-run streak, the `v0.7.0`/`v0.8.0` divergence, the 62.5%-of-first-eight-tags recurrence rate) remains true and is kept as the worked example of why a remembered ordering is a weak substitute for a structural fix.
+- `D:/dev/rag/rust/index.md` updated for all three in the same filing.
+
+**Still in flight:**
+- Nothing engineering-side changed by this filing. The `NEXT_SESSION.md`
+  queue is unaffected; this role did not edit that file (engineer-owned,
+  rewritten by the engineer at session end).
+
+**For next session:**
+- `NEXT_SESSION.md` §0 and §A, as last written, describe a `v0.8.0` tag
+  state and a CI-streak severity that are both now stale — see the two
+  corrections above and the `bb154ed`/`08a88bd` entries in `ROADMAP.md`
+  for the current facts and their sourcing. The engineer's own end-of-
+  session rewrite of `NEXT_SESSION.md` is the place that should carry the
+  corrected `HEAD`/tag state forward.
+- `--strict-tip` exists on both filing gates now; worth adopting as a
+  librarian self-check immediately before committing a filing.

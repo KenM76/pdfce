@@ -96,6 +96,172 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `bb154ed` — ★★★★★ **A GATE THAT ASKS A COMMIT TO CITE ITS OWN HASH CAN ONLY EVER BE RED — BOTH FILING GATES NOW DEFER THEIR OWN TIP COMMIT INSTEAD OF FAILING ON IT, `R217` MINTED**; ★★★★ **CORRECTS THE PRIOR (`08a88bd`) ENTRY ON TWO FACTS — "FOURTEEN RED BY CONSTRUCTION" WAS TRUE OF ONLY THREE OF THE FOURTEEN, AND THE `v0.8.0` TAG HAS MOVED TO THIS FILING'S OWN COMMIT (`5661d86`), DISCHARGING THE RELEASE-GATE HAZARD FOR THIS TAG WITHOUT ANY ORDERING DISCIPLINE**; ★★★ **THE SIBLING GATE `check-passes-filed.py` HAD THE IDENTICAL, DORMANT DEFECT AND WAS FIXED BEFORE IT EVER FIRED** — no Pass ID, infrastructure — 2026-08-24 (two-hundred-and-forty-first filing)
+
+**Sourcing.** This filing has **no shell** (librarian invocation). Every
+git/CI figure below is **relayed from the engineer's own dispatch**, which
+does have a shell and states the command beside each figure it reports;
+this role is reporting what was measured, not independently re-measuring
+it. Per hard rule 8: distinguish checked from relayed, always — this
+entire entry is the relayed case.
+
+---
+
+#### What shipped, in one paragraph
+
+Both `tools/check-commits-filed.py` and `tools/check-passes-filed.py` join
+on **"this commit's hash appears in `ROADMAP.md`/`SESSION_LOG.md`"**. That
+join cannot be satisfied by the tip commit of any push, for any commit,
+code or docs — the filing that would satisfy it is necessarily a *later*
+commit. The existing docs-only exemption (`D:/dev/rag/rust/a_gate_joining_
+on_a_hash_the_commit_itself_writes_is_unsatisfiable.md`, 2026-08-07) only
+ever covered the ledger-writing commit itself; it did nothing for an
+ordinary *code* commit whose filing is merely scheduled, not impossible —
+which is every code commit, on its own CI run. **Both gates now defer the
+join for `HEAD` alone**, on every run, printed on both the passing and
+failing path, and the deferral evaporates the instant a following commit
+exists. Real debt behind the tip — a genuinely older, unfiled commit —
+still hard-fails, unchanged. A `--strict-tip` flag reproduces the old,
+undeferred behaviour for the one caller that can actually satisfy it: a
+librarian filing checking itself immediately before committing.
+
+---
+
+#### ★★★★ Correction 1 — "fourteen red by construction" overstated by a factor of ~4.7
+
+The prior entry (`08a88bd`, immediately below) read *"CI has been red for
+FOURTEEN consecutive runs on one step"* and characterised all fourteen as
+structural. **Replaying the new (deferred-tip) gate at all fourteen
+historical `headSha` values shows that is true of exactly THREE:**
+
+| run | commit | what the OLD gate printed | new gate |
+|---|---|---|---|
+| `32679353296` | `08a88bd` (the `v0.8.0` tag) | tip only | exit `0` |
+| `32595460670` | `c24ad7a` | tip only | exit `0` |
+| `32520914981` | `6a2c13f` | tip only | exit `0` |
+| `32586077737` | `83409b3` | tip **plus** `71f7055`, `bd9844d` (older, genuinely unfiled) | exit `1`, correctly |
+| *(the other 10)* | — | tip plus 1–5 older unfiled commits each | exit `1`, correctly |
+
+**Eleven of fourteen were doing real work** — naming genuinely unfiled
+older commits, not merely reacting to their own tip — and stayed red
+after the fix, as they should. Three were pure tip-artefacts and now pass.
+*"By construction"* correctly describes the **pattern** the streak
+followed (a run of interleaved code commits reads as a run of red CI); it
+overstated **how many of the fourteen individual failures had no other
+cause**. Last green run before the streak, unchanged: `32493456093` at
+`06aaad3`.
+
+#### ★★★★★ Correction 2 — the `v0.8.0` tag has MOVED; `NEXT_SESSION.md` §A is stale as of this filing
+
+`NEXT_SESSION.md` §A (written by the 240th filing) states `HEAD` is
+`08a88bd`, equal to `origin/main`, equal to the `v0.8.0` tag, tag object
+`2ed21e4`. **Measured today: `HEAD` and `origin/main` are both `5661d86`**
+(the 240th filing's own commit, before `bb154ed` landed on top of it),
+**and the `v0.8.0` tag object is now `2e613a9`, pointing at `5661d86`** —
+both locally and on the remote (`git ls-remote --tags origin v0.8.0`).
+**The tag was moved to the filing commit after the handoff was written** —
+this is **option (B)** from `NEXT_SESSION.md` §0 ("move the tag to the
+filing commit and force-push — rewrites a published tag on a public repo,
+do not do this casually"), **taken**, without §0 itself being updated to
+record it. This role does not edit `NEXT_SESSION.md` (engineer-owned); the
+correction is filed here, dated, per `R216`'s placement rule, and the
+`08a88bd` entry above carries a pointer amendment rather than a duplicate
+of the figures.
+
+**Consequence, stated plainly because it changes what the release hazard
+means for `v0.8.0` specifically:** the tag now sits on a commit that *can*
+cite its own filing — it *is* the filing — so `verify-release.py v0.8.0`'s
+seventh check is no longer permanently unsatisfiable for this tag. This
+was accomplished by moving the tag (option B), not by the ordering
+discipline (option C) `NEXT_SESSION.md` §0 recommended for `v0.8.1`. Both
+routes now work, for different reasons: `R217`'s structural fix means a
+tag on an *ordinary* code commit is fine too, as long as its filing lands
+before anyone reads CI at that commit.
+
+---
+
+#### The sibling gate, fixed before it fired
+
+`tools/check-passes-filed.py` carried the identical defect and had never
+been observed to fail: pushes in this project usually batch behind a
+docs-only librarian filing that is already exempt, so the tip is usually
+already the exempt case. **Verified at `ff4b4bf`** ("Pass 97.1f: a
+knockout group in ink", a code commit claiming a Pass ID): old behaviour
+flagged it UNFILED; new behaviour defers it while `a277931` — genuinely
+older, genuinely unfiled — behind it still hard-fails. Fixed in the same
+commit as the primary gate, on the argument that a fix applied only to the
+instance already observed is how the same defect gets found twice.
+
+---
+
+#### What is NOT weakened (carried forward because a future session will be tempted to misread the fix as a loosening)
+
+- The tip is deferred by **exactly one commit**, never forgiven — checked
+  again the moment anything lands on top of it. The only permanently
+  unchecked state is the final commit in the project's history being code
+  and never followed by a filing, which no later commit could have
+  flagged either.
+- The deferral is **printed on both the clean and the failing path** — a
+  deferral visible only when the gate already fails is invisible in
+  exactly the run whose reader most needs to see it.
+- **`--strict-tip`** restores the old behaviour for a librarian's own
+  pre-filing self-check.
+- Real debt behind the tip still exits `1`, unchanged — sampled at
+  `83409b3` above.
+- `verify-release.py`'s comment and failure-hint text were corrected in
+  the same commit rather than left to describe behaviour the gate no
+  longer has.
+
+---
+
+#### Verification performed
+
+Both branches of the new predicate sampled at real historical commits in
+throwaway worktrees, not asserted: `08a88bd` (tip-only → exit `0`),
+`83409b3` (tip + 2 real → exit `1` on the 2), `ff4b4bf` (sibling gate, tip
+Pass-claiming → deferred, `a277931` still failed), plus `--strict-tip`
+reproducing the old exit `1` at both. **All 16 runnable `tools/check-*`
+gates exit `0` at `HEAD`.** `python tools/verify-release.py v0.8.0` is now
+**7 of 7**, apart from "working tree clean" at the moment of measurement
+(the engineer's own uncommitted edits, cleared on commit).
+
+---
+
+#### `FEATURES.md`
+
+**No rows affected.** This is repository infrastructure, not a pdfce
+capability — no core/cli/gui box changes. Stated explicitly so the
+absence reads as confirmed rather than overlooked.
+
+---
+
+#### Ledger
+
+**No Pass ID** — infrastructure, same convention as the `08a88bd` and
+`8522167` entries above/below it. **No decision minted** — this is a gate
+implementation fix, not a crate-boundary/library/invariant choice for
+`ARCHITECTURE.md` §12. **`R217` minted** — ceiling moves `R216` → `R217`;
+next free `R218`. Decisions next free unchanged, **`085`**. Operator
+questions next free unchanged, **`(bs)`**. Next free Pass in the `74`
+family unchanged, **`74.11`**; `122.4` the next free `122`; `97.1g`
+reserved and unbuilt. `render-page` metrics line unchanged at **`90`
+keys** — no rendering code touched. Filing ordinal **241**.
+
+**Three RAG files touched**, all `D:/dev/rag/rust/` (ecosystem-wide;
+nothing pdfce-specific): one new —
+`a_gate_whose_evidence_only_a_later_commit_can_produce_should_defer_the_tip_not_fail_it.md`
+— and two amended with dated footers/supersession notices —
+`a_gate_joining_on_a_hash_the_commit_itself_writes_is_unsatisfiable.md`
+and
+`a_release_tag_on_a_code_commit_cannot_satisfy_a_filing_gate_so_file_first_then_tag.md`
+(the latter marked **superseded** at its own top, not deleted, per this
+filing's instructions — its measured history stays true and useful).
+`D:/dev/rag/rust/index.md` updated in the same filing for all three.
+
+**Candidate standing rule accepted at `n=3`** — see `R217` above.
+
+---
+
 ### `08a88bd` — ★★★★★ **`v0.8.0` IS RELEASED — TAG `2ed21e4` AT `08a88bd`, PUSHED, TWO ASSETS, AND THE OPERATOR'S AUTHORISATION IS RECORDED BY NAME** (`CLAUDE.md` rule 8 makes each publication its own act); ★★★★★ **AND THE RELEASE GATE FOUND THAT CI HAS BEEN RED FOR *FOURTEEN* CONSECUTIVE RUNS ON ONE STEP — the dispatch reported two** (`c24ad7a`, `83409b3`); the last green run is `32493456093` at `06aaad3`, and **all fourteen fail on the identical step `check that every code commit is filed`**, measured by `gh run view --json jobs` on each; ★★★★★ **THE ORDERING IS THE WHOLE FINDING, AND `verify-release.py` SAYS IT ITSELF: *"If the failure is a filing/bookkeeping gate, the fix is ordering: file first, let CI go green, then tag."*** — **`v0.7.0`'s tag sat on a librarian FILING commit (`3bc8fbe`) and its run was GREEN; `v0.8.0`'s tag sits on a CODE commit whose own filing cannot exist in its own tree**, so ★★ **the run at the tagged commit CANNOT be made green by re-running it** — a re-run checks out `08a88bd`, and this entry is not in `08a88bd`; ★★★ **`verify-release.py v0.8.0` = 6 of 7 ok, exit 1**, and it is the instrument that surfaced both failures — **a release gate that READS CI found what a CI gate could not make anyone READ**; ★★★ **DISK: the first packaging attempt died on `os error 112` with `D:` at 100 % / 0 bytes free**, `target/` at **110 GB** of which `target/debug` was **103 GB**; ★★ **`FEATURES.md`: NO CAPABILITY ROW MOVES — ONE STALE LITERAL REPAIRED** (`pdfce-cli 0.7.0` → a version-agnostic form); ★ **README's `v0.3.0…v0.7.0` / "FOUR releases" passage RULED CORRECT AND LEFT ALONE** — it is a *static* history claim, not a self-referential one (`R216`) — no Pass ID; release record — 2026-08-23 (two-hundred-and-fortieth filing)
 
 **Sourcing.** This filing has a shell. **Every figure below was produced
@@ -367,6 +533,45 @@ and
 
 **Gate exit codes after this filing's edits** are recorded in today's
 `SESSION_LOG.md` entry.
+
+**★★★★★ AMENDED 2026-08-24, `bb154ed` — TWO facts recorded above are
+STALE, and one of them is a correction to this entry's own headline,
+relayed from the engineer's dispatch (this filing has no shell; figures
+below are measured by the engineer, not by this role, per hard rule 8).**
+
+1. **The tag has MOVED.** `v0.8.0` sat on `08a88bd` (tag object `2ed21e4`)
+   when this entry was written. **It now sits on `5661d86`** — the
+   librarian filing commit that recorded this very entry — **tag object
+   `2e613a9`**, both locally and on the remote (`git ls-remote --tags
+   origin v0.8.0`). This is **option (B)** from the finding above ("move
+   the tag to the filing commit and force-push — rewrites a published tag
+   on a public repo, do not do this casually"), **taken**, without the
+   companion handoff document being updated to say so at the time. **Net
+   effect: `verify-release.py v0.8.0`'s seventh check ("CI is GREEN at the
+   tagged commit") is no longer unsatisfiable for this tag** — it is
+   satisfiable now, because the commit the tag points to is one that can,
+   in fact, cite its own filing (it *is* the filing).
+2. **"CI has been red for FOURTEEN consecutive runs BY CONSTRUCTION" was
+   only true of THREE of the fourteen, measured by replaying the
+   deferred-tip gate (`R217`) at all fourteen historical `headSha`
+   values.** Three runs were **purely structural** — the tip was the
+   *only* hash printed — and all three now exit `0` under the fixed gate:
+   `32679353296` at `08a88bd` (the original `v0.8.0` tag), `32595460670`
+   at `c24ad7a`, `32520914981` at `6a2c13f`. **The other eleven also
+   named genuinely unfiled OLDER commits** behind the tip — between one
+   and five each; e.g. run `32586077737` at `83409b3` printed the tip
+   *plus* `71f7055` and `bd9844d`, both older and both genuinely
+   unnarrated — and **those eleven still exit `1`, correctly**, under the
+   fixed gate. **So the gate was doing real work 11 times out of 14, not
+   zero.** "By construction" is the right description of the *pattern*
+   the streak followed, and the wrong description of *why every one of
+   the fourteen runs individually failed* — only three of them had no
+   other cause. Last green run before the streak, unchanged:
+   `32493456093` at `06aaad3`.
+
+Both corrections apply to this entry specifically because both facts were
+asserted here. See the `bb154ed` entry immediately above for the fix that
+produced them and for `R217`.
 
 ### `8522167` — the round-7 note's own ordinals DELETED, and ★★★★★ **THE DISPOSITION REVERSES WITHOUT THE RULING REVERSING, WHICH IS THE WHOLE CONTENT OF THIS ENTRY** (**no Pass ID**) — ★★★★★ **THE 238th FILING RECORDED THIS DEFECT AND DECLINED TO REPAIR IT; THE ENGINEER REPAIRED IT; BOTH ARE CORRECT, BECAUSE THE DECLINE WAS AGAINST *CORRECTION* AND THE REPAIR WAS A *DELETION***: the note's ladder (*"Round 1 fixed wrong values … Rounds 5 and 6 produced fresh instances of classes 1 and 2"*) pinned round 1 to the first correction while every other record in this project numbers that commit **round 3**, so *"rounds 5 and 6"* named **this note's own commit and one that does not exist** — and the 238th filing's stated ground for not repairing it was that *"repairing it writes an eighth sentence about a seventh correction, which is the generator by definition"*, **which is an argument against a REWORDING and not against a REMOVAL**; ★★★★★ **THE ORDINALS ARE GONE, NOT CORRECTED** — the list is now of defect **SHAPES** (*wrong values; wrong pointers; wrong quantifiers; an unwritten antecedent*) closed by *"the later rounds produced fresh instances of the earlier kinds, so the list is of shapes rather than of stages"*, and a short parenthetical states the rule and says why the ordinals are absent; ★★★★ **THE APPLIED EDIT IS STRICTLY STRONGER THAN THE REMEDY THIS ROLE PRESCRIBED, AND THE DIFFERENCE IS ONE WORD**: the prescription kept *"**Six** rounds of correction ran against this file"*, which drops the per-round ordinals but **retains the count** — and the count is the very axis the two numberings disagreed on; the applied text says *"**Several** rounds"* and **asserts nothing anybody has to maintain**; ★★★★ **THE `110 lines earlier` DISTANCE IS GONE IN THE SAME PASS**, on this role's other prescription — *a distance is a claim; a relation is not* — **the same claim in a different unit**, and both remedies this session produced were **deletions**; ★★★★★ **THE RULING ASKED FOR — *for a SELF-REFERENTIAL claim, prefer DELETION to CORRECTION, because a correction is drawn from the same class as the defect* — IS ACCEPTED AS A SHARPENING OF THE RAG FINDING'S CONSEQUENCE 1, NOT AS A NEW RULE AND NOT AS ALREADY-IMPLIED**, with the boundary that makes it safe written beside it; ★★★ **THE SWEEP FOUND TWO SURVIVORS IN THIS ROLE'S OWN TREES AND BOTH ARE THE SAME DEFECT** — a *"deliberately NOT repaired"* disposition, present-tense, in `ROADMAP.md`'s convergence practice **and** in the new RAG finding's consequence 2, **both falsified by the commit under filing**; ★★★★★ **AND IT FOUND THE THING THAT FIRED A TRIGGER: `R216` IS MINTED, CEILING `R215` → `R216`** — the convergence practice's own promotion trigger (*"a SECOND document that grows a layer of sentences about its own corrections; at `n=2`, mint it"*, written one filing earlier) **fired on `docs/NEXT_SESSION.md`**, which carried **three** *"this paragraph read X until 2026-08-23"* annotations; ★★★★★ **AND THE MECHANISM IS A TENSION BETWEEN TWO RULES, NOT CARELESSNESS — `R215` (d) obliges preserving wrong wording, which is FREE in an append-only file and means HAND-CARRYING IT INTO EVERY REWRITE of an overwritten one**, so the obligation is discharged by the append-only record on the overwritten document's behalf; ★ **`FEATURES.md`: NO ROW, CONFIRMED BY SWEEP** — no capability moved; ★ **`render-page` metrics line unchanged at `90` keys, no code changed, measured by running the gate**; ★ **SESSION CLOSE — `NEXT_SESSION.md` rewritten for a cold reader, and the sweep is STOPPED here by the engineer's instruction rather than by an empty result** — 2026-08-23 (two-hundred-and-thirty-ninth filing)
 
@@ -92852,6 +93057,86 @@ same cause (hashes exist only at commit time), two different failure modes.
   `D:/dev/rag/rust/a_document_that_annotates_its_own_corrections_has_made_its_edit_history_part_of_its_content.md`.
 
   **Ceiling moves `R215` → `R216`; next free `R217`.**
+
+- **R217 — A GATE THAT REQUIRES A COMMIT TO CITE SOMETHING ONLY A *LATER*
+  COMMIT CAN CREATE IS UNSATISFIABLE BY CONSTRUCTION FOR THAT COMMIT, NOT
+  MERELY STRICT. DEFER THE JOIN BY EXACTLY ONE COMMIT AND DISCLOSE THE
+  DEFERRAL ON BOTH THE PASSING AND FAILING PATH; NEVER LET IT FAIL FOR
+  THAT REASON ALONE** (2026-08-24; librarian-minted, two-hundred-and-
+  forty-first filing; `bb154ed`; **third occurrence of one shape**, only
+  this one named as a class).
+
+  **Why this is a new rule rather than a re-application of the existing
+  docs-only exemption.** `tools/check-commits-filed.py` already exempted
+  docs-only commits — it has to, or the filing commit could not satisfy
+  its own join. That exemption is a **permanent class exemption**, and it
+  only covers the one commit that can genuinely never satisfy the join.
+  It does nothing for an *ordinary code commit* whose filing is merely
+  *scheduled for later*, because that commit is just as unable to cite a
+  hash that does not exist yet. That gap is why the gate ran **red for 14
+  consecutive CI runs**, every one on the identical step — a run of
+  interleaved code commits produces a run of red CI by this exact
+  construction, and the constant output read as normal rather than
+  broken.
+
+  **The fix is positional, not classificatory.** Skip the join for
+  `HEAD` alone, on every run — not by inspecting its diff, not by its
+  subject line, only by its position at the tip — and let the deferral
+  evaporate the instant anything lands on top of it. A commit deferred on
+  its own CI run is checked like everything else the moment a following
+  commit exists. **The only permanently-unchecked state is the final
+  commit in the project's entire history being code and never followed by
+  a filing** — which is the one state no later commit could ever have
+  flagged either. **The deferral is printed on both the clean and the
+  failing path**, because a deferral visible only when the gate already
+  fails is invisible in exactly the run whose reader most needs to see
+  it. A `--strict-tip` flag restores the full, pre-deferral join for the
+  one caller that CAN satisfy it — a filing commit checking itself before
+  it is written.
+
+  **Three occurrences of one shape, and only the third earned the
+  number.** (1) 2026-08-07 — `check-passes-filed.py`'s docs-only
+  exemption, the founding instance, fixed with the permanent class
+  exemption
+  (`D:/dev/rag/rust/a_gate_joining_on_a_hash_the_commit_itself_writes_is_unsatisfiable.md`).
+  (2) 2026-08-23 — `check-commits-filed.py` fired the 14-run streak
+  recorded in the prior Shipped entry. (3) 2026-08-24 — the **sibling**
+  `check-passes-filed.py` was found to carry the **identical, dormant**
+  defect, verified at `ff4b4bf` (a code commit claiming a Pass ID: old
+  behaviour flags it UNFILED; new behaviour defers it while the genuinely
+  older, unfiled `a277931` behind it still hard-fails), and fixed
+  **before it ever bit** — pushes in this project usually batch behind a
+  docs-only filing commit that was already exempt, so the sibling gate's
+  identical shape had simply never had the chance to fire.
+
+  **Transferable habit from occurrence 3, and the reason this rule exists
+  rather than a single repaired script:** when a gate defect is fixed,
+  check every sibling gate built on the same join, whether or not it has
+  ever been observed to fail. Dormancy is evidence about the trigger
+  condition (an unbatched push, a tag on a code commit) having not yet
+  occurred for that particular gate — it is not evidence the shape is
+  rare.
+
+  **What is NOT weakened.** The tip is deferred by exactly one commit,
+  never forgiven; real debt behind it — an older, genuinely unfiled
+  commit — still hard-fails, unchanged (`83409b3` sampled: tip plus two
+  real offenders, still fails, correctly, on the two). This rule does not
+  authorise a permanent exemption for any class beyond the one
+  `a_gate_joining_on_a_hash…` already names; it authorises deferring the
+  **position**, never the **commit's obligation**.
+
+  **Consequence for the release-tag hazard this rule's second occurrence
+  recorded.** `a_release_tag_on_a_code_commit_cannot_satisfy_a_filing_gate_so_file_first_then_tag.md`'s
+  remedy — file first, watch CI go green, then tag — is now **superseded**
+  by this structural fix, marked so at that file's own top rather than
+  deleted. A tag on a code commit is green whenever the history *behind*
+  it is filed; there is nothing left to remember or get wrong by
+  ordering.
+
+  **Full derivation:**
+  `D:/dev/rag/rust/a_gate_whose_evidence_only_a_later_commit_can_produce_should_defer_the_tip_not_fail_it.md`.
+
+  **Ceiling moves `R216` → `R217`; next free `R218`.**
 
 ## Update protocol
 
