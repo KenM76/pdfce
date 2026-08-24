@@ -59157,3 +59157,125 @@ behind).
   corrected `HEAD`/tag state forward.
 - `--strict-tip` exists on both filing gates now; worth adopting as a
   librarian self-check immediately before committing a filing.
+
+## 2026-08-24 (two-hundred-and-forty-second filing) — `Pass 97.1g` ships: a non-isolated group on an ink page can finally see what is under it; acceptance criterion MET, headline result still NEGATIVE; a draft duplicate standing rule caught before commit
+
+**Shipped:**
+- **`Pass 97.1g` (`c4a85d0`).** A non-isolated ordinary transparency group
+  on a `DeviceCMYK` page was composited as if isolated — its interior
+  blended against a transparent buffer, and ISO 32000-1 §11.4.4's backdrop
+  removal never ran. The second content walk now exists, ported line for
+  line from the additive `Paint` arm. New in `CmykBuffer`:
+  `child_from_backdrop`, `composite_non_isolated` (soft mask applied
+  **after** removal, because removal divides by the unmasked `α_gn`), and
+  `backdrop_present`. `Canvas::group`'s `Cmyk` arm now runs the same
+  three-way test the `Paint` arm already used.
+
+**Decisions made this session:**
+- No architectural decision — a code-correctness fix, not a crate-
+  boundary/library/invariant choice. `ARCHITECTURE.md` §12 unaffected.
+- **No new standing rule.** `R143` (*a refusal's stated reason is re-
+  verified before it is used to scope work*) already covers the shape
+  found in the `Cmyk` arm's approximation comment; it gains a dated
+  instance-note rather than a duplicate. See "Findings + decisions" below
+  for how the duplicate was nearly minted.
+
+**Findings + decisions:**
+- **★★ The acceptance criterion is met and the headline result is still
+  negative — file it as both.** `cmyk_groups_approximated` reaches 0 on
+  Ghent (was 118), as the Backlog entry required. But **this Pass changes
+  zero pixels in any corpus pdfce has**: Ghent's 51 patches, 0 differing
+  pixels on any; the Ghent board unchanged (29/10/12); an external 4,012-
+  file corpus has zero files containing both "Transparency" and
+  "DeviceCMYK", and the 114-file subcorpus that mentions `DeviceCMYK` also
+  shows 0 differing renders.
+- **The 118 → 0 drop is mostly the counter getting HONEST, not 118
+  repairs.** Of the 118 prior approximations, only 13 genuinely needed the
+  second walk; the other 105 rendered correctly and were counted anyway,
+  because the old test asked "is this group non-isolated?" instead of
+  §11.4.4 NOTE 2's "does its interior read the backdrop?" `R210`'s shape
+  (a conformance figure filed with the criteria the harness implements),
+  now seen against a diagnostic counter rather than a suite score.
+- **End-to-end verification came from four purpose-built fixtures**, since
+  no corpus pdfce holds exercises the construct: `tools/gen-nonisolated-
+  group-fixtures.py`, hand-written PDF bytes. At scale 4: non-isolated
+  Multiply old-vs-new differs on 40,000 px (max delta 137, direction
+  verified — red falls to zero as Multiply of magenta over cyan predicts);
+  isolated Multiply and non-isolated Normal are both 0-px controls.
+- **Two lessons from the fixture generator, one of them the session's most
+  important finding.** (1) A vacuous tautological assertion sat beside a
+  wrong literal (`/GSO 7 0 R` vs `/GSI 8 0 R`, off by one) — same family as
+  `R162`, instanced in a generator rather than a test. (2) **The feature's
+  own precondition was invisible**: `needs_buffer` only forces a buffer
+  when the outer graphics state is non-neutral; a non-isolated group under
+  `/ca 1` paints inline, which already **is** correct non-isolated
+  semantics, so a fixture at `/ca 1` cannot exercise the fix at all. The
+  first fixture draft used `/ca 1`, rendered identically before and after,
+  and looked exactly like a no-op fix. Written up at
+  `D:\dev\rag\rust\a_fixture_that_avoids_a_feature_precondition_cannot_tell_a_fix_from_a_no_op.md`.
+- **★ A near-miss worth recording plainly: this filing's own first draft
+  proposed minting a new standing rule (`R218`)** for a third finding — the
+  `Cmyk` arm's approximation comment citing a round trip that `Pass 97.1f`
+  had already deleted, three Passes earlier, unread. **Checked against the
+  existing record before committing**, and `R143` already covers exactly
+  this shape, with an existing worked instance (`R-INV-4`), and the RAG
+  file this pattern lives in already carries an explicit 2026-08-05 ruling
+  that it stays a RAG finding rather than generating a new pdfce rule per
+  occurrence. Corrected in-entry rather than minted: `R143` gains a dated
+  instance-note; the finding itself is filed as new occurrences in
+  `D:\dev\rag\rust\a_limitation_can_outlive_its_cause_and_be_re_derived_from_its_own_consequences.md`
+  and `trust_but_verify_doc_comments_are_not_evidence.md` (now its 12th).
+  The mechanism worth keeping: grep the standing-rules ledger and the RAG
+  index *before* drafting a mint, not after.
+- Tests added: 4 unit (`cmyk_buffer.rs`) + 3 integration
+  (`nonisolated_group_sees_its_backdrop.rs`), written as a non-vacuous pair
+  (one asserts the two routes AGREE for a Normal-only interior, one
+  asserts they DIFFER for a blending one).
+- Disclosure corrected in the same commit: `pdfce-cli`'s operator note,
+  the in-source narrative and the metrics-key table all previously said a
+  non-isolated group "is composited as if isolated" unconditionally; now
+  true only of the allocation-failure fallback.
+- `fuzz/Cargo.lock` refreshed (had been left at `0.7.0` by the `v0.8.0`
+  bump).
+- Verification (relayed, no shell this filing): 4,207 workspace tests
+  green; `cargo fmt`/`clippy` clean; all 16 `tools/check-*` gates exit 0;
+  `fuzz/` checks clean; `cargo tree` confirms GUI-core separation intact.
+- **`c4a85d0` is itself a Pass-claiming code commit at the tip** — both
+  filing gates (`bb154ed`, same day) report clean with the tip deferred,
+  demonstrating that fix one commit after it shipped.
+
+**`FEATURES.md`:**
+- One row moved *Planned → Implemented* ("Non-isolated ordinary
+  transparency groups composited correctly on a subtractive page"):
+  `core [x]`, `cli [x]`, `gui [ ]` (paused, not rounded up), `Acrobat —`
+  unchanged.
+- Two sibling *Implemented* rows (Transparency GROUP compositing;
+  Subtractive colorant compositing buffer) swept under hard rule 11 and
+  corrected — both carried the now-false "still composited as if
+  isolated" clause about this same gap.
+
+**RAG:**
+- New: `D:\dev\rag\rust\a_fixture_that_avoids_a_feature_precondition_cannot_tell_a_fix_from_a_no_op.md`.
+- Amended with new occurrences: `D:\dev\rag\rust\a_limitation_can_outlive_its_cause_and_be_re_derived_from_its_own_consequences.md`
+  (2nd occurrence + 4th detection heuristic) and
+  `D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+  (12th occurrence, `last_verified` bumped).
+- `D:\dev\rag\rust\index.md` updated for all three.
+
+**Still in flight:**
+- `Pass 97.1k` (images/shadings still bridge through sRGB) is next in the
+  `97.1` family, already filed to *Backlog*.
+- Carried forward, not closed by this Pass: `resolve_indexed`'s discarded
+  scratch `ColorDiagnostics`; implicit knockout (`/TK`, `B`/`b`, shading
+  patterns); `/TR` on a soft mask read but not evaluated; `/AIS true` vs
+  `false` undistinguished for a group mask; spot colorants still four
+  planes not runtime N; per-paint rendering intent.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned).
+- Ledger: next free Pass in the `97.1` family is `97.1k`; standing rules
+  ceiling stays `R217` (next free `R218`); decisions next free `081`;
+  operator questions next free `(bs)`; filing ordinal `242`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Everything above is relayed from the engineer's
+  dispatch, per hard rule 8.
