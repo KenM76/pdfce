@@ -1092,6 +1092,188 @@ impl CmykBuffer {
         }
     }
 
+    /// Does this buffer hold **any** marked pixel — i.e. is there a
+    /// backdrop for a non-isolated group to see?
+    ///
+    /// # Why this is not just `dirty_region().is_some()`
+    ///
+    /// The dirty rectangle records where something was *written*, and a
+    /// write of a fully transparent pixel counts. §11.4.5's substitution is
+    /// about the backdrop being transparent, not about it being untouched:
+    /// *"an isolated group's initial backdrop is transparent"*, so a
+    /// backdrop that was written and is transparent anyway IS the isolated
+    /// case and must take the one-walk path. Testing the rectangle alone
+    /// would send it down the two-walk path, where the removal then divides
+    /// by an `α_gn` it did not need to and returns the same answer more
+    /// slowly — correct, but for no reason, on every page whose group sits
+    /// over blank paper.
+    ///
+    /// The additive twin is `p.pixels().iter().any(|px| px.alpha() > 0)`,
+    /// and this is the same test over the alpha plane, restricted to the
+    /// only region that can be non-zero.
+    ///
+    /// # Cost
+    ///
+    /// One pass over the dirty rectangle's alpha, short-circuiting on the
+    /// first marked pixel — so it is `O(1)` on the common case of a group
+    /// over existing content and `O(area)` only when the answer is `false`.
+    pub(crate) fn backdrop_present(&self) -> bool {
+        let Some((x0, y0, x1, y1)) = self.dirty_region() else {
+            return false;
+        };
+        (y0..y1).any(|y| {
+            let row = (y * self.width) as usize;
+            self.alpha[row + x0 as usize..row + x1 as usize]
+                .iter()
+                .any(|a| *a > 0.0)
+        })
+    }
+
+    /// A child buffer **pre-loaded with this buffer's own content** — the
+    /// initial backdrop a non-isolated group (§11.4.4) is entitled to see.
+    ///
+    /// # Why this exists next to [`CmykBuffer::take_child`] rather than
+    /// instead of it
+    ///
+    /// A non-isolated group is rendered **twice**, and the two runs need
+    /// different starting states. Run 1 starts transparent, so its alpha is
+    /// `α_gn` — the group's *own* accumulated alpha, with no backdrop in
+    /// it — which is precisely the divisor §11.4.4's removal needs. Run 2
+    /// starts from the backdrop, so its colour is the group composited
+    /// *over* that backdrop, which is what the group's elements actually
+    /// saw. Neither run alone is the answer; the answer is
+    /// [`CmykBuffer::composite_non_isolated`] of the two.
+    ///
+    /// `take_child` gives run 1's buffer. This gives run 2's.
+    ///
+    /// # Why only the dirty rectangle is copied
+    ///
+    /// Outside it the parent is untouched, and an untouched buffer is all
+    /// zeros — `α = 0`, every colorant `0` — which is byte-for-byte what a
+    /// child returned by [`CmykBuffer::give_back_child`] already holds. So
+    /// copying the rest would write zeros over zeros. This is not only an
+    /// optimisation: it keeps the child's dirty rectangle equal to the
+    /// parent's rather than the whole page, so the merge below and the
+    /// eventual clear both stay proportional to what was actually painted.
+    ///
+    /// The additive twin (`Canvas::group`'s `Paint` arm) clones the whole
+    /// `Pixmap` instead. That is not a disagreement — a `Pixmap` carries no
+    /// dirty rectangle to preserve, so there is nothing there to be careful
+    /// about.
+    ///
+    /// # Returns
+    ///
+    /// `None` on the same condition as [`CmykBuffer::take_child`]: no spare
+    /// and no allocation. The caller falls back to the isolated
+    /// approximation and counts it, rather than dropping the group.
+    pub(crate) fn child_from_backdrop(&mut self) -> Option<Self> {
+        let mut child = self.take_child()?;
+        let Some((x0, y0, x1, y1)) = self.dirty_region() else {
+            // Nothing painted, so the backdrop IS transparent, and a
+            // transparent initial backdrop is §11.4.5's isolated case. The
+            // cleared child is already correct; the caller's own
+            // `backdrop_present` test normally means we never get here.
+            return Some(child);
+        };
+        for y in y0..y1 {
+            let row = (y * self.width) as usize;
+            let (a, b) = (row + x0 as usize, row + x1 as usize);
+            for plane in 0..4 {
+                child.planes[plane][a..b].copy_from_slice(&self.planes[plane][a..b]);
+            }
+            child.alpha[a..b].copy_from_slice(&self.alpha[a..b]);
+        }
+        // The copied span counts as written: `give_back_child` clears only
+        // the dirty rectangle, and a child handed back with backdrop still
+        // in it would hand that backdrop to the NEXT group as if it were
+        // its own content. Silent, and wrong in a way that grows with how
+        // many groups a page has.
+        child.mark_dirty((x0, y0, x1, y1));
+        Some(child)
+    }
+
+    /// **§11.4.4's backdrop removal**, then §11.4.4's element formula —
+    /// the subtractive twin of `canvas::composite_non_isolated_group`.
+    ///
+    /// `self` is the parent buffer, and on entry it still holds the frozen
+    /// initial backdrop: nothing has been composited into it since the
+    /// group began. That is what makes it readable as `C_0` here.
+    ///
+    /// * `iso` — run 1's buffer (started transparent). **Only its alpha is
+    ///   read**, and that alpha is `α_gn`.
+    /// * `nis` — run 2's buffer (started from the backdrop): the group's
+    ///   colour accumulated *over* that backdrop.
+    /// * `alpha` — §11.4.5's constant alpha at the `Do`.
+    /// * `mask` — the soft mask's data, or `None`.
+    ///
+    /// # ★ The removal divides by the UNMASKED `α_gn`
+    ///
+    /// The soft mask is not part of the group's own accumulation — §11.4.5
+    /// applies it to the *finished* result — so masking before the removal
+    /// would divide by the wrong number and shift the group's **colour**,
+    /// not merely its opacity. The mask is therefore applied to `source.a`
+    /// after [`remove_backdrop_cmyk`] has run, never before. This is the
+    /// same ordering the additive path documents, and it is the one an
+    /// implementation gets wrong by calling an existing `apply_mask` on the
+    /// child buffer first because that is the shorter line of code.
+    ///
+    /// # Why the walk is over `iso`'s dirty rectangle
+    ///
+    /// Where the group marked nothing, `α_gn` is zero and §11.4.4's result
+    /// is unreachable whatever colour `nis` holds there — `nis` holds the
+    /// backdrop unchanged, and compositing the backdrop onto itself is the
+    /// one operation §11.4.3 forbids (*"the backdrop's contribution … shall
+    /// be applied only once"*). Walking `nis`'s rectangle instead would do
+    /// exactly that over the whole backdrop, which is why the choice of
+    /// rectangle here is a correctness question and not a performance one.
+    ///
+    /// # Returns
+    ///
+    /// The number of pixels changed.
+    pub(crate) fn composite_non_isolated(
+        &mut self,
+        iso: &Self,
+        nis: &Self,
+        alpha: Chan,
+        blend: Blend,
+        mask: Option<&[u8]>,
+    ) -> u32 {
+        debug_assert_eq!(iso.width, self.width);
+        debug_assert_eq!(nis.width, self.width);
+        let alpha = alpha.clamp(0.0, 1.0);
+        let Some((x0, y0, x1, y1)) = iso.dirty_region() else {
+            return 0;
+        };
+        self.mark_dirty((x0, y0, x1, y1));
+        let mut changed = 0_u32;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let idx = (y * self.width + x) as usize;
+                let agn = iso.alpha[idx];
+                if agn <= 0.0 {
+                    continue;
+                }
+                let backdrop = self.pixel(idx);
+                let over = nis.pixel(idx);
+                let c = remove_backdrop_cmyk(over, backdrop, agn);
+                let m = mask.map_or(1.0, |d| d.get(idx).map_or(1.0, |v| Chan::from(*v) / 255.0));
+                // Shape is the group's own `f_g`, unscaled by the outer
+                // constant alpha -- §11.4.5 scales alpha and leaves shape
+                // alone. `composite_at` ignores shape outside a knockout
+                // group, but passing the scaled value would be a latent
+                // bug the moment this buffer ever is one.
+                let source = PixelCmyk {
+                    c,
+                    a: agn * alpha * m,
+                };
+                if self.composite_at(idx, source, agn, blend) {
+                    changed += 1;
+                }
+            }
+        }
+        changed
+    }
+
     /// Hand a finished child buffer back for the next group to use.
     ///
     /// Clears **only the rectangle the child actually wrote**, which is
@@ -1392,6 +1574,160 @@ mod tests {
             *b = 255;
         }
         m
+    }
+
+    /// Paint one solid colorant over the whole of `b`, the way a content
+    /// stream element would, so a test can build a backdrop or a group
+    /// interior without going through the interpreter.
+    fn paint_all(b: &mut CmykBuffer, c: [Chan; 4], alpha: Chan, blend: Blend) {
+        let (w, h) = (b.width, b.height);
+        let m = full_mask(w, h);
+        b.composite_mask(&m, (0, 0, w, h), c, alpha, blend);
+    }
+
+    /// ★★ THE IDENTITY THE THREE-WAY TEST IN `Canvas::group` RESTS ON.
+    ///
+    /// `Pass 97.1g` skips the second content walk whenever the group's
+    /// interior is backdrop-INdependent (§11.4.4 NOTE 2), on the claim that
+    /// isolated and non-isolated composition then agree **exactly**. That
+    /// claim is load-bearing and cheap to get wrong, so it is asserted here
+    /// rather than trusted: an interior painted entirely with `Normal` must
+    /// give the same page whether it was composed in one walk or two.
+    ///
+    /// If this ever fails, the shortcut in `Canvas::group` is unsound and
+    /// the renderer has been silently substituting isolated semantics on
+    /// every ordinary group over a non-empty backdrop -- which is exactly
+    /// the defect this Pass exists to end, reintroduced through its own
+    /// optimisation.
+    #[test]
+    fn a_normal_only_interior_makes_one_walk_and_two_walks_agree() {
+        let intent = CmykIntent::default();
+        let backdrop = [0.6, 0.1, 0.0, 0.05];
+        let inner = [0.0, 0.7, 0.3, 0.0];
+
+        // --- one walk: the isolated route -------------------------------
+        let mut one = CmykBuffer::new(4, 4, intent).unwrap();
+        paint_all(&mut one, backdrop, 1.0, Blend::Normal);
+        let mut iso = one.take_child().unwrap();
+        paint_all(&mut iso, inner, 0.5, Blend::Normal);
+        one.composite_buffer(&iso, 0.8, Blend::Normal);
+
+        // --- two walks: the non-isolated route ---------------------------
+        let mut two = CmykBuffer::new(4, 4, intent).unwrap();
+        paint_all(&mut two, backdrop, 1.0, Blend::Normal);
+        let mut iso2 = two.take_child().unwrap();
+        paint_all(&mut iso2, inner, 0.5, Blend::Normal);
+        let mut nis = two.child_from_backdrop().unwrap();
+        paint_all(&mut nis, inner, 0.5, Blend::Normal);
+        two.composite_non_isolated(&iso2, &nis, 0.8, Blend::Normal, None);
+
+        for idx in 0..16 {
+            let a = one.pixel(idx);
+            let b = two.pixel(idx);
+            for ch in 0..4 {
+                assert!(
+                    (a.c[ch] - b.c[ch]).abs() < 1e-4,
+                    "colorant {ch} at {idx}: one-walk {} vs two-walk {}",
+                    a.c[ch],
+                    b.c[ch]
+                );
+            }
+            assert!(
+                (a.a - b.a).abs() < 1e-4,
+                "alpha at {idx}: one-walk {} vs two-walk {}",
+                a.a,
+                b.a
+            );
+        }
+    }
+
+    /// The complementary half, and the reason this pair is two tests
+    /// rather than one: the identity above would also hold if
+    /// `composite_non_isolated` were quietly doing nothing at all.
+    ///
+    /// With a backdrop-READING interior -- here `Multiply` inside the
+    /// group -- the two routes MUST differ, because that is the entire
+    /// content of §11.4.4 NOTE 2. A test that only asserts agreement
+    /// cannot tell a correct removal from an absent one (`R162`: could
+    /// this ever have come out false?).
+    #[test]
+    fn a_blending_interior_makes_the_two_routes_differ() {
+        let intent = CmykIntent::default();
+        let backdrop = [0.6, 0.1, 0.0, 0.05];
+        let inner = [0.0, 0.7, 0.3, 0.0];
+
+        let mut one = CmykBuffer::new(2, 2, intent).unwrap();
+        paint_all(&mut one, backdrop, 1.0, Blend::Normal);
+        let mut iso = one.take_child().unwrap();
+        paint_all(&mut iso, inner, 1.0, Blend::Multiply);
+        one.composite_buffer(&iso, 1.0, Blend::Normal);
+
+        let mut two = CmykBuffer::new(2, 2, intent).unwrap();
+        paint_all(&mut two, backdrop, 1.0, Blend::Normal);
+        let mut iso2 = two.take_child().unwrap();
+        paint_all(&mut iso2, inner, 1.0, Blend::Multiply);
+        let mut nis = two.child_from_backdrop().unwrap();
+        paint_all(&mut nis, inner, 1.0, Blend::Multiply);
+        two.composite_non_isolated(&iso2, &nis, 1.0, Blend::Normal, None);
+
+        let a = one.pixel(0);
+        let b = two.pixel(0);
+        let delta: Chan = (0..4).map(|i| (a.c[i] - b.c[i]).abs()).sum();
+        assert!(
+            delta > 1e-3,
+            "isolated and non-isolated must differ when the interior blends; \
+             one-walk {:?} two-walk {:?}",
+            a.c,
+            b.c
+        );
+    }
+
+    /// A child seeded from the backdrop carries the backdrop's marks, and
+    /// `give_back_child` must clear ALL of them.
+    ///
+    /// Not a hypothetical: `give_back_child` clears only the dirty
+    /// rectangle, so `child_from_backdrop` marking that rectangle is the
+    /// only thing standing between the next group and a buffer that starts
+    /// with someone else's page in it. A leak here is invisible on a
+    /// one-group page and grows with group count, which is the worst shape
+    /// a bug can have -- absent from every small reproduction.
+    #[test]
+    fn a_backdrop_seeded_child_comes_back_clean() {
+        let intent = CmykIntent::default();
+        let mut b = CmykBuffer::new(4, 4, intent).unwrap();
+        paint_all(&mut b, [0.9, 0.9, 0.9, 0.9], 1.0, Blend::Normal);
+        let seeded = b.child_from_backdrop().unwrap();
+        assert!(seeded.pixel(0).a > 0.0, "the seed must actually carry ink");
+        b.give_back_child(seeded);
+        let next = b.take_child().unwrap();
+        for idx in 0..16 {
+            let px = next.pixel(idx);
+            assert_eq!(px.a, 0.0, "reused child still marked at {idx}");
+            assert_eq!(px.c, [0.0; 4], "reused child still inked at {idx}");
+        }
+    }
+
+    /// `backdrop_present` answers §11.4.5's question -- *is the initial
+    /// backdrop transparent?* -- and not the easier one the dirty rectangle
+    /// answers, *was anything written?*
+    ///
+    /// The distinction is the whole reason the helper exists: a buffer
+    /// written with fully transparent paint has a dirty rectangle and no
+    /// backdrop, and sending it down the two-walk path would be wasted work
+    /// on every page whose group sits over blank paper.
+    #[test]
+    fn a_written_but_transparent_backdrop_is_still_absent() {
+        let intent = CmykIntent::default();
+        let mut b = CmykBuffer::new(4, 4, intent).unwrap();
+        assert!(!b.backdrop_present(), "an untouched buffer has no backdrop");
+        paint_all(&mut b, [0.5; 4], 0.0, Blend::Normal);
+        assert!(
+            !b.backdrop_present(),
+            "alpha-zero paint leaves the backdrop transparent, whatever the \
+             dirty rectangle says"
+        );
+        paint_all(&mut b, [0.5; 4], 1.0, Blend::Normal);
+        assert!(b.backdrop_present(), "opaque paint IS a backdrop");
     }
 
     #[test]

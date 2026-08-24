@@ -937,51 +937,119 @@ impl<'a> Canvas<'a> {
         }
         match self {
             Self::Cmyk(b) => {
-                // ★ TREATED AS ISOLATED, ALWAYS, AND THAT IS A NAMED
-                // APPROXIMATION. A non-isolated group composites against
-                // its backdrop, and this canvas's backdrop is ink while
-                // the child buffer is screen colour -- there is no way to
-                // hand one to the other without the very round trip the
-                // colorant buffer exists to delete. So the contents run
-                // ONCE, over a transparent backdrop, which is exactly what
-                // §11.4.5's isolated case specifies and is what a
-                // non-isolated group on this page does not get.
+                // ★★ THE SECOND CONTENT WALK, `Pass 97.1g`.
                 //
-                // `backdrop_rerun` is therefore reported as `false`
-                // truthfully -- no second walk happened -- and the
-                // shortfall is carried by `groups_bridged` instead. The
-                // two must not be conflated: one is a cost that was paid,
-                // the other is a correction that was skipped.
-                let mut child = b.take_child()?;
-                let (result, _dependent) = {
-                    let mut sub = Canvas::Cmyk(&mut child);
+                // This arm used to treat EVERY group here as isolated and
+                // say so: *"there is no way to hand one to the other
+                // without the very round trip the colorant buffer exists
+                // to delete."* That sentence was reasoning about the
+                // SRGB-interior era, when a group's child was a `Pixmap`
+                // and the parent was ink, so handing the backdrop down
+                // meant converting it. `Pass 97.1f` gave the child a
+                // native colorant buffer, and from that commit onwards the
+                // parent and the child hold the same four planes in the
+                // same space -- so the backdrop can simply be COPIED, and
+                // the obstacle the comment described had already stopped
+                // existing. It went on being quoted for three Passes.
+                //
+                // Worth keeping as a shape rather than an anecdote: a
+                // comment justifying an approximation is not re-read when
+                // the thing it blames is removed, because nothing links
+                // them. The approximation outlived its own reason.
+                //
+                // Structure below is a deliberate PORT of the `Paint` arm,
+                // line for line, so the two paths stay legibly the same
+                // computation in two spaces (§11.4.4 is one clause, not two).
+                let blend = layer_blend(paint);
+                let opacity = paint.opacity.clamp(0.0, 1.0);
+
+                // Run 1: transparent start. Its alpha is `α_gn`.
+                let mut iso = b.take_child()?;
+                let (result, backdrop_dependent) = {
+                    let mut sub = Canvas::Cmyk(&mut iso);
                     f(&mut sub)
                 };
-                if let Some(m) = mask {
-                    child.apply_mask(m);
-                }
                 // The group's own bridge tallies ride along: a child
                 // buffer's bridged pixels and bridged sub-groups are the
                 // parent page's too, and dropping them here would make a
                 // page composited entirely out of bridged images report
                 // zero bridging.
-                b.absorb_counters(&child);
-                // Counted ONLY when the group was non-isolated: an
-                // isolated group is now exact, and counting it would make
-                // the shortfall look larger than it is on precisely the
-                // documents where it is smallest.
-                if !isolated {
-                    b.note_group_approximated();
+                b.absorb_counters(&iso);
+
+                // §11.4.5's substitution, applied as a test rather than a
+                // branch -- the same three-way test the `Paint` arm uses,
+                // and for the same reasons. A backdrop that is transparent
+                // everywhere IS an isolated group's backdrop, so there is
+                // nothing to run twice and nothing to remove.
+                let backdrop_present = b.backdrop_present();
+                if isolated || !backdrop_dependent || !backdrop_present {
+                    if let Some(m) = mask {
+                        iso.apply_mask(m);
+                    }
+                    b.composite_buffer(&iso, opacity, blend);
+                    b.give_back_child(iso);
+                    return Some(GroupOutcome {
+                        result,
+                        backdrop_rerun: false,
+                        // A knockout group reaching here has lost its
+                        // knockout semantics along with its blending
+                        // space; reported through the channel that already
+                        // means exactly that.
+                        knockout_approximated: usize::from(knockout),
+                    });
                 }
-                let blend = layer_blend(paint);
-                b.composite_buffer(&child, paint.opacity.clamp(0.0, 1.0), blend);
-                b.give_back_child(child);
+
+                // Run 2: the same content stream over the group's own
+                // initial backdrop. `b` is untouched until the merge
+                // below, so it still holds the frozen backdrop both the
+                // copy and the removal need.
+                //
+                // ★ ALLOCATION FAILURE FALLS BACK, IT DOES NOT DROP THE
+                // GROUP. `child_from_backdrop` returns `None` on the same
+                // condition `take_child` does, and a page that cannot
+                // afford one more buffer should still get the isolated
+                // approximation it used to get -- counted, so the
+                // disclosure stays honest about which one it got.
+                let Some(mut nis) = b.child_from_backdrop() else {
+                    b.note_group_approximated();
+                    if let Some(m) = mask {
+                        iso.apply_mask(m);
+                    }
+                    b.composite_buffer(&iso, opacity, blend);
+                    b.give_back_child(iso);
+                    return Some(GroupOutcome {
+                        result,
+                        backdrop_rerun: false,
+                        knockout_approximated: usize::from(knockout),
+                    });
+                };
+                {
+                    let mut sub = Canvas::Cmyk(&mut nis);
+                    let _ = f(&mut sub);
+                }
+                // Run 2's counters are DELIBERATELY NOT absorbed. They are
+                // the same content walked a second time, and adding them
+                // would double every bridged-pixel and sub-group tally on
+                // exactly the pages this Pass improves -- a disclosure
+                // number that gets worse because the renderer got better
+                // is worse than no number.
+                //
+                // The mask is passed INTO the merge rather than applied to
+                // a buffer first: §11.4.4's removal divides by the UNMASKED
+                // `α_gn`. See `composite_non_isolated`.
+                b.composite_non_isolated(&iso, &nis, opacity, blend, mask.map(Mask::data));
+                // ★ ONE buffer is handed back, not two, and it is the
+                // cheaper one to clear. `give_back_child` keeps a SINGLE
+                // spare, so returning both would clear `nis` -- whose dirty
+                // rectangle spans the whole backdrop it was seeded from --
+                // and then immediately drop it to make room for `iso`,
+                // whose rectangle is only the group's own marks. Paying the
+                // larger clear for a buffer about to be freed is pure loss.
+                drop(nis);
+                b.give_back_child(iso);
                 Some(GroupOutcome {
                     result,
-                    backdrop_rerun: false,
-                    // A knockout group reaching here has lost its knockout
-                    // semantics along with its blending space; reported
-                    // through the channel that already means exactly that.
+                    backdrop_rerun: true,
                     knockout_approximated: usize::from(knockout),
                 })
             }
