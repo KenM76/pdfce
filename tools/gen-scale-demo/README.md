@@ -10,8 +10,18 @@ pixel between them.
 python tools/gen-scale-demo/gen_banana.py <out.pdf>
 ```
 
-Nothing ships. This is a demonstration and a stress test, not a fixture —
-it is not in `fixtures/`, no test loads it, and `cargo test` never runs it.
+**`banana-at-scale.pdf` is checked in beside this file**, and is attached
+to the `v0.8.0` release. Regenerate it with the command above; the
+generator is deterministic, so a regenerated file is byte-identical to the
+committed one unless the source changed.
+
+It is **not a fixture**: it is not in `fixtures/`, no test loads it, and
+`cargo test` never runs it. It is here to be looked at — and because a
+claim about rendering nine orders of magnitude on one page is worth more
+as a file you can open than as a paragraph.
+
+*(This paragraph read "Nothing ships" until `v0.8.0`, when the operator
+asked for the PDF to go out with the release.)*
 
 ---
 

@@ -2522,7 +2522,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-cli"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "clap",
  "pdfce-core",
@@ -2532,7 +2532,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aes",
  "cbc",
@@ -2551,7 +2551,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-fetch"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.19",
@@ -2560,7 +2560,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-gui"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "eframe",
  "egui_tiles",
@@ -2572,7 +2572,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-print"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "thiserror 2.0.19",
  "windows",
@@ -2580,7 +2580,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-render"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "pdfce-core",
