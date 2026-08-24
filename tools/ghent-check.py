@@ -55,6 +55,90 @@ an empty gap rather than being tuned to a wanted answer (W14). The energy
 floor exists only to reject small text glyphs, whose strokes are short
 enough to produce a high ratio on very little total energy.
 
+THE CONTRAST FLOOR WAS CALIBRATED ON ONE POPULATION (fixed 2026-08-24)
+======================================================================
+`CONTRAST_MIN` was 12.0, chosen against the ONLY population anyone had
+measured: the sub-perceptual differences Acrobat leaves in a render that is,
+to the eye, ten clean swatches. It rejected those correctly. It had never
+been checked against a population of GENUINE traps of moderate contrast,
+because none had been measured.
+
+`GWG 1.0` is that population, and the operator read it cell by cell. At this
+harness's own default scale its six X-shaped candidates measure:
+
+    contrast   operator's reading
+    10.7       cell i -- a clear fail
+    10.2       cell d -- a clear fail
+     7.8       cell j -- a clear fail
+     7.4       cell e -- a clear fail
+     4.1       cell b -- "a faint outline only ... the math for the edges
+     4.1       cell g --  of the x differs slightly with rounding"
+
+Four clear fails and two faint outlines, exactly as he described them, and
+the two populations are separated by an EMPTY interval from 4.1 to 7.4. The
+old floor of 12.0 sat above all six, so `GWG 1.0` reported `clean` while
+carrying four crosses a human sees immediately.
+
+6.0 sits inside that empty interval with ~1.4 levels of margin on each side.
+The rest of the corpus was measured before it was chosen, not after:
+
+  * the sub-perceptual population the old floor existed to reject is at or
+    below 1.1 across every Acrobat render;
+  * the "genuinely invisible" cells of `GWG 16.2`, which the operator agreed
+    are invisible, are 1.5 to 3.3 -- below 4.1, so they stay rejected;
+  * across all 51 patches the change flips exactly ONE verdict, `GWG 1.0`
+    pass -> FAIL, which is the correction the operator asked for. Every
+    other patch that gains a detection above 6.0 was already FAIL on a
+    larger mark.
+
+★ THE REVIEW'S DIAGNOSIS OF THIS FAULT WAS WRONG, and recording that matters
+more than the fix. §3 of that document says the floor "has no area term" and
+that box 3's crosses are "roughly three times the linear size" of the
+calibration patch's, so the remedy is to make the threshold a function of
+mark size. Measured here: at the scale this harness renders, every trap on
+`GWG 1.0` is 36-38 px square and the `GWG 16.0` calibration traps are 38 px
+square. **They are the same size.** An area term would have changed nothing
+and the patch would have gone on reporting clean, with a fix in place and a
+plausible reason to stop looking. The fault was never geometry; it was a
+threshold calibrated against one population and applied to another.
+
+THE POSITIVE CRITERION -- A MARK THAT SHOULD BE THERE
+=====================================================
+The suite marks failure two ways and this harness implements one. Beside the
+cross that should vanish, four patches print a check mark that should be
+PRESENT: *"If a check mark is visible in the upper right corner then DeviceN
+is respected (= GOOD). If no check mark appears then DeviceN color was
+transformed to CMYK (= ERROR)."*
+
+A detector built to find a presence cannot see an absence. It does not report
+"I cannot tell" -- it reports `clean`, which is indistinguishable from a pass,
+and it had done so for these four for its entire life.
+
+They are now reported as `MARK?` and counted as UNRESOLVED. That is not a
+detector; it is the removal of a false green, and it is the more urgent half:
+every "N of 51 pass" sentence this project has ever filed included four
+patches the instrument had never examined.
+
+Ground truth for whoever builds the detector, measured 2026-08-24 against
+Acrobat renders of the same patches:
+
+  * `GWG 8.2` (GWG082): Acrobat draws two OLIVE check marks, ~46x56 px, in
+    the upper-right corner of each image, plus a smaller inline one in the
+    caption. pdfce draws only the caption glyph. FAIL.
+  * `GWG 8.01` (GWG080): Acrobat draws two DARK-GREEN check marks on the
+    images AND about fifteen more along the spot-colour gradient bar. pdfce
+    draws none of them. FAIL.
+  * `GWG 8.1` (GWG081): same family, same result. FAIL.
+  * `GWG 5.0` (GWG050): the mark is a BLACK glyph from an embedded modified
+    Symbol font, not a coloured shape. pdfce renders it correctly. PASS.
+
+★ Note the trap in that list, because it caught this session: the mark's
+COLOUR is not a constant of the criterion. A detector keyed on one hue passes
+`GWG 8.01` by matching the green end of its gradient bar while both real
+marks are missing -- a false green produced by the fix for a false green.
+Whatever adjudicates these must key on the mark's presence relative to a
+reference render, not on a colour.
+
 WHAT A VERDICT HERE DOES AND DOES NOT MEAN
 ==========================================
 `X` means the suite's own trap fired: that feature is not rendered
@@ -85,7 +169,29 @@ AREA_MIN = 200      # px; below this a mark is a glyph, not a swatch trap
 EDGE_MIN, EDGE_MAX = 16, 90
 FILL_LO, FILL_HI = 0.15, 0.60
 DIAG_MIN = 0.85
-CONTRAST_MIN = 12.0   # 8-bit levels; below this the X is not "clear"
+CONTRAST_MIN = 6.0    # 8-bit levels; below this the X is not "clear".
+#                       12.0 until 2026-08-24 -- see THE CONTRAST FLOOR
+#                       WAS CALIBRATED ON ONE POPULATION, in the docstring.
+
+# Substrings that mean THIS PATCH SCORES ITSELF WITH A MARK THAT SHOULD BE
+# PRESENT, rather than with a cross that should be absent. Matched against
+# the patch's own extracted text, exactly as `ref_style` is -- the patch
+# states its criterion on its face, so the harness reads it rather than
+# carrying a hand-maintained list that can drift from the corpus.
+#
+# ★ FOUR PATCHES MATCH, NOT SEVEN. `docs/ghent-operator-review-2026-08-21.md`
+# §2 lists seven, from a grep of the ReadMes for "check mark", and three of
+# them -- GWG150, GWG151, GWG152 -- are wrong. Those three say on their own
+# face *"If a X can be seen, Optional Content is not handled right"*: the
+# NEGATIVE criterion, which this harness already implements. Their ReadMes
+# mention a check mark only while describing what the failure cross is drawn
+# OUT OF ("a cross consisting of 2 check marks").
+#
+# ⇒ **a grep for a phrase finds a mention, not a criterion.** The list was
+# built by searching for words and read as if it had been built by reading
+# the rule, which is the same shape as every other false-green this harness
+# has produced.
+MARK_CRITERION = ("check mark", "checkmark", "check marks", "checkmarks")
 
 
 def cli_path():
@@ -294,6 +400,8 @@ def main():
         txt = subprocess.run([cli, "extract-text", os.path.join(args.dir, f)],
                              capture_output=True, text=True, errors="replace").stdout.lower()
         ref_style = ("reference image" in txt) or ("match the reference" in txt)
+        # Read from the patch's own face, like `ref_style` above.
+        mark_style = any(k in txt for k in MARK_CRITERION)
         sim = reference_similarity(png) if ref_style else None
         ref_sim = None
         if marks:
@@ -319,6 +427,13 @@ def main():
                 # resembles the reference, read as success.
                 if ref_sim is not None and sim is not None and ref_sim[0] >= 0.50:
                     verdict = "REF-PASS" if sim[0] >= ref_sim[0] - 0.05 else "REF-FAIL"
+        elif mark_style:
+            # ★ NOT `clean`. This patch is scored by a mark that should be
+            # PRESENT, and nothing here looks for one. Reporting `clean`
+            # would be the detector answering a question the patch never
+            # asked -- the same error `REF` was introduced to end, one
+            # criterion over.
+            verdict = "MARK?"
         else:
             verdict = "clean"
         results.append({
@@ -337,14 +452,17 @@ def main():
 
     clean = [r for r in results if r["verdict"] in ("clean", "REF-PASS")]
     failed = [r for r in results if r["verdict"] in ("X", "REF-FAIL")]
-    ref = [r for r in results if r["verdict"] == "REF"]
+    ref = [r for r in results if r["verdict"] in ("REF", "MARK?")]
     broke = [r for r in results if r["verdict"] == "RENDER-FAILED"]
     for r in results:
         mark = {"clean": "  ok  ", "X": " FAIL ", "REF": " ref? ",
                 "REF-PASS": "  ok  ", "REF-FAIL": " FAIL ",
-                "RENDER-FAILED": " ERR  "}[r["verdict"]]
+                "MARK?": " mark?", "RENDER-FAILED": " ERR  "}[r["verdict"]]
         if r["verdict"] == "X":
             extra = f"  {r['traps']} trap(s) at {' '.join(r['where'])}"
+        elif r["verdict"] == "MARK?":
+            extra = ("  scored by a check mark that should be PRESENT; "
+                     "this harness only detects marks that should be ABSENT")
         elif r["verdict"].startswith("REF"):
             extra = (f"  strip corr={r['ref_corr']}"
                      + (f" vs reference-engine {r['ref_engine_corr']}"
@@ -356,11 +474,15 @@ def main():
     print(f"ghent-check: {len(results)} patches -- "
           f"{len(failed)} FAIL, "
           f"{len(clean)} pass, "
-          f"{len(ref)} UNRESOLVED (reference-strip, no usable calibration), "
+          f"{len(ref)} UNRESOLVED (reference-strip or positive-criterion), "
           f"{len(broke)} render errors")
     print()
     print("A 'clean' verdict is the SUITE's own pass criterion for an X-trap")
     print("patch and is NOT a claim of pixel-accuracy against a press proof.")
+    print("A 'mark?' row is NOT a pass either: that patch is scored by a")
+    print("check mark that should be PRESENT, and this harness has no")
+    print("detector for an absent mark. Ground truth for those four is in")
+    print("the docstring; three of them are known failures.")
     print("A 'ref?' row is NOT a pass: those patches carry their reference")
     print("images inline and are scored, not adjudicated, because no")
     print("known-passing patch exists yet to calibrate a threshold against.")
