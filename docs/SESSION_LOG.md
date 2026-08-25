@@ -60640,3 +60640,179 @@ cannot alter behaviour). Filed as an addendum to the `Pass 124.0`
    decisions ceiling `087`, next free `088`; Pass family ceiling `124`,
    next free `125`; operator-question ceiling **`(bu)`** (corrected this
    filing), next free **`(bv)`**; filing ordinal **253**.
+
+## 2026-08-25 (two-hundred-and-fifty-fourth filing) — `Pass 125.0` ships mesh shadings, closing the operator's own two remaining [suite] failures; three more commits filed (`4b22c95`/`525585e`/`3016641`); `R218` MINTED; four new cross-project RAG findings, two Backlog notes filed
+
+**Sourcing.** No shell this filing (librarian invocation). Every figure
+below is relayed from the engineer's four commit messages, which state
+their own method beside each figure, per hard rule 8.
+
+**Shipped:**
+
+- **`Pass 125.0`** (`3681a7f`) — mesh shadings (types 4/5/6/7,
+  §8.7.4.5.5–.8) render. The operator's own trigger: *"on the [suite] pdf
+  that has 4 tests per page we still had two fails in the first box on the
+  first page … seems like these last two should be easier given everyone
+  else seems to have figured them out already."* (elided per the `(bt)`
+  suite-name scrub, 253rd filing) Both were tensor-patch
+  (type 7) cells. Correlation against the patch's own printed reference
+  images: **−0.044 → 0.949** and **−0.044 → 0.997**; Acrobat scores 0.981
+  and 0.997 on the same cells, so one cell now scores CLOSER to reference
+  than Acrobat's own render. Suite board `8 FAIL / 27 pass / 16 UNRESOLVED`
+  → `7 FAIL / 27 pass / 17 UNRESOLVED`. The residual on the weaker cell is
+  proved to be `iccce`'s `DeviceCMYK`→sRGB path, not the mesh — the page's
+  plain raster images differ from Acrobat by the same 26.5/29.6 magnitude.
+  Full detail, measurements table, spec-trap list and the two ambiguities
+  filed in `docs/ROADMAP.md`'s new top *Shipped* entry.
+- **`4b22c95`** (no Pass ID) — the fuzz harness rejoins working order:
+  `cargo fuzz build` had not linked since `Pass 71.0` added OCR (a `cdylib`
+  dependency, `rten`, breaks libFuzzer's forced `main` reference for the
+  WHOLE `fuzz/` directory), undetected for twelve days because nothing
+  runs it in CI. Fixed by scoping `default-features = false` on both
+  `pdfce-core` and `pdfce-render` in `fuzz/Cargo.toml`. New target
+  `mesh_shading`: **1,107,957 runs in 91 s, no crash.**
+- **`525585e`** (no Pass ID) — the suite-name scrub gate
+  (`tools/check-suite-name-absent.py`) had two defects, both found by
+  `iccce` independently hitting the identical shape in its own copy of the
+  gate: it printed the forbidden term it exists to suppress (the
+  *filename* of a violation, which for this gate IS the violation), and it
+  could not see untracked files, so a local run before staging — the
+  natural moment to verify — excluded exactly the files a session had just
+  written. Both fixed; verified by an A/B injection probe (pre-fix: exit
+  0 "clean" on a file violating the rule twice; post-fix: exit 1, both
+  violations reported, term never printed).
+- **`3016641`** (no Pass ID) — a test assertion shipped with a ten-space
+  hole in it, the SECOND heredoc-continuation string-gap defect this
+  session (first was `c9f8419`, filed 247th filing), caught by
+  `tools/check-string-gaps.sh` before commit both times.
+
+**Decisions made this session:**
+
+- **None minted.** `MeshPatchPadding`'s resolution (a setting, not a hard-
+  coded choice) is an instance of the existing "permanent spec ambiguity ⇒
+  operator setting" pattern (decision 024 §4.4's shape), not a new
+  architectural decision — no `ARCHITECTURE.md` §12 entry filed.
+
+**Findings + decisions:**
+
+- **`R218` MINTED** (`ROADMAP.md` *Standing rules*, ceiling `R217` →
+  `R218`, next free `R219`): *a gate whose input set is "what is already
+  committed" cannot see the commit you are about to make.* Cleared the
+  two-occurrence bar on its own — fired once in pdfce's own gate and once,
+  independently, in `iccce`'s copy of the identical gate shape. Any
+  `tools/check-*` shelling out to `git ls-files`/`git grep`/`git log`/
+  `git diff` without including untracked, non-ignored files is subject to
+  it. A Backlog audit of the other seventeen `tools/check-*` scripts
+  against this rule is filed (unscoped, no Pass ID), and a second unscoped
+  Backlog note asks whether `cargo +nightly fuzz build` (build-only,
+  ~4 min warm) belongs in CI — the structural fix for the fuzz-harness
+  defect, not a reminder.
+- **Two mesh-shading ambiguities, handled the two ways the standing rules
+  already prescribe.** The type 6/7 patch-record byte-padding rule
+  (§8.7.4.5.5 scopes it to a *vertex*; a patch has none; ISO 32000-2
+  repeats the sentence verbatim) is **permanent** ⇒ a setting
+  (`MeshPatchPadding`, default `per_record`). The patch subdivision
+  density is also unspecified but is a function of ZOOM, so it is
+  deliberately **not** a setting — an operator cannot set the right value,
+  it is derived from the patch's device-space hull instead.
+- **A rasterisation defect found and fixed mid-Pass, worth remembering for
+  its shape**: adjacent mesh primitives leave sub-pixel cracks at shared
+  boundaries; on a conformance patch what shows through a crack is the
+  patch's own fail marker, drawn underneath, so a crack reads as a stray
+  black speck rather than a visible seam. The obvious fix — dilate every
+  primitive's edge — made the render measurably WORSE (correlation
+  0.9485 → 0.9347) because primitives paint in stream order and
+  unconditional dilation lets each overwrite a fraction of a pixel of its
+  predecessor at every interior seam, not just the true outer boundary.
+  Correct fix restricts the margin to pixels nothing has painted yet
+  (0.9489, watertight). Verified at 5 scales, sampling the *predicate*
+  (subdivision density changes with scale) rather than an arbitrary range.
+- **Blast radius measured, not reasoned**: 1 of 51 suite patches contains
+  a mesh shading; 0 of 3,735 external-corpus files do, on page 1.
+- **Four new cross-project RAG findings filed this session:**
+  `D:\dev\rag\rust\cargo_fuzz_cannot_link_a_graph_containing_a_cdylib_dependency.md`
+  (new file); a ninth-occurrence footer appended to the existing
+  `D:\dev\rag\rust\a_multiline_string_literal_that_loses_its_trailing_backslash_bakes_a_visible_gap_mid_sentence.md`
+  (second occurrence this session, same file, dated section, not a
+  duplicate); two new files in `C:\personal_rag\pdf\` —
+  `lesson_20260825_mesh_shadings_are_rare_and_uniform_when_present.md` and
+  `lesson_20260825_a_rasterised_meshs_cracks_are_invisible_as_cracks.md`.
+  Both subdirectory `index.md` files and the master `C:\personal_rag\index.md`
+  updated in the same filing.
+- **`docs/FEATURES.md` updated in this same filing**, per the maintenance
+  contract: the `sh`-operator row's stale "2 unpainted are mesh shadings"
+  clause amended (true when written, not deleted); the type-1/mesh
+  *Planned* row split (mesh moved to *Implemented*, type 1 stays); one new
+  *Implemented* row added for mesh shadings; the two *Planned* rows on
+  native colorant image paths and per-sample shading overprint both gained
+  an explicit mesh-population sentence, since mesh is a new population
+  bridging through sRGB that neither row previously named.
+- **★ Self-correction, within this same filing, before commit: the
+  `(bt)` suite-name scrub was breached by CORRECTLY quoting the
+  operator.** The engineer's dispatch to file `Pass 125.0` quoted Ken's
+  own trigger sentence verbatim, name included — faithful to what he
+  said and exactly how a trigger worth keeping in the record should be
+  captured. Filed faithfully by this role, it planted the forbidden term
+  in four lines (`ROADMAP.md:99,110`, `SESSION_LOG.md:60644,60653`): two
+  inside a verbatim quotation, two in headings paraphrasing it. Neither
+  the quoting nor the filing was wrong on its own terms — the breach is
+  a property of the *boundary* between them, not of either party.
+  `tools/check-suite-name-absent.py` caught it (exit 1, four `CONTENT`
+  lines) before commit. Fixed here: all four elided with a `[suite]`
+  bracket marker, matching the convention the `(bt)` closure itself
+  established (`ROADMAP.md`'s operator-question entry, 253rd filing);
+  the operator's words are otherwise unchanged, and the private map
+  directory keeps the unredacted wording.
+- **The fix has to live at the point operator speech ENTERS a tracked
+  document — the dispatch, not the filing that follows it.** A
+  `git grep`-based gate checks a file after it is written; nothing
+  currently checks a dispatch on the way in. Recorded here so the next
+  engineer-to-librarian dispatch does not re-import the term by quoting
+  Ken verbatim — that half is the engineer's to carry. **Not minted as
+  a new standing rule this filing**: this is the first occurrence of
+  this specific mechanism (a quotation-boundary breach, distinct from
+  `R218`'s gate-scope blind spot below — one is about what the CHECK
+  can see, the other about what the DISPATCH lets through), and house
+  convention here holds a candidate to a two-occurrence bar before
+  minting. If it recurs, mint it as its own rule rather than folding it
+  into `R218` — the failure classes differ even though both read as
+  "an input the check couldn't see."
+- **★★ `R218` corroborated by the filing that documents it, not only by
+  the synthetic probe it was tested against.**
+  `tools/check-suite-name-absent.py` was fixed for the untracked-file
+  blind spot earlier in this same filing (`525585e`) and verified there
+  by an A/B injection probe. Its FIRST real post-fix run caught this
+  filing's own four lines above — unstaged, uncommitted, written by
+  this role minutes earlier. The PRE-fix gate (tracked-only) would have
+  reported clean, because these edits were not yet in the index.
+  `R218`'s claim — *a gate whose input set is "what is already
+  committed" cannot see the commit you are about to make* — was
+  demonstrated by the same session that minted it, on the very document
+  recording the mint. Nobody staged this violation on purpose.
+
+**Still in flight:**
+
+- A mesh still bridges through sRGB before compositing on a subtractive
+  page, so its overprint is not represented — the mesh half of
+  `Pass 97.1k`, unchanged by this filing.
+- `ShadingType 1` (function-based) is still modelled and not painted.
+- Two unscoped Backlog notes filed and open: wire `cargo +nightly fuzz
+  build` into CI; audit the other seventeen `tools/check-*` scripts
+  against `R218`.
+- Cutting a backup remains open and unmeasured by this filing — no shell,
+  per hard rule 8 backup currency is not asserted from here.
+- `docs/NEXT_SESSION.md` **not touched by this filing** — that file is the
+  engineer's own, and this filing's report to the engineer notes that
+  explicitly so it can be rewritten to cite this entry's numbers.
+
+**For next session:**
+
+1. If either unscoped Backlog note (CI fuzz-build wiring, `check-*` audit
+   against `R218`) is picked up, it earns its own Pass ID at that time —
+   next free stays `125.1` until then.
+2. Cutting a backup needs a direct check by whoever has a shell next.
+3. Ledger: standing rules ceiling **`R218`** (minted this filing), next
+   free **`R219`**; decisions ceiling `087`, next free `088`; Pass family
+   ceiling **`125`** (`Pass 125.0` SHIPPED), next free **`125.1`**;
+   operator-question ceiling `(bu)`, next free `(bv)`, unchanged; filing
+   ordinal **254**.

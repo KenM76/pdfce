@@ -96,6 +96,383 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `3681a7f` — `Pass 125.0` ships: mesh shadings render — the operator's own [suite] patch goes from two hard fails (correlation **−0.044**) to **0.949** and **0.997** against its own printed reference images, and the tiny residual left is proved to be `iccce`'s `DeviceCMYK`→sRGB path, not the mesh; suite board `8 FAIL / 27 pass / 16 UNRESOLVED` → `7 FAIL / 27 pass / 17 UNRESOLVED` — 2026-08-25 (two-hundred-and-fifty-fourth filing)
+
+**Sourcing.** No shell this filing (librarian invocation). Every figure below
+is relayed from the engineer's commit (`3681a7f`) and its accompanying test
+run, which state their own method beside each figure — per hard rule 8, that
+is the correct posture for a shell-less filing.
+
+---
+
+#### The operator's own words that started it
+
+*"on the [suite] pdf that has 4 tests per page we still had two fails in the
+first box on the first page. In the other pdf programs I've tried they pass
+all of these tests. can we work on that next? seems like these last two
+should be easier given everyone else seems to have figured them out
+already."* (elided per the `(bt)` suite-name scrub, 253rd filing — the
+unredacted wording lives in the private map directory) The first box is
+suite patch `PCS 6.0` (`PCS1_060`), four cells —
+shading types **7, 3, 2, 7**. Types 2 and 3 already rendered correctly; the
+two type 7 cells are **tensor-product patch meshes**, which pdfce recognised,
+counted (`shadings_mesh=2`) and refused outright. The operator's instinct was
+right: this was a capability gap, not a fidelity one.
+
+#### What shipped
+
+New module `crates/pdfce-render/src/mesh.rs` (~1,800 lines including docs)
+decoding and forward-rasterising all **four** mesh types — 4 (free-form
+Gouraud triangles), 5 (lattice-form), 6 (Coons patch), 7 (tensor-product
+patch), ISO 32000-1 §8.7.4.5.5–.8. `crates/pdfce-render/src/shading.rs` keeps
+the dictionary half and delegates the stream half; `Shading::paint` dispatches
+into it. Reachable by both paint routes: `sh` and `PatternType 2`.
+
+#### Measurement — the patch the operator was looking at
+
+Each cell of `PCS 6.0` pairs a live shading with a bitmap of what a correct
+render produces (the patch's own printed criterion is *"The shadings should
+look like the reference image"*), so scoring needs no external reference.
+Mean absolute per-channel difference and Pearson correlation, shading versus
+its own reference image, at the harness's own scale:
+
+| cell | shading type | pdfce before | pdfce after | Acrobat, same file |
+|---|---|---|---|---|
+| `a` | 7 (tensor) | 125.9 / corr **−0.044** | 10.0 / corr **0.949** | 7.6 / corr 0.981 |
+| `b` | 3 (control) | 6.2 / 0.9985 | 6.2 / 0.9985 (unchanged) | 4.5 / 0.9979 |
+| `c` | 2 (control) | 0.9 / 0.9997 | 0.9 / 0.9997 (unchanged) | 1.1 / 0.9998 |
+| `d` | 7 (tensor) | 128.6 / corr **−0.044** | 1.9 / corr **0.997** | 3.4 / corr 0.997 |
+
+Cell `d` now scores **closer to its own reference than Acrobat's own render
+does** on the same file.
+
+**★ The residual on cell `a` is NOT a mesh defect — recorded so a future
+session does not chase it inside the mesh code.** pdfce's *mesh* differs
+from Acrobat's *mesh* by essentially the same amount pdfce's *plain raster
+image* differs from Acrobat's *plain raster image*, on the same page: mean
+|Δ| **26.5 vs 29.6** on cell `a`, **27.1 vs 26.7** on cell `d`. The reference
+image involves no mesh at all — the shared error is the `DeviceCMYK`→sRGB
+path, already re-scoped to `iccce` as `Pass 122.7` (decision 064).
+
+**Suite board:** `8 FAIL / 27 pass / 16 UNRESOLVED` → `7 FAIL / 27 pass /
+17 UNRESOLVED`. `PCS 6.0` leaves the trap-X population entirely (the black
+placeholder X the harness was detecting is gone) and lands in the
+reference-strip bucket the harness cannot adjudicate — reported as
+`ref? strip corr=0.84`. **Do not read 0.84 as a grade**: `PCS 6.1`, which
+renders perfectly and is visually indistinguishable from Acrobat, scores
+0.371 on the same metric. The strip correlation is uncalibrated by the
+harness's own output; the cell-by-cell table above is the evidence that
+matters.
+
+**Blast radius, measured rather than reasoned.** **1 of 51** suite patches
+contains a mesh shading. **0 of 3,735** external-corpus PDFs contain one on
+page 1 (swept with the pre-fix binary). Nothing without a mesh can reach any
+of the new code — entry is gated on `Geometry::Mesh`.
+
+#### Spec sourcing (project rule 1)
+
+Every line cites
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.7.4.5__mesh.md`
+(labels `MSH1`–`MSH36`, `MSH-A1`–`MSH-A5`, `MSH-N1`–`MSH-N5`, ingested
+2026-08-18). Three traps that file names, all of which render a *plausible*
+picture when got wrong:
+
+1. **One evaluator, not two** (`MSH30`) — a Coons patch IS a tensor patch
+   whose four internal control points its boundary implies, so `Patch`
+   always holds sixteen points and type 6 is converted on the way in. Two
+   evaluators would be two rendering paths for the same content — the bug
+   class `CLAUDE.md` rule 4's 2026-08-13 narrowing exists to remove.
+2. **The corner-colour walk-around order** (`MSH24`) — colours are given in
+   the order the control points walk the boundary, not raster order;
+   TL/TR/BL/BR transposes the patch across a diagonal.
+3. **`/Function` changes the record size** (`MSH14`) — one field per vertex
+   regardless of component count; sizing from the colour space desynchronises
+   every record after the first, reading as a corrupt file rather than a
+   parse bug.
+
+**Two ambiguities, handled the two different ways they deserve.**
+
+- **`MSH-A1`** (the byte-padding unit for a type 6/7 *patch* record;
+  §8.7.4.5.5 scopes its rule to a *vertex*, and a patch has none; ISO 32000-2
+  repeats the sentence word for word — **permanent**) ⇒ **a setting**. New
+  `pdfce_core::settings::MeshPatchPadding` ∈ `per_record` | `none`, default
+  `per_record` — the only reading under which the standard's own
+  cross-reference has any content. Threaded `Settings` →
+  `RenderOptions::with_mesh_patch_padding` → `RenderPolicy` → the parser,
+  wired in `pdfce-cli`, given a row in the GUI settings window, and made
+  observable by a fixture whose bit widths (4/12/4) put a record at 340 bits.
+- **`MSH-A3`** (subdivision density for a patch; also unspecified, and `/SM`
+  bounds *colour* error rather than geometric deviation) ⇒ **deliberately
+  NOT a setting**, because the right value is a function of zoom, and a knob
+  the operator cannot set correctly is worse than none. Chosen from the
+  patch's device-space hull instead (~4 px per cell), which bounds the error
+  in the units a viewer perceives.
+
+#### Defect found and fixed during the Pass — the crack that read as a speck
+
+Adjacent primitives flatten their shared boundary independently, leaving
+slivers a fraction of a pixel wide; one pixel in a 60×60 cell went unpainted
+— and what showed through it was the suite's own failure marker, drawn
+**underneath** the shading. A crack in a gradient does not read as a crack;
+it reads as a stray black speck in the artwork.
+
+Closed by a **0.35 px coverage margin applied ONLY to pixels nothing has
+painted yet.** ★ The unconditional form closed the crack and moved the
+cell's correlation the **wrong** way — 0.9485 → 0.9347 — because primitives
+paint in stream order, so dilating unconditionally lets each one overwrite a
+third of a pixel of its predecessor and shifts **every** interior colour
+boundary in the direction of the stream. Restricted to holes: **0.9489**,
+watertight. Verified at scales **1, 2, 4, 8 and 16** — sampled across the
+*predicate* (subdivision density changes with scale), not across "a
+reasonable range," per `R211` clause (e).
+
+#### Tests — 12 fixtures + 12 integration tests + 9 unit tests, all green
+
+`tools/gen-mesh-fixtures.py` → `fixtures/synthetic/mesh/` (12 files +
+`PROVENANCE.md`). Synthetic, `LEGAL.md` §5 category (a). ★ **Load-bearing
+here, not boilerplate**: the only real mesh this project can reach is inside
+a licensed patch that cannot be checked in or named, and the type 7 fixtures
+are built from **the standard's own equations**, not from any sample.
+
+Strongest assertions are **equivalences the standard requires**, so neither
+side needs blessing by anybody: `type6_coons.pdf` ≡ `type7_tensor.pdf`
+(`MSH30` — the type 7 file's internal points come from the *generator's*
+independent transcription of §8.7.4.5.8's four equations, the renderer
+derives them, so agreement checks one transcription against another) and
+`type4_triangles.pdf` ≡ `type5_lattice.pdf` (`MSH19` vs `MSH22`, across two
+parsers with different record shapes, one with no flag field at all). Both
+measured **byte-identical**. `type6_coons.pdf` ≠ `type4_triangles.pdf` is
+**asserted**, keeping the two agreements from being renders of nothing.
+
+Also covered: all three nonzero edge flags, a continued **type 7** record
+(twelve coordinate pairs, not eight — internal points never inherited), the
+parametric form's order of operations, a truncated stream, an `Indexed`
+refusal, and the other paint route (a mesh reached as a `PatternType 2` fill
+anchors in the opposite coordinate space and must land the same pixels —
+measured **0** differing interior pixels).
+
+★ **The fixture generator's first draft authored its continued patches as if
+the inherited edge arrived forward.** Flags 2 and 3 hand it over **reversed**,
+and the result was a pair of lens shapes with a hole between them, close
+enough to "a gradient" at a glance to need a second look.
+
+★ **The parametric test's first draft expected 85 and 117 and would have
+FAILED a correct renderer.** It applied an sRGB transfer curve to the
+function's output; a `DeviceRGB` component in a PDF **is** the device value
+(§8.6.4.3). Correct values **28** (right order) vs **47** (wrong order),
+recorded in the test's own doc comment rather than quietly corrected.
+
+#### Disclosure (rule 4)
+
+Three new metrics keys on the `render-page` line — `mesh_records`,
+`mesh_truncated`, `mesh_unusable` — with rows in the per-key table, the
+module-doc template, the `println!`, and the test's key list (all four
+copies the metrics-contract gate names). Counted CLI notes for the two
+disclosures. Every refusal carries a named reason (`MeshRefusal::reason`).
+The CLI's old mesh note **told the operator to wait for something that had
+arrived**; it now states what pdfce chose where the standard declined to
+(device-size subdivision, linear interpolation) and what it still does not
+do.
+
+#### Verification
+
+`cargo test --workspace` green (80 test binaries, 0 failures). `cargo fmt
+--check` clean. `cargo clippy --workspace --all-targets -- -D warnings`
+clean. `cargo tree -p pdfce-core` / `-p pdfce-render` show **no** GUI/
+windowing dependency. **16 of 18** `tools/check-*` green; the two red were
+`check-passes-filed.py` and `check-commits-filed.py`, red only because this
+filing had not happened yet (now cured by this entry's own citations);
+`check-image-colorspace-truth.py` is a non-gate that takes a fixture
+directory as an argument. No packaging change, so no packaging smoke test.
+No new Cargo dependency, so no `cargo-about` regeneration.
+
+#### Standing NOT-DONE — named so it does not read as done
+
+A mesh still resolves its colour to sRGB before compositing, so on an ink
+page it is bridged like any other shading (`cmyk_bridged_pixels`) and its
+overprint is not represented — the mesh half of `Pass 97.1k`. Also unchanged:
+`ShadingType 1` (function-based) is still modelled and not painted (see
+*Planned* below).
+
+#### `FEATURES.md`
+
+Four edits, all in this filing: line ~223's `sh`-operator row amended (the
+"2 unpainted are mesh shadings, not this row" sentence was true when written
+and is now stale — amended, not deleted); the *Planned* row at ~303 split
+(mesh moved to *Implemented*, type 1 stays *Planned*); a new *Implemented*
+row added, `core [x] / cli [x] / gui [ ]`; the two *Planned* rows on native
+colorant image paths (~309) and per-sample shading overprint (~311) both
+gained an explicit mesh-population sentence.
+
+#### `ARCHITECTURE.md`
+
+**No decision minted, no body-section edit.** `MeshPatchPadding` is a new
+`pub` settings item, not an architectural decision — it is an instance of
+the existing "permanent spec ambiguity ⇒ a setting" pattern (decision 024
+§4.4's shape), not a new one.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `124`, next free `125` | ceiling **`125`**, `Pass 125.0` SHIPPED; next free **`125.1`** |
+| decisions (`ARCHITECTURE.md` §12) | `087` | unchanged — no architectural decision. Next free `088` |
+| standing rules | `R217` | unchanged by this entry — see `R218` proposal below, in the `525585e` entry |
+| `FEATURES.md` | — | one row split, one new *Implemented* row, two *Planned* rows amended (see above) |
+
+---
+
+### `4b22c95` — the fuzz harness rejoins CI-adjacent tooling: `cargo fuzz build` has not linked since OCR landed and nothing said so; a new `mesh_shading` target ships alongside the fix, **1,107,957 runs in 91 s (≈ 12,175 runs/s), no crash** — 2026-08-25 (two-hundred-and-fifty-fourth filing)
+
+**Sourcing.** No shell this filing (librarian invocation); figures relayed
+from the engineer's commit and its own build/run log, per hard rule 8.
+
+**The defect.** `pdfce-core`'s default features include `ocrs`, which pulls
+the `rten` inference runtime; `rten` builds a **cdylib**, and cargo-fuzz puts
+libFuzzer's `/include:main` into the link arguments for the whole graph, so
+the cdylib is asked to export a `main` it does not have (`LNK2001: unresolved
+external symbol main`). **Confirmed pre-existing, not new**: building
+`parse_object`, a fuzz target untouched since long before OCR landed, fails
+identically.
+
+**The fix.** Both `pdfce-core` and `pdfce-render` taken in `fuzz/Cargo.toml`
+with `default-features = false, features = ["jpx"]` — repeated on **both**
+because cargo unifies features across the graph, the effect
+`pdfce-render/Cargo.toml`'s own feature block already documents from a
+2026-08-12 measurement.
+
+**New target `mesh_shading`**, over `pdfce_render::mesh::parse` — a bit-level
+parser whose field widths come from the dictionary, whose type 6/7 record
+stride depends on a flag read from the **stream**, whose patch inheritance
+chains back through previously-parsed state, and **whose output size is not
+bounded by its input size** (two-bit coordinates make a type 5 vertex record
+eight bits, so a megabyte of stream is a million vertices before
+subdivision). **1,107,957 runs over 91 seconds, no crash.**
+
+★ **The part worth carrying forward is how it stayed broken.**
+`cargo fuzz build` is not one of CI's jobs — it is a discipline named in
+`ARCHITECTURE.md` §10.2 and in the engineer role's own hard-always list, and
+the engineer's agent-memory note *"Gates I owe myself"* names the cargo-fuzz
+gate **specifically** as the one that gets skipped, with both halves having
+recurred on 2026-08-21. A Pass that added a dependency broke a check nothing
+runs, and every Pass since shipped with the harness dead. `R209`'s *"all
+gates green names a set, and the set somebody runs is not the set CI runs"*
+applies here to a set of **one**.
+
+**Owed, not filed as a Pass** (per this filing's own ledger constraint, next
+free Pass ID stays `125.1`): whether `cargo +nightly fuzz build` (build
+only, not run — ~4 minutes warm) belongs in CI. Filed as an **unscoped
+Backlog note**, below — the structural fix, not a reminder, for the same
+reason the release-ordering discipline was replaced structurally in
+`bb154ed`.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `125`, next free `125.1` | unchanged — this entry ships no Pass |
+| Backlog | — | one unscoped note added (cargo-fuzz-build-in-CI), below |
+
+---
+
+### `525585e` — the suite-name scrub gate published the term it suppresses, and could not see the commit it was gating: two defects, both found by `iccce` on its own copy of the same gate, both fixed here; **`R218` proposed and MINTED** — 2026-08-25 (two-hundred-and-fifty-fourth filing)
+
+**Sourcing.** No shell this filing; figures relayed from the engineer's
+commit and its own A/B probe run, per hard rule 8.
+
+**How it surfaced.** `iccce` built the same name-scrub gate, hit both
+defects on its own copy, then read `tools/check-suite-name-absent.py` and
+found them here too — reported through
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\note_your_name_gate_has_the_two_defects_mine_had.md`,
+marked informational, no reply owed. That note also records `iccce`'s own
+repository scrubbed on the operator's instruction — **451** occurrences of
+the name and **309** of the acronym across 61 tracked text files plus five
+paths, following `SCRUB_SPEC.md` exactly, history untouched. Worth recording:
+the two repositories now share one vocabulary rather than two dialects, and
+`SCRUB_SPEC.md` earned its keep beyond this project.
+
+**Defect 1 — the gate published the term it exists to suppress.** The
+failure path printed a violating file **name** verbatim, and the path *is*
+the violation, so every time the gate fired it wrote the forbidden term into
+a public CI log on a public repository. Both output paths are masked now.
+The asymmetry is why it was missable: the contents branch was already safe
+because a `path:line` locator carries no text, so the care that produced the
+base64-encoded needles was never applied one function further down.
+
+**Defect 2 — ★★ the gate could not see the commit it was gating.**
+`git ls-files` lists what is already in the index and a bare `git grep`
+searches only tracked files, so a local run **before staging** — which is
+when anyone naturally runs a verification — excluded precisely the files the
+session had just written. Now `--untracked` and `--cached --others
+--exclude-standard`.
+
+**Verified by A/B, not argued**, with a probe file whose name and contents
+both carry the term, left unstaged in `docs/`:
+
+| run | result |
+|---|---|
+| pre-fix | exit 0, "clean" — on a file violating the rule **twice** |
+| post-fix | exit 1, `FILENAME docs/_probe_***_name.md`, `CONTENT docs/_probe_***_name.md:1`, term absent from the output |
+
+**★★★ Standing rule proposed by the engineer, evaluated and MINTED here —
+it clears this project's two-occurrence bar on its own, having fired twice,
+once in each of two sibling repositories:**
+
+> **`R218` — A gate whose input set is "what is already committed" cannot
+> see the commit you are about to make.** Run locally before staging — which
+> answers a question about the **past** — and run on CI, where everything is
+> checked out — which answers one about the **present** — and the two
+> disagree **exactly on the new work**, so a green local run carries no
+> information about the push that follows it. Any `tools/check-*` that
+> shells out to `git ls-files`, `git grep`, `git log` or `git diff` without
+> including untracked, non-ignored files is subject to this rule.
+>
+> Caught by an **injection test** in both repositories (write a file that
+> violates the rule, run the gate, read its output as its audience would),
+> not by review — the cheap, generalisable technique here, ~90 seconds per
+> run.
+>
+> Ceiling moves `R217` → `R218`; next free `R219`.
+
+**Owed follow-up, filed as an unscoped Backlog note, below:** audit the
+other seventeen `tools/check-*` scripts against `R218` — this is a shape, not
+a property of the one script it was found in.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| standing rules | `R217` | **`R218` MINTED**; next free `R219` |
+| Backlog | — | one unscoped note added (audit remaining `check-*` scripts against `R218`), below |
+
+---
+
+### `3016641` — a test assertion shipped with a ten-space hole in it: the second heredoc-continuation string-gap defect this session, caught by `tools/check-string-gaps.sh` — 2026-08-25 (two-hundred-and-fifty-fourth filing)
+
+**Sourcing.** No shell this filing; relayed from the engineer's commit and
+gate output, per hard rule 8.
+
+A Rust line continuation lost its trailing backslash and a test assertion
+shipped with a ten-space hole mid-sentence; `tools/check-string-gaps.sh`
+caught it before it reached the record. ★ **Second occurrence this session,
+same cause both times**: editing Rust through a shell **heredoc**, where
+`\\` arrives as a single `\`. Every edit made through a script written to a
+*file* and executed was unaffected. The engineer's own agent-memory note
+*"NEVER put prose through the Bash tool"* already covers this; recorded here
+because it recurred in a form the note did not name — a **test assertion**
+rather than an operator-visible string — and because the second one survived
+until the gate sweep ran, the same shape as the `525585e` entry's finding one
+scale down: a check run at the wrong point in the write-then-stage sequence
+tells you about the past, not the change you are about to make.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `125`, next free `125.1` | unchanged — no Pass |
+
+---
+
 ### `15c3310` — THE FIRST PUSH SINCE `v0.8.0`: SIX COMMITS, `81e5aab`→`15c3310`, ON THE OPERATOR'S ONE-WORD AUTHORISATION ("push") — NOT A RELEASE, NO TAG; A SQUASH THAT WOULD HAVE HELD ~48 REPUBLISHED SUITE-NAME MENTIONS TO ZERO WAS CONSIDERED AND REJECTED, BECAUSE IT WOULD HAVE FALSIFIED `ROADMAP.md`'S/`SESSION_LOG.md`'S OWN HASH CITATIONS — no Pass ID, no decision — 2026-08-25 (two-hundred-and-fifty-third filing)
 
 **Sourcing.** No shell this filing (librarian invocation). Every figure below
@@ -76930,6 +77307,35 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+### Wire `cargo +nightly fuzz build` into CI — unscoped, no Pass ID
+
+**Filed 2026-08-25 (two-hundred-and-fifty-fourth filing)**, owed by the
+`4b22c95` Shipped entry above. `cargo fuzz build` is not one of CI's jobs; it
+is a discipline named in `ARCHITECTURE.md` §10.2 and in the engineer role's
+own hard-always list, and it had been silently broken since OCR landed
+(`Pass 71.0`) with nothing catching it — every Pass since shipped with the
+fuzz harness dead. A **build-only** job (not run — ~4 minutes warm on this
+machine) closes the structural gap the way `bb154ed`'s release-ordering
+fix replaced a discipline that lived only in memory. Scope when picked up:
+which fuzz targets to build (all, or a rotating subset for time budget), and
+whether a build failure blocks the same workflow `check-*` gates block or
+runs as its own job.
+
+### Audit the other seventeen `tools/check-*` scripts against `R218` — unscoped, no Pass ID
+
+**Filed 2026-08-25 (two-hundred-and-fifty-fourth filing)**, owed by the
+`525585e` Shipped entry above, which minted `R218` — *a gate whose input set
+is "what is already committed" cannot see the commit you are about to
+make.* `check-suite-name-absent.py` had this defect and it fired twice,
+once here and once independently in the sibling `iccce` repository's copy of
+the same gate — the two-occurrence bar is already cleared, by the rule's own
+shape rather than by count of scripts. Any `tools/check-*` that shells out to
+`git ls-files`, `git grep`, `git log` or `git diff` without including
+untracked, non-ignored files is a candidate. Method: the same **injection
+test** that found the founding instance — write a file that violates the
+rule, run the gate unstaged, read its output as its audience would — not
+review by inspection.
+
 ### `Pass 74.7` + `Pass 74.9` — **SHIPPED 2026-08-23** (`1d6db9e` + `5b0d885`; `296a23e`) — moved to *Shipped*
 
 The full entry is in *Shipped* under `1d6db9e` + `5b0d885` + `296a23e`.
@@ -95347,6 +95753,46 @@ same cause (hashes exist only at commit time), two different failure modes.
   `D:/dev/rag/rust/a_gate_whose_evidence_only_a_later_commit_can_produce_should_defer_the_tip_not_fail_it.md`.
 
   **Ceiling moves `R216` → `R217`; next free `R218`.**
+
+- **R218 — A GATE WHOSE INPUT SET IS "WHAT IS ALREADY COMMITTED" CANNOT SEE
+  THE COMMIT YOU ARE ABOUT TO MAKE.** Minted 2026-08-25 (two-hundred-and-
+  fifty-fourth filing), from the `525585e` Shipped entry above.
+
+  `tools/check-suite-name-absent.py` shelled out to `git ls-files` (tracked
+  files only) and a bare `git grep` (tracked files only) to check for the
+  forbidden suite name/acronym. Run locally **before staging** — which is
+  when anyone naturally runs a verification, and exactly the moment a
+  session's own newly-written files are untracked — the gate answered a
+  question about the **past** (what is already in the index) while its
+  caller needed an answer about the **present** (what is about to be
+  pushed). The two disagree precisely on the new work, so a green local run
+  before staging carried no information about the push that followed it.
+  Fixed by adding `--untracked` and `--cached --others --exclude-standard`
+  to both the filename and contents sweeps.
+
+  **Cleared the two-occurrence bar on its own, in two different
+  repositories.** `iccce` built the same gate independently, hit the
+  identical defect, fixed it, then read pdfce's copy and found it there too
+  — reported informationally, no reply owed
+  (`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\note_your_name_gate_has_the_two_defects_mine_had.md`).
+  Two projects converging on the same gate shape and the same defect in it
+  is stronger evidence than one project hitting it twice.
+
+  **Scope.** Any `tools/check-*` that shells out to `git ls-files`,
+  `git grep`, `git log` or `git diff` without including untracked,
+  non-ignored files. A Backlog audit of the remaining seventeen scripts
+  against this rule is filed, above.
+
+  **Verified by an injection test, not by review**: write a probe file that
+  violates the rule (name and contents both), leave it unstaged, run the
+  gate. Pre-fix: exit 0, "clean" — on a file violating the rule twice.
+  Post-fix: exit 1, both violations reported, the forbidden term itself
+  never printed (a second, distinct defect fixed in the same commit — the
+  failure path used to print the violating file NAME verbatim, which for
+  THIS gate specifically means the path IS the violation; both output paths
+  are now masked).
+
+  **Ceiling moves `R217` → `R218`; next free `R219`.**
 
 ## Update protocol
 
