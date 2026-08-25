@@ -96,6 +96,186 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `4267f84` — VERSION BUMP `0.9.0` → `0.10.0`, MINOR: Type 3 fonts render (`Pass 126.0`/`Pass 126.1`) — **`v0.10.0` TAGGED/PUSHED/PUBLISHED AT `dd48c7c`, AND CI IS CORRECTLY RED THERE**, on `check-commits-filed.py`, because `4267f84` sits behind a filing commit that was written before `4267f84` existed; ★★★★★ **THE ORDERING DEFECT THAT PRODUCED IT IS THE MORE USEFUL HALF: A GREEN `tools/check-*` SWEEP IS A CLAIM ABOUT THE TREE IT RAN ON, NOT A DURABLE PROPERTY OF ANY COMMIT IN IT — FOURTH OCCURRENCE OF `R217`'S SHAPE, NOT `R218`'S**; operational corollary recorded as a named candidate (n=1, below the two-occurrence bar) — tag move to this filing's own commit **PENDING**, engineer's next act — no Pass ID, infrastructure/release record — 2026-08-25 (two-hundred-and-fifty-ninth filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). Every
+figure below is relayed from the engineer's dispatch, which quotes `4267f84`
+in full and reports the `gh run view` result for run `32899481708` at
+`dd48c7c`; nothing below is this role's own measurement.
+
+---
+
+#### What `4267f84` is
+
+A minor version bump, `0.9.0` → `0.10.0`, on the same footing as every
+release since `0.5.x` — the version-carrying half of shipping `Pass 126.0`/
+`Pass 126.1` (Type 3 font rendering, filed and moved to *Shipped* above at
+the 258th filing). Contents, as relayed: both lock files moved — the
+workspace `Cargo.lock` (six own-crate version lines) **and**
+`fuzz/Cargo.lock`, which sits outside the workspace and was left at `0.7.0`
+by the `v0.8.0` bump; checked by reading its `pdfce-core` stanza directly
+rather than assuming a build touched it, the same discipline the `08a88bd`
+entry above established for the workspace lock. `THIRD_PARTY_LICENSES.md`
+regenerated with CI's exact `cargo-about` invocation and produced
+**byte-identical** output — Type 3 rendering needed no new crate, because a
+glyph procedure is an ordinary content stream and the interpreter already
+existed.
+
+**Verification, as relayed:** fmt clean; `cargo clippy --workspace
+--all-targets --all-features -- -D warnings` clean, 0 diagnostics; `cargo
+test --workspace --all-features` green; `cargo test -p pdfce-core
+--no-default-features` green; `cargo check -p pdfce-core -p pdfce-render
+--target wasm32-unknown-unknown` clean; `cargo tree -p pdfce-core` /
+`-p pdfce-render` — neither carries a GUI, windowing or HTTP dependency;
+**`cargo +nightly fuzz build`, all 25 targets, on Windows, 4 min 36 s** —
+the one check this project's own CI structurally cannot perform for this
+Pass, since the fuzz job runs on `ubuntu-latest` and this morning's earlier
+break (`ccf9ed3` entry, 255th filing) was MSVC-only; running it locally on
+the platform CI does not cover is the discipline `R209` names, not a gate.
+
+---
+
+#### The release, as it stands right now — TAGGED, PUSHED, PUBLISHED, CI RED
+
+`v0.10.0` is tagged, annotated, at `dd48c7c` (the librarian's own filing
+commit for `Pass 126.0`/`Pass 126.1` — the *correct* placement by this
+project's own precedent, see `08a88bd`'s entry above on why a filing
+commit is the right thing to tag), pushed, and published with one asset,
+`pdfce-v0.10.0-windows-x64-portable.zip`, **11,192,802 B**. URL:
+`https://github.com/KenM76/pdfce/releases/tag/v0.10.0`.
+
+**CI run `32899481708` at `dd48c7c`: FAILURE.** Nine of ten jobs green —
+`fuzz targets build (nightly)`, `cargo test (windows-latest)`, `cargo test
+(ubuntu-latest)`, clippy, fmt, the licence audit, the zero-GUI-deps check,
+the no-network check, the macOS/wasm32 cross-check — the tenth red on
+`check-commits-filed.py`, on exactly `4267f84`, for the reason this entry
+exists to explain.
+
+**Packaging smoke test — run and passed, on the artefact itself, despite
+the CI failure being unrelated to packaging correctness:** the zip
+extracted to a fresh path; `pdfce-cli.exe` reports `0.10.0`; rendering a
+Type 3 fixture from the extracted binary produced a PNG **byte-identical**
+(same MD5) to the development build's, with `type3_glyphs=8
+type3_colors_ignored=1`; the GUI launched from the extraction and its
+process `Path` confirms the copy that ran was the packaged one.
+
+**★ Status, stated plainly so the pending half is not lost to the next
+reader:** at filing time, `v0.10.0`'s tag sits on a commit whose CI is red
+for the reason explained below, and the move to correct it — retagging
+`v0.10.0` at this filing's own commit, force-pushing the tag, rebuilding
+the portable package so `BUILD-INFO.txt` names the tagged commit rather
+than a superseded one, replacing the release asset, re-running
+`verify-release.py` — is the **engineer's next act, not yet performed**.
+This entry is written so that report has somewhere to land as a dated
+amendment, exactly as `e115947`'s did for `v0.9.0` (256th filing) and
+`08a88bd`'s did for `v0.8.0` (241st filing, the precedent for moving a
+published tag for this exact class of reason).
+
+---
+
+#### ★★★★★ The ordering defect — why CI went from green to red without `4267f84` changing at all
+
+**The sequence, in real order, not the order it was reasoned about:**
+
+1. The engineer dispatched this role to file `Pass 126.0`/`Pass 126.1` to
+   *Shipped* (the entries immediately below this one, 258th filing).
+2. **Before** that filing was committed, the engineer committed the
+   version bump, `4267f84`.
+3. The engineer ran the full `tools/check-*` sweep. **At this exact
+   moment, `4267f84` was HEAD** — the tip-deferral mechanism `R217` minted
+   (`bb154ed`, 241st filing;
+   `D:/dev/rag/rust/a_gate_whose_evidence_only_a_later_commit_can_produce_should_defer_the_tip_not_fail_it.md`)
+   correctly excused it, and the sweep reported all-green.
+4. This role's filing commit, `dd48c7c`, landed **on top of** `4267f84`.
+
+The instant step 4 happened, `4267f84` stopped being HEAD, its deferral
+evaporated exactly as `R217` designed it to, and it was asked to cite a
+filing — but the filing that landed on top of it had been **written before
+`4267f84` existed** (it quotes `1a5fc92` and `0f09780`, the two commits
+`Pass 126.0`/`Pass 126.1` actually shipped as, and could not possibly have
+named a commit not yet made). `check-commits-filed.py` is red at `dd48c7c`
+today, correctly: `4267f84` is now genuine, real, correctly-flagged debt —
+not a tip artefact, not a gate defect. **Nothing about the gate is wrong
+here.** This is the exact "what is NOT weakened" branch `R217`'s own text
+already documents (*"real debt behind the tip — a genuinely older, unfiled
+commit — still hard-fails, unchanged"*), firing precisely as designed,
+against a fourth, previously-unseen route into the same position.
+
+**Why this is `R217`'s shape and not `R218`'s, stated because the engineer
+explicitly left the call to this role.** `R218` (`525585e`, 254th filing)
+is about a gate whose input set is **tracked files** failing to see
+**untracked** ones — a spatial blind spot, fixed by widening what the
+gate reads (`--untracked`, `--cached --others --exclude-standard`). What
+happened here has no untracked-file component at all; every commit
+involved was fully committed the whole time. The mechanism is `R217`'s —
+tip deferral, and the correctly-designed evaporation of that deferral the
+moment a following commit lands — encountered via a fourth route into the
+same position: not a 14-run streak of interleaved code commits (occurrence
+2), not a sibling gate found dormant before it bit (occurrence 3), but a
+**dispatch whose filing was interposed by an unrelated commit before it
+could land**. Filed as a fourth occurrence in the existing RAG file
+(`D:/dev/rag/rust/a_gate_whose_evidence_only_a_later_commit_can_produce_should_defer_the_tip_not_fail_it.md`),
+not a fifth code fix to the gate — **there is no code fix**; the gate
+cannot defer a commit disguised as something that happened earlier, and it
+should not be made to try.
+
+**The operational corollary, which is why this half is "the more useful
+one":**
+
+> **A green run of a tip-deferring gate is a claim about the tree AS OF THE
+> MOMENT IT RAN, not a durable property of any commit in it.** Every
+> commit landed on top of the tip after that moment can convert a
+> (correctly) excused tip into real debt — without that tip commit's own
+> content, message or diff changing at all. The gate's answer about commit
+> N is a function of what gets committed *after* N, not only of N itself.
+
+**The actionable rule, stated as sequencing discipline because there is no
+code fix available:** ⇒ **the filing commit for a dispatch must be the
+very next commit after the dispatch, with nothing interposed.** Any code
+commit landed between "dispatch the filer" and "the filer's commit lands"
+has, by construction, no filing that can name it, because the filing was
+written against the world as it stood at dispatch time. `bb154ed` made
+tag-on-a-code-commit safe *in general*; it does not make *file-then-
+append-code-then-file* safe, and nothing does except ordering — the same
+shape as `R217`'s own superseded predecessor finding
+(`a_release_tag_on_a_code_commit_cannot_satisfy_a_filing_gate_so_file_
+first_then_tag.md`), recurring one layer up, at the dispatch boundary
+instead of the tag boundary.
+
+**Recorded as a named candidate, not minted — n=1, below this project's own
+two-occurrence bar.** If this ordering hazard (a librarian dispatch
+interposed by an unrelated commit before its filing lands) recurs, mint it
+as its own standing rule rather than folding it into `R217`, on the same
+reasoning `R217` itself gave for not folding into `R218`'s sibling
+candidate: the shapes read alike ("a check that couldn't see the defect")
+but the mechanisms differ enough to be worth naming separately if it
+happens twice.
+
+---
+
+#### `docs/FEATURES.md`
+
+**No rows affected.** This is a version-bump/release-record entry over a
+Pass already moved to *Implemented* at the 258th filing above — no new
+core/cli/gui box changes. Stated explicitly per this project's own
+convention (`bb154ed`'s entry) so the absence reads as confirmed, not
+overlooked.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `126`, next free `126.2` | unchanged — this entry is a version bump/release record, not a Pass |
+| decisions (`ARCHITECTURE.md` §12) | `087` | unchanged — next free `088`; no decision this filing |
+| standing rules | `R218` | **unchanged, next free `R219`.** `R217` cited, corroborated at a **fourth occurrence** (RAG file amended, not a new file); operational corollary recorded as a **named candidate**, not minted (n=1, below the two-occurrence bar) |
+| `D:\dev\rag\rust\` | `a_gate_whose_evidence_only_a_later_commit_can_produce_should_defer_the_tip_not_fail_it.md` at its third occurrence (`bb154ed`, 241st filing) | **fourth-occurrence section + operational corollary added this filing**; `index.md` bullet amended with a dated footer to match; `last_verified` bumped to `2026-08-25` |
+| operator authorisations | `v0.9.0`'s ("release when ready", DISCHARGED, 256th filing) | **`v0.10.0` — "release when Type 3 rendering ships" (recorded 258th filing, carried from the standing "release when ready" go-ahead) — tag/push/publish steps taken, but CI-green-at-tagged-commit is FAILING per this entry; discharge PENDING the retag the engineer has stated as next** |
+| `docs/FEATURES.md` | — | none — see above |
+
+---
+
 ### `0f09780` — `Pass 126.1` ships: the bitmap flavour of Type 3 rendering, and the measurement that it is not smoothed — matches Acrobat's fixed-resolution-stencil behaviour, verified across the minify/magnify boundary rather than a "reasonable range" (`R211` clause (e)) — 2026-08-25 (two-hundred-and-fifty-eighth filing)
 
 **Sourcing.** No shell this filing (librarian invocation, hard rule 8). Every
