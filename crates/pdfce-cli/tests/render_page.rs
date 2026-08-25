@@ -452,6 +452,9 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "mesh_records",
             "mesh_truncated",
             "mesh_unusable",
+            "type3_glyphs",
+            "type3_glyphs_missing",
+            "type3_colors_ignored",
             // §8.6.6.4/.5 and §8.6.5 image colour, appended 2026-08-17.
             // Both exist because the pixel-parity harness reads THIS LINE
             // and nothing else: a `Lab` image with a perfectly good

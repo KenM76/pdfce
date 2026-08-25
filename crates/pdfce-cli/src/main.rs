@@ -124,6 +124,8 @@
 //!               shadings=<n> shadings_via_sh=<n> shadings_paintable=<n> \
 //!               shadings_painted=<n> shadings_refused=<n> shadings_mesh=<n> \
 //!               mesh_records=<n> mesh_truncated=<n> mesh_unusable=<n> \
+//!               type3_glyphs=<n> type3_glyphs_missing=<n> \
+//!               type3_colors_ignored=<n> \
 //!               img_colorant_none=<n> img_uncalibrated=<n> \
 //!               blend_modes_applied=<n> blend_modes_ignored=<n> \
 //!               soft_masks_ignored=<n> soft_masks_applied=<n> \
@@ -287,6 +289,9 @@
 //! | `shadings_paintable` | `shading.paintable` | "will an update fix MY file?" (the question an operator actually has, and why this sits between the census and the result: a page whose shadings are all type-7 meshes reports `shadings_paintable=0` and needs a different answer from one where paintable equals `shadings`) |
 //! | `shadings_painted` | `shading.painted` | "how many gradients actually reached the raster?" (the right half of this line's load-bearing pair — `shadings` non-zero beside `shadings_painted` zero is the honest statement that pdfce found the gradients, understood them, and drew none. An unpainted shading leaves whatever was underneath it showing through. Read either number alone and you get the wrong answer) |
 //! | `shadings_refused` | `shading.refused` | "how many shading dictionaries were rejected outright, with a named reason?" (DIVERGENCE. The finer counters behind it — no usable `/Function`, a `/Function` that would not load, a `/Function` output count disagreeing with the colour space's component count (§8.7.4.4), an incomplete colour ramp — are NOT on this line; they and the reason strings go to stderr, where a new key cannot break a parser) |
+//! | `type3_glyphs` | `type3_glyph_procs_run` | "how many glyphs did pdfce draw by RUNNING a content stream?" - Type 3 (ISO 32000-1 8.7.4.5 is shadings; this is 9.6.5) defines its glyphs as procedures rather than as a font program, so this is a census of a different KIND of glyph rather than a shortfall. Zero on almost every document; non-zero means the page carries a font whose shapes the file itself draws |
+//! | `type3_glyphs_missing` | `type3_glyphs_missing` | "was a Type 3 code shown whose glyph does not exist?" (DISCLOSURE). Two causes, which the standard gives the same outcome and which are therefore one counter: the code has no `/Differences` entry (9.6.6.3 makes a Type 3 encoding TOTAL, with nothing to fall back on), or its glyph name is not a key in `/CharProcs` (9.6.5 step b, "no glyph shall be painted"). **The advance still happened** - the clause says nothing about the width and `/Widths` supplies it independently, so this counts glyphs that are absent and never text that has moved |
+//! | `type3_colors_ignored` | `type3_colors_ignored` | "how many colour operators inside a `d1` glyph procedure did pdfce drop?" (DISCLOSURE, and NOT a shortfall). Table 113 makes ignoring them the DEFINED behaviour - a `d1` glyph "specifies only shape, not colour" and takes the colour in force at the text-showing operator - and Acrobat was measured doing the same on 2026-08-25. It is reported because an operator debugging a glyph that came out the "wrong" colour needs to be told that the colour operator they can see in the stream was deliberately dropped rather than missed |
 //! | `mesh_records` | `shading.mesh_records` | "how much geometry came out of the mesh streams?" - triangles for shading types 4/5, patches for types 6/7 (ISO 32000-1 8.7.4.5.5-.8). Zero beside a non-zero `shadings_mesh` and a zero `mesh_unusable` would be a bug; zero beside a non-zero `mesh_unusable` is the streams being unreadable, which is a different fact and is why they are two keys |
 //! | `mesh_truncated` | `shading.mesh_truncated` | "did a mesh stream stop part-way through a record?" (DISCLOSURE). pdfce paints the complete records and discards the remainder. The standard states an error condition for exactly ONE of the four mesh types (type 4) and is silent for the other three, so this is a product decision being reported rather than a conformance verdict. A type 5 stream that does not hold a whole number of rows counts here too |
 //! | `mesh_unusable` | `shading.mesh_unusable` | "was a mesh shading found and NOT decodable?" (DISCLOSURE). Bad `/BitsPer...` widths, a missing or wrong-length `/Decode`, an `Indexed` colour space (which a literal reading permits and which would interpolate palette INDICES), a first patch with a nonzero edge flag and nothing to inherit from. Each occurrence names its reason in the notes below the line. Distinct from `shadings_refused`, which counts dictionaries rejected before their stream was reached |
@@ -348,7 +353,7 @@
 //!
 //! | token | reason | meaning |
 //! |---|---|---|
-//! | `unsupported_type3` | `Type3` | Type 3 (content-stream) glyphs, deferred |
+//! | `unsupported_type3` | `Type3` | a Type 3 font (ISO 32000-1 9.6.5, content-stream glyphs) that pdfce could not build a model for. ★ **This meant "Type 3 is deferred" until `Pass 126.0`, when Type 3 began rendering.** It now means only that Table 112's IRREDUCIBLE entries are missing -- `/CharProcs` (no glyph descriptions exist) or `/FontMatrix` (no mapping from glyph space to text space, and guessing the conventional `[0.001 ...]` would render a nonstandard font a thousand times too large). Everything else recovers; a font with no usable `/Encoding` in particular is NOT counted here, because 9.6.6.3 makes that a font whose every code resolves to no glyph -- a blank page by the standard rather than a feature pdfce lacks. See `type3_glyphs` for the census of what DID render |
 //! | `unsupported_noncmap` | `NonIdentityCmap` | `Type0` with a non-`Identity-H` CMap, deferred |
 //! | `unsupported_vertical` | `VerticalWriting` | `Identity-V` vertical writing, deferred |
 //! | `unsupported_composite_not_embedded` | `CompositeNotEmbedded` | `Identity-H` with no embedded program — supply the font |
@@ -7985,6 +7990,7 @@ sep_none_suppressed={} pattern_spaces={} patterns_unpainted={} \
 indexed_clamped={} indexed_short={} shadings={} shadings_via_sh={} \
 shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={} \
 mesh_records={} mesh_truncated={} mesh_unusable={} \
+type3_glyphs={} type3_glyphs_missing={} type3_colors_ignored={} \
 img_colorant_none={} img_uncalibrated={} \
 blend_modes_applied={} blend_modes_ignored={} soft_masks_ignored={} \
 soft_masks_applied={} soft_mask_tr_ignored={} soft_masks_reset_stale={} \
@@ -8130,6 +8136,9 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         d.shading.mesh_records,
         d.shading.mesh_truncated,
         d.shading.mesh_unusable,
+        d.type3_glyph_procs_run,
+        d.type3_glyphs_missing,
+        d.type3_colors_ignored,
         // Appended after every pre-existing key. Both exist because the
         // pixel-parity harness reads THIS LINE and nothing else — a
         // stderr sentence, however well written, is invisible to it, and

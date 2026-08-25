@@ -77,6 +77,7 @@ pub mod overprint;
 pub mod profile;
 pub mod shading;
 pub mod text;
+pub mod type3;
 
 use pdfce_core::content::ContentStream;
 use pdfce_core::document::Document;
@@ -1586,18 +1587,75 @@ mod tests {
         assert_eq!(out.diagnostics.unknown_ops, 0);
     }
 
+    /// §9.6.6.3: a Type 3 font with an EMPTY encoding paints nothing —
+    /// and is not thereby an unsupported font.
+    ///
+    /// ★ This test asserted `fonts_unsupported == 1` until `Pass 126.0`,
+    /// citing decision 004 §4.3's deferred list. That was correct for as
+    /// long as Type 3 was deferred and became a claim about the renderer
+    /// that the renderer contradicted — `R212`. It is rewritten rather
+    /// than deleted, because the FILE it describes is interesting for a
+    /// new reason.
+    ///
+    /// §9.6.6.3 makes a Type 3 font's code-to-name mapping "entirely
+    /// defined by its `Encoding` entry", with no built-in encoding to
+    /// fall back on and no meaningful `StandardEncoding` base (the
+    /// `CharProcs` keys are arbitrary names). So an empty `/Encoding` is
+    /// a font whose every code resolves to nothing — blank page, by the
+    /// standard, not by a shortfall.
+    ///
+    /// The distinction is the whole point: `fonts_unsupported` means
+    /// "pdfce cannot render this font", and reporting it here would send
+    /// an operator looking for a missing feature instead of a missing
+    /// `/Differences` array.
     #[test]
-    fn type3_font_is_counted_unsupported_not_rendered() {
-        // Decision 004 §4.3 lists Type 3 as this Pass's deferred work;
-        // its text must be skipped, never approximated.
+    fn a_type3_font_with_an_empty_encoding_paints_nothing_and_is_not_unsupported() {
         let (doc, page) = doc_with_font(
             "BT /F1 24 Tf 10 10 Td (Hi) Tj ET",
             "<< /Type /Font /Subtype /Type3 /FontMatrix [0.001 0 0 0.001 0 0] \
              /CharProcs << >> /Encoding << >> >>",
         );
         let out = render_page(&doc, &page, 1.0).unwrap();
+        assert_eq!(ink_bbox(&out.pixmap), None, "no code has a glyph name");
+        assert_eq!(
+            out.diagnostics.fonts_unsupported, 0,
+            "the font loaded; it simply has no glyphs to show"
+        );
+        assert_eq!(
+            out.diagnostics.type3_glyphs_missing, 2,
+            "both codes of \"Hi\" must be reported as glyphs that do not exist"
+        );
+        assert_eq!(out.diagnostics.type3_glyph_procs_run, 0);
+    }
+
+    /// A Type 3 font missing Table 112's IRREDUCIBLE entries is still
+    /// refused, and this is the pair that keeps the test above honest.
+    ///
+    /// Without it, "not unsupported" could be read as "pdfce never
+    /// refuses a Type 3 font", which would be a different and much worse
+    /// property: a font with no `/CharProcs` has no glyph descriptions
+    /// anywhere, and a font with no `/FontMatrix` has no mapping from
+    /// glyph space to text space — guessing the conventional
+    /// `[0.001 …]` would render a nonstandard font at a thousand times
+    /// the wrong size.
+    #[test]
+    fn a_type3_font_without_charprocs_is_still_refused_by_name() {
+        let (doc, page) = doc_with_font(
+            "BT /F1 24 Tf 10 10 Td (Hi) Tj ET",
+            "<< /Type /Font /Subtype /Type3 /FontMatrix [0.001 0 0 0.001 0 0] \
+             /Encoding << >> >>",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
         assert_eq!(ink_bbox(&out.pixmap), None);
         assert_eq!(out.diagnostics.fonts_unsupported, 1);
+        assert_eq!(
+            out.diagnostics
+                .fonts_unsupported_by_reason
+                .get("Type3")
+                .copied(),
+            Some(1),
+            "the refusal must be NAMED, not merely counted"
+        );
     }
 
     #[test]

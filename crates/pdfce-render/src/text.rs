@@ -70,8 +70,16 @@
 //! - **notdef** — the code resolved to no glyph at all. Something is
 //!   missing from the page.
 //! - **unsupported font** — the font's machinery is outside this Pass
-//!   (a non-Identity CMap, `Identity-V`, Type 3, a non-embedded
-//!   composite). The text was **skipped**, not approximated.
+//!   (a non-Identity CMap, `Identity-V`, a non-embedded composite). The
+//!   text was **skipped**, not approximated.
+//!
+//!   ★ **Type 3 was on that list until `Pass 126.0` and is not any
+//!   more.** It renders — see [`crate::type3`] — and its bucket now
+//!   means only "Table 112's irreducible entries are missing", which is
+//!   a much narrower thing than it used to mean. A counter whose
+//!   MEANING changes under a reader is worse than one whose value
+//!   does, so the change is stated here rather than left to be
+//!   inferred from a smaller number.
 //!
 //! [`FontEnvironment::named`]: crate::font::FontEnvironment::named
 
@@ -351,8 +359,12 @@ pub struct LoadedFont {
     pub kind: FontKind,
 }
 
-/// The two font shapes this Pass renders (decision 004 §4.3). Type 3
-/// (§9.6.5) is recognized and skipped — see [`load`].
+/// The font shapes this crate renders.
+///
+/// This said "the two font shapes ... Type 3 is recognized and skipped"
+/// until `Pass 126.0`, which is the `R212` shape: a claim about the
+/// module sitting where a reader meets it first, with nothing under test
+/// to contradict it. There are three now.
 #[derive(Debug)]
 pub enum FontKind {
     /// `Type1` / `MMType1` / `TrueType` — one byte per glyph, fully
@@ -360,6 +372,16 @@ pub enum FontKind {
     Simple(Box<SimpleFont>),
     /// `Type0` with an `Identity-H` CMap.
     Composite(CompositeFont),
+    /// `Type3` (§9.6.5) — glyphs are **content streams**, not a font
+    /// program.
+    ///
+    /// The odd one out in three ways that matter at every call site
+    /// below, which is why it is a variant rather than a flag:
+    /// [`LoadedFont::data`] holds **no program** (there is none to
+    /// hold), widths are in `FontMatrix` units rather than thousandths,
+    /// and painting a glyph means running an interpreter rather than
+    /// looking up an outline. See [`crate::type3`].
+    Type3(Box<crate::type3::Type3Font>),
 }
 
 /// A simple font, flattened (module docs).
@@ -420,7 +442,11 @@ impl LoadedFont {
     #[must_use]
     pub fn codes(&self, string: &[u8]) -> Vec<Code> {
         match self.kind {
-            FontKind::Simple(_) => string
+            // §9.6: a Type 3 font is a SIMPLE font — one byte per code,
+            // and §9.3.3's word spacing applies to the single-byte code
+            // 32 exactly as it does for Type 1. Only the glyph
+            // *machinery* differs.
+            FontKind::Simple(_) | FontKind::Type3(_) => string
                 .iter()
                 .map(|&b| Code {
                     value: u32::from(b),
@@ -444,11 +470,69 @@ impl LoadedFont {
         }
     }
 
+    /// The advance for a code, **in text space** — the value §9.4.4's
+    /// `w0` wants, with no further division.
+    ///
+    /// # ★ Why this exists at all, rather than a `/1000` at the call site
+    ///
+    /// Because for a Type 3 font that division is **wrong**, and it is
+    /// wrong in a way that renders. Table 112: Type 3 widths "shall be
+    /// interpreted in glyph space as specified by `FontMatrix`
+    /// (**unlike** the widths of a Type 1 font, which are in thousandths
+    /// of a unit of text space)". A caller that divides by 1000 and then
+    /// lets the font matrix apply scales a typical advance by `1e-6`,
+    /// collapsing a whole line of text onto one point.
+    ///
+    /// The call site used to spell `font.width(code) / 1000.0`, which is
+    /// correct for two of the three font kinds and silently wrong for
+    /// the third. Moving the conversion in here makes the units a
+    /// property of the font rather than a habit of the caller, so the
+    /// mistake is not available to make.
+    #[must_use]
+    pub fn advance_text_space(&self, code: u32) -> f32 {
+        match &self.kind {
+            FontKind::Type3(f) => f.advance_text_space(code),
+            FontKind::Simple(_) | FontKind::Composite(_) => {
+                self.width(code) / GLYPH_SPACE_PER_TEXT_SPACE
+            }
+        }
+    }
+
+    /// Whether this font's glyphs are content streams (§9.6.5).
+    ///
+    /// Asked at the paint site, where a Type 3 font takes a completely
+    /// different route: no font program to parse, no outline to look up,
+    /// an interpreter run instead.
+    #[must_use]
+    pub const fn is_type3(&self) -> bool {
+        matches!(self.kind, FontKind::Type3(_))
+    }
+
+    /// The Type 3 model, or `None` for the other two kinds.
+    #[must_use]
+    pub fn type3(&self) -> Option<&crate::type3::Type3Font> {
+        match &self.kind {
+            FontKind::Type3(f) => Some(f),
+            FontKind::Simple(_) | FontKind::Composite(_) => None,
+        }
+    }
+
     /// Advance width for a code, in **glyph space** (1000 = one text
-    /// space unit). The caller divides.
+    /// space unit).
+    ///
+    /// ★ Prefer [`Self::advance_text_space`]. This returns a raw number
+    /// whose UNITS DEPEND ON THE FONT KIND — thousandths for a simple or
+    /// composite font, `FontMatrix` units for a Type 3 — so dividing its
+    /// result by 1000 is correct for two kinds and silently wrong for the
+    /// third.
     #[must_use]
     pub fn width(&self, code: u32) -> f32 {
         match &self.kind {
+            FontKind::Type3(f) => usize::try_from(code)
+                .ok()
+                .and_then(|i| f.widths.get(i))
+                .copied()
+                .unwrap_or(0.0),
             FontKind::Simple(f) => usize::try_from(code)
                 .ok()
                 .and_then(|i| f.widths.get(i))
@@ -471,6 +555,14 @@ impl LoadedFont {
     #[must_use]
     pub fn gid(&self, code: u32, program: Option<&FontProgram<'_>>) -> Option<u32> {
         match &self.kind {
+            // A Type 3 font has no GIDs, because it has no program to
+            // index into. Its codes resolve to a glyph NAME and then to a
+            // content stream (§9.6.5 steps a and b) -- see
+            // `crate::type3::Type3Font::proc_for`. Returning `None` here
+            // would be read by the caller as "notdef", which is a
+            // different fact, so no caller may reach this for a Type 3
+            // font; `is_type3()` is the guard.
+            FontKind::Type3(_) => None,
             FontKind::Simple(f) => usize::try_from(code)
                 .ok()
                 .and_then(|i| f.gids.get(i))
@@ -503,9 +595,23 @@ impl LoadedFont {
 /// — decision 004 §4.3's deferred list).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnsupportedFont {
-    /// `/Subtype /Type3` (§9.6.5) — glyphs are content streams, which
-    /// needs the interpreter re-entrant plus `d0`/`d1` and a recursion
-    /// bound.
+    /// `/Subtype /Type3` (§9.6.5) with Table 112's **irreducible**
+    /// entries missing.
+    ///
+    /// ★ This meant "pdfce does not render Type 3 at all" until
+    /// `Pass 126.0`, and its doc comment said so. It now means something
+    /// much narrower, and the narrowing matters to whoever reads the
+    /// counter: `/CharProcs` absent (there are no glyph descriptions to
+    /// run) or `/FontMatrix` absent (there is no mapping from glyph
+    /// space to text space, and guessing the conventional `[0.001 …]`
+    /// would render a nonstandard font a thousand times too large).
+    ///
+    /// Everything else recovers. In particular a font with **no usable
+    /// `/Encoding`** is NOT refused: §9.6.6.3 makes that a font whose
+    /// every code resolves to no glyph, which is a blank page by the
+    /// standard rather than a feature pdfce lacks — and refusing it
+    /// would skip the text's ADVANCES too, moving everything after it on
+    /// the line.
     Type3,
     /// A `Type0` font whose CMap is not `Identity-H`: a predefined CJK
     /// CMap or an embedded CMap stream (§9.7.5, deferred with its own
@@ -586,7 +692,25 @@ pub fn load(
     match subtype.as_slice() {
         b"Type1" | b"MMType1" | b"TrueType" => load_simple(doc, font_dict, env, base_font),
         b"Type0" => load_composite(doc, font_dict, base_font),
-        b"Type3" => Err(UnsupportedFont::Type3),
+        b"Type3" => crate::type3::Type3Font::load(doc, font_dict)
+            .map(|t3| LoadedFont {
+                base_font,
+                // ★ EMPTY, and it is not a placeholder. A Type 3 font
+                // HAS no program — §9.6.5's whole point is that the font
+                // dictionary defines the glyphs rather than describing a
+                // program elsewhere. Every consumer of `data` is gated on
+                // `is_type3()` being false; see `interpret::show_string`,
+                // which must not try to parse this.
+                data: crate::font::FontData::new(Vec::new()),
+                // The document's own glyph descriptions, exactly. Nothing
+                // is substituted and nothing can be — there is no shape
+                // to substitute FOR.
+                source: crate::font::GlyphSource::Embedded,
+                kind: FontKind::Type3(Box::new(t3)),
+            })
+            // Only when Table 112's irreducible entries are missing — see
+            // `Type3Font::load` for which two and why the others recover.
+            .ok_or(UnsupportedFont::Type3),
         _ => Err(UnsupportedFont::UnknownSubtype),
     }
 }

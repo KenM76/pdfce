@@ -1,0 +1,63 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 720] /Resources << /Font << /T3 5 0 R /F1 6 0 R >> /XObject << /Fx 10 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 142 >>
+stream
+0 0 1 rg
+BT /T3 40 Tf 60 600 Td (\101) Tj ET
+0 0 0 rg
+BT /F1 11 Tf 200 605 Td (glyph draws via a form found only in the PAGE resources) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type3 /FontBBox [0 0 700 700] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs 7 0 R /Encoding 8 0 R /FirstChar 65 /LastChar 65 /Widths [750] >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+7 0 obj
+<< /ga 9 0 R >>
+endobj
+8 0 obj
+<< /Type /Encoding /Differences [65 /ga] >>
+endobj
+9 0 obj
+<< /Length 28 >>
+stream
+750 0 0 0 700 700 d1
+/Fx Do
+endstream
+endobj
+10 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 700 700] /Length 17 >>
+stream
+0 0 700 700 re f
+endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000283 00000 n 
+0000000475 00000 n 
+0000000656 00000 n 
+0000000726 00000 n 
+0000000757 00000 n 
+0000000816 00000 n 
+0000000893 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+1010
+%%EOF

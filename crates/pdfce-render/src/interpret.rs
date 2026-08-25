@@ -1175,6 +1175,37 @@ pub struct Diagnostics {
     /// [`MAX_XOBJECT_DEPTH`] **or** re-entered a form already on the
     /// stack (a cycle). Their content is missing from the raster.
     pub xobject_depth_overflows: usize,
+    /// Type 3 glyph procedures executed (§9.6.5).
+    ///
+    /// A census, not a shortfall: this is how many glyphs pdfce drew by
+    /// running a content stream rather than by looking up an outline.
+    /// Read beside [`Self::type3_glyphs_missing`] — the pair says how
+    /// much of a page's Type 3 text arrived.
+    pub type3_glyph_procs_run: usize,
+    /// Type 3 codes shown whose glyph could not be found.
+    ///
+    /// Two causes, which §9.6.5 gives the same outcome and which are
+    /// therefore counted together: the code has no `/Differences` entry
+    /// (§9.6.6.3 leaves a Type 3 font nothing to fall back on), or the
+    /// glyph name is not a key in `/CharProcs` (step b, "no glyph shall
+    /// be painted").
+    ///
+    /// ★ **The advance still happened.** The clause says nothing about
+    /// the width, `/Widths` supplies it independently, and a reader that
+    /// skipped it would mis-position every later glyph on the line — so
+    /// this counts glyphs that are absent, never text that has moved.
+    pub type3_glyphs_missing: usize,
+    /// Colour operators ignored inside a `d1` glyph procedure (Table
+    /// 113).
+    ///
+    /// **Not a shortfall.** The clause makes ignoring them the defined
+    /// behaviour, and Acrobat was measured doing the same on 2026-08-25.
+    /// It is counted because it is a real divergence between what the
+    /// file's bytes say and what pdfce drew, which project rule 4 does
+    /// not permit to be silent — an operator debugging a Type 3 glyph
+    /// that came out the "wrong" colour needs to be told the colour
+    /// operator they can see in the stream was deliberately dropped.
+    pub type3_colors_ignored: usize,
 
     // ---- annotation appearances (Pass 6.0, ISO 32000-1 §12.5) --------
     //
@@ -1501,6 +1532,9 @@ polarity unverifiable (decision 006 R30)",
         self.forms_culled += other.forms_culled;
         self.subpixel_culled += other.subpixel_culled;
         self.xobject_depth_overflows += other.xobject_depth_overflows;
+        self.type3_glyph_procs_run += other.type3_glyph_procs_run;
+        self.type3_glyphs_missing += other.type3_glyphs_missing;
+        self.type3_colors_ignored += other.type3_colors_ignored;
         // Annotation counters are page-level (a nested form never sets
         // them), so in practice `other` contributes zero here — but the
         // merge is written out in full so it stays correct if that ever
@@ -1817,6 +1851,8 @@ pub(crate) fn run_on(
         // hiddenness from; `/OC` sections inside it start the stack.
         false,
         blend_space,
+        // A page's own content stream is never a glyph procedure.
+        None,
     )
 }
 
@@ -1917,6 +1953,7 @@ pub fn trace_paths(
         subpath_start: None,
         needs_move: false,
         pending_clip: None,
+        type3_glyph: None,
         compat_depth: 0,
         mc_stack: Vec::new(),
         hidden_depth: 0,
@@ -1978,6 +2015,10 @@ fn run_nested(
     // decided at the group boundary the caller owns, and a callee that
     // re-derived it would have to re-read the isolation rule.
     blend_space: crate::compositor::BlendSpace,
+    // `Some` when this stream is a Type 3 glyph procedure (§9.6.5). See
+    // `Interpreter::type3_glyph`. A form XObject passes `None` — a `d0`
+    // inside one is not permitted and must not perturb anything.
+    type3_glyph: Option<crate::type3::GlyphColorSource>,
 ) -> Diagnostics {
     // §8.7.2 PM3/PM5: pattern space anchors to this stream's DEFAULT
     // coordinate system, not to the CTM where the fill occurs. Captured
@@ -1999,6 +2040,7 @@ fn run_nested(
         subpath_start: None,
         needs_move: false,
         pending_clip: None,
+        type3_glyph,
         compat_depth: 0,
         mc_stack: Vec::new(),
         hidden_depth: usize::from(hidden),
@@ -2147,6 +2189,7 @@ pub(crate) fn run_form_at_on(
         subpath_start: None,
         needs_move: false,
         pending_clip: None,
+        type3_glyph: None,
         compat_depth: 0,
         mc_stack: Vec::new(),
         hidden_depth: 0,
@@ -2242,6 +2285,30 @@ struct Interpreter<'a> {
     /// Deferred clip rule set by `W`/`W*`, applied after the next
     /// paint op (§8.5.4).
     pending_clip: Option<FillRule>,
+    /// Set when this stream is a **Type 3 glyph procedure** (§9.6.5),
+    /// carrying what its first operator declared about colour.
+    ///
+    /// `None` for every ordinary stream, and it does two jobs:
+    ///
+    /// * **It gates `d0`/`d1`.** Table 113 says both "shall only be
+    ///   permitted in a content stream appearing in a Type 3 font's
+    ///   `CharProcs` dictionary", so outside one they are a diagnosed
+    ///   no-op rather than a state change.
+    /// * **It suppresses colour.** A procedure that began with `d1`
+    ///   declares "only shape, not colour", and Table 113 says any
+    ///   colour operator inside it "shall be ignored" — the glyph takes
+    ///   the colour in force at the text-showing operator. `d0` declares
+    ///   the opposite and flips this to
+    ///   [`GlyphColorSource::ShapeAndColor`].
+    ///
+    /// ★ It starts at `ShapeOnly` and a `d0` raises it, rather than the
+    /// reverse, because the declaration arrives INSIDE the stream: the
+    /// caller cannot know which it is until the first operator runs. The
+    /// default therefore has to be the safe one, and shape-only is safe —
+    /// a glyph that inherits the text colour looks like text, whereas one
+    /// that keeps whatever colour the procedure last set can be any
+    /// colour at all.
+    type3_glyph: Option<crate::type3::GlyphColorSource>,
     /// `BX`/`EX` nesting depth (§7.8.2 Table 32; may nest).
     compat_depth: usize,
     /// One entry per open `BMC`/`BDC`, `true` if THAT level opened a
@@ -2338,6 +2405,39 @@ struct Interpreter<'a> {
 }
 
 impl Interpreter<'_> {
+    /// Whether `name` is one of Table 74's colour-setting operators.
+    ///
+    /// Used for exactly one thing: Table 113's rule that inside a `d1`
+    /// glyph procedure "any use of such operators shall be ignored".
+    ///
+    /// ★ `gs` is deliberately NOT in this set, and the judgement is
+    /// worth recording because the clause's parenthesis — "(or other
+    /// colour-related parameters)" — could be read as covering it. An
+    /// `/ExtGState` carries alpha, blend mode and soft mask alongside
+    /// line width, line cap and dash pattern, and §9.6.5 explicitly
+    /// INSTRUCTS a glyph procedure to set the latter three: "if it
+    /// invokes the `S` operator, it shall explicitly set the line width,
+    /// line join, line cap, and dash pattern". Blocking `gs` wholesale
+    /// would forbid what the same clause requires. So the gag is on the
+    /// colour operators proper, which is what "such operators" refers
+    /// back to.
+    const fn is_color_operator(name: &[u8]) -> bool {
+        matches!(
+            name,
+            b"g" | b"G"
+                | b"rg"
+                | b"RG"
+                | b"k"
+                | b"K"
+                | b"cs"
+                | b"CS"
+                | b"sc"
+                | b"SC"
+                | b"scn"
+                | b"SCN"
+        )
+    }
+
     fn execute(&mut self, op: &Operation<'_>, content: &ContentStream, canvas: &mut Canvas<'_>) {
         let Some(name) = op.operator_name(&content.buf) else {
             // The only non-operator "operation" the projection yields is
@@ -2373,6 +2473,30 @@ impl Interpreter<'_> {
                 _ => None,
             })
             .collect();
+
+        // ★ TABLE 113'S COLOUR PROHIBITION, applied once for all twelve
+        // colour operators.
+        //
+        // "A glyph description that begins with the d1 operator should not
+        // execute any operators that set the colour ... any use of such
+        // operators SHALL BE IGNORED. The glyph description is executed
+        // solely to determine the glyph's shape. Its colour shall be
+        // determined by the graphics state in effect each time this glyph
+        // is painted by a text-showing operator."
+        //
+        // Ignored, not diagnosed as a defect: the clause makes this the
+        // DEFINED behaviour for a conformant reader, so a file that does it
+        // is being read correctly rather than tolerated. `tolerated` would
+        // report a shortfall that is not one.
+        //
+        // Counted, though, because it is a real thing pdfce did to the
+        // file's instructions and rule 4 does not let that be silent.
+        if self.type3_glyph == Some(crate::type3::GlyphColorSource::ShapeOnly)
+            && Self::is_color_operator(name)
+        {
+            self.diag.type3_colors_ignored += 1;
+            return;
+        }
 
         match name {
             // ---- graphics state (Table 57) ----
@@ -2447,9 +2571,55 @@ impl Interpreter<'_> {
             }
             b"d" => self.set_dash(op),
             b"i" | b"ri" => {} // flatness / rendering intent: recognized no-ops in Pass 1
+
+            // ---- Type 3 glyph metrics (Table 113, §9.6.5) ----
+            //
+            // `d0 wx wy` and `d1 wx wy llx lly urx ury` pass width and
+            // bounding-box information to the font machinery. pdfce takes
+            // the ADVANCE from `/Widths` rather than from `wx`, because
+            // Table 112 makes `/Widths` required and Table 113 only
+            // requires `wx` to be "consistent with" it — so the two are
+            // the same number in a well-formed file, and `/Widths` is the
+            // one that is known before the procedure runs, which is what
+            // §9.4.4's advance needs.
+            //
+            // What these operators DO decide is colour, and that is the
+            // whole of their effect here.
+            b"d0" | b"d1" => {
+                if self.type3_glyph.is_none() {
+                    // Table 113, both rows: "This operator shall only be
+                    // permitted in a content stream appearing in a Type 3
+                    // font's CharProcs dictionary." Elsewhere it is
+                    // diagnosed and dropped — never allowed to perturb
+                    // state, because a `d0` in a page stream is a
+                    // malformed file, not an instruction.
+                    self.diag.tolerated += 1;
+                    self.diag.note(b"d0/d1(outside a Type 3 glyph procedure)");
+                    return;
+                }
+                if name == b"d0" {
+                    // "declare that the glyph description specifies BOTH
+                    // its shape and its colour". Raising this un-gags the
+                    // colour operators for the rest of this stream.
+                    self.type3_glyph = Some(crate::type3::GlyphColorSource::ShapeAndColor);
+                }
+                // `d1` needs no assignment: shape-only is where the stream
+                // started. ★ Measured against Acrobat Reader 2026-08-25 —
+                // a `d1` procedure setting red on a blue page renders BLUE,
+                // and the `d0` twin renders RED. Acrobat honours Table
+                // 113's ignore, so the clause and parity agree here.
+                self.diag.type3_glyph_procs_run += 1;
+            }
             b"gs" => self.apply_ext_gstate(op, canvas),
 
             // ---- device colours (Table 74, §8.6.4) ----
+            //
+            // ★ EVERY ARM FROM HERE TO `SCN` IS GATED, at the top of
+            // `execute`, on Table 113's colour prohibition inside a `d1`
+            // glyph procedure. The gate is there rather than repeated
+            // here because "ignore the colour operators" is one rule over
+            // twelve arms, and twelve copies of it is twelve places for
+            // the thirteenth arm to be forgotten.
             //
             // Each of these sets the colour SPACE as well as the colour —
             // Table 74's wording is "set the … colour space to DeviceGray
@@ -2838,7 +3008,14 @@ impl Interpreter<'_> {
             b"sh" => self.shading_operator(op, canvas),
 
             // ---- recognized, deferred to later slices ----
-            b"MP" | b"DP" | b"d0" | b"d1" => {
+            //
+            // `d0`/`d1` were here until `Pass 126.0` and are now handled
+            // above, beside the graphics-state operators, because they
+            // DO something: they decide where a Type 3 glyph's colour
+            // comes from. Left out of this list rather than left in it
+            // unreachable -- an arm that cannot be reached is a claim
+            // about the dispatch that the dispatch contradicts.
+            b"MP" | b"DP" => {
                 self.diag.deferred_ops += 1;
                 self.diag.note(name);
             }
@@ -3027,6 +3204,17 @@ impl Interpreter<'_> {
             return;
         }
 
+        // ★ TYPE 3 LEAVES HERE, BEFORE THE PROGRAM PARSE, and the
+        // position is load-bearing rather than tidy: a Type 3 font's
+        // `data` is EMPTY because §9.6.5 gives it no program to hold, so
+        // falling through would parse zero bytes, fail, and report
+        // `UnusableProgram` — a defect in a font that has nothing wrong
+        // with it.
+        if font.is_type3() {
+            self.show_type3(&font, string, canvas);
+            return;
+        }
+
         // `data` must outlive `program`, which borrows it — declaration
         // order gives the reverse drop order that guarantees it.
         let data = font.data.clone();
@@ -3060,7 +3248,14 @@ impl Interpreter<'_> {
             // §9.4.4's advance, applied whether or not anything was
             // painted — mode 3 (invisible) and a missing glyph both
             // still move the pen.
-            let w0 = font.width(code.value) / 1000.0;
+            //
+            // ★ `advance_text_space`, not `width(..) / 1000.0`. The
+            // divisor is right for a simple or composite font and WRONG
+            // for a Type 3, whose widths are in `FontMatrix` units
+            // (Table 112). The conversion moved into `LoadedFont` so the
+            // units are a property of the font rather than a habit of
+            // this line.
+            let w0 = font.advance_text_space(code.value);
             let tx = self
                 .gs
                 .current
@@ -3068,6 +3263,202 @@ impl Interpreter<'_> {
                 .advance_for(w0, 0.0, code.word_spacing_applies);
             self.with_text_object(|t| t.advance(tx, 0.0));
         }
+    }
+
+    /// Show a string set in a **Type 3 font** (§9.6.5).
+    ///
+    /// The whole of §9.6.5's procedure, per code:
+    ///
+    /// ```text
+    /// a) code -> glyph name, via /Encoding      (§9.6.6.3: TOTAL, no fallback)
+    /// b) glyph name -> /CharProcs stream        (absent => paint nothing)
+    /// c) save gstate; CTM := FontMatrix x Trm; run the stream; restore
+    /// d) advance by /Widths[code] through FontMatrix
+    /// ```
+    ///
+    /// Step (d) happens **whether or not (b) found anything**. The clause
+    /// says "no glyph shall be painted" and stops; `/Widths` supplies the
+    /// advance independently, and a reader that skipped it would
+    /// mis-position every remaining glyph on the line — which looks like
+    /// a layout bug rather than a missing-glyph one, and is therefore the
+    /// more expensive way to be wrong.
+    fn show_type3(&mut self, font: &LoadedFont, string: &[u8], canvas: &mut Canvas<'_>) {
+        let Some(t3) = font.type3() else {
+            return;
+        };
+        for code in font.codes(string) {
+            self.paint_type3_glyph(t3, code.value, canvas);
+            let w0 = font.advance_text_space(code.value);
+            let tx = self
+                .gs
+                .current
+                .text
+                .advance_for(w0, 0.0, code.word_spacing_applies);
+            self.with_text_object(|t| t.advance(tx, 0.0));
+        }
+    }
+
+    /// Run one glyph procedure (§9.6.5 step c).
+    ///
+    /// # The transform, which is the whole of the placement
+    ///
+    /// §9.6.5, verbatim: "When the glyph description begins execution,
+    /// the current transformation matrix shall be **the concatenation of
+    /// the font matrix and the text space that was in effect at the time
+    /// the text-showing operator was invoked**."
+    ///
+    /// So the glyph procedure's CTM is
+    ///
+    /// ```text
+    /// FontMatrix  x  [Tfs*Th 0 0 Tfs 0 Trise]  x  Tm  x  CTM
+    /// ```
+    ///
+    /// which is exactly what [`crate::text::TextState::glyph_to_user`]
+    /// builds for the other font kinds, with `FontMatrix` standing where
+    /// their `1/upem` scale stands. That parallel is why the font matrix
+    /// is applied here rather than folded into the width or the size: it
+    /// is the same rung of the same ladder, and §9.2.4 names Type 3 as
+    /// the one font whose glyph space is not `1/1000`.
+    ///
+    /// The glyph "shall describe the glyph in terms of absolute
+    /// coordinates in the glyph coordinate system, placing the glyph
+    /// origin at (0, 0)", so nothing else is translated in.
+    ///
+    /// # Graphics state
+    ///
+    /// "The graphics state shall be saved before this invocation and
+    /// shall be restored afterward" — satisfied by running on a CLONE of
+    /// the current state, the same way [`Self::do_form`] does; `self.gs`
+    /// is never touched. "Aside from the CTM, the graphics state shall be
+    /// inherited from the environment of the text-showing operator",
+    /// which the clone gives for free and which is what makes the current
+    /// fill colour reach a `d1` glyph.
+    fn paint_type3_glyph(
+        &mut self,
+        t3: &crate::type3::Type3Font,
+        code: u32,
+        canvas: &mut Canvas<'_>,
+    ) {
+        // Table 106 modes 3 and 7 paint nothing. Checked before the
+        // stream is fetched and decoded, because an invisible glyph that
+        // costs a filter chain is an invisible glyph that costs a filter
+        // chain — and §9.3.6 mode 3 is the OCR text layer, which is
+        // every glyph on a scanned page.
+        let ts_fills = self.gs.current.text.fills();
+        let ts_strokes = self.gs.current.text.strokes();
+        if !ts_fills && !ts_strokes {
+            return;
+        }
+
+        let Some(proc_obj) = t3.proc_for(code) else {
+            // §9.6.5 step (b), or §9.6.6.3's "no name at all". Counted,
+            // and the caller still advances.
+            self.diag.type3_glyphs_missing += 1;
+            return;
+        };
+
+        // --- recursion guard (ARCHITECTURE.md §10.1) ---
+        //
+        // ★ A glyph procedure may show text, in any font, INCLUDING THE
+        // ONE IT BELONGS TO. §9.6.5 does not forbid it and Annex C sets
+        // no limit, so an unbounded reader has a guaranteed
+        // stack-overflow input sitting in the standard. The counter is
+        // shared with form XObjects deliberately: the two nest through
+        // each other (a glyph may `Do` a form; a form may show a Type 3
+        // string), so two independent budgets would each stay under
+        // their own limit while the real stack did not.
+        if self.depth >= MAX_XOBJECT_DEPTH {
+            self.diag.xobject_depth_overflows += 1;
+            self.diag
+                .note(b"Type3(glyph procedure nested past MAX_XOBJECT_DEPTH)");
+            return;
+        }
+
+        let doc = self.doc;
+        let Object::Stream(stream) = doc.resolve(proc_obj) else {
+            // §7.3.8 requires a stream here. A non-stream is a malformed
+            // file, and is the same visible outcome as a missing glyph.
+            self.diag.type3_glyphs_missing += 1;
+            self.diag.note(b"Type3(CharProcs entry is not a stream)");
+            return;
+        };
+        let Some(raw) = doc.slice(stream.data_span) else {
+            self.diag.type3_glyphs_missing += 1;
+            return;
+        };
+        let Ok(bytes) = pdfce_core::filters::decode_stream(&stream.dict, raw) else {
+            self.diag.type3_glyphs_missing += 1;
+            self.diag.note(b"Type3(glyph procedure would not decode)");
+            return;
+        };
+        let Ok(content) = ContentStream::parse(bytes) else {
+            self.diag.type3_glyphs_missing += 1;
+            self.diag.note(b"Type3(glyph procedure unparseable)");
+            return;
+        };
+
+        let Some(tobj) = self.text else {
+            return;
+        };
+
+        // §9.6.5's CTM. `param` is §9.4.4's text-space parameters, the
+        // same six numbers `glyph_to_user` uses; `FontMatrix` replaces the
+        // `1/upem` scale that stands there for a font with a program.
+        let m = t3.font_matrix;
+        let ts = &self.gs.current.text;
+        let param = tiny_skia::Transform::from_row(
+            ts.font_size * ts.horizontal_scale,
+            0.0,
+            0.0,
+            ts.font_size,
+            0.0,
+            ts.rise,
+        );
+        let glyph_ctm = tiny_skia::Transform::from_row(m[0], m[1], m[2], m[3], m[4], m[5])
+            .post_concat(param)
+            .post_concat(tobj.tm)
+            .post_concat(self.gs.current.ctm);
+
+        // "The graphics state shall be saved before this invocation and
+        // shall be restored afterward": a clone, never a mutation of
+        // `self.gs`.
+        let mut inner = self.gs.current.clone();
+        inner.set_ctm64(crate::gstate::Mat64::from_f32(glyph_ctm));
+
+        // Table 112's `/Resources`, WITH the fallback that is easy to
+        // miss: "If any glyph descriptions refer to named resources but
+        // this dictionary is absent, the names shall be looked up in the
+        // resource dictionary of the PAGE on which the font is used."
+        // Old files routinely omit it, and a reader without the fallback
+        // reports "resource not found" on a well-formed document.
+        let resources: &Dict = t3.resources.as_ref().unwrap_or(self.resources);
+
+        let nested = run_nested(
+            doc,
+            &content,
+            resources,
+            self.fonts,
+            inner,
+            canvas,
+            self.depth + 1,
+            // The same cycle set forms use. A glyph procedure has no
+            // object identity of its own to add — it is reached by name,
+            // not by `Do` — but it must carry the forms already active,
+            // or a form invoked from inside a glyph could re-enter itself
+            // unguarded.
+            self.active.clone(),
+            self.cancel,
+            self.policy,
+            self.oc_hidden(),
+            self.blend_space,
+            // ★ SHAPE-ONLY UNTIL THE STREAM SAYS OTHERWISE. Table 113's
+            // `d1` is the common case and the safe default; a `d0` inside
+            // the procedure raises it. The declaration cannot be known
+            // before the stream runs, which is why this is a starting
+            // value rather than a decision.
+            Some(crate::type3::GlyphColorSource::ShapeOnly),
+        );
+        self.diag.merge(nested);
     }
 
     /// Paint one glyph per the current rendering mode (Table 106).
@@ -4297,6 +4688,8 @@ impl Interpreter<'_> {
             self.policy,
             false,
             mask_space,
+            // A soft-mask group is a form XObject, not a glyph procedure.
+            None,
         );
         self.diag.merge(nested);
         Self::mask_from_buffer(&buf, luminosity, canvas)
@@ -5614,6 +6007,8 @@ impl Interpreter<'_> {
                         policy,
                         hidden_here,
                         group_space,
+                        // A form XObject, not a glyph procedure.
+                        None,
                     );
                     // "Did anything inside this group need to read what was
                     // underneath it?" — §11.4.4 NOTE 2's condition, answered
@@ -5672,6 +6067,8 @@ impl Interpreter<'_> {
                     policy,
                     hidden_here,
                     group_space,
+                    // A form XObject, not a glyph procedure.
+                    None,
                 );
                 self.diag.merge(nested);
                 if needs_buffer {

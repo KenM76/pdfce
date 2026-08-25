@@ -399,3 +399,16 @@ path = "fuzz_targets/mesh_shading.rs"
 test = false
 doc = false
 bench = false
+
+# Pass 126.0: the Type 3 font model (ISO 32000-1 9.6.5, Tables 112/113). A
+# FONT DICTIONARY parser, which is a shape a fuzzer is unusually good at:
+# `/Widths` is a file-controlled array placed at a file-controlled offset in a
+# 256-slot table, `/Differences` is a little stack machine that can walk off
+# the end of that table, and the glyph lookup crosses two dictionaries whose
+# keys disagree in the ordinary case rather than the exotic one.
+[[bin]]
+name = "type3_font"
+path = "fuzz_targets/type3_font.rs"
+test = false
+doc = false
+bench = false
