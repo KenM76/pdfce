@@ -60816,3 +60816,87 @@ their own method beside each figure, per hard rule 8.
    ceiling **`125`** (`Pass 125.0` SHIPPED), next free **`125.1`**;
    operator-question ceiling `(bu)`, next free `(bv)`, unchanged; filing
    ordinal **254**.
+
+## 2026-08-25 (two-hundred-and-fifty-fifth filing) — CORRECTION: CI already runs `cargo fuzz build` (Linux only; the break was MSVC-only, not CI absence); `v0.9.0` release cut, authorised ("release when ready") — tag/push/publish/verify NOT yet observed
+
+**Sourcing.** No shell this filing (librarian invocation). Every figure
+below is relayed from the engineer's two commit messages (`ccf9ed3`,
+`e115947`) and the commands they name, per hard rule 8.
+
+**Shipped:**
+
+- **`ccf9ed3`** (no Pass ID) — corrects the 254th filing's `4b22c95`
+  entry: `cargo fuzz build` **is** a CI job (`fuzz targets build
+  (nightly)`, `ubuntu-latest`) and has been green throughout, including
+  at the tip the day before the break was found. The harness's
+  twelve-day-dead state was an **MSVC-only** linker break (`rten`'s
+  `cdylib` crate-type vs libFuzzer's forced `main` reference) that a
+  Linux job structurally cannot see. Also fixed: `ci.yml`'s stale
+  hand-written "eight targets" comment — the actual count is 24 —
+  replaced with a pointer to `fuzz/fuzz_targets/`.
+- **`e115947`** — version bump `0.8.0` → `0.9.0`, minor. Release cut:
+  both lock files confirmed at `0.9.0` (including `fuzz/Cargo.lock`,
+  the one that drifted at the prior release), `THIRD_PARTY_LICENSES.md`
+  regenerated with an empty diff (no dependency change this session),
+  full verification suite green including — for the first time —
+  `cargo +nightly fuzz build` (24/24 targets, on Windows, 5 min 41 s).
+  Portable zip built and packaging-smoke-tested from a fresh copy
+  outside the build tree. **One** release asset (the portable zip
+  only) — no demonstration PDF this time, because the headline
+  capability's best demonstration is licensed conformance artwork that
+  must not be redistributed (`LEGAL.md` §5). **Tag, push, GitHub
+  release and `python tools/verify-release.py v0.9.0` NOT yet run as of
+  this filing** — the engineer will report the outcome for a possible
+  dated amendment.
+
+**Decisions made this session:** none minted.
+
+**Findings + decisions:**
+
+- **The standing assumption "a green CI outranks a red local build"
+  failed here, in the direction that matters.** CI's fuzz-build job
+  is Linux-only; the defect it missed is Windows/MSVC-only. A
+  single-platform gate is single-platform evidence, not general
+  evidence — recorded as a **named candidate** for a future standing
+  rule (a sibling to `R218`, but a different shape: coverage-across-
+  platforms rather than input-set drift over time), **not minted** at
+  n=1.
+- **Operator authorisation recorded by name**, per the same discipline
+  as `v0.7.0`'s and `v0.8.0`'s: *"release when ready"* — covers
+  `v0.9.0` only, does not carry forward to any future release.
+- **`docs/ROADMAP.md`'s Backlog entry "Wire `cargo +nightly fuzz
+  build` into CI" amended with a dated footer**, narrowing it to "add
+  a `windows-latest` sibling job" now that its founding premise (no
+  fuzz-build job exists in CI) is known false.
+- **`FEATURES.md` checked for a stale version literal**, per this
+  filing's own dispatch instruction (the 240th filing had to repair
+  one — `pdfce-cli 0.7.0` — at the `v0.8.0` bump) — **none found**; the
+  file is already version-agnostic. No row changes: this release ships
+  no capability beyond `Pass 125.0`, already reflected in the 254th
+  filing.
+
+**Still in flight:**
+
+- Tag `v0.9.0`, push, GitHub release, and
+  `python tools/verify-release.py v0.9.0` — all owed by the engineer,
+  to be reported back and, if anything differs from what is recorded
+  here, folded in as a dated amendment to the `e115947` `ROADMAP.md`
+  entry and this session-log entry.
+- The two unscoped Backlog notes from the 254th filing remain open:
+  fuzz-build-in-CI (now narrowed to a `windows-latest` sibling job);
+  `check-*` audit against `R218`.
+- `docs/NEXT_SESSION.md` **not touched by this filing** — the
+  engineer's own file, deliberately deferred per this filing's
+  dispatch until the release is verified.
+
+**For next session:**
+
+1. Confirm tag/push/publish/`verify-release.py v0.9.0` and amend the
+   `ROADMAP.md` `e115947` entry (and this entry) with the observed
+   results.
+2. If the platform-coverage finding recurs, mint it as a named
+   standing rule — next free is `R219`.
+3. Ledger: standing rules ceiling **`R218`** unchanged, next free
+   **`R219`**; decisions ceiling `087`, next free `088`; Pass family
+   ceiling **`125`**, next free **`125.1`**; operator-question ceiling
+   `(bu)`, next free `(bv)`, unchanged; filing ordinal **255**.

@@ -96,6 +96,176 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `ccf9ed3` — CORRECTION: CI does run `cargo fuzz build` — it runs it on Linux, and the break the `4b22c95` entry (254th filing) attributed to "not one of CI's jobs" is MSVC-only — 2026-08-25 (two-hundred-and-fifty-fifth filing)
+
+**Sourcing.** No shell this filing (librarian invocation). Every figure below
+is relayed from the engineer's commit message and the `gh run view` output it
+quotes, per hard rule 8.
+
+**What was wrong, stated plainly.** The `4b22c95` entry, filed earlier today
+(254th filing), said the fuzz harness had stayed broken for twelve days
+because *"`cargo fuzz build` is not one of CI's jobs"*. **That is false.** The
+job is `fuzz targets build (nightly)` in `.github/workflows/ci.yml`, it runs
+`cargo +nightly fuzz build`, and it has been **green throughout**, including
+at `0d4165e` — the tip the day before the break was found. Verified with
+`gh run view 32863234681 --json jobs`, a measurement, not an inference.
+
+**The real reason, and it is better than the one invented.** The job runs on
+**`ubuntu-latest`**, and the break is **MSVC-only**. `rten` declares
+`crate-type = ["lib", "cdylib"]` (read out of the vendored manifest at
+`~/.cargo/registry/src/…/rten-0.24.0/Cargo.toml`, not assumed). On Windows the
+cdylib link is handed libFuzzer's `/include:main` and fails to resolve it; the
+same cdylib on Linux becomes a `.so`, and no linker asks a `.so` for a `main`.
+
+⇒ **CI was not asleep — it was structurally incapable of seeing this, and
+the local (Windows) build was the only place it could surface.**
+
+⇒ **The generalisation, which is what makes this worth a filing rather than a
+footnote.** The standing assumption in this project is that CI is the
+stricter of the two evidence sources, so a green CI run absolves a red local
+one. **Here it was exactly backwards.** A single-platform job is
+single-platform *evidence*, and the platform it does not cover (Windows/MSVC)
+is the one this project is developed on. This is a **different shape** from
+`R218` — `R218` is about a gate's input SET drifting over time (tracked vs
+untracked files); this is about a gate's COVERAGE across platforms at a fixed
+point in time. **First occurrence — below the two-occurrence bar — recorded
+as a named candidate rather than minted:** *"green CI on one platform is not
+evidence about a defect exclusive to a platform it does not run on."* If it
+recurs, mint it as a sibling to `R218` rather than folding it in — the shapes
+differ even though both read as "a check that couldn't see the defect."
+
+**Two things fixed in the same commit, both worth a line.**
+- `ci.yml`'s job comment named *"the eight cargo-fuzz targets"* and listed
+  them by hand. **There are 24** (`fuzz/fuzz_targets/*.rs`, counted). Wrong
+  for months, unnoticed precisely because `cargo fuzz build` compiles every
+  target in `fuzz/Cargo.toml` and needs no per-target wiring there — nothing
+  forced the hand-written list to stay true. **Same shape, same cause, as the
+  stale mesh CLI note `Pass 125.0` replaced**: a hand-maintained list sitting
+  beside an automatic mechanism. Replaced with a pointer to `fuzz/fuzz_targets/`.
+- The Windows/MSVC blind spot is now documented **at the job itself**, where
+  somebody will look, rather than only in a commit message they would have to
+  know to search for.
+
+**Owed follow-up, filed to Backlog** by amending the existing
+`Wire cargo +nightly fuzz build into CI` note rather than duplicating it (see
+Backlog section, dated footer): a **`windows-latest` sibling job** for the
+fuzz-build step. Until it exists, a Windows `cargo +nightly fuzz build`
+remains a per-session discipline (`ARCHITECTURE.md` §10.2), not a gate —
+`R209`.
+
+**★ Nothing amended in the 254th filing's own entries.** `4b22c95` and the
+`ROADMAP.md`/`SESSION_LOG.md` text citing it stand as written; this entry is
+their dated correction — the same append-only discipline this project applied
+six commits earlier (`15c3310`, 253rd filing) when it declined to squash away
+its own hash citations.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `125`, next free `125.1` | unchanged — no Pass |
+| standing rules | `R218` | unchanged — the platform-coverage finding recorded as a **named candidate**, not minted (n=1, below the two-occurrence bar). Next free stays `R219` |
+| Backlog | "Wire `cargo +nightly fuzz build` into CI" | **AMENDED** with a dated footer narrowing scope to a `windows-latest` sibling job (see Backlog section) |
+
+---
+
+### `e115947` — VERSION BUMP `0.8.0` → **`0.9.0`, MINOR**: gradient meshes draw — RELEASE CUT AUTHORISED (*"release when ready"*, operator, verbatim, given mid-turn immediately after being briefed on `Pass 125.0`) — ★ TAG / PUSH / GITHUB RELEASE / `verify-release.py` **NOT YET OBSERVED AT FILING TIME** — 2026-08-25 (two-hundred-and-fifty-fifth filing)
+
+**Sourcing.** No shell this filing (librarian invocation). Every figure below
+is relayed from the engineer's commit message and the verification commands
+it names, per hard rule 8. **The tag, the push, the GitHub release and
+`python tools/verify-release.py v0.9.0` are explicitly NOT yet observed at
+filing time** — the engineer states these happen after this entry is
+committed, and will report back for a possible dated amendment. Treat
+everything below as the record of a release being **cut**, not of one already
+published.
+
+**The authorisation.** Operator, verbatim and complete, mid-turn, unprompted,
+immediately after being briefed on `Pass 125.0`: **"release when ready."**
+Under `CLAUDE.md` rule 8 this is an explicit, current go-ahead, on the same
+footing as `v0.7.0`'s and `v0.8.0`'s own authorisations — each publication is
+its own act, and this one covers `v0.9.0` only.
+
+**Version.** `0.8.0` → `0.9.0`, workspace-wide, **minor** (not patch) — the
+same bar every release since `0.5.x` has used: `Pass 125.0` adds an
+operator-visible capability (four mesh shading types, previously recognised
+and refused), a new persisted setting (`mesh_patch_padding`), and three new
+metrics keys.
+
+**Both lock files** — `Cargo.lock` and `fuzz/Cargo.lock` — read at `0.9.0` in
+the `pdfce-core` stanza of each, not assumed from a build having run. This is
+the lock file that has drifted before: `fuzz/Cargo.lock` sat at `0.7.0`
+through the entire `v0.8.0` bump, because the fuzz crate is deliberately
+outside the workspace and no ordinary `cargo build` touches it.
+
+**`THIRD_PARTY_LICENSES.md` regenerated** with
+`cargo about generate about.hbs -o THIRD_PARTY_LICENSES.md` — the exact
+command CI runs. Regenerating **is** the licence audit: `about.toml` accepts
+only permissive SPDX ids, so `generate` fails outright if any dependency,
+transitive included, carries an unaccepted copyleft licence. **It passed and
+the diff is empty** — the dependency set did not change this session (the one
+`Cargo.toml` edit, `fuzz/`'s, sits outside the shipping graph by
+construction).
+
+**Verification, all run AT the bumped version:**
+
+| check | result |
+|---|---|
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | clean, 0 diagnostics |
+| `cargo test --workspace --all-features` | green |
+| `cargo test -p pdfce-core --no-default-features` | green |
+| `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` | clean |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | no GUI, windowing or HTTP dependency in either |
+| `tools/check-*` | 18 on disk, 17 runnable as bare gates, all 17 exit 0; the 18th takes a fixture-directory argument and is not a gate |
+| `cargo +nightly fuzz build`, **all 24 targets, on Windows** | **5 min 41 s warm** — the check the `ccf9ed3` correction (above) found had never run here, and the one CI's Linux job cannot structurally perform |
+
+**Packaging.** `python tools/package-portable.py` →
+`D:\builds\pdfce-20260825-1450-e115947\`, built from a **clean** tree (an
+earlier run against the still-uncommitted version bump produced a `-dirty`
+folder, superseded). `pdfce-gui.exe` 16,311,296 B, `pdfce-cli.exe`
+12,189,184 B, plus `LICENSE`, `README.md`, `THIRD_PARTY_LICENSES.md`,
+`BUILD-INFO.txt` — **28,892,212 B total**. Zipped:
+`D:\builds\pdfce-v0.9.0-windows-x64-portable.zip`, **11,180,078 B**.
+
+**Packaging smoke test — run against a fresh copy, not the build tree.** The
+folder was copied to `D:\Dev\temp\mesh\smoke-fresh\`, and **both** binaries
+launched **from the copy**: `pdfce-cli.exe --version` →
+`pdfce-cli 0.9.0, built 2026-08-25T18:50:53Z`; `pdfce-cli.exe render-page` on
+a mesh fixture → `shadings_painted=1 mesh_records=1`, 48,877-byte PNG
+written; `pdfce-gui.exe` opened a document with its window title confirming
+the running instance is the **copy**, not the source tree. No installer, no
+registry.
+
+**Release assets: one, deliberately — a change from `v0.8.0`.** `v0.8.0`
+shipped a second, demonstration asset (`banana-at-scale.pdf`). `v0.9.0` does
+not, and the reason is a licensing one worth recording: this release's
+headline capability is the mesh-shading fix in `Pass 125.0`, whose best
+demonstration is a **licensed** print-conformance patch whose artwork must
+not be redistributed (`docs/LEGAL.md` §5, and the `(bt)` name ruling). The
+twelve **synthetic** mesh fixtures that demonstrate the same capability are
+MIT-clean and already in-repository at `fixtures/synthetic/mesh/`, so nothing
+is lost by shipping only the portable zip.
+
+**★ Not yet observed at filing time, stated plainly rather than implied:**
+the tag `v0.9.0`, the push, the GitHub release, and
+`python tools/verify-release.py v0.9.0`. These happen after this entry is
+committed; the engineer will report the outcome for a possible dated
+amendment to this entry, per hard rule 8's posture on unmeasured claims.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Version | `0.8.0` | **`0.9.0`** — minor bump, `e115947` |
+| Pass IDs | ceiling `125`, next free `125.1` | unchanged — a release carries no Pass ID |
+| decisions (`ARCHITECTURE.md` §12) | `087` | unchanged — next free `088` |
+| standing rules | `R218` | unchanged — next free `R219` (see `ccf9ed3` entry above for the recorded-not-minted candidate) |
+| `FEATURES.md` | — | no capability row moves; version-literal check run per this filing's dispatch, **none found** — the file is already version-agnostic |
+| operator authorisations | `v0.8.0`'s ("push"/publish, discharged) | **`v0.9.0` — "release when ready" — RECORDED, NOT yet discharged**; discharge follows the tag/push/publish/verify steps, to be reported and possibly amended here |
+
+---
+
 ### `3681a7f` — `Pass 125.0` ships: mesh shadings render — the operator's own [suite] patch goes from two hard fails (correlation **−0.044**) to **0.949** and **0.997** against its own printed reference images, and the tiny residual left is proved to be `iccce`'s `DeviceCMYK`→sRGB path, not the mesh; suite board `8 FAIL / 27 pass / 16 UNRESOLVED` → `7 FAIL / 27 pass / 17 UNRESOLVED` — 2026-08-25 (two-hundred-and-fifty-fourth filing)
 
 **Sourcing.** No shell this filing (librarian invocation). Every figure below
@@ -77320,6 +77490,20 @@ fix replaced a discipline that lived only in memory. Scope when picked up:
 which fuzz targets to build (all, or a rotating subset for time budget), and
 whether a build failure blocks the same workflow `check-*` gates block or
 runs as its own job.
+
+**★ AMENDED 2026-08-25 (two-hundred-and-fifty-fifth filing), by `ccf9ed3`.**
+The premise above is **wrong, and corrected in that entry** (`ROADMAP.md`
+Shipped, above): `cargo fuzz build` already **is** a CI job — `fuzz targets
+build (nightly)` in `.github/workflows/ci.yml`, running on `ubuntu-latest` —
+and it has been green throughout, including at the tip the day before the
+break this note's founding entry (`4b22c95`) diagnosed. **Scope narrowed
+accordingly**: what is actually owed is a **`windows-latest` sibling** for
+that existing job, not a fuzz-build job built from scratch. The Linux job
+cannot see the defect that motivated this note by construction — it is
+MSVC-only (`rten`'s `cdylib` crate-type vs libFuzzer's forced `main`
+reference), and `ubuntu-latest` links no MSVC. Until the sibling exists, a
+Windows `cargo +nightly fuzz build` stays a per-session discipline
+(`ARCHITECTURE.md` §10.2), not a gate.
 
 ### Audit the other seventeen `tools/check-*` scripts against `R218` — unscoped, no Pass ID
 
