@@ -105,6 +105,7 @@ builds `--no-default-features`, so both configurations compile.
 | Get per-glyph positions for a selection highlight | `PageText::runs[].glyphs[]` → `ExtractedGlyph{x,y,advance,size}` — `mod.rs:407-452` | §8.4 |
 | Get the byte-exact origin of a glyph (for editing) | `ExtractOptions::default().with_provenance(true)` then `ExtractedGlyph::provenance` — `mod.rs:948`, `mod.rs:325` | §8.4 |
 | Search for text across the document | `EditSession::find_text_with(&needle, &TextSearchOptions)` — `edit.rs:11853` **(read-only in effect, but needs a session)** | §8.5 |
+| Search for text **and learn what was unreadable** | `EditSession::search_text(&needle, &TextSearchOptions)` — `edit.rs:16450` → `TextSearch { matches, diagnostics }` | §8.5 |
 | Decode a PDF text string (`/Title`, `/Author`, bookmark labels) | `textstring::decode_text_string(&[u8]) -> DecodedText` — `textstring.rs:363` | §8.6 |
 | Inventory every font the document uses | `fontinfo::inventory(&DocumentView) -> FontInventory` — `fontinfo.rs:1601` | §9.1 |
 | Know if a font is embedded / subsetted / removable | `FontRecord::program`, `::removability` — `fontinfo.rs:1209-1259`; `split_subset_tag` — `fontinfo.rs:1320` | §9.1 |
@@ -996,6 +997,45 @@ for h in &hits {
 
 `TextMatch` — `edit.rs:6080`: `page_index`, `quad`, `text`. It needs
 `&mut self` (an internal cache), so hold the session, not a `&Document`.
+
+**★★ A ZERO MATCH COUNT IS NOT EVIDENCE THE NEEDLE IS ABSENT, and
+`find_text_with` structurally cannot tell you so.** Two completely different
+situations produce the identical empty `Vec<TextMatch>`:
+
+1. the needle genuinely is not in the document; or
+2. the document's text was **never recoverable as Unicode**, so no needle
+   could ever have matched it.
+
+Case 2 is not exotic, and its populations render *perfectly* — which is
+exactly what makes it invisible. A **Type 3** font (ISO 32000-1 §9.6.5) draws
+each glyph with a content stream named by an arbitrary `/CharProcs` key, so
+`/g13` carries no Unicode meaning and §9.10.2 method 2's precondition is
+false by construction: without a `/ToUnicode` CMap there is **no sourced route
+to Unicode at all**. `Identity-H` with no `/ToUnicode` is the composite twin.
+Acrobat is gated on the identical entry — this is parity, not a pdfce
+shortfall — and Acrobat's answer is to give up silently, which pdfce's rule 4
+forbids.
+
+```rust
+let found = session.search_text("total", &opts);            // edit.rs:16450
+for h in &found.matches { /* ... same TextMatch as before ... */ }
+
+let d = &found.diagnostics;                                 // TextDiagnostics
+d.type3_fonts_without_to_unicode;   // Type 3 fonts with no /ToUnicode
+d.identity_fonts_without_to_unicode;// Identity-H fonts with no /ToUnicode
+d.ladder_failures;                  // per-CODE total, every cause
+d.codes_total;                      // denominator for the above
+```
+
+**For a new GUI:** when a search returns nothing and any of those three is
+non-zero, say so beside the result — *“no matches; N font(s) in this
+document carry text that cannot be searched”* — rather than a bare
+“0 results”. `pdfce-cli`'s `find-text` does exactly this: the counters ride
+its machine-readable summary line (`unreadable_codes=`,
+`type3_no_tounicode=`, `identity_no_tounicode=`) and the prose goes to
+stderr. The disclosure belongs **off-canvas** (rule 4 as narrowed by
+decision 059) — a status line or results panel, never a mark drawn into the
+page view.
 
 **★★ `find_text` and `find_text_with` have different default matching
 semantics, and this has already caused a real defect.**

@@ -200,6 +200,38 @@ pub enum FontNote {
     ToUnicodeUnusable,
     /// The rung-3 hole, by name.
     Rung3(Rung3Gap),
+    /// A **Type 3** font carrying no usable `/ToUnicode` CMap — the
+    /// Type 3 dead end, and the exact analogue of
+    /// [`Rung3Gap::IdentityNoToUnicode`] for a simple font.
+    ///
+    /// § 9.6.5 defines a Type 3 glyph as a **content stream** named by an
+    /// arbitrary key in `/CharProcs`. That name is private to the one
+    /// document: `/g13` or `/square` carries no Unicode meaning, and
+    /// §9.10.2 method 2's precondition (the resolved code→name table
+    /// drawing only from Adobe standard Latin ∪ Symbol) is therefore
+    /// false for a Type 3 font **by construction** — see
+    /// `resolve_encoding`'s closing line, which sets it false
+    /// unconditionally.
+    ///
+    /// So rung 1 (`/ToUnicode`) is the only rung a Type 3 font can climb.
+    /// Without it, extraction, search and copy of text set in that font
+    /// are not merely degraded — they are impossible from the file's own
+    /// contents. **This is Acrobat's limit too**, not a pdfce shortfall:
+    /// Acrobat's extract/search/copy pipeline for Type 3 is gated
+    /// entirely on `/ToUnicode` (Acrobat_Features
+    /// `type3fonts__extraction_editing_and_tagging.md`, verified
+    /// 2026-08-25), and its Accessibility Checker fails such a document
+    /// for the same reason.
+    ///
+    /// pdfce's one **counted extension** beyond that: if a Type 3
+    /// producer happened to name its glyphs with standard names, the
+    /// Adobe Glyph List still resolves them, and those codes are counted
+    /// as [`TextDiagnostics::via_glyph_name_extension`] — *not sourced*,
+    /// and never as rung 2. So this note means "the only sourced route is
+    /// closed", not "nothing came out".
+    ///
+    /// [`TextDiagnostics::via_glyph_name_extension`]: super::TextDiagnostics::via_glyph_name_extension
+    Type3NoToUnicode,
     /// No width information was available for this font, so advances are
     /// estimated. Positions and derived word spacing downstream of this
     /// font are correspondingly less reliable.
@@ -408,6 +440,22 @@ impl ExtractFont {
         is_type3: bool,
     ) -> Self {
         let std14 = fontdata::std14_by_base_font(strip_subset_tag(&base_font));
+
+        // The Type 3 dead end, recorded where the evidence lives.
+        //
+        // Deliberately BEFORE the encoding is resolved, and deliberately
+        // not conditioned on anything the encoding produces: whether a
+        // Type 3 font has a sourced route to Unicode is a property of the
+        // FONT DICTIONARY alone (§9.6.5 + §9.10.2), decided the moment
+        // `/ToUnicode` is absent. Conditioning it on "did any code
+        // actually fail" would make the disclosure depend on which page
+        // happened to be extracted, and a document whose Type 3 text sits
+        // on page 40 would report nothing for the first 39 — the exact
+        // shape of silence rule 4 forbids.
+        if is_type3 && to_unicode.is_none() {
+            notes.push(FontNote::Type3NoToUnicode);
+        }
+
         let (names, rung2_precondition) =
             resolve_encoding(doc, font_dict, std14, is_type3, &mut notes);
         let widths = simple_widths(doc, font_dict, &names, std14, &mut notes);

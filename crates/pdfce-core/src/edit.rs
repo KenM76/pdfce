@@ -10087,6 +10087,48 @@ pub struct TextMatch {
     pub text: String,
 }
 
+/// A text search's hits **and what the search could not read**.
+///
+/// The return type of [`EditSession::search_text`]. It exists because a
+/// bare `Vec<TextMatch>` cannot express the one answer an operator most
+/// needs: *"I found nothing, and here is why that might not mean what you
+/// think."*
+///
+/// # The failure mode this type is for
+///
+/// An empty [`Self::matches`] has two completely different causes and one
+/// appearance:
+///
+/// 1. the needle genuinely is not in the document; or
+/// 2. the document's text was never recoverable as Unicode, so no needle
+///    could ever have matched it.
+///
+/// Case 2 is not exotic. Its two named populations are Type 3 fonts with
+/// no `/ToUnicode` ([`TextDiagnostics::type3_fonts_without_to_unicode`] —
+/// glyphs that are content streams named by arbitrary `/CharProcs` keys,
+/// ISO 32000-1 §9.6.5) and `Identity-H` composite fonts with no
+/// `/ToUnicode` ([`TextDiagnostics::identity_fonts_without_to_unicode`]).
+/// Both **render perfectly**, which is exactly why the failure is
+/// invisible without this: the operator can see the word on the page and
+/// the search says it is not there.
+///
+/// [`TextDiagnostics::ladder_failures`] is the per-code total across every
+/// cause, including causes with no named font-level counter.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
+pub struct TextSearch {
+    /// The hits, in page then content order — identical to what
+    /// [`EditSession::find_text_with`] returns for the same arguments.
+    pub matches: Vec<TextMatch>,
+    /// The whole-document extraction diagnostics the scan produced.
+    ///
+    /// Document-wide, **not** filtered to the pages that matched: a font
+    /// that swallowed the needle on page 40 is precisely the one a caller
+    /// with zero hits needs to hear about, and filtering by hit would
+    /// discard it.
+    pub diagnostics: crate::text_extract::TextDiagnostics,
+}
+
 /// How pdfce decides what a **word** is, for whole-word text search.
 ///
 /// # Why this is a setting and not a constant (R169)
@@ -16174,7 +16216,15 @@ impl EditSession {
         // glyph-span-to-quad geometry would drift, and the way they would
         // drift is the worst possible: a redaction covering a slightly
         // different box than the search that found it.
-        let matches: Vec<TextMatch> = self.scan_text_matches(&matcher, whole_word)?;
+        // The diagnostics half is deliberately dropped HERE and nowhere
+        // else. `mark_redactions_by_search` already returns the ids it
+        // created, and a caller that marked nothing has that fact in
+        // hand; what it does NOT yet have is *why*, and wiring that
+        // through this verb's return type is a separate, operator-facing
+        // change (`Pass 127.1`, filed). Naming the drop is the point —
+        // an unnamed `.0` here is how a disclosure quietly stops
+        // happening.
+        let matches: Vec<TextMatch> = self.scan_text_matches(&matcher, whole_word)?.matches;
 
         let mut created = Vec::with_capacity(matches.len());
         for m in matches {
@@ -16343,8 +16393,63 @@ impl EditSession {
     /// # }
     /// ```
     pub fn find_text_with(&mut self, needle: &str, options: &TextSearchOptions) -> Vec<TextMatch> {
+        self.search_text(needle, options).matches
+    }
+
+    /// [`EditSession::find_text_with`], **plus what the search could not
+    /// read** — the same hits and the extraction diagnostics that produced
+    /// them, in one [`TextSearch`].
+    ///
+    /// # Why this exists, and why it is not an option on the other two
+    ///
+    /// A text search has a failure mode that looks exactly like a correct
+    /// answer: **`matches = 0` because the needle is not in the document**
+    /// and **`matches = 0` because the document's text was never
+    /// recoverable as Unicode** are the same output. Nothing in
+    /// [`TextMatch`] can distinguish them, because the second case
+    /// produces no `TextMatch` to carry the news.
+    ///
+    /// The populations where that happens are named, not hypothetical.
+    /// [`TextDiagnostics::type3_fonts_without_to_unicode`] is one — a
+    /// Type 3 font's glyphs are content streams named by arbitrary
+    /// `/CharProcs` keys (§9.6.5), so without a `/ToUnicode` CMap there is
+    /// no sourced route to Unicode at all and the text renders perfectly
+    /// while being unsearchable.
+    /// [`TextDiagnostics::identity_fonts_without_to_unicode`] is the
+    /// composite twin, and [`TextDiagnostics::ladder_failures`] is the
+    /// per-code total across every cause.
+    ///
+    /// Project rule 4 ("fuzzy, never sneaky") makes disclosing that a
+    /// requirement rather than a nicety, and in `pdfce-cli` the
+    /// invocation is the commit, so the CLI **prints** it on the way past.
+    ///
+    /// It is a separate method rather than a flag on
+    /// [`EditSession::find_text`] because the diagnostics are not free —
+    /// they are the whole-document extraction's, and a caller that wants
+    /// only hits should not be made to hold a `TextDiagnostics` it will
+    /// drop. Both paths run the identical scan; this one simply does not
+    /// throw half of it away.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::{EditSession, TextSearchOptions}};
+    /// # fn demo(doc: Document) {
+    /// let mut session = EditSession::new(doc);
+    /// let found = session.search_text("total", &TextSearchOptions::default());
+    /// if found.matches.is_empty() && found.diagnostics.type3_fonts_without_to_unicode > 0 {
+    ///     // NOT "the word is absent" — some of this document's text is
+    ///     // not searchable at all, and the operator needs to know which.
+    ///     eprintln!(
+    ///         "{} Type 3 font(s) carry no /ToUnicode",
+    ///         found.diagnostics.type3_fonts_without_to_unicode
+    ///     );
+    /// }
+    /// # }
+    /// ```
+    pub fn search_text(&mut self, needle: &str, options: &TextSearchOptions) -> TextSearch {
         if needle.is_empty() {
-            return Vec::new();
+            return TextSearch::default();
         }
         let n = needle.to_owned();
         let case_insensitive = options.case_insensitive;
@@ -16396,11 +16501,22 @@ impl EditSession {
     /// and the redaction path, for the same reason the *scan* is shared:
     /// a highlight and the redaction made from it must not be able to
     /// disagree about which hits exist.
+    ///
+    /// # Why it returns the diagnostics too
+    ///
+    /// The extraction this scan runs already produces them, and they are
+    /// the only evidence that distinguishes *"the needle is not in this
+    /// document"* from *"this document's text was never readable"* — see
+    /// [`EditSession::search_text`]. Returning them costs one move and
+    /// makes the honest answer available to every caller; **dropping**
+    /// them is then a decision a caller has to make explicitly, at a line
+    /// somebody can read, rather than a fact about this function's
+    /// signature that nobody can see from the call site.
     fn scan_text_matches(
         &mut self,
         matcher: &dyn Fn(&str) -> Vec<(usize, usize)>,
         whole_word: Option<WordBoundary>,
-    ) -> Result<Vec<TextMatch>, EditError> {
+    ) -> Result<TextSearch, EditError> {
         use crate::annot_author::Quad;
         use crate::page_tree::Rect;
         use crate::text_extract::{self, ExtractOptions, TextOrigin};
@@ -16501,7 +16617,10 @@ impl EditSession {
                 }
             }
         }
-        Ok(matches)
+        Ok(TextSearch {
+            matches,
+            diagnostics: extracted.diagnostics,
+        })
     }
 
     /// Author a text-bearing annotation onto a page (Pass 6.2): FreeText,

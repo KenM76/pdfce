@@ -754,6 +754,24 @@ pub struct TextDiagnostics {
     /// dead end. For these, "no Unicode is recoverable" is §9.10.2's own
     /// answer, not a pdfce limitation.
     pub identity_fonts_without_to_unicode: u64,
+    /// Distinct **Type 3** fonts (§9.6.5) with **no** usable `/ToUnicode`
+    /// — the Type 3 dead end, and the simple-font twin of
+    /// [`Self::identity_fonts_without_to_unicode`] above.
+    ///
+    /// A Type 3 glyph is a content stream named by an arbitrary
+    /// `/CharProcs` key, so §9.10.2 method 2's precondition is false for
+    /// such a font by construction and rung 1 is its only route. When
+    /// this is non-zero, text set in those fonts **renders correctly and
+    /// cannot be searched, copied or extracted** — and that is the
+    /// standard's own answer, not a pdfce limitation. Acrobat is gated on
+    /// the same entry.
+    ///
+    /// Non-zero does **not** mean nothing came out: pdfce's counted
+    /// glyph-name extension ([`Self::via_glyph_name_extension`]) still
+    /// resolves a Type 3 glyph that happens to carry a standard name.
+    /// Read this counter as *"the sourced route is closed for N fonts"*,
+    /// and [`Self::ladder_failures`] for what actually fell through.
+    pub type3_fonts_without_to_unicode: u64,
     /// Distinct fonts whose descendant declares one of rung 3's four
     /// Adobe collections, for which the `registry-ordering-UCS2` CMap is
     /// not bundled.
@@ -841,6 +859,7 @@ impl TextDiagnostics {
         self.via_glyph_name_extension += other.via_glyph_name_extension;
         self.ladder_failures += other.ladder_failures;
         self.identity_fonts_without_to_unicode += other.identity_fonts_without_to_unicode;
+        self.type3_fonts_without_to_unicode += other.type3_fonts_without_to_unicode;
         self.ucs2_cmaps_unavailable += other.ucs2_cmaps_unavailable;
         self.predefined_cmaps_unavailable += other.predefined_cmaps_unavailable;
         self.actual_text_applied += other.actual_text_applied;

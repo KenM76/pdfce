@@ -6,6 +6,12 @@ Rendered by `crates/pdfce-render/src/type3.rs` and
 `crates/pdfce-render/src/interpret.rs`'s `show_type3`; used by
 `crates/pdfce-render/tests/type3_fonts.rs`.
 
+`tounicode_gate.pdf` is the exception and is used by
+`crates/pdfce-core/tests/text_extract.rs` instead: it exists for the
+**extraction** half (§9.10.2), not the rendering half, and it is in this
+directory rather than `fixtures/synthetic/text/` because what it provokes is a
+property of the Type 3 font subtype and of nothing else.
+
 ## Source material and license (LEGAL.md §5, project rule 7)
 
 **Nothing here derives from a third-party file.** These are `LEGAL.md` §5
@@ -31,6 +37,7 @@ Every file is 612 × 720 pt. The Type 3 font uses the conventional
 | `missing_glyph_advances.pdf` | a code named in `/Differences` and **absent from `/CharProcs`**, between two that are present | a renderer that treats a missing glyph as a skipped code, which mis-positions every later glyph on the line |
 | `resources_fallback.pdf` | a font with **no `/Resources`** whose glyph invokes a form XObject by name | Table 112's page-resource fallback, which old files depend on and whose absence reports "resource not found" on a well-formed document |
 | `self_recursive.pdf` | a glyph procedure that shows its own font | an unbounded reader — this input is a stack overflow by construction, and §9.6.5 permits it |
+| `tounicode_gate.pdf` | **three** Type 3 fonts on one page — one carrying a `/ToUnicode` CMap, two carrying none | a reader that cannot EXTRACT Type 3 text at all, and a per-font diagnostic that de-duplicates on the `/BaseFont` Table 112 does not give a Type 3 font |
 
 ## The controls are the design
 
@@ -52,6 +59,25 @@ The same reasoning shapes the rest:
 - `self_recursive.pdf` asserts both that the render **terminates** and that it
   **drew something** — a reader that refused Type 3 outright, or bailed at the
   first nesting, also terminates.
+- `tounicode_gate.pdf`'s `/TA` font **carries** a `/ToUnicode` and must extract
+  as `HI!`. Without that control, every assertion about the two fonts that
+  carry none would also pass for a reader that extracts nothing from any
+  Type 3 font whatsoever — which is the failure the whole capability exists
+  to distinguish from the legitimate dead end.
+- And its two dead-end fonts are **two**, not one, on purpose. ISO 32000-1
+  Table 112 gives a Type 3 font **no `/BaseFont` entry**, so a conformant one
+  has no name at all; the assertion that the counter reads exactly `2` is a
+  claim about the diagnostic's de-duplication key rather than about the
+  counter's existence. ★ Measured on the pre-fix code it read **`0`** —
+  `/TA` is unnamed too, is resolved first, has a `/ToUnicode` and therefore no
+  note to emit, so it claimed the empty key and silenced both fonts behind it.
+  A `> 0` assertion would have passed on neither code and proved nothing.
+- Its glyphs are named `/ga1`, `/gb1`, `/gc1` — deliberately **not** standard
+  glyph names. pdfce keeps a counted extension beyond Acrobat: a Type 3 glyph
+  that happens to be named `/A` still resolves through the Adobe Glyph List.
+  Non-standard names shut that door, so the codes reach §9.10.2's failure
+  clause and the dead end is measured rather than papered over by a lucky
+  name.
 
 ★★ **Row E was added after rows A–D, and the reason is worth keeping.** The
 first four rows position every glyph with `Td`, so a renderer that ignored

@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (30287 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 139 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (30406 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 140 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 139 public `EditSession` methods
+## 1. Verb index — all 140 public `EditSession` methods
 
-**Count: 139.** Established by brace-matched extraction of the four
+**Count: 140.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -768,6 +768,7 @@ always errors.
 |---|---|---|---|
 | Find text (legacy shape) | `find_text(&mut self, needle, case_insensitive) -> Vec<TextMatch>` | 11792 | ⚠️ Hard-codes `with_wildcards(true)`. **Not what a Find bar wants.** |
 | Find text with options | `find_text_with(&mut self, needle, &TextSearchOptions) -> Vec<TextMatch>` | 11853 | ✅ Use this. `TextSearchOptions::wildcards` defaults to `false`. |
+| Search text **and hear what it could not read** | `search_text(&mut self, needle, &TextSearchOptions) -> TextSearch` | 16450 | ✅★ **Prefer this over `find_text_with` for any operator-facing search.** Returns `TextSearch { matches, diagnostics }` — the same hits, plus the extraction's `TextDiagnostics`. `matches.is_empty()` alone cannot tell *“the needle is absent”* from *“this document's text was never recoverable as Unicode”*; `diagnostics.type3_fonts_without_to_unicode`, `.identity_fonts_without_to_unicode` and `.ladder_failures` can. `Pass 127.0`. |
 
 Both take `&mut self` despite changing nothing (they read `self.view()`).
 `TextMatch` = `{ page_index, quad: Quad, text: String }` (`edit.rs:6080`).

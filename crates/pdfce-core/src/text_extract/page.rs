@@ -675,7 +675,7 @@ impl Walk<'_> {
             return;
         };
         let font = Rc::new(ExtractFont::resolve(self.doc, font_dict));
-        self.report_font(&font);
+        self.report_font(&font, &key);
         self.fonts.insert(key, Rc::clone(&font));
         self.ts.font = Some(font);
         self.cur_font_resource = Some(name);
@@ -683,17 +683,65 @@ impl Walk<'_> {
 
     /// Turn a newly resolved font's [`FontNote`]s into counted, named
     /// diagnostics — once per distinct font, not once per `Tf`.
-    fn report_font(&mut self, font: &ExtractFont) {
-        let key = font.base_font.as_bytes().to_vec();
+    ///
+    /// # Why the de-duplication key is not simply `/BaseFont`
+    ///
+    /// It was, until `Pass 127.0`, and that silently **suppressed every
+    /// diagnostic for every font the standard does not give a name to**.
+    /// ISO 32000-1 Table 112 — the Type 3 font dictionary — has **no
+    /// `/BaseFont` entry at all**; a conformant Type 3 font therefore
+    /// resolves to an empty `base_font`, and so does any font whose
+    /// `/BaseFont` is missing or malformed. Keyed on that empty string,
+    /// every unnamed font on a page shared one slot.
+    ///
+    /// ★ **A/B'd rather than reasoned about, and the measurement was worse
+    /// than the prediction.** The expectation written first was that N
+    /// unnamed dead ends would report as `1`. Measured against
+    /// `tounicode_gate.pdf` on the pre-fix code, the counter reported
+    /// **`0`** — because the first unnamed font to be resolved on that page
+    /// is `/TA`, which has a `/ToUnicode` and therefore no note to emit. It
+    /// claimed the empty key, and `/TB` and `/TC` were then skipped before
+    /// their notes were ever read. So the old key did not merely
+    /// under-count coincident fonts; **one clean unnamed font silenced
+    /// every unnamed font behind it**, and the document with two dead ends
+    /// reported none at all.
+    ///
+    /// So a named font still de-duplicates by name — that is the property
+    /// worth having, and it is why a font used by both the page and a form
+    /// XObject reports once. An **unnamed** font falls back to the
+    /// resource identity it was selected through, which is exactly the
+    /// cache key `select_font` already computes and is distinct per
+    /// `(resource dictionary, resource name)` pair.
+    fn report_font(&mut self, font: &ExtractFont, resource_key: &(usize, Vec<u8>)) {
+        let key = if font.base_font.is_empty() {
+            let mut k = b"r:".to_vec();
+            k.extend_from_slice(&resource_key.0.to_le_bytes());
+            k.push(b'/');
+            k.extend_from_slice(&resource_key.1);
+            k
+        } else {
+            let mut k = b"n:".to_vec();
+            k.extend_from_slice(font.base_font.as_bytes());
+            k
+        };
         if self.fonts_seen.contains(&key) {
             return;
         }
         self.fonts_seen.push(key);
+        // A `/BaseFont`-less font — every conformant Type 3 font, per
+        // Table 112 — is named by the RESOURCE KEY the content stream
+        // selected it with (`/T3`), because that is the only handle the
+        // operator has: it is what `Tf` says, what `list-fonts` shows, and
+        // what a hex editor finds. `<unnamed>` was accurate and useless,
+        // and became actively misleading once more than one such font
+        // could be reported per page.
+        let resource_name = String::from_utf8_lossy(&resource_key.1);
         let name = if font.base_font.is_empty() {
-            "<unnamed>"
+            format!("/{resource_name}")
         } else {
-            &font.base_font
+            font.base_font.clone()
         };
+        let name = name.as_str();
         for note in &font.notes {
             match note {
                 FontNote::Rung3(Rung3Gap::IdentityNoToUnicode) => {
@@ -725,6 +773,16 @@ impl Walk<'_> {
                         "text: font {name} relies on its embedded program's built-in encoding, \
                          which pdfce-core cannot read; StandardEncoding assumed and any recovered \
                          characters are counted as the glyph-name extension, not as §9.10.2 rung 2"
+                    ));
+                }
+                FontNote::Type3NoToUnicode => {
+                    self.diagnostics.type3_fonts_without_to_unicode += 1;
+                    self.diagnostics.note(format!(
+                        "text: font {name} is a Type 3 font with NO /ToUnicode — its glyphs are \
+                         content streams named by arbitrary /CharProcs keys (ISO 32000-1 §9.6.5), \
+                         so §9.10.2 leaves no sourced route to Unicode: text set in it RENDERS \
+                         correctly but cannot be searched, copied or extracted. Acrobat is gated \
+                         on the same entry"
                     ));
                 }
                 FontNote::UnknownSubtype => {

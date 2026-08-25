@@ -13166,9 +13166,18 @@ fn cmd_find_text(input: &Path, needle: &str, ignore_case: bool) -> u8 {
         }
     };
     let mut session = pdfce_core::edit::EditSession::new(doc);
-    let hits = session.find_text(needle, ignore_case);
+    // `search_text`, not `find_text`: the same scan, but it also hands
+    // back what the extraction underneath could NOT read. See the
+    // "what a zero means" block below — that is the whole reason.
+    let found = session.search_text(
+        needle,
+        &pdfce_core::edit::TextSearchOptions::default()
+            .with_case_insensitive(ignore_case)
+            .with_wildcards(true),
+    );
+    let hits = &found.matches;
 
-    for h in &hits {
+    for h in hits {
         // Bounds over all FOUR corners rather than reading `ll`/`ur`.
         // Today every quad here comes from `Quad::from_rect` and is
         // axis-aligned, so the two agree — but `Quad` is a general
@@ -13192,12 +13201,83 @@ fn cmd_find_text(input: &Path, needle: &str, ignore_case: bool) -> u8 {
         );
     }
     println!(
-        "find-text {} needle={needle:?} ignore_case={} matches={}",
+        "find-text {} needle={needle:?} ignore_case={} matches={} unreadable_codes={} \
+type3_no_tounicode={} identity_no_tounicode={}",
         input.display(),
         u32::from(ignore_case),
         hits.len(),
+        // Appended `Pass 127.0`, per the stable-line append-never-reorder
+        // rule. See `report_unsearchable_text` for why a search result
+        // that omits these is not a result.
+        found.diagnostics.ladder_failures,
+        found.diagnostics.type3_fonts_without_to_unicode,
+        found.diagnostics.identity_fonts_without_to_unicode,
     );
+    report_unsearchable_text(&found.diagnostics);
     exit::SUCCESS
+}
+
+/// Say, on stderr, what this document's text search **could not read**.
+///
+/// # Why a search command has to do this at all
+///
+/// `matches=0` has two causes and one appearance: the needle is not in
+/// the document, or the document's text was never recoverable as Unicode
+/// so no needle could have matched it. A search that prints only the
+/// first reading is not merely terse — it is **wrong** about the second,
+/// and wrong in the direction that ends with an operator concluding a
+/// word is absent from a page they can see it on.
+///
+/// The two named populations are both fonts that **render perfectly**,
+/// which is exactly what makes the failure invisible:
+///
+/// * **Type 3 with no `/ToUnicode`** (ISO 32000-1 §9.6.5). A Type 3
+///   glyph is a content stream named by an arbitrary `/CharProcs` key —
+///   `/g13` means nothing outside the one document — so §9.10.2 method 2's
+///   precondition is false by construction and rung 1 is the font's only
+///   route to Unicode. Acrobat is gated on the identical entry; this is
+///   parity, not a pdfce shortfall.
+/// * **`Identity-H`/`Adobe-Identity-0` with no `/ToUnicode`**, the
+///   composite twin, which §9.10.2 excludes from every rung.
+///
+/// `unreadable_codes` (`ladder_failures`) is the per-code total across
+/// every cause including unnamed ones, and is reported whether or not
+/// either font-level counter fired.
+///
+/// # Why stderr, and why unconditionally on the summary line
+///
+/// The counters ride the machine-readable summary line so a script can
+/// branch on them without parsing prose; the prose goes to stderr so it
+/// never contaminates a `find-text > hits.txt` capture. Project rule 4
+/// ("fuzzy, never sneaky") makes the disclosure obligatory, and in
+/// `pdfce-cli` the invocation is the commit — there is no session in
+/// which to review it later, so it is printed on the way past.
+fn report_unsearchable_text(d: &pdfce_core::text_extract::TextDiagnostics) {
+    if d.type3_fonts_without_to_unicode > 0 {
+        eprintln!(
+            "pdfce-cli: find-text: {} Type 3 font(s) in this document carry NO /ToUnicode CMap \
+             (ISO 32000-1 §9.6.5) — their glyphs are content streams named by arbitrary \
+             /CharProcs keys, so text set in them RENDERS correctly and cannot be searched or \
+             copied. Acrobat is gated on the same entry",
+            d.type3_fonts_without_to_unicode
+        );
+    }
+    if d.identity_fonts_without_to_unicode > 0 {
+        eprintln!(
+            "pdfce-cli: find-text: {} font(s) are Identity-H/Adobe-Identity-0 with NO /ToUnicode \
+             — ISO 32000-1 §9.10.2 excludes them from every ladder rung, so text set in them \
+             cannot be searched or copied",
+            d.identity_fonts_without_to_unicode
+        );
+    }
+    if d.ladder_failures > 0 {
+        eprintln!(
+            "pdfce-cli: find-text: {} of {} character code(s) could not be mapped to Unicode and \
+             are U+FFFD in the searched text — a needle covering them cannot match. A zero match \
+             count for this document is therefore not evidence the needle is absent",
+            d.ladder_failures, d.codes_total
+        );
+    }
 }
 
 /// One line describing a resolved rich-text run style.
@@ -18235,7 +18315,7 @@ sourced_pct={:.1} spaces_derived={} lines_derived={} \
 actual_text={} artifacts={} reversed={} identity_no_tounicode={} \
 ucs2_missing={} predefined_cmaps_missing={} tagged={} suspects={} \
 struct_tree={} forms={} rtl_runs={} invisible={} unreadable_pages={} \
-contents_unresolved={}",
+contents_unresolved={} type3_no_tounicode={}",
         input.display(),
         extracted.pages.len(),
         extracted.plain_text().chars().count(),
@@ -18267,6 +18347,11 @@ contents_unresolved={}",
         // missing from this extraction rather than absent from the
         // document.
         d.contents_unresolved,
+        // `Pass 127.0`, appended per the same rule: Type 3 fonts with no
+        // `/ToUnicode`. The simple-font twin of `identity_no_tounicode`
+        // above, and the reason a document can render text this command
+        // cannot extract.
+        d.type3_fonts_without_to_unicode,
     );
     if output.is_some() || json {
         // stdout is free (the payload went to a file), or the payload is
@@ -18350,7 +18435,7 @@ fn extraction_json(input: &Path, extracted: &pdfce_core::text_extract::Extracted
     ));
 
     out.push_str("  \"diagnostics\": {\n");
-    let counters: [(&str, u64); 20] = [
+    let counters: [(&str, u64); 21] = [
         ("codes_total", d.codes_total),
         ("via_to_unicode", d.via_to_unicode),
         ("via_encoding_agl", d.via_encoding_agl),
@@ -18377,6 +18462,12 @@ fn extraction_json(input: &Path, extracted: &pdfce_core::text_extract::Extracted
         ("lines_derived", d.lines_derived),
         ("rtl_runs", d.rtl_runs),
         ("invisible_glyphs", d.invisible_glyphs),
+        // `Pass 127.0`. Type 3 fonts with no `/ToUnicode` — the reason a
+        // document can render text this extraction cannot recover.
+        (
+            "type3_fonts_without_to_unicode",
+            d.type3_fonts_without_to_unicode,
+        ),
     ];
     for (name, value) in counters {
         out.push_str(&format!("    \"{name}\": {value},\n"));

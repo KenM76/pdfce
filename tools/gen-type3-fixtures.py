@@ -29,6 +29,7 @@ THE FILES
 | `missing_glyph_advances.pdf` | a code with no `/CharProcs` entry, between two that have one | a renderer that skips the whole code, which mis-positions every later glyph on the line |
 | `resources_fallback.pdf` | a font with NO `/Resources` whose glyph names one | Table 112's page-resource fallback, which old files depend on |
 | `self_recursive.pdf` | a glyph procedure that shows its own font | an unbounded reader - this is a stack overflow by construction |
+| `tounicode_gate.pdf` | three Type 3 fonts, one WITH a `/ToUnicode` and two without | a reader that extracts no Type 3 text at all, and a per-font diagnostic that de-duplicates on the `/BaseFont` a Type 3 font does not have |
 
 ★ `colour_and_advance.pdf` IS ALSO THE ACROBAT ORACLE. Rows A-D of it were
 rendered in Acrobat Reader on 2026-08-25 and answered a question the
@@ -346,6 +347,140 @@ def self_recursive() -> bytes:
     return build(procs, "65 /ga", content, font_resources=b"<< /Font << /T3 5 0 R >> >>")
 
 
+# --- Pass 127.0: the EXTRACTION gate ----------------------------------------
+# A `/ToUnicode` CMap for codes 65..67 -> "HI!". Hand-written rather than
+# generated so the fixture's expected text is legible in the file itself: a
+# test that asserts "HI!" and a CMap that says <41> <0048> are two independent
+# statements of the same fact, which is what makes disagreement detectable.
+TO_UNICODE_HI = b"""/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CMapName /pdfce-type3-HI def
+/CMapType 2 def
+1 begincodespacerange
+<00> <FF>
+endcodespacerange
+3 beginbfchar
+<41> <0048>
+<42> <0049>
+<43> <0021>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end"""
+
+
+def tounicode_gate() -> bytes:
+    """§9.10.2's Type 3 dead end, and its control, on ONE page.
+
+    THREE Type 3 fonts, deliberately:
+
+    * `/TA` carries a `/ToUnicode` CMap. Its three codes must extract as
+      ``HI!`` - the CONTROL, without which "nothing extracted" would pass for
+      a reader that extracts nothing from any Type 3 font at all.
+    * `/TB` and `/TC` carry none. Their glyph names (`/gb1`, `/gc1`, ...) are
+      arbitrary `/CharProcs` keys, which is all a Type 3 glyph name ever is
+      (Table 112), so no rung of §9.10.2 can reach Unicode for them.
+
+    ★ THE REASON THERE ARE TWO DEAD ENDS AND NOT ONE. Table 112 has **no
+    `/BaseFont` entry**: a conformant Type 3 font has no name. pdfce's
+    per-font diagnostics de-duplicated on that name, so before `Pass 127.0`
+    every unnamed font on a page collapsed into a single entry and the new
+    `type3_fonts_without_to_unicode` counter would have said `1` here. The
+    fixture asserts **2**, which is a claim about the de-duplication key and
+    not merely about the counter's existence.
+
+    ★ AND THE GLYPH NAMES ARE NOT STANDARD ONES, deliberately. pdfce keeps a
+    counted extension beyond Acrobat: a Type 3 glyph that happens to be named
+    `/A` still resolves through the Adobe Glyph List and is counted as
+    `via_glyph_name_extension`. Naming these `/gb1` shuts that door, so the
+    codes reach §9.10.2's failure clause and the dead end is measured rather
+    than papered over by a lucky name.
+    """
+    # Object plan, fixed and asserted below, because these dictionaries name
+    # each other by hand (R162):
+    #   1 catalog, 2 pages, 3 page, 4 content,
+    #   5 /TA font, 6 /TA CharProcs, 7 /TA Encoding, 8 /TA glyph proc,
+    #   9 /TA ToUnicode,
+    #   10 /TB font, 11 /TB CharProcs, 12 /TB Encoding, 13 /TB glyph proc,
+    #   14 /TC font, 15 /TC CharProcs, 16 /TC Encoding, 17 /TC glyph proc,
+    #   18 Helvetica.
+    def t3(font_obj: int, names: list[str], to_unicode: int | None) -> bytes:
+        cp, enc = font_obj + 1, font_obj + 2
+        tu = b" /ToUnicode " + str(to_unicode).encode() + b" 0 R" if to_unicode else b""
+        return (
+            b"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 "
+            + str(BOXW).encode() + b" " + str(BOXW).encode()
+            + b"] /FontMatrix [0.001 0 0 0.001 0 0]"
+            + b" /CharProcs " + str(cp).encode() + b" 0 R"
+            + b" /Encoding " + str(enc).encode() + b" 0 R"
+            + b" /FirstChar 65 /LastChar " + str(64 + len(names)).encode()
+            + b" /Widths [" + b" ".join(str(ADV).encode() for _ in names) + b"]"
+            + tu
+            + b" >>"
+        )
+
+    # All three fonts share ONE glyph procedure object each; the shape does
+    # not matter to extraction, only that a code maps to a painted glyph.
+    a_names = ["ga1", "ga2", "ga3"]
+    b_names = ["gb1"]
+    c_names = ["gc1"]
+
+    content = (
+        "0 0 1 rg\n"
+        # /TA: three codes, a /ToUnicode - must come out "HI!".
+        f"BT /TA {SIZE} Tf 60 620 Td (\\101\\102\\103) Tj ET\n"
+        # /TB and /TC: one code each, no /ToUnicode - two dead ends.
+        f"BT /TB {SIZE} Tf 60 540 Td (\\101) Tj ET\n"
+        f"BT /TC {SIZE} Tf 60 460 Td (\\101) Tj ET\n"
+        "0 0 0 rg\n"
+        + label(625, "TA has /ToUnicode -> extracts as HI!")
+        + label(545, "TB has none -> unsearchable, and it is SAID so")
+        + label(465, "TC has none either -> and it is a SECOND font, not the same one")
+    )
+
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "
+        + str(PAGE_W).encode() + b" " + str(PAGE_H).encode()
+        + b"] /Resources << /Font << /TA 5 0 R /TB 10 0 R /TC 14 0 R /F1 18 0 R >> >>"
+        + b" /Contents 4 0 R >>",
+        stream(content),
+        t3(5, a_names, 9),
+        b"<< " + b" ".join(
+            b"/" + n.encode() + b" 8 0 R" for n in a_names
+        ) + b" >>",
+        b"<< /Type /Encoding /Differences [65 "
+        + b" ".join(b"/" + n.encode() for n in a_names) + b"] >>",
+        stream(PROC_NARROW),
+        b"<< /Length " + str(len(TO_UNICODE_HI)).encode() + b" >>\nstream\n"
+        + TO_UNICODE_HI + b"\nendstream",
+        t3(10, b_names, None),
+        b"<< /gb1 13 0 R >>",
+        b"<< /Type /Encoding /Differences [65 /gb1] >>",
+        stream(PROC_NARROW),
+        t3(14, c_names, None),
+        b"<< /gc1 17 0 R >>",
+        b"<< /Type /Encoding /Differences [65 /gc1] >>",
+        stream(PROC_NARROW),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    assert len(objects) == 18, len(objects)
+    # The three fonts must be three DISTINCT objects, or the fixture cannot
+    # make its own central claim.
+    assert objects[2].count(b"/TA 5 0 R") == 1
+    assert objects[2].count(b"/TB 10 0 R") == 1
+    assert objects[2].count(b"/TC 14 0 R") == 1
+    # Indices are into the list above: 0 catalog, 1 pages, 2 page,
+    # 3 content, 4 /TA font, ... 9 /TB font, ... 13 /TC font.
+    assert objects[4].count(b"/ToUnicode 9 0 R") == 1
+    assert b"/ToUnicode" not in objects[9]
+    assert b"/ToUnicode" not in objects[13]
+    return pdf(objects)
+
+
 def rebuild_with_extra(data: bytes, extra: list[bytes]) -> bytes:
     """Re-serialise a built file with additional objects appended.
 
@@ -375,6 +510,7 @@ def main() -> None:
         "missing_glyph_advances.pdf": missing_glyph_advances(),
         "resources_fallback.pdf": resources_fallback(),
         "self_recursive.pdf": self_recursive(),
+        "tounicode_gate.pdf": tounicode_gate(),
     }
     for name, data in sorted(files.items()):
         (OUT / name).write_bytes(data)
