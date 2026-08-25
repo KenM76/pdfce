@@ -60204,3 +60204,187 @@ touched, no `cargo tree`/round-trip/packaging checks apply.
   filing — no shell. Everything above is either this role's own
   documentation edits or relayed from the dispatching engineer's report,
   per hard rule 8.
+
+> **★ CORRECTED 2026-08-25 (251st filing).** The "Ledger" bullet above
+> reads "operator-question ceiling unchanged at `(bs)`, next free `(bs)`."
+> **That is wrong** — `ROADMAP.md`'s *Open operator questions* section
+> itself states "next free `(bt)`" twice (independently, at `(bs)`'s
+> opening and its withdrawal footer), and a **retired/withdrawn** letter
+> does not become the next free one. Corrected by re-reading the *Open
+> operator questions* section directly. The 251st filing's own entry
+> below uses the corrected value.
+
+## 2026-08-25 (two-hundred-and-fifty-first filing) — `Pass 124.0` ships: `tools/intent-census/` measures a population pdfce could not previously state a number for; `Pass 122.7` re-scoped from "reduce" to "adopt" once `iccce` proved the residual structural; `Pass 124.1` filed; `(bt)` opened
+
+**Shipped:**
+- `Pass 124.0` (`7b1f47a`) — `tools/intent-census/` (`README.md` +
+  `ri_census.py` + `icc_census.py`), out-of-tree tooling, same standing as
+  `tools/cmyk-calibration`/`tools/render-parity`. No Rust changed; no
+  `cargo` gate applies and none is claimed. Answers `iccce`'s population
+  question (cache design fine at 4, unpleasant at 40) in one reply,
+  `open/2026-08-25-reply-both-answers-are-nothing-yet-and-here-is-the-population.md`
+  (seven questions, seven answers), which also acknowledges `iccce`'s own
+  reply diagnosing the `Pass 122.7` blue-channel residual as a gamut
+  clamp.
+
+**Decisions made this session:**
+- **Decision 087** (`ARCHITECTURE.md` §12) — `Pass 122.7`'s residual is
+  not a calibration error; `iccce` proved structurally (ICC.1:2022 Annex
+  F.8–F.16, a clamp applied to the linear values before the inverse TRC)
+  that a fitted lookup table cannot reproduce a gamut clamp, because a
+  clamp is a discontinuity and interpolation is smooth by construction.
+  pdfce will **not** refit `cmyk_table.rs` further against this target.
+  `Pass 122.7` re-scoped from *"reduce the blue floor"* to *"adopt a
+  conformant transform"* — the fix genuinely cannot be built on pdfce's
+  side of decision 064's compositing/conversion boundary. Recorded
+  alongside: `settings::CmykIntent` currently offers the operator a
+  choice between two answers that are both wrong at the gamut boundary,
+  in opposite directions, by construction — not a bug, a property of a
+  fitted table.
+
+**Findings + decisions:**
+- **Sourcing note:** no shell in this filing (librarian invocation). The
+  measurement figures below are relayed from `tools/intent-census/README.md`
+  and the outbound reply, per hard rule 8. Three source-code claims (the
+  `ri`/`i` no-op match in `interpret.rs`, the absent `/RI` key, and the
+  `GWG`-occurrence count of 18 in `tools/ghent-check.py`) were
+  **independently `Grep`-confirmed by this role this filing**, not merely
+  relayed.
+- **The census, denominators beside every figure (hard rule 10).** Ghent
+  Output Suite v5.0, 51 print-production PDFs, all deep-scanned: **12 of
+  51** name a rendering intent, **1 of 51** names two
+  (`3_GWG221_OutputIntentChangeIndicator_x4.pdf`, Perceptual +
+  RelativeColorimetric), none names more; distinct `/ICCBased` source
+  references max **4**, mean **0.29** (12 of 51 carry any); distinct
+  `/DestOutputProfile` references **exactly 1 in 51 of 51 files**.
+  `fixtures/`, 4,239 files, 350 deep-scanned: **5 of 350** name any
+  intent, **0 of 350** name more than one; a raw byte-grep across all
+  4,239 finds 16/6, and **all six** multi-intent hits are veraPDF
+  conformance probes built to name all four intents.
+- **The tool's own control: a byte-grep for `/RI` measures zero and
+  lies.** Raw pass over the 51 Ghent files found **0 of 51**; the
+  inflate-first deep pass found **12 of 51**. `/RI` reaches a PDF only
+  inside a Flate-compressed `/ExtGState` (object stream) or content
+  stream in any modern producer's output, so a scan that does not inflate
+  first undercounts totally, not partially.
+- **`/Custom` is a legal rendering-intent name** (§8.6.5.8) — a reader
+  must substitute a default, not refuse. Present in
+  `veraPDF test suite 6-2-8-t03-fail-a.pdf`, a real fixture.
+  Filed as an edge case `Pass 124.1` must build against.
+  **pdfce has never decoded an ICC profile anywhere** —
+  `output_intent_blend_space()` reads only `/N` off `/DestOutputProfile`'s
+  stream dictionary; `ICCBased` resolves through `/Alternate` or the
+  spec's `/N` fallback. Neither ever fetches a profile's bytes.
+- **A PDF/X file carries its own CMYK source profile — no network fetch
+  needed for this class of file.** `iccce` pulled a 1,526,728-byte ICC v2
+  `prtr` CMYK→Lab profile (FOGRA27, Heidelberg Printopen 4.0.5.2, 12 tags)
+  out of `1_GWG010_CMYK_OP_x3.pdf`'s `/OutputIntents` →
+  `/DestOutputProfile`. Measured across the Ghent set: exactly one
+  `/DestOutputProfile` in 51 of 51 files — relevant to `ARCHITECTURE.md`
+  §1.1's permanent no-network-client-in-the-engine posture, which this
+  finding supports empirically rather than changes.
+- **A draft claim caught before it shipped.** The engineer drafted "ours
+  does not carry document names" about `tools/ghent-check.py`, grepped
+  before sending, and found the opposite: 18 `GWG` mentions, individual
+  patch names, one verbatim quoted caption, in a public MIT repository.
+  The corrected sentence shipped in the reply. Opened as operator
+  question `(bt)`, below, rather than resolved unilaterally — this is a
+  licence-terms reading, not an engineering call.
+- **`docs/NEXT_SESSION.md` §4 corrected** (engineer-owned, not edited by
+  this role) — the entry said pdfce "carries one [rendering intent] per
+  page"; wrong twice. pdfce carries none, and `CmykIntent` (the thing a
+  reader would find looking for "pdfce's intent") is a lookup-table
+  selector, per-invocation, not an ICC rendering intent and not per-page.
+  `iccce` was about to design an API shape against the wrong sentence.
+- **Method reflects the machine, not incidentally.** Operator stated this
+  PC has 16 GB RAM and is running SOLIDWORKS this session; both scanners
+  are single-threaded Python, capped at 4 MiB/stream and 64 MiB/document
+  of inflation, files above 40 MiB skipped outright, no `cargo` build ran,
+  and the already-built `target/release/pdfce-cli.exe` was reused rather
+  than rebuilt.
+- **Ledger self-correction.** Two prior filings' ledgers (`Pass 123.0`
+  Shipped entry, and this file's own 250th-filing entry, both above)
+  stated "operator-question... next free `(bs)`" — wrong; the *Open
+  operator questions* section itself said `(bt)` twice, independently. A
+  retired/withdrawn letter is not the next free one. Corrected with a
+  dated footer on each, sourced to the section itself rather than
+  re-derived. `(bt)` is what this filing actually opens.
+
+**`ROADMAP.md`:**
+- New Shipped entry, `Pass 124.0` (`7b1f47a`), top of file.
+- `Pass 122.7` (Backlog) re-scoped in place with a dated block — heading
+  changed to reflect the new scope; original diagnosis text kept, not
+  deleted.
+- New Backlog entry, `Pass 124.1` — carry `/RI` through the graphics
+  state, per-paint, with the `/Custom`-name and undecoded-profile-bytes
+  edge cases recorded. Not gated on `iccce`.
+- New open operator question `(bt)` — whether `tools/ghent-check.py`
+  should be untracked, given `iccce`'s own 2026-08-18 precedent
+  (`5e1e5df`) of untracking its equivalent file for the same licence
+  reasoning. Ceiling moves `(bs)` (retired) → `(bt)`, next free `(bu)`.
+- Two dated correction footnotes added (see "Ledger self-correction,"
+  above).
+
+**`ARCHITECTURE.md`:**
+- §12 gains decision 087 (full text above). No body-section change — a
+  scope call under the existing decision-064 boundary, not a redrawn one.
+
+**`FEATURES.md`:**
+- No row changes for `Pass 124.0` itself — a measurement tool and a
+  documentation correction, nothing newly reachable by an operator.
+  Considered and deliberately left alone, not overlooked.
+- One new *Planned* row for `Pass 124.1` (rendering intent through the
+  graphics state), all three boxes unticked, placed beside the existing
+  `/OutputIntents`/`/ICCBased` rows with an explicit "not gated on
+  `iccce`" note so it is not misread as blocked on the same thing they
+  are.
+
+**`personal_rag/pdf`:** three new lessons —
+- `lesson_20260825_a_byte_grep_for_rendering_intent_measures_zero_and_lies.md`
+- `lesson_20260825_rendering_intents_are_rare_and_almost_never_plural.md`
+- `lesson_20260825_a_pdfx_file_carries_its_own_cmyk_source_profile.md`
+
+Both subject index (`C:\personal_rag\pdf\index.md`) and master index
+(`C:\personal_rag\index.md`) updated in this filing.
+
+**Still in flight:**
+- `Pass 124.1` (carry `/RI` through the graphics state) — filed, not
+  scoped to acceptance criteria or a fixture set.
+- `Pass 122.7` — still a pointer, no pdfce code change implied; next move
+  is `iccce`'s, whenever a conformant transform ships.
+- Operator question `(bt)` — awaiting Ken's read on the licensing
+  question; default if unanswered is "no change" (file stays tracked).
+- The write side of `/BrotliDecode` (`Pass 123.0`'s deferred half) —
+  unchanged, still unscoped.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned) — it
+  already carries its own §4 correction, filed by the engineer alongside
+  the reply, per this session's own record above.
+- Ledger: standing rules ceiling stays `R217`, next free `R218`;
+  decisions ceiling `087`, next free `088`; Pass family ceiling `124`
+  (new family), next free `125`; operator-question ceiling `(bt)`, next
+  free `(bu)`; `render-page` metrics line **92 keys**, unchanged (no new
+  counter); filing ordinal `251`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Measurement figures are relayed from
+  `tools/intent-census/README.md` and the outbound reply; the three
+  source-code claims named above were independently `Grep`-confirmed by
+  this role this filing, per hard rule 8.
+
+**Addendum, same day — `ba8f31f`: the hard-rule-11 survivor closed inside
+one day, not carried to a future Pass.** This filing's own §"The channel"
+above (decision 087's naming-collision finding) named two `crates/`
+doc-comment sites that still called `CmykIntent` "the rendering intent" —
+`crates/pdfce-render/tests/cmyk_intent.rs`'s file-level title and
+`crates/pdfce-render/src/cmyk_buffer.rs`'s section heading. Per hard rule
+11 this role reported the survivor rather than editing `crates/` itself.
+**The engineer fixed both the same session** — Ken's standing "fix bugs on
+discovery" preference — rather than filing it for later, which is worth
+the record showing explicitly: the sweep-to-fix loop closed inside one
+day. Doc comments only, no behaviour changed; `cargo fmt --check` clean;
+`cargo check -j 2 -p pdfce-render` clean (19.4 s, incremental);
+`cargo clippy`/`cargo test` deliberately not run (16 GB machine, operator
+running SOLIDWORKS, light-resource-use request — a doc-comment-only change
+cannot alter behaviour). Filed as an addendum to the `Pass 124.0`
+`ROADMAP.md` entry rather than a new Pass ID, since no capability changed.

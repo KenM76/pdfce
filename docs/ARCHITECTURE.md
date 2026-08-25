@@ -25046,3 +25046,76 @@ free 072.**
   rule 3 and existing sourcing discipline (rule 1), not a new pattern.
 
   **Ceiling moves 085 → 086; next free 087.**
+
+- **2026-08-25 — Decision 087. `Pass 122.7`'S RESIDUAL IS NOT A CALIBRATION
+  ERROR: `iccce` PROVED STRUCTURALLY THAT A FITTED LOOKUP TABLE CANNOT
+  REPRODUCE A GAMUT CLAMP. PDFCE WILL NOT REFIT `cmyk_table.rs` FURTHER
+  AGAINST THIS TARGET; THE FIX IS A CONFORMANT TRANSFORM, GATED ON `iccce`
+  BY DECISION 064.** (Librarian filing, 251st, no shell — sourced to
+  `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\2026-08-25-reply-the-blue-floor-is-the-intent-and-a-fitted-table-cannot-have-it.md`
+  and `iccce`'s own `DL-069`/`DL-070`, relayed by the engineer's dispatch.)
+
+  **The finding, in the form that makes it a decision rather than a
+  measurement.** `Pass 122.7` (`ROADMAP.md`, Backlog) diagnosed a
+  blue-channel residual on Ghent `GWG 1.0`'s shading cells as belonging
+  entirely to pdfce's interim `DeviceCMYK`→sRGB table, not to compositing.
+  `iccce` went one step further and showed the residual is **structural,
+  not a fitting defect**: Acrobat's blue = 0 on this patch is a **normative
+  out-of-gamut clamp** — ICC.1:2022 Annex F.8–F.16 clamps each linear
+  component to `[0,1]` **before** applying the inverse TRC — proved with a
+  7-point sweep where blue holds at exactly `0.000000` across the whole
+  range (a converged value moves with its input; a clamped one does not).
+  **A clamp is a discontinuity, and a fitted table's interpolation is
+  smooth by construction**, so no refit of the same structure can sit
+  exactly on the gamut boundary on every channel at once — pdfce's two
+  interim tables missing the same patch in **opposite directions**
+  (`naive`: blue exact, green 13 low; `calibrated`/`neutral_black`: blue 55
+  high, green 9 high) is the *signature* of that structure, not evidence
+  of a wrong choice between them. `iccce`'s own finding cuts back at real
+  CMMs too: their CLUT interpolation smooths identically, and the clamp
+  survives in a real transform only because it is applied analytically,
+  in code, **after** every interpolation — a rule with a corollary for any
+  future fast-path table generated *from* a correct CMM: it inherits the
+  same limitation unless the clamp is re-applied analytically after the
+  lookup rather than assumed to be present in the sampled data.
+
+  **The decision.** `Pass 122.7` re-scopes from *"reduce the blue floor"*
+  to *"adopt a conformant transform"* (`ROADMAP.md`, this filing). pdfce
+  will **not** hand-fit a correction into `cmyk_table.rs` for this or any
+  similarly-shaped gamut-boundary residual — decision 064's boundary
+  already assigns colour *conversion* to `iccce` and pdfce *compositing*;
+  this finding is the concrete reason that boundary is correct here rather
+  than merely tidy, since the fix genuinely cannot be built on pdfce's
+  side of it. The regression target `Pass 122.7` already recorded (blue ≈ 0
+  **and** green ≈ 156 together, on `GWG 1.0`'s shading cells) stands as the
+  acceptance criterion for whichever transform `iccce` eventually ships.
+
+  **Recorded because it is uncomfortable and true, not because it is
+  flattering:** `crates/pdfce-core/src/settings/mod.rs`'s `CmykIntent`
+  (`calibrated`/`neutral_black`/`naive`) currently offers the operator a
+  choice between **two answers that are both wrong at the gamut
+  boundary**, in opposite directions, by construction — not a bug in
+  either table, a property of what a fitted table is. This does not change
+  today; it is named so a future session does not "fix" the disagreement
+  between the two tables by picking a different default.
+
+  **Evidence-class discipline carried over and worth restating.** `iccce`'s
+  own reply declined to convert one exact matching row (blue = 0) into a
+  ΔE claim against a `PrintWindow` screen capture of Acrobat — a rendering
+  cross-check is weaker than a colorimetric one, and computing a ΔE against
+  a clamped value would measure the clamp, not colour accuracy. pdfce's
+  side of the same discipline: `Pass 124.0`'s census figures (`ROADMAP.md`)
+  are stated as a **corpus census, structural** — counts of what producers
+  wrote, not a rendering comparison and not ground truth.
+
+  **Body-section updates:** none required — this is a scope call under the
+  existing decision-064 boundary, not a redrawn one. `ARCHITECTURE.md`'s
+  own text describing `cmyk_table.rs` (decision 006/`Pass 49.0`) is
+  unchanged; this decision adds a *reason a refit will not be attempted*,
+  it does not alter the table's documented provenance or status.
+
+  **No new standing rule minted** — this restates and applies decision
+  064's existing boundary to a newly-diagnosed case; it does not establish
+  a new pattern of its own.
+
+  **Ceiling moves 086 → 087; next free 088.**

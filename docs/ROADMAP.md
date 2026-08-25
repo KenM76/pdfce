@@ -96,6 +96,256 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `7b1f47a` — `Pass 124.0` ships: `tools/intent-census/`, and a rendering-intent population pdfce had no number for is now measured — 12 of 51 Ghent print files name an intent, 1 names two, none names more; `/DestOutputProfile` is exactly one per document in 51 of 51 — 2026-08-25 (two-hundred-and-fifty-first filing)
+
+**Sourcing.** No shell in this filing (librarian invocation). The measurement
+figures below are **relayed** from `tools/intent-census/README.md` and the
+outbound reply, which state their own method beside each figure, per hard
+rule 8. Three source-code claims (the `ri`/`i` no-op match, the absent `/RI`
+key, and the `GWG` occurrence count in `tools/ghent-check.py`) were
+**independently re-confirmed by this role's own `Grep` on live source this
+filing** — that distinction is called out inline below rather than left
+implicit, per hard rule 11's "check a draft claim of your own before
+publishing it."
+
+---
+
+#### Context — a resource-constrained session, and why the method is single-threaded
+
+The operator's own words this session: this machine has **16 GB RAM** and is
+**running SOLIDWORKS**, so heavy work was deliberately avoided. The engineer's
+method reflects that constraint directly rather than incidentally: the two
+scanners are **single-threaded Python**, capped at **4 MiB per stream / 64 MiB
+per document** of inflation, files above **40 MiB** are skipped outright, no
+`cargo` build ran, and the already-built `target/release/pdfce-cli.exe` was
+reused rather than rebuilt. No Rust changed. **No `cargo` gate applies to this
+Pass and none is claimed** — `cargo fmt`/`cargo clippy`/`cargo test` were not
+re-run this filing.
+
+---
+
+#### What shipped
+
+`tools/intent-census/` — `README.md` + `ri_census.py` + `icc_census.py`,
+**out-of-tree tooling in the same standing as `tools/cmyk-calibration` and
+`tools/render-parity`** (`docs/LEGAL.md` §6): a development instrument, not a
+runtime artefact. Nothing here ships in a pdfce binary; pdfce depends on none
+of it.
+
+Built to answer a question the sibling `iccce` project asked in
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\request_can_you_hand_me_the_output_intent_and_an_intent.md`
+— *"how many distinct `(source, destination, intent, BPC)` combinations could
+one page actually produce? I have a cache design that is fine at 4 and
+unpleasant at 40."* — which `docs/NEXT_SESSION.md` §4 stated pdfce had **no
+measurement of at all**, in as many words.
+
+---
+
+#### The measurement, with a denominator beside every figure (hard rule 10)
+
+**The raw-vs-deep control, which is the tool's own instrument for its own
+error.** A rendering intent reaches a PDF either as `/RI` in an `/ExtGState`
+or as the `ri` content-stream operator, and in any modern producer's output
+both routes sit inside a Flate-compressed object or content stream. A byte
+grep for `/RI` therefore **measures zero and is wrong**: on the 51-file Ghent
+set, the raw (non-inflating) pass found **0 of 51** files naming an intent;
+the deep (inflate-then-search) pass found **12 of 51**. The raw pass is kept
+in the tool rather than deleted, so the undercount is re-derivable rather
+than merely asserted.
+
+**Ghent Output Suite v5.0 — 51 print-production PDFs, every one deep-scanned:**
+
+| statistic | value |
+|---|---|
+| files naming any rendering intent | **12 of 51** (24 %) |
+| files naming more than one | **1 of 51** — `3_GWG221_OutputIntentChangeIndicator_x4.pdf`, `Perceptual` + `RelativeColorimetric`; none names more |
+| distinct `/ICCBased` source-profile object references, max | **4** (`3_GWG130_ICC_Source_Profile_x4.pdf`) |
+| distinct `/ICCBased` source-profile object references, mean | **0.29** over 51 files; 12 of 51 carry any |
+| distinct `/DestOutputProfile` references | **exactly 1, in 51 of 51 files** |
+
+**`fixtures/` — 4,239 files, 350 deep-scanned:**
+
+| statistic | value |
+|---|---|
+| deep pass (350-file sample), any intent | 5 of 350 |
+| deep pass (350-file sample), more than one | **0 of 350** |
+| raw byte-grep (all 4,239 files), any intent | 16 of 4,239 |
+| raw byte-grep (all 4,239 files), more than one | 6 of 4,239 — **all six are veraPDF conformance probes** whose stated purpose is to name all four standard intents in one document |
+
+`fixtures/` is **dominated by conformance suites** (2,907 of 4,239 files are
+veraPDF) — the wrong population to generalise print-production behaviour
+from, which is why the two counts are reported separately rather than pooled.
+
+**The last row is the load-bearing one for a cache design.** The destination
+profile is a per-document constant in 51 of 51 print-production files
+measured — a transform cache keyed by destination can be built once per
+document and reused across every page of it, and an eager 4×2 build (every
+intent × BPC state) would be waste in 100 % of the files measured, since no
+file in either population used more than two intents.
+
+---
+
+#### Evidence class
+
+**Corpus census, structural.** Counts of what producers wrote — object and
+content-stream bytes after Flate inflation — obtained without parsing the
+xref, the trailer, or the page tree at all. **Does not answer whether a
+single page switches intent mid-stream**; the census never builds a page
+tree, so that question is still open on `docs/NEXT_SESSION.md` §4 after this
+filing, in exactly the words it used before.
+
+---
+
+#### The channel — seven questions, seven answers, one reply
+
+pdfce's engineer answered
+`request_can_you_hand_me_the_output_intent_and_an_intent.md` in full and
+separately acknowledged
+`2026-08-25-reply-the-blue-floor-is-the-intent-and-a-fitted-table-cannot-have-it.md`
+in one reply,
+`open/2026-08-25-reply-both-answers-are-nothing-yet-and-here-is-the-population.md`.
+Headline capability answers from that reply, **independently re-confirmed by
+this role's own `Grep` on live source this filing** (not merely relayed):
+
+- **`/RI` is not carried anywhere.** The content-stream operator is an
+  explicit no-op — `crates/pdfce-render/src/interpret.rs`:
+  `b"i" | b"ri" => {} // flatness / rendering intent: recognized no-ops in
+  Pass 1` — confirmed present at that exact match. `/RI` inside an
+  `/ExtGState` is **not read at all**: `apply_ext_gstate` has no such key and
+  `GraphicsState` has no field for it.
+- **A naming collision the reply flags explicitly.** `settings::CmykIntent`
+  (`calibrated`/`neutral_black`/`naive`) is **not an ICC rendering intent** —
+  it selects which fixed `DeviceCMYK`→sRGB lookup table is used, per
+  invocation, not per document or per paint. This is the exact knob `Pass
+  122.7`'s diagnosis measured at blue 55 vs blue 0 (below).
+  `crates/pdfce-core/src/settings/mod.rs` confirmed to hold the type this
+  filing.
+  - Pdfce has never decoded an ICC profile anywhere: `output_intent_blend_
+    space()` (confirmed present in `interpret.rs`) resolves `/OutputIntents`
+    → `/DestOutputProfile` as far as its dictionary's `/N` key only, and
+    `ICCBased` resolves through `/Alternate` or the spec's own `/N` fallback
+    — neither ever fetches the stream body.
+- **`docs/NEXT_SESSION.md` §4 corrected in the same reply, not merely
+  flagged.** The entry read *"pdfce carries one [rendering intent] per
+  page"* — wrong twice: pdfce carries **none**, and the field a reader would
+  actually find (`CmykIntent`) is a lookup-table selector, per-invocation,
+  not an ICC rendering intent and not per-page. `iccce` was about to design
+  an API shape against the wrong sentence. See item below, "`docs/NEXT_
+  SESSION.md`."
+- **★ A draft claim caught before it shipped.** The reply's own text records
+  that its author drafted *"ours does not carry document names"* about
+  `tools/ghent-check.py`, then grepped before sending and found the opposite
+  — the file mentions `GWG` **18 times** (re-confirmed by this role's own
+  `Grep`: 18), names individual patches, and **quotes one patch's printed
+  caption verbatim**. See the new open operator question `(bt)`, below.
+
+---
+
+#### What this Pass does NOT establish
+
+- **Not a page-level measurement.** No page tree was built; the census
+  cannot say whether one *page* switches intent mid-stream, only whether a
+  *document* names more than one intent anywhere.
+- **Not a rendering comparison, not ground truth.** The tool reads what
+  producers wrote and says nothing about whether any consumer honours it.
+- **Object-reference identity is not profile identity**, stated in both
+  directions: a *lower* bound on distinct profiles if two objects hold
+  byte-identical bytes, an *upper* bound on cache entries if a cache is
+  keyed by object id.
+
+---
+
+#### Verification
+
+**No `cargo` gate applies — no Rust changed.** `cargo fmt`/`cargo
+clippy`/`cargo test` **were not re-run this filing and are not claimed.**
+`target/release/pdfce-cli.exe` (already built) was reused, not rebuilt.
+`tools/check-*` gates are Python/shell tooling checks and are unaffected by
+a new `tools/` subdirectory that ships nothing.
+
+---
+
+#### `FEATURES.md`
+
+**No row changes from this entry.** No capability shipped — a measurement
+tool and a documentation correction, nothing an operator can newly reach.
+See the `Pass 124.1` Backlog entry, below, for the one new *Planned* row
+this filing's *other* work adds.
+
+---
+
+#### `ARCHITECTURE.md`
+
+No body-section change from this Pass alone; see decision **087**, below,
+which covers the `Pass 122.7` re-scope this same census informs.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | — (no prior Pass covered this) | **`Pass 124.0` SHIPPED**; **`Pass 124.1` FILED to *Backlog*** (carry `/RI` through the graphics state — see below) |
+| Pass family ceiling | **123** | **124** — new family; next free **125** |
+| decisions (`ARCHITECTURE.md` §12) | **086** | **087** — the `Pass 122.7` re-scope and the clamp-finding acceptance (below). Next free **088**. |
+| standing rules | **R217** | unchanged, next free **R218** — no new pattern, a scope call and a measurement |
+| operator questions | ceiling **(bs)** (retired/withdrawn), next free **(bt)`** — ★ corrected this filing, see the footnote on the `Pass 123.0` entry above and on the 250th `SESSION_LOG.md` entry; both said "next free `(bs)`," which the *Open operator questions* section itself (lines confirming `(bt)` twice) contradicts | **`(bt)` FILED** (the `GWG`-mention licence question, below). New ceiling **(bt)**, next free **(bu)**. |
+| `render-page` metrics line | **92 keys** | unchanged — no new counter |
+| `FEATURES.md` | — | one new *Planned* row (`Pass 124.1`'s capability); no *Implemented* changes |
+| `PRIOR_ART.md` | — | unchanged — no new dependency |
+| `personal_rag/pdf` | **151** lessons (`Grep -c '^- \[lesson_'` on `index.md`, checked this filing) | **154** — +3 lessons (byte-grep-lies, intents-are-rare-and-singular, PDF/X-carries-its-own-profile). ★ Aside, not resolved here: a disk `Glob` for `lesson_*.md` in the same directory counts **155** files after the addition — one file short of an index entry somewhere in the existing 151, predating this filing. Flagged for a future "index check" invocation, not chased down in this one. |
+| Filing ordinal | **250** | **251** |
+
+**Backup currency and git/CI state: not independently checked this
+filing** — no shell. Measurement figures above are relayed from
+`tools/intent-census/README.md` and the outbound reply; the three source-code
+claims marked above were independently `Grep`-confirmed by this role this
+filing, per hard rule 8's "Read/Grep on live source substitutes for `git
+show` on current-tree claims."
+
+---
+
+#### Addendum — `ba8f31f`: the hard-rule-11 sweep survivor this filing reported (and declined to fix, being `crates/`) was fixed the same session
+
+*"Two doc comments called CmykIntent 'the rendering intent.' It is not
+one."*
+
+This filing's own §"The channel" above named the naming collision — decision
+**087** established that `CmykIntent` is not an ICC rendering intent, and
+that finding had not yet reached two doc-comment sites in `crates/`. Per
+hard rule 11, this role reports such survivors rather than editing
+`crates/` itself. The engineer made the fix **the same session** rather than
+carrying it to a future Pass — the operator's standing "fix bugs on
+discovery" preference — closing the sweep-to-fix loop inside one day.
+
+Both sites corrected:
+
+- `crates/pdfce-render/tests/cmyk_intent.rs` — file-level title changed from
+  *"The `DeviceCMYK` rendering intent is a real knob"* to *"The `DeviceCMYK`
+  conversion knob is real"*, plus a new starred paragraph stating that
+  `CmykIntent` is **not** an ICC rendering intent, that it selects one of
+  three fitted lookup tables and is per-invocation, and that pdfce carries
+  **no** PDF rendering intent at all (`ri` is an explicit no-op, `/RI` is
+  never read).
+- `crates/pdfce-render/src/cmyk_buffer.rs` — section heading changed from
+  *"The rendering intent"* to *"The intent the standard asks for, and the
+  knob pdfce actually has"*, plus a starred paragraph carrying the same
+  distinction **and** the structural reason from `iccce`'s `DL-069`: no
+  lattice here can reach Acrobat's gamut clamp, because a clamp is a
+  discontinuity at the gamut boundary and an interpolated lattice smooths
+  across it whichever way it is fitted.
+
+**Verification claimed, and no more than this.** Doc comments only, no
+behaviour changed. `cargo fmt --check` clean. `cargo check -j 2 -p
+pdfce-render` clean — **19.4 s, incremental**. **`cargo clippy` and `cargo
+test` were NOT run** — deliberately, per this same filing's own
+resource-constraint context above (16 GB machine, operator running
+SOLIDWORKS, asked for light resource use) and because a doc-comment-only
+change cannot alter behaviour. This entry is not a full gate pass and must
+not be read as one.
+
+---
+
 ### `4163ad9` — `Pass 123.0` ships: `/BrotliDecode` reads, and the standard it is "part of" does not contain it — read-only, against `EXTN-BROTLI-1`, `(bq)` ANSWERED — 2026-08-25 (two-hundred-and-fiftieth filing)
 
 **Sourcing.** No shell in this filing (librarian invocation). Every figure
@@ -279,6 +529,17 @@ split, and the dependency. §9 gains a `brotli` 8.0.4 dependency paragraph.
 **Backup currency and git/CI state: not independently checked this
 filing** — no shell. Every figure above is relayed from the engineer's
 own dispatch, per hard rule 8.
+
+> **★ CORRECTED 2026-08-25 (251st filing).** This entry's own ledger row
+> above reads "operator questions | ceiling **(bs)**, next free **(bs)**"
+> — **that is wrong.** The *Open operator questions* section itself states
+> "next free `(bt)`" twice, independently (once at `(bs)`'s own opening
+> line, once at its withdrawal footer), and `(bs)` was **retired by
+> withdrawal**, not left open — a retired letter does not become the next
+> free one (hard rule 2's Pass-ID analogue, applied to this ledger for the
+> first time). Corrected by re-reading the *Open operator questions*
+> section directly, not by re-deriving the number. The `Pass 124.0` entry
+> above uses the corrected value, `(bt)`.
 
 ---
 
@@ -76753,12 +77014,56 @@ agreement with a sibling constant.
 
 ---
 
-### `Pass 122.7` — ★ DIAGNOSED AND ROUTED — POINTER ONLY, not pending pdfce work — blue-channel residual on the now-shipped `Separation`/`DeviceN` shading-overprint route is `iccce`'s (decision 064)
+### `Pass 122.7` — ★★ RE-SCOPED AGAIN — from "reduce the blue floor" to "adopt a conformant transform" — a fitted table cannot reach the target, `iccce` proved it structurally, decision 087
 
 **Filed 2026-08-25 (two-hundred-and-forty-eighth filing) as "diagnose the
 blue-channel residual"; re-scoped the same day (two-hundred-and-forty-ninth
 filing, librarian) once the diagnosis landed — no code changed for the
-re-scope, measurement and routing only.**
+re-scope, measurement and routing only; ★ re-scoped AGAIN 2026-08-25
+(two-hundred-and-fifty-first filing) once `iccce` closed the loop with a
+structural finding, not a better number.**
+
+> **★★ 2026-08-25 (251st filing) — THE RESIDUAL IS NOT A CALIBRATION ERROR.
+> IT IS A GAMUT CLAMP, AND A FITTED LOOKUP TABLE CANNOT REPRODUCE ONE.**
+> `iccce` replied in
+> `open/2026-08-25-reply-the-blue-floor-is-the-intent-and-a-fitted-table-cannot-have-it.md`
+> with a structural proof, not a closer fit: Acrobat's blue = 0 is a
+> **normative out-of-gamut clamp** (ICC.1:2022 Annex F.8–F.16 — each linear
+> component is clamped to `[0,1]` **before** its inverse TRC is applied), and
+> **a clamp is a discontinuity** while a fitted table's interpolation is
+> smooth by construction, so no refit of the same structure can sit exactly
+> on the boundary on both channels at once. Proven with a 7-point sweep
+> where blue holds at exactly `0.000000` across the whole range — a
+> converged value moves with its input, a clamped one does not. **pdfce's
+> two interim tables missing in opposite directions (`naive`: blue exact,
+> green 13 low; `calibrated`/`neutral_black`: blue 55 high, green 9 high)
+> is now understood as the SIGNATURE of that structure, not as "picked the
+> wrong table."** See `ARCHITECTURE.md` §12 decision **087** for the full
+> acceptance and the archived version of this diagnosis; the full lesson is
+> `C:\personal_rag\pdf\lesson_20260825_fitted_cmyk_table_cannot_reproduce_a_gamut_clamp_because_a_clamp_is_a_discontinuity.md`.
+>
+> **Consequence for this entry: the scope changes, not just the routing.**
+> Was: *"diagnose (then reduce) the blue-channel residual."* Now: **"adopt a
+> conformant CMYK→display transform when `iccce` ships one — pdfce will NOT
+> refit its interim tables further."** Refitting is now a known dead end,
+> not merely unattempted; a future session that reaches for "try a finer
+> grid" or "add a correction term" on `cmyk_table.rs` should read this note
+> first. The regression target stated below (blue ≈ 0 AND green ≈ 156
+> together, on `GWG 1.0`'s shading cells) is unchanged and is exactly the
+> criterion a real transform must beat both interim tables on.
+>
+> **Uncomfortable and true, recorded because `iccce`'s reply named it
+> explicitly:** `settings::CmykIntent` currently offers the operator a
+> choice between `naive` and `calibrated`/`neutral_black` — **two answers
+> that are both wrong at the gamut boundary**, in opposite directions, by
+> construction. That is not a bug in either table; it is what the setting
+> is, until a real transform exists to replace both options.
+>
+> **This entry stays a POINTER, more firmly than before.** No pdfce code
+> changes are implied by this re-scope — the interim tables and the
+> `CmykIntent` setting are unchanged. What changed is that "improve this
+> later" is no longer an open possibility for the table-fitting approach
+> specifically; the next move is still `iccce`'s.
 
 **The diagnosis.** The residual is **entirely the interim CMYK→sRGB
 table**, not compositing — two independent signals on Ghent `GWG 1.0`'s
@@ -76819,6 +77124,63 @@ never established — a rendering reference only).
 Closing it outright would drop the only pdfce-side cross-reference to the
 channel note; it is kept open and inert instead. No further pdfce action
 is owed here — the next move is `iccce`'s, whenever they get to it.
+
+---
+
+### `Pass 124.1` — carry `/RI` through the graphics state, per-paint
+
+**Filed 2026-08-25 (two-hundred-and-fifty-first filing), surfaced by the
+`Pass 124.0` intent census and the `iccce` reply that came with it.**
+pdfce carries **no** rendering intent anywhere today. `ri` (and `i`,
+flatness) is an explicit content-stream no-op —
+`crates/pdfce-render/src/interpret.rs`, `b"i" | b"ri" => {}`. `/RI` inside
+an `/ExtGState` is **not read at all**: `apply_ext_gstate` has no such key
+and `GraphicsState` carries no field for one. Not blocked on `iccce` — this
+is pdfce's own graphics-state plumbing and is a **prerequisite** for
+consuming any real CMM, not a consequence of one arriving.
+
+**Shape, per ISO 32000-2 §11.7.5.3.** The rendering intent belongs at the
+**painting operation**, not at the document or the page — §11.7.5.3 is
+explicit that intent is graphics-state, set by `ri`/`/RI` and read at the
+moment a mark is painted. The correct carrier is therefore a field on
+`GraphicsState`, set by both routes (`ri` operator, `/ExtGState /RI`),
+read wherever a paint call currently ends its colour pipeline. **pdfce
+would initially populate every read of it with a per-document constant**
+(there is no consumer yet to vary it), but the carrier itself should be
+per-paint from the start — building it document-level now and widening it
+to per-paint later is the more expensive order, per the `iccce` reply's own
+argument: *"if your API takes an intent per call, pdfce can pass a
+per-document constant into it today and a real graphics-state value later
+without an API change. If it takes a per-document intent, the later change
+is a breaking one."* The same reasoning applies to pdfce's own internal
+carrier.
+
+**Two edge cases to build against, recorded here so they are not
+discovered mid-implementation:**
+
+- **`/Custom` is a LEGAL rendering-intent name.** §8.6.5.8 permits names
+  outside the standard four (`AbsoluteColorimetric`, `RelativeColorimetric`,
+  `Saturation`, `Perceptual`) and **obliges a reader to substitute a
+  default** rather than refuse. `veraPDF test suite
+  6-2-8-t03-fail-a.pdf` names one — a real fixture, not a hypothetical.
+  Whatever pdfce's carrier hands downstream (eventually `iccce`), it must
+  accept an unrecognised name and record what it substituted, not refuse
+  the paint.
+- **`/DestOutputProfile` bytes are still undecoded.** `output_intent_
+  blend_space()` (`interpret.rs`) resolves `/OutputIntents` →
+  `/DestOutputProfile` and reads only the stream dictionary's `/N` key;
+  `ICCBased` resolves through `/Alternate` or the spec's own `/N`
+  fallback. **pdfce has never decoded an ICC profile anywhere in the
+  codebase.** Carrying a rendering intent through the graphics state does
+  not by itself fix this — it is the companion gap, tracked separately in
+  `FEATURES.md`'s existing `/OutputIntents`-aware CMYK conversion /
+  `/ICCBased` rows (both gated on `iccce`, unlike this entry).
+
+**Not yet scoped to acceptance criteria or a fixture set — filing the
+shape and the two traps, not a committed test list.** No Pass sub-split
+performed; this may split into a graphics-state field alone (cheap,
+independently useful for disclosure) versus wiring a real consumer
+(gated on `iccce`) when it is picked up.
 
 ---
 
@@ -81462,6 +81824,71 @@ added. See that section below.
   verb, no acceptance-criteria research needed.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
+
+**NEW 2026-08-25 (two-hundred-and-fifty-first filing) — one question, and it
+is a licensing/publication-risk call, not the engineer's or this role's to
+resolve. Operator-question ceiling moves `(bs)` (retired by withdrawal,
+never reissued) → `(bt)`, next free `(bu)`:**
+
+- **★ (bt) Should `tools/ghent-check.py` be untracked (removed from the
+  public MIT repository's git history going forward, kept locally) because
+  of how much Ghent Output Suite detail it quotes?**
+
+  **What prompted it.** Answering `iccce`'s reply this session, the
+  engineer drafted the sentence *"ours does not carry document names"*
+  about pdfce's own Ghent tooling — then grepped before sending, and found
+  the opposite. `tools/ghent-check.py` mentions `GWG` **18 times**
+  (independently re-confirmed by this role's own `Grep` this filing: 18):
+  it names individual patches (`GWG 1.0`, `GWG 16.0`, `GWG 16.2`) and
+  **quotes one patch's printed caption verbatim** — *"If an 'X' appears,
+  rendering of Non-Knockout Transparency Groups (a transparency effect) is
+  not performed correctly."* The corrected sentence shipped in the reply
+  itself before it left (`Pass 124.0`, above); this question is the
+  follow-up the correction opened rather than closed.
+
+  **Why it is not the engineer's or this role's call.** This is a
+  copyright/licence-terms reading of the Ghent Output Suite's own licence
+  (affirmative-notice + commercial-context language), applied to what a
+  *tool's own documentation* may quote inside a public MIT repository —
+  exactly the class of judgement hard rule 6 reserves to the operator (via
+  `pdfce-spec-librarian` for spec text; this is the same shape pointed at a
+  different licensor). No RAG in this project's stack owns Ghent Output
+  Suite licensing specifically.
+
+  **The precedent already made, by a sibling, the other way.** The `iccce`
+  project faced the identical question about its own `docs/
+  GHENT_COMPATIBILITY.md` and its operator **chose on 2026-08-18** (`iccce`
+  commit `5e1e5df`) to leave that document **deliberately untracked** —
+  reasoning that the suite's licence carries an affirmative-notice
+  requirement and a commercial-context restriction, and that keeping
+  detailed quotation out of an MIT repository avoids the entanglement
+  rather than resting on a fair-quotation argument. **pdfce's exposure is
+  smaller** — one quoted caption and a list of patch identifiers inside a
+  development tool, not a whole compatibility document — but it is the
+  same class of question, and the two sibling projects are currently
+  answering it differently with no stated reason for the divergence.
+
+  **What each answer buys:**
+
+  - **"Yes — untrack it, keep it local"** — matches `iccce`'s own
+    precedent and removes the exposure entirely; costs the tool's
+    reasoning/history from `git log` for anyone without local access,
+    same trade `iccce` accepted.
+  - **"No — it stays tracked as-is"** *(the default if you do not
+    answer — narrowest interpretation, changes nothing)* — keeps the tool
+    fully in `git log`/`git blame`; the quoted caption and 18 `GWG`
+    mentions remain in a public repository's history, including in every
+    prior commit that touched the file, which untracking-going-forward
+    would not retroactively remove either.
+  - **"Trim the file instead"** — keep it tracked, remove the verbatim
+    caption quote and any patch-identifying strings not needed for the
+    harness to run; smaller exposure than full untracking, but does not
+    address history already committed, same as the "No" option's limit.
+
+  This entry does not resolve which of pdfce's other files (if any) carry
+  similar exposure — that survey is not performed here.
+
+---
 
 **NEW 2026-08-24 (two-hundred-and-forty-fourth filing) — one question,
 spec-governed and not the engineer's to answer alone. Operator-question
