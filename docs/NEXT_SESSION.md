@@ -355,7 +355,7 @@ Classified by rendering each failure and reading its diagnostics:
 | patch | what is actually wrong |
 |---|---|
 | `GWG 6.0` | **mesh shadings are unimplemented** (`shadings_mesh=2`). pdfce draws a black X placeholder where shading types 6/7 belong. Types 2 and 3 render correctly and match Acrobat. **Nothing to do with the sRGB bridge** |
-| the other **7** | `sep_all_approximated`, 6–12 per patch, on pages that **all now have `cmyk_buffer=1`** |
+| the other **7** | `sep_all_approximated`, 6–12 per patch, on pages that **all now have `cmyk_buffer=1`** — ★ but see the correction below: on `GWG 1.0` that counter spans **two different defects**, so do not read it as one population without checking each patch's cells |
 
 ★ **`GWG 6.0` is the case that falsifies the bridge theory outright.** Its traps
 measure **232 and 234** of 255 contrast — far too gross for a colour-conversion
@@ -374,13 +374,61 @@ precisely what a screen neutral cannot do.
 **Evidence, and its limits, stated separately:**
 - The counter fires **at the point of conversion**, so `/Separation /All`
   painting definitely happened — that part is not a guess.
-- On `GWG 1.0` the count is **6**, and the cells that visibly differ from
-  Acrobat are **exactly 6 of 10** — `a`, `b`, `f`, `g` (a strong purple X on
-  brown where Acrobat shows solid brown) plus `e`, `j` (an X over the shading).
-  A count matching the divergence exactly is coincidence-resistant.
-- **NOT established:** that those specific marks are the `/All` paint. Confirm
-  by dumping the content stream and reading the colour space the trap marks are
-  filled with, before writing any code.
+- On `GWG 1.0` **four** cells show a trap X: `a`, `b`, `f`, `g` — the font
+  and vector cells. That is the whole `/All` population on this patch.
+- **NOT established:** that those marks are the `/All` paint. Confirm by
+  dumping the content stream and reading the colour space they are filled
+  with, before writing any code.
+
+★★★★ **AND THE COUNT MATCH I CLAIMED HERE WAS WRONG — the operator corrected
+it 2026-08-25 and the correction splits this bucket in two.**
+
+This section said six cells diverge and `sep_all_approximated=6`, calling that
+*"coincidence-resistant"*. **Cells `e` and `j` have NO trap X.** His words:
+*"e and j don't have x but they are the wrong color and always have been since
+the x was removed."*
+
+I read the X-shaped figure inside those two cells as a failure marker. **It is
+the artwork.** The shading's own function traces an X; Acrobat draws it
+orange-on-orange so it vanishes, and pdfce draws it pink and cyan so it does
+not. So `e`/`j` are a **chromatic** defect, not a trap defect, and they are
+long-standing rather than new.
+
+⇒ The "6 = 6" match was **two different defects added together to reach a
+number**, which is worse than no match at all: it made a coincidence look like
+a mechanism.
+
+★ **I already held the evidence and did not use it.** `ghent-check.py` reported
+`GWG 1.0` as **4 traps**, at `152,148 / 152,68 / 67,69 / 67,149` — all four in
+the left-hand font/vector columns, none in the shading column. The harness and
+the operator agreed; only my eyeballing of the render did not.
+
+### What `e` and `j` actually are, measured
+
+Blue channel, `pdfce` versus Acrobat on the same two cells:
+
+| | whole cell | centre |
+|---|---:|---:|
+| Acrobat | **3** | **3** |
+| pdfce | **110** | **209** |
+
+Acrobat's blue is ~zero everywhere; pdfce's centre is dominated by it, which is
+the cyan core visible in the render. **pdfce is injecting blue that should not
+exist** — the signature of a colour path evaluating in the wrong space, not of
+a mis-composited overprint.
+
+⇒ **`e`/`j` belong to `Pass 97.1k` after all** — specifically its *shading*
+half: `ColorRamp::at` returns three-channel sRGB when the ramp is **built**, so
+a `DeviceCMYK` shading's authored colorants are gone before any canvas sees
+them. That also fits *"always have been"*: it is structural and predates every
+Pass this session. `122.5` moved those pixels (1 808 and 1 861 of them) without
+fixing them, because giving the page an ink buffer does not un-resolve a ramp
+that was flattened upstream.
+
+⇒ **REVISED SPLIT for `GWG 1.0`, and the pattern to check on the other six:**
+`a`/`b`/`f`/`g` are a trap-X defect (`/All` hypothesis, above); `e`/`j` are the
+shading colour path (`97.1k`). **Two causes, not one.** Do not let a single
+counter's total tempt you into merging them again.
 
 ★★ **AND THIS IS NEWLY FIXABLE BECAUSE OF `122.5`, which is the part worth
 noticing.** Applying a tint to *all available colorants* requires colorants to
