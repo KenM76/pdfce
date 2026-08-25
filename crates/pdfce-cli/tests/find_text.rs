@@ -214,3 +214,117 @@ fn no_matches_still_exits_zero() {
     assert_eq!(code(&out), 0, "an empty result is not a failure");
     assert!(stdout(&out).contains("matches=0"));
 }
+
+// ---------------------------------------------------------------------------
+// `Pass 127.0` — a zero match count is not evidence the needle is absent
+// ---------------------------------------------------------------------------
+
+fn stderr(out: &Output) -> String {
+    String::from_utf8(out.stderr.clone()).expect("stderr must be valid UTF-8")
+}
+
+fn type3_fixture(rel: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/synthetic/type3")
+        .join(rel)
+}
+
+/// A search over a document containing unsearchable text SAYS SO, on the
+/// summary line and in prose, and says it even when it found something.
+///
+/// # Why this is a test and not a nicety
+///
+/// `matches=0` has two causes and one appearance: the needle is absent, or
+/// the document's text was never recoverable as Unicode so no needle could
+/// have matched it. A Type 3 font (ISO 32000-1 §9.6.5) draws each glyph with
+/// a content stream named by an arbitrary `/CharProcs` key, so without a
+/// `/ToUnicode` CMap there is no sourced route to Unicode at all — and the
+/// text **renders perfectly**, which is what makes the failure invisible.
+///
+/// The fixture holds three Type 3 fonts: `/TA` with a `/ToUnicode` (so
+/// `HI!` is findable) and `/TB`/`/TC` with none. Asserting the disclosure on
+/// the SUCCESSFUL search is deliberate — a successful search still owes the
+/// operator the rest of the document, and a disclosure that only appears on
+/// a zero-hit run would be silent in exactly the mixed case real documents
+/// produce.
+#[test]
+fn a_search_discloses_the_text_it_could_not_read() {
+    let f = type3_fixture("tounicode_gate.pdf");
+    let out = run(&["find-text", &f.display().to_string(), "--needle", "HI!"]);
+    assert_eq!(code(&out), 0);
+
+    let s = stdout(&out);
+    assert!(
+        s.contains("matches=2"),
+        "the /ToUnicode-backed run is found: {s}"
+    );
+    assert!(
+        s.contains("type3_no_tounicode=2"),
+        "the two fonts with no /ToUnicode ride the machine-readable line, so a \
+         script can branch without parsing prose: {s}"
+    );
+    assert!(s.contains("unreadable_codes=2"), "{s}");
+    assert!(s.contains("identity_no_tounicode=0"), "{s}");
+
+    let e = stderr(&out);
+    assert!(
+        e.contains("Type 3 font(s)") && e.contains("/ToUnicode"),
+        "and the prose explains it, on stderr so it cannot contaminate a \
+         `find-text > hits.txt` capture: {e}"
+    );
+    assert!(
+        e.contains("§9.6.5"),
+        "the clause is cited, so an operator can check the claim: {e}"
+    );
+}
+
+/// The zero-hit case — the one that matters — carries the same disclosure.
+///
+/// Without it the operator reads "not found" as "not present", which is the
+/// wrong conclusion in the one situation where being wrong is expensive: the
+/// word IS on the page, and they can see it.
+#[test]
+fn a_zero_hit_search_still_says_what_was_unreadable() {
+    let f = type3_fixture("tounicode_gate.pdf");
+    let out = run(&[
+        "find-text",
+        &f.display().to_string(),
+        "--needle",
+        "zzzznotpresent",
+    ]);
+    assert_eq!(code(&out), 0, "an empty result is not a failure");
+
+    let s = stdout(&out);
+    assert!(s.contains("matches=0"), "{s}");
+    assert!(s.contains("type3_no_tounicode=2"), "{s}");
+
+    assert!(
+        stderr(&out).contains("not evidence the needle is absent"),
+        "the conclusion the operator must NOT draw is named outright: {}",
+        stderr(&out)
+    );
+}
+
+/// A document with nothing unreadable in it says nothing — the disclosure is
+/// conditional, not boilerplate.
+///
+/// A warning printed on every run is a warning nobody reads, and it would
+/// make the counters above meaningless as a signal. The zeros still ride the
+/// summary line for a script; only the prose is suppressed.
+#[test]
+fn a_fully_readable_document_gets_no_warning() {
+    let f = fixture("text/composite-editable.pdf");
+    let out = run(&["find-text", &f.display().to_string(), "--needle", "ABC"]);
+    assert_eq!(code(&out), 0);
+
+    assert!(
+        stdout(&out).contains("type3_no_tounicode=0"),
+        "the counter is always present: {}",
+        stdout(&out)
+    );
+    assert!(
+        !stderr(&out).contains("Type 3 font(s)"),
+        "but the prose is not: {}",
+        stderr(&out)
+    );
+}
