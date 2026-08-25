@@ -626,8 +626,21 @@ pdfce does not have yet.
 - **`/AIS true`** is not distinguished from `/AIS false`.
 - **Spot colorants** — four planes, not runtime `N`. Every remaining
   trap-criterion Ghent FAIL is in this bucket.
-- **Per-paint rendering intent** (§11.7.5.3) — pdfce carries one per page. No
-  corpus measurement of mid-page intent switching has been taken.
+- **Rendering intent** (§11.7.5.3, §8.6.5.8) — ★ **this entry said "pdfce
+  carries one per page" and that was wrong twice. pdfce carries NONE.** The
+  `ri` operator is an explicit no-op (`interpret.rs`, `b"i" | b"ri" => {}`) and
+  `/RI` in an `/ExtGState` is **not read at all** — `apply_ext_gstate` has no
+  such key and the graphics state has no field to hold it. The thing a reader
+  would find if they went looking, `settings::CmykIntent`
+  (`calibrated`/`neutral_black`/`naive`), is **not an ICC rendering intent**:
+  it selects which fixed `DeviceCMYK`→sRGB lookup table is used, and it is
+  per-invocation, not per page and not per paint. Corrected 2026-08-25 while
+  answering iccce, who would otherwise have designed an API against it.
+  **Now measured** (`tools/intent-census/`): 12 of 51 Ghent print-production
+  files name an intent, **1 of 51 names two**, and a byte-grep that does not
+  inflate streams finds **0 of 51** — so any future scan must inflate first.
+  Still **not** measured, because the census never builds a page tree: whether
+  a single *page* switches intent mid-stream.
 - **A non-isolated group whose SECOND buffer cannot be allocated** still falls
   back to isolated semantics — counted, disclosed, and now the *only* way a
   non-isolated group reaches `cmyk_groups_approximated`.
