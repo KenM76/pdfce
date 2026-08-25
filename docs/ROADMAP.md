@@ -96,7 +96,170 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `f6457ee` — `Pass 122.2` ships: the Ghent harness stops reporting `clean` on four patches it never examined — ★★★ ONE FAULT FIXED (the contrast floor, but NOT for the reason the founding review gave), ONE FAULT REPLACED BY AN HONEST REFUSAL (`MARK?`, not a detector), AND THE REVIEW'S OWN FLOOR FIGURE (26) DOES NOT REPRODUCE — CORRECTED CURRENT STANDING IS 25 — 2026-08-24 (two-hundred-and-forty-third filing)
+
+**Sourcing.** No shell in this filing (librarian invocation). Every figure
+below is **relayed from the engineer's own dispatch**, which does have a
+shell and stated its method beside each figure — per hard rule 8, this
+entire entry is the relayed case, not independently re-measured. All 16
+`tools/check-*` gates reported exit 0; no Rust changed (`tools/ghent-check.py`
+only), so no test/fmt/clippy/`cargo tree` delta applies — the harness is
+out-of-tree tooling, never shipped, never in `cargo test`.
+
+---
+
+#### What shipped, in one paragraph
+
+`docs/ghent-operator-review-2026-08-21.md` found two instrument faults in
+`tools/ghent-check.py`: a contrast floor calibrated against the wrong
+population, and a harness that only hunts a mark that should be ABSENT,
+blind to the suite's other criterion — a mark that should be PRESENT. This
+Pass repairs the first and replaces the second's false `clean` with an
+honest, distinct `MARK?` verdict rather than a detector — a working-looking
+colour-keyed detector was built, caught producing a false positive, and
+thrown away. **Both repairs also correct the founding review itself**: its
+diagnosis of fault 1 (needs an area term) does not survive re-measurement,
+and its patch list for fault 2 (seven patches) over-counted by three from a
+phrase-grep that found a mention, not a criterion.
+
+---
+
+#### ★★★ Fault 1 — the contrast floor: FIXED, but not for the diagnosed reason
+
+`CONTRAST_MIN` 12.0 → 6.0, calibrated against the operator's own cell-by-cell
+reading of `GWG 1.0` (the review's calibration set) — his four "clear fails"
+(cells i/d/j/e) measure **10.7, 10.2, 7.8, 7.4** at the harness's own scale;
+his two "faint outline only" (b/g) measure **4.1, 4.1**. An **empty interval**
+from 4.1 to 7.4 — 6.0 sits in the middle with ~1.4 levels of margin either
+side. Cross-checked before shipping: the pre-existing sub-perceptual
+population stays ≤1.1 across every Acrobat render; `GWG 16.2`'s genuinely
+invisible cells (1.3–3.3) stay rejected; across all 51 patches the change
+flips **exactly one** verdict, `GWG 1.0` pass → FAIL.
+
+**★★ The review's own diagnosis of this fault does not hold, and this is
+worth recording as its own finding, not folded into "fixed."** §3 of the
+review says the floor "has no area term" and that box 3's crosses are
+"roughly three times the linear size" of the calibration patch's, so the
+prescribed remedy was to make the threshold a function of mark size.
+**Measured, before implementing it: every trap on `GWG 1.0` and the
+`GWG 16.0` calibration patch is the SAME pixel size at this harness's render
+scale — 36–38 px square, both.** An area term would have changed nothing on
+this population; the fault was never geometry, it was one population's
+threshold (calibrated on ten sub-perceptual swatches) applied to a different
+population (moderate-contrast traps) with no second calibration point.
+⇒ **A fix aimed at a misdiagnosed cause is more dangerous than no fix,
+because it consumes the suspicion** — an area term would have shipped with a
+plausible-sounding justification and no measurable effect on the false
+`clean` it was meant to close, and the patch would have gone on reporting
+clean with a fix already in place and a reason to stop looking.
+
+---
+
+#### ★★★ Fault 2 — the positive criterion: NOT a detector; a false `clean` removed and replaced by an honest `MARK?`
+
+**★ CORRECTS THE FOUNDING REVIEW'S OWN LIST: FOUR PATCHES, NOT SEVEN.** The
+review's list (`GWG 050/080/081/082/150/151/152`) came from a `grep` of the
+suite's ReadMes for the phrase "check mark". `GWG 150`/`151`/`152` do NOT
+belong — their own ReadMe text states the suite's **negative** criterion
+(*"If a X can be seen, Optional Content is not handled right"*) and mentions
+"check mark" only while describing what the FAILURE CROSS is drawn out of
+("a cross consisting of 2 check marks"). **A grep for a phrase finds a
+mention, not a criterion.** Re-verified 2026-08-24 against Acrobat renders of
+all three: one check mark, "Default View", no cross, in both engines —
+**`GWG 15.0`/`15.1`/`15.2` genuinely PASS**, discharging the review's owed
+item 4 (three patches "no one has looked at"). The harness now reads each
+patch's own extracted ReadMe text at runtime (the pattern `ref_style`
+already used), so this list can no longer drift from the corpus by a stale
+grep.
+
+The four real check-mark patches score `MARK?` — a distinct verdict, counted
+UNRESOLVED, never folded into `pass` or `FAIL`. Ground truth recorded BY
+HAND in `tools/ghent-check.py`'s own docstring, against Acrobat-Pro renders,
+because no automated detector ships this Pass:
+
+| GWG | Acrobat shows | pdfce shows | verdict |
+|---|---|---|---|
+| `8.2` DeviceN (4 col.) | two olive marks ~46×56 px, upper-right of each image, plus a smaller inline one | inline mark only | **FAIL** |
+| `8.01` DeviceN (6 col.) | two dark-green marks on the images plus ~15 more along the spot-colour gradient bar | none | **FAIL** |
+| `8.1` DeviceN (5 col.) | same family | same absence | **FAIL** |
+| `5.0` Font Substitution | a black glyph, embedded modified Symbol font | rendered correctly | **PASS** |
+
+**★★ THE TRAP THIS RAISED, CAUGHT MID-SESSION, AND WHY NO DETECTOR SHIPS.** A
+first detector keyed on the mark's OWN COLOUR (olive, measured from
+`GWG 8.2`'s genuine mark). Run against `GWG 8.01` it reported the mark
+PRESENT — matching the green stop of that patch's own spot-colour gradient
+bar — while BOTH real marks were absent: a false green produced BY the fix
+for a false green, on the very patch the operator had already flagged.
+**The mark's colour is not a constant of the criterion.** Whatever
+eventually adjudicates these four must key on presence relative to a
+reference render, not on a hue. The working-looking detector was thrown
+away rather than shipped; see the RAG finding below.
+
+---
+
+#### ★★★★ Corrected current standing: `25 pass of 51`, not the review's `26` — the harness reports `24 / 11 / 16`
+
+Harness board after this Pass: **`24 pass / 11 FAIL / 16 UNRESOLVED`**
+(24+11+16 = 51). Arithmetic against the prior board (`29/10/12`): the one
+`GWG 1.0` flip accounts for `29 − 1 = 28` and `10 + 1 = 11`; the four
+reclassified check-mark patches account for `28 − 4 = 24` and
+`12 + 4 = 16`. Every patch accounted for.
+
+**The one-patch gap between the harness's `24` and the corrected `25` is
+`GWG 5.0`** — verified correct by hand (table above) but not yet
+adjudicable by the harness itself, so it stays folded into `MARK?`/
+UNRESOLVED on the board's own count rather than being hand-promoted into
+the harness's own tally.
+
+**★★ Why the review's `26 pass AT MINIMUM` does not reproduce, and this is
+left disputed rather than resolved.** That figure counted `GWG 1.1` as a
+flip FAIL → PASS, from the operator's own words: *"the combined render
+shows no cross at any contrast."* Re-examined 2026-08-24, cropped and
+magnified 6×, the **individual** patch render — what this harness actually
+scores — shows a solid, filled, high-contrast teal X on a blue swatch at
+contrast 17.4, not an outline. **The two observations may both be true of
+two different artefacts** — the combined multi-patch page vs. the
+single-patch render — and this filing does not overrule the only
+independent oracle this harness has ever had. `GWG 1.1` stays FAIL on the
+board. **See `Pass 122.4`, filed below**, to chase whether the combined and
+individual renders genuinely disagree — which would be a defect in its own
+right, independent of this instrument repair.
+
+---
+
+#### RAG
+
+New personal_rag/pdf lessons: `lesson_20260824_check_mark_detector_must_key_on_presence_not_hue.md`
+(the colour-matching trap) and
+`lesson_20260824_a_readme_phrase_grep_conflates_a_defining_criterion_with_an_incidental_mention.md`
+(the four-not-seven correction). New instance added to
+`D:\dev\rag\rust\a_plausible_explanation_that_predicts_the_right_order_of_magnitude_is_not_a_diagnosis.md`
+(the contrast-floor misdiagnosis — this instance flatly falsifies the
+mechanism rather than merely failing to separate two hypotheses of matching
+magnitude).
+
+**★ `docs/ghent-operator-review-2026-08-21.md` is NOT edited by this
+filing.** `Pass 122.2`'s own acceptance criteria say so explicitly — *"an
+oracle amended to agree with the instrument is not an oracle"* — and this
+role's remit treats it as engineer-owned. Its two now-superseded claims (the
+area-term diagnosis; the seven-patch list) are corrected here and in the
+Ghent standing board instead, with a pointer back to this entry.
+
+---
+
 ### `c4a85d0` — `Pass 97.1g`: a non-isolated group on an ink page can finally see what is under it — ★★ THE ACCEPTANCE CRITERION IS MET (`cmyk_groups_approximated` 118 → 0) AND THE HEADLINE RESULT IS STILL NEGATIVE: ZERO PIXELS DIFFER IN ANY CORPUS PDFCE HAS — 2026-08-24 (two-hundred-and-forty-second filing)
+
+**★ AMENDED 2026-08-24, LATER THE SAME DAY, by `Pass 122.2` (`f6457ee`,
+243rd filing) — the Ghent board figure quoted below is superseded within
+hours of being filed.** This entry's own line said *"Ghent board: 29 pass /
+10 FAIL / 12 unresolved — unchanged... corrected ceiling 26"*. **Both halves
+of that parenthetical are now stale**: the harness itself moved to
+`24 / 11 / 16` (two instrument faults repaired, not a rendering change —
+`Pass 97.1g` still changed zero pixels in every corpus pdfce has, which is
+this entry's own headline and is UNAFFECTED), and the corrected ceiling
+is **25, not 26** (see `Pass 122.2`'s *Shipped* entry, immediately below
+this one, for the full correction — the review's own `26` figure does not
+reproduce). Kept legible rather than rewritten, per hard rule 1.
 
 **Sourcing.** No shell in this filing (librarian invocation). Every figure
 below is **relayed from the engineer's own dispatch**, which does have a
@@ -67194,7 +67357,86 @@ parallel one).
 
 ---
 
-### ★★★★★ THE GHENT STANDING BOARD — **26 pass AT MINIMUM, of 51 patches** (harness-reported `29 / 10 / 12`, CORRECTED DOWNWARD 2026-08-21 by the 225th filing; three optional-content patches still unchecked) — ★★★★★ **THE HARNESS IMPLEMENTS ONE OF THE SUITE'S TWO PASS CRITERIA, AND THE OTHER HAS BEEN REPORTED `clean` FOR ITS ENTIRE LIFE — SO EVERY FIGURE BELOW THIS LINE, INCLUDING ALL THE HISTORICAL ONES, IS OVER-COUNTED BY THE SAME FAMILY OF SEVEN PATCHES. THE DELTAS ARE UNAFFECTED; THE LEVELS ARE NOT** — see the correction block immediately below — ★★★ **RE-MEASURED 2026-08-21 (224th filing, `Pass 97.1e`/`97.1f`, `a277931`+`ff4b4bf`) AGAINST A BINARY BUILT FROM `06aaad3` IN A WORKTREE; the previous figure (**26 / 14 / 11**) is kept below as history and was NOT stale — it was correct at its own commit, and this is a SHIP moving it, not a correction** — ★★ **AND THE COMPOSITION OF THE REMAINING 10 FAILs IS NOW THE BOARD'S MOST USEFUL FACT: every one of them is an OVERPRINT, SPOT or ICC patch. Not one is a blending-space failure any more** — ★★ **FIGURE CORRECTED TWICE OVER 2026-08-19 (189th filing): once by a SHIP and once because the PREVIOUS FIGURE WAS ALREADY STALE** — the ONE architectural item that unblocks the largest cluster — opened 2026-08-18 (hundred-and-sixty-sixth filing)
+### ★★★★★★ THE GHENT STANDING BOARD — **25 pass AT MINIMUM, of 51 patches** (harness-reported `24 / 11 / 16` after `Pass 122.2`'s instrument repair, CORRECTED 2026-08-21 by the 225th filing and AGAIN 2026-08-24 by the 243rd; `GWG 1.1` remains DISPUTED between the harness and the operator's own review, unresolved — see `Pass 122.4`) — ★★★★★ **THE HARNESS IMPLEMENTS ONE OF THE SUITE'S TWO PASS CRITERIA, AND THE OTHER HAS BEEN REPORTED `clean` FOR ITS ENTIRE LIFE — SO EVERY FIGURE BELOW THIS LINE, INCLUDING ALL THE HISTORICAL ONES, IS OVER-COUNTED BY THE SAME FAMILY** — see the correction blocks immediately below — ★★★ **RE-MEASURED 2026-08-21 (224th filing, `Pass 97.1e`/`97.1f`, `a277931`+`ff4b4bf`) AGAINST A BINARY BUILT FROM `06aaad3` IN A WORKTREE; the previous figure (**26 / 14 / 11**) is kept below as history and was NOT stale — it was correct at its own commit, and this is a SHIP moving it, not a correction** — ★★ **AND THE COMPOSITION OF THE REMAINING FAILs IS NOW THE BOARD'S MOST USEFUL FACT: every one of them is an OVERPRINT, SPOT or ICC patch. Not one is a blending-space failure any more** — ★★ **FIGURE CORRECTED TWICE OVER 2026-08-19 (189th filing): once by a SHIP and once because the PREVIOUS FIGURE WAS ALREADY STALE** — the ONE architectural item that unblocks the largest cluster — opened 2026-08-18 (hundred-and-sixty-sixth filing)
+
+#### ★★★★★★ CORRECTED AGAIN 2026-08-24 (`Pass 122.2`, `f6457ee`, two-hundred-and-forty-third filing) — ONE FAULT FIXED, ONE FAULT REPLACED BY AN HONEST REFUSAL, AND THE 225th FILING'S OWN FLOOR FIGURE DOES NOT REPRODUCE
+
+**Corrected standing: `25 pass of 51`, not the 225th filing's `26`.** Harness
+now reports **`24 pass / 11 FAIL / 16 UNRESOLVED`** (24+11+16=51). The
+one-patch gap between the harness's `24` and the corrected `25` is `GWG 5.0`
+— verified correct by hand but not yet adjudicable by the harness itself
+(no detector shipped, see below), so it stays inside `MARK?`/UNRESOLVED on
+the board's own count.
+
+**Arithmetic against the prior board (`29/10/12`), so every patch is
+accounted for:** one `GWG 1.0` flip (pass→FAIL) takes `29→28` / `10→11`;
+four reclassified check-mark patches (formerly false `clean`, now `MARK?`)
+take `28→24` / `12→16`.
+
+**Why the 225th filing's `26 pass AT MINIMUM` does NOT reproduce.** That
+figure counted `GWG 1.1` as a flip FAIL → PASS from *"the combined render
+shows no cross at any contrast."* Re-examined 2026-08-24, cropped and
+magnified 6×: the **individual** patch render — what this harness actually
+scores — shows a solid, filled, high-contrast teal X at contrast 17.4, not
+an outline. **The two observations may both be true of two different
+artefacts** (the combined multi-patch page vs. the single-patch render), and
+this filing does not overrule the only independent oracle this harness has
+ever had. `GWG 1.1` stays FAIL. **`Pass 122.4`** (Backlog) exists to chase
+whether the combined and individual renders genuinely disagree — which
+would be a defect in its own right.
+
+**Fault 1 (contrast floor) FIXED — but the 225th filing's OWN DIAGNOSIS of
+it does not hold, and that is a finding in itself.** `CONTRAST_MIN`
+12.0 → 6.0, calibrated against the operator's cell readings: four "clear
+fails" at 10.7/10.2/7.8/7.4, two "faint outline only" at 4.1/4.1 — an empty
+interval 4.1–7.4, 6.0 in the middle. The 225th filing's prescription — *"the
+floor has no area term… make the threshold a function of mark size"* —
+**measured false before being implemented**: every trap on `GWG 1.0` and the
+`GWG 16.0` calibration patch is the SAME pixel size (36–38 px) at this
+harness's render scale. An area term would have changed nothing. **A fix
+aimed at a misdiagnosed cause is more dangerous than no fix, because it
+consumes the suspicion** — it would have shipped with a plausible reason to
+stop looking and zero effect on the false `clean`. Net board effect: exactly
+one flip, `GWG 1.0` pass → FAIL.
+
+**Fault 2 (positive criterion) — NOT a detector. A false `clean` is removed
+and replaced by an honest `MARK?` verdict, counted UNRESOLVED, never folded
+into `pass` or `FAIL`.** ★ **AND THE 225th FILING'S OWN LIST WAS WRONG: FOUR
+PATCHES, NOT SEVEN.** `GWG 150`/`151`/`152` were included by a `grep` for
+the phrase "check mark" — but those three ReadMes state the suite's
+NEGATIVE criterion and mention "check mark" only while describing what the
+FAILURE CROSS is drawn out of. **A grep for a phrase finds a mention, not a
+criterion.** Re-verified against Acrobat renders: **`GWG 15.0`/`15.1`/`15.2`
+genuinely PASS**, discharging owed item 4 below. The harness now reads each
+patch's own extracted ReadMe text at runtime, so this list cannot drift from
+the corpus again.
+
+**Ground truth for the four real check-mark patches, by hand (Acrobat
+renders, 2026-08-24), since no detector ships:**
+
+| GWG | Acrobat shows | pdfce shows | verdict |
+|---|---|---|---|
+| `8.2` DeviceN (4 col.) | two olive marks ~46×56 px, upper-right of each image, plus a smaller inline one | inline mark only | **FAIL** |
+| `8.01` DeviceN (6 col.) | two dark-green marks on the images plus ~15 more along the spot-colour gradient bar | none | **FAIL** |
+| `8.1` DeviceN (5 col.) | same family | same absence | **FAIL** |
+| `5.0` Font Substitution | a black glyph, embedded modified Symbol font | rendered correctly | **PASS** |
+
+**★★ THE TRAP THIS RAISED, CAUGHT MID-SESSION.** A first detector keyed on
+the mark's OWN COLOUR (olive, from `GWG 8.2`). Run against `GWG 8.01` it
+reported the mark PRESENT — matching the green stop of that patch's own
+spot-colour gradient bar — while BOTH real marks were absent: a false green
+produced BY the fix for a false green. **The mark's colour is not a
+constant of the criterion**; a future detector must key on presence
+relative to a reference render, not on a hue. Thrown away rather than
+shipped. RAG:
+`C:\personal_rag\pdf\lesson_20260824_check_mark_detector_must_key_on_presence_not_hue.md`.
+
+**Owed, DISCHARGED by this Pass:** the harness repair and the re-measure.
+**Owed, still:** a reference-render-based (not hue-based) detector for the
+four `MARK?` patches; `Pass 122.4` for the combined-vs-individual render
+question. Full record: the `Pass 122.2` *Shipped* entry, top of *Shipped*.
+
+---
 
 #### ★★★★★ CORRECTED 2026-08-21 (two-hundred-and-twenty-fifth filing) — **BY AN ORACLE, NOT BY A RE-MEASUREMENT, AND THAT DISTINCTION IS THE WHOLE FINDING**
 
@@ -67276,7 +67518,12 @@ everything below.
 
 **Owed:** `Pass 122.2` (teach the harness the positive criterion and give the
 floor an area term, calibrated against the table above), then **re-measure and
-re-file**, then **check `15.0`/`15.1`/`15.2`**.
+re-file**, then **check `15.0`/`15.1`/`15.2`**. **★ DISCHARGED 2026-08-24 —
+see the correction block above this one.** Shipped in a different shape than
+requested here: no area term (measured and refused, see above), `MARK?`
+rather than `MISSING-MARK`, and this block's own **26 pass AT MINIMUM** does
+NOT reproduce — kept below, unrewritten, as the record of what this filing
+believed at the time.
 
 ---
 
@@ -75458,43 +75705,49 @@ reaches 0 on the suite; corpus A/B.
 
 ---
 
-### `Pass 122.2` — teach `tools/ghent-check.py` the POSITIVE criterion, and give its contrast floor an AREA term
+### `Pass 122.2` — **SHIPPED 2026-08-24** (`f6457ee`) — moved to *Shipped*
 
-**Filed 2026-08-21 (two-hundred-and-twenty-fifth filing).** The harness scores
-**one of the suite's two pass criteria**; full statement of both faults in the
-*Ghent standing board*, under *Next up*. **This is the instrument repair every
-Ghent figure in the repository is currently waiting on.**
+The full entry is in *Shipped*, top of section (two-hundred-and-forty-third
+filing). **Shipped in a different shape than filed**: item 1 (the positive
+criterion) shipped as an honest `MARK?` verdict for the four real check-mark
+patches, not a `MISSING-MARK` detector — a working-looking colour-keyed
+detector was built, caught producing a false positive, and thrown away.
+Item 2 (an area term on the contrast floor) was **measured and refused**:
+the floor moved from a bad calibration to a good one (`CONTRAST_MIN`
+12.0 → 6.0), but an area term specifically does not hold — every trap on
+`GWG 1.0` and the `GWG 16.0` calibration patch is the same pixel size at
+this harness's scale. Item 3 (outline-vs-fill) is **not built** — out of
+scope once a detector wasn't shipped. Item 4 (re-measure, check
+`15.0`/`15.1`/`15.2`) is done: those three genuinely PASS. **Also
+corrected the review's own two claims** (the area-term diagnosis; a
+seven-patch list that was actually four) — see the Shipped entry and the
+Ghent standing board, both above/below.
 
-**Four items, in order:**
+---
 
-1. **The positive criterion.** Per-patch, from each ReadMe: **which** marker,
-   **where**, **what colour**. Seven patches use it — GWG `050`, `080`, `081`,
-   `082`, `150`, `151`, `152` (`grep` the ReadMes for *"check mark"*).
-   **Report a missing mark as its OWN verdict** (`MISSING-MARK`), **not folded
-   into `X`** — the two are different facts and a reader who cannot tell them
-   apart will chase the wrong defect.
-2. **An area term on the contrast floor.** `CONTRAST_MIN = 12.0` is calibrated
-   for one mark size. **Do not lower it** — that drags box 11's genuinely
-   invisible 1.3–3.1 population in. Make the threshold a function of the mark's
-   size.
-3. **Express outline-vs-fill.** The operator gave the mechanism twice by name
-   (*"just an issue with the layer edge"*, *"the math for the edges of the x
-   differs slightly with rounding"*). **A mark present in OUTLINE only is a
-   different fact from a mark present in FILL**, and the harness has no way to
-   say so today.
-4. **Re-measure and re-file**, then **check `15.0`/`15.1`/`15.2`**, which no one
-   has looked at.
+### `Pass 122.4` — GWG 1.1: does the COMBINED Ghent render disagree with the INDIVIDUAL patch render it is assembled from?
 
-**★ THE CALIBRATION SET.** `docs/ghent-operator-review-2026-08-21.md` — the
-operator's cell-level judgements, **the first independent calibration this
-harness has ever had**. Every prior threshold came from `GWG 16.0` alone
-(2026-08-17), whose answer was already known from a code change: **that is
-self-consistency, not ground truth.** ★★ **Do not edit that file** — it is the
-oracle, and an oracle amended to agree with the instrument is not an oracle.
+**Filed 2026-08-24 (two-hundred-and-forty-third filing), spun out of
+`Pass 122.2`'s own re-verification.** The founding review read `GWG 1.1` as
+a pass from the **combined** multi-patch page (*"the combined render shows
+no cross at any contrast... a faint outline only"*). `Pass 122.2`'s
+re-check, on the **individual** patch render — the one this harness actually
+scores — found a solid, filled, high-contrast teal X at contrast 17.4, not
+an outline. **Both observations may be correct, of two different
+artefacts**, and neither has been overruled by the other: if the combined
+page and the single-patch render of the SAME patch genuinely disagree, that
+is a defect in its own right, independent of and prior to any instrument
+repair — a document that reads differently depending on which page it is
+composited onto is not a rendering fault this project has a name for yet.
 
-**Acceptance:** the harness reproduces all eight of the operator's rows in §1 of
-that document, `MISSING-MARK` is a distinct verdict, and the re-measured board
-is filed with `R210`'s criteria statement attached.
+**Acceptance:** render `GWG 1.1` both ways from the same binary at the same
+scale, diff the patch's own bounding box between the two renders. If they
+agree, the dispute is `GWG 1.1` itself (a genuinely borderline mark) and the
+Ghent standing board's FAIL stands unless the operator overrules it a second
+time. If they disagree, scope a new Pass for the compositing defect that
+causes it — page assembly, or the combined document's own shared-resource
+graphics state leaking between patches, are the two prior candidates
+worth checking first.
 
 ---
 
@@ -92311,7 +92564,14 @@ same cause (hashes exist only at commit time), two different failure modes.
   harness.
   (b) **An unadjudicated patch gets its OWN verdict**, never folded into
   `pass` and never into `FAIL`. `Pass 122.2` builds `MISSING-MARK` for exactly
-  this.
+  this. **★ AMENDED 2026-08-24 (243rd filing, `Pass 122.2` shipped,
+  `f6457ee`): the verdict that shipped is named `MARK?`, not `MISSING-MARK`,
+  and it is honest UNCERTAINTY rather than a detected absence** — a
+  colour-keyed presence detector was built, caught producing a false
+  positive (see the RAG finding this Pass filed), and thrown away rather
+  than shipped. Clause (b)'s obligation is satisfied either way: the point
+  is that the four patches get a THIRD verdict distinct from `pass`/`FAIL`,
+  which `MARK?` is.
   (c) **Name the calibration source of every threshold**, and **how many
   independent cases it was calibrated against.** *"Calibrated on one patch
   whose answer was known"* is a sentence that would have prevented both
@@ -92399,6 +92659,28 @@ same cause (hashes exist only at commit time), two different failure modes.
   narrow enough that nobody recognised it in a different setting. That is the
   argument for widening a scope note as soon as a second setting appears,
   rather than waiting for a third.
+
+  **★★★ INSTANCE-NOTE, 2026-08-24 (243rd filing, `Pass 122.2`, `f6457ee`) —
+  THIS IS `R210` BEING ACTED ON, NOT MERELY RESTATED, AND IT FOUND THE RULE'S
+  OWN FOUNDING DOCUMENT MIS-STATING THE CRITERIA SET IT WAS WARNING ABOUT.**
+  `docs/ghent-operator-review-2026-08-21.md` — the calibration set this rule
+  names as R210's own founding evidence — listed **seven** patches using the
+  suite's positive criterion, found by `grep`ping the ReadMes for the phrase
+  "check mark". **Three of the seven (`GWG 150`/`151`/`152`) do not use that
+  criterion at all** — their ReadMes state the suite's NEGATIVE criterion and
+  mention "check mark" only while describing what the failure cross is drawn
+  out of. **A phrase match found a mention, not a criterion**, which is
+  exactly the shape clause (c) warns about (*"name the calibration source of
+  every threshold, and how many independent cases it was calibrated
+  against"*) — except here the miscount was in the CRITERIA SET itself, one
+  level upstream of any threshold. **Not a new rule**: this is the same
+  mechanism R210 already names, found a third time, this time inside the
+  document that R210 was minted to explain. The founding review's other
+  claim (an area term repairs the contrast floor) also did not survive
+  re-measurement — see the Ghent standing board's 2026-08-24 correction,
+  `Pass 122.2`'s *Shipped* entry, for both corrections in full. **The
+  self-referential shape is the point worth keeping**: a rule that instructs
+  "state your criteria" is not exempt from needing its own criteria checked.
 
 - **R211 — WHEN TWO CODE PATHS OWE EACH OTHER BYTE-IDENTICAL OUTPUT, THAT IS A
   *PRECISION* CONTRACT, NOT ONLY AN ARITHMETIC ONE: NARROW EXACTLY WHAT THE

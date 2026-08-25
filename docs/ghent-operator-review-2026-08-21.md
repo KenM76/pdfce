@@ -7,6 +7,89 @@ instrument faults they expose. It exists because these are the only
 independent judgements of pdfce's Ghent output that have ever been taken —
 every other number in this project came from the harness scoring itself.
 
+---
+
+## ★★ AMENDED 2026-08-24 BY `Pass 122.2` — READ THIS BEFORE ACTING ON §2 OR §3
+
+**The operator's cell-by-cell readings below still stand. Two of MY analyses
+of them do not**, and both were wrong in the direction that would have made
+someone implement the wrong thing confidently. The original wording is left
+in place below rather than edited, because this document's value is that it
+is dated; the corrections are here, at the top, where they cannot be missed.
+
+**1. §2's "seven of the 51 patches use the positive criterion" is FOUR.**
+`GWG150`, `GWG151` and `GWG152` are not among them. Those three state on
+their own face *"If a X can be seen, Optional Content is not handled right"*
+— the NEGATIVE criterion, which the harness already implements. Their
+ReadMes mention a check mark only while describing what the failure cross is
+drawn **out of** (*"a cross consisting of 2 check marks"*).
+
+⇢ The list was built by grepping the ReadMes for the phrase *"check mark"*
+and was then read as if it had been built by reading the rule. **A grep for a
+phrase finds a mention, not a criterion.** The harness now reads each patch's
+own extracted text at runtime instead of carrying a list.
+
+**2. §3's diagnosis — "the contrast floor has no area term" — is WRONG, and
+the fix it recommends would have changed nothing.** §3 says box 3's crosses
+are *"roughly three times the linear size"* of the calibration patch's, so
+the threshold should become a function of mark size. Measured at the scale
+the harness actually renders: **every trap on `GWG 1.0` is 36–38 px square,
+and the `GWG 16.0` calibration traps are 38 px square. They are the same
+size.**
+
+The real fault was simpler and worse: `CONTRAST_MIN = 12.0` had been
+calibrated against **one** population — the sub-perceptual differences
+Acrobat leaves in a visually-clean render — and never against genuine traps
+of moderate contrast, because none had been measured. §1's rows are that
+missing population, and they separate cleanly:
+
+| contrast | operator's reading |
+|---:|---|
+| 10.7, 10.2, 7.8, 7.4 | the four **clear fails** (cells i, d, j, e) |
+| 4.1, 4.1 | the two **"faint outline only"** (cells b, g) |
+
+An empty interval from 4.1 to 7.4. The floor is now **6.0**, inside it.
+
+⇢ ★ **Had the area term been built as recommended, `GWG 1.0` would have gone
+on reporting `clean` — with a fix in place and a plausible reason to stop
+looking.** A fix aimed at a misdiagnosed cause is more dangerous than no fix,
+because it consumes the suspicion.
+
+**3. §1 row 4 (`GWG 1.1`, fail → pass) is NOT REPRODUCIBLE, and is left open
+rather than overruled.** The harness still reports one mark at contrast
+**17.4**; cropped and magnified 6×, it is a solid, filled, high-contrast teal
+X on a blue swatch, not an outline. But the operator's own wording names a
+**different artefact** — *"the **combined** render shows no cross"* — and the
+harness scores **individual patch** renders. Both observations may be true.
+⇢ If the combined and individual renders genuinely differ, **that is a defect
+in its own right and nobody has looked**; it is filed as `Pass 122.4`.
+
+**4. §5 owed item 4 is DISCHARGED.** *"Check the three optional-content
+patches, which no one has looked at."* Looked at, side by side against
+Acrobat renders: all three show one check mark and *"Default View"*, no
+cross, in both engines. `GWG 15.0`, `15.1`, `15.2` **genuinely pass**. The
+only difference from Acrobat is the swatch's cyan — the known CMYK
+colorimetry gap, not a trap.
+
+**5. §5's "26 pass at minimum" is now 25.** It reached 26 by flipping
+`GWG 1.1`, which correction 3 above does not support. Current harness board:
+**11 FAIL / 24 pass / 16 UNRESOLVED**, plus `GWG 5.0` whose mark is present
+but which the harness cannot adjudicate ⇒ **25**.
+
+**One thing §5 item 1 should have said and could not.** A first attempt at
+the check-mark detector keyed on the mark's **colour**, measured from
+`GWG 8.2` (olive). Run against `GWG 8.01` it reported the mark PRESENT — by
+matching the green end of that patch's spot-colour gradient bar — while
+**both real marks were absent**. ⇒ **The mark's colour is not a constant of
+the criterion**; `GWG 8.2`'s marks are olive and `GWG 8.01`'s are dark green.
+Any detector must key on presence relative to a reference render, not a hue.
+No detector shipped in `122.2` for exactly this reason.
+
+Full derivation and the measured populations: `ROADMAP.md`'s `Pass 122.2`
+Shipped entry, and the docstring of `tools/ghent-check.py`.
+
+---
+
 ★ **Treat this as an ORACLE, not as feedback.** The harness had no
 independent check before today; its thresholds were calibrated against one
 patch (`GWG 16.0`, 2026-08-17) whose answer was known from a code change.

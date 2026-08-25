@@ -56,16 +56,25 @@ false in both directions at different times; the Flatten row below is
 the worked example (panel: reachable; ribbon `edit.form_flatten`:
 scaffolded and inert).
 
-**★★ GHENT FIGURES IN THIS FILE ARE HARNESS FIGURES, AND THE HARNESS
-SCORES ONE OF THE SUITE'S TWO PASS CRITERIA (added 2026-08-21).**
-`tools/ghent-check.py` hunts for a **cross that should not be there**; seven
-of the 51 patches instead fail by the **absence of a check mark**, and have
-been reported `clean` since the harness was written. Its contrast floor also
-has no area term. **So every `N of 51` below is an OVER-COUNT of the same
-family — the current standing is `26 pass at minimum`, not the harness's
-`29`, and the DELTAS each row quotes are unaffected while the LEVELS are
-not.** Repair is `ROADMAP.md`'s `Pass 122.2`; the calibration set is
-`docs/ghent-operator-review-2026-08-21.md`.
+**★★ GHENT FIGURES IN THIS FILE ARE HARNESS FIGURES (updated 2026-08-24,
+`Pass 122.2`, `f6457ee`).** `tools/ghent-check.py` now separates its
+**negative** criterion (a cross that should be ABSENT) from its
+**positive** criterion (a check mark that should be PRESENT, on four
+patches — `GWG 5.0`/`8.2`/`8.1`/`8.01`; a prior filing's claim of **seven**
+was a phrase-grep over-count, corrected the same Pass) — the four score an
+honest `MARK?`, counted UNRESOLVED, not a detector (a colour-keyed one was
+built, produced a false positive, and was thrown away). Harness now reports
+**`24 pass / 11 FAIL / 16 UNRESOLVED`** of 51. **Corrected current standing:
+`25 pass`** — the 24 harness passes plus `GWG 5.0`, verified correct by hand
+but not yet harness-adjudicable. **This is lower than a prior filing's `26`
+floor**: that figure counted `GWG 1.1` as a pass from the COMBINED Ghent
+render; re-examined on the INDIVIDUAL patch render this harness scores, it
+shows a solid filled X, so it stays FAIL here, disputed rather than
+resolved (`ROADMAP.md`'s `Pass 122.4`). **Every `N of 51` below is still an
+OVER-COUNT candidate of the same instrument-repair kind — the DELTAS each
+row quotes are unaffected, the LEVELS may not be.** Calibration set:
+`docs/ghent-operator-review-2026-08-21.md` (two of its own claims corrected
+by `Pass 122.2` — see `ROADMAP.md`'s Ghent standing board).
 
 **ce dimension** = one pdfce itself authors. **pdf dimension** = one
 already in the file from CAD; pdfce reads it, never alters it

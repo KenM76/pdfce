@@ -59279,3 +59279,112 @@ behind).
 - Backup currency and git/CI state not independently checked this
   filing — no shell. Everything above is relayed from the engineer's
   dispatch, per hard rule 8.
+
+## 2026-08-24 (two-hundred-and-forty-third filing) — `Pass 122.2` ships: the Ghent harness stops reporting `clean` on four patches it never examined; one instrument fault fixed, one replaced by an honest refusal; the founding review's own floor figure (26) does not reproduce, corrected standing is 25
+
+**Shipped:**
+- **`Pass 122.2` (`f6457ee`).** `tools/ghent-check.py` repaired against
+  `docs/ghent-operator-review-2026-08-21.md`'s two findings. Fault 1 (the
+  contrast floor): `CONTRAST_MIN` 12.0 → 6.0, calibrated against the
+  operator's own cell readings — an empty interval 4.1–7.4, 6.0 in the
+  middle. Fault 2 (the positive/check-mark criterion): NOT a detector — a
+  working colour-keyed one was built, caught producing a false positive,
+  and thrown away. The four real check-mark patches (`GWG 5.0`/`8.2`/
+  `8.1`/`8.01`) now score an honest `MARK?` verdict, counted UNRESOLVED,
+  never folded into `pass` or `FAIL`. `GWG 15.0`/`15.1`/`15.2` were
+  confirmed genuine PASSes (discharging the review's owed item 4) once
+  the harness stopped reading them as check-mark patches at all — they
+  were only ever on the review's list by a phrase-grep over-count.
+
+**Decisions made this session:**
+- No architectural decision — an out-of-tree tooling repair
+  (`tools/ghent-check.py` only), not a crate-boundary/library/invariant
+  choice. `ARCHITECTURE.md` §12 unaffected; no Rust changed, so no
+  test/fmt/clippy/`cargo tree` delta applies.
+- `docs/ghent-operator-review-2026-08-21.md` is **not** edited by this
+  filing, per `Pass 122.2`'s own acceptance criteria (*"an oracle amended
+  to agree with the instrument is not an oracle"*) and this role's
+  standing remit (engineer-owned). Its two now-superseded claims are
+  corrected in `ROADMAP.md`'s Ghent standing board and `Pass 122.2`'s own
+  *Shipped* entry instead, with a pointer back from the review file's own
+  location left for the engineer to add if desired.
+
+**Findings + decisions:**
+- **★★ The founding review's own diagnosis of fault 1 does not hold, and
+  the correction matters more than the fix.** The review prescribed an
+  area term (bigger marks should read as more visible). Measured before
+  implementing it: every trap on the failing patch and the `GWG 16.0`
+  calibration patch is the SAME pixel size (36–38 px) at harness scale.
+  An area term would have changed nothing. **A fix aimed at a
+  misdiagnosed cause is more dangerous than no fix, because it consumes
+  the suspicion** — it would have shipped with a plausible rationale and
+  zero measurable effect on the actual false-`clean` output.
+- **★★ The founding review's own patch list for fault 2 was wrong: four
+  patches, not seven.** `GWG 150`/`151`/`152` were included by a `grep`
+  for the phrase "check mark" in their ReadMes, but those three state the
+  suite's NEGATIVE criterion and mention "check mark" only while
+  describing what the failure cross is drawn out of. **A grep for a
+  phrase finds a mention, not a criterion.** The harness now reads each
+  patch's own ReadMe text at runtime so this list cannot drift again.
+- **★★★ The trap caught mid-session: a colour-keyed presence detector
+  false-positived on the very patch already flagged as wrong.** Keyed on
+  the mark's own colour (olive, from `GWG 8.2`), the detector reported
+  `GWG 8.01`'s mark PRESENT by matching the green stop of that patch's
+  own spot-colour gradient bar, while both real marks were absent. **The
+  mark's colour is not a constant of the criterion.** No detector
+  shipped; the harness reports `MARK?` instead.
+- **★ Corrected current standing: `25 pass of 51`, not the 225th filing's
+  `26`.** Harness now reports `24 pass / 11 FAIL / 16 UNRESOLVED`
+  (24+11+16=51 — one `GWG 1.0` flip, four reclassified check-mark
+  patches, reconciles exactly against the prior `29/10/12`). The
+  one-patch gap between the harness's 24 and the corrected 25 is
+  `GWG 5.0`, verified correct by hand but not yet harness-adjudicable.
+  **The review's `26` does not reproduce** because it counted `GWG 1.1`
+  as a pass from the COMBINED Ghent render; re-examined on the
+  INDIVIDUAL patch render this harness actually scores, it is a solid
+  filled X at contrast 17.4, not an outline. Left disputed, not
+  resolved — this filing does not overrule the operator's own review,
+  the only independent oracle this harness has ever had. New Backlog
+  entry `Pass 122.4` opened to check whether the combined and individual
+  renders genuinely disagree, which would be a defect in its own right.
+- `R210` gained a dated instance-note (not a new rule): this Pass is
+  R210 being acted on rather than restated, and it found the rule's own
+  founding document (the operator review) mis-stating the criteria set
+  it was warning about — the self-referential shape is the point worth
+  keeping.
+- Verification (relayed, no shell this filing): all 16 `tools/check-*`
+  gates exit 0. No Rust changed.
+
+**`FEATURES.md`:**
+- Ghent-figures banner (top of file) rewritten: harness figures updated
+  to `24/11/16`, corrected standing to `25`, the seven-patch claim
+  corrected to four, `GWG 1.1` dispute noted. No row moved between
+  *Implemented*/*Planned* — this Pass changed a measuring instrument,
+  not a pdfce capability.
+
+**RAG:**
+- New: `C:\personal_rag\pdf\lesson_20260824_check_mark_detector_must_key_on_presence_not_hue.md`,
+  `C:\personal_rag\pdf\lesson_20260824_a_readme_phrase_grep_conflates_a_defining_criterion_with_an_incidental_mention.md`.
+- Amended with a second instance:
+  `D:\dev\rag\rust\a_plausible_explanation_that_predicts_the_right_order_of_magnitude_is_not_a_diagnosis.md`
+  (`last_verified` bumped to 2026-08-24).
+- `C:\personal_rag\pdf\index.md`, `C:\personal_rag\index.md` and
+  `D:\dev\rag\rust\index.md` updated for all three.
+
+**Still in flight:**
+- `Pass 122.4` (combined-vs-individual Ghent render for `GWG 1.1`) and
+  `Pass 122.3` (colorant-buffer byte ceiling) both open in *Backlog*.
+- A reference-render-based (not hue-based) `MARK?` detector for the four
+  check-mark patches remains unbuilt — deliberately, per the trap found
+  this session.
+- `Pass 97.1k` (images/shadings still bridge through sRGB) remains next
+  in the `97.1` family, unaffected by this filing.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned).
+- Ledger: standing rules ceiling stays `R217` (next free `R218` — this
+  filing amended `R210` in place rather than minting); decisions next
+  free `081`; operator questions next free `(bs)`; filing ordinal `243`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Everything above is relayed from the operator's
+  dispatch text, per hard rule 8.
