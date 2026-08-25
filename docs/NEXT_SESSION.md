@@ -31,7 +31,42 @@ Three pieces of work, in the order they landed:
 | `c4a85d0` | **`Pass 97.1g` — a non-isolated group on an ink page can finally see what is under it.** §11.4.4's second content walk on a subtractive page. ★ **Its headline result is NEGATIVE and that is the honest framing: it changes no rendering in any corpus pdfce owns** |
 | `f6457ee` | **`Pass 122.2` — the Ghent harness stops scoring four patches it never examined.** Board `29 pass` → `24 pass` harness-reported. **Its own conclusion that standing was 25 was superseded hours later by `122.4` — it is 26; see §A** |
 
-### ★★★★★ THE MOST IMPORTANT THING ON THIS PAGE — ONE ROOT CAUSE UNDER 24 OF 51 PATCHES
+### ★★★★★ SHIPPED: THE ROOT CAUSE UNDER 24 OF 51 PATCHES — `Pass 122.5`
+
+**The board moved UP for the first time this session: `24 pass` → `27 pass` of
+51, three patches fixed, ZERO regressed.** Every other correction today moved
+it *down*, because those were repairs to the instrument rather than to the
+renderer. This one is the renderer.
+
+Fixed: `GWG 1.1` (CMYK Overprint Mode — **the patch the operator's own review
+flagged**, that `122.2` called "not reproducible" and `122.4` proved pdfce was
+rendering wrong), `GWG 3.0` (Gray K black Overprint), `GWG 4.0` (White
+Overprint).
+
+**What it does:** when a page group declares no `/CS`, the document's
+`/OutputIntents` is consulted — `/DestOutputProfile`'s `/N ≥ 4` means a
+subtractive device class and the colorant buffer engages. Setting
+`page_blend_space_source`, defaulting to `output_intent_if_subtractive`.
+**Blast radius measured, not estimated:** of 4012 external PDFs, 2273 carry an
+output intent and **65 (2.9 %) change behaviour**, all CMYK-intent conformance
+files.
+
+★ **The default was chosen by the engineer, not asked of the operator**, and
+the operator question opened for it earlier the same day stays **WITHDRAWN**.
+See the note below on why that question should never have existed.
+
+★★ **Two things a future session must not undo.** The display-list recorder
+and the direct renderer call the **same** `page_blend_space` with the **same**
+setting — decision 084's shared-predicate rule, because a recording that judged
+the space differently would refuse the wrong pages in both directions. And the
+metrics line stayed **all-integers**: the provenance is
+`blend_space_from_output_intent=<0|1>` with the word moved into the operator
+note, because `render_page.rs` pins that every value on that line parses as a
+`u64` and downstream consumers rely on it.
+
+---
+
+### ★★ THE ORIGINAL FINDING, kept because the METHOD is the transferable part
 
 **Found at the end of the session by chasing `Pass 122.4`. No code shipped;
 this is a measurement, and it should set the next session's priority.**
@@ -61,8 +96,8 @@ board's long-standing note about *"the ONE architectural item that unblocks
 the largest cluster"* now has a named, measured mechanism — and it is very
 likely **one fix, not twenty**.
 
-**⇒ THE SPEC READING IS DONE AND IT CHANGES THE SHAPE OF THE WORK. Read
-this before touching `Pass 122.5`.**
+**⇒ THE SPEC READING BEHIND IT, kept because `Pass 97.1k` and anything else
+touching the colorant buffer will need the same clauses.**
 
 ★ **pdfce IS CONFORMING TODAY.** ISO 32000-1 §11.4.7 and §11.6.3 each state
 independently that *"if not otherwise specified, the page group's colour space
@@ -171,13 +206,14 @@ authority discards the signal.**
 ### Ledger at end of session
 
 Next free in the `97.1` family: **`97.1k`** (filed Backlog, unbuilt).
-`122.0`–`122.5` all filed; **`122.4` and `122.5` are NEW this session**, next free **`122.6`**. Operator question **`(bs)` was opened and WITHDRAWN the same day** (see §A) — the letter is consumed, **next free `(bt)`**, and **nothing is awaiting Ken** except pushing and cutting a backup, both his acts.
+`122.0`–`122.5` filed; **`122.2`, `122.4` and `122.5` SHIPPED this session**, `122.0`/`122.1`/`122.3` still Backlog; next free **`122.6`**. Operator question **`(bs)` was opened and WITHDRAWN the same day** (see §A) — the letter is consumed, **next free `(bt)`**, and **nothing is awaiting Ken** except pushing and cutting a backup, both his acts.
 `119.1` still unstarted. Standing rules unchanged — **no rule was minted this
 session**, and one was *proposed and withdrawn* because `R143` already owned
 the shape. Decisions unchanged. **Version `0.8.0`.** 17 `tools/check-*` on
-disk, **16 runnable as bare gates; all 16 exit 0.** Ghent: **26 pass at
-minimum** of 51 (harness-reported `24 / 11 / 16`; `GWG 1.1`'s dispute is
-RESOLVED in the operator's favour — see §A).
+disk, **16 runnable as bare gates; all 16 exit 0.** Ghent: harness-reported
+**`27 pass / 8 FAIL / 16 UNRESOLVED`** of 51, plus `GWG 5.0` whose mark is
+present but unadjudicable ⇒ **28 at minimum**. `GWG 1.1`'s dispute is RESOLVED
+in the operator's favour and the patch now PASSES.
 
 ---
 
@@ -307,19 +343,13 @@ of the claim (`R211` clause (e)). Sample across the **predicate**, not across
 
 **Nothing in this queue is blocked on anybody.**
 
-1. **`Pass 122.5` — UNBLOCKED AND FULLY DESIGNED. Start here.** The
-   24-of-51 root cause in §A. The spec reading is done, the setting and its
-   default are chosen, and §A carries the four constraints that shape the
-   implementation — the opaque-model citation for `_x3`/`_x1a` files, the
-   structural-not-colorimetric corollary, the `SP-A3` predicate, and the
-   proof that no cheaper fix exists. ★ `Pass 122.4` is ANSWERED and needs
-   nothing further; **`(bs)` is WITHDRAWN and must not be reissued**.
-2. **`Pass 97.1k`** — native colorant paths for **images and shadings**, which
+1. **`Pass 97.1k` — the last structural item in the `97.x` family.** — native colorant paths for **images and shadings**, which
    bridge through sRGB today (`cmyk_bridged_pixels`, `cmyk_unbridged_images`).
    The last structural item in the `97.x` family. Means widening a type one
    layer up: `DecodedImage` holds a `Pixmap`; `ColorRamp::at` returns
-   three-channel sRGB when the ramp is *built*. **Take this while `122.5` is
-   blocked** — same subsystem, no dependency on the spec answer.
+   three-channel sRGB when the ramp is *built*. ★ **More files reach the
+   colorant buffer since `122.5`**, so this bridge is now on a wider
+   population than when it was scoped.
 3. **The check-mark detector** — `122.2` deliberately shipped none. It must key
    on **presence relative to a reference render**, not on a hue (§2 item 4).
    Ground truth for all four patches is in `tools/ghent-check.py`'s docstring
