@@ -199,6 +199,67 @@ fn a_bitmap_glyph_paints_its_stencil_in_the_graphics_state_colour() {
     );
 }
 
+/// ★ `Pass 126.1` — a bitmap glyph is a STENCIL and is never smoothed,
+/// at any zoom.
+///
+/// The Acrobat-parity corpus records, at source tier, that Acrobat does
+/// **not** interpolate bitmap Type 3 glyphs: they get jaggier as you zoom
+/// in, which is what drove the industry practice of converting TeX
+/// Computer-Modern Type 3 fonts to Type 1. pdfce matches that, and this
+/// test is what keeps it matching.
+///
+/// The measurement is a colour census inside the glyph's own box. A
+/// nearest-neighbour stencil produces exactly **two** colours — the page
+/// and the fill — because every pixel is either covered or not. Any
+/// interpolation produces intermediates, and one intermediate pixel is
+/// enough to fail this.
+///
+/// ★ THE SCALES ARE CHOSEN TO CROSS THE PREDICATE, not to be "a
+/// reasonable range" (`R211` clause (e)). The mask is 8x8 samples in a
+/// 28 pt box, so its device size passes through its own sample count
+/// somewhere near scale 0.29: at 0.25 the image is being MINIFIED and at
+/// 1, 4 and 16 it is being MAGNIFIED, which are different code paths with
+/// different filters. Sampling only the magnified side would leave the
+/// minifying filter free to smooth.
+#[test]
+fn a_bitmap_glyph_is_never_smoothed_at_any_zoom() {
+    for scale in [0.25f32, 1.0, 4.0, 16.0] {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/synthetic/type3/colour_and_advance.pdf");
+        let doc = Document::from_bytes(std::fs::read(&path).expect("fixture file"))
+            .expect("fixture parses");
+        let pages = page_tree::pages(&doc).expect("page tree");
+        let p = pdfce_render::render_page(&doc, &pages[0], scale).expect("renders");
+
+        // The mask glyph's box, in page points, inset by one point so the
+        // silhouette's own edge pixels are not the thing being counted.
+        let mut seen: Vec<(u8, u8, u8)> = Vec::new();
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let (x0, x1) = ((61.0 * scale) as u32, (87.0 * scale) as u32);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let (y0, y1) = (
+            ((720.0 - 427.0) * scale) as u32,
+            ((720.0 - 401.0) * scale) as u32,
+        );
+        for y in y0..y1.max(y0 + 1) {
+            for x in x0..x1.max(x0 + 1) {
+                let Some(px) = p.pixmap.pixel(x, y) else {
+                    continue;
+                };
+                let c = (px.red(), px.green(), px.blue());
+                if !seen.contains(&c) {
+                    seen.push(c);
+                }
+            }
+        }
+        assert!(
+            seen.len() <= 2,
+            "at scale {scale} the stencil shows {} distinct colours; more than two means it was interpolated, and a bitmap glyph is a region of the page to be painted rather than a picture to be resampled: {seen:?}",
+            seen.len()
+        );
+    }
+}
+
 // ===========================================================================
 // Table 112 — the width rule, which no `Td`-positioned glyph can test
 // ===========================================================================
