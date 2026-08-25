@@ -59776,3 +59776,107 @@ touched, no `cargo tree`/round-trip/packaging checks apply.
   filing — no shell. Everything above is either this role's own
   documentation edits or relayed from the dispatching engineer's report,
   per hard rule 8.
+
+## 2026-08-25 (two-hundred-and-forty-seventh filing) — `c9f8419` FILED, NO PASS ID: shadings ignore overprint entirely, and until now said nothing about it; an operator correction falsifies a same-session claim in `NEXT_SESSION.md` and finds a second, coupled gap on the way; `Pass 122.6` filed
+
+**Shipped:**
+- `c9f8419` (no Pass ID, disclosure fix) — `overprint_shadings_unsupported`,
+  a new diagnostic counter on `render-page`'s stable metrics line and in
+  the CLI's per-key disclosure table. `shading.rs` had no overprint code
+  at all, and the colorant-buffer route in `interpret.rs` composited a
+  shading's result with `Blend::Normal` hardcoded — a page could lose
+  overprint on every shading it had and report a clean line. Reports
+  **2** on Ghent `GWG 1.0`. Also fixes a stale `Pass 97.1g` cross-
+  reference in a code comment (correct: `Pass 97.1k`). Touched
+  `pdfce-render` (`interpret.rs`), `pdfce-cli` (metrics line, key table,
+  contract test), plus one new/extended test file.
+
+**Decisions made this session:**
+- No new decision number. A dated addendum was added to decision 069's
+  own body (`ARCHITECTURE.md` §12) naming the shading gap and the
+  coupling below, rather than minting a new decision — this is the same
+  disclosure obligation decision 069 point 3 already establishes,
+  applied to a second object class nobody had checked.
+
+**Findings + decisions:**
+- **Sourcing note for this whole entry:** no shell in this filing
+  (librarian invocation). Every figure is relayed from the engineer's
+  own dispatch, which stated its method beside each figure — per hard
+  rule 8, treat this entire entry as the relayed case.
+- **The origin.** Ken, verbatim: *"btw e and j don't have x but they are
+  the wrong color and always have been since the x was removed."* This
+  falsified a claim in `docs/NEXT_SESSION.md` (engineer-owned, not this
+  file) that read six cells of `GWG 1.0` as diverging and called
+  `sep_all_approximated=6` "coincidence-resistant." Only four cells
+  carry a trap X; cells `e`/`j` carry no X at all — the X-shaped figure
+  the engineer had read as a failure marker is the shading's own
+  artwork (its function traces an X; Acrobat draws it orange-on-orange
+  so it vanishes, pdfce draws it pink/cyan so it does not). The "6 = 6"
+  match was two different defects summed to one number — worse than no
+  match, because it read as a mechanism. Nothing in `ROADMAP.md` needed
+  correcting for this specific claim, because it was never filed there;
+  `NEXT_SESSION.md` §2b carries the engineer's own dated correction.
+- **The disconfirming evidence was already in hand.** `tools/ghent-
+  check.py` had reported `GWG 1.0` at 4 traps, all in the font/vector
+  columns, none in the shading column — the harness and the operator
+  agreed; only the engineer's own eyeballing of the render did not. The
+  shape worth keeping: a measurement already run in the same session
+  contradicted the claim that got filed.
+- **The investigation, once opened, found a second and unrelated gap:**
+  shadings have no overprint path at all (mechanism, ruled-out items and
+  the coupling argument are recorded in full in `ROADMAP.md`'s `c9f8419`
+  *Shipped* entry — not repeated here). Blue channel at the affected
+  cell centre: pdfce 209, Acrobat 3; measured pre-`Pass 122.5` at 228,
+  ruling out the sRGB bridge as the cause (the operator's "always have
+  been" confirmed by measurement).
+- **★ The coupling finding.** `ColorRamp::build` resolves colour to
+  sRGB when the ramp is built, so nothing downstream has colorants left
+  to overprint with — an overprint composite alone changes nothing here,
+  native colorants alone change nothing either. `Pass 122.6` (Backlog)
+  scopes both halves as one fix, acceptance criteria stating the
+  coupling explicitly so a partial ship cannot look complete.
+- **`tools/check-string-gaps.sh` caught a heredoc-eaten backslash in the
+  new test's own assertion message** (a ten-space gap) before commit —
+  second RAG occurrence recorded this session's worth of findings, filed
+  as an amendment to the existing file, not a new one.
+
+**`ROADMAP.md`:**
+- New *Shipped* entry for `c9f8419` filed at the top (no Pass ID,
+  reverse-chronological, above `Pass 122.5`).
+- `Pass 122.6` filed to *Backlog*, beside `Pass 122.3` (same family).
+
+**`FEATURES.md`:**
+- Overprint SIMULATION *Implemented* row widened to name the shading gap
+  alongside the pre-existing image one.
+- "Native colorant paths for images and shadings" *Planned* row extended
+  to point at both dependent rows and at `Pass 122.6`.
+- New *Planned* row added, "Per-sample shading overprint," beside the
+  existing per-sample-image-overprint row.
+
+**`ARCHITECTURE.md`:**
+- Decision 069 (§12) gains a dated addendum (2026-08-25, no new decision
+  number) naming the shading gap and the coupling; no new §12 entry.
+
+**Still in flight:**
+- `Pass 122.6` — scoped, not started.
+- **Flagged, not fixed this filing:** `ARCHITECTURE.md` §12 has no
+  `decision 085` entry, though `SESSION_LOG.md`'s 246th-filing entry
+  records decision 085 as minted for `Pass 122.5`'s
+  `page_blend_space_source` default. Outside this dispatch's scope;
+  raised for the engineer's attention.
+- Per-sample image overprint (`overprint_images_unsupported`) and now
+  its shading sibling — both still unbuilt, both now carrying matched
+  *Planned* rows.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned) — the
+  engineer's own correction to §2b already covers the falsified claim
+  this session's origin describes.
+- Ledger: standing rules ceiling stays `R217`, next free `R218` (none
+  minted this filing); decisions ceiling `085`, next free `086`; Pass
+  family `122.x` next free `122.7`; `render-page` metrics line **92
+  keys**; filing ordinal `247`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Everything above is either this role's own
+  documentation edits or relayed from the dispatching engineer's report,
+  per hard rule 8.

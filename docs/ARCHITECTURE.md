@@ -23409,6 +23409,26 @@ sentence to test the next such blocker against.
 disposition as 063/064/066/068. **Ceiling moves 068 → 069; next free
 070.**
 
+**★ AMENDED 2026-08-25 (247th filing, `c9f8419`, no new decision number) —
+the same gap exists for SHADINGS, not only images, and it is now
+disclosed.** `overprint::composite` had exactly one call site (the path
+and glyph painter) when this decision was filed; `shading.rs` had **none**,
+and the colorant-buffer route composited a shading's result with
+`Blend::Normal` **hardcoded** — so a page could lose overprint on every
+shading it had and still report a clean metrics line. `render-page` now
+ships `overprint_shadings_unsupported` as `overprint_images_unsupported`'s
+exact sibling, same reasoning as point 3 above (*"the composite was never
+offered this object class at all"*), applied to the second object class
+nobody had checked. **The coupling this decision's §2 already implies but
+never spelled out for shadings specifically:** `ColorRamp::build` resolves
+colour to three-channel sRGB **when the ramp is built**, so nothing
+downstream has colorants left to overprint with — an overprint composite
+alone would change nothing here, and native shading colorants alone would
+change nothing either; a fix needs both. Scoped as `Pass 122.6`
+(`ROADMAP.md` Backlog). No decision number minted — this is the disclosure
+obligation point 3 already establishes, found late because nobody had
+checked the second call site.
+
 ### 2026-08-18 (hundred-and-sixty-seventh filing) — decision 070: **A SOFT MASK IS MULTIPLIED INTO THE CLIP, NOT THREADED AS A SECOND MASK THROUGH EVERY PAINT SITE — AND THE PRICE IS PAID IN ONE PLACE, DISCLOSED, RATHER THAN SPREAD ACROSS TEN**
 
 **Status: DECIDED.** `cb20770` implements ISO 32000-1 §11.6.5 `/Alpha` and

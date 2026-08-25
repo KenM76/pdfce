@@ -96,6 +96,158 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `c9f8419` — Shadings ignore overprint entirely, and until now said nothing about it — no Pass ID, disclosure fix found from an operator reading — 2026-08-25 (two-hundred-and-forty-seventh filing)
+
+**Sourcing.** No shell in this filing (librarian invocation). Every figure
+below is **relayed from the engineer's own dispatch**, which stated its
+method beside each figure — per hard rule 8, this entire entry is the
+relayed case, not independently re-measured.
+
+---
+
+#### The origin — an operator correction that falsified a claim filed hours earlier, and a self-inflicted misreading
+
+Ken, 2026-08-25, verbatim: *"btw e and j don't have x but they are the wrong
+color and always have been since the x was removed."*
+
+This falsifies a claim recorded in `docs/NEXT_SESSION.md` (engineer-owned,
+not this file) the same session, which read **six** cells of `GWG 1.0` as
+diverging and called `sep_all_approximated=6` *"coincidence-resistant."*
+**Only four cells carry a trap X.** The engineer had read the X-shaped
+figure inside cells `e`/`j` as a failure marker; it is the **artwork** —
+the shading's own function traces an X, Acrobat draws it orange-on-orange
+so it vanishes, pdfce draws it pink and cyan so it does not. **The
+"6 = 6" match was two different defects summed to one number**, which is
+worse than no match at all — it makes a coincidence read as a mechanism.
+`docs/NEXT_SESSION.md` §2b already carries the engineer's own dated
+correction of that claim; nothing in `ROADMAP.md` needs correcting for it,
+because the false claim was never filed here in the first place.
+
+**The disconfirming evidence was already in hand, in the same session.**
+`tools/ghent-check.py` had reported `GWG 1.0` at **4 traps**, all in the
+left-hand font/vector columns, none in the shading column — the harness
+and the operator agreed; only the engineer's own eyeballing of the render
+did not. The shape worth keeping is not "the operator caught something
+nobody could have seen" — it is **"a measurement already run in the same
+session contradicted the claim that got filed."**
+
+---
+
+#### What the investigation found — a gap with no counter behind it
+
+`crates/pdfce-render/src/shading.rs` had **no mention of overprint at
+all**, and the colorant-buffer route in `interpret.rs` composited a
+shading's result with `Blend::Normal` **hardcoded**. Images at least
+disclosed their own equivalent gap via `overprint_images_unsupported`
+(`Pass 97.1b`); shadings disclosed **nothing** — a page could lose
+overprint on every shading it had and still report a clean metrics line.
+
+**Mechanism, read from the fixture's own objects, not inferred:** the
+shadings are `/DeviceN [/Cyan /Magenta]`, `ShadingType 3`, ramping
+`C0[0.5 0.0] → C1[0.0 0.5]`, painted over an orange ground. Under
+overprint the yellow beneath survives and the result reads **green** —
+what Acrobat renders. Without it, cyan and magenta replace all four
+colorants and the result reads **blue**. Blue channel at the cell centre:
+pdfce **209**, Acrobat **3**; whole-cell mean **110 vs 3**.
+
+**Ruled out, recorded so nobody re-derives them:**
+- **Not the sRGB bridge `Pass 122.5` introduced/worsened.** Measured
+  pre-`Pass 122.5` (no colorant buffer, no bridge round-trip): blue centre
+  **228**; post-`Pass 122.5`: **209**; Acrobat: **3**. The bridge barely
+  moved it — confirms the operator's *"always have been"* by measurement,
+  not merely by his word.
+- **Not `/Separation /All`.** That branch yields `Rgb::from_gray(1 −
+  tint)`, a **neutral** (`R = G = B`); the observed cell is blue-dominant,
+  not grey.
+- **Not mesh shadings.** These are `ShadingType 3` (radial), a type pdfce
+  paints; `shadings_refused = 0`, `shadings_painted = 4`.
+
+**★ The two halves are coupled, and this is the finding most worth
+keeping — it is why the commit ships disclosure, not a fix.**
+`ColorRamp::build` calls `space.to_rgb(...)` and resolves colour to
+three-channel sRGB **when the ramp is built**, so nothing downstream has
+colorants left to overprint with. §11.7.4.3's second bullet makes
+`B(c_b, c_s)` equal `c_s` for every component *"specified in the current
+colour space"* — a bridged sRGB scratch has specified all three. **An
+overprint composite alone changes nothing; native colorants alone change
+nothing; a future Pass needs both or neither.** Scoped below as
+`Pass 122.6` (Backlog), with the acceptance criteria stating the coupling
+explicitly.
+
+---
+
+#### What shipped
+
+`overprint_shadings_unsupported` — `overprint_images_unsupported`'s exact
+sibling, one new diagnostic counter on `render-page`'s stable metrics line
+(**92 keys now**, `check-metrics-line-contract.py` green) and in the
+CLI's per-key disclosure table, with the coupling above explained inline.
+Reports **2** on `GWG 1.0` — **exactly the two shading cells the operator
+named** (`e`, `j`), arrived at independently of his message, which is the
+tie between the counter and the defect it names.
+
+**Also in this commit:** a stale Pass-ID cross-reference corrected. A
+comment beside the ramp-evaluated-in-ink code cited `Pass 97.1g` — the
+non-isolated-group Pass, unrelated to ramps. Correct citation:
+`Pass 97.1k`. Filed as a small instance of an existing pattern: a Pass ID
+written into a code comment drifts silently because nothing joins a
+comment to the ledger.
+
+**★ `tools/check-string-gaps.sh` earned its keep again.** The first draft
+of the new test's assertion message went in through a heredoc that ate a
+line-continuation backslash, baking a ten-space gap into the message. It
+compiled; nothing else in the toolchain would have caught it. New
+occurrence recorded in the existing RAG file (`D:/dev/rag/rust/`, below)
+rather than a new one, per hard rule 4.
+
+---
+
+#### Verification
+
+**4,212** workspace tests green (5 in the new/extended shading-overprint
+test file, including the counter asserted as **exactly 2**, not merely
+non-zero — a counter firing on the wrong population would still be
+non-zero). `cargo fmt --all --check` and `cargo clippy --workspace
+--all-targets` clean. All **16** runnable gates green. `cargo tree -p
+pdfce-core` / `-p pdfce-render` show no GUI dependency. **The Ghent board
+is UNCHANGED at `27 pass / 8 FAIL / 16 UNRESOLVED`** — this commit
+disclosed a defect, it did not fix one, and the board correctly does not
+move.
+
+---
+
+#### `FEATURES.md`
+
+No capability gained — the disclosure is new, the render output is not.
+The Overprint SIMULATION row's image-only caveat is widened to name
+shadings too; a new *Planned* row is added beside the existing
+per-sample-image-overprint row, for the shading half of the same gap,
+cross-referencing `Pass 122.6`.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | none shipped this filing | **`Pass 122.6` FILED to *Backlog*** (native colorant path for shadings + overprint composite, scoped as one coupled fix, per the finding above) |
+| decisions (`ARCHITECTURE.md` §12) | **085** | **unchanged** — this is a disclosure fix inside decision 069's existing scope, not a new crate-boundary/library/invariant choice. A dated addendum was added to decision 069's own body naming the shading gap and the coupling, no new number. Next free **086**. |
+| standing rules | **R217** | **unchanged**, next free **R218**. No rule minted — this is a one-off empirical finding (an X-shaped defect misread as a trap marker), not a generalisable process gap. |
+| operator questions | **(bs)** | unchanged, next free **(bs)** |
+| `render-page` metrics line | **91 keys** | **92 keys** — `overprint_shadings_unsupported` added |
+| `FEATURES.md` | — | one *Implemented* row widened (Overprint SIMULATION), one new *Planned* row added (shading overprint), beside the existing image-overprint row |
+| Filing ordinal | **246** | **247** |
+
+**One RAG file amended** (not created — dedup, hard rule 4):
+`D:/dev/rag/rust/a_multiline_string_literal_that_loses_its_trailing_backslash_bakes_a_visible_gap_mid_sentence.md`,
+new dated section for this occurrence.
+
+**Backup currency and git/CI state: not independently checked this
+filing** — no shell. Every figure above is relayed from the engineer's own
+dispatch, per hard rule 8.
+
+---
+
 ### `270b9d0` — `Pass 122.5` ships: print files that ask for ink get ink, and say so — ★★★★★ THE GHENT BOARD MOVES FOR THE FIRST TIME IN THIS DIRECTION: `24 pass / 11 FAIL / 16 UNRESOLVED` → `27 pass / 8 FAIL / 16 UNRESOLVED`, THREE PATCHES FIXED, ZERO REGRESSIONS — 2026-08-24 (two-hundred-and-forty-sixth filing)
 
 **Sourcing.** No shell in this filing (librarian invocation). Every figure
@@ -76258,6 +76410,31 @@ either the page bands or the refusal is **disclosed on the stable stdout line**
 with the scale at which it fired; the ceiling's value is justified in its own
 doc comment **by an arithmetic argument naming DPI and page size**, not by
 agreement with a sibling constant.
+
+---
+
+### `Pass 122.6` — native colorant paths for shadings, THEN wire the overprint composite to them — the two halves are coupled, ship together or not at all
+
+**Filed 2026-08-25 (two-hundred-and-forty-seventh filing)**, from the
+shading-overprint gap `c9f8419` disclosed (`overprint_shadings_unsupported`,
+reports 2 on Ghent `GWG 1.0`). `ColorRamp::build` resolves colour to
+three-channel sRGB when the ramp is **built** (`space.to_rgb(...)`), so by
+the time a shading paints there are no colorants left for
+`overprint::composite` to blend against — and `overprint::composite` has
+no call site inside `shading.rs` regardless. **Acceptance criterion states
+the coupling explicitly, so a partial ship cannot look complete:**
+`overprint_shadings_unsupported` reaches 0 only when BOTH (a) a shading's
+own colour ramp is evaluated natively in the page's colorant space on a
+subtractive page, not bridged through sRGB, and (b) the colorant-buffer
+route in `interpret.rs` blends a shading's result through Table 149
+instead of `Blend::Normal` hardcoded. **Building either half alone changes
+nothing measurable** — verified, not assumed, for the sRGB-bridge half in
+`c9f8419`'s ruled-out list (pre-/post-`Pass 122.5` blue-channel delta was
+228 → 209 against an Acrobat target of 3; the bridge barely moved it).
+Shares its native-colorant-path half with the row already filed for
+images (`FEATURES.md` *Planned*, "Native colorant paths for images and
+shadings") — the image and shading halves may ship as one Pass or two,
+but neither ships against a placeholder for the other.
 
 ---
 
