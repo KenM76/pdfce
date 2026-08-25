@@ -50,8 +50,30 @@ cargo-fuzz = true
 # (It is MIT OR Apache-2.0 regardless — no docs/LEGAL.md §6.2 flag.)
 libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
 
+# ** `default-features = false`, AND IT IS THE DIFFERENCE BETWEEN A FUZZ
+# HARNESS THAT BUILDS AND ONE THAT DOES NOT. **
+#
+# `pdfce-core`'s default features include `ocrs`, which pulls the `rten`
+# inference runtime. `rten` builds a **cdylib**, and cargo-fuzz puts
+# libFuzzer's `/include:main` into the link arguments for the whole graph, so
+# the cdylib is asked to export a `main` it does not have:
+#
+#     LINK : error LNK2001: unresolved external symbol main
+#     rten-<hash>.dll : fatal error LNK1120: 1 unresolved externals
+#
+# ** EVERY TARGET IN THIS DIRECTORY FAILED THAT WAY, not just a new one. **
+# Measured 2026-08-25 on `parse_object`, which had not been touched since
+# long before OCR landed: the harness stopped building the day `Pass 71.0`
+# added `ocrs`, and nothing said so, because `cargo fuzz build` is not one of
+# CI's jobs and running it is a discipline rather than a gate (`R209`).
+#
+# No fuzz target needs OCR. `jpx` is kept because `image_codec_jpx` needs it,
+# and it is named explicitly rather than inherited, so a future default that
+# adds another heavyweight capability does not silently re-break this.
 [dependencies.pdfce-core]
 path = "../crates/pdfce-core"
+default-features = false
+features = ["jpx"]
 
 # pdfce-render, for the FF-C donor-subsetting target (Pass 21.0). The
 # subsetter lives there, not in core, because producing a subset requires
@@ -63,6 +85,12 @@ path = "../crates/pdfce-core"
 # pull anything into a shipped binary.
 [dependencies.pdfce-render]
 path = "../crates/pdfce-render"
+# Same reason as `pdfce-core` above, and it MUST be repeated here: cargo
+# unifies features across the graph, so one crate taking defaults re-enables
+# `ocrs` for everybody (the effect `pdfce-render/Cargo.toml`'s own feature
+# block documents, measured on 2026-08-12).
+default-features = false
+features = ["jpx"]
 
 # cargo-fuzz builds with the release profile; keep debuginfo so crash
 # backtraces point at real source lines.
@@ -335,6 +363,20 @@ bench = false
 [[bin]]
 name = "dimension_sidecar"
 path = "fuzz_targets/dimension_sidecar.rs"
+test = false
+doc = false
+bench = false
+
+# Pass 125.0: the mesh-shading stream decoder (ISO 32000-1 8.7.4.5.5-.8).
+# A BIT-level parser whose field widths, record stride and record COUNT all
+# come out of the file, and whose output size is not bounded by its input
+# size -- two-bit coordinates make a type 5 vertex eight bits long, so a
+# megabyte of stream is a million vertices before any subdivision. Types 6
+# and 7 have no fixed stride at all: the record length depends on an edge
+# flag read from the stream, which is the classic length-confusion shape.
+[[bin]]
+name = "mesh_shading"
+path = "fuzz_targets/mesh_shading.rs"
 test = false
 doc = false
 bench = false
