@@ -62,10 +62,29 @@ libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
 #     rten-<hash>.dll : fatal error LNK1120: 1 unresolved externals
 #
 # ** EVERY TARGET IN THIS DIRECTORY FAILED THAT WAY, not just a new one. **
-# Measured 2026-08-25 on `parse_object`, which had not been touched since
-# long before OCR landed: the harness stopped building the day `Pass 71.0`
-# added `ocrs`, and nothing said so, because `cargo fuzz build` is not one of
-# CI's jobs and running it is a discipline rather than a gate (`R209`).
+# Measured 2026-08-25 on `parse_object`, which had not been touched since long
+# before OCR landed: the harness stopped building the day `Pass 71.0` added
+# `ocrs`.
+#
+# ** AND THE REASON NOBODY NOTICED IS NOT THE ONE THIS COMMENT FIRST GAVE. **
+# It said `cargo fuzz build` "is not one of CI's jobs". It IS one -- the job is
+# named `fuzz targets build (nightly)` in `.github/workflows/ci.yml`, it runs
+# `cargo +nightly fuzz build`, and it has been GREEN throughout, including at
+# `0d4165e` the day before this was found. Checked with
+# `gh run view <id> --json jobs`, not assumed.
+#
+# ** The job runs on `ubuntu-latest`, and the break is MSVC-only. ** `rten`
+# declares `crate-type = ["lib", "cdylib"]`; on Windows the cdylib link is
+# handed libFuzzer's `/include:main` and fails, while the same cdylib on Linux
+# becomes a `.so` that no linker asks for a `main`. So CI was not asleep -- it
+# was structurally incapable of seeing this, and the LOCAL build was the only
+# place it could surface. The usual assumption (CI is the stricter of the two)
+# is exactly backwards here.
+#
+# ⇒ owed, filed to Backlog rather than done in a release commit: a
+# `windows-latest` sibling for the fuzz job. Until it exists, a Windows
+# `cargo +nightly fuzz build` is a per-session discipline, not a gate
+# (`R209`).
 #
 # No fuzz target needs OCR. `jpx` is kept because `image_codec_jpx` needs it,
 # and it is named explicitly rather than inherited, so a future default that

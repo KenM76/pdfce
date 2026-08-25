@@ -645,12 +645,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # docs/ARCHITECTURE.md §10.2: the eight cargo-fuzz targets
-      # (parse_object, load_document, content_and_filters,
-      # image_codec_dct, image_codec_ccitt, image_codec_jbig2,
-      # image_codec_jpx, writer_roundtrip — see fuzz/fuzz_targets/*.rs
-      # for the invariant each asserts) are part of Pass 1's, Pass 2.1's,
-      # Pass 2.2's, Pass 2.3's and Pass 3.0's shipping criteria.
+      # docs/ARCHITECTURE.md §10.2: the cargo-fuzz targets are part of the
+      # shipping criteria of every Pass that added one — see
+      # fuzz/fuzz_targets/*.rs for the invariant each asserts.
+      #
+      # ★ This comment named EIGHT targets and listed them by hand. There
+      # are 24 (measured 2026-08-25, `ls fuzz/fuzz_targets/*.rs | wc -l`),
+      # and the list had been wrong for months — the same stale-count
+      # defect `R212` is about, in the one place nobody re-reads because
+      # `cargo fuzz build` compiles every target in fuzz/Cargo.toml and
+      # needs no per-target wiring here. A hand-maintained list beside an
+      # automatic mechanism has nothing forcing it to stay true, so it is
+      # now a pointer rather than a list.
+      #
+      # ★★ AND THIS JOB HAS A BLIND SPOT WORTH NAMING HERE, because this
+      # is where someone will look. It runs on `ubuntu-latest`. On
+      # 2026-08-25 the whole harness was found unbuildable on Windows/MSVC
+      # — `rten` (pulled by the default `ocrs` feature) declares
+      # `crate-type = ["lib", "cdylib"]`, and the cdylib link is handed
+      # libFuzzer's `/include:main`, which a `.so` on Linux is never asked
+      # for. This job was GREEN throughout. A `windows-latest` sibling is
+      # owed and is filed to Backlog; until it exists, this job proves the
+      # targets compile, not that they LINK on the platform pdfce is
+      # developed on.
       #
       # writer_roundtrip (Pass 3.0, decision 007 R40) is the first
       # WRITE-direction target: it asserts the ARCHITECTURE.md §5

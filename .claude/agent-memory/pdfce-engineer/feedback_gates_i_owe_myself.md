@@ -97,15 +97,39 @@ defect in two spellings.
 
 ## THIRD RECURRENCE, 2026-08-25 -- AND THE STAND-IN THIS FILE RECOMMENDS CANNOT SEE IT
 
-The whole fuzz harness had been **unbuildable for weeks** and nothing said
-so. `pdfce-core`'s default features include `ocrs`, which pulls the `rten`
-inference runtime; `rten` builds a **cdylib**, and cargo-fuzz applies
-libFuzzer's `/include:main` to every link in the graph, so the cdylib is
-asked to export a `main` it does not have. Every target in the directory
-died with `LNK2001: unresolved external symbol main`. Confirmed pre-existing
-by building `parse_object`, untouched since long before OCR landed.
+The whole fuzz harness had been **unbuildable on this machine for weeks**
+and nothing said so. `pdfce-core`'s default features include `ocrs`, which
+pulls the `rten` inference runtime; `rten` declares
+`crate-type = ["lib", "cdylib"]`, and cargo-fuzz applies libFuzzer's
+`/include:main` to every link in the graph, so the cdylib is asked to export
+a `main` it does not have. Every target in the directory died with
+`LNK2001: unresolved external symbol main`. Confirmed pre-existing by
+building `parse_object`, untouched since long before OCR landed.
 
 It surfaced only because a new Pass added a target and I tried to build it.
+
+**★★ AND MY FIRST EXPLANATION FOR WHY NOBODY NOTICED WAS WRONG, WHICH IS THE
+MORE USEFUL HALF.** I wrote — into a commit message, a filing and this file —
+that *"`cargo fuzz build` is not one of CI's jobs"*. **It is.** The job is
+`fuzz targets build (nightly)`, it runs `cargo +nightly fuzz build`, and it
+was **green** at the tip the day before. Checked with
+`gh run view <id> --json jobs`; I had asserted it from the shape of the
+problem instead.
+
+**The real reason is better: the job runs on `ubuntu-latest`, and the break is
+MSVC-only.** The same cdylib on Linux is a `.so`, and no linker asks a `.so`
+for a `main`. So CI was not asleep — it was **structurally incapable** of
+seeing this, and the local build was the only place it could surface.
+
+⇒ **The usual assumption is that CI is the stricter of the two and a green CI
+absolves a red local. Here it was exactly backwards.** A single-platform job
+is single-platform *evidence*, and the platform it does not cover is the one
+the code is written on.
+
+⇒ And note how close I came to filing the wrong lesson permanently: the
+correction arrived only because I read `ci.yml` for an unrelated reason while
+cutting a release. **Before asserting that a check does not exist, open the
+file that would contain it.**
 
 **The new information, and it is a correction to the "how to apply" above:**
 
