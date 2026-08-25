@@ -96,6 +96,192 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `270b9d0` — `Pass 122.5` ships: print files that ask for ink get ink, and say so — ★★★★★ THE GHENT BOARD MOVES FOR THE FIRST TIME IN THIS DIRECTION: `24 pass / 11 FAIL / 16 UNRESOLVED` → `27 pass / 8 FAIL / 16 UNRESOLVED`, THREE PATCHES FIXED, ZERO REGRESSIONS — 2026-08-24 (two-hundred-and-forty-sixth filing)
+
+**Sourcing.** No shell in this filing (librarian invocation). Every figure
+below is **relayed from the engineer's own dispatch**, which does have a
+shell and stated its method beside each figure — per hard rule 8, this
+entire entry is the relayed case, not independently re-measured.
+
+---
+
+#### What shipped, in one paragraph
+
+`page_blend_space_source` ∈ `device_native | output_intent_if_subtractive |
+output_intent_always`, **defaulting to `output_intent_if_subtractive`**.
+When a page group declares no `/CS`, the document's `/OutputIntents` is
+now consulted: `/DestOutputProfile`'s `/N` ≥ 4 (a subtractive device
+class) engages the colorant buffer instead of the additive-sRGB path
+§8.6.7 already permits but Acrobat does not take. Implemented in
+`interpret::page_blend_space`, which now returns `(BlendSpace,
+BlendSpaceFrom)`. **The display-list recorder and the direct renderer
+call the SAME function with the SAME setting** — decision 084's
+shared-predicate discipline, applied here so a recording and a render can
+never judge the blending space differently and refuse the wrong pages in
+opposite directions. Touched: `pdfce-core` (settings), `pdfce-render`
+(`interpret`/`lib`/`display_list`/`font`), `pdfce-cli` (metrics line +
+operator note + tests), `pdfce-gui` (settings panel + `ui_text`), plus a
+new integration test file.
+
+---
+
+#### ★★ Why this is a SETTING, not a silent fix — the spec is determinate and AGAINST the change, and 2.0 opens it only informatively
+
+ISO 32000-1 is determinate and against this behaviour: §11.4.7 and
+§11.6.3 each independently state that, absent a specification, the page
+group's colour space **shall** be the device's native one;
+`/OutputIntent` never appears in the 1.7 transparency model at all;
+§8.6.7 *prescribes* today's degenerate branch verbatim. **pdfce's prior
+behaviour was conforming but degenerate, never merely unspecified.**
+ISO 32000-2 opens the question, but only informatively: Annex P allows
+the page group's space to come *"from the output device, or from the
+output intent,"* unranked — two conformant 2.0 processors can disagree
+and both cite the same annex. That is exactly standing rule **R169**'s
+case (spec genuinely, informatively ambiguous ⇒ ship both readings as a
+setting, best-sourced default, never a question back to Ken). **The
+default was the engineer's to pick, per the operator's own twice-given
+standing instruction, and it was picked without asking.** Open operator
+question `(bs)`, withdrawn earlier the same day (245th filing), stays
+withdrawn.
+
+---
+
+#### Blast radius — measured, not estimated
+
+External corpus **4,012** PDFs; **2,273** carry an `/OutputIntent`; **65
+of those 2,273 (2.9 %)** move to ink compositing under the new default,
+and every one of the 65 is a CMYK-intent PDF/A or TWG conformance file.
+Ghent verdicts changed: **3 fixed, 0 regressed.**
+
+---
+
+#### ★★★ A contract almost broken, and the test that caught it
+
+Blending-space provenance was first emitted on the metrics line as a
+**word** — `blend_space_from=output_intent`. `crates/pdfce-cli/tests/render_page.rs`
+failed: **every value on that line parses as a `u64`**, a property
+downstream consumers rely on rather than an accident of the values
+happening to be counts so far. Shipping the first non-integer value
+would have been a **silent compatibility change to a line whose KEY
+ORDER is already pinned as a stable contract**. Shipped instead as
+`blend_space_from_output_intent=<0|1>` — always present, so its absence
+is never ambiguous — and the provenance word moved into the operator
+note, where prose belongs. Only the **inference** needs a flag:
+`page_group` means the file said so, `device_native` means the standard
+said so, and neither is something pdfce guessed. ⇒ **A machine-readable
+line has properties beyond its schema, and a test is where they live.**
+The metrics-line key count is now **91**, up from 90 (decision 084).
+
+---
+
+#### ★★★★ Five of this project's own gates caught things reading would not have
+
+1. `check-settings-consumed.py` — twice. First that the setting was
+   parsed and written but **read by nothing**; then, after the renderer
+   was wired, that it was still unreachable because no **builder**
+   existed for a shell to call.
+2. The settings **round-trip test**, which demands every field be set to
+   a **non-default** value, so a key `write_to_string` forgot cannot pass
+   by accidentally matching its default.
+3. The **`RenderPolicy` projection test**, exercised at a non-default
+   value so it walks the new builder seam rather than merely satisfying
+   the compiler.
+4. `render_page`'s **stable-stdout-line** test — the integer-only
+   property above.
+5. `pdfce-gui`'s settings panel test, which asserts **every field of
+   `Settings` has a control in the window** — a setting reachable only by
+   hand-editing `settings.txt` is not reachable. A control and its three
+   explanatory strings were added to `ui_text.rs`, per the string gate.
+
+**`FEATURES.md` note:** the `gui` column tracks `D:\dev\pdfceGUI`, not
+`crates/pdfce-gui`, since 2026-08-19 (decision 073) — this in-repo
+`pdfce-gui` control keeps a gate honest and is **not** a `[x] gui` tick.
+
+---
+
+#### Tests
+
+Four new tests in `crates/pdfce-render/tests/page_blend_space_source.rs`:
+a non-vacuous **pair** (the default takes the space from the output
+intent; `DeviceNative` gives the **opposite** answer on the same file)
+plus an over-reach guard (a page that **declares** its own group `/CS`
+renders pixel-identical under every value of the setting, because the
+setting fills a silence and must not touch a file that isn't silent).
+All four skip loudly, not quietly, when the external Ghent corpus is
+absent.
+
+---
+
+#### Verification
+
+**4,211** workspace tests green, 0 failures. `cargo fmt --all --check`
+clean; `cargo clippy --workspace --all-targets` clean. All **16**
+runnable gates exit 0. `fuzz/` targets `cargo check` clean. `cargo tree
+-p pdfce-core` and `-p pdfce-render` show no `egui`/`eframe`/`winit`/
+`wgpu`/`glow` — GUI-core separation holds.
+
+**Acceptance criterion, as filed:** *"the 24-patch signature
+(`overprint_requested>0` with `cmyk_buffer=0`) reaches 0 under the
+default setting, or each patch that still carries it has a spec-cited
+justification."* Relayed as met by the engineer's dispatch; **the raw
+signature count itself was not quoted to this role and is not
+independently re-measured this filing** — treat as unverified by this
+role until seen directly (hard rule 8).
+
+---
+
+#### The board, corrected
+
+**Harness board moves for the first time in this direction:
+`24 pass / 11 FAIL / 16 UNRESOLVED` → `27 pass / 8 FAIL / 16 UNRESOLVED`**
+(27+8+16 = 51). Three verdicts flipped, all FAIL → pass, **zero
+regressions**: `1_GWG011` (CMYK Overprint Mode — the same patch
+`Pass 122.4` measured), `2_GWG030` (Gray K black Overprint), `2_GWG040`
+(White Overprint).
+
+**Hand-adjudicated minimum, carrying forward `Pass 122.4`'s two
+out-of-band adjudications:** `27` harness passes + `GWG 5.0`
+(hand-verified pass, harness-unadjudicable) = **28 pass, at minimum**.
+Of the 16 harness-UNRESOLVED, the `MARK?` population is **unchanged at
+4** (`GWG 5.0`/`8.2`/`8.1`/`8.01`) — **3 of those 4 are known FAIL**
+(`8.2`, `8.1`, `8.01` — Acrobat shows check marks pdfce does not paint, a
+per-sample image-overprint gap, unaffected by this Pass) and **1 is
+known PASS** (`GWG 5.0`).
+
+**★ Supersedes, without rewriting:** the `24/11/16` harness figure and
+the `25`/`26`/`28 at minimum` hand-adjudicated figures carried in the
+`Pass 122.2` *Shipped* entry's "Corrected current standing" section and
+in `Pass 122.4`'s correction block (both below/above in this file, per
+hard rule 1 — kept legible, not rewritten). This is the first Pass in
+the sequence to move the **harness's own** count, rather than a hand
+adjudication layered on top of it.
+
+---
+
+#### `FEATURES.md`
+
+`[x] core`, `[x] cli`; `gui` unchanged — tracks `D:\dev\pdfceGUI`, not
+shown reachable there. New *Implemented* row for the page-group
+blend-space-source setting, placed beside the existing colorant-buffer
+row; Ghent banner figures corrected to the board above.
+
+---
+
+#### Deliverables cited
+
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__page_group_absent_blending_space.md`
+(`PGB-1`…`PGB-14`, `PGB-N1`/`PGB-N2`, `PGB-A1`…`PGB-A4`) and
+`D:\Dev\Rag-Specialized\PDF_Spec\pdfx\pdfx__ref__transparency_blending_space.md`
+(`PX-1`…`PX-11`, `PX-N1`…`PX-N3`) — both already named in this Pass's
+Backlog design and carried forward unchanged.
+
+**Two open items NOT resolved by this Pass, carried forward as before:**
+`PGB-A2` (which `OutputIntent`, when a file carries several) and
+`PGB-A4` (edition-dependent; a single `pdf_semantics_edition` knob is
+still only a suggestion, not built).
+
+---
+
 ### `f6457ee` — `Pass 122.2` ships: the Ghent harness stops reporting `clean` on four patches it never examined — ★★★ ONE FAULT FIXED (the contrast floor, but NOT for the reason the founding review gave), ONE FAULT REPLACED BY AN HONEST REFUSAL (`MARK?`, not a detector), AND THE REVIEW'S OWN FLOOR FIGURE (26) DOES NOT REPRODUCE — CORRECTED CURRENT STANDING IS 25 — 2026-08-24 (two-hundred-and-forty-third filing)
 
 **Sourcing.** No shell in this filing (librarian invocation). Every figure
@@ -198,6 +384,13 @@ away rather than shipped; see the RAG finding below.
 ---
 
 #### ★★★★ Corrected current standing: `25 pass of 51`, not the review's `26` — the harness reports `24 / 11 / 16`
+
+**★ SUPERSEDED 2026-08-24 (246th filing, `Pass 122.5`, `270b9d0`) — see
+the top of *Shipped*, above.** `Pass 122.5` shipped code and moved the
+**harness's own** count to `27 pass / 8 FAIL / 16 UNRESOLVED`; the `25`
+figure below (and the `26`/`28-at-minimum` hand adjudications in the
+correction blocks that follow) are stale. Kept legible rather than
+rewritten, per hard rule 1.
 
 Harness board after this Pass: **`24 pass / 11 FAIL / 16 UNRESOLVED`**
 (24+11+16 = 51). Arithmetic against the prior board (`29/10/12`): the one
@@ -67517,6 +67710,11 @@ solved twice, differently:**
 
 #### ★★★★★★★ CORRECTED AGAIN, LATER THE SAME DAY, 2026-08-24 (`Pass 122.4`'s ANSWER — MEASUREMENT ONLY, NO COMMIT, two-hundred-and-forty-fourth filing) — A THIRD ORACLE SETTLES THE DISPUTE: `GWG 1.1` FLIPS FAIL → PASS, STANDING MOVES TO 26, AND THE MECHANISM GENERALISES TO 24 OF 51 PATCHES
 
+**★ SUPERSEDED 2026-08-24 (246th filing, `Pass 122.5`, `270b9d0`) — see the
+top of *Shipped*.** `Pass 122.5` shipped the fix this block's mechanism
+predicted: harness board `24/11/16` → `27/8/16`, hand-adjudicated minimum
+`26` → `28`. Kept legible rather than rewritten, per hard rule 1.
+
 **`Pass 122.4` asked: does the combined render disagree with the individual patch render it is assembled from? ANSWERED: YES — and the operator's original reading of the combined page was right all along.**
 
 **Three-way measurement, `GWG 1.1`'s OPM-1 swatch, same binary, 2026-08-24:**
@@ -76023,148 +76221,6 @@ standing board's 245th-filing correction block for the clause
 correction (§11.4.7/§11.6.3, not §11.7.2) and the PDF/X-1a/X-3 opaque-
 model split (§8.6.7/Table 148, not §11.7.4.3/Table 149, for most of the
 24-patch population).
-
----
-
-### `Pass 122.5` — the colorant-buffer allocation gap `Pass 122.4` exposed: the page group's blending colour space is undeclared for 24 of 51 patches, and pdfce should offer BOTH readings as a setting
-
-**Filed 2026-08-24 (two-hundred-and-forty-fourth filing), spun out of
-`Pass 122.4`'s measurement. ★ CORRECTED IN PLACE 2026-08-24
-(245th filing, `pdfce-spec-librarian`'s findings, `pdfce-librarian`
-filing) — citations, premise, and scope all revised; the fix is now
-designed, not merely gated on a spec reading.**
-
-`Pass 122.4` found that pdfce allocates a colorant buffer — and
-composites `DeviceCMYK` overprint content subtractively, in ink — only
-when the page group carries a declared `/CS /DeviceCMYK`. **The page
-group itself exists unconditionally** (ISO 32000-1 §11.4.7: *"all of the
-elements painted directly onto a page shall be treated as if they were
-contained in a transparency group… This group is called the page
-group,"* treated as isolated regardless of whether `/Group` appears in
-the page dictionary). A standalone PDF/X-3 file with a CMYK
-`OutputIntent` but an **undeclared** page-group `/CS` gets no buffer and
-composites additively, in sRGB — visibly wrong against Adobe Acrobat
-(rendering reference; licence tier unestablished), which does not do
-this. Swept the full 51-patch Ghent corpus: **24 of 51 patches request
-overprint and get no colorant buffer**; those 24 are every remaining
-Ghent FAIL and all four `MARK?` patches. See the Ghent standing board's
-2026-08-24 correction blocks (244th and 245th filings) for the full
-measurement and patch list.
-
-**The spec reading is now IN — `pdfce-spec-librarian` dispatched,
-245th filing, and this is what it found:**
-
-- **Governing clauses are §11.4.7 and §11.6.3, not §11.7.2** (which
-  governs *declared or inherited* group spaces and never reaches an
-  undeclared one). Both independently state: *"If not otherwise
-  specified, the page group's colour space shall be inherited from the
-  native colour space of the output device."*
-- **Under ISO 32000-1 (1.7), pdfce's current `cmyk_buffer=0` behaviour is
-  CONFORMING.** `/OutputIntent` does not appear in 1.7's compositing
-  text at all (measured: one hit for "output intent" within ±4 lines of
-  `blend`/`composit`/`transparen` in the full 1.7 corpus, and it is
-  §8.6.5.5's ICC sentence, excluded); §14.11.5 says a processor is *"free
-  to disregard"* `/OutputIntent` for anything but its stated informational
-  purpose, and that sentence survives verbatim into 2.0.
-- **ISO 32000-2 (2.0) opens the question, but only informatively.**
-  §11.4.7 allows the device colour space to be *"actual, assumed or
-  simulated"* and says the processor **can** derive it differently;
-  **Annex P** (informative) says a page group's colour space can be
-  inherited *"from the output device, or from the output intent,"* with
-  **no ranking and no condition between the two**; §11.4.7 NOTE 3 names
-  PDF/X-4's `OutputIntent` as the *"implied default page blending colour
-  space"* — for PDF/X-4 specifically, which (unlike X-1a/X-3) permits
-  live transparency. The only body-text rung, §10.8.3 step (a), is a
-  `should` and selects a colourant set, not a blending space.
-- ⇒ **Two conformant 2.0 processors can legitimately disagree, and both
-  can cite Annex P.** That is exactly the shape standing rule **R169**
-  governs (*"where the PDF standard is genuinely ambiguous, pdfce's
-  answer is a SETTING, not a silent pick"*) — not a question for Ken.
-  Open operator question `(bs)`, opened when this Pass was first filed,
-  is **WITHDRAWN** on that basis; see its dated closure.
-- **For PDF/X-1a and PDF/X-3 specifically — most of the 24-patch
-  population — the citation is different again.** Both forbid live
-  transparency, so a conforming file in either subset has no
-  transparency group to begin with; its overprint is an **opaque-model**
-  question governed by **§8.6.7 and Table 148**, never §11.7.4.3 / Table
-  149. §8.6.7 already prescribes today's degenerate branch: *"It also
-  shall not apply if the device's native colour space is not
-  `DeviceCMYK`; in that case, source colours shall be converted… and all
-  components participate in the conversion, whatever their values"* —
-  today's sRGB behaviour is literally what this clause names,
-  **conforming but degenerate**, not merely unspecified. And no free
-  ISO 15930 (PDF/X) source establishes that any PDF/X part *requires* a
-  page group or CMYK compositing — X-3 works by construction, writer-side
-  (its `DeviceCMYK` content and its CMYK `OutputIntent` profile must
-  already agree for the file to be conformant at all), which is why the
-  fix for the X-3/X-1a slice of the 24 is **structural** (allocate an
-  n-colorant buffer sized from the `OutputIntent`'s component count) and
-  **not colorimetric** — a nominal CMYK buffer with no ICC transform is
-  sufficient; do not scope an ICC pipeline for this slice.
-- **Why a shader-only fix cannot work for the additive path, regardless
-  of which setting value is active:** §11.7.4.3's second bullet defines
-  `B(cb, cs) = cs` for every colour component *"specified in the current
-  colour space,"* else `cb`. In sRGB every source colour has already
-  been converted to all three components, so every component is
-  "specified," so `B = cs` everywhere — overprint is structurally
-  unrepresentable in an additive buffer, not merely un-simulated. Only
-  an n-colorant buffer represents it.
-- **One more dormant prediction fired**: §11.7.4.3's OPM-1 predicate
-  names *"the current colour space and group colour space,"* never the
-  output device — a `DeviceCMYK` page group satisfies OPM-1 on an RGB
-  display. Recorded in the corpus as `SP-A3` since 2026-08-08; this is
-  the case that triggers it.
-
-**Design — a setting, per R169, not a silent pick:**
-
-    setting: page_blend_space_source
-      values: device_native | output_intent_if_subtractive | output_intent_always
-      default: output_intent_if_subtractive
-
-  `device_native` is 1.7-literal (today's shipped behaviour, kept
-  available and disclosable, never silently removed).
-  `output_intent_if_subtractive` — **the chosen default** — allocates an
-  n-colorant buffer from the page's `OutputIntent` when that intent
-  names a subtractive (non-RGB/Gray) colour space, even absent a
-  declared page `/Group`; this is the reading Acrobat's renderer appears
-  to apply and is "what would be normally expected" of a PDF/X print
-  file (the operator's own stated criterion for defaults he has not
-  picked himself, 2026-08-20). `output_intent_always` is the more
-  aggressive reading (Annex P's unranked alternative, applied
-  unconditionally) kept as the third option because Annex P gives no
-  textual basis to rule it out. **Disclosure (rule 4, off-canvas, no
-  page-canvas marking):** the active blending-space source and its
-  provenance print on the status line / CLI output whenever a rendered
-  page's blending space was chosen by inference rather than by an
-  explicit page `/Group /CS`.
-  For the X-1a/X-3 opaque-model slice, the buffer allocation is
-  structural (colorant count from the `OutputIntent`) regardless of
-  which `page_blend_space_source` value is active, per the §8.6.7
-  finding above.
-
-**Two open items carried forward, not to be re-solved differently by
-this Pass:** `PGB-A2` (which `OutputIntent`, when a file carries
-several — same shape as `SEP-A1`) and `PGB-A4` (edition-dependent;
-consider a single `pdf_semantics_edition` knob rather than a family of
-per-clause ones). See the Ghent standing board's 245th-filing correction
-block.
-
-**Deliverables to cite in any implementation Pass's doc comments:**
-`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__page_group_absent_blending_space.md`
-(`PGB-1`…`PGB-14`, `PGB-N1`/`PGB-N2`, `PGB-A1`…`PGB-A4`) and
-`D:\Dev\Rag-Specialized\PDF_Spec\pdfx\pdfx__ref__transparency_blending_space.md`
-(`PX-1`…`PX-11`, `PX-N1`…`PX-N3`).
-
-**Acceptance:** the `page_blend_space_source` setting ships with the
-stated three values and `output_intent_if_subtractive` default,
-CLI/GUI-surfaced; the 24-patch signature (`overprint_requested>0` with
-`cmyk_buffer=0`) reaches 0 **under the default setting**, or each patch
-that still carries it has a spec-cited justification; the X-1a/X-3
-slice's buffer allocation is structural (colorant count only, no ICC
-transform) and cites §8.6.7/Table 148, never §11.7.4.3/Table 149; the
-X-4/transparency slice cites §11.4.7/§11.6.3, never §11.7.2; re-measure
-the Ghent board; `GWG 1.1`'s individual-patch render agrees with its
-combined-document render under the default setting.
 
 ---
 

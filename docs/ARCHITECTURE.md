@@ -24782,3 +24782,105 @@ free 072.**
   §5 are not engaged**, for the reasons stated at the head of this entry.
 
   **Ceiling moves 083 → 084; next free 085.**
+
+---
+
+- **2026-08-24 — Decision 085. WHEN A PAGE GROUP DECLARES NO `/CS`, THE
+  BLENDING COLOUR SPACE IS INFERRED FROM THE DOCUMENT'S `/OutputIntent`
+  BY DEFAULT — A `page_blend_space_source` SETTING, NOT A SILENT PICK,
+  PER R169.** (`270b9d0`, `Pass 122.5`, 246th filing — librarian filing,
+  no shell; every figure relayed from the engineer's dispatch, hard rule
+  8.) **Parent: decision 079** (the colorant buffer engages only on a
+  subtractive page).
+
+  **The situation.** ISO 32000-1 §11.4.7/§11.6.3 are determinate: absent
+  a declared `/Group /CS`, the page group's blending space **shall** be
+  the device's native one, and `/OutputIntent` never appears in the 1.7
+  transparency model at all. §8.6.7 *prescribes* the resulting additive-
+  sRGB branch verbatim for a device whose native space is not
+  `DeviceCMYK`. **pdfce's prior behaviour (`cmyk_buffer=0` for an
+  undeclared page group) was therefore conforming, not defective, under
+  1.7.** ISO 32000-2 opens the question but only **informatively**:
+  Annex P permits the space to be inherited *"from the output device, or
+  from the output intent,"* with no ranking and no condition between the
+  two. **Two conformant 2.0 processors can disagree and both cite Annex
+  P** — the shape standing rule **R169** governs (spec genuinely,
+  informatively ambiguous ⇒ a setting, best-sourced default, never a
+  question back to the operator).
+
+  **The decision, in one line.** `Settings` gains `page_blend_space_source
+  ∈ {device_native, output_intent_if_subtractive, output_intent_always}`,
+  **default `output_intent_if_subtractive`** — allocate an n-colorant
+  buffer from the page's `/OutputIntent` when that intent names a
+  subtractive (non-RGB/Gray) colour space, even absent a declared page
+  `/Group`, because that is the reading Acrobat's own renderer appears to
+  take and "what would be normally expected" of a PDF/X print file (the
+  operator's stated criterion for a default he has not picked himself,
+  2026-08-20). **The default was the engineer's to pick, per that
+  standing instruction, and it was picked without asking** — open
+  operator question `(bs)` was opened for this exact question and
+  withdrawn the same day (245th filing) on the same warrant.
+
+  **Why a setting rather than an unconditional fix.** §11.7.4.3's blend
+  formula makes overprint **structurally unrepresentable** in an additive
+  buffer once every source colour has already been converted to three
+  components — so the additive path cannot simply be repaired in place;
+  the only representable fix is to allocate ink where the document names
+  a subtractive output intent, and the spec gives two legitimate,
+  unranked ways to decide when that applies. Both are shipped, gated by
+  the setting; `device_native` keeps the prior 1.7-literal behaviour
+  available and disclosable, never silently removed.
+
+  **Shared predicate, per decision 084's discipline.** The choice is
+  implemented once, in `interpret::page_blend_space`, returning
+  `(BlendSpace, BlendSpaceFrom)`. **The display-list recorder and the
+  direct renderer call the SAME function with the SAME setting** — a
+  recording and a render can never judge the blending space differently
+  and refuse the wrong pages in opposite directions, the same shape
+  decision 084 established for the `f32`/`f64` precision boundary,
+  applied here to a colour-space boundary instead.
+
+  **Disclosure (`CLAUDE.md` rule 4 — off-canvas, no page-canvas
+  marking).** The metrics line carries `blend_space_from_output_intent=
+  <0|1>`, always present so its absence is never ambiguous; the
+  human-readable provenance word (`page_group` / `device_native`) moved
+  to the operator note, where prose belongs. Only the **inference** is
+  flagged — a page that declares its own `/Group /CS` is untouched by the
+  setting and carries no provenance flag at all.
+
+  **★ A contract nearly broken, worth recording as its own finding.** The
+  provenance was first drafted as a bare word on the metrics line
+  (`blend_space_from=output_intent`). `render_page.rs`'s stable-line test
+  failed: every key on that line parses as `u64`, a property downstream
+  consumers rely on rather than an accident of the values so far all
+  being counts. The integer-flag shape above is the fix; the metrics-line
+  key count moves **90 → 91**.
+
+  **Measured blast radius**, so the decision is not taken on a hunch:
+  external corpus 4,012 PDFs; 2,273 carry an `/OutputIntent`; **65 of
+  those 2,273 (2.9 %)** move to ink compositing under the new default,
+  every one a CMYK-intent PDF/A or TWG conformance file. Ghent: 3
+  verdicts fixed (`1_GWG011`, `2_GWG030`, `2_GWG040`), 0 regressed.
+
+  **Body-section updates:** §4.1 gains sync entry **(AC)** —
+  `Settings::page_blend_space_source` (three variants: `device_native`,
+  `output_intent_if_subtractive`, `output_intent_always`),
+  `interpret::page_blend_space` (returns `(BlendSpace, BlendSpaceFrom)`),
+  and `Diagnostics`'s new `blend_space_from_output_intent` flag —
+  **exact type/derive shape (enum name, `#[non_exhaustive]` status, field
+  visibility) relayed from the engineer's dispatch, not independently
+  read from `crates/` by this role this filing; flag for confirmation on
+  next code-touching dispatch.** §2 stack table unaffected (no new
+  dependency). **§3 (GUI-core separation) holds by report**: `cargo tree
+  -p pdfce-core`/`-p pdfce-render` relayed clean of `egui`/`eframe`/
+  `winit`/`wgpu`/`glow`, not independently re-run by this role. §5
+  (round-trip) is not engaged — this is a render-time interpretation
+  choice, not a writer change.
+
+  **No new standing rule minted.** R169/R206 already cover this exactly,
+  and this decision is the second instance of R169 firing on the same
+  question the operator's 2026-08-20 wording answers generally — a third
+  rule would be proliferation, not discipline (the same disposition the
+  245th filing reached for the setting's own design).
+
+  **Ceiling moves 084 → 085; next free 086.**

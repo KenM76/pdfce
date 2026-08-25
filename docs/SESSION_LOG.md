@@ -59641,3 +59641,138 @@ touched, no `cargo tree`/round-trip/packaging checks apply.
   `pdfce-spec-librarian` report, per hard rule 8.
 - **NO COMMIT** — dispatching engineer stated intent to commit these
   edits together with the engineer's own, separately.
+
+## 2026-08-24 (two-hundred-and-forty-sixth filing) — `Pass 122.5` ships: print files that ask for ink get ink, and say so; the Ghent board moves for the first time in this direction, `24/11/16` → `27/8/16`, three patches fixed, zero regressions
+
+**Shipped:**
+- `Pass 122.5` (`270b9d0`) — `page_blend_space_source` setting
+  (`device_native | output_intent_if_subtractive | output_intent_always`,
+  default `output_intent_if_subtractive`). When a page group declares no
+  `/CS`, the document's `/OutputIntents` is now consulted: a subtractive
+  destination profile (`/N` ≥ 4) engages the colorant buffer instead of
+  compositing additively in sRGB. `interpret::page_blend_space` is the
+  single shared function both the display-list recorder and the direct
+  renderer call (decision 084's shared-predicate discipline, reused).
+  Touched `pdfce-core`, `pdfce-render`, `pdfce-cli`, `pdfce-gui`, plus a
+  new test file.
+
+**Decisions made this session:**
+- **Decision 085** (`ARCHITECTURE.md` §12): the default is
+  `output_intent_if_subtractive`, picked by the engineer without asking,
+  per the operator's own twice-given standing instruction to pick a
+  default for spec-ambiguous cases rather than ask. Open operator
+  question `(bs)` — opened for exactly this question, 244th filing —
+  stays withdrawn (245th filing's basis: this is R169's case, not a
+  question for Ken).
+
+**Findings + decisions:**
+- **Sourcing note for this whole entry:** no shell in this filing
+  (librarian invocation). Every figure below is relayed from the
+  engineer's own dispatch, which stated its method beside each figure —
+  per hard rule 8, treat this entire entry as the relayed case, not
+  independently re-measured.
+- **The board moved for the first time in this direction.** Prior
+  filings today (`Pass 122.2`, `Pass 122.4`) corrected the harness's
+  instrument or layered hand adjudication on top of an unchanged harness
+  count. This is the first Pass in the `122.x` sequence to change the
+  **harness's own** score: `24 pass / 11 FAIL / 16 UNRESOLVED` →
+  `27 pass / 8 FAIL / 16 UNRESOLVED` (27+8+16=51). Three verdicts
+  flipped, all FAIL → pass, zero regressions: `1_GWG011` (CMYK Overprint
+  Mode — the same patch `Pass 122.4` measured via a third oracle),
+  `2_GWG030` (Gray K black Overprint), `2_GWG040` (White Overprint).
+- **Hand-adjudicated minimum moves `26` → `28`**: 27 harness passes +
+  `GWG 5.0` (hand-verified pass, harness-unadjudicable). Of the 16
+  UNRESOLVED, the `MARK?` population is unchanged at 4
+  (`GWG 5.0`/`8.2`/`8.1`/`8.01`) — 3 of those 4 are known FAIL (`8.2`,
+  `8.1`, `8.01`; a separate, unaffected gap — per-sample image
+  overprint) and 1 is known PASS (`GWG 5.0`).
+- **A contract nearly broken, and the test that caught it.** Blending
+  provenance was first drafted as a word on the metrics line
+  (`blend_space_from=output_intent`); `render_page.rs`'s stable-line
+  test failed because every value on that line parses as `u64` — a
+  property downstream consumers rely on, not an accident of the values
+  so far all being counts. Shipped instead as an integer flag,
+  `blend_space_from_output_intent=<0|1>`, always present; the
+  human-readable word moved to the operator note. Metrics-line key count
+  moves **90 → 91**.
+- **Five of this project's own gates caught things reading would not
+  have**: `check-settings-consumed.py` (twice — parsed-but-unread, then
+  wired-but-no-builder), the settings round-trip test (non-default
+  values only), the `RenderPolicy` projection test (non-default value,
+  exercises the new builder seam), `render_page`'s stable-line test (the
+  integer-only property above), and `pdfce-gui`'s settings-panel test
+  (every `Settings` field needs a reachable control — a new control and
+  three strings were added to `ui_text.rs`).
+- **`FEATURES.md`'s `gui` column tracks `D:\dev\pdfceGUI`, not
+  `crates/pdfce-gui`, since 2026-08-19 (decision 073).** The in-repo
+  `pdfce-gui` settings control added this Pass keeps a gate honest; it
+  is **not** a `[x] gui` tick and was not treated as one.
+- **Blast radius, measured not estimated:** external corpus 4,012 PDFs;
+  2,273 carry an `/OutputIntent`; 65 of those 2,273 (2.9 %) move to ink
+  compositing under the new default, every one a CMYK-intent PDF/A or
+  TWG conformance file.
+- **What was NOT independently re-measured this filing, flagged per hard
+  rule 8:** the `Pass 122.5` acceptance criterion's raw signature count
+  (`overprint_requested>0` with `cmyk_buffer=0` reaching 0 under the
+  default setting) — relayed as met, not quoted as a number, so treated
+  as unverified by this role pending direct confirmation; and the exact
+  Rust type/derive shape of the new settings surface (relayed for
+  `ARCHITECTURE.md` §4.1 sync entry (AC), flagged there for confirmation
+  on a future code-touching dispatch).
+
+**`ROADMAP.md`:**
+- `Pass 122.5` moved from *Backlog* to the top of *Shipped*, fully
+  deleted from *Backlog* per this project's fully-delete-on-ship
+  convention (`Pass 92.0`/`93.0` precedent).
+- Superseding pointers added (not rewrites, per hard rule 1) to the two
+  older correction blocks whose figures this Pass supersedes:
+  `Pass 122.2`'s "Corrected current standing" section (`25 pass`) and
+  `Pass 122.4`'s correction block (`26 pass`, mechanism prediction).
+
+**`FEATURES.md`:**
+- Ghent-figures banner updated to `27/8/16` harness, `28 pass` at
+  minimum, citing `Pass 122.5`/`270b9d0` directly rather than the
+  244th-filing measurement-only figure it replaces.
+- New *Implemented* row added (colour/compositing section, immediately
+  after the subtractive colorant-buffer row): the page-group
+  blend-space-source setting. `[x] core`, `[x] cli`, `[ ] gui` (tracks
+  `D:\dev\pdfceGUI`, not shown reachable there).
+
+**`ARCHITECTURE.md`:**
+- **Decision 085** added to §12 (ceiling `084` → `085`, next free
+  `086`), parented to decision 079 (colorant buffer engages only on a
+  subtractive page) and cross-referencing decision 084 (shared-predicate
+  discipline, reused here for the colour-space boundary instead of the
+  `f32`/`f64` precision boundary it was minted for).
+- §4.1 gains sync entry **(AC)** for the new public surface
+  (`Settings::page_blend_space_source`, `interpret::page_blend_space`,
+  `Diagnostics::blend_space_from_output_intent`), with the exact
+  type/derive shape flagged as relayed, not independently read from
+  `crates/` this filing.
+
+**Still in flight:**
+- `Pass 122.3` (colorant-buffer byte ceiling) — unaffected by this
+  filing, still open.
+- A reference-render-based `MARK?` detector for the four check-mark
+  patches (`GWG 5.0`/`8.2`/`8.1`/`8.01`) — still unbuilt, per
+  `Pass 122.2`'s own deferral; `GWG 5.0` is the one of the four already
+  known-good by hand.
+- `PGB-A2` (which `OutputIntent`, when a file carries several) and
+  `PGB-A4` (edition-dependent; a single `pdf_semantics_edition` knob) —
+  carried forward from `Pass 122.5`'s own design, not resolved by this
+  Pass.
+- Per-sample image overprint (`overprint_images_unsupported`) — the
+  named cause of `GWG 8.2`/`8.1`/`8.01` staying FAIL — remains a
+  separate, unbuilt gap (`FEATURES.md`'s existing *Planned* row).
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned), per
+  the dispatch's own instruction.
+- Ledger: standing rules ceiling stays `R217` (none minted this filing —
+  R169/R206 already cover the mechanism); decisions ceiling `085`, next
+  free `086`; Pass family `122.x` next free `122.6`; filing ordinal
+  `246`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Everything above is either this role's own
+  documentation edits or relayed from the dispatching engineer's report,
+  per hard rule 8.
