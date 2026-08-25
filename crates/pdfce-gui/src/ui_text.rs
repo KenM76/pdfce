@@ -2496,6 +2496,57 @@ pub fn settings_save_failed(reason: &str) -> String {
 // --- CMYK rendering -------------------------------------------------------
 
 /// Heading for the CMYK conversion setting.
+pub fn setting_page_blend_title() -> &'static str {
+    "How print files are coloured when they do not say"
+}
+
+/// What the standard does not settle here.
+pub fn setting_page_blend_silence() -> &'static str {
+    "A print file can carry a colour profile saying it is destined for ink, \
+yet not state which colour space its pages should be mixed in. The older \
+standard says to use the screen's; the newer one says the screen's OR the \
+file's profile, and does not say which wins. Where you mix the colour decides \
+whether overprinting inks can be shown at all — on screen they cannot be, at \
+any quality setting."
+}
+
+/// The consequence an operator can see.
+pub fn setting_page_blend_radius() -> &'static str {
+    "Affects print-ready files that carry a colour profile but no page colour \
+space. Ordinary screen documents are unaffected either way."
+}
+
+pub fn setting_page_blend_intent_if_subtractive() -> &'static str {
+    "Use the file's ink profile (pdfce's default)"
+}
+
+/// The shipped default's explanation.
+pub fn setting_page_blend_intent_if_subtractive_note() -> &'static str {
+    "A print file renders the way a print viewer shows it, with overprinting \
+inks visible. A file whose profile is a screen profile is left alone."
+}
+
+pub fn setting_page_blend_device_native() -> &'static str {
+    "Always use the screen's colour"
+}
+
+/// The strictly-conforming alternative.
+pub fn setting_page_blend_device_native_note() -> &'static str {
+    "Exactly what the older standard requires, and what pdfce did before this \
+setting existed. Overprinting inks cannot be shown this way."
+}
+
+pub fn setting_page_blend_intent_always() -> &'static str {
+    "Use the file's profile even when it is a screen profile"
+}
+
+/// The literal reading of the newer standard's informative annex.
+pub fn setting_page_blend_intent_always_note() -> &'static str {
+    "The most literal reading of the newer standard. Rarely wanted: a screen \
+profile then changes how a page is mixed, which is a bigger change than the \
+evidence supports."
+}
+
 pub fn setting_cmyk_title() -> &'static str {
     "How CMYK colour is shown on screen"
 }

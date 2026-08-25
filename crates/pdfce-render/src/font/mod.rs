@@ -595,6 +595,11 @@ pub struct RenderOptions {
     /// [`CmykIntent::NeutralBlack`] is the answer for CAD and line
     /// drawings, where every stroke is pure K and true black is expected.
     pub cmyk_intent: CmykIntent,
+    /// Where a page's blending colour space comes from when its group
+    /// declares none — spec ambiguity `PGB-A1`. See
+    /// [`pdfce_core::settings::PageBlendSpaceSource`], whose docs carry the
+    /// clause citations and the reason this is a setting rather than a fix.
+    pub page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource,
     /// Which filter resamples a size-mismatched `/SMask` or explicit
     /// `/Mask` (spec ambiguity `SM-A1`, §8.9.6.3 / Table 145).
     ///
@@ -663,6 +668,8 @@ pub struct RenderOptions {
 pub struct RenderPolicy<'a> {
     /// See [`RenderOptions::cmyk_intent`].
     pub cmyk_intent: CmykIntent,
+    /// See [`RenderOptions::page_blend_space_source`].
+    pub page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource,
     /// See [`RenderOptions::mask_resample`].
     pub mask_resample: MaskResample,
     /// See [`RenderOptions::image_minify`].
@@ -700,6 +707,10 @@ impl Default for RenderOptions {
         Self {
             fonts: FontEnvironment::default(),
             annotations: true,
+            // ISO 32000-2 Annex P's route, taken only when the output
+            // intent is subtractive -- see `PageBlendSpaceSource`, whose
+            // docs carry why this is a choice and not a right answer.
+            page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource::default(),
             // OFF. The one lossy knob in this struct, and decision 082
             // puts that choice with the operator rather than with the
             // default.
@@ -824,6 +835,34 @@ impl RenderOptions {
         self
     }
 
+    /// Set where a page's blending colour space comes from when its group
+    /// declares none (§11.4.7; spec ambiguity `PGB-A1`), returning `self`
+    /// for chaining.
+    ///
+    /// Same `#[non_exhaustive]` reasoning as [`Self::with_annotations`].
+    /// This is the seam the operator's persisted setting arrives through:
+    /// `RenderOptions::default().with_page_blend_space_source(settings.page_blend_space_source)`.
+    ///
+    /// # What it changes
+    ///
+    /// Whether a PDF/X file that declares no page group composites in ink
+    /// or on screen — and therefore whether **overprint can be represented
+    /// at all**, which in an additive space it cannot be (see
+    /// [`pdfce_core::settings::PageBlendSpaceSource`]). On the Ghent PDF
+    /// Output Suite this moves 24 of 51 patches between the two paths.
+    ///
+    /// The choice is disclosed rather than silent: the resulting space's
+    /// provenance is reported as `blend_space_from` on
+    /// `pdfce-cli render-page`'s metrics line.
+    #[must_use]
+    pub fn with_page_blend_space_source(
+        mut self,
+        source: pdfce_core::settings::PageBlendSpaceSource,
+    ) -> Self {
+        self.page_blend_space_source = source;
+        self
+    }
+
     /// Attach a cancellation flag, returning `self` for chaining.
     ///
     /// Same consuming-builder reason as [`Self::with_annotations`]:
@@ -902,6 +941,7 @@ impl RenderOptions {
     pub const fn policy(&self) -> RenderPolicy<'_> {
         RenderPolicy {
             cmyk_intent: self.cmyk_intent,
+            page_blend_space_source: self.page_blend_space_source,
             mask_resample: self.mask_resample,
             image_minify: self.image_minify,
             cmyk_jpeg_polarity: self.cmyk_jpeg_polarity,
@@ -947,6 +987,7 @@ mod render_policy_tests {
         let hidden = crate::LayerVisibility::hiding([pdfce_core::object::ObjId::new(10, 0)]);
         let options = RenderOptions::default()
             .with_cmyk_intent(pdfce_core::settings::CmykIntent::Naive)
+            .with_page_blend_space_source(pdfce_core::settings::PageBlendSpaceSource::DeviceNative)
             .with_mask_resample(pdfce_core::settings::MaskResample::Bilinear)
             .with_image_minify(pdfce_core::settings::MinifyFilter::Smooth)
             .with_cmyk_jpeg_polarity(pdfce_core::settings::CmykJpegPolarity::InvertOnApp14)
@@ -957,6 +998,10 @@ mod render_policy_tests {
             options.policy(),
             RenderPolicy {
                 cmyk_intent: pdfce_core::settings::CmykIntent::Naive,
+                // NOT the default. This test proves a builder call reaches
+                // the policy, and a field left at its default would pass
+                // whether or not `with_page_blend_space_source` did anything.
+                page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource::DeviceNative,
                 mask_resample: pdfce_core::settings::MaskResample::Bilinear,
                 image_minify: pdfce_core::settings::MinifyFilter::Smooth,
                 cmyk_jpeg_polarity: pdfce_core::settings::CmykJpegPolarity::InvertOnApp14,

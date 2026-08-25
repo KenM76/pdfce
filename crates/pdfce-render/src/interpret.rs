@@ -569,6 +569,40 @@ pub struct Diagnostics {
     /// answer is the standard's answer. Non-zero means it is not, and
     /// [`Self::blends_in_wrong_space`] says how often that mattered.
     pub blend_space_subtractive: usize,
+    /// **Where the page's blending colour space came from** — `page_group`,
+    /// `device_native` or `output_intent`.
+    ///
+    /// # Why a provenance and not just a space
+    ///
+    /// Because the space alone cannot be checked. `blend_space_subtractive`
+    /// says a page composited in ink; it does not say whether the file
+    /// asked for that or whether pdfce inferred it from an output intent
+    /// under `PageBlendSpaceSource::OutputIntentIfSubtractive`. Those are
+    /// different facts and only one of them is pdfce's guess.
+    ///
+    /// This is project rule 4 applied to the least visible inference the
+    /// renderer makes: a blending space changes **every colour on the
+    /// page** and draws nothing to say so, so two files rendering
+    /// differently for this reason are otherwise indistinguishable from a
+    /// bug. The disclosure is off-canvas by construction — a string on the
+    /// metrics line — and nothing is drawn on the page.
+    ///
+    /// `""` when no page content was painted and the question never arose.
+    pub blend_space_from: &'static str,
+    /// `1` when the page's blending space was **inferred from the document's
+    /// output intent** rather than declared by the page group or defaulted
+    /// to the device's native space; `0` otherwise.
+    ///
+    /// The numeric twin of [`Self::blend_space_from`], and the one that
+    /// reaches `pdfce-cli`'s metrics line. That line's values are all
+    /// non-negative integers — a property its own test pins, and one
+    /// downstream consumers rely on — so the provenance is reported there as
+    /// a flag and in prose in the operator note.
+    ///
+    /// Only the **inference** needs a flag: `page_group` means the file said
+    /// so and `device_native` means the standard said so, and neither is
+    /// something pdfce guessed.
+    pub blend_space_from_output_intent: usize,
     /// Blend-mode applications performed **additively while the blending
     /// colour space was subtractive** — §11.3.4 violations, counted where
     /// they happen.
@@ -1370,6 +1404,14 @@ polarity unverifiable (decision 006 R30)",
         self.overprint_refused += other.overprint_refused;
         self.overprint_images_unsupported += other.overprint_images_unsupported;
         self.blend_space_subtractive += other.blend_space_subtractive;
+        // A provenance is a per-page FACT, not a tally, so merging takes
+        // the first non-empty rather than summing or overwriting. A page
+        // that painted no content contributes nothing and must not erase
+        // the answer a sibling already established.
+        if self.blend_space_from.is_empty() {
+            self.blend_space_from = other.blend_space_from;
+        }
+        self.blend_space_from_output_intent += other.blend_space_from_output_intent;
         self.cmyk_buffer_engaged |= other.cmyk_buffer_engaged;
         self.cmyk_buffer_refused += other.cmyk_buffer_refused;
         self.cmyk_bridged_pixels += other.cmyk_bridged_pixels;
@@ -1551,18 +1593,151 @@ pub(crate) fn page_blend_space(
     page_id: ObjId,
     resources: &Dict,
     diag: &mut crate::color::ColorDiagnostics,
-) -> crate::compositor::BlendSpace {
+    source: pdfce_core::settings::PageBlendSpaceSource,
+) -> (crate::compositor::BlendSpace, BlendSpaceFrom) {
+    use crate::compositor::BlendSpace;
     let Some(dict) = doc.value(page_id).and_then(Object::as_dict) else {
-        return crate::compositor::BlendSpace::Additive;
+        return (BlendSpace::Additive, BlendSpaceFrom::DeviceNative);
     };
-    dict.get(b"Group")
+    // The DECLARED case first, and it is unconditional: a page group that
+    // names its `/CS` is answered by Table 147, and no setting reaches it.
+    // `PGB-7a` notes that ISO 32000-2's Annex P routes a declared page group
+    // through the same "device or output intent" node, but only to supply a
+    // space it did not declare -- a declared one is still its own answer.
+    if let Some(sp) = dict
+        .get(b"Group")
         .map(|o| doc.resolve(o))
         .and_then(Object::as_dict)
         .and_then(|g| g.get(b"CS"))
         .and_then(|cs| crate::color::resolve_object(doc, doc.resolve(cs), resources, 0, diag))
-        .map_or(crate::compositor::BlendSpace::Additive, |sp| {
-            crate::compositor::BlendSpace::of(&sp)
+    {
+        return (BlendSpace::of(&sp), BlendSpaceFrom::PageGroup);
+    }
+    // UNDECLARED. §11.4.7 and §11.6.3 both say the device's native space,
+    // and for pdfce that is an `RGBA8` pixmap. Everything below is ISO
+    // 32000-2 Annex P territory and is therefore opt-out-able.
+    match source {
+        pdfce_core::settings::PageBlendSpaceSource::DeviceNative => {
+            (BlendSpace::Additive, BlendSpaceFrom::DeviceNative)
+        }
+        pdfce_core::settings::PageBlendSpaceSource::OutputIntentIfSubtractive => {
+            match output_intent_blend_space(doc) {
+                Some(BlendSpace::Subtractive) => {
+                    (BlendSpace::Subtractive, BlendSpaceFrom::OutputIntent)
+                }
+                // ★ An additive output intent is NOT reported as
+                // `OutputIntent` provenance, because under this setting it
+                // did not decide anything -- the answer is the device's
+                // native space either way, and claiming the intent supplied
+                // it would make the disclosure say something false on every
+                // ordinary RGB file.
+                _ => (BlendSpace::Additive, BlendSpaceFrom::DeviceNative),
+            }
+        }
+        pdfce_core::settings::PageBlendSpaceSource::OutputIntentAlways => {
+            output_intent_blend_space(doc)
+                .map_or((BlendSpace::Additive, BlendSpaceFrom::DeviceNative), |sp| {
+                    (sp, BlendSpaceFrom::OutputIntent)
+                })
+        }
+        // `PageBlendSpaceSource` is `#[non_exhaustive]`, so a variant added
+        // in `pdfce-core` compiles here before anyone teaches this match
+        // about it. The fallback is the ISO 32000-1 answer -- the device's
+        // native space -- because that is the direction that cannot invent
+        // a subtractive page out of a setting this build does not
+        // understand. A new variant therefore renders as today's `1.7`
+        // behaviour until wired, which is visible and conservative rather
+        // than silently colourful.
+        _ => (BlendSpace::Additive, BlendSpaceFrom::DeviceNative),
+    }
+}
+
+/// Where a page's blending colour space came from — for **disclosure**, not
+/// for behaviour.
+///
+/// Project rule 4 requires an inference pdfce made to be reported
+/// off-canvas, and a blending space is the extreme case of an invisible
+/// inference: it changes every colour on the page and leaves no mark saying
+/// so. Two files that render differently for this reason would otherwise be
+/// indistinguishable from a bug.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BlendSpaceFrom {
+    /// The page group declared `/CS`. Table 147; nothing was inferred.
+    PageGroup,
+    /// Inherited from the output device, which for pdfce is sRGB.
+    /// ISO 32000-1 §11.4.7 / §11.6.3.
+    DeviceNative,
+    /// Taken from the document's output intent — ISO 32000-2 Annex P,
+    /// which is **informative** and does not rank this against the device.
+    /// Only reachable when the page group declared no `/CS`.
+    OutputIntent,
+}
+
+impl BlendSpaceFrom {
+    /// The token used on `pdfce-cli`'s metrics line.
+    pub(crate) const fn token(self) -> &'static str {
+        match self {
+            Self::PageGroup => "page_group",
+            Self::DeviceNative => "device_native",
+            Self::OutputIntent => "output_intent",
+        }
+    }
+}
+
+/// The blending space implied by the document's `/OutputIntents`, if one can
+/// be determined at all.
+///
+/// # How the colour class is decided, and why it is `/N` rather than a name
+///
+/// The output intent's `/DestOutputProfile` is an ICC profile stream, and
+/// §8.6.5.5 / Table 66 give `/N` as the number of colour components — the
+/// same key `ICCBased` uses. Four or more components is a subtractive
+/// device class; one or three is not. Reading `/N` rather than parsing the
+/// profile header keeps this to one dictionary lookup and uses the value
+/// the writer was already obliged to make correct.
+///
+/// # What returns `None`, and why that is not a failure
+///
+/// A file may carry an output intent with **no** `/DestOutputProfile` —
+/// PDF/X permits identifying a registered printing condition by name alone.
+/// pdfce cannot resolve a name to a colorant count without a registry it
+/// does not ship and must not fetch (`ARCHITECTURE.md` §1.1 forbids a
+/// network client in the engine, permanently). `None` therefore means *"not
+/// determinable here"*, and the caller falls back to the device's native
+/// space — the ISO 32000-1 answer, which is the safe direction.
+///
+/// # Multiple output intents
+///
+/// The first one that yields a determinable space wins. ISO 32000-2 does
+/// not say which intent governs when several are present — recorded as
+/// `PGB-A2` in the spec corpus, and deliberately NOT solved differently
+/// from the existing `SEP-A1` question of the same shape. First-wins is
+/// stated here so that the choice is visible rather than emergent.
+fn output_intent_blend_space(doc: &DocumentView<'_>) -> Option<crate::compositor::BlendSpace> {
+    let catalog = doc
+        .catalog_id()
+        .and_then(|id| doc.value(id))
+        .and_then(Object::as_dict)?;
+    let entry = catalog.get(b"OutputIntents")?;
+    let items = doc.resolve(entry).as_array().map(<[Object]>::to_vec)?;
+    items.iter().find_map(|item| {
+        let intent = doc.resolve(item).as_dict()?.clone();
+        let profile = intent.get(b"DestOutputProfile")?;
+        // `/DestOutputProfile` is an ICC profile STREAM, so its `/N` lives on
+        // the stream's dictionary. `Object::as_dict` matches only `Dict`, by
+        // design, so the stream arm is written out rather than papered over
+        // with a helper that would blur the two.
+        let n = match doc.resolve(profile) {
+            Object::Stream(st) => st.dict.get(b"N").map(|o| doc.resolve(o)),
+            _ => None,
+        }
+        .and_then(Object::as_int)?;
+        Some(if n >= 4 {
+            crate::compositor::BlendSpace::Subtractive
+        } else {
+            crate::compositor::BlendSpace::Additive
         })
+    })
 }
 
 /// [`run`], against an arbitrary drawing target rather than a pixmap.

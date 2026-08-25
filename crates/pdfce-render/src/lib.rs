@@ -487,12 +487,25 @@ fn render_impl(
     // the one thing that must not happen is a page counted as subtractive
     // and composited additively, or the reverse.
     let mut page_space_diag = color::ColorDiagnostics::default();
-    let page_space = if scope.paints_page_content() {
-        interpret::page_blend_space(doc, page.id, &page.resources, &mut page_space_diag)
+    // Destructured immediately: `page_space` drives behaviour and
+    // `page_space_from` drives DISCLOSURE only. Keeping them as one tuple
+    // past this point invites a caller to test the pair for equality and
+    // accidentally make provenance behavioural.
+    let (page_space, page_space_from) = if scope.paints_page_content() {
+        interpret::page_blend_space(
+            doc,
+            page.id,
+            &page.resources,
+            &mut page_space_diag,
+            options.policy().page_blend_space_source,
+        )
     } else {
         // No page content means no page group to have a blending space.
         // Annotations composite in sRGB either way.
-        compositor::BlendSpace::Additive
+        (
+            compositor::BlendSpace::Additive,
+            interpret::BlendSpaceFrom::DeviceNative,
+        )
     };
 
     // ★ THE SWITCH. A colorant buffer is engaged ONLY for a page whose
@@ -556,6 +569,14 @@ fn render_impl(
             if page_space.is_subtractive() {
                 diagnostics.blend_space_subtractive += 1;
             }
+            // Set unconditionally, including for an ordinary additive page.
+            // Reporting provenance only when it is interesting would make
+            // its ABSENCE ambiguous between "not inferred" and "not
+            // recorded", which is the shape that makes a disclosure
+            // unreadable.
+            diagnostics.blend_space_from = page_space_from.token();
+            diagnostics.blend_space_from_output_intent =
+                usize::from(page_space_from == interpret::BlendSpaceFrom::OutputIntent);
             // Carry the page-level omission into the render diagnostics. The
             // interpreter cannot observe it — the streams it never received
             // leave no trace in the operator stream — so the count is copied

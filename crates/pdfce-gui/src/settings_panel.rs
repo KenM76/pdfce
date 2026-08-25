@@ -86,8 +86,8 @@ use eframe::egui;
 use pdfce_core::pageops::SeparationPolicy;
 use pdfce_core::settings::{
     ActualTextPrecedence, CmykIntent, CmykJpegPolarity, MaskResample, MinifyFilter,
-    MissingAppearanceState, QuadPointOrder, Settings, StoreLocation, TrailingEol, UnmappableCode,
-    XrefEntryEol,
+    MissingAppearanceState, PageBlendSpaceSource, QuadPointOrder, Settings, StoreLocation,
+    TrailingEol, UnmappableCode, XrefEntryEol,
 };
 
 use crate::ui_text;
@@ -232,6 +232,7 @@ pub fn show(
                     });
                     group(ui, ui_text::settings_group_colour(), false, |ui| {
                         cmyk_intent_setting(ui, draft);
+                        page_blend_space_setting(ui, draft);
                         ui.add_space(10.0);
                         cmyk_jpeg_setting(ui, draft);
                     });
@@ -397,6 +398,37 @@ fn theme_setting(ui: &mut egui::Ui, draft: &mut Draft) {
     if current.is_none() {
         ui.label(egui::RichText::new(ui_text::setting_theme_unknown(&draft.working.theme)).small());
     }
+}
+
+fn page_blend_space_setting(ui: &mut egui::Ui, draft: &mut Draft) {
+    header(
+        ui,
+        ui_text::setting_page_blend_title(),
+        ui_text::setting_page_blend_silence(),
+        ui_text::setting_page_blend_radius(),
+    );
+    let v = &mut draft.working.page_blend_space_source;
+    option(
+        ui,
+        v,
+        PageBlendSpaceSource::OutputIntentIfSubtractive,
+        ui_text::setting_page_blend_intent_if_subtractive(),
+        Some(ui_text::setting_page_blend_intent_if_subtractive_note()),
+    );
+    option(
+        ui,
+        v,
+        PageBlendSpaceSource::DeviceNative,
+        ui_text::setting_page_blend_device_native(),
+        Some(ui_text::setting_page_blend_device_native_note()),
+    );
+    option(
+        ui,
+        v,
+        PageBlendSpaceSource::OutputIntentAlways,
+        ui_text::setting_page_blend_intent_always(),
+        Some(ui_text::setting_page_blend_intent_always_note()),
+    );
 }
 
 fn cmyk_intent_setting(ui: &mut egui::Ui, draft: &mut Draft) {

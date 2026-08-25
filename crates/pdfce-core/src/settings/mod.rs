@@ -343,6 +343,104 @@ pub enum CmykIntent {
     Naive,
 }
 
+/// Where a page's blending colour space comes from when the page group
+/// does **not** declare one (spec ambiguity `PGB-A1`).
+///
+/// # The silence being filled, and why it is edition-dependent
+///
+/// **ISO 32000-1 is determinate, and it is determinate AGAINST consulting
+/// the output intent.** §11.4.7 and §11.6.3 each state it independently:
+/// *"If not otherwise specified, the page group's colour space **shall**
+/// be inherited from the native colour space of the output device."*
+/// `shall`, no hedge. And `/OutputIntent` is **absent from the 1.7
+/// transparency model entirely** — the spec corpus records this as a
+/// *measured* negative (`PGB-N1`), not an unfound one: a proximity scan of
+/// every "output intent" line in the 756-page source against
+/// `blend`/`composit`/`transparen` returns exactly one hit, §8.6.5.5's ICC
+/// sentence, inspected and excluded. §14.11.5's *"informational purposes
+/// only … free to disregard"* survives verbatim into 2.0.
+///
+/// **ISO 32000-2 opens it, and only informatively.** §11.4.7 inherits from
+/// the *"actual, **assumed or simulated**"* output device and says a
+/// processor **can** choose which; **Annex P is informative** and offers
+/// *"from the output device, **or** from the output intent"* with **no
+/// ranking, no condition and no precedence**; §11.4.7 NOTE 3 names PDF/X-4's
+/// output intent as the *"implied default page blending colour space"*. The
+/// only body-text rung is §10.8.3(a), a **`should`**, and it selects a
+/// *colourant set* rather than a blending space.
+///
+/// ⇒ Two conformant PDF 2.0 processors render the same file in two
+/// different blending spaces and both cite Annex P. That is what makes this
+/// a setting rather than a bug: there is no reading of the standard under
+/// which one of these answers is simply wrong.
+///
+/// # What turns on it
+///
+/// Overprint. §8.6.7 *prescribes* the additive branch — *"source colours
+/// **shall** be converted to the device's native colour space, and **all
+/// components participate in the conversion, whatever their values**"* — so
+/// [`Self::DeviceNative`] is **conforming but degenerate**, never
+/// "unspecified".
+///
+/// ★ And the degeneracy is **structural, not approximate**. §11.7.4.3's
+/// second bullet makes `B(c_b, c_s)` equal `c_s` for every component
+/// *"specified in the current colour space"*; in sRGB every source colour
+/// has already been converted to all three components, so every component
+/// is specified and `B = c_s` **everywhere**. Overprint is therefore not
+/// merely unsimulated in an additive space — it is **unrepresentable**, and
+/// no amount of compositing work recovers it. Only an n-colorant buffer
+/// does. This is worth knowing before anyone attempts a cheaper fix.
+///
+/// Measured on the Ghent PDF Output Suite: **24 of its 51 patches request
+/// overprint and receive no colorant buffer** under [`Self::DeviceNative`],
+/// and those 24 contain every remaining failure in the suite.
+///
+/// # Disclosure
+///
+/// Whichever source is used, the resulting blending space and **its
+/// provenance** are reported off-canvas — `pdfce-cli` prints them on the
+/// metrics line, and nothing is drawn on the page (project rule 4). An
+/// inferred blending space is exactly the kind of invisible inference that
+/// rule exists for: it changes every colour on the page and leaves no mark
+/// saying so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum PageBlendSpaceSource {
+    /// ISO 32000-1 §11.4.7 / §11.6.3 to the letter: the device's native
+    /// space, which for pdfce's `RGBA8` pixmap is additive.
+    ///
+    /// **Strictly conforming under PDF 1.7, and it renders overprint
+    /// degenerately** (see the type docs). Choose this to reproduce
+    /// pdfce's pre-`Pass 122.5` output, or when the question is *"what does
+    /// ISO 32000-1 literally require?"*
+    DeviceNative,
+    /// Consult the output intent **only when its destination profile is
+    /// subtractive** (a four-or-more-colorant device class); otherwise fall
+    /// back to the device's native space.
+    ///
+    /// **The shipped default.** Chosen on the operator's standing criterion
+    /// for these — *"default it to your best guess as to what would be
+    /// normally expected"* — and what is normally expected of a PDF/X print
+    /// file is that it renders the way a print-oriented viewer renders it,
+    /// with overprint working.
+    ///
+    /// The conditional is what keeps it safe: an RGB or greyscale output
+    /// intent cannot drag a page into a subtractive space, so the only
+    /// files this moves are ones that already declare themselves to be
+    /// destined for ink.
+    #[default]
+    OutputIntentIfSubtractive,
+    /// Consult the output intent whenever there is one, whatever its
+    /// colour class.
+    ///
+    /// The most literal reading of Annex P's unranked *"or from the output
+    /// intent"*. Kept because Annex P genuinely says this and a reader
+    /// implementing it directly would land here — but not the default: an
+    /// RGB output intent switching a page's blending space is a larger
+    /// behavioural change than the evidence supports.
+    OutputIntentAlways,
+}
+
 /// Which filter resamples a `/SMask` or explicit `/Mask` whose pixel grid
 /// differs from its base image's (spec ambiguity `SM-A1`).
 ///
@@ -947,6 +1045,11 @@ pub struct Settings {
     pub parallel_epsilon_degrees: f64,
     /// Which filter resamples a size-mismatched `/SMask` or `/Mask`
     /// (`SM-A1`, §8.9.6.3 / Table 145). RENDER radius.
+    /// Where a page's blending colour space comes from when its group
+    /// declares none — spec ambiguity `PGB-A1`. See
+    /// [`PageBlendSpaceSource`], whose docs carry the clause citations
+    /// and the reason this is a setting rather than a fix.
+    pub page_blend_space_source: PageBlendSpaceSource,
     pub mask_resample: MaskResample,
     /// How an image drawn smaller than its own pixel grid is sampled
     /// (`IM-A1`, §8.9.5.3). RENDER radius.
@@ -1020,6 +1123,7 @@ impl Default for Settings {
             // `Enum::default()` in turn, so there is still exactly one
             // answer to "what does pdfce do by default?", and tests in
             // this module and in `pdfce-render` pin that agreement.
+            page_blend_space_source: PageBlendSpaceSource::default(),
             mask_resample: MaskResample::default(),
             image_minify: MinifyFilter::default(),
             cmyk_jpeg_polarity: CmykJpegPolarity::default(),
@@ -1082,6 +1186,16 @@ const fn cmyk_token(intent: CmykIntent) -> &'static str {
         CmykIntent::Calibrated => "calibrated",
         CmykIntent::NeutralBlack => "neutral_black",
         CmykIntent::Naive => "naive",
+    }
+}
+
+/// The settings-file token for a page-blend-space source. See
+/// [`separation_token`] for why every enum gets one of these.
+const fn page_blend_space_source_token(src: PageBlendSpaceSource) -> &'static str {
+    match src {
+        PageBlendSpaceSource::DeviceNative => "device_native",
+        PageBlendSpaceSource::OutputIntentIfSubtractive => "output_intent_if_subtractive",
+        PageBlendSpaceSource::OutputIntentAlways => "output_intent_always",
     }
 }
 
@@ -1321,6 +1435,24 @@ impl Settings {
                     using: Self::default().word_gap_ratio.to_string(),
                 }),
             },
+            "page_blend_space_source" => match value {
+                "device_native" => {
+                    self.page_blend_space_source = PageBlendSpaceSource::DeviceNative;
+                }
+                "output_intent_if_subtractive" => {
+                    self.page_blend_space_source = PageBlendSpaceSource::OutputIntentIfSubtractive;
+                }
+                "output_intent_always" => {
+                    self.page_blend_space_source = PageBlendSpaceSource::OutputIntentAlways;
+                }
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: page_blend_space_source_token(Self::default().page_blend_space_source)
+                        .to_owned(),
+                }),
+            },
             "mask_resample" => match value {
                 "nearest" => self.mask_resample = MaskResample::Nearest,
                 "box_average" => self.mask_resample = MaskResample::BoxAverage,
@@ -1534,6 +1666,38 @@ impl Settings {
             out,
             "mask_resample = {}\n",
             mask_resample_token(self.mask_resample)
+        );
+
+        out.push_str(
+            "# Where a page's BLENDING COLOUR SPACE comes from when the page group\n\
+             # does not declare one. This decides whether OVERPRINT can work at all.\n\
+             #\n\
+             # ISO 32000-1 is determinate here -- the device's native space, which\n\
+             # for pdfce means sRGB -- and in sRGB overprint is not merely\n\
+             # approximated, it is UNREPRESENTABLE. ISO 32000-2's Annex P allows the\n\
+             # output intent to supply the space instead, but says so informatively\n\
+             # and without ranking the two, so this is a genuine choice rather than a\n\
+             # right answer and a wrong one.\n\
+             #\n\
+             #   device_native                 ISO 32000-1 to the letter. Reproduces\n\
+             #                                 pdfce's output before this setting\n\
+             #                                 existed. Overprint renders degenerately.\n\
+             #   output_intent_if_subtractive  Use the output intent's space when it is\n\
+             #                                 a four-or-more-colorant one. A PDF/X\n\
+             #                                 print file then renders the way a\n\
+             #                                 print-oriented viewer renders it. An RGB\n\
+             #                                 or grey output intent changes nothing.\n\
+             #   output_intent_always          Annex P read literally: any output\n\
+             #                                 intent supplies the space.\n\
+             #\n\
+             # Whichever is chosen, the space pdfce actually used and WHERE IT CAME\n\
+             # FROM are reported on `pdfce-cli render-page`'s metrics line. Nothing is\n\
+             # drawn on the page.\n",
+        );
+        let _ = writeln!(
+            out,
+            "page_blend_space_source = {}\n",
+            page_blend_space_source_token(self.page_blend_space_source)
         );
 
         out.push_str(
@@ -2180,6 +2344,9 @@ mod tests {
         let written = Settings {
             separations: SeparationPolicy::Discard,
             cmyk_intent: CmykIntent::Calibrated,
+            // NOT the default (`OutputIntentIfSubtractive`) -- see the note
+            // above about a value that matches the default proving nothing.
+            page_blend_space_source: PageBlendSpaceSource::DeviceNative,
             word_gap_ratio: 0.35,
             // Deliberately NOT the default (0.5): this test exists to catch a
             // field `write_to_string` forgot, and a value equal to the default

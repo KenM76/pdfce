@@ -521,6 +521,11 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "soft_masks_on_group_result",
             "overprint_images_unsupported",
             "blend_space_subtractive",
+            // Pass 122.5. A FLAG rather than the provenance word it started
+            // as: every value on this line parses as an integer, and the
+            // assertion below pins that. The word moved to the operator
+            // note, where prose belongs.
+            "blend_space_from_output_intent",
             "blends_in_wrong_space",
             // `Pass 97.1e`'s colorant buffer, appended for the same reason
             // the previous group was: this list IS the contract, and a

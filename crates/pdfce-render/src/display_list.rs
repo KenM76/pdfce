@@ -786,8 +786,22 @@ pub fn record_page(
     // Resolved ONCE, and used for two things that must not disagree: what
     // the interpreter is told the blending space is, and whether this page
     // is recordable at all.
+    // ★ THE SAME PREDICATE THE DIRECT RENDER USES, including the same
+    // `page_blend_space_source` setting -- decision 084's rule that two
+    // paths which must agree share the predicate deciding when they can,
+    // rather than each computing its own. A recording that judged the
+    // blending space differently from the render would refuse the wrong
+    // pages, and both directions are bad: refusing too few hands back a
+    // replay that composites in the wrong space.
     let page_space = if scope.paints_page_content() {
-        crate::interpret::page_blend_space(doc, page.id, &page.resources, &mut Default::default())
+        crate::interpret::page_blend_space(
+            doc,
+            page.id,
+            &page.resources,
+            &mut Default::default(),
+            options.policy().page_blend_space_source,
+        )
+        .0
     } else {
         crate::compositor::BlendSpace::Additive
     };
