@@ -60980,3 +60980,139 @@ by this amendment.
    **`R219`**; decisions ceiling `087`, next free `088`; Pass family
    ceiling **`125`**, next free **`125.1`**; operator-question ceiling
    `(bu)`, next free `(bv)`, unchanged; filing ordinal **256**.
+
+## 2026-08-25 (two-hundred-and-fifty-seventh filing) — new operator request filed, nothing built: `Pass 126.0`/`Pass 126.1` (Type 3 font rendering, vector + bitmap), `docs/FEATURES.md` row split, Pass 1.1 item 4 promoted
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+engineer's dispatch relayed: the operator's request verbatim; a corpus
+measurement (49 of 3,735 external-corpus files, 1.3%, via
+`pdfce-cli render-page`/`unsupported_type3`); a `pdfce-acrobat-librarian`
+dispatch that wrote three new files under
+`D:\Dev\Rag-Specialized\Acrobat_Features\`
+(`type3fonts__rendering_and_color_semantics.md`,
+`type3fonts__malformed_inputs_and_limits.md`,
+`type3fonts__extraction_editing_and_tagging.md`); and a 4-row Acrobat
+Reader probe the engineer ran and relayed with its full stimulus/response
+table. All figures filed as relayed, not independently re-measured.
+
+**Shipped:** nothing — this is a new-request filing (`CLAUDE.md` rule 5,
+agent-file workflow #1), not a Pass completion. No code touched.
+
+**Decisions made this session:** none. **Pass-ID family choice, stated so
+the reasoning is on record:** the engineer's dispatch proposed `126.0`/
+`126.1` "for readability of the family" while noting the roadmap's own
+ledger literally reads "next free `125.1`" and left the choice to this
+role. Took `126.0`/`126.1` — checked against project precedent first
+(`Pass 123.0` → `Pass 124.0`, two unrelated topics, new major each time;
+decimals reserved for continuing the SAME feature, e.g. `122.6`/`122.7`,
+`119.1`/`119.2`/`119.4`). `Pass 125.0` is mesh shadings; Type 3 font
+rendering is unrelated, so it gets a new major rather than continuing the
+mesh-shading family under `125.x`. Both IDs grepped clean before use (0
+matches for `Pass 126.0`/`Pass 126.1` anywhere in `ROADMAP.md`), per the
+standing memory lesson about minting Pass IDs from an assumption instead
+of the live ledger.
+
+**Findings + decisions:**
+
+- **Population, measured not estimated: 49 of 3,735 external-corpus PDFs
+  carry a Type 3 font on page 1 (1.3%), skewed toward conformance
+  fixtures** (veraPDF Isartor/PDF_A, pdfium bug cases, PDFBox
+  regressions) — expected of a corpus built from test files. Recorded
+  honestly as low-frequency-but-not-low-consequence: every hit is text
+  silently absent from the page today, and the operator asked for this
+  by name. The print-conformance suite's own `unsupported_type3=2` (page
+  3) was already on record (149th filing) and is now cross-referenced
+  from the new Pass entries.
+- **Acrobat ground truth, measured directly (4-row probe, relayed by the
+  engineer from the operator's installed Acrobat Reader):** `d1` glyph
+  procedures ignore their own colour operators and paint in the
+  graphics-state colour (rows A/B, both BLUE); `d0` procedures keep
+  their own colour (row C, RED); a `d1` + inline `ImageMask` bitmap
+  glyph paints correctly in the graphics-state colour with the stencil
+  shape intact (row D, BLUE). Acrobat is spec-conformant on every point
+  this probe tests (ISO 32000-1 §9.6.5), so an acceptance criterion
+  citing §9.6.5 is simultaneously an Acrobat-parity criterion here — a
+  useful convergence, filed as such.
+- **Why the feature is cheap relative to what it delivers, and why that
+  reasoning belongs on record rather than only in the engineer's head:**
+  a Type 3 glyph procedure is an ordinary content stream — the existing
+  interpreter runs it unchanged, no font-format parser or rasteriser
+  needed. `interpret.rs`'s form-XObject recursion guards (`depth`
+  counter, `active` cycle set, `MAX_XOBJECT_DEPTH`) are directly reusable
+  for the mandatory glyph-procedure recursion bound (§9.6.5 sets none;
+  Annex C sets none either — a guaranteed stack-overflow input absent a
+  guard). Inline `ImageMask` stencils already ship, which is most of
+  `Pass 126.1`'s mechanism before it starts.
+- **The named implementation trap, on record before any code is
+  written:** Type 3 `Widths` are in `FontMatrix` units, not thousandths
+  of text space — dividing by 1000 *and* applying a `[0.001 …]`-style
+  matrix scales by 1e-6. Flagged by the engineer as the single most
+  common Type 3 bug in the wild.
+- **A missing `CharProcs` entry paints nothing but still advances the
+  pen** — §9.6.5 step (b) withholds the paint, not the width; an
+  implementation that skips the advance mis-positions the rest of the
+  line. Named as an acceptance criterion specifically so it doesn't get
+  silently gotten wrong.
+- **Unmeasured-for-Acrobat gaps, named rather than left implicit:**
+  behaviour on a glyph procedure starting with neither `d0` nor `d1`;
+  whether a missing `CharProcs` key still advances the width in Acrobat;
+  a `d1` procedure containing a full-colour (non-1-bit) image; whether
+  the page-level `/Resources` fallback actually happens in Acrobat; a
+  wrong `/FontBBox`; any Acrobat recursion limit. Also on record from the
+  Acrobat Features RAG: Acrobat does not smooth bitmap Type 3 glyphs at
+  zoom, has no in-place editing path for Type 3 text, and extraction/
+  search work only when `/ToUnicode` is present.
+- **`docs/FEATURES.md` row 307 split**, per the maintenance contract
+  (a Pass filed with no features row is how the two documents start to
+  diverge): the old combined "Type 3 font rendering and `Tr` 4–7
+  text-clipping modes" row is now two Planned rows — one for Type 3
+  (citing `Pass 126.0`/`126.1`, both boxes unticked), one for `Tr` 4–7
+  (unscoped, no Pass ID, unticked) — so the Type 3 promotion is not
+  misread as covering `Tr` 4–7 as well.
+- **Backlog's Pass 1.1 item 4 amended with a dated footer** (append-only;
+  the original LOW-ranking text stands, not deleted) recording the
+  promotion and re-stating the re-measured population at promotion time.
+  The Vector-graphics-editing bucket's own cross-reference to "Pass 1.1
+  item 4" (decision-007 fold-in, item (d)) got a matching bracketed
+  pointer so a reader following that link also sees the promotion.
+- **New Backlog note, NOT a Pass, explicitly flagged as not requested
+  this session:** Type 3 text extraction/search, gated entirely on
+  `/ToUnicode` presence — a distinct capability from rendering. The
+  operator's "font support" ask is read as rendering only; extraction is
+  named so it is not silently assumed either way.
+- **Declined to touch `D:\Dev\Rag-Specialized\Acrobat_Features\index.md`**
+  even though the dispatch reported that file as wanting a "Type 3 font
+  rendering" registration — that RAG is `pdfce-acrobat-librarian`'s
+  exclusive territory (agent-file "Coordinating" section; `CLAUDE.md`
+  rule 12 / hard rule 6's boundary, restated for a sibling RAG rather
+  than the spec RAG it was written about). Flagged back to the engineer
+  in this filing's report rather than written here.
+
+**Still in flight:**
+
+- `Pass 126.0`/`Pass 126.1` are filed with acceptance criteria but
+  **not started** — no code, no tests, no spec-RAG citations verified
+  against the actual corpus text yet (the clause numbers above are
+  relayed from the engineer's dispatch, not independently confirmed by
+  this role against `D:\Dev\Rag-Specialized\PDF_Spec\`).
+- Zoom-behaviour question for `Pass 126.1` (match Acrobat's no-smoothing
+  behaviour, or deliberately differ and disclose) is explicitly left
+  open in the Pass entry — an implementation decision, not a filing
+  omission.
+- `D:\Dev\Rag-Specialized\Acrobat_Features\index.md` registration for the
+  three new Type 3 files remains owed to `pdfce-acrobat-librarian`, not
+  this role.
+
+**For next session:**
+
+1. Engineer verifies the relayed spec clause numbers (§9.6.5, Table
+   112/113, §9.6.6.3) against `D:\Dev\Rag-Specialized\PDF_Spec\` before
+   writing any Type 3 code — this filing's citations are as-relayed, not
+   independently re-sourced.
+2. `Pass 126.0` before `126.1` — the bitmap flavour explicitly depends on
+   the vector flavour's glyph-procedure execution mechanism.
+3. Ledger: standing rules ceiling **`R218`** unchanged, next free
+   **`R219`**; decisions ceiling `087`, next free `088`, unchanged (no
+   decision this filing); Pass family ceiling **`126`**, next free
+   **`126.2`**; operator-question ceiling `(bu)`, next free `(bv)`,
+   unchanged; filing ordinal **257**.
