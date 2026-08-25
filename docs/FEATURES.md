@@ -57,24 +57,29 @@ the worked example (panel: reachable; ribbon `edit.form_flatten`:
 scaffolded and inert).
 
 **★★ GHENT FIGURES IN THIS FILE ARE HARNESS FIGURES (updated 2026-08-24,
-`Pass 122.2`, `f6457ee`).** `tools/ghent-check.py` now separates its
-**negative** criterion (a cross that should be ABSENT) from its
-**positive** criterion (a check mark that should be PRESENT, on four
-patches — `GWG 5.0`/`8.2`/`8.1`/`8.01`; a prior filing's claim of **seven**
-was a phrase-grep over-count, corrected the same Pass) — the four score an
-honest `MARK?`, counted UNRESOLVED, not a detector (a colour-keyed one was
-built, produced a false positive, and was thrown away). Harness now reports
-**`24 pass / 11 FAIL / 16 UNRESOLVED`** of 51. **Corrected current standing:
-`25 pass`** — the 24 harness passes plus `GWG 5.0`, verified correct by hand
-but not yet harness-adjudicable. **This is lower than a prior filing's `26`
-floor**: that figure counted `GWG 1.1` as a pass from the COMBINED Ghent
-render; re-examined on the INDIVIDUAL patch render this harness scores, it
-shows a solid filled X, so it stays FAIL here, disputed rather than
-resolved (`ROADMAP.md`'s `Pass 122.4`). **Every `N of 51` below is still an
-OVER-COUNT candidate of the same instrument-repair kind — the DELTAS each
-row quotes are unaffected, the LEVELS may not be.** Calibration set:
-`docs/ghent-operator-review-2026-08-21.md` (two of its own claims corrected
-by `Pass 122.2` — see `ROADMAP.md`'s Ghent standing board).
+two-hundred-and-forty-fourth filing, MEASUREMENT ONLY — no commit).**
+`tools/ghent-check.py` separates its **negative** criterion (a cross
+that should be ABSENT) from its **positive** criterion (a check mark
+that should be PRESENT, on four patches — `GWG 5.0`/`8.2`/`8.1`/`8.01`)
+— the four score an honest `MARK?`, counted UNRESOLVED, not a detector.
+Harness reports **`24 pass / 11 FAIL / 16 UNRESOLVED`** of 51,
+UNCHANGED since `Pass 122.2` (no code has shipped since). **Corrected
+current standing: `26 pass`** — the 24 harness passes, plus `GWG 5.0`
+(hand-verified, harness-unadjudicable) and, as of `Pass 122.4`'s
+measurement, `GWG 1.1`: a third oracle (Adobe Acrobat — rendering
+reference, licence tier unestablished) agrees with pdfce's
+COMBINED-document render of `GWG 1.1`, not its individual-patch render,
+so the earlier `25` figure — which counted `GWG 1.1` as disputed — is
+superseded. **The mechanism behind `GWG 1.1`'s wrong individual render —
+no colorant buffer allocated when a page group's `/CS` is undeclared
+despite a CMYK `OutputIntent` — affects 24 of 51 patches, essentially the
+whole remaining FAIL/`MARK?` population.** Scoped as `ROADMAP.md`'s
+`Pass 122.5` (Backlog) as a `page_blend_space_source` setting (spec
+reading complete, 245th filing — R169 governs, no operator question).
+**Every `N of 51` below is still an OVER-COUNT candidate of the same
+instrument-repair kind — the DELTAS each row quotes are unaffected, the
+LEVELS may not be.** Calibration set:
+`docs/ghent-operator-review-2026-08-21.md`.
 
 **ce dimension** = one pdfce itself authors. **pdf dimension** = one
 already in the file from CAD; pdfce reads it, never alters it

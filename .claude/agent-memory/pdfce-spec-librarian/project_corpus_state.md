@@ -3595,3 +3595,117 @@ deliverable is auditing it. Nine findings, most generalisable:
     would still have misled the next reader; it got a dated footer saying so
     explicitly. **A true statement can need an update.** (Fourth instance of
     item 48's "the old file's one-line summary is the third thing to change".)
+
+
+56. **★ THE MEASURED-DIVERGENCE dispatch — "our renderer disagrees with
+    Acrobat on a real test file; does the standard support the fix?" The
+    deliverable is a CONFORMANCE VERDICT, and the honest answer can be
+    "you are already conforming."** (2026-08-24, the no-`/Group` +
+    CMYK-`/OutputIntent` blending-space question; new files
+    `iso32000__ref__page_group_absent_blending_space.md` and — new prefix —
+    `pdfx__ref__transparency_blending_space.md`.) Nine things, in the order they
+    bit:
+
+    a. **THE ANSWER WAS DIFFERENT IN THE TWO EDITIONS, AND BOTH ARE CURRENT.**
+       ISO 32000-1: the page blending space is the **device's** native space,
+       unconditional `shall`, output intent **absent** (measured). ISO 32000-2:
+       the *"actual, **assumed or simulated**"* device — processor's choice —
+       plus an **informative** Annex P saying "or from the output intent". So
+       the proposed architectural fix is **non-conforming under 1.7 and
+       permitted-never-required under 2.0.** *Neither* "yes" nor "no" was the
+       deliverable; **"version-gated, and therefore a SETTING"** was.
+
+    b. **★★ THE CLAUSE THE DISPATCH NAMED WAS THE WRONG ONE, AND ITS TITLE
+       IS WHY.** The engineer asked for "§11.7.2 (and neighbours)". §11.7.2 is
+       *"Colour spaces for transparency groups"* — it governs **declared and
+       inherited** group spaces and **never mentions a page with no `/Group`**.
+       The deciding clauses are **§11.4.7 and §11.6.3** (1.7 states the rule
+       **twice**, and §11.6.3's statement was quoted nowhere in this corpus).
+       **A clause title that matches the question's vocabulary is not evidence
+       the clause answers it.** Filed as its own labelled claim (`PGB-4`) so the
+       trap is greppable.
+
+    c. **★ THE DISPATCH'S FRAMING CONTAINED A FALSE PREMISE THAT NOBODY HAD
+       STATED: "the page declares no transparency group."** §11.4.7's **first
+       sentence** makes the page group **unconditional** (`shall`, over all
+       top-level content) and **isolated**. `/Group` supplies *attributes*; it
+       does not create the group. This is not pedantry — it is Annex P's
+       **step-1 branch**, and a reader who thinks "no group" exits the algorithm
+       at the wrong node. **Audit the nouns in the question, not just the
+       question.**
+
+    d. **A FIGURE HELD TWO BRANCHES THE PROSE OMITTED** — see reference item
+       **4f**. The payoff was direct: the figure showed that an explicit
+       `/Group /CS /DeviceCMYK` **page** group *also* resolves to "device or
+       Output Intent", so the PDF/X-4 file and the PDF/X-3 file **converge on one
+       rule** under 2.0. That is a one-code-path finding the prose could not give.
+
+    e. **★★ THE STRONGEST NORMATIVE HOOK WAS IN A CLAUSE NOBODY CITED, VIA A
+       DIFFERENT MECHANISM.** Everyone looks at §11.4.7 NOTE 3 (a NOTE) and
+       Annex P (informative). The only **body-text** statement in either edition
+       routing a rendering decision through an output intent is
+       **ISO 32000-2 §10.8.3 step (a)**: `DestOutputProfile` **should** be
+       consulted — and it selects a **COLOURANT SET for a simulated separating
+       device**, not a blending space. **Different mechanism, converging effect.**
+       Say which mechanism you are citing; they have different modalities and
+       different failure modes.
+
+    f. **★ THE "IS IT NON-CONFORMING?" HALF OF AN OVERPRINT QUESTION HAS A
+       PRESCRIBED ANSWER, NOT A SILENCE.** ISO 32000-1 §8.6.7 *positively
+       directs* the no-overprint branch on a non-CMYK device ("all components
+       participate in the conversion, whatever their values") and licences
+       ignoring `/OP`/`op`/`OPM`. So the renderer's "failure" was **the branch
+       the clause names**. The right label was **(b) conforming but degenerate**,
+       and the offered label **(c) unspecified was wrong** — the case is
+       addressed, just not *graded*. Evidenced with `nonseparating` = **0/0**.
+
+    g. **★★ THE ACTUAL LEVER WAS A GATE-PREDICATE MISMATCH ALREADY SITTING
+       IN THE CORPUS AS AN AMBIGUITY.** §8.6.7's `OPM` gate is on the **device's**
+       native space; **§11.7.4.3's is on the current AND GROUP colour spaces and
+       never mentions the device.** ⇒ a `DeviceCMYK` page group satisfies it **on
+       an RGB display**. That is `SP-A3`, recorded 2026-08-08 as a divergence that
+       *"for a page with no explicit group … are the same condition"*. **The
+       equality holds ONLY under 1.7.** A recorded ambiguity can be dormant for
+       months and then be exactly the mechanism a dispatch needs — **grep the
+       ambiguity registers before deciding a question is unanswered.** Also: the
+       load-bearing sentence was §11.7.4.3's **SECOND** bullet (components not
+       *"specified in the current colour space"* keep `c_b` ⇒ in sRGB every
+       component is specified ⇒ **overprint is structurally unrepresentable,
+       not merely unsimulated**), not the OPM-1 bullet everyone quotes.
+
+    h. **★★ THE CONFORMANCE-LEVEL OF THE TEST FILE CHANGED WHICH IMAGING
+       MODEL APPLIES, AND NOBODY IN THE CHAIN HAD CHECKED IT. PDF/X-1a and
+       PDF/X-3 FORBID live transparency.** So the PDF/X-3 patch is not a
+       transparency case at all: its overprint is an **opaque**-model question
+       (§8.6.7 + **Table 148**), not §11.7.4.3/Table 149. **Same architectural
+       fix, different citation — and the citation is the part that goes into a
+       doc comment.** Generalise: **when a dispatch cites a conformance-suite
+       file, establish what its conformance level FORBIDS before reasoning about
+       what the base standard permits.**
+
+    i. **A PAYWALL CAN DEFEAT ALL THREE STANDARD FREE ROUTES, AND THE
+       ROLE-BRIEF'S OWN SUBSTITUTION CAN BE FALSE FOR THE SPECIFIC STANDARD** —
+       reference item **4g**. veraPDF has **`PDF_A` and `PDF_UA` only**; there is
+       **no** open validation-rule mirror of ISO 15930. Response: a new prefix
+       (`pdfx__*`) whose **first section is a SOURCING BANNER**, a binding
+       corpus-wide rule that **no ISO 15930 clause number may be asserted
+       anywhere**, and a `clause:` field that says **"CLAUSE NUMBERS NOT
+       OBTAINED"**. **Record the failed routes with what was grepped for** — the
+       negative is reusable, the frustration is not.
+
+    j. **★ THE COUNT IN `index.md` WAS STALE BEFORE I TOUCHED IT, IN TWO
+       PLACES** (header said 153 content, disk had 156; the `iso32000__s__` row
+       said 96, disk had 97). Fifth instance of "a COUNT in the corpus is a
+       hypothesis" (items 47, 48, 50). **Recount per-prefix with
+       `ls <subdir>/<prefix>*.md | wc -l` and write the correction as a
+       correction**, naming the row that is still wrong rather than silently
+       fixing it.
+
+    k. **SIX existing files needed dated footers, and one of them was a file
+       whose PRESENT, EXPLICIT scope banner was still incomplete.**
+       `iso32000__ref__spot_colour_overprint.md` was split on 2026-08-21 by
+       **output-device class** (additive vs subtractive). The 2026-08-24 case —
+       **an RGB device compositing in a `DeviceCMYK` blending space** — is
+       *neither*, because the two clauses disagree about which axis the gate is
+       on. **A scope banner partitions on the axis its author could see.**
+       (Same shape as item 54's `SEP-A1`; third instance.)

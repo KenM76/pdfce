@@ -59388,3 +59388,256 @@ behind).
 - Backup currency and git/CI state not independently checked this
   filing — no shell. Everything above is relayed from the operator's
   dispatch text, per hard rule 8.
+
+## 2026-08-24 (two-hundred-and-forty-fourth filing) — `Pass 122.4` answered: a third oracle (Acrobat) settles the GWG 1.1 dispute, standing moves 25 → 26, and the mechanism generalises to 24 of 51 patches; `Pass 122.5` filed, spec question `(bs)` opened; MEASUREMENT ONLY, NO COMMIT
+
+**Shipped:** none — this filing is a measurement result, not a code
+change. No `cargo tree`/round-trip/packaging checks apply.
+
+**Investigation result, against `Pass 122.4`:**
+- `Pass 122.4` asked whether pdfce's combined Ghent render disagrees with
+  the individual-patch render it is assembled from, for `GWG 1.1`.
+  **Answered: yes, and the operator's original reading of the combined
+  page was right.** Three-way measurement on the same binary: pdfce's
+  individual patch (`1_GWG011_Overprint-Mode_x3.pdf`) shows a solid,
+  filled, high-contrast teal X (contrast 18.4); pdfce's combined document
+  page shows none (a faint outline only); **Acrobat Pro's own render of
+  the same individual patch also shows none.** Acrobat agrees with
+  pdfce's combined render, not its individual one — the individual
+  render is pdfce's own outlier and is wrong. `GWG 1.1` PASSES.
+- **Mechanism:** the individual patch file has no page `/Group /CS
+  /DeviceCMYK`, so pdfce allocates no colorant buffer and composites
+  `DeviceCMYK` overprint content additively, in sRGB
+  (`blend_space_subtractive=0`, `cmyk_buffer=0`). The combined document
+  declares a page group and gets the ink buffer
+  (`blend_space_subtractive=2`, `cmyk_buffer=1`). Same artwork, two
+  compositing spaces.
+- **Scale, swept across all 51 Ghent patches:** 24 of 51 request
+  overprint and receive no colorant buffer (only 13 do); those 24 are
+  every remaining Ghent FAIL and all four `MARK?` patches. This is very
+  likely a single fix for nearly the entire remaining Ghent gap, not a
+  family of per-feature ones.
+
+**Corrected standing: `25 → 26 pass of 51`.** Harness-reported figure is
+UNCHANGED at `24 pass / 11 FAIL / 16 UNRESOLVED` (no code shipped this
+session); the correction layers two hand-adjudications on top —
+`GWG 5.0` (already counted) and, newly, `GWG 1.1` — neither reflected in
+the harness's own bucketing yet. **This supersedes `Pass 122.2`'s own
+`25`, filed earlier the same day** — recorded as a dated supersession on
+that entry, not a silent overwrite; the 243rd filing's reasoning was
+sound given what it had (no Acrobat reference existed yet).
+
+**Decisions made this session:**
+- No architectural decision minted. The open question — whether a CMYK
+  `OutputIntent` alone should trigger colorant-buffer allocation absent a
+  page `/Group` — is explicitly left to the operator (spec-governed, not
+  an implementation-detail call) and filed as `(bs)`, gated on a
+  `pdfce-spec-librarian` dispatch for the §11.7.2-vs-`OutputIntent`
+  reading before any Pass is scoped against it.
+
+**Findings + decisions:**
+- **Methodology finding, worth carrying forward:** when a test harness
+  and a human reviewer disagree, the disagreement is itself data, not
+  noise to be resolved by picking a side. `Pass 122.2` left the `GWG 1.1`
+  dispute genuinely open in both directions rather than adjudicating it
+  by authority — that refusal is what made it worth checking a third way
+  (Acrobat) hours later. Had either side been declared right on the
+  spot, the 24-patch root cause would still be undiscovered.
+- `D:\Dev\temp\ghent-out\final1.png` (dated 2026-08-17) is a STALE
+  artefact — it shows `GWG 8.2` with check marks and without images, the
+  opposite of pdfce's current behaviour (images present, no check marks,
+  confirmed in both the individual and combined renders today). `GWG 8.2`
+  is unrelated to the combined-vs-individual discrepancy; only the
+  overprint-buffer population above is.
+- Verification (relayed, no shell this filing): sourcing per hard rule 8
+  — no independent git/CI check performed; the render figures above are
+  relayed from the engineer's dispatch text.
+
+**`FEATURES.md`:**
+- Ghent-figures banner (top of file) rewritten: standing corrected to
+  `26`, `GWG 1.1` resolved rather than disputed, the 24-patch mechanism
+  and its gating Pass (`122.5`) named. No row moved between
+  *Implemented*/*Planned* — this filing changed a standing figure, not a
+  pdfce capability.
+
+**Still in flight:**
+- `Pass 122.5` (Backlog) — the colorant-buffer allocation fix, scoping
+  gated on a `pdfce-spec-librarian` dispatch and on operator question
+  `(bs)`.
+- `Pass 122.3` (colorant-buffer byte ceiling) still open in *Backlog*,
+  unaffected by this filing.
+- A reference-render-based `MARK?` detector for the four check-mark
+  patches (`GWG 5.0`/`8.2`/`8.1`/`8.01`) remains unbuilt, per `Pass
+  122.2`'s own deferral.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned) — the
+  dispatching engineer stated intent to update it directly with this
+  result at the top of the queue.
+- Ledger: standing rules ceiling stays `R217` (no new rule minted);
+  decisions next free `081` (none minted this filing); operator
+  questions ceiling now `(bs)` (used this filing), next free `(bt)`;
+  Pass `122.5` filed (Backlog), next free in the `122` family `122.6`;
+  filing ordinal `244`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Everything above is relayed from the engineer's
+  dispatch text, per hard rule 8.
+
+> **★★★★★ AMENDMENT, 2026-08-24 (245th filing) — FOUR CORRECTIONS FROM
+> `pdfce-spec-librarian`, INCLUDING A WITHDRAWN QUESTION.** Full detail
+> in `ROADMAP.md`'s Ghent standing board (245th-filing correction block)
+> and `Pass 122.5`; summarized here per this file's own amendment-footer
+> convention.
+> 1. **Operator question `(bs)`, opened by this entry, is WITHDRAWN** —
+>    it directly contravened standing rules R169/R206 (spec ambiguity →
+>    setting, default = engineer's best guess, never asked). Replaced by
+>    setting `page_blend_space_source`, default
+>    `output_intent_if_subtractive`.
+> 2. **"No page `/Group`" was the wrong premise.** The page group exists
+>    unconditionally (ISO 32000-1 §11.4.7); what is undeclared is its
+>    `/CS`.
+> 3. **§11.7.2 was the wrong clause.** §11.4.7 and §11.6.3 govern; §11.7.2
+>    governs only declared/inherited group spaces.
+> 4. **"Acrobat Pro" was an unverified licence-tier claim**, a third
+>    occurrence of this exact over-claim in this project's history.
+>    Corrected to "Adobe Acrobat (rendering reference; licence tier
+>    unestablished)."
+>
+> Also newly recorded: under ISO 32000-1 pdfce's current behaviour is
+> CONFORMING (not a bug); PDF/X-1a/X-3 (most of the 24-patch population)
+> is an opaque-model question (§8.6.7/Table 148), not a transparency one
+> (§11.7.4.3/Table 149); ISO 15930 (PDF/X) remains unsourced and no
+> clause from it is asserted. See the 245th-filing entry below for the
+> full session record.
+
+## 2026-08-24 (two-hundred-and-forty-fifth filing) — `pdfce-spec-librarian` corrects the 244th filing's blending-space citation, premise, and one attribution; `(bs)` WITHDRAWN and replaced by a setting; NO COMMIT, LIBRARIAN FILING ONLY
+
+**Shipped:** none. Documentation-only correction filing; no code
+touched, no `cargo tree`/round-trip/packaging checks apply.
+
+**Decisions made this session:**
+- Operator question `(bs)` (opened by the 244th filing) is **WITHDRAWN**,
+  not answered. It directly contravened two standing, verbatim operator
+  instructions (2026-08-19, 2026-08-20 — carried as **R169**/**R206**):
+  spec ambiguity gets a setting with the engineer's best-guess default,
+  never a question back to Ken. `pdfce-spec-librarian` confirmed this is
+  exactly R169's trigger — the spec is genuinely ambiguous but only
+  *informatively* (ISO 32000-2 Annex P gives the page group two
+  legitimate inheritance sources with no ranking between them).
+- Replacement setting, filed into `Pass 122.5`: `page_blend_space_source`
+  ∈ `device_native | output_intent_if_subtractive | output_intent_always`,
+  **default `output_intent_if_subtractive`** — chosen on the operator's
+  own stated criterion for defaults he has not picked himself ("what
+  would be normally expected"), not on implementation safety.
+- No new standing rule minted. R169/R206 already cover this exactly;
+  minting a third rule for the same mechanism would be proliferation,
+  not discipline.
+
+**Findings + decisions:**
+- **Premise correction:** the page group exists **unconditionally**
+  under ISO 32000-1 §11.4.7 (*"all of the elements painted directly onto
+  a page shall be treated as if they were contained in a transparency
+  group… This group is called the page group"*), whether or not `/Group`
+  appears in the page dictionary. What the 244th filing's 24-patch
+  population actually has is an **undeclared page-group `/CS`**, never
+  "no page group." Corrected everywhere it appeared in today's earlier
+  entries (Ghent standing board, `Pass 122.4`, `Pass 122.5`,
+  `FEATURES.md`).
+- **Citation correction:** §11.4.7 and §11.6.3 govern the undeclared-`/CS`
+  case (*"if not otherwise specified, the page group's colour space
+  shall be inherited from the native colour space of the output
+  device"*), not §11.7.2, which governs only *declared or inherited*
+  group spaces and never reaches this case.
+- **Conformance finding, new:** under ISO 32000-1 (1.7), pdfce's current
+  `cmyk_buffer=0` behaviour is **conforming**, not defective.
+  `/OutputIntent` does not appear in 1.7's compositing text at all
+  (measured: a ±4-line proximity scan of every "output intent" hit
+  against `blend`/`composit`/`transparen` returns exactly one hit,
+  excluded as an unrelated ICC sentence), and §14.11.5's "free to
+  disregard" language for `/OutputIntent` survives verbatim into 2.0.
+  ISO 32000-2 opens the question only informatively (Annex P; §11.4.7
+  NOTE 3, scoped to PDF/X-4 specifically). Had the operator not asked
+  for the Acrobat-matching behaviour as a default, staying on 1.7
+  semantics would have been a legitimate, disclosable choice, not a bug.
+- **PDF/X-1a/X-3 split, new:** both forbid live transparency, so a
+  conforming file in either subset has no transparency group at all —
+  its overprint is an opaque-model question (§8.6.7 and Table 148), never
+  §11.7.4.3/Table 149. Most of the 24-patch population is `_x3`/`_x1a`,
+  so this citation split governs most implementation work, not a
+  minority of it. §8.6.7 also already names today's degenerate sRGB
+  branch as conforming, and no free ISO 15930 source found requires a
+  page group or CMYK compositing for X-1a/X-3 conformance — the fix for
+  that slice is structural (n-colorant buffer sized from the
+  `OutputIntent`) rather than colorimetric (no ICC transform needed).
+- **Structural-unrepresentability finding, new:** §11.7.4.3's blend
+  formula (`B(cb, cs) = cs` for every component "specified in the current
+  colour space") makes overprint structurally unrepresentable in an
+  additive (sRGB) buffer once every source colour has been converted to
+  three components — no shader-only fix is possible under either setting
+  value; only an n-colorant buffer represents it.
+- **Dormant prediction fired:** `SP-A3` (recorded 2026-08-08 — the OPM-1
+  predicate names the current *and group* colour space, never the output
+  device) is the mechanism behind a `DeviceCMYK` page group satisfying
+  OPM-1 on an RGB display; this dispatch is the case that triggered it.
+- **Negative result, recorded as a negative:** ISO 15930 (PDF/X) remains
+  paywalled; all three free routes to it failed. No ISO 15930 clause
+  number is asserted anywhere in the corpus and none may be added from
+  recall. Free secondary sources establish only that no PDF/X part
+  requires a page group (GWG's own conformance list accepts an
+  *undefined* blend space) and that X-3's CMYK convention works
+  writer-side, by construction, with no reader-side rule needed.
+- **Attribution correction, third occurrence:** "Acrobat Pro" was used
+  three times in today's earlier entries to describe the rendering
+  reference. Adobe ships one binary and gates paid features at runtime; a
+  window title establishes nothing about licence tier. This is the third
+  time this exact over-claim has been made and corrected in this
+  project's history (2026-08-08 from a folder name, 2026-08-18 from a
+  window title, now 2026-08-24 from a window title again). Corrected to
+  "Adobe Acrobat (rendering reference; licence tier unestablished)"
+  everywhere it appeared in today's entries.
+- **Methodology note:** this role held R169/R206 in memory and still
+  opened `(bs)`, because the item was framed as an architectural decision
+  ("this changes compositing for a large class of files") rather than as
+  a spec ambiguity. The framing, not the rule's absence, was the failure
+  — worth checking for on any future dispatch that reads as consequential
+  before checking whether it is actually spec-dictated.
+
+**`FEATURES.md`:**
+- Ghent-figures banner: attribution and mechanism-description phrasing
+  corrected (Acrobat Pro → Adobe Acrobat with the licence-tier caveat;
+  "no `/Group`" → "undeclared `/CS`"); `Pass 122.5`'s framing updated to
+  "setting, spec reading complete" rather than "gated on a spec reading."
+  No row moved between *Implemented*/*Planned* — standing figure (`26`)
+  is unchanged, this filing corrected wording only.
+
+**Still in flight:**
+- `Pass 122.5` (Backlog) — now fully designed (the `page_blend_space_source`
+  setting, its default, the X-1a/X-3 structural slice, the citations to
+  use) but not yet implemented.
+- `Pass 122.3` (colorant-buffer byte ceiling) unaffected by this filing.
+- A reference-render-based `MARK?` detector for the four check-mark
+  patches remains unbuilt, per `Pass 122.2`'s own deferral.
+- Deliverables named this filing, not yet independently verified beyond
+  existence-on-disk: dated footers owed to `iso32000__s__11.7.2.md`,
+  `__11.4.md`, `__14.11.5.md`, `__8.6.7.md`, `__11.7.md`, and
+  `iso32000__ref__spot_colour_overprint.md`, plus that RAG's `index.md`
+  and `LEGAL_NOTE.md` — reported by `pdfce-spec-librarian`'s dispatch,
+  not independently confirmed by this role (no access to that RAG tree
+  from this dispatch's tool scope beyond path existence checks on the
+  two new `.md` files, both confirmed present).
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned) —
+  per this dispatch's own instruction.
+- Ledger: standing rules ceiling stays `R217` (no new rule minted, R169/
+  R206 already cover this case); decisions next free `081` (none minted
+  this filing); operator questions ceiling stays `(bs)` — **retired by
+  withdrawal, not reissued** — next free remains `(bt)`; Pass `122.5`
+  corrected in place (Backlog), next free in the `122` family `122.6`;
+  filing ordinal `245`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Everything above is either this role's own
+  documentation edits or relayed from the dispatching engineer's
+  `pdfce-spec-librarian` report, per hard rule 8.
+- **NO COMMIT** — dispatching engineer stated intent to commit these
+  edits together with the engineer's own, separately.

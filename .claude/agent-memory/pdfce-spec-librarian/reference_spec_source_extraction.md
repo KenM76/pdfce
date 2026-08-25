@@ -689,3 +689,55 @@ they settle "does this extension exist / is this prefix registered?" outright.**
   (base64 — pipe through `base64.b64decode`). Four fetches produced a full
   vendor-conformance table **including three divergences from the published
   spec**. `gh api repos/<o>/<r>/pulls/<n> --jq '.state,.merged'` dates the rest.
+
+
+**4f. ★★ A FIGURE CAN BE THE ONLY PLACE THE ALGORITHM IS COMPLETE — and the
+prose bullets beside it will read as if they were sufficient.** Established
+2026-08-24 on **ISO 32000-2 Annex P** ("An algorithm to determine the actual
+blending colour space of a transparency group"). The annex has four prose
+bullets **and** `Figure P.1`, a flowchart. The bullets omit **two whole
+branches** that the figure has: that a page group with an explicit `DeviceCMYK`
+`CS` *also* routes to "device or Output Intent", and that `/Default*` remapping
+is consulted **before** anything else. Extraction:
+
+```python
+p = PdfReader(src).pages[995]          # 0-based; dump marker is 1-based
+print(len(p.images))                   # -> 1
+open('figP.png','wb').write(p.images[0].data)   # then Read the PNG
+```
+
+**The diagnostic that tells you a figure is load-bearing rather than
+decorative: a whitespace-stripped search for a phrase you can SEE in the figure
+returns 0.** `deviceoroutputintent` = **0 hits** in the 2.0 dump, while
+`fromtheoutputintent` (the prose bullet) = 1. **A 0-hit on a phrase that is
+visibly on the page is proof the content is not text** — the same class as
+4a-sexies (path-drawn math symbols) and 4a-quinquies (`Annex<2 spaces><letter>`),
+but at *whole-algorithm* scale rather than symbol scale. Generalise: **before
+concluding a normative-adjacent annex is fully read, count its `/XObject`
+images.**
+
+**4g. ★ PDF/X (ISO 15930) is the corpus's HARDEST paywall — all three
+standard free routes fail, and the third failure is the surprising one.**
+Measured 2026-08-24, recorded in `LEGAL_NOTE.md`:
+
+- `standards.iteh.ai` catalogue page for ISO 15930-7:2010 — fetched, 44 603 B,
+  **zero `cdn.standards.iteh.ai` / `samples/` / `href="*.pdf"` matches.** The
+  free-front-matter route **does not exist for every ISO standard**; check the
+  HTML for the link before assuming it does.
+- `iso.org/obp/ui/en/#!iso:std:55843:en` **via `r.jina.ai`** — HTTP 200,
+  body = the Cloudflare **"Just a moment…" challenge page, 183 B**. **The
+  jina route (item 4d) does NOT defeat OBP**, only the committee catalogue.
+  Add OBP to the list of things to try-but-not-assume.
+- ★ **`veraPDF/veraPDF-validation-profiles` has `PDF_A` and `PDF_UA` ONLY.**
+  The role-brief's stated substitution ("use veraPDF's open validation rules for
+  paywalled conformance standards") is **true for PDF/A and PDF/UA and FALSE for
+  PDF/X.** `curl` the repo's root `contents` API before promising a rule mirror.
+
+What *does* work for PDF/X, in descending strength: (1) **ISO 32000-2 §11.4.7
+NOTE 3**, an ISO-primary sentence *describing what ISO 15930-7 does* — the
+strongest citation obtainable, and informative in its own document;
+(2) **pdfa.org** article text via `r.jina.ai` (the trade body, free, quotable);
+(3) **gwg.org** — the Ghent Workgroup's own PDFs, which are free, fetchable
+with plain `curl`, `pypdf`-readable, and are **the authors of the test suite the
+engineer is measuring against**; (4) vendor whitepapers (Esko) and preflight-rule
+help centres (DUON) for the rule as implementers state it.

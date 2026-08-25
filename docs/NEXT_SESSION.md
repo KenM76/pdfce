@@ -29,7 +29,123 @@ Three pieces of work, in the order they landed:
 |---|---|
 | `bb154ed` | **CI can be green again.** Both filing gates had been asking each commit to cite a hash that would not exist until a *later* commit — unsatisfiable by construction. The tip is now DEFERRED and disclosed, never failed |
 | `c4a85d0` | **`Pass 97.1g` — a non-isolated group on an ink page can finally see what is under it.** §11.4.4's second content walk on a subtractive page. ★ **Its headline result is NEGATIVE and that is the honest framing: it changes no rendering in any corpus pdfce owns** |
-| `f6457ee` | **`Pass 122.2` — the Ghent harness stops scoring four patches it never examined.** Board `29 pass` → `24 pass`; corrected standing **25**, not the review's 26 |
+| `f6457ee` | **`Pass 122.2` — the Ghent harness stops scoring four patches it never examined.** Board `29 pass` → `24 pass` harness-reported. **Its own conclusion that standing was 25 was superseded hours later by `122.4` — it is 26; see §A** |
+
+### ★★★★★ THE MOST IMPORTANT THING ON THIS PAGE — ONE ROOT CAUSE UNDER 24 OF 51 PATCHES
+
+**Found at the end of the session by chasing `Pass 122.4`. No code shipped;
+this is a measurement, and it should set the next session's priority.**
+
+`pdfce` composites a page in its **ink (colorant) buffer only when the page
+declares `/Group /CS /DeviceCMYK`.** Verified directly, not inferred: the
+individual Ghent patch files contain **zero** `/Group` occurrences and **do**
+carry an `/OutputIntent`; the combined suite document contains **217**.
+
+Consequence, measured three ways on `GWG 1.1`'s OPM-1 swatch:
+
+| render | the X the suite traps on |
+|---|---|
+| pdfce, **individual** patch (PDF/X-3, no `/Group`) | **solid, contrast 18.4** |
+| pdfce, same artwork in the **combined** doc (PDF/X-4, has `/Group`) | **none** |
+| **Adobe Acrobat**, individual patch | **none** |
+
+⇒ Acrobat agrees with the combined render. **pdfce's individual-patch render
+is the outlier and is wrong**, so `GWG 1.1` PASSES and the operator's own
+review was right about it. Standing moves to **26**.
+
+**★ And the population is the whole remaining failure set.** Across all 51
+patches, **24 request overprint and receive no colorant buffer**
+(`cmyk_buffer=0` with `overprint_requested>0`); only 13 get one. Those 24
+contain **every remaining Ghent FAIL** and **all four `MARK?` patches**. The
+board's long-standing note about *"the ONE architectural item that unblocks
+the largest cluster"* now has a named, measured mechanism — and it is very
+likely **one fix, not twenty**.
+
+**⇒ THE SPEC READING IS DONE AND IT CHANGES THE SHAPE OF THE WORK. Read
+this before touching `Pass 122.5`.**
+
+★ **pdfce IS CONFORMING TODAY.** ISO 32000-1 §11.4.7 and §11.6.3 each state
+independently that *"if not otherwise specified, the page group's colour space
+**shall** be inherited from the native colour space of the output device"* —
+determinate, `shall`, no hedge — and `/OutputIntent` is **absent from the 1.7
+transparency model entirely** (measured, not assumed). §8.6.7 then *prescribes*
+the degenerate branch pdfce takes: *"source colours **shall** be converted to
+the device's native colour space, and **all components participate in the
+conversion, whatever their values**."* ⇒ Today's behaviour is **conforming but
+degenerate**, never "unspecified". Staying put would be legitimate, and would
+make the Acrobat divergence a **disclosable deviation to record rather than
+repair**.
+
+★ **ISO 32000-2 is where it opens, and only informatively.** §11.4.7 inherits
+from the *"actual, **assumed or simulated**"* device and says the processor
+**can** choose; **Annex P is informative** and offers *"from the output device,
+**or** from the output intent"* with **no ranking, no condition, no
+precedence**. The only body-text rung is §10.8.3(a), a **`should`**, and it
+selects a *colourant set*, not a blending space. ⇒ Two conformant 2.0
+processors render the same file in two different spaces and both cite Annex P.
+
+⇒ **THAT IS A SETTING, AND THE DEFAULT WAS MINE TO PICK.**
+`page_blend_space_source` ∈ `device_native` | `output_intent_if_subtractive` |
+`output_intent_always`, **defaulting to `output_intent_if_subtractive`** —
+chosen on the operator's own stated criterion, *"what would be normally
+expected"*: a print file should render the way Acrobat renders it. Rule 4's
+disclosure rides with it — **name the blending space and its provenance
+off-canvas** (status line / CLI line); draw nothing on the page.
+
+★★ **THE OPERATOR QUESTION I OPENED FOR THIS WAS WITHDRAWN, AND THE REASON IS
+WORTH MORE THAN THE ITEM.** I filed it as `(bs)` for Ken to rule on. He has
+removed exactly this class from his queue **twice** — *"do not ask me for the
+default as you know more about this than I ever will"* (2026-08-19) and *"make
+things work both ways as options, default it to your best guess"* (2026-08-20).
+I had both in memory and opened it anyway, because a 24-patch cross-cutting
+finding **stops looking like a spec ambiguity and starts looking like an
+architecture decision**. ⇒ **The costume is the failure mode, not ignorance of
+the rule.** The test is *"do two defensible answers exist?"*, never *"does this
+feel big?"*
+
+★★★ **AND ONE CORRECTION THAT CHANGES THE CODE, NOT JUST THE PROSE:
+PDF/X-1a AND PDF/X-3 FORBID LIVE TRANSPARENCY.** Most of the 24-patch
+population is `_x3` / `_x1a`, so those files have no transparency, never select
+a blending space, and their overprint is an **OPAQUE-MODEL** question —
+**§8.6.7 and Table 148**, *not* §11.7.4.3 / Table 149. Same n-colorant buffer
+either way, **different citation, and the citation is what goes in the doc
+comment.**
+
+★★★★ **DO NOT ATTEMPT A CHEAPER FIX — overprint in an additive space is
+STRUCTURALLY UNREPRESENTABLE, not merely unsimulated.** §11.7.4.3's second
+bullet: `B(c_b, c_s)` is `c_s` for all components *"specified in the current
+colour space"*, otherwise `c_b`. In sRGB every source colour has already been
+converted to all three components ⇒ every component is "specified" ⇒
+`B = c_s` **everywhere**. No shader work fixes this; only an n-colorant buffer
+does. This forecloses a whole family of cheaper-looking attempts.
+
+**Also settled:** for the X-3 patches the decision is **structural (how many
+colorants), not colorimetric** — the trap X can be made correct with a nominal
+CMYK and no ICC transform at all. And §11.7.4.3's OPM-1 predicate names *"the
+current colour space **and group colour space**"* and **never the output
+device**, so a `DeviceCMYK` page group satisfies it on an RGB display; the spec
+corpus had recorded that as `SP-A3`, dormant since 2026-08-08, and this is the
+case that fired it.
+
+**Spec deliverables — cite these, do not re-derive:**
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__page_group_absent_blending_space.md`
+(`PGB-1`…`PGB-14`, `PGB-N1/N2`, `PGB-A1`…`PGB-A4`) and
+`D:\Dev\Rag-Specialized\PDF_Spec\pdfx\pdfx__ref__transparency_blending_space.md`
+(`PX-1`…`PX-11`, `PX-N1`…`PX-N3`). **No ISO 15930 clause number is asserted
+anywhere in that corpus and none may be added from recall** — the standard is
+paywalled and all three free routes failed. Two follow-ons are recorded rather
+than re-derivable: `PGB-A2` (*which* output intent, when there are several —
+same shape as the existing `SEP-A1`, **do not solve it twice, differently**)
+and `PGB-A4` (the answer is **edition-dependent**; consider one
+`pdf_semantics_edition` knob rather than three).
+
+**★★ HOW IT WAS FOUND, because the method is the transferable part.**
+`Pass 122.2` recorded the harness-versus-operator disagreement on `GWG 1.1`
+as *"disputed, left open in both directions"* rather than picking a winner.
+**That refusal is the only reason this exists.** Had either side been declared
+right, the 24-patch root cause would still be undiscovered. ⇒ **When an oracle
+and an instrument disagree, the disagreement is DATA; resolving it by
+authority discards the signal.**
 
 ### ★★ THE THREE THINGS MOST LIKELY TO BE MISREAD
 
@@ -55,12 +171,13 @@ Three pieces of work, in the order they landed:
 ### Ledger at end of session
 
 Next free in the `97.1` family: **`97.1k`** (filed Backlog, unbuilt).
-`122.0`–`122.4` all filed; **`122.4` is NEW this session**, next free `122.5`.
+`122.0`–`122.5` all filed; **`122.4` and `122.5` are NEW this session**, next free **`122.6`**. Operator question **`(bs)` was opened and WITHDRAWN the same day** (see §A) — the letter is consumed, **next free `(bt)`**, and **nothing is awaiting Ken** except pushing and cutting a backup, both his acts.
 `119.1` still unstarted. Standing rules unchanged — **no rule was minted this
 session**, and one was *proposed and withdrawn* because `R143` already owned
 the shape. Decisions unchanged. **Version `0.8.0`.** 17 `tools/check-*` on
-disk, **16 runnable as bare gates; all 16 exit 0.** Ghent: **25 pass at
-minimum** of 51.
+disk, **16 runnable as bare gates; all 16 exit 0.** Ghent: **26 pass at
+minimum** of 51 (harness-reported `24 / 11 / 16`; `GWG 1.1`'s dispute is
+RESOLVED in the operator's favour — see §A).
 
 ---
 
@@ -190,18 +307,19 @@ of the claim (`R211` clause (e)). Sample across the **predicate**, not across
 
 **Nothing in this queue is blocked on anybody.**
 
-1. **`Pass 97.1k`** — native colorant paths for **images and shadings**, which
+1. **`Pass 122.5` — UNBLOCKED AND FULLY DESIGNED. Start here.** The
+   24-of-51 root cause in §A. The spec reading is done, the setting and its
+   default are chosen, and §A carries the four constraints that shape the
+   implementation — the opaque-model citation for `_x3`/`_x1a` files, the
+   structural-not-colorimetric corollary, the `SP-A3` predicate, and the
+   proof that no cheaper fix exists. ★ `Pass 122.4` is ANSWERED and needs
+   nothing further; **`(bs)` is WITHDRAWN and must not be reissued**.
+2. **`Pass 97.1k`** — native colorant paths for **images and shadings**, which
    bridge through sRGB today (`cmyk_bridged_pixels`, `cmyk_unbridged_images`).
    The last structural item in the `97.x` family. Means widening a type one
    layer up: `DecodedImage` holds a `Pixmap`; `ColorRamp::at` returns
-   three-channel sRGB when the ramp is *built*.
-2. **`Pass 122.4`** (NEW) — **does the combined render disagree with the
-   individual patch render?** `GWG 1.1` is the one place the harness and the
-   operator's own review still disagree: the harness sees a solid, filled,
-   high-contrast X at contrast 17.4 (verified by cropping and magnifying 6×);
-   he saw none, **in the combined render**. Those are different artefacts and
-   both may be true. **If they genuinely differ, that is a rendering defect
-   nobody has looked at.** Settle it before quoting either number again.
+   three-channel sRGB when the ramp is *built*. **Take this while `122.5` is
+   blocked** — same subsystem, no dependency on the spec answer.
 3. **The check-mark detector** — `122.2` deliberately shipped none. It must key
    on **presence relative to a reference render**, not on a hue (§2 item 4).
    Ground truth for all four patches is in `tools/ghent-check.py`'s docstring
