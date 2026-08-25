@@ -78,6 +78,9 @@
 //! streams, content streams) that have nowhere to put them.
 
 pub mod ascii;
+/// `/BrotliDecode` — a PDF Association EXTENSION, not ISO 32000-2. See the
+/// module docs before believing any citation you find for it.
+pub mod brotli;
 pub mod flate;
 pub mod lzw;
 pub mod predictor;
@@ -250,6 +253,14 @@ fn apply_one(
 ) -> Result<Vec<u8>, FilterError> {
     match name {
         b"FlateDecode" | b"Fl" => flate::decode(data, parms),
+        // EXTN-BROTLI-1 §5.2. NO ABBREVIATION: the extension defines none,
+        // and Table 92's abbreviations exist for inline images, which this
+        // filter `SHALL NOT` be used for. ★ MuPDF accepts a `/Br` alias that
+        // does not exist in the extension -- that is MuPDF's behaviour, not
+        // the specification, and pdfce does not follow it. Accepting `/Br`
+        // would make pdfce read files no conformant writer produces and no
+        // other reader agrees on.
+        b"BrotliDecode" => brotli::decode(data, parms),
         // §7.4.2/§7.4.3 — parameterless (Table 6), so `parms` is
         // deliberately not forwarded.
         b"ASCIIHexDecode" | b"AHx" => ascii::decode_hex(data),
@@ -358,6 +369,48 @@ mod tests {
         let d = dict_with_filter(Object::Name(Name::from(b"Crypt")));
         let e = decode_stream(&d, b"anything").unwrap_err();
         assert_eq!(e, FilterError::UnsupportedFilter("Crypt".into()));
+    }
+
+    /// ★ `/Br` IS NOT A FILTER NAME, and pdfce refuses it on purpose.
+    ///
+    /// **MuPDF accepts `/Br` as an alias for `/BrotliDecode`** — its
+    /// `pdf-stream.c` tests `pdf_name_eq(f, PDF_NAME(BrotliDecode)) ||
+    /// pdf_name_eq(f, PDF_NAME(Br))`. **The extension defines no such
+    /// abbreviation**, and could not sensibly: Table 92's abbreviations exist
+    /// for inline images, and `/BrotliDecode` `SHALL NOT` appear in one.
+    ///
+    /// This is a behaviour-versus-specification split, and following the
+    /// behaviour would be the worse choice in both directions — pdfce would
+    /// read files no conformant writer emits, and would disagree with every
+    /// reader that is not MuPDF. Pinned as a test so a future reader who
+    /// meets a `/Br` in the wild adds it deliberately, with a decision
+    /// record, rather than as an obvious-looking omission.
+    #[test]
+    fn br_is_not_accepted_as_an_abbreviation_for_brotli() {
+        let mut notes = FilterNotes::default();
+        let e = apply_one(b"Br", None, b"anything", &mut notes).unwrap_err();
+        assert_eq!(e, FilterError::UnsupportedFilter("Br".into()));
+    }
+
+    /// `/BrotliDecode` reaches its decoder rather than the unsupported arm.
+    ///
+    /// Asserted through the DISPATCH rather than by calling `brotli::decode`
+    /// directly: the filter module's own tests prove the decoder works, and
+    /// this proves the name is wired to it. Those are different claims, and
+    /// `Pass 2.x`'s history has an instance of each passing while the other
+    /// failed.
+    #[test]
+    fn brotli_decode_is_dispatched_and_not_refused() {
+        let mut notes = FilterNotes::default();
+        // Deliberately invalid Brotli. Success here would mean the name was
+        // silently ignored; what must happen is that the BROTLI decoder
+        // refuses it, which is a differently-shaped error from
+        // `UnsupportedFilter` and is what distinguishes "wired" from "not".
+        let e = apply_one(b"BrotliDecode", None, &[0xff; 32], &mut notes).unwrap_err();
+        assert!(
+            !matches!(e, FilterError::UnsupportedFilter(_)),
+            "/BrotliDecode must reach its decoder, got {e:?}"
+        );
     }
 
     #[test]

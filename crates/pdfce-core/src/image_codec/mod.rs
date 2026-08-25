@@ -432,6 +432,20 @@ pub enum ImageCodecError {
         /// Which codec.
         codec: Codec,
     },
+    /// `/BrotliDecode` appeared in an **inline image's** filter chain, which
+    /// EXTN-BROTLI-1 §5.2 forbids outright.
+    ///
+    /// Distinct from [`ImageCodecError::NotAllowedInline`] deliberately: that
+    /// one names a terminal **codec** the inline form does not admit, while
+    /// this is a **byte-stream filter** that is legal everywhere else a
+    /// stream is legal. Collapsing the two would report "codec not allowed
+    /// inline" about something that is not a codec, and an operator chasing
+    /// that message would look in the wrong half of the file.
+    #[error(
+        "/BrotliDecode may not appear in an inline image (EXTN-BROTLI-1 \u{a7}5.2); \
+         it is legal in any other stream"
+    )]
+    BrotliNotAllowedInline,
     /// Two or more terminal codecs in one `/Filter` chain, or a codec
     /// followed by further filters. Neither is meaningful: a codec
     /// consumes a codestream and produces samples, so nothing can be
@@ -592,6 +606,27 @@ pub fn decode_image_view_with(
         && !codec.allowed_inline()
     {
         return Err(ImageCodecError::NotAllowedInline { codec });
+    }
+
+    // EXTN-BROTLI-1 §5.2: "`BrotliDecode` SHALL NOT be used for inline
+    // images." Checked over the WHOLE chain rather than only the terminal
+    // position, because Brotli is a byte-stream filter and its legal place is
+    // the prefix -- so `allowed_inline()`, which classifies terminal CODECS,
+    // structurally cannot see it. The two checks look alike and are asking
+    // different questions.
+    //
+    // ★ pdfium DECODES Brotli on inline images, which the extension forbids.
+    // That is pdfium's behaviour, not the specification, and following it
+    // would mean pdfce reads files no conformant writer produces. Refusing is
+    // also the safer asymmetry: a file that should not exist gets a named
+    // error rather than a silent, plausible render.
+    //
+    // There is no abbreviation to check for -- the extension defines none,
+    // precisely because Table 92's abbreviations exist for inline images and
+    // this filter may not appear in one. (MuPDF accepts a `/Br` alias that
+    // does not exist; pdfce does not, at the dispatch in `filters`.)
+    if inline && names.iter().any(|n| n.as_slice() == b"BrotliDecode") {
+        return Err(ImageCodecError::BrotliNotAllowedInline);
     }
 
     // Byte-stream prefix: everything except the terminal codec.

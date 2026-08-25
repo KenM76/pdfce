@@ -106,6 +106,25 @@ thiserror = "2"
 # entry. License: MIT OR Apache-2.0 (permissive per docs/LEGAL.md §6).
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
+# brotli: /BrotliDecode -- a PDF Association EXTENSION (EXTN-BROTLI-1 v1.3,
+# 2026-08-19), NOT part of ISO 32000-2:2020. `brotli` returns zero hits in
+# both ISO editions and Table 6 enumerates exactly ten filters in each; the
+# widely-repeated citation "ISO 32000-2:2020 section 7.4.11" is FALSE and
+# that clause does not exist. Sourcing:
+# D:\Dev\Rag-Specialized\PDF_Spec\filters\filter__brotli.md.
+#
+# PURE RUST, and that is why this crate rather than a binding to the C
+# reference implementation: a C dependency would break the
+# static-single-binary packaging invariant (ARCHITECTURE.md section 6) and
+# the wasm32 fork, the same constraint that fixed flate2's backend above.
+#
+# default-features off. The crate's defaults pull its `ffi-api` surface and
+# a compressor this filter does not need; `std` + `alloc-stdlib` are the
+# decode path. License: BSD-3-Clause AND MIT -- BOTH permissive, so
+# docs/LEGAL.md section 6 needs no operator call (project rule 13). Verified
+# from the fetched crate metadata, not from a relayed note.
+brotli = { version = "8", default-features = false, features = ["std", "alloc-stdlib"] }
+
 # --- Pass 2.1 -------------------------------------------------------
 #
 # zune-jpeg: DCTDecode (§7.4.8), the highest-value single codec —

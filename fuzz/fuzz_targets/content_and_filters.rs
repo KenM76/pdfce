@@ -17,6 +17,9 @@
 //!    the classic parser-bug hotspot: inflate bombs, truncated zlib
 //!    tails, rows that don't match the declared `Columns` geometry,
 //!    and invalid PNG filter tags all land here.
+//! 2a-bis. `BrotliDecode` over the same bytes, bare and with the PNG-Up
+//!    predictor. Its ceiling matters more than the others': Brotli's
+//!    worst-case expansion far exceeds deflate's.
 //! 2b. `LZWDecode` over the same bytes in **both `/EarlyChange`
 //!    modes**, with and without a `/Predictor`. LZW is byte-stream
 //!    shaped exactly like the Flate case above, and the two modes are
@@ -71,6 +74,35 @@ fuzz_target!(|data: &[u8]| {
     );
     dict.insert(Name::from(b"DecodeParms"), Object::Dict(parms));
     let _ = decode_stream(&dict, data);
+
+    // 2a-bis. BrotliDecode, bare and with the same PNG-Up predictor.
+    //
+    //     Fuzzed for the reason ARCHITECTURE.md §10.2 gives for every
+    //     filter, and with one of its own: Brotli's worst-case expansion
+    //     is far higher than deflate's ~1032:1, because a small window of
+    //     literals can be repeated across a large window. That makes the
+    //     ceiling the thing most worth attacking here, and a
+    //     ceiling-crossing input must come back as
+    //     `FilterError::OutputTooLarge` rather than as an allocation.
+    //
+    //     BOTH predictor states are driven deliberately: the extension
+    //     retitles Table 8 to include Brotli, so the predictor path is
+    //     shared with Flate verbatim and a Brotli-specific predictor bug
+    //     would be a bug in shared code reached by a new caller.
+    for predictor in [false, true] {
+        let mut dict = Dict::new();
+        dict.insert(
+            Name::from(b"Filter"),
+            Object::Name(Name::from(b"BrotliDecode")),
+        );
+        if predictor {
+            let mut parms = Dict::new();
+            parms.insert(Name::from(b"Predictor"), Object::Integer(12));
+            parms.insert(Name::from(b"Columns"), Object::Integer(8));
+            dict.insert(Name::from(b"DecodeParms"), Object::Dict(parms));
+        }
+        let _ = decode_stream(&dict, data);
+    }
 
     // 2b. LZWDecode in BOTH /EarlyChange modes, bare and with the same
     //     PNG-Up predictor as the Flate case above. `EarlyChange`
