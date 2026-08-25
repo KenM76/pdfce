@@ -134,7 +134,8 @@
 //!               overprint_pixels=<n> nonseparable_composited=<n> \
 //!               nonseparable_pixels=<n> groups_backdrop_reruns=<n> \
 //!               soft_masks_on_group_result=<n> \
-//!               overprint_images_unsupported=<n> blend_space_subtractive=<n> \
+//!               overprint_images_unsupported=<n> overprint_shadings_unsupported=<n> \
+//!               blend_space_subtractive=<n> \
 //!               blend_space_from_output_intent=<0|1> \
 //!               blends_in_wrong_space=<n> cmyk_buffer=<n> \
 //!               cmyk_buffer_refused=<n> cmyk_bridged_pixels=<n> \
@@ -309,6 +310,7 @@
 //! | `groups_backdrop_reruns` | `transparency_groups_backdrop_reruns` | "why did this page take twice as long as its neighbour?" (§11.4.4 — a COST counter, not a shortfall, and the only one on this line that names something pdfce DID: a non-isolated group whose content stream was walked a SECOND time over a copy of its own backdrop, so the element formula and backdrop removal could be computed against it. It is the only place in the renderer where a page's content is interpreted more than once. Zero is the normal reading and does NOT mean non-isolated groups were mishandled — §11.4.4 NOTE 5 makes the single walk exact whenever the group's interior composites `Normal` throughout) |
 //! | `soft_masks_on_group_result` | `soft_masks_on_group_result` | "were group soft masks applied ONCE to the composite, or once per object inside it?" (§11.4.5 — read against `soft_masks_applied`, which counts masks BUILT while this counts the ones that reached where the clause puts them. The difference is not a shortfall on its own: a mask on an ELEMENTARY object belongs in the clip, because §11.6.4.1 makes the mask value that object's `q_m` and a `q_m` multiplies coverage exactly as a clip does. What to look for is a document WITH transparency groups where this stays at zero while `soft_masks_reset_stale` climbs — that page's group masks are multiplying once per object, visible wherever two of them overlap) |
 //! | `overprint_images_unsupported` | `overprint_images_unsupported` | "how many IMAGES were painted under overprint that `CompatibleOverprint` was never offered?" (DIVERGENCE, and a whole OBJECT CLASS rather than a run of ordinary failures — `overprint::composite` has exactly one call site, in the path and glyph painter, and an image XObject does not reach it. It cannot be fixed at the call site: per-sample overprint needs per-sample colorants, and an image's colorant identity is gone by the time its texels composite. Counted first deliberately — a counter blind to a whole object class reports a SMALLER problem than exists, which this project has already paid for once in the glyph painter) |
+//! | `overprint_shadings_unsupported` | `overprint_shadings_unsupported` | "how many shadings were painted while overprint was in force and could not honour it?" (DIVERGENCE. A shading fails one step earlier than an image does: its colour ramp resolves to three-channel sRGB when the ramp is BUILT, so nothing downstream has colorants left to overprint WITH. ★ The two halves are COUPLED -- §11.7.4.3 makes `B(c_b, c_s)` equal `c_s` for every component 'specified in the current colour space', and a bridged sRGB scratch has specified all three, so an overprint composite alone would change nothing and native colorants alone would change nothing either. Visible on Ghent `GWG 1.0` cells e/j, where a `/DeviceN [/Cyan /Magenta]` shading over an orange ground should let the yellow beneath survive and read GREEN, and instead reads BLUE) |
 //! | `blend_space_subtractive` | `blend_space_subtractive` | "is this page's compositing governed by §11.3.4 at all?" (the page itself and every transparency group whose blending colour space is `DeviceCMYK`, `Separation`, `DeviceN`, or a four-component `ICCBased` resolving to one. A CENSUS OF EXPOSURE, not a shortfall — a page can be entirely `DeviceCMYK` and entirely correct, because `Normal` is `c_s` on either side of the complement. Not a small class: every patch in the Ghent transparency panel declares `/Group /CS /DeviceCMYK` on the PAGE, including one whose own objects are `ICCBased` RGB, because a non-isolated group inherits its blending space (Table 147's `/CS` row). Whether §11.3.4 was HONOURED is `cmyk_buffer`; what it cost when it was not is `blends_in_wrong_space`. Three numbers, three questions, and reading any one alone gets a wrong answer) |
 //! | `blends_in_wrong_space` | `blends_in_wrong_space` | "how many blends were computed on the WRONG SIDE of §11.3.4's complement?" (DIVERGENCE, and the number that says a rendering is actually AFFECTED rather than merely exposed. The worked case is Ghent `1_GWG162`'s `Difference` cell: magenta under black gives `DeviceCMYK 1 0 1 0` — the green the patch is authored around — under §11.3.4, and `(237, 1, 140)` without it. ★ It now fires ONLY where the colorant buffer did not run, so a subtractive page that composited in ink reports zero here — read it with `cmyk_buffer`, never alone) |
 //! | `cmyk_buffer` | `cmyk_buffer_engaged` (a `bool`, printed `0`/`1`) | "did this page composite in INK, or in sRGB?" (THE KEY THAT CHANGES WHAT THE PREVIOUS ONE MEANS, and the only non-count on this half of the line — a parser treating every metrics key as a magnitude will misread it. At `1`, the blends `blends_in_wrong_space` counted were PERFORMED subtractively: that counter is fixed at `/BM`-selection time and measures exposure to §11.3.4, not failure. Read the pair, never the second alone) |
@@ -7982,7 +7984,7 @@ groups_composited={} groups_knockout_approx={} \
 overprint_requested={} overprint_opm1={} overprint_effective={} \
 overprint_composited={} overprint_refused={} overprint_pixels={} nonseparable_composited={} nonseparable_pixels={} \
 groups_backdrop_reruns={} soft_masks_on_group_result={} \
-overprint_images_unsupported={} \
+overprint_images_unsupported={} overprint_shadings_unsupported={} \
 blend_space_subtractive={} blend_space_from_output_intent={} blends_in_wrong_space={} \
 cmyk_buffer={} cmyk_buffer_refused={} cmyk_bridged_pixels={} \
 cmyk_groups_approximated={} cmyk_unbridged_images={}",
@@ -8286,6 +8288,7 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         // four Ghent patches, and it is the number that has to fall before
         // the /Indexed colorant fix can be observed at all.
         d.overprint_images_unsupported,
+        d.overprint_shadings_unsupported,
         // 11.3.4's blending colour space, and how often it mattered.
         //
         // `blend_space_subtractive` counts the page and every transparency

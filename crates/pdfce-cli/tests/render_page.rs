@@ -520,6 +520,7 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "groups_backdrop_reruns",
             "soft_masks_on_group_result",
             "overprint_images_unsupported",
+            "overprint_shadings_unsupported",
             "blend_space_subtractive",
             // Pass 122.5. A FLAG rather than the provenance word it started
             // as: every value on this line parses as an integer, and the

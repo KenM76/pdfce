@@ -537,6 +537,39 @@ pub struct Diagnostics {
     /// `ColorSpace::indexed_entry` is correct, cited, and **inert on the
     /// whole corpus** until this number can go down.
     pub overprint_images_unsupported: usize,
+    /// Shadings painted while overprint was in force that **could not
+    /// honour it** — §8.6.7 / §11.7.4.3.
+    ///
+    /// # Why this needed its own counter rather than sharing the image one
+    ///
+    /// Because the causes differ and so do the fixes. An image is
+    /// per-sample: pdfce paints it normally and covers what is beneath.
+    /// A shading fails one step earlier — [`crate::shading::ColorRamp`]
+    /// resolves colour to three-channel sRGB when the ramp is **built**,
+    /// so by the time anything composites there are no colorants left to
+    /// overprint *with*.
+    ///
+    /// ★ **The two halves are COUPLED and neither fixes this alone.**
+    /// §11.7.4.3's second bullet makes `B(c_b, c_s)` equal `c_s` for every
+    /// component *"specified in the current colour space"*, and a bridged
+    /// sRGB scratch has specified all three — so routing the existing
+    /// composite through an overprint blend would change nothing. Native
+    /// colorants without an overprint composite would equally change
+    /// nothing. A future Pass must do both or neither.
+    ///
+    /// # What it looks like on a page
+    ///
+    /// Measured on Ghent `GWG 1.0` cells `e`/`j`: a
+    /// `/DeviceN [/Cyan /Magenta]` shading over an orange ground. Under
+    /// overprint the yellow beneath survives and the result reads green —
+    /// which is what Acrobat renders. Without it the cyan and magenta
+    /// replace all four colorants and the result reads blue. Blue channel,
+    /// centre of the cell: pdfce **209**, Acrobat **3**.
+    ///
+    /// The operator identified those two cells as *"the wrong colour …
+    /// always have been"*, which is what this counter now makes visible
+    /// rather than leaving to be noticed.
+    pub overprint_shadings_unsupported: usize,
     /// Transparency groups (and the page itself) whose **blending colour
     /// space is SUBTRACTIVE** — `DeviceCMYK`, `Separation`, `DeviceN`, or
     /// a four-component `ICCBased` resolving to one (§11.3.4).
@@ -1403,6 +1436,7 @@ polarity unverifiable (decision 006 R30)",
         self.nonseparable_pixels += other.nonseparable_pixels;
         self.overprint_refused += other.overprint_refused;
         self.overprint_images_unsupported += other.overprint_images_unsupported;
+        self.overprint_shadings_unsupported += other.overprint_shadings_unsupported;
         self.blend_space_subtractive += other.blend_space_subtractive;
         // A provenance is a per-page FACT, not a tally, so merging takes
         // the first non-empty rather than summing or overwriting. A page
@@ -3896,7 +3930,9 @@ impl Interpreter<'_> {
         // `ColorRamp::at` resolves a shading's colour to three-channel
         // sRGB when the ramp is BUILT, so by the time the pixel loop runs
         // there are no colorants left to composite. Evaluating the ramp in
-        // ink is `Pass 97.1g`; until then the shading paints into a
+        // ink is `Pass 97.1k` -- this said `97.1g` until 2026-08-25, which
+        // is the non-isolated-group Pass and has nothing to do with ramps;
+        // until it lands the shading paints into a
         // transparent scratch with the same evaluator, and its RESULT
         // crosses into the colorant buffer -- so a shading on a
         // subtractive page composites against the page in ink even though
@@ -3911,6 +3947,17 @@ impl Interpreter<'_> {
                 .paint(to_target, region, clip, alpha, &mut scratch)
                 .is_some()
             {
+                // ★ `Blend::Normal`, EVEN WHEN OVERPRINT IS IN FORCE, and
+                // that is now disclosed instead of silent. Routing this
+                // through an overprint blend would not help: the scratch
+                // is bridged sRGB, so §11.7.4.3's "specified in the
+                // current colour space" is true of all three components
+                // and `B = c_s` everywhere regardless. The fix is native
+                // colorants in the ramp AND an overprint composite here,
+                // together -- see `overprint_shadings_unsupported`.
+                if self.gs.current.overprint_fill || self.gs.current.overprint_stroke {
+                    self.diag.overprint_shadings_unsupported += 1;
+                }
                 buf.composite_srgb(
                     &scratch,
                     clamp_region(region, w, h),

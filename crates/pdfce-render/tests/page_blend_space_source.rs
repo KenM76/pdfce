@@ -161,3 +161,29 @@ fn the_provenance_is_always_reported() {
          space came from"
     );
 }
+
+/// ★ A shading painted under overprint cannot honour it, and now says so.
+///
+/// Found 2026-08-25 when the operator read `GWG 1.0` cells `e` and `j` and
+/// said they carry no trap X but are *"the wrong colour … always have been"*.
+/// He was right, and `shading.rs` contained no mention of overprint at all —
+/// the gap was real and, unlike the image equivalent, entirely undisclosed.
+///
+/// The count is asserted as **exactly 2** rather than merely non-zero because
+/// two is the number of shading cells on that patch, and it is the figure that
+/// ties the counter to the cells he named. A counter that fired on the wrong
+/// population would still be non-zero.
+#[test]
+fn a_shading_under_overprint_discloses_that_it_cannot_honour_it() {
+    let Some(page) = render(
+        "1_GWG010_CMYK_OP_x3.pdf",
+        PageBlendSpaceSource::OutputIntentIfSubtractive,
+    ) else {
+        return;
+    };
+    assert_eq!(
+        page.diagnostics.overprint_shadings_unsupported, 2,
+        "GWG 1.0 paints two shadings under overprint; both are bridged \
+         through sRGB and neither can overprint, so both must be disclosed"
+    );
+}
