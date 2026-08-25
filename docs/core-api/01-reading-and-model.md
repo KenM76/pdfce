@@ -2096,13 +2096,37 @@ discard them.
 
 Several settings exist specifically because the standard is ambiguous and
 the operator's standing directive (2026-08-08, R169) is that ambiguity
-becomes a user choice rather than a hard-coded default: `CmykIntent` `:313`,
-`MaskResample` `:380`, `MinifyFilter` `:440`, `CmykJpegPolarity` `:490`,
-`UnmappableCode` `:539`, `ActualTextPrecedence` `:623`,
-`MissingAppearanceState` `:682`, `XrefEntryEol` `:747`, `TrailingEol` `:818`.
+becomes a user choice rather than a hard-coded default. The full list, with
+line numbers re-measured 2026-08-25:
+
+| setting | line | the silence it fills |
+|---|---|---|
+| `CmykIntent` | `:313` | §8.6.4.4 defines no CMYK-to-screen conversion at all |
+| `PageBlendSpaceSource` | `:408` | `PGB-A1` — where a page's blending space comes from when its group declares none |
+| `MeshPatchPadding` | `:494` | `MSH-A1` — what a type 6/7 mesh-shading PATCH record pads to, when the clause states the rule for a vertex |
+| `MaskResample` | `:540` | `SM-A1` — which filter resamples a size-mismatched `/SMask` |
+| `MinifyFilter` | `:600` | `IM-A1` — how an image drawn smaller than its pixel grid is sampled |
+| `CmykJpegPolarity` | `:650` | `DCT-A1` — how a CMYK JPEG with no `/Decode` is read |
+| `UnmappableCode` | `:699` | what stands in for a character no `/ToUnicode` covers |
+| `ActualTextPrecedence` | `:783` | whether `/ActualText` overrides the glyphs beneath it |
+| `MissingAppearanceState` | `:842` | `AS-A1` — which appearance a widget with no `/AS` shows |
+| `QuadPointOrder` | `:887` | the two orderings real producers write for `/QuadPoints` |
+| `XrefEntryEol` | `:951` | the two-byte end-of-line a classic xref entry uses |
+| `TrailingEol` | `:1022` | whether a saved file ends with a newline |
+
+★ **Two of these were missing from this list before 2026-08-25**, and the
+shape of the omission is worth more than the correction: the list was written
+as prose with inline line numbers, so adding a setting meant editing a
+sentence, and `PageBlendSpaceSource` (Pass 122.5) and `MeshPatchPadding`
+(Pass 125.0) each landed without one. A table is not merely tidier — a
+missing ROW is visible in a way a missing clause in a run-on sentence is not.
+
 Two of these (`UnmappableCode`, `ActualTextPrecedence`) are consumed
 directly by `ExtractOptions` (§8.2), and `CmykJpegPolarity` by
-`image_codec::decode_image_view_with` (§11.2).
+`image_codec::decode_image_view_with` (§11.2). The four RENDER-radius ones
+(`PageBlendSpaceSource`, `MeshPatchPadding`, `MaskResample`, `MinifyFilter`)
+reach the pixels through `pdfce_render::RenderOptions`' `with_*` builders and
+its `policy()` projection, never through a global.
 
 **★ Do not confuse `settings::Settings` with document metadata.** This is
 operator configuration — theme, ambiguity-resolution defaults — and has

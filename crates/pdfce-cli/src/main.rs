@@ -123,6 +123,7 @@
 //!               patterns_unpainted=<n> indexed_clamped=<n> indexed_short=<n> \
 //!               shadings=<n> shadings_via_sh=<n> shadings_paintable=<n> \
 //!               shadings_painted=<n> shadings_refused=<n> shadings_mesh=<n> \
+//!               mesh_records=<n> mesh_truncated=<n> mesh_unusable=<n> \
 //!               img_colorant_none=<n> img_uncalibrated=<n> \
 //!               blend_modes_applied=<n> blend_modes_ignored=<n> \
 //!               soft_masks_ignored=<n> soft_masks_applied=<n> \
@@ -286,6 +287,9 @@
 //! | `shadings_paintable` | `shading.paintable` | "will an update fix MY file?" (the question an operator actually has, and why this sits between the census and the result: a page whose shadings are all type-7 meshes reports `shadings_paintable=0` and needs a different answer from one where paintable equals `shadings`) |
 //! | `shadings_painted` | `shading.painted` | "how many gradients actually reached the raster?" (the right half of this line's load-bearing pair — `shadings` non-zero beside `shadings_painted` zero is the honest statement that pdfce found the gradients, understood them, and drew none. An unpainted shading leaves whatever was underneath it showing through. Read either number alone and you get the wrong answer) |
 //! | `shadings_refused` | `shading.refused` | "how many shading dictionaries were rejected outright, with a named reason?" (DIVERGENCE. The finer counters behind it — no usable `/Function`, a `/Function` that would not load, a `/Function` output count disagreeing with the colour space's component count (§8.7.4.4), an incomplete colour ramp — are NOT on this line; they and the reason strings go to stderr, where a new key cannot break a parser) |
+//! | `mesh_records` | `shading.mesh_records` | "how much geometry came out of the mesh streams?" - triangles for shading types 4/5, patches for types 6/7 (ISO 32000-1 8.7.4.5.5-.8). Zero beside a non-zero `shadings_mesh` and a zero `mesh_unusable` would be a bug; zero beside a non-zero `mesh_unusable` is the streams being unreadable, which is a different fact and is why they are two keys |
+//! | `mesh_truncated` | `shading.mesh_truncated` | "did a mesh stream stop part-way through a record?" (DISCLOSURE). pdfce paints the complete records and discards the remainder. The standard states an error condition for exactly ONE of the four mesh types (type 4) and is silent for the other three, so this is a product decision being reported rather than a conformance verdict. A type 5 stream that does not hold a whole number of rows counts here too |
+//! | `mesh_unusable` | `shading.mesh_unusable` | "was a mesh shading found and NOT decodable?" (DISCLOSURE). Bad `/BitsPer...` widths, a missing or wrong-length `/Decode`, an `Indexed` colour space (which a literal reading permits and which would interpolate palette INDICES), a first patch with a nonzero edge flag and nothing to inherit from. Each occurrence names its reason in the notes below the line. Distinct from `shadings_refused`, which counts dictionaries rejected before their stream was reached |
 //! | `shadings_mesh` | (derived — `shading.mesh()`, `by_type[3..7]` summed) | "how much of this page needs the mesh work rather than the parametric work?" (types 4–7, §8.7.4 — DERIVED at print time from the per-`ShadingType` census, which is itself not on the line. A subset of `shadings`; what remains after subtracting it is the function-based, axial and radial population) |
 //! | `img_colorant_none` | `images_colorant_none` | "how many images were correctly painted as NOTHING?" (§8.6.6.4/.5 — a `/Separation /None` or all-`/None` `/DeviceN` image colour space. CENSUS of pdfce's CORRECTNESS, and it is on the machine line rather than only in a note because a pixel-parity harness reads this line and nothing else: pdfium paints such an image BLACK (measured 2026-08-17), so the divergence will be maximal and it is pdfce that is right) |
 //! | `img_uncalibrated` | `images_uncalibrated_colorimetry` | "how many images went through pdfce's OWN XYZ→sRGB rather than a colour-management engine?" (`Lab`, `CalGray`, `CalRGB` — Bradford to D65, no rendering intent. Defensible, not colour-managed. On the line rather than only in a note because a `Lab` image landed in a parity harness's *unexplained* bucket while a perfectly good stderr sentence explained it — a disclosure that reached a human and not a machine) |
@@ -7847,6 +7851,10 @@ numbered 1..={})",
         .with_annotations(annotations)
         .with_cmyk_intent(settings.cmyk_intent)
         .with_page_blend_space_source(settings.page_blend_space_source)
+        // `MSH-A1`: what a type 6/7 mesh-shading PATCH record pads to.
+        // The clause states the rule for a VERTEX and the patch clauses
+        // point back at it without redefining the unit, in both editions.
+        .with_mesh_patch_padding(settings.mesh_patch_padding)
         // The other four R169 rendering knobs, all spec silences the
         // standard declines to fill: the mask resampling filter
         // (`SM-A1`, §8.9.6.3), the minification filter (`IM-A1`,
@@ -7976,6 +7984,7 @@ tint_applied={} tint_not_applied={} sep_all_approximated={} \
 sep_none_suppressed={} pattern_spaces={} patterns_unpainted={} \
 indexed_clamped={} indexed_short={} shadings={} shadings_via_sh={} \
 shadings_paintable={} shadings_painted={} shadings_refused={} shadings_mesh={} \
+mesh_records={} mesh_truncated={} mesh_unusable={} \
 img_colorant_none={} img_uncalibrated={} \
 blend_modes_applied={} blend_modes_ignored={} soft_masks_ignored={} \
 soft_masks_applied={} soft_mask_tr_ignored={} soft_masks_reset_stale={} \
@@ -8118,6 +8127,9 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         d.shading.painted,
         d.shading.refused,
         d.shading.mesh(),
+        d.shading.mesh_records,
+        d.shading.mesh_truncated,
+        d.shading.mesh_unusable,
         // Appended after every pre-existing key. Both exist because the
         // pixel-parity harness reads THIS LINE and nothing else — a
         // stderr sentence, however well written, is invisible to it, and
@@ -8822,15 +8834,28 @@ background colour, or nothing",
     }
     if s.mesh() > 0 {
         eprintln!(
-            // 8.7.4.5.5-.8, NOT 9.x — the first version of this string said
+            // 8.7.4.5.5-.8, NOT 9.x -- the first version of this string said
             // 9 and printed a clause that does not exist to the operator.
             // Same class as the stale DeviceN sentence fixed earlier today:
             // a wrong fact in a user-visible string, invisible to every
             // gate, caught only by reading the actual output.
+            //
+            // ** AND THE REST OF IT WENT STALE THE SAME WAY. ** Until
+            // `Pass 125.0` this sentence ended "they are a materially larger
+            // piece of work than the axial and radial types. Counted
+            // separately so that waiting for one is not mistaken for waiting
+            // for the other" -- i.e. it told the operator to wait for
+            // something that had arrived. `R212`: the counter and the
+            // sentence beside it are two claims, and only one of them is
+            // under test.
             "pdfce-cli: note: {} of those are MESH shadings (types 4-7, ISO 32000-1 \
-8.7.4.5.5-.8): their geometry is a bit-packed vertex stream rather than a formula, and they \
-are a materially larger piece of work than the axial and radial types. Counted separately so \
-that waiting for one is not mistaken for waiting for the other",
+8.7.4.5.5-.8) -- their geometry is a bit-packed stream of triangles or Bezier patches rather \
+than a formula, and pdfce decodes and paints them. Two things about them are pdfce's choice \
+rather than the standard's, because the standard declines to say: a patch surface is \
+approximated by flat cells whose density is chosen from its size ON SCREEN, so it is finer \
+when you zoom in; and interpolation across a triangle is linear, which is what Gouraud \
+names. A mesh also still resolves its colour to screen RGB before compositing, so on an ink \
+page it is bridged like any other shading and its overprint is not represented",
             s.mesh()
         );
     }
@@ -8857,6 +8882,26 @@ lands",
 than their colour space takes (8.7.4.4); the colours such a shading would paint are not the \
 ones the document specifies",
             s.function_arity_mismatch
+        );
+    }
+    if s.mesh_truncated > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} mesh shading stream(s) ended part-way through a record. pdfce \
+painted the records that were complete and discarded the remainder. ISO 32000-1 states an \
+error condition for exactly ONE of the four mesh types (type 4, 8.7.4.5.5) and says nothing \
+about the other three, so keeping the complete part is pdfce's decision and this is it being \
+disclosed rather than a verdict on the file. A type 5 stream that does not hold a whole \
+number of rows is counted here too",
+            s.mesh_truncated
+        );
+    }
+    if s.mesh_unusable > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} mesh shading(s) could not be decoded at all and painted \
+nothing -- whatever was underneath them shows through. The reason for each is named in the \
+divergence list below. This is NOT the same as a refused shading: the dictionary was fine \
+and the stream was not",
+            s.mesh_unusable
         );
     }
     if s.ramps_incomplete > 0 {

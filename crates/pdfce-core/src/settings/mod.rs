@@ -441,6 +441,68 @@ pub enum PageBlendSpaceSource {
     OutputIntentAlways,
 }
 
+/// How a type 6 or type 7 mesh-shading **patch record** is padded - spec
+/// ambiguity `MSH-A1` (ISO 32000-1 8.7.4.5.5/.7/.8).
+///
+/// # The silence being filled
+///
+/// 8.7.4.5.5 states the padding rule for the triangle types and scopes it
+/// to a **vertex**, verbatim:
+///
+/// > "Each set of **vertex** data shall occupy a whole number of bytes. If
+/// > the total number of bits required is not divisible by 8, the last data
+/// > byte for each **vertex** is padded at the end with extra bits, which
+/// > shall be ignored."
+///
+/// A Coons or tensor-product patch has no vertices. 8.7.4.5.7 and
+/// 8.7.4.5.8 defer to that clause - *"See 8.7.4.5.5 ... for further details
+/// on the format of the data"* - which **imports the rule but leaves its
+/// unit undefined** for a structure the rule's own wording does not
+/// describe.
+///
+/// Two readings survive the text, and **ISO 32000-2 does not resolve
+/// either**: the spec RAG's edition delta `D3` records the sentence as
+/// word-for-word identical in 2.0, including its scoping to "each vertex".
+/// So this is **permanent**, not merely unresearched, which is what makes
+/// it a setting rather than a defect awaiting a fix.
+///
+/// # When it is observable at all
+///
+/// Only when `BitsPerFlag + k*BitsPerCoordinate + m*BitsPerComponent` is
+/// **not** a multiple of 8. The combinations measured in real files so far
+/// are `8`/`32`/`8` (the print-conformance suite's two type 7 meshes) and
+/// the RAG's noted common case `8`/`16`/`8`; both are byte aligned for
+/// every record shape, so the two readings render identically. A file with
+/// `BitsPerFlag` 2 or 4, or 12-bit coordinates, is where they diverge - and
+/// there the divergence is total, because a mis-alignment desynchronises
+/// every record after the first.
+///
+/// # Default: [`Self::PerRecord`] - the reading under which the deferral
+/// has content
+///
+/// If 8.7.4.5.7's pointer imports nothing, it says nothing, and a normative
+/// cross-reference that says nothing is the weaker of the two readings.
+/// "The record" is the only structure the pointer can be importing once
+/// "the vertex" does not exist.
+///
+/// Whichever is chosen, what pdfce got out of the stream is disclosed
+/// off-canvas (project rule 4): `pdfce-cli render-page` reports
+/// `mesh_truncated` when a stream ended part-way through a record, which is
+/// the symptom a wrong reading produces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum MeshPatchPadding {
+    /// Pad each **patch record** - its flag, all its coordinates and all
+    /// its colours - up to a whole number of bytes, by analogy with the
+    /// vertex rule. **The shipped default.**
+    #[default]
+    PerRecord,
+    /// Do not pad patch records at all: read types 6 and 7 as a continuous
+    /// bit string, on the reading that 8.7.4.5.5's rule is scoped to a
+    /// structure patches do not have and therefore does not reach them.
+    None,
+}
+
 /// Which filter resamples a `/SMask` or explicit `/Mask` whose pixel grid
 /// differs from its base image's (spec ambiguity `SM-A1`).
 ///
@@ -1050,6 +1112,11 @@ pub struct Settings {
     /// [`PageBlendSpaceSource`], whose docs carry the clause citations
     /// and the reason this is a setting rather than a fix.
     pub page_blend_space_source: PageBlendSpaceSource,
+    /// How a type 6/7 mesh-shading patch record is byte-padded - spec
+    /// ambiguity `MSH-A1`, 8.7.4.5.5/.7/.8. See [`MeshPatchPadding`], whose
+    /// docs carry the clause text and the reason it is permanent rather
+    /// than pending. RENDER radius.
+    pub mesh_patch_padding: MeshPatchPadding,
     pub mask_resample: MaskResample,
     /// How an image drawn smaller than its own pixel grid is sampled
     /// (`IM-A1`, §8.9.5.3). RENDER radius.
@@ -1124,6 +1191,7 @@ impl Default for Settings {
             // answer to "what does pdfce do by default?", and tests in
             // this module and in `pdfce-render` pin that agreement.
             page_blend_space_source: PageBlendSpaceSource::default(),
+            mesh_patch_padding: MeshPatchPadding::default(),
             mask_resample: MaskResample::default(),
             image_minify: MinifyFilter::default(),
             cmyk_jpeg_polarity: CmykJpegPolarity::default(),
@@ -1196,6 +1264,15 @@ const fn page_blend_space_source_token(src: PageBlendSpaceSource) -> &'static st
         PageBlendSpaceSource::DeviceNative => "device_native",
         PageBlendSpaceSource::OutputIntentIfSubtractive => "output_intent_if_subtractive",
         PageBlendSpaceSource::OutputIntentAlways => "output_intent_always",
+    }
+}
+
+/// The settings-file token for a mesh patch-padding reading. See
+/// [`separation_token`] for why every enum gets one of these.
+const fn mesh_patch_padding_token(p: MeshPatchPadding) -> &'static str {
+    match p {
+        MeshPatchPadding::PerRecord => "per_record",
+        MeshPatchPadding::None => "none",
     }
 }
 
@@ -1453,6 +1530,16 @@ impl Settings {
                         .to_owned(),
                 }),
             },
+            "mesh_patch_padding" => match value {
+                "per_record" => self.mesh_patch_padding = MeshPatchPadding::PerRecord,
+                "none" => self.mesh_patch_padding = MeshPatchPadding::None,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: mesh_patch_padding_token(Self::default().mesh_patch_padding).to_owned(),
+                }),
+            },
             "mask_resample" => match value {
                 "nearest" => self.mask_resample = MaskResample::Nearest,
                 "box_average" => self.mask_resample = MaskResample::BoxAverage,
@@ -1698,6 +1785,25 @@ impl Settings {
             out,
             "page_blend_space_source = {}\n",
             page_blend_space_source_token(self.page_blend_space_source)
+        );
+
+        out.push_str(
+            "# How a mesh shading PATCH record (shading types 6 and 7) is padded.\n\
+             # ISO 32000-1 states that rule for a VERTEX, and a patch has no vertices;\n\
+             # the patch clauses point back at it without saying what its unit becomes.\n\
+             # ISO 32000-2 repeats the sentence word for word, so this is permanently\n\
+             # ambiguous rather than merely unresearched.\n\
+             #   per_record  pad each patch record to a whole byte (the default)\n\
+             #   none        read the patch stream as one continuous bit string\n\
+             #\n\
+             # It changes nothing unless a file's BitsPerFlag/BitsPerCoordinate/\n\
+             # BitsPerComponent make a record a non-multiple of 8 bits. Every mesh\n\
+             # measured so far is byte aligned either way.\n",
+        );
+        let _ = writeln!(
+            out,
+            "mesh_patch_padding = {}\n",
+            mesh_patch_padding_token(self.mesh_patch_padding)
         );
 
         out.push_str(
@@ -2347,6 +2453,8 @@ mod tests {
             // NOT the default (`OutputIntentIfSubtractive`) -- see the note
             // above about a value that matches the default proving nothing.
             page_blend_space_source: PageBlendSpaceSource::DeviceNative,
+            // NOT the default (`PerRecord`), same reason.
+            mesh_patch_padding: MeshPatchPadding::None,
             word_gap_ratio: 0.35,
             // Deliberately NOT the default (0.5): this test exists to catch a
             // field `write_to_string` forgot, and a value equal to the default

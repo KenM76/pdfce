@@ -72,6 +72,7 @@ pub mod image;
 pub mod interpret;
 pub mod layer_state;
 pub mod mask;
+pub mod mesh;
 pub mod overprint;
 pub mod profile;
 pub mod shading;

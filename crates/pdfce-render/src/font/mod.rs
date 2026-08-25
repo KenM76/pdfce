@@ -600,6 +600,16 @@ pub struct RenderOptions {
     /// [`pdfce_core::settings::PageBlendSpaceSource`], whose docs carry the
     /// clause citations and the reason this is a setting rather than a fix.
     pub page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource,
+    /// How a type 6/7 mesh-shading patch record is byte-padded - spec
+    /// ambiguity `MSH-A1`. See
+    /// [`pdfce_core::settings::MeshPatchPadding`], whose docs carry the
+    /// clause text and the reason the ambiguity is permanent.
+    ///
+    /// It is observable only on a file whose `BitsPerFlag`,
+    /// `BitsPerCoordinate` and `BitsPerComponent` make a patch record a
+    /// non-multiple of 8 bits; every mesh measured so far is byte aligned
+    /// under both readings.
+    pub mesh_patch_padding: pdfce_core::settings::MeshPatchPadding,
     /// Which filter resamples a size-mismatched `/SMask` or explicit
     /// `/Mask` (spec ambiguity `SM-A1`, §8.9.6.3 / Table 145).
     ///
@@ -670,6 +680,8 @@ pub struct RenderPolicy<'a> {
     pub cmyk_intent: CmykIntent,
     /// See [`RenderOptions::page_blend_space_source`].
     pub page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource,
+    /// See [`RenderOptions::mesh_patch_padding`].
+    pub mesh_patch_padding: pdfce_core::settings::MeshPatchPadding,
     /// See [`RenderOptions::mask_resample`].
     pub mask_resample: MaskResample,
     /// See [`RenderOptions::image_minify`].
@@ -730,6 +742,7 @@ impl Default for RenderOptions {
             // of the box. `settings_defaults_match_render_defaults` in
             // this module pins that.
             cmyk_intent: CmykIntent::default(),
+            mesh_patch_padding: pdfce_core::settings::MeshPatchPadding::default(),
             mask_resample: MaskResample::default(),
             image_minify: MinifyFilter::default(),
             cmyk_jpeg_polarity: CmykJpegPolarity::default(),
@@ -874,6 +887,21 @@ impl RenderOptions {
         self
     }
 
+    /// Set how a mesh-shading patch record is byte-padded (`MSH-A1`),
+    /// returning `self` for chaining. Same `#[non_exhaustive]` reasoning as
+    /// [`Self::with_annotations`].
+    ///
+    /// This is the seam the operator's persisted setting arrives through:
+    /// `RenderOptions::default().with_mesh_patch_padding(settings.mesh_patch_padding)`.
+    #[must_use]
+    pub fn with_mesh_patch_padding(
+        mut self,
+        padding: pdfce_core::settings::MeshPatchPadding,
+    ) -> Self {
+        self.mesh_patch_padding = padding;
+        self
+    }
+
     /// Set the mask resampling filter (`SM-A1`), returning `self` for
     /// chaining. Same `#[non_exhaustive]` reasoning as
     /// [`Self::with_annotations`].
@@ -942,6 +970,7 @@ impl RenderOptions {
         RenderPolicy {
             cmyk_intent: self.cmyk_intent,
             page_blend_space_source: self.page_blend_space_source,
+            mesh_patch_padding: self.mesh_patch_padding,
             mask_resample: self.mask_resample,
             image_minify: self.image_minify,
             cmyk_jpeg_polarity: self.cmyk_jpeg_polarity,
@@ -968,6 +997,7 @@ mod render_policy_tests {
         let settings = pdfce_core::settings::Settings::default();
         let options = RenderOptions::default();
         assert_eq!(settings.cmyk_intent, options.cmyk_intent);
+        assert_eq!(settings.mesh_patch_padding, options.mesh_patch_padding);
         assert_eq!(settings.mask_resample, options.mask_resample);
         assert_eq!(settings.image_minify, options.image_minify);
         assert_eq!(settings.cmyk_jpeg_polarity, options.cmyk_jpeg_polarity);
@@ -988,6 +1018,7 @@ mod render_policy_tests {
         let options = RenderOptions::default()
             .with_cmyk_intent(pdfce_core::settings::CmykIntent::Naive)
             .with_page_blend_space_source(pdfce_core::settings::PageBlendSpaceSource::DeviceNative)
+            .with_mesh_patch_padding(pdfce_core::settings::MeshPatchPadding::None)
             .with_mask_resample(pdfce_core::settings::MaskResample::Bilinear)
             .with_image_minify(pdfce_core::settings::MinifyFilter::Smooth)
             .with_cmyk_jpeg_polarity(pdfce_core::settings::CmykJpegPolarity::InvertOnApp14)
@@ -1002,6 +1033,7 @@ mod render_policy_tests {
                 // the policy, and a field left at its default would pass
                 // whether or not `with_page_blend_space_source` did anything.
                 page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource::DeviceNative,
+                mesh_patch_padding: pdfce_core::settings::MeshPatchPadding::None,
                 mask_resample: pdfce_core::settings::MaskResample::Bilinear,
                 image_minify: pdfce_core::settings::MinifyFilter::Smooth,
                 cmyk_jpeg_polarity: pdfce_core::settings::CmykJpegPolarity::InvertOnApp14,

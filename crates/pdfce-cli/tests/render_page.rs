@@ -449,6 +449,9 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "shadings_painted",
             "shadings_refused",
             "shadings_mesh",
+            "mesh_records",
+            "mesh_truncated",
+            "mesh_unusable",
             // §8.6.6.4/.5 and §8.6.5 image colour, appended 2026-08-17.
             // Both exist because the pixel-parity harness reads THIS LINE
             // and nothing else: a `Lab` image with a perfectly good
@@ -1378,9 +1381,20 @@ initial colour and once for `scn`: {line:?}"
 /// `Shading::load` that reads Table 78's entries out of a stream's
 /// dictionary rather than a bare dictionary.
 fn three_shadings_pdf() -> Vec<u8> {
-    // The ShadingType 7 vertex data is deliberately minimal and is NOT
-    // decoded by this slice — the assertion is that pdfce classifies it as
-    // a mesh and declines it by name, not that it reads the patch.
+    // The ShadingType 7 patch data is two bytes, which cannot hold one
+    // complete patch record (the smallest legal one is 24 coordinate fields
+    // plus four colours plus a flag). ★★ THAT USED TO BE INCIDENTAL AND IS
+    // NOW THE POINT. Until `Pass 125.0` no mesh was decoded at all, so this
+    // fixture asserted "classified as a mesh and declined by name" and any
+    // bytes would have done. Meshes are decoded now, so the same two bytes
+    // exercise a different branch: 8.7.4.5.7's "at least one complete patch
+    // shall be specified", reported as `mesh_unusable`.
+    //
+    // Left at two bytes rather than grown into a real patch, deliberately.
+    // Real mesh geometry is tested in
+    // `crates/pdfce-render/tests/mesh_shadings.rs` against twelve purpose-
+    // built fixtures; what THIS file tests is the census LINE, and a census
+    // needs one shading of each kind, not one correct picture.
     let mesh_body = "AB";
     build_pdf(&[
         (1, "<< /Type /Catalog /Pages 2 0 R >>".into()),
@@ -1463,7 +1477,19 @@ fn shadings_are_inventoried_by_type_and_reported_as_unpainted() {
     // The split that answers "will an update fix my file?".
     assert!(
         line.contains(" shadings_paintable=2 "),
-        "the axial and radial are paintable once geometry lands; the mesh is not: {line:?}"
+        "the axial and radial are paintable; the mesh is not, because its stream is too short for one patch: {line:?}"
+    );
+    // The counters that say WHY it is not paintable. Without these the
+    // assertion above passes equally well against a build that stopped
+    // decoding meshes entirely, which is exactly the regression this line
+    // exists to notice.
+    assert!(
+        line.contains(" mesh_unusable=1 "),
+        "the two-byte patch stream must be reported as unusable, by name: {line:?}"
+    );
+    assert!(
+        line.contains(" mesh_records=0 "),
+        "no geometry can come out of a two-byte patch stream: {line:?}"
     );
     // No trailing space: `shadings_mesh` is currently the LAST key on the
     // line, so it is followed by the newline. Asserted with a leading

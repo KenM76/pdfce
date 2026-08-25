@@ -26,16 +26,19 @@
 //! claim about the module, and claims that outlive their subject are what
 //! standing rule `R212` is about.
 //!
-//! What is still true: the **mesh** types (4-7) are modelled and refused,
-//! never painted.
+//! That paragraph has now been overtaken twice. The **mesh** types (4-7)
+//! were "modelled and refused, never painted" until `Pass 125.0`; they are
+//! now decoded and rasterised by [`crate::mesh`], which this module owns
+//! the dictionary half of and delegates the stream half to.
 //!
-//! The geometry it needs — §8.7.4.5, ISO 32000-1 Tables 79–84 — is now in
-//! the corpus **for the analytic types only**
-//! (`iso32000__s__8.7.4.5__analytic.md`, covering types 1, 2 and 3). The
-//! **mesh** stream encodings (types 4–7, Tables 82–84) are still not
-//! ingested, and the corpus index carries an explicit "do not answer from
-//! recall" marker for them. Project rule 1: spec-governed geometry is not
-//! written from training-data recall.
+//! The geometry both halves need - 8.7.4.5, ISO 32000-1 Tables 79-86 - is
+//! in the spec corpus in two files: `iso32000__s__8.7.4.5__analytic.md`
+//! for types 1/2/3 (labels SH1-SH45) and
+//! `iso32000__s__8.7.4.5__mesh.md` for types 4/5/6/7 (labels MSH1-MSH36).
+//! The corpus index's "do not answer from recall" marker on the mesh
+//! family was retired by the second of those. Project rule 1:
+//! spec-governed geometry is not written from training-data recall, and
+//! neither half of this feature was.
 //!
 //! ### Three things the corpus corrected that this module had wrong
 //!
@@ -313,10 +316,13 @@ impl Geometry {
 
     /// Whether pdfce's *painting* slice is expected to handle this type.
     ///
-    /// Separate from "did the model load", which is [`Shading`]'s business.
-    /// A type 7 mesh can parse perfectly and still not be paintable, and an
-    /// operator asking "will an update fix my file?" is asking this
-    /// question, not that one.
+    /// Separate from "did the model load", which is [`Shading`]'s business,
+    /// and separate again from "is it paintable" - since `Pass 125.0` a
+    /// mesh IS painted, by [`crate::mesh`]'s forward rasteriser rather than
+    /// by this module's inverse-mapped pixel loop. This predicate answers
+    /// only "does a closed-form parametric coordinate exist at every
+    /// point?", which is what [`Geometry::param_at`] needs and what a mesh
+    /// does not have.
     #[must_use]
     pub const fn is_analytic(&self) -> bool {
         matches!(
@@ -589,6 +595,18 @@ pub struct Shading {
     pub bbox: Option<[f32; 4]>,
     /// `/AntiAlias`, default `false`.
     pub anti_alias: bool,
+    /// The decoded stream half of a type 4-7 shading (`MSH1`: those four
+    /// "shall be represented as streams").
+    ///
+    /// `None` for the analytic types, and also for a mesh whose stream
+    /// could not be turned into geometry - in which case the refusal has
+    /// already been counted in [`ShadingDiagnostics::mesh_unusable`] and
+    /// named in the notes, so a `None` here is never silent.
+    ///
+    /// Behind an [`Arc`] because a mesh is the one part of a shading that
+    /// can be megabytes, and a [`Shading`] is cloned per paint on some
+    /// routes.
+    pub mesh: Option<Arc<crate::mesh::Mesh>>,
 }
 
 impl Shading {
@@ -608,12 +626,21 @@ impl Shading {
         obj: &Object,
         resources: &Dict,
         intent: CmykIntent,
+        patch_padding: pdfce_core::settings::MeshPatchPadding,
         color_diag: &mut ColorDiagnostics,
         diag: &mut ShadingDiagnostics,
     ) -> Option<Self> {
         let resolved = doc.resolve(obj);
         // Table 78's entries live in the dictionary either way; a mesh
         // shading is a stream whose *dictionary* carries them.
+        // The STREAM itself, when there is one. A mesh's geometry is in
+        // the payload rather than in the dictionary (`MSH1`), so keeping
+        // only `&s.dict` -- which is all the analytic types ever needed --
+        // would throw away the half that matters for types 4-7.
+        let stream = match resolved {
+            Object::Stream(s) => Some(s),
+            _ => None,
+        };
         let dict = match resolved {
             Object::Dict(d) => d,
             Object::Stream(s) => &s.dict,
@@ -714,10 +741,36 @@ impl Shading {
             }
         }
 
-        // Only the analytic types have a 1-D parametric domain to sample.
-        // A mesh carries colour per vertex, so building a ramp for one
-        // would be meaningless rather than merely unused.
+        // `/Decode` is read once here rather than inside the mesh parser,
+        // because a PARAMETRIC mesh's ramp domain is its `c` pair -- MSH14
+        // clause 2 shrinks the array to `[xmin xmax ymin ymax t_min
+        // t_max]` -- and the ramp is built before the parse.
+        let mesh_decode = components(doc, dict, b"Decode");
+
+        // The analytic types have a 1-D parametric domain to sample, and so
+        // does a mesh WITH a `/Function`: MSH14's `t`. A mesh without one
+        // carries colour per vertex and has no ramp at all, which is a real
+        // answer rather than a missing one.
         let ramp = match (&geometry, &function) {
+            (Geometry::Mesh { .. }, Some(f)) => {
+                // The `t` range is the `/Decode` array's third pair. If it
+                // is absent the mesh will refuse below for the same reason,
+                // so [0, 1] here only keeps the ramp from being a second
+                // place that decides the file is malformed.
+                let domain = mesh_decode
+                    .as_ref()
+                    .filter(|d| d.len() >= 6)
+                    .map_or([0.0, 1.0], |d| [d[4], d[5]]);
+                diag.ramps_sampled += 1;
+                let r = ColorRamp::build(f, domain, &color_space, intent, color_diag);
+                if !r.is_complete() {
+                    diag.ramps_incomplete += 1;
+                    diag.note(
+                        "mesh shading /Function failed at one or more ramp samples; those patches paint nothing",
+                    );
+                }
+                Some(r)
+            }
             (Geometry::Axial { domain, .. } | Geometry::Radial { domain, .. }, Some(f)) => {
                 diag.ramps_sampled += 1;
                 let r = ColorRamp::build(f, *domain, &color_space, intent, color_diag);
@@ -740,6 +793,61 @@ impl Shading {
             ));
         }
 
+        // ---------------------------------------------------------------
+        // The stream half (types 4-7). Everything above this point is
+        // Table 78, which governs all seven types identically.
+        // ---------------------------------------------------------------
+        let mesh = if let Geometry::Mesh { shading_type } = geometry {
+            let decoded = stream.and_then(|st| {
+                let raw = doc.slice(st.data_span)?;
+                pdfce_core::filters::decode_stream(&st.dict, raw).ok()
+            });
+            let outcome = match (stream, decoded.as_deref()) {
+                (None, _) => Err(crate::mesh::MeshRefusal::NotAStream),
+                (Some(_), None) => Err(crate::mesh::MeshRefusal::Undecodable),
+                (Some(_), Some(data)) => {
+                    let input = crate::mesh::ParseInput {
+                        shading_type,
+                        data,
+                        decode: mesh_decode.as_deref(),
+                        bits_per_coordinate: uint(doc, dict, b"BitsPerCoordinate"),
+                        bits_per_component: uint(doc, dict, b"BitsPerComponent"),
+                        bits_per_flag: uint(doc, dict, b"BitsPerFlag"),
+                        vertices_per_row: uint(doc, dict, b"VerticesPerRow"),
+                        space: &color_space,
+                        parametric: function.is_some(),
+                        patch_padding,
+                        intent,
+                    };
+                    crate::mesh::parse(&input, color_diag)
+                }
+            };
+            match outcome {
+                Ok(m) => {
+                    diag.mesh_records += m.records;
+                    if m.truncated {
+                        diag.mesh_truncated += 1;
+                        diag.note(
+                            "mesh shading stream ended part-way through a record; the complete records were painted and the remainder discarded",
+                        );
+                    }
+                    if let Some(rows) = m.rows_inferred {
+                        diag.note(&format!(
+                            "type 5 mesh row count is not in the dictionary and was inferred from the stream length: {rows} row(s)"
+                        ));
+                    }
+                    Some(Arc::new(m))
+                }
+                Err(reason) => {
+                    diag.mesh_unusable += 1;
+                    diag.note(reason.reason());
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         diag.count(&geometry);
 
         Some(Self {
@@ -750,18 +858,32 @@ impl Shading {
             background: components(doc, dict, b"Background"),
             bbox: array_n(doc, dict, b"BBox"),
             anti_alias: boolean(doc, dict, b"AntiAlias"),
+            mesh,
         })
     }
 
-    /// Whether the next slice will be able to paint this shading.
+    /// Whether pdfce can paint this shading.
     ///
-    /// True requires all three of: an analytic type, a function, and a
-    /// ramp. Reported so the inventory can distinguish "pdfce found a
-    /// gradient it will soon draw" from "pdfce found something it will
-    /// still refuse", which is the difference between an operator waiting
-    /// for an update and one who needs a different answer.
+    /// The name said "the NEXT slice will be able to" for as long as there
+    /// was a next slice, and outlived two of them. Read against
+    /// [`ShadingDiagnostics::painted`]: the gap between the two is shadings
+    /// pdfce understood and still did not put on the page, which is the
+    /// difference between an operator whose file is malformed and one
+    /// waiting on a capability.
+    ///
+    /// True for an analytic type with a ramp, or for a mesh whose stream
+    /// decoded. False is always accompanied by a named reason in
+    /// [`ShadingDiagnostics::notes`] - a shading pdfce declines and cannot
+    /// explain would violate project rule 4.
     #[must_use]
     pub fn is_paintable(&self) -> bool {
+        if self.mesh.is_some() {
+            // A mesh needs no ramp unless it is the parametric form, and
+            // the parametric form's ramp is built by `load` exactly when
+            // `/Function` is present. So "the stream decoded" is the whole
+            // condition.
+            return true;
+        }
         self.geometry.is_analytic() && self.ramp.is_some()
     }
 }
@@ -857,6 +979,23 @@ fn components(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<Vec<f32
 ///
 /// `Object` has no `as_bool` accessor — booleans are read by matching the
 /// variant, which is the idiom the rest of this crate uses.
+/// Read a non-negative integer entry, or `None` if it is absent, not a
+/// number, or negative.
+///
+/// Separate from [`num`] because every consumer of one of these
+/// (`BitsPerCoordinate`, `BitsPerComponent`, `BitsPerFlag`,
+/// `VerticesPerRow`) validates the value against a closed set immediately
+/// afterwards, and a negative or fractional value must fail that check
+/// rather than wrap into a plausible one.
+fn uint(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<u32> {
+    let v = num(doc, dict.get(key)?)?;
+    if !v.is_finite() || v < 0.0 || v > f64::from(u32::MAX) {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    Some(v.round() as u32)
+}
+
 fn boolean(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> bool {
     matches!(
         dict.get(key).map(|o| doc.resolve(o)),
@@ -898,11 +1037,17 @@ fn extend_pair(doc: &DocumentView<'_>, dict: &Dict) -> [bool; 2] {
 /// it?* (`paintable` vs `mesh`), *or is my file broken?* (`refused` and the
 /// named reasons).
 ///
-/// **Every counter here is currently a "found, not painted" census** — this
-/// slice builds the model and paints nothing. `painted` exists and stays at
-/// zero until the geometry slice lands, deliberately: a counter that
-/// appears at the same moment the feature does cannot be used to show the
-/// feature arriving.
+/// This block said **"every counter here is currently a 'found, not
+/// painted' census"** through two slices that painted, which is the failure
+/// `R212` is about: a claim ABOUT a module, sitting where it is read first,
+/// with nothing under test to contradict it.
+///
+/// What survives from the original reasoning, because it was right and is
+/// why `painted` reads correctly today: a counter that appears at the same
+/// moment its feature does cannot be used to show the feature arriving. Both
+/// [`Self::painted`] and [`Self::paintable`] predate the code that moves
+/// them, so a pre-Pass and post-Pass binary can be compared on the same
+/// file.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ShadingDiagnostics {
     /// Shading dictionaries encountered, by either route.
@@ -941,6 +1086,27 @@ pub struct ShadingDiagnostics {
     pub ramps_sampled: usize,
     /// Ramps with at least one sample the function failed to produce.
     pub ramps_incomplete: usize,
+    /// Geometry decoded from mesh streams - triangles for types 4/5,
+    /// patches for types 6/7.
+    ///
+    /// Zero beside a non-zero [`Self::mesh_unusable`] says the streams were
+    /// there and pdfce could not read them; zero beside a non-zero
+    /// [`Self::by_type`] entry for 4-7 with no refusal would be a bug.
+    pub mesh_records: usize,
+    /// Mesh streams that ended part-way through a record, or (type 5) did
+    /// not hold a whole number of rows.
+    ///
+    /// pdfce paints the complete records and discards the remainder.
+    /// ISO 32000-1 states an error condition for exactly one of the four
+    /// types (`MSH20`, type 4) and is silent for the other three, so this
+    /// is a product decision disclosed rather than a conformance verdict.
+    pub mesh_truncated: usize,
+    /// Mesh shadings whose stream could not be turned into geometry at all,
+    /// each with a named reason in [`Self::notes`].
+    ///
+    /// Distinct from [`Self::refused`], which counts dictionaries rejected
+    /// before the stream was ever reached.
+    pub mesh_unusable: usize,
     /// First few distinct human-readable reasons.
     pub notes: Vec<String>,
 }
@@ -1000,6 +1166,9 @@ impl ShadingDiagnostics {
         self.function_arity_mismatch += other.function_arity_mismatch;
         self.ramps_sampled += other.ramps_sampled;
         self.ramps_incomplete += other.ramps_incomplete;
+        self.mesh_records += other.mesh_records;
+        self.mesh_truncated += other.mesh_truncated;
+        self.mesh_unusable += other.mesh_unusable;
         for note in other.notes {
             self.note(&note);
         }
@@ -1535,6 +1704,22 @@ impl Shading {
         alpha: f32,
         pixmap: &mut tiny_skia::Pixmap,
     ) -> Option<usize> {
+        // A mesh is FORWARD-rasterised and shares nothing below this line
+        // but the arguments: no `Param`, no ramp lookup per pixel, no
+        // inverse map except for `/BBox`. See `crate::mesh`'s module docs
+        // for why the two algorithms are opposite rather than variations.
+        if let Some(mesh) = self.mesh.as_ref() {
+            return crate::mesh::paint(
+                mesh,
+                self.ramp.as_ref(),
+                to_target,
+                self.bbox,
+                region,
+                clip,
+                alpha,
+                pixmap,
+            );
+        }
         if !self.geometry.is_analytic() {
             return None;
         }

@@ -85,9 +85,9 @@
 use eframe::egui;
 use pdfce_core::pageops::SeparationPolicy;
 use pdfce_core::settings::{
-    ActualTextPrecedence, CmykIntent, CmykJpegPolarity, MaskResample, MinifyFilter,
-    MissingAppearanceState, PageBlendSpaceSource, QuadPointOrder, Settings, StoreLocation,
-    TrailingEol, UnmappableCode, XrefEntryEol,
+    ActualTextPrecedence, CmykIntent, CmykJpegPolarity, MaskResample, MeshPatchPadding,
+    MinifyFilter, MissingAppearanceState, PageBlendSpaceSource, QuadPointOrder, Settings,
+    StoreLocation, TrailingEol, UnmappableCode, XrefEntryEol,
 };
 
 use crate::ui_text;
@@ -240,6 +240,12 @@ pub fn show(
                         mask_setting(ui, draft);
                         ui.add_space(10.0);
                         minify_setting(ui, draft);
+                        ui.add_space(10.0);
+                        // Grouped with images rather than with colour: a
+                        // gradient mesh is a picture-shaped thing, and this
+                        // knob is about READING it, not about what colour it
+                        // comes out.
+                        mesh_padding_setting(ui, draft);
                     });
                     group(ui, ui_text::settings_group_text(), false, |ui| {
                         word_gap_setting(ui, draft);
@@ -428,6 +434,30 @@ fn page_blend_space_setting(ui: &mut egui::Ui, draft: &mut Draft) {
         PageBlendSpaceSource::OutputIntentAlways,
         ui_text::setting_page_blend_intent_always(),
         Some(ui_text::setting_page_blend_intent_always_note()),
+    );
+}
+
+fn mesh_padding_setting(ui: &mut egui::Ui, draft: &mut Draft) {
+    header(
+        ui,
+        ui_text::setting_mesh_padding_title(),
+        ui_text::setting_mesh_padding_silence(),
+        ui_text::setting_mesh_padding_radius(),
+    );
+    let v = &mut draft.working.mesh_patch_padding;
+    option(
+        ui,
+        v,
+        MeshPatchPadding::PerRecord,
+        ui_text::setting_mesh_padding_per_record(),
+        Some(ui_text::setting_mesh_padding_per_record_note()),
+    );
+    option(
+        ui,
+        v,
+        MeshPatchPadding::None,
+        ui_text::setting_mesh_padding_none(),
+        Some(ui_text::setting_mesh_padding_none_note()),
     );
 }
 

@@ -3869,6 +3869,7 @@ impl Interpreter<'_> {
             entry,
             resources,
             intent,
+            self.policy.mesh_patch_padding,
             &mut self.diag.color,
             &mut self.diag.shading,
         );
@@ -4862,6 +4863,7 @@ impl Interpreter<'_> {
             shading_entry,
             resources,
             intent,
+            self.policy.mesh_patch_padding,
             &mut self.diag.color,
             &mut self.diag.shading,
         ) else {

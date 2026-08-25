@@ -2547,6 +2547,48 @@ profile then changes how a page is mixed, which is a bigger change than the \
 evidence supports."
 }
 
+pub fn setting_mesh_padding_title() -> &'static str {
+    "How gradient meshes are read out of a file"
+}
+
+/// What the standard does not settle here.
+pub fn setting_mesh_padding_silence() -> &'static str {
+    "A gradient mesh stores its shape as a stream of packed bits. The standard \
+says where one triangle's bits end and the next begin, but the same rule was \
+never restated for the curved-patch kind, which has no triangles in it. Both \
+readings survive the wording, and the newer standard repeats it unchanged, so \
+this is a gap that will not be closed by a later edition."
+}
+
+/// Where it bites, and where it does not.
+pub fn setting_mesh_padding_radius() -> &'static str {
+    "Affects only files whose mesh uses unusual field widths. Every mesh pdfce \
+has measured reads the same either way; if one ever does not, the wrong \
+setting makes it unreadable rather than subtly different."
+}
+
+pub fn setting_mesh_padding_per_record() -> &'static str {
+    "Round each patch up to whole bytes (pdfce's default)"
+}
+
+/// The shipped default's explanation.
+pub fn setting_mesh_padding_per_record_note() -> &'static str {
+    "Treats a whole patch the way the standard treats a whole triangle. It is \
+the only reading under which the standard's own cross-reference says \
+anything at all."
+}
+
+pub fn setting_mesh_padding_none() -> &'static str {
+    "Read the patches as one unbroken run of bits"
+}
+
+/// The alternative reading.
+pub fn setting_mesh_padding_none_note() -> &'static str {
+    "Takes the rounding rule as applying only to triangles, which is what it \
+literally names. Try this if a file with a curved-patch gradient renders as \
+nonsense or not at all."
+}
+
 pub fn setting_cmyk_title() -> &'static str {
     "How CMYK colour is shown on screen"
 }
