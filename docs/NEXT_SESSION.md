@@ -339,17 +339,80 @@ of the claim (`R211` clause (e)). Sample across the **predicate**, not across
 
 ---
 
+## §2b — ★★★★ WHAT THE REMAINING 8 GHENT FAILURES ACTUALLY ARE, measured after `122.5`
+
+**Read this before picking the next Pass. It contradicts the queue order I
+wrote earlier the same session, and the contradiction is the useful part.**
+
+I had `Pass 97.1k` (images and shadings bridging through sRGB) at the top,
+reasoning that 32 of 51 patches now report `cmyk_bridged_pixels` and that all 8
+failures are among them. **That reasoning was wrong in the way this project
+keeps re-learning: a counter being NON-ZERO on a failing patch is not evidence
+that it CAUSES the failure.**
+
+Classified by rendering each failure and reading its diagnostics:
+
+| patch | what is actually wrong |
+|---|---|
+| `GWG 6.0` | **mesh shadings are unimplemented** (`shadings_mesh=2`). pdfce draws a black X placeholder where shading types 6/7 belong. Types 2 and 3 render correctly and match Acrobat. **Nothing to do with the sRGB bridge** |
+| the other **7** | `sep_all_approximated`, 6–12 per patch, on pages that **all now have `cmyk_buffer=1`** |
+
+★ **`GWG 6.0` is the case that falsifies the bridge theory outright.** Its traps
+measure **232 and 234** of 255 contrast — far too gross for a colour-conversion
+error. A bridge fix would not have moved it, and I would have spent a Pass
+finding that out.
+
+### The hypothesis for the other seven, and exactly how to confirm it
+
+`Separation /All`. §8.6.6.4 says painting with `/All` **shall apply the tint to
+all available colorants at once**; on an additive display pdfce renders that as
+a neutral of luminance `1 − tint`, which is disclosed as
+`sep_all_approximated`. The suite paints its trap marks so that they merge
+invisibly into the surround **when the tint reaches every colorant** — which is
+precisely what a screen neutral cannot do.
+
+**Evidence, and its limits, stated separately:**
+- The counter fires **at the point of conversion**, so `/Separation /All`
+  painting definitely happened — that part is not a guess.
+- On `GWG 1.0` the count is **6**, and the cells that visibly differ from
+  Acrobat are **exactly 6 of 10** — `a`, `b`, `f`, `g` (a strong purple X on
+  brown where Acrobat shows solid brown) plus `e`, `j` (an X over the shading).
+  A count matching the divergence exactly is coincidence-resistant.
+- **NOT established:** that those specific marks are the `/All` paint. Confirm
+  by dumping the content stream and reading the colour space the trap marks are
+  filled with, before writing any code.
+
+★★ **AND THIS IS NEWLY FIXABLE BECAUSE OF `122.5`, which is the part worth
+noticing.** Applying a tint to *all available colorants* requires colorants to
+exist. Before `122.5` these pages had no colorant buffer, so a native `/All`
+was impossible and the screen neutral was the only option. `122.5` did not just
+fix three patches — **it unblocked the fix for the rest.**
+
+⇒ Suggested next Pass: **`/Separation /All` applied natively in the colorant
+buffer**, not `97.1k`. Confirm the content-stream question above first.
+
+---
+
 ## §3 — THE QUEUE, in the order I would take it
 
 **Nothing in this queue is blocked on anybody.**
 
-1. **`Pass 97.1k` — the last structural item in the `97.x` family.** — native colorant paths for **images and shadings**, which
+1. **`/Separation /All` in the colorant buffer — see §2b.** Newly possible
+   after `122.5`, and the measured cause under 7 of the 8 remaining Ghent
+   failures. **Confirm the content-stream question in §2b before writing
+   code.** Needs a Pass ID; `122.6` is free.
+2. **Mesh shadings (types 6/7)** — `GWG 6.0`'s actual defect, and the only
+   remaining failure NOT in the `/All` bucket. pdfce draws a placeholder X
+   today. A real capability gap rather than a fidelity one.
+3. **`Pass 97.1k` — the last structural item in the `97.x` family.** — native colorant paths for **images and shadings**, which
    bridge through sRGB today (`cmyk_bridged_pixels`, `cmyk_unbridged_images`).
    The last structural item in the `97.x` family. Means widening a type one
    layer up: `DecodedImage` holds a `Pixmap`; `ColorRamp::at` returns
    three-channel sRGB when the ramp is *built*. ★ **More files reach the
    colorant buffer since `122.5`**, so this bridge is now on a wider
-   population than when it was scoped.
+   population than when it was scoped — **but see §2b: a wider population
+   is not the same as a causal one, and the bridge is NOT what the
+   remaining failures are made of.**
 3. **The check-mark detector** — `122.2` deliberately shipped none. It must key
    on **presence relative to a reference render**, not on a hue (§2 item 4).
    Ground truth for all four patches is in `tools/ghent-check.py`'s docstring
