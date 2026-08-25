@@ -339,7 +339,76 @@ of the claim (`R211` clause (e)). Sample across the **predicate**, not across
 
 ---
 
-## §2b — ★★★★ WHAT THE REMAINING 8 GHENT FAILURES ACTUALLY ARE, measured after `122.5`
+## §2a — ★★★★★ 2026-08-25: THE OPERATOR CORRECTED A CLAIM AND IT LED TO TWO SHIPPED PASSES
+
+**Read this before §2b — §2b was written the previous day and this supersedes
+part of it.**
+
+He said, of Ghent `GWG 1.0`: *"e and j don't have x but they are the wrong
+color and always have been since the x was removed."* Both halves were right,
+and chasing them produced everything below.
+
+**What I got wrong.** I read the X-shaped figure inside those two cells as a
+trap marker. **It is the artwork** — the shading's own function traces an X,
+Acrobat draws it orange-on-orange so it vanishes, pdfce drew it pink and cyan
+so it did not. Only **four** cells carry a trap X on that patch. My filed
+claim of *"six divergent cells, `sep_all_approximated=6`,
+coincidence-resistant"* was **two different defects summed to reach a number**,
+which is worse than no match at all: it made a coincidence look like a
+mechanism.
+
+★ **And I already held the disconfirming evidence.** `ghent-check.py` had
+reported `GWG 1.0` as **4 traps**, all in the left-hand font/vector columns,
+none in the shading column. The harness and the operator agreed; only my
+eyeballing of a screenshot did not. **This was not a case of the operator
+seeing something I could not — it was me not reading my own instrument.**
+
+### What shipped from it
+
+| commit | what |
+|---|---|
+| `c9f8419` | **Shadings ignored overprint entirely and said nothing about it.** `shading.rs` had no mention of overprint at all; images at least disclosed their equivalent gap. Added `overprint_shadings_unsupported`, which reported **2** on `GWG 1.0` — exactly the two cells he named, arrived at independently |
+| `c743a69` | **`Pass 122.6`** — a `/DeviceN` shading under overprint now keeps the ink beneath it. Blue centre **209 → 56**, green centre **179 → 187.5** against Acrobat's **186.6**. ★ **A large improvement, NOT a completed one** |
+
+**`Pass 122.7` is DIAGNOSED AND ROUTED, not pending work.** The residual blue
+is **entirely the CMYK→sRGB table**, proved two ways: it is a *uniform floor*
+(median 55, 1.00 of the cell above 20; Acrobat median 0, 0.05 above) rather
+than a gradient artefact, and swapping `cmyk_intent` moves it while nothing
+else does — `naive` gives blue **0**/green **143**, `calibrated` gives
+**55**/**165**, Acrobat is **0**/**156**. ★ **Neither stand-in is right and
+Acrobat sits BETWEEN them**, so this is a hue error in saturated orange, *not*
+pdfce having picked the wrong table — do not "fix" it by flipping the default.
+Colour conversion is `iccce`'s by **decision 064**, so it went to the channel
+as an informational note:
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\note_cmyk_to_srgb_injects_blue_into_saturated_orange.md`.
+Target for whenever a real transform lands: **blue ≈ 0 AND green ≈ 156** on
+that file, which beats both stand-ins on the same measurement.
+
+### ★★ THREE THINGS FROM THIS RUN WORTH REUSING
+
+1. **A disclosure counter's test is written to fail when the gap closes.**
+   `c9f8419`'s test asserted the counter was **2** and pinned the gap;
+   `122.6` closed it and the test failed. That failure is the fix being
+   observed, not the test being weakened. It now asserts **0**, *beside* an
+   assertion that four shadings were actually painted — because a counter is
+   also zero when nothing was drawn.
+2. **Two halves can be coupled such that neither alone does anything.** The
+   ramp resolved colour to sRGB at BUILD time, and §11.7.4.3 makes
+   `B(c_b, c_s)` equal `c_s` for every component *"specified in the current
+   colour space"* — which a bridged sRGB triple has specified all three of. So
+   an overprint composite over a bridged source changes nothing, and native
+   colorants without an overprint composite change nothing. **Check for this
+   shape before scoping either half alone.**
+3. **The excluded case is the interesting one.** `Pass 122.6` deliberately
+   does **not** cover a `DeviceCMYK` shading: Table 149's `DeviceCmykDirect`
+   row under `/OPM 1` is the **one value-dependent cell in the table**, so its
+   rules cannot be computed once per shading, which is what the fast route
+   does. That case keeps the bridge and keeps being disclosed. **Honest beats
+   silently wrong.**
+
+---
+
+## §2b — WHAT THE REMAINING GHENT FAILURES ARE, measured after `122.5` (2026-08-24)
 
 **Read this before picking the next Pass. It contradicts the queue order I
 wrote earlier the same session, and the contradiction is the useful part.**
@@ -445,14 +514,18 @@ buffer**, not `97.1k`. Confirm the content-stream question above first.
 
 **Nothing in this queue is blocked on anybody.**
 
-1. **`/Separation /All` in the colorant buffer — see §2b.** Newly possible
-   after `122.5`, and the measured cause under 7 of the 8 remaining Ghent
-   failures. **Confirm the content-stream question in §2b before writing
-   code.** Needs a Pass ID; `122.6` is free.
+1. **The trap-X cells — `GWG 1.0`'s `a`/`b`/`f`/`g`.** The `/All`
+   hypothesis in §2b, now **narrowed to four cells rather than six** by the
+   operator's correction (§2a). **Confirm the content-stream question in §2b
+   before writing code** — that those marks really are the `/All` paint is
+   still unestablished, and §2a is what happens when a co-occurring counter is
+   read as a cause. `122.8` is the next free ID.
 2. **Mesh shadings (types 6/7)** — `GWG 6.0`'s actual defect, and the only
    remaining failure NOT in the `/All` bucket. pdfce draws a placeholder X
    today. A real capability gap rather than a fidelity one.
-3. **`Pass 97.1k` — the last structural item in the `97.x` family.** — native colorant paths for **images and shadings**, which
+3. **Per-image overprint (`Pass 122.1`)** — the image sibling of what `122.6`
+   just did for shadings, and now the obvious next one of that family.
+4. **`Pass 97.1k` — the last structural item in the `97.x` family.** — native colorant paths for **images and shadings**, which
    bridge through sRGB today (`cmyk_bridged_pixels`, `cmyk_unbridged_images`).
    The last structural item in the `97.x` family. Means widening a type one
    layer up: `DecodedImage` holds a `Pixmap`; `ColorRamp::at` returns

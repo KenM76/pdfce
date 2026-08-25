@@ -59979,3 +59979,105 @@ touched, no `cargo tree`/round-trip/packaging checks apply.
   filing — no shell. Everything above is either this role's own
   documentation edits or relayed from the dispatching engineer's report,
   per hard rule 8.
+
+## 2026-08-25 (two-hundred-and-forty-ninth filing) — `Pass 122.7` DIAGNOSED AND RE-SCOPED, no commit: the blue-channel residual is the interim CMYK→sRGB table, not compositing, and it is `iccce`'s by decision 064
+
+**Shipped:**
+- Nothing. **No commit this filing** — measurement and routing only, no
+  code changed. `Pass 122.7` re-scoped in `ROADMAP.md` from "diagnose the
+  residual" to a pointer-only entry; it stays in *Backlog*, inert, rather
+  than being deleted or read as scheduled pdfce work.
+
+**Decisions made this session:**
+- None new. Applied the existing decision **064** boundary (pdfce owns
+  compositing, `iccce` owns conversion) to route the finding — no
+  amendment to the decision itself.
+
+**Findings + decisions:**
+- **Sourcing note:** no shell in this filing (librarian invocation).
+  Every figure below is relayed from the engineer's own dispatch, which
+  stated its method beside each figure, per hard rule 8.
+- **The residual is entirely the interim CMYK→sRGB table, not
+  compositing.** Two independent signals on Ghent `GWG 1.0`'s `shading`
+  cells: (1) **distribution, not gradient** — blue is a uniform floor
+  across the whole orange cell, pdfce min 30 / p25 52 / **median 55** /
+  p75 61 with **1.00** of pixels above 20, versus Acrobat's min 0 / p25 0
+  / **median 0** / p75 0 with **0.05** above 20; (2) **swapping the table
+  moves it and nothing else does** — same file, only `cmyk_intent`
+  changed: `naive` gives blue **0** / green 143; `calibrated` and
+  `neutral_black` (pdfce's default) both give blue **55** / green 165;
+  Acrobat is blue **0** / green **156**.
+- ★ **Neither of pdfce's two stand-in tables is right — Acrobat sits
+  BETWEEN them.** `naive` matches blue exactly and misses green by 13;
+  `calibrated`/`neutral_black` overshoot green by 9 and miss blue by 55.
+  Saturated orange (`C=0, M≈0.6, Y=1, K=0`) is a region where the
+  calibrated table has a hue error and the naive one a luminance error,
+  in different directions — not a case of picking the wrong one of
+  pdfce's three tables. Recorded explicitly so a future session does not
+  "fix" this by flipping the default.
+- **Routed to `iccce` as an informational note, not a request**, per
+  decision 064 (pdfce: compositing; `iccce`: conversion — profile
+  parsing, transform construction, rendering intents, ΔE). Filed at
+  `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\note_cmyk_to_srgb_injects_blue_into_saturated_orange.md`,
+  with a matching row in that channel's own `INDEX.md` (oracle + numbers
+  both present, per that index's own requirement for a colour claim).
+  Both the note and the index row were already correctly filed by the
+  engineer before this dispatch; this filing verified them and named the
+  note's filename in `ROADMAP.md` itself (the "a cross-project
+  deliverable is not handed off until a pdfce doc names it" discipline
+  from this role's own agent file — a 419-line cross-project file once
+  went unmerged and untracked because only the producing side knew about
+  it).
+- **What pdfce is explicitly not doing, recorded so the scope doesn't
+  creep back in:** not hand-fitting the table (a local patch would make a
+  later real transform harder to drop in); not evaluating a CMM crate (no
+  candidate slot exists, settled by decision 064); not blocked (the
+  interim tables stay — this is a calibration case for whenever `iccce`
+  ships a real transform, not a pdfce dependency).
+- **Regression target recorded for whenever `iccce`'s transform lands:**
+  on this file, a correct transform should hit blue ≈ 0 **and** green ≈
+  156, beating both of pdfce's interim stand-ins on the same measurement.
+  `GWG 1.0`'s shading cells are an unusually well-pinned target because
+  Acrobat's blue is a hard floor (0 for 95% of the cell) rather than a
+  judgement call. Corpus provenance carried in the `ROADMAP.md` entry
+  itself: Ghent Output Suite 5.0 (not redistributable,
+  `D:\Dev\temp\ghent-patches\`); Acrobat reference renders at
+  `D:\Dev\temp\acro-refs\` (captured 2026-08-18 via `PrintWindow`; binary
+  self-identifies as Acrobat Pro 25.1, licence tier never established —
+  rendering reference only).
+
+**`ROADMAP.md`:**
+- `Pass 122.7`'s Backlog entry rewritten in place (not deleted, not
+  moved) — header now reads "DIAGNOSED AND ROUTED — POINTER ONLY, not
+  pending pdfce work"; body carries the measurement table, the
+  between-the-two-stand-ins finding, the decision-064 routing citation
+  with the note's full filename, the not-doing list, the regression
+  target, and the corpus provenance. Entry stays in *Backlog*, inert,
+  rather than closed — it is the only pdfce-side pointer to the channel
+  note.
+
+**`FEATURES.md`:**
+- No change. No capability moved; this filing routed a defect, it did
+  not ship or plan one.
+
+**Still in flight:**
+- The blue-channel residual itself — now `iccce`'s to pick up whenever
+  they get to it, per the note's own "no reply owed, not a request"
+  framing. No pdfce action is owed.
+- `iccce`'s inbox still carries other older open items (see the
+  standing `iccce` inbox tracking elsewhere in `ROADMAP.md`); this
+  filing adds one more informational note to that channel, not a
+  priority claim over the rest.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned).
+- Ledger: standing rules ceiling stays `R217`, next free `R218`;
+  decisions ceiling `085`, next free `086` (no new decision — 064
+  applied, not amended); Pass family `122.x` next free `122.8`
+  (`122.7` itself is not "next" work, it's a closed-out pointer);
+  `render-page` metrics line **92 keys**, unchanged; filing ordinal
+  `249`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Everything above is either this role's own
+  documentation edits or relayed from the dispatching engineer's report,
+  per hard rule 8.

@@ -76567,26 +76567,72 @@ agreement with a sibling constant.
 
 ---
 
-### `Pass 122.7` — diagnose the blue-channel residual on the now-shipped `Separation`/`DeviceN` shading-overprint route
+### `Pass 122.7` — ★ DIAGNOSED AND ROUTED — POINTER ONLY, not pending pdfce work — blue-channel residual on the now-shipped `Separation`/`DeviceN` shading-overprint route is `iccce`'s (decision 064)
 
-**Filed 2026-08-25 (two-hundred-and-forty-eighth filing), opened
-alongside `Pass 122.6`'s ship rather than guessed at.** On Ghent
-`GWG 1.0` cells `e`/`j`, `Pass 122.6`'s `Separation`/`DeviceN`
-shading-overprint composite (`c743a69`) brought the green channel to
-within about one level of Acrobat (**187.5** vs **186.6**) but left the
-blue channel far off (**55.7** vs Acrobat's **2.6**, down from **209.2**
-pre-fix). The green match and the blue miss are on the **same cell, from
-the same composite**, which points at something remaining in the
-cyan/magenta path rather than in the overprint-rule selection
-`Pass 122.6` already got right — but **nobody has diagnosed it, and this
-entry deliberately does not guess further.** Candidates to rule in or out,
-not yet checked: a colour-management step applied to the ramp's sRGB
-samples but not its CMYK ones; a channel-order or gamma mismatch between
-`ColorSpace::to_cmyk`'s output and what the colorant buffer expects
-elsewhere; rounding in the ramp's ten-sample interpolation. **Acceptance:**
-blue centre within Acrobat's own patch-to-patch measurement noise
-(established by re-measuring a passing cell as a control), mechanism
-named and cited, not merely nudged into range by parameter search.
+**Filed 2026-08-25 (two-hundred-and-forty-eighth filing) as "diagnose the
+blue-channel residual"; re-scoped the same day (two-hundred-and-forty-ninth
+filing, librarian) once the diagnosis landed — no code changed for the
+re-scope, measurement and routing only.**
+
+**The diagnosis.** The residual is **entirely the interim CMYK→sRGB
+table**, not compositing — two independent signals on Ghent `GWG 1.0`'s
+`shading` cells. (1) **Distribution, not gradient:** across the whole
+orange cell the blue channel is a uniform floor — pdfce min 30 / p25 52 /
+median **55** / p75 61, with **1.00** of pixels above 20; Acrobat min 0 /
+p25 0 / median **0** / p75 0, **0.05** above 20. A flat offset across a
+gradient is not a compositing residue. (2) **Swapping the table moves it
+and nothing else does** — same file, only `cmyk_intent` changed:
+
+| `cmyk_intent` | blue median | green median |
+|---|---:|---:|
+| `naive` | **0** | 143 |
+| `calibrated` | **55** | 165 |
+| `neutral_black` (pdfce default) | **55** | 165 |
+| **Acrobat** | **0** | **156** |
+
+★ **Neither of pdfce's two stand-in tables is right — Acrobat sits
+BETWEEN them.** `naive` matches blue exactly and misses green by 13;
+`calibrated`/`neutral_black` overshoot green by 9 and miss blue by 55.
+This is not "pdfce picked the wrong one of its three tables" — saturated
+orange (`C=0, M≈0.6, Y=1, K=0`) is a region where the calibrated table has
+a **hue error** and the naive one a **luminance error**, in different
+directions. Recorded so a future session does not "fix" this by flipping
+the default.
+
+**The routing.** `ARCHITECTURE.md` decision 064: pdfce owns
+**compositing**, `iccce` owns **conversion** — profile parsing, transform
+construction, rendering intents, ΔE. A CMYK→sRGB table is conversion ⇒
+this is `iccce`'s. Filed as an **informational note, not a request**:
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\note_cmyk_to_srgb_injects_blue_into_saturated_orange.md`,
+with a matching row in that channel's `INDEX.md` (oracle + numbers both
+present, per that index's own requirement for a colour claim).
+
+**What pdfce is explicitly NOT doing, and this entry does not imply
+otherwise:**
+- **Not hand-fitting the table.** A hue correction fitted to one orange
+  patch would make a later real transform harder to drop in.
+- **Not evaluating a CMM crate.** No candidate slot for one exists —
+  settled by decision 064.
+- **Not blocked.** The interim tables stay; this is a calibration case for
+  whenever `iccce` ships a real transform, not a pdfce dependency.
+
+**Regression target for whenever `iccce`'s transform lands** (recorded here
+so it survives independent of the channel note): on this file, a correct
+transform should hit **blue ≈ 0 AND green ≈ 156**, beating both of pdfce's
+interim stand-ins on the same measurement. `GWG 1.0`'s shading cells are an
+unusually well-pinned target because Acrobat's blue is a hard floor (0 for
+95% of the cell) rather than a judgement call.
+
+**Corpus provenance:** Ghent Output Suite 5.0 is not redistributable,
+lives at `D:\Dev\temp\ghent-patches\`; Acrobat reference renders of all 51
+patches at `D:\Dev\temp\acro-refs\` (captured 2026-08-18 via
+`PrintWindow`; binary self-identifies as Acrobat Pro 25.1, licence tier
+never established — a rendering reference only).
+
+**This entry stays in Backlog as a pointer, not as scheduled pdfce work.**
+Closing it outright would drop the only pdfce-side cross-reference to the
+channel note; it is kept open and inert instead. No further pdfce action
+is owed here — the next move is `iccce`'s, whenever they get to it.
 
 ---
 
