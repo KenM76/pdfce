@@ -13,21 +13,32 @@ can falsify it.
 
 ## §A — COLD START: everything you need, in one screen
 
-**`HEAD` is the librarian filing for `Pass 125.0` plus one agent-memory
-commit. The working tree is clean. Nothing is blocked on anybody.** Both
+**`HEAD` is `a73e3be`, which is also the `v0.9.0` tag. The working tree is
+clean, `origin/main` matches, and nothing is blocked on anybody.** Both
 FeatureRequests channels were checked; the newest inbound is
 `iccce`'s `note_your_name_gate_has_the_two_defects_mine_had.md`, which was
 **acted on and closed** this session — see §0.
+
+**★ `v0.9.0` IS RELEASED AND VERIFIED.** `python tools/verify-release.py
+v0.9.0` → **7 of 7 ok, exit 0**; CI run `32888354436` green on all ten jobs at
+the tagged commit. The previous release's own filing recorded **6 of 7, exit
+1**. This is the first release since `v0.7.0` whose tagged commit's CI run is
+green, and it is green **without anyone remembering an ordering discipline** —
+which is what `bb154ed` was for, now demonstrated on a real release rather
+than argued for. Both operator items in §5 are discharged **for this act
+only**.
 
 ### What this run built (2026-08-25, afternoon)
 
 | commit | what an operator would notice |
 |---|---|
 | `3681a7f` | **`Pass 125.0` — gradient MESHES render.** The operator's own report: two failing cells in the first box of the print-conformance suite's first page. Both were `ShadingType 7` tensor-product patch meshes, recognised and refused. All four mesh types (4/5/6/7) now decode and rasterise |
-| `4b22c95` | **The fuzz harness had not linked since OCR landed** and nothing said so. Repaired, plus a `mesh_shading` target: 1 107 957 runs in 91 s, no crash |
+| `4b22c95` | **The fuzz harness had not linked ON WINDOWS since OCR landed.** Repaired, plus a `mesh_shading` target: 1 107 957 runs in 91 s, no crash. ★ **Its own stated reason was wrong and `ccf9ed3` corrects it — read that one too** |
 | `525585e` | **The suite-name scrub gate published the term it suppresses, and could not see the commit it was gating.** Both found by `iccce`. `R218` minted |
 | `3016641` | A test assertion shipped with a ten-space hole — the second heredoc-eaten line continuation this session |
-| `42bcea0` | The filing. ★ **Its own first draft breached the scrub rule in four lines, two of them inside a verbatim quotation of the operator** |
+| `42bcea0` | The `Pass 125.0` filing. ★ **Its own first draft breached the scrub rule in four lines, two of them inside a verbatim quotation of the operator** |
+| `ccf9ed3` | ★★ **CI DOES run `cargo fuzz build` — on Linux.** The break was MSVC-only, so a green CI and a broken local build were never a contradiction. Also: `ci.yml` claimed "the eight cargo-fuzz targets"; there are 24 |
+| `e115947` / `a73e3be` | **`v0.9.0`** — the version bump and the release filing. The tag is on the second of these |
 
 ### ★★★★★ `Pass 125.0` — the numbers, because they are the evidence
 
@@ -151,15 +162,24 @@ runs.* At the time of writing: **18 on disk, 17 runnable as bare gates, all
 fixture-directory argument and is **not** a gate. Count them; do not quote a
 count.
 
-**3. ★★ `cargo +nightly fuzz build <target>` IS NOT OPTIONAL, AND
-`cargo check --bins` IS NOT A SUBSTITUTE.** `check-ci-parity.py --list`
-offers `cd fuzz && cargo check --bins` as the fuzz job's local stand-in.
-**A/B'd 2026-08-25: it passes in BOTH states** — with the broken feature set
-and the fixed one — because `cargo check` **never links** and the break was a
-link break. A cheap proxy for a gate is a proxy for the part of the gate that
-is cheap. Run the real thing at least once per session that touches `fuzz/`
-**or any crate's `Cargo.toml`**; a dependency change *is* a fuzz-harness
-change, which is how the harness stayed dead for weeks.
+**3. ★★ RUN `cargo +nightly fuzz build` ON WINDOWS. CI CANNOT DO IT FOR
+YOU, AND `cargo check --bins` IS NOT A SUBSTITUTE EITHER.** Two separate
+traps, and each defeats the obvious escape from the other:
+
+- **CI's `fuzz targets build (nightly)` job runs on `ubuntu-latest`.** It has
+  been green throughout, including while the harness was completely
+  unbuildable here — `rten` declares `crate-type = ["lib", "cdylib"]`, and
+  only Windows hands that cdylib libFuzzer's `/include:main`. A green CI does
+  **not** absolve a red local; on this job the local run is the stricter one.
+  A `windows-latest` sibling is filed to Backlog and does not exist yet.
+- **`check-ci-parity.py --list` offers `cd fuzz && cargo check --bins` as the
+  local stand-in.** A/B'd 2026-08-25: **it passes in BOTH states**, because
+  `cargo check` never links and the break was a link break. **A cheap proxy
+  for a gate is a proxy for the part of the gate that is cheap.**
+
+Run the real thing at least once per session that touches `fuzz/` **or any
+crate's `Cargo.toml`** — a dependency change *is* a fuzz-harness change,
+which is how this went unnoticed. About 5–6 minutes warm for all 24 targets.
 
 **4. Read `docs/compositor-plan.md`** before scoping anything in `97.x`.
 
@@ -319,12 +339,30 @@ pdfce does not have yet.
 
 ## §5 — THE TWO OPERATOR ITEMS
 
-- **PUSHING — NOT DISCHARGED.** The 2026-08-25 morning authorisation covered
-  **that push** (`15c3310`). The five commits since — `3681a7f`, `4b22c95`,
-  `525585e`, `3016641`, `42bcea0`, plus the agent-memory commit — are local
-  only. The next push needs its own go-ahead (`CLAUDE.md` rule 8), and so
-  does any **release**: a push is not a release, and `v0.8.1` has been
-  neither asked for nor cut.
+- **PUSHING AND RELEASING — BOTH DISCHARGED 2026-08-25, AND NEITHER CARRIES
+  FORWARD.** The operator said **"release when ready"**, unprompted, after
+  being briefed on `Pass 125.0`. `v0.9.0` was tagged at `a73e3be` (a librarian
+  filing commit, deliberately), `main` pushed `0d4165e..a73e3be` as a clean
+  fast-forward, and the release published with one asset,
+  `pdfce-v0.9.0-windows-x64-portable.zip` (11,180,078 B).
+  **The next push and the next release each need their own go-ahead**
+  (`CLAUDE.md` rule 8) — one authorisation covers one act.
+
+  ★ **Only ONE asset, and the reason is a licence one.** `v0.8.0` shipped a
+  demonstration PDF beside the zip. This release's headline artefact is a
+  render of a **licensed** conformance patch whose artwork must not be
+  redistributed (`docs/LEGAL.md` §5, plus the 2026-08-25 name ruling), so
+  none was attached. The twelve **synthetic** mesh fixtures that demonstrate
+  the same capability are MIT-clean and in the repository at
+  `fixtures/synthetic/mesh/`. **Do not attach a render of a suite patch to a
+  release, ever** — the temptation is real, because it is the best picture
+  of what shipped.
+
+  ★★ **The packaging smoke test was run on the ZIP, not on the build
+  folder**, and that distinction is the point: the zip was extracted to a
+  fresh path and `pdfce-cli.exe` run from the extraction, producing a render
+  **byte-identical** (same MD5) to the development build's. The artefact
+  people download is verified, not merely built.
 - **CUTTING A BACKUP — STILL NOT DISCHARGED.** A GitHub release is an
   offsite copy of one build and one PDF; it is **not a `git bundle`** and
   does not contain the history. **Re-measure before quoting** —

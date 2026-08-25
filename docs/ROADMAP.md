@@ -171,14 +171,89 @@ its own hash citations.
 
 ### `e115947` — VERSION BUMP `0.8.0` → **`0.9.0`, MINOR**: gradient meshes draw — RELEASE CUT AUTHORISED (*"release when ready"*, operator, verbatim, given mid-turn immediately after being briefed on `Pass 125.0`) — ★ TAG / PUSH / GITHUB RELEASE / `verify-release.py` **NOT YET OBSERVED AT FILING TIME** — 2026-08-25 (two-hundred-and-fifty-fifth filing)
 
-**Sourcing.** No shell this filing (librarian invocation). Every figure below
-is relayed from the engineer's commit message and the verification commands
-it names, per hard rule 8. **The tag, the push, the GitHub release and
-`python tools/verify-release.py v0.9.0` are explicitly NOT yet observed at
-filing time** — the engineer states these happen after this entry is
-committed, and will report back for a possible dated amendment. Treat
-everything below as the record of a release being **cut**, not of one already
-published.
+**★★★ AMENDED 2026-08-25 (two-hundred-and-fifty-sixth filing) — OBSERVED, NOT
+CORRECTED.** The header and the paragraph immediately below it are kept
+exactly as filed: they were an honest record of a release **cut** but not yet
+published, written with the outcome deliberately left open pending a shell
+report. Nothing below retracts them — this block **completes** the claim,
+from a shell, all four items:
+
+- **Tag.** `v0.9.0`, annotated, at commit `a73e3be` — this project's own
+  255th-filing (librarian) commit, i.e. the filing commit for the `e115947`
+  entry below, not `e115947` itself. Deliberate placement: `v0.7.0`'s tag sat
+  on a librarian filing commit and its CI ran green; `v0.8.0`'s sat on a code
+  commit whose own filing could not exist in its own tree, and a re-run could
+  not make that green. `bb154ed` (243rd filing) removed the *need* for this
+  discipline by deferring the release tip, but tagging a filing commit
+  remains strictly better and costs nothing.
+- **Push.** `git push origin main` → `0d4165e..a73e3be`, clean fast-forward,
+  eight commits, no divergence, no force. `git push origin v0.9.0` → tag
+  pushed.
+- **Release.** `gh release create v0.9.0` — title *"pdfce v0.9.0 - gradient
+  meshes draw"*, **one** asset,
+  `pdfce-v0.9.0-windows-x64-portable.zip` (**11,180,078 B** — matches the zip
+  size recorded below, unchanged by upload), at
+  `https://github.com/KenM76/pdfce/releases/tag/v0.9.0`.
+- **CI at the tagged commit.** Run `32888354436`, conclusion **`success`**,
+  all **ten** jobs green (verified via `gh run view --json jobs`): ui_text
+  strings, `cargo fmt --check`, fuzz targets build (nightly), cross-target
+  macOS/wasm32, `cargo test (ubuntu-latest)`, engine-needs-no-network,
+  third-party licence audit, `cargo clippy -D warnings`, zero-GUI-deps,
+  `cargo test (windows-latest)`.
+- **`python tools/verify-release.py v0.9.0` → 7 of 7 ok, exit 0**, message
+  *"tag, HEAD, origin/main, CI and the release agree."* Worth stating
+  explicitly against the prior release's own record: `v0.8.0`'s equivalent
+  check scored **6 of 7, exit 1**. This is the first release since `v0.7.0`
+  whose tagged commit's CI run is green — and it is green **without** anyone
+  having to remember an ordering discipline, because `bb154ed` made the
+  ordering structural rather than a habit. The fix is now demonstrated on a
+  real release, not merely argued for.
+
+**One more measurement, worth its own line because it closes this same
+session's own subject.** CI job `fuzz targets build (nightly)` is green at
+the tagged commit, **and** a local Windows `cargo +nightly fuzz build` of all
+24 targets is also green. Those two facts were **not** simultaneously true at
+any point between `Pass 71.0` and this filing — CI stayed green on Linux
+while the MSVC-only break (`ccf9ed3`, above) sat undetected — and nothing had
+compared them until now. They agree.
+
+**Packaging smoke test, extended to the release asset itself** (the entry
+below already recorded a smoke test against the *build-tree copy*; this is
+the separate check against the *downloadable zip*). The release zip was
+extracted to a fresh path and `pdfce-cli.exe` run from the extraction;
+rendering the mesh patch from the extracted binary produced a PNG
+**byte-identical (same MD5)** to the one the development build produces. The
+artefact an operator would actually download is verified end to end, not
+merely the folder it was built from.
+
+**Discharged.** The operator's *"release when ready"* authorisation is
+discharged for `v0.9.0` by this push and publication. Per `CLAUDE.md` rule 8
+it does **not** carry forward — the next push and the next release each need
+their own go-ahead.
+
+**★ Not discharged by this, and deliberately called out so it is not read as
+implied:** backup currency. A GitHub release is an offsite copy of **one
+build and one PDF asset** — it is not a `git bundle` and does not contain
+project history. That remains a separate, unmeasured-from-here obligation;
+per hard rule 8, this role has not checked `D:\Dev\pdfce-backups\` this
+filing and states none of its currency.
+
+**Sourcing for this amendment.** Shell-observed by the engineer and relayed
+verbatim in the dispatch, per hard rule 8's "check, then assert, and say
+which" — every figure above names the command or artefact that produced it.
+
+---
+
+**Sourcing (original, at filing time).** No shell this filing (librarian
+invocation). Every figure below is relayed from the engineer's commit
+message and the verification commands it names, per hard rule 8. **The tag,
+the push, the GitHub release and `python tools/verify-release.py v0.9.0`
+are explicitly NOT yet observed at filing time** — the engineer states these
+happen after this entry is committed, and will report back for a possible
+dated amendment. Treat everything below as the record of a release being
+**cut**, not of one already published. *(This caveat is superseded by the
+AMENDED block above; kept verbatim as the honest record of what was known
+when it was written.)*
 
 **The authorisation.** Operator, verbatim and complete, mid-turn, unprompted,
 immediately after being briefed on `Pass 125.0`: **"release when ready."**
@@ -252,6 +327,10 @@ the tag `v0.9.0`, the push, the GitHub release, and
 `python tools/verify-release.py v0.9.0`. These happen after this entry is
 committed; the engineer will report the outcome for a possible dated
 amendment to this entry, per hard rule 8's posture on unmeasured claims.
+*(★★★ AMENDED 2026-08-25, two-hundred-and-fifty-sixth filing — all four now
+observed from a shell; see the AMENDED block at the head of this entry for
+the tag hash, push range, release URL/asset, CI run ID and
+`verify-release.py` result.)*
 
 #### Ledger
 
@@ -262,7 +341,7 @@ amendment to this entry, per hard rule 8's posture on unmeasured claims.
 | decisions (`ARCHITECTURE.md` §12) | `087` | unchanged — next free `088` |
 | standing rules | `R218` | unchanged — next free `R219` (see `ccf9ed3` entry above for the recorded-not-minted candidate) |
 | `FEATURES.md` | — | no capability row moves; version-literal check run per this filing's dispatch, **none found** — the file is already version-agnostic |
-| operator authorisations | `v0.8.0`'s ("push"/publish, discharged) | **`v0.9.0` — "release when ready" — RECORDED, NOT yet discharged**; discharge follows the tag/push/publish/verify steps, to be reported and possibly amended here |
+| operator authorisations | `v0.8.0`'s ("push"/publish, discharged) | **`v0.9.0` — "release when ready" — RECORDED, NOT yet discharged**; discharge follows the tag/push/publish/verify steps, to be reported and possibly amended here → **★★★ AMENDED 256th filing: DISCHARGED** — tag `a73e3be`, push `0d4165e..a73e3be`, release `v0.9.0` published, CI run `32888354436` success, `verify-release.py` 7/7 exit 0; does not carry forward (rule 8) |
 
 ---
 

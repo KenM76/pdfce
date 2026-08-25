@@ -60900,3 +60900,83 @@ below is relayed from the engineer's two commit messages (`ccf9ed3`,
    **`R219`**; decisions ceiling `087`, next free `088`; Pass family
    ceiling **`125`**, next free **`125.1`**; operator-question ceiling
    `(bu)`, next free `(bv)`, unchanged; filing ordinal **255**.
+
+## 2026-08-25 (two-hundred-and-fifty-sixth filing) — CLOSING THE LOOP: `v0.9.0` tag/push/publish/verify OBSERVED from a shell — amendment, not correction
+
+**Sourcing.** The engineer's dispatch relays a shell-run sequence directly
+(tag, push, `gh release create`, `gh run view`, `python
+tools/verify-release.py v0.9.0`, and a fresh-extraction packaging smoke
+test), each figure named with the command that produced it, per hard rule
+8. This filing performs no shell itself; it files what was reported.
+
+**Shipped:** nothing new — this filing amends the 255th filing's two open
+entries (`docs/ROADMAP.md`'s `e115947` and this file's own 255th-filing
+entry) with the outcome they deliberately left unmeasured. No Pass ID, no
+decision, no standing rule.
+
+**Decisions made this session:** none.
+
+**Findings + decisions:**
+
+- **`v0.9.0` tag** — annotated, at commit `a73e3be`, the librarian's own
+  255th-filing commit (not the engineer's `e115947`). Deliberate: a tag on
+  a filing commit has a green-CI precedent (`v0.7.0`); a tag on a code
+  commit does not (`v0.8.0`, whose own filing couldn't exist in its own
+  tree). `bb154ed` removed the *need* for this discipline by deferring the
+  release tip, but the practice still costs nothing and was kept.
+- **Push** — `origin/main` `0d4165e..a73e3be`, clean fast-forward, eight
+  commits; tag pushed separately, no divergence, no force.
+- **GitHub release** — `v0.9.0`, title *"pdfce v0.9.0 - gradient meshes
+  draw"*, one asset (`pdfce-v0.9.0-windows-x64-portable.zip`,
+  **11,180,078 B**), at `https://github.com/KenM76/pdfce/releases/tag/v0.9.0`.
+- **CI at the tagged commit** — run `32888354436`, **success**, all ten
+  jobs green, confirmed via `gh run view --json jobs`.
+- **`tools/verify-release.py v0.9.0` → 7 of 7 ok, exit 0.** Contrast with
+  `v0.8.0`'s own record of **6 of 7, exit 1** for the same check — this is
+  the first release since `v0.7.0` with a green CI run at the tagged
+  commit, and the first time that came from the ordering being
+  **structural** (`bb154ed`) rather than remembered. The fix is now
+  demonstrated on a real release.
+- **Fuzz-build cross-platform agreement, closing this session's own
+  subject** — CI's `fuzz targets build (nightly)` job is green at the
+  tagged commit, and a local Windows `cargo +nightly fuzz build` of all 24
+  targets is also green. Those two facts had not been simultaneously true
+  at any point between `Pass 71.0` and this filing (CI stayed green on
+  Linux while an MSVC-only linker break sat undetected, per `ccf9ed3`).
+  Nothing had compared them until now; they agree.
+- **Packaging smoke test extended to the release asset**, not just the
+  build-tree copy already recorded at filing time: the downloaded zip was
+  extracted to a fresh path, `pdfce-cli.exe` run from there, mesh-patch PNG
+  rendered — **byte-identical (same MD5)** to the development build's PNG.
+  The artefact an operator actually downloads is verified end to end.
+- **Ledger discharge** — operator authorisation *"release when ready"* is
+  discharged for `v0.9.0`; per `CLAUDE.md` rule 8 this does not carry
+  forward to any future push or release.
+- **★ NOT discharged by this, stated so it isn't read as implied: backup
+  currency.** A GitHub release is an offsite copy of one build and one PDF
+  asset — not a `git bundle`, and it carries no project history. Per hard
+  rule 8, this role has not checked `D:\Dev\pdfce-backups\` this filing and
+  asserts nothing about its currency; that remains a separate, open
+  obligation.
+- **Framing, because the distinction was asked for explicitly:** the 255th
+  filing's entries were written honestly, with the outcome left open on
+  purpose pending a shell report. Nothing above retracts them — this
+  filing **completes** a claim that was correctly left unmeasured, which is
+  a different act from correcting one that was measured wrong.
+
+**Still in flight:** nothing carried forward by this filing specifically;
+see the 255th filing's own still-in-flight items (fuzz-build-in-CI
+`windows-latest` sibling job, `check-*` audit against `R218`) — unaffected
+by this amendment.
+
+**For next session:**
+
+1. The next push and the next release each need their own operator
+   go-ahead under `CLAUDE.md` rule 8 — `v0.9.0`'s authorisation does not
+   carry forward.
+2. Backup currency for the post-release state is unverified from here —
+   check `D:\Dev\pdfce-backups\` before asserting it.
+3. Ledger: standing rules ceiling **`R218`** unchanged, next free
+   **`R219`**; decisions ceiling `087`, next free `088`; Pass family
+   ceiling **`125`**, next free **`125.1`**; operator-question ceiling
+   `(bu)`, next free `(bv)`, unchanged; filing ordinal **256**.
