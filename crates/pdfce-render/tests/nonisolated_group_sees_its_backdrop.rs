@@ -13,7 +13,7 @@
 //! where `Pass 97.1g` very nearly shipped as dead code, and the sequence is
 //! worth recording because nothing in the test suite would have caught it:
 //!
-//! 1. The Ghent PDF Output Suite is this project's transparency oracle. All
+//! 1. The print-conformance suite is this project's transparency oracle. All
 //!    51 patches were rendered with a binary built before this Pass and one
 //!    built after. **Zero pixels differ, on any patch.** Thirteen second
 //!    content walks do occur, but every one is an over-trigger of the

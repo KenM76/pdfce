@@ -2,7 +2,7 @@
 
 **Written 2026-08-18**, engineer-owned, at `2a75be1`+`e618d67`.
 Companion to `docs/overprint-architecture-survey.md` (the sourcing record for
-the colorant half) and `docs/ghent-patch-reference.md` (the per-patch expected
+the colorant half) and `docs/suite-patch-reference.md` (the per-patch expected
 appearance for the overprint patches).
 
 > ## ★★★ AMENDMENT 2026-08-21 — STAGE A SHIPPED, AND IT CANNOT DELIVER ITS
@@ -21,20 +21,20 @@ appearance for the overprint patches).
 >
 > | patch | traps before | after | why |
 > |---|---:|---:|---|
-> | `1_GWG161` (non-isolated **knockout**, DeviceCMYK) | 14 | **2** | §11.4.6 implemented |
+> | `PCS1_161` (non-isolated **knockout**, DeviceCMYK) | 14 | **2** | §11.4.6 implemented |
 > | everything else | — | unchanged | — |
 >
-> `1_GWG161` is the headline and it is the one this plan predicted least
+> `PCS1_161` is the headline and it is the one this plan predicted least
 > confidently: twelve of sixteen cells now render correctly, and the two
 > that remain sit with the residue below. **No patch regressed**, and
-> `2_GWG120_White_OP-KO` — the other `/K`-named patch — still passes.
+> `PCS2_120` — the other `/K`-named patch — still passes.
 >
 > ### ★★ THE FINDING THAT CHANGES THE STAGING, and it is a derivation, not
 > ### a hunch
 >
-> §4's Stage A expects seven patches: `1_GWG161`, `3_GWG161`, `1_GWG162`
+> §4's Stage A expects seven patches: `PCS1_161`, `PCS3_161`, `PCS1_162`
 > and the four soft-mask patches. **It will not get them, and the reason is
-> not that the group model is wrong.** Worked by hand on `1_GWG162`'s
+> not that the group model is wrong.** Worked by hand on `PCS1_162`'s
 > `Difference` cell, whose two operands are printed in the file:
 >
 > ```text
@@ -64,8 +64,8 @@ appearance for the overprint patches).
 > that it is now the **leading** item and it is what four of Stage A's
 > seven expected patches were actually waiting for.
 >
-> Note the shape: **every Ghent transparency patch declares
-> `/Group /CS /DeviceCMYK` on the PAGE** (`3_GWG161` included, whose own
+> Note the shape: **every suite transparency patch declares
+> `/Group /CS /DeviceCMYK` on the PAGE** (`PCS3_161` included, whose own
 > objects are `ICCBased` RGB). So the blending space is CMYK for all of
 > them regardless of what the artwork is coloured in, and pdfce blends
 > every one of them in device sRGB.
@@ -81,7 +81,7 @@ appearance for the overprint patches).
 > *paper*.
 >
 > `Sat(white) = 0` and `Lum(white) = 1`, so `Hue`/`Saturation`/`Color` of
-> **anything** over white is white. Measured on `1_GWG162` at scale 2.0:
+> **anything** over white is white. Measured on `PCS1_162` at scale 2.0:
 >
 > | cell | pdfce before | pdfce after | pdfium |
 > |---|---|---|---|
@@ -143,16 +143,16 @@ appearance for the overprint patches).
 >
 >   | patch | before | after |
 >   |---|---:|---:|
->   | `1_GWG1610` Softmasks Text part1 | 0.576 | **0.962** |
->   | `1_GWG168` Softmasks Vector part1 | 0.725 | **0.978** |
->   | `1_GWG169` Softmasks Vector part2 | 0.905 | **0.986** |
+>   | `PCS1_1610` Softmasks Text part1 | 0.576 | **0.962** |
+>   | `PCS1_168` Softmasks Vector part1 | 0.725 | **0.978** |
+>   | `PCS1_169` Softmasks Vector part2 | 0.905 | **0.986** |
 >
->   `1_GWG1611` still traps once and `1_GWG166` / `3_GWG167` still report
+>   `PCS1_1611` still traps once and `PCS166` / `PCS3_167` still report
 >   `corr=None` (their strips could not be located at all, which is a
 >   harness limit rather than a render result).
 >
 >   ★ **AND IT LEAVES AN INSTRUMENT PROBLEM, named rather than solved.**
->   Those three stay in the UNRESOLVED bucket because `ghent-check.py` has
+>   Those three stay in the UNRESOLVED bucket because `suite-check.py` has
 >   **no calibrated threshold** for reference-strip patches — its own
 >   output says so. There is now a visible bimodal split to calibrate
 >   against (`0.96`–`0.99` for the three above against `0.04`–`0.41` for
@@ -161,8 +161,8 @@ appearance for the overprint patches).
 >   calibrating the instrument immediately after making it report what you
 >   wanted is not a measurement. It needs its own session, its own
 >   justification, and preferably a patch whose expected verdict is known
->   independently — which is exactly how `ghent-check`'s trap threshold was
->   calibrated in the first place (GWG 16.0, 2026-08-17).
+>   independently — which is exactly how `suite-check`'s trap threshold was
+>   calibrated in the first place (PCS 16.0, 2026-08-17).
 > * **`f_g` is approximated by `α_g`** for a group used as an element of a
 >   knockout group — exact whenever that group's own elements are opaque,
 >   which is §11.4 corpus §7.4's stated safe-skip condition.
@@ -170,7 +170,7 @@ appearance for the overprint patches).
 >   per-paint non-separable blends) composite with non-knockout semantics
 >   inside a knockout group, counted on
 >   `transparency_groups_knockout_approximated`.
-> * ~~**`3_GWG161` is unexplained**~~ **— EXPLAINED 2026-08-21, by a counter
+> * ~~**`PCS3_161` is unexplained**~~ **— EXPLAINED 2026-08-21, by a counter
 >   rather than by an argument.** `blends_in_wrong_space` reports **15 of its
 >   15** blend modes computed additively across **18 subtractive groups**. The
 >   mechanism is Table 147's `/CS` row: its own objects are `ICCBased` RGB, but
@@ -184,15 +184,15 @@ appearance for the overprint patches).
 >   sound and still useful — they are what made the remaining hypothesis worth
 >   testing:
 >
-> * **`3_GWG161` was unexplained**, and two cheap explanations had been
+> * **`PCS3_161` was unexplained**, and two cheap explanations had been
 >   RULED OUT rather than left hanging. 14 traps, no knockout groups, no
 >   backdrop reruns triggered (correctly — its groups' interiors are all
 >   `Normal`), and its blend modes sit at the `Do` where `draw_pixmap`
 >   already handles them. The §11.3.4 hypothesis fits but was **not**
->   confirmed by derivation the way `1_GWG162`'s was.
+>   confirmed by derivation the way `PCS1_162`'s was.
 >
->   **Ruled out (1) — GWG's own CMM tolerance.** The patch's ReadMe
->   (`GWG161-164_Transp_Basic_BM_ICCBased_README.txt`) says in terms:
+>   **Ruled out (1) — the suite's own CMM tolerance.** The patch's ReadMe
+>   says in terms:
 >   *"A faint X is due to differences in the CMM and does not indicate a
 >   failure. A clearly visible X indicates that this blend mode is not
 >   supported properly which is a failure."* pdfce **has** a different CMM
@@ -215,7 +215,7 @@ appearance for the overprint patches).
 >   is what a wrong operand, not a missing operation, looks like.
 >
 >   ⇒ The remaining candidates, in the order they are worth testing:
->   the blending colour space (§11.3.4, as for `1_GWG162`); the `ICCBased`
+>   the blending colour space (§11.3.4, as for `PCS1_162`); the `ICCBased`
 >   → alternate fallback changing what `0 1 1 scn` means; or the patch's
 >   three-layer structure — its ReadMe describes **"Upper object ICCbased
 >   with transparency effect (Fill), Lower object ICCbased, Background
@@ -239,11 +239,11 @@ appearance for the overprint patches).
 >    FAIL/UNRESOLVED line without any patch changing outcome.** Found by
 >    building the previous commit in a worktree rather than quoting the board.
 >    Filed as a reading, not a verified cause.
-> 2. **`1_GWG160` genuinely passes now** — the non-separable blend modes
+> 2. **`PCS1_160` genuinely passes now** — the non-separable blend modes
 >    (`Pass 85.4b`, `972ddbb`) shipped, and it was the patch they flipped.
 >
 > ★ **Point 2 is the one that touches this document's argument, not just its
-> numbers.** `1_GWG160` is one of the five transparency-group failures §1.1
+> numbers.** `PCS1_160` is one of the five transparency-group failures §1.1
 > probes cell by cell, and it was resolved by **Table 137 arithmetic, not by
 > a compositor** — with no CMYK buffer, no non-transparent initial backdrop
 > and no `Pass 97.0`. So the claim that these failures "do not decompose"
@@ -260,21 +260,21 @@ appearance for the overprint patches).
 > current fourteen, measured today:
 >
 > ```text
-> overprint / colorant   1_GWG011  1_GWG190  1_GWG191  1_GWG192
->                        2_GWG020  2_GWG030  2_GWG040
-> transparency groups    1_GWG161  1_GWG162  3_GWG161  3_GWG164
-> soft masks             1_GWG1611
-> shading                1_GWG060
-> ICC                    3_GWG130
+> overprint / colorant   PCS1_011  PCS1_190  PCS1_191  PCS1_192
+>                        PCS2_020  PCS2_030  PCS2_040
+> transparency groups    PCS1_161  PCS1_162  PCS3_161  PCS3_164
+> soft masks             PCS1_1611
+> shading                PCS1_060
+> ICC                    PCS3_130
 > ```
 >
-> §1's baseline block and §1.1's `1_GWG160` probe are **left as written** —
+> §1's baseline block and §1.1's `PCS1_160` probe are **left as written** —
 > they are the measurement this plan was built on and rewriting them would
 > destroy the record of what was true at `e618d67`. Read them as dated.
 
 This document exists to answer one question with evidence rather than
 intuition: **what single build clears the largest share of the remaining
-Ghent failures, and why is it one build rather than five?**
+suite failures, and why is it one build rather than five?**
 
 The answer given here, **at the time of writing and now owed a re-derivation
 (see the amendment above)**, is that **16 of the then-18** failures are
@@ -298,18 +298,18 @@ Baseline re-measured 2026-08-18 at `e618d67`:
 ```
 
 The five **transparency-group** failures were probed cell by cell with a new
-diagnostic (`tools/ghent-cell-probe.py`, §7 below). For each trap X it reports
+diagnostic (`tools/suite-cell-probe.py`, §7 below). For each trap X it reports
 three numbers: the colour pdfce painted **inside** the X, the colour pdfce
 painted in the **surround**, and the colour **Acrobat** painted at the same
 place. That triple is decisive, because the suite's trap X is drawn so that a
 *correct* engine renders it **the same colour as its surround** — so a
 disagreement localises to one of the two, not to "the cell".
 
-### 1.1 What the probe found — `1_GWG160` (DeviceCMYK, non-isolated, non-knockout)
+### 1.1 What the probe found — `PCS1_160` (DeviceCMYK, non-isolated, non-knockout)
 
 Only **3 of 16** cells fail: the ones governed by **`Hue`**, **`Saturation`**
 and **`Color`**, at device x = 204, 266 and 329 on the y = 106 row. Cell
-identities resolved by `tools/ghent-cellmap.py` from each form XObject's
+identities resolved by `tools/suite-cellmap.py` from each form XObject's
 `/Matrix` and `/BBox` against its governing `/ExtGState`.
 
 **★ CORRECTED 2026-08-18, later the same day.** This section originally read
@@ -330,7 +330,7 @@ pixels.
 
 > **★ PAST TENSE AS OF 2026-08-19, and the tense is the point.** The four
 > nonseparable modes ship (`Pass 85.4b`, `972ddbb`) — pdfce computes Table 137
-> itself, they no longer touch `blend_modes_ignored`, and `1_GWG160` passes.
+> itself, they no longer touch `blend_modes_ignored`, and `PCS1_160` passes.
 > The paragraph above is a **dated measurement**, still correct about
 > `e618d67` and still load-bearing for the reasoning that follows it.
 >
@@ -340,14 +340,14 @@ pixels.
 > will not see.
 
 The corrected reading, and the cell identities are now **resolved** rather
-than inferred — `tools/ghent-cellmap.py` walks the content stream, tracks the
+than inferred — `tools/suite-cellmap.py` walks the content stream, tracks the
 CTM through `q`/`Q`/`cm`, and maps each form XObject's `/Matrix` and `/BBox`
 into device space against its governing `/ExtGState`:
 
 | patch | `Hue` | `Saturation` | `Color` | `Luminosity` | applied modes |
 |---|---|---|---|---|---|
-| `1_GWG160` | trap | trap | trap | **clean** | all 11 clean |
-| `3_GWG164` | trap | trap | trap | **clean** | **`Difference` traps** |
+| `PCS1_160` | trap | trap | trap | **clean** | all 11 clean |
+| `PCS3_164` | trap | trap | trap | **clean** | **`Difference` traps** |
 
 **Three separate facts fall out, and the first two are different bugs:**
 
@@ -357,7 +357,7 @@ into device space against its governing `/ExtGState`:
    this artwork its correct result and its `Normal` stand-in coincide closely
    enough to stay under the suite's clear-X threshold. **Do not read that
    clean cell as evidence `Luminosity` works.**
-2. **`3_GWG164`'s `Difference` cell is the real §11.3.4 evidence** — an
+2. **`PCS3_164`'s `Difference` cell is the real §11.3.4 evidence** — an
    *applied*, separable mode, failing on ICCBased CMYK. `Difference` is
    `|cb − cs|`, the mode most sensitive to whether its operands were
    complemented first, so it is where a wrong blending space surfaces
@@ -392,12 +392,12 @@ of why they fail today. `iso32000__s__11.3.5.md` §4.8, verbatim:
 same RAG file anticipated the gap in writing: *"pdfce currently composites in
 device RGB. If/when a CMYK path lands, this clause is the whole rule."*
 
-`3_GWG164` (ICCBased **CMYK**) fails **4** cells: the same three declined
+`PCS3_164` (ICCBased **CMYK**) fails **4** cells: the same three declined
 nonseparable modes, **plus `Difference`** — and that fourth cell is the only
 direct evidence in the corpus that an *applied* mode is computed in the wrong
 space.
 
-### 1.2 What the probe found — `1_GWG161` / `3_GWG161` / `1_GWG162` (14 / 15 / 7 cells)
+### 1.2 What the probe found — `PCS1_161` / `PCS3_161` / `PCS1_162` (14 / 15 / 7 cells)
 
 Different shape entirely. In almost every failing cell, **pdfce's surround
 agrees with Acrobat** (within a few levels) while **pdfce's X is a saturated
@@ -421,7 +421,7 @@ neutral, pdfce allocates a buffer — and in doing so **silently converts a
 NON-isolated group into an isolated one**. The comment says so: *"Buffering
 unconditionally gets those wrong in the opposite direction from flattening."*
 
-The Ghent transparency patches set `/BM` on the graphics state **at the `Do`**,
+The suite transparency patches set `/BM` on the graphics state **at the `Do`**,
 which makes `outer_is_neutral` false for every cell. So every cell takes the
 buffered path, every cell loses the page backdrop, and every interior blend
 degenerates to "paint the source". **14 of 16, 15 of 16, 7 of 16** — the
@@ -440,8 +440,8 @@ Diagnosed last session and unchanged: `/Alpha` and `/Luminosity` masks are
 **constructed correctly** (both were dumped to PNG and inspected — correct,
 properly placed soft gradients), but they are **applied by folding into the
 clip**, which applies them to each element *inside* the group. §11.4.5 applies
-the mask to the group's **RESULT**. Four patches (`GWG1610`, `GWG1611`,
-`GWG168`, `GWG169`).
+the mask to the group's **RESULT**. Four patches (`PCS1610`, `PCS1611`,
+`PCS168`, `PCS169`).
 
 There is nowhere to apply a mask to a group result until the group result is a
 thing pdfce owns. Same build.
@@ -456,8 +456,8 @@ peer-reviewed paper that collapsing colour before compositing *"is not
 possible"* **specifically because of overprint**), and by pdfce's own spec RAG,
 which called it *"architectural, a different project"* on 2026-08-08.
 
-Seven patches: `GWG011`, `GWG190`, `GWG191`, `GWG192`, `GWG020`, `GWG030`,
-`GWG040`.
+Seven patches: `PCS011`, `PCS190`, `PCS191`, `PCS192`, `PCS020`, `PCS030`,
+`PCS040`.
 
 #### ★★ AMENDMENT 2026-08-19 — a FOURTH justification, and it is the direct one
 
@@ -494,7 +494,7 @@ branch of the rule**.
 | pure K line art | 0/0/0/1.00 | 0/0/0/1.00 | same |
 | **registration black** | **1.00/1.00/1.00/1.00** | **0/0/0/1.00** | ★ CHANGED |
 | rich black | 0.60/0.40/0.40/1.00 | 1.00/0/0.07/1.00 | ★ CHANGED |
-| 75 % K (Ghent 23.0) | 0/0/0/0.75 | 0/0/0/0.75 | same |
+| 75 % K (PCS 23.0) | 0/0/0/0.75 | 0/0/0/0.75 | same |
 | cyan solid | 1.00/0/0/0 | 1.00/0.27/0/0.06 | ★ CHANGED |
 | magenta solid | 0/1.00/0/0 | 0/0.99/0.41/0.07 | ★ CHANGED |
 | cyan + magenta | 1.00/1.00/0/0 | 0.68/0.67/0/0.43 | ★ CHANGED |
@@ -530,7 +530,7 @@ implementation; the overprint implementation is **operating on the wrong ink
 set most of the time**, and its own correctness is currently unobservable.
 
 **A caution for whoever measures Stage B.** Because 7 of 10 branch
-differently, some Ghent overprint patches may currently pass *by accident* —
+differently, some suite overprint patches may currently pass *by accident* —
 a wrong branch that happens to produce the expected pixels. Stage B should
 therefore expect the patch board to move in **both** directions, and a patch
 that regresses from pass to fail is not automatically a Stage B defect. Check
@@ -539,8 +539,8 @@ against this probe before assuming it is.
 
 | Patch | Cause | Where it belongs |
 |---|---|---|
-| `1_GWG060` | Type 6/7 mesh shadings | `Pass 85.1` — **unblocked**; `iso32000__s__8.7.4.5__mesh.md` (1,014 lines, Tables 82–86) landed 2026-08-18 |
-| `3_GWG130` | ICC source profile handling | Its own Pass; see §6 on why `lcms2` is not the answer |
+| `PCS1_060` | Type 6/7 mesh shadings | `Pass 85.1` — **unblocked**; `iso32000__s__8.7.4.5__mesh.md` (1,014 lines, Tables 82–86) landed 2026-08-18 |
+| `PCS3_130` | ICC source profile handling | Its own Pass; see §6 on why `lcms2` is not the answer |
 
 ---
 
@@ -597,7 +597,7 @@ struct Pixel<const N: usize> {
 **f32, not u8**, and this is load-bearing rather than fastidious: §11.4.4's
 backdrop-removal correction contains a single `1/α_gn`, which amplifies
 quantisation error by that factor. At `α_gn = 0.02` a half-level u8 error
-becomes 25 levels — visible, and exactly the magnitude Ghent traps on.
+becomes 25 levels — visible, and exactly the magnitude suite traps on.
 
 **Un-premultiplied**, because the blend function `B(cb, cs)` is defined on
 un-premultiplied values and premultiplying-then-blending is a different
@@ -619,8 +619,8 @@ an archived benchmark, deliberately outside every git repo).
 >
 > | RAG file | proved by |
 > |---|---|
-> | `shape_must_be_tracked_separately_from_alpha.md` | **13 trap marks** on Ghent `1_GWG161`. Shape `f_g` and alpha `α_g` ship on **separate** planes in `cmyk_buffer.rs`; the patch **passes the suite**. Its *"a fixture built from opaque fills cannot distinguish a correct knockout implementation from a wrong one — build it with `/ca < 1`"* rule is followed by **all three** new knockout tests, one of which asserts an ordinary group and a knockout group give **different** answers on the same two paints. |
-> | `backdrop_defaults_zero_fill_inverts_masks.md` | prevented the class **exactly at the Stage A → Stage B boundary it predicted**. Related and learned the hard way the same session: handing a knockout group a **transparent** initial backdrop took `1_GWG161` from **2 traps to 15** — worse than no implementation at all. |
+> | `shape_must_be_tracked_separately_from_alpha.md` | **13 trap marks** on suite `PCS1_161`. Shape `f_g` and alpha `α_g` ship on **separate** planes in `cmyk_buffer.rs`; the patch **passes the suite**. Its *"a fixture built from opaque fills cannot distinguish a correct knockout implementation from a wrong one — build it with `/ca < 1`"* rule is followed by **all three** new knockout tests, one of which asserts an ordinary group and a knockout group give **different** answers on the same two paints. |
+> | `backdrop_defaults_zero_fill_inverts_masks.md` | prevented the class **exactly at the Stage A → Stage B boundary it predicted**. Related and learned the hard way the same session: handing a knockout group a **transparent** initial backdrop took `PCS1_161` from **2 traps to 15** — worse than no implementation at all. |
 >
 > **Two of this file's own sentences are now stale and are flagged rather
 > than rewritten** (`pdfce-librarian` does not write this document): `:56`
@@ -783,8 +783,8 @@ Delivers:
   32000-1 and a **`shall`** in ISO 32000-2 §11.3.2. Note the `shall` is on
   *robustness*: never emit NaN or Inf.
 
-Expected: `1_GWG161`, `3_GWG161`, `1_GWG162`, `GWG1610`, `GWG1611`, `GWG168`,
-`GWG169` — **7 patches**, 25 → up to 32.
+Expected: `PCS1_161`, `PCS3_161`, `PCS1_162`, `PCS1610`, `PCS1611`, `PCS168`,
+`PCS169` — **7 patches**, 25 → up to 32.
 
 ### Stage B — colorant planes (proposed `Pass 97.1`)
 
@@ -802,7 +802,7 @@ Delivers:
   a plane; retain it only to derive that colorant's equivalent colour for the
   final collapse.
 
-Expected: `1_GWG160`, `3_GWG164`, and the 7 overprint patches — **9 patches**,
+Expected: `PCS1_160`, `PCS3_164`, and the 7 overprint patches — **9 patches**,
 32 → up to 41.
 
 ### Stage C — the collapse, and its disclosure (proposed `Pass 97.2`)
@@ -913,7 +913,7 @@ and its engine findings stand; this amendment is the correction to what was
 inferred *from* them. Amend it there before citing it again.
 ### Out of scope for 97.x
 
-`Pass 85.1` mesh shadings (`1_GWG060`) and ICC source profiles (`3_GWG130`).
+`Pass 85.1` mesh shadings (`PCS1_060`) and ICC source profiles (`PCS3_130`).
 Both are real, both are separately scoped, neither is blocked on this build.
 
 ---
@@ -994,42 +994,44 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
 1. ~~**The trap detector is probably over-counting.**~~ **MEASURED AND FALSE,
    2026-08-18. Do not spend a session on this.** The hypothesis was that
    `CONTRAST_MIN` — calibrated against pdfce's own output rather than against
-   GWG's stated *"Faint X does not indicate a failure!"* — was firing on marks
-   GWG pre-declares tolerant (**all ten cells of GWG020**, **cell d of every
-   DeviceN patch**). The new probe measured the actual X-versus-surround
-   contrast on every currently-failing patch those tolerances cover:
+   the suite's stated *"Faint X does not indicate a failure!"* — was firing on
+   marks the suite pre-declares tolerant (**all ten cells of PCS020**, **cell
+   d of every DeviceN patch**). The new probe measured the actual
+   X-versus-surround contrast on every currently-failing patch those
+   tolerances cover:
 
    | patch | cell | X | surround | faint? |
    |---|---|---|---|---|
-   | `GWG020` | 6 of 7 | `[254,254,253]` white | `[141,197,62]` green | **no — maximal** |
-   | `GWG020` | 2 cells | `[196,197,195]` grey | `[146,197,73]` green | no |
-   | `GWG190` | d | `[0,0,0]` black | `[0,158,218]` cyan | **no** |
-   | `GWG191` | a,b,d | `[0,0,0]` black | green / cyan | no |
-   | `GWG191` | c | `[0,240,255]` | `[0,180,241]` | no (~60 levels) |
-   | `GWG192` | b | `[255,255,255]` white | `[239,56,62]` red | **no — maximal** |
+   | `PCS020` | 6 of 7 | `[254,254,253]` white | `[141,197,62]` green | **no — maximal** |
+   | `PCS020` | 2 cells | `[196,197,195]` grey | `[146,197,73]` green | no |
+   | `PCS190` | d | `[0,0,0]` black | `[0,158,218]` cyan | **no** |
+   | `PCS191` | a,b,d | `[0,0,0]` black | green / cyan | no |
+   | `PCS191` | c | `[0,240,255]` | `[0,180,241]` | no (~60 levels) |
+   | `PCS192` | b | `[255,255,255]` white | `[239,56,62]` red | **no — maximal** |
 
-   GWG's wording for `GWG020` is *"a faint 'X' in **slightly darker green**"*.
-   A **white** X on green is not that mark. Every trap still firing on these
-   patches is at or near maximal contrast, so **no recalibration consistent
-   with GWG's criterion changes a single verdict**. The failures are real
-   rendering failures, and they are the ones §4 Stage B addresses.
+   The suite's wording for `PCS020` is *"a faint 'X' in **slightly darker
+   green**"*. A **white** X on green is not that mark. Every trap still
+   firing on these patches is at or near maximal contrast, so **no
+   recalibration consistent with the suite's criterion changes a single
+   verdict**. The failures are real rendering failures, and they are the
+   ones §4 Stage B addresses.
 
-   One live nuance that survives, and is *not* about contrast: `GWG191` cell
-   **c** has **two sanctioned correct outcomes** — GWG states a cross there is
-   fine *"if the system performs colour conversion and sets the OPM for this
-   patch c to 0"*. pdfce converts but leaves `OPM 1`, so its cross is a
-   genuine failure today. If Stage B ever makes pdfce take the
+   One live nuance that survives, and is *not* about contrast: `PCS191` cell
+   **c** has **two sanctioned correct outcomes** — the suite states a cross
+   there is fine *"if the system performs colour conversion and sets the OPM
+   for this patch c to 0"*. pdfce converts but leaves `OPM 1`, so its cross is
+   a genuine failure today. If Stage B ever makes pdfce take the
    convert-and-set-OPM-0 route deliberately, the harness must learn that
    cell c is not binary.
-2. **The suite ships its own Reference file** —
-   `Ghent_PDF-Output-Test-V50_ALL_REFERENCE.pdf`, in the same ZIP, with texts
-   in Registration so they appear in every separation. pdfce is not using it
-   as an oracle and should. This is the one that bears on the 8 UNRESOLVED.
+2. **The suite ships its own Reference file** — a whole-suite reference
+   render, in the same ZIP, with texts in Registration so they appear in
+   every separation. pdfce is not using it as an oracle and should. This is
+   the one that bears on the 8 UNRESOLVED.
 
    **Blocked on an input, checked 2026-08-18:** the file is **not on this
-   machine**. `D:\Dev\temp\ghent-patches\` holds the 51 patch PDFs and
-   `D:\Dev\temp\ghent-readmes\` the extracted ReadMes, but the Reference PDF
-   was not among what was kept from the 126 MB download. Re-fetching it is an
+   machine**. The local corpus directories hold the 51 patch PDFs and the
+   extracted ReadMes, but the Reference PDF was not among what was kept from
+   the 126 MB download. Re-fetching it is an
    operator call (a large download, and `LEGAL.md` §5 governs what enters the
    corpus), so this item is **owed, not merely unstarted** — it should not be
    picked up as if it were a free afternoon.
@@ -1048,12 +1050,12 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
    **Measured A/B on the four patches that carry `/Indexed`, pre- and
    post-fix binaries, same corpus:** `overprint_effective`,
    `overprint_composited`, `overprint_refused` and `overprint_pixels` are
-   **identical to the digit** on `1_GWG190` (5/5/0/3607), `1_GWG191`
-   (2/2/0/1679), `1_GWG192` (3/3/0/2182) and `2_GWG020` (4/4/0/1654). Board
+   **identical to the digit** on `PCS1_190` (5/5/0/3607), `PCS1_191`
+   (2/2/0/1679), `PCS1_192` (3/3/0/2182) and `PCS2_020` (4/4/0/1654). Board
    unchanged.
 
    ★ **Why: every `/Indexed [/DeviceN …]` space in those patches is an IMAGE
-   colour space and nothing else.** Verified structurally — `1_GWG190`'s two
+   colour space and nothing else.** Verified structurally — `PCS1_190`'s two
    are `/XO1` and `/XO2`, both `/Subtype /Image`. So the classification fix
    is correct, cited, tested, and **inert on the whole corpus** until images
    reach overprint at all. The original write-up put the `/Indexed` half
@@ -1066,16 +1068,16 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
    is invisible to Table 149. Extracted from the corpus:
 
    ```
-   1_GWG190:  /Indexed [/DeviceN [/Cyan]              /DeviceCMYK ...] 255 <lookup>
-   1_GWG190:  /Indexed [/DeviceN [/Cyan /Yellow /Black] /DeviceCMYK ...] 255 <lookup>
-   2_GWG020:  /Indexed /DeviceCMYK 255 <lookup>
+   PCS1_190:  /Indexed [/DeviceN [/Cyan]              /DeviceCMYK ...] 255 <lookup>
+   PCS1_190:  /Indexed [/DeviceN [/Cyan /Yellow /Black] /DeviceCMYK ...] 255 <lookup>
+   PCS2_020:  /Indexed /DeviceCMYK 255 <lookup>
    ```
 
-   The first two **are** GWG190's documented discriminator — the a/b pair's
+   The first two **are** PCS190's documented discriminator — the a/b pair's
    DeviceN **omits** the backdrop's colorants and the c/d pair **includes**
    them at 0%, and *"the colorant LIST — not the tint values — decides what
    survives"*. pdfce cannot see either list. `/Indexed` appears in **4 of the
-   7 failing overprint patches** (`GWG190`, `GWG191`, `GWG192`, `GWG020`).
+   7 failing overprint patches** (`PCS190`, `PCS191`, `PCS192`, `PCS020`).
 
    Two halves to the fix, and only the first is small: `classify` must recurse
    into the base space, **and** the tints handed to `cmyk_group_rules` must be
@@ -1085,7 +1087,7 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
    **A second, larger gap surfaced while measuring this**, and it is recorded
    rather than fixed because it belongs to Stage B: `overprint::composite` has
    exactly **one** call site, in the path/glyph painter. **Image XObjects do
-   not reach it at all** — and `GWG190`'s only failing cell is `d`, an image.
+   not reach it at all** — and `PCS190`'s only failing cell is `d`, an image.
    Per-sample overprint needs per-sample colorants, which is the colorant
    buffer. Before building it, add the counter: an image that skips overprint
    is currently not counted as `overprint_refused`, which is the same
@@ -1106,20 +1108,20 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
 
    | patch | count |
    |---|---:|
-   | `1_GWG190` | 2 |
-   | `1_GWG191` | 2 |
-   | `1_GWG192` | 2 |
-   | `2_GWG020` | 4 |
-   | `2_GWG031` | **1 — and this patch PASSES the suite** |
+   | `PCS1_190` | 2 |
+   | `PCS1_191` | 2 |
+   | `PCS1_192` | 2 |
+   | `PCS2_020` | 4 |
+   | `PCS2_031` | **1 — and this patch PASSES the suite** |
 
    That last row is the one to keep: a patch can pass its own trap and still
    have an object class the renderer never offered the feature to.
 
 And one new one, produced while writing this document:
 
-4. **`tools/ghent-cell-probe.py`** — the diagnostic §1 is built on. For each
+4. **`tools/suite-cell-probe.py`** — the diagnostic §1 is built on. For each
    trap it prints the X colour, the surround colour and Acrobat's colour at
-   the same cell. It turned "14 traps on `1_GWG161`" into "the interior blend
+   the same cell. It turned "14 traps on `PCS1_161`" into "the interior blend
    is being applied against a transparent backdrop" in one run. It currently
    lives outside the repo and should be promoted into `tools/` with the cell
    index → blend-mode mapping derived from the content stream rather than from

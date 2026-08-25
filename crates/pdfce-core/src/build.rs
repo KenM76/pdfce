@@ -32,7 +32,7 @@
 //! soft-proofing). Decision 064's status line is **"DECIDED (boundary), NOT
 //! STARTED (either consumer)"**, and the Pass that wires it is `Pass 97.x`,
 //! the colorant compositor — currently top of the queue, and worth ~16 of
-//! the 18 remaining Ghent failures. `iccce` has already shipped the exact
+//! the 18 remaining suite failures. `iccce` has already shipped the exact
 //! call that Pass needs.
 //!
 //! Reporting this as a settled architectural boundary — which the first

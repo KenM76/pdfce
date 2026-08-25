@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Probe a Ghent trap cell: what pdfce painted, and what Acrobat painted there.
+"""Probe a suite trap cell: what pdfce painted, and what Acrobat painted there.
 
 WHY THIS EXISTS
 ---------------
-`tools/ghent-check.py` answers "did a trap X fire?" — a pass/fail verdict that
+`tools/suite-check.py` answers "did a trap X fire?" — a pass/fail verdict that
 matches the suite's own criterion. It deliberately says nothing about *why*,
 and for a failing patch that is the entire remaining question.
 
-The Ghent trap X is drawn so that a CORRECT engine renders the X **the same
+The suite trap X is drawn so that a CORRECT engine renders the X **the same
 colour as the swatch it sits on**, making it invisible. That design gives a
 free oracle that costs no reference render at all:
 
@@ -28,14 +28,14 @@ Add a known-good render at the same cell and the triple becomes decisive:
   * both differ from Acrobat
         -> a colour-conversion difference, not a compositing one.
 
-This tool turned "14 traps on 1_GWG161" into "every interior blend is being
+This tool turned "14 traps on PCS1_161" into "every interior blend is being
 applied against a transparent backdrop" in a single run. See
 `docs/compositor-plan.md` §1 for the diagnosis it produced.
 
 INPUTS
 ------
-  patch          the patch stem, e.g. `1_GWG160_Transp_Basic_BM_DeviceCMYK_Non-knockout_X4`
-  --render-dir   where ghent-check.py left `<patch>.pdf.png`  (default: alongside the corpus)
+  patch          the patch stem, e.g. `PCS1_160_Transp_Basic_BM_DeviceCMYK_Non-knockout_X4`
+  --render-dir   where suite-check.py left `<patch>.pdf.png`  (default: alongside the corpus)
   --reference-dir  known-good renders named `<patch>.png`     (optional but this is the point)
 
 The corpus and the reference renders live OUTSIDE the repository — test-corpus
@@ -53,7 +53,7 @@ It does not name the blend mode of a cell. Doing that reliably means reading
 the patch's content stream, resolving the `/ExtGState` each `Do` selects, and
 mapping the form XObject's placement matrix into device space — real work, and
 work that would be wrong in a quiet way if any step were approximated. The
-manual derivation for `1_GWG160` is written out in `docs/compositor-plan.md`
+manual derivation for `PCS1_160` is written out in `docs/compositor-plan.md`
 §1.1 (cell pitch 31.68 pt, 22.678 pt squares, render scale 2.0) so the
 arithmetic is at least reproducible. Promoting that derivation into this file
 is a genuine improvement and is listed as owed.
@@ -75,8 +75,8 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def _load_ghent_check():
-    """Import `ghent-check.py` for `find_traps`.
+def _load_suite_check():
+    """Import `suite-check.py` for `find_traps`.
 
     The hyphen in the filename makes it not a legal module name, so a normal
     import cannot reach it. Reusing its detector rather than re-implementing
@@ -84,8 +84,8 @@ def _load_ghent_check():
     would report a different set of cells than the harness does, and then the
     two tools would disagree about which cells are even failing.
     """
-    path = os.path.join(HERE, "ghent-check.py")
-    spec = importlib.util.spec_from_file_location("ghent_check", path)
+    path = os.path.join(HERE, "suite-check.py")
+    spec = importlib.util.spec_from_file_location("suite_check", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -108,7 +108,7 @@ def _dominant_split(band_gray, fill, w, h):
 
 
 def probe(render_png, reference_png=None):
-    gc = _load_ghent_check()
+    gc = _load_suite_check()
     rgb = cv2.imread(render_png, cv2.IMREAD_COLOR)
     if rgb is None:
         return None
@@ -147,18 +147,38 @@ def probe(render_png, reference_png=None):
     return rows
 
 
+def _default_render_dir():
+    """`$PDFCE_SUITE_DIR/_render`, or None when the corpus is not configured.
+
+    The licensed suite is not named in this repository and neither is its
+    location on disk (operator ruling 2026-08-25), so there is no hard-coded
+    fallback to reach for. Returning None makes the caller pass `--render-dir`
+    explicitly rather than silently probing a directory that does not exist on
+    a fresh clone.
+    """
+    root = os.environ.get("PDFCE_SUITE_DIR")
+    return os.path.join(root, "_render") if root else None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("patch", help="patch stem, without .pdf or .png")
-    ap.add_argument("--render-dir", default=r"D:\Dev\temp\ghent-patches\_render")
+    ap.add_argument(
+        "--render-dir",
+        default=_default_render_dir(),
+        help="where suite-check.py left <id>.pdf.png; defaults to "
+        "$PDFCE_SUITE_DIR/_render, and must be given explicitly when that "
+        "variable is unset, because no corpus path may be hard-coded in "
+        "this repository (operator ruling 2026-08-25)",
+    )
     ap.add_argument("--reference-dir", default=None)
     args = ap.parse_args()
 
     render = os.path.join(args.render_dir, args.patch + ".pdf.png")
     if not os.path.exists(render):
-        print(f"ghent-cell-probe: no render at {render}\n"
-              f"  run tools/ghent-check.py first -- it is what produces them.",
+        print(f"suite-cell-probe: no render at {render}\n"
+              f"  run tools/suite-check.py first -- it is what produces them.",
               file=sys.stderr)
         return 2
     reference = (os.path.join(args.reference_dir, args.patch + ".png")
@@ -166,7 +186,7 @@ def main():
 
     rows = probe(render, reference)
     if rows is None:
-        print(f"ghent-cell-probe: could not read {render}", file=sys.stderr)
+        print(f"suite-cell-probe: could not read {render}", file=sys.stderr)
         return 2
     if not rows:
         # ASCII only in printed output: this runs on a Windows console under

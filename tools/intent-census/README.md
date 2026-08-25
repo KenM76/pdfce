@@ -45,7 +45,7 @@ A rendering intent reaches a PDF by two routes (ISO 32000-1 §8.6.5.8, Table 58
 
 So the raw pass can only see intents in files whose object and content streams
 happen to be uncompressed — which in practice means hand-written test files
-and decompressed fixtures. **Measured undercount on the Ghent v5.0 patch set:
+and decompressed fixtures. **Measured undercount on the suite v5.0 patch set:
 the raw pass found 0 files with an intent; the deep pass found 12 of 51.** Not
 "an undercount" as a caveat — a *total* miss on the population that matters.
 
@@ -89,10 +89,10 @@ pdfce-supplied intent must therefore accept a name it does not recognise.
 
 ★ This corpus is **dominated by conformance suites** (2 907 of 4 239 files are
 veraPDF). It is the wrong population to generalise print-production behaviour
-from, which is why the Ghent set below is reported separately rather than
+from, which is why the suite set below is reported separately rather than
 pooled with it.
 
-### 2.2 The Ghent Output Suite v5.0 patch set — 51 files, all deep-scanned
+### 2.2 The print-conformance suite patch set — 51 files, all deep-scanned
 
 Print-production files, produced by real prepress tooling.
 
@@ -100,8 +100,8 @@ Print-production files, produced by real prepress tooling.
 |---|---|
 | raw pass, any intent | **0 of 51** |
 | deep pass, any intent | **12 of 51** (24 %) |
-| deep pass, more than one intent | **1 of 51** — `3_GWG221_OutputIntentChangeIndicator_x4.pdf`, `Perceptual` + `RelativeColorimetric` |
-| distinct `/ICCBased` source references, max | **4** (`3_GWG130_ICC_Source_Profile_x4.pdf`) |
+| deep pass, more than one intent | **1 of 51** — `PCS3_221`, `Perceptual` + `RelativeColorimetric` |
+| distinct `/ICCBased` source references, max | **4** (`PCS3_130`) |
 | distinct `/ICCBased` source references, mean | 0.29; 12 of 51 files carry any |
 | distinct `/DestOutputProfile` references | **exactly 1 in every one of the 51 files** |
 
@@ -130,7 +130,7 @@ because neither is the number on its own.
 **Corpus census, structural.** Not a rendering comparison and not ground
 truth: the tool reads what producers wrote, and says nothing about whether any
 consumer honours it. The `raw`-versus-`deep` split is itself the tool's
-internal control, and it is the reason the `fixtures/` number and the Ghent
+internal control, and it is the reason the `fixtures/` number and the suite
 number disagree by two orders of magnitude — one population compresses its
 object streams and the other is full of decompressed test files.
 

@@ -261,7 +261,7 @@ pub struct Diagnostics {
     /// wrong for reasons that have nothing to do with the space.
     ///
     /// **Measured evidence, and it is one cell rather than a cluster:**
-    /// Ghent `3_GWG164` (ICCBased CMYK) fails its **`Difference`** cell —
+    /// suite `PCS3_164` (ICCBased CMYK) fails its **`Difference`** cell —
     /// an applied, separable mode. `Difference` is `|cb − cs|`, the mode
     /// most sensitive to whether its operands were complemented first, so
     /// it is exactly where a wrong blending space shows up soonest. The
@@ -270,7 +270,7 @@ pub struct Diagnostics {
     /// by cell-pitch arithmetic.
     ///
     /// **★ CORRECTION, 2026-08-18.** An earlier revision of this doc also
-    /// blamed §11.3.5.3 here and cited `1_GWG160`'s `Hue`/`Saturation`/
+    /// blamed §11.3.5.3 here and cited `PCS1_160`'s `Hue`/`Saturation`/
     /// `Color` failures as proof. Those did not reach this counter: at the
     /// time [`crate::gstate::blend_mode_from_name`] returned `None` for all
     /// four nonseparable modes, so they landed in
@@ -285,7 +285,7 @@ pub struct Diagnostics {
     /// ([`crate::blend_nonsep`]), `blend_mode_from_name` is no longer the
     /// route they take, and they DO increment this counter — with their
     /// composites additionally counted on
-    /// [`Self::nonseparable_composited`]. `1_GWG160` now passes.
+    /// [`Self::nonseparable_composited`]. `PCS1_160` now passes.
     ///
     /// Two corrections deep on one paragraph, so the shape is worth naming
     /// rather than just fixing again: **a correction written in the present
@@ -348,9 +348,9 @@ pub struct Diagnostics {
     /// become cheap. The `Pass 85.5` row carried the same defect — *"gated
     /// on `iccce`"* — and was falsified the same way, by someone trying it.
     ///
-    /// The per-cell trap table that used to sit here (`1_GWG160` and
-    /// `3_GWG164`, three of four modes trapping) is **deleted rather than
-    /// corrected**: `1_GWG160` now PASSES, so a table of which of its cells
+    /// The per-cell trap table that used to sit here (`PCS1_160` and
+    /// `PCS3_164`, three of four modes trapping) is **deleted rather than
+    /// corrected**: `PCS1_160` now PASSES, so a table of which of its cells
     /// trap describes a document state that no longer exists.
     pub blend_modes_ignored: usize,
     /// Form XObjects carrying `/Group << /S /Transparency >>` (§11.4.7,
@@ -368,7 +368,7 @@ pub struct Diagnostics {
     /// answer for almost anything else.
     ///
     /// That distinction is invisible in every other counter. It was found
-    /// only by rendering the operator's Ghent X-4 file and seeing its
+    /// only by rendering the operator's suite X-4 file and seeing its
     /// blend-mode panel still show the suite's failure crosses AFTER blend
     /// modes were implemented and verified correct both in isolation and
     /// against a coloured backdrop. The page carries 148 form XObjects;
@@ -531,8 +531,8 @@ pub struct Diagnostics {
     /// glyph painter (`bf75351`).
     ///
     /// ★ It is also what makes the `/Indexed` classification fix
-    /// measurable. Ghent's `1_GWG190`, `1_GWG191`, `1_GWG192` and
-    /// `2_GWG020` all carry `/Indexed [/DeviceN …]` spaces and every one
+    /// measurable. suite's `PCS1_190`, `PCS1_191`, `PCS1_192` and
+    /// `PCS2_020` all carry `/Indexed [/DeviceN …]` spaces and every one
     /// of them uses that space **only** for an image — so
     /// `ColorSpace::indexed_entry` is correct, cited, and **inert on the
     /// whole corpus** until this number can go down.
@@ -559,7 +559,7 @@ pub struct Diagnostics {
     ///
     /// # What it looks like on a page
     ///
-    /// Measured on Ghent `GWG 1.0` cells `e`/`j`: a
+    /// Measured on suite `PCS 1.0` cells `e`/`j`: a
     /// `/DeviceN [/Cyan /Magenta]` shading over an orange ground. Under
     /// overprint the yellow beneath survives and the result reads green —
     /// which is what Acrobat renders. Without it the cyan and magenta
@@ -592,7 +592,7 @@ pub struct Diagnostics {
     /// not is [`Diagnostics::blends_in_wrong_space`]. Three numbers, three
     /// questions, and reading any one of them alone gets a wrong answer.
     ///
-    /// **It is not a small class.** Every patch in the Ghent transparency
+    /// **It is not a small class.** Every patch in the suite transparency
     /// panel declares `/Group /CS /DeviceCMYK` on the PAGE, including the
     /// one whose own objects are `ICCBased` RGB, because a non-isolated
     /// group inherits its blending space rather than choosing one
@@ -653,7 +653,7 @@ pub struct Diagnostics {
     /// blends inside them were computed the wrong way"*. Reporting only
     /// the first would overstate; only the second would hide the exposure.
     ///
-    /// The worked case is Ghent `1_GWG162`'s `Difference` cell: magenta
+    /// The worked case is suite `PCS1_162`'s `Difference` cell: magenta
     /// under black gives `DeviceCMYK 1 0 1 0` — the green the patch is
     /// authored around — under §11.3.4, and `(237, 1, 140)` without it.
     ///
@@ -666,7 +666,7 @@ pub struct Diagnostics {
     ///
     /// Leaving it un-narrowed was tried and rejected in the same session:
     /// `tools/measure-blend-space.py` went on reporting **107 of 107 wrong**
-    /// on the Ghent suite after the buffer landed and two of its patches
+    /// on the print-conformance suite after the buffer landed and two of its patches
     /// started passing. A shortfall counter that cannot see the fix reports
     /// the fix as a no-op — and it is the only instrument anyone runs at
     /// corpus scale for this question, so it would have said so
@@ -744,7 +744,7 @@ pub struct Diagnostics {
     /// `/BM` silently becomes an isolated one, and every blend inside it
     /// composites against nothing, returning the source colour unchanged.
     ///
-    /// Measured on the Ghent transparency patches, which set `/BM` at every
+    /// Measured on the suite transparency patches, which set `/BM` at every
     /// `Do`: **14, 15 and 7** wrong cells out of 16, each counted here as a
     /// success. That measurement predates `Pass 97.0`, which **shipped on
     /// 2026-08-21**; this doc still said the number "over-reports until
@@ -913,10 +913,10 @@ pub struct Diagnostics {
     /// coverage exactly as a clip does. The two behaviours are one
     /// implementation of two different clauses, not a fix half-applied.
     ///
-    /// Measured on Ghent, reference-strip correlation on the same strip
-    /// before and after: `1_GWG1610` 0.576 → **0.962**, `1_GWG168`
-    /// 0.725 → **0.978**, `1_GWG169` 0.905 → **0.986**. Still counted as
-    /// UNRESOLVED by `tools/ghent-check.py`, which has no calibrated
+    /// Measured on the suite, reference-strip correlation on the same strip
+    /// before and after: `PCS1_1610` 0.576 → **0.962**, `PCS1_168`
+    /// 0.725 → **0.978**, `PCS1_169` 0.905 → **0.986**. Still counted as
+    /// UNRESOLVED by `tools/suite-check.py`, which has no calibrated
     /// threshold for reference-strip patches — that is an instrument gap,
     /// not a render result.
     ///
@@ -1608,7 +1608,7 @@ pub fn run(
 ///
 /// # Why this is the number that matters
 ///
-/// **Every patch in the Ghent transparency panel declares
+/// **Every patch in the suite transparency panel declares
 /// `/Group /CS /DeviceCMYK` here**, including the one whose own objects
 /// are `ICCBased` RGB. So the space is subtractive for all of them
 /// regardless of what the artwork is coloured in, and §11.3.4's complement
@@ -4527,7 +4527,7 @@ impl Interpreter<'_> {
         // because the colorant buffer needs the same answer and the two
         // must not be able to disagree -- see that function for why a
         // `DeviceCMYK` or `Separation`/`DeviceN` source is READ rather than
-        // converted, and for the Ghent patch that discriminates.
+        // converted, and for the suite patch that discriminates.
         //
         // `None` means the space states no tints of its own, and the only
         // thing left is to reconstruct them from the paint colour the
@@ -5448,7 +5448,7 @@ impl Interpreter<'_> {
         // only), and would be an excessive number of conversions where it
         // is.
         //
-        // ★ Which is why every Ghent transparency patch blends in
+        // ★ Which is why every suite transparency patch blends in
         // `DeviceCMYK` even though one of them draws in `ICCBased` RGB:
         // the declaration is on the PAGE group, and the cell groups either
         // inherit it or restate it.
@@ -5892,7 +5892,7 @@ impl Interpreter<'_> {
         // fill — Table 58's `/BM` is a graphics-state parameter, not a
         // path-painting one. This was hard-coded `SourceOver` when
         // blend modes first landed, and the symptom was precise and
-        // misleading: the operator's Ghent page 2 reported 76 blend
+        // misleading: the operator's suite page 2 reported 76 blend
         // modes APPLIED while only 0.37% of its pixels changed, because
         // the marks those modes govern are drawn by images, not paths.
         // A counter said the feature worked; the pixels said otherwise.

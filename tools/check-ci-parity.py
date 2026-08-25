@@ -112,6 +112,7 @@ LOCAL = {
     "tools/check-one-commit-per-command.py": "python tools/check-one-commit-per-command.py",
     "tools/check-passes-filed.py": "python tools/check-passes-filed.py",
     "tools/check-settings-consumed.py": "python tools/check-settings-consumed.py",
+    "tools/check-suite-name-absent.py": "python tools/check-suite-name-absent.py",
     "tools/check-string-gaps.sh": "bash tools/check-string-gaps.sh",
     "tools/check-theme-colors.sh": "bash tools/check-theme-colors.sh",
     "tools/check-ci-parity.py": "python tools/check-ci-parity.py",

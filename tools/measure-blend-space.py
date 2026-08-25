@@ -16,7 +16,7 @@ that counter is read at corpus scale.
 LAST PLACE STILL DESCRIBING THE OLD WORLD. A page whose group declares a
 subtractive space now composites in a colorant buffer, and
 `blends_in_wrong_space` increments only where that did NOT happen. On the
-Ghent suite this script reported 107 of 107 wrong before the fix and 0 of
+suite this script reported 107 of 107 wrong before the fix and 0 of
 107 after it — which is the whole reason the counter had to be narrowed:
 left as it was, it would have gone on reporting 107 while two patches
 started passing, and this script is the only instrument anybody runs at
@@ -39,14 +39,14 @@ THE FIRST MEASUREMENT, 2026-08-21, so a later run has something to differ
 from
 =======================================================================
 
-    Ghent PDF Output Suite (51)   13 files subtractive   107/107 wrong (100.0%)
+    print-conformance suite (51)   13 files subtractive   107/107 wrong (100.0%)
     fixtures/external (3,735)     15 files subtractive     2/49  wrong (  4.1%)
 
 One hundred percent on the suite built to test this; four percent on the
 corpus of files people actually have. Both matter and they say different
-things: the Ghent transparency panels cannot pass without the colorant
+things: the suite transparency panels cannot pass without the colorant
 buffer, and the buffer will change almost nothing about how ordinary
-documents look. That second half is a SCOPING fact and the Ghent numbers
+documents look. That second half is a SCOPING fact and the suite numbers
 alone could not have produced it.
 
 USAGE

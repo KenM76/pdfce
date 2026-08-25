@@ -29,7 +29,7 @@ Three pieces of work, in the order they landed:
 |---|---|
 | `bb154ed` | **CI can be green again.** Both filing gates had been asking each commit to cite a hash that would not exist until a *later* commit — unsatisfiable by construction. The tip is now DEFERRED and disclosed, never failed |
 | `c4a85d0` | **`Pass 97.1g` — a non-isolated group on an ink page can finally see what is under it.** §11.4.4's second content walk on a subtractive page. ★ **Its headline result is NEGATIVE and that is the honest framing: it changes no rendering in any corpus pdfce owns** |
-| `f6457ee` | **`Pass 122.2` — the Ghent harness stops scoring four patches it never examined.** Board `29 pass` → `24 pass` harness-reported. **Its own conclusion that standing was 25 was superseded hours later by `122.4` — it is 26; see §A** |
+| `f6457ee` | **`Pass 122.2` — the suite harness stops scoring four patches it never examined.** Board `29 pass` → `24 pass` harness-reported. **Its own conclusion that standing was 25 was superseded hours later by `122.4` — it is 26; see §A** |
 
 ### ★★★★★ SHIPPED: THE ROOT CAUSE UNDER 24 OF 51 PATCHES — `Pass 122.5`
 
@@ -38,9 +38,9 @@ Three pieces of work, in the order they landed:
 it *down*, because those were repairs to the instrument rather than to the
 renderer. This one is the renderer.
 
-Fixed: `GWG 1.1` (CMYK Overprint Mode — **the patch the operator's own review
+Fixed: `PCS 1.1` (CMYK Overprint Mode — **the patch the operator's own review
 flagged**, that `122.2` called "not reproducible" and `122.4` proved pdfce was
-rendering wrong), `GWG 3.0` (Gray K black Overprint), `GWG 4.0` (White
+rendering wrong), `PCS 3.0` (Gray K black Overprint), `PCS 4.0` (White
 Overprint).
 
 **What it does:** when a page group declares no `/CS`, the document's
@@ -73,10 +73,10 @@ this is a measurement, and it should set the next session's priority.**
 
 `pdfce` composites a page in its **ink (colorant) buffer only when the page
 declares `/Group /CS /DeviceCMYK`.** Verified directly, not inferred: the
-individual Ghent patch files contain **zero** `/Group` occurrences and **do**
+individual suite patch files contain **zero** `/Group` occurrences and **do**
 carry an `/OutputIntent`; the combined suite document contains **217**.
 
-Consequence, measured three ways on `GWG 1.1`'s OPM-1 swatch:
+Consequence, measured three ways on `PCS 1.1`'s OPM-1 swatch:
 
 | render | the X the suite traps on |
 |---|---|
@@ -85,13 +85,13 @@ Consequence, measured three ways on `GWG 1.1`'s OPM-1 swatch:
 | **Adobe Acrobat**, individual patch | **none** |
 
 ⇒ Acrobat agrees with the combined render. **pdfce's individual-patch render
-is the outlier and is wrong**, so `GWG 1.1` PASSES and the operator's own
+is the outlier and is wrong**, so `PCS 1.1` PASSES and the operator's own
 review was right about it. Standing moves to **26**.
 
 **★ And the population is the whole remaining failure set.** Across all 51
 patches, **24 request overprint and receive no colorant buffer**
 (`cmyk_buffer=0` with `overprint_requested>0`); only 13 get one. Those 24
-contain **every remaining Ghent FAIL** and **all four `MARK?` patches**. The
+contain **every remaining suite FAIL** and **all four `MARK?` patches**. The
 board's long-standing note about *"the ONE architectural item that unblocks
 the largest cluster"* now has a named, measured mechanism — and it is very
 likely **one fix, not twenty**.
@@ -175,7 +175,7 @@ and `PGB-A4` (the answer is **edition-dependent**; consider one
 `pdf_semantics_edition` knob rather than three).
 
 **★★ HOW IT WAS FOUND, because the method is the transferable part.**
-`Pass 122.2` recorded the harness-versus-operator disagreement on `GWG 1.1`
+`Pass 122.2` recorded the harness-versus-operator disagreement on `PCS 1.1`
 as *"disputed, left open in both directions"* rather than picking a winner.
 **That refusal is the only reason this exists.** Had either side been declared
 right, the 24-patch root cause would still be undiscovered. ⇒ **When an oracle
@@ -185,19 +185,19 @@ authority discards the signal.**
 ### ★★ THE THREE THINGS MOST LIKELY TO BE MISREAD
 
 1. **`cmyk_groups_approximated` went 118 → 0 and that is MOSTLY A COUNTER
-   GETTING HONEST.** Of the 118 the old code counted across the Ghent suite,
+   GETTING HONEST.** Of the 118 the old code counted across the print-conformance suite,
    **13** actually needed the second walk; the other **105** rendered exactly
    right and were counted anyway, because the test asked *"is this group
    non-isolated?"* instead of §11.4.4 NOTE 2's *"does its interior read the
    backdrop?"*. **Do not read that drop as 118 groups repaired.** The CLI
    metrics-key table now carries the warning at the key itself.
-2. **The Ghent board went DOWN, and that is the instrument improving.**
+2. **The suite board went DOWN, and that is the instrument improving.**
    `10 FAIL / 29 pass / 12 unresolved` → **`11 FAIL / 24 pass / 16
    UNRESOLVED`**. One patch was always failing and the floor hid it; four were
    never examined at all and said `clean`. **A falling number here is the
    harness telling the truth for the first time**, not a regression.
 3. **`Pass 97.1g` ships a capability nothing exercises.** Measured against a
-   pre-fix binary: **0 differing pixels across all 51 Ghent patches**; **0
+   pre-fix binary: **0 differing pixels across all 51 suite patches**; **0
    differing renders across the 114 external-corpus PDFs that mention
    DeviceCMYK**; and of 4012 external PDFs, **zero** contain both
    `Transparency` and `DeviceCMYK`. The only evidence it works is four
@@ -251,9 +251,9 @@ Next free in the `97.1` family: **`97.1k`** (filed Backlog, unbuilt).
 `119.1` still unstarted. Standing rules unchanged — **no rule was minted this
 session**, and one was *proposed and withdrawn* because `R143` already owned
 the shape. Decisions unchanged. **Version `0.8.0`.** 17 `tools/check-*` on
-disk, **16 runnable as bare gates; all 16 exit 0.** Ghent: harness-reported
-**`27 pass / 8 FAIL / 16 UNRESOLVED`** of 51, plus `GWG 5.0` whose mark is
-present but unadjudicable ⇒ **28 at minimum**. `GWG 1.1`'s dispute is RESOLVED
+disk, **16 runnable as bare gates; all 16 exit 0.** suite: harness-reported
+**`27 pass / 8 FAIL / 16 UNRESOLVED`** of 51, plus `PCS 5.0` whose mark is
+present but unadjudicable ⇒ **28 at minimum**. `PCS 1.1`'s dispute is RESOLVED
 in the operator's favour and the patch now PASSES.
 
 ---
@@ -323,8 +323,8 @@ a full disk with `target/debug` at 103 GB. Delete **`target/debug` only** —
 never `cargo clean`, which also drops the warm `target/release` you are about
 to need. At the time of writing: **82 % used, 178 GB free**, `target` 6.6 GB.
 
-**5. The Ghent corpus is at `D:\Dev\temp\ghent-patches` (51 patches), and
-Acrobat reference renders of all 51 are at `D:\Dev\temp\acro-refs`.** The
+**5. The suite corpus is at `$PDFCE_SUITE_DIR` (51 patches), and
+Acrobat reference renders of all 51 are at `$PDFCE_SUITE_REFS`.** The
 second of those is the calibration set `Pass 122.2` used and the previous
 handoff never mentioned. Neither is in the repository.
 
@@ -353,7 +353,7 @@ reference dangled. **It reads as verification.** (`R162`, in a fixture
 generator rather than a test.)
 
 **3. ★ A fix aimed at a MISDIAGNOSED cause is more dangerous than no fix,
-because it consumes the suspicion.** The operator review's §3 said the Ghent
+because it consumes the suspicion.** The operator review's §3 said the suite
 contrast floor *"has no area term"* and that the missed crosses were *"three
 times the linear size"* of the calibration ones. Measured at the scale the
 harness renders: **36–38 px versus 38 px. The same size.** Had the area term
@@ -362,10 +362,10 @@ a fix in place and a plausible reason to stop looking.
 
 **4. ★ A detector keyed on an incidental property will confirm itself.** The
 first check-mark detector keyed on the mark's **colour**, measured from
-`GWG 8.2` (olive). On `GWG 8.01` it reported the mark PRESENT — by matching the
+`PCS 8.2` (olive). On `PCS 8.01` it reported the mark PRESENT — by matching the
 green end of that patch's gradient bar — while **both real marks were absent**.
-**A false green produced by the fix for a false green.** `GWG 8.2`'s marks are
-olive; `GWG 8.01`'s are dark green. It was thrown away rather than shipped,
+**A false green produced by the fix for a false green.** `PCS 8.2`'s marks are
+olive; `PCS 8.01`'s are dark green. It was thrown away rather than shipped,
 which is why `122.2` ships no detector.
 
 **5. A grep for a phrase finds a MENTION, not a criterion.** The review's
@@ -385,7 +385,7 @@ of the claim (`R211` clause (e)). Sample across the **predicate**, not across
 **Read this before §2b — §2b was written the previous day and this supersedes
 part of it.**
 
-He said, of Ghent `GWG 1.0`: *"e and j don't have x but they are the wrong
+He said, of suite `PCS 1.0`: *"e and j don't have x but they are the wrong
 color and always have been since the x was removed."* Both halves were right,
 and chasing them produced everything below.
 
@@ -398,8 +398,8 @@ coincidence-resistant"* was **two different defects summed to reach a number**,
 which is worse than no match at all: it made a coincidence look like a
 mechanism.
 
-★ **And I already held the disconfirming evidence.** `ghent-check.py` had
-reported `GWG 1.0` as **4 traps**, all in the left-hand font/vector columns,
+★ **And I already held the disconfirming evidence.** `suite-check.py` had
+reported `PCS 1.0` as **4 traps**, all in the left-hand font/vector columns,
 none in the shading column. The harness and the operator agreed; only my
 eyeballing of a screenshot did not. **This was not a case of the operator
 seeing something I could not — it was me not reading my own instrument.**
@@ -408,7 +408,7 @@ seeing something I could not — it was me not reading my own instrument.**
 
 | commit | what |
 |---|---|
-| `c9f8419` | **Shadings ignored overprint entirely and said nothing about it.** `shading.rs` had no mention of overprint at all; images at least disclosed their equivalent gap. Added `overprint_shadings_unsupported`, which reported **2** on `GWG 1.0` — exactly the two cells he named, arrived at independently |
+| `c9f8419` | **Shadings ignored overprint entirely and said nothing about it.** `shading.rs` had no mention of overprint at all; images at least disclosed their equivalent gap. Added `overprint_shadings_unsupported`, which reported **2** on `PCS 1.0` — exactly the two cells he named, arrived at independently |
 | `c743a69` | **`Pass 122.6`** — a `/DeviceN` shading under overprint now keeps the ink beneath it. Blue centre **209 → 56**, green centre **179 → 187.5** against Acrobat's **186.6**. ★ **A large improvement, NOT a completed one** |
 
 **`Pass 122.7` is DIAGNOSED AND ROUTED, not pending work.** The residual blue
@@ -449,7 +449,7 @@ that file, which beats both stand-ins on the same measurement.
 
 ---
 
-## §2b — WHAT THE REMAINING GHENT FAILURES ARE, measured after `122.5` (2026-08-24)
+## §2b — WHAT THE REMAINING SUITE FAILURES ARE, measured after `122.5` (2026-08-24)
 
 **Read this before picking the next Pass. It contradicts the queue order I
 wrote earlier the same session, and the contradiction is the useful part.**
@@ -464,10 +464,10 @@ Classified by rendering each failure and reading its diagnostics:
 
 | patch | what is actually wrong |
 |---|---|
-| `GWG 6.0` | **mesh shadings are unimplemented** (`shadings_mesh=2`). pdfce draws a black X placeholder where shading types 6/7 belong. Types 2 and 3 render correctly and match Acrobat. **Nothing to do with the sRGB bridge** |
-| the other **7** | `sep_all_approximated`, 6–12 per patch, on pages that **all now have `cmyk_buffer=1`** — ★ but see the correction below: on `GWG 1.0` that counter spans **two different defects**, so do not read it as one population without checking each patch's cells |
+| `PCS 6.0` | **mesh shadings are unimplemented** (`shadings_mesh=2`). pdfce draws a black X placeholder where shading types 6/7 belong. Types 2 and 3 render correctly and match Acrobat. **Nothing to do with the sRGB bridge** |
+| the other **7** | `sep_all_approximated`, 6–12 per patch, on pages that **all now have `cmyk_buffer=1`** — ★ but see the correction below: on `PCS 1.0` that counter spans **two different defects**, so do not read it as one population without checking each patch's cells |
 
-★ **`GWG 6.0` is the case that falsifies the bridge theory outright.** Its traps
+★ **`PCS 6.0` is the case that falsifies the bridge theory outright.** Its traps
 measure **232 and 234** of 255 contrast — far too gross for a colour-conversion
 error. A bridge fix would not have moved it, and I would have spent a Pass
 finding that out.
@@ -484,7 +484,7 @@ precisely what a screen neutral cannot do.
 **Evidence, and its limits, stated separately:**
 - The counter fires **at the point of conversion**, so `/Separation /All`
   painting definitely happened — that part is not a guess.
-- On `GWG 1.0` **four** cells show a trap X: `a`, `b`, `f`, `g` — the font
+- On `PCS 1.0` **four** cells show a trap X: `a`, `b`, `f`, `g` — the font
   and vector cells. That is the whole `/All` population on this patch.
 - **NOT established:** that those marks are the `/All` paint. Confirm by
   dumping the content stream and reading the colour space they are filled
@@ -508,8 +508,8 @@ long-standing rather than new.
 number**, which is worse than no match at all: it made a coincidence look like
 a mechanism.
 
-★ **I already held the evidence and did not use it.** `ghent-check.py` reported
-`GWG 1.0` as **4 traps**, at `152,148 / 152,68 / 67,69 / 67,149` — all four in
+★ **I already held the evidence and did not use it.** `suite-check.py` reported
+`PCS 1.0` as **4 traps**, at `152,148 / 152,68 / 67,69 / 67,149` — all four in
 the left-hand font/vector columns, none in the shading column. The harness and
 the operator agreed; only my eyeballing of the render did not.
 
@@ -535,7 +535,7 @@ Pass this session. `122.5` moved those pixels (1 808 and 1 861 of them) without
 fixing them, because giving the page an ink buffer does not un-resolve a ramp
 that was flattened upstream.
 
-⇒ **REVISED SPLIT for `GWG 1.0`, and the pattern to check on the other six:**
+⇒ **REVISED SPLIT for `PCS 1.0`, and the pattern to check on the other six:**
 `a`/`b`/`f`/`g` are a trap-X defect (`/All` hypothesis, above); `e`/`j` are the
 shading colour path (`97.1k`). **Two causes, not one.** Do not let a single
 counter's total tempt you into merging them again.
@@ -555,13 +555,13 @@ buffer**, not `97.1k`. Confirm the content-stream question above first.
 
 **Nothing in this queue is blocked on anybody.**
 
-1. **The trap-X cells — `GWG 1.0`'s `a`/`b`/`f`/`g`.** The `/All`
+1. **The trap-X cells — `PCS 1.0`'s `a`/`b`/`f`/`g`.** The `/All`
    hypothesis in §2b, now **narrowed to four cells rather than six** by the
    operator's correction (§2a). **Confirm the content-stream question in §2b
    before writing code** — that those marks really are the `/All` paint is
    still unestablished, and §2a is what happens when a co-occurring counter is
    read as a cause. `122.8` is the next free ID.
-2. **Mesh shadings (types 6/7)** — `GWG 6.0`'s actual defect, and the only
+2. **Mesh shadings (types 6/7)** — `PCS 6.0`'s actual defect, and the only
    remaining failure NOT in the `/All` bucket. pdfce draws a placeholder X
    today. A real capability gap rather than a fidelity one.
 3. **Per-image overprint (`Pass 122.1`)** — the image sibling of what `122.6`
@@ -577,8 +577,8 @@ buffer**, not `97.1k`. Confirm the content-stream question above first.
    remaining failures are made of.**
 3. **The check-mark detector** — `122.2` deliberately shipped none. It must key
    on **presence relative to a reference render**, not on a hue (§2 item 4).
-   Ground truth for all four patches is in `tools/ghent-check.py`'s docstring
-   and `D:\Dev\temp\acro-refs` has the references.
+   Ground truth for all four patches is in `tools/suite-check.py`'s docstring
+   and `$PDFCE_SUITE_REFS` has the references.
 4. **Build `R214`'s positional-reference gate** — a grep over a closed
    vocabulary (*of those*, *the above*, *this slice*, *the former*, *the
    latter*, *as above*, *see below*) in doc comments. **Measure its baseline
@@ -586,7 +586,7 @@ buffer**, not `97.1k`. Confirm the content-stream question above first.
    vocabulary rides the same instrument; build **one** script with two
    vocabularies.
 5. **`Pass 122.1`** — per-sample image overprint. Diagnosed: it is why
-   `GWG 8.2`'s check mark is missing. The mark is painted in yellow
+   `PCS 8.2`'s check mark is missing. The mark is painted in yellow
    *underneath* the images, which overprint it; pdfce paints the image normally
    and covers it (`overprint_images_unsupported = 2`). pdfium fails it too.
 6. **`Pass 122.0`** — multithreading, the operator's own request. His design (a
@@ -625,7 +625,7 @@ pdfce does not have yet.
 - **`/TR` on a soft mask** is read, counted, never evaluated.
 - **`/AIS true`** is not distinguished from `/AIS false`.
 - **Spot colorants** — four planes, not runtime `N`. Every remaining
-  trap-criterion Ghent FAIL is in this bucket.
+  trap-criterion suite FAIL is in this bucket.
 - **Rendering intent** (§11.7.5.3, §8.6.5.8) — ★ **this entry said "pdfce
   carries one per page" and that was wrong twice. pdfce carries NONE.** The
   `ri` operator is an explicit no-op (`interpret.rs`, `b"i" | b"ri" => {}`) and
@@ -636,7 +636,7 @@ pdfce does not have yet.
   it selects which fixed `DeviceCMYK`→sRGB lookup table is used, and it is
   per-invocation, not per page and not per paint. Corrected 2026-08-25 while
   answering iccce, who would otherwise have designed an API against it.
-  **Now measured** (`tools/intent-census/`): 12 of 51 Ghent print-production
+  **Now measured** (`tools/intent-census/`): 12 of 51 suite print-production
   files name an intent, **1 of 51 names two**, and a byte-grep that does not
   inflate streams finds **0 of 51** — so any future scan must inflate first.
   Still **not** measured, because the census never builds a page tree: whether

@@ -63,7 +63,7 @@
 //! choice**, deliberately made, to render what a press would produce rather
 //! than what the standard's floor permits. Two reasons:
 //!
-//! 1. The Ghent PDF Output Suite's overprint patches are authored so that a
+//! 1. The print-conformance suite's overprint patches are authored so that a
 //!    renderer which ignores overprint shows a visible trap X. Ten of the
 //!    suite's 51 patches test overprint directly. A conformant renderer that
 //!    ignores it fails all ten, and the operator sees ten red Xs.
@@ -470,7 +470,7 @@ pub fn compatible_overprint_cmyk(
 ///   first — is wrong for a space naming a spot ALONGSIDE a process
 ///   colorant: the flattened RGB carries the spot's contribution, and
 ///   reconstructing CMYK from it smears the spot into the process
-///   channels. Ghent `2_GWG030` is built entirely from that shape.
+///   channels. suite `PCS2_030` is built entirely from that shape.
 ///
 /// # `None`, and what the caller must do with it
 ///
@@ -562,10 +562,10 @@ pub fn classify(space: &ColorSpace, in_image_sample: bool) -> Option<SourceKind>
         //
         // Without this arm an `/Indexed [/DeviceN [/Cyan] /DeviceCMYK …]`
         // space fell to the catch-all below and Table 149 decided what
-        // survives from a colorant list it never read. `1_GWG190` is
+        // survives from a colorant list it never read. `PCS1_190` is
         // authored on exactly that discriminator.
         //
-        // ★ `/Indexed` is PRESENT in four of the seven Ghent overprint
+        // ★ `/Indexed` is PRESENT in four of the seven suite overprint
         // patches — and, measured 2026-08-21, REACHABLE IN NONE OF THEM:
         // every one of those spaces is an IMAGE colour space, and
         // `composite` has no image call site, so pre- and post-fix
@@ -878,16 +878,16 @@ mod tests {
     ///
     /// Without this, `/Indexed [/DeviceN [/Cyan] /DeviceCMYK …]` fell to
     /// `OtherProcess` and Table 149 decided what survives from a colorant
-    /// list it never read. `1_GWG190` is authored on exactly that
+    /// list it never read. `PCS1_190` is authored on exactly that
     /// discriminator: its a/b pair's `DeviceN` omits the backdrop's
     /// colorants and its c/d pair includes them at 0 %.
     ///
-    /// ★ **`/Indexed` is PRESENT in four of the seven failing Ghent
+    /// ★ **`/Indexed` is PRESENT in four of the seven failing suite
     /// overprint patches, and REACHABLE in none of them** — measured
     /// 2026-08-21: every one of those spaces is an *image* colour space,
     /// `composite` has no image call site, and pre- and post-fix binaries
     /// report identical overprint counters on all four. This test guards a
-    /// correct rule that no Ghent pixel currently exercises, which is a
+    /// correct rule that no suite pixel currently exercises, which is a
     /// reason to keep it rather than to discount it — but the four is not
     /// a scoreboard.
     #[test]
@@ -1221,7 +1221,7 @@ mod tests {
             out,
             [1.0, 1.0, 0.0, 0.0],
             "cyan + overprinted magenta must retain BOTH inks — that is what a \
-             press does and what the trap X in the Ghent patches detects",
+             press does and what the trap X in the suite patches detects",
         );
 
         // Overprint off: the paint knocks out everything it does not set.

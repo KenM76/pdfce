@@ -785,10 +785,10 @@ impl<'a> Canvas<'a> {
                     //
                     // `draw_pixmap` cannot carry these four — that is the
                     // whole of decision 066 — so the group's RESULT is
-                    // blended here instead. This is the case Ghent's
+                    // blended here instead. This is the case suite's
                     // `Transp_Basic_BM` patches are made of: every one of
                     // their non-separable modes sits at a group `Do`, not at
-                    // a paint, so without this the feature reaches no Ghent
+                    // a paint, so without this the feature reaches no suite
                     // pixel at all.
                     crate::blend_nonsep::composite_layer(
                         p,
@@ -853,8 +853,8 @@ impl<'a> Canvas<'a> {
     /// modes, most of which are dependent on both the backdrop and source
     /// colours being blended."* Painting such a group into a transparent
     /// buffer hands every interior blend a backdrop of **nothing**, and
-    /// `B(nothing, C_s)` degenerates to `C_s` — which is why Ghent's
-    /// `3_GWG161` renders as a grid of saturated primaries.
+    /// `B(nothing, C_s)` degenerates to `C_s` — which is why suite's
+    /// `PCS3_161` renders as a grid of saturated primaries.
     ///
     /// # The two runs, and why the second is conditional
     ///
@@ -918,7 +918,7 @@ impl<'a> Canvas<'a> {
         // history of this two-line dispatch is worth keeping.
         //
         // `Pass 97.1e` first sent `Cmyk` to the ordinary bridged arm below,
-        // which cost `1_GWG161` -- the suite's KNOCKOUT patch -- eleven of
+        // which cost `PCS1_161` -- the suite's KNOCKOUT patch -- eleven of
         // the thirteen traps `Pass 97.0c` had just removed, by silently
         // substituting non-knockout semantics on exactly the pages that
         // test them. Sending it to `KnockoutTarget` instead recovered most
@@ -1227,7 +1227,7 @@ impl Canvas<'_> {
                 // BETTER THAN HAVING NO BACKDROP AT ALL, and the numbers
                 // are in `snapshot_srgb_backdrop`'s own docs: handing a
                 // subtractive page's knockout groups a TRANSPARENT initial
-                // backdrop took Ghent `1_GWG161` from 2 traps to 15. A
+                // backdrop took suite `PCS1_161` from 2 traps to 15. A
                 // knockout group's entire definition is "composite against
                 // the group's initial backdrop"; give it nothing and it
                 // knocks out against nothing.
@@ -1861,7 +1861,7 @@ fn composite_group_result(
 /// Backdrop removal contains a single `1/α_gn`, which amplifies whatever
 /// error its input carries by that factor. At `α_gn = 0.02` a half-level
 /// 8-bit error becomes 25 levels — visible, and exactly the magnitude the
-/// Ghent transparency panels trap on. The *inputs* are still 8-bit (the
+/// suite transparency panels trap on. The *inputs* are still 8-bit (the
 /// elements were rasterised by `tiny_skia` into a `Pixmap`), and that
 /// remaining quantisation is a documented shortfall of this stage rather
 /// than a solved problem: `Pass 97.1`'s colorant buffer is where the

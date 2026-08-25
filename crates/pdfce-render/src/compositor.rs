@@ -19,7 +19,7 @@
 //!    non-separable modes, `Pass 85.4b` — it did so with a hand-written
 //!    formula that assumed a **fully opaque backdrop**. See
 //!    [`composite_element`]'s own notes: that assumption is what made
-//!    Ghent's `1_GWG162` paint four cells solid white.
+//!    suite's `PCS1_162` paint four cells solid white.
 //!
 //! This module is the single place the standard's formulas live, so the
 //! three call sites that need them (the non-separable per-paint composite,
@@ -153,8 +153,8 @@ pub enum Blend {
 ///
 /// # ★ The measurement that makes this the leading item of `Pass 97.1`
 ///
-/// Getting it wrong is not a shade of difference. Worked by hand on Ghent
-/// `1_GWG162`'s `Difference` cell, whose two operands are printed in the
+/// Getting it wrong is not a shade of difference. Worked by hand on suite
+/// `PCS1_162`'s `Difference` cell, whose two operands are printed in the
 /// file — magenta `0 1 0 0 k` under black `0 0 0 1 k`, and the surround a
 /// correct engine must produce is RGB `(0, 165, 79)`:
 ///
@@ -167,7 +167,7 @@ pub enum Blend {
 /// That is the surround, exactly. Blending the same two colours in device
 /// sRGB gives `(237,1,140)` in pdfce and `(202,29,108)` in pdfium — **both
 /// wrong, differently**, because both blend on the wrong side of this
-/// switch. **Every Ghent transparency patch declares
+/// switch. **Every suite transparency patch declares
 /// `/Group /CS /DeviceCMYK` on the PAGE**, including the one whose own
 /// objects are `ICCBased` RGB, so the switch is `Subtractive` for all of
 /// them regardless of what the artwork is coloured in.
@@ -525,7 +525,7 @@ impl Pixel {
 ///
 /// which is the formula above **specialised to `α_b = 1` and `α_i = 1`**,
 /// and both papered over the `α_b = 0` case by substituting a **white**
-/// backdrop. Measured consequence, Ghent `1_GWG162` at scale 2.0: the
+/// backdrop. Measured consequence, suite `PCS1_162` at scale 2.0: the
 /// `Hue`, `Saturation` and `Color` cells rendered `(255, 255, 255)` where
 /// pdfium renders `(184, 184, 184)`, and `Luminosity` rendered a flat grey
 /// `(106, 106, 106)` where pdfium renders `(255, 22, 158)`. The mechanism
@@ -594,7 +594,7 @@ pub fn composite_element(backdrop: Pixel, source: Pixel, blend: Blend) -> Pixel 
 /// four Table 137 modes out of `tiny_skia::BlendMode`.
 ///
 /// Four components rather than N: `Pass 97.1`'s first deliverable is the
-/// **blending colour space**, which for every file in the Ghent corpus is
+/// **blending colour space**, which for every file in the suite corpus is
 /// `DeviceCMYK`. Spot planes are the *second* deliverable and want a
 /// runtime-N plane-major buffer (measured 3–5× faster than interleaved,
 /// `docs/compositor-plan.md` §3.2). Building N now would fuse two
@@ -940,7 +940,7 @@ mod tests {
     /// back the source colour unchanged, for **every** blend mode. The
     /// previous hand-written composites substituted a white backdrop here,
     /// which made `Hue`/`Saturation`/`Color` return white and `Luminosity`
-    /// return a neutral grey — measured on Ghent `1_GWG162`.
+    /// return a neutral grey — measured on suite `PCS1_162`.
     #[test]
     fn blend_over_a_transparent_backdrop_is_the_source_for_every_mode() {
         let src = Pixel {
@@ -1177,7 +1177,7 @@ mod tests {
     /// ★★★ **THE CASE `Pass 97.1` EXISTS FOR, worked from a real file
     /// rather than from a formula.**
     ///
-    /// Ghent `1_GWG162`'s `Difference` cell prints both its operands: a
+    /// suite `PCS1_162`'s `Difference` cell prints both its operands: a
     /// magenta `0 1 0 0 k` under a black `0 0 0 1 k`, with `/BM
     /// /Difference` at the `Do`. The patch is authored so a correct engine
     /// makes the trap X vanish into its surround, and the surround is
@@ -1189,10 +1189,10 @@ mod tests {
     /// told us the trap is authored on the blending colour space rather
     /// than on the group model.
     ///
-    /// If this test ever fails, the Ghent transparency panels cannot pass,
+    /// If this test ever fails, the suite transparency panels cannot pass,
     /// whatever else is correct.
     #[test]
-    fn ghent_16_2_difference_cell_lands_exactly_on_its_surround() {
+    fn suite_16_2_difference_cell_lands_exactly_on_its_surround() {
         let magenta = [0.0, 1.0, 0.0, 0.0];
         let black = [0.0, 0.0, 0.0, 1.0];
         let got = Blend::Difference.apply_subtractive(magenta, black);

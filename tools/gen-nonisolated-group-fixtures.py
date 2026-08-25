@@ -11,7 +11,7 @@ once over the group's own initial backdrop to obtain its colour, and the
 backdrop is then removed from the second so §11.4.3's *"the backdrop's
 contribution … shall be applied only once"* holds.
 
-The Ghent PDF Output Suite — this project's usual transparency oracle —
+The print-conformance suite — this project's usual transparency oracle —
 **does not exercise it.** Measured, not assumed: rendering all 51 patches
 with a binary built before `97.1g` and one built after gives **zero
 differing pixels**, on any patch, at any scale tested. Thirteen second

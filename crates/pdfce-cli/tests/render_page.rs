@@ -410,7 +410,7 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // NO shell had ever read. They stopped at the crate boundary,
             // which is disclosure to nobody (project rule 4).
             //
-            // Found by rendering the Ghent PDF Output Suite 5.0 test file:
+            // Found by rendering the print-conformance suite test file:
             // it reported a clean render for pages whose gradient patches
             // paint nothing at all, because `patterns_unpainted` was the
             // only counter that could have said so and it went nowhere.
@@ -464,7 +464,7 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // silently dropped the rest, so a page composited by the wrong
             // rule reported nothing at all. Disclosing the gap BEFORE
             // implementing it is what made it measurable — the operator's
-            // Ghent X-4 file turned out to carry 113 ignored blend modes
+            // suite X-4 file turned out to carry 113 ignored blend modes
             // and 36 ignored soft masks, with the worst page being one
             // that had looked clean by every other counter.
             "blend_modes_applied",
@@ -479,7 +479,7 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "soft_mask_tr_ignored",
             "soft_masks_reset_stale",
             // §11.4.7 transparency groups — the third clause-11 gap, and
-            // the one that explained why the Ghent blend-mode panel still
+            // the one that explained why the suite blend-mode panel still
             // failed after blend modes were implemented and verified.
             "groups_flattened",
             "groups_special",

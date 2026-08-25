@@ -1,59 +1,64 @@
-# Ghent PDF Output Suite 5.0 — per-patch reference
+# The print-conformance suite — per-patch reference
 
 **Written 2026-08-18** by the engineer, from a commissioned research pass
-that extracted `GhentPDFOutputSuite50_ReadMes.pdf` (82 pp) and the combined
-test-page captions.
+that extracted the suite's combined ReadMes document (82 pp) and the
+combined test-page captions.
 
-**Why this file exists.** GWG's per-patch documentation is **not on the
-web** — it ships inside the 126 MB individual-patches download
-(<https://gwg.org/?wpdmdl=9076>; force HTTP/1.1, HTTP/2 truncates). The
-ReadMes bundle is at <https://gwg.org/?wpdmdl=9080> (24,508,479 bytes, no
-login). Re-obtaining this costs a download and an extraction pass, so the
-extracted substance lives here.
+**Why this file exists.** The suite's per-patch documentation is **not on
+the web** — it ships inside the suite's individual-patches download (126 MB;
+force HTTP/1.1, HTTP/2 truncates), alongside a separate ReadMes bundle
+(24,508,479 bytes, no login). Re-obtaining this costs a download and an
+extraction pass, so the extracted substance lives here.
 
 **Label convention, carried from the research pass:**
-- **PRIMARY (GWG ReadMe)** / **PRIMARY (GWG caption)** — quoted GWG text.
+- **PRIMARY (suite ReadMe)** / **PRIMARY (suite caption)** — quoted suite text.
 - **MEASURED** — inspection of the patch artwork itself.
 - **DERIVED** — computed from ISO 32000-1 Tables 148/149. **Not published by
   anyone.** Treat as a strong prediction, not as ground truth.
 
-Numbering: GWG010 = "patch 1.0", GWG192 = "patch 19.2".
+**Colorant-name note.** The patches' own spot colorant is a named
+`/Separation` whose name identifies the suite's publisher; referred to
+throughout this document as **Suite Green** (vocabulary scrub, 2026-08-25).
+This is a substitution in this document's *prose*, not a claim about the
+literal bytes in any patch file.
+
+Numbering: PCS010 = "patch 1.0", PCS192 = "patch 19.2".
 
 ---
 
 ## §0 — Two rules that change how the harness should score
 
-**PRIMARY, stated by Stephan Jaeggi (Co-Chair, GWG Process Control
+**PRIMARY, stated by Stephan Jaeggi (Co-Chair, the suite's Process Control
 Subcommittee):**
 
 > **"Faint X does not indicate a failure!"**
 
 Evaluation is explicitly perceptual and explicitly tolerant — a human at
-0.5 m / 20 in, *"you will not need a loupe"*. ~~`tools/ghent-check.py` may
+0.5 m / 20 in, *"you will not need a loupe"*. ~~`tools/suite-check.py` may
 therefore be over-counting~~; its `CONTRAST_MIN` was calibrated against
-pdfce's own output, not against GWG's stated criterion. Patches GWG
-pre-declares tolerant: **all ten cells of GWG020**, and **cell d of each
-DeviceN patch**.
+pdfce's own output, not against the suite's stated criterion. Patches the
+suite pre-declares tolerant: **all ten cells of PCS020**, and **cell d of
+each DeviceN patch**.
 
 **★ MEASURED 2026-08-18 — the over-counting suspicion is FALSE, and this
 paragraph is kept rather than deleted so the question is not re-opened.**
-`tools/ghent-cell-probe.py` measured the actual X-versus-surround contrast on
+`tools/suite-cell-probe.py` measured the actual X-versus-surround contrast on
 every still-failing patch those tolerances cover:
 
-| patch | X | surround | GWG's word for it |
+| patch | X | surround | the suite's word for it |
 |---|---|---|---|
-| `GWG020` (6 of 7 cells) | `[254,254,253]` **white** | `[141,197,62]` green | *"faint … in slightly darker green"* |
-| `GWG190` cell d | `[0,0,0]` **black** | `[0,158,218]` cyan | *"a **faint** cross in patch d"* |
-| `GWG192` cell b | `[255,255,255]` **white** | `[239,56,62]` red | — |
+| `PCS020` (6 of 7 cells) | `[254,254,253]` **white** | `[141,197,62]` green | *"faint … in slightly darker green"* |
+| `PCS190` cell d | `[0,0,0]` **black** | `[0,158,218]` cyan | *"a **faint** cross in patch d"* |
+| `PCS192` cell b | `[255,255,255]` **white** | `[239,56,62]` red | — |
 
 A white X on green is not "slightly darker green". Every trap still firing is
-at or near **maximal** contrast, so **no recalibration consistent with GWG's
-own criterion moves a single verdict.** The failures are real. §10's caveat
-about strict pixel-diffs still stands in principle; it just does not apply to
-anything pdfce is currently failing.
+at or near **maximal** contrast, so **no recalibration consistent with the
+suite's own criterion moves a single verdict.** The failures are real. §10's
+caveat about strict pixel-diffs still stands in principle; it just does not
+apply to anything pdfce is currently failing.
 
 **Two tolerances that survive, because neither is about contrast:**
-- **`GWG191` cell c has TWO sanctioned correct outcomes** (§9) — a cross there
+- **`PCS191` cell c has TWO sanctioned correct outcomes** (§9) — a cross there
   is acceptable *"if the system performs colour conversion and sets the OPM
   for this patch c to 0"*. pdfce converts but leaves `OPM 1`, so its cross is
   a genuine failure **today**; a future Pass that takes the other route must
@@ -61,22 +66,22 @@ anything pdfce is currently failing.
 - **The transparency patches are STRICTER, not more tolerant** — see §11:
   *"A 100% correct rendering does expect a 100% 'X' free output."*
 
-**The suite ships a Reference file** — `Ghent_PDF-Output-Test-V50_ALL_REFERENCE.pdf`,
-in the same ZIP. Its texts are in Registration (`/Separation /All`) so they
-appear in every separation. **pdfce is not currently using it as an oracle
-and should** — but **checked 2026-08-18, the file is not on this machine**;
-`D:\Dev\temp\ghent-patches\` and `ghent-readmes\` were kept from the download
-and it was not. Re-fetching is an operator call (large download, `LEGAL.md`
-§5), so this is **owed, not merely unstarted**.
+**The suite ships a Reference file** — a whole-suite reference render, in the
+same ZIP as the patches. Its texts are in Registration (`/Separation /All`)
+so they appear in every separation. **pdfce is not currently using it as an
+oracle and should** — but **checked 2026-08-18, the file is not on this
+machine**; the local corpus directories were kept from the download and it
+was not. Re-fetching is an operator call (large download, `LEGAL.md` §5), so
+this is **owed, not merely unstarted**.
 
 Composition of the 51: **27 CMYK-only, 8 SPOT, 16 CMS** (ICCBased /
 colour-management). **So the spot axis is only 8 of 51** — that bounds the
 direct conformance ROI of the n-channel work, though some CMS patches carry
 spots too.
 
-Slide decks (PRIMARY-adjacent, authored by a GWG officer):
-<https://pdf-aktuell.ch/files/StephanJaeggi-Ghent_PDF_Output_Suite_5.pdf> (2018),
-<https://www.fourpees.com/assets/media/Branded-imagery/Press-releases/220203_FourPeesCafe%CC%81_Stephan-Jaeggi_Ghent-PDF-Output-Suite-5.0_web.pdf> (2022).
+Slide decks by the suite's publisher, authored by one of its officers, exist
+but are not archived here (their URLs name the suite directly, which this
+document's vocabulary scrub excludes).
 
 ---
 
@@ -99,13 +104,13 @@ From ISO 32000-1 §8.6.7 + Tables 148/149:
 - **R5** — Table 149: *"For spot colour components, the value shall always
   be c_b"* (the backdrop).
 
-**R3 corroborated by two vendors.** Peter Kleinheider (author of GWG041/132/133):
-*"DeviceGray can not overprint DeviceCMYK"*. And Heidelberg Prinect:
-*"'DeviceGray' colors overprint all spot colors lying lower down. However,
-contrary to expectations, **CMY separations are knocked out**"* — with a
-shipped remedy, *"Turn Overprinting Device Gray into K"*, which converts to
-`/Separation/Black` because *"This conversion causes CMY separations to be
-overprinted."*
+**R3 corroborated by two vendors.** Peter Kleinheider (author of
+PCS041/132/133): *"DeviceGray can not overprint DeviceCMYK"*. And Heidelberg
+Prinect: *"'DeviceGray' colors overprint all spot colors lying lower down.
+However, contrary to expectations, **CMY separations are knocked out**"* —
+with a shipped remedy, *"Turn Overprinting Device Gray into K"*, which
+converts to `/Separation/Black` because *"This conversion causes CMY
+separations to be overprinted."*
 <https://onlinehelp.prinect-lounge.com/Prinect_PDF_Toolbox/Version2021/en/Prinect/Color_management/Color_management-9.htm>
 
 **Why `/Separation /Black` differs from `k`:** §8.6.6.4 reserves **only**
@@ -118,12 +123,12 @@ route to the same n-channel conclusion.
 
 ---
 
-## §2 — ★ GWG040 White Overprint — the patch that diagnosed pdfce's bug
+## §2 — ★ PCS040 White Overprint — the patch that diagnosed pdfce's bug
 
 **PRIMARY (ReadMe)**, 10 Nov 2006, Peter Claes. 4.0.1 replaced a withdrawn 4.0.
 
-**MEASURED:** `/CS1 = [/Separation /GWG Green /DeviceCMYK]`, tint transform
-`C0=[0,0,0,0] → C1=[0.5, 0, 1, 0]` — **GWG Green = 50C 0M 100Y 0K at full
+**MEASURED:** `/CS1 = [/Separation /Suite Green /DeviceCMYK]`, tint transform
+`C0=[0,0,0,0] → C1=[0.5, 0, 1, 0]` — **Suite Green = 50C 0M 100Y 0K at full
 tint, and carries no K**. `/CS2 = [/Separation /Black]`. Six ExtGStates
 spanning OPM 0/1 × op true/false.
 
@@ -144,7 +149,7 @@ cases, but not all cases**… includes examples of cases where objects would
 be expected to disappear as well as cases where the proper behavior would be
 to knock out the object below."*
 
-### DERIVED per-cell truth table (not published by GWG)
+### DERIVED per-cell truth table (not published by the suite)
 
 | Cell | Result |
 |---|---|
@@ -170,10 +175,10 @@ result.
 ### ★ Why this diagnosed pdfce
 
 > Flattening spot through the tint transform to RGB before compositing
-> destroys R1 and R5: once GWG Green is RGB there is no unspecified colorant
-> left to leave unchanged, so painting 0% over it erases it. **That predicts
-> a white X in exactly a, b, c (and g, h, i), and correct output in d, e, f
-> where the right answer IS knockout.**
+> destroys R1 and R5: once Suite Green is RGB there is no unspecified
+> colorant left to leave unchanged, so painting 0% over it erases it. **That
+> predicts a white X in exactly a, b, c (and g, h, i), and correct output in
+> d, e, f where the right answer IS knockout.**
 
 That prediction was derived independently of pdfce's output and **matches
 the observed render exactly** (2026-08-18, `ac15158`). **The fix is
@@ -181,19 +186,19 @@ colorant-level compositing, not an overprint special case.**
 
 ---
 
-## §3 — ★ GWG030 Gray / K black Overprint
+## §3 — ★ PCS030 Gray / K black Overprint
 
 **PRIMARY (ReadMe)**, 06 Jan 2006, Peter Claes. Same 12-cell geometry as
-GWG040 (a–f OPM 0, g–l OPM 1): 50% K / 50% gray / 50% sep-black, each over
+PCS040 (a–f OPM 0, g–l OPM 1): 50% K / 50% gray / 50% sep-black, each over
 spot and over CMYK.
 
-**MEASURED:** `/CS1 = [/DeviceN [/Black /GWG Green] /DeviceCMYK]` — **the
+**MEASURED:** `/CS1 = [/DeviceN [/Black /Suite Green] /DeviceCMYK]` — **the
 "spot" backdrop is a two-colorant DeviceN carrying Black**, not a plain
 Separation. `/CS2 = [/Separation /Black /DeviceCMYK]`. Backdrop fills
 `0.5 1 scn` and `0.5 0 1 0.5 k`. Foreground fills `0 0 0 .5 k`, `.5 g`,
 `/CS2 cs .5 scn`. **Eleven ExtGStates with `/OP` and `/op` set
 independently** — so this patch also discriminates **stroke-vs-fill
-overprint**, which no GWG prose mentions.
+overprint**, which no suite prose mentions.
 
 ### DERIVED per-cell truth table
 
@@ -212,14 +217,15 @@ encodings of black must agree over a spot backdrop.**
 **d vs f at OPM 0** is the sharpest single pair: same tint, same backdrop,
 same OPM — DeviceCMYK knocks out, Separation overprints.
 
-**★ Version warning — PRIMARY (GWG v4 whitepaper §2.3.2):** GWG 3.0 and
-GWG 12.0 were **silently changed** in Output Suite 4.0 *"to prevent ghosting
-effect"*, **filenames unchanged**. **Pin fixtures to a file hash.**
+**★ Version warning — PRIMARY (the suite's v4 whitepaper §2.3.2):** PCS 3.0
+and PCS 12.0 were **silently changed** in the suite's 4.0 revision *"to
+prevent ghosting effect"*, **filenames unchanged**. **Pin fixtures to a file
+hash.**
 
 **UNRESOLVED — cell e/k backdrop.** The ReadMe says *"a 50% Gray vector
 object is set to overprint **a Gray object**"*; the caption says *"50% gray
 over **CMYK**"*. Wording is identical in the standalone ReadMe, the combined
-ReadMes, **and the v3.0 manual** — stable ~20 years, so not an extraction
+ReadMes, **and the earlier manual** — stable ~20 years, so not an extraction
 artifact. DERIVED reading: the caption is right, because the grid is
 symmetric (d/e/f all "over CMYK") and *"50% Gray over a Gray object"* would
 be a **degenerate no-op** that could never show an X. Settleable in ~10
@@ -227,7 +233,7 @@ minutes by mapping rectangles to cells in the content stream.
 
 ---
 
-## §4 — GWG010 CMYK Overprint
+## §4 — PCS010 CMYK Overprint
 
 Five object types × two OPM. **PRIMARY**, 07 Nov 2005. Caption columns
 `font | vector | image | mask | shading`; a–e OPM 0, f–j OPM 1.
@@ -243,7 +249,7 @@ The shading cells e/j likewise.
 1. **`/ImageMask` occurs ZERO times in the file.** One XObject, `/Im0`,
    `Subtype /Image`, `ColorSpace [/Indexed /DeviceCMYK 0 <lookup>]`
    (hival 0), 95×95, drawn **four** times — both the "image" and "mask"
-   columns draw it. **GWG010 does not test image masks**, despite the
+   columns draw it. **PCS010 does not test image masks**, despite the
    ReadMe and caption saying so.
 2. ReadMe cells h and i say *"with op mode 0"* while sitting in the OPM 1
    block. **MEASURED:** those draws use `/GS4 = {OP:false, OPM:1, op:true}`.
@@ -251,19 +257,19 @@ The shading cells e/j likewise.
 
 **Consequence for pdfce:** `/Indexed` over `/DeviceCMYK` means colorants
 must be read from the **base** space (§8.6.6.3). Reading them off `/Indexed`
-yields none and gets **both GWG010 and GWG031** wrong.
+yields none and gets **both PCS010 and PCS031** wrong.
 
 **Image masks + OPM is a genuine ambiguity** — §8.6.7 excludes *"the
 painting of images"* without carving out image masks, but a stencil paints
 with the current non-stroking colour (§8.9.6.2), satisfying §8.6.7's own
 test; PDF/A-4 phrases its restriction as covering *"image masks"*; Enfocus
-documents masks as OPM-**sensitive**. **GWG ships no image mask, so it has
-no evidence either way.** → **settings-shaped**; default OPM-sensitive to
-match Acrobat/Enfocus.
+documents masks as OPM-**sensitive**. **The suite ships no image mask, so it
+has no evidence either way.** → **settings-shaped**; default OPM-sensitive
+to match Acrobat/Enfocus.
 
 ---
 
-## §5 — GWG011 CMYK Overprint Mode
+## §5 — PCS011 CMYK Overprint Mode
 
 **PRIMARY**, 27 Dec 2006, Jaeggi. Two columns `OPM 0 | OPM 1`.
 
@@ -271,9 +277,9 @@ match Acrobat/Enfocus.
 `Cross (overpr) 90/10/90/0` · `Cross 0/0/10/50` · `Rect 90/10/10/50` —
 *"If an X appears the Overprint Mode (OPM) is not respected."*
 
-**Cleanest OPM statement GWG publishes:** *"The Overprint Mode specifies if
-a CMYK channel with 0% does overprint an other CMYK color underneath
-(OPM = 1) or does knock out (OPM = 0)."*
+**Cleanest OPM statement the suite publishes:** *"The Overprint Mode
+specifies if a CMYK channel with 0% does overprint an other CMYK color
+underneath (OPM = 1) or does knock out (OPM = 0)."*
 
 Both rects and crosses carry a zero in the M or C channel — that is what
 makes the two modes composite differently. **Expect only ONE X on failure**
@@ -281,15 +287,15 @@ makes the two modes composite differently. **Expect only ONE X on failure**
 
 ---
 
-## §6 — GWG020 Spot and CMYK Overprint
+## §6 — PCS020 Spot and CMYK Overprint
 
-**PRIMARY**, 27 Nov 2005, **updated 15 Jun 2015**. Spot is "GWG Green".
+**PRIMARY**, 27 Nov 2005, **updated 15 Jun 2015**. Spot is "Suite Green".
 Top row "cmyk over spot" (a–e), bottom "spot over cmyk" (f–j); columns
 `font | vector | image | mask | shading`.
 
-**Key contrast with GWG010:** here images and image masks **are** expected
+**Key contrast with PCS010:** here images and image masks **are** expected
 to overprint, because the spot colorant is genuinely absent from the other
-object's space (R1). GWG010's image cells must knock out because OPM cannot
+object's space (R1). PCS010's image cells must knock out because OPM cannot
 reach images (R2). **Together they are a clean two-sided test of whether a
 renderer keys overprint off the COLOUR SPACE rather than the OBJECT TYPE.**
 This is the second patch pdfce's spot-flattening fails — in both directions.
@@ -299,14 +305,14 @@ may show in **all** of the tests; this is acceptable behavior in this patch."*
 
 ---
 
-## §7 — GWG041 White Overprint Mode
+## §7 — PCS041 White Overprint Mode
 
-The only overprint patch where GWG publishes **both** the correct appearance
-**and** a per-failure-mode diagnostic. **PRIMARY**, 08 Apr 2008, Kleinheider.
-Two cells. **MEASURED:** only two ExtGStates, both **OPM 1** — this patch
-does not vary OPM.
+The only overprint patch where the suite publishes **both** the correct
+appearance **and** a per-failure-mode diagnostic. **PRIMARY**, 08 Apr 2008,
+Kleinheider. Two cells. **MEASURED:** only two ExtGStates, both **OPM 1** —
+this patch does not vary OPM.
 
-- **a)** white vector in `/Separation /GWG Green`, overprint on, over CMYK.
+- **a)** white vector in `/Separation /Suite Green`, overprint on, over CMYK.
 - **b)** CMYK *"almost white (0.2% in each process color channel except black)"*, overprint on.
 
 **Expected, stated positively:** *"If a PDF/X conforming workflow performs
@@ -325,11 +331,11 @@ instance)"*. The whole cell tests a renderer's **rounding threshold**, so an
 implementer needs the real number. For calibration, Kodak Prinergy ships
 *"White is considered white when black (K) is less than 0.9%"*.
 
-**pdfce currently passes GWG041.**
+**pdfce currently passes PCS041.**
 
 ---
 
-## §8 — GWG120 White Overprint / Knockout
+## §8 — PCS120 White Overprint / Knockout
 
 **The bidirectional patch: half the cells are authored KNOCKOUT and must
 stay knockout.** **PRIMARY**, 27 Dec 2006 rev 29 Aug 2013, Jaeggi.
@@ -341,17 +347,17 @@ Rows `Overprint` / `Knockout`; sub-rows `CMYK` / `Spot`; columns
 setting white always to knockout… When a workflow or RIP **changes** the
 overprint behaviour of an element an X appears."*
 
-GWG030/040 ask *"did you honour overprint?"*; **GWG120 asks "did you honour
+PCS030/040 ask *"did you honour overprint?"*; **PCS120 asks "did you honour
 the AUTHORED setting, whichever it was?"** A "white always knocks out" rule
 passes the bottom half and fails the top; "white always overprints" does the
 reverse. **MEASURED:** three ExtGStates, clean overprint/knockout binary at
 fixed OPM 1.
 
-**pdfce currently passes GWG120.**
+**pdfce currently passes PCS120.**
 
 ---
 
-## §9 — GWG190 / 191 / 192 DeviceN Overprint (Black / Yellow / White)
+## §9 — PCS190 / 191 / 192 DeviceN Overprint (Black / Yellow / White)
 
 Best-documented overprint patches in the suite. **PRIMARY**, 12 Dec 2012,
 Kleinheider. All three share one layout: four cells, a/c vector and b/d
@@ -359,9 +365,9 @@ image, *"OP is true for all topmost elements."*
 
 | Patch | a + b must render | c + d must render |
 |---|---|---|
-| **GWG190** Black | solid **Black (100C100K)** | solid **Cyan** |
-| **GWG191** Yellow | solid **Green** | solid **Cyan** |
-| **GWG192** White | solid **Red** | solid **White** |
+| **PCS190** Black | solid **Black (100C100K)** | solid **Cyan** |
+| **PCS191** Yellow | solid **Green** | solid **Cyan** |
+| **PCS192** White | solid **Red** | solid **White** |
 
 **The discriminator, identical in all three:** the **a/b** pair uses a
 DeviceN whose colorant list **omits** the backdrop's colorants, so overprint
@@ -381,14 +387,14 @@ outcomes; do not treat it as binary.** *"A **faint** cross in patch **d**
 indicates a colour conversion using inadequate ICC profiles or method"* —
 faint = tolerated.
 
-**MEASURED (GWG192):** spaces are
+**MEASURED (PCS192):** spaces are
 `[/DeviceN [/Cyan /Magenta /Yellow /Black /None] /DeviceCMYK …]` and
 `[/DeviceN [/Black /None] /DeviceCMYK …]`. **The `/None` colorant is present
 in both** — must mark nothing (§8.6.6.4) and **must not join the overprint
 colorant set.** *(This is exactly what Ghostscript bug 709099 gets wrong —
 see `docs/overprint-architecture-survey.md` §5.)*
 
-**Acrobat-verified ground truth for GWG192 cell d** — Poppler issue #1410
+**Acrobat-verified ground truth for PCS192 cell d** — Poppler issue #1410
 (⚠️ GPL project; tracker **prose only**), closed FIXED: *"The expected
 result is to have a completely white square for d. I checked with Adobe
 Acrobat and it renders a white square indeed."*
@@ -400,21 +406,21 @@ Acrobat and it renders a white square indeed."*
 - The test pages carry an embedded **Preflight Audit Trail** and a preflight
   signature that **invalidates on any modification** — a useful tamper check,
   but it trips if tooling rewrites the file.
-- A strict pixel-diff produces **false failures** on exactly the cells GWG
-  pre-declares tolerant (§0).
+- A strict pixel-diff produces **false failures** on exactly the cells the
+  suite pre-declares tolerant (§0).
 
 ---
 
-## §11 — GWG160 / 161 / 162 Transparency Basic Blend Modes (DeviceCMYK)
+## §11 — PCS160 / PCS1_161 / PCS1_162 Transparency Basic Blend Modes (DeviceCMYK)
 
-**PRIMARY (GWG ReadMe, "Patch 16.0 – 16.2", © 2012).** Three patches, one
+**PRIMARY (suite ReadMe, "Patch 16.0 – 16.2", © 2012).** Three patches, one
 axis each, over the same 16-cell blend-mode grid:
 
 | Patch | Variant |
 |---|---|
-| `GWG160` | *"without applying 'Knockout' or 'Isolate'"* |
-| `GWG161` | *"with the use of the 'knockout' effect"* |
-| `GWG162` | *"with the use of the 'Isolate' effect"* |
+| `PCS160` | *"without applying 'Knockout' or 'Isolate'"* |
+| `PCS1_161` | *"with the use of the 'knockout' effect"* |
+| `PCS1_162` | *"with the use of the 'Isolate' effect"* |
 
 **Evaluation is Method 1 (trap X), and it is STRICT — this is the important
 sentence and it removes a tolerance a reader might assume by analogy with the
@@ -423,7 +429,7 @@ overprint patches:**
 > *"It is possible that a faint 'X' may appear, e.g. in case of 16.2 or 16.3.
 > **A 100% correct rendering does expect a 100% 'X' free output though.**"*
 
-⇒ Unlike `GWG020` (§6) and the DeviceN cell d (§9), **no X here is
+⇒ Unlike `PCS020` (§6) and the DeviceN cell d (§9), **no X here is
 pre-forgiven**. Every trap is a real failure.
 
 **One genuine exclusion, and the harness already honours it structurally:**
@@ -433,13 +439,13 @@ pre-forgiven**. Every trap is a real failure.
 > an 'X'. This does per definition **not** indicate a problem. A distinguished
 > coloured **fill** colour does though."*
 
-`ghent-check.py`'s shape test requires `fill` between 0.15 and 0.60 **and**
+`suite-check.py`'s shape test requires `fill` between 0.15 and 0.60 **and**
 mass on both diagonals **and** mass at the crossing centre — an anti-aliased
 outline is hollow and fails all three. So the exclusion is satisfied by
 construction rather than by a threshold, which is the stronger way to satisfy
 it.
 
-### MEASURED cell layout (2026-08-18, `tools/ghent-cell-probe.py`)
+### MEASURED cell layout (2026-08-18, `tools/suite-cell-probe.py`)
 
 16 cells in two rows of 8. Row 2's labels, read from the patch's own content
 stream in order: `Hard Light | Difference | Exclusion | Hue | Saturation |
@@ -457,11 +463,11 @@ ColorDodge, Overlay, SoftLight, HardLight, Hue, Color, Luminosity, Saturation,
 
 | Patch | traps | what the probe shows |
 |---|---|---|
-| `GWG160` | **3** of 16 | `Hue`, `Saturation`, `Color` — and **`Luminosity` passes** |
-| `GWG161` | **14** | X emerges as the raw source primary in nearly every cell |
-| `GWG162` | **7** | same signature, fewer cells |
+| `PCS160` | **3** of 16 | `Hue`, `Saturation`, `Color` — and **`Luminosity` passes** |
+| `PCS1_161` | **14** | X emerges as the raw source primary in nearly every cell |
+| `PCS1_162` | **7** | same signature, fewer cells |
 
-**★ `GWG160` is NOT §11.3.5.3 — corrected 2026-08-18, same day.** This
+**★ `PCS160` is NOT §11.3.5.3 — corrected 2026-08-18, same day.** This
 paragraph originally said those three were "exactly the nonseparable modes
 whose K component is taken from the backdrop" and called `Luminosity` passing
 "the one-bit confirmation". Measured: every transparency patch reports
@@ -474,12 +480,12 @@ does not imply "visibly wrong", and that clean cell is **not** evidence
 
 §11.3.5.3 is still what implementing them correctly requires. It was simply
 not the explanation for the failures. Cell identities are now resolved by
-`tools/ghent-cellmap.py` (CTM walk + `/Matrix`/`/BBox` into device space
+`tools/suite-cellmap.py` (CTM walk + `/Matrix`/`/BBox` into device space
 against the governing `/ExtGState`) rather than by cell-pitch arithmetic.
 
-**`GWG161`/`GWG162` are §11.4.7, not knockout.** A `tiny_skia::Pixmap` starts
-transparent, and a transparent initial backdrop **is** isolated semantics.
-pdfce allocates a group buffer whenever the outer graphics state is
+**`PCS1_161`/`PCS1_162` are §11.4.7, not knockout.** A `tiny_skia::Pixmap`
+starts transparent, and a transparent initial backdrop **is** isolated
+semantics. pdfce allocates a group buffer whenever the outer graphics state is
 non-neutral — and every cell in these patches sets `/BM` at the `Do`. So a
 **non-isolated group silently becomes an isolated one** and every interior
 blend composites against nothing, which returns `cs` unchanged. That is
@@ -489,12 +495,12 @@ Full write-up and the staged fix: `docs/compositor-plan.md` §1.2, `Pass 97.0`.
 
 ---
 
-## §12 — GWG161 / 164 Transparency Basic Blend Modes (ICCBased)
+## §12 — PCS3_161 / PCS3_164 Transparency Basic Blend Modes (ICCBased)
 
-**PRIMARY (GWG ReadMe, "Patch 16.1, 16.4", GOS 5.0).** Same blend-mode grid,
-ICCBased objects. The ReadMe documents the **object stack**, which §11's
-DeviceCMYK ReadMe never does and which matters for choosing the blending
-colour space:
+**PRIMARY (suite ReadMe, "Patch 16.1, 16.4", suite version 5.0).** Same
+blend-mode grid, ICCBased objects. The ReadMe documents the **object stack**,
+which §11's DeviceCMYK ReadMe never does and which matters for choosing the
+blending colour space:
 
 ```
 Upper object       ICCBased, with the transparency effect (Fill)
@@ -513,33 +519,33 @@ and `97.1` divide between them.
 > failure."* … *"A **clearly visible** X indicates that this blend mode is not
 > supported properly which **is** a failure."*
 
-**MEASURED, 2026-08-18 — the tolerance does not rescue pdfce.** `3_GWG161`
+**MEASURED, 2026-08-18 — the tolerance does not rescue pdfce.** `PCS3_161`
 shows X `[255,0,255]` against surround `[129,45,156]` (~126 levels) and
-`3_GWG164` shows X `[165,165,165]` against surround `[19,19,19]` (~146
-levels). Neither is a CMM difference; both are "clearly visible" by GWG's own
-wording. Consistent with §11's finding and with §0's measured result that no
-contrast recalibration moves any verdict.
+`PCS3_164` shows X `[165,165,165]` against surround `[19,19,19]` (~146
+levels). Neither is a CMM difference; both are "clearly visible" by the
+suite's own wording. Consistent with §11's finding and with §0's measured
+result that no contrast recalibration moves any verdict.
 
-`3_GWG164` fails **4** cells and is the ICCBased-CMYK twin of `GWG160`'s
+`PCS3_164` fails **4** cells and is the ICCBased-CMYK twin of `PCS160`'s
 nonseparable-mode defect — §11.3.5.3 names *"both `DeviceCMYK` and `ICCBased`
-calibrated CMYK spaces"* explicitly. `3_GWG161` fails **15** and is the
+calibrated CMYK spaces"* explicitly. `PCS3_161` fails **15** and is the
 isolated-group defect.
 
 ---
 
-## §13 — GWG166 / 168 / 169 / 1610 / 1611 Soft Masks
+## §13 — PCS166 / PCS168 / PCS169 / PCS1610 / PCS1611 Soft Masks
 
-**PRIMARY (GWG ReadMe, "Patch 16.6, 16.8, 16.9, 16.10, 16.11", © 2012).**
+**PRIMARY (suite ReadMe, "Patch 16.6, 16.8, 16.9, 16.10, 16.11", © 2012).**
 
 | Patch | Mask kind |
 |---|---|
-| `16.6` (`GWG166`) | **Image** soft masks — *"a Layer Mask (and transparent gradient or feather effect)"* |
-| `16.8` / `16.9` (`GWG168`/`GWG169`) | **Vector** soft masks — *"Drop Shadows, Outer Glow, Inner Glow"* |
-| `16.10` / `16.11` (`GWG1610`/`GWG1611`) | The same effects applied to **Text** objects |
+| `16.6` (`PCS166`) | **Image** soft masks — *"a Layer Mask (and transparent gradient or feather effect)"* |
+| `16.8` / `16.9` (`PCS168`/`PCS169`) | **Vector** soft masks — *"Drop Shadows, Outer Glow, Inner Glow"* |
+| `16.10` / `16.11` (`PCS1610`/`PCS1611`) | The same effects applied to **Text** objects |
 
 **Evaluation is Method 2, NOT a trap X:** *"a visual comparison to a reference
-**within the patch**."* This is why `ghent-check.py` scores these by strip
-correlation rather than adjudicating them, and why `GWG166` and `3_GWG167`
+**within the patch**."* This is why `suite-check.py` scores these by strip
+correlation rather than adjudicating them, and why `PCS166` and `PCS3_167`
 land in the UNRESOLVED bucket rather than the FAIL one.
 
 **PRIMARY failure signatures**, worth having because a correlation number
@@ -566,9 +572,9 @@ work, against the reference engine's own score on the same strip:
 
 | Patch | pdfce | reference engine |
 |---|---|---|
-| `1_GWG1610` Text part 1 | 0.575 | 0.966 |
-| `1_GWG168` Vector part 1 | 0.725 | 0.981 |
-| `1_GWG169` Vector part 2 | 0.905 | 0.983 |
+| `PCS1_1610` Text part 1 | 0.575 | 0.966 |
+| `PCS1_168` Vector part 1 | 0.725 | 0.981 |
+| `PCS1_169` Vector part 2 | 0.905 | 0.983 |
 
 Fix is `Pass 97.0`: there is nowhere to apply a mask to a group result until
 the group result is a value pdfce owns.

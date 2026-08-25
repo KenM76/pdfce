@@ -1763,7 +1763,7 @@ fn resolve_space_array(
         //
         // Before this, EVERY one of these was an outright refusal and the
         // image was dropped from the raster entirely. On the operator's
-        // Ghent X-4 file that was 18 pictures across three pages, which is
+        // suite X-4 file that was 18 pictures across three pages, which is
         // the largest single hole this crate had.
         b"Separation" | b"DeviceN" | b"Lab" | b"CalGray" | b"CalRGB" => {
             let obj = Object::Array(items.to_vec());
@@ -1810,7 +1810,7 @@ fn resolve_space_array(
 ///   ran; and
 /// - **truncated** any base with more than four components. `DeviceN` is
 ///   the only PDF colour space whose component count is not fixed by its
-///   family, and the Ghent suite ships five- and six-colorant patches.
+///   family, and the print-conformance suite ships five- and six-colorant patches.
 ///
 /// Both were found on 2026-08-21 by an operator reading a test patch's own
 /// caption, not by any gate this project owns.
@@ -1923,14 +1923,14 @@ fn resolve_indexed(
     //    image renders, and nothing anywhere says the document's own
     //    transform never ran.
     //
-    //    Measured on Ghent `GWG 8.2`, whose image space is
+    //    Measured on suite `PCS 8.2`, whose image space is
     //    `[/Indexed [/DeviceN [/Cyan /Black] /DeviceCMYK <tint>] 255 …]`:
     //    pdfce rendered a neutral-grey manta ray where the duotone's cyan
     //    should be, and the patch's own caption calls that exact outcome
     //    an ERROR.
     //
     // 2. **Width.** Four slots cannot hold a five- or six-colorant
-    //    `DeviceN`, and the suite ships both (`GWG 8.1`, `GWG 8.01`). The
+    //    `DeviceN`, and the suite ships both (`PCS 8.1`, `PCS 8.01`). The
     //    trailing colorants were silently dropped before any conversion
     //    was attempted.
     for i in 0..=hival {
@@ -1963,7 +1963,7 @@ mod tests {
     /// input count the document declares. The previous code passed four
     /// components always; a two-colorant `DeviceN` therefore got four,
     /// its transform refused, and the palette silently came out neutral
-    /// grey. Ghent `GWG 8.2`'s duotone rendered as a greyscale manta ray
+    /// grey. suite `PCS 8.2`'s duotone rendered as a greyscale manta ray
     /// where it should have been cyan, and the harness called it clean.
     #[test]
     fn a_palette_entry_is_exactly_as_wide_as_its_base_space() {
@@ -1980,7 +1980,7 @@ mod tests {
         assert!((two[0] - 10.0 / 255.0).abs() < 1e-6);
         assert!((two[1] - 20.0 / 255.0).abs() < 1e-6);
         // Six colorants are NOT truncated to four -- `DeviceN` is the one
-        // space whose width its family does not fix, and the Ghent suite
+        // space whose width its family does not fix, and the print-conformance suite
         // ships a six-colorant patch.
         let six = palette_entry(&entry, 6);
         assert!((six[5] - 60.0 / 255.0).abs() < 1e-6);

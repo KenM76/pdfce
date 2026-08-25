@@ -148,7 +148,7 @@ appears to be genuinely novel.
 Per Ken's standing "parity is a floor" directive, recorded so they are not
 lost:
 
-1. **Ghostscript bug 709099 — CONFIRMED and unfixed.** GWG V5.0's DeviceN
+1. **Ghostscript bug 709099 — CONFIRMED and unfixed.** The suite's DeviceN
    spaces carry `/None` colorants. Ghostscript computes a DeviceN's
    equivalent CMYK at *instantiation*, but `/None` values are not known
    until *use*, so *"overprint simulation will not work for files
@@ -156,7 +156,7 @@ lost:
    due to presence of /None colorants`. **Resolving spot equivalents lazily
    at use rather than at instantiation beats Ghostscript on a patch Artifex
    has given up on.**
-2. **Ghostscript bug 696023** — fails GWG040 a/b/c and GWG030, regressed on
+2. **Ghostscript bug 696023** — fails PCS040 a/b/c and PCS030, regressed on
    the GS 10 codebase (Apr 2024). Artifex's own ground-truth file is named
    `Acrobat9_with_overprint.png`, i.e. **Acrobat's Simulate Overprint is the
    industry's de-facto oracle for these two patches.**

@@ -1055,7 +1055,7 @@ impl Geometry {
             // 2-in function evaluated over an inverse `/Matrix` and has no
             // `/Extend` at all — outside the transformed domain rectangle
             // it is `/Background` or nothing (SH21). Deliberately deferred
-            // rather than rushed: the Ghent measurement found **zero**
+            // rather than rushed: the suite measurement found **zero**
             // type-1 shadings against 5 axial and 9 radial, so it is the
             // cheapest of the three to leave and the least missed.
             Self::FunctionBased { .. } | Self::Mesh { .. } => None,

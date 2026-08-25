@@ -35,7 +35,7 @@
 //!
 //! # The measurement that made this a Pass rather than a nicety
 //!
-//! On the Ghent PDF Output Suite, **13 of 51 files declare a subtractive
+//! On the print-conformance suite, **13 of 51 files declare a subtractive
 //! blending space and 107 of 107 blend-mode applications ran in the wrong
 //! one** — 100 %. Every transparency patch in that suite declares
 //! `/Group /CS /DeviceCMYK` on the **page**, so no amount of per-object
@@ -326,8 +326,8 @@ pub(crate) struct CmykBuffer {
     /// happens at its boundary at all.
     ///
     /// This is a shortfall, not a cost. Both cases are `Pass 97.1f`'s work
-    /// and both are measurable: routing the Ghent knockout patch
-    /// `1_GWG161` through the sRGB path costs it two traps against its
+    /// and both are measurable: routing the suite knockout patch
+    /// `PCS1_161` through the sRGB path costs it two traps against its
     /// pre-Pass baseline, and that number is the one to watch when the
     /// native knockout target lands.
     groups_approximated: u64,
@@ -382,7 +382,7 @@ pub(crate) struct CmykBuffer {
     /// (`to_vec`), and multiply, each over the whole page regardless of
     /// how small the mark was.
     ///
-    /// Measured on the Ghent combined document at scale 2 (1224×1584):
+    /// Measured on the suite combined document at scale 2 (1224×1584):
     /// page 1 went from **632 ms to 3,713 ms**, a 5.9× slowdown on a page
     /// carrying a *single* transparency group — so the cost tracked the
     /// paint count, not the group count.
@@ -404,7 +404,7 @@ pub(crate) struct CmykBuffer {
     /// consequence: compositing the child back walked the **whole page**,
     /// per group.
     ///
-    /// Measured on the Ghent combined document at scale 2 (1224×1584,
+    /// Measured on the suite combined document at scale 2 (1224×1584,
     /// 1.94 M pixels): page 1 carries **1** group and renders in 330 ms;
     /// page 2 carries **142** and rendered in 3,445 ms. That is ≈ 22 ms
     /// per group, for groups whose artwork is a swatch a few hundred
@@ -425,7 +425,7 @@ pub(crate) struct CmykBuffer {
     ///
     /// Every transparency group gets a page-sized child buffer, and at
     /// 1224×1584 that is five `f32` planes — **38.8 MB** — allocated,
-    /// zeroed and dropped **per group**. Ghent page 2 carries 142 groups.
+    /// zeroed and dropped **per group**. suite page 2 carries 142 groups.
     ///
     /// Measured per-group cost against page area, which is what identified
     /// it (the first hypothesis — that the full-page *merge* was the cost —
@@ -994,7 +994,7 @@ impl CmykBuffer {
     /// Because the bridge is a **round trip**, and a round trip through a
     /// group is what makes a group's contents a different colour from
     /// identical contents painted outside it. That is not a subtle
-    /// artefact on the Ghent transparency patches — it is precisely the
+    /// artefact on the suite transparency patches — it is precisely the
     /// mechanism the trap X detects, since the X is drawn inside the group
     /// and its surround outside it, authored to match only if both survive
     /// to the same value.
@@ -1073,7 +1073,7 @@ impl CmykBuffer {
     /// Handing them a transparent buffer instead is not a smaller error —
     /// it is a **larger** one, and it is measured: routing a subtractive
     /// page's knockout groups over a transparent initial backdrop took
-    /// Ghent `1_GWG161` from **2 traps to 15**, undoing `Pass 97.0c`'s
+    /// suite `PCS1_161` from **2 traps to 15**, undoing `Pass 97.0c`'s
     /// knockout implementation on exactly the pages that test it.
     ///
     /// So the rule this function encodes is: *a round trip is worse than
@@ -1099,7 +1099,7 @@ impl CmykBuffer {
     ///
     /// ★ Mixing them is not a small error, and it was measured: converting
     /// the backdrop with the calibrated lattice and converting the result
-    /// back with max-GCR left Ghent `1_GWG161` at **10 traps** against a
+    /// back with max-GCR left suite `PCS1_161` at **10 traps** against a
     /// pre-Pass baseline of **2**, because the two transforms are not
     /// inverses and every knockout element accumulated the difference.
     /// Using the invertible pair on both legs is what makes an untouched
@@ -1872,7 +1872,7 @@ mod tests {
     }
 
     #[test]
-    fn ghent_16_2_difference_cell_lands_on_its_surround_through_the_buffer() {
+    fn suite_16_2_difference_cell_lands_on_its_surround_through_the_buffer() {
         // The cell this whole Pass was derived from: magenta `0 1 0 0 k`
         // under black `0 0 0 1 k` with `/BM /Difference`. §11.3.4's
         // complement gives `1 - |cb' - cs'|` = `DeviceCMYK 1 0 1 0`, which
@@ -2066,7 +2066,7 @@ mod tests {
         );
         // Second: magenta with Difference. Against the INITIAL backdrop
         // (K = 1) §11.3.4 gives `1 − |c_b′ − c_s′|` = `1 0 1 0`, the same
-        // answer `compositor.rs`'s own Ghent test pins.
+        // answer `compositor.rs`'s own suite test pins.
         ko.composite_mask(
             &full,
             (0, 0, 1, 1),

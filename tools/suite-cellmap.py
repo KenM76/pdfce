@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Map each Ghent transparency-patch cell to the blend mode that governs it.
+"""Map each suite transparency-patch cell to the blend mode that governs it.
 
 WHY THIS EXISTS
 ---------------
-`tools/ghent-cell-probe.py` says a trap fired at device (204, 106) and what
+`tools/suite-cell-probe.py` says a trap fired at device (204, 106) and what
 colour it is. It cannot say WHICH BLEND MODE that cell tests, and without that
 a trap count is not a diagnosis.
 
@@ -18,7 +18,7 @@ patches do not label them the same way.
 So this tool resolves the mapping from the file instead:
 
   * inflate every stream and rebuild an object table, including objects that
-    live inside object streams (the Ghent files put their resources there);
+    live inside object streams (the suite files put their resources there);
   * collect `/ExtGState` name -> `/BM`, and `/XObject` name -> `/BBox` + `/Matrix`;
   * walk the content stream tracking the CTM through `q` / `Q` / `cm`;
   * at each `/Xnn Do`, compose `/Matrix` with the CTM, push `/BBox` through it,
@@ -28,7 +28,7 @@ Output is one line per painted cell, sorted top-to-bottom then left-to-right:
 
     device~( 203, 105)   X10    GS39  Hue
 
-Cross-reference those coordinates against `ghent-cell-probe.py`'s trap
+Cross-reference those coordinates against `suite-cell-probe.py`'s trap
 positions (they agree to within a pixel or two -- the probe reports the trap
 mark's bounding box, this reports the XObject's).
 
@@ -39,8 +39,8 @@ them into one namespace.** Where a file has several resource dictionaries that
 each define `/GS1`, later definitions overwrite earlier ones and the reported
 blend mode for some cells will be wrong or `?`.
 
-Measured 2026-08-18: `1_GWG160` and `3_GWG164` resolve cleanly and completely.
-`1_GWG161` and `1_GWG162` do NOT -- they report `?` for most cells and repeat
+Measured 2026-08-18: `PCS1_160` and `PCS3_164` resolve cleanly and completely.
+`PCS1_161` and `PCS1_162` do NOT -- they report `?` for most cells and repeat
 device positions, which is the symptom. **Those two patches are unmapped.**
 Fixing it means threading the resource dictionary through the content walk
 rather than pre-flattening, which is the correct design and is not done here.
@@ -49,7 +49,7 @@ Do not read a `?` as "no blend mode set". Read it as "this tool could not tell".
 
 USAGE
 -----
-    python tools/ghent-cellmap.py <patch.pdf>
+    python tools/suite-cellmap.py <patch.pdf>
 
 The corpus lives OUTSIDE the repository (test-corpus rules, `docs/LEGAL.md`
 §5). Nothing here writes anything.

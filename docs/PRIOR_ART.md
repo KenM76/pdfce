@@ -521,7 +521,7 @@ the same way, in minutes, whenever they next matter.
   — new **Colour management (ICC)** table added under Supporting crates.
   `moxcms` (BSD-3-Clause OR Apache-2.0, pure Rust, ≤16 inks) recorded as
   the ICC-hop candidate for `Pass 97.2`'s N-plane→sRGB collapse and the
-  separate `3_GWG130` ICC work — it clears the wasm32 gate that rules out
+  separate `PCS3_130` ICC work — it clears the wasm32 gate that rules out
   `lcms2` (a C binding). **Not added to any `Cargo.toml`** by this entry;
   classification only, per rule 13. Sourcing: `docs/
   collapse-model-survey.md` §7, itself commissioned to answer

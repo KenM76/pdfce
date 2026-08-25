@@ -506,7 +506,7 @@ impl ColorSpace {
     /// * `DeviceCmyk` — the components themselves.
     /// * `Separation` / `DeviceN` **whose alternate resolves to
     ///   `DeviceCmyk`** — the tint transform's own output, taken *before*
-    ///   anything converts it. This is the case Ghent `GWG 1.0` exercises:
+    ///   anything converts it. This is the case suite `PCS 1.0` exercises:
     ///   `/DeviceN [/Cyan /Magenta]` over a `DeviceCMYK` alternate.
     ///
     /// **`None` everywhere else, and `None` is not a failure** — it is the
@@ -671,12 +671,12 @@ impl ColorSpace {
     /// /DeviceCMYK …]` space names one. Without this resolution the
     /// classifier sees `Indexed`, falls to "some other process space", and
     /// Table 149 decides what survives from a colorant list it never read.
-    /// Ghent's `1_GWG190` is authored on precisely that discriminator —
+    /// suite's `PCS1_190` is authored on precisely that discriminator —
     /// its a/b pair's `DeviceN` **omits** the backdrop's colorants and its
     /// c/d pair **includes** them at 0 %, and the patch's own ReadMe says
     /// the colorant LIST, not the tint values, decides the outcome.
     ///
-    /// ★ **`/Indexed` is PRESENT in four of the seven failing Ghent
+    /// ★ **`/Indexed` is PRESENT in four of the seven failing suite
     /// overprint patches, and REACHABLE in none of them** — measured
     /// 2026-08-21: every one of those spaces is an **image** colour space,
     /// `overprint::composite` has no image call site, and pre- and

@@ -16,7 +16,7 @@ defects.
 
 - **`/Indexed` overprint classification.** The plan called it *"MEASURED
   AND CONFIRMED… a live defect, not a suspicion"*, present in 4 of 7
-  failing Ghent overprint patches. It was a live defect. After the fix,
+  failing suite overprint patches. It was a live defect. After the fix,
   `overprint_effective` / `overprint_composited` / `overprint_refused` /
   `overprint_pixels` were **identical to the digit** on all four patches.
   Cause, verified structurally rather than guessed: every `/Indexed`
@@ -24,7 +24,7 @@ defects.
   `overprint::composite` has no image call site at all. The plan listed
   the `/Indexed` half first and the image half second; **the dependency
   runs the other way**.
-- **Stage A of the compositor.** Scoped to deliver 7 Ghent patches. It
+- **Stage A of the compositor.** Scoped to deliver 7 suite patches. It
   delivered 0 patch verdicts — while genuinely fixing four blend cells,
   taking one panel from 14 wrong cells to 2, and moving three
   reference-strip correlations from 0.58/0.73/0.91 to 0.96/0.98/0.99. The

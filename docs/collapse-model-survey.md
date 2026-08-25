@@ -146,7 +146,7 @@ them behavioural references only.
    isolation entirely.
    **Version/tooling corrections, both PRIMARY:** the `SPOT_NCOMPS != 4`
    handling is Poppler **0.66.0 (2018-06-19)**, not 23.08.0 — 23.08.0 is
-   *"Fix GWG 19.2 — DeviceN Overprint (White)"*. And the
+   *"Fix PCS 19.2 — DeviceN Overprint (White)"*. And the
    `-processcolorformat CMYK8` requirement is **`pdftops` only**:
    `pdftoppm` has its own independent `-overprint` flag (default false)
    that switches the render to DeviceN8, **present in the source and absent
@@ -159,9 +159,9 @@ them behavioural references only.
    has exactly one element**. ISO 32000-1 §14.11.5 permits several with
    different subtypes. **⇒ a second settings-shaped ambiguity.**
 7. **No Acrobat-vs-Poppler or Acrobat-vs-MuPDF comparison exists anywhere.**
-   Both projects validate against the **Ghent Workgroup suite** and **ECI
+   Both projects validate against **the print-conformance suite** and **ECI
    Altona Test Suite 2**, not against Acrobat. If pdfce wants that delta it
-   must measure it — which is what `tools/ghent-check.py` plus the Acrobat
+   must measure it — which is what `tools/suite-check.py` plus the Acrobat
    reference strips already do.
 8. **★ THE LOAD-BEARING INVARIANT, stated by two vendors independently.**
    Harlequin: *"if spot colorants are converted to process colors,
@@ -455,8 +455,8 @@ convert. A dependency with no caller is the `R151` shape.
 
 ## §8 — Validation corpus
 
-The Ghent Workgroup PDF Output Suite 5.0's `SPOT` and `CMYK` categories, plus
+The print-conformance suite's `SPOT` and `CMYK` categories, plus
 **ECI Altona Test Suite 2**. This is what Poppler itself validates against and
-it is the only rights-clean overprint corpus. pdfce already runs the Ghent
-half (`tools/ghent-check.py`); **Altona is not on this machine and is not
-currently used.**
+it is the only rights-clean overprint corpus. pdfce already runs the
+print-conformance half (`tools/suite-check.py`); **Altona is not on this
+machine and is not currently used.**

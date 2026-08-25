@@ -312,7 +312,7 @@ pub(crate) fn composite(
             // white medium in once at the end, so "transparent" means "no
             // backdrop", not "paper". `Sat(white) = 0` and `Lum(white) = 1`
             // make `Hue`/`Saturation`/`Color` of anything over white
-            // *white*, which is what Ghent `1_GWG162` rendered.
+            // *white*, which is what suite `PCS1_162` rendered.
             let out = crate::compositor::composite_element(
                 crate::compositor::Pixel::from_premultiplied(px),
                 crate::compositor::Pixel { c: source, a: t },

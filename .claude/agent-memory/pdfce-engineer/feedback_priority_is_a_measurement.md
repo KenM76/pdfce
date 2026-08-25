@@ -9,9 +9,9 @@ Before working a queued item, **measure that the thing you are optimising
 for actually needs it.** A priority inherited from a handoff is a claim, and
 claims get verified.
 
-**Why:** on 2026-08-17 the pdfce handoff's Ghent queue read
+**Why:** on 2026-08-17 the pdfce handoff's suite queue read
 *shading patterns → tiling patterns → transparency → overprint*. I shipped
-shading patterns, then checked what the operator's Ghent X-4 file still
+shading patterns, then checked what the operator's suite X-4 file still
 needed and found **`pattern_spaces=0` on all six pages** — that file uses no
 `scn` patterns at all. The Pass I had just shipped did not move it, and
 tiling patterns, queued next, would not have either. Transparency, queued

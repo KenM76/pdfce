@@ -1,11 +1,11 @@
 ---
 name: compositor-state
-description: 2026-08-21 evening — the CMYK colorant buffer SHIPPED (Pass 97.1e/f); the Ghent transparency panels are no longer blocked on the blending space, and every remaining FAIL is an overprint/spot/ICC patch
+description: 2026-08-21 evening — the CMYK colorant buffer SHIPPED (Pass 97.1e/f); the suite transparency panels are no longer blocked on the blending space, and every remaining FAIL is an overprint/spot/ICC patch
 metadata:
   type: project
 ---
 
-**Supersedes the 2026-08-21 morning entry**, which said the Ghent
+**Supersedes the 2026-08-21 morning entry**, which said the suite
 transparency panels were blocked on §11.3.4's blending colour space. They
 were. They are not any more.
 
@@ -17,7 +17,7 @@ once at the end.
 **Measured against a worktree build of the parent commit `06aaad3`, not
 against a documented number:**
 
-| Ghent suite | baseline | 97.1e | **97.1f** |
+| suite | baseline | 97.1e | **97.1f** |
 |---|---:|---:|---:|
 | pass | 26 | 28 | **29** |
 | FAIL | 14 | 11 | **10** |
@@ -26,13 +26,13 @@ against a documented number:**
 
 ★★ **THE PASS COUNTS ABOVE ARE AN OVER-COUNT, AND SO IS EVERY ONE THIS
 PROJECT HAS FILED.** The operator read the render cell by cell the same
-evening and found failures `tools/ghent-check.py` **structurally cannot
+evening and found failures `tools/suite-check.py` **structurally cannot
 see** — it implements ONE of the suite's two criteria (a cross that should
 not be there) and is blind to the other (a **check mark that should be
 there and is not**, which is how seven patches score). Corrected standing:
 **26 at most**. **The DELTAS survive, the LEVELS do not** — every column is
 over-counted by the same family, so before/after is sound and any absolute
-"N of 51" is not. See `docs/ghent-operator-review-2026-08-21.md`, the
+"N of 51" is not. See `docs/suite-operator-review-2026-08-21.md`, the
 operator's cell-level calls, which are the calibration set. Fix is
 `Pass 122.2`.
 
@@ -62,7 +62,7 @@ colour is resolved to sRGB one layer above the canvas.
 do not re-make them:**
 
 1. **A transparent initial backdrop for a knockout group is WORSE than no
-   knockout at all** (`1_GWG161`: 2 → 15 traps).
+   knockout at all** (`PCS1_161`: 2 → 15 traps).
 2. **The two CMYK↔sRGB transforms are for different jobs.** Terminal
    conversion wants the *calibrated* lattice; a ROUND TRIP wants the
    *invertible* max-GCR pair and does not care about accuracy, because the
@@ -72,7 +72,7 @@ do not re-make them:**
    still said 107/107 wrong after two patches started passing.
 
 **How to apply:** re-measure with a worktree build of the parent commit
-before claiming any movement — the Ghent harness numbers in documents drift,
+before claiming any movement — the suite harness numbers in documents drift,
 and this session's baseline run cost five minutes and settled two
 contradictions. `docs/NEXT_SESSION.md` (2026-08-21 evening) carries the
 queue; item 1 is `97.1g`, the non-isolated group, which is a **port** of an

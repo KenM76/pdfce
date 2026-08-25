@@ -1099,7 +1099,7 @@ COLLAPSE.**
   it is ISO-paywalled and absent from `LEGAL.md` §2, so it is doubly out of reach.
   `PDF/X-4` = **0 hits** (ISO 15930-7 postdates 2008). **Write no matrix**; write
   the two-sentence NOTE the standard *does* give, plus three named closure routes
-  (operator-provided copy / veraPDF + Ghent Workgroup free secondaries / do
+  (operator-provided copy / veraPDF + free secondaries from the suite's publisher / do
   nothing — read-and-preserve needs no PDF/X rule). Item 16 discipline, applied to
   a *conformance profile* rather than an algorithm.
 

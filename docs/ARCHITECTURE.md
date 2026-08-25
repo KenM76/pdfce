@@ -1133,11 +1133,11 @@ D:\Dev\pdfce\
                                    transcribed into
                                    `pdfce-render/src/blend_nonsep.rs` and
                                    applied both at a paint and — the half
-                                   that actually moves Ghent — at a
+                                   that actually moves the suite — at a
                                    transparency group's composited result
                                    through `Canvas::layer`, because every
                                    non-separable mode in that corpus sits
-                                   at a `Do` and none at a paint. **Ghent
+                                   at a `Do` and none at a paint. **The suite
                                    25 → 26 pass, 15 → 14 FAIL of 51.**
                                    **The dependency defect is unchanged
                                    and tiny-skia is still not routed these
@@ -1174,7 +1174,7 @@ D:\Dev\pdfce\
                                    against the PAGE's accumulated
                                    backdrop, which unconditional
                                    buffering got wrong (878 ms measured
-                                   on Ghent page 2 vs. a 230 ms
+                                   on the suite's page 2 vs. a 230 ms
                                    pre-`85.4c` baseline, 142 buffers,
                                    found by asking why the per-buffer
                                    cost was what it was). The buffer is
@@ -1207,8 +1207,8 @@ D:\Dev\pdfce\
                                    fast path under neutral outer state
                                    counts as `groups_composited`, because
                                    that IS §11.4.5's result for it, not a
-                                   flattening approximation. Ghent GWG
-                                   16.0 (non-knockout blend-mode panel)
+                                   flattening approximation. The suite's
+                                   PCS 16.0 (non-knockout blend-mode panel)
                                    renders CLEAN on both the original fix
                                    and the correction; `groups_flattened`
                                    on that file 187 → 0, unaffected by
@@ -1221,10 +1221,10 @@ D:\Dev\pdfce\
                                    ordinary groups today, approximated
                                    and counted via
                                    `groups_knockout_approx` (47) rather
-                                   than silently wrong — GWG 16.1 still
+                                   than silently wrong — PCS 16.1 still
                                    shows its crosses, matching the
                                    counter). `/SMask` soft-mask groups
-                                   (36 occurrences, Ghent) remain
+                                   (36 occurrences, suite) remain
                                    entirely unread. Both are blocked on
                                    a `pdfce-spec-librarian` dispatch for
                                    §11.4.6/§11.5.2–.3, in flight as of
@@ -1235,7 +1235,7 @@ D:\Dev\pdfce\
                                    naming shape/opacity separation as a
                                    property a single-alpha buffer model
                                    may not be able to represent at all.
-                                   Now this project's top-priority Ghent
+                                   Now this project's top-priority suite
                                    render-fidelity gap, narrowed from
                                    "all group compositing" to "knockout
                                    groups + soft masks" (`ROADMAP.md`
@@ -1307,8 +1307,8 @@ D:\Dev\pdfce\
                                    applies the mask to the group's RESULT. Construction is
                                    correct (mask groups and folded clips dumped to PNG, both
                                    correct soft gradients); application is not. Strip
-                                   correlation moved on all three measurable Ghent soft-mask
-                                   patches and NONE passes — Ghent standing UNCHANGED at
+                                   correlation moved on all three measurable suite soft-mask
+                                   patches and NONE passes — suite standing UNCHANGED at
                                    25/18/8 of 51. Full derivation: decision 070 in §12, and
                                    `ROADMAP.md`'s `cb20770` Shipped entry.
                                    **★ FIXED 2026-08-18 (hundred-and-
@@ -1371,7 +1371,7 @@ D:\Dev\pdfce\
                                    need to be. **Named limit:** two inks
                                    overprinting in sequence over a rich
                                    backdrop can differ from a true
-                                   separated pipeline. **Measured: Ghent
+                                   separated pipeline. **Measured: the suite
                                    22 → 25 of 51 patches.** **What the
                                    amendment does NOT touch:** obligation
                                    (2) — blending IN a `DeviceCMYK`
@@ -1427,7 +1427,7 @@ D:\Dev\pdfce\
                                    all when a group's blending colour
                                    space is DeviceCMYK** — §11.3/§11.4
                                    define blending IN the group's BCS,
-                                   and the Ghent corpus's own patches
+                                   and the suite corpus's own patches
                                    declare `TBCS: DeviceCMYK`; pdfce
                                    blends in RGB today (decision 068),
                                    so `Difference`/`Exclusion` and the
@@ -1458,7 +1458,7 @@ D:\Dev\pdfce\
                                    over 2.1 Mpix = ~0.7 µs/pixel**; at
                                    300 DPI, 8.4 Mpix ⇒ **≈6 s over
                                    8.4 Mpix, same per-pixel rate**.
-                                   pdfce renders a full Ghent page in
+                                   pdfce renders a full suite page in
                                    ~0.6 s today, so this conversion alone
                                    would cost 2.5×–10× the entire render
                                    — fine for export, too slow for
@@ -1562,9 +1562,9 @@ D:\Dev\pdfce\
                                    NOTE 6's nesting rule is honoured: a
                                    non-isolated group inside a knockout
                                    group inherits the **OUTER** group's
-                                   initial backdrop. Ghent `1_GWG161`
+                                   initial backdrop. Suite `PCS1_161`
                                    **14 traps → 2** (2/16 cells correct
-                                   → 14/16); `2_GWG120_White_OP-KO`
+                                   → 14/16); `PCS2_120`
                                    still passes; no patch regressed.
                                    **(2)** *"non-isolated knockout (the
                                    common case) is NOT representable,
@@ -1603,9 +1603,9 @@ D:\Dev\pdfce\
                                    overlapping objects and was invisible
                                    on single-object fixtures.
                                    Reference-strip correlation
-                                   `1_GWG1610` 0.576 → **0.962**,
-                                   `1_GWG168` 0.725 → **0.978**,
-                                   `1_GWG169` 0.905 → **0.986** (mean
+                                   `PCS1_1610` 0.576 → **0.962**,
+                                   `PCS1_168` 0.725 → **0.978**,
+                                   `PCS1_169` 0.905 → **0.986** (mean
                                    over three, 0.735 → 0.975). Counter
                                    `soft_masks_on_group_result`; the one
                                    unliftable case (a `W n` clip between
@@ -1626,12 +1626,12 @@ D:\Dev\pdfce\
                                    correct and is now the whole
                                    remainder.** `Pass 97.0` corrected
                                    every group-model mechanism it set
-                                   out to correct and **the Ghent board
+                                   out to correct and **the suite board
                                    did not move — 26 pass · 14 FAIL · 11
                                    UNRESOLVED of 51, before and after**
                                    (trap count 67 → 55, all 12 of them
-                                   `1_GWG161`'s). Derived by hand on
-                                   `1_GWG162`'s `Difference` cell:
+                                   `PCS1_161`'s). Derived by hand on
+                                   `PCS1_162`'s `Difference` cell:
                                    complement, `|cb′ − cs′|`, complement
                                    back = `DeviceCMYK 1 0 1 0`, the
                                    green the trap surround requires;
@@ -1640,9 +1640,9 @@ D:\Dev\pdfce\
                                    and both are wrong, differently**, so
                                    pdfium is a **peer, not an oracle**,
                                    for anything §11.3.4 governs. **Every
-                                   Ghent transparency patch declares
+                                   suite transparency patch declares
                                    `/Group /CS /DeviceCMYK` on the
-                                   PAGE**, including `3_GWG161` whose own
+                                   PAGE**, including `PCS3_161` whose own
                                    objects are `ICCBased` RGB. Full
                                    derivation:
                                    `docs/compositor-plan.md`'s head
@@ -1659,7 +1659,7 @@ D:\Dev\pdfce\
                                    space, honouring **Table 147's rule
                                    that a NON-ISOLATED group ignores its
                                    own `/CS` and inherits the parent's**
-                                   — which is *why* `3_GWG161` blends in
+                                   — which is *why* `PCS3_161` blends in
                                    `DeviceCMYK`, and which discharged
                                    that patch's "unconfirmed" flag by
                                    counter (**15 of its 15 blends
@@ -1671,7 +1671,7 @@ D:\Dev\pdfce\
                                    `blend_space_subtractive` (census)
                                    and `blends_in_wrong_space`
                                    (shortfall) ship on the CLI's stable
-                                   line. **Measured: Ghent 107/107
+                                   line. **Measured: the suite 107/107
                                    blends wrong (100.0 %, 13 of 51
                                    files); `fixtures/external` 2/49
                                    (4.1 %, 15 of 3,735 rendered), both
@@ -1724,7 +1724,7 @@ D:\Dev\pdfce\
                                    wrong space wherever the BCS is CMYK"* —
                                    **FALSE on a subtractive page since
                                    `a277931`.** The census went **107 of
-                                   107 wrong → 0 of 107** on the Ghent
+                                   107 wrong → 0 of 107** on the
                                    suite. It remains **true on an additive
                                    page and that is correct, not a
                                    shortfall**: §8.6.6.4 makes reverting to
@@ -1737,13 +1737,13 @@ D:\Dev\pdfce\
                                    the whole remainder"* — **discharged.**
                                    The remainder is now the
                                    **spot/n-channel** half only: **every
-                                   remaining Ghent FAIL is an overprint,
+                                   remaining suite FAIL is an overprint,
                                    spot or ICC patch, and not one is a
-                                   blending-space failure.** Ghent **26 →
+                                   blending-space failure.** The suite **26 →
                                    29 pass of 51**, trap marks **55 → 41**.
                                    ★ **CORRECTED 2026-08-21 (225th
                                    filing): BOTH LEVELS ARE
-                                   OVER-COUNTS — `tools/ghent-check.py`
+                                   OVER-COUNTS — `tools/suite-check.py`
                                    implements one of the suite's two
                                    pass criteria and has reported
                                    `clean` for the other since it was
@@ -1752,8 +1752,8 @@ D:\Dev\pdfce\
                                    minimum**. The DELTA (+3) and the
                                    trap counts are unaffected; the
                                    levels are not. See `ROADMAP.md`'s
-                                   *Ghent standing board* and
-                                   `docs/ghent-operator-review-2026-08-21.md`.**
+                                   *suite standing board* and
+                                   `docs/suite-operator-review-2026-08-21.md`.**
                                    **(4)** *"the `iccce` boundary (decision
                                    064) still owns the final conversion"* —
                                    **unchanged as a BOUNDARY and no longer
@@ -1765,7 +1765,7 @@ D:\Dev\pdfce\
                                    conversion, and an **exactly
                                    invertible** max-GCR pair for a ROUND
                                    TRIP. Using the accurate one on a round
-                                   trip left `1_GWG161` at **10 trap
+                                   trip left `PCS1_161` at **10 trap
                                    marks**; the invertible one took it to
                                    **4**. When `iccce` lands it replaces
                                    the terminal one, not both.
@@ -22811,7 +22811,7 @@ shading behind a bucket that carries no Pass IDs at all.** The Vector-
 editing bucket is explicitly "not yet Pass-scoped" in its own text —
 that was fine while nothing exercised the gap, but the operator hit it
 first by **rendering** a PDF/X-4 conformance file, not by editing
-anything (`Pass 84.0`'s Ghent-suite measurement, this filing). A
+anything (`Pass 84.0`'s print-conformance-suite measurement, this filing). A
 render-fidelity defect measured on real content should not wait on an
 unscoped editing bucket to be reached.
 
@@ -23109,7 +23109,7 @@ own two-occurrence-plus-review bar for promotion. **Ceiling moves
 > `Color` and `Luminosity` are computed by
 > `crates/pdfce-render/src/blend_nonsep.rs` — Table 137 transcribed from
 > `iso32000__s__11.3.5.md` — applied at a paint and, decisively, at a
-> transparency group's composited result via `Canvas::layer`. **Ghent 25 →
+> transparency group's composited result via `Canvas::layer`. **The suite 25 →
 > 26 pass, 15 → 14 FAIL of 51.**
 >
 > **★ WHY THIS AMENDS RATHER THAN SUPERSEDES, and the distinction is the
@@ -23215,7 +23215,7 @@ rule 1) — `iso32000__s__11.6.4.md` line 269 already flags §11.4.6 as a
 spec-RAG GAP naming shape/opacity separation as the one place a
 single-alpha model may not suffice. Soft-mask groups are similarly out
 of scope for this decision. See the `Pass 85.4c` `ROADMAP.md` Shipped
-entry for the full measurement (Ghent GWG 16.0 clean, GWG 16.1 still
+entry for the full measurement (suite PCS 16.0 clean, PCS 16.1 still
 crossed) and `ARCHITECTURE.md` §3's `pdfce-render\interpret.rs` body
 entry for the implementation description.
 
@@ -23257,7 +23257,7 @@ free 069.**
 > counts it, not `groups_flattened`.
 >
 > **How it was found:** not by testing isolated/non-isolated behaviour
-> directly, but by measuring the unconditional buffer's own cost — Ghent
+> directly, but by measuring the unconditional buffer's own cost — the suite's
 > page 2 at 878 ms buffered vs. a 230 ms pre-`85.4c` baseline, 142
 > buffers involved. Asking why that per-buffer overhead was what it was,
 > rather than accepting it as correctness's price, surfaced the backdrop
@@ -23376,8 +23376,8 @@ never reaches it. Before `97.1b` **nothing counted that**: a page full of
 images under `/OP true` reported **zero** overprint shortfall. Widening the
 older counter would have made a whole missing object class look like a run
 of ordinary failures **and would have moved a number an operator may
-already be diffing between runs.** First measurement includes `2_GWG031`
-= 1 — **a Ghent patch that PASSES the suite**, which is the cleanest
+already be diffing between runs.** First measurement includes `PCS2_031`
+= 1 — **a patch that PASSES the suite**, which is the cleanest
 statement of why the two are separate: a patch can pass its own trap and
 still contain an object class the renderer never offered the feature to.
 
@@ -23387,10 +23387,10 @@ overprint in **both** modes; pdfce flattens spots into RGB and so cannot
 tell a spot backdrop from a process one. A **page-sized spot-ink multiplier
 plate** (~150 lines + an `f32` page buffer) was built to recover that:
 divide the multiplier out before Table 149, multiply it back after.
-Ablation on the same binary, one line changed — plate OFF `GWG020`=7,
-`GWG030`=3, `GWG040`=7 (**17 traps, 25 of 51 patches passing**); plate ON
+Ablation on the same binary, one line changed — plate OFF `PCS020`=7,
+`PCS030`=3, `PCS040`=7 (**17 traps, 25 of 51 patches passing**); plate ON
 5, 6, 5 (**16 traps, 25 of 51 passing**). **−1 trap of 17, 0 patches of 51
-flipped, and `2_GWG030` REGRESSED 3 → 6 for a reason the engineer could not
+flipped, and `PCS2_030` REGRESSED 3 → 6 for a reason the engineer could not
 explain.** Reverted; working copies kept outside the tree so the next
 attempt starts from the measurement. **The deliverable is the negative
 result: the remaining overprint patches need a REAL n-channel buffer — one
@@ -23480,12 +23480,12 @@ predicate are two things that can silently disagree about which pixels a
 shading covers, and the disagreement would show as coverage that changes
 only when a page happens to composite in ink — exactly the kind of drift
 nothing in the existing test suite would catch. Small-scale instance of
-decision 084's shared-predicate rule; verified neutral by diffing Ghent
+decision 084's shared-predicate rule; verified neutral by diffing the suite
 against the pre-refactor binary (27,091 pixels, matching `Pass 122.5`'s
 own figure exactly, i.e. this refactor changed nothing on its own).
 
 **Measured result, recorded as a large improvement and explicitly NOT a
-completed one.** Ghent `GWG 1.0` cells `e`/`j`: green channel now matches
+completed one.** The suite's `PCS 1.0` cells `e`/`j`: green channel now matches
 Acrobat to about one level (187.5 vs 186.6); blue channel does not (55.7
 vs Acrobat's 2.6, down from 209.2 pre-fix). The mechanism for the blue
 residual is undiagnosed — scoped as `Pass 122.7` (`ROADMAP.md` Backlog)
@@ -23551,9 +23551,9 @@ guessed: the mask groups and the folded clips were dumped to PNG and
 right and application is wrong. Fixing it is **the same offscreen-buffer
 work as isolated/knockout groups** (decision 068's territory) and belongs
 with them, not here. Concretely: **strip correlation against Acrobat
-reference strips moved on every measurable Ghent patch and NOT ONE of them
-passes** — `1_GWG1610` 0.515 → 0.575 (reference engine 0.966), `1_GWG168`
-0.661 → 0.725 (0.981), `1_GWG169` 0.884 → 0.905 (0.983). **Ghent standing
+reference strips moved on every measurable suite patch and NOT ONE of them
+passes** — `PCS1_1610` 0.515 → 0.575 (reference engine 0.966), `PCS1_168`
+0.661 → 0.725 (0.981), `PCS1_169` 0.884 → 0.905 (0.983). **The suite standing
 is unchanged at 25 pass / 18 FAIL / 8 UNRESOLVED of 51.**
 
 **★★ THE SOURCED CONTRACT, recorded because three clauses are traps a
@@ -24162,7 +24162,7 @@ free 072.**
 - **2026-08-21 — Decision 077. PDFCE OWNS THE COMPOSITING ARITHMETIC;
   `tiny_skia` IS DEMOTED FROM "THE THING THAT BLENDS" TO "THE THING THAT
   SCAN-CONVERTS" FOR GROUP COMPOSITES — AND THE BLENDING COLOUR SPACE
-  (§11.3.4), NOT THE GROUP MODEL, IS WHAT THE GHENT TRANSPARENCY PANELS
+  (§11.3.4), NOT THE GROUP MODEL, IS WHAT THE SUITE'S TRANSPARENCY PANELS
   ARE BLOCKED ON.** `Pass 97.0`,
   `7160819`/`9b49ca0`/`86a7b70` (`ROADMAP.md` *Shipped*, top).
 
@@ -24187,7 +24187,7 @@ free 072.**
   transparency common, because pdfce's page buffer starts **transparent**
   and the white medium is composited in **once at the end**.
   `Sat(white) = 0`, `Lum(white) = 1`, so Hue/Saturation/Color over white
-  **is white**. `1_GWG162`: three cells (255,255,255) → (184,184,184),
+  **is white**. `PCS1_162`: three cells (255,255,255) → (184,184,184),
   matching pdfium exactly; Luminosity (106,106,106) → (255,20,159)
   against pdfium's (255,22,158). **The failure was mode-dependent and
   therefore invisible in review** — harmless for the four modes
@@ -24198,24 +24198,24 @@ free 072.**
 
   **★ THE SCOPING RULING, which is the part that changes future work.**
   Every mechanism `Pass 97.0` promised was built and each is measurably
-  correct (Ghent traps 67 → 55; `1_GWG161` 14 → 2; soft-mask strip
+  correct (suite traps 67 → 55; `PCS1_161` 14 → 2; soft-mask strip
   correlation 0.735 → 0.975 mean over three patches) — **and the board
   did not move: 26 pass · 14 FAIL · 11 UNRESOLVED of 51, before and
   after.** `docs/compositor-plan.md` §4 expected **seven** patches from
   Stage A and got **zero**. **Decided: the blend SPACE, not the spot
   PLANES, is `Pass 97.1`'s leading deliverable.** Evidence is a hand
-  derivation on `1_GWG162`'s `Difference` cell whose operands the file
+  derivation on `PCS1_162`'s `Difference` cell whose operands the file
   prints — `DeviceCMYK 0 1 0 0` over `DeviceCMYK 0 0 0 1`, §11.3.4
   complement, `|cb′ − cs′|`, complement back = `DeviceCMYK 1 0 1 0`,
   exactly the green the trap surround requires. pdfce renders
-  `(237,1,140)`; **pdfium renders `(202,29,108)`**. **Every Ghent
+  `(237,1,140)`; **pdfium renders `(202,29,108)`**. **Every suite
   transparency patch declares `/Group /CS /DeviceCMYK` on the PAGE**,
-  including `3_GWG161` whose own objects are `ICCBased` RGB — so *a
+  including `PCS3_161` whose own objects are `ICCBased` RGB — so *a
   renderer blending in device sRGB is wrong on all of them regardless of
   what the objects are coloured in*, and no amount of group-model
   correctness reaches the trap.
   **→ Confirmed and given its mechanism by decision 078 (2026-08-21):**
-  the route is **Table 147's inheritance row**, and `3_GWG161`'s share of
+  the route is **Table 147's inheritance row**, and `PCS3_161`'s share of
   it is **15 of 15 blends** — the "fits but not derived" caveat this
   decision recorded is discharged there.
 
@@ -24284,7 +24284,7 @@ free 072.**
   ancestor isolated parent group"* — **and gives the reason**: converting a
   backdrop into another space is not always possible, and would be an
   excessive number of conversions where it is. **This rule is why
-  `3_GWG161` blends in `DeviceCMYK` while its own objects are `ICCBased`
+  `PCS3_161` blends in `DeviceCMYK` while its own objects are `ICCBased`
   RGB**, and it discharged that patch's "unconfirmed" flag by counter
   (15 of its 15 blends wrong).
 
@@ -24296,24 +24296,24 @@ free 072.**
   **A subtractive space is not by itself an error** — the complement is
   applied to the blend *function* and `Normal` is `c_s` on either side of
   it — so counting the space alone would report every CMYK print file in
-  the world as broken. **Two of the thirteen subtractive Ghent patches are
+  the world as broken. **Two of the thirteen subtractive suite patches are
   in exactly that state**, so this is a live distinction, not a
   hypothetical one, and a test exists whose only job is to hold the line.
 
   **(b) The colorant buffer is re-scoped by its own measurement.**
-  Re-measured on two corpora (222nd filing): **Ghent PDF Output Suite —
+  Re-measured on two corpora (222nd filing): **the print-conformance suite —
   13 of 51 files subtractive, 107 blends applied, 107 in the wrong space
   (100.0 %)**; **`fixtures/external` — 15 of 3,735 rendered files (of
   4,012 on disk) subtractive, 49 blends applied, 2 in the wrong space
   (4.1 %)**, and **both of those two files are veraPDF transparency
-  conformance fixtures**. Subtractive groups: **181 over 51 Ghent patches
+  conformance fixtures**. Subtractive groups: **181 over 51 suite patches
   vs 16 over 3,735 real files — 3.55 vs 0.004 per file, ~830×.**
 
   **Decided: `Pass 97.1`'s colorant buffer is a CONFORMANCE and
   print-credibility deliverable, not an appearance one.** It is required —
-  the Ghent transparency panels cannot pass without it — and it will
+  the suite's transparency panels cannot pass without it — and it will
   change **nothing** about how ordinary documents render. **A Pass
-  justified on the Ghent number alone would have been mis-sold**, because
+  justified on the suite number alone would have been mis-sold**, because
   a conformance suite is by construction 100 % of whatever it tests.
   **The consequence is on JUDGEMENT, not on scope:** when the buffer
   lands, the real-world corpus is expected not to move, and that must not
@@ -24480,7 +24480,7 @@ free 072.**
   **(d) ★★ A HARD ACCEPTANCE CRITERION: output must be BYTE-IDENTICAL at any
   core count.** Not *visually* identical, not *within tolerance*. **Every
   measurement this project makes depends on it** — the 4,023-file corpus A/B,
-  the six-page render-identity checks, every Ghent verdict, every
+  the six-page render-identity checks, every suite verdict, every
   `PoisonReason` argument about a cached page rendering a *different* picture.
   Testable for pennies: render at 1 core and at N, compare hashes. **Without
   this criterion, parallelism quietly retires the project's entire regression
@@ -24946,8 +24946,8 @@ free 072.**
   **Measured blast radius**, so the decision is not taken on a hunch:
   external corpus 4,012 PDFs; 2,273 carry an `/OutputIntent`; **65 of
   those 2,273 (2.9 %)** move to ink compositing under the new default,
-  every one a CMYK-intent PDF/A or TWG conformance file. Ghent: 3
-  verdicts fixed (`1_GWG011`, `2_GWG030`, `2_GWG040`), 0 regressed.
+  every one a CMYK-intent PDF/A or TWG conformance file. Suite: 3
+  verdicts fixed (`PCS1_011`, `PCS2_030`, `PCS2_040`), 0 regressed.
 
   **Body-section updates:** §4.1 gains sync entry **(AC)** —
   `Settings::page_blend_space_source` (three variants: `device_native`,
@@ -25057,7 +25057,7 @@ free 072.**
 
   **The finding, in the form that makes it a decision rather than a
   measurement.** `Pass 122.7` (`ROADMAP.md`, Backlog) diagnosed a
-  blue-channel residual on Ghent `GWG 1.0`'s shading cells as belonging
+  blue-channel residual on the suite's `PCS 1.0` shading cells as belonging
   entirely to pdfce's interim `DeviceCMYK`→sRGB table, not to compositing.
   `iccce` went one step further and showed the residual is **structural,
   not a fitting defect**: Acrobat's blue = 0 on this patch is a **normative
@@ -25087,7 +25087,7 @@ free 072.**
   this finding is the concrete reason that boundary is correct here rather
   than merely tidy, since the fix genuinely cannot be built on pdfce's
   side of it. The regression target `Pass 122.7` already recorded (blue ≈ 0
-  **and** green ≈ 156 together, on `GWG 1.0`'s shading cells) stands as the
+  **and** green ≈ 156 together, on `PCS 1.0`'s shading cells) stands as the
   acceptance criterion for whichever transform `iccce` eventually ships.
 
   **Recorded because it is uncomfortable and true, not because it is

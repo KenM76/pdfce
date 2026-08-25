@@ -42,15 +42,67 @@ use pdfce_core::document::Document;
 use pdfce_core::settings::PageBlendSpaceSource;
 use pdfce_render::{RenderOptions, RenderedPage};
 
-/// Render page 1 of a Ghent patch under an explicit blend-space source.
+/// Resolve a patch id (`PCS1_011`) to a file, through the private map.
 ///
-/// The corpus lives outside the repository (`docs/LEGAL.md` §5 — the Ghent
-/// suite is not redistributable here), so every test in this file **skips**
-/// rather than fails when it is absent. A skip is announced on stdout: a
-/// silently-skipped test is indistinguishable from a passing one, which is the
-/// failure mode this project keeps re-learning.
+/// # Why an id and an environment variable rather than a path
+///
+/// Operator ruling 2026-08-25: the licensed print-conformance suite is not
+/// named anywhere in this repository, and neither are its file names — the
+/// repository is public, and the suite's licence carries an affirmative-notice
+/// requirement and a commercial-context restriction. So this test knows a
+/// stable **id** and nothing else.
+///
+/// The resolution chain, in order, and it **never fails, only skips**:
+///
+/// 1. `PDFCE_SUITE_DIR` — the corpus directory, set by whoever has a licensed
+///    copy. Absent on every fresh clone, which is the normal case.
+/// 2. `<dir>/pdfce-manifest.txt` — `id=filename`, one per line, `#` comments.
+///    It lives *with the corpus*, outside the repository, because the file
+///    names are as much the suite's material as the artwork is.
+///
+/// A missing variable, a missing manifest, an id the manifest does not carry,
+/// and a named file that is not on disk are **all skips**, each announced on
+/// stdout. A silently-skipped test is indistinguishable from a passing one,
+/// which is the failure mode this project keeps re-learning.
+fn resolve(id: &str) -> Option<PathBuf> {
+    let Ok(dir) = std::env::var("PDFCE_SUITE_DIR") else {
+        println!("SKIP: {id} — PDFCE_SUITE_DIR is unset (external corpus absent)");
+        return None;
+    };
+    let manifest = PathBuf::from(&dir).join("pdfce-manifest.txt");
+    let Ok(text) = std::fs::read_to_string(&manifest) else {
+        println!("SKIP: {id} — no manifest at {}", manifest.display());
+        return None;
+    };
+    let name = text.lines().find_map(|line| {
+        let line = line.trim();
+        if line.starts_with('#') {
+            return None;
+        }
+        let (key, value) = line.split_once('=')?;
+        (key.trim() == id).then(|| value.trim().to_owned())
+    });
+    let Some(name) = name else {
+        println!("SKIP: {id} — not listed in {}", manifest.display());
+        return None;
+    };
+    let path = PathBuf::from(dir).join(name);
+    if path.exists() {
+        Some(path)
+    } else {
+        println!("SKIP: {id} — listed but not present on disk");
+        None
+    }
+}
+
+/// Render page 1 of a suite patch under an explicit blend-space source.
+///
+/// The corpus lives outside the repository (`docs/LEGAL.md` §5 — it is not
+/// redistributable here), so every test in this file **skips** rather than
+/// fails when it is absent. See [`resolve`] for the chain and for why the
+/// patch is addressed by id.
 fn render(name: &str, source: PageBlendSpaceSource) -> Option<RenderedPage> {
-    let path = PathBuf::from(r"D:\Dev\temp\ghent-patches").join(name);
+    let path = resolve(name)?;
     if !path.exists() {
         println!("SKIP: {} not present (external corpus)", path.display());
         return None;
@@ -63,7 +115,7 @@ fn render(name: &str, source: PageBlendSpaceSource) -> Option<RenderedPage> {
 
 /// The patch this Pass was found on: PDF/X-3, no page group `/CS`, a CMYK
 /// output intent, and overprint content.
-const OVERPRINT_PATCH: &str = "1_GWG011_Overprint-Mode_x3.pdf";
+const OVERPRINT_PATCH: &str = "PCS1_011";
 
 /// Under the shipped default, a CMYK output intent supplies the blending
 /// space, the colorant buffer engages, and the provenance says so.
@@ -114,7 +166,7 @@ fn device_native_reproduces_the_iso_32000_1_answer() {
 /// setting rather than about one of its values.
 #[test]
 fn a_declared_page_group_is_immune_to_the_setting() {
-    const DECLARED: &str = "1_GWG160_Transp_Basic_BM_DeviceCMYK_Non-knockout_X4.pdf";
+    const DECLARED: &str = "PCS1_160";
     let Some(native) = render(DECLARED, PageBlendSpaceSource::DeviceNative) else {
         return;
     };
@@ -164,7 +216,7 @@ fn the_provenance_is_always_reported() {
 
 /// ★ A `DeviceN` shading under overprint is painted in ink and honours it.
 ///
-/// Found 2026-08-25 when the operator read `GWG 1.0` cells `e` and `j` and
+/// Found 2026-08-25 when the operator read `PCS 1.0` cells `e` and `j` and
 /// said they carry no trap X but are *"the wrong colour … always have been"*.
 /// He was right: `shading.rs` had no mention of overprint at all.
 ///
@@ -180,20 +232,17 @@ fn the_provenance_is_always_reported() {
 /// nothing was painted at all. So the paint is asserted beside it.
 #[test]
 fn a_devicen_shading_under_overprint_is_painted_in_ink() {
-    let Some(page) = render(
-        "1_GWG010_CMYK_OP_x3.pdf",
-        PageBlendSpaceSource::OutputIntentIfSubtractive,
-    ) else {
+    let Some(page) = render("PCS1_010", PageBlendSpaceSource::OutputIntentIfSubtractive) else {
         return;
     };
     assert_eq!(
         page.diagnostics.shading.painted, 4,
-        "GWG 1.0 paints four shadings; a zero disclosure below means nothing \
+        "PCS 1.0 paints four shadings; a zero disclosure below means nothing \
          unless they were actually painted"
     );
     assert_eq!(
         page.diagnostics.overprint_shadings_unsupported, 0,
-        "both of GWG 1.0's overprinting shadings are /DeviceN over a \
+        "both of PCS 1.0's overprinting shadings are /DeviceN over a \
          DeviceCMYK alternate, so both take the native ink route and neither \
          needs disclosing"
     );

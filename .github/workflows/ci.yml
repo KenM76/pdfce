@@ -433,6 +433,16 @@ jobs:
       - name: check the ledger numbers have no duplicates
         run: python tools/check-ledger-numbers.py
 
+      # Operator ruling 2026-08-25: the licensed print-conformance suite pdfce
+      # measures itself against is not named anywhere in this PUBLIC repository
+      # -- not in contents, not in file names. The gate has a bootstrapping
+      # problem it solves by holding its needles base64-encoded: a check for
+      # "this word must never appear", written as a plain grep, makes the gate
+      # itself the rule's first violation. It also never echoes an offending
+      # line, because CI logs on a public repository are public too.
+      - name: check the licensed suite is not named anywhere
+        run: python tools/check-suite-name-absent.py
+
       # One operator gesture is ONE undo entry (R179/R49). A `commit()` inside
       # a loop is N entries for one gesture, and leaves earlier commits
       # standing when a later iteration fails -- the `import_form_data` defect

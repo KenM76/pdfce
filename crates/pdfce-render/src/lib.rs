@@ -510,7 +510,7 @@ fn render_impl(
 
     // ★ THE SWITCH. A colorant buffer is engaged ONLY for a page whose
     // group declares a subtractive blending space -- 13 of 51 files in the
-    // Ghent PDF Output Suite, and 15 of 4,012 in `fixtures/external`, of
+    // print-conformance suite, and 15 of 4,012 in `fixtures/external`, of
     // which every single one is a conformance fixture rather than an
     // organic document. Every other page keeps the sRGB path byte for byte,
     // which is not merely a safety measure: ISO 32000-1 §8.6.6.4 makes it
@@ -548,7 +548,7 @@ fn render_impl(
             // before anything is painted, because every element on the page
             // and every non-isolated group inside it composites in it.
             //
-            // ★ This is the number the Ghent transparency panels turn on:
+            // ★ This is the number the suite transparency panels turn on:
             // all of them declare `/Group /CS /DeviceCMYK` here, including
             // the one whose own objects are `ICCBased` RGB, so §11.3.4's
             // complement governs every blend on those pages and pdfce

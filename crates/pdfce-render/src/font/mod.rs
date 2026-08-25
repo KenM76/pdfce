@@ -848,7 +848,7 @@ impl RenderOptions {
     /// Whether a PDF/X file that declares no page group composites in ink
     /// or on screen — and therefore whether **overprint can be represented
     /// at all**, which in an additive space it cannot be (see
-    /// [`pdfce_core::settings::PageBlendSpaceSource`]). On the Ghent PDF
+    /// [`pdfce_core::settings::PageBlendSpaceSource`]). On the suite PDF
     /// Output Suite this moves 24 of 51 patches between the two paths.
     ///
     /// The choice is disclosed rather than silent: the resulting space's

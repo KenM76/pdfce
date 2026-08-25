@@ -1,10 +1,10 @@
-//! Do Ghent patch 23.0's four "same black" panels actually render the same
+//! Do suite patch 23.0's four "same black" panels actually render the same
 //! colour through pdfce's sRGB path?
 //!
 //! # The question, and why it is pdfce's rather than iccce's
 //!
 //! `iccce`'s `note_gray_black_routing_is_yours.md` (2026-08-17, third
-//! amendment 2026-08-18) reclassified GWG patch 23.0 from a colour-management
+//! amendment 2026-08-18) reclassified suite patch 23.0 from a colour-management
 //! problem to a **PDF device-routing** one, and handed it back. The patch
 //! draws one tone four ways and they must match:
 //!
@@ -16,7 +16,7 @@
 //! | `DeviceN` | 75 | `.75 scn` |
 //!
 //! Those are not arbitrary: ISO 32000-1 cl. 10.3.3 says the CMYK equivalent
-//! of a gray is `c = m = y = 0`, `k = 1 − gray`, and `1 − 0.25 = 0.75`. GWG
+//! of a gray is `c = m = y = 0`, `k = 1 − gray`, and `1 − 0.25 = 0.75`. The suite
 //! authored the patch on the device-space rule.
 //!
 //! ★ **Earlier iccce documents circulated 50 % / 0-0-0-50 for these panels
@@ -53,7 +53,7 @@ fn to8(c: [f32; 3]) -> [u8; 3] {
 }
 
 fn main() {
-    println!("Ghent 23.0 — the four-way gray equivalence, through pdfce's sRGB path\n");
+    println!("suite 23.0 — the four-way gray equivalence, through pdfce's sRGB path\n");
 
     // The patch's own values.
     let gray = gray_to_srgb(0.25);

@@ -737,7 +737,7 @@ What *does* work for PDF/X, in descending strength: (1) **ISO 32000-2 §11.4.7
 NOTE 3**, an ISO-primary sentence *describing what ISO 15930-7 does* — the
 strongest citation obtainable, and informative in its own document;
 (2) **pdfa.org** article text via `r.jina.ai` (the trade body, free, quotable);
-(3) **gwg.org** — the Ghent Workgroup's own PDFs, which are free, fetchable
+(3) **the suite's publisher** — its own PDFs, which are free, fetchable
 with plain `curl`, `pypdf`-readable, and are **the authors of the test suite the
 engineer is measuring against**; (4) vendor whitepapers (Esko) and preflight-rule
 help centres (DUON) for the rule as implementers state it.

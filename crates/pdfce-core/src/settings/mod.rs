@@ -391,7 +391,7 @@ pub enum CmykIntent {
 /// no amount of compositing work recovers it. Only an n-colorant buffer
 /// does. This is worth knowing before anyone attempts a cheaper fix.
 ///
-/// Measured on the Ghent PDF Output Suite: **24 of its 51 patches request
+/// Measured on the print-conformance suite: **24 of its 51 patches request
 /// overprint and receive no colorant buffer** under [`Self::DeviceNative`],
 /// and those 24 contain every remaining failure in the suite.
 ///

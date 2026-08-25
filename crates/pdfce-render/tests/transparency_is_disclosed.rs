@@ -37,7 +37,7 @@
 //!
 //! ## What this gap actually costs, measured
 //!
-//! On the operator's Ghent PDF Output Suite 5.0 X-4 file, 2026-08-17:
+//! On the operator's print-conformance suite X-4 file, 2026-08-17:
 //! **113 blend modes and 36 soft masks across six pages**, with page 2
 //! alone accounting for 76 and 31. Page 2 had previously reported no
 //! unsupported images, no unpainted patterns and no refused shadings — it
@@ -333,7 +333,7 @@ fn page_with_form(extra: &str) -> Vec<u8> {
 /// pdfce used to paint the contents straight onto the page, applying those
 /// to each object INSIDE instead. That was invisible until it was counted,
 /// and the way it surfaced is the whole argument for counting a gap before
-/// closing it: the Ghent X-4 file's blend-mode panel still showed the
+/// closing it: the suite X-4 file's blend-mode panel still showed the
 /// suite's failure crosses AFTER blend modes were implemented and verified
 /// correct both in isolation and against a coloured backdrop, while every
 /// blend-mode counter looked healthy. The page carried 148 form XObjects
@@ -670,7 +670,7 @@ fn a_soft_mask_applies_to_the_group_result_not_to_each_object_inside_it() {
 
 /// ★ **§11.3.4 / Table 147 — the blending colour space is INHERITED by a
 /// non-isolated group and CHOSEN by an isolated one, and the difference
-/// is what makes the whole Ghent transparency panel subtractive.**
+/// is what makes the whole suite transparency panel subtractive.**
 ///
 /// Table 147's `/CS` row: *"if the group is non-isolated, `CS` shall be
 /// ignored and the colour space shall be inherited from the group's
@@ -682,7 +682,7 @@ fn a_soft_mask_applies_to_the_group_result_not_to_each_object_inside_it() {
 ///
 /// So a `DeviceCMYK` **page** group makes every non-isolated group on the
 /// page subtractive whatever those groups declare, and that is exactly the
-/// shape of `3_GWG161`: `ICCBased` RGB artwork, `DeviceCMYK` page group,
+/// shape of `PCS3_161`: `ICCBased` RGB artwork, `DeviceCMYK` page group,
 /// and all fifteen of its blends computed on the wrong side of §11.3.4.
 ///
 /// Four cases in one test because the interesting ones are the pairs:
@@ -807,7 +807,7 @@ fn a_cmyk_page_that_only_composites_normal_is_not_counted_as_wrong() {
 /// `DeviceCMYK` is composited in ink, and the `Difference` cell that
 /// motivated the whole build lands on the value §11.3.4 requires.
 ///
-/// # Why this fixture is the Ghent cell and not a synthetic one
+/// # Why this fixture is the suite cell and not a synthetic one
 ///
 /// Because the arithmetic is already pinned by `compositor.rs`'s unit
 /// test, and pinning it twice proves nothing. What is unproven until this

@@ -12,7 +12,7 @@ else. Every pixel of the resulting raster is a measurement of that colour
 space and of nothing else.
 
 They were written for `Pass 85.x` (image colour spaces), where eighteen
-images in the operator's Ghent PDF Output Suite file failed to paint at all
+images in the operator's print-conformance suite file failed to paint at all
 because five spaces were an outright refusal in the image path.
 
 WHY A GENERATOR RATHER THAN CHECKED-IN PDFs
@@ -164,7 +164,7 @@ def main(outdir: str) -> None:
     )
 
     make(outdir, "separation",
-         b"[/Separation /GWGSpot /DeviceCMYK " + fn1 + b"]",
+         b"[/Separation /SuiteSpot /DeviceCMYK " + fn1 + b"]",
          1, lambda x, y: (x * 4,))
 
     # Type-4 calculator, 2-in 4-out, as an INDIRECT stream (7.3.8.1).

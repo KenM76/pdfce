@@ -1,10 +1,10 @@
-# Ghent suite — operator review, 2026-08-21, and what it says about the harness
+# The print-conformance suite — operator review, 2026-08-21, and what it says about the harness
 
 **The operator read the annotated render cell by cell and found defects
-`tools/ghent-check.py` structurally cannot see.** This file records his
+`tools/suite-check.py` structurally cannot see.** This file records his
 observations verbatim-in-substance, my verification of each, and the two
 instrument faults they expose. It exists because these are the only
-independent judgements of pdfce's Ghent output that have ever been taken —
+independent judgements of pdfce's suite output that have ever been taken —
 every other number in this project came from the harness scoring itself.
 
 ---
@@ -18,7 +18,7 @@ in place below rather than edited, because this document's value is that it
 is dated; the corrections are here, at the top, where they cannot be missed.
 
 **1. §2's "seven of the 51 patches use the positive criterion" is FOUR.**
-`GWG150`, `GWG151` and `GWG152` are not among them. Those three state on
+`PCS150`, `PCS151` and `PCS152` are not among them. Those three state on
 their own face *"If a X can be seen, Optional Content is not handled right"*
 — the NEGATIVE criterion, which the harness already implements. Their
 ReadMes mention a check mark only while describing what the failure cross is
@@ -33,8 +33,8 @@ own extracted text at runtime instead of carrying a list.
 the fix it recommends would have changed nothing.** §3 says box 3's crosses
 are *"roughly three times the linear size"* of the calibration patch's, so
 the threshold should become a function of mark size. Measured at the scale
-the harness actually renders: **every trap on `GWG 1.0` is 36–38 px square,
-and the `GWG 16.0` calibration traps are 38 px square. They are the same
+the harness actually renders: **every trap on `PCS 1.0` is 36–38 px square,
+and the `PCS 16.0` calibration traps are 38 px square. They are the same
 size.**
 
 The real fault was simpler and worse: `CONTRAST_MIN = 12.0` had been
@@ -50,12 +50,12 @@ missing population, and they separate cleanly:
 
 An empty interval from 4.1 to 7.4. The floor is now **6.0**, inside it.
 
-⇢ ★ **Had the area term been built as recommended, `GWG 1.0` would have gone
+⇢ ★ **Had the area term been built as recommended, `PCS 1.0` would have gone
 on reporting `clean` — with a fix in place and a plausible reason to stop
 looking.** A fix aimed at a misdiagnosed cause is more dangerous than no fix,
 because it consumes the suspicion.
 
-**3. §1 row 4 (`GWG 1.1`, fail → pass) is NOT REPRODUCIBLE, and is left open
+**3. §1 row 4 (`PCS 1.1`, fail → pass) is NOT REPRODUCIBLE, and is left open
 rather than overruled.** The harness still reports one mark at contrast
 **17.4**; cropped and magnified 6×, it is a solid, filled, high-contrast teal
 X on a blue swatch, not an outline. But the operator's own wording names a
@@ -67,39 +67,39 @@ in its own right and nobody has looked**; it is filed as `Pass 122.4`.
 **4. §5 owed item 4 is DISCHARGED.** *"Check the three optional-content
 patches, which no one has looked at."* Looked at, side by side against
 Acrobat renders: all three show one check mark and *"Default View"*, no
-cross, in both engines. `GWG 15.0`, `15.1`, `15.2` **genuinely pass**. The
+cross, in both engines. `PCS 15.0`, `15.1`, `15.2` **genuinely pass**. The
 only difference from Acrobat is the swatch's cyan — the known CMYK
 colorimetry gap, not a trap.
 
 **5. §5's "26 pass at minimum" is now 25.** It reached 26 by flipping
-`GWG 1.1`, which correction 3 above does not support. Current harness board:
-**11 FAIL / 24 pass / 16 UNRESOLVED**, plus `GWG 5.0` whose mark is present
+`PCS 1.1`, which correction 3 above does not support. Current harness board:
+**11 FAIL / 24 pass / 16 UNRESOLVED**, plus `PCS 5.0` whose mark is present
 but which the harness cannot adjudicate ⇒ **25**.
 
 **One thing §5 item 1 should have said and could not.** A first attempt at
 the check-mark detector keyed on the mark's **colour**, measured from
-`GWG 8.2` (olive). Run against `GWG 8.01` it reported the mark PRESENT — by
+`PCS 8.2` (olive). Run against `PCS 8.01` it reported the mark PRESENT — by
 matching the green end of that patch's spot-colour gradient bar — while
 **both real marks were absent**. ⇒ **The mark's colour is not a constant of
-the criterion**; `GWG 8.2`'s marks are olive and `GWG 8.01`'s are dark green.
+the criterion**; `PCS 8.2`'s marks are olive and `PCS 8.01`'s are dark green.
 Any detector must key on presence relative to a reference render, not a hue.
 No detector shipped in `122.2` for exactly this reason.
 
 Full derivation and the measured populations: `ROADMAP.md`'s `Pass 122.2`
-Shipped entry, and the docstring of `tools/ghent-check.py`.
+Shipped entry, and the docstring of `tools/suite-check.py`.
 
 ---
 
 ★ **Treat this as an ORACLE, not as feedback.** The harness had no
 independent check before today; its thresholds were calibrated against one
-patch (`GWG 16.0`, 2026-08-17) whose answer was known from a code change.
+patch (`PCS 16.0`, 2026-08-17) whose answer was known from a code change.
 That is self-consistency, not ground truth. These rows are ground truth.
 
 ---
 
 ## 1. What he found, and what I confirmed
 
-| # | GWG | harness said | operator says | I verified | verdict |
+| # | PCS | harness said | operator says | I verified | verdict |
 |---|---|---|---|---|---|
 | 3 | 1.0 CMYK Overprint Test | **pass** | cells `d`,`e`,`i`,`j` are **clear fails**; `b`,`g` are faint outlines only | yes — the mask and shading cells carry large, obvious crosses | **FAIL** |
 | 4 | 1.1 CMYK Overprint Mode | **FAIL, 1 cross** | **pass** except a faint outline | the combined render shows no cross at any contrast | **PASS** |
@@ -121,7 +121,7 @@ the operator could not see them either.
 The suite marks a failure two ways, and its own artwork says so:
 
 - **negative marker** — a cross that a correct renderer makes vanish.
-  `ghent-check.py` implements this, thoroughly.
+  `suite-check.py` implements this, thoroughly.
 - **positive marker** — *"If a check mark is visible in the upper right
   corner then DeviceN is respected (= GOOD). If no check mark appears then
   DeviceN color was transformed to CMYK (= ERROR)."*
@@ -129,8 +129,8 @@ The suite marks a failure two ways, and its own artwork says so:
   not be there; it has no notion of a mark that should be there and is not.
 
 **Seven of the 51 patches use the positive criterion** — grep the ReadMes
-for "check mark": `GWG050`, `GWG080`, `GWG081`, `GWG082`, `GWG150`,
-`GWG151`, `GWG152`. Every one of them has been reported `clean` for the
+for "check mark": `PCS050`, `PCS080`, `PCS081`, `PCS082`, `PCS150`,
+`PCS151`, `PCS152`. Every one of them has been reported `clean` for the
 harness's entire life, and at least three of them are failures.
 
 ⇢ **The failure mode is exactly the one this project keeps re-learning: an
@@ -163,13 +163,13 @@ the first three read correctly. The blending-colour-space census
 either fault above.
 
 **What it changes is the scoreboard**, and specifically any sentence of the
-form *"N of 51 Ghent patches pass"*. Every such sentence in `ROADMAP.md`,
+form *"N of 51 suite patches pass"*. Every such sentence in `ROADMAP.md`,
 `FEATURES.md` and `SESSION_LOG.md` — including numbers filed earlier today —
 is an over-count by the size of the check-mark family.
 
 ## 5. Owed work
 
-1. **Teach `ghent-check.py` the positive criterion.** Per-patch, from the
+1. **Teach `suite-check.py` the positive criterion.** Per-patch, from the
    ReadMe: which marker, where, what colour. Report `MISSING-MARK` as its
    own verdict rather than folding it into `X`.
 2. **Give the contrast floor an area term**, calibrated against the rows in

@@ -96,13 +96,13 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
-### `7b1f47a` — `Pass 124.0` ships: `tools/intent-census/`, and a rendering-intent population pdfce had no number for is now measured — 12 of 51 Ghent print files name an intent, 1 names two, none names more; `/DestOutputProfile` is exactly one per document in 51 of 51 — 2026-08-25 (two-hundred-and-fifty-first filing)
+### `7b1f47a` — `Pass 124.0` ships: `tools/intent-census/`, and a rendering-intent population pdfce had no number for is now measured — 12 of 51 suite print files name an intent, 1 names two, none names more; `/DestOutputProfile` is exactly one per document in 51 of 51 — 2026-08-25 (two-hundred-and-fifty-first filing)
 
 **Sourcing.** No shell in this filing (librarian invocation). The measurement
 figures below are **relayed** from `tools/intent-census/README.md` and the
 outbound reply, which state their own method beside each figure, per hard
 rule 8. Three source-code claims (the `ri`/`i` no-op match, the absent `/RI`
-key, and the `GWG` occurrence count in `tools/ghent-check.py`) were
+key, and the suite-identifier occurrence count in `tools/suite-check.py`) were
 **independently re-confirmed by this role's own `Grep` on live source this
 filing** — that distinction is called out inline below rather than left
 implicit, per hard rule 11's "check a draft claim of your own before
@@ -147,19 +147,19 @@ measurement of at all**, in as many words.
 error.** A rendering intent reaches a PDF either as `/RI` in an `/ExtGState`
 or as the `ri` content-stream operator, and in any modern producer's output
 both routes sit inside a Flate-compressed object or content stream. A byte
-grep for `/RI` therefore **measures zero and is wrong**: on the 51-file Ghent
+grep for `/RI` therefore **measures zero and is wrong**: on the 51-file suite
 set, the raw (non-inflating) pass found **0 of 51** files naming an intent;
 the deep (inflate-then-search) pass found **12 of 51**. The raw pass is kept
 in the tool rather than deleted, so the undercount is re-derivable rather
 than merely asserted.
 
-**Ghent Output Suite v5.0 — 51 print-production PDFs, every one deep-scanned:**
+**The print-conformance suite — 51 print-production PDFs, every one deep-scanned:**
 
 | statistic | value |
 |---|---|
 | files naming any rendering intent | **12 of 51** (24 %) |
-| files naming more than one | **1 of 51** — `3_GWG221_OutputIntentChangeIndicator_x4.pdf`, `Perceptual` + `RelativeColorimetric`; none names more |
-| distinct `/ICCBased` source-profile object references, max | **4** (`3_GWG130_ICC_Source_Profile_x4.pdf`) |
+| files naming more than one | **1 of 51** — `PCS3_221`, `Perceptual` + `RelativeColorimetric`; none names more |
+| distinct `/ICCBased` source-profile object references, max | **4** (`PCS3_130`) |
 | distinct `/ICCBased` source-profile object references, mean | **0.29** over 51 files; 12 of 51 carry any |
 | distinct `/DestOutputProfile` references | **exactly 1, in 51 of 51 files** |
 
@@ -234,10 +234,11 @@ this role's own `Grep` on live source this filing** (not merely relayed):
   SESSION.md`."
 - **★ A draft claim caught before it shipped.** The reply's own text records
   that its author drafted *"ours does not carry document names"* about
-  `tools/ghent-check.py`, then grepped before sending and found the opposite
-  — the file mentions `GWG` **18 times** (re-confirmed by this role's own
-  `Grep`: 18), names individual patches, and **quotes one patch's printed
-  caption verbatim**. See the new open operator question `(bt)`, below.
+  `tools/suite-check.py`, then grepped before sending and found the opposite
+  — the file mentions the suite's identifier **18 times** (re-confirmed by
+  this role's own `Grep`: 18), names individual patches, and **quotes one
+  patch's printed caption verbatim**. See the new open operator question
+  `(bt)`, below.
 
 ---
 
@@ -289,7 +290,7 @@ which covers the `Pass 122.7` re-scope this same census informs.
 | Pass family ceiling | **123** | **124** — new family; next free **125** |
 | decisions (`ARCHITECTURE.md` §12) | **086** | **087** — the `Pass 122.7` re-scope and the clamp-finding acceptance (below). Next free **088**. |
 | standing rules | **R217** | unchanged, next free **R218** — no new pattern, a scope call and a measurement |
-| operator questions | ceiling **(bs)** (retired/withdrawn), next free **(bt)`** — ★ corrected this filing, see the footnote on the `Pass 123.0` entry above and on the 250th `SESSION_LOG.md` entry; both said "next free `(bs)`," which the *Open operator questions* section itself (lines confirming `(bt)` twice) contradicts | **`(bt)` FILED** (the `GWG`-mention licence question, below). New ceiling **(bt)**, next free **(bu)**. |
+| operator questions | ceiling **(bs)** (retired/withdrawn), next free **(bt)`** — ★ corrected this filing, see the footnote on the `Pass 123.0` entry above and on the 250th `SESSION_LOG.md` entry; both said "next free `(bs)`," which the *Open operator questions* section itself (lines confirming `(bt)` twice) contradicts | **`(bt)` FILED** (the suite-identifier-mention licence question, below). New ceiling **(bt)**, next free **(bu)** — ★ **`(bt)` ANSWERED and `(bu)` FILED this same filing (2026-08-25, `Pass 124.2`, below)**; see the *Open operator questions* section for both. |
 | `render-page` metrics line | **92 keys** | unchanged — no new counter |
 | `FEATURES.md` | — | one new *Planned* row (`Pass 124.1`'s capability); no *Implemented* changes |
 | `PRIOR_ART.md` | — | unchanged — no new dependency |
@@ -517,7 +518,7 @@ split, and the dependency. §9 gains a `brotli` 8.0.4 dependency paragraph.
 | ledger | before | after |
 |---|---|---|
 | Pass IDs | Brotli filed CONDITIONAL in *Backlog*, no Pass ID | **`Pass 123.0` SHIPPED** (moved to *Shipped*; Backlog entry fully deleted per this project's fully-delete-on-ship convention — its sourcing detail is preserved in `filter__brotli.md` and recapped above) |
-| Pass family ceiling | **122** | **123** — new family (unrelated to family 122's overprint/Ghent work); next free **124** |
+| Pass family ceiling | **122** | **123** — new family (unrelated to family 122's overprint/suite work); next free **124** |
 | decisions (`ARCHITECTURE.md` §12) | **085** | **086** — the extension-vs-ISO scope call and the read/write split. Next free **087**. |
 | standing rules | **R217** | unchanged, next free **R218** |
 | operator questions | ceiling **(bs)**, next free **(bs)** | **`(bq)` ANSWERED and CLOSED** (nested closure in place, below the ceiling — `(bq)` was never the ceiling). Ceiling unchanged at **(bs)**, next free **(bs)**. |
@@ -555,7 +556,7 @@ method beside each figure — per hard rule 8.
 
 A `/DeviceN [/Cyan /Magenta]` shading painted over an orange ground now
 lets the yellow beneath survive under overprint — which is what overprint
-means, and why Acrobat renders Ghent `GWG 1.0` cells `e`/`j` with a green
+means, and why Acrobat renders the suite's `PCS 1.0` cells `e`/`j` with a green
 core. Before this Pass, pdfce replaced all four colorants and rendered
 them blue.
 
@@ -605,7 +606,7 @@ shared by both paint routes rather than copied — the two must agree
 about *which pixels a shading covers*, exactly and always, or coverage
 could silently change on a page that happened to composite in ink, which
 nothing would flag. Decision 084's shared-predicate rule at small scale.
-Verified neutral: Ghent's diff against the pre-refactor binary was
+Verified neutral: the suite's diff against the pre-refactor binary was
 **27,091** pixels, exactly the figure `Pass 122.5` alone accounts for.
 
 ---
@@ -615,10 +616,10 @@ Verified neutral: Ghent's diff against the pre-refactor binary was
 Gated on overprint in force AND the ramp keeping colorants AND a
 `Separation`/`DeviceN` source. Of **114** external-corpus `DeviceCMYK`
 files, **zero** combine an ink buffer with shadings and overprint —
-external corpus untouched. **Six** Ghent patches are candidates
-(`1_GWG010`, `1_GWG1611`, `1_GWG169`, `2_GWG020`, `2_GWG080`, `2_GWG081`);
-all now report `overprint_shadings_unsupported=0`. **The Ghent board is
-UNCHANGED at `27 pass / 8 FAIL / 16 UNRESOLVED`** — `GWG 1.0` still fails
+external corpus untouched. **Six** suite patches are candidates
+(`PCS1_010`, `PCS1_1611`, `PCS1_169`, `PCS2_020`, `PCS2_080`, `PCS2_081`);
+all now report `overprint_shadings_unsupported=0`. **The suite board is
+UNCHANGED at `27 pass / 8 FAIL / 16 UNRESOLVED`** — `PCS 1.0` still fails
 on cells `b`/`g`, a **different defect** (the trap-X/`/All` bucket). This
 entry does not imply a board move.
 
@@ -712,7 +713,7 @@ Ken, 2026-08-25, verbatim: *"btw e and j don't have x but they are the wrong
 color and always have been since the x was removed."*
 
 This falsifies a claim recorded in `docs/NEXT_SESSION.md` (engineer-owned,
-not this file) the same session, which read **six** cells of `GWG 1.0` as
+not this file) the same session, which read **six** cells of `PCS 1.0` as
 diverging and called `sep_all_approximated=6` *"coincidence-resistant."*
 **Only four cells carry a trap X.** The engineer had read the X-shaped
 figure inside cells `e`/`j` as a failure marker; it is the **artwork** —
@@ -725,7 +726,7 @@ correction of that claim; nothing in `ROADMAP.md` needs correcting for it,
 because the false claim was never filed here in the first place.
 
 **The disconfirming evidence was already in hand, in the same session.**
-`tools/ghent-check.py` had reported `GWG 1.0` at **4 traps**, all in the
+`tools/suite-check.py` had reported `PCS 1.0` at **4 traps**, all in the
 left-hand font/vector columns, none in the shading column — the harness
 and the operator agreed; only the engineer's own eyeballing of the render
 did not. The shape worth keeping is not "the operator caught something
@@ -783,7 +784,7 @@ explicitly.
 sibling, one new diagnostic counter on `render-page`'s stable metrics line
 (**92 keys now**, `check-metrics-line-contract.py` green) and in the
 CLI's per-key disclosure table, with the coupling above explained inline.
-Reports **2** on `GWG 1.0` — **exactly the two shading cells the operator
+Reports **2** on `PCS 1.0` — **exactly the two shading cells the operator
 named** (`e`, `j`), arrived at independently of his message, which is the
 tie between the counter and the defect it names.
 
@@ -810,7 +811,7 @@ test file, including the counter asserted as **exactly 2**, not merely
 non-zero — a counter firing on the wrong population would still be
 non-zero). `cargo fmt --all --check` and `cargo clippy --workspace
 --all-targets` clean. All **16** runnable gates green. `cargo tree -p
-pdfce-core` / `-p pdfce-render` show no GUI dependency. **The Ghent board
+pdfce-core` / `-p pdfce-render` show no GUI dependency. **The suite board
 is UNCHANGED at `27 pass / 8 FAIL / 16 UNRESOLVED`** — this commit
 disclosed a defect, it did not fix one, and the board correctly does not
 move.
@@ -849,7 +850,7 @@ dispatch, per hard rule 8.
 
 ---
 
-### `270b9d0` — `Pass 122.5` ships: print files that ask for ink get ink, and say so — ★★★★★ THE GHENT BOARD MOVES FOR THE FIRST TIME IN THIS DIRECTION: `24 pass / 11 FAIL / 16 UNRESOLVED` → `27 pass / 8 FAIL / 16 UNRESOLVED`, THREE PATCHES FIXED, ZERO REGRESSIONS — 2026-08-24 (two-hundred-and-forty-sixth filing)
+### `270b9d0` — `Pass 122.5` ships: print files that ask for ink get ink, and say so — ★★★★★ THE SUITE BOARD MOVES FOR THE FIRST TIME IN THIS DIRECTION: `24 pass / 11 FAIL / 16 UNRESOLVED` → `27 pass / 8 FAIL / 16 UNRESOLVED`, THREE PATCHES FIXED, ZERO REGRESSIONS — 2026-08-24 (two-hundred-and-forty-sixth filing)
 
 **Sourcing.** No shell in this filing (librarian invocation). Every figure
 below is **relayed from the engineer's own dispatch**, which does have a
@@ -904,7 +905,7 @@ withdrawn.
 External corpus **4,012** PDFs; **2,273** carry an `/OutputIntent`; **65
 of those 2,273 (2.9 %)** move to ink compositing under the new default,
 and every one of the 65 is a CMYK-intent PDF/A or TWG conformance file.
-Ghent verdicts changed: **3 fixed, 0 regressed.**
+Suite verdicts changed: **3 fixed, 0 regressed.**
 
 ---
 
@@ -960,7 +961,7 @@ intent; `DeviceNative` gives the **opposite** answer on the same file)
 plus an over-reach guard (a page that **declares** its own group `/CS`
 renders pixel-identical under every value of the setting, because the
 setting fills a silence and must not touch a file that isn't silent).
-All four skip loudly, not quietly, when the external Ghent corpus is
+All four skip loudly, not quietly, when the external suite corpus is
 absent.
 
 ---
@@ -988,18 +989,18 @@ role until seen directly (hard rule 8).
 **Harness board moves for the first time in this direction:
 `24 pass / 11 FAIL / 16 UNRESOLVED` → `27 pass / 8 FAIL / 16 UNRESOLVED`**
 (27+8+16 = 51). Three verdicts flipped, all FAIL → pass, **zero
-regressions**: `1_GWG011` (CMYK Overprint Mode — the same patch
-`Pass 122.4` measured), `2_GWG030` (Gray K black Overprint), `2_GWG040`
+regressions**: `PCS1_011` (CMYK Overprint Mode — the same patch
+`Pass 122.4` measured), `PCS2_030` (Gray K black Overprint), `PCS2_040`
 (White Overprint).
 
 **Hand-adjudicated minimum, carrying forward `Pass 122.4`'s two
-out-of-band adjudications:** `27` harness passes + `GWG 5.0`
+out-of-band adjudications:** `27` harness passes + `PCS 5.0`
 (hand-verified pass, harness-unadjudicable) = **28 pass, at minimum**.
 Of the 16 harness-UNRESOLVED, the `MARK?` population is **unchanged at
-4** (`GWG 5.0`/`8.2`/`8.1`/`8.01`) — **3 of those 4 are known FAIL**
+4** (`PCS 5.0`/`8.2`/`8.1`/`8.01`) — **3 of those 4 are known FAIL**
 (`8.2`, `8.1`, `8.01` — Acrobat shows check marks pdfce does not paint, a
 per-sample image-overprint gap, unaffected by this Pass) and **1 is
-known PASS** (`GWG 5.0`).
+known PASS** (`PCS 5.0`).
 
 **★ Supersedes, without rewriting:** the `24/11/16` harness figure and
 the `25`/`26`/`28 at minimum` hand-adjudicated figures carried in the
@@ -1016,7 +1017,7 @@ adjudication layered on top of it.
 `[x] core`, `[x] cli`; `gui` unchanged — tracks `D:\dev\pdfceGUI`, not
 shown reachable there. New *Implemented* row for the page-group
 blend-space-source setting, placed beside the existing colorant-buffer
-row; Ghent banner figures corrected to the board above.
+row; suite banner figures corrected to the board above.
 
 ---
 
@@ -1035,13 +1036,13 @@ still only a suggestion, not built).
 
 ---
 
-### `f6457ee` — `Pass 122.2` ships: the Ghent harness stops reporting `clean` on four patches it never examined — ★★★ ONE FAULT FIXED (the contrast floor, but NOT for the reason the founding review gave), ONE FAULT REPLACED BY AN HONEST REFUSAL (`MARK?`, not a detector), AND THE REVIEW'S OWN FLOOR FIGURE (26) DOES NOT REPRODUCE — CORRECTED CURRENT STANDING IS 25 — 2026-08-24 (two-hundred-and-forty-third filing)
+### `f6457ee` — `Pass 122.2` ships: the suite harness stops reporting `clean` on four patches it never examined — ★★★ ONE FAULT FIXED (the contrast floor, but NOT for the reason the founding review gave), ONE FAULT REPLACED BY AN HONEST REFUSAL (`MARK?`, not a detector), AND THE REVIEW'S OWN FLOOR FIGURE (26) DOES NOT REPRODUCE — CORRECTED CURRENT STANDING IS 25 — 2026-08-24 (two-hundred-and-forty-third filing)
 
 **Sourcing.** No shell in this filing (librarian invocation). Every figure
 below is **relayed from the engineer's own dispatch**, which does have a
 shell and stated its method beside each figure — per hard rule 8, this
 entire entry is the relayed case, not independently re-measured. All 16
-`tools/check-*` gates reported exit 0; no Rust changed (`tools/ghent-check.py`
+`tools/check-*` gates reported exit 0; no Rust changed (`tools/suite-check.py`
 only), so no test/fmt/clippy/`cargo tree` delta applies — the harness is
 out-of-tree tooling, never shipped, never in `cargo test`.
 
@@ -1049,8 +1050,8 @@ out-of-tree tooling, never shipped, never in `cargo test`.
 
 #### What shipped, in one paragraph
 
-`docs/ghent-operator-review-2026-08-21.md` found two instrument faults in
-`tools/ghent-check.py`: a contrast floor calibrated against the wrong
+`docs/suite-operator-review-2026-08-21.md` found two instrument faults in
+`tools/suite-check.py`: a contrast floor calibrated against the wrong
 population, and a harness that only hunts a mark that should be ABSENT,
 blind to the suite's other criterion — a mark that should be PRESENT. This
 Pass repairs the first and replaces the second's false `clean` with an
@@ -1066,22 +1067,22 @@ phrase-grep that found a mention, not a criterion.
 #### ★★★ Fault 1 — the contrast floor: FIXED, but not for the diagnosed reason
 
 `CONTRAST_MIN` 12.0 → 6.0, calibrated against the operator's own cell-by-cell
-reading of `GWG 1.0` (the review's calibration set) — his four "clear fails"
+reading of `PCS 1.0` (the review's calibration set) — his four "clear fails"
 (cells i/d/j/e) measure **10.7, 10.2, 7.8, 7.4** at the harness's own scale;
 his two "faint outline only" (b/g) measure **4.1, 4.1**. An **empty interval**
 from 4.1 to 7.4 — 6.0 sits in the middle with ~1.4 levels of margin either
 side. Cross-checked before shipping: the pre-existing sub-perceptual
-population stays ≤1.1 across every Acrobat render; `GWG 16.2`'s genuinely
+population stays ≤1.1 across every Acrobat render; `PCS 16.2`'s genuinely
 invisible cells (1.3–3.3) stay rejected; across all 51 patches the change
-flips **exactly one** verdict, `GWG 1.0` pass → FAIL.
+flips **exactly one** verdict, `PCS 1.0` pass → FAIL.
 
 **★★ The review's own diagnosis of this fault does not hold, and this is
 worth recording as its own finding, not folded into "fixed."** §3 of the
 review says the floor "has no area term" and that box 3's crosses are
 "roughly three times the linear size" of the calibration patch's, so the
 prescribed remedy was to make the threshold a function of mark size.
-**Measured, before implementing it: every trap on `GWG 1.0` and the
-`GWG 16.0` calibration patch is the SAME pixel size at this harness's render
+**Measured, before implementing it: every trap on `PCS 1.0` and the
+`PCS 16.0` calibration patch is the SAME pixel size at this harness's render
 scale — 36–38 px square, both.** An area term would have changed nothing on
 this population; the fault was never geometry, it was one population's
 threshold (calibrated on ten sub-perceptual swatches) applied to a different
@@ -1097,15 +1098,15 @@ clean with a fix already in place and a reason to stop looking.
 #### ★★★ Fault 2 — the positive criterion: NOT a detector; a false `clean` removed and replaced by an honest `MARK?`
 
 **★ CORRECTS THE FOUNDING REVIEW'S OWN LIST: FOUR PATCHES, NOT SEVEN.** The
-review's list (`GWG 050/080/081/082/150/151/152`) came from a `grep` of the
-suite's ReadMes for the phrase "check mark". `GWG 150`/`151`/`152` do NOT
+review's list (`PCS 050/080/081/082/150/151/152`) came from a `grep` of the
+suite's ReadMes for the phrase "check mark". `PCS 150`/`151`/`152` do NOT
 belong — their own ReadMe text states the suite's **negative** criterion
 (*"If a X can be seen, Optional Content is not handled right"*) and mentions
 "check mark" only while describing what the FAILURE CROSS is drawn out of
 ("a cross consisting of 2 check marks"). **A grep for a phrase finds a
 mention, not a criterion.** Re-verified 2026-08-24 against Acrobat renders of
 all three: one check mark, "Default View", no cross, in both engines —
-**`GWG 15.0`/`15.1`/`15.2` genuinely PASS**, discharging the review's owed
+**`PCS 15.0`/`15.1`/`15.2` genuinely PASS**, discharging the review's owed
 item 4 (three patches "no one has looked at"). The harness now reads each
 patch's own extracted ReadMe text at runtime (the pattern `ref_style`
 already used), so this list can no longer drift from the corpus by a stale
@@ -1113,10 +1114,10 @@ grep.
 
 The four real check-mark patches score `MARK?` — a distinct verdict, counted
 UNRESOLVED, never folded into `pass` or `FAIL`. Ground truth recorded BY
-HAND in `tools/ghent-check.py`'s own docstring, against Acrobat-Pro renders,
+HAND in `tools/suite-check.py`'s own docstring, against Acrobat-Pro renders,
 because no automated detector ships this Pass:
 
-| GWG | Acrobat shows | pdfce shows | verdict |
+| PCS | Acrobat shows | pdfce shows | verdict |
 |---|---|---|---|
 | `8.2` DeviceN (4 col.) | two olive marks ~46×56 px, upper-right of each image, plus a smaller inline one | inline mark only | **FAIL** |
 | `8.01` DeviceN (6 col.) | two dark-green marks on the images plus ~15 more along the spot-colour gradient bar | none | **FAIL** |
@@ -1125,7 +1126,7 @@ because no automated detector ships this Pass:
 
 **★★ THE TRAP THIS RAISED, CAUGHT MID-SESSION, AND WHY NO DETECTOR SHIPS.** A
 first detector keyed on the mark's OWN COLOUR (olive, measured from
-`GWG 8.2`'s genuine mark). Run against `GWG 8.01` it reported the mark
+`PCS 8.2`'s genuine mark). Run against `PCS 8.01` it reported the mark
 PRESENT — matching the green stop of that patch's own spot-colour gradient
 bar — while BOTH real marks were absent: a false green produced BY the fix
 for a false green, on the very patch the operator had already flagged.
@@ -1147,18 +1148,18 @@ rewritten, per hard rule 1.
 
 Harness board after this Pass: **`24 pass / 11 FAIL / 16 UNRESOLVED`**
 (24+11+16 = 51). Arithmetic against the prior board (`29/10/12`): the one
-`GWG 1.0` flip accounts for `29 − 1 = 28` and `10 + 1 = 11`; the four
+`PCS 1.0` flip accounts for `29 − 1 = 28` and `10 + 1 = 11`; the four
 reclassified check-mark patches account for `28 − 4 = 24` and
 `12 + 4 = 16`. Every patch accounted for.
 
 **The one-patch gap between the harness's `24` and the corrected `25` is
-`GWG 5.0`** — verified correct by hand (table above) but not yet
+`PCS 5.0`** — verified correct by hand (table above) but not yet
 adjudicable by the harness itself, so it stays folded into `MARK?`/
 UNRESOLVED on the board's own count rather than being hand-promoted into
 the harness's own tally.
 
 **★★ Why the review's `26 pass AT MINIMUM` does not reproduce, and this is
-left disputed rather than resolved.** That figure counted `GWG 1.1` as a
+left disputed rather than resolved.** That figure counted `PCS 1.1` as a
 flip FAIL → PASS, from the operator's own words: *"the combined render
 shows no cross at any contrast."* Re-examined 2026-08-24, cropped and
 magnified 6×, the **individual** patch render — what this harness actually
@@ -1166,7 +1167,7 @@ scores — shows a solid, filled, high-contrast teal X on a blue swatch at
 contrast 17.4, not an outline. **The two observations may both be true of
 two different artefacts** — the combined multi-patch page vs. the
 single-patch render — and this filing does not overrule the only
-independent oracle this harness has ever had. `GWG 1.1` stays FAIL on the
+independent oracle this harness has ever had. `PCS 1.1` stays FAIL on the
 board. **See `Pass 122.4`, filed below**, to chase whether the combined and
 individual renders genuinely disagree — which would be a defect in its own
 right, independent of this instrument repair.
@@ -1184,20 +1185,20 @@ New personal_rag/pdf lessons: `lesson_20260824_check_mark_detector_must_key_on_p
 mechanism rather than merely failing to separate two hypotheses of matching
 magnitude).
 
-**★ `docs/ghent-operator-review-2026-08-21.md` is NOT edited by this
+**★ `docs/suite-operator-review-2026-08-21.md` is NOT edited by this
 filing.** `Pass 122.2`'s own acceptance criteria say so explicitly — *"an
 oracle amended to agree with the instrument is not an oracle"* — and this
 role's remit treats it as engineer-owned. Its two now-superseded claims (the
 area-term diagnosis; the seven-patch list) are corrected here and in the
-Ghent standing board instead, with a pointer back to this entry.
+Suite standing board instead, with a pointer back to this entry.
 
 ---
 
 ### `c4a85d0` — `Pass 97.1g`: a non-isolated group on an ink page can finally see what is under it — ★★ THE ACCEPTANCE CRITERION IS MET (`cmyk_groups_approximated` 118 → 0) AND THE HEADLINE RESULT IS STILL NEGATIVE: ZERO PIXELS DIFFER IN ANY CORPUS PDFCE HAS — 2026-08-24 (two-hundred-and-forty-second filing)
 
 **★ AMENDED 2026-08-24, LATER THE SAME DAY, by `Pass 122.2` (`f6457ee`,
-243rd filing) — the Ghent board figure quoted below is superseded within
-hours of being filed.** This entry's own line said *"Ghent board: 29 pass /
+243rd filing) — the suite board figure quoted below is superseded within
+hours of being filed.** This entry's own line said *"suite board: 29 pass /
 10 FAIL / 12 unresolved — unchanged... corrected ceiling 26"*. **Both halves
 of that parenthetical are now stale**: the harness itself moved to
 `24 / 11 / 16` (two instrument faults repaired, not a rendering change —
@@ -1236,20 +1237,20 @@ disclosure stays honest under memory pressure.
 #### ★★ Read the criterion and the headline separately — they disagree, and the disagreement is the finding
 
 The Backlog acceptance said *"`cmyk_groups_approximated` reaches 0 on the
-Ghent suite."* **It does: 118 → 0.** But **this Pass changes no rendering
+suite."* **It does: 118 → 0.** But **this Pass changes no rendering
 in any corpus pdfce has**, measured against a binary built from `bb154ed`
 in a throwaway worktree:
 
-- Ghent PDF Output Suite, all 51 patches, pre- vs post-fix: **0 differing
+- The print-conformance suite, all 51 patches, pre- vs post-fix: **0 differing
   pixels, on any patch.**
-- Ghent board: **29 pass / 10 FAIL / 12 unresolved — unchanged** (the
+- suite board: **29 pass / 10 FAIL / 12 unresolved — unchanged** (the
   harness's own count; `R210`'s over-count caveat still applies, corrected
   ceiling 26).
 - External corpus, **4,012 PDFs**: **zero** contain both "Transparency" and
   "DeviceCMYK". 114 mention `DeviceCMYK`, 15 allocate a colorant buffer, and
   the pre/post A/B over those 114 gives **0 differing renders.**
 
-Thirteen second walks **do** occur on Ghent, and every one over-triggers the
+Thirteen second walks **do** occur on the suite, and every one over-triggers the
 deliberately-conservative `backdrop_dependent` test in `interpret.rs`: the
 suite's blend-mode patches put their `/BM` in the graphics state **around**
 the `Do`, which the group's own composite had already honoured.
@@ -6752,7 +6753,7 @@ bundle and pushing are both the operator's calls and this role did neither.
 (Forward slashes deliberately — see hard rule 11's own note.)
 
 
-### `c24ad7a` — THE FILING COMMIT THAT COULD NOT FILE ITSELF: the 226th filing's own commit carried three code repairs, so the gate that files commits went red on the commit that made it green — no Pass ID; record + three hard-rule-11 repairs; ★★★ **THE GENERALISABLE HALF, AND IT BELONGS TO THE ENGINEER RATHER THAN TO THIS ROLE — A LIBRARIAN FILING THAT ALSO CARRIES A CODE CHANGE CANNOT FILE ITSELF, AND MANUFACTURES EXACTLY ONE MORE UNFILED COMMIT PER FILING**; ★★ **MINT DECLINED AT n=1 AND THE DECLINE NAMES ITS PRICE — unlike four of the five candidates declined this week, THIS ONE HAS A MECHANICAL ORACLE** (`git diff --name-only` against the commit subject), so the warrant for declining is the instance count, not the impossibility of a gate; ★★ **THE SHAPE QUESTION THE DISPATCH ASKED IS ANSWERED "REPEATED, NOT COINCIDENCE" — AND THE ANSWER IS AN AMENDMENT TO `R210`'S SCOPE, NOT `R212`**: the Ghent over-count and the string-gap gate's *"has caught it every time"* are **one mechanism** — an instrument's misses live inside its own denominator, so silence is emitted as success and only an **oracle outside the instrument** can find them; ★ **THREE CLAIMS THIS SESSION MADE ABOUT ITS OWN OUTPUT WERE CHECKED AGAINST BYTES AND ALL THREE HOLD** — `od -c` on the pre-repair blob shows **two real `\r` bytes**, `git log -S` names **`38b0330` (2026-08-18)** as the introducing commit, and `ls` resolves the repaired path — 2026-08-22 (two-hundred-and-twenty-seventh filing)
+### `c24ad7a` — THE FILING COMMIT THAT COULD NOT FILE ITSELF: the 226th filing's own commit carried three code repairs, so the gate that files commits went red on the commit that made it green — no Pass ID; record + three hard-rule-11 repairs; ★★★ **THE GENERALISABLE HALF, AND IT BELONGS TO THE ENGINEER RATHER THAN TO THIS ROLE — A LIBRARIAN FILING THAT ALSO CARRIES A CODE CHANGE CANNOT FILE ITSELF, AND MANUFACTURES EXACTLY ONE MORE UNFILED COMMIT PER FILING**; ★★ **MINT DECLINED AT n=1 AND THE DECLINE NAMES ITS PRICE — unlike four of the five candidates declined this week, THIS ONE HAS A MECHANICAL ORACLE** (`git diff --name-only` against the commit subject), so the warrant for declining is the instance count, not the impossibility of a gate; ★★ **THE SHAPE QUESTION THE DISPATCH ASKED IS ANSWERED "REPEATED, NOT COINCIDENCE" — AND THE ANSWER IS AN AMENDMENT TO `R210`'S SCOPE, NOT `R212`**: the suite over-count and the string-gap gate's *"has caught it every time"* are **one mechanism** — an instrument's misses live inside its own denominator, so silence is emitted as success and only an **oracle outside the instrument** can find them; ★ **THREE CLAIMS THIS SESSION MADE ABOUT ITS OWN OUTPUT WERE CHECKED AGAINST BYTES AND ALL THREE HOLD** — `od -c` on the pre-repair blob shows **two real `\r` bytes**, `git log -S` names **`38b0330` (2026-08-18)** as the introducing commit, and `ls` resolves the repaired path — 2026-08-22 (two-hundred-and-twenty-seventh filing)
 
 **Sourcing.** Shell held and used (hard rule 8); every figure below names the
 command that produced it. **Nothing was committed by this role, and nothing
@@ -6874,12 +6875,12 @@ false.** `ae06440` (2026-08-20) is titled *"the string-gap gate reported two of
 three"*, and the miss was found **by a human who knew there were three**.
 Record: **three episodes, one under-report.** The ordinal (*"third time"*)
 survives; the absolute (*"every time"*) does not. The commit's author noted the
-resemblance to this week's Ghent over-count and asked whether it is a repeated
+resemblance to this week's suite over-count and asked whether it is a repeated
 shape. **It is**, and the argument is:
 
 **The mechanism is identical, not merely analogous.**
 
-| | Ghent, 2026-08-21 (`R210`'s founding instance) | the string-gap gate, 2026-08-22 |
+| | the suite, 2026-08-21 (`R210`'s founding instance) | the string-gap gate, 2026-08-22 |
 |---|---|---|
 | the figure | `29 pass of 51` | *"has caught it every time"* |
 | what produced it | the harness scoring itself | the gate's green runs, read as a complete history |
@@ -6903,13 +6904,13 @@ counts"* — and **a scope note is precisely the part of a rule that a new
 instance is entitled to widen.** Minting `R212` would put one mechanism under
 two numbers, which is the fragmentation the 220th, 222nd and 223rd filings all
 declined to commit, and a reader hitting the string-gap rule would have no way
-to know the Ghent derivation was the same thing.
+to know the suite derivation was the same thing.
 
 **So: `R210` is amended in place, with its original scope note kept quoted**
 (see *Standing rules*, `R210`, amendment of 2026-08-22). **The ceiling does not
 move.**
 
-**★ The one asymmetry, stated so the amendment is not over-read.** In the Ghent
+**★ The one asymmetry, stated so the amendment is not over-read.** In the suite
 case the *harness* produced the wrong number; in the string-gap case a *human
 sentence in a commit message* made an absolute claim about a gate. That is a
 sourcing failure as well as an instrument failure — and it is why the
@@ -7083,7 +7084,7 @@ reported at the foot of this entry.
 The dispatch suggested `71f7055` *"plausibly belongs with the `122.x`
 deep-zoom family"*. **There is no `122.x` deep-zoom family.** `122.0`–`122.3`
 were all filed on 2026-08-21 by the 225th filing and are threading, per-sample
-image overprint, the Ghent harness's positive criterion, and the colorant
+image overprint, the suite harness's positive criterion, and the colorant
 buffer's byte ceiling — **four unrelated items sharing a filing date**, not a
 family.
 
@@ -7121,7 +7122,7 @@ what makes a whole-page renderer feel like it has a zoom ceiling, and the
 ceiling is SPATIAL, not numerical.**
 
 With it, cost is the size of **what you are looking at**. Measured by the
-engineer, **one 1600 × 1000 viewport on a Ghent patch**:
+engineer, **one 1600 × 1000 viewport on a suite patch**:
 
 | zoom (viewport held at 1600 × 1000 px) | region (pt) | raster | time |
 |---:|---:|---:|---:|
@@ -7483,10 +7484,10 @@ in-flight ` M crates/pdfce-cli/src/main.rs` (the unfinished `--region` flag) is
 `SESSION_LOG.md` twin.
 
 
-### `2c5ec1d` + `9838c58` + `00ae8b9` + `62cf4e6`/`8372f20`/`4fca888` + `6a2c13f` — `PASS 97.1h` (the `/Indexed`-over-`/DeviceN` palette), `PASS 97.1i` + `PASS 97.1j` (two constant-factor fixes, the first of which repairs a regression `97.1e` shipped this morning), the XFA availability survey, and the engineer's discharge of the 224th filing's five survivors — ★★★★★ **AND THE HEADLINE OF THIS ENTRY IS A CORRECTION TO A NUMBER THIS ROLE FILED EARLIER TODAY: THE GHENT BOARD'S `29 pass of 51` IS AN OVER-COUNT AND THE CORRECTED FIGURE IS `26 pass AT MINIMUM`** — `tools/ghent-check.py` implements **ONE of the suite's TWO pass criteria** and has reported `clean` for the other **for its entire life**; ★★★ **THE CORRECTION CAME FROM THE OPERATOR READING THE RENDER CELL BY CELL — THE FIRST INDEPENDENT JUDGEMENT OF PDFCE'S GHENT OUTPUT THAT HAS EVER BEEN TAKEN**, and every prior number on this board was the harness scoring itself; ★★ **`R210` MINTED** — *a conformance figure is filed with the CRITERIA the harness implements, not only its denominator*; ★★ **DECISION 080 MINTED** — threading is gated at COMPILE TIME on the target, not only at runtime by a setting, because both `std::thread::spawn` and `rayon` `cargo check` **cleanly** for `wasm32-unknown-unknown`; ★ **the operator's *"put multithread in the plan for later"* is filed as `Pass 122.0` with his design intact and one constraint added** — 2026-08-21 (two-hundred-and-twenty-fifth filing)
+### `2c5ec1d` + `9838c58` + `00ae8b9` + `62cf4e6`/`8372f20`/`4fca888` + `6a2c13f` — `PASS 97.1h` (the `/Indexed`-over-`/DeviceN` palette), `PASS 97.1i` + `PASS 97.1j` (two constant-factor fixes, the first of which repairs a regression `97.1e` shipped this morning), the XFA availability survey, and the engineer's discharge of the 224th filing's five survivors — ★★★★★ **AND THE HEADLINE OF THIS ENTRY IS A CORRECTION TO A NUMBER THIS ROLE FILED EARLIER TODAY: THE SUITE BOARD'S `29 pass of 51` IS AN OVER-COUNT AND THE CORRECTED FIGURE IS `26 pass AT MINIMUM`** — `tools/suite-check.py` implements **ONE of the suite's TWO pass criteria** and has reported `clean` for the other **for its entire life**; ★★★ **THE CORRECTION CAME FROM THE OPERATOR READING THE RENDER CELL BY CELL — THE FIRST INDEPENDENT JUDGEMENT OF PDFCE'S SUITE OUTPUT THAT HAS EVER BEEN TAKEN**, and every prior number on this board was the harness scoring itself; ★★ **`R210` MINTED** — *a conformance figure is filed with the CRITERIA the harness implements, not only its denominator*; ★★ **DECISION 080 MINTED** — threading is gated at COMPILE TIME on the target, not only at runtime by a setting, because both `std::thread::spawn` and `rayon` `cargo check` **cleanly** for `wasm32-unknown-unknown`; ★ **the operator's *"put multithread in the plan for later"* is filed as `Pass 122.0` with his design intact and one constraint added** — 2026-08-21 (two-hundred-and-twenty-fifth filing)
 
 **Sourcing.** Shell held and used (hard rule 8); the command is named beside
-every figure this role produced itself. **Every Ghent, timing and corpus figure
+every figure this role produced itself. **Every suite, timing and corpus figure
 below is the engineer's, taken this session** — none is carried from a
 document, and the one figure that *was* carried from a document is the one this
 entry corrects. **Nothing was committed by this role.**
@@ -7500,9 +7501,9 @@ filed here rather than left to a gate nobody reads twice.
 
 ## ★★★★★ FIRST, THE CORRECTION, BECAUSE IT INVALIDATES A NUMBER IN THE ENTRY DIRECTLY BELOW THIS ONE
 
-**`docs/ghent-operator-review-2026-08-21.md`** (committed in `2c5ec1d`,
+**`docs/suite-operator-review-2026-08-21.md`** (committed in `2c5ec1d`,
 engineer-owned, **not edited by this role** — it is the calibration set) records
-the operator reading the annotated Ghent render **cell by cell** and finding
+the operator reading the annotated suite render **cell by cell** and finding
 defects the harness **structurally cannot see**.
 
 | the claim | status |
@@ -7514,32 +7515,33 @@ defects the harness **structurally cannot see**.
 
 **Fault 1 — the harness implements ONE of the suite's TWO pass criteria.**
 The suite marks failure two ways and its own artwork says so: a **negative
-marker** (a cross a correct renderer makes vanish — `ghent-check.py` implements
-this thoroughly) and a **positive marker** (*"if a check mark is visible …
-then DeviceN is respected; if no check mark appears then DeviceN colour was
-transformed to CMYK (= ERROR)"*). **The harness has no notion of a mark that
-should be there and is not.** **Seven of the 51 patches score this way** — GWG
-`050`, `080`, `081`, `082`, `150`, `151`, `152` — and every one has been
-reported `clean` for the harness's whole life. **At least three of them (8.2,
-8.1, 8.01) are failures.**
+marker** (a cross a correct renderer makes vanish — `suite-check.py` implements
+this thoroughly) and a **positive marker** (each cell's own caption states
+that a visible check mark means DeviceN colour was respected, and its absence
+means DeviceN colour was silently transformed to CMYK — an error). **The
+harness has no notion of a mark that should be there and is not.** **Seven of
+the 51 patches score this way** — `PCS050`, `PCS080`, `PCS081`, `PCS082`,
+`PCS150`, `PCS151`, `PCS152` — and every one has been reported `clean` for
+the harness's whole life. **At least three of them (8.2, 8.1, 8.01) are
+failures.**
 
 ⇢ **An absence is invisible to a detector built to find a presence, and a gate
 that looks for the wrong thing does not report *"I cannot tell"* — it reports
 `clean`, which is indistinguishable from a pass.**
 
 **Fault 2 — the contrast floor has no area term.** `CONTRAST_MIN = 12.0`
-(8-bit levels) implements the suite's *"a **clear** X … judged by a human at
-0.5 m"* as a fixed number **regardless of how big the mark is**. Patch
-`GWG 1.0`'s cells `d` and `i` carry crosses roughly **three times the linear
-size** of the calibration patch's at a measured contrast of **9.8** — below the
-floor and unmistakable to the eye; box 11's cells sit at **1.3–3.1** and
-genuinely are invisible. **Lowering the number would drag box 11 in with it**;
-the threshold has to be a function of the mark's size.
+(8-bit levels) implements the suite's own stated pass criterion — a clear X,
+judged by a human at 0.5 m — as a fixed number **regardless of how big the
+mark is**. Patch `PCS 1.0`'s cells `d` and `i` carry crosses roughly **three
+times the linear size** of the calibration patch's at a measured contrast of
+**9.8** — below the floor and unmistakable to the eye; box 11's cells sit at
+**1.3–3.1** and genuinely are invisible. **Lowering the number would drag box
+11 in with it**; the threshold has to be a function of the mark's size.
 
 **The cell-level dispositions the operator supplied**, which are what makes
 this a calibration set rather than a complaint:
 
-| GWG | harness said | corrected |
+| id | harness said | corrected |
 |---|---|---|
 | `1.0` CMYK Overprint Test | pass | **FAIL** (cells `d`,`e`,`i`,`j`) |
 | `1.1` CMYK Overprint Mode | FAIL, 1 cross | **PASS** (faint outline only) |
@@ -7563,9 +7565,9 @@ the operator confirmed the first three read correctly. **What moves is the
 scoreboard, and only the scoreboard.**
 
 **★★★ AND THE HONEST SHAPE OF THE ERROR, because it is not "the harness was
-buggy".** Every Ghent figure this project has ever filed came from **the harness
+buggy".** Every suite figure this project has ever filed came from **the harness
 scoring itself**; its thresholds were calibrated against **one** patch
-(`GWG 16.0`, 2026-08-17) whose answer was already known from a code change.
+(`PCS 16.0`, 2026-08-17) whose answer was already known from a code change.
 **That is self-consistency, not ground truth.** The board carried a caveat
 saying a document has no access to staleness and *"only re-measuring does"* —
 and **re-measuring with the same instrument is exactly what does not help
@@ -7574,25 +7576,25 @@ was an **oracle**, and today one arrived.
 
 **★ This is also the SECOND time this exact instrument has produced a headline
 that was too high, and the first time is already in this file.** The 148th
-filing records `ghent-check.py`'s **first run reporting `29 of 51`**, corrected
+filing records `suite-check.py`'s **first run reporting `29 of 51`**, corrected
 before publication when 13 reference-strip patches turned out not to be
 adjudicable by an X-detector. **Same shape, same number, four days apart** — the
 first was caught before it was filed and the second was not. `R210` is minted
 on that pair, below.
 
-**Every sentence of the form *"N of 51 Ghent patches pass"* in this file,
+**Every sentence of the form *"N of 51 suite patches pass"* in this file,
 `FEATURES.md` and `SESSION_LOG.md` is over-counted by the check-mark family,
 including the historical ones** — the seven positive-criterion patches have been
 scored `clean` since the harness was written, so **no** figure on this board has
 ever excluded them. **Historical entries are NOT rewritten** (Shipped is
-append-only): the *Ghent standing board* under *Next up* carries the correction
+append-only): the *suite standing board* under *Next up* carries the correction
 once, at the top, and it governs every figure below it.
 
 ---
 
 ## `PASS 97.1h` (`2c5ec1d`) — an `/Indexed` palette over a `/DeviceN` base rendered GREY, and the operator found it by reading a test patch's own caption
 
-`GWG 8.2`'s duotone manta ray came out neutral greyscale. It should be
+`PCS 8.2`'s duotone manta ray came out neutral greyscale. It should be
 cyan-and-black; **the patch's caption says so in as many words**, and pdfce had
 rendered it wrong for as long as it had rendered it.
 
@@ -7606,7 +7608,7 @@ the whole thing to `to_rgb`. **Three lines, two independent faults:**
    refuse; `tint_through` returns `None`; `device_n_to_rgb` falls back to its
    **max-tint NEUTRAL**. Grey palette, image renders, page looks fine.
 2. **WIDTH.** Four slots cannot hold a five- or six-colorant `DeviceN`, and the
-   suite ships both (`GWG 8.1`, `GWG 8.01`). Trailing colorants were dropped
+   suite ships both (`PCS 8.1`, `PCS 8.01`). Trailing colorants were dropped
    **before any conversion was attempted**.
 
 **Ships:** `palette_entry(entry, m)` — exactly `m` components, sized from the
@@ -7617,12 +7619,12 @@ were wrong for the whole life of the feature.**
 **VERIFIED AGAINST AN INDEPENDENT RENDERER, not against expectation.** pdfium
 renders the duotone in cyan and shows the cyan patch on the animal's back;
 pdfce before showed neither, after shows both, **and the two engines now
-agree**. On `GWG 8.01` the pixels differing from pdfium by more than 40 levels
+agree**. On `PCS 8.01` the pixels differing from pdfium by more than 40 levels
 drop **28,305 → 11,694**.
 
 **Real-world A/B, both builds over `fixtures/external`: 3,735 identical, 0
 changed, of 4,023 files.** The combination **does not occur** in real-world
-documents — so the fix is safe, and **its only positive evidence is the Ghent
+documents — so the fix is safe, and **its only positive evidence is the suite
 patches plus a second renderer**. That is the honest form of the claim: a
 corpus that cannot exercise a construct is not evidence the construct works.
 
@@ -7639,7 +7641,7 @@ colour that is grey looks like a greyscale image, which is a thing documents
 legitimately contain. **The only thing that saw through all three was a human
 reading the test's own instructions.**
 
-**`GWG 8.2` still fails after the fix** — see `Pass 122.1`, below: its check
+**`PCS 8.2` still fails after the fix** — see `Pass 122.1`, below: its check
 mark is painted in **yellow underneath the images**, which overprint it, so the
 patch tests **image overprint**, not `DeviceN` colour as its caption says.
 **pdfium fails it too.** A smaller wrongness honestly stated, not a fixed one.
@@ -7648,10 +7650,10 @@ patch tests **image overprint**, not `DeviceN` colour as its caption says.
 
 ## `PASS 97.1i` (`9838c58`) + `PASS 97.1j` (`00ae8b9`) — TWO CONSTANT-FACTOR FIXES, AND THE FIRST REPAIRS A REGRESSION `97.1e` SHIPPED THIS MORNING
 
-Measured on the Ghent combined document at scale 2 (**1224×1584**), **all six
-pages byte-identical throughout, Ghent verdict unchanged**:
+Measured on the suite's combined document at scale 2 (**1224×1584**), **all six
+pages byte-identical throughout, suite verdict unchanged**:
 
-| page, Ghent combined doc at scale 2 | pre-Pass `06aaad3` | after `97.1e` | after both fixes | vs pre-Pass |
+| page, suite combined doc at scale 2 | pre-Pass `06aaad3` | after `97.1e` | after both fixes | vs pre-Pass |
 |---|---:|---:|---:|---:|
 | 1 | 632 ms | **3,713 ms** | **320 ms** | **0.51×** |
 | 2 | 4,086 ms | 7,689 ms | **2,486 ms** | **0.61×** |
@@ -7859,10 +7861,10 @@ shipped** — no Pass ID is minted for it and no `FEATURES.md` box is ticked.
 `SESSION_LOG.md` twin.
 
 
-### `a277931` + `ff4b4bf` — `PASS 97.1e` + `PASS 97.1f`: PDFCE COMPOSITES A CMYK PAGE IN INK FROM THE FIRST OPERATOR TO THE LAST, AND THE GHENT BLEND-SPACE CENSUS GOES **107 OF 107 WRONG → 0 OF 107**; ★★★ **THE RE-SCOPING FACT, AND IT IS THE HALF THAT OUTLIVES THE NUMBERS — EVERY REMAINING FAIL ON THE SUITE IS AN OVERPRINT, SPOT OR ICC PATCH; NOT ONE IS A BLENDING-SPACE FAILURE ANY MORE**, so the next Ghent gains are `85.5`'s n-channel spot remainder, not more compositing; ★★★ **THE BASELINE WAS BUILT, NOT QUOTED** — `06aaad3` compiled in a worktree and run through the harness, which is the only reason the `1_GWG161` REGRESSION `97.1e` shipped was visible to be closed by `97.1f`; ★★ **AN INSTRUMENT FIX WITHOUT WHICH THIS PASS WOULD HAVE READ AS A NO-OP** — `blends_in_wrong_space` was narrowed, and **the counter's own docstring at the definition site was updated while the SAME CLAIM three fields above it and the DOCSTRING OF THE SCRIPT THAT READS IT were not** (hard-rule-11 sweep: **5 survivors reported, 0 edited by this role**); ★★ **THE COMPOSITOR RAG'S TWO LOAD-BEARING FINDINGS ARE NOW PROVED IN TRAPS AND RECORDED ON THE CONSUMING SIDE**, worth 13 trap marks between them; ★ **REAL-WORLD A/B: 463 IDENTICAL PNGs OF 500 SAMPLED, 0 CHANGED** — the prediction decision 078 filed, confirmed on a sample and **deliberately not extrapolated to the 4,012-file corpus, whose run was still executing when this was dispatched** — 2026-08-21 (two-hundred-and-twenty-fourth filing)
+### `a277931` + `ff4b4bf` — `PASS 97.1e` + `PASS 97.1f`: PDFCE COMPOSITES A CMYK PAGE IN INK FROM THE FIRST OPERATOR TO THE LAST, AND THE SUITE BLEND-SPACE CENSUS GOES **107 OF 107 WRONG → 0 OF 107**; ★★★ **THE RE-SCOPING FACT, AND IT IS THE HALF THAT OUTLIVES THE NUMBERS — EVERY REMAINING FAIL ON THE SUITE IS AN OVERPRINT, SPOT OR ICC PATCH; NOT ONE IS A BLENDING-SPACE FAILURE ANY MORE**, so the next suite gains are `85.5`'s n-channel spot remainder, not more compositing; ★★★ **THE BASELINE WAS BUILT, NOT QUOTED** — `06aaad3` compiled in a worktree and run through the harness, which is the only reason the `PCS1_161` REGRESSION `97.1e` shipped was visible to be closed by `97.1f`; ★★ **AN INSTRUMENT FIX WITHOUT WHICH THIS PASS WOULD HAVE READ AS A NO-OP** — `blends_in_wrong_space` was narrowed, and **the counter's own docstring at the definition site was updated while the SAME CLAIM three fields above it and the DOCSTRING OF THE SCRIPT THAT READS IT were not** (hard-rule-11 sweep: **5 survivors reported, 0 edited by this role**); ★★ **THE COMPOSITOR RAG'S TWO LOAD-BEARING FINDINGS ARE NOW PROVED IN TRAPS AND RECORDED ON THE CONSUMING SIDE**, worth 13 trap marks between them; ★ **REAL-WORLD A/B: 463 IDENTICAL PNGs OF 500 SAMPLED, 0 CHANGED** — the prediction decision 078 filed, confirmed on a sample and **deliberately not extrapolated to the 4,012-file corpus, whose run was still executing when this was dispatched** — 2026-08-21 (two-hundred-and-twenty-fourth filing)
 
 **Sourcing.** Shell held and used (hard rule 8); the command is named beside
-every figure this role produced itself. **Every Ghent, census and A/B figure
+every figure this role produced itself. **Every suite, census and A/B figure
 below is the engineer's, taken this session against a binary built from
 `06aaad3` in a git worktree** — none is carried from a document. **Nothing
 was committed by this role.**
@@ -7941,11 +7943,11 @@ silently disappear.
 
 #### MEASURED — the baseline was BUILT, not quoted
 
-**Ghent PDF Output Suite, 51 patches** (`tools/ghent-check.py`, corpus at
-`D:\Dev\temp\ghent-patches`), against a binary compiled from **`06aaad3`** in
+**The print-conformance suite, 51 patches** (`tools/suite-check.py`, corpus at
+the suite's local corpus directory, `PDFCE_SUITE_DIR`), against a binary compiled from **`06aaad3`** in
 a git worktree:
 
-| Ghent PDF Output Suite (**of 51 patches**) | baseline `06aaad3` | `97.1e` | **`97.1f`** |
+| the print-conformance suite (**of 51 patches**) | baseline `06aaad3` | `97.1e` | **`97.1f`** |
 |---|---:|---:|---:|
 | pass | 26 (51.0 %) | 28 (54.9 %) | **29 (56.9 %)** |
 | FAIL | 14 (27.5 %) | 11 (21.6 %) | **10 (19.6 %)** |
@@ -7956,33 +7958,33 @@ a git worktree:
 > ★★★ **AMENDED 2026-08-21 (225th filing, HOURS LATER) — THE `pass` ROW OF
 > THIS TABLE IS AN OVER-COUNT IN EVERY COLUMN, AND THE TABLE IS KEPT VERBATIM
 > RATHER THAN REWRITTEN BECAUSE THE INSTRUMENT, NOT THE MEASUREMENT, IS WHAT
-> WAS WRONG.** `tools/ghent-check.py` implements **one of the suite's two pass
+> WAS WRONG.** `tools/suite-check.py` implements **one of the suite's two pass
 > criteria** — it hunts for a **cross that should not be there** and has no
 > notion of a **check mark that should be there and is not**. **Seven patches
-> score by the second criterion** (GWG `050`, `080`, `081`, `082`, `150`,
+> score by the second criterion** (PCS `050`, `080`, `081`, `082`, `150`,
 > `151`, `152`) and have been reported `clean` for the harness's entire life;
 > **at least three are failures**. Its contrast floor (`CONTRAST_MIN = 12.0`)
-> also has **no area term**, so `GWG 1.0`'s over-sized crosses at contrast
+> also has **no area term**, so `PCS 1.0`'s over-sized crosses at contrast
 > **9.8** read clean while being obvious to the eye. **Corrected standing: 26
 > pass at minimum**, pending three unchecked optional-content patches
 > (`15.0`/`15.1`/`15.2`). **Every column of this table is affected equally**,
 > so the **deltas** it reports — `+3 pass`, `55 → 41` traps — are unaffected;
-> **the levels are not.** Source: `docs/ghent-operator-review-2026-08-21.md`
+> **the levels are not.** Source: `docs/suite-operator-review-2026-08-21.md`
 > (engineer-owned, the operator's own cell-level judgements). Full disposition
 > in the 225th filing's entry, top of *Shipped*.
 
-| blend-space census, **Ghent, 51 patches** (`tools/measure-blend-space.py`) | baseline | `97.1e` | **`97.1f`** |
+| blend-space census, **the suite, 51 patches** (`tools/measure-blend-space.py`) | baseline | `97.1e` | **`97.1f`** |
 |---|---:|---:|---:|
 | blend modes applied | 107 | 107 | **107** |
 | **of those, in the wrong space** | 107 (**100.0 %**) | 15 (14.0 %) | **0 (0.0 %)** |
 
-**Patches that changed verdict:** `1_GWG162` (Isolate) FAIL → pass;
-`3_GWG164` (ICCBasedCMYK) FAIL → pass; **`1_GWG161` (Knockout) FAIL → pass at
-`97.1f`**; `1_GWG1611` FAIL → UNRESOLVED (lost its last trap, reference-strip
-correlation **0.986**). `3_GWG161` improved **14 → 11 traps** and still FAILs.
+**Patches that changed verdict:** `PCS1_162` (Isolate) FAIL → pass;
+`PCS3_164` (ICCBasedCMYK) FAIL → pass; **`PCS1_161` (Knockout) FAIL → pass at
+`97.1f`**; `PCS1_1611` FAIL → UNRESOLVED (lost its last trap, reference-strip
+correlation **0.986**). `PCS3_161` improved **14 → 11 traps** and still FAILs.
 
 **★ THE REGRESSION `97.1e` SHIPPED, NAMED IN ITS OWN COMMIT MESSAGE RATHER
-THAN AVERAGED AWAY, AND CLOSED ONE COMMIT LATER.** `1_GWG161` went **2 → 4
+THAN AVERAGED AWAY, AND CLOSED ONE COMMIT LATER.** `PCS1_161` went **2 → 4
 traps** at `97.1e`, because a knockout group was the one construct still
 running its interior in sRGB (`KnockoutTarget`'s target is a `Pixmap`), so
 its elements blended additively inside a page that did not. **The census
@@ -8069,10 +8071,10 @@ render**, not over 500.
 
 #### ★★★ THE RE-SCOPING FACT
 
-**Every remaining FAIL on the Ghent suite is an overprint, spot or ICC patch.
+**Every remaining FAIL on the suite is an overprint, spot or ICC patch.
 Not one is a blending-space failure any more.** Ten FAILs of 51.
 
-This retires §11.3.4 as an open item and hands the remaining Ghent gains to a
+This retires §11.3.4 as an open item and hands the remaining suite gains to a
 different piece of work: **`Pass 85.5`'s n-channel remainder — one plate per
 SPOT colorant** — carried in *Backlog* as the *Per-colorant (n-channel)
 compositing buffer* row, whose **stated leading reason was the blending
@@ -8117,7 +8119,7 @@ sentence written in chat. ⇢ *A design sentence nobody has checked against the
 primary source is a guess with good posture.*
 
 **2. A TRANSPARENT BACKDROP IS NOT A BACKDROP.** Handing knockout groups an
-empty initial backdrop took `1_GWG161` from **2 trap marks to 15** — **worse
+empty initial backdrop took `PCS1_161` from **2 trap marks to 15** — **worse
 than having no knockout implementation at all**. A knockout group's entire
 definition is *"composite each element against the group's INITIAL
 backdrop"*; supply an empty one and it knocks out against nothing. ⇢ *When a
@@ -8128,7 +8130,7 @@ not a degraded implementation, it is a different one.*
 INVERTIBILITY.** pdfce has two `DeviceCMYK`→sRGB transforms: a lattice fitted
 against a reference renderer, and a max-GCR pair that is the **exact inverse**
 of its own `rgb_to_cmyk`. Using the *accurate* one on a round trip (colorant
-buffer → sRGB group interior → colorant buffer) left `1_GWG161` at **10 trap
+buffer → sRGB group interior → colorant buffer) left `PCS1_161` at **10 trap
 marks**; swapping to the *invertible* one took it to **4**, and carrying shape
 separately took it to **0**. The value never reaches a screen in the
 intermediate form, so accuracy there buys nothing and costs invertibility.
@@ -8203,7 +8205,7 @@ same "an obligation needs a record on both sides" reason
 
 | RAG file | what it said | what it was worth |
 |---|---|---|
-| `shape_must_be_tracked_separately_from_alpha.md` | a `(C, α)` pixel is **one scalar short** of §11.4's model — shape `f` and alpha `α` are separate quantities and only their product is alpha | **13 trap marks** on `1_GWG161`; also supplied the *"a fixture built from opaque fills cannot distinguish a correct knockout implementation from a wrong one — build it with `/ca < 1`"* rule that all three new tests follow |
+| `shape_must_be_tracked_separately_from_alpha.md` | a `(C, α)` pixel is **one scalar short** of §11.4's model — shape `f` and alpha `α` are separate quantities and only their product is alpha | **13 trap marks** on `PCS1_161`; also supplied the *"a fixture built from opaque fills cannot distinguish a correct knockout implementation from a wrong one — build it with `/ca < 1`"* rule that all three new tests follow |
 | `backdrop_defaults_zero_fill_inverts_masks.md` | never `memset(0)` a subtractive buffer — `DeviceCMYK`'s initial colour is `[0 0 0 1]`, so a zero fill is **white** and inverts every luminosity mask | prevented the whole class at the Stage A → Stage B boundary, exactly where it was predicted to appear |
 
 `docs/compositor-plan.md` §3.2 carries both as amendments already; a dated
@@ -8270,10 +8272,10 @@ they are the 222nd filing's re-measured ones:
 
 | corpus | subtractive files | blends wrong | rate |
 |---|---:|---:|---|
-| Ghent PDF Output Suite | **13 of 51** | **107 of 107** | **100.0 %** |
+| the print-conformance suite | **13 of 51** | **107 of 107** | **100.0 %** |
 | `fixtures/external` (rendered) | **15 of 3,735** | **2 of 49** | **4.1 %** |
 
-**So the CMYK buffer is REQUIRED for the Ghent transparency panels and
+**So the CMYK buffer is REQUIRED for the suite transparency panels and
 will change almost nothing about how ordinary documents look.** The
 handoff states the second half as an instruction — *do not expect the
 render-parity buckets to move, and do not read that as failure* — which is
@@ -8495,10 +8497,10 @@ is the 222nd filing's to move.
 
 ---
 
-### `cbb1ede` + `90739d7` — `PASS 97.1c` + `PASS 97.1d`: PDFCE READS THE BLENDING COLOUR SPACE IT COMPOSITES IN, AND ON THE GHENT SUITE IT HAS NEVER ONCE BEEN THE RIGHT ONE — **107 OF 107 BLEND MODES, 100.0%**; ★★★ **THE 216TH FILING'S OWN "UNCONFIRMED" FLAG ON `3_GWG161` IS DISCHARGED BY A COUNTER RATHER THAN AN ARGUMENT — 15 OF ITS 15 BLENDS, AND TABLE 147'S INHERITANCE ROW IS THE REASON**; ★★★ **PASS-ID COLLISION — `97.1a`/`97.1b` WERE ALREADY SPENT BY THE 217TH FILING ON DIFFERENT DELIVERABLES**, so this work is filed as `97.1c`/`97.1d` and `90739d7`'S OWN SUBJECT LINE IS WRONG (hard rule 2, first live instance); ★★★ **THE SCOPING FACT THE GHENT NUMBERS ALONE COULD NOT HAVE PRODUCED — 100.0 % ON THE CONFORMANCE SUITE, 4.1 % ON THE REAL CORPUS, AND THIS FILING'S RE-MEASUREMENT MAKES IT 0 %**: both affected "real-world" files are **veraPDF transparency conformance fixtures**, so the colorant buffer buys conformance and print-site credibility and will change **nothing** about how ordinary documents look — the dispatch's own conclusion was under-stated by its own data; ★★ **HARD-RULE-11 SURVIVOR #1 DISCHARGED BY REMOVAL, NOT CORRECTION** — README's `v0.3.0` label is **gone**, not updated; ★★ **AND THE INSTRUMENT WAS UNTRACKED** — `tools/measure-blend-space.py`, which produced every figure below, was in no commit and in no gate's view, and **was committed by `74c5f2c` DURING this filing**; ★ **`74c5f2c` IS FILED BY THE CONCURRENT 223rd ENTRY, NOT THIS ONE** — but survivor #2's discharge is **verified here by grep**, and **two figures in that commit's own handoff are under-stated by this filing's re-measurement** — 2026-08-21 (two-hundred-and-twenty-second filing)
+### `cbb1ede` + `90739d7` — `PASS 97.1c` + `PASS 97.1d`: PDFCE READS THE BLENDING COLOUR SPACE IT COMPOSITES IN, AND ON THE SUITE IT HAS NEVER ONCE BEEN THE RIGHT ONE — **107 OF 107 BLEND MODES, 100.0%**; ★★★ **THE 216TH FILING'S OWN "UNCONFIRMED" FLAG ON `PCS3_161` IS DISCHARGED BY A COUNTER RATHER THAN AN ARGUMENT — 15 OF ITS 15 BLENDS, AND TABLE 147'S INHERITANCE ROW IS THE REASON**; ★★★ **PASS-ID COLLISION — `97.1a`/`97.1b` WERE ALREADY SPENT BY THE 217TH FILING ON DIFFERENT DELIVERABLES**, so this work is filed as `97.1c`/`97.1d` and `90739d7`'S OWN SUBJECT LINE IS WRONG (hard rule 2, first live instance); ★★★ **THE SCOPING FACT THE SUITE NUMBERS ALONE COULD NOT HAVE PRODUCED — 100.0 % ON THE CONFORMANCE SUITE, 4.1 % ON THE REAL CORPUS, AND THIS FILING'S RE-MEASUREMENT MAKES IT 0 %**: both affected "real-world" files are **veraPDF transparency conformance fixtures**, so the colorant buffer buys conformance and print-site credibility and will change **nothing** about how ordinary documents look — the dispatch's own conclusion was under-stated by its own data; ★★ **HARD-RULE-11 SURVIVOR #1 DISCHARGED BY REMOVAL, NOT CORRECTION** — README's `v0.3.0` label is **gone**, not updated; ★★ **AND THE INSTRUMENT WAS UNTRACKED** — `tools/measure-blend-space.py`, which produced every figure below, was in no commit and in no gate's view, and **was committed by `74c5f2c` DURING this filing**; ★ **`74c5f2c` IS FILED BY THE CONCURRENT 223rd ENTRY, NOT THIS ONE** — but survivor #2's discharge is **verified here by grep**, and **two figures in that commit's own handoff are under-stated by this filing's re-measurement** — 2026-08-21 (two-hundred-and-twenty-second filing)
 
 **This filing HAS a shell (hard rule 8), and used it.** **Both corpora
-were re-measured here**, not taken on report — 51 Ghent patches and 4,012
+were re-measured here**, not taken on report — 51 suite patches and 4,012
 `fixtures/external` PDFs, through `tools/measure-blend-space.py` against
 `target/release/pdfce-cli.exe`. **All seven of the dispatch's headline
 figures reproduced exactly.** Everything below is labelled *re-measured*
@@ -8577,7 +8579,7 @@ What shipped, all in `crates/pdfce-render/src/compositor.rs`:
   affine and its three weights sum to exactly 1, so complementation
   commutes with it. **Only `B()` needs the round trip.**
 
-**Six tests, and two of them carry the Pass.** The `1_GWG162` `Difference`
+**Six tests, and two of them carry the Pass.** The `PCS1_162` `Difference`
 cell is asserted directly **with its own negative control** — the additive
 answer is asserted to *differ*, so the test cannot pass by the complement
 being a no-op. And **`Multiply` and `Screen` are asserted to EXCHANGE**
@@ -8589,7 +8591,7 @@ opposite.** That is the single most likely way to get §11.3.4 wrong while
 believing it is right, and it now has a test.
 
 **Four components rather than N, on purpose.** The leading deliverable is
-the blending colour SPACE, which for every file in the Ghent corpus is
+the blending colour SPACE, which for every file in the suite corpus is
 `DeviceCMYK`. Spot planes are the second deliverable and want a runtime-N
 **plane-major** buffer (measured 3–5× faster than interleaved, `Pass 97.0`
 research). Building N now would fuse two questions that fail
@@ -8652,16 +8654,16 @@ the group.
 
 ---
 
-#### ★★★ `3_GWG161`'S 14 TRAPS: THE 216TH FILING'S "UNCONFIRMED" FLAG IS DISCHARGED
+#### ★★★ `PCS3_161`'S 14 TRAPS: THE 216TH FILING'S "UNCONFIRMED" FLAG IS DISCHARGED
 
 **The 216th filing recorded this deliberately and correctly** — *"the
-§11.3.4 hypothesis FITS but was NOT derived the way `1_GWG162`'s was. A
+§11.3.4 hypothesis FITS but was NOT derived the way `PCS1_162`'s was. A
 hypothesis that fits and a derivation that closes are different evidence"*
 — and the `Pass 97.1` *Backlog* entry carried the matching ⚠ *"do not count
 it toward this Pass's acceptance until it is."*
 
 **It is confirmed now, and by a counter rather than by an argument.**
-Table 147's inheritance row is the whole mechanism: `3_GWG161`'s own
+Table 147's inheritance row is the whole mechanism: `PCS3_161`'s own
 objects are `ICCBased` **RGB**, its cell groups declare **nothing
 subtractive**, and it blends in **`DeviceCMYK`** anyway — because **the
 declaration is on the PAGE group and its cell groups inherit it.** The
@@ -8669,15 +8671,15 @@ hypothesis was right; what was missing was the *route*, and the route is a
 spec row nobody had read.
 
 **Re-measured by this filing**, not taken on report —
-`python tools/measure-blend-space.py "D:\Dev\temp\ghent-patches"`:
+`python tools/measure-blend-space.py "$PDFCE_SUITE_DIR"`:
 
 ```
-3_GWG161_Transp_Basic_BM_ICCBasedRGB_x4.pdf    15 wrong / 18 subtractive groups
+PCS3_161_Transp_Basic_BM_ICCBasedRGB_x4.pdf    15 wrong / 18 subtractive groups
 ```
 
 **15 of 15 blend modes in the wrong space.** Note the two counts are
 different quantities and must not be merged: **15 blend modes** (this
-Pass's counter) against **14 trap cells of 16** (`ghent-check.py`'s
+Pass's counter) against **14 trap cells of 16** (`suite-check.py`'s
 measure, after `85.4b` took it from 15). The patch's *acceptance* is still
 14 traps; its *cause* is now 15 of 15.
 
@@ -8689,10 +8691,10 @@ rewrites).
 
 #### ★★★ THE MEASUREMENT, AND IT REDIRECTS THE REST OF `Pass 97.1`
 
-**Ghent PDF Output Suite — re-measured by this filing** (51 patch PDFs at
-`D:\Dev\temp\ghent-patches`, `pdfce-cli render-page --page 1 --scale 1`):
+**The print-conformance suite — re-measured by this filing** (51 patch PDFs at
+the suite's local corpus directory, `pdfce-cli render-page --page 1 --scale 1`):
 
-| Ghent PDF Output Suite (51 patch PDFs, **re-measured**) | count | of denominator |
+| the print-conformance suite (51 patch PDFs, **re-measured**) | count | of denominator |
 |---|---:|---|
 | files with a subtractive blending space | **13** | 25.5 % of 51 |
 | files with **at least one** wrong-space blend | **11** | 21.6 % of 51 |
@@ -8700,12 +8702,12 @@ rewrites).
 | blend modes applied | **107** | 2.10 per file over 51 |
 | of those, computed in the **wrong space** | **107** | **100.0 % of 107** |
 
-**Every one of the engineer's three Ghent figures reproduced exactly**
+**Every one of the engineer's three suite figures reproduced exactly**
 (13, 107, 107). **Two figures this filing adds that the dispatch did not
 carry, and the second is the more useful one:**
 
 - **11 files, not 13, actually blend wrong.** The census is 13; **two
-  subtractive-space Ghent patches composite nothing but `Normal` and are
+  subtractive-space suite patches composite nothing but `Normal` and are
   therefore entirely correct.** That is the census-vs-shortfall
   distinction **occurring in live data**, in the very corpus the test was
   written to defend — the test that "holds that line"
@@ -8719,19 +8721,19 @@ carry, and the second is the more useful one:**
 Worst offenders, re-measured (wrong blends / subtractive groups):
 
 ```
- 31 /  50   1_GWG162_Transp_Basic_BM_DeviceCMYK_Isolate_X4.pdf   ← the derivation cell
- 15 /  49   1_GWG161_Transp_Basic_BM_DeviceCMYK_Knockout_X4.pdf
- 15 /  18   3_GWG161_Transp_Basic_BM_ICCBasedRGB_x4.pdf          ← the confirmation above
- 15 /  17   3_GWG164_Transp_Basic_BM_ICCbasedCMYK_x4.pdf
- 15 /  17   1_GWG160_Transp_Basic_BM_DeviceCMYK_Non-knockout_X4.pdf
-  6 /   7   1_GWG1610_Softmasks_Text_part1_X4.pdf
-  5 /   6   1_GWG168_Softmasks_Vector_part1_X4.pdf
-  2 /   6   1_GWG1611_Softmasks_Text_part2_X4.pdf
-  1 /   5   1_GWG169_Softmasks_Vector_part2_X4.pdf
-  1 /   2   3_GWG221_OutputIntentChangeIndicator_x4.pdf
+ 31 /  50   PCS1_162_Transp_Basic_BM_DeviceCMYK_Isolate_X4.pdf   ← the derivation cell
+ 15 /  49   PCS1_161_Transp_Basic_BM_DeviceCMYK_Knockout_X4.pdf
+ 15 /  18   PCS3_161_Transp_Basic_BM_ICCBasedRGB_x4.pdf          ← the confirmation above
+ 15 /  17   PCS3_164_Transp_Basic_BM_ICCbasedCMYK_x4.pdf
+ 15 /  17   PCS1_160_Transp_Basic_BM_DeviceCMYK_Non-knockout_X4.pdf
+  6 /   7   PCS1_1610_Softmasks_Text_part1_X4.pdf
+  5 /   6   PCS1_168_Softmasks_Vector_part1_X4.pdf
+  2 /   6   PCS1_1611_Softmasks_Text_part2_X4.pdf
+  1 /   5   PCS1_169_Softmasks_Vector_part2_X4.pdf
+  1 /   2   PCS3_221_OutputIntentChangeIndicator_x4.pdf
 ```
 
-**★ `3_GWG221` is on that list and is NOT on `Pass 97.1`'s acceptance
+**★ `PCS3_221` is on that list and is NOT on `Pass 97.1`'s acceptance
 list.** One wrong blend, in an OutputIntent patch. Not scoped here; noted
 so a later acceptance re-count is not surprised by it.
 
@@ -8757,7 +8759,7 @@ belongs to the *measurement*, not to the *corpus*, and the 277-file
 difference is a render-coverage fact hiding inside a blend-space table.
 Neither figure is wrong; only one of them was written down.
 
-**★ (2) 16 subtractive groups over 3,735 files, against 181 over 51 Ghent
+**★ (2) 16 subtractive groups over 3,735 files, against 181 over 51 suite
 patches.** Per *rendered file* that is **0.004 vs 3.55 — a factor of ~830**.
 That ratio, not the file percentages, is the honest size of the
 prepress/general gap, and it is the number a colorant-buffer cost estimate
@@ -8782,7 +8784,7 @@ in the direction that makes the scoping ruling firmer, not weaker.
 
 **★★★ WHAT THE TWO CORPORA SAY, AND THEY SAY DIFFERENT THINGS.**
 
-- **100.0 % on the suite built to test this.** The Ghent transparency
+- **100.0 % on the suite built to test this.** The suite transparency
   panels **cannot** be passed without the colorant buffer. The previous
   handoff derived that by hand for **one cell**; it is now true of **every
   blend on every one of those patches**.
@@ -8798,9 +8800,9 @@ in the direction that makes the scoping ruling firmer, not weaker.
 **Filed as a SCOPING FACT against `Pass 97.1`'s remaining work, not as a
 statistic**, and the *Backlog* entry is amended with it in this same
 filing. It is the kind of fact that is only available before the work:
-**the Ghent numbers alone could not have produced it**, because a
+**the suite numbers alone could not have produced it**, because a
 conformance suite is by construction 100 % of whatever it tests. A Pass
-justified on Ghent alone would have been sold as a rendering fix; it is a
+justified on suite alone would have been sold as a rendering fix; it is a
 conformance fix, and that changes how its result should be judged when it
 lands — **do not expect the real-world corpus to move, and do not read
 that as failure.**
@@ -8890,7 +8892,7 @@ applied to `docs/compositor-plan.md`). Second consecutive concurrent pair
 this session, after the 219th/221st.
 
 **Verified here rather than assumed**, because it discharges an item this
-entry raised: `grep -n "3_GWG161\|unexplained\|UNCONFIRMED"
+entry raised: `grep -n "PCS3_161\|unexplained\|UNCONFIRMED"
 docs/NEXT_SESSION.md` at `74c5f2c` returns **zero hits** — **hard-rule-11
 survivor #2 is discharged by wholesale rewrite**, and
 `tools/measure-blend-space.py` is now tracked.
@@ -8931,7 +8933,7 @@ are now in the file the next session reads first.** Reported, not edited —
   was committed at **10:05:38** — i.e. from the working tree, not
   demonstrably from the commit. `cargo build --release -p pdfce-cli` at
   `HEAD` **did recompile** (3 m 26 s) and produced a binary of **byte-
-  identical size** (11,885,568), and **the Ghent measurement re-run
+  identical size** (11,885,568), and **the suite measurement re-run
   against it is identical in all six figures**. So the numbers are HEAD's,
   and the question is closed rather than assumed away.
 - **`git status --porcelain` at the time of writing:** one modified file
@@ -8954,7 +8956,7 @@ are now in the file the next session reads first.** Reported, not edited —
 - **Nothing renders differently.** `Pass 97.1c` ships arithmetic with **no
   wiring**; `Pass 97.1d` ships a **reader and two counters**. Every blend
   is still computed in device sRGB. **This is the third consecutive `97.x`
-  deliverable to move zero Ghent patches** (`97.0`: seven expected, zero
+  deliverable to move zero suite patches** (`97.0`: seven expected, zero
   delivered; `97.1a`: correct, cited, tested and inert; `97.1c`/`97.1d`:
   measurement only) — **and unlike the first two, this one was designed to
   move nothing.** A measurement is not a regression.
@@ -8969,7 +8971,7 @@ are now in the file the next session reads first.** Reported, not edited —
 - **`overprint::composite`'s white-backdrop convention is still
   untouched** — inherited from `97.0a`, still deliberately waiting for the
   buffer that will replace its input.
-- **The Ghent board did not move**: still **26 pass · 14 FAIL · 11
+- **The suite board did not move**: still **26 pass · 14 FAIL · 11
   UNRESOLVED of 51**, unchanged since `97.0`.
 
 #### What this filing declined to mint
@@ -9203,7 +9205,7 @@ not so the work is re-narrated.
 
 - **`Pass 97.0a`–`97.0d`** — the compositor: pdfce owns §11.4.4/§11.4.8
   and Table 136; non-isolated groups see their backdrop; §11.4.6 knockout
-  implemented; soft masks apply to a group's **result**. Ghent `16.1`
+  implemented; soft masks apply to a group's **result**. The suite's `16.1`
   **14 wrong cells → 2**; soft-mask strip correlation **0.576 → 0.962**,
   **0.725 → 0.978**, **0.905 → 0.986** (216th).
 - **`Pass 97.1a`/`97.1b`** — `/Indexed` colorants, and the counter for
@@ -9220,7 +9222,7 @@ not so the work is re-narrated.
 
 #### ★ The honest half, and it is in the published notes as well as here
 
-**The Ghent board did not move: 26 pass / 14 fail / 11 unresolved of 51,
+**The suite board did not move: 26 pass / 14 fail / 11 unresolved of 51,
 before and after**, while the trap count across the failing patches fell
 **67 → 55** — **12 traps cleared over 14 failing patches = 0.86 traps per
 failing patch.** **The transparency panels are blocked on §11.3.4's
@@ -9406,7 +9408,7 @@ since it are restated in the ledger.
 
 `ColorSpace::indexed_entry`'s own rustdoc at
 `crates/pdfce-render/src/color.rs:599–600` still read *"`/Indexed`
-appears in **four of the seven** failing Ghent overprint patches"* —
+appears in **four of the seven** failing suite overprint patches"* —
 bare, and carrying exactly the *reachable-by-the-renderer* reading that
 `943575e` had corrected in the other two sites to **present in four,
 reachable in none**. `26c6fad` gives it the same qualification plus a
@@ -9516,7 +9518,7 @@ HANDOFF.** `943575e`'s commit message — which quotes the librarian's
 report verbatim — reads:
 
 > *"**overprint.rs, twice**: `/Indexed` appears in four of the seven
-> failing Ghent overprint patches."*
+> failing suite overprint patches."*
 
 **That is a file-scoped denominator, written by this role, in the report
 the engineer then swept against.** The engineer's grep is not where the
@@ -9763,14 +9765,14 @@ true.** Those notes said, under a heading titled *"Not implemented"*:
 not read this release as 'transparency works'."* **This is the release
 where that changes.** Knockout groups, non-isolated group backdrops and
 soft masks applied to a group's **result** all ship (`Pass 97.0a–d`);
-Ghent **16.1 goes from 14 wrong cells to 2**; the three measurable
+the suite's **16.1 goes from 14 wrong cells to 2**; the three measurable
 soft-mask patches go **0.576 → 0.962**, **0.725 → 0.978**, **0.905 →
 0.986**. Also in it: **text editing inside form XObjects** (`Pass 119.0`,
 `119.2`), the **object clipboard** (`Pass 120.x`), `transform_objects`,
 and three defects only the operator's own CAD drawing could find.
 
 **★ The honest half, and it belongs in the record as much as in the
-notes.** The **Ghent board did not move** — **26 pass / 14 FAIL / 11
+notes.** The **suite board did not move** — **26 pass / 14 FAIL / 11
 UNRESOLVED of 51, before and after** — while the trap count across the
 failing patches fell **67 → 55**, i.e. **12 traps cleared over 14 failing
 patches = 0.86 traps per failing patch**. **The transparency panels are
@@ -9997,7 +9999,7 @@ Both were found **by this role, while filing the 217th**, both live in
 2. **`crates/pdfce-render/src/overprint.rs`, twice** (the `classify`
    arm's comment, corrected text at `:487–495`, and the test's rustdoc,
    corrected text at `:804–812`) — *"`/Indexed`
-   appears in four of the seven failing Ghent overprint patches."*
+   appears in four of the seven failing suite overprint patches."*
    **Not false.** The defect is that it reads as
    *reachable-by-the-renderer* when it only ever asserted
    *present-in-the-file* — and `Pass 97.1a`'s own A/B measurement
@@ -10077,7 +10079,7 @@ and `docs/`, then read. Result:
 > **`crates/pdfce-render/src/color.rs:599–600`**, in
 > **`ColorSpace::indexed_entry`'s rustdoc** (the function itself at
 > `:617`):
-> *"`/Indexed` appears in **four of the seven** failing Ghent overprint
+> *"`/Indexed` appears in **four of the seven** failing suite overprint
 > patches."*
 > **Bare, unqualified, and carrying exactly the reading `943575e`
 > corrected in the other two sites.**
@@ -10534,7 +10536,7 @@ an absence-claim finding into a **boundary-claim** one.
 **279**. All three were brought current by the 217th filing and are
 **accurate at `HEAD`**: row 203 already names
 `overprint_images_unsupported` as *deliberately separate* from
-`overprint_refused` and gives the `2_GWG031` = 1 measurement; row 202
+`overprint_refused` and gives the `PCS2_031` = 1 measurement; row 202
 already carries the `/Indexed`-is-inert result with its structural
 reason; row 279 already names §11.3.4's blending colour space as *the
 leading reason, measured* for the colorant buffer. `943575e` changes no
@@ -10686,19 +10688,19 @@ The four counters are **identical to the digit**:
 
 | patch | `overprint_effective` | `overprint_composited` | `overprint_refused` | `overprint_pixels` |
 |---|---|---|---|---|
-| `1_GWG190` | 5 | 5 | 0 | 3607 |
-| `1_GWG191` | 2 | 2 | 0 | 1679 |
-| `1_GWG192` | 3 | 3 | 0 | 2182 |
-| `2_GWG020` | 4 | 4 | 0 | 1654 |
+| `PCS1_190` | 5 | 5 | 0 | 3607 |
+| `PCS1_191` | 2 | 2 | 0 | 1679 |
+| `PCS1_192` | 3 | 3 | 0 | 2182 |
+| `PCS2_020` | 4 | 4 | 0 | 1654 |
 
 *(Pre-fix and post-fix, same numbers in both columns — the table is the
 after state and the before state simultaneously, which is the claim.)*
-Ghent board unchanged.
+Suite board unchanged.
 
 **Why, verified STRUCTURALLY rather than assumed** — and this is what
 turns "no change" from a worry into a result: **every
 `/Indexed [/DeviceN …]` space in those patches is an IMAGE colour space
-and nothing else.** `1_GWG190`'s two are **`/XO1` and `/XO2`, both
+and nothing else.** `PCS1_190`'s two are **`/XO1` and `/XO2`, both
 `/Subtype /Image`.** So the fix is correct, cited and tested, and
 **inert on the whole corpus until images reach overprint at all** — which
 is `97.1b`'s subject and the colorant buffer's.
@@ -10755,11 +10757,11 @@ path** (engineer-relayed):
 
 | patch | `overprint_images_unsupported` |
 |---|---|
-| `1_GWG190` | 2 |
-| `1_GWG191` | 2 |
-| `1_GWG192` | 2 |
-| `2_GWG020` | 4 |
-| **`2_GWG031`** | **1 — ★ and this patch PASSES the suite** |
+| `PCS1_190` | 2 |
+| `PCS1_191` | 2 |
+| `PCS1_192` | 2 |
+| `PCS2_020` | 4 |
+| **`PCS2_031`** | **1 — ★ and this patch PASSES the suite** |
 
 **Keep that last row.** *A patch can pass its own trap and still have an
 object class the renderer never offered the feature to.* That is the
@@ -10773,7 +10775,7 @@ different facts, and only one of them was being reported.
 - `cargo fmt --check` and
   `cargo clippy --all-targets --workspace -- -D warnings` **clean**.
 - **All 14 CI gates green.**
-- **Ghent board unchanged: 26 pass / 14 FAIL / 11 UNRESOLVED, no patch
+- **suite board unchanged: 26 pass / 14 FAIL / 11 UNRESOLVED, no patch
   regressed.**
 
 #### Documents amended by the engineer in the same commit
@@ -10787,7 +10789,7 @@ it — one plan, one place.
 #### What this Pass did NOT do
 
 - **§11.3.4's blending colour space — `Pass 97.1`'s LEADING deliverable —
-  is untouched and still unbuilt.** It is what the 14 remaining Ghent
+  is untouched and still unbuilt.** It is what the 14 remaining suite
   transparency failures are blocked on.
 - **The colorant planes are untouched.** `97.1a`/`97.1b` are the two
   items §7 listed as owed *before* the buffer, and nothing more.
@@ -10853,10 +10855,10 @@ means *no backdrop*, **not *paper***. `Sat(white) = 0` and
 `Lum(white) = 1`, so Hue/Saturation/Color of anything over white **is
 white**.
 
-Ghent `1_GWG162` at scale 2.0, with **pdfium as an independent second
+The suite's `PCS1_162` at scale 2.0, with **pdfium as an independent second
 opinion** (engineer-relayed):
 
-| `1_GWG162` cell (of 16) | before `7160819` | after `7160819` | pdfium |
+| `PCS1_162` cell (of 16) | before `7160819` | after `7160819` | pdfium |
 |---|---|---|---|
 | Hue | (255,255,255) | (184,184,184) | (184,184,184) |
 | Saturation | (255,255,255) | (184,184,184) | (184,184,184) |
@@ -10910,9 +10912,9 @@ formula has `(1 − α_s)`. **§11.4.6 NOTE 6's nesting rule is honoured**: a
 non-isolated group inside a knockout group inherits the **OUTER** group's
 initial backdrop, not the immediate one.
 
-**MEASURED (engineer-relayed): `1_GWG161` went from 14 traps to 2 — twelve
+**MEASURED (engineer-relayed): `PCS1_161` went from 14 traps to 2 — twelve
 of sixteen cells now render correctly, i.e. the panel went from 2/16
-correct to 14/16.** `2_GWG120_White_OP-KO` **still passes**. **No patch
+correct to 14/16.** `PCS2_120_White_OP-KO` **still passes**. **No patch
 regressed.**
 
 **★ `transparency_groups_knockout_approximated` CHANGED MEANING, and this
@@ -10928,7 +10930,7 @@ redefined counter reads as an improvement in the wrong thing.**
 The test that asserted the old meaning was **updated rather than
 deleted**, with the reason in its own doc comment. **The old and new
 numbers are not comparable in either direction** — the pre-`9b49ca0`
-figure of **47 on the Ghent corpus**, quoted in four documents, is a
+figure of **47 on the suite corpus**, quoted in four documents, is a
 count of a different unit and must not be carried forward as a baseline.
 
 **★★ HARD RULE 11 SWEEP — SEVEN SURVIVORS FOUND, ALL REPORTED, FIVE
@@ -10961,14 +10963,14 @@ object's `q_m`) and is **wrong for a group**, where it multiplies **once
 per object inside** — so the error grows as `M^n` for `n` overlapping
 objects, which is why it was invisible on single-object fixtures.
 
-Reference-strip correlation on the Ghent soft-mask patches
+Reference-strip correlation on the suite soft-mask patches
 (engineer-relayed, three patches):
 
 | patch | before `86a7b70` | after `86a7b70` | Δ |
 |---|---:|---:|---:|
-| `1_GWG1610` Softmasks Text part1 | 0.576 | **0.962** | +0.386 |
-| `1_GWG168` Softmasks Vector part1 | 0.725 | **0.978** | +0.253 |
-| `1_GWG169` Softmasks Vector part2 | 0.905 | **0.986** | +0.081 |
+| `PCS1_1610` Softmasks Text part1 | 0.576 | **0.962** | +0.386 |
+| `PCS1_168` Softmasks Vector part1 | 0.725 | **0.978** | +0.253 |
+| `PCS1_169` Softmasks Vector part2 | 0.905 | **0.986** | +0.081 |
 
 Mean over the three: **0.735 → 0.975**. New counter
 **`soft_masks_on_group_result`**. **The one case a mask cannot be lifted —
@@ -11061,15 +11063,15 @@ it requires somebody to remember to run both.
 
 #### ★★★ THE SCOPING FINDING — Stage A will NOT deliver its seven patches, and the reason is NOT the group model
 
-**Ghent board UNCHANGED: `26 pass · 14 FAIL · 11 UNRESOLVED` of 51, before
+**suite board UNCHANGED: `26 pass · 14 FAIL · 11 UNRESOLVED` of 51, before
 and after.** Trap count across the failing patches went **67 → 55**, i.e.
 **12 traps cleared over 14 failing patches = 0.86 traps per failing patch
-on average, and 12 of those 12 are `1_GWG161`'s** — *the improvement is
+on average, and 12 of those 12 are `PCS1_161`'s** — *the improvement is
 entirely one panel*, which is exactly the shape a scoping error produces.
 `docs/compositor-plan.md` §4 expects **seven** patches from Stage A and
 **gets zero**.
 
-**Derived by hand on `1_GWG162`'s `Difference` cell**, whose two operands
+**Derived by hand on `PCS1_162`'s `Difference` cell**, whose two operands
 are printed in the file — X1 = `DeviceCMYK 0 1 0 0` (magenta),
 X2 = `DeviceCMYK 0 0 0 1` (black), `/BM /Difference`, and the surround a
 correct engine must produce is RGB `(0,165,79)`:
@@ -11085,8 +11087,8 @@ renders `(202,29,108)`** — *both blend in RGB and both are wrong,
 differently*. **The trap is authored on the BLENDING COLOUR SPACE, and no
 amount of group-model correctness reaches it.**
 
-**Every Ghent transparency patch declares `/Group /CS /DeviceCMYK` on the
-PAGE** — including **`3_GWG161`, whose own objects are `ICCBased` RGB**.
+**Every suite transparency patch declares `/Group /CS /DeviceCMYK` on the
+PAGE** — including **`PCS3_161`, whose own objects are `ICCBased` RGB**.
 So §11.3.4's subtractive complement
 (`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`) is **`Pass 97.1`'s
 LEADING deliverable, ahead of the spot planes**, and **four of Stage A's
@@ -11100,20 +11102,20 @@ than restating it** — one plan, one place, per the standing
 no-second-copy discipline.
 
 **★ RECORDED AS UNCONFIRMED RATHER THAN ASSUMED — and this is the part a
-future session will be tempted to round up.** `3_GWG161`'s **14 traps**:
+future session will be tempted to round up.** `PCS3_161`'s **14 traps**:
 no knockout groups, **no backdrop reruns triggered** (correctly — its
 groups' interiors are all `Normal`, which is NOTE 5's condition), blend
 modes sit at the `Do` where `draw_pixmap` already handles them. **The
-§11.3.4 hypothesis FITS but was NOT derived the way `1_GWG162`'s was.**
+§11.3.4 hypothesis FITS but was NOT derived the way `PCS1_162`'s was.**
 A hypothesis that fits and a derivation that closes are different
-evidence, and `1_GWG162`'s arithmetic above is the only one of the two
+evidence, and `PCS1_162`'s arithmetic above is the only one of the two
 that has been done.
 
 > **★★★ AMENDED 2026-08-21 (two-hundred-and-twenty-second filing) — THIS
-> FLAG IS DISCHARGED. `3_GWG161` IS CONFIRMED, AND BY A COUNTER RATHER
+> FLAG IS DISCHARGED. `PCS3_161` IS CONFIRMED, AND BY A COUNTER RATHER
 > THAN BY AN ARGUMENT.** `Pass 97.1d` (`90739d7`) reads the blending
 > colour space, and re-measured by that filing:
-> **15 of `3_GWG161`'s 15 blend modes are computed in the wrong space**,
+> **15 of `PCS3_161`'s 15 blend modes are computed in the wrong space**,
 > across 18 subtractive groups. **The route the caution above was right to
 > demand is Table 147's `/CS` row**: a **non-isolated** group's `/CS`
 > *shall be ignored* and the space *inherited from the parent*, so
@@ -11122,11 +11124,11 @@ that has been done.
 > right and the mechanism was a spec row nobody had read** — which is
 > exactly why "fits" and "derived" were correctly kept apart here.
 > **Keep the two counts distinct:** 15 **blend modes** (this measure)
-> against 14 **trap cells of 16** (`ghent-check.py`'s measure). Full
+> against 14 **trap cells of 16** (`suite-check.py`'s measure). Full
 > record: the `cbb1ede` + `90739d7` entry at the top of *Shipped*.
 
 **AN INSTRUMENT PROBLEM, NAMED AND DELIBERATELY NOT SOLVED THIS SESSION.**
-`tools/ghent-check.py` has **no calibrated threshold for reference-strip
+`tools/suite-check.py` has **no calibrated threshold for reference-strip
 patches**, so the three soft-mask patches above stay **UNRESOLVED despite
 0.96–0.99 correlation**. There is now a **bimodal split to calibrate
 against** — 0.96–0.99 for the three fixed patches against 0.04–0.41 for
@@ -14384,7 +14386,7 @@ compete for priority on its own merits — it was cheap to fix and
 `pdfceGUI` is a forward consumer of the same code path.
 
 **(C) New `crates/pdfce-core/examples/gray_equivalence_probe.rs`** — a
-re-runnable measurement of Ghent 23.0's four-way gray equivalence through
+re-runnable measurement of suite 23.0's four-way gray equivalence through
 pdfce's sRGB path, which is how (B) was found.
 
 #### An answer owed to `iccce`, and a corpus gap they found in ours
@@ -14432,7 +14434,7 @@ one gap in this project's own spec corpus.
   answer (relayed): no neutral space works, because overprint selects per
   *colorant identity*, which XYZ and spectral both discard; the right
   target is N channels where N is a per-page property; `DeviceN` is
-  already PDF's model for it; overprint is 10 of the 18 Ghent patches
+  already PDF's model for it; overprint is 10 of the 18 suite patches
   still failing. **A detailed Backlog bucket for exactly this already
   exists — `Pass 97.1` "colorant planes"** (filed hundred-and-
   sixty-ninth filing, from `docs/compositor-plan.md`) — so the
@@ -14801,7 +14803,7 @@ next free **`R201`**.
 > evidence when this librarian has no shell"*), not a gap in discipline.
 >
 > **Owed item 34 — CLOSED.** The 191st filing flagged that the dispatch's
-> prose ("closed 2 of 3 Ghent survivors") did not match this page's own
+> prose ("closed 2 of 3 suite survivors") did not match this page's own
 > item-by-item table ("2 of the six claim-sweep survivors"), and did not
 > guess which the engineer meant. The engineer has now read both commit
 > bodies directly rather than recalled them:
@@ -14988,7 +14990,7 @@ unread, `v0.7.0` bumped but not tagged.
 >
 > **★ The dispatch's own framing of `b1ea628` disagrees with the figure
 > already on this page.** The dispatch describes it as having *"closed 2
-> of 3 Ghent survivors"*, naming items 23, 26, 27 as *"the three files it
+> of 3 suite survivors"*, naming items 23, 26, 27 as *"the three files it
 > OWED"* that came out byte-identical. **The 190th filing's own
 > item-by-item table** (this file, immediately below in *Shipped*) counts
 > **2 of the SIX claim-sweep survivors** closed by `b1ea628` (items 24 and
@@ -15379,7 +15381,7 @@ independent instances ⇒ `R199`**, minted this filing; the warrant is in
 *Standing rules* and turns on **mechanism**, not on the count.
 
 **The per-cell trap table beneath it is DELETED rather than corrected.**
-`1_GWG160` passes now, so a table of which of its cells trap describes a
+`PCS1_160` passes now, so a table of which of its cells trap describes a
 document state that no longer exists. **Deleting beats correcting when the
 subject is gone** — a corrected table would still assert that the patch
 has trapping cells.
@@ -15448,7 +15450,7 @@ see this filing's header box.
 **Discharges owed item 21.** `docs/compositor-plan.md` §1 carried
 *"Baseline re-measured 2026-08-18 at `e618d67`: 25 pass · 18 FAIL · 8
 UNRESOLVED"*, and the document's whole thesis rests on that denominator:
-*"what single build clears the largest share of the **18** remaining Ghent
+*"what single build clears the largest share of the **18** remaining suite
 failures"* and *"**16 of the 18** failures are downstream of the same
 missing thing."*
 
@@ -15458,12 +15460,12 @@ missing thing."*
    with `pass` unchanged at **25**, so three patches crossed the
    FAIL/UNRESOLVED line and **no patch changed outcome.** Filed as a
    reading, not a verified cause — **owed item 20 is still open.**
-2. **`1_GWG160` genuinely passes now**, flipped by `Pass 85.4b`.
+2. **`PCS1_160` genuinely passes now**, flipped by `Pass 85.4b`.
    **Standing is `26 pass · 14 FAIL · 11 UNRESOLVED` of 51.**
 
 #### ★ POINT 2 TOUCHES THE ARGUMENT, WHICH IS WHY THIS IS AN AMENDMENT AND NOT A FIND-AND-REPLACE
 
-**`1_GWG160` is one of the five transparency-group failures §1.1 probes
+**`PCS1_160` is one of the five transparency-group failures §1.1 probes
 CELL BY CELL** to establish that these failures *"do not decompose"* —
 and it was resolved by **Table 137 arithmetic**: no CMYK buffer, no
 non-transparent initial backdrop, no `Pass 97.0`. **So the thesis has a
@@ -15482,7 +15484,7 @@ from data rather than from a fresh run.
 
 #### The preservation ruling, and it is the right one
 
-**§1's baseline block and §1.1's `1_GWG160` probe are LEFT AS WRITTEN**,
+**§1's baseline block and §1.1's `PCS1_160` probe are LEFT AS WRITTEN**,
 marked dated. They are the measurement the plan was built on, and
 rewriting them would destroy the record of what was true at `e618d67`.
 This is the 188th filing's liveness ruling applied correctly to a document
@@ -15831,9 +15833,9 @@ bucket — see the pointer added there.
 
 ---
 
-### Pass 85.4b — `972ddbb` — ★★★★★ **THE FOUR NON-SEPARABLE BLEND MODES SHIP: decision 066 REFUSED TRUSTING THE DEPENDENCY, IT NEVER REFUSED THE FEATURE. GHENT 25 → 26 pass, 15 → 14 FAIL. ★ AND THE RECORDED GHENT BASELINE WAS ALREADY STALE — 25/18/8 in this file, 25/15/11 on the harness** — filed 2026-08-19 (hundred-and-eighty-ninth filing)
+### Pass 85.4b — `972ddbb` — ★★★★★ **THE FOUR NON-SEPARABLE BLEND MODES SHIP: decision 066 REFUSED TRUSTING THE DEPENDENCY, IT NEVER REFUSED THE FEATURE. SUITE 25 → 26 pass, 15 → 14 FAIL. ★ AND THE RECORDED SUITE BASELINE WAS ALREADY STALE — 25/18/8 in this file, 25/15/11 on the harness** — filed 2026-08-19 (hundred-and-eighty-ninth filing)
 
-The operator asked for *"only the easy things"* on Ghent. **This was the
+The operator asked for *"only the easy things"* on the suite. **This was the
 only candidate, and it was easy for a reason worth recording rather than
 by luck:** `Pass 85.5` had already built the machinery — rasterise a
 paint to a coverage mask with **the same rasteriser a normal paint
@@ -15886,7 +15888,7 @@ either case.**
 #### ★★ AND THE MEASUREMENT CORRECTED ITS AUTHOR TWICE
 
 **FIRST — a measured IMPROVEMENT that came from a BUG, and it was nearly
-reported as a win.** An early run showed `3_GWG164` going **4 traps → 1**.
+reported as a win.** An early run showed `PCS3_164` going **4 traps → 1**.
 `outer_is_neutral` tests `blend_mode == SourceOver`, and a non-separable
 mode **parks `blend_mode` at exactly that** while carrying the real mode
 in a new field — so a group under `/BM /Hue` **LOOKED neutral**, skipped
@@ -15902,15 +15904,15 @@ inherited a mode that belongs to the group's **RESULT**. Two sites, one
 class, no grep that finds them. Recorded as owed item **18**, and it is a
 `D:\dev\rag\rust\` finding, written this filing.
 
-**SECOND — the paint-level implementation reached ZERO Ghent pixels.**
+**SECOND — the paint-level implementation reached ZERO suite pixels.**
 With both bugs fixed, `nonseparable_composited` read **0 on all five
-Ghent patches that use these modes.** **Not a disappointment — a
+suite patches that use these modes.** **Not a disappointment — a
 FINDING:** every non-separable mode in that corpus sits at a
 **transparency-group `Do`**, never at a paint. So a correct, tested,
 paint-level implementation was **useless** until `Canvas::layer`
 composited the **group RESULT** through Table 137 per pixel (
 `draw_pixmap` cannot carry these four). **That is what flipped
-`1_GWG160`.**
+`PCS1_160`.**
 
 #### MEASURED — same harness, same command, baseline BUILT FROM THE PREVIOUS COMMIT IN A WORKTREE rather than read from a document
 
@@ -15921,17 +15923,17 @@ composited the **group RESULT** through Table 137 per pixel (
 
 | patch | before | after |
 |---|---|---|
-| `1_GWG160_Transp_Basic_BM_DeviceCMYK_Non-knockout` | FAIL | **ok** |
-| `3_GWG164_Transp_Basic_BM_ICCbasedCMYK` | 4 traps | **1** |
-| `3_GWG161_Transp_Basic_BM_ICCBasedRGB` | 15 traps | **14** |
+| `PCS1_160_Transp_Basic_BM_DeviceCMYK_Non-knockout` | FAIL | **ok** |
+| `PCS3_164_Transp_Basic_BM_ICCbasedCMYK` | 4 traps | **1** |
+| `PCS3_161_Transp_Basic_BM_ICCBasedRGB` | 15 traps | **14** |
 
 **Scope of the regression check:** A/B against the previous commit over
-**742 documents × 2 scales = 1,383 renders, 0 differing**, with the Ghent
+**742 documents × 2 scales = 1,383 renders, 0 differing**, with the suite
 patches as the **positive control** (they *do* differ — an all-identical
 A/B with no positive control proves the harness ran, not that the change
 is safe).
 
-#### ★★★ THE RECORDED GHENT BASELINE WAS ALREADY STALE — CORRECTED THIS FILING WHEREVER IT APPEARS
+#### ★★★ THE RECORDED SUITE BASELINE WAS ALREADY STALE — CORRECTED THIS FILING WHEREVER IT APPEARS
 
 `ROADMAP.md` said **25 pass / 18 FAIL / 8 UNRESOLVED**. The harness
 reports **25 / 15 / 11** on the **pre-change** binary. The engineer did
@@ -15950,7 +15952,7 @@ regression**. Recorded as the reading, **not** as a verified cause: the
 two measurements were taken by different runs at different commits, and
 nobody has diffed the classifier. Owed item **20**.
 
-**Corrected in:** the Ghent standing board (below), the `85.4b` row, and
+**Corrected in:** the suite standing board (below), the `85.4b` row, and
 `FEATURES.md`. **NOT corrected, deliberately:** `docs/compositor-plan.md`
 §1 and `docs/NEXT_SESSION.md` (both engineer-owned — reported as owed
 items **21** and **22**), and every dated *Shipped* / `SESSION_LOG.md` /
@@ -15971,7 +15973,7 @@ contract test extended deliberately
 (`crates/pdfce-cli/tests/render_page.rs:493`).
 
 **Ledger effects.** No new Pass family — this **closes the `85.4b` row**
-of the `Pass 85.0–85.5` Ghent gap inventory, whose row is rewritten
+of the `Pass 85.0–85.5` suite gap inventory, whose row is rewritten
 below. **Decision 066 AMENDED, not superseded**; decision ceiling stays
 **071**, next free **072**. No standing rule minted.
 
@@ -16033,7 +16035,7 @@ and it is why this is filed as an entry rather than a footnote.
 #### Where it lands
 
 **`Pass 97.x`, the colorant compositor** — already top of the queue and
-worth ~16 of the (then) 18 remaining Ghent failures.
+worth ~16 of the (then) 18 remaining suite failures.
 `docs/compositor-plan.md` records the ICC hop as `iccce`'s, and **`iccce`
 has ALREADY SHIPPED the exact call**
 (`Chain::with_destination(&src, Destination::None, intent)`). **So there
@@ -18367,7 +18369,7 @@ is partial):
   the 4 nonseparable modes (Hue/Saturation/Color/Luminosity) are
   recognised and **declined**, so they land in `blend_modes_ignored` and
   never reach `blend_modes_applied` at all — the measurement `83c85ec`
-  made directly (every Ghent transparency patch: `blend_modes_applied=11,
+  made directly (every suite transparency patch: `blend_modes_applied=11,
   blend_modes_ignored=4`).
 - **Soft masks** — built correctly, but folded into the clip instead of
   applied to the group's RESULT (§11.4.5); `/TR` is counted and never
@@ -18405,7 +18407,7 @@ truth this comment now states (confirmed by `Read` before filing).
 
 Verification (relayed): `cargo fmt --all` clean; `cargo clippy -p
 pdfce-cli --all-targets -- -D warnings` clean; `cargo test -p pdfce-cli
---test render_page` 15/15 green. Ghent standing carried forward
+--test render_page` 15/15 green. Suite standing carried forward
 unchanged: **25 pass / 18 FAIL / 8 UNRESOLVED of 51** — this commit is
 comments only in `crates/`, not re-run.
 
@@ -18439,16 +18441,16 @@ finding noted `blend_modes_applied`'s corrected field doc attributed
 while `gstate.rs`'s `blend_mode_from_name` returns `None` for all four
 nonseparable names — meaning the evidence cited could not reach the
 counter it was cited for. **This commit settles it, and settles it the
-harder way — by measurement, not by re-reading:** every Ghent
+harder way — by measurement, not by re-reading:** every suite
 transparency patch reports `blend_modes_applied=11, blend_modes_ignored=4`.
 pdfce **declines** the four nonseparable modes outright and composites
-them as `Normal`. `1_GWG160`'s Hue/Saturation/Color failures are because
+them as `Normal`. `PCS1_160`'s Hue/Saturation/Color failures are because
 those modes are **NOT IMPLEMENTED**, not because K is read from the wrong
 operand. The clause was correctly quoted, the cells were correctly
 identified, and the sentence joining them was false — a citation makes a
 claim look checked, not be checked.
 
-**New tool: `tools/ghent-cellmap.py`.** The original cell→mode mapping
+**New tool: `tools/suite-cellmap.py`.** The original cell→mode mapping
 came from cell-pitch arithmetic — one method, no cross-check, right about
 *positions* while the causal story built on it was wrong. The tool now
 walks the content stream, tracks the CTM through `q`/`Q`/`cm`, and pushes
@@ -18457,18 +18459,18 @@ against the governing `/ExtGState`, resolving cells properly instead of
 by pitch.
 
 **What it found once the guessing stopped:**
-- `Hue`, `Saturation`, `Color` trap in **both** `1_GWG160` and `3_GWG164`.
+- `Hue`, `Saturation`, `Color` trap in **both** `PCS1_160` and `PCS3_164`.
   **`Luminosity` is declined identically and comes out CLEAN in both** —
   "declined" does not imply "visibly wrong," and that clean cell must not
   be read as evidence `Luminosity` works.
-- **`3_GWG164`'s `Difference` cell** is the actual §11.3.4 evidence: an
+- **`PCS3_164`'s `Difference` cell** is the actual §11.3.4 evidence: an
   *applied*, separable mode still failing on ICCBased CMYK. `Difference`
   is `|cb − cs|`, the mode most sensitive to whether operands were
   complemented first. One cell, reported as one cell.
 
 **Stated limitation, not discovered later:** the tool flattens resource
 names into one namespace, so a file defining `/GS1` in several resource
-dictionaries reports `?`. `1_GWG161` and `1_GWG162` do exactly that and
+dictionaries reports `?`. `PCS1_161` and `PCS1_162` do exactly that and
 are **UNMAPPED** — `?` means the tool could not tell, not that no blend
 mode is set.
 
@@ -18556,7 +18558,7 @@ candidate that clears the wasm32 gate `lcms2` fails (a C binding).
 **NOT ADDED to any `Cargo.toml`** — rule 13 requires a `docs/PRIOR_ART.md`
 entry first. **Added by this filing**, below, classified permissive,
 recorded as the candidate of record for `Pass 97.2` and for the separate
-`3_GWG130` ICC work.
+`PCS3_130` ICC work.
 
 **`Pass 97.2`'s own Backlog entry updated by this filing** — see
 *Backlog*, below — to name the decided default, the five settings, and
@@ -18596,7 +18598,7 @@ still read, verbatim, "A census, not a shortfall." Confirmed by `Read`:
 `tiny_skia::Pixmap` starts transparent, which is isolated semantics
 (§11.4.7), so a group buffered for an outer-state reason (not its own
 `/I`) silently becomes isolated regardless; wrong on **14, 15 and 7 of 16**
-Ghent transparency-patch cells (`1_GWG161`/`3_GWG161`/`1_GWG162`), all
+suite transparency-patch cells (`PCS1_161`/`PCS3_161`/`PCS1_162`), all
 counted as successes until `Pass 97.0` lands — matching the print-site
 text `3e3019a` already fixed, word for word in substance.
 
@@ -18616,7 +18618,7 @@ measurements rather than by re-reading:
    separately requires a CMYK detour for the four NONSEPARABLE modes,
    where K is **selected** by mode (backdrop's K for Hue/Saturation/
    Color, source's K for Luminosity) rather than blended — pdfce omits
-   the detour, K is never touched. Ghent `1_GWG160` **fails exactly the
+   the detour, K is never touched. The suite's `PCS1_160` **fails exactly the
    first three cells and passes Luminosity** — the one-bit confirmation
    that the missing clause, not something else, is the cause. `Pass
    97.1` is the fix; the doc now says so.
@@ -18628,8 +18630,8 @@ measurements rather than by re-reading:
    **RESULT**; pdfce folds the mask into the clip, which applies it to
    each element **inside** the group instead. The two diverge wherever
    the group's elements overlap. Measured against the reference engine on
-   the same Ghent strip: `1_GWG1610` **0.575 vs 0.966**, `1_GWG168`
-   **0.725 vs 0.981**, `1_GWG169` **0.905 vs 0.983** — all three improved
+   the same suite strip: `PCS1_1610` **0.575 vs 0.966**, `PCS1_168`
+   **0.725 vs 0.981**, `PCS1_169` **0.905 vs 0.983** — all three improved
    by the soft-mask work, none passing. `Pass 97.0` is the fix (the same
    Pass as the group-compositing fix above — there is nowhere to apply a
    mask to a group's result until that result is a value pdfce owns).
@@ -18666,7 +18668,7 @@ next commit touching `pdfce-cli/src/main.rs`.
 **★ A seventh finding, this one an inconsistency inside the fix itself,
 not a missed copy — flagged, not resolved.** `blend_modes_applied`'s
 corrected field doc (point 2 above) attributes §11.3.5.3's nonseparable-
-mode/K-selection shortfall, and the Ghent `1_GWG160` evidence, to THIS
+mode/K-selection shortfall, and the suite `PCS1_160` evidence, to THIS
 counter. Confirmed by `Read` of `crates/pdfce-render/src/gstate.rs:415`–
 `455`: `blend_mode_from_name` returns `None` for all four nonseparable
 names (`Hue`/`Saturation`/`Color`/`Luminosity`) unconditionally — no
@@ -18674,7 +18676,7 @@ other call site in `pdfce-render` maps them to a `tiny_skia::BlendMode`.
 Per `interpret.rs:2502`–`2513`, `None` always increments
 `blend_modes_ignored`, never `blend_modes_applied`. So a nonseparable
 mode cannot reach `blend_modes_applied` through any path this librarian
-found, which means the §11.3.5.3/`1_GWG160` evidence the corrected doc
+found, which means the §11.3.5.3/`PCS1_160` evidence the corrected doc
 cites belongs to `blend_modes_ignored`'s own shortfall — where, in fact,
 it is *also* documented correctly, at `interpret.rs:254`–`268` ("one of
 the four NON-SEPARABLE modes … which pdfce recognises perfectly well and
@@ -18684,7 +18686,7 @@ blended mode, separable included, whenever the group's blend space is
 CMYK, independent of which counter increments. **Not corrected here**
 (same no-code-edit-mandate reasoning as the sixth survivor above);
 flagged for the engineer to confirm and, if this reading holds, move the
-§11.3.5.3/`1_GWG160` sentence from `blend_modes_applied`'s doc to
+§11.3.5.3/`PCS1_160` sentence from `blend_modes_applied`'s doc to
 `blend_modes_ignored`'s, where a version of it already lives. This
 librarian's own ROADMAP/FEATURES filing above relays the corrected doc's
 text faithfully rather than silently resolving the discrepancy itself —
@@ -18699,7 +18701,7 @@ the non-separable-modes row, which is where the prior caveat lived.
 Amended with the colour-space caveat and a `Pass 97.1` pointer. The
 *Transparency GROUP compositing* row (amended by the 171st filing) and
 the *Soft masks* row (already carrying the §11.4.5 application caveat and
-the same Ghent correlation numbers cited above, added by an earlier
+the same suite correlation numbers cited above, added by an earlier
 filing) were checked and found already accurate — no change needed to
 either.
 
@@ -18757,7 +18759,7 @@ its-per-item-form discipline — better an incomplete figure stated as
 incomplete than a total invented to fill the gap). No `cargo tree`
 re-check reported and none needed: this commit touches only
 `crates/pdfce-render/src/interpret.rs` doc comments, no `Cargo.toml`, no
-executable logic. Ghent standing not re-run this filing (doc-only commit,
+executable logic. Suite standing not re-run this filing (doc-only commit,
 same reasoning `3e3019a` used) — carried forward unchanged at **25 pass /
 18 FAIL / 8 UNRESOLVED of 51**.
 
@@ -18854,9 +18856,9 @@ transparent, a transparent initial backdrop **is** isolated semantics
 (§11.4.7), and pdfce allocates a buffer whenever the OUTER graphics state
 is non-neutral — so a group buffered for that reason (not because its own
 `/I` is true) silently gets isolated compositing regardless, and every
-Ghent transparency-patch cell affected is counted as a success:
-**14, 15 and 7 wrong cells out of 16** on `1_GWG161`/`3_GWG161`/
-`1_GWG162` respectively. `Pass 97.0` (the compositor, *Backlog* below) is
+suite transparency-patch cell affected is counted as a success:
+**14, 15 and 7 wrong cells out of 16** on `PCS1_161`/`PCS3_161`/
+`PCS1_162` respectively. `Pass 97.0` (the compositor, *Backlog* below) is
 the fix; until it lands the counter over-reports.
 
 **★★ Found by this filing, NOT by the dispatching engineer's own report,
@@ -18885,7 +18887,7 @@ pdfce-render --target wasm32-unknown-unknown` green; `cargo tree` shows
 unaffected, this commit is doc-comment-only in both engine crates plus
 `pdfce-cli`; `check-ui-strings.sh` and `check-disclosure-channel.sh`
 clean (expected — no operator-facing string or disclosure setter
-changed, only developer-facing rustdoc); **Ghent standing unchanged at
+changed, only developer-facing rustdoc); **suite standing unchanged at
 25 pass / 18 FAIL / 8 UNRESOLVED of 51**, re-run rather than assumed —
 comments cannot move pixels, the same discipline `e11b4f8` applied.
 
@@ -18976,7 +18978,7 @@ true the moment the four PROCESS colorants became preserved, per pixel,
 through Table 149 (decision 069 §2, `ARCHITECTURE.md` §12). What remains
 genuinely flattened is SPOT, which has no plane of its own and must go
 through its tint transform. **Found the same way this class of bug is
-always found in this project: it printed in full on a Ghent render and
+always found in this project: it printed in full on a suite render and
 disagreed with the numbers on the same line.**
 
 **Verification (RELAYED).** `cargo fmt --all -- --check` clean;
@@ -18984,7 +18986,7 @@ disagreed with the numbers on the same line.**
 `cargo test -p pdfce-cli --test render_page` **15 of 15** green (that test
 pins the stdout KEY list, unchanged — only the note's prose moved);
 `tools/check-ui-strings.sh` clean; `tools/check-disclosure-channel.sh`
-clean. **Ghent standing unchanged at 25 pass / 18 FAIL / 8 UNRESOLVED of
+clean. **suite standing unchanged at 25 pass / 18 FAIL / 8 UNRESOLVED of
 51** — re-measured to confirm rather than assumed, because a stderr note
 cannot move a pixel.
 
@@ -19070,14 +19072,14 @@ but promotion to a numbered rule is flagged, not made, per this entry's
 own "Standing-rule candidacy" paragraph above. Ceiling stays **R195**,
 next free **R196**. **Next free filing ordinal: 171.**
 
-### `5ef5498` — **A PER-TRAP DIAGNOSTIC SPLITS "PDFCE PAINTED WRONG" FROM "THE HARNESS MEASURED WRONG," AND COLLAPSES SIXTEEN OF EIGHTEEN GHENT FAILURES INTO ONE MISSING COMPOSITOR. `docs/compositor-plan.md` FILED; TWO OUTSIDE-DEPENDENCY SUGGESTIONS ASSESSED AND REJECTED** — no Pass ID, no decision minted; commit `5ef5498` touches `tools/` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-sixty-ninth filing)
+### `5ef5498` — **A PER-TRAP DIAGNOSTIC SPLITS "PDFCE PAINTED WRONG" FROM "THE HARNESS MEASURED WRONG," AND COLLAPSES SIXTEEN OF EIGHTEEN SUITE FAILURES INTO ONE MISSING COMPOSITOR. `docs/compositor-plan.md` FILED; TWO OUTSIDE-DEPENDENCY SUGGESTIONS ASSESSED AND REJECTED** — no Pass ID, no decision minted; commit `5ef5498` touches `tools/` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-18 (hundred-and-sixty-ninth filing)
 
 **Filed by `pdfce-librarian` WITHOUT a shell this session.** Every figure
 below is RELAYED from the dispatching engineer's own report; none is
 independently re-measured here.
 
 **What shipped.**
-- `tools/ghent-cell-probe.py` — a per-trap diagnostic. For each Ghent
+- `tools/suite-cell-probe.py` — a per-trap diagnostic. For each suite
   trap X it reports the RGB pdfce painted INSIDE the X, the RGB it
   painted in the SURROUND, and the RGB a reference engine painted at the
   same cell. The suite draws trap X to match its swatch colour when a
@@ -19086,11 +19088,11 @@ independently re-measured here.
   leaving both as one impression.
 - `docs/compositor-plan.md` — new engineer-owned plan of record,
   companion to `docs/overprint-architecture-survey.md` and
-  `docs/ghent-patch-reference.md` (both `8eb0668`, *Shipped*,
+  `docs/suite-patch-reference.md` (both `8eb0668`, *Shipped*,
   hundred-and-sixty-seventh filing).
 - `docs/NEXT_SESSION.md` — superseding headline pointing at the plan.
 
-**The finding.** Ghent standing is UNCHANGED at **25 pass / 18 FAIL / 8
+**The finding.** suite standing is UNCHANGED at **25 pass / 18 FAIL / 8
 UNRESOLVED of 51** (re-measured at `e618d67`) — this commit is diagnosis,
 not repair. But the 18 failures had been read as five separate problems;
 **16 of them are one problem**: pdfce has no compositor of its own and
@@ -19105,7 +19107,7 @@ from a call site.
 
 **Two one-bit discriminators, filed as discriminators rather than
 impressions, per this project's own measurement discipline:**
-1. `1_GWG160` fails exactly 3 of 16 cells — Hue, Saturation, Color — and
+1. `PCS1_160` fails exactly 3 of 16 cells — Hue, Saturation, Color — and
    Luminosity PASSES. Those three are precisely the nonseparable blend
    modes whose K comes from the BACKDROP; Luminosity's comes from the
    SOURCE (§11.3.5.3: K is SELECTED, not blended). A renderer
@@ -19114,10 +19116,10 @@ impressions, per this project's own measurement discipline:**
    composites in device RGB. If/when a CMYK path lands, this clause is
    the whole rule") — the answer was sourced in the spec corpus BEFORE
    the defect was measured, the same shape as `CLAUDE.md`'s XFA bullet.
-2. `1_GWG161`/`3_GWG161`/`1_GWG162` (14/15/7 traps) are NOT a knockout
+2. `PCS1_161`/`PCS3_161`/`PCS1_162` (14/15/7 traps) are NOT a knockout
    bug. `interpret.rs` allocates a group buffer whenever the outer
    graphics state is non-neutral, and a transparent buffer IS isolated
-   semantics — so every Ghent transparency cell (all set `/BM` at the
+   semantics — so every suite transparency cell (all set `/BM` at the
    `Do`) silently converts a non-isolated group into an isolated one.
    The probe sees the X emerge as the raw source primary, exactly what a
    blend function returns composited against nothing. The existing code
@@ -19125,17 +19127,17 @@ impressions, per this project's own measurement discipline:**
    direction") predicted this in writing before it was measured.
 
 **A hypothesis killed — the cheaper half of this diagnostic.** The
-standing suspicion (`NEXT_SESSION.md` §2 item 1; `ghent-patch-reference.md`
-§0) that `ghent-check.py` over-counts against GWG's own "Faint X does not
+standing suspicion (`NEXT_SESSION.md` §2 item 1; `suite-patch-reference.md`
+§0) that `suite-check.py` over-counts against the suite's publisher's own "Faint X does not
 indicate a failure!" criterion is FALSE. Measured on every still-failing
-patch the tolerance covers: `GWG020` shows a WHITE X on green, `GWG190` a
-BLACK X on cyan, `GWG192` a WHITE X on red — at or near maximal contrast,
-against GWG's own wording of "a faint X in slightly darker green." No
-recalibration consistent with GWG's own criterion moves any verdict. A
+patch the tolerance covers: `PCS020` shows a WHITE X on green, `PCS190` a
+BLACK X on cyan, `PCS192` a WHITE X on red — at or near maximal contrast,
+against the suite's publisher's own wording of "a faint X in slightly darker green." No
+recalibration consistent with the suite's publisher's own criterion moves any verdict. A
 session was about to be spent on it.
 
-One nuance survives, and it is not about contrast: `GWG191` cell c has
-TWO sanctioned correct outcomes per GWG's own ReadMe — a cross there is
+One nuance survives, and it is not about contrast: `PCS191` cell c has
+TWO sanctioned correct outcomes per the suite's publisher's own ReadMe — a cross there is
 acceptable "if the system performs colour conversion and sets the OPM
 for this patch c to 0." pdfce converts but leaves `OPM 1`, so its cross
 is a genuine failure today. If a future Pass deliberately takes the
@@ -19257,9 +19259,9 @@ claim, not documentation** — escalated to
 occurrence 11, below.
 
 **What this does NOT change.** `85.4c`'s soft-mask half stays
-**PARTIAL** — the remaining Ghent gap (the mask is applied to each
+**PARTIAL** — the remaining suite gap (the mask is applied to each
 element painted INSIDE the group rather than to the group's RESULT,
-§11.4.5) is untouched by this fix, and no Ghent re-measurement is
+§11.4.5) is untouched by this fix, and no suite re-measurement is
 reported in this filing (none was relayed; none is invented here).
 `LUM-A1` (which analytic CMYK→luminosity FORM to use, §11.5.3 NOTE 3 vs
 §10.3.3) is a distinct, still-open question from this fix (which
@@ -19287,10 +19289,10 @@ above), and no earlier instance of a filing commit itself needing filing
 surfaces in this filing's read of the record. Ceiling stays **R195**,
 next free **R196**. **Next free filing ordinal: 169.**
 
-### `8eb0668` — **TWO RESEARCH DELIVERABLES THAT EXISTED ONLY IN A CONVERSATION TRANSCRIPT ARE NOW ON DISK — `docs/overprint-architecture-survey.md` AND `docs/ghent-patch-reference.md`. A DELIVERABLE RECORDED ONLY WHERE IT WAS PRODUCED HAS BEEN FILED, NOT HANDED OFF** — no Pass ID; a documentation-persistence commit, same disposition as `docs/ocr-engine-survey.md` — filed 2026-08-18 (hundred-and-sixty-seventh filing)
+### `8eb0668` — **TWO RESEARCH DELIVERABLES THAT EXISTED ONLY IN A CONVERSATION TRANSCRIPT ARE NOW ON DISK — `docs/overprint-architecture-survey.md` AND `docs/suite-patch-reference.md`. A DELIVERABLE RECORDED ONLY WHERE IT WAS PRODUCED HAS BEEN FILED, NOT HANDED OFF** — no Pass ID; a documentation-persistence commit, same disposition as `docs/ocr-engine-survey.md` — filed 2026-08-18 (hundred-and-sixty-seventh filing)
 
 **VERIFIED HERE** (`git show --stat 8eb0668`): 3 files, **794 insertions /
-274 deletions** — `docs/ghent-patch-reference.md` **+375** (new),
+274 deletions** — `docs/suite-patch-reference.md` **+375** (new),
 `docs/overprint-architecture-survey.md` **+201** (new),
 `docs/NEXT_SESSION.md` rewritten (**+492 / −274**, net **+218**), because
 the prior handoff's queue — *"do clause-11 transparency next"* — had been
@@ -19323,33 +19325,34 @@ and the licensing rule that governs every follow-up: **every one of those
 projects is GPL/AGPL and stays a BEHAVIOURAL reference only** (`LEGAL.md`
 §6.1, project rule 8, standing rule `R61`'s shape).
 
-**`docs/ghent-patch-reference.md`** — per-patch expected appearance for the
-overprint patches, extracted from GWG's own ReadMes, **which are not on the
-web**: they ship inside a 126 MB download (patches `gwg.org/?wpdmdl=9076`,
-ReadMes `gwg.org/?wpdmdl=9080`, 24,508,479 bytes, no login; force HTTP/1.1,
-HTTP/2 truncates). Re-obtaining it costs a download and an extraction pass,
-which is precisely why the substance is now in the repository. Carries a
-**provenance label on every claim** — `PRIMARY (GWG ReadMe)` / `PRIMARY
-(GWG caption)` / `MEASURED` / `DERIVED` — including **DERIVED per-cell
-truth tables for `GWG030` and `GWG040` that nobody has published**, and
-**two corrections to GWG's own prose** (`GWG010` contains zero image masks
-despite its ReadMe describing an image-mask test; its cells h/i say "op
-mode 0" while sitting in the OPM 1 block).
+**`docs/suite-patch-reference.md`** — per-patch expected appearance for the
+overprint patches, extracted from the suite's publisher's own ReadMes, **which are not on the
+web**: they ship inside a 126 MB download (patches via the suite's official
+download, ReadMes via a companion download, 24,508,479 bytes, no login;
+force HTTP/1.1, HTTP/2 truncates). Re-obtaining it costs a download and an
+extraction pass, which is precisely why the substance is now in the
+repository. Carries a **provenance label on every claim** — `PRIMARY (suite
+ReadMe)` / `PRIMARY (suite caption)` / `MEASURED` / `DERIVED` — including
+**DERIVED per-cell truth tables for `PCS030` and `PCS040` that nobody has
+published**, and **two corrections to the suite's publisher's own prose**
+(`PCS010` contains zero image masks despite its ReadMe describing an
+image-mask test; its cells h/i say "op mode 0" while sitting in the OPM 1
+block).
 
 **★ The single most useful thing in it, and it is a methodology result.**
 The research derived **from the spec alone** that flattening spot to RGB
-predicts a white X in **exactly cells a, b and c** of `GWG040` and correct
+predicts a white X in **exactly cells a, b and c** of `PCS040` and correct
 output in **d, e and f** — **without seeing pdfce's output** — and that
 matches the measured render exactly. **The `ac15158` ablation and this
 derivation are the same finding reached from opposite directions**, which
 is a materially stronger warrant than either alone. Filed here so the next
 session inherits the confirmation rather than the ablation only.
 
-**★★ TWO GHENT *HARNESS* FINDINGS, ACTIONABLE BEFORE ANY RENDERER WORK —
+**★★ TWO SUITE *HARNESS* FINDINGS, ACTIONABLE BEFORE ANY RENDERER WORK —
 carried to *Next up* as an entry of their own so they are not read as
-survey prose.** (1) **GWG's own stated criterion is that a FAINT X DOES NOT
+survey prose.** (1) **the suite's publisher's own stated criterion is that a FAINT X DOES NOT
 INDICATE A FAILURE**, judged by a human at 0.5 m — while
-`tools/ghent-check.py`'s threshold was **calibrated against pdfce's own
+`tools/suite-check.py`'s threshold was **calibrated against pdfce's own
 output** rather than against that criterion, so the harness may be
 **over-counting failures**. (2) **The suite ships a Reference file that
 pdfce is not using as an oracle.** Both bear directly on the standing
@@ -19413,7 +19416,7 @@ history, not against `.gitignore`.
 finding is the shape, and it is already written into `.gitignore`'s own
 comment block, which is the right home for it.
 
-### `cb20770` — **★★★★★ SOFT MASKS STOP BEING A DISCLOSURE AND START BEING COVERAGE — `/Alpha` AND `/Luminosity` MASK GROUPS ARE BUILT AND APPLIED, AND THE HEADLINE DELIBERATELY DID NOT MOVE: REAL MOVEMENT ON EVERY MEASURABLE PATCH AND *NONE OF THEM PASSES YET*** — the soft-mask half of the Ghent gap inventory's `85.4c` row; **PARTIAL, the row does not close**; decision **070** minted — filed 2026-08-18 (hundred-and-sixty-seventh filing)
+### `cb20770` — **★★★★★ SOFT MASKS STOP BEING A DISCLOSURE AND START BEING COVERAGE — `/Alpha` AND `/Luminosity` MASK GROUPS ARE BUILT AND APPLIED, AND THE HEADLINE DELIBERATELY DID NOT MOVE: REAL MOVEMENT ON EVERY MEASURABLE PATCH AND *NONE OF THEM PASSES YET*** — the soft-mask half of the suite gap inventory's `85.4c` row; **PARTIAL, the row does not close**; decision **070** minted — filed 2026-08-18 (hundred-and-sixty-seventh filing)
 
 **What shipped.** ISO 32000-1 **§11.6.5** `/Alpha` and `/Luminosity` soft
 masks in `pdfce-render`. Until now `gs /SMask` was parsed, counted and
@@ -19432,23 +19435,23 @@ engineer's own agent-memory file **+65 / −35**.
 correlation against Acrobat Pro reference strips, **same binary, before →
 after**:
 
-| Ghent patch | before | after | Δ | reference engine | gap remaining |
+| suite patch | before | after | Δ | reference engine | gap remaining |
 |---|---:|---:|---:|---:|---:|
-| `1_GWG1610_Softmasks_Text_part1_X4` | 0.515 | **0.575** | +0.060 | 0.966 | 0.391 |
-| `1_GWG168_Softmasks_Vector_part1_X4` | 0.661 | **0.725** | +0.064 | 0.981 | 0.256 |
-| `1_GWG169_Softmasks_Vector_part2_X4` | 0.884 | **0.905** | +0.021 | 0.983 | 0.078 |
+| `PCS1_1610_Softmasks_Text_part1_X4` | 0.515 | **0.575** | +0.060 | 0.966 | 0.391 |
+| `PCS1_168_Softmasks_Vector_part1_X4` | 0.661 | **0.725** | +0.064 | 0.981 | 0.256 |
+| `PCS1_169_Softmasks_Vector_part2_X4` | 0.884 | **0.905** | +0.021 | 0.983 | 0.078 |
 
 **Real movement on every measurable patch and NOT ONE OF THEM PASSES.
-Ghent standing is UNCHANGED at 25 pass / 18 FAIL / 8 UNRESOLVED of 51
+Suite standing is UNCHANGED at 25 pass / 18 FAIL / 8 UNRESOLVED of 51
 (49.0 % / 35.3 % / 15.7 %), 0 render errors** — see the standing board in
 *Next up*, which is the single home for that figure. **The correlations
 ARE the result here; the headline did not move, and the engineer reported
 it that way rather than leading with the commit's existence.** The
 reference-engine and gap columns are filed beside the deltas (hard rule
 10(a)) so the remaining distance is readable without a second lookup:
-`GWG1610` — the **text** patch — is both furthest from reference and the
+`PCS1610` — the **text** patch — is both furthest from reference and the
 one that closed the least of its own gap (**+0.060 of 0.451 = 13 %**,
-against `GWG169`'s **+0.021 of 0.099 = 21 %**).
+against `PCS169`'s **+0.021 of 0.099 = 21 %**).
 
 **★★ THE SOURCED CONTRACT — five clauses, three of them traps.** All are in
 code doc comments (project rule 1). Full text in **decision 070**
@@ -19568,7 +19571,7 @@ catch.
 
 **Ledger effects.** **No Pass ID minted and none claimed beyond the
 existing row** — following the 165th/166th precedent, the commit is matched
-to the Ghent gap inventory's **`85.4c`** row (*"transparency GROUPS …
+to the suite gap inventory's **`85.4c`** row (*"transparency GROUPS …
 `/SMask` soft-mask groups"*), whose soft-mask half this discharges
 **partially**. The row **does not close**: knockout occlusion order and
 soft-mask-on-group-result both remain, and they are now **the same defect**.
@@ -19586,7 +19589,7 @@ it) or **RELAYED** (from the dispatching engineer, not re-measured).
 **★ THIS ENTRY CLAIMS AN EXISTING PASS ID THE DISPATCHING ENGINEER DID NOT
 NAME**, exactly as the hundred-and-sixty-fifth filing did for `Pass 86.0`.
 The dispatch described all three commits of this filing as unnumbered. This
-librarian matched them to **`Pass 85.5`** — the Ghent gap inventory's
+librarian matched them to **`Pass 85.5`** — the suite gap inventory's
 "overprint compositing" row, whose stated scope is *"the remaining
 SIMULATION half only"*, which is precisely and only what these commits
 build. **No Pass ID was minted; next free Pass family remains `97`.**
@@ -19606,9 +19609,9 @@ from the already-flattened RGB.
 For a space that names a **spot colorant ALONGSIDE a process colorant**,
 the flattened RGB carries the spot's contribution too; converting that RGB
 back to CMYK **smears the spot into the process channels**, and Table 149
-then faithfully paints the smear. Ghent `2_GWG030` is built entirely from
+then faithfully paints the smear. The suite's `PCS2_030` is built entirely from
 that shape — `/CS1 cs .5 1 scn` over a two-colorant space. **RELAYED, and
-this is the honest part: it changed NO trap count on the Ghent corpus.**
+this is the honest part: it changed NO trap count on the suite corpus.**
 It is kept because it is strictly more faithful to what the file states,
 and because a value read from the operands cannot drift the way a
 reconstruction can — **not because it moved a number.** A change kept on
@@ -19620,7 +19623,7 @@ SPOT row preserves the backdrop under overprint in **both** overprint
 modes, whereas the process row under `OPM 0` paints `c_s`. pdfce flattens
 spots into RGB before compositing, so **it cannot tell a spot backdrop from
 a process one**. **RELAYED, and visual rather than inferential:** on
-`2_GWG040` Acrobat renders **all six cells clean**; pdfce painted white
+`PCS2_040` Acrobat renders **all six cells clean**; pdfce painted white
 trap Xs in **exactly the three "over spot" cells** and got **the three
 "over CMYK" cells right**. **3 of 6 cells, split precisely along the
 diagnosis** — that is what makes it certain rather than plausible.
@@ -19630,14 +19633,14 @@ multiplier spot ink applied at each pixel, divided out before Table 149 and
 multiplied back after. **Ablation, RELAYED — same binary, one line
 changed:**
 
-| configuration | `GWG020` | `GWG030` | `GWG040` | traps, 3 patches | patches passing, of 51 |
+| configuration | `PCS020` | `PCS030` | `PCS040` | traps, 3 patches | patches passing, of 51 |
 |---|---:|---:|---:|---:|---:|
 | **plate OFF** (shipped) | 7 | 3 | 7 | **17** | **25 of 51 = 49.0 %** |
 | **plate ON** (reverted) | 5 | 6 | 5 | **16** | **25 of 51 = 49.0 %** |
 
 **Read the table by its columns, which is why it is a table.** The trap
 total moves **17 → 16 = −1 trap of 17 = −5.9 %**, and the patch column does
-not move **at all**: **0 patches of 51 flipped**. And `2_GWG030`
+not move **at all**: **0 patches of 51 flipped**. And `PCS2_030`
 **REGRESSES 3 → 6, a doubling, for a reason the engineer could not
 explain.** A page-sized `f32` buffer and ~150 lines are not earned by a net
 of one trap; shipping a change that makes a patch worse **without knowing
@@ -19680,7 +19683,7 @@ next free Pass family **97**. No standing rule minted or cited; ceiling
 stays **`R195`**, next free **`R196`**. Decision ceiling moves **068 →
 069** (minted against `bf75351`), next free **070**.
 
-### ★★★★★ Pass 85.5 (compositing) — `bf75351` — **OVERPRINT STOPS BEING A COUNTER AND STARTS BEING PIXELS: 22 → 25 OF 51 ON GHENT — AND THE SECOND HALF IS THE MORE INTERESTING DEFECT, BECAUSE THE GLYPH PAINTER DID NOT MERELY SKIP THE BLEND, IT DID NOT COUNT IT EITHER** — the simulation half of the Ghent gap inventory's `85.5` row; **PARTIAL, the row does not close** — filed 2026-08-18 (hundred-and-sixty-sixth filing)
+### ★★★★★ Pass 85.5 (compositing) — `bf75351` — **OVERPRINT STOPS BEING A COUNTER AND STARTS BEING PIXELS: 22 → 25 OF 51 ON SUITE — AND THE SECOND HALF IS THE MORE INTERESTING DEFECT, BECAUSE THE GLYPH PAINTER DID NOT MERELY SKIP THE BLEND, IT DID NOT COUNT IT EITHER** — the simulation half of the suite gap inventory's `85.5` row; **PARTIAL, the row does not close** — filed 2026-08-18 (hundred-and-sixty-sixth filing)
 
 > **★ STAGED-SHIP QUALIFIER `(compositing)` ADDED 2026-08-18 (183rd
 > filing) — this heading was bare `Pass 85.5` when written.** It is the
@@ -19715,8 +19718,8 @@ stays **`R195`**, next free **`R196`**. Decision ceiling moves **068 →
 
 **Filed by `pdfce-librarian` WITH a shell (hard rule 8).** Labels as above.
 
-**THE HEADLINE, WITH ITS DENOMINATOR (RELAYED — Ghent PDF Output Suite
-5.0, all 51 patches, against Acrobat Pro reference strips, measured before
+**THE HEADLINE, WITH ITS DENOMINATOR (RELAYED — the print-conformance
+suite, all 51 patches, against Acrobat Pro reference strips, measured before
 and after):**
 
 | | pass | FAIL | unresolved | of | pass rate |
@@ -19725,10 +19728,10 @@ and after):**
 | **after** (this commit) | **25** | **18** | 8 | **51** | **49.0 %** |
 
 **Δ = +3 patches of 51 = +5.9 points**, `unresolved` unchanged at **8 of
-51 = 15.7 %**, **0 render errors**. Newly passing, named: `2_GWG041_White_
-OP_x3`, `1_GWG010_CMYK_OP_x3`, `2_GWG120_White_OP-KO_X1`. **The remaining
+51 = 15.7 %**, **0 render errors**. Newly passing, named: `PCS2_041_White_
+OP_x3`, `PCS1_010_CMYK_OP_x3`, `PCS2_120_White_OP-KO_X1`. **The remaining
 overprint failures are PARTIAL, not untouched** — trap counts fell on most
-of the rest as well: `2_GWG030` **9 → 3**, `2_GWG040` **9 → 7**, `2_GWG020`
+of the rest as well: `PCS2_030` **9 → 3**, `PCS2_040` **9 → 7**, `PCS2_020`
 **9 → 7**. That distinction matters for scoping: a patch at 7 traps and a
 patch at 9 look identical in a pass/fail column and are not the same
 distance from done.
@@ -19918,7 +19921,7 @@ deliberate policy choice** to render what a **press** would produce rather
 than what the standard's **floor** permits. The justification is
 Acrobat-parity — Acrobat enables Overprint Preview **automatically for
 PDF/X**, so a PDF/X-4 file's *expected* on-screen appearance includes it —
-and the corpus agrees: **10 of the Ghent suite's 51 patches test overprint
+and the corpus agrees: **10 of the suite's 51 patches test overprint
 directly and every one of them showed a trap X without it.**
 
 **A choice recorded where the code is** is the durable half here. C2 items
@@ -20560,7 +20563,7 @@ clean. `cargo tree -p pdfce-core` / `-p pdfce-render` — zero GUI-crate
 hits, GUI-core separation invariant holds.
 
 **Ledger effects.** Pass family: **93 → 95** (this Pass; `94` reserved
-by the Ghent-harness entry below, filed the same session out of strict
+by the suite-harness entry below, filed the same session out of strict
 commit order — see that entry's own note); next free family **96**
 (consumed immediately by `Pass 96.0`, above). Standing rules: no new
 rule minted this entry. Decisions: none minted — ceiling stays **068**,
@@ -20676,7 +20679,7 @@ precedent this one follows.
 **Ledger effects.** No Pass number (version-bump record, hash-headed,
 per the `abe6c97` precedent). No standing rule, no decision.
 
-### ★★★ Pass 94.0 — `47e4d37` — **A GHENT CONFORMANCE HARNESS, AND THE FIRST NUMBER IT GAVE WAS ONE THIS SESSION NEARLY REPORTED AS FINAL** — `tools/ghent-check.py`, automating the suite's own criterion (a clean X-shaped trap, authored pre-swapped); first run reported 29/51, the honest figure was lower because 13 patches use reference strips, not X traps — filed 2026-08-18 (hundred-and-sixty-fourth filing, filed out of strict commit order)
+### ★★★ Pass 94.0 — `47e4d37` — **A SUITE CONFORMANCE HARNESS, AND THE FIRST NUMBER IT GAVE WAS ONE THIS SESSION NEARLY REPORTED AS FINAL** — `tools/suite-check.py`, automating the suite's own criterion (a clean X-shaped trap, authored pre-swapped); first run reported 29/51, the honest figure was lower because 13 patches use reference strips, not X traps — filed 2026-08-18 (hundred-and-sixty-fourth filing, filed out of strict commit order)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
 figure below is RELAYED from the dispatching engineer's report.**
@@ -20695,8 +20698,8 @@ record of the wrinkle. Read `Pass 92.0`'s entry for the harness's own
 X-detector defects and fixes; this entry is about the harness's own
 creation and its first, since-corrected headline number.
 
-**What shipped.** `tools/ghent-check.py` — a Ghent PDF Output Suite
-conformance harness that automates the suite's OWN pass/fail criterion:
+**What shipped.** `tools/suite-check.py` — a conformance harness for the
+print-conformance suite that automates the suite's OWN pass/fail criterion:
 each patch's trap is authored as a clean X-mark, PRE-SWAPPED so a
 correctly-rendering implementation shows a clean shape and an incorrect
 one shows the trap. **This is not a pdfium diff** — pdfium fails many
@@ -20770,7 +20773,7 @@ vs `gs` OPERATORS — and neither is a subset of the other. Corrected
 before this filing.
 
 **★ Finding that changes scope.** Overprint is measured EFFECTIVE on the
-TRANSPARENCY patches too, not only the classic overprint set — **GWG
+TRANSPARENCY patches too, not only the classic overprint set — **PCS
 16.0/16.1/16.2 each report 19 effective occurrences.** The n-channel
 CMYK+alpha buffer the eventual `85.5` simulation needs is therefore
 worth MORE patches than the overprint bucket in `Pass 93.0`'s failure
@@ -20792,14 +20795,14 @@ already-decided data model; no new crate boundary or library choice.
 `Pass 94.0`'s "FINAL STATE" note, immediately above). Standing rules: no
 new rule. Decisions: none — ceiling stays **068**, next free **069**.
 
-### ★★★★ Pass 93.0 — `a342354` — **THE ELEVEN UNADJUDICATED GHENT PATCHES NOW HAVE A CALIBRATION SOURCE, AND A GUARD THAT COST FOUR APPARENT PASSES IS THE REASON TO TRUST THE REST** — `ghent-check --reference-dir` adjudicates against 51 Acrobat Pro captures — filed 2026-08-18 (hundred-and-sixty-third filing)
+### ★★★★ Pass 93.0 — `a342354` — **THE ELEVEN UNADJUDICATED SUITE PATCHES NOW HAVE A CALIBRATION SOURCE, AND A GUARD THAT COST FOUR APPARENT PASSES IS THE REASON TO TRUST THE REST** — `suite-check --reference-dir` adjudicates against 51 Acrobat Pro captures — filed 2026-08-18 (hundred-and-sixty-third filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
 figure below is RELAYED from the dispatching engineer's report, not
 independently re-run or read via `git show`.** Sibling entry to `Pass
 92.0`, immediately below, same session.
 
-**What shipped.** `ghent-check --reference-dir` adjudicates the
+**What shipped.** `suite-check --reference-dir` adjudicates the
 reference-strip patches — the ones the corrected X-detector (`Pass
 92.0`) alone cannot score, because they need a KNOWN-GOOD render to
 compare against, not just a clean-square judgement — against renders
@@ -20827,7 +20830,7 @@ this change alone.
 | engine | FAIL | pass | UNRESOLVED | total |
 |---|---|---|---|---|
 | pdfce | 21 | 22 | 8 | 51 |
-| Acrobat Pro | 1 (GWG 16.1, `ICCBasedRGB`) | — | — | 51 |
+| Acrobat Pro | 1 (PCS 16.1, `ICCBasedRGB`) | — | — | 51 |
 
 **pdfce's 21 failures, by cause (sums to 21 of 21):** overprint **10**,
 transparency-in-CMYK-space **5**, softmasks **3**, mesh shadings **1**,
@@ -20845,10 +20848,10 @@ holds.
 **Not this filing's to independently verify — flagged, not asserted.**
 The 0.054-vs-0.064 figures, the 21/22/8 split and the 51-Acrobat-Pro
 capture count are all relayed; this librarian has no shell this
-dispatch and cannot re-run `ghent-check` to confirm them.
+dispatch and cannot re-run `suite-check` to confirm them.
 
 **`FEATURES.md`.** No row change — this is test-harness/calibration
-tooling (`ghent-check`), not a shipped operator-facing capability, and
+tooling (`suite-check`), not a shipped operator-facing capability, and
 `FEATURES.md`'s own header scopes it to "what can pdfce do," not to
 pdfce's own verification tooling.
 
@@ -20872,7 +20875,7 @@ this filing. Ceiling stays **R195**, next free **R196**. Decisions:
 filing also makes, for the related but explicitly UN-minted CMYK
 compositing buffer item).
 
-### ★★★★ Pass 92.0 — `8caada6` — **OVERPRINT IS TRACKED AND DISCLOSED, AND THE GHENT X-DETECTOR WAS COUNTING MARKS NOBODY CAN SEE** — `/OP`/`/op`/`/OPM` read, carried, counted, printed; three detector defects fixed, one of them the detector being STRICTER THAN THE STANDARD IT IMPLEMENTS — filed 2026-08-18 (hundred-and-sixty-third filing)
+### ★★★★ Pass 92.0 — `8caada6` — **OVERPRINT IS TRACKED AND DISCLOSED, AND THE SUITE X-DETECTOR WAS COUNTING MARKS NOBODY CAN SEE** — `/OP`/`/op`/`/OPM` read, carried, counted, printed; three detector defects fixed, one of them the detector being STRICTER THAN THE STANDARD IT IMPLEMENTS — filed 2026-08-18 (hundred-and-sixty-third filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
 figure below is RELAYED from the dispatching engineer's report, not
@@ -20884,10 +20887,10 @@ from `ExtGState`, carried in `GraphicsState`, and counted
 CLI stable line with prose. **Table 58's rule implemented as stated:
 `/OP` sets BOTH overprint parameters unless `/op` is present in the
 SAME dictionary**, in which case `/op` governs non-stroking
-independently. **Measured: overprint fires on 20 of 51 Ghent patches,
+independently. **Measured: overprint fires on 20 of 51 suite patches,
 up to 19 times on one page.**
 
-**What shipped, the Ghent X-detector fix — three defects, each found
+**What shipped, the suite X-detector fix — three defects, each found
 by disbelieving the tool rather than trusting a passing run:**
 
 1. **A single diagonal stroke scored a perfect X.** The test asked "is
@@ -20899,7 +20902,7 @@ by disbelieving the tool rather than trusting a passing run:**
 3. **★ The detector was STRICTER THAN THE STANDARD IT IMPLEMENTS.**
    Exact-intensity pixel segmentation found "real" X marks in all eight
    swatches of an Acrobat render that reads, to the eye, as ten clean
-   green squares. The Ghent suite's own criterion is "a CLEAR X,"
+   green squares. The suite's own criterion is "a CLEAR X,"
    judged by a human at arm's length — counting sub-perceptual
    intensity variation is its own wrong answer, not a stricter-is-safer
    improvement. **Fix: a mark must now differ from its surround by
@@ -21003,7 +21006,7 @@ modes 2 and 6 knockout. §11.7.4.4's own NOTE 2 names the visible
 symptom: **the double border on a semi-transparent fill-then-stroke IS
 missing knockout.** Ranked by likely real-world frequency: `B`/`b` ≫
 `/TK` > explicit `/K` ≈ shading patterns. This inverts the prior
-framing — `groups_knockout_approx` (47 on one Ghent file, all
+framing — `groups_knockout_approx` (47 on one suite file, all
 *explicit* `/K`) was being read as the whole population; it is a small,
 easily-measured slice of it. Fill-then-stroke and default-mode text are
 not counted by that counter at all today.
@@ -21113,7 +21116,7 @@ wrong backdrop. Both are wrong; neither is a smaller wrong than the
 other in the general case.
 
 **How it was found.** Not by testing isolated/non-isolated behaviour —
-by measuring the buffer allocation's own cost. Ghent page 2 measured
+by measuring the buffer allocation's own cost. suite page 2 measured
 **878 ms** buffered (`85.4c`) against a **230 ms** pre-`85.4c`
 (flattened) baseline. The commit's own subject line names the
 triggering question: *"why 142 buffers cost 600ms"* — 142 being the
@@ -21165,10 +21168,10 @@ confirming this test would have caught `85.4c`'s defect had it existed
 before that commit rather than after it.
 
 **Verification.**
-- Ghent page 2: **878 ms → ~600 ms** (baseline pre-`85.4c` was 230 ms;
+- suite page 2: **878 ms → ~600 ms** (baseline pre-`85.4c` was 230 ms;
   the residual gap over baseline is the buffers still legitimately
   needed — non-Normal/reduced-alpha outer state or genuine isolation).
-  Its GWG 16.0 panel (the fixture the whole `85.4c` fix was measured
+  Its PCS 16.0 panel (the fixture the whole `85.4c` fix was measured
   against) stays **CLEAN** — the condition change does not regress the
   case it was built to fix.
 - **300-file corpus sample: buckets IDENTICAL for the THIRD consecutive
@@ -21211,7 +21214,7 @@ carried forward rather than decided unilaterally.** This is the
 **second** time in one session a PERFORMANCE question, asked about a
 measurement taken for an unrelated reason, surfaced a CORRECTNESS bug
 rather than an optimisation opportunity: instance 1 was `Pass 90.1`
-(`bd244d9`) — 76 applied blend modes changing only 0.37% of Ghent
+(`bd244d9`) — 76 applied blend modes changing only 0.37% of the suite
 page 2's pixels led to finding `BlendMode::SourceOver` hard-coded on the
 image-paint path; instance 2 is this entry — a 4.6 ms/buffer average
 cost led to finding the isolated/non-isolated backdrop defect above.
@@ -21230,7 +21233,7 @@ above is the template for how to phrase it.
 **`docs/FEATURES.md` — no change.** The *Implemented* row for
 transparency-group compositing (Colour, transparency & rendering
 fidelity section) never claimed unconditional buffering — it describes
-outcomes (page-sized buffer, state reset, Ghent GWG 16.0 clean,
+outcomes (page-sized buffer, state reset, the suite's PCS 16.0 clean,
 `groups_flattened` 187→0) that are all still true after this correction.
 The capability did not change; its correctness for the non-isolated
 majority case did, and that is a `ROADMAP.md`/`ARCHITECTURE.md` fact,
@@ -21266,7 +21269,7 @@ decision 068's second amendment.
 ### ★★★★★ Pass 85.4c — `0d6f4ac` — **THE GHOST CROSSES ARE GONE: TRANSPARENCY GROUPS NOW COMPOSITE THROUGH A REAL OFFSCREEN BUFFER — THIS INVENTORY'S SINGLE LARGEST REMAINING GAP CLOSES FOR THE NON-KNOCKOUT CASE, DECISION 068 MINTED, `R180` GAINS A SIXTH INSTANCE ON A NEW KIND OF ARTEFACT** — filed 2026-08-17 (hundred-and-sixtieth filing)
 
 **Sourcing.** No shell tool this dispatch (hard rule 8). Test counts,
-corpus-regression buckets, the Ghent panel result, and the gate outputs
+corpus-regression buckets, the suite panel result, and the gate outputs
 below are **relayed** from the dispatching engineer's own run, not
 independently re-verified here.
 
@@ -21294,11 +21297,11 @@ stable line; `groups_flattened` now survives only as the
 allocation-failure fallback.
 
 **★ The measure that matters is a conformance result, not a counter.**
-The Ghent PDF Output Suite X-4 file's **GWG 16.0 "Transparency Basic
+The suite's combined X-4 file's **PCS 16.0 "Transparency Basic
 Blend Modes (DeviceCMYK, Non-Knockout)"** panel — each swatch drawing a
-cross a correctly-rendering engine covers, per the page's own German
-caption *"Fehler sind mit einem Kreuz … zu erkennen"* — now renders
-**CLEAN**, matching the suite's own reference sheet. `groups_flattened`
+cross a correctly-rendering engine covers, per the page's own printed
+caption (in German) describing how a rendering error is marked — now
+renders **CLEAN**, matching the suite's own reference sheet. `groups_flattened`
 on that file: **187 → 0.**
 
 **★ NOT fixed, and counted rather than silently wrong: `/K` knockout
@@ -21308,7 +21311,7 @@ so later elements REPLACE earlier ones instead of layering. Compositing
 as an ordinary (non-knockout) group gets the outer boundary right and
 the internal occlusion order wrong — strictly better than the prior
 flattening, still incorrect — and `groups_knockout_approx` names it
-rather than hiding it. **The adjacent GWG 16.1 (Knockout) panel still
+rather than hiding it. **The adjacent PCS 16.1 (Knockout) panel still
 shows its crosses**, which is exactly what the counter reports; the
 page and pdfce's own diagnostics now agree.
 
@@ -21370,7 +21373,7 @@ rendering fidelity" section, and *Planned*, in place of the prior
 combined row.
 
 **Ledger effects.** Pass family: **85** (sub-Pass `85.4c` — the ID was
-already reserved in the *Next up* Ghent gap-inventory table; no new
+already reserved in the *Next up* suite gap-inventory table; no new
 family, next free stays **92**). Standing rules: **no new rule
 minted** — `R180` gains its **sixth instance** (full text below);
 ceiling stays **R195**, next free **R196**. Decisions: **NEW decision
@@ -21813,7 +21816,7 @@ no Pass ID is minted.
 
 **Ledger effects.** Pass family: **90** (sub-Pass `.2`; family unaffected, next free family stays **91**). Standing rules: **no new rule minted** — `R180` gains its **fifth instance** (full text below); ceiling stays **R195**, next free **R196**. Decisions: **none** — ceiling stays **066**, next free **067**.
 
-### ★★★★★ Pass 90.1 — `bd244d9` — **BLEND MODES NOW COMPOSITE FOR REAL — AND THE PAGE WAS NEVER SUPPOSED TO BE WHITE TO BEGIN WITH: THE RENDERER'S PAGE-BACKDROP MODEL WAS INVERTED SINCE IT WAS FIRST WRITTEN** — implementation half of `Pass 90.0`'s clause-11 disclosure; closes the blend-mode half of the `85.4` Ghent gap, transparency-GROUP compositing and soft masks remain — filed 2026-08-17 (hundred-and-fifty-seventh filing)
+### ★★★★★ Pass 90.1 — `bd244d9` — **BLEND MODES NOW COMPOSITE FOR REAL — AND THE PAGE WAS NEVER SUPPOSED TO BE WHITE TO BEGIN WITH: THE RENDERER'S PAGE-BACKDROP MODEL WAS INVERTED SINCE IT WAS FIRST WRITTEN** — implementation half of `Pass 90.0`'s clause-11 disclosure; closes the blend-mode half of the `85.4` suite gap, transparency-GROUP compositing and soft masks remain — filed 2026-08-17 (hundred-and-fifty-seventh filing)
 
 **Origin.** `Pass 90.0` (same session, `ae46e82`) made pdfce's blindness
 to `/BM` and `/SMask` COUNTABLE without implementing either. This Pass
@@ -21867,7 +21870,7 @@ Skia gate on `mn < 0`, so the branch is dead and negative channels from
 Canonical demonstration: `Luminosity` of a BLACK source over a pure BLUE
 backdrop must give black under both specs; the crate returns
 `(0, 0, 227)`. **So the four are NOT mapped — they are counted and
-disclosed.** On Ghent page 2 that is exact and visible: **60 blend
+disclosed.** On suite page 2 that is exact and visible: **60 blend
 modes applied, 16 refused** (the sixteen being Hue/Saturation/Color/
 Luminosity at four swatches each). Full write-up, reproduction and the
 general "verify before trusting a conforming-sounding dependency"
@@ -21894,7 +21897,7 @@ this is the third, same shelf, not a new one.
 
 **★★ Finding 3 — a third gap, found by disbelieving a healthy counter.**
 After blend modes were implemented and verified working in isolation
-AND against a coloured backdrop, the Ghent blend panel STILL showed the
+AND against a coloured backdrop, the suite blend panel STILL showed the
 suite's failure crosses while every counter looked clean. Page 2 carries
 148 form XObjects and `pdfce-render` had never read `/Group` at all. The
 swatches are transparency groups (§11.4.7) and their contents were
@@ -21918,7 +21921,7 @@ clean page.
 `gstate::blend_mode_from_name` as the single Table 136/137 mapping
 point, threaded to all four `solid()` paint sites AND to image
 painting — which had `BlendMode::SourceOver` hard-coded, found because
-76 applied blend modes on Ghent page 2 changed only 0.37% of its
+76 applied blend modes on suite page 2 changed only 0.37% of its
 pixels before this fix. `blend_modes_applied` (a census) split from
 `blend_modes_ignored` (a shortfall), because those were ONE counter an
 hour before this commit and implementing the feature falsified that
@@ -22005,14 +22008,14 @@ rule minted** — R192 cited, full text above; ceiling stays **R195**,
 next free **R196**. Decisions: **decision 066 minted** (full text
 below) — ceiling moves **065 → 066**, next free **067**.
 
-### ★★★★ Pass 90.0 — `ae46e82` — **THE GHENT QUEUE WAS ORDERED ON AN ASSUMPTION NOBODY HAD MEASURED — CLAUSE-11 TRANSPARENCY (`/BM`, `/SMask`) WAS STRUCTURALLY UNMEASURABLE, AND MEASURING IT REVERSES THE `Pass 85.0`–`85.5` BUILD ORDER** — filed 2026-08-17 (hundred-and-fifty-sixth filing)
+### ★★★★ Pass 90.0 — `ae46e82` — **THE SUITE QUEUE WAS ORDERED ON AN ASSUMPTION NOBODY HAD MEASURED — CLAUSE-11 TRANSPARENCY (`/BM`, `/SMask`) WAS STRUCTURALLY UNMEASURABLE, AND MEASURING IT REVERSES THE `Pass 85.0`–`85.5` BUILD ORDER** — filed 2026-08-17 (hundred-and-fifty-sixth filing)
 
 **Disclosure only. Nothing in this Pass implements clause-11
 transparency — it makes pdfce's own blindness to it countable, for the
 first time.**
 
 **Origin.** After shipping `Pass 85.2` slice 1 (shading patterns), the
-engineer checked what the Ghent PDF Output Suite X-4 file still needs
+engineer checked what the suite's combined X-4 file still needs
 and found the queue this ledger had shipped —
 `85.0` → `85.2` → `85.3` → `85.4` → `85.5` → `85.1` — was an ordering
 **inferred from spec breadth**, never measured against the operator's
@@ -22072,7 +22075,7 @@ the gap that turned out to be the biggest one.
   Folding the two into one number would bury the second inside the
   first at exactly the moment it matters most.
 
-**Measured, `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages),
+**Measured, the suite's combined X-4 file (PDF/X-4, 6 pages),
 per page, then totalled — never a bare total without its denominator:**
 
 | page | 1 | 2 | 3 | 4 | 5 | 6 | **total (6 pages)** |
@@ -22110,14 +22113,14 @@ reached a shell. `Pass 85.3`'s Shipped entry already credits this test
 with catching a counter no shell printed; this is the third save.
 
 **Gap-inventory reordering — the reason this filing exists.** The
-`Pass 85.0`–`85.5` Ghent gap-inventory entry (below, under *Next up*)
+`Pass 85.0`–`85.5` suite gap-inventory entry (below, under *Next up*)
 is updated in this same filing: `85.4`'s "measured evidence" cell now
 carries the table above instead of "still defers both," and the
 *Suggested build order* paragraph is **replaced** (not appended to)
 with the order this measurement implies — `85.4` (transparency, now
 first) → `85.1` (mesh shadings, now second) → the `/Separation /All`
 question (unchanged, a question not a Pass) → `85.2` slice 2 (tiling,
-now demoted — measured zero Ghent occurrences) → `85.5` (overprint,
+now demoted — measured zero suite occurrences) → `85.5` (overprint,
 unchanged, last). See that entry for the full table and reasoning;
 not duplicated here.
 
@@ -22188,9 +22191,9 @@ above; ceiling stays **R195**, next free **R196**, re-derived from
 
 ### ★★★★ Pass 85.2 slice 1 — `5df75dd` — **SHADING PATTERNS (`PatternType 2`) NOW PAINT — `scn` NAMING A GRADIENT NO LONGER DRAWS NOTHING** — closes the shading half of the `85.2` gap-inventory row; tiling patterns (`PatternType 1`) remain — filed 2026-08-17 (hundred-and-fifty-fifth filing)
 
-**Origin.** Second item on the Ghent gap-inventory queue (`docs/NEXT_SESSION.md`, *"shading patterns + tiling patterns"*), following `Pass 85.0`'s `sh`-operator paint. Ships the shading-pattern half only; tiling patterns and clause-11 transparency/overprint remain queued.
+**Origin.** Second item on the suite gap-inventory queue (`docs/NEXT_SESSION.md`, *"shading patterns + tiling patterns"*), following `Pass 85.0`'s `sh`-operator paint. Ships the shading-pattern half only; tiling patterns and clause-11 transparency/overprint remain queued.
 
-**What was wrong.** `Pass 85.0` made `sh` paint axial and radial shadings and stopped there. `crate::shading::Shading::load` had exactly ONE caller. A `scn` naming a `PatternType 2` pattern — the route real documents overwhelmingly use, and the one the operator's Ghent X-4 file needs — incremented `patterns_unpainted` and drew nothing.
+**What was wrong.** `Pass 85.0` made `sh` paint axial and radial shadings and stopped there. `crate::shading::Shading::load` had exactly ONE caller. A `scn` naming a `PatternType 2` pattern — the route real documents overwhelmingly use, and the one the operator's suite X-4 file needs — incremented `patterns_unpainted` and drew nothing.
 
 **Why the two routes are not the same paint with a different trigger.** `sh` paints in CURRENT user space and fills the CLIP REGION (Table 77). A pattern paints in PATTERN space, mapped to the DEFAULT space of the *parent content stream* by the pattern's own `/Matrix`, and fills the PATH (§8.7.2 NOTE 1; PM5's `shall` is the binding form — the spec corpus's own instruction is to cite NOTE 1 paired with PM5, not alone). A pattern is therefore IMMUNE to a `cm` that `sh` obeys — swap the two anchorings and every page still renders a gradient, in the right place, until something applies a transform. Sourced from `iso32000__s__8.7.md`'s PM1–PM9, already in the corpus; no spec-librarian dispatch needed.
 
@@ -22691,7 +22694,7 @@ independently confirmed by this librarian). Decision records:
 **unchanged at 065**, next free **066** (a new decision considered and
 declined, above).
 
-### ★★★★ Pass 85.3 — `1e7a0be` — **`/Separation`, `/DeviceN`, `Lab`, `CalGray`, `CalRGB` NOW DECODE IN IMAGES — 18 images that had been dropped from the raster entirely, across 3 Ghent pages, now paint** — closes `Pass 1.1` item 6.4 and the `85.3` row of the Ghent gap inventory — filed 2026-08-17 (hundred-and-fifty-second filing)
+### ★★★★ Pass 85.3 — `1e7a0be` — **`/Separation`, `/DeviceN`, `Lab`, `CalGray`, `CalRGB` NOW DECODE IN IMAGES — 18 images that had been dropped from the raster entirely, across 3 suite pages, now paint** — closes `Pass 1.1` item 6.4 and the `85.3` row of the suite gap inventory — filed 2026-08-17 (hundred-and-fifty-second filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
 figure below is RELAYED from the dispatching engineer's report, not
@@ -22708,7 +22711,7 @@ the dispatching engineer's own flag.
 **What shipped.** All five previously-`ImageError::UnsupportedColorSpace`
 image colour spaces now decode: `Separation`, `DeviceN`, `Lab`,
 `CalGray`, `CalRGB`. Measured on
-`Ghent_PDF-Output-Test-V50_ALL_X4.pdf`: page 1 images 10/10 unsupported
+the suite's combined X-4 file: page 1 images 10/10 unsupported
 → 20/0; page 4 6/6 → 12/0; page 5 9/2 → 11/0 — **18 images** that had
 been dropped from the raster entirely now paint.
 
@@ -22754,7 +22757,7 @@ colour spaces on image XObjects" (closing `Pass 1.1` item 6.4) moves to
 a shortfall), widened to name `CalGray`/`CalRGB` since both came free
 from the same delegation.
 
-**`ROADMAP.md`'s own Ghent gap inventory (*Next up*, `Pass 85.0`–
+**`ROADMAP.md`'s own suite gap inventory (*Next up*, `Pass 85.0`–
 `85.5`).** Row `85.3` struck as SHIPPED; build order updated. See that
 entry's own dated amendment, below.
 
@@ -22862,7 +22865,7 @@ gains a second instance; **no rule minted**; ceiling unchanged at
 records: **unchanged at 065** — this is a documentation/ledger
 correction, not an architectural decision.
 
-### ★★★★ Pass 85.0 — `33ea830` (model) + `9839d6f` (paint) — **SHADING PAINTS: AXIAL AND RADIAL, GHENT PDF OUTPUT SUITE SHADING COVERAGE 0/16 → 14/16** — shipped in two slices, same session, 2026-08-17 (hundred-and-fiftieth filing)
+### ★★★★ Pass 85.0 — `33ea830` (model) + `9839d6f` (paint) — **SHADING PAINTS: AXIAL AND RADIAL, PRINT-CONFORMANCE SUITE SHADING COVERAGE 0/16 → 14/16** — shipped in two slices, same session, 2026-08-17 (hundred-and-fiftieth filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
 figure below is RELAYED from the dispatching engineer's report, not
@@ -22884,7 +22887,7 @@ repeated one Pass later.
 (`ShadingType 3`) now paint per-pixel into the clip region, anchored to
 current user space per Table 77.
 
-**Measured, `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages):**
+**Measured, the suite's combined X-4 file (PDF/X-4, 6 pages):**
 **14 of 16 shadings now paint (was 0/16).** Page 1: 0/12 → 10/12. Page
 4: 0/4 → 4/4. Both remaining are tensor-product **mesh** shadings (type
 7), named as such, not silently missed. Type 1 (function-based) is
@@ -22991,7 +22994,7 @@ judged not to apply to a pure spec-conformance/pdfium-cross-check
 fidelity fix, is not stated in what reached this filing. Flagged for
 the engineer to confirm or close, not asserted either way here.
 
-### ★★★★ Pass 84.0 — `d0f8c5f` — **TWELVE COLOUR COUNTERS WERE COMPUTED, MERGED AND UNIT-TESTED, AND NO SHELL EVER READ ONE OF THEM.** `pdfce_render::ColorDiagnostics` carried twelve counters since the colour-space slice shipped; `render-page`'s stdout carried 38 keys and none of them. **A stale runtime string was also fixed** — pdfce had been telling operators a shipped feature (§7.10 tint transforms) did not exist. Found while diagnosing a Ghent PDF Output Suite PDF/X-4 conformance file the operator called "a long way off" — filed 2026-08-17 (hundred-and-forty-ninth filing)
+### ★★★★ Pass 84.0 — `d0f8c5f` — **TWELVE COLOUR COUNTERS WERE COMPUTED, MERGED AND UNIT-TESTED, AND NO SHELL EVER READ ONE OF THEM.** `pdfce_render::ColorDiagnostics` carried twelve counters since the colour-space slice shipped; `render-page`'s stdout carried 38 keys and none of them. **A stale runtime string was also fixed** — pdfce had been telling operators a shipped feature (§7.10 tint transforms) did not exist. Found while diagnosing a print-conformance-suite PDF/X-4 file the operator called "a long way off" — filed 2026-08-17 (hundred-and-forty-ninth filing)
 
 **Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
 figure below is RELAYED from the dispatching engineer's report, not
@@ -67400,6 +67403,16 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+**`Pass 124.2` — the suite-name scrub, `docs/ROADMAP.md`'s half — operator-ordered, 2026-08-25, opened this filing (two-hundred-and-fifty-second), closed the two-hundred-and-fifty-third.** Ken's ruling (quoted in elided form in `(bt)`'s own closure, below, *Open operator questions*) answers `(bt)` and goes further than it asked — see that entry's own nested closure for the full ruling. Five agents scrub in parallel from a shared private contract (`D:\Dev\pdfce-private\suite\SCRUB_SPEC.md`, outside this repository by design): this role owns `docs/ROADMAP.md` only — `SESSION_LOG.md`, `ARCHITECTURE.md`/`FEATURES.md`/the surveys, and `crates/`/`tools/`/`docs/NEXT_SESSION.md` are scrubbed by the other four filings/the engineer, not here.
+
+**Acceptance criterion, rewritten 253rd filing because the original was self-defeating: `python tools/check-suite-name-absent.py` exits `0`.** The original criterion (this paragraph, two-hundred-and-fifty-second filing) named the two forbidden terms literally inside the acceptance criterion meant to guarantee their absence — a checkable rule that was itself the rule's own first violation, and a reader could not then distinguish a real occurrence from the gate hunting them. `tools/check-suite-name-absent.py` (new, shipped by the engineer between the two filings) solves the bootstrapping problem: the two needles are stored **base64-encoded** in the script and decoded at run time, so the rule and its enforcement can coexist in one repository without contradicting each other. This is not obfuscation for its own sake and not secrecy — the private map (`D:\Dev\pdfce-private\suite\`) names the suite in full; it is the only way for a rule and its enforcement to coexist without contradicting each other. The script checks tracked file **contents** (`git grep -I -i`, binaries excluded — a binary OCR model matches a naive case-insensitive byte grep on its weights, and a model's weights are not a mention) **and** tracked file **names** (a scrubbed file still named after the suite fails the check, since the name is published in every directory listing and diff regardless of what the file's contents say). It prints `path:line` but **never the offending line's text**, because CI logs on a public repository are themselves public. Exit codes: `0` clean, `1` occurrences found, `2` could not run.
+
+This filing (253rd) closes the two occurrences the script found in this document itself: this acceptance criterion (just rewritten above) and the verbatim quotation of Ken's ruling in `(bt)`'s closure, below, which is now elided — see that entry's own note on why the elision is deliberate. That brings `docs/ROADMAP.md`'s own portion to zero. Also folded in here, completed by the engineer between the two filings: five patch identifiers in `crates/pdfce-render/tests/page_blend_space_source.rs` now resolve through **`PDFCE_SUITE_DIR`** plus a `pdfce-manifest.txt` that sits beside the corpus, outside the repository — no path and no suite file name remains in tracked code, verified both ways (variable set: all 5 tests pass; variable unset: all 5 skip, each announcing its own skip on stdout). `tools/suite-cell-probe.py`'s hard-coded corpus default became an environment lookup returning `None`, so the path must now be given explicitly when the variable is unset. `cargo fmt --check`, `cargo check -p pdfce-render --tests` and `cargo clippy -p pdfce-render --tests --all-features` are all clean; `cargo test` was run only for the one affected test binary, **not** the full workspace — the operator is running SolidWorks on a 16 GB machine this session and asked for light resource use, so this is not a full-suite-green claim. `check-suite-name-absent.py` is itself a new gate; see item 7 of the OWED table above for its place in the project's own gate count (amended this filing).
+
+**★ A correction this filing owes its own predecessor's report, not this document** (the 252nd filing's chat report, never written to disk): it flagged three `crates/pdfce-render/src/color.rs`/`overprint.rs` doc-comment sites as *"almost certainly still say [the suite name]"* and owed to the engineer under hard rule 11. They do not — the engineer had already scrubbed all of `crates/`, `tools/`, `.claude/agent-memory/pdfce-engineer/` and `docs/NEXT_SESSION.md` before that filing started, so `crates/` was at zero the whole time, and the concern was a reasonable inference from a file the prior filing could not see (no shell), now closed-and-verified rather than left owed.
+
+**This filing has no shell** (librarian invocation, hard rule 8) — it does not run `check-suite-name-absent.py` itself and does not assert its result beyond what the engineer relayed in dispatch: that the script, before this filing's two fixes, reported exactly these two lines and nothing else. Status: this document's own portion is now at zero occurrences of the two needles, pending the engineer's own run of the script to confirm; the Pass as a whole is still **NOT SHIPPED** until the engineer verifies the combined result across all five filings and commits.
+
 **`Pass 119.0` SHIPPED, `cc57080` — see top of *Shipped*, below.** The
 pointer entry that lived here (two-hundred-and-eighth filing) is removed
 per this project's fully-delete-on-ship convention (`Pass 92.0`/`93.0`
@@ -67436,7 +67449,7 @@ and `crates/`, both outside this role's remit.
 | **4** | **`index.md`'s citation tallies do not reconcile with a naive count and state no method** | `index.md:16–17` | 186th sweep | Says *"382 verified citations"* / *"128 citations"*; `grep -o "\.rs:[0-9]\+" \| wc -l` gives **458** / **191**. **NOT asserted as wrong** — "verified citations" may count something narrower. Asserted only as **not re-derivable by a reader**, which is the `R197` failure in its milder form. |
 | **5** | **★★ PARTIALLY DISCHARGED 2026-08-19 (189th filing) — `open\2026-08-19-insert-pages-orphan-count-reply.md` answers item 1 of the five (the orphan ruling, with the permanence argument); items 2–5 remain owed and the box above stays open.** Original text: **A REPLY TO `pdfceGUI` IS STILL OWED** — `request_insert_pages_leaves_orphaned_widgets_and_has_no_route_back_for_outlines.md` | `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` | carried 184th → 185th → **186th** | Third consecutive filing. `e194b46` supplies most of the material verbatim; **it is not the reply.** Channel re-established by `ls` this filing (`R196`): the file is dated **2026-08-18 15:19** and still open. |
 | **6** | **★★ `note_gray_black_routing_is_yours.md` STILL UNREAD** | `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\` | carried forward | `ls` this filing: dated **2026-08-18 01:37**, 13,543 bytes — **the largest open note in that channel.** Named by the engineer in this dispatch as owed. |
-| **7** | ~~**CI runs 5 of 14 `tools/check-*` gates**~~ — **CLOSED by `108d0e8`, 215th filing: 14 of 15 wired, the 15th (`check-image-colorspace-truth.py`) deliberately excluded and named as such in `ci.yml`'s own comment.** | `.github/workflows/*.yml` | 186th sweep; closed 215th | Measured 215th filing by `Glob` (10 `.py` + 5 `.sh` = 15 total) + `Grep -o` over `ci.yml` (14 unique invocations) + reading the exclusion comment — counting, not reading, which is also what the 186th filing's own "5 of 14" did (see the 215th filing's Shipped entry: that figure was correct for its own time, not a second misread — `check-outcome-disclosed.py` did not exist until `Pass 110.0`, 203rd filing). **★ AMENDED 2026-08-22 (230th filing), sourced by `ls tools/check-*` and by RUNNING each one, not from a document: the population has grown TWICE since — `check-ci-parity.py` (`5884ed1`, 219th filing) and `check-metrics-line-contract.py` (`ea413a4`). Live figure: 17 scripts on disk (12 `.py` + 5 `.sh`), 16 runnable as bare gates, all 16 exit 0 at that filing except `check-commits-filed.py`; the 17th, `check-image-colorspace-truth.py`, still takes a fixture directory and is still deliberately excluded from CI. The item stays CLOSED — what is corrected is its FIGURE, which is the same defect this project keeps re-learning: a count that stayed correct-sounding while the thing it counted grew.** |
+| **7** | ~~**CI runs 5 of 14 `tools/check-*` gates**~~ — **CLOSED by `108d0e8`, 215th filing: 14 of 15 wired, the 15th (`check-image-colorspace-truth.py`) deliberately excluded and named as such in `ci.yml`'s own comment.** | `.github/workflows/*.yml` | 186th sweep; closed 215th | Measured 215th filing by `Glob` (10 `.py` + 5 `.sh` = 15 total) + `Grep -o` over `ci.yml` (14 unique invocations) + reading the exclusion comment — counting, not reading, which is also what the 186th filing's own "5 of 14" did (see the 215th filing's Shipped entry: that figure was correct for its own time, not a second misread — `check-outcome-disclosed.py` did not exist until `Pass 110.0`, 203rd filing). **★ AMENDED 2026-08-22 (230th filing), sourced by `ls tools/check-*` and by RUNNING each one, not from a document: the population has grown TWICE since — `check-ci-parity.py` (`5884ed1`, 219th filing) and `check-metrics-line-contract.py` (`ea413a4`). Live figure: 17 scripts on disk (12 `.py` + 5 `.sh`), 16 runnable as bare gates, all 16 exit 0 at that filing except `check-commits-filed.py`; the 17th, `check-image-colorspace-truth.py`, still takes a fixture directory and is still deliberately excluded from CI. The item stays CLOSED — what is corrected is its FIGURE, which is the same defect this project keeps re-learning: a count that stayed correct-sounding while the thing it counted grew.** **★ AMENDED 2026-08-25 (253rd filing), sourced by `Glob` only — no shell this filing, so not run and not checked against CI: the population has grown again, `tools/check-suite-name-absent.py` (new, `Pass 124.2`). Live figure: 18 scripts on disk (13 `.py` + 5 `.sh`). CI-wiring and per-script exit status not re-verified this filing; owed to whoever next runs the full set.** |
 | **8** | **★★★ THE STANDING RENDER-FIDELITY GATE HAS NO USABLE BASELINE — `--gate` MODE IS CURRENTLY MEANINGLESS** | `tools/render-parity/out/summary.json` | 216th filing | Read directly this filing, not relayed. Dated **2026-07-31 14:51**; records **`files_seen: 2914`** against today's **4,023**; emits the bucket vocabulary **`benign` (2840) / `known-gap` (49) / `unexplained` (1) / `reference-divergence` (0)** — **a vocabulary the harness no longer emits at all** (current: `below-band`, `disclosed-gap-small`, `disclosed-gap`, `unexplained`, `reference-divergence`, `reference-aborted`). Band `frac_over_32 = 0.0294` vs today's **0.3287**, an **11× difference that is a units/method change, not a regression**. **Consequence:** the gate cannot compare against it, so **the only thing that means anything today is running the corpus TWICE and diffing** — which `Pass 97.0` did, and which is strictly weaker than a gate because it depends on somebody remembering. **Owed: re-base the baseline at a named commit, and record the commit IN the file** (`R197`). Engineer-owned (`tools/`), therefore reported, not edited. |
 | **9** | **★★★ `check-ledger-numbers.py`'s PASS-HEADING ANCHOR IS BLIND TO A BACKTICKED PASS ID — THE THIRD INSTANCE OF A CLASS ITS OWN COMMENTS DOCUMENT TWICE** | `tools/check-ledger-numbers.py:~205` | 216th filing | The anchor is `^#{2,4} (?:★+ )?Pass `. **This project's current Shipped heading convention writes the ID in BACKTICKS** — `` ### `Pass 120.2`/`Pass 120.4` (`af5989f`) — … `` — and several entries lead with the commit hash instead. **Neither form matches.** Measured consequence, from the gate's own output this filing: *"Pass families with headings: up to **118**"* while **`Pass 121.1` has shipped**, and `113`, `114`, `115`, `116`, `117`, `119`, `120`, `121`, `97` all sit under *"CLAIMED BUT NOT YET HEADED"* — **eight shipped Pass families invisible to the ceiling calculation.** The gate is **not failing** (uniqueness still holds) — it is **reporting less than it appears to**, which is the `R53`–`R57` shape. **★ The file's own comments record this exact class being fixed TWICE** — once to admit `★ Pass`, once widened to `★+ Pass` — and name the transferable lesson each time: *"it repaired the ONE spelling that had been seen rather than the CLASS."* **A third spelling has appeared and the anchor is one spelling behind again.** Suggested widening: allow any run of decoration (`★`, backtick, or both) between the hashes and `Pass`, and scan the heading prefix for a backticked ID as well as a bare one. **Discovered the same way the previous two were** — reading the gate's output against a filing whose Pass ID was known. Engineer-owned (`tools/`), therefore reported, not edited. |
 | **10** | **★★ FIVE `crates/` SURVIVORS OF THE `transparency_groups_knockout_approximated` MEANING CHANGE** (hard rule 11 sweep, 216th filing) | `crates/pdfce-render/src/interpret.rs:495–504` and `:4318–4341`; `crates/pdfce-cli/src/main.rs:~7823–7840` and `~8081–8089`; `crates/pdfce-cli/tests/render_page.rs:~466` | 216th filing | Full table with the exact stale wording is in the `7160819`/`9b49ca0`/`86a7b70` *Shipped* entry, §`97.0c`. **The two most expensive are the two nearest the code that changed**: the counter's **own rustdoc** (the definition site an IDE hover resolves to) and a **24-line comment opening *"`/K` (knockout, Table 147) is NOT implemented"* thirty lines above the increment**. ⚠ **That comment's other two paragraphs are still TRUE and must survive the correction** — the four-clauses population argument and the degenerate-fixture warning (*"Any knockout test must set `/ca < 1`"*), which is the trap `97.0c`'s new test was built to dodge. Survivor 4 is a **user-facing `eprintln!`** carrying **two** defects — stale semantics *and* the `Table 96` citation `Pass 85.4e` corrected to Table 147 everywhere else. **`crates/` is outside this role's remit: reported, not edited.** |
@@ -67711,10 +67724,10 @@ separately below under hard rule 11.
 |---|---|---|---|
 | **16** | **★★ `Pass 102.0` SHIPPED WITH TWO OF ITS FIVE ACCEPTANCE CRITERIA UNMET, and one of them is `CLAUDE.md` rule 11** | `crates/pdfce-cli/`, `crates/pdfce-core/tests/insert_pages_preserves_undo.rs` | **(3)** `grep -rn 'orphaned_widgets' crates/pdfce-cli/` → **0 hits**. Not a missing `println!`: `pdfce-cli insert-pages` (`main.rs:22870`) calls **`pageops::insert`**, a *different* verb, so `EditSession::insert_pages` has **no CLI surface at all** — an `R151` instance, and rule 11 (*"each feature Pass ships its `pdfce-cli` subcommand alongside"*) is unsatisfied. **(4)** no test where one field's widgets **STRADDLE** an inserted and a non-inserted page — the case the Pass entry itself called *"the case that makes this Pass permanent"*; the two shipped tests cover all-orphaned (`:303`) and none (`:105`). **★ A name collision is embedded here and wants a ruling BEFORE it ships:** two verbs would both be spelled `insert-pages` on the CLI, with **different `/AcroForm` semantics**. |
 | **17** | **`Pass 104.0`'s four ce-dimension group verbs have NO shell** | `crates/pdfce-cli/src/`, `crates/pdfce-gui/src/` | `grep -rn` for `rename_dimension_group` / `set_dimension_group` / `delete_dimension_group` across both → **0 hits**. `FEATURES.md` reads `[x]` core / `[ ]` cli / `[ ]` gui accordingly. **`[ ]`, not `—`** — rule 11 makes a CLI subcommand the default deliverable, so this is a **gap**, not a shape mismatch. GUI is separately paused, so only the CLI half is actionable now. |
-| **18** | **★★ A NEW GRAPHICS-STATE FIELD MUST BE ADDED TO EVERY "IS THE STATE STILL DEFAULT?" PREDICATE, AND NOTHING MAKES THOSE SITES FINDABLE FROM THE FIELD** | `crates/pdfce-render/` | Two sites hit by one field in `972ddbb`: **`outer_is_neutral`** (tests `blend_mode == SourceOver`, which a non-separable mode parks at *exactly*, so a `/BM /Hue` group looked neutral, skipped its buffer and painted inline — a §11.4.5 violation) and **`do_form`'s group-contents reset** (contents inherited a mode belonging to the group's **RESULT**). **★ The first produced a measured Ghent IMPROVEMENT — `3_GWG164` 4 traps → 1 — that was nearly reported as a win; fixing the bug REMOVED the improvement.** Written up this filing at `D:\dev\rag\rust\`. **Owed:** an enumerated list of default-state predicates beside `GraphicsState`, or a single `is_default()` that those predicates delegate to. Engineer's call which. |
+| **18** | **★★ A NEW GRAPHICS-STATE FIELD MUST BE ADDED TO EVERY "IS THE STATE STILL DEFAULT?" PREDICATE, AND NOTHING MAKES THOSE SITES FINDABLE FROM THE FIELD** | `crates/pdfce-render/` | Two sites hit by one field in `972ddbb`: **`outer_is_neutral`** (tests `blend_mode == SourceOver`, which a non-separable mode parks at *exactly*, so a `/BM /Hue` group looked neutral, skipped its buffer and painted inline — a §11.4.5 violation) and **`do_form`'s group-contents reset** (contents inherited a mode belonging to the group's **RESULT**). **★ The first produced a measured suite IMPROVEMENT — `PCS3_164` 4 traps → 1 — that was nearly reported as a win; fixing the bug REMOVED the improvement.** Written up this filing at `D:\dev\rag\rust\`. **Owed:** an enumerated list of default-state predicates beside `GraphicsState`, or a single `is_default()` that those predicates delegate to. Engineer's call which. |
 | **19** | **A RULE THIS FILING DECLINES TO MINT, recorded so the decision is VISIBLE rather than absent — *an acceptance criterion written from the DATA MODEL cannot see an APPEARANCE defect*** | — | **Two instances one hour apart, both self-caught by sabotage runs.** `Pass 98.0`'s round-trip test **passed with the reader stubbed out to return `None`** — it checked `/BE` survived in the dictionary; the defect was that the appearance drew flat. `Pass 104.0`'s re-parent test **passed against an implementation that writes the field and nothing else** — it checked `d.group`; the defect would have been a dimension reading its old group's scale. ★ **Both criteria were written by THIS FILE** (`Pass 98.0`'s in the 178th filing's Backlog amendment). ⇒ Two occurrences meets the promotion bar on count, and **the warrant is still weak in the way `R198`'s own mint text warns about**: the fix in both cases was *"assert on the rendered artefact, differentially, and sabotage-verify"*, which is `R92`/`R43` discipline pointed at tests rather than a new obligation. **Recommendation: a scoping check to run when WRITING an acceptance criterion, not a standing rule.** The mint is the engineer's act (rule 5). |
-| **20** | **★★ THE GHENT HARNESS RECLASSIFIED THREE PATCHES FAIL → UNRESOLVED AND NOBODY KNOWS WHICH THREE OR WHY** | `tools/ghent-check.py` | Documented **25 / 18 / 8**; measured **25 / 15 / 11** on the pre-`972ddbb` binary, built from the previous commit in a worktree. `18+8 = 15+11 = 26` and **`pass` is 25 in both**, so **no patch changed outcome** — three crossed the FAIL/UNRESOLVED line only. **Two consequences:** the FAILs-by-cause cluster table (sums to 18) no longer reconciles and is flagged not-current, and **every before/after delta filed against the old classification is suspect in the same direction at once** — the 167th filing's *finding 1* arriving for real. **Owed:** re-run, re-cluster, and say whether the classifier changed or the two runs differ for another reason. |
-| **21** | **★★ `docs/compositor-plan.md` §1 CARRIES THE STALE BASELINE, AND IT IS A LIVE PLAN — NOT A DATED RECORD** | `docs/compositor-plan.md:9`, `:29` | Engineer-owned, therefore **reported, not edited.** §1 states *"Baseline re-measured 2026-08-18 at `e618d67`: 25 pass · 18 FAIL · 8 UNRESOLVED"*, and the document's whole thesis rests on it: *"what single build clears the largest share of the **18** remaining Ghent failures"* and *"**16 of the 18** failures are downstream of the same missing thing"*. **The 188th filing's liveness ruling says a frozen figure in a DATED RECORD is the record working — this is the other category.** `Pass 97.x` is scoped from this document, so a stale denominator here is a **stale contract misleading a PLAN**, precisely the `3cfc5d4` shape. **The 16-of-18 ratio needs re-deriving against 14, and some of the four modes `972ddbb` shipped may already have been inside the 16.** ⚠ **Its §"non-separable" analysis is separately falsified** — see item 28. |
+| **20** | **★★ THE SUITE HARNESS RECLASSIFIED THREE PATCHES FAIL → UNRESOLVED AND NOBODY KNOWS WHICH THREE OR WHY** | `tools/suite-check.py` | Documented **25 / 18 / 8**; measured **25 / 15 / 11** on the pre-`972ddbb` binary, built from the previous commit in a worktree. `18+8 = 15+11 = 26` and **`pass` is 25 in both**, so **no patch changed outcome** — three crossed the FAIL/UNRESOLVED line only. **Two consequences:** the FAILs-by-cause cluster table (sums to 18) no longer reconciles and is flagged not-current, and **every before/after delta filed against the old classification is suspect in the same direction at once** — the 167th filing's *finding 1* arriving for real. **Owed:** re-run, re-cluster, and say whether the classifier changed or the two runs differ for another reason. |
+| **21** | **★★ `docs/compositor-plan.md` §1 CARRIES THE STALE BASELINE, AND IT IS A LIVE PLAN — NOT A DATED RECORD** | `docs/compositor-plan.md:9`, `:29` | Engineer-owned, therefore **reported, not edited.** §1 states *"Baseline re-measured 2026-08-18 at `e618d67`: 25 pass · 18 FAIL · 8 UNRESOLVED"*, and the document's whole thesis rests on it: *"what single build clears the largest share of the **18** remaining suite failures"* and *"**16 of the 18** failures are downstream of the same missing thing"*. **The 188th filing's liveness ruling says a frozen figure in a DATED RECORD is the record working — this is the other category.** `Pass 97.x` is scoped from this document, so a stale denominator here is a **stale contract misleading a PLAN**, precisely the `3cfc5d4` shape. **The 16-of-18 ratio needs re-deriving against 14, and some of the four modes `972ddbb` shipped may already have been inside the 16.** ⚠ **Its §"non-separable" analysis is separately falsified** — see item 28. |
 | **22** | **`docs/NEXT_SESSION.md:217` states the stale baseline** | `docs/NEXT_SESSION.md` | Engineer-owned by explicit rule (*"do not touch"*), and overwritten each session anyway, so this is the **cheapest and shortest-lived** item here. Listed only so the handoff is not the last document quoting `25 / 18 / 8` as current. |
 
 #### ★★★★ THE CLAIM SWEEP (hard rule 11) — **items 23–28, SIX SURVIVORS, and the first one is inside the comment that corrected the SEVENTH instance of this exact class**
@@ -67729,10 +67742,10 @@ this role's remit.**
 |---|---|---|---|
 | **23** | ★★★ **"The 4 NONSEPARABLE modes are recognised and DECLINED, so they land in `blend_modes_ignored`, not here."** | `crates/pdfce-cli/src/main.rs:7102–7103` | **False on both halves.** `interpret.rs:2665–2674` resolves a non-separable name **FIRST**, sets `gs.nonseparable`, and increments **`blend_modes_applied`** — the four can no longer reach `blend_modes_ignored` at all. ★★ **AND IT SITS INSIDE THE COMMENT BLOCK HEADED *"★ SEVENTH copy of the stale-shortfall claim, corrected 2026-08-18"*** — the correction of the seventh instance became the eighth. Same recursion as `3cfc5d4`, where the gate being fixed for a stale docstring had a stale docstring. |
 | **24** | ★★★ **An operator-facing `eprintln!` telling the operator the page is WRONG for a reason that can no longer occur** | `crates/pdfce-cli/src/main.rs:7333–7339` | The `blend_modes_ignored` note offers two reasons and calls the second *"far the likelier on a print-oriented file"*: *"(b) one of the four NON-SEPARABLE modes — Hue, Saturation, Color, Luminosity — which pdfce recognises and deliberately DECLINES to composite … Either way the page is not blank where those marks are, it is WRONG there."* **Reason (b) is now unreachable**, so on a modern file the note names the wrong cause with stated high confidence. **This is the worst class of survivor** — `pdfceGUI`'s own lesson, repeated back in the 184th filing: *a disclosure that names the wrong failure is worse than none, because it is believed.* |
-| **25** | ★★★ **An entire rustdoc section, headed with a ★ and a measurement, false top to bottom** | `crates/pdfce-render/src/interpret.rs:289–313` (`Diagnostics::blend_modes_ignored`) | Headed *"★ MEASURED CONSEQUENCE, 2026-08-18 — this is where `1_GWG160`'s failures actually live"*. Four false claims: **(a)** *"Every Ghent transparency patch reports `applied=11, ignored=4`, and the 4 are these modes"* — they now increment `applied`; **(b)** the trap table's premise; **(c)** *"Do not read the clean cell as evidence `Luminosity` is implemented; it is declined exactly like the other three"* — all four are implemented; **(d)** *"Implementing them needs … a backdrop this crate can read, which is `Pass 97.0`'s buffer"* — **shipped WITHOUT `Pass 97.0`**, so that is a **stated blocker falsified by trying it**, the same shape as `85.5`'s `iccce` gate. **And `1_GWG160` now PASSES**, which is the heading's own subject. |
+| **25** | ★★★ **An entire rustdoc section, headed with a ★ and a measurement, false top to bottom** | `crates/pdfce-render/src/interpret.rs:289–313` (`Diagnostics::blend_modes_ignored`) | Headed *"★ MEASURED CONSEQUENCE, 2026-08-18 — this is where `PCS1_160`'s failures actually live"*. Four false claims: **(a)** *"Every suite transparency patch reports `applied=11, ignored=4`, and the 4 are these modes"* — they now increment `applied`; **(b)** the trap table's premise; **(c)** *"Do not read the clean cell as evidence `Luminosity` is implemented; it is declined exactly like the other three"* — all four are implemented; **(d)** *"Implementing them needs … a backdrop this crate can read, which is `Pass 97.0`'s buffer"* — **shipped WITHOUT `Pass 97.0`**, so that is a **stated blocker falsified by trying it**, the same shape as `85.5`'s `iccce` gate. **And `PCS1_160` now PASSES**, which is the heading's own subject. |
 | **26** | ★★ **`blend_mode_from_name`'s refusal comment reads as the current state of the four modes** | `crates/pdfce-render/src/gstate.rs:476–498` | Every fact in it is still true **about the dependency**, so a grep for "wrong" finds nothing to fix — which is exactly why rule 11 says read for the claim. What is now false is the **conclusion**: *"Returning `None` costs a correct rendering of four modes"* (it costs nothing — the caller resolves them before reaching here) and *"implementing them properly … is a Pass of its own"* (that Pass is `85.4b`, shipped). A reader of this function still concludes pdfce does not render Hue/Saturation/Color/Luminosity. |
 | **27** | ★★ **`DroppedProperty::BorderEffect`'s rustdoc explains a drop that mostly no longer happens** | `crates/pdfce-core/src/edit.rs:3013–3019` | *"`MarkupStyle` … has no `border_effect` field, so `set_markup_style` cannot express one"*; *"this variant reports a foreign `/BE` that was never in a pdfce spec to begin with"*; *"pdfce's own `/AP` no longer draws it"*. After `Pass 98.0` a foreign `/BE << /S /C >>` on `/Square` or `/Polygon` **IS** read into the spec and **IS** drawn; the variant now fires only for `/Circle`, `/PolyLine`, `/Line`, `/Ink` and for `/S` ≠ `/C`. **Lower-confidence companion, flagged not asserted:** the CLI's operator note at `main.rs:18631` (*"the regenerated appearance draws a straight outline"*) is still **true of the cases that still fire** but no longer distinguishes them — it reads as the general behaviour. |
-| **28** | ★★ **`docs/compositor-plan.md`'s non-separable analysis is falsified in its premise, separately from its stale baseline** | `docs/compositor-plan.md:56–79`, `:115` | Engineer-owned; **reported.** *"`blend_mode_from_name` returns `None` for all four nonseparable modes, so pdfce **declines them outright** and composites them as `Normal`"* and *"`blend_modes_applied=11, blend_modes_ignored=4` in every one"* — both now false. Its finding 1 (*"`Hue`/`Saturation`/`Color` fail because they are not implemented"*) and its warning (*"Do not read that clean cell as evidence `Luminosity` works"*) are retired by the ship. **Finding 2 SURVIVES and is the part worth keeping** — `3_GWG164`'s `Difference` cell is still applied-and-separable and still the §11.3.4 blending-space evidence. **Finding 3 is now half-answered:** §11.3.5.3's K-selection rule was *"still required to implement the nonseparable modes correctly"*, and they are implemented — whether the CMYK detour is in `blend_nonsep.rs` or still owed is a question for the engineer, not answerable from this side. |
+| **28** | ★★ **`docs/compositor-plan.md`'s non-separable analysis is falsified in its premise, separately from its stale baseline** | `docs/compositor-plan.md:56–79`, `:115` | Engineer-owned; **reported.** *"`blend_mode_from_name` returns `None` for all four nonseparable modes, so pdfce **declines them outright** and composites them as `Normal`"* and *"`blend_modes_applied=11, blend_modes_ignored=4` in every one"* — both now false. Its finding 1 (*"`Hue`/`Saturation`/`Color` fail because they are not implemented"*) and its warning (*"Do not read that clean cell as evidence `Luminosity` works"*) are retired by the ship. **Finding 2 SURVIVES and is the part worth keeping** — `PCS3_164`'s `Difference` cell is still applied-and-separable and still the §11.3.4 blending-space evidence. **Finding 3 is now half-answered:** §11.3.5.3's K-selection rule was *"still required to implement the nonseparable modes correctly"*, and they are implemented — whether the CMYK detour is in `blend_nonsep.rs` or still owed is a question for the engineer, not answerable from this side. |
 
 **★ WHAT THE SWEEP DID *NOT* FIND, recorded because a rule that only ever
 reports hits trains its reader to expect hits.** `0eff831`'s
@@ -67798,7 +67811,7 @@ message: *the commit's account of the repository is not the repository.*
 | # | subject | verdict | evidence, this filing |
 |---|---|---|---|
 | **16** | `Pass 102.0`'s missing CLI subcommand | **★ CLOSED, ruled `—`** | Not a gap. `pdfce-cli insert-pages` calls **`pageops::insert`**, a different verb that **merges** `/AcroForm` and therefore has no orphan count to print; a one-shot CLI has no open session to insert into. Measured table in the `b1ea628` entry. `FEATURES.md`'s `[ ]` was the over-report and the legend exists for this distinction. **The name collision this uncovered is NOT closed — item 29.** |
-| **20** | Ghent classifier reclassified three patches FAIL → UNRESOLVED, cause unknown | **STILL OPEN, unchanged** | `01fbdc5` restates the arithmetic (`18+8 = 15+11 = 26`, `pass` 25 both) and **explicitly files it as a reading, not a verified cause.** Nobody has diffed the classifier. |
+| **20** | suite classifier reclassified three patches FAIL → UNRESOLVED, cause unknown | **STILL OPEN, unchanged** | `01fbdc5` restates the arithmetic (`18+8 = 15+11 = 26`, `pass` 25 both) and **explicitly files it as a reading, not a verified cause.** Nobody has diffed the classifier. |
 | **21** | `docs/compositor-plan.md` §1's stale baseline, in a LIVE plan | **★ CLOSED by `01fbdc5`** | Head amendment states `26 · 14 · 11`, names both causes, groups today's fourteen by cause, and marks §1/§1.1 as dated rather than rewriting them. **The preservation ruling is correct and is recorded in the Shipped entry.** |
 | **22** | `docs/NEXT_SESSION.md:217` states the stale baseline | **★ CLOSED by `01fbdc5`** | Corrected in the same commit. Engineer-owned; this role did not touch it. |
 | **23** | `main.rs:7102–7103` — *"The 4 NONSEPARABLE modes are recognised and DECLINED, so they land in `blend_modes_ignored`, not here."* | **★★ NOT CLOSED — byte-identical, same line numbers** | `sed -n '7085,7120p' crates/pdfce-cli/src/main.rs` this filing returns the quoted text unchanged, still inside the comment block headed *"★ SEVENTH copy of the stale-shortfall claim, corrected 2026-08-18"*. `git show b1ea628 -- crates/pdfce-cli/src/main.rs` touches **two** hunks: `@@ -7330,14` (the `eprintln!`, item 24) and `@@ -22867,6` (the collision doc). **Line 7102 is in neither.** ⇒ **The commit whose SUBJECT LINE is *"the correction of the seventh stale claim became the eighth"* did not fix the eighth.** |
@@ -67806,7 +67819,7 @@ message: *the commit's account of the repository is not the repository.*
 | **25** | `interpret.rs:289–313` — the whole `blend_modes_ignored` rustdoc | **★ CLOSED, and expanded rather than trimmed** | All four false claims gone. Now carries three dated sections: *"THIS COUNTER USED TO MEAN TWO THINGS"*, *"AND THIS BLOCK NAMED A BLOCKER THAT SHIPPING FALSIFIED"*, and the deletion note for the trap table. **See `R199`.** |
 | **26** | `gstate.rs:476–498` — `blend_mode_from_name`'s refusal comment | **★★ NOT CLOSED — untouched by `b1ea628`** | `sed -n '470,505p' crates/pdfce-render/src/gstate.rs` still ends *"Returning `None` costs a correct rendering of four modes"* and *"implementing them properly … is a Pass of its own"*. The first is false (the caller resolves them before reaching here, so it costs nothing) and the second names a Pass that **shipped** as `85.4b`. **Every fact about the DEPENDENCY in this comment is still true**, which is why no grep finds it — the 189th filing's warrant for reading over grepping, still standing. **★ It is also a second live instance of `R199`'s shape**: *"is a Pass of its own"* is a stated cost-blocker, and the Pass exists. |
 | **27** | `edit.rs:3013–3019` — `DroppedProperty::BorderEffect`'s rustdoc | **★★ NOT CLOSED — untouched** | `sed -n '3005,3032p' crates/pdfce-core/src/edit.rs` still reads *"`MarkupStyle` … has no `border_effect` field, so `set_markup_style` cannot express one"*, *"this variant reports a foreign `/BE` that was never in a pdfce spec to begin with"* and *"pdfce's own `/AP` no longer draws it"*. After `Pass 98.0` a foreign `/BE << /S /C >>` on `/Square` or `/Polygon` **is** read into the spec and **is** drawn; the variant now fires only for `/Circle`, `/PolyLine`, `/Line`, `/Ink` and for `/S` ≠ `/C`. `b1ea628`'s `edit.rs` hunk is the `insert-pages` collision doc at `:22860`+, nowhere near. |
-| **28** | `docs/compositor-plan.md`'s non-separable analysis | **◐ PARTLY DISCHARGED by `01fbdc5`, remainder open** | The **head amendment** now says `1_GWG160` passes and that the thesis has a counter-example — which retires the document's *conclusion*. **§1.1's body at `:104–106` is untouched and still asserts, present-tense and undated, that pdfce *"declines them outright"* and reports `applied=11, ignored=4` *"in every one"*.** The head says *"read §1.1 as dated"*; the body does not say it about itself. **A reader arriving at §1.1 by grep or section link never sees the head.** Its **finding 2** survives and is still the §11.3.4 evidence (`3_GWG164`'s `Difference` cell), exactly as the 189th filing predicted. **Finding 3 is now answerable and nobody has answered it:** whether §11.3.5.3's K-selection detour is inside `blend_nonsep.rs` or still owed — `interpret.rs`'s new rustdoc says the CMYK detour *"remains `Pass 97.x`'s"*, which reads like an answer but is a claim about a **different** obligation (a `DeviceCMYK` *blending space*), not about K-selection inside the four modes. **Owed item 31.** |
+| **28** | `docs/compositor-plan.md`'s non-separable analysis | **◐ PARTLY DISCHARGED by `01fbdc5`, remainder open** | The **head amendment** now says `PCS1_160` passes and that the thesis has a counter-example — which retires the document's *conclusion*. **§1.1's body at `:104–106` is untouched and still asserts, present-tense and undated, that pdfce *"declines them outright"* and reports `applied=11, ignored=4` *"in every one"*.** The head says *"read §1.1 as dated"*; the body does not say it about itself. **A reader arriving at §1.1 by grep or section link never sees the head.** Its **finding 2** survives and is still the §11.3.4 evidence (`PCS3_164`'s `Difference` cell), exactly as the 189th filing predicted. **Finding 3 is now answerable and nobody has answered it:** whether §11.3.5.3's K-selection detour is inside `blend_nonsep.rs` or still owed — `interpret.rs`'s new rustdoc says the CMYK detour *"remains `Pass 97.x`'s"*, which reads like an answer but is a claim about a **different** obligation (a `DeviceCMYK` *blending space*), not about K-selection inside the four modes. **Owed item 31.** |
 
 **★★ THE PATTERN ACROSS THE ROW, and it is the reason this table is
 item-by-item.** Of the six survivors, **two closed, three untouched, one
@@ -67868,7 +67881,7 @@ for the next shelled filing to confirm. **Numbering continues** 1–7
 
 | # | owed | where | evidence |
 |---|---|---|---|
-| **34** | **The dispatch's framing of `b1ea628` ("closed 2 of 3 Ghent survivors") does not match this page's own item-by-item count ("2 of the six claim-sweep survivors")** | `ROADMAP.md`'s 191st-filing header box; the 190th filing's item-by-item table | Both framings agree on the operative fact (23/26/27 were byte-identical) so this did not block filing `9a5d8b9`, but the two counts use different denominators and nobody has said which the engineer intended. Reconcile or discard as a wording slip. → **RESOLVED, 192nd filing** — see the new header box above this table's own filing box: `git show -s --format=%B` on both commits (relayed by the engineer, not independently reachability-checked here) confirms the sweep returned **six**, `b1ea628` left **23, 26, 27** untouched despite its subject line, and `9a5d8b9` is titled *"the three survivors the last commit claimed and did not fix."* This page's own item-by-item table was the correct account; the dispatch's "2 of 3" was a wording error in the dispatch, not a genuine second denominator. |
+| **34** | **The dispatch's framing of `b1ea628` ("closed 2 of 3 suite survivors") does not match this page's own item-by-item count ("2 of the six claim-sweep survivors")** | `ROADMAP.md`'s 191st-filing header box; the 190th filing's item-by-item table | Both framings agree on the operative fact (23/26/27 were byte-identical) so this did not block filing `9a5d8b9`, but the two counts use different denominators and nobody has said which the engineer intended. Reconcile or discard as a wording slip. → **RESOLVED, 192nd filing** — see the new header box above this table's own filing box: `git show -s --format=%B` on both commits (relayed by the engineer, not independently reachability-checked here) confirms the sweep returned **six**, `b1ea628` left **23, 26, 27** untouched despite its subject line, and `9a5d8b9` is titled *"the three survivors the last commit claimed and did not fix."* This page's own item-by-item table was the correct account; the dispatch's "2 of 3" was a wording error in the dispatch, not a genuine second denominator. |
 | **35** | **`docs/NEXT_SESSION.md:67` still states `add_outline_item` — "no verb exists"**, now false | `docs/NEXT_SESSION.md:67` | Engineer-owned by explicit rule (*"do not touch"*) and overwritten each session regardless — same disposition as owed item 22 in the 190th filing. Listed so the handoff is not the last document quoting a retired claim as current. |
 | **36** | **`9a5d8b9`'s disposition (closes owed items 23, 26, 27) is filed from the dispatching engineer's report, not from an independent read of the diff** | `crates/pdfce-cli/src/main.rs:7102–7103`, `crates/pdfce-render/src/gstate.rs:476–498`, `crates/pdfce-core/src/edit.rs:3013–3019` | No shell this filing. **Recommend the next shelled filing `sed`/`git show` these three sites against `9a5d8b9` before treating 23/26/27 as settled** — the exact discipline the 190th filing itself recommended, applied here by the one filing unable to perform it. |
 
@@ -68012,9 +68025,9 @@ inferred from any prior filing (hard rule 8):**
 >   itself owed work**). The channel's `README.md` says closing an
 >   exchange **moves BOTH files to `archive/`**; these three were
 >   answered and never moved.
-> - **★ `reply_ghent_render_harness.md` is a STRAY DUPLICATE.** Its pair
+> - **★ `reply_suite_render_harness.md` is a STRAY DUPLICATE.** Its pair
 >   is already closed —
->   `archive/2026-08-17-ghent-render-harness-{request,reply}.md` both
+>   `archive/2026-08-17-suite-render-harness-{request,reply}.md` both
 >   exist. The reply was **copied into the archive rather than moved**,
 >   so `open\` still shows a closed exchange. **One deletion; pure
 >   housekeeping, no thinking required** — and it is 1 of the 16, so the
@@ -68034,7 +68047,7 @@ inferred from any prior filing (hard rule 8):**
 >   request**, which is exactly the kind of item a "requests owed" count
 >   cannot see.
 > - **`note_ask_priority.md` ranks "iccce's three open asks."** The third
->   was `request_ghent_render_harness.md`, closed and archived at 22:25
+>   was `request_suite_render_harness.md`, closed and archived at 22:25
 >   the same evening — **so "three" and today's "two" agree**; the note is
 >   simply older than the closure. Recorded because a future reader
 >   otherwise finds a third ask that no longer exists.
@@ -68303,13 +68316,13 @@ parallel one).
 
 ---
 
-### ★★★★★★ THE GHENT STANDING BOARD — **26 pass AT MINIMUM, of 51 patches** (harness-reported `24 / 11 / 16`, UNCHANGED since `Pass 122.2` — this is a measurement-only step, no code shipped; CORRECTED 2026-08-21 by the 225th filing, AGAIN 2026-08-24 by the 243rd, AND AGAIN 2026-08-24 LATER THE SAME DAY by the 244th — `GWG 1.1`'s DISPUTE IS RESOLVED: a third, independent oracle (Adobe Acrobat) agrees with pdfce's COMBINED render, not its individual one, so `GWG 1.1` flips FAIL → PASS; see `Pass 122.4`'s answered investigation and `Pass 122.5` (Backlog) for the mechanism it exposed, which generalises to 24 of 51 patches — AND CORRECTED AGAIN 2026-08-24, STILL THE SAME DAY, BY THE 245th FILING: `pdfce-spec-librarian` reports the 244th filing's clause citation, its "no page group" premise, and its Acrobat-attribution wording were all wrong, and that under ISO 32000-1 pdfce's CURRENT behaviour is CONFORMING, not defective — see the correction block immediately below, which supersedes the citations (not the measurements) in every block beneath it) — ★★★★★ **THE HARNESS IMPLEMENTS ONE OF THE SUITE'S TWO PASS CRITERIA, AND THE OTHER HAS BEEN REPORTED `clean` FOR ITS ENTIRE LIFE — SO EVERY FIGURE BELOW THIS LINE, INCLUDING ALL THE HISTORICAL ONES, IS OVER-COUNTED BY THE SAME FAMILY** — see the correction blocks immediately below — ★★★ **RE-MEASURED 2026-08-21 (224th filing, `Pass 97.1e`/`97.1f`, `a277931`+`ff4b4bf`) AGAINST A BINARY BUILT FROM `06aaad3` IN A WORKTREE; the previous figure (**26 / 14 / 11**) is kept below as history and was NOT stale — it was correct at its own commit, and this is a SHIP moving it, not a correction** — ★★ **AND THE COMPOSITION OF THE REMAINING FAILs IS NOW THE BOARD'S MOST USEFUL FACT: every one of them is an OVERPRINT, SPOT or ICC patch. Not one is a blending-space failure any more** — ★★ **FIGURE CORRECTED TWICE OVER 2026-08-19 (189th filing): once by a SHIP and once because the PREVIOUS FIGURE WAS ALREADY STALE** — the ONE architectural item that unblocks the largest cluster — opened 2026-08-18 (hundred-and-sixty-sixth filing)
+### ★★★★★★ THE SUITE STANDING BOARD — **26 pass AT MINIMUM, of 51 patches** (harness-reported `24 / 11 / 16`, UNCHANGED since `Pass 122.2` — this is a measurement-only step, no code shipped; CORRECTED 2026-08-21 by the 225th filing, AGAIN 2026-08-24 by the 243rd, AND AGAIN 2026-08-24 LATER THE SAME DAY by the 244th — `PCS 1.1`'s DISPUTE IS RESOLVED: a third, independent oracle (Adobe Acrobat) agrees with pdfce's COMBINED render, not its individual one, so `PCS 1.1` flips FAIL → PASS; see `Pass 122.4`'s answered investigation and `Pass 122.5` (Backlog) for the mechanism it exposed, which generalises to 24 of 51 patches — AND CORRECTED AGAIN 2026-08-24, STILL THE SAME DAY, BY THE 245th FILING: `pdfce-spec-librarian` reports the 244th filing's clause citation, its "no page group" premise, and its Acrobat-attribution wording were all wrong, and that under ISO 32000-1 pdfce's CURRENT behaviour is CONFORMING, not defective — see the correction block immediately below, which supersedes the citations (not the measurements) in every block beneath it) — ★★★★★ **THE HARNESS IMPLEMENTS ONE OF THE SUITE'S TWO PASS CRITERIA, AND THE OTHER HAS BEEN REPORTED `clean` FOR ITS ENTIRE LIFE — SO EVERY FIGURE BELOW THIS LINE, INCLUDING ALL THE HISTORICAL ONES, IS OVER-COUNTED BY THE SAME FAMILY** — see the correction blocks immediately below — ★★★ **RE-MEASURED 2026-08-21 (224th filing, `Pass 97.1e`/`97.1f`, `a277931`+`ff4b4bf`) AGAINST A BINARY BUILT FROM `06aaad3` IN A WORKTREE; the previous figure (**26 / 14 / 11**) is kept below as history and was NOT stale — it was correct at its own commit, and this is a SHIP moving it, not a correction** — ★★ **AND THE COMPOSITION OF THE REMAINING FAILs IS NOW THE BOARD'S MOST USEFUL FACT: every one of them is an OVERPRINT, SPOT or ICC patch. Not one is a blending-space failure any more** — ★★ **FIGURE CORRECTED TWICE OVER 2026-08-19 (189th filing): once by a SHIP and once because the PREVIOUS FIGURE WAS ALREADY STALE** — the ONE architectural item that unblocks the largest cluster — opened 2026-08-18 (hundred-and-sixty-sixth filing)
 
 #### ★★★★★★★★ CORRECTED BY `pdfce-spec-librarian`, 2026-08-24 (245th filing, `pdfce-librarian`, NO COMMIT) — FOUR ERRORS IN THE 244th FILING, ONE OF THEM A VIOLATION OF A STANDING OPERATOR INSTRUCTION; `(bs)` WITHDRAWN, REPLACED BY A SETTING
 
 **This block corrects CITATIONS AND FRAMING, not the 244th filing's
 MEASUREMENTS.** The three-way render comparison (pdfce individual vs.
-pdfce combined vs. Adobe Acrobat) still stands and `GWG 1.1` still flips
+pdfce combined vs. Adobe Acrobat) still stands and `PCS 1.1` still flips
 FAIL → PASS; the standing figure `26` is unchanged. What was wrong is the
 clause cited for WHY, the premise about what exists, one attribution, and
 — most importantly — that a question got opened for Ken that a standing
@@ -68336,7 +68349,7 @@ than as a spec ambiguity — the costume, not the rule, is what failed.
 
 **2 — the cited clause is wrong, and so is the premise it was cited
 for.** The 244th filing said §11.7.2 governs and that the individual
-Ghent patches have **no page group**. Both wrong. **The page group
+suite patches have **no page group**. Both wrong. **The page group
 exists unconditionally.** ISO 32000-1 §11.4.7: *"All of the elements
 painted directly onto a page… shall be treated as if they were contained
 in a transparency group P… This group is called the page group,"*
@@ -68411,7 +68424,7 @@ same reading:
 gap.** ISO 15930 is paywalled and all three free routes failed. **No
 ISO 15930 clause number is asserted anywhere in the corpus and none may
 be added from recall.** From free secondary sources: no source
-establishes that any PDF/X part *requires* a page group (GWG's own
+establishes that any PDF/X part *requires* a page group (the suite's publisher's own
 conformance list accepts an *undefined* blend space — affirmative
 evidence the other way), and none requires CMYK compositing; X-4
 requires only *agreement* between a declared group `/CS` and the
@@ -68461,7 +68474,7 @@ solved twice, differently:**
 
 ---
 
-#### ★★★★★★★ CORRECTED AGAIN, LATER THE SAME DAY, 2026-08-24 (`Pass 122.4`'s ANSWER — MEASUREMENT ONLY, NO COMMIT, two-hundred-and-forty-fourth filing) — A THIRD ORACLE SETTLES THE DISPUTE: `GWG 1.1` FLIPS FAIL → PASS, STANDING MOVES TO 26, AND THE MECHANISM GENERALISES TO 24 OF 51 PATCHES
+#### ★★★★★★★ CORRECTED AGAIN, LATER THE SAME DAY, 2026-08-24 (`Pass 122.4`'s ANSWER — MEASUREMENT ONLY, NO COMMIT, two-hundred-and-forty-fourth filing) — A THIRD ORACLE SETTLES THE DISPUTE: `PCS 1.1` FLIPS FAIL → PASS, STANDING MOVES TO 26, AND THE MECHANISM GENERALISES TO 24 OF 51 PATCHES
 
 **★ SUPERSEDED 2026-08-24 (246th filing, `Pass 122.5`, `270b9d0`) — see the
 top of *Shipped*.** `Pass 122.5` shipped the fix this block's mechanism
@@ -68470,24 +68483,24 @@ predicted: harness board `24/11/16` → `27/8/16`, hand-adjudicated minimum
 
 **`Pass 122.4` asked: does the combined render disagree with the individual patch render it is assembled from? ANSWERED: YES — and the operator's original reading of the combined page was right all along.**
 
-**Three-way measurement, `GWG 1.1`'s OPM-1 swatch, same binary, 2026-08-24:**
+**Three-way measurement, `PCS 1.1`'s OPM-1 swatch, same binary, 2026-08-24:**
 
 | render | result |
 |---|---|
-| pdfce, INDIVIDUAL patch `1_GWG011_Overprint-Mode_x3.pdf` | solid, filled, **contrast 18.4**, 79×78 px |
-| pdfce, COMBINED document `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` page 1 | none detectable (a faint outline only) |
+| pdfce, INDIVIDUAL patch `PCS1_011_Overprint-Mode_x3.pdf` | solid, filled, **contrast 18.4**, 79×78 px |
+| pdfce, COMBINED document (the suite's combined X-4 file) page 1 | none detectable (a faint outline only) |
 | **Adobe Acrobat** (rendering reference; licence tier unestablished), individual patch | none detectable |
 
 ⇒ **Acrobat agrees with pdfce's combined render. pdfce's individual-patch
-render is the outlier, and it is wrong.** `GWG 1.1` PASSES.
+render is the outlier, and it is wrong.** `PCS 1.1` PASSES.
 
 **Corrected standing moves `25 → 26`.** The harness-reported figure is
 UNCHANGED at **`24 pass / 11 FAIL / 16 UNRESOLVED`** — this step shipped
 no code, so the harness still scores the individual-patch file exactly as
 it did this morning. The correction is two hand-adjudications layered on
 top of the harness's own bucketing, neither of which the harness itself
-has been taught yet: `GWG 5.0` pulled out of its 16 UNRESOLVED, `GWG 1.1`
-pulled out of its 11 FAIL. `24 + 1 (GWG 5.0) + 1 (GWG 1.1) = 26`.
+has been taught yet: `PCS 5.0` pulled out of its 16 UNRESOLVED, `PCS 1.1`
+pulled out of its 11 FAIL. `24 + 1 (PCS 5.0) + 1 (PCS 1.1) = 26`.
 
 **★ THIS SUPERSEDES `Pass 122.2`'s OWN "25" FROM EARLIER THE SAME DAY** —
 see the amendment on that entry, immediately below, rather than a silent
@@ -68502,28 +68515,28 @@ overprint-LOGIC defect, it is a compositing-SPACE defect:**
     individual patch (_x3):  blend_space_subtractive=0   cmyk_buffer=0   (composited in sRGB)
     combined document (_X4): blend_space_subtractive=2   cmyk_buffer=1   (composited natively in ink)
 
-`1_GWG011_Overprint-Mode_x3.pdf` is a standalone PDF/X-3 file whose page
+`PCS1_011_Overprint-Mode_x3.pdf` is a standalone PDF/X-3 file whose page
 group carries **an undeclared `/CS`** — the page group itself exists
 unconditionally (ISO 32000-1 §11.4.7), corrected 2026-08-24, 245th
 filing, above — so pdfce never allocates a colorant buffer and
 composites `DeviceCMYK` overprint content additively, on screen. The
-combined `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` declares a `/CS` and
+combined file declares a `/CS` and
 gets the ink buffer. Same artwork, two different compositing spaces,
 visibly different output — and Acrobat's individual-patch render shows
 this does NOT happen there, so the additive path is pdfce's own defect,
 not a property of the file.
 
 **★★ THE SCALE OF IT — the reason this is the headline and not a
-`GWG 1.1` footnote.** Swept all 51 Ghent patches for the same signature
+`PCS 1.1` footnote.** Swept all 51 suite patches for the same signature
 (`overprint_requested>0` with `cmyk_buffer=0`): **24 of 51 REQUEST
 overprint and receive NO colorant buffer; only 13 get one.** The 24
-include **every single remaining Ghent FAIL and all four `MARK?`
+include **every single remaining suite FAIL and all four `MARK?`
 patches**:
 
-`1_GWG010`, `1_GWG011`, `1_GWG050`, `1_GWG082`, `1_GWG090`, `1_GWG091`,
-`1_GWG150`, `1_GWG151`, `1_GWG152`, `1_GWG190`, `1_GWG191`, `1_GWG192`,
-`2_GWG020`, `2_GWG030`, `2_GWG031`, `2_GWG040`, `2_GWG041`, `2_GWG080`,
-`2_GWG081`, `2_GWG120`, `3_GWG132`, `3_GWG133`, `3_GWG205`, `3_GWG206`.
+`PCS1_010`, `PCS1_011`, `PCS1_050`, `PCS1_082`, `PCS1_090`, `PCS1_091`,
+`PCS1_150`, `PCS1_151`, `PCS1_152`, `PCS1_190`, `PCS1_191`, `PCS1_192`,
+`PCS2_020`, `PCS2_030`, `PCS2_031`, `PCS2_040`, `PCS2_041`, `PCS2_080`,
+`PCS2_081`, `PCS2_120`, `PCS3_132`, `PCS3_133`, `PCS3_205`, `PCS3_206`.
 
 ⇒ This board's own long-standing note — *"the ONE architectural item
 that unblocks the largest cluster"* — now has a **named, measured
@@ -68547,11 +68560,11 @@ both readings as a setting, default to the best-sourced guess of normal
 expectation, do not ask.
 
 **A second, smaller correction, found while re-verifying the
-artefacts.** `D:\Dev\temp\ghent-out\final1.png` (dated 2026-08-17) shows
-`GWG 8.2` **with check marks and without its images** — the opposite of
+artefacts.** `D:\Dev\temp\suite-out\final1.png` (dated 2026-08-17) shows
+`PCS 8.2` **with check marks and without its images** — the opposite of
 what pdfce produces today in both the individual and combined renders
 (images present, check marks absent). **That artefact is STALE**;
-date-qualify it if it is ever cited again. Re-verified `GWG 8.2` in the
+date-qualify it if it is ever cited again. Re-verified `PCS 8.2` in the
 combined document today: images present, no check marks, consistent with
 the individual patch — `8.2` is NOT part of the combined-vs-individual
 discrepancy; only the overprint-buffer population above is.
@@ -68559,7 +68572,7 @@ discrepancy; only the overprint-buffer population above is.
 **★ METHODOLOGY FINDING, worth carrying forward: when an oracle and an
 instrument disagree, the disagreement is data, not noise to be resolved
 by authority.** `Pass 122.2` recorded the harness-vs-operator dispute
-over `GWG 1.1` as genuinely open in both directions rather than picking
+over `PCS 1.1` as genuinely open in both directions rather than picking
 a winner — that refusal is what made it worth checking a third way hours
 later. Had either side been declared right on the spot, the 24-patch
 root cause would still be undiscovered.
@@ -68574,25 +68587,25 @@ filing** — see above and its dated closure in *Open operator questions*.
 
 **Corrected standing: `25 pass of 51`, not the 225th filing's `26`.** Harness
 now reports **`24 pass / 11 FAIL / 16 UNRESOLVED`** (24+11+16=51). The
-one-patch gap between the harness's `24` and the corrected `25` is `GWG 5.0`
+one-patch gap between the harness's `24` and the corrected `25` is `PCS 5.0`
 — verified correct by hand but not yet adjudicable by the harness itself
 (no detector shipped, see below), so it stays inside `MARK?`/UNRESOLVED on
 the board's own count.
 
 **Arithmetic against the prior board (`29/10/12`), so every patch is
-accounted for:** one `GWG 1.0` flip (pass→FAIL) takes `29→28` / `10→11`;
+accounted for:** one `PCS 1.0` flip (pass→FAIL) takes `29→28` / `10→11`;
 four reclassified check-mark patches (formerly false `clean`, now `MARK?`)
 take `28→24` / `12→16`.
 
 **Why the 225th filing's `26 pass AT MINIMUM` does NOT reproduce.** That
-figure counted `GWG 1.1` as a flip FAIL → PASS from *"the combined render
+figure counted `PCS 1.1` as a flip FAIL → PASS from *"the combined render
 shows no cross at any contrast."* Re-examined 2026-08-24, cropped and
 magnified 6×: the **individual** patch render — what this harness actually
 scores — shows a solid, filled, high-contrast teal X at contrast 17.4, not
 an outline. **The two observations may both be true of two different
 artefacts** (the combined multi-patch page vs. the single-patch render), and
 this filing does not overrule the only independent oracle this harness has
-ever had. `GWG 1.1` stays FAIL. **`Pass 122.4`** (Backlog) exists to chase
+ever had. `PCS 1.1` stays FAIL. **`Pass 122.4`** (Backlog) exists to chase
 whether the combined and individual renders genuinely disagree — which
 would be a defect in its own right.
 
@@ -68601,7 +68614,7 @@ correction block above this one.** `Pass 122.4` ran the measurement this
 paragraph called for and found a THIRD oracle — Adobe Acrobat (rendering
 reference; licence tier unestablished), not just the harness or the
 operator's own reading — and it agrees with pdfce's combined render, not
-its individual one. `GWG 1.1` does not stay FAIL; it flips to PASS, and
+its individual one. `PCS 1.1` does not stay FAIL; it flips to PASS, and
 this entry's own corrected standing (`25`) is one low as a result. The
 reasoning above was sound given what it had measured — no Acrobat
 reference existed yet — it simply did not have the measurement that
@@ -68613,22 +68626,22 @@ it does not hold, and that is a finding in itself.** `CONTRAST_MIN`
 fails" at 10.7/10.2/7.8/7.4, two "faint outline only" at 4.1/4.1 — an empty
 interval 4.1–7.4, 6.0 in the middle. The 225th filing's prescription — *"the
 floor has no area term… make the threshold a function of mark size"* —
-**measured false before being implemented**: every trap on `GWG 1.0` and the
-`GWG 16.0` calibration patch is the SAME pixel size (36–38 px) at this
+**measured false before being implemented**: every trap on `PCS 1.0` and the
+`PCS 16.0` calibration patch is the SAME pixel size (36–38 px) at this
 harness's render scale. An area term would have changed nothing. **A fix
 aimed at a misdiagnosed cause is more dangerous than no fix, because it
 consumes the suspicion** — it would have shipped with a plausible reason to
 stop looking and zero effect on the false `clean`. Net board effect: exactly
-one flip, `GWG 1.0` pass → FAIL.
+one flip, `PCS 1.0` pass → FAIL.
 
 **Fault 2 (positive criterion) — NOT a detector. A false `clean` is removed
 and replaced by an honest `MARK?` verdict, counted UNRESOLVED, never folded
 into `pass` or `FAIL`.** ★ **AND THE 225th FILING'S OWN LIST WAS WRONG: FOUR
-PATCHES, NOT SEVEN.** `GWG 150`/`151`/`152` were included by a `grep` for
+PATCHES, NOT SEVEN.** `PCS 150`/`151`/`152` were included by a `grep` for
 the phrase "check mark" — but those three ReadMes state the suite's
 NEGATIVE criterion and mention "check mark" only while describing what the
 FAILURE CROSS is drawn out of. **A grep for a phrase finds a mention, not a
-criterion.** Re-verified against Acrobat renders: **`GWG 15.0`/`15.1`/`15.2`
+criterion.** Re-verified against Acrobat renders: **`PCS 15.0`/`15.1`/`15.2`
 genuinely PASS**, discharging owed item 4 below. The harness now reads each
 patch's own extracted ReadMe text at runtime, so this list cannot drift from
 the corpus again.
@@ -68636,7 +68649,7 @@ the corpus again.
 **Ground truth for the four real check-mark patches, by hand (Acrobat
 renders, 2026-08-24), since no detector ships:**
 
-| GWG | Acrobat shows | pdfce shows | verdict |
+| PCS | Acrobat shows | pdfce shows | verdict |
 |---|---|---|---|
 | `8.2` DeviceN (4 col.) | two olive marks ~46×56 px, upper-right of each image, plus a smaller inline one | inline mark only | **FAIL** |
 | `8.01` DeviceN (6 col.) | two dark-green marks on the images plus ~15 more along the spot-colour gradient bar | none | **FAIL** |
@@ -68644,7 +68657,7 @@ renders, 2026-08-24), since no detector ships:**
 | `5.0` Font Substitution | a black glyph, embedded modified Symbol font | rendered correctly | **PASS** |
 
 **★★ THE TRAP THIS RAISED, CAUGHT MID-SESSION.** A first detector keyed on
-the mark's OWN COLOUR (olive, from `GWG 8.2`). Run against `GWG 8.01` it
+the mark's OWN COLOUR (olive, from `PCS 8.2`). Run against `PCS 8.01` it
 reported the mark PRESENT — matching the green stop of that patch's own
 spot-colour gradient bar — while BOTH real marks were absent: a false green
 produced BY the fix for a false green. **The mark's colour is not a
@@ -68667,12 +68680,12 @@ question. Full record: the `Pass 122.2` *Shipped* entry, top of *Shipped*.
 pass**; three more are **unchecked**, which is why the corrected figure is a
 floor rather than a number.
 
-**Source:** `docs/ghent-operator-review-2026-08-21.md` — the operator read the
+**Source:** `docs/suite-operator-review-2026-08-21.md` — the operator read the
 annotated render **cell by cell**. **These are the first independent judgements
-of pdfce's Ghent output that have ever been taken.** Engineer-owned; **this
+of pdfce's suite output that have ever been taken.** Engineer-owned; **this
 role does not edit it** — it is the calibration set for repairing the harness.
 
-| GWG | harness said | corrected | why |
+| PCS | harness said | corrected | why |
 |---|---|---|---|
 | `1.0` CMYK Overprint Test | pass | **FAIL** | cells `d`,`e`,`i`,`j` carry large crosses at contrast **9.8**, below a floor with no area term |
 | `1.1` CMYK Overprint Mode | FAIL, 1 cross | **PASS** | no cross at any contrast; a faint outline only |
@@ -68692,13 +68705,13 @@ vanish — implemented thoroughly) **and** with a **positive marker** (*"if a
 check mark is visible … then DeviceN is respected; if no check mark appears
 then DeviceN colour was transformed to CMYK (= ERROR)"*). **The harness has no
 notion of a mark that should be there and is not.** Seven of 51 patches score
-this way — GWG `050`, `080`, `081`, `082`, `150`, `151`, `152`. ⇢ **A gate
+this way — PCS `050`, `080`, `081`, `082`, `150`, `151`, `152`. ⇢ **A gate
 that looks for the wrong thing does not report *"I cannot tell"*; it reports
 `clean`, which is indistinguishable from a pass.**
 
 **(2) The contrast floor has no area term.** `CONTRAST_MIN = 12.0` implements
 the suite's *"a **clear** X … judged by a human at 0.5 m"* as a fixed number
-**regardless of mark size**. `GWG 1.0`'s cells `d`/`i` are ~**3× the linear
+**regardless of mark size**. `PCS 1.0`'s cells `d`/`i` are ~**3× the linear
 size** of the calibration patch's at contrast **9.8**; box 11's cells sit at
 **1.3–3.1** and genuinely are invisible. **Lowering the number drags box 11 in;
 the threshold has to be a function of the mark's size.** The operator also
@@ -68711,13 +68724,13 @@ different from every other correction on this board.** The box's own caveat
 below says a document has no access to staleness and **"only re-measuring
 does"**. That is true of a **stale** figure and false of a **mis-scored** one:
 every figure this project has filed came from **the harness scoring itself**,
-its thresholds calibrated against **one** patch (`GWG 16.0`, 2026-08-17) whose
+its thresholds calibrated against **one** patch (`PCS 16.0`, 2026-08-17) whose
 answer was already known from a code change. **Re-running an instrument that
 agrees with itself produces the same number forever.** What was missing was an
 **ORACLE**, and one arrived today from outside the machine.
 
 **★★ SECOND OCCURRENCE, SAME INSTRUMENT, SAME NUMBER.** The 148th filing
-records `ghent-check.py`'s **first run reporting `29 of 51`**, corrected before
+records `suite-check.py`'s **first run reporting `29 of 51`**, corrected before
 publication when **13 reference-strip patches** turned out not to be adjudicable
 by an X-detector. **Four days apart; the first was caught before it was filed,
 the second was published and propagated for a day.** `R210` is minted on that
@@ -68762,7 +68775,7 @@ that. **Only re-measuring does.**
 
 #### ★★★★★ RE-MEASURED 2026-08-21 (two-hundred-and-twenty-fourth filing) — A SHIP, NOT A CORRECTION, AND THE BASELINE WAS BUILT
 
-**Standing at `HEAD` (`ff4b4bf`), from `tools/ghent-check.py`. The
+**Standing at `HEAD` (`ff4b4bf`), from `tools/suite-check.py`. The
 comparison column is a binary compiled from `06aaad3` in a git worktree —
 not a number quoted from this board**, which is the discipline the 189th
 filing's Half 2 made a rule of and the reason a 2-trap regression inside
@@ -68778,10 +68791,10 @@ filing's Half 2 made a rule of and the reason a 2-trap regression inside
 
 **Arithmetic check (hard rule 10):** `26+14+11 = 28+11+12 = 29+10+12 = 51`
 in every column, so no patch is unaccounted for. **Three patches changed to
-`pass`** (`1_GWG162`, `3_GWG164`, `1_GWG161`) and **one moved FAIL →
-UNRESOLVED** (`1_GWG1611`, having lost its last trap; strip correlation
+`pass`** (`PCS1_162`, `PCS3_164`, `PCS1_161`) and **one moved FAIL →
+UNRESOLVED** (`PCS1_1611`, having lost its last trap; strip correlation
 **0.986**), which is `14 − 10 = 4` FAILs leaving and `11 → 12` UNRESOLVED
-gaining one. **`3_GWG161` improved 14 → 11 traps and still FAILs.**
+gaining one. **`PCS3_161` improved 14 → 11 traps and still FAILs.**
 
 ★★★ **THE COMPOSITION FACT, which is what this board should be read for
 now: all 10 remaining FAILs are overprint, spot or ICC patches.** The
@@ -68804,8 +68817,8 @@ remainder, not from more compositing work. Full record: the
 | render errors | **0** | **0 %** |
 
 **Half 1 — the ship.** `Pass 85.4b` (`972ddbb`, the four non-separable
-blend modes) moved **25 → 26 pass, 15 → 14 FAIL**. `1_GWG160` flipped
-FAIL → ok; `3_GWG164` went 4 traps → 1; `3_GWG161` went 15 → 14.
+blend modes) moved **25 → 26 pass, 15 → 14 FAIL**. `PCS1_160` flipped
+FAIL → ok; `PCS3_164` went 4 traps → 1; `PCS3_161` went 15 → 14.
 
 **Half 2 — ★★ THE FIGURE THIS BOX CARRIED WAS ALREADY WRONG BEFORE THAT
 SHIP.** This board read **25 / 18 / 8**. The harness, run on the
@@ -68849,7 +68862,7 @@ record is the record working):
 
 **★ THE CLUSTER TABLE BELOW NO LONGER RECONCILES AND IS NOT SILENTLY
 PATCHED.** It sums to **18** by cause; the FAIL count is now **14**.
-`1_GWG160` has left the transparency-group cluster (5 → 4), which accounts
+`PCS1_160` has left the transparency-group cluster (5 → 4), which accounts
 for one; **the other three are the FAIL→UNRESOLVED reclassification, and
 nobody has said WHICH three.** Re-clustering from the harness is owed item
 **20** and belongs with the classifier question, because guessing which
@@ -68859,7 +68872,7 @@ clustering anyone actually ran*, dated 2026-08-18, not as current.**
 
 **Previous standing, for the delta:** 22 / 21 / 8 (43.1 %) at `Pass 93.0`
 (`a342354`). **Acrobat Pro's own score on the same 51 is 1 FAIL**
-(`GWG 16.1`, `ICCBasedRGB`) — the ceiling is **50, not 51**, and pdfce is
+(`PCS 16.1`, `ICCBasedRGB`) — the ceiling is **50, not 51**, and pdfce is
 **26 of a reachable 50 (52.0 %)**.
 
 <details><summary>★ SUPERSEDED — the figure this box carried from 2026-08-18 to 2026-08-19, kept legible rather than rewritten</summary>
@@ -68890,7 +68903,7 @@ unresolved unchanged.**
 `cb20770`, soft masks).** The board is **still 25 / 18 / 8 of 51.** That is
 not an oversight in this filing — it is the commit's own reported result.
 **Strip correlation moved on all three measurable soft-mask patches**
-(`1_GWG1610` 0.515 → 0.575, `1_GWG168` 0.661 → 0.725, `1_GWG169` 0.884 →
+(`PCS1_1610` 0.515 → 0.575, `PCS1_168` 0.661 → 0.725, `PCS1_169` 0.884 →
 0.905, against reference-engine 0.966 / 0.981 / 0.983) **and none of them
 crossed the pass threshold.** **What changed is the CHARACTER of the
 soft-mask cluster, not its count: those 4 FAILs are now PARTIAL rather than
@@ -68902,7 +68915,7 @@ board.
 
 **The 18 remaining FAILs, clustered by cause (RELAYED)** — ⚠ **DATED
 2026-08-18 AND NO LONGER RECONCILING: the FAIL count is now 14. Do not
-quote this table as current** (owed item **20**). `1_GWG160` has left the
+quote this table as current** (owed item **20**). `PCS1_160` has left the
 transparency-group row (5 → 4); the other three departures are the
 unexplained FAIL→UNRESOLVED reclassification and are **not** attributed
 here, because attributing them without re-running the harness would
@@ -68910,11 +68923,11 @@ manufacture a consistent-looking wrong set:
 
 | cluster | patches | named |
 |---|---:|---|
-| overprint | **7** | `GWG011`, `GWG190`, `GWG191`, `GWG192`, `GWG020`, `GWG030`, `GWG040` |
-| transparency groups | **5** | `1_GWG160`, `1_GWG161`, `1_GWG162`, `3_GWG161`, `3_GWG164` |
-| soft masks | **4** *(PARTIAL since `cb20770` — moved, none passing)* | `GWG1610`, `GWG1611`, `GWG168`, `GWG169` |
-| shading | **1** | `GWG060` |
-| ICC | **1** | `GWG130` |
+| overprint | **7** | `PCS011`, `PCS190`, `PCS191`, `PCS192`, `PCS020`, `PCS030`, `PCS040` |
+| transparency groups | **5** | `PCS1_160`, `PCS1_161`, `PCS1_162`, `PCS3_161`, `PCS3_164` |
+| soft masks | **4** *(PARTIAL since `cb20770` — moved, none passing)* | `PCS1610`, `PCS1611`, `PCS168`, `PCS169` |
+| shading | **1** | `PCS060` |
+| ICC | **1** | `PCS130` |
 | **total** | **18** | **= the FAIL count above** |
 
 **★ ONE DISCREPANCY, FLAGGED RATHER THAN SILENTLY RESOLVED — for the
@@ -68933,9 +68946,9 @@ rather than a guess: a REAL n-CHANNEL BUFFER — one plate per colorant, RGB
 synthesised only at display.** It is what the **7-patch overprint cluster**
 needs, and plausibly what part of the 5-patch transparency-group cluster
 needs too (§3's obligation (2): blending in a `DeviceCMYK` blending colour
-space, which the Ghent patches declare). **DO NOT RE-ATTEMPT THE CHEAP
+space, which the suite patches declare). **DO NOT RE-ATTEMPT THE CHEAP
 VERSION.** A page-sized spot-ink multiplier plate was built and ablated in
-`ac15158`: **−1 trap of 17, 0 patches of 51 flipped, and `2_GWG030`
+`ac15158`: **−1 trap of 17, 0 patches of 51 flipped, and `PCS2_030`
 regressed 3 → 6 unexplained.** Working copies are kept **outside the tree**
 so the next attempt starts from that measurement. Full account: the
 `ac15158` Shipped entry and the rewritten `85.5` row, below.
@@ -68966,24 +68979,24 @@ into the roadmap rather than left in the commit.
 the engineer assigns. The work is carried on the `85.5` row until it is
 scoped.
 
-### ★★★★ TWO GHENT **HARNESS** FINDINGS — the instrument may be wrong before the renderer is, and both are actionable BEFORE any further render work — filed 2026-08-18 (hundred-and-sixty-seventh filing), from `docs/ghent-patch-reference.md` (`8eb0668`)
+### ★★★★ TWO SUITE **HARNESS** FINDINGS — the instrument may be wrong before the renderer is, and both are actionable BEFORE any further render work — filed 2026-08-18 (hundred-and-sixty-seventh filing), from `docs/suite-patch-reference.md` (`8eb0668`)
 
 **Why this is its own entry rather than a line in the survey.** Every
 render figure this project has quoted for four filings — **25 of 51**, the
 cluster table, the `85.5` and soft-mask deltas — comes out of
-`tools/ghent-check.py`. **If the harness is miscalibrated, every one of
+`tools/suite-check.py`. **If the harness is miscalibrated, every one of
 those numbers is wrong in the same direction at once**, and none of them
 would disagree with each other, which is exactly the failure mode hard
 rule 10 exists to make visible. **These findings are about the INSTRUMENT,
 not the subject.**
 
-**Finding 1 — GWG's own pass criterion is looser than pdfce's.** GWG states
+**Finding 1 — the suite's own pass criterion is looser than pdfce's.** The suite's publisher states
 that **a FAINT X DOES NOT INDICATE A FAILURE**; the judgement is made by a
-human at **0.5 m**. `tools/ghent-check.py`'s threshold, by contrast, was
+human at **0.5 m**. `tools/suite-check.py`'s threshold, by contrast, was
 **calibrated against pdfce's own output**. **A threshold derived from the
 thing it measures is not a measurement** — it is the render's own error
 budget renamed. Direction of the likely error: **the harness may be
-OVER-COUNTING failures**, so some of the 18 FAILs may already meet GWG's
+OVER-COUNTING failures**, so some of the 18 FAILs may already meet the suite's publisher's
 stated criterion. **Do not treat this as good news until it is measured** —
 it cuts the other way too, because a re-calibrated harness invalidates the
 before/after deltas filed against the old one unless both sides are re-run
@@ -68991,14 +69004,14 @@ on the same threshold.
 
 **Finding 2 — the suite ships a Reference file that pdfce is not using as
 an oracle.** pdfce compares against Acrobat Pro reference strips it
-generated itself. The suite's own Reference is the artefact GWG intends for
+generated itself. The suite's own Reference is the artefact the suite's publisher intends for
 that role, and it is sitting unused. **`Pass 93.0` already established that
 introducing a real reference engine changes the ranking of the work** —
 this is the same lesson, one layer down, on the corpus that ranking is
 derived from.
 
 **What is owed, and it is deliberately not scoped into a Pass here.**
-Re-derive the threshold from GWG's stated criterion rather than from
+Re-derive the threshold from the suite's publisher's stated criterion rather than from
 pdfce's output; wire the shipped Reference in as the oracle; **then re-run
 the whole board and re-file the standing figure, with both the old and new
 thresholds named** so the four filings of history stay readable rather than
@@ -69018,7 +69031,7 @@ looking at the files, not inferred from the fact that they were asked:**
    conclusion `ac15158` reached by ablation. See the `8eb0668` Shipped
    entry.
 2. **Transparency groups + soft masks + mesh shadings → two outputs.** The
-   patch-level half is `docs/ghent-patch-reference.md` (`8eb0668`, +375);
+   patch-level half is `docs/suite-patch-reference.md` (`8eb0668`, +375);
    the soft-mask half was **implemented** the same day (`cb20770`,
    decision 070) and its sourced contract is in that commit's code doc
    comments. **The mesh-shading half is spec corpus, item 3 below.**
@@ -69059,7 +69072,7 @@ asked.
 1. **Overprint-simulation architecture** — feeds the n-channel-buffer item
    above.
 2. **Transparency groups + soft masks + mesh shadings** — feeds the 5-patch
-   and 4-patch clusters and the 1-patch `GWG060` shading FAIL.
+   and 4-patch clusters and the 1-patch `PCS060` shading FAIL.
 3. **`pdfce-spec-librarian` on §8.7.4.5.5–.8 (mesh shading geometry),
    §11.6.5's `/BC` default, and §11.4.6 backdrop removal** — the corpus
    gaps `85.1` and `85.4c`/`85.4e` both name as blocking. `LUM-A1`
@@ -69078,7 +69091,7 @@ The `v0.6.0` GitHub release, under a heading titled *"Not implemented —
 and now measurable,"* states *"Transparency-group compositing and soft
 masks are not implemented."* `Pass 85.4c` (`0d6f4ac`, same day, later in
 the same operator session) makes half of that sentence false —
-non-knockout transparency-group compositing now ships (Ghent GWG 16.0
+non-knockout transparency-group compositing now ships (the suite's PCS 16.0
 renders clean). Cut `v0.6.1` naming both halves correctly: group
 compositing ships (non-knockout), knockout groups are approximated and
 counted (not correct), soft masks remain unimplemented. Full account:
@@ -69129,7 +69142,7 @@ transparency-group half false. **Both halves of that published sentence are
 now stale.** The honest replacement is not "soft masks are implemented"
 either — it is *"soft masks are built and applied; `/TR` is disclosed but
 not evaluated, and the mask is applied per element rather than to a group's
-result, so none of the Ghent soft-mask patches passes yet."* **Filing a
+result, so none of the suite soft-mask patches passes yet."* **Filing a
 release note that overstates this would be `R180`'s EIGHTH instance and the
 first self-inflicted one.**
 
@@ -69203,13 +69216,13 @@ here if it is not.
 **Acceptance:** a page with an unpainted type-1 or mesh shading reports
 NOT clean in whichever GUI ships this fix, verified against a fixture
 built for exactly that (a synthetic function-based-shading page is
-sufficient — the Ghent corpus's own type-1 count is zero, per `Pass
+sufficient — the suite's own type-1 count is zero, per `Pass
 85.0`'s own measurement).
 
-### ★★★★ Pass 85.0–85.5 — **THE GHENT PDF OUTPUT SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against `Ghent_PDF-Output-Test-V50_ALL_X4.pdf` (PDF/X-4, 6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.** **★★ FURTHER CORRECTED 2026-08-17 (`Pass 90.1`, hundred-and-fifty-seventh filing): `85.4` is now SPLIT.** Blend modes (eleven separable, `ExtGState /BM`) are SHIPPED; the four non-separable modes are measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix); transparency-GROUP compositing (isolated/knockout, offscreen buffer) and `/SMask` soft-mask groups remain UNSTARTED and are now this inventory's **single largest remaining gap** — see the row and build order below. **★★★ CORRECTED AGAIN 2026-08-17 (`Pass 85.4c`, `0d6f4ac`, hundred-and-sixtieth filing): non-knockout transparency-GROUP compositing SHIPS.** A group now composites through a real page-sized offscreen buffer (decision 068). Knockout groups (`/K true`) remain approximated, not correct; `/SMask` soft-mask groups remain unread. See the `85.4c` row and the re-derived build order, both below. **★★★★ CORRECTED A FOURTH TIME 2026-08-17 (`Pass 85.4e`, `fee42e8`, hundred-and-sixty-second filing): the §11.4.6/§11.5.2–.3 spec dispatch LANDED — knockout groups are now correctly BUFFERED (the transparent-container half), still NOT correctly COMPOSITED (occlusion order), and the population this gap actually covers is far larger than "42 explicit `/K` groups": §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` knockout, and §11.6.7 makes shading patterns knockout — no `/K` key required for any of the three.** See the `85.4c` row (rewritten) and the build order (fourth re-derivation), both below. **★★★★★ CORRECTED A FIFTH TIME 2026-08-18 (`Pass 85.5`, `bd9d5ef`+`bf75351`+`ac15158`, hundred-and-sixty-sixth filing): OVERPRINT SIMULATION SHIPS — the row that was ranked highest-impact and gated on `iccce` turned out not to need the gate. `85.5` is now PARTIAL, not unstarted: 22 → 25 of 51 Ghent patches (43.1 % → 49.0 %). **The remainder is a MEASURED negative result rather than an open question** — the cheap spot-multiplier approximation was built, ablated and reverted (−1 trap of 17, 0 patches of 51 flipped, one patch REGRESSED), and what the remaining patches need is a real n-channel buffer. See the rewritten `85.5` row and the three Shipped entries, top of *Shipped*. **Corpus standing after this filing: 25 pass / 18 FAIL / 8 UNRESOLVED / 0 render errors, of 51 patches.** **★★★★★★ CORRECTED A SIXTH TIME 2026-08-19 (`Pass 85.4b`, `972ddbb`, hundred-and-eighty-ninth filing): `85.4b` SHIPS AND IS CLOSED — the four non-separable blend modes are implemented from Table 137 inside pdfce, so the second correction's clause *"measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix)"* is FALSE and is kept only as history. Decision 066 refused TRUSTING THE DEPENDENCY, never the feature, and `Pass 85.5`'s coverage-mask machinery is what made the from-scratch route cheap.** **★★ AND THE CORPUS STANDING QUOTED IN THE FIFTH CORRECTION ABOVE (`25 / 18 / 8`) WAS ALREADY A CLASSIFIER ARTEFACT WHEN IT WAS WRITTEN** — the harness reports `25 / 15 / 11` on the pre-`972ddbb` binary and **`26 / 14 / 11` after**. `pass` is unchanged at 25 across the discrepancy and `18+8 = 15+11 = 26`, so **no patch changed outcome; three moved across the FAIL/UNRESOLVED boundary only.** Full disposition, including which documents were corrected and which were deliberately left frozen, in the **Ghent standing board** under *Next up*. **Six of seven line items are now shipped or closed** (`85.0`, `85.2` shading half, `85.3`, `85.4a`, `85.4b`, `85.4c` non-knockout half, `85.5` partial); `85.1`, `85.2` tiling half, `85.4c` remainder and `85.5`'s n-channel remainder are what is left.
+### ★★★★ Pass 85.0–85.5 — **THE PRINT-CONFORMANCE SUITE GAP INVENTORY** — six render-fidelity gaps, ALL MEASURED (not estimated) from pdfce's own `Pass 84.0` diagnostics against the suite's combined PDF/X-4 file (6 pages) — filed 2026-08-17 (hundred-and-forty-ninth filing) — **★ STATUS CORRECTED 2026-08-17 (`Pass 90.0`, hundred-and-fifty-sixth filing): this heading had read "ALL UNSTARTED" three shipped Passes after it stopped being true. Current status: `85.0` shipped, `85.3` shipped, `85.2` shading half shipped/tiling half unstarted, `85.4` disclosure shipped/implementation unstarted (`Pass 90.0`) — see the table below for the re-derived build order.** **★★ FURTHER CORRECTED 2026-08-17 (`Pass 90.1`, hundred-and-fifty-seventh filing): `85.4` is now SPLIT.** Blend modes (eleven separable, `ExtGState /BM`) are SHIPPED; the four non-separable modes are measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix); transparency-GROUP compositing (isolated/knockout, offscreen buffer) and `/SMask` soft-mask groups remain UNSTARTED and are now this inventory's **single largest remaining gap** — see the row and build order below. **★★★ CORRECTED AGAIN 2026-08-17 (`Pass 85.4c`, `0d6f4ac`, hundred-and-sixtieth filing): non-knockout transparency-GROUP compositing SHIPS.** A group now composites through a real page-sized offscreen buffer (decision 068). Knockout groups (`/K true`) remain approximated, not correct; `/SMask` soft-mask groups remain unread. See the `85.4c` row and the re-derived build order, both below. **★★★★ CORRECTED A FOURTH TIME 2026-08-17 (`Pass 85.4e`, `fee42e8`, hundred-and-sixty-second filing): the §11.4.6/§11.5.2–.3 spec dispatch LANDED — knockout groups are now correctly BUFFERED (the transparent-container half), still NOT correctly COMPOSITED (occlusion order), and the population this gap actually covers is far larger than "42 explicit `/K` groups": §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` knockout, and §11.6.7 makes shading patterns knockout — no `/K` key required for any of the three.** See the `85.4c` row (rewritten) and the build order (fourth re-derivation), both below. **★★★★★ CORRECTED A FIFTH TIME 2026-08-18 (`Pass 85.5`, `bd9d5ef`+`bf75351`+`ac15158`, hundred-and-sixty-sixth filing): OVERPRINT SIMULATION SHIPS — the row that was ranked highest-impact and gated on `iccce` turned out not to need the gate. `85.5` is now PARTIAL, not unstarted: 22 → 25 of 51 suite patches (43.1 % → 49.0 %). **The remainder is a MEASURED negative result rather than an open question** — the cheap spot-multiplier approximation was built, ablated and reverted (−1 trap of 17, 0 patches of 51 flipped, one patch REGRESSED), and what the remaining patches need is a real n-channel buffer. See the rewritten `85.5` row and the three Shipped entries, top of *Shipped*. **Corpus standing after this filing: 25 pass / 18 FAIL / 8 UNRESOLVED / 0 render errors, of 51 patches.** **★★★★★★ CORRECTED A SIXTH TIME 2026-08-19 (`Pass 85.4b`, `972ddbb`, hundred-and-eighty-ninth filing): `85.4b` SHIPS AND IS CLOSED — the four non-separable blend modes are implemented from Table 137 inside pdfce, so the second correction's clause *"measured-wrong-in-tiny-skia and REFUSED (not a gap this project can close without an upstream fix)"* is FALSE and is kept only as history. Decision 066 refused TRUSTING THE DEPENDENCY, never the feature, and `Pass 85.5`'s coverage-mask machinery is what made the from-scratch route cheap.** **★★ AND THE CORPUS STANDING QUOTED IN THE FIFTH CORRECTION ABOVE (`25 / 18 / 8`) WAS ALREADY A CLASSIFIER ARTEFACT WHEN IT WAS WRITTEN** — the harness reports `25 / 15 / 11` on the pre-`972ddbb` binary and **`26 / 14 / 11` after**. `pass` is unchanged at 25 across the discrepancy and `18+8 = 15+11 = 26`, so **no patch changed outcome; three moved across the FAIL/UNRESOLVED boundary only.** Full disposition, including which documents were corrected and which were deliberately left frozen, in the **suite standing board** under *Next up*. **Six of seven line items are now shipped or closed** (`85.0`, `85.2` shading half, `85.3`, `85.4a`, `85.4b`, `85.4c` non-knockout half, `85.5` partial); `85.1`, `85.2` tiling half, `85.4c` remainder and `85.5`'s n-channel remainder are what is left.
 
-**Origin.** The operator rendered the Ghent suite and reported pdfce
-"a long way off." The Ghent suite is a formal prepress conformance
+**Origin.** The operator rendered the suite and reported pdfce
+"a long way off." The suite is a formal prepress conformance
 corpus: each patch draws a large **X** that a correctly-rendering
 engine *covers*; a visible X is a recorded failure. Unlike this
 project's usual corpora (veraPDF, pdf20examples), it is purpose-built to
@@ -69222,13 +69235,13 @@ and deferred-op counts on that file — not estimated.**
 | Pass | gap | measured evidence | spec |
 |---|---|---|---|
 | ~~`85.0`~~ | `sh` operator + shading patterns, types 1–3 (function/axial/radial) | page 1 defers 52 ops, page 4 defers 85; `sh` named in both | §8.7.4.5.2–.8, Tables 79–84 (function-based/axial/radial); §7.10 evaluator ALREADY EXISTS (`pdfce_core::function`) — the colour half is done, geometry is not — **SHIPPED 2026-08-17, `33ea830`+`9839d6f` (axial + radial only; function-based and mesh remain, see `85.1`). See the `Pass 85.0` Shipped entry, top of *Shipped*.** |
-| `85.1` | mesh shadings, types 4–7 | Ghent page 1: `shadings_mesh=2`, painted 10 of 12 (the 2 mesh shadings are the only unpainted ones left in the `85.0` row). ~~**NOT IN THE SPEC CORPUS**~~ — `iso32000__s__8.7.md`'s own "NOT ingested" list names exactly this range; dispatch `pdfce-spec-librarian` for §8.7.4.5.5–.8 + Tables 82–84 before writing any of it. **★ UNBLOCKED 2026-08-18 (hundred-and-sixty-ninth filing) — the dispatch LANDED four filings ago (`8eb0668`, hundred-and-sixty-seventh filing) and this row was never re-scoped to say so, per the hundred-and-sixty-seventh filing's own "consequence nobody has acted on yet" note, above.** `iso32000__s__8.7.4.5__mesh.md` (59,848 B, timestamped 2026-08-18 05:41–05:47) is in the corpus now. The blocker no longer holds; `85.1` may be scoped into a real Pass on the spec it now has, still gated on the `pdfce-acrobat-librarian` dispatch for prepress rendering acceptance criteria (unconfirmed run, per the note below the table). | §8.7.4.5.5–.8, same Table range — **PROMOTED to second in the build order below**, per `Pass 90.0`'s measurement (2026-08-17); ranking UNCHANGED by the unblock above, only readiness |
-| `85.2` | pattern paint — **shading** (`PatternType 2`, §8.7.4) **SHIPPED**; **tiling** (`PatternType 1`, §8.7.3) still not started | shading half: `scn` naming a `PatternType 2` pattern now paints, anchored to the pattern's own base CTM (§8.7.2 NOTE 1/PM5) rather than the current CTM `sh` uses — **SHIPPED 2026-08-17, `5df75dd`, `Pass 85.2` slice 1. See the Shipped entry, top of *Shipped*.** Tiling half: `interpret.rs`'s `/Pattern` fill path still has no `PatternType 1` branch; `patterns_unpainted` now counts only a genuine shortfall (tiling, an unresolvable name, a degenerate matrix, or an unpaintable shading). **★ Measured 2026-08-17 (`Pass 90.0`): `pattern_spaces=0` on all 6 Ghent pages — NOT ONE page uses `scn` naming a pattern of either type. Tiling is real work but NOT Ghent-driven; DEMOTED below `85.4`/`85.1` in the build order.** | §8.7.3 (tiling, NOT STARTED) + §8.7.4 (shading, SHIPPED) — tiling additionally needs the pattern's own content stream run into a tile and replicated on `/XStep`/`/YStep`, a different job from evaluating a function per pixel |
+| `85.1` | mesh shadings, types 4–7 | the suite page 1: `shadings_mesh=2`, painted 10 of 12 (the 2 mesh shadings are the only unpainted ones left in the `85.0` row). ~~**NOT IN THE SPEC CORPUS**~~ — `iso32000__s__8.7.md`'s own "NOT ingested" list names exactly this range; dispatch `pdfce-spec-librarian` for §8.7.4.5.5–.8 + Tables 82–84 before writing any of it. **★ UNBLOCKED 2026-08-18 (hundred-and-sixty-ninth filing) — the dispatch LANDED four filings ago (`8eb0668`, hundred-and-sixty-seventh filing) and this row was never re-scoped to say so, per the hundred-and-sixty-seventh filing's own "consequence nobody has acted on yet" note, above.** `iso32000__s__8.7.4.5__mesh.md` (59,848 B, timestamped 2026-08-18 05:41–05:47) is in the corpus now. The blocker no longer holds; `85.1` may be scoped into a real Pass on the spec it now has, still gated on the `pdfce-acrobat-librarian` dispatch for prepress rendering acceptance criteria (unconfirmed run, per the note below the table). | §8.7.4.5.5–.8, same Table range — **PROMOTED to second in the build order below**, per `Pass 90.0`'s measurement (2026-08-17); ranking UNCHANGED by the unblock above, only readiness |
+| `85.2` | pattern paint — **shading** (`PatternType 2`, §8.7.4) **SHIPPED**; **tiling** (`PatternType 1`, §8.7.3) still not started | shading half: `scn` naming a `PatternType 2` pattern now paints, anchored to the pattern's own base CTM (§8.7.2 NOTE 1/PM5) rather than the current CTM `sh` uses — **SHIPPED 2026-08-17, `5df75dd`, `Pass 85.2` slice 1. See the Shipped entry, top of *Shipped*.** Tiling half: `interpret.rs`'s `/Pattern` fill path still has no `PatternType 1` branch; `patterns_unpainted` now counts only a genuine shortfall (tiling, an unresolvable name, a degenerate matrix, or an unpaintable shading). **★ Measured 2026-08-17 (`Pass 90.0`): `pattern_spaces=0` on all 6 suite pages — NOT ONE page uses `scn` naming a pattern of either type. Tiling is real work but NOT suite-driven; DEMOTED below `85.4`/`85.1` in the build order.** | §8.7.3 (tiling, NOT STARTED) + §8.7.4 (shading, SHIPPED) — tiling additionally needs the pattern's own content stream run into a tile and replicated on `/XStep`/`/YStep`, a different job from evaluating a function per pixel |
 | ~~`85.3`~~ | closes **`Pass 1.1` item 6.4** — `/Separation`/`/DeviceN`/`Lab` IMAGE colour spaces | **10 images missing page 1, 6 page 4, 2 page 5** — stderr: "image colour space /Separation is not supported", "/DeviceN is not supported" | §8.6.6.4/§8.6.6.5; vector fills already work (`separation_to_rgb`/`device_n_to_rgb` are wired to the §7.10 evaluator) — this is the per-pixel image path only — **SHIPPED 2026-08-17, `1e7a0be` (`CalGray`/`CalRGB` came free from the same delegation). See the `Pass 85.3` Shipped entry, top of *Shipped*.** |
-| ~~`85.4a`~~ | blend modes — `ExtGState /BM`, eleven separable modes | `pdfce-render/src/interpret.rs` — **SHIPPED 2026-08-17, `Pass 90.1`, `bd244d9`.** Ghent page 2: 60 of 76 `/BM` invocations now composite exactly. Required a page-backdrop model correction (opaque-white-fill → isolated group over transparent backdrop, §11.4.7) — see the `Pass 90.1` Shipped entry. | §11.3.5, Table 136/137 — **SHIPPED**, see the `Pass 90.1` Shipped entry |
-| `85.4b` | non-separable blend modes — Hue/Saturation/Color/Luminosity | ★★★★★ **SHIPPED 2026-08-19 (`972ddbb`, hundred-and-eighty-ninth filing) — THIS ROW IS CLOSED.** Ghent page 2: 16 of 76 `/BM` invocations (4 modes × 4 swatches). **Ghent 25 → 26 pass, 15 → 14 FAIL of 51** (`1_GWG160` FAIL → ok; `3_GWG164` 4 traps → 1; `3_GWG161` 15 → 14). Table 137 is transcribed by hand into `crates/pdfce-render/src/blend_nonsep.rs` from `iso32000__s__11.3.5.md`, whose nine named traps each have a test, and **verified against `tiny_skia` as an independent oracle**: 34,630 in-gamut samples agree within 2/255, 27,870 out-of-gamut samples produce 13,084 disagreements worst 227/255 — **that split IS the correctness signature**, because agreement everywhere would mean the dependency's bug had been inherited. **★ THE PAINT-LEVEL IMPLEMENTATION ALONE REACHED ZERO GHENT PIXELS** — every non-separable mode in that corpus sits at a transparency-group `Do`, never at a paint — so `Canvas::layer` composites the group RESULT through Table 137 per pixel; that is what flipped `1_GWG160`. **★ A measured "improvement" from a BUG was caught and removed:** `outer_is_neutral` tests `blend_mode == SourceOver`, which a non-separable mode parks at exactly, so a `/BM /Hue` group looked neutral and painted inline (§11.4.5 violation) — `do_form`'s group-contents reset had the same hole. Regression scope: 742 documents × 2 scales = **1,383 renders, 0 differing**, Ghent as the positive control. ~~**REFUSED, not mapped**: tiny-skia 0.11.4 is measured wrong … Not closeable inside pdfce without an upstream tiny-skia fix or a from-scratch implementation of the four HSL formulas.~~ **The old wording is kept struck rather than deleted, because it is what a reader took as settled** — the dependency defect is real and unchanged (`D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`); what was never true is that the FEATURE was refused. **The second clause of the strike-through was the false one: the from-scratch implementation is exactly what shipped, and `Pass 85.5`'s coverage-mask machinery is what made it cheap.** | §11.3.5.3 — **shipped**; `ARCHITECTURE.md` §12 decision 066 **AMENDED, not reversed** — the refusal was of the DEPENDENCY, and the policy is what produced this ship |
-| ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). Ghent GWG 16.0 (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **★ `Pass 85.4d` (`b15d7ff`, same day) CORRECTED `85.4c`'s buffering to be CONDITIONAL** (outer non-Normal/alpha<1 OR isolated, else paint inline). **★★ `Pass 85.4e` (`fee42e8`, hundred-and-sixty-second filing) LANDS the §11.4.6/§11.5.2–.3 spec dispatch and fixes two defects it found: a citation error (`/K`/`/I`/`/CS` are Table 147, not 96 — table numbers shift −2 between ISO 32000-1 and -2) and a buffering gap (knockout groups now buffer UNCONDITIONALLY, not gated on `85.4d`'s outer-state test — a knockout group has no initial backdrop to composite against when painted inline at all).** Knockout groups are now correctly **buffered** (the container); they are still **NOT correctly composited** (the contents' occlusion order) — `groups_knockout_approx` still counts every one, GWG 16.1 still shows its crosses. **The dispatch also reframes the population this gap covers**: no `/K` key is required for a knockout group at all — §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` and text render modes 2/6 knockout (its own NOTE 2: a double border on semi-transparent fill-then-stroke IS this bug), and §11.6.7 makes shading patterns knockout. Ranked by likely frequency, `B`/`b` ≫ `/TK` > explicit `/K` ≈ shading patterns — the 47-group `groups_knockout_approx` figure measures only the last, smallest tier. **Representability is now known, not assumed:** isolated knockout is bit-exact representable in pdfce's single premultiplied-alpha buffer; non-isolated knockout (the common case, since `/K` defaults false the same way `/I` does) is NOT, pending buffer-model work. ~~`/SMask` soft-mask groups (36 occurrences, all pages) remain entirely unread~~ **— FALSE SINCE `cb20770` (2026-08-18, hundred-and-sixty-seventh filing, decision 070): `/Alpha` and `/Luminosity` soft masks are BUILT AND APPLIED, multiplied into the clip so every existing paint site honours them. The soft-mask half of this row is PARTIAL, not unstarted, and it has COLLAPSED INTO the knockout half rather than closing: folding into the clip attenuates each element INSIDE the scope, whereas §11.4.5 applies a mask to the group's RESULT — the same offscreen-buffer work. Construction verified correct by dumping mask groups and folded clips to PNG; strip correlation moved on all three measurable Ghent patches and NONE passes. `/TR` is read, counted and disclosed but NOT evaluated (`soft_mask_tr_ignored`), and it is where a mask gets INVERTED. See the `cb20770` Shipped entry.** A spec ambiguity, `LUM-A1` (`DeviceCMYK` soft-mask luminosity — ISO 32000-1 self-contradicts, divergence `K·S` max 0.25), is registered against them, below, for whenever they are built. See the `Pass 85.4e` Shipped entry, top of *Shipped*, and decision 068's second amendment. **Now this inventory's remaining top-priority gap, RE-RANKED within itself** — see the build order below for this filing's ruling on isolated-knockout vs. soft masks vs. non-isolated knockout. | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
-| `85.5` | overprint compositing — **SIMULATION SHIPS 2026-08-18 (`bd9d5ef` + `bf75351`, hundred-and-sixty-sixth filing); THE ROW IS PARTIAL, NOT CLOSED** | **Ghent, all 51 patches, Acrobat Pro reference strips: 22 pass / 21 FAIL / 8 unresolved (43.1 %) → 25 pass / 18 FAIL / 8 unresolved (49.0 %), 0 render errors — Δ +3 of 51 = +5.9 points.** Newly passing `2_GWG041_White_OP_x3`, `1_GWG010_CMYK_OP_x3`, `2_GWG120_White_OP-KO_X1`; trap counts fell on the rest too (`2_GWG030` 9→3, `2_GWG040` 9→7, `2_GWG020` 9→7) — the remaining overprint failures are **partial, not untouched**. Table 149 is a pure function in `crates/pdfce-render/src/overprint.rs` (1,123 lines, 12 tests, the main test IS the table); the paint path rasterises an overprinting paint to a coverage mask with the SAME rasteriser a normal paint uses, then blends per pixel in CMYK **reconstructed from the RGB buffer** (`rgb_to_cmyk`/`cmyk_to_rgb` exact inverses over 4,913 colours to 1e-5). **Text was the second half and the more interesting defect** — the glyph painter did not merely skip the blend, it did not COUNT it, so `overprint_effective` under-reported; wiring text took 23 → 25. Three counters on the stable stdout line: `overprint_composited`, `overprint_refused`, `overprint_pixels`. **★ WHAT REMAINS, and it is a MEASURED NEGATIVE RESULT, not an estimate (`ac15158`):** the remaining overprint patches need a **REAL n-channel buffer — one plate per colorant, RGB synthesised only at display** — NOT an approximation layered over an RGB pipeline. The cheap version (a page-sized spot-ink multiplier plate, ~150 lines + an f32 page buffer) was **built and ablated on the same binary**: plate OFF `GWG020`=7/`GWG030`=3/`GWG040`=7 = **17 traps, 25 of 51 pass**; plate ON 5/6/5 = **16 traps, 25 of 51 pass** — **−1 trap of 17, 0 patches of 51 flipped, and `2_GWG030` REGRESSES 3 → 6 for a reason the engineer could not explain.** **Reverted; working copies kept OUTSIDE the tree so the next attempt starts from the measurement.** Do not re-attempt the multiplier shortcut. The root cause is representability: pdfce flattens spots into RGB, so it cannot tell a spot backdrop from a process one, and Table 149's SPOT row preserves the backdrop in BOTH modes — visible on `2_GWG040`, where Acrobat renders all six cells clean and pdfce got exactly the three "over CMYK" cells right and exactly the three "over spot" cells wrong. **Also shipped in `ac15158`:** a `/Separation`/`/DeviceN` now takes its process tints from its own OPERANDS (§8.6.6.5 O7, names-array order) rather than reconstructing CMYK from flattened RGB — **changed NO trap count, kept for fidelity, filed honestly as a null result.** **Prior history of this row, unchanged and still true: ★ MEASURED AGAINST A REAL REFERENCE ENGINE 2026-08-18 (`Pass 93.0`, `a342354`): overprint was the SINGLE LARGEST cause of pdfce's failures (10 of 21 measured FAILs; Acrobat Pro itself shows 1 FAIL of 51). Tracking/disclosure SHIPPED `Pass 92.0` (`8caada6`) — fires on 20 of 51 patches; `Pass 92.1` (`4b58c98`) found `overprint_effective` non-zero on the GWG 16.0/16.1/16.2 TRANSPARENCY patches too (19 each).** | **§11.7.4.3 Table 149 + §8.6.7. ★ THE STATED BLOCKER WAS FALSIFIED BY TRYING IT.** This row read *"architectural and gated on `iccce` for the final CMYK→display conversion"*, and `ARCHITECTURE.md` §3 read *"overprint is inexpressible in an RGB buffer, not merely unimplemented."* **Both were true of a PERMANENT CMYK pipeline and false of a PER-PAINT one** — simulation shipped with no CMYK buffer, no `iccce`, and no reply to `request_cmyk_buffer_destination_and_width.md`. §3 is amended (hundred-and-sixty-sixth filing) and **decision 069** records what was chosen. **The `iccce` gate still holds for §3's obligation (2)** — blending in a `DeviceCMYK` blending colour space, and the final conversion — so this is a narrowing, not a retraction. Policy status unchanged: **§8.6.7 makes ignoring `/OP` conformant, so simulating it is a CHOICE (spec item C2), which is why `overprint_refused` is on the stable stdout line.** |
+| ~~`85.4a`~~ | blend modes — `ExtGState /BM`, eleven separable modes | `pdfce-render/src/interpret.rs` — **SHIPPED 2026-08-17, `Pass 90.1`, `bd244d9`.** The suite page 2: 60 of 76 `/BM` invocations now composite exactly. Required a page-backdrop model correction (opaque-white-fill → isolated group over transparent backdrop, §11.4.7) — see the `Pass 90.1` Shipped entry. | §11.3.5, Table 136/137 — **SHIPPED**, see the `Pass 90.1` Shipped entry |
+| `85.4b` | non-separable blend modes — Hue/Saturation/Color/Luminosity | ★★★★★ **SHIPPED 2026-08-19 (`972ddbb`, hundred-and-eighty-ninth filing) — THIS ROW IS CLOSED.** The suite page 2: 16 of 76 `/BM` invocations (4 modes × 4 swatches). **The suite 25 → 26 pass, 15 → 14 FAIL of 51** (`PCS1_160` FAIL → ok; `PCS3_164` 4 traps → 1; `PCS3_161` 15 → 14). Table 137 is transcribed by hand into `crates/pdfce-render/src/blend_nonsep.rs` from `iso32000__s__11.3.5.md`, whose nine named traps each have a test, and **verified against `tiny_skia` as an independent oracle**: 34,630 in-gamut samples agree within 2/255, 27,870 out-of-gamut samples produce 13,084 disagreements worst 227/255 — **that split IS the correctness signature**, because agreement everywhere would mean the dependency's bug had been inherited. **★ THE PAINT-LEVEL IMPLEMENTATION ALONE REACHED ZERO SUITE PIXELS** — every non-separable mode in that corpus sits at a transparency-group `Do`, never at a paint — so `Canvas::layer` composites the group RESULT through Table 137 per pixel; that is what flipped `PCS1_160`. **★ A measured "improvement" from a BUG was caught and removed:** `outer_is_neutral` tests `blend_mode == SourceOver`, which a non-separable mode parks at exactly, so a `/BM /Hue` group looked neutral and painted inline (§11.4.5 violation) — `do_form`'s group-contents reset had the same hole. Regression scope: 742 documents × 2 scales = **1,383 renders, 0 differing**, the suite as the positive control. ~~**REFUSED, not mapped**: tiny-skia 0.11.4 is measured wrong … Not closeable inside pdfce without an upstream tiny-skia fix or a from-scratch implementation of the four HSL formulas.~~ **The old wording is kept struck rather than deleted, because it is what a reader took as settled** — the dependency defect is real and unchanged (`D:\dev\rag\rust\tiny_skia_0.11_non_separable_blend_modes_wrong_by_up_to_107_255.md`); what was never true is that the FEATURE was refused. **The second clause of the strike-through was the false one: the from-scratch implementation is exactly what shipped, and `Pass 85.5`'s coverage-mask machinery is what made it cheap.** | §11.3.5.3 — **shipped**; `ARCHITECTURE.md` §12 decision 066 **AMENDED, not reversed** — the refusal was of the DEPENDENCY, and the policy is what produced this ship |
+| ~~`85.4c`~~ | transparency GROUPS — isolated/knockout offscreen compositing, `/SMask` soft-mask groups | `pdfce-render/src/interpret.rs` — **non-knockout compositing SHIPPED 2026-08-17, `0d6f4ac`.** A group now renders into its own page-sized offscreen buffer with contents-state reset to initial, composited as a unit with the outer blend mode/alpha (§11.4.5; decision 068). The suite's `PCS 16.0` (non-knockout) panel renders CLEAN; `groups_flattened` 187 → 0. **★ `Pass 85.4d` (`b15d7ff`, same day) CORRECTED `85.4c`'s buffering to be CONDITIONAL** (outer non-Normal/alpha<1 OR isolated, else paint inline). **★★ `Pass 85.4e` (`fee42e8`, hundred-and-sixty-second filing) LANDS the §11.4.6/§11.5.2–.3 spec dispatch and fixes two defects it found: a citation error (`/K`/`/I`/`/CS` are Table 147, not 96 — table numbers shift −2 between ISO 32000-1 and -2) and a buffering gap (knockout groups now buffer UNCONDITIONALLY, not gated on `85.4d`'s outer-state test — a knockout group has no initial backdrop to composite against when painted inline at all).** Knockout groups are now correctly **buffered** (the container); they are still **NOT correctly composited** (the contents' occlusion order) — `groups_knockout_approx` still counts every one, PCS 16.1 still shows its crosses. **The dispatch also reframes the population this gap covers**: no `/K` key is required for a knockout group at all — §9.3.8's `/TK` defaults `true` (every text object), §11.7.4.4 makes `B`/`B*`/`b`/`b*` and text render modes 2/6 knockout (its own NOTE 2: a double border on semi-transparent fill-then-stroke IS this bug), and §11.6.7 makes shading patterns knockout. Ranked by likely frequency, `B`/`b` ≫ `/TK` > explicit `/K` ≈ shading patterns — the 47-group `groups_knockout_approx` figure measures only the last, smallest tier. **Representability is now known, not assumed:** isolated knockout is bit-exact representable in pdfce's single premultiplied-alpha buffer; non-isolated knockout (the common case, since `/K` defaults false the same way `/I` does) is NOT, pending buffer-model work. ~~`/SMask` soft-mask groups (36 occurrences, all pages) remain entirely unread~~ **— FALSE SINCE `cb20770` (2026-08-18, hundred-and-sixty-seventh filing, decision 070): `/Alpha` and `/Luminosity` soft masks are BUILT AND APPLIED, multiplied into the clip so every existing paint site honours them. The soft-mask half of this row is PARTIAL, not unstarted, and it has COLLAPSED INTO the knockout half rather than closing: folding into the clip attenuates each element INSIDE the scope, whereas §11.4.5 applies a mask to the group's RESULT — the same offscreen-buffer work. Construction verified correct by dumping mask groups and folded clips to PNG; strip correlation moved on all three measurable suite patches and NONE passes. `/TR` is read, counted and disclosed but NOT evaluated (`soft_mask_tr_ignored`), and it is where a mask gets INVERTED. See the `cb20770` Shipped entry.** A spec ambiguity, `LUM-A1` (`DeviceCMYK` soft-mask luminosity — ISO 32000-1 self-contradicts, divergence `K·S` max 0.25), is registered against them, below, for whenever they are built. See the `Pass 85.4e` Shipped entry, top of *Shipped*, and decision 068's second amendment. **Now this inventory's remaining top-priority gap, RE-RANKED within itself** — see the build order below for this filing's ruling on isolated-knockout vs. soft masks vs. non-isolated knockout. | clause 11.4–11.6.4 (groups) + §11.6.5.3-adjacent (soft-mask groups); the per-IMAGE `/SMask`/`/Mask` shipped in `Pass 48.1` is unrelated — do not conflate the two `/SMask` meanings when scoping |
+| `85.5` | overprint compositing — **SIMULATION SHIPS 2026-08-18 (`bd9d5ef` + `bf75351`, hundred-and-sixty-sixth filing); THE ROW IS PARTIAL, NOT CLOSED** | **The suite, all 51 patches, Acrobat Pro reference strips: 22 pass / 21 FAIL / 8 unresolved (43.1 %) → 25 pass / 18 FAIL / 8 unresolved (49.0 %), 0 render errors — Δ +3 of 51 = +5.9 points.** Newly passing `PCS2_041_White_OP_x3`, `PCS1_010_CMYK_OP_x3`, `PCS2_120_White_OP-KO_X1`; trap counts fell on the rest too (`PCS2_030` 9→3, `PCS2_040` 9→7, `PCS2_020` 9→7) — the remaining overprint failures are **partial, not untouched**. Table 149 is a pure function in `crates/pdfce-render/src/overprint.rs` (1,123 lines, 12 tests, the main test IS the table); the paint path rasterises an overprinting paint to a coverage mask with the SAME rasteriser a normal paint uses, then blends per pixel in CMYK **reconstructed from the RGB buffer** (`rgb_to_cmyk`/`cmyk_to_rgb` exact inverses over 4,913 colours to 1e-5). **Text was the second half and the more interesting defect** — the glyph painter did not merely skip the blend, it did not COUNT it, so `overprint_effective` under-reported; wiring text took 23 → 25. Three counters on the stable stdout line: `overprint_composited`, `overprint_refused`, `overprint_pixels`. **★ WHAT REMAINS, and it is a MEASURED NEGATIVE RESULT, not an estimate (`ac15158`):** the remaining overprint patches need a **REAL n-channel buffer — one plate per colorant, RGB synthesised only at display** — NOT an approximation layered over an RGB pipeline. The cheap version (a page-sized spot-ink multiplier plate, ~150 lines + an f32 page buffer) was **built and ablated on the same binary**: plate OFF `PCS020`=7/`PCS030`=3/`PCS040`=7 = **17 traps, 25 of 51 pass**; plate ON 5/6/5 = **16 traps, 25 of 51 pass** — **−1 trap of 17, 0 patches of 51 flipped, and `PCS2_030` REGRESSES 3 → 6 for a reason the engineer could not explain.** **Reverted; working copies kept OUTSIDE the tree so the next attempt starts from the measurement.** Do not re-attempt the multiplier shortcut. The root cause is representability: pdfce flattens spots into RGB, so it cannot tell a spot backdrop from a process one, and Table 149's SPOT row preserves the backdrop in BOTH modes — visible on `PCS2_040`, where Acrobat renders all six cells clean and pdfce got exactly the three "over CMYK" cells right and exactly the three "over spot" cells wrong. **Also shipped in `ac15158`:** a `/Separation`/`/DeviceN` now takes its process tints from its own OPERANDS (§8.6.6.5 O7, names-array order) rather than reconstructing CMYK from flattened RGB — **changed NO trap count, kept for fidelity, filed honestly as a null result.** **Prior history of this row, unchanged and still true: ★ MEASURED AGAINST A REAL REFERENCE ENGINE 2026-08-18 (`Pass 93.0`, `a342354`): overprint was the SINGLE LARGEST cause of pdfce's failures (10 of 21 measured FAILs; Acrobat Pro itself shows 1 FAIL of 51). Tracking/disclosure SHIPPED `Pass 92.0` (`8caada6`) — fires on 20 of 51 patches; `Pass 92.1` (`4b58c98`) found `overprint_effective` non-zero on the PCS 16.0/16.1/16.2 TRANSPARENCY patches too (19 each).** | **§11.7.4.3 Table 149 + §8.6.7. ★ THE STATED BLOCKER WAS FALSIFIED BY TRYING IT.** This row read *"architectural and gated on `iccce` for the final CMYK→display conversion"*, and `ARCHITECTURE.md` §3 read *"overprint is inexpressible in an RGB buffer, not merely unimplemented."* **Both were true of a PERMANENT CMYK pipeline and false of a PER-PAINT one** — simulation shipped with no CMYK buffer, no `iccce`, and no reply to `request_cmyk_buffer_destination_and_width.md`. §3 is amended (hundred-and-sixty-sixth filing) and **decision 069** records what was chosen. **The `iccce` gate still holds for §3's obligation (2)** — blending in a `DeviceCMYK` blending colour space, and the final conversion — so this is a narrowing, not a retraction. Policy status unchanged: **§8.6.7 makes ignoring `/OP` conformant, so simulating it is a CHOICE (spec item C2), which is why `overprint_refused` is on the stable stdout line.** |
 
 **Suggested build order — ★ RE-DERIVED 2026-08-17 (`Pass 90.0`,
 hundred-and-fifty-sixth filing), REPLACING the order below rather than
@@ -69237,9 +69250,9 @@ appending to it.** The order this box originally shipped with
 **ordering suggestion inferred from spec breadth, never measured
 against the operator's own file** — see the *Standing-pattern watch*
 note at the end of `Pass 90.0`'s Shipped entry for the general
-finding. Measuring it (`pattern_spaces=0` on all 6 Ghent pages; 113
+finding. Measuring it (`pattern_spaces=0` on all 6 suite pages; 113
 `/BM` + 36 `/SMask` occurrences) reverses two placements: tiling
-patterns turn out not to be Ghent-driven at all, and clause-11
+patterns turn out not to be suite-driven at all, and clause-11
 transparency turns out to be the single largest gap in the file.
 **Current order — ★★ RE-DERIVED AGAIN 2026-08-17 (`Pass 90.1`,
 hundred-and-fifty-seventh filing), REPLACING the order below rather
@@ -69267,7 +69280,7 @@ but nothing else in this table displaces it once it does) → `85.1`
 librarian dispatch owed) → `/Separation /All` re-check (a
 **question**, not a Pass — see the secondary-finding bullet below) →
 `85.2` slice 2 (tiling patterns, **demoted**, unchanged — measured
-zero Ghent occurrences) → `85.5` (overprint, unchanged, last, gated on
+zero suite occurrences) → `85.5` (overprint, unchanged, last, gated on
 `iccce`). **Still an ordering suggestion, not a dependency graph** —
 none of `85.1`/`85.2`/`85.4c`/`85.5` depend on each other. **Five of
 seven line items now fully shipped or closed** (`85.0`, `85.2` shading
@@ -69294,7 +69307,7 @@ two, and interleave —
    model — no architecture change needed, only implementing the
    per-element-against-initial-backdrop compositing loop inside a
    buffer this Pass already guarantees gets allocated.
-2. **Soft-mask groups, second**, unchanged in scope (36 Ghent
+2. **Soft-mask groups, second**, unchanged in scope (36 suite
    occurrences) but now carrying an owed decision — `LUM-A1`'s default
    (below) — before implementation, per `CLAUDE.md`'s "make spec
    ambiguity a setting" rule.
@@ -69311,7 +69324,7 @@ two, and interleave —
 **★★★★★★ SIXTH TOUCH 2026-08-18 (hundred-and-sixty-ninth filing) —
 NOT a re-derivation of the order above, a FLAG against item 3.** A
 per-trap diagnostic (`5ef5498`, *Shipped*, this filing) traced 16 of
-Ghent's 18 remaining failures to a single missing compositor and wrote
+the suite's 18 remaining failures to a single missing compositor and wrote
 `docs/compositor-plan.md`, staged as **Pass 97.0/97.1/97.2** (*Backlog*,
 this filing). Pass 97.0 builds pdfce's own f32 buffer with §11.4.4
 backdrop removal and §11.4.8 two-buffer knockout — **exactly the
@@ -69319,7 +69332,7 @@ backdrop removal and §11.4.8 two-buffer knockout — **exactly the
 knockout.** This is recorded as an OVERLAP, not a merge: item 3's
 acceptance criterion (correct occlusion order for `B`/`b`/default-mode
 text) is not restated as a `97.0` deliverable and `97.0`'s own
-acceptance criteria (below, *Backlog*) do not name every Ghent knockout
+acceptance criteria (below, *Backlog*) do not name every suite knockout
 trap item 3 covers. Whoever starts `97.0` should re-check whether
 shipping it closes item 3 outright or leaves a residual — **flagged so
 that check happens once, deliberately, rather than the two entries
@@ -69334,7 +69347,7 @@ weakens that ranking; only the order **within** the remainder changes.
 **★★★★★ RE-DERIVED A FIFTH TIME 2026-08-18 (`Pass 93.0`, `a342354`,
 hundred-and-sixty-third filing) — `85.5` (overprint) MOVES OUT OF LAST
 PLACE, the first change to this table's ranking driven by a comparison
-against a REAL reference engine rather than by Ghent patch-count
+against a REAL reference engine rather than by suite patch-count
 breadth alone.** Every prior re-derivation (first through fourth,
 above) ranked `85.5` last on the same stated grounds — "lowest
 priority, architectural, gated on `iccce`" — inferred from spec
@@ -69360,7 +69373,7 @@ was never measured against real causes of failure. **Current order:**
 dispatch's own sub-ordering above) AND `85.5` (overprint, blocked on
 `iccce`) — **whichever unblocks first, first** — → `85.1` (mesh
 shadings) → `/Separation /All` re-check (question, not a Pass) → `85.2`
-slice 2 (tiling patterns, demoted, unchanged — zero Ghent occurrences).
+slice 2 (tiling patterns, demoted, unchanged — zero suite occurrences).
 **Still an ordering suggestion, not a dependency graph**, unchanged
 from every prior re-derivation's own caveat.
 
@@ -76599,7 +76612,7 @@ now priority order, set by that data:
    Near-zero corpus presence.
    **★ AMENDED 2026-08-17 (hundred-and-forty-ninth filing) — "near-zero"
    now has one measured counter-example, not zero.** `unsupported_type3=2`
-   on page 3 of the Ghent PDF Output Suite (a formal prepress conformance
+   on page 3 of the print-conformance suite (a formal prepress conformance
    corpus, unlike this item's original veraPDF/pdf20examples measurement
    base). **Flagged, not re-prioritized** — one file is not a corpus
    re-measurement, and this is one data point against a LOW ranking set
@@ -76855,7 +76868,7 @@ means the serial one rots, and the serial one is the web fork's only path.
 **★★★ HARD ACCEPTANCE CRITERION: OUTPUT MUST BE BYTE-IDENTICAL AT ANY CORE
 COUNT.** Not "visually identical", not "within tolerance". **Every measurement
 this project makes depends on it** — the 4,023-file corpus A/B, the six-page
-render-identity checks, every Ghent verdict. Testable for pennies: render at 1
+render-identity checks, every suite verdict. Testable for pennies: render at 1
 core and at N, compare hashes. **This criterion is what stops parallelism from
 quietly retiring the project's whole regression apparatus.**
 
@@ -76905,7 +76918,7 @@ has **exactly one call site**, in the path and glyph painter, so an image under
 `/OP true` is painted normally and merely counted
 (`overprint_images_unsupported`).
 
-**★ THE DIAGNOSIS, which is what this entry adds: this is why Ghent `GWG 8.2`'s
+**★ THE DIAGNOSIS, which is what this entry adds: this is why suite `PCS 8.2`'s
 check mark does not appear.** The check mark is painted in **YELLOW UNDERNEATH
 the images**, and the images are drawn over it with `/OP true /op true`, so a
 press adds cyan and black **without erasing the yellow** — **cyan over yellow
@@ -76922,7 +76935,7 @@ distinction between a smaller wrongness and a fix.
 i.e. the colorant buffer extended to images. Sibling of `Pass 85.5`'s n-channel
 spot remainder, and it lands with it or after it, never before.
 
-**Acceptance:** `GWG 8.2`'s check mark visible; `overprint_images_unsupported`
+**Acceptance:** `PCS 8.2`'s check mark visible; `overprint_images_unsupported`
 reaches 0 on the suite; corpus A/B.
 
 ---
@@ -76937,25 +76950,25 @@ detector was built, caught producing a false positive, and thrown away.
 Item 2 (an area term on the contrast floor) was **measured and refused**:
 the floor moved from a bad calibration to a good one (`CONTRAST_MIN`
 12.0 → 6.0), but an area term specifically does not hold — every trap on
-`GWG 1.0` and the `GWG 16.0` calibration patch is the same pixel size at
+`PCS 1.0` and the `PCS 16.0` calibration patch is the same pixel size at
 this harness's scale. Item 3 (outline-vs-fill) is **not built** — out of
 scope once a detector wasn't shipped. Item 4 (re-measure, check
 `15.0`/`15.1`/`15.2`) is done: those three genuinely PASS. **Also
 corrected the review's own two claims** (the area-term diagnosis; a
 seven-patch list that was actually four) — see the Shipped entry and the
-Ghent standing board, both above/below.
+Suite standing board, both above/below.
 
 ---
 
 ### `Pass 122.4` — ANSWERED 2026-08-24 (two-hundred-and-forty-fourth filing) — MEASUREMENT ONLY, NO COMMIT
 
-Full result is on the Ghent standing board (*Next up*), top correction
+Full result is on the suite standing board (*Next up*), top correction
 block. **Answer: YES, the combined and individual renders disagree, and
 the operator's original reading of the combined page was right.** A
 third oracle (Adobe Acrobat — rendering reference; licence tier
 unestablished) settled it: Acrobat's own individual-patch render of
-`GWG 1.1` also shows no mark, agreeing with pdfce's combined render and
-disagreeing with pdfce's individual one. `GWG 1.1` flips FAIL → PASS;
+`PCS 1.1` also shows no mark, agreeing with pdfce's combined render and
+disagreeing with pdfce's individual one. `PCS 1.1` flips FAIL → PASS;
 standing moves `25 → 26`. The underlying mechanism — no colorant buffer
 allocated when the page group's `/CS` is undeclared (the page group
 itself is unconditional, ISO 32000-1 §11.4.7) despite a CMYK
@@ -76969,7 +76982,7 @@ question this entry opened as `(bs)` is **WITHDRAWN**, not spec-governed
 in the sense of needing Ken — it is a genuine, informative-only spec
 ambiguity (Annex P) that standing rule R169 already answers: ship both
 readings as a setting, default to the best-sourced guess, do not ask.
-See `(bs)`'s dated closure in *Open operator questions* and the Ghent
+See `(bs)`'s dated closure in *Open operator questions* and the suite
 standing board's 245th-filing correction block for the clause
 correction (§11.4.7/§11.6.3, not §11.7.2) and the PDF/X-1a/X-3 opaque-
 model split (§8.6.7/Table 148, not §11.7.4.3/Table 149, for most of the
@@ -77049,7 +77062,7 @@ structural finding, not a better number.**
 > not merely unattempted; a future session that reaches for "try a finer
 > grid" or "add a correction term" on `cmyk_table.rs` should read this note
 > first. The regression target stated below (blue ≈ 0 AND green ≈ 156
-> together, on `GWG 1.0`'s shading cells) is unchanged and is exactly the
+> together, on `PCS 1.0`'s shading cells) is unchanged and is exactly the
 > criterion a real transform must beat both interim tables on.
 >
 > **Uncomfortable and true, recorded because `iccce`'s reply named it
@@ -77066,7 +77079,7 @@ structural finding, not a better number.**
 > specifically; the next move is still `iccce`'s.
 
 **The diagnosis.** The residual is **entirely the interim CMYK→sRGB
-table**, not compositing — two independent signals on Ghent `GWG 1.0`'s
+table**, not compositing — two independent signals on suite `PCS 1.0`'s
 `shading` cells. (1) **Distribution, not gradient:** across the whole
 orange cell the blue channel is a uniform floor — pdfce min 30 / p25 52 /
 median **55** / p75 61, with **1.00** of pixels above 20; Acrobat min 0 /
@@ -77110,12 +77123,12 @@ otherwise:**
 **Regression target for whenever `iccce`'s transform lands** (recorded here
 so it survives independent of the channel note): on this file, a correct
 transform should hit **blue ≈ 0 AND green ≈ 156**, beating both of pdfce's
-interim stand-ins on the same measurement. `GWG 1.0`'s shading cells are an
+interim stand-ins on the same measurement. `PCS 1.0`'s shading cells are an
 unusually well-pinned target because Acrobat's blue is a hard floor (0 for
 95% of the cell) rather than a judgement call.
 
-**Corpus provenance:** Ghent Output Suite 5.0 is not redistributable,
-lives at `D:\Dev\temp\ghent-patches\`; Acrobat reference renders of all 51
+**Corpus provenance:** the print-conformance suite is not redistributable,
+lives in the suite's local corpus directory (`PDFCE_SUITE_DIR`); Acrobat reference renders of all 51
 patches at `D:\Dev\temp\acro-refs\` (captured 2026-08-18 via
 `PrintWindow`; binary self-identifies as Acrobat Pro 25.1, licence tier
 never established — a rendering reference only).
@@ -77595,8 +77608,8 @@ added. See that section below.
 
 - **★★★★★ Pass 97.0 / 97.1 / 97.2 — THE COMPOSITOR, filed 2026-08-18
   (hundred-and-sixty-ninth filing) — scoped from `docs/compositor-plan.md`
-  §4, itself written off `tools/ghent-cell-probe.py`'s finding (`5ef5498`,
-  *Shipped*, this filing) that 16 of Ghent's 18 remaining failures
+  §4, itself written off `tools/suite-cell-probe.py`'s finding (`5ef5498`,
+  *Shipped*, this filing) that 16 of the suite's 18 remaining failures
   collapse into ONE missing compositor.** Continuation of the render-
   fidelity family decision 063 broke out of "Vector graphics editing
   (Inkscape-parity)" — see that decision and the `Pass 85.0–85.5` entry,
@@ -77644,15 +77657,15 @@ added. See that section below.
   > **★★ AND `97.0`'S ACCEPTANCE CRITERION IS FALSIFIED, NOT MET: IT
   > DELIVERED ZERO OF ITS SEVEN PATCHES, AND THE REASON IS NOT THE GROUP
   > MODEL.** Every mechanism `97.0` promised was built and every one is
-  > measurably correct — Ghent trap count **67 → 55** across the failing
-  > patches, `1_GWG161` **14 traps → 2**, soft-mask strip correlation
+  > measurably correct — suite trap count **67 → 55** across the failing
+  > patches, `PCS1_161` **14 traps → 2**, soft-mask strip correlation
   > **0.735 → 0.975** mean over three patches — and the **board did not
   > move: `26 pass · 14 FAIL · 11 UNRESOLVED` of 51, before and after.**
   > **The transparency panels are blocked on §11.3.4's BLENDING COLOUR
-  > SPACE**, derived by hand this session on `1_GWG162`'s `Difference`
-  > cell (full arithmetic in the *Shipped* entry): every Ghent
+  > SPACE**, derived by hand this session on `PCS1_162`'s `Difference`
+  > cell (full arithmetic in the *Shipped* entry): every suite
   > transparency patch declares `/Group /CS /DeviceCMYK` **on the PAGE**,
-  > including `3_GWG161` whose own objects are `ICCBased` RGB, so a
+  > including `PCS3_161` whose own objects are `ICCBased` RGB, so a
   > renderer blending in device sRGB is wrong on all of them **regardless
   > of what the objects are coloured in**. pdfium fails the same cells
   > **differently**, which makes it a **peer, not an oracle**, for
@@ -77706,8 +77719,8 @@ added. See that section below.
   robustness: never emit NaN/Inf). **f32 is load-bearing, not
   fastidious**: the `1/α_gn` correction amplifies quantisation error, and
   at `α_gn = 0.02` a half-level u8 error becomes 25 levels.
-  **Acceptance:** `1_GWG161`, `3_GWG161`, `1_GWG162`, `1_GWG1610`,
-  `1_GWG1611`, `1_GWG168`, `1_GWG169` — 7 patches, Ghent 25 → up to 32 of
+  **Acceptance:** `PCS1_161`, `PCS3_161`, `PCS1_162`, `PCS1_1610`,
+  `PCS1_1611`, `PCS1_168`, `PCS1_169` — 7 patches, suite 25 → up to 32 of
   51. **See the SIXTH-TOUCH flag on `85.4c`'s remainder, `Pass 85.0–85.5`
   entry, *Next up* — this Pass may subsume that row's non-isolated-
   knockout item; check, do not assume, when this Pass ships.**
@@ -77716,11 +77729,11 @@ added. See that section below.
   > §11.3.4's SUBTRACTIVE COMPLEMENT IS NOW THIS PASS'S LEADING
   > DELIVERABLE, AHEAD OF THE SPOT PLANES.** It is listed second in the
   > paragraph below and that ordering is now wrong: the blend **space**,
-  > not the spot **planes**, is what the Ghent transparency panels are
+  > not the spot **planes**, is what the suite transparency panels are
   > blocked on, and it is what four of Stage A's seven expected patches
   > were waiting on. `blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`,
   > applied whenever the group's blending colour space is subtractive —
-  > **and every Ghent transparency patch declares `/Group /CS
+  > **and every suite transparency patch declares `/Group /CS
   > /DeviceCMYK` on the PAGE**, including ones whose artwork is
   > `ICCBased` RGB. **Derivation, evidence and the pdfium comparison:
   > `docs/compositor-plan.md`'s head amendment `:8–179` (the plan of
@@ -77729,17 +77742,17 @@ added. See that section below.
   > **This does not change the Pass's dependency (`97.0` first — now
   > satisfied) or its acceptance list; it changes what gets built first
   > inside it, and therefore what the first measurable result will be.**
-  > ~~⚠ **`3_GWG161`'s 14 traps are an UNCONFIRMED instance of this
+  > ~~⚠ **`PCS3_161`'s 14 traps are an UNCONFIRMED instance of this
   > hypothesis, not a confirmed one** — it fits, but it was not derived
-  > the way `1_GWG162`'s `Difference` cell was. Do not count it toward
+  > the way `PCS1_162`'s `Difference` cell was. Do not count it toward
   > this Pass's acceptance until it is.~~
   > **★ DISCHARGED 2026-08-21 (222nd filing).** `Pass 97.1d` (`90739d7`)
-  > confirms it by counter: **15 of `3_GWG161`'s 15 blend modes are in the
+  > confirms it by counter: **15 of `PCS3_161`'s 15 blend modes are in the
   > wrong space**, over 18 subtractive groups, and **Table 147's
   > inheritance row is the mechanism** — a non-isolated group's `/CS` is
   > ignored and the space comes from the parent, so `ICCBased` RGB
   > artwork under a `DeviceCMYK` page group blends in `DeviceCMYK`.
-  > **`3_GWG161` may now be counted toward this Pass's acceptance.**
+  > **`PCS3_161` may now be counted toward this Pass's acceptance.**
   > **Also inherited from `97.0`:** `overprint::composite` still carries
   > the **white-backdrop convention** `97.0a` removed from
   > `blend_nonsep` — deliberately left alone, because it is Table 149
@@ -77755,7 +77768,7 @@ added. See that section below.
   >   `Blend::apply_subtractive` (§11.3.4's complement for the eleven
   >   separable modes, §11.3.5.3's CMYK detour with **K selected by mode**
   >   for the four non-separable ones), `PixelCmyk`,
-  >   `composite_element_cmyk`. Six tests, including `1_GWG162`'s
+  >   `composite_element_cmyk`. Six tests, including `PCS1_162`'s
   >   `Difference` cell **with a negative control**, and the
   >   `Multiply`↔`Screen` exchange under the complement.
   > - **`97.1d` — the space READER.** `page_blend_space` (§11.4.7) plus
@@ -77773,20 +77786,20 @@ added. See that section below.
   >
   > | corpus | files subtractive | blends applied | in the wrong space |
   > |---|---:|---:|---:|
-  > | **Ghent PDF Output Suite** (51 patches) | 13 (25.5 %) | 107 | **107 (100.0 %)** |
+  > | **the print-conformance suite** (51 patches) | 13 (25.5 %) | 107 | **107 (100.0 %)** |
   > | **`fixtures/external`** (3,735 rendered of 4,012 on disk) | 15 (0.4 %) | 49 | **2 (4.1 %)** |
   >
   > **100 % on the suite built to test this; 4.1 % on the corpus of files
   > people actually have — and both of those two files are veraPDF
   > transparency CONFORMANCE fixtures** (PDF/A-4 §6.2.9, PDF/A-2b
   > §6.2.10), so **no organic document in 3,735 is affected.**
-  > **Subtractive groups: 181 over 51 Ghent patches vs 16 over 3,735 real
+  > **Subtractive groups: 181 over 51 suite patches vs 16 over 3,735 real
   > files — 3.55 vs 0.004 per file, a factor of ~830.**
   >
   > **Therefore: this Pass buys CONFORMANCE and print-site credibility,
   > which is the stated goal, and will change nothing about how ordinary
   > documents look. Do not expect the real-world corpus to move when it
-  > lands, and do not read that as failure.** The Ghent numbers alone
+  > lands, and do not read that as failure.** The suite numbers alone
   > could not have produced this — a conformance suite is by construction
   > 100 % of whatever it tests. Full record: the `cbb1ede` + `90739d7`
   > entry at the top of *Shipped*.
@@ -77803,16 +77816,16 @@ added. See that section below.
   > complement and §11.3.5.3's CMYK detour — written and tested by `97.1c`,
   > unwired until now — finally have somewhere to run.
   >
-  > **Measured:** Ghent **26 → 29 pass of 51**, **55 → 41 trap marks**, and
+  > **Measured:** suite **26 → 29 pass of 51**, **55 → 41 trap marks**, and
   > the blend-space census **107 of 107 wrong → 0 of 107**. This Pass's
-  > acceptance list named `1_GWG160`, `3_GWG164`, `GWG011`, `GWG190`,
-  > `GWG191`, `GWG192`, `GWG020`, `GWG030`, `GWG040`; **`3_GWG164` is the one
-  > of those nine this ship flipped**, plus `1_GWG162` and `1_GWG161` from
+  > acceptance list named `PCS1_160`, `PCS3_164`, `PCS011`, `PCS190`,
+  > `PCS191`, `PCS192`, `PCS020`, `PCS030`, `PCS040`; **`PCS3_164` is the one
+  > of those nine this ship flipped**, plus `PCS1_162` and `PCS1_161` from
   > `97.0`'s list. **The other eight are the SPOT half and are still open** —
   > which is the re-scoping fact, below.
   >
   > ★★★ **RE-SCOPED BY ITS OWN RESULT: what remains of this Pass is the
-  > SPOT/n-channel half ONLY.** Every remaining Ghent FAIL is an overprint,
+  > SPOT/n-channel half ONLY.** Every remaining suite FAIL is an overprint,
   > spot or ICC patch; **not one is a blending-space failure any more**. The
   > paragraph below still reads as though the blend space and the spot planes
   > arrive together — **they did not**, and the blend space arrived first.
@@ -77837,7 +77850,7 @@ added. See that section below.
   >
   > **★ THE NON-ISOLATED-GROUP HALF OF THIS PARAGRAPH IS DISCHARGED, 2026-08-24
   > — `Pass 97.1g` (`c4a85d0`, top of *Shipped*, 242nd filing).** The second
-  > content walk now exists; `cmyk_groups_approximated` reaches 0 on Ghent.
+  > content walk now exists; `cmyk_groups_approximated` reaches 0 on the suite.
   > **Read the discharge with its own headline, not just its criterion**: the
   > fix changes zero pixels in any corpus pdfce has, and most of the 118→0 drop
   > was the counter becoming honest rather than 118 groups being repaired —
@@ -77851,7 +77864,7 @@ added. See that section below.
   and impossible in general in PostScript — a structural advantage pdfce
   inherits from the format). Delivers §11.3.4's subtractive complement
   (`blend_subtractive(cb, cs) = 1 − B(1 − cb, 1 − cs)`), §11.3.5.3's CMYK
-  detour with K **selected by mode** (closes `1_GWG160`'s Hue/Saturation/
+  detour with K **selected by mode** (closes `PCS1_160`'s Hue/Saturation/
   Color discriminator above), and gives the already-written-and-tested
   `pdfce_render::overprint` (Table 149, 12 tests, `bd9d5ef`) somewhere to
   run for the first time against a real spot plane. Keep the tint
@@ -77859,8 +77872,8 @@ added. See that section below.
   the plane count and fall back to the tint transform beyond it — that
   fallback is precisely today's behaviour, so it is already written and
   already disclosed.
-  **Acceptance:** `1_GWG160`, `3_GWG164`, plus `GWG011`, `GWG190`,
-  `GWG191`, `GWG192`, `GWG020`, `GWG030`, `GWG040` — 9 patches, 32 → up to
+  **Acceptance:** `PCS1_160`, `PCS3_164`, plus `PCS011`, `PCS190`,
+  `PCS191`, `PCS192`, `PCS020`, `PCS030`, `PCS040` — 9 patches, 32 → up to
   41 of 51.
   **Dependency: `97.0` first.** Doing colorant-plane arithmetic and
   backdrop removal on the same pixels at the same time is two unknowns
@@ -77877,8 +77890,8 @@ added. See that section below.
   > below rather than deleted, because ONE OF THEM WAS WRONG ABOUT
   > ITSELF and that is the reusable part.**
   > **Finding 1 (`/Indexed`) is fixed and MOVED NOTHING** — all four
-  > overprint counters identical to the digit across `1_GWG190`/`191`/
-  > `192`/`2_GWG020`, because **every `/Indexed [/DeviceN …]` space in
+  > overprint counters identical to the digit across `PCS1_190`/`191`/
+  > `192`/`PCS2_020`, because **every `/Indexed [/DeviceN …]` space in
   > those patches is an IMAGE colour space**. It was filed as a live
   > defect blocking the buffer; it is in fact **unreachable until the
   > image path exists**, so **the dependency runs the opposite way round
@@ -77887,7 +77900,7 @@ added. See that section below.
   > *reachable-by-the-renderer* — that conflation is the whole error.
   > **Finding 2's counter (`overprint_images_unsupported`) shipped as
   > specified**, deliberately separate from `overprint_refused`; its
-  > first measurement includes **`2_GWG031` = 1, a patch that PASSES**.
+  > first measurement includes **`PCS2_031` = 1, a patch that PASSES**.
   > **What is still `97.1`'s and still unbuilt:** §11.3.4's blending
   > colour space (the leading deliverable), the colorant planes, and the
   > image overprint path itself — `97.1b` counts that gap, it does not
@@ -77897,10 +77910,10 @@ added. See that section below.
      falls to `SourceKind::OtherProcess` and its base's colorant list is
      invisible to Table 149 — §8.6.6.3 puts the colour values in the BASE
      space. Present in **4 of the 7 failing overprint patches**
-     (`GWG190`, `GWG191`, `GWG192`, `GWG020`); `GWG190`'s corpus text is
+     (`PCS190`, `PCS191`, `PCS192`, `PCS020`); `PCS190`'s corpus text is
      its own documented a/b-vs-c/d discriminator (`/Indexed [/DeviceN
      [/Cyan] /DeviceCMYK ...]` vs. `/Indexed [/DeviceN [/Cyan /Yellow
-     /Black] /DeviceCMYK ...]`) — GWG states the colorant LIST, not the
+     /Black] /DeviceCMYK ...]`) — the suite's publisher states the colorant LIST, not the
      tint values, decides what survives, and pdfce currently sees
      neither list. **Fix has two halves, only the first is small:**
      `classify` must recurse into the base space, **and** the tints
@@ -77908,7 +77921,7 @@ added. See that section below.
      components, not the raw index the call site passes today.
   2. **Image XObjects never reach overprint at all.**
      `overprint::composite` has exactly one call site, in the path/glyph
-     painter — `GWG190`'s only failing cell is `d`, an image. Per-sample
+     painter — `PCS190`'s only failing cell is `d`, an image. Per-sample
      overprint needs per-sample colorants, i.e. the colorant buffer this
      Pass builds, so the fix is not pulled forward. **Before building the
      buffer, add the missing counter first:** an image that skips
@@ -78001,9 +78014,9 @@ added. See that section below.
   shifted unrelated RGB raster content.
 
   **Explicitly NOT part of 97.x, and neither is blocked on it:**
-  `1_GWG060` mesh shadings — that is `Pass 85.1`, *Next up*, **now
+  `PCS1_060` mesh shadings — that is `Pass 85.1`, *Next up*, **now
   unblocked** (see that row's own amendment, this filing) — and
-  `3_GWG130` ICC source profiles, which needs its own Pass gated on
+  `PCS3_130` ICC source profiles, which needs its own Pass gated on
   `iccce`, same as the `/OutputIntents`/`/ICCBased` rows already in
   `FEATURES.md`'s *Planned* section.
 
@@ -78085,9 +78098,9 @@ added. See that section below.
      the **two** corrections both `compositor-plan.md` and
      `collapse-model-survey.md` now carry under `★★ AMENDMENT 2026-08-19`
      headers, confirmed independently by `Read`/`Grep` this filing:
-     - **The Ghent standing moved without a patch changing outcome.**
+     - **The suite standing moved without a patch changing outcome.**
        `18+8 = 15+11 = 26`: three patches crossed the FAIL/UNRESOLVED line
-       from a classifier shift alone. `1_GWG160` also now genuinely
+       from a classifier shift alone. `PCS1_160` also now genuinely
        passes — resolved by Table 137 arithmetic, **not** by a compositor —
        so *"16 of the 18"* cannot be restated as *"16 of the 14"* without
        re-deriving which failures actually require `Pass 97.x`.
@@ -78112,17 +78125,17 @@ added. See that section below.
   already folded into `compositor-plan.md`/`collapse-model-survey.md`
   themselves — **a future session scoping `Pass 97.x` should re-derive the
   acceptance-criteria patch lists from the current 14, not re-discover
-  either correction from scratch, and not re-measure Ghent only to
+  either correction from scratch, and not re-measure the suite only to
   rediscover a standing this entry could have stated.** Re-measurement
-  itself (the GWG Reference file is not on this machine per
+  itself (the suite's publisher's Reference file is not on this machine per
   `docs/NEXT_SESSION.md` §2) remains owed to whichever session scopes this
   Pass for real.
 
-- **`tools/ghent-check.py` HAS NO CALIBRATED THRESHOLD FOR
+- **`tools/suite-check.py` HAS NO CALIBRATED THRESHOLD FOR
   REFERENCE-STRIP PATCHES — filed 2026-08-21 (two-hundred-and-sixteenth
   filing). An INSTRUMENT item, not a feature item.**
 
-  Three Ghent soft-mask patches (`1_GWG1610`, `1_GWG168`, `1_GWG169`) sit
+  Three suite soft-mask patches (`PCS1_1610`, `PCS1_168`, `PCS1_169`) sit
   at **0.962 / 0.978 / 0.986** reference-strip correlation after
   `Pass 97.0d` and are **still reported UNRESOLVED**, because the checker
   has no threshold to resolve them against. **The board therefore
@@ -79848,7 +79861,7 @@ added. See that section below.
   twice — but it had the side effect of blocking *rendering* a shading
   behind this entirely unscoped bucket (no Pass IDs exist for it above),
   and rendering is what the operator hit first, on a real PDF/X-4
-  conformance file (`Ghent_PDF-Output-Test-V50_ALL_X4.pdf`), not while
+  conformance file (the suite's combined X-4 file), not while
   editing anything. **`Pass 85.0`–`85.2`** (`ROADMAP.md` *Next up*,
   filed same session) now carry shading paint (`sh` + shading patterns,
   types 1–3), mesh shadings (types 4–7) and tiling pattern paint as
@@ -81825,39 +81838,107 @@ added. See that section below.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
+**NEW 2026-08-25 (two-hundred-and-fifty-second filing) — one question, and it
+is a destructive, history-rewriting, operator-only act, not the engineer's or
+this role's to perform or to decide. Operator-question ceiling moves `(bt)` →
+`(bu)`, next free `(bv)`:**
+
+- **★ (bu) The suite-name scrub (`(bt)`, immediately below, ANSWERED this
+  filing) removes the name going forward from `HEAD`. It does not, and
+  cannot, remove it from history already published. Do you want that
+  history rewritten and force-pushed?**
+
+  **What prompted it.** Ken's ruling on `(bt)` (quoted verbatim there, and
+  in that entry's own closure below) was executed as a working-tree scrub
+  across five parallel agent filings this session, `docs/ROADMAP.md`'s own
+  portion filed as `Pass 124.2`: every tracked file, going forward, is
+  clean. **That is only half the exposure.**
+  `github.com/KenM76/pdfce` has been public since **2026-08-09 04:56Z**
+  (`main` pushed 10:18Z the same day — rule 8 in this project's own
+  `CLAUDE.md`), and every commit made before this scrub already carries
+  every mention this filing just removed. Those commits are unchanged by a
+  scrub of the working tree; they are still reachable by `git log`, still
+  clonable, still forkable, and — independent of anything in this
+  repository — already cached by GitHub's own infrastructure the moment
+  they were pushed.
+
+  **Why it is not the engineer's or this role's call.** Retracting that
+  history requires rewriting it (`git filter-repo`/`git rebase` across
+  every affected commit, or a fresh orphan history) and **force-pushing**
+  — a destructive act that rewrites `main`'s public commit graph,
+  invalidates every existing clone's and fork's history relative to it,
+  and cannot reach copies already taken (a clone made yesterday, a fork,
+  GitHub's own caches) regardless of what is force-pushed today. **The
+  engineer has not done this and will not do it from a session** — it is
+  exactly the class of act project rule 8 already reserves to an explicit,
+  current, operator go-ahead, one level more irreversible than an ordinary
+  push.
+
+  **What each answer buys:**
+
+  - **"Yes — rewrite and force-push"** — the closest available approximation
+    to retraction going forward: `HEAD` and its ancestry stop naming the
+    suite, for any NEW clone or fetch. **Does not reach clones or forks that
+    already exist**, and does not reach anything GitHub itself has already
+    cached or indexed independently of the git objects. Collaborators and
+    any existing local clone (including this machine's own working copies
+    and backup bundles under `D:\Dev\pdfce-backups\`) would need to be
+    reset to the rewritten history or would silently diverge from it.
+  - **"No — leave history as it is"** *(the default if you do not answer —
+    narrowest interpretation, changes nothing further)* — the scrub stands
+    as a going-forward measure only; the pre-scrub mentions remain
+    permanently in the published history, exactly as they are today.
+  - **"Something narrower"** — e.g. rewriting only specific commits, or
+    accepting the exposure and instead documenting it (this entry already
+    does the latter). Not evaluated in depth here because the two clean
+    options above bound the real choice: rewrite everything and accept the
+    fork/clone divergence cost, or accept the history as published.
+
+  **Backup currency and remote/clone state: not independently checked this
+  filing** — no shell (librarian invocation, hard rule 8). Whoever acts on
+  either answer should verify `D:\Dev\pdfce-backups\` and `git remote -v`
+  directly rather than trust any figure carried in a document, per this
+  project's own standing discipline on that exact failure mode.
+
+  **Default if unanswered: leave history as it is.** The working-tree scrub
+  stands; nothing further is attempted.
+
+---
+
 **NEW 2026-08-25 (two-hundred-and-fifty-first filing) — one question, and it
 is a licensing/publication-risk call, not the engineer's or this role's to
 resolve. Operator-question ceiling moves `(bs)` (retired by withdrawal,
 never reissued) → `(bt)`, next free `(bu)`:**
 
-- **★ (bt) Should `tools/ghent-check.py` be untracked (removed from the
+- **★ (bt) Should `tools/suite-check.py` be untracked (removed from the
   public MIT repository's git history going forward, kept locally) because
-  of how much Ghent Output Suite detail it quotes?**
+  of how much print-conformance-suite detail it quotes?**
 
   **What prompted it.** Answering `iccce`'s reply this session, the
   engineer drafted the sentence *"ours does not carry document names"*
-  about pdfce's own Ghent tooling — then grepped before sending, and found
-  the opposite. `tools/ghent-check.py` mentions `GWG` **18 times**
-  (independently re-confirmed by this role's own `Grep` this filing: 18):
-  it names individual patches (`GWG 1.0`, `GWG 16.0`, `GWG 16.2`) and
-  **quotes one patch's printed caption verbatim** — *"If an 'X' appears,
-  rendering of Non-Knockout Transparency Groups (a transparency effect) is
-  not performed correctly."* The corrected sentence shipped in the reply
-  itself before it left (`Pass 124.0`, above); this question is the
-  follow-up the correction opened rather than closed.
+  about pdfce's own suite tooling — then grepped before sending, and found
+  the opposite. `tools/suite-check.py` mentions the suite's identifier
+  **18 times** (independently re-confirmed by this role's own `Grep` this
+  filing: 18): it names individual patches (`PCS 1.0`, `PCS 16.0`,
+  `PCS 16.2`) and **quotes one patch's printed caption verbatim** —
+  a sentence stating that an 'X' mark appearing means non-knockout
+  transparency-group rendering was not performed correctly. The corrected
+  sentence shipped in the reply itself before it left (`Pass 124.0`,
+  above); this question is the follow-up the correction opened rather
+  than closed.
 
   **Why it is not the engineer's or this role's call.** This is a
-  copyright/licence-terms reading of the Ghent Output Suite's own licence
-  (affirmative-notice + commercial-context language), applied to what a
-  *tool's own documentation* may quote inside a public MIT repository —
-  exactly the class of judgement hard rule 6 reserves to the operator (via
-  `pdfce-spec-librarian` for spec text; this is the same shape pointed at a
-  different licensor). No RAG in this project's stack owns Ghent Output
-  Suite licensing specifically.
+  copyright/licence-terms reading of the print-conformance suite's own
+  licence (affirmative-notice + commercial-context language), applied to
+  what a *tool's own documentation* may quote inside a public MIT
+  repository — exactly the class of judgement hard rule 6 reserves to the
+  operator (via `pdfce-spec-librarian` for spec text; this is the same
+  shape pointed at a different licensor). No RAG in this project's stack
+  owns the suite's licensing specifically.
 
   **The precedent already made, by a sibling, the other way.** The `iccce`
-  project faced the identical question about its own `docs/
-  GHENT_COMPATIBILITY.md` and its operator **chose on 2026-08-18** (`iccce`
+  project faced the identical question about its own compatibility-notes
+  document and its operator **chose on 2026-08-18** (`iccce`
   commit `5e1e5df`) to leave that document **deliberately untracked** —
   reasoning that the suite's licence carries an affirmative-notice
   requirement and a commercial-context restriction, and that keeping
@@ -81876,14 +81957,71 @@ never reissued) → `(bt)`, next free `(bu)`:**
     same trade `iccce` accepted.
   - **"No — it stays tracked as-is"** *(the default if you do not
     answer — narrowest interpretation, changes nothing)* — keeps the tool
-    fully in `git log`/`git blame`; the quoted caption and 18 `GWG`
-    mentions remain in a public repository's history, including in every
-    prior commit that touched the file, which untracking-going-forward
+    fully in `git log`/`git blame`; the quoted caption and 18
+    identifier mentions remain in a public repository's history, including
+    in every prior commit that touched the file, which untracking-going-forward
     would not retroactively remove either.
   - **"Trim the file instead"** — keep it tracked, remove the verbatim
     caption quote and any patch-identifying strings not needed for the
     harness to run; smaller exposure than full untracking, but does not
     address history already committed, same as the "No" option's limit.
+
+  > **★★★★★ ANSWERED 2026-08-25 (two-hundred-and-fifty-second filing) —
+  > CLOSED, AND WIDER THAN ASKED. Operator, verbatim and in full:**
+  >
+  > > *"Keep mentions of [the suite] out of the public repo."*
+  >
+  > **The bracketed elision is deliberate, sourced by this filing (253rd),
+  > and it is the sharpest illustration of what was ordered: this is the one
+  > place in the repository where the ruling's own subject had to be
+  > redacted from the ruling itself, quoting Ken while obeying him in the
+  > same sentence.** Nothing else in the quotation is paraphrased — every
+  > word other than the elided one is exactly what he said. The unredacted
+  > wording lives in the private map directory alongside the manifest
+  > (`D:\Dev\pdfce-private\suite\`, outside this repository by design, same
+  > as the `SCRUB_SPEC.md`/`manifest.json` referenced throughout this
+  > closure).
+  >
+  > **None of the three costed options above is what he chose.** He did not
+  > pick "untrack `tools/suite-check.py`," "leave it tracked," or "trim the
+  > quoted caption" — he ruled on the **name itself**, project-wide, which
+  > subsumes and exceeds all three: the tool stays tracked, the caption quote
+  > and every patch-identifying string are **rewritten** to an opaque `PCS`
+  > identifier scheme (`D:\Dev\pdfce-private\suite\manifest.json`, outside
+  > this repository by design), and the word is removed from **every**
+  > tracked file — source, tests, tools, docs, filenames, and this role's own
+  > agent-memory notes — not only from the one tool this question named.
+  >
+  > **pdfce's answer is broader than `iccce`'s.** `iccce`'s operator, on the
+  > identical question, chose narrower: untrack one document (its own
+  > compatibility-notes document, `iccce` commit `5e1e5df`, 2026-08-18) and
+  > leave the rest of that repository as it was. Ken's ruling here does not
+  > stop at untracking `tools/suite-check.py` — it reaches every tracked
+  > file in this repository that named the suite, filed as `Pass 124.2`
+  > (this document's own portion; `Pass 124.0`/`124.1` are unrelated Passes
+  > filed the same day) and executed by five parallel agent filings against
+  > one shared substitution contract (`SCRUB_SPEC.md`, same private
+  > directory). The two sibling projects, which answered the SAME question
+  > differently with "no stated reason for the divergence" as of this
+  > entry's own original filing, no longer diverge on the *pattern* — narrow
+  > vs. broad was the divergence, and pdfce chose broad.
+  >
+  > **What this closes and what it does not.** CLOSED: whether
+  > `tools/suite-check.py` (and every other tracked file) may keep the name —
+  > no, project-wide, going forward from `HEAD`. **NOT closed by this
+  > ruling, and not closable by a working-tree scrub at all: the repository
+  > has been public since 2026-08-09, and every mention already committed is
+  > already in the published history** — clonable, forkable, and cached by
+  > GitHub independently of anything this filing changes. Filed as a NEW
+  > question, `(bu)`, immediately above this section's ceiling, rather than
+  > folded into this closure, because retracting published history is a
+  > different act (destructive, history-rewriting, operator-only) from
+  > removing a name going forward.
+  >
+  > **Operator-question ceiling moves `(bt)` → `(bu)`** (see the `(bu)` entry,
+  > filed above this one). **Nothing about the naming question itself is
+  > still awaiting Ken** — `(bu)` is a separate, narrower question about
+  > history he has not yet been asked.
 
   This entry does not resolve which of pdfce's other files (if any) carry
   similar exposure — that survey is not performed here.
@@ -81898,14 +82036,14 @@ ceiling moves `(br)` → `(bs)`, next free `(bt)`:**
   pdfce to composite `DeviceCMYK` overprint content subtractively (in
   ink) even when the page declares no `/Group`?**
 
-  **What prompted it.** `Pass 122.4`'s measurement of `GWG 1.1` found
+  **What prompted it.** `Pass 122.4`'s measurement of `PCS 1.1` found
   pdfce allocates a colorant buffer, and composites overprint content
   natively in ink, only when a page declares `/Group /CS /DeviceCMYK`. A
   standalone file with a CMYK `OutputIntent` but no page `/Group` gets no
   buffer and composites additively, in sRGB — and Acrobat's own render of
   the same standalone file does NOT show this artefact. Swept the full
-  51-patch Ghent corpus: **24 of 51 request overprint and get no
-  colorant buffer** — every remaining Ghent FAIL and all four `MARK?`
+  51-patch suite corpus: **24 of 51 request overprint and get no
+  colorant buffer** — every remaining suite FAIL and all four `MARK?`
   patches carry this signature. Very likely a single fix for nearly the
   entire remaining gap.
 
@@ -93907,13 +94045,13 @@ same cause (hashes exist only at commit time), two different failure modes.
   adjudicated"*.
 
   **Two instances, same instrument, same number, four days apart:**
-  1. **2026-08-17, `tools/ghent-check.py`'s FIRST RUN — `29 of 51`.**
+  1. **2026-08-17, `tools/suite-check.py`'s FIRST RUN — `29 of 51`.**
      **13 of the 51 patches use REFERENCE STRIPS, not X-shaped traps**, and an
      X-detector cannot adjudicate them. **Caught before the number was
      reported as final** (148th filing) — a near-miss, not an incident.
   2. **2026-08-21, the same harness — `29 of 51` again.** **Seven patches use
      the suite's POSITIVE marker** (*"if no check mark appears then DeviceN
-     colour was transformed to CMYK (= ERROR)"*) — GWG `050`, `080`, `081`,
+     colour was transformed to CMYK (= ERROR)"*) — PCS `050`, `080`, `081`,
      `082`, `150`, `151`, `152` — and the harness **hunts only for a cross that
      should not be there**. All seven have been reported `clean` **for the
      harness's entire life**; at least three are failures. Filed, published and
@@ -93921,10 +94059,10 @@ same cause (hashes exist only at commit time), two different failure modes.
      the render cell by cell. Corrected standing: **26 pass at minimum**.
 
   **★ WHY A RE-MEASUREMENT CANNOT DISCHARGE THIS, and why that makes it a rule
-  rather than a caution.** The *Ghent standing board* already carries the right
+  rather than a caution.** The *suite standing board* already carries the right
   caveat for a **stale** figure — *"staleness is a relation to the world and a
   document has no access to that; only re-measuring does"*. **That is false for
-  a MIS-SCORED figure.** Every Ghent number this project has filed came from
+  a MIS-SCORED figure.** Every suite number this project has filed came from
   **the harness scoring itself**, with thresholds calibrated against **one**
   patch whose answer was already known from a code change. **An instrument that
   agrees with itself returns the same number forever.** Re-measurement checks
@@ -93963,7 +94101,7 @@ same cause (hashes exist only at commit time), two different failure modes.
   answered from artefacts alone, and this one can.**
 
   **★ Scope note, so it is not over-read.** This binds on **conformance-suite
-  and corpus figures** — Ghent, veraPDF, `fixtures/external` — not on ordinary
+  and corpus figures** — the print-conformance suite, veraPDF, `fixtures/external` — not on ordinary
   test counts, where the criterion is the assertion and there is nothing to
   omit.
 
@@ -93985,7 +94123,7 @@ same cause (hashes exist only at commit time), two different failure modes.
 
   **Line up the two instances and they share every step:**
 
-  | | Ghent, `29 of 51` | the gate, *"every time"* |
+  | | the suite, `29 of 51` | the gate, *"every time"* |
   |---|---|---|
   | who produced the figure | the harness scoring itself | the gate's green runs, read as a complete history |
   | the silent part | 7 positive-marker patches emitted as `clean` | one episode the gate could not see |
@@ -94015,17 +94153,17 @@ same cause (hashes exist only at commit time), two different failure modes.
   widen. Minting would have put **one mechanism under two numbers** — the
   fragmentation the 220th, 222nd and 223rd filings each declined to commit —
   and a reader arriving at the gate-history rule would have had no route back to
-  the Ghent derivation that explains it. **Ceiling unmoved: `R211` stands, next
+  the suite derivation that explains it. **Ceiling unmoved: `R211` stands, next
   free `R212`.**
 
-  **★ The asymmetry, so the amendment is not over-read.** In the Ghent case an
+  **★ The asymmetry, so the amendment is not over-read.** In the suite case an
   *instrument* produced the wrong number; here a *human sentence in a commit
   message* made an absolute claim about an instrument. Clause (d) is therefore a
   question to ask **before writing the claim**, not a change to any gate. The
   two are joined by the fact that **the sentence was believable only because the
   gate's misses are invisible** — the property this rule exists to name.
 
-  **★ And the interval is the finding.** The Ghent over-count was written down
+  **★ And the interval is the finding.** The suite over-count was written down
   on 2026-08-21; *"has caught it every time"* was written **the next day, by the
   same project, in a commit message**. Four days separated the two corrections.
   **A rule recorded is not a rule internalised**, and the second instance came
@@ -94037,10 +94175,10 @@ same cause (hashes exist only at commit time), two different failure modes.
   **★★★ INSTANCE-NOTE, 2026-08-24 (243rd filing, `Pass 122.2`, `f6457ee`) —
   THIS IS `R210` BEING ACTED ON, NOT MERELY RESTATED, AND IT FOUND THE RULE'S
   OWN FOUNDING DOCUMENT MIS-STATING THE CRITERIA SET IT WAS WARNING ABOUT.**
-  `docs/ghent-operator-review-2026-08-21.md` — the calibration set this rule
+  `docs/suite-operator-review-2026-08-21.md` — the calibration set this rule
   names as R210's own founding evidence — listed **seven** patches using the
   suite's positive criterion, found by `grep`ping the ReadMes for the phrase
-  "check mark". **Three of the seven (`GWG 150`/`151`/`152`) do not use that
+  "check mark". **Three of the seven (`PCS 150`/`151`/`152`) do not use that
   criterion at all** — their ReadMes state the suite's NEGATIVE criterion and
   mention "check mark" only while describing what the failure cross is drawn
   out of. **A phrase match found a mention, not a criterion**, which is
@@ -94051,7 +94189,7 @@ same cause (hashes exist only at commit time), two different failure modes.
   mechanism R210 already names, found a third time, this time inside the
   document that R210 was minted to explain. The founding review's other
   claim (an area term repairs the contrast floor) also did not survive
-  re-measurement — see the Ghent standing board's 2026-08-24 correction,
+  re-measurement — see the suite standing board's 2026-08-24 correction,
   `Pass 122.2`'s *Shipped* entry, for both corrections in full. **The
   self-referential shape is the point worth keeping**: a rule that instructs
   "state your criteria" is not exempt from needing its own criteria checked.

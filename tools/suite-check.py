@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""ghent-check — turn the Ghent PDF Output Suite into a pass/fail signal.
+"""suite-check — turn the print-conformance suite into a pass/fail signal.
 
 WHY THIS EXISTS
 ===============
-The Ghent PDF Output Suite 5.0 ships 51 single-patch PDFs, each testing one
+The print-conformance suite ships 51 single-patch PDFs, each testing one
 PDF/X feature. Its stated pass criterion is a human at 0.5 m looking for a
 red X, which is not automatable — but the ARTWORK IS AUTHORED PRE-SWAPPED,
 and that is what makes it mechanical. Each patch draws a trap X whose colour
 is chosen so that a CORRECT renderer makes it vanish into its surround and
-an INCORRECT one leaves it visible. Every patch says so on its own face; the
-GWG 16.0 patch's caption reads "If an 'X' appears, rendering of Non-Knockout
-Transparency Groups (a transparency effect) is not performed correctly."
+an INCORRECT one leaves it visible. Every patch states that criterion on its own
+printed face, naming the feature under test and telling the reader that a
+visible X means it rendered wrong. Those captions are the suite's own
+copyrighted text and are NOT reproduced here -- operator ruling 2026-08-25;
+see the private map directory named in this repository's scrub record.
 
 So the pass/fail signal ships inside the corpus. No press, no proof, no
 instrument, no reference measurement to source, and — importantly — no
@@ -36,7 +38,7 @@ edge energy in a sliding window:
     axis(x,y) = | |dI/dx| - |dI/dy| |      one dominates => H or V edge
     score     = sum(diag) / sum(axis)
 
-CALIBRATION, measured rather than chosen (2026-08-17, GWG 16.0 at scale 2.0,
+CALIBRATION, measured rather than chosen (2026-08-17, PCS 16.0 at scale 2.0,
 the patch whose expected result was known independently because pdfce had
 just been changed to fix it):
 
@@ -63,7 +65,7 @@ to the eye, ten clean swatches. It rejected those correctly. It had never
 been checked against a population of GENUINE traps of moderate contrast,
 because none had been measured.
 
-`GWG 1.0` is that population, and the operator read it cell by cell. At this
+`PCS 1.0` is that population, and the operator read it cell by cell. At this
 harness's own default scale its six X-shaped candidates measure:
 
     contrast   operator's reading
@@ -76,7 +78,7 @@ harness's own default scale its six X-shaped candidates measure:
 
 Four clear fails and two faint outlines, exactly as he described them, and
 the two populations are separated by an EMPTY interval from 4.1 to 7.4. The
-old floor of 12.0 sat above all six, so `GWG 1.0` reported `clean` while
+old floor of 12.0 sat above all six, so `PCS 1.0` reported `clean` while
 carrying four crosses a human sees immediately.
 
 6.0 sits inside that empty interval with ~1.4 levels of margin on each side.
@@ -84,9 +86,9 @@ The rest of the corpus was measured before it was chosen, not after:
 
   * the sub-perceptual population the old floor existed to reject is at or
     below 1.1 across every Acrobat render;
-  * the "genuinely invisible" cells of `GWG 16.2`, which the operator agreed
+  * the "genuinely invisible" cells of `PCS 16.2`, which the operator agreed
     are invisible, are 1.5 to 3.3 -- below 4.1, so they stay rejected;
-  * across all 51 patches the change flips exactly ONE verdict, `GWG 1.0`
+  * across all 51 patches the change flips exactly ONE verdict, `PCS 1.0`
     pass -> FAIL, which is the correction the operator asked for. Every
     other patch that gains a detection above 6.0 was already FAIL on a
     larger mark.
@@ -96,7 +98,7 @@ more than the fix. §3 of that document says the floor "has no area term" and
 that box 3's crosses are "roughly three times the linear size" of the
 calibration patch's, so the remedy is to make the threshold a function of
 mark size. Measured here: at the scale this harness renders, every trap on
-`GWG 1.0` is 36-38 px square and the `GWG 16.0` calibration traps are 38 px
+`PCS 1.0` is 36-38 px square and the `PCS 16.0` calibration traps are 38 px
 square. **They are the same size.** An area term would have changed nothing
 and the patch would have gone on reporting clean, with a fix in place and a
 plausible reason to stop looking. The fault was never geometry; it was a
@@ -122,19 +124,19 @@ patches the instrument had never examined.
 Ground truth for whoever builds the detector, measured 2026-08-24 against
 Acrobat renders of the same patches:
 
-  * `GWG 8.2` (GWG082): Acrobat draws two OLIVE check marks, ~46x56 px, in
+  * `PCS 8.2` (PCS082): Acrobat draws two OLIVE check marks, ~46x56 px, in
     the upper-right corner of each image, plus a smaller inline one in the
     caption. pdfce draws only the caption glyph. FAIL.
-  * `GWG 8.01` (GWG080): Acrobat draws two DARK-GREEN check marks on the
+  * `PCS 8.01` (PCS080): Acrobat draws two DARK-GREEN check marks on the
     images AND about fifteen more along the spot-colour gradient bar. pdfce
     draws none of them. FAIL.
-  * `GWG 8.1` (GWG081): same family, same result. FAIL.
-  * `GWG 5.0` (GWG050): the mark is a BLACK glyph from an embedded modified
+  * `PCS 8.1` (PCS081): same family, same result. FAIL.
+  * `PCS 5.0` (PCS050): the mark is a BLACK glyph from an embedded modified
     Symbol font, not a coloured shape. pdfce renders it correctly. PASS.
 
 ★ Note the trap in that list, because it caught this session: the mark's
 COLOUR is not a constant of the criterion. A detector keyed on one hue passes
-`GWG 8.01` by matching the green end of its gradient bar while both real
+`PCS 8.01` by matching the green end of its gradient bar while both real
 marks are missing -- a false green produced by the fix for a false green.
 Whatever adjudicates these must key on the mark's presence relative to a
 reference render, not on a colour.
@@ -149,7 +151,7 @@ catch. This tool reports what the suite asks; it does not claim more.
 
 USAGE
 =====
-    python tools/ghent-check.py <dir-of-patch-pdfs> [--scale 2.0] [--json]
+    python tools/suite-check.py <dir-of-patch-pdfs> [--scale 2.0] [--json]
 
 Out-of-tree tooling, exactly like `tools/render-parity`: never shipped,
 never in `cargo test`, never in the GUI-core `cargo tree` invariant.
@@ -179,9 +181,9 @@ CONTRAST_MIN = 6.0    # 8-bit levels; below this the X is not "clear".
 # states its criterion on its face, so the harness reads it rather than
 # carrying a hand-maintained list that can drift from the corpus.
 #
-# ★ FOUR PATCHES MATCH, NOT SEVEN. `docs/ghent-operator-review-2026-08-21.md`
+# ★ FOUR PATCHES MATCH, NOT SEVEN. `docs/suite-operator-review-2026-08-21.md`
 # §2 lists seven, from a grep of the ReadMes for "check mark", and three of
-# them -- GWG150, GWG151, GWG152 -- are wrong. Those three say on their own
+# them -- PCS150, PCS151, PCS152 -- are wrong. Those three say on their own
 # face *"If a X can be seen, Optional Content is not handled right"*: the
 # NEGATIVE criterion, which this harness already implements. Their ReadMes
 # mention a check mark only while describing what the failure cross is drawn
@@ -209,7 +211,7 @@ def find_traps(png):
     Segmenting on exact levels rather than a quantised or thresholded image
     is what makes this work, and it is not an optimisation. The trap is a
     FLAT-FILLED shape drawn in one colour over a flat swatch of another —
-    measured on GWG 16.0, a grey `178` X on a black `0` square — so the two
+    measured on PCS 16.0, a grey `178` X on a black `0` square — so the two
     are perfectly separable by value and the X falls out as one connected
     component. An edge detector sees only its outline (which is a hollow X,
     with none of the shape statistics below), and a quantiser can split two
@@ -218,7 +220,7 @@ def find_traps(png):
     values of two adjacent traps on the same patch.
 
     Shape test, all four measured on known traps before being fixed as
-    thresholds (GWG 16.0: three traps, each 38x38, fill 0.44, diag 1.00;
+    thresholds (PCS 16.0: three traps, each 38x38, fill 0.44, diag 1.00;
     every clean swatch scored below 0.05 on the diagonal measure):
 
       * bbox 16..90 px square-ish -- a swatch-sized mark, not a glyph;
@@ -259,7 +261,7 @@ def find_traps(png):
             # "near a diagonal" -- and the detector reports an X wherever a
             # slash, a chart rule or an anti-aliased corner appears. That
             # false positive is not hypothetical: it put 8 phantom traps on
-            # an Acrobat render of GWG 2.0 whose ten swatches are provably
+            # an Acrobat render of PCS 2.0 whose ten swatches are provably
             # clean, and it inflated pdfce's own failure count too. An X has
             # two arms; requiring each to hold at least a quarter of the
             # mark is what makes it an X rather than a line.
@@ -286,7 +288,7 @@ def find_traps(png):
             #
             # This is not a convenience threshold. Segmenting on exact
             # intensity found genuine X marks in all eight swatches of an
-            # Acrobat render of GWG 2.0 that is, to the eye, ten clean green
+            # Acrobat render of PCS 2.0 that is, to the eye, ten clean green
             # squares: Acrobat leaves a sub-perceptual difference. Counting
             # those made the detector STRICTER than the standard it is
             # implementing, which is its own kind of wrong answer.
@@ -342,7 +344,7 @@ def reference_similarity(png):
     test objects above a strip of REFERENCE IMAGES and say "each of these
     ... should match the reference images". On those, "no X found" is not a
     pass — it is the detector answering a question the patch never asked.
-    `GWG 16.10` is the case that exposed it: it reported clean while two of
+    `PCS 16.10` is the case that exposed it: it reported clean while two of
     its five reference cells rendered as empty boxes.
 
     Returns (correlation, mean-abs-difference). A correct render makes the
@@ -471,7 +473,7 @@ def main():
             extra = ""
         print(f"{mark} {r['patch']}{extra}")
     print()
-    print(f"ghent-check: {len(results)} patches -- "
+    print(f"suite-check: {len(results)} patches -- "
           f"{len(failed)} FAIL, "
           f"{len(clean)} pass, "
           f"{len(ref)} UNRESOLVED (reference-strip or positive-criterion), "
