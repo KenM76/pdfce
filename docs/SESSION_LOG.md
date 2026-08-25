@@ -61433,3 +61433,439 @@ watch for a second occurrence before minting.
    family ceiling **`126`**, next free **`126.2`**, unchanged; operator-
    question ceiling `(bu)`, next free `(bv)`, unchanged; filing ordinal
    **260**.
+
+## 2026-08-25 (two-hundred-and-sixty-first filing) — `Pass 127.0` SHIPS in THREE commits (`2104d38` + `35fce5f` + `768e934`, the last being the **`v0.11.0`** bump): Type 3 text searches and copies where `/ToUnicode` exists, and NAMES the dead end where it does not; ★★ a second, wider defect found by building the fixture — Table 112 gives a Type 3 font no `/BaseFont`, and ONE CLEAN UNNAMED FONT SILENCED EVERY UNNAMED FONT BEHIND IT; ★★★ and the filing's own stale finding is recorded as the transferable half — A FILING AGENT'S VIEW OF THE TREE IS A SNAPSHOT AND THE ENGINEER KEPT WORKING INSIDE IT
+
+**Sourcing, and it is MIXED this filing — the split matters before any
+figure below is quoted.** This role **held a shell** for this dispatch,
+so per hard rule 8 it says which half is which. **Checked here, command
+named:** `git rev-parse --short HEAD` → `2104d38`; `git remote -v` →
+`origin https://github.com/KenM76/pdfce.git`; `git show --stat 2104d38` →
+**12 files, 743 insertions, 19 deletions**; `ls
+fixtures/synthetic/type3/` → **5 fixture PDFs + `PROVENANCE.md`**;
+`docs/core-api/index.md` line 17 reads *"all 140 public verbs"* and
+`02-editing-and-saving.md` carries the `search_text` row; `git status
+--porcelain` → **one dirty file AT THE MOMENT THIS ROLE LOOKED** —
+committed as `35fce5f` while this filing was still being written, see
+*Still in flight* item 1 and **read that before quoting this clause**;
+backup currency by `git bundle list-heads` + `git rev-list --count`.
+**Relayed, not measured here:** `cargo test --workspace` green,
+fmt/clippy clean, 17 bare gates exit 0, `cargo tree` GUI-freedom, the
+non-vacuity A/B, the render check, and `cargo +nightly fuzz build`.
+
+**★ AMENDMENT SOURCING, added in the same filing before commit.** A
+second shell pass, after `35fce5f` and `768e934` landed, re-checked the
+tree the filing will actually be committed into: `git log --oneline`
+→ the three commits above; `git show --stat` on each; `grep -cF --
+'0.10.0' Cargo.lock fuzz/Cargo.lock` → **`0` and `0`**; `grep -n -A1
+'name = "pdfce' fuzz/Cargo.lock` → both stanzas at `0.11.0`; `ls` on
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` → the outbound note
+present at **4,641 B**; `df -h /d` → `105G` avail. **Relayed for the
+amendment, not measured here:** the 115-suite `cargo test --workspace`
+result, the 8-test `find_text` result, fmt/clippy, `check-string-gaps.sh`
+PASS, `cargo tree`, and the Windows `cargo +nightly fuzz build`
+(**exit 0, 25 targets, 4 m 20 s**) — see *For next session* item 8, which
+also records **when** the fuzz build ran relative to the bump.
+
+**Shipped:**
+
+- **`Pass 127.0`** (`2104d38`) — *"Type 3 text searches and copies, and
+  says when it cannot."* Moved to *Shipped*, top, this filing.
+
+- **★ AMENDED IN PLACE, SAME FILING, BEFORE COMMIT — the session is THREE
+  commits, not one.** The bullet above listed only `2104d38` because that
+  was the whole of the history when this role looked. It is completed
+  rather than annotated, since the sentence was never committed; the
+  *concern* the incomplete view produced is kept in full under *Findings*
+  below, because a raised-and-resolved concern is a better record than no
+  concern.
+
+  | commit | subject | what it carries |
+  |---|---|---|
+  | **`2104d38`** | *Pass 127.0: Type 3 text searches and copies, and says when it cannot* | core + CLI + fixture + **core** tests + `docs/core-api/` — 12 files, 743 insertions, 19 deletions |
+  | **`35fce5f`** | *Pass 127.0 (cont.): the disclosure is tested where the operator reads it* | the **three CLI-level tests**, `crates/pdfce-cli/tests/find_text.rs`, +114 lines, one file |
+  | **`768e934`** | *v0.11.0: a search that no longer lies by omission* | workspace version `0.10.0` → `0.11.0`, **both lock files** (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.lock`) |
+
+- **`v0.11.0` VERSION BUMP** (`768e934`) — filed as its own *Shipped*
+  entry in `ROADMAP.md`, above the `Pass 127.0` entry. **MINOR, not
+  patch**, and the reasoning is filed rather than left to be re-derived:
+  a **new public core verb** `EditSession::search_text` (**140 verbs, was
+  139**), a **new public type** `TextSearch`, and a **new
+  `TextDiagnostics` field**. Every one is **additive** —
+  `TextDiagnostics` is `#[non_exhaustive]` so no downstream struct
+  literal or exhaustive match could have existed to break, and
+  `find_text`/`find_text_with` are **behaviourally unchanged** and now
+  merely delegate — **so nothing downstream breaks.** It is still not a
+  patch: the question a version answers here is not *"did anything
+  break"* but *"can a consumer now call something they could not call
+  before"*, and a consuming project builds against `docs/core-api/`,
+  which moved **139 → 140** in the same commit as the code.
+  **Not tagged, not pushed, no release** — `CLAUDE.md` rule 8, each
+  publish is its own operator go-ahead.
+
+  **★ Why filing the bump matters and is not bookkeeping.**
+  `tools/check-commits-filed.py` treats a commit touching **`fuzz/`** as
+  CODE — and `768e934` touches `fuzz/Cargo.lock`, so `Cargo.toml` alone
+  would not have tripped it but `fuzz/` does. **`v0.10.0` was tagged over
+  exactly this shape one release ago** (`4267f84` unfiled, CI red at the
+  tag, tag moved and package rebuilt), which is the entire subject of
+  `docs/NEXT_SESSION.md` §0a. **Twice in two releases is what this entry
+  exists to prevent.**
+
+**Decisions made this session:** none. `search_text` is an **additive
+verb on an existing type**, not a crate-boundary or invariant change, so
+it earns a `ROADMAP.md` entry and a `docs/core-api/` row rather than an
+`ARCHITECTURE.md` §12 decision. Decisions ceiling stays `087`. **The
+version bump is likewise not a decision** — it is an application of the
+project's existing semver practice, and the *reasoning* is filed with the
+bump entry so the next bump is not argued from scratch.
+
+**Findings + decisions:**
+
+- **The request, and the phrasing IS the finding.** Operator, verbatim:
+  *"searching and copying Type 3 text still needs the file to carry a
+  character map."* He had **already worked out the gate himself** before
+  asking for it — the request is a statement of the constraint, handed
+  over. That closes the Backlog note the 258th filing had explicitly
+  marked *"NOT operator-requested this session"*, filed that way so the
+  status would be named rather than assumed. **It was true when filed and
+  false hours later**, which is the half-life such a flag has; both
+  sentences are kept in `ROADMAP.md` rather than rewritten (`R215` (d)).
+
+- **★★ METHODOLOGY, and the most reusable line of the session: the scope
+  SHRANK BY MEASUREMENT.** `docs/NEXT_SESSION.md` §3 queued this as *"Type
+  3 text EXTRACTION and search"*. **The extraction half turned out to be
+  shipped-and-unnamed.** `ExtractFont::resolve` routes `Subtype /Type3`
+  through `resolve_simple`, and §9.10.2 rung 1 (`/ToUnicode`) is
+  **font-subtype-agnostic** — it has been since `Pass 4`. A probe fixture
+  built **before any code was written** extracted `HI!` at
+  `via_tounicode=3`, `sourced_pct=100.0`, `failed=0`. **That single
+  measurement is why this is a DISCLOSURE Pass and not an EXTRACTION
+  Pass — checking first turned a feature into a sentence.** Scope
+  normally moves the other way; it only moves this way if the probe is
+  built **before** the implementation rather than as its test.
+
+- **What was actually missing: the dead end had no name.** A Type 3 glyph
+  is a content stream named by an **arbitrary `/CharProcs` key** (ISO
+  32000-1 §9.6.5). `/g13` carries no Unicode meaning outside its own
+  document, so **§9.10.2 method 2's precondition is false for a Type 3
+  font BY CONSTRUCTION** — `resolve_encoding` has set it false
+  unconditionally since `Pass 4`. **Rung 1 is the font's only route.**
+  Without `/ToUnicode` the text **renders perfectly** and cannot be
+  searched, copied or extracted, and pdfce reported that as an anonymous
+  `failed=N` among the ladder totals. **`CLAUDE.md` rule 4 forbids the
+  silence, not the limit.**
+
+- **Parity-plus, and evidenced rather than asserted.** Acrobat has the
+  **identical** limit and its answer is to **give up silently** —
+  `D:\Dev\Rag-Specialized\Acrobat_Features\type3fonts__extraction_editing_and_tagging.md`,
+  verified 2026-08-25, which **explicitly recommended this posture**:
+  *"report per-run 'no /ToUnicode, glyph identity unknown' rather than
+  silently returning nothing."* Same limit, disclosed. (`MEMORY.md`'s
+  *"exceed the parity reference when you can"* — divergence recorded, not
+  left implicit.)
+
+- **Shipped surface:** `FontNote::Type3NoToUnicode`, raised in
+  `resolve_simple` **from the font dictionary alone** — deliberately not
+  conditioned on whether any code actually failed, because **a document
+  whose Type 3 text sits on page 40 must not report nothing for the first
+  39**; `TextDiagnostics::type3_fonts_without_to_unicode`, the
+  **simple-font twin** of `identity_fonts_without_to_unicode`; a per-font
+  note naming the font and citing §9.6.5/§9.10.2; CLI `extract-text`
+  gains `type3_no_tounicode=` on its stable summary line (**appended,
+  never reordered**) and in its JSON; CLI `find-text` gains
+  `unreadable_codes=`, `type3_no_tounicode=`, `identity_no_tounicode=`
+  plus prose on stderr through a new `report_unsearchable_text` helper.
+
+- **New public core verb `EditSession::search_text`, and why a verb
+  rather than a field.** `find_text` returns `Vec<TextMatch>`, and **an
+  empty one has two causes with one appearance**: the needle is absent,
+  or the document's text was **never recoverable as Unicode** so no
+  needle could have matched. Nothing in `TextMatch` can distinguish them
+  — **the second case produces no `TextMatch` to carry the news**, so the
+  carrier and the thing to be carried are the same object. That is why
+  enriching `TextMatch` could not fix it.
+  `search_text(needle, &TextSearchOptions) -> TextSearch { matches,
+  diagnostics }` runs the **identical scan** and simply does not throw
+  half of it away; `find_text_with` now **delegates** to it, so **matching
+  behaviour is unchanged**. `scan_text_matches` (private) returns both
+  halves, which makes the redaction path's decision to **drop** the
+  diagnostics **a line somebody can read** instead of a fact about a
+  signature invisible from the call site — and that is precisely what
+  turns `Pass 127.1` into discoverable owed work rather than a latent
+  defect.
+
+- **★★★ THE SECOND DEFECT — WIDER THAN TYPE 3, AND THE MEASUREMENT BEAT
+  THE PREDICTION.** The per-font diagnostic de-duplicated on `/BaseFont`.
+  **ISO 32000-1 Table 112 — the Type 3 font dictionary — has NO
+  `/BaseFont` ENTRY AT ALL.** A conformant Type 3 font therefore has **no
+  name**, and every unnamed font on a page shared **one slot** in
+  `fonts_seen`. **A/B'd rather than reasoned about, and the prediction was
+  written down first — which is the only reason the surprise is legible.**
+  The expectation was that **N** unnamed dead ends would report as **`1`**.
+  Reverted to the old key and re-run against the new fixture, the counter
+  reported **`0`**: `/TA` is unnamed too, is resolved **first**, carries a
+  `/ToUnicode` and therefore has **no note to emit**, so it **claimed the
+  empty key** and both later fonts were skipped before their notes were
+  ever read. **One CLEAN unnamed font silenced every unnamed font behind
+  it.** Filed in the form hard rule 10 requires: **predicted `1`, measured
+  `0`, over a fixture of 3 Type 3 fonts of which 2 are dead ends** — the
+  denominator is what makes `0` read as *"all of them suppressed"* rather
+  than *"one fewer than expected"*. The doc comment, the test rationale
+  and the fixture's `PROVENANCE.md` were **all corrected to the measured
+  value**, not the predicted one.
+
+- **The fix, and the naming half of it.** A **named** font still
+  de-duplicates by name; an **unnamed** one falls back to the `(resource
+  dict ptr, resource name)` identity `select_font` **already computes** —
+  no new identity invented. And such a font is now **NAMED BY ITS
+  RESOURCE KEY** — `/TB`, `/TC` — because with no `/BaseFont` to quote
+  **that is the only handle the operator has**. `<unnamed>` was accurate
+  and unusable, and became **actively misleading** the moment two such
+  fonts could be reported on one page.
+
+- **★ The defect was NOT Type-3-specific.** It suppressed
+  `UnknownSubtype`, `BuiltinEncodingUnreadable` and **every other
+  per-font note** for any font with a missing or malformed `/BaseFont`.
+  **It was found only because Type 3 makes namelessness the CONFORMANT
+  case** — everywhere else a nameless font is a defect, so the bug hid
+  behind the rarity of its own trigger.
+
+- **The fixture is built to fail three specific wrong readers.**
+  `fixtures/synthetic/type3/tounicode_gate.pdf`, from
+  `tools/gen-type3-fixtures.py` (**5 fixture PDFs now, was 4** — verified
+  by `ls`). `/TA` carries a `/ToUnicode` and must extract as `HI!` — **the
+  CONTROL**, without which every other assertion would **also pass for a
+  reader that extracts nothing from any Type 3 font at all**. `/TB` and
+  `/TC` carry none and are **two fonts, not one**, so *"the counter reads
+  exactly 2"* is a claim about the **de-duplication key**. Glyphs are
+  named `/ga1`, `/gb1`, `/gc1` — **deliberately non-standard**, because
+  pdfce keeps a **counted extension beyond Acrobat** (a Type 3 glyph named
+  `/A` still resolves through the AGL and is counted as
+  `via_glyph_name_extension`, not sourced); non-standard names **shut that
+  door**, so the dead end is **measured** rather than papered over by a
+  lucky name. Renders correctly (`type3_glyphs=5`,
+  `unsupported_type3=0`), **verified by rendering the page and looking at
+  it**, not only by reading counters.
+
+- **★ `tools/check-string-gaps.sh` caught FOUR eaten line continuations,
+  and the gate found them where a re-read did not.** Root cause: the patch
+  script used a **NON-RAW** Python triple-quoted string, in which a
+  trailing backslash before a newline is a **Python** line continuation
+  and consumes **both the backslash and the newline**. The result
+  **compiles** — a valid Rust string with the next line's indentation
+  baked into the middle of the sentence. **Second occurrence of the
+  wrapped-literal class in this project.** Escalated as a **dated
+  amendment** to the existing `D:\dev\rag\rust\` finding rather than a new
+  file (hard rule 4).
+
+- **Verification, relayed:** `cargo test --workspace` green with **5 new
+  tests** in `crates/pdfce-core/tests/text_extract.rs` (**43** in that
+  file now); **non-vacuity A/B'd — reverting the de-dup key made 3 of the
+  5 fail**; fmt and `clippy --workspace --all-targets -- -D warnings`
+  clean; **all 17 bare gates exit 0** (**18 scripts on disk**;
+  `check-image-colorspace-truth.py` takes an argument and is not a bare
+  gate — **counted this session, not quoted from a prior handoff**,
+  `R209`); `cargo tree -p pdfce-core` / `-p pdfce-render` carry **no GUI
+  dependency**; `docs/core-api/` updated **in the same commit**, every
+  stated count **139 → 140**, `check-core-api-verbs.py` green;
+  `cargo +nightly fuzz build` on Windows run this session, green.
+
+- **★★ Hard-rule-11 sweep — searched for the CLAIM, not for a string.**
+  The capability *"Type 3 text cannot be extracted or searched"* changed
+  meaning, so every place describing it was read. **Two stale survivors
+  found and fixed this filing:** `FEATURES.md` L234's closing
+  cross-reference (*"a separate row, **Planned**"* — the exact
+  cross-reference that goes wrong when only one of two rows is updated),
+  and `ROADMAP.md`'s Pass 1.1 item 4 footer (*"remains open"*). **One
+  survivor found and deliberately LEFT:**
+  `crates/pdfce-render/src/type3.rs` L88–92, *"What this module does NOT
+  do → No text extraction"* — **not stale**, because it is a claim about
+  *that module*, and extraction lives in `pdfce-core::text_extract`. Read
+  and judged, not skipped. **One reported, not edited:**
+  `docs/NEXT_SESSION.md`, engineer-owned — see *For next session*.
+
+**Still in flight:**
+
+- **★★★ RAISED AND RESOLVED — NOT still in flight, and kept here rather
+  than deleted.** What this bullet said when first drafted is preserved
+  verbatim, because it shows the check ran and what closed it:
+
+  > **★ `crates/pdfce-cli/tests/find_text.rs` is DIRTY and holds this
+  > Pass's own CLI tests — found by this filing's shell, not reported in
+  > the dispatch.** `git status --porcelain` shows **+112 lines, 3
+  > `#[test]` functions** —
+  > `a_search_discloses_the_text_it_could_not_read`,
+  > `a_zero_hit_search_still_says_what_was_unreadable`,
+  > `a_fully_readable_document_gets_no_warning` — headed *"`Pass 127.0` —
+  > a zero match count is not evidence the needle is absent"*. **They are
+  > NOT in `2104d38`**, whose stat lists
+  > `crates/pdfce-core/tests/text_extract.rs` and no CLI test file. **So
+  > the commit ships the `find-text` disclosure without the tests that
+  > prove it**, and the green `cargo test --workspace` was green in a tree
+  > containing three tests no future checkout will have. Engineer's to
+  > commit; this role does not touch `crates/`.
+
+  **Resolution: `35fce5f`.** The three tests are committed, one file,
+  +114 lines. `cargo test -p pdfce-cli --test find_text` → **8 passed**
+  against the final tree. **The Pass ships WITH the tests that prove it.**
+  The concern was real, this filing raised it, and it was already
+  discharged before this filing was committed.
+
+  **★★ The reason it went stale is the finding — record this, not the
+  correction. NEITHER PARTY WAS WRONG.** The engineer wrote those tests
+  **after dispatching this role** and committed them **while this role was
+  still working**. The observation was accurate at the instant of
+  `git status` and obsolete at the instant of filing.
+
+  **This is `R218`'s shape one scale further out.** `R218` records that *a
+  check whose input set is "what is committed" cannot see the commit about
+  to be made*. Here the same gap opens between two **agents**:
+
+  > **A FILING AGENT'S VIEW OF THE WORKING TREE IS A SNAPSHOT, AND THE
+  > ENGINEER KEPT WORKING INSIDE IT.** Every `git status`, `git show
+  > --stat` and `git log` a librarian runs describes the tree at
+  > **dispatch-plus-ε**, not the tree the filing will be committed into.
+  > The dispatch-then-continue pattern — the **normal and correct** way
+  > this project works, and not being argued against — means the two are
+  > routinely different.
+
+  **What it produced here: a *"the commit ships without its tests"*
+  finding that was already stale when it was written.** Not false, not
+  careless, and **not fixable by looking harder** — the input moved. That
+  is what makes it worth naming, because the instinctive correction
+  ("check more carefully") does not address it and would not have caught
+  it.
+
+  **The mitigation already exists; this is its reason, seen from the
+  librarian's side.** `docs/NEXT_SESSION.md` §0a — *"the filing commit
+  must be the LAST commit before the tag"* — was minted from the **release**
+  side, after `v0.10.0` was tagged over an unfiled bump. **Put the filing
+  commit last and every snapshot the filing took is reconciled against the
+  tree the filing lands in, because nothing else lands after it.** The
+  ordering cannot make a librarian's snapshot fresher; it makes the
+  staleness **harmless**, which is the only property that can actually be
+  guaranteed.
+
+  **Cheap corollary for this role:** any claim of the form *"X is missing
+  from the record / from the commit"* is a claim about a **snapshot** and
+  should be written as one — *"at the moment this role looked"* — not as a
+  property of the history. The 261st filing's Sourcing block in
+  `ROADMAP.md` has been amended to that wording. **A finding about ABSENCE
+  is the one class a concurrent commit can invert, and it is exactly the
+  class librarians produce most.**
+
+  *(Observation, not a mint: n=1 for this inter-agent form, and `R218`
+  plus §0a between them already carry the obligation. Standing-rule
+  ceiling stays `R218`. If it recurs, the mint is `R219` and this is its
+  first occurrence.)*
+- **`Pass 127.1`** filed to *Backlog* — `mark_redactions_by_search` still
+  drops the diagnostics the scan now returns.
+- **Type 3 EDITING remains out of scope**, and it is an **evidenced**
+  "nothing to copy": Acrobat has no in-place path for it either, per the
+  parity RAG.
+
+**For next session:**
+
+1. **`docs/NEXT_SESSION.md` needs two corrections, and this role did not
+   make them** — that file is engineer-owned. **§3 queue item 1 (*"Type 3
+   text EXTRACTION and search"*) is DONE**; items 2–12 are untouched.
+   **§4's bullet *"Type 3 text cannot be extracted, searched or edited"*
+   is now WRONG for the first two verbs** and must be narrowed to
+   **editing only**, with the `/ToUnicode` gate stated as the shipped
+   behaviour rather than the blocker.
+2. ~~**Commit the three dirty CLI tests** (item 1 of *Still in flight*),
+   or say deliberately why they are held back.~~ **DONE before this filing
+   was committed — `35fce5f`.** Struck rather than deleted; see *Still in
+   flight* item 1 for why the item existed and what the staleness teaches.
+2a. **★ TAG `v0.11.0` — AND THE FILING COMMIT CARRYING THIS ENTRY MUST BE
+   THE LAST COMMIT BEFORE IT** (`docs/NEXT_SESSION.md` §0a). All three
+   code commits of this session (`2104d38`, `35fce5f`, `768e934`) are
+   named in `ROADMAP.md` and here, so `tools/check-commits-filed.py` has
+   a citation for each the moment the filing lands on top of them. **Do
+   not tag first.** `v0.10.0` did, one release ago, and cost a red CI, a
+   forced tag move, a package rebuild and a re-run smoke test. **The
+   release itself still needs its own operator go-ahead** (item 5).
+3. **`Pass 127.1` is the natural next take** — small, unblocked, and the
+   more dangerous of the two silences it descends from. **The outbound
+   note to `pdfceGUI` already warns that project about it by name**, so
+   the gap is now visible from two trees rather than one — see item 7.
+4. **Backup currency, CHECKED this filing rather than asserted:** the
+   newest bundle `D:\Dev\pdfce-backups\pdfce-20260825-0218-full.bundle`
+   holds `refs/heads/main` at `81e5aab`, **25 commits behind `2104d38`**
+   (`git bundle list-heads` + `git rev-list --count 81e5aab..HEAD`). The
+   259th and 260th filings both declined to state a figure; here is one,
+   with its command. Two releases have now shipped with no fresh bundle.
+5. **The next push and the next release each need their own operator
+   go-ahead** (`CLAUDE.md` rule 8) — unchanged.
+6. **Ledger:** standing rules ceiling **`R218`**, next free **`R219`**,
+   unchanged — **no mint this filing**, and none proposed; decisions
+   ceiling **`087`**, next free **`088`**, unchanged; **Pass family
+   ceiling `126` → `127`**, next free **`127.2`** (`127.0` shipped,
+   `127.1` filed to *Backlog* this filing); operator-question ceiling
+   `(bu)`, next free `(bv)`, unchanged; **workspace version `0.10.0` →
+   `0.11.0`** (`768e934`, filed as its own *Shipped* entry, **added by
+   this filing's amendment** — the version had not moved when the rest of
+   this ledger was written); **filing ordinal 261** — this amendment is
+   part of the 261st filing, **not a 262nd**.
+
+7. **★ THE OUTBOUND HAND-OFF IS NAMED HERE ON PURPOSE — a cross-project
+   deliverable recorded only in the PRODUCING tree has been FILED, not
+   HANDED OFF.**
+   `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`
+   `2026-08-25-a-zero-result-search-is-not-proof-the-word-is-absent.md`
+   *(verified by `ls` this filing: 4,641 B, written 2026-08-25 18:37 —
+   the same minute as `2104d38`).* **What it asks pdfceGUI to do**, so the
+   obligation is legible from this tree without opening it: **(a)** swap
+   the Find bar from `find_text_with` to **`search_text`**, because the
+   former cannot distinguish *"the needle is absent"* from *"this text was
+   never readable"*; **(b)** treat
+   **`docs/core-api/01-reading-and-model.md` §8.5** as the real
+   documentation — the note is a pointer, not a substitute; **(c)** an
+   explicit warning that **`mark_redactions_by_search` does NOT disclose
+   yet** (`Pass 127.1`, *Backlog*, unshipped), so the GUI does not wire a
+   redaction path on the assumption that the search fix covered it.
+   **`[ ] gui` stays unticked** — the note has been sent, nothing is
+   wired.
+
+8. **Verification against the FINAL tree** (all three commits present),
+   distinct from the figures relayed against `2104d38` earlier in this
+   entry:
+
+   | check | result |
+   |---|---|
+   | `cargo test --workspace` | **115 test suites, all `ok`, 0 failed** |
+   | `cargo test -p pdfce-cli --test find_text` | **8 passed** — a claim about `35fce5f` having landed, not merely about the suite running |
+   | `cargo fmt --check` | clean |
+   | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+   | `tools/check-string-gaps.sh` | **PASS** |
+   | `cargo tree -p pdfce-core` / `-p pdfce-render` | **no GUI dependency** (`CLAUDE.md` rule 2) |
+
+   **★ `cargo +nightly fuzz build` ON WINDOWS: exit `0`, 25 targets,
+   4 m 20 s — NOT OWED, RUN ANYWAY.** Nothing in `2104d38` or `35fce5f`
+   touched `fuzz/` or any `Cargo.toml`, so no rule demanded it. It was run
+   because **CI's fuzz job is `ubuntu-latest` and is structurally blind to
+   the MSVC-only link class repaired yesterday** — a green CI is not
+   evidence for *this* platform, and building on it is the only thing that
+   is. **NOTE for accuracy: it ran BEFORE `768e934`, which DID touch
+   `Cargo.toml` and `fuzz/Cargo.lock`.** A version-string bump cannot break
+   a link — same symbols, same crate graph, same object layout — so the
+   result is not in doubt; but it **ran before**, not after, and saying so
+   costs a sentence and stops a future reader treating it as a post-bump
+   measurement it is not.
+
+   **Both lock files verified by measurement, not by assuming a build
+   touched them:** `grep -cF -- '0.10.0' Cargo.lock fuzz/Cargo.lock` →
+   **`0` and `0`**; every workspace crate and both `pdfce-*` stanzas
+   inside `fuzz/Cargo.lock` read `0.11.0`. **`fuzz/Cargo.lock` sits
+   outside the workspace**, so no ordinary `cargo build` refreshes it —
+   it was stranded at `0.7.0` for two releases by exactly that assumption.
+
+   **Disk:** `target/debug` had reached **92 GB with the volume 98 %
+   full** — the condition that killed a packaging run on 2026-08-23.
+   **`target/debug` deleted, and ONLY `target/debug`** — never
+   `cargo clean`, which would also drop the warm `target/release` and buy
+   a full rebuild for nothing. **104 GB free** afterwards. *(`df -h /d`
+   here reads `954G` / `105G` avail / **90 % used** — drifted by the
+   ordinary work of the session since, which is why the command is
+   recorded and not only the number.)*
