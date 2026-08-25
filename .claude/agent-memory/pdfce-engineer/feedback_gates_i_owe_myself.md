@@ -95,5 +95,43 @@ defect in two spellings.
 
 ---
 
+## THIRD RECURRENCE, 2026-08-25 -- AND THE STAND-IN THIS FILE RECOMMENDS CANNOT SEE IT
+
+The whole fuzz harness had been **unbuildable for weeks** and nothing said
+so. `pdfce-core`'s default features include `ocrs`, which pulls the `rten`
+inference runtime; `rten` builds a **cdylib**, and cargo-fuzz applies
+libFuzzer's `/include:main` to every link in the graph, so the cdylib is
+asked to export a `main` it does not have. Every target in the directory
+died with `LNK2001: unresolved external symbol main`. Confirmed pre-existing
+by building `parse_object`, untouched since long before OCR landed.
+
+It surfaced only because a new Pass added a target and I tried to build it.
+
+**The new information, and it is a correction to the "how to apply" above:**
+
+> `python tools/check-ci-parity.py --list` names the local stand-in for the
+> fuzz job as **`cd fuzz && cargo check --bins`**, and this memory recommends
+> it as the cheap catch-all.
+
+**A/B'd on 2026-08-25: `cargo check --bins` passes in BOTH states** -- with
+the broken feature set and with the fixed one. `cargo check` **never links**,
+and the break is a *link* break. So the stand-in is a compile check wearing a
+build check's name, and it is structurally incapable of catching the entire
+class this recurrence belongs to.
+
+★ Note the shape rather than the fix: the previous amendment identified "the
+local sweep is not CI's set" and prescribed a stand-in. The stand-in was
+cheaper than the real thing **because it did less**, and the thing it did not
+do is exactly where the next failure lived. **A cheap proxy for a gate is a
+proxy for the part of the gate that is cheap.**
+
+**How to apply, corrected:** for the fuzz job the only honest local check is
+`cargo +nightly fuzz build <target>` -- about four minutes warm, and it must
+be run at least once per session that touches `fuzz/` **or any crate's
+Cargo.toml**. A dependency change is a fuzz-harness change, which is not
+obvious and is how this one landed.
+
+---
+
 Related: [[run-the-projects-own-gates]] (the gate set is wider than fmt/clippy/
 tests), [[fuzz-asan-dll]] (why running one is not one command on this machine).

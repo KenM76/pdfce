@@ -165,6 +165,28 @@ different quoting form, do not double anything. The diagnosis is already
 written above and it never changes. The loud mode is the lucky one; the same
 call could have half-applied.
 
+**★ 2026-08-25 — TWICE MORE, and what is new is WHO CAUGHT IT.** Two Rust
+line continuations lost their trailing backslash to a heredoc, so two string
+literals shipped with a ten-space hole mid-sentence. Same mode as 2026-08-17,
+nothing new about the cause.
+
+What is new: **`tools/check-string-gaps.sh` caught both.** This project now
+owns a gate for exactly this defect, so the failure mode has moved from
+"ships silently" to "fails a gate" — which is a real improvement and also a
+trap, because it makes the heredoc feel survivable. It is not: the gate only
+sees a *run of three or more spaces*, so a continuation lost at a word
+boundary, or one that produces a doubled word rather than a gap, still ships.
+
+★★ And the second one survived a full gate sweep. The sweep ran, went green,
+and then the file was edited once more. **A gate answers a question about the
+tree it was run on, not the tree that follows** — the same shape as the
+`git ls-files` finding the same day, one scale down. Run the string gate
+again after the LAST edit, not after the last batch of edits.
+
+Operationally unchanged and now three-times reinforced: **every edit that went
+through a script Written to a file was fine; every one that went through a
+heredoc was not.**
+
 Related: [[absence-needs-an-unscoped-query]] — same family. Both are cases
 where a tool returned something that *looked* like a normal result, and the
 only defence was checking with an instrument rather than with a glance. Also
