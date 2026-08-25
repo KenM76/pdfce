@@ -654,10 +654,20 @@ pdfce does not have yet.
 
 ## §5 — THE TWO OPERATOR ITEMS
 
-- **PUSHING — NOT AUTHORISED for anything after `v0.8.0`.** Ken's
-  *"Relese everything to github and include the banana pdf"* discharged the
-  `v0.8.0` release and **does not carry forward**. `v0.8.1` needs its own
-  go-ahead (`CLAUDE.md` rule 8). **Nothing from this session has been pushed.**
+- **PUSHING — DISCHARGED 2026-08-25 for that day's work, and it does NOT carry
+  forward.** Ken said *"push"* after the suite-name scrub; `main` went to
+  `origin` at `15c3310`, six commits, and `origin/main` now matches local.
+  That authorisation covered **that push**. The next one needs its own
+  go-ahead (`CLAUDE.md` rule 8), and so does any **release** — a push is not a
+  release, and `v0.8.1` was neither asked for nor cut.
+  ★ **One judgement was made inside that push and a future session should know
+  it.** Three of the six commits ADD mentions of the scrubbed suite name in
+  their diffs — they predate the scrub, which removes them again at the tip.
+  Squashing would have kept those out of public history and was **rejected**:
+  `ROADMAP.md` and `SESSION_LOG.md` already cite `7b1f47a` and `ba8f31f` by
+  hash, so a squash would have falsified filings the gates check. Net exposure
+  is ~48 mentions in intermediate diffs of a history that already carried
+  thousands; the tip is clean.
 - **CUTTING A BACKUP — STILL NOT DISCHARGED.** A GitHub release is an offsite
   copy of one build and one PDF; it is **not a `git bundle`** and does not
   contain the history. **Re-measure before quoting** —

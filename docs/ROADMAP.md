@@ -96,6 +96,129 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `15c3310` — THE FIRST PUSH SINCE `v0.8.0`: SIX COMMITS, `81e5aab`→`15c3310`, ON THE OPERATOR'S ONE-WORD AUTHORISATION ("push") — NOT A RELEASE, NO TAG; A SQUASH THAT WOULD HAVE HELD ~48 REPUBLISHED SUITE-NAME MENTIONS TO ZERO WAS CONSIDERED AND REJECTED, BECAUSE IT WOULD HAVE FALSIFIED `ROADMAP.md`'S/`SESSION_LOG.md`'S OWN HASH CITATIONS — no Pass ID, no decision — 2026-08-25 (two-hundred-and-fifty-third filing)
+
+**Sourcing.** No shell this filing (librarian invocation). Every figure below
+is **relayed** from the engineer's dispatch, which states each one as
+"measured, none inferred" and names the command that produced it (`git push`,
+`git fetch`, `git log`, `git show --stat` per-commit). Per hard rule 8, this
+is the correct posture for a shell-less filing: report the figure and say
+which — not silence, not an inferred number.
+
+---
+
+#### The authorisation, and its scope
+
+**Operator, verbatim, 2026-08-25, given immediately after being briefed on
+the suite-name scrub (the 252nd filing, above): *"push"***. Under `CLAUDE.md`
+rule 8 that is an explicit, current go-ahead — and, per that same rule,
+**it covers this push only**. It is **not** a release: no tag, no `v0.8.1`,
+no GitHub release asset. **★ The authorisation is DISCHARGED by this filing
+and does NOT carry forward** — the next push, whenever it happens, needs its
+own word from Ken, exactly as `v0.8.1` will need its own per the `v0.8.0`
+entry above.
+
+---
+
+#### The push, as measured
+
+| what | measured |
+|---|---|
+| `origin/main` before | `81e5aab` |
+| `origin/main` after | `15c3310` — confirmed by `git fetch` + re-check, local `main` matches |
+| commits pushed | **six**, oldest first: `4163ad9`, `97ab4d2`, `7b1f47a`, `ba8f31f`, `d401b92`, `15c3310` |
+| diff shape | 62 files, +4242/−1618 |
+
+---
+
+#### ★ The judgement call inside the push — republishing scrubbed material versus falsifying a citation
+
+Three of the six commits (`7b1f47a`, `97ab4d2`, `d401b92`) **predate** the
+252nd filing's suite-name scrub and therefore **re-add** mentions of the
+name the operator ruled out of the public repository; `15c3310` removes them
+again at the tip. Pushing this run therefore put roughly **48 mentions** that
+had never before been public into history, inside those three intermediate
+commits — on top of the thousands already there from before 2026-08-09
+(`(bt)`'s ruling, 252nd filing, above).
+
+**Squashing the six into one commit was considered and rejected.** The
+reason is the finding, not the number: `docs/ROADMAP.md` and
+`docs/SESSION_LOG.md` **already cite `7b1f47a` and `ba8f31f` by hash** (this
+very Shipped section, the `Pass 124.0` entry immediately below, and its
+`ba8f31f` addendum) — both files are actively checked by
+`tools/check-commits-filed.py` / `tools/check-passes-filed.py` for exactly
+this kind of citation. A squash changes every commit hash downstream of the
+squash point, which would have **falsified those citations retroactively**,
+in files whose entire purpose is to be a trustworthy audit trail. The tip
+(`15c3310`) is clean of both forbidden terms; `tools/check-suite-name-
+absent.py` exits `0` against it.
+
+**Stated plainly: two of this project's own commitments were weighed against
+each other, and citation integrity won over minimising republished
+exposure** of material already 16 days public in bulk. This is a genuine
+tension, not a false one, and it will recur the next time a scrub follows
+commits that are not yet pushed.
+
+**Standing-rule bar — NOT met at this filing, and said so rather than
+silently declined.** One related-but-distinct precedent exists: the 2026-08-09
+history-handling decision (`(bh)`, Backlog/Standing-rules region above,
+*"THIS DOES NOT CLEAR GIT HISTORY"*) also considered and rejected squashing —
+but that was pre-first-publish, weighing history-rewrite/squash/accept against
+a **confidentiality** exposure, not against an **already-cited hash**. The
+mechanism being protected differs (confidentiality vs. this project's own
+citation-verification gates), so this is judged a **first occurrence** of
+*this specific* tension, not a second instance of the earlier one. Recorded
+here so a future session recognises the second occurrence if one arrives,
+rather than re-deriving the trade from scratch.
+
+---
+
+#### `FEATURES.md`
+
+**No row changes.** Nothing shipped — a push moves bytes to a remote, it
+does not add a capability.
+
+---
+
+#### `ARCHITECTURE.md`
+
+No decision minted, no body-section change — this is a publish-timing act
+under existing rule 8, not an architectural decision.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `124`, next free `125` | unchanged — no Pass shipped by this filing |
+| decisions (`ARCHITECTURE.md` §12) | **087** | unchanged — no architectural decision. Next free **088** |
+| standing rules | **R217** | unchanged — squash-vs-citation tension recorded but NOT minted (n=1, see above). Next free **R218** |
+| open operator questions | ceiling `(bu)` | unchanged — nothing new opened or closed by this filing. Next free **(bv)** |
+| SESSION_LOG filing ordinals | **252** | **253** |
+| push/backup status | *"except pushing and cutting a backup, both his acts"* (recurring ledger note across many prior entries) | **pushing is now DISCHARGED for this run and does not carry forward** — the next push needs its own operator word. Cutting a backup remains open and unmeasured by this filing (no shell; per hard rule 8, backup currency is not asserted from here). |
+
+**Backup currency and CI state: not independently checked this filing** —
+no shell. Nothing above asserts either; both remain the engineer's or a
+future shelled filing's to check.
+
+**★ A correction, named as one, with its world-source stated (hard rule
+10's corollary).** The operator-question row above reads `(bu)`, not `(bt)`
+as `SESSION_LOG.md`'s 252nd-filing ledger recorded ("operator-question
+ceiling `(bt)`, next free `(bu)`"). **That ledger entry was already stale
+at the moment it was written** — this document's own *Open operator
+questions* section (immediately below, "NEW 2026-08-25 (two-hundred-and-
+fifty-second filing)") shows the `(bu)` question filed **within that same
+252nd filing**, after the `(bt)` closure that the SESSION_LOG ledger row
+was counting. Verified by `Read`/`Grep` directly against this file's own
+*Open operator questions* section this filing (lines given in the ledger
+row above), not by trusting the prior ledger figure. `SESSION_LOG.md`'s
+own record is left uncorrected in place, per this project's append-only
+discipline for that file — an amendment footer belongs there, not a
+silent edit, and is left to whichever filing next touches that entry.
+
+---
+
 ### `7b1f47a` — `Pass 124.0` ships: `tools/intent-census/`, and a rendering-intent population pdfce had no number for is now measured — 12 of 51 suite print files name an intent, 1 names two, none names more; `/DestOutputProfile` is exactly one per document in 51 of 51 — 2026-08-25 (two-hundred-and-fifty-first filing)
 
 **Sourcing.** No shell in this filing (librarian invocation). The measurement

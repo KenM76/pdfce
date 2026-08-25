@@ -60547,3 +60547,96 @@ cannot alter behaviour). Filed as an addendum to the `Pass 124.0`
    ceiling `087`, next free `088`; Pass family ceiling `124`, next free
    `125`; operator-question ceiling `(bt)`, next free `(bu)`; filing
    ordinal **252**.
+
+> **★ AMENDED 2026-08-25 (two-hundred-and-fifty-third filing).** The
+> operator-question figure above was already stale when written: this
+> filing's own *Open operator questions* section in `docs/ROADMAP.md`
+> shows the `(bu)` question filed **within this same 252nd filing**,
+> after the `(bt)` closure this ledger row was counting from. Correct
+> figures: ceiling **`(bu)`**, next free **`(bv)`** — verified by
+> `Read`/`Grep` directly against `docs/ROADMAP.md`'s *Open operator
+> questions* section, not carried forward from this row. Left in place
+> per this file's append-only discipline; not rewritten.
+
+## 2026-08-25 (two-hundred-and-fifty-third filing) — the first push since `v0.8.0`: six commits, `81e5aab`→`15c3310`, on the operator's one-word go-ahead; a squash was weighed against this project's own hash citations and lost
+
+**Shipped:**
+
+- **No commit from this filing** (librarian invocation, no shell). The
+  event filed is `git push origin main`, executed by the engineer, moving
+  `origin/main` from `81e5aab` to `15c3310` — six commits, 62 files,
+  +4242/−1618. `git fetch` confirms `origin/main` now matches local `main`.
+  **Not a release** — no tag, no `v0.8.1`, no GitHub release asset.
+
+**Decisions made this session:**
+
+- **None minted.** The governing act is the operator's own one-word
+  authorisation, not an architectural decision — see Findings below.
+
+**Findings + decisions:**
+
+- **The authorisation, verbatim: *"push"*** — Ken, 2026-08-25, given
+  immediately after being briefed on the suite-name scrub (the 252nd
+  filing). Under `CLAUDE.md` rule 8 that is an explicit, current
+  go-ahead, and per that same rule **it covers this push only**. ★ **It
+  is DISCHARGED by this filing and does NOT carry forward** — the next
+  push needs its own word from Ken, exactly as `v0.8.1` will need its own.
+- **The six commits, oldest first:** `4163ad9`, `97ab4d2`, `7b1f47a`,
+  `ba8f31f`, `d401b92`, `15c3310`. All figures relayed from the engineer's
+  dispatch, which reports them as shell-measured (`git push`, `git fetch`,
+  `git log`), not inferred — this filing itself has no shell (hard rule 8).
+- **★ The judgement call inside the push, filed to `docs/ROADMAP.md`'s new
+  top Shipped entry (`` `15c3310` ``) in full, summarised here.** Three of
+  the six commits (`7b1f47a`, `97ab4d2`, `d401b92`) predate the scrub and
+  re-add the suite name; `15c3310` removes it again at the tip. Pushing
+  therefore put roughly **48 mentions** that had never before been public
+  into history, on top of the thousands already there from before
+  2026-08-09. **Squashing the six into one commit was considered and
+  rejected**, because `docs/ROADMAP.md` and `docs/SESSION_LOG.md` already
+  cite `7b1f47a` and `ba8f31f` by hash, and `tools/check-commits-filed.py`/
+  `tools/check-passes-filed.py` actively verify those citations — a squash
+  would have rewritten those hashes and falsified the citation. **Two of
+  this project's own commitments were weighed against each other, and
+  citation integrity won** over minimising republished exposure of
+  material already 16 days public in bulk. The tip is clean;
+  `tools/check-suite-name-absent.py` exits `0` against it.
+- **Standing-rule bar — checked, not met, said so rather than declined
+  silently.** One related precedent exists (the 2026-08-09 `(bh)`
+  history-handling decision, also a squash-considered-and-rejected), but
+  it weighed squash against a **confidentiality** exposure, not against an
+  **already-cited hash** — a different mechanism. Judged a first
+  occurrence of *this* specific tension. Recorded in `docs/ROADMAP.md`'s
+  new entry so a second occurrence is recognised rather than re-derived.
+- **★ A ledger correction, caught while filing this entry, not related to
+  the push itself.** The 252nd filing's own `SESSION_LOG.md` ledger read
+  "operator-question ceiling `(bt)`, next free `(bu)`" — already stale
+  when written, because `docs/ROADMAP.md`'s *Open operator questions*
+  section shows the `(bu)` question filed within that same 252nd filing,
+  after the `(bt)` closure the ledger row was counting. Correct figures:
+  ceiling **`(bu)`**, next free **`(bv)`** — verified by reading
+  `docs/ROADMAP.md` directly this filing. Amendment footer added to the
+  252nd filing's entry, above; not rewritten, per this file's append-only
+  discipline.
+
+**Still in flight:**
+
+- **Cutting a backup** remains open and unmeasured by this filing — no
+  shell, and per hard rule 8 backup currency is never asserted from
+  documents. `D:\Dev\pdfce-backups\` needs a direct check by whoever has
+  a shell next.
+- **`(bt)`'s untracking question and `(bu)`'s history-retraction
+  question** both remain open, unaffected by this filing — see the 252nd
+  filing's entry, above, and `docs/ROADMAP.md`'s *Open operator
+  questions* section for both.
+
+**For next session:**
+
+1. The next push, whenever it happens, needs its own explicit operator
+   word — this one does not carry forward.
+2. `docs/NEXT_SESSION.md` §0/§5 already reflects the push (engineer-owned,
+   not edited by this filing).
+3. No `FEATURES.md` change — nothing shipped, a push is not a capability.
+4. Ledger: standing rules ceiling stays `R217`, next free `R218`;
+   decisions ceiling `087`, next free `088`; Pass family ceiling `124`,
+   next free `125`; operator-question ceiling **`(bu)`** (corrected this
+   filing), next free **`(bv)`**; filing ordinal **253**.
