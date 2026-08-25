@@ -23429,6 +23429,58 @@ change nothing either; a fix needs both. Scoped as `Pass 122.6`
 obligation point 3 already establishes, found late because nobody had
 checked the second call site.
 
+**★ AMENDED AGAIN 2026-08-25 (248th filing, `Pass 122.6`, `c743a69`, no new
+decision number) — the coupled fix shipped, for a bounded source population,
+and the bound is itself worth recording as an invariant.** `ColorSpace::
+to_cmyk` returns the file's own authored colorants or `None` — `None` for
+`DeviceGray`/`DeviceRgb` deliberately, because pdfce claiming components a
+document never named would be the same defect this decision's point 3
+forbids, aimed at input rather than output. `ColorRamp::at_cmyk` builds its
+CMYK samples in the **same loop, from the same `comps`**, as `ColorRamp::
+build`'s sRGB samples, so the two representations of one ramp cannot
+describe different points of it; `CmykBuffer::composite_overprint_varying`
+is the per-pixel-varying-source twin of the existing solid-colour overprint
+composite (§2 above), needed because a shading's colour is not one value.
+
+**The guard, which is the part likely to be re-litigated by a future
+session that only reads the counter:** the route is taken **only** for a
+`Separation`/`DeviceN` source. **Table 149's `DeviceCmykDirect` row under
+`/OPM 1` is the one VALUE-DEPENDENT cell in the table** — a zero tint
+selects the backdrop, a non-zero one selects the source (§11.7.4.3) — so
+its rule cannot be decided once per shading the way a fixed-colorant
+ramp's can. A `DeviceCMYK`-sourced shading under overprint therefore
+**keeps the sRGB bridge and keeps reporting itself unsupported**
+(`overprint_shadings_unsupported`) rather than being silently routed
+through a rule that does not hold for it. This is the same
+representability distinction §11.4.6's isolated/non-isolated split and
+this decision's own §2/§4 already turned on, applied a third time: **do
+not build a once-per-object shortcut for a rule the spec states
+per-pixel.**
+
+**One geometry walk, not two.** `sample_at()` — the pixel-centre-and-
+`/BBox` coverage predicate a shading's paint already used — was extracted
+and is now called by both the normal paint route and the new overprint
+route, rather than reimplemented for the second. Two copies of that
+predicate are two things that can silently disagree about which pixels a
+shading covers, and the disagreement would show as coverage that changes
+only when a page happens to composite in ink — exactly the kind of drift
+nothing in the existing test suite would catch. Small-scale instance of
+decision 084's shared-predicate rule; verified neutral by diffing Ghent
+against the pre-refactor binary (27,091 pixels, matching `Pass 122.5`'s
+own figure exactly, i.e. this refactor changed nothing on its own).
+
+**Measured result, recorded as a large improvement and explicitly NOT a
+completed one.** Ghent `GWG 1.0` cells `e`/`j`: green channel now matches
+Acrobat to about one level (187.5 vs 186.6); blue channel does not (55.7
+vs Acrobat's 2.6, down from 209.2 pre-fix). The mechanism for the blue
+residual is undiagnosed — scoped as `Pass 122.7` (`ROADMAP.md` Backlog)
+rather than guessed at. No standing rule minted for the disclosure-test-
+inversion finding this ship also produced (a disclosure counter's test
+asserting a non-zero gap is *expected* to fail when the gap closes, and
+that failure is the fix being observed) — one occurrence, below this
+project's two-occurrence promotion bar; recorded in `ROADMAP.md`'s
+`Pass 122.6` *Shipped* entry as a named candidate.
+
 ### 2026-08-18 (hundred-and-sixty-seventh filing) — decision 070: **A SOFT MASK IS MULTIPLIED INTO THE CLIP, NOT THREADED AS A SECOND MASK THROUGH EVERY PAINT SITE — AND THE PRICE IS PAID IN ONE PLACE, DISCLOSED, RATHER THAN SPREAD ACROSS TEN**
 
 **Status: DECIDED.** `cb20770` implements ISO 32000-1 §11.6.5 `/Alpha` and

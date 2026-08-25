@@ -96,6 +96,160 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `c743a69` — `Pass 122.6` ships: a DeviceN shading under overprint keeps the ink beneath it — ★★★★ A LARGE IMPROVEMENT, FILED AS ONE: GREEN MATCHES ACROBAT TO ~1 LEVEL, BLUE DOES NOT (55.7 AGAINST 2.6) — 2026-08-25 (two-hundred-and-forty-eighth filing)
+
+**Sourcing.** No shell in this filing (librarian invocation). Every figure
+below is **relayed from the engineer's own dispatch**, which stated its
+method beside each figure — per hard rule 8.
+
+---
+
+#### What shipped, and its honest limit
+
+A `/DeviceN [/Cyan /Magenta]` shading painted over an orange ground now
+lets the yellow beneath survive under overprint — which is what overprint
+means, and why Acrobat renders Ghent `GWG 1.0` cells `e`/`j` with a green
+core. Before this Pass, pdfce replaced all four colorants and rendered
+them blue.
+
+Measured on those cells:
+
+| | blue centre | green centre |
+|---|---:|---:|
+| before | 209.2 | 178.9 |
+| **after** | **55.7** | **187.5** |
+| Acrobat | 2.6 | 186.6 |
+
+**The green channel now matches Acrobat to about one level. Blue does
+not — 55.7 against 2.6.** Filed as a large improvement, **not** a
+completed one; the residual is recorded rather than rounded away — see
+`Pass 122.7` (Backlog), opened this filing precisely so it isn't guessed
+at.
+
+---
+
+#### Why it took three pieces, none of which works alone
+
+- `ColorSpace::to_cmyk` — the authored colorants, or `None`. `None` for
+  `DeviceGray`/`DeviceRgb` deliberately: a grey *could* be mapped to `K`,
+  but that is not what the file specified, and letting pdfce claim
+  components the document never named is the exact error the function
+  exists to prevent.
+- `ColorRamp::at_cmyk` — the same samples, built in the **same loop from
+  the same `comps`** as `ColorRamp::build`'s sRGB samples, so the two
+  answers cannot describe different points of the ramp. **All-or-nothing**:
+  a ramp with colorants at some samples and not others would overprint
+  across part of its span and not the rest.
+- `CmykBuffer::composite_overprint_varying` — §11.7.4.3 where the source
+  colour differs **per pixel**, the twin of the solid-colour composite
+  (which takes one `[Chan; 4]` because a filled path has one colour).
+
+**The guard.** Only a `Separation`/`DeviceN` source takes this route.
+**Table 149's `DeviceCmykDirect` row under `/OPM 1` is the one
+value-dependent cell in the table** — a zero tint selects the backdrop, a
+non-zero one selects the source — so its rules cannot be computed once
+per shading, which is exactly what this route does. A `DeviceCMYK`
+shading under overprint therefore **keeps the sRGB bridge and keeps being
+disclosed** (`overprint_shadings_unsupported`). Honest beats silently
+wrong; the exclusion is a correctness guard, not caution.
+
+**One geometry walk, not two.** `sample_at()` was extracted and is
+shared by both paint routes rather than copied — the two must agree
+about *which pixels a shading covers*, exactly and always, or coverage
+could silently change on a page that happened to composite in ink, which
+nothing would flag. Decision 084's shared-predicate rule at small scale.
+Verified neutral: Ghent's diff against the pre-refactor binary was
+**27,091** pixels, exactly the figure `Pass 122.5` alone accounts for.
+
+---
+
+#### Blast radius
+
+Gated on overprint in force AND the ramp keeping colorants AND a
+`Separation`/`DeviceN` source. Of **114** external-corpus `DeviceCMYK`
+files, **zero** combine an ink buffer with shadings and overprint —
+external corpus untouched. **Six** Ghent patches are candidates
+(`1_GWG010`, `1_GWG1611`, `1_GWG169`, `2_GWG020`, `2_GWG080`, `2_GWG081`);
+all now report `overprint_shadings_unsupported=0`. **The Ghent board is
+UNCHANGED at `27 pass / 8 FAIL / 16 UNRESOLVED`** — `GWG 1.0` still fails
+on cells `b`/`g`, a **different defect** (the trap-X/`/All` bucket). This
+entry does not imply a board move.
+
+---
+
+#### A test inverted itself, and that is the point of it
+
+Yesterday's disclosure test (`c9f8419`) asserted
+`overprint_shadings_unsupported == 2`, pinning the gap. This Pass closed
+the gap and **the test failed** — precisely what a disclosure test is
+for: the counter it watches is the one the fix must empty. It now
+asserts `0`, **beside an assertion that four shadings were actually
+painted**, because a counter is also zero when nothing was drawn. The
+inversion is left visible in the test's own doc comment rather than
+quietly rewritten. **Candidate for a standing rule** — *"a disclosure
+counter's test is written to fail when the gap closes, and that failure
+is the fix being observed, not the test being weakened"* — **not
+minted**: a single occurrence, below this project's own two-occurrence
+promotion bar. Recorded here so a second instance is recognised rather
+than re-derived.
+
+---
+
+#### Verification
+
+**4,212** workspace tests green — unchanged from `c9f8419`'s own count,
+because this Pass edited an existing assertion rather than adding new
+tests. `cargo fmt --all --check` and `cargo clippy --workspace
+--all-targets` clean — one visibility warning found and fixed
+(`paint_cmyk` narrowed to `pub(crate)`, since `CmykBuffer` is
+crate-private). All **16** runnable gates green. `fuzz/` targets `cargo
+check` clean. `cargo tree -p pdfce-core` / `-p pdfce-render` show no GUI
+dependency.
+
+---
+
+#### `FEATURES.md`
+
+Overprint SIMULATION *Implemented* row (Fonts & rendering) widened with
+the shipped scope and the residual. "Per-sample shading overprint"
+*Planned* row narrowed to its remaining scope (`DeviceCMYK` sources,
+colorant-less ramps) and now also names the blue residual. "Native
+colorant paths for images and shadings" *Planned* row narrowed to images
+only, crediting shadings' `Separation`/`DeviceN` half as shipped. **No
+box ticked beyond what was already ticked** — Overprint SIMULATION was
+core `[x]` / cli `[x]` / gui `[ ]` before this Pass and stays there; the
+capability widened inside an already-ticked row rather than crossing a
+tick boundary.
+
+---
+
+#### `ARCHITECTURE.md`
+
+Decision 069 (§12) gains a **second** dated addendum (2026-08-25, 248th
+filing, no new decision number) recording the shipped fix, the
+`DeviceCmykDirect` value-dependence guard, and the shared `sample_at`
+geometry-walk invariant.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `Pass 122.6` in *Backlog* | **`Pass 122.6` SHIPPED** (moved to *Shipped*, entry fully deleted from *Backlog* per this project's fully-delete-on-ship convention); **`Pass 122.7` FILED to *Backlog*** — diagnose the blue-channel residual on the now-shipped `Separation`/`DeviceN` overprint route |
+| decisions (`ARCHITECTURE.md` §12) | **085** | **unchanged** — dated addendum added to decision 069's existing body, no new number. Next free **086**. |
+| standing rules | **R217** | **unchanged**, next free **R218**. No rule minted for the disclosure-test-inversion finding — one occurrence, below the two-occurrence bar; recorded as a candidate above. |
+| operator questions | **(bs)** | unchanged, next free **(bs)** |
+| `render-page` metrics line | **92 keys** | **unchanged** — no new counter; an existing one (`overprint_shadings_unsupported`) now reports fewer non-zero cases |
+| `FEATURES.md` | — | one *Implemented* row widened (Overprint SIMULATION), two *Planned* rows narrowed (native colorant paths; per-sample shading overprint) |
+| Filing ordinal | **247** | **248** |
+
+**Backup currency and git/CI state: not independently checked this
+filing** — no shell. Every figure above is relayed from the engineer's
+own dispatch, per hard rule 8.
+
+---
+
 ### `c9f8419` — Shadings ignore overprint entirely, and until now said nothing about it — no Pass ID, disclosure fix found from an operator reading — 2026-08-25 (two-hundred-and-forty-seventh filing)
 
 **Sourcing.** No shell in this filing (librarian invocation). Every figure
@@ -76413,28 +76567,26 @@ agreement with a sibling constant.
 
 ---
 
-### `Pass 122.6` — native colorant paths for shadings, THEN wire the overprint composite to them — the two halves are coupled, ship together or not at all
+### `Pass 122.7` — diagnose the blue-channel residual on the now-shipped `Separation`/`DeviceN` shading-overprint route
 
-**Filed 2026-08-25 (two-hundred-and-forty-seventh filing)**, from the
-shading-overprint gap `c9f8419` disclosed (`overprint_shadings_unsupported`,
-reports 2 on Ghent `GWG 1.0`). `ColorRamp::build` resolves colour to
-three-channel sRGB when the ramp is **built** (`space.to_rgb(...)`), so by
-the time a shading paints there are no colorants left for
-`overprint::composite` to blend against — and `overprint::composite` has
-no call site inside `shading.rs` regardless. **Acceptance criterion states
-the coupling explicitly, so a partial ship cannot look complete:**
-`overprint_shadings_unsupported` reaches 0 only when BOTH (a) a shading's
-own colour ramp is evaluated natively in the page's colorant space on a
-subtractive page, not bridged through sRGB, and (b) the colorant-buffer
-route in `interpret.rs` blends a shading's result through Table 149
-instead of `Blend::Normal` hardcoded. **Building either half alone changes
-nothing measurable** — verified, not assumed, for the sRGB-bridge half in
-`c9f8419`'s ruled-out list (pre-/post-`Pass 122.5` blue-channel delta was
-228 → 209 against an Acrobat target of 3; the bridge barely moved it).
-Shares its native-colorant-path half with the row already filed for
-images (`FEATURES.md` *Planned*, "Native colorant paths for images and
-shadings") — the image and shading halves may ship as one Pass or two,
-but neither ships against a placeholder for the other.
+**Filed 2026-08-25 (two-hundred-and-forty-eighth filing), opened
+alongside `Pass 122.6`'s ship rather than guessed at.** On Ghent
+`GWG 1.0` cells `e`/`j`, `Pass 122.6`'s `Separation`/`DeviceN`
+shading-overprint composite (`c743a69`) brought the green channel to
+within about one level of Acrobat (**187.5** vs **186.6**) but left the
+blue channel far off (**55.7** vs Acrobat's **2.6**, down from **209.2**
+pre-fix). The green match and the blue miss are on the **same cell, from
+the same composite**, which points at something remaining in the
+cyan/magenta path rather than in the overprint-rule selection
+`Pass 122.6` already got right — but **nobody has diagnosed it, and this
+entry deliberately does not guess further.** Candidates to rule in or out,
+not yet checked: a colour-management step applied to the ramp's sRGB
+samples but not its CMYK ones; a channel-order or gamma mismatch between
+`ColorSpace::to_cmyk`'s output and what the colorant buffer expects
+elsewhere; rounding in the ramp's ten-sample interpolation. **Acceptance:**
+blue centre within Acrobat's own patch-to-patch measurement noise
+(established by re-measuring a passing cell as a control), mechanism
+named and cited, not merely nudged into range by parameter search.
 
 ---
 

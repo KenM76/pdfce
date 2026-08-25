@@ -59880,3 +59880,102 @@ touched, no `cargo tree`/round-trip/packaging checks apply.
   filing — no shell. Everything above is either this role's own
   documentation edits or relayed from the dispatching engineer's report,
   per hard rule 8.
+
+## 2026-08-25 (two-hundred-and-forty-eighth filing) — `Pass 122.6` ships: a `DeviceN` shading under overprint keeps the ink beneath it; a large improvement filed as one — green matches Acrobat to ~1 level, blue does not (55.7 vs 2.6); `Pass 122.7` filed for the residual
+
+**Shipped:**
+- `Pass 122.6` (`c743a69`) — a `Separation`/`DeviceN` shading's own
+  colorants now overprint correctly. Three pieces, none sufficient alone:
+  `ColorSpace::to_cmyk` (authored colorants or `None`, deliberately `None`
+  for `DeviceGray`/`DeviceRgb`), `ColorRamp::at_cmyk` (CMYK samples built
+  in the same loop as the existing sRGB ones), `CmykBuffer::
+  composite_overprint_varying` (the per-pixel-varying twin of the
+  solid-colour overprint composite). `sample_at()` extracted so both
+  paint routes share one coverage-geometry walk. Touched `pdfce-render`
+  only: `color.rs`, `shading.rs`, `cmyk_buffer.rs`, `interpret.rs`, one
+  test file.
+
+**Decisions made this session:**
+- No new decision number. A second dated addendum was added to decision
+  069's body (`ARCHITECTURE.md` §12) recording the shipped fix, the
+  `DeviceCmykDirect` value-dependence guard that excludes `DeviceCMYK`
+  sources, and the shared `sample_at` geometry-walk invariant.
+
+**Findings + decisions:**
+- **Sourcing note for this whole entry:** no shell in this filing
+  (librarian invocation). Every figure is relayed from the engineer's own
+  dispatch, per hard rule 8.
+- **The honest limit, stated plainly because it is the point.** Measured
+  on Ghent `GWG 1.0` cells `e`/`j`: blue centre pdfce 209.2 (before) →
+  55.7 (after) vs Acrobat 2.6; green centre pdfce 178.9 (before) → 187.5
+  (after) vs Acrobat 186.6. **Green now matches Acrobat to about one
+  level; blue does not** — a large improvement, not a completed one.
+- **The guard, the reusable part.** Table 149's `DeviceCmykDirect` row
+  under `/OPM 1` is the one value-dependent cell in the table — a zero
+  tint selects the backdrop, a non-zero one selects the source — so it
+  cannot be computed once per shading. Only `Separation`/`DeviceN`
+  sources take the new route; `DeviceCMYK`-sourced shadings and
+  colorant-less colour spaces (`DeviceGray`/`DeviceRgb`) keep the sRGB
+  bridge and keep reporting `overprint_shadings_unsupported`.
+- **Blast radius, measured not assumed.** Of 114 external-corpus
+  `DeviceCMYK` files, zero combine an ink buffer with shadings and
+  overprint — external corpus untouched. Six Ghent patches are
+  candidates (`1_GWG010`, `1_GWG1611`, `1_GWG169`, `2_GWG020`,
+  `2_GWG080`, `2_GWG081`), all now report the counter at 0. **The Ghent
+  board is UNCHANGED at `27 pass / 8 FAIL / 16 UNRESOLVED`** — `GWG 1.0`
+  still fails on cells `b`/`g`, a different defect (trap-X/`/All`
+  bucket); this ship does not move the board.
+- **A disclosure test inverted itself, by design.** `c9f8419`'s test
+  asserted `overprint_shadings_unsupported == 2`, pinning the gap; this
+  Pass closed the gap and the assertion failed, which is what a
+  disclosure test is for. Now asserts `0`, beside an assertion that four
+  shadings actually painted (a counter is also zero when nothing was
+  drawn). Flagged as a candidate standing rule, **not minted** — one
+  occurrence, below this project's two-occurrence promotion bar.
+
+**`ROADMAP.md`:**
+- New *Shipped* entry for `c743a69`/`Pass 122.6` filed at the top
+  (reverse-chronological, above `c9f8419`).
+- `Pass 122.6` fully deleted from *Backlog* (fully-delete-on-ship
+  convention, no remnant pointer).
+- `Pass 122.7` filed to *Backlog* in `Pass 122.6`'s former slot —
+  diagnose the blue-channel residual; deliberately does not guess at a
+  mechanism.
+
+**`FEATURES.md`:**
+- Overprint SIMULATION *Implemented* row (Fonts & rendering) widened
+  with the shipped scope, the guard, and the residual. No box crossed a
+  tick boundary — the row was already core `[x]` / cli `[x]` / gui `[ ]`.
+- "Native colorant paths for images and shadings" *Planned* row narrowed
+  to images only; shadings' `Separation`/`DeviceN` half credited as
+  shipped.
+- "Per-sample shading overprint" *Planned* row narrowed to its remaining
+  scope (`DeviceCMYK` sources, colorant-less ramps) and now names the
+  blue residual, pointing at `Pass 122.7`.
+
+**`ARCHITECTURE.md`:**
+- Decision 069 (§12) gains a second dated addendum (2026-08-25, 248th
+  filing, no new decision number).
+
+**Still in flight:**
+- `Pass 122.7` — scoped, not started; explicitly undiagnosed rather than
+  guessed at.
+- Per-sample image overprint (`overprint_images_unsupported`) still
+  unbuilt — its *Planned* row is now the sole remaining item on the
+  native-colorant-path prerequisite.
+- The blue/green split within `Pass 122.6`'s own shipped route is itself
+  a hint (something in the cyan/magenta path, not the overprint-rule
+  selection) but this filing deliberately did not chase it further than
+  naming candidates in `Pass 122.7`'s own text.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned).
+- Ledger: standing rules ceiling stays `R217`, next free `R218` (a
+  disclosure-test-inversion rule was considered and explicitly not
+  minted — one occurrence); decisions ceiling `085`, next free `086`;
+  Pass family `122.x` next free `122.8`; `render-page` metrics line
+  **92 keys**, unchanged; filing ordinal `248`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Everything above is either this role's own
+  documentation edits or relayed from the dispatching engineer's report,
+  per hard rule 8.
