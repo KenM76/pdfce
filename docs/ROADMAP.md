@@ -98,10 +98,76 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ### `4267f84` — VERSION BUMP `0.9.0` → `0.10.0`, MINOR: Type 3 fonts render (`Pass 126.0`/`Pass 126.1`) — **`v0.10.0` TAGGED/PUSHED/PUBLISHED AT `dd48c7c`, AND CI IS CORRECTLY RED THERE**, on `check-commits-filed.py`, because `4267f84` sits behind a filing commit that was written before `4267f84` existed; ★★★★★ **THE ORDERING DEFECT THAT PRODUCED IT IS THE MORE USEFUL HALF: A GREEN `tools/check-*` SWEEP IS A CLAIM ABOUT THE TREE IT RAN ON, NOT A DURABLE PROPERTY OF ANY COMMIT IN IT — FOURTH OCCURRENCE OF `R217`'S SHAPE, NOT `R218`'S**; operational corollary recorded as a named candidate (n=1, below the two-occurrence bar) — tag move to this filing's own commit **PENDING**, engineer's next act — no Pass ID, infrastructure/release record — 2026-08-25 (two-hundred-and-fifty-ninth filing)
 
-**Sourcing.** No shell this filing (librarian invocation, hard rule 8). Every
-figure below is relayed from the engineer's dispatch, which quotes `4267f84`
-in full and reports the `gh run view` result for run `32899481708` at
-`dd48c7c`; nothing below is this role's own measurement.
+**★★★ AMENDED 2026-08-25 (two-hundred-and-sixtieth filing) — OBSERVED, NOT
+CORRECTED.** The header above, and the "PENDING, engineer's next act"
+language throughout this entry, are kept exactly as filed: an honest record
+of a release published with a correctly-red tag, written with the outcome
+deliberately left open pending a shell report. Nothing below retracts that
+record — this block **completes** the claim, from a shell, item by item:
+
+- **Tag moved.** `v0.10.0` re-tagged at `8567647` — this role's own filing
+  commit for the entries this dispatch closed out, the same placement this
+  project's own precedent argues for (`08a88bd`/`bb154ed` for `v0.8.0`,
+  `e115947`'s 256th-filing amendment above for `v0.9.0`): a tag on a filing
+  commit, not on a code commit whose own filing cannot exist in its own
+  tree. Force-pushed: `4232673...2539626 v0.10.0 -> v0.10.0 (forced
+  update)`.
+- **`main` pushed** `dd48c7c..8567647`.
+- **Package rebuilt, not merely re-tagged — recorded as a judgement, not a
+  formality.** Moving the tag alone would have left the shipped
+  `BUILD-INFO.txt` naming `dd48c7c`, a commit the tag no longer points at
+  once moved — a small dishonesty that costs nothing to remove and would
+  have been invisible to every gate. Rebuilt at
+  `D:\builds\pdfce-20260825-1732-8567647\`, `BUILD-INFO.txt` names
+  `8567647`. Release asset replaced with `gh release upload --clobber`,
+  **11,192,481 B**.
+- **Smoke test re-run on the NEW artefact, not carried forward from the
+  old one.** The zip was extracted to a fresh path; `pdfce-cli.exe` reports
+  `0.10.0`; rendering the Type 3 colour fixture from the extracted binary
+  gives `type3_glyphs=8 type3_colors_ignored=1` and a PNG **byte-identical**
+  (same MD5, `691cf02a…`) to the development build's. A re-cut release is a
+  new artefact and gets its own test — the same discipline `e115947`'s
+  amendment applied to `v0.9.0`'s release zip.
+- **CI at the re-tagged commit.** Run `32901516410`, conclusion `success`.
+- **`python tools/verify-release.py v0.10.0` → 7 of 7 ok, exit 0**, message
+  *"tag, HEAD, origin/main, CI and the release agree."*
+
+**Worth stating alongside `v0.9.0`'s equivalent line** (256th-filing
+amendment, above): this is the **second consecutive release verifying 7 of
+7**, and the **first one to get there after a red run rather than instead
+of one**. The gate did its job — it found a real unfiled commit
+(`4267f84`), the fix was a filing rather than a suppression, and the same
+gate then went green on its own terms. That is the shape a working gate
+has, and it belongs on the record beside the two releases where nothing
+went wrong.
+
+**Discharged.** The "tag move to this filing's own commit PENDING" status
+in this entry's header and in the "Status, stated plainly" section below is
+resolved by the above. No new Pass, no new decision, no new standing rule —
+the ordering candidate this entry recorded at n=1 stays a **candidate**;
+nothing observed since contradicts the `R217`-not-`R218` classification
+made there.
+
+**★ Not discharged by this, and deliberately called out so it is not read
+as implied: the backup obligation.** A GitHub release is an offsite copy of
+**one build and one zip** — it is not a `git bundle` and carries none of
+the project's history. That has now gone **two releases** (`v0.9.0`,
+`v0.10.0`) unaddressed. Per hard rule 8, this role has not checked
+`D:\Dev\pdfce-backups\` this filing and states no figure about its
+currency.
+
+**Sourcing for this amendment.** Shell-observed by the engineer and relayed
+verbatim in the dispatch, per hard rule 8's "check, then assert, and say
+which" — every figure above names the command or artefact that produced
+it.
+
+---
+
+**Sourcing (original, at filing time).** No shell this filing (librarian
+invocation, hard rule 8). Every figure below is relayed from the
+engineer's dispatch, which quotes `4267f84` in full and reports the `gh
+run view` result for run `32899481708` at `dd48c7c`; nothing below is
+this role's own measurement.
 
 ---
 
@@ -169,7 +235,12 @@ than a superseded one, replacing the release asset, re-running
 This entry is written so that report has somewhere to land as a dated
 amendment, exactly as `e115947`'s did for `v0.9.0` (256th filing) and
 `08a88bd`'s did for `v0.8.0` (241st filing, the precedent for moving a
-published tag for this exact class of reason).
+published tag for this exact class of reason). *(★★★ AMENDED 2026-08-25,
+two-hundred-and-sixtieth filing — retag, force-push, rebuild, replaced
+asset, green CI and `verify-release.py` 7/7 all now observed from a
+shell; see the AMENDED block at the head of this entry for the tag hash,
+push range, release asset size, CI run ID and `verify-release.py`
+result.)*
 
 ---
 
@@ -271,7 +342,7 @@ overlooked.
 | decisions (`ARCHITECTURE.md` §12) | `087` | unchanged — next free `088`; no decision this filing |
 | standing rules | `R218` | **unchanged, next free `R219`.** `R217` cited, corroborated at a **fourth occurrence** (RAG file amended, not a new file); operational corollary recorded as a **named candidate**, not minted (n=1, below the two-occurrence bar) |
 | `D:\dev\rag\rust\` | `a_gate_whose_evidence_only_a_later_commit_can_produce_should_defer_the_tip_not_fail_it.md` at its third occurrence (`bb154ed`, 241st filing) | **fourth-occurrence section + operational corollary added this filing**; `index.md` bullet amended with a dated footer to match; `last_verified` bumped to `2026-08-25` |
-| operator authorisations | `v0.9.0`'s ("release when ready", DISCHARGED, 256th filing) | **`v0.10.0` — "release when Type 3 rendering ships" (recorded 258th filing, carried from the standing "release when ready" go-ahead) — tag/push/publish steps taken, but CI-green-at-tagged-commit is FAILING per this entry; discharge PENDING the retag the engineer has stated as next** |
+| operator authorisations | `v0.9.0`'s ("release when ready", DISCHARGED, 256th filing) | **`v0.10.0` — "release when Type 3 rendering ships" (recorded 258th filing, carried from the standing "release when ready" go-ahead) — tag/push/publish steps taken, but CI-green-at-tagged-commit is FAILING per this entry; discharge PENDING the retag the engineer has stated as next** → **★★★ AMENDED 260th filing: DISCHARGED** — retag `8567647`, push `dd48c7c..8567647`, force-pushed tag, rebuilt package + replaced release asset (11,192,481 B), CI run `32901516410` success, `verify-release.py` 7/7 exit 0; does not carry forward (`CLAUDE.md` rule 8) |
 | `docs/FEATURES.md` | — | none — see above |
 
 ---

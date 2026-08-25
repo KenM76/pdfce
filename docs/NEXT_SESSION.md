@@ -13,70 +13,61 @@ can falsify it.
 
 ## §A — COLD START: everything you need, in one screen
 
-**`HEAD` is `a73e3be`, which is also the `v0.9.0` tag. The working tree is
+**`HEAD` is `8567647`, which is also the `v0.10.0` tag. The working tree is
 clean, `origin/main` matches, and nothing is blocked on anybody.** Both
-FeatureRequests channels were checked; the newest inbound is
-`iccce`'s `note_your_name_gate_has_the_two_defects_mine_had.md`, which was
-**acted on and closed** this session — see §0.
+FeatureRequests channels were checked; the newest inbound is `iccce`'s
+`note_your_name_gate_has_the_two_defects_mine_had.md`, **acted on and closed**
+— see §0.
 
-**★ `v0.9.0` IS RELEASED AND VERIFIED.** `python tools/verify-release.py
-v0.9.0` → **7 of 7 ok, exit 0**; CI run `32888354436` green on all ten jobs at
-the tagged commit. The previous release's own filing recorded **6 of 7, exit
-1**. This is the first release since `v0.7.0` whose tagged commit's CI run is
-green, and it is green **without anyone remembering an ordering discipline** —
-which is what `bb154ed` was for, now demonstrated on a real release rather
-than argued for. Both operator items in §5 are discharged **for this act
-only**.
+**★ `v0.10.0` IS RELEASED AND VERIFIED.** `python tools/verify-release.py
+v0.10.0` → **7 of 7 ok, exit 0**; CI run `32901516410` green at the tagged
+commit. Second consecutive release at 7 of 7, and the first to get there
+**after** a red run rather than instead of one — see §0a, which is the most
+useful thing on this page.
 
-### What this run built (2026-08-25, afternoon)
+### What this run built (2026-08-25)
+
+Two features and four repairs, in one day.
 
 | commit | what an operator would notice |
 |---|---|
-| `3681a7f` | **`Pass 125.0` — gradient MESHES render.** The operator's own report: two failing cells in the first box of the print-conformance suite's first page. Both were `ShadingType 7` tensor-product patch meshes, recognised and refused. All four mesh types (4/5/6/7) now decode and rasterise |
-| `4b22c95` | **The fuzz harness had not linked ON WINDOWS since OCR landed.** Repaired, plus a `mesh_shading` target: 1 107 957 runs in 91 s, no crash. ★ **Its own stated reason was wrong and `ccf9ed3` corrects it — read that one too** |
-| `525585e` | **The suite-name scrub gate published the term it suppresses, and could not see the commit it was gating.** Both found by `iccce`. `R218` minted |
-| `3016641` | A test assertion shipped with a ten-space hole — the second heredoc-eaten line continuation this session |
-| `42bcea0` | The `Pass 125.0` filing. ★ **Its own first draft breached the scrub rule in four lines, two of them inside a verbatim quotation of the operator** |
-| `ccf9ed3` | ★★ **CI DOES run `cargo fuzz build` — on Linux.** The break was MSVC-only, so a green CI and a broken local build were never a contradiction. Also: `ci.yml` claimed "the eight cargo-fuzz targets"; there are 24 |
-| `e115947` / `a73e3be` | **`v0.9.0`** — the version bump and the release filing. The tag is on the second of these |
+| `3681a7f` | **`Pass 125.0` — gradient MESHES render.** Two failing cells in the first box of the print-conformance suite's first page, reported by the operator. Both were `ShadingType 7` tensor-product patch meshes, recognised and refused. All four mesh types now decode and rasterise |
+| `1a5fc92` | **`Pass 126.0` — TYPE 3 FONTS render.** Glyphs that are content streams rather than a font program. **49 of 49** corpus files carrying one now show their text; one drew a heading that was an entirely blank page that morning |
+| `0f09780` | **`Pass 126.1`** — the bitmap flavour, and the measurement that it is never smoothed at any zoom, which matches Acrobat |
+| `4b22c95` / `ccf9ed3` | The fuzz harness had not linked **on Windows** since OCR landed. Repaired — and the second commit corrects the first's stated REASON, which was wrong |
+| `525585e` | The suite-name scrub gate published the term it suppresses, and could not see the commit it was gating. Both found by `iccce`. `R218` minted |
+| `8567647` | The `v0.10.0` filing, and the tag |
 
-### ★★★★★ `Pass 125.0` — the numbers, because they are the evidence
+### ★★ THE TWO FEATURES, IN THE NUMBERS THAT MATTER
 
-`PCS 6.0`'s four cells each pair a live shading with a bitmap of what a
-correct render produces — the patch's own printed criterion is *"The shadings
-should look like the reference image"* — so scoring it costs **no external
-reference at all**. Mean absolute per-channel difference and Pearson
-correlation, shading versus its own reference image:
+**`Pass 125.0` — mesh shadings.** `PCS 6.0`'s two type 7 cells, scored against
+the reference images the patch prints beside them:
 
-| cell | type | before | after | Acrobat, same file |
-|---|---|---|---|---|
-| `a` | 7 (mesh) | 125.9 / **−0.044** | 10.0 / **0.949** | 7.6 / 0.981 |
-| `b` | 3 (control) | 6.2 / 0.9985 | 6.2 / 0.9985 | 4.5 / 0.9979 |
-| `c` | 2 (control) | 0.9 / 0.9997 | 0.9 / 0.9997 | 1.1 / 0.9998 |
-| `d` | 7 (mesh) | 128.6 / **−0.044** | 1.9 / **0.997** | 3.4 / 0.997 |
+| cell | before | after | Acrobat, same file |
+|---|---|---|---|
+| `a` | corr **−0.044** | **0.949** | 0.981 |
+| `d` | corr **−0.044** | **0.997** | 0.997 |
 
-Cell `d` is **closer to its reference than Acrobat's own render is**.
+Cell `d` is closer to its reference than Acrobat's own render is. ★ **The
+residual on `a` is NOT a mesh defect** — pdfce's mesh differs from Acrobat's
+mesh by the same amount pdfce's *plain raster image* differs from Acrobat's on
+the same page (26.5 vs 29.6). It is the `DeviceCMYK`→sRGB path, which is
+`iccce`'s by decision 064. **Do not chase it inside `mesh.rs`.**
 
-★ **THE RESIDUAL ON CELL `a` IS NOT A MESH DEFECT, and this forecloses a
-Pass.** pdfce's *mesh* differs from Acrobat's *mesh* by essentially the same
-amount pdfce's *plain raster image* differs from Acrobat's *plain raster
-image* on the same page — **26.5 vs 29.6** on cell `a`, **27.1 vs 26.7** on
-cell `d`. The reference image contains no mesh. ⇒ the residual is the
-`DeviceCMYK`→sRGB path, which is `iccce`'s by decision 064 and is already
-routed there as `Pass 122.7`. Do not chase it inside `mesh.rs`.
+Suite board `8 FAIL / 27 pass / 16 UNRESOLVED` → **`7 FAIL / 27 pass / 17
+UNRESOLVED`**. ★ `PCS 6.0` now reports `ref? strip corr=0.84`; **that is not a
+grade** — `PCS 6.1` renders perfectly and scores **0.371** on the same
+uncalibrated metric.
 
-**Suite board `8 FAIL / 27 pass / 16 UNRESOLVED` → `7 FAIL / 27 pass / 17
-UNRESOLVED`.** `PCS 6.0` leaves the trap-X population and lands in the
-reference-strip bucket the harness cannot adjudicate (`ref? strip corr=0.84`).
-★ **Do not read 0.84 as a grade** — `PCS 6.1` renders perfectly and scores
-**0.371** on the same metric. The strip correlation is uncalibrated; the
-harness says so itself. The cell table above is the evidence.
+**`Pass 126.0`/`126.1` — Type 3 fonts.** All 49 corpus files render,
+`unsupported_type3=0`, `type3_glyphs_missing=0`, no panics. The one question
+nobody had recorded — whether Acrobat honours Table 113's rule that a `d1`
+glyph's own colour operators "shall be ignored" — was **measured in Acrobat
+before any code was written**: `d1` blue, `d0` red, image-mask blue. Acrobat is
+spec-conformant on every point tested, so **§9.6.5 and Acrobat parity are the
+same criterion here**.
 
-**Blast radius, measured:** 1 of 51 suite patches contains a mesh; **0 of
-3 735** external-corpus PDFs contain one on page 1. Nothing without a mesh
-reaches the new code — entry is gated on `Geometry::Mesh`.
-
-### The two ambiguities, handled the two different ways they deserve
+### The two ambiguities### The two ambiguities, handled the two different ways they deserve
 
 This contrast is the transferable part.
 
@@ -107,6 +98,47 @@ This contrast is the transferable part.
    because primitives paint in stream order and each then overwrote a third
    of a pixel of its predecessor — shifting every interior colour boundary
    downstream. Do not "simplify" it.
+
+---
+
+## §0a — ★★★ THE FILING COMMIT MUST BE THE LAST COMMIT BEFORE THE TAG
+
+**Read this before cutting a release. It cost a red CI run and a re-tag.**
+
+`v0.10.0` was tagged, pushed and published, and CI came back **red** on
+`check-commits-filed.py`: the version-bump commit was in no filing.
+
+The sequence that produced it: dispatch the librarian → commit the version
+bump → commit the librarian's filing on top. **The filing was written before
+the commit it needed to cite existed.**
+
+★ **And the gate sweep run beforehand was green, honestly.** At that moment
+the bump was the **tip**, and `bb154ed`'s tip-deferral correctly excuses a
+commit that cannot cite its own hash. The instant the filing landed on top,
+the bump stopped being the tip and became real debt. **The gate went from
+green to red without anything about that commit changing.**
+
+The librarian classified this as a fourth occurrence of **`R217`**'s shape
+(tip-deferral evaporating once a commit lands on top) rather than `R218`'s,
+**correcting the framing I handed it** — `R218` is a tracked-versus-untracked
+blind spot with no analog here. Recorded as a named candidate at n = 1, not
+minted.
+
+> **The rule: the librarian's filing commit must be the LAST commit before the
+> tag.** Any code commit made after the dispatch has, by construction, no
+> filing that can name it. `bb154ed` made *tag-on-a-code-commit* safe; nothing
+> makes *file-then-append-code* safe except ordering.
+
+**The recovery, which has precedent** (`v0.8.0`, 241st filing): file the
+orphan, re-tag at the filing commit, force-push the tag, **rebuild the
+package** so its `BUILD-INFO.txt` names the tagged commit rather than a
+superseded one, replace the asset with `--clobber`, and **re-run the smoke
+test on the new artefact** — a re-cut release is a new artefact and does not
+inherit the old one's test.
+
+★ The rebuild is a judgement, not a step. Leaving it would have shipped a
+`BUILD-INFO.txt` naming a commit that is not the tag — a small dishonesty no
+gate would ever have caught.
 
 ---
 
@@ -251,7 +283,15 @@ file's last edit — `R218` one scale down. Every edit made through a script
 
 **Nothing in this queue is blocked on anybody.**
 
-1. **The trap-X cells — `PCS 1.0`'s `a`/`b`/`f`/`g`.** The `/Separation /All`
+1. **Type 3 text EXTRACTION and search** — `/ToUnicode`-gated, filed to
+   Backlog and **explicitly marked as not requested by the operator**. It is
+   first in this queue anyway, and the reason is a support one rather than a
+   technical one: `FEATURES.md` now shows Type 3 under *Implemented*, and a
+   reader will reasonably assume searching works. It does not. A Type 3 glyph
+   name carries no intrinsic Unicode meaning, so extraction depends entirely
+   on the file carrying a `/ToUnicode` CMap — which is the same thing Acrobat
+   depends on, so this is parity rather than catch-up. Small.
+2. **The trap-X cells — `PCS 1.0`'s `a`/`b`/`f`/`g`.** The `/Separation /All`
    hypothesis: §8.6.6.4 says painting with `/All` applies the tint to **all
    available colorants at once**, which a screen neutral cannot do; `122.5`
    gave those pages a colorant buffer, so it is now possible. **Confirm the
@@ -259,39 +299,41 @@ file's last edit — `R218` one scale down. Every edit made through a script
    paint is still unestablished, and reading a co-occurring counter as a
    cause is what §2a of the previous handoff was about. `125.1` is the next
    free ID.
-2. **Mesh shadings in ink — the mesh half of `Pass 97.1k`.** Newly relevant:
+3. **Mesh shadings in ink — the mesh half of `Pass 97.1k`.** Newly relevant:
    meshes are a **new** population bridging through sRGB. `Patch` corners
    hold a resolved `Shade::Rgb`; carrying authored colorants alongside is the
    same shape `ColorRamp::at_cmyk` already took for analytic ramps in
    `122.6`, and would let a mesh honour overprint.
-3. **Mesh cells `e`/`j` on `PCS 1.0`** — the shading colour path
+4. **Mesh cells `e`/`j` on `PCS 1.0`** — the shading colour path
    (`ColorRamp::at` resolves to sRGB when the ramp is *built*). Long-standing
    and structural; unrelated to `125.0`.
-4. **Per-image overprint (`Pass 122.1`)** — the image sibling of `122.6`.
+5. **Per-image overprint (`Pass 122.1`)** — the image sibling of `122.6`.
    Diagnosed: it is why `PCS 8.2`'s check mark is missing. pdfium fails it too.
-5. **Wire `cargo +nightly fuzz build` into CI** (build only, ~4 min warm).
-   The structural fix for §1 item 3; a reminder is not one, for the same
-   reason the release-ordering discipline was replaced structurally in
-   `bb154ed`.
-6. **Audit the other seventeen `tools/check-*` against `R218`.** Filed as an
+6. **A `windows-latest` sibling for CI's fuzz job.** ★ Not "wire fuzzing
+   into CI" — **it is already wired**, as `fuzz targets build (nightly)`, and
+   it has been green throughout. It runs on `ubuntu-latest`, and the break
+   found today was MSVC-only, so the job is structurally blind to the entire
+   class. Until the sibling exists, a Windows `cargo +nightly fuzz build` is a
+   per-session discipline and not a gate.
+7. **Audit the other seventeen `tools/check-*` against `R218`.** Filed as an
    unscoped Backlog note.
-7. **Build `R214`'s positional-reference gate** — a grep over a closed
+8. **Build `R214`'s positional-reference gate** — a grep over a closed
    vocabulary in doc comments. **Measure its baseline first, repair, then
    wire — never wire it red.** `R216`'s companion vocabulary rides the same
    instrument; build **one** script with two vocabularies.
-8. **`Pass 122.0`** — multithreading, the operator's own request. ★★ Read §2
+9. **`Pass 122.0`** — multithreading, the operator's own request. ★★ Read §2
    item 5 and `R215` before writing its acceptance table: *"byte-identical
    output at any core count"* is a differential claim over an **unbounded**
    parameter. Sample the switch points (1, 2, `n-1`, `n`, oversubscribed).
    Decision 080 adds a compile-time target gate, because `std::thread` and
    `rayon` both `cargo check` cleanly for `wasm32`.
-9. **`Pass 119.1`** — `unshare_form`. Carried unstarted through eleven
+10. **`Pass 119.1`** — `unshare_form`. Carried unstarted through eleven
    handoffs now.
-10. **`Pass 122.3`** — the colorant buffer's byte ceiling. A **full-page**
+11. **`Pass 122.3`** — the colorant buffer's byte ceiling. A **full-page**
     render above ~375 DPI refuses the buffer and silently composites in the
     wrong space, so one page can have different colours at different
     resolutions. Interactive use is unaffected.
-11. **`R215`'s retro-application** — not started. Any Pass filed with a
+12. **`R215`'s retro-application** — not started. Any Pass filed with a
     *"required after"* column must be re-read against `R215` before that
     column is used as a gate. Runs over `docs/` **and both RAG tiers**.
 
@@ -303,7 +345,23 @@ Known gaps in shipped behaviour. None is a regression; each is a capability
 pdfce does not have yet.
 
 - **Mesh shadings bridge through sRGB** into the colorant buffer, so their
-  overprint is not represented. New this session; queue item 2.
+  overprint is not represented. New this session; queue item 3.
+- **Type 3 text cannot be extracted, searched or edited.** Rendering ships;
+  extraction is `/ToUnicode`-gated and is queue item 1. Editing is not
+  planned and Acrobat has no in-place path for it either.
+- **A Type 3 glyph is not culled against `/FontBBox`.** Table 112 makes
+  `[0 0 0 0]` a *sentinel* meaning "assume nothing", and a nonzero box that is
+  wrong makes the result "unpredictable" rather than clipped, so pdfce uses it
+  for nothing. `Type3Font::bbox_is_sentinel` exists so that a future caller
+  that wants to cull has to ask rather than discover the sentinel by erasing
+  every glyph of a font that used it.
+- **Acrobat's behaviour on MALFORMED Type 3 is unmeasured**, and the parity
+  corpus says so rather than guessing: a procedure whose first operator is
+  neither `d0` nor `d1`; whether Acrobat still advances on a missing
+  `/CharProcs` key; a `d1` procedure containing a full-colour image; whether
+  its `/Resources` page fallback actually happens; a wrong `/FontBBox`; any
+  recursion limit. pdfce implements all of these from the clause plus its own
+  robustness posture, which is stated rather than presented as parity.
 - **`ShadingType 1`** (function-based) is modelled, ramped and **not
   painted**. Zero occurrences measured in the suite corpus.
 - **Mesh anti-aliasing**: `/AntiAlias` is a hint and defaults false, so a
@@ -339,14 +397,14 @@ pdfce does not have yet.
 
 ## §5 — THE TWO OPERATOR ITEMS
 
-- **PUSHING AND RELEASING — BOTH DISCHARGED 2026-08-25, AND NEITHER CARRIES
-  FORWARD.** The operator said **"release when ready"**, unprompted, after
-  being briefed on `Pass 125.0`. `v0.9.0` was tagged at `a73e3be` (a librarian
-  filing commit, deliberately), `main` pushed `0d4165e..a73e3be` as a clean
-  fast-forward, and the release published with one asset,
-  `pdfce-v0.9.0-windows-x64-portable.zip` (11,180,078 B).
+- **PUSHING AND RELEASING — DISCHARGED TWICE ON 2026-08-25, AND NEITHER
+  CARRIES FORWARD.** Two separate authorisations, each covering one act:
+  *"release when ready"* → **`v0.9.0`** at `a73e3be`; *"release new version
+  when done"* → **`v0.10.0`** at `8567647`. Both tagged on a librarian filing
+  commit, both verified **7 of 7**.
   **The next push and the next release each need their own go-ahead**
-  (`CLAUDE.md` rule 8) — one authorisation covers one act.
+  (`CLAUDE.md` rule 8) — one authorisation covers one act, and two in a day
+  does not make a standing one.
 
   ★ **Only ONE asset, and the reason is a licence one.** `v0.8.0` shipped a
   demonstration PDF beside the zip. This release's headline artefact is a

@@ -61350,3 +61350,86 @@ this project's two-occurrence bar (see below).
    family ceiling **`126`**, next free **`126.2`**, unchanged (no Pass
    this filing); operator-question ceiling `(bu)`, next free `(bv)`,
    unchanged; filing ordinal **259**.
+
+## 2026-08-25 (two-hundred-and-sixtieth filing) — CLOSING THE LOOP: `v0.10.0` retag/force-push/rebuild/verify OBSERVED from a shell — amendment, not correction
+
+**Sourcing.** The engineer's dispatch relays a shell-run sequence directly
+(retag, force-push, `gh release upload --clobber`, `gh run view`, `python
+tools/verify-release.py v0.10.0`, and a fresh-extraction packaging smoke
+test), each figure named with the command that produced it, per hard rule
+8. This filing performs no shell itself; it files what was reported.
+
+**Shipped:** nothing new — this filing amends the 259th filing's two open
+entries (`docs/ROADMAP.md`'s `4267f84` and that filing's own session-log
+entry above) with the outcome they deliberately left unmeasured. No Pass
+ID, no decision, no standing rule.
+
+**Decisions made this session:** none.
+
+**Findings + decisions:**
+
+- **`v0.10.0` retagged** at commit `8567647` — the librarian's own filing
+  commit, not `4267f84` and not `dd48c7c` (the commit whose CI was
+  correctly red on `check-commits-filed.py` over `4267f84`, per the 259th
+  filing's entry). Same placement precedent as `v0.7.0`, `v0.8.0`'s
+  correction, and `v0.9.0`: a tag on a filing commit, not a code commit
+  whose own filing cannot exist in its own tree.
+- **Force-push** — `4232673...2539626 v0.10.0 -> v0.10.0 (forced
+  update)`. `main` pushed `dd48c7c..8567647`.
+- **Package rebuilt, not merely re-tagged, and recorded here as a
+  judgement rather than a mechanical step.** Moving the tag alone would
+  have left the shipped `BUILD-INFO.txt` naming `dd48c7c` — a commit the
+  tag no longer pointed at — a small dishonesty invisible to every gate
+  and costing nothing to remove. Rebuilt at
+  `D:\builds\pdfce-20260825-1732-8567647\`, `BUILD-INFO.txt` names
+  `8567647`. Release asset replaced with `--clobber`, **11,192,481 B**.
+- **Smoke test re-run on the NEW artefact, not carried forward from the
+  old one** — the zip was extracted to a fresh path; `pdfce-cli.exe`
+  reports `0.10.0`; rendering the Type 3 colour fixture from the extracted
+  binary gives `type3_glyphs=8 type3_colors_ignored=1` and a PNG
+  **byte-identical** (same MD5, `691cf02a…`) to the development build's. A
+  re-cut release is a new artefact and gets its own test.
+- **CI at the re-tagged commit** — run `32901516410`, **success**.
+- **`tools/verify-release.py v0.10.0` → 7 of 7 ok, exit 0.** This is the
+  **second consecutive release verifying 7 of 7** (`v0.9.0` was the
+  first), and the **first one to get there after a red run rather than
+  instead of one** — worth recording alongside `v0.9.0`'s equivalent line
+  above: the gate found a real unfiled commit (`4267f84`), the fix was a
+  filing rather than a suppression, and the same gate then went green on
+  its own terms. That is the shape a working gate has.
+- **Ledger:** no Pass, no decision, no standing rule minted by this
+  filing. The ordering candidate the 259th filing recorded at **n=1** (a
+  librarian dispatch interposed by an unrelated commit before its filing
+  lands) stays a **candidate** — nothing observed since is a second
+  occurrence, and the `R217`-not-`R218` classification made at the 259th
+  filing stands, unchanged.
+- **★ NOT discharged by this, stated so it isn't read as implied: backup
+  currency.** A GitHub release is an offsite copy of one build and one
+  zip — not a `git bundle`, and it carries no project history. That has
+  now gone **two releases** (`v0.9.0`, `v0.10.0`) unaddressed. Per hard
+  rule 8, this role has not checked `D:\Dev\pdfce-backups\` this filing
+  and asserts nothing about its currency.
+- **Framing, because the distinction was asked for explicitly:** the
+  259th filing's entries were written honestly, with the outcome left
+  open on purpose pending a shell report — the ordering defect they
+  described was real, and CI was correctly red at `dd48c7c`. Nothing
+  above retracts them — this filing **completes** a claim that was
+  correctly left unmeasured, which is a different act from correcting one
+  that was measured wrong.
+
+**Still in flight:** nothing carried forward by this filing specifically.
+The named ordering-hazard candidate from the 259th filing remains at n=1;
+watch for a second occurrence before minting.
+
+**For next session:**
+
+1. The next push and the next release each need their own operator
+   go-ahead under `CLAUDE.md` rule 8.
+2. Backup currency remains unverified from here across **two** releases
+   now (`v0.9.0`, `v0.10.0`) — check `D:\Dev\pdfce-backups\` before
+   asserting anything about it.
+3. Ledger: standing rules ceiling **`R218`** unchanged, next free
+   **`R219`**; decisions ceiling `087`, next free `088`, unchanged; Pass
+   family ceiling **`126`**, next free **`126.2`**, unchanged; operator-
+   question ceiling `(bu)`, next free `(bv)`, unchanged; filing ordinal
+   **260**.
