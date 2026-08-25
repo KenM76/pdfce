@@ -6603,6 +6603,20 @@ defaults, and a CI job (extending decision 039's existing one) asserts
 `alloc`/`oid`/`zeroize` stay off across all four targets. Full
 reasoning: §12's decision 039 amendment.
 
+**Fourth dependency, first for the `/BrotliDecode` filter: `brotli` 8.0.4
+(2026-08-25, `Pass 123.0`, `4163ad9`; see §12 decision 086).**
+`BSD-3-Clause AND MIT`, both permissive — no operator licence call needed
+under rule 13, verified live against the crate's own published metadata
+at adoption time, not relayed from an earlier reading. Pure Rust
+deliberately, unlike `aes`/`sha2`'s cfg-selected hardware backends above:
+a binding to the C reference implementation would break both single-
+binary packaging and the wasm32 web-fork target, so `cargo check --target
+wasm32-unknown-unknown` clean was verified as part of adoption, not
+assumed. **Decode only** — the crate's compressor half is not compiled
+into the shipped binary; see decision 086 for why the write side is a
+separate, deferred deliverable rather than a smaller slice of the same
+one. `THIRD_PARTY_LICENSES.md` regenerated via `cargo-about`.
+
 ## 10. Adversarial input hardening & fuzzing
 
 `pdfce-core` parses files from the public internet by design — every
@@ -6614,7 +6628,8 @@ input**, not just "possibly malformed." This is a real gap identified
 ### 10.1 Resource-limit guards (decompression-bomb defense)
 
 Every filter decoder (`FlateDecode`, `LZWDecode`, `CCITTFaxDecode`,
-`JBIG2Decode`, `DCTDecode`, `JPXDecode`) **must** enforce a maximum
+`JBIG2Decode`, `DCTDecode`, `JPXDecode`, `BrotliDecode` — added
+2026-08-25, `Pass 123.0`, §12 decision 086) **must** enforce a maximum
 decoded-output-size cap before/while decoding, not just check the
 result afterward — a few KB of compressed input can expand to
 gigabytes (classic zip-bomb pattern), and PDF's filter chaining
@@ -24956,3 +24971,78 @@ free 072.**
   245th filing reached for the setting's own design).
 
   **Ceiling moves 084 → 085; next free 086.**
+
+- **2026-08-25 — Decision 086. `/BROTLIDECODE` IS IMPLEMENTED AGAINST THE
+  PDF ASSOCIATION'S `EXTN-BROTLI-1` EXTENSION, READ-ONLY; THE WRITE SIDE
+  IS DEFERRED, NOT REFUSED, BY ROUND-TRIP RULE 3.** (`4163ad9`,
+  `Pass 123.0`, 250th filing — librarian filing, no shell; every figure
+  relayed from the engineer's own dispatch, hard rule 8.) **Resolves open
+  operator question `(bq)`** (`ROADMAP.md`).
+
+  **The situation.** The operator asked (2026-08-21) for Brotli "when it
+  becomes part of the pdf 2.0 standard." `pdfce-spec-librarian` sourced
+  `EXTN-BROTLI-1 v1.3` as a **PDF Association extension** to ISO
+  32000-2:2020, announced 2026-08-19 — not an ISO amendment, and ISO/TC
+  171/SC 2's catalogue carries zero Brotli work items. His stated trigger
+  had therefore not fired.
+
+  **The ruling, 2026-08-25, verbatim:** *"we added the new compression
+  standard to our roadmap. let's implement it now."* Read as "the
+  extension is enough" — the strongest of the three options this project
+  had costed for him — and accepted as such. **Recorded alongside the
+  ruling, not instead of it:** his own phrase, "the new compression
+  standard," describes an ISO-level event that has not occurred; what he
+  authorised is implementation against the extension specifically. The
+  correction is to the sentence, not to the decision — see `ROADMAP.md`'s
+  closed `(bq)` entry for the full text.
+
+  **Scope decided, and it is narrower than "implement Brotli":** decode
+  (`/BrotliDecode`) ships; encode does not, and is **deferred, not
+  refused** — filed as its own open, unscoped Backlog item. The reason is
+  structural, not a caution: round-trip rule 3 (§5) requires an untouched
+  stream to be re-emitted byte-identical, which for Brotli means
+  byte-copying rather than decoding-and-recompressing (Brotli encoders are
+  not guaranteed deterministic across versions or quality settings), and
+  the crate's encoder half is not even compiled into the shipped binary.
+  The operator's ruling authorises building against the extension; it does
+  not, by itself, authorise a re-encode path that could silently rewrite
+  bytes pdfce never logically touched.
+
+  **Filter-contract choices made against the extension text, recorded so
+  they are not re-derived or guessed at differently later:**
+  - Large-window Brotli (RFC 9841) supported; RFC 9841's *framing format*
+    refused (satisfied by construction — the code never wraps/unwraps a
+    frame — rather than by an explicit check). These are opposite halves
+    of the same RFC.
+  - `FlateDecode`'s existing predictor code reused verbatim (Table 8 is
+    retitled to include Brotli, not given a new variant).
+  - Inline images refused (extension §5.2), checked over the whole filter
+    chain rather than at the terminal-codec position, since
+    `Codec::allowed_inline()` classifies terminal codecs and Brotli is a
+    prefix filter.
+  - `/Br` (an abbreviation MuPDF accepts but the extension does not
+    define) refused; inline-image Brotli (which pdfium decodes but the
+    extension forbids) refused. Both are **behaviour, not specification**
+    divergences from shipping readers, each pinned by its own test.
+
+  **A false citation was corrected at the source rather than only noted.**
+  Every web-search summary of the filter asserts "ISO 32000-2:2020
+  §7.4.11" — that clause does not exist (§7.4 ends at 7.4.10, zero hits for
+  the string in 1,023 pages). Traced to an unmerged pypdf PR's body text.
+  The crate's own module doc comments carry the refutation, so a future
+  reader meets the correction before meeting the error.
+
+  **Dependency:** `brotli` 8.0.4, `BSD-3-Clause AND MIT` — see §9's own
+  paragraph for the full dependency-classification record.
+
+  **Body-section updates:** §9 gains the `brotli` 8.0.4 dependency
+  paragraph (above). §10.1's filter-decoder list gains `BrotliDecode`.
+  §3 (GUI-core separation) holds by report — `cargo tree -p pdfce-core`
+  relayed clean, not independently re-run by this role this filing. §5
+  (round-trip) is the section this decision's write-side deferral is
+  reasoned from directly, not merely consistent with.
+
+  **No new standing rule minted** — this is a scope call under existing
+  rule 3 and existing sourcing discipline (rule 1), not a new pattern.
+
+  **Ceiling moves 085 → 086; next free 087.**

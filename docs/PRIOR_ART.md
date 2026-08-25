@@ -122,6 +122,7 @@ of which is a Rust-native engine.
 |---|---|---|---|
 | `flate2` (+ `miniz_oxide` or `zlib-rs` backend) | MIT OR Apache-2.0 (backends: MIT/Zlib/Apache-2.0) | adopt | Pluggable backend; use `miniz_oxide` or `zlib-rs` (both pure Rust, WASM-safe). **Never enable the `zlib`/`zlib-ng` C backend features in pdfce-core** — breaks WASM/no-toolchain goal. |
 | `weezl` | MIT OR Apache-2.0 | adopt | LZW. Exposes `Decoder::with_tiff_size_switch` — maps directly to PDF's `/EarlyChange` parameter (default 1); verify exact signature at implementation time. |
+| `brotli` | BSD-3-Clause AND MIT | **ADOPTED 2026-08-25** (`Pass 123.0`, `4163ad9`, decode only) | `/BrotliDecode` per `EXTN-BROTLI-1 v1.3` (PDF Association extension to ISO 32000-2:2020, not the base standard itself). Pure Rust — verified `cargo check --target wasm32-unknown-unknown` clean, keeping the web-fork target intact. Version 8.0.4 verified live against crates.io at adoption. Uses the raw state-machine decode API, not the `std::io::Read` wrapper (`brotli::Decompressor`) — a `Read` wrapper reports a truncated stream as a clean `Ok(0)` EOF, indistinguishable from success. **Encoder half not compiled in** — writing Brotli is a separate, deferred question (`ARCHITECTURE.md` §12 decision 086); round-trip rule 3 needs an untouched stream byte-copied, not decoded-and-recompressed. |
 
 ### Image codecs — the "problem filter" set is now fully solved in pure Rust
 

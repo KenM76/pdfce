@@ -203,10 +203,51 @@ authority discards the signal.**
    `Transparency` and `DeviceCMYK`. The only evidence it works is four
    purpose-built fixtures. That is stated plainly rather than dressed up.
 
+### ★★★★ 2026-08-25 (later): `/BrotliDecode` READS — `Pass 123.0`, decision 086
+
+**On the operator's direct instruction to build it now.** `4163ad9`.
+
+★★ **THE PREMISE NEEDS CARRYING FORWARD, because it will be met again.** He
+said *"we added the new compression standard to our roadmap"* — it IS on the
+roadmap, and it is **NOT part of ISO 32000-2**. Zero hits in both editions,
+§7.4 stops at 7.4.10, Table 6 enumerates exactly ten filters. What exists is
+**`EXTN-BROTLI-1 v1.3`, a PDF Association EXTENSION**, announced 2026-08-19.
+There is no ISO work item, amendment or dated target. The Backlog entry was
+filed CONDITIONAL on his own trigger — *"when it becomes part of the pdf 2.0
+standard"* — and **that trigger never fired**; his instruction overrode it,
+which is a scope call and his to make. **Open question `(bq)` is now
+ANSWERED.**
+
+⇒ **Do not let `FEATURES.md` or any summary imply ISO conformance from this.**
+
+**Shipped: READ only.** Predictors reuse `FlateDecode`'s code unchanged
+(Table 8 is retitled, there is no Brotli variant and there must not be one);
+large-window RFC 9841 supported, its **framing** refused; **inline images
+refused** per §5.2, checked over the *whole* chain because a byte-stream
+filter's legal place is the prefix and `allowed_inline()` classifies terminal
+**codecs**; **`/Br` refused** — MuPDF accepts that alias and pdfium decodes
+Brotli inline, both **behaviour, not specification**, both pinned by tests so
+nobody "fixes" pdfce's correctness later.
+
+**The WRITE side is open, unscoped Backlog.** It collides with **rule 3**: an
+untouched Brotli stream must be re-emitted **byte-identical**, which is a
+byte-copy question rather than a re-compress one. Needs design before anyone
+picks it up. ★ And a writer trap is already on record: **pdf.js silently
+ignores `/DecodeParms` predictors on Brotli** while honouring them for Flate
+and LZW, so a pdfce-written Brotli stream *with* a predictor would render
+wrong there with no error.
+
+★ **A prior module's doc comment prevented a repeat of its own bug.**
+`brotli::Decompressor` is a `std::io::Read` wrapper, and `flate.rs` already
+documented that a `Read` wrapper reports a **truncated** stream as a clean
+`Ok(0)` EOF — indistinguishable from success. The raw state machine was used
+instead, and a test fails loudly if truncation ever returns `Ok`. That is the
+documentation-first discipline paying rent.
+
 ### Ledger at end of session
 
 Next free in the `97.1` family: **`97.1k`** (filed Backlog, unbuilt).
-`122.0`–`122.5` filed; **`122.2`, `122.4` and `122.5` SHIPPED this session**, `122.0`/`122.1`/`122.3` still Backlog; next free **`122.6`**. Operator question **`(bs)` was opened and WITHDRAWN the same day** (see §A) — the letter is consumed, **next free `(bt)`**, and **nothing is awaiting Ken** except pushing and cutting a backup, both his acts.
+`122.0`–`122.5` filed; **`122.2`, `122.4` and `122.5` SHIPPED this session**, `122.0`/`122.1`/`122.3` still Backlog; `122.6` SHIPPED, `122.7` is a pointer only; **`Pass 123.0` SHIPPED** (Brotli read), next free **`123.1`**. Decisions to **086**. Operator question **`(bq)` ANSWERED**; **`(bs)` was opened and WITHDRAWN the same day** (see §A) — the letter is consumed, **next free `(bt)`**, and **nothing is awaiting Ken** except pushing and cutting a backup, both his acts.
 `119.1` still unstarted. Standing rules unchanged — **no rule was minted this
 session**, and one was *proposed and withdrawn* because `R143` already owned
 the shape. Decisions unchanged. **Version `0.8.0`.** 17 `tools/check-*` on

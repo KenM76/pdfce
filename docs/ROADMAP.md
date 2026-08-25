@@ -96,6 +96,192 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `4163ad9` — `Pass 123.0` ships: `/BrotliDecode` reads, and the standard it is "part of" does not contain it — read-only, against `EXTN-BROTLI-1`, `(bq)` ANSWERED — 2026-08-25 (two-hundred-and-fiftieth filing)
+
+**Sourcing.** No shell in this filing (librarian invocation). Every figure
+below is **relayed from the engineer's own dispatch**, which stated its
+method beside each figure — per hard rule 8.
+
+---
+
+#### The operator resolved `(bq)`, and the premise he resolved it on needs correcting in the record
+
+Ken, 2026-08-25, verbatim: *"we added the new compression standard to our
+roadmap. let's implement it now."*
+
+He is right about the first half — it **is** on the roadmap, filed
+2026-08-21 as a CONDITIONAL Backlog entry. He is directing real work, and
+that direction stands: **`(bq)` is ANSWERED — implement against the
+extension, don't wait for the base standard.** That is a scope call and
+his to make, and he made it.
+
+But the entry was filed conditional on **his own** earlier trigger —
+*"when it becomes part of the pdf 2.0 standard"* — and that trigger has
+**not** fired. Brotli is not part of ISO 32000-2; there is no ISO work
+item, amendment or dated target. What exists is `EXTN-BROTLI-1 v1.3`, a
+**PDF Association extension** announced 2026-08-19, sourced properly by
+`pdfce-spec-librarian` into
+`D:\Dev\Rag-Specialized\PDF_Spec\filters\filter__brotli.md`. Both halves
+are recorded here rather than only the direction: he directed the work,
+and the sentence describing why ("the new compression standard") describes
+something that has not happened at the ISO level. Neither half cancels the
+other — see the closed operator-question entry, below, for the full
+resolution text.
+
+---
+
+#### What shipped — the read side only
+
+- **`/BrotliDecode` decodes wherever a stream is legal.** New
+  `filters::brotli`, dispatched from `filters::apply_one`.
+- **`FlateDecode`'s predictors reused UNCHANGED.** EXTN-BROTLI-1 retitles
+  Table 8 to include Brotli; there is no Brotli predictor variant and
+  pdfce does not add one.
+- **Large-window Brotli (RFC 9841) supported; RFC 9841's FRAMING FORMAT
+  refused.** These are opposite halves of the same RFC and easy to
+  conflate — the extension adopts the large-window mode and forbids the
+  framing format. The framing refusal is satisfied by construction (this
+  code never wraps or unwraps a frame) rather than by an explicit check.
+- **Inline images REFUSED** — EXTN-BROTLI-1 §5.2 forbids them. New error
+  `ImageCodecError::BrotliNotAllowedInline`. Checked over the **whole
+  filter chain**, not the terminal position: Brotli is a byte-stream
+  filter whose legal place is the *prefix*, so `Codec::allowed_inline()`
+  — which classifies terminal **codecs** — structurally cannot see it; a
+  separate error variant exists because the two checks ask different
+  questions.
+- **`/Br` REFUSED.** MuPDF accepts it as an alias the extension does not
+  define (Table 92's abbreviations exist for inline images, and this
+  filter may not appear in one). **pdfium decodes Brotli on inline
+  images**, which the extension forbids. Both are **behaviour, not
+  specification**, and both are pinned by a test so a future reader adds
+  either deliberately, with a decision record, rather than as an
+  obvious-looking omission.
+- **NO ENCODER, deliberately.** Emitting Brotli interacts with round-trip
+  rule 3: an untouched stream must be re-emitted byte-identical, which is
+  a byte-copy question rather than a re-compress one, and Brotli encoders
+  are not required to be deterministic across versions or quality
+  settings. Separate and larger; the crate's compressor half is not
+  compiled into the shipped binary. **The write side is filed as its own
+  Backlog item, not implied by this Pass.**
+
+---
+
+#### A false citation was the first thing a search would return
+
+Every web-search summary of `/BrotliDecode` asserts it is *"specified in
+ISO 32000-2:2020 §7.4.11."* **That clause does not exist** — zero hits for
+`7.4.11` in 1,023 pages, and §7.4 stops at 7.4.10. Traced to the body text
+of an unmerged pypdf PR (#3254); pypdf's own maintainer-written issue
+(#3223) says the opposite and is correct. The module doc comments now
+carry the refutation directly, so the next reader who greps the crate
+meets the correction before meeting the error.
+
+---
+
+#### The `Read`-wrapper trap, avoided because `flate.rs` had already documented it
+
+`brotli::Decompressor` is a `std::io::Read` wrapper, and a `Read` wrapper
+reports a **truncated** stream as a clean `Ok(0)` EOF — indistinguishable
+from success, so a truncated content stream would render as a page
+silently missing its end. The raw state-machine API is used instead, and
+a test fails loudly if a truncated stream ever returns `Ok`. A prior
+module's own doc comment prevented a repeat of its own bug — the payoff
+of documenting a gotcha where the next filter author will actually read
+it.
+
+---
+
+#### Verified on a real file, not only in units
+
+Two fixtures (`tools/gen-brotli-fixture.py`, new), one plain and one with
+a PNG-Up predictor: both render with **zero unsupported filters**, draw
+**identical content (0 pixels differ)**, and the authored colours land
+exactly. The unit tests prove the decoder works; these prove **a page can
+reach it** — a different claim, and one this project has watched fail
+before.
+
+A fixture bug was found and fixed **at source**: the content was 75 bytes
+against `/Columns 4`, so the predictor variant decoded with a trailing pad
+byte. The fix is a content length that is a multiple of the column count
+— **not** an assertion relaxed to "identical apart from padding," which
+would have discarded the test's ability to catch a real predictor bug.
+
+---
+
+#### Dependency (project rule 13, pre-answered by the Backlog entry)
+
+`brotli` **8.0.4**, **BSD-3-Clause AND MIT** — both permissive, **no
+operator licence call needed**. Licence read from the fetched crate
+metadata directly this filing, not relayed from the earlier note. Pure
+Rust deliberately: a binding to the C reference implementation would break
+single-binary packaging and the wasm32 fork — verified by `cargo check
+--target wasm32-unknown-unknown`, clean. `THIRD_PARTY_LICENSES.md`
+regenerated via `cargo-about`, which **is** the licence audit
+(`about.toml` accepts permissive only, fails on copyleft). `PRIOR_ART.md`'s
+Compression / LZW table gains a row (below).
+
+---
+
+#### Standing filter obligations, both discharged
+
+- **Output-size ceiling** (`ARCHITECTURE.md` §10) — Brotli needs it more
+  than deflate; its worst-case expansion ratio far exceeds deflate's
+  ~1032:1. Plus a guard against a decoder that requests output room and
+  writes nothing, which the ceiling alone would never catch (a
+  zero-byte-progress loop never reaches it).
+- **`cargo-fuzz` target extended** to `BrotliDecode`, in both predictor
+  states.
+
+---
+
+#### Verification
+
+**4,220** workspace tests green. `cargo fmt --all --check` and `cargo
+clippy --workspace --all-targets` clean. All **16** gates green. `fuzz/`
+targets `cargo check` clean; wasm32 clean. `cargo tree -p pdfce-core`
+shows no GUI dependency.
+
+---
+
+#### `FEATURES.md`
+
+New *Implemented* row, Fonts & rendering: `[x]` core / `[x]` cli / `[ ]`
+gui — reached through every existing CLI path that opens a stream, no new
+subcommand needed. States plainly that it is an **extension, not ISO
+32000-2**, so the row cannot be read as a conformance claim pdfce cannot
+make. The 2026-08-21 *Planned* row is narrowed to the write side only,
+rather than deleted, since the write side remains real, scoped and open.
+
+---
+
+#### `ARCHITECTURE.md`
+
+Decision **086** (§12): the extension-vs-ISO scope call, the read/write
+split, and the dependency. §9 gains a `brotli` 8.0.4 dependency paragraph.
+§10.1's filter-decoder list gains `BrotliDecode`.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | Brotli filed CONDITIONAL in *Backlog*, no Pass ID | **`Pass 123.0` SHIPPED** (moved to *Shipped*; Backlog entry fully deleted per this project's fully-delete-on-ship convention — its sourcing detail is preserved in `filter__brotli.md` and recapped above) |
+| Pass family ceiling | **122** | **123** — new family (unrelated to family 122's overprint/Ghent work); next free **124** |
+| decisions (`ARCHITECTURE.md` §12) | **085** | **086** — the extension-vs-ISO scope call and the read/write split. Next free **087**. |
+| standing rules | **R217** | unchanged, next free **R218** |
+| operator questions | ceiling **(bs)**, next free **(bs)** | **`(bq)` ANSWERED and CLOSED** (nested closure in place, below the ceiling — `(bq)` was never the ceiling). Ceiling unchanged at **(bs)**, next free **(bs)**. |
+| `render-page` metrics line | **92 keys** | unchanged — no new counter |
+| `FEATURES.md` | — | one new *Implemented* row (Fonts & rendering); one *Planned* row narrowed to the write side |
+| `PRIOR_ART.md` | — | `brotli` 8.0.4 row added, Compression / LZW table |
+| Filing ordinal | **249** | **250** |
+
+**Backup currency and git/CI state: not independently checked this
+filing** — no shell. Every figure above is relayed from the engineer's
+own dispatch, per hard rule 8.
+
+---
+
 ### `c743a69` — `Pass 122.6` ships: a DeviceN shading under overprint keeps the ink beneath it — ★★★★ A LARGE IMPROVEMENT, FILED AS ONE: GREEN MATCHES ACROBAT TO ~1 LEVEL, BLUE DOES NOT (55.7 AGAINST 2.6) — 2026-08-25 (two-hundred-and-forty-eighth filing)
 
 **Sourcing.** No shell in this filing (librarian invocation). Every figure
@@ -77570,232 +77756,6 @@ added. See that section below.
   `docs/NEXT_SESSION.md` §2) remains owed to whichever session scopes this
   Pass for real.
 
-- **BROTLI COMPRESSION FILTER — CONDITIONAL, filed 2026-08-21
-  (two-hundred-and-sixteenth filing) on a direct operator request. No
-  Pass ID assigned: the trigger has not fired.**
-
-  **Operator, 2026-08-21, verbatim:** *"please note somewhere that we are
-  going to have to add brotli compression when it becomes part of the pdf
-  2.0 standard."*
-
-  > **★★★ SOURCED PROPERLY 2026-08-21 (two-hundred-and-seventeenth
-  > filing). `pdfce-spec-librarian` was dispatched in parallel with the
-  > filing above and has reported. THE RECORD IS NOW
-  > `D:\Dev\Rag-Specialized\PDF_Spec\filters\filter__brotli.md`
-  > (513 lines) — read it before scoping anything; this entry points at
-  > it and deliberately does not restate it.** The scrape caveat below is
-  > **discharged**: the corpus entry is written off the extension
-  > specification itself and off the two licensed ISO primaries, not off
-  > a landing page.
-  >
-  > **What the sourcing changed, and it is not a small change:**
-  >
-  > 1. **The measured negative is now MEASURED, both editions.** `brotli`
-  >    returns **zero hits in ISO 32000-2:2020 (1,023 pp)** *and* **zero
-  >    in ISO 32000-1:2008 (756 pp)**. Structural corroboration: §7.4 ends
-  >    at **7.4.10 (Crypt)**, and **Table 6 enumerates exactly ten
-  >    filters in both editions**. A scan of **all 2,840 Errata
-  >    Collection 3 markup annotations** returned nothing Brotli-related,
-  >    so **the negative holds for the corrected text too** and not
-  >    merely for a text extractor's view of the printed page.
-  > 2. **★★ BUT THE SPECIFICATION EXISTS, IS FINISHED, AND IS TWO DAYS
-  >    OLD.** **`EXTN-BROTLI-1 v1.3`, *Brotli compression in PDF 2.0*,
-  >    PDF Association PDF TWG, announced 2026-08-19** (registry commit
-  >    2026-08-18 — **two days before the operator asked about it**).
-  >    Licence **CC-BY-4.0**. **The filter name is `/BrotliDecode`.**
-  > 3. **It is an EXTENSION, not an amendment, and not on a dated ISO
-  >    path.** Registered under developer prefix **`PDFa`**,
-  >    `BaseVersion 2.0`, `ExtensionLevel 1`, `ExtensionRevision (2026)`.
-  >    **ISO/TC 171/SC 2's catalogue has zero Brotli hits** — there is no
-  >    work item, no amendment, no dated target.
-  >
-  > **★★★ WHICH MEANS THE OPERATOR'S PREMISE NEEDS CORRECTING, GENTLY AND
-  > IN HIS OWN TERMS.** He asked for Brotli *"when it becomes part of the
-  > pdf 2.0 standard"* — **that phrasing describes an event nobody has
-  > scheduled**, while **a specification pdfce could implement against
-  > already exists and is complete.** Waiting for the base standard is
-  > still a perfectly defensible answer; it is just not the *default*
-  > answer it sounds like, because the thing being waited for has no
-  > date. **Filed as open operator question `(bq)`, below, amended by
-  > this filing with these facts. NOT RESOLVED HERE** — and note that
-  > pdfce has answered this *shape* of question before (it implements
-  > ISO 32000-2 material generally, and `ARCHITECTURE.md` §12 has
-  > precedent for edition-gated behaviour), so it is **a real choice,
-  > not a formality.**
-  >
-  > **⚠ A FALSE CITATION IS CIRCULATING, AND IT WILL BE THE FIRST THING
-  > THE NEXT PERSON MEETS.** Every web-search summary asserts the filter
-  > is *"specified in ISO 32000-2:2020 §7.4.11"*. **§7.4.11 DOES NOT
-  > EXIST** — the string `7.4.11` returns **zero hits in 1,023 pages**,
-  > and §7.4 stops at 7.4.10. The corpus entry carries that
-  > one-command refutation. Traced to the **body text of an unmerged
-  > pypdf PR (#3254)**; **pypdf's own maintainer-written issue (#3223)
-  > says the opposite and is correct.** Recorded *in this Backlog entry*
-  > rather than only in the corpus, because the false citation is what a
-  > search returns first.
-  >
-  > **THREE DECODE-CONTRACT RULES THAT WOULD NOT HAVE BEEN GUESSED**, and
-  > one of them makes the work smaller:
-  > - **Large-window Brotli (RFC 9841) `SHALL` be supported** — not
-  >   optional, so a decoder limited to RFC 7932's window is
-  >   non-conformant.
-  > - **RFC 9841's framing format `SHALL NOT` be used** — the stream
-  >   carries raw Brotli, not RFC 9841 frames.
-  > - **★ `FlateDecode`'s predictors apply VERBATIM.** Table 8 is
-  >   retitled to include Brotli, so **pdfce's existing predictor code is
-  >   reusable as-is** — the PNG/TIFF predictor path does not need a
-  >   Brotli variant.
-  > - Placement: **`/BrotliDecode` `SHALL NOT` be used for inline
-  >   images**; otherwise it is legal **wherever `FlateDecode` is**.
-  >
-  > **THREE SHIPPING READERS ALREADY DIVERGE FROM THE TWO-DAY-OLD SPEC**
-  > — recorded as **BEHAVIOUR, not specification**, and the third is the
-  > one that bites a future *writer*:
-  > - **MuPDF** reads a **`/Br` abbreviation that does not exist** in the
-  >   extension.
-  > - **pdfium** decodes Brotli on **inline images**, which the
-  >   extension forbids.
-  > - **★ pdf.js silently IGNORES `/DecodeParms` predictors on Brotli**
-  >   while honouring them for Flate and LZW. A pdfce writer that emits
-  >   Brotli **with** a predictor would produce a file pdf.js renders
-  >   wrong and reports no error about.
-  >
-  > **DEPENDENCY POSTURE — project rule 13 is PRE-ANSWERED for the read
-  > side, not left open.** crates.io `brotli` **8.0.4** is
-  > **BSD-3-Clause AND MIT** (verified live by the dispatch, 2026-08-21),
-  > so a read-side addition needs **no operator licence call**. It still
-  > owes the standing filter obligations below — the **output-size
-  > ceiling** (`ARCHITECTURE.md` §10) and the **`cargo-fuzz` target** —
-  > neither of which the licence finding touches.
-  >
-  > **TODAY'S BEHAVIOUR IS CORRECT, NOT A BUG.** pdfce returns
-  > `FilterError::UnsupportedFilter("BrotliDecode")` on such a stream —
-  > **a conformant refusal, not a mis-render.** Stated here so nobody
-  > files it a second time as a defect.
-  >
-  > **THE WRITE SIDE REMAINS THE LARGER AND SEPARATE QUESTION**, for the
-  > reason already recorded at the foot of this entry: emitting Brotli
-  > interacts with **project rule 3 (round-trip / minimal-diff)**,
-  > because an **untouched Brotli stream must be re-emitted
-  > byte-identical**, which requires byte-copying rather than
-  > decode-and-re-encode. That obligation is unchanged by the sourcing.
-
-  **The condition IS the entry.** Filed as *conditional on Brotli
-  becoming part of the PDF 2.0 standard*, and it stays conditional until
-  somebody can cite the clause. It is **not** a scheduled Pass and must
-  not be promoted to one on the strength of this entry alone.
-
-  **★ STANDARDISATION STATUS — ~~THE SPEC CORPUS HAS NOTHING~~, BUT A
-  PRIMARY SOURCE WAS FOUND IN THE WORKING TREE, AND IT SHARPENS THE
-  CONDITION RATHER THAN SATISFYING IT.** *(The struck clause was true for
-  one filing. The corpus now holds `filters\filter__brotli.md` — see the
-  amendment box above. The conclusion below is unchanged and was reached
-  correctly; only its evidence base has grown.)*
-
-  What this project's own corpus said as of the two-hundred-and-sixteenth
-  filing: `grep -ri brotli` over
-  `D:\Dev\Rag-Specialized\PDF_Spec\` returned **ZERO hits**. The only
-  mentions anywhere in pdfce's docs are **incidental and about a
-  different thing** — `brotli-decompressor` as a *transitive dependency
-  of the rejected `allsorts` font crate* (`PRIOR_ART.md`,
-  `docs/decisions/004`), which is **WOFF2 font compression, not a PDF
-  stream filter**. **Do not read those hits as evidence about the
-  filter.**
-
-  **★★ WHAT WAS FOUND, and it must be read precisely.** An **untracked**
-  file `jina.txt` at the repo root (2026-08-21 06:54, presumably the
-  operator's own scrape, not committed) is the PDF Association's page
-  `https://pdfa.org/resource/extension-brotli/`, *"Brotli compression in
-  PDF"*, **published by the PDF Association © 2026**. Its own words:
-
-  > *"This document specifies an **extension to the PDF 2.0
-  > specification** (ISO 32000-2:2020) to allow the use of Brotli for
-  > compression of PDF stream data. Brotli is a well-standardized,
-  > patent-free specification with several independent implementations."*
-
-  The Brotli extension dictionary is listed on the PDF Association's
-  **PDF extensions page** (`pdfa.org/extensions#brotli-compression`), and
-  the specification is a **PDF Association publication**
-  (`pdf-extension-brotli.pdf`), with technical comments routed to the
-  **PDF TWG**.
-
-  **★★★ THEREFORE THE OPERATOR'S CONDITION HAS *NOT* FIRED, AND THIS IS
-  THE DISTINCTION THE WHOLE ENTRY TURNS ON.** He asked for this *"when it
-  becomes part of the pdf 2.0 standard"*. **A registered PDF Association
-  EXTENSION to ISO 32000-2:2020 is not ISO 32000-2:2020.** It is a
-  published, citable, vendor-neutral specification — materially stronger
-  evidence than "nothing found", and strong enough that adoption is
-  foreseeable — but the base standard has not absorbed it. **Recording it
-  as "now in PDF 2.0" would be exactly the claim-bearing over-read the
-  project's own sourcing rules forbid**, and it would fire a conditional
-  the operator scoped deliberately.
-  **What would fire it:** the extension being folded into ISO 32000-2 (an
-  amendment, or the next edition), or the operator saying the extension
-  itself is enough. **The second is his call, not the engineer's** — see
-  the open question this filing adds below.
-
-  ⚠ **Two caveats on the source, both deliberate — ★ BOTH DISCHARGED
-  2026-08-21 (two-hundred-and-seventeenth filing); kept legible rather
-  than deleted, because the shape of what they warned about is the
-  reusable part.** (1) It is a **scrape in an untracked working-tree
-  file**, not a corpus entry — a dated reading, not a standing fact
-  (`R199`), and it should be re-checked against `pdfa.org` before
-  anything is built on it. → **Superseded**: the corpus entry
-  `filter__brotli.md` is written off the extension specification and the
-  two licensed ISO primaries. **The scrape itself was then swept into a
-  code commit by a `git add -A` and deleted rather than committed** —
-  see this filing's housekeeping note in `SESSION_LOG.md`. (2) **The
-  extension PDF itself was not read** — only the landing page describing
-  it; the filter name, the stream-dictionary key and the parameter set
-  are therefore **unknown to this entry** and must not be guessed. →
-  **Discharged**: the filter name is **`/BrotliDecode`**, the document is
-  **`EXTN-BROTLI-1 v1.3`**, and the parameter set is **`FlateDecode`'s
-  Table 8 predictors verbatim** — see the amendment box at the head of
-  this entry. **The caveat was right to refuse to guess: the guess a
-  search would have supplied was `§7.4.11 of ISO 32000-2:2020`, and that
-  clause does not exist.**
-  `pdfce-spec-librarian` was dispatched in parallel with this filing to
-  establish the status properly and write it into the corpus (that RAG is
-  **not this role's to write** — hard rule 6); **this entry points at
-  whatever that produces, and at the extension document itself, rather
-  than standing as the record.**
-
-  **The shape of the work when it lands** — a new decode filter beside
-  `FlateDecode`/`LZWDecode` in `pdfce-core`'s `filters` module, subject
-  to the same standing rules as every other filter, **none of them
-  optional**:
-  - an **output-size ceiling** (`ARCHITECTURE.md` §10). Brotli's
-    compression ratio makes it a **decompression-bomb carrier by
-    construction**, which is exactly why the ceiling is not a formality
-    here;
-  - a **`cargo-fuzz` target**, same as every other filter;
-  - a **dependency-licence classification under project rule 13 BEFORE
-    any crate is added.** The obvious crate (`brotli`) is
-    **BSD-3-Clause/MIT dual — permissive** — but **that must be
-    re-verified live at adoption time, not taken from this note.** A
-    licence recorded in a roadmap entry is a **dated reading, not a
-    standing fact** (`R199`).
-    **★ DONE ONCE, 2026-08-21 (two-hundred-and-seventeenth filing):**
-    `brotli` **8.0.4** verified live on crates.io as **`BSD-3-Clause AND
-    MIT`**, so a read-side addition needs **no operator licence call**.
-    **That is itself a dated reading** and does not retire the bullet —
-    re-check at adoption. What it *does* retire is the possibility that
-    the licence is the blocker;
-  - **`THIRD_PARTY_LICENSES.md` regenerated by `cargo-about`** the moment
-    the dependency set changes (project rule 13).
-
-  **★ THE WRITE SIDE IS PART OF THIS, AND IT IS THE HALF THAT TOUCHES AN
-  INVARIANT.** Read-only support would let pdfce *open* such a file;
-  **emitting** Brotli-compressed streams is a separate deliverable. And
-  **re-emitting an UNTOUCHED Brotli stream must be byte-identical** —
-  project rule 3, round-trip / minimal-diff. **That is not automatic:**
-  it requires the untouched stream to be **copied as bytes, never
-  decoded-and-re-encoded**, because Brotli encoders are not required to
-  be deterministic across versions or quality settings, and a re-encode
-  would rewrite bytes pdfce did not logically touch. The existing filter
-  architecture already honours this for `FlateDecode`; the obligation is
-  recorded now so it is not rediscovered at implementation time.
-
 - **`tools/ghent-check.py` HAS NO CALIBRATED THRESHOLD FOR
   REFERENCE-STRIP PATCHES — filed 2026-08-21 (two-hundred-and-sixteenth
   filing). An INSTRUMENT item, not a feature item.**
@@ -81776,6 +81736,47 @@ directly from your own Brotli request. Operator-question ceiling moves
 
   **Default if unanswered: wait for the base standard.** Nothing is built
   and nothing is written that another reader cannot open.
+
+  > **★★★★★ ANSWERED 2026-08-25 (two-hundred-and-fiftieth filing) — CLOSED.
+  > He chose "the extension is enough," and named the work directly rather
+  > than picking off the table above. Operator, verbatim and in full:**
+  >
+  > > *"we added the new compression standard to our roadmap. let's
+  > > implement it now."*
+  >
+  > **He is right that it is on the roadmap** — filed as this very entry,
+  > 2026-08-21. He is directing the work: implement now, against the
+  > extension, rather than wait for the base standard. **That resolves this
+  > question as "the extension is enough," the first of the three costed
+  > options above** — not "read yes, write no" verbatim, though what
+  > shipped (`Pass 123.0`, `4163ad9`) happens to be read-only, for an
+  > independent reason: round-trip rule 3 makes emitting Brotli a separate,
+  > larger deliverable (byte-copying an untouched stream, not re-encoding
+  > it), filed as its own open Backlog item rather than assumed answered by
+  > this ruling.
+  >
+  > **One clause of his own sentence needs correcting, gently, in his own
+  > terms, because left alone it will mislead a future reader rather than
+  > him.** *"The new compression standard"* describes an event that has
+  > **not** happened — Brotli is still not in ISO 32000-2:2020, still has
+  > no ISO work item. What he actually authorised is implementation against
+  > `EXTN-BROTLI-1 v1.3`, the PDF Association extension. Both halves are
+  > recorded rather than either alone: he made the call, and the call is
+  > sound regardless of the phrasing — the correction is to the sentence,
+  > not to the decision.
+  >
+  > **Consequence accepted, per the table above:** files pdfce writes with
+  > Brotli — once the write side ships — will not open in software that
+  > does not know the extension; files pdfce reads gain pure upside with no
+  > such cost. Reading shipped first; writing was never blocked by this
+  > answer, only by rule 3's own requirement, which this answer does not
+  > touch.
+  >
+  > **Operator-question ceiling unchanged at `(bs)`, next free `(bs)`** —
+  > `(bq)` closes below the ceiling, the same shape `(br)`'s closure used
+  > above. **Nothing about Brotli is now awaiting Ken; the write side is
+  > the engineer's/librarian's own Backlog item, not a question back to
+  > him.**
 
 **NEW in the hundred-and-eighty-second filing (2026-08-18) — both
 filed OPEN with `Pass 101.0` / `Pass 101.1`, neither answered by the

@@ -60081,3 +60081,126 @@ touched, no `cargo tree`/round-trip/packaging checks apply.
   filing — no shell. Everything above is either this role's own
   documentation edits or relayed from the dispatching engineer's report,
   per hard rule 8.
+
+## 2026-08-25 (two-hundred-and-fiftieth filing) — `Pass 123.0` ships: `/BrotliDecode` reads, against the PDF Association's extension, not ISO 32000-2 itself; `(bq)` ANSWERED; decision 086 minted
+
+**Shipped:**
+- `Pass 123.0` (`4163ad9`) — `/BrotliDecode` decode, read-only.
+  `filters::brotli`, dispatched from `filters::apply_one`. Reuses
+  `FlateDecode`'s predictors verbatim (Table 8 retitled, not a new
+  variant). Large-window Brotli (RFC 9841) supported; RFC 9841's framing
+  format refused by construction. Inline images refused (new
+  `ImageCodecError::BrotliNotAllowedInline`), checked over the whole
+  filter chain rather than at the terminal-codec position. `/Br`
+  abbreviation refused (MuPDF accepts it; the extension does not define
+  it); inline-image Brotli refused (pdfium decodes it; the extension
+  forbids it) — both pinned by tests as behaviour-not-specification
+  divergences. **No encoder** — deliberately not compiled into the
+  shipped binary; the write side is filed as its own open Backlog item,
+  not implied by this Pass, per round-trip rule 3 (an untouched stream
+  must be byte-copied on save, not decoded-and-recompressed).
+
+**Decisions made this session:**
+- **Decision 086** (`ARCHITECTURE.md` §12) — implement against
+  `EXTN-BROTLI-1 v1.3` (PDF Association extension to ISO 32000-2:2020,
+  announced 2026-08-19), read-only; write side deferred, not refused, by
+  round-trip rule 3. Resolves open operator question `(bq)`.
+- **`(bq)` ANSWERED and CLOSED** (`ROADMAP.md`). Ken, verbatim: *"we added
+  the new compression standard to our roadmap. let's implement it now."*
+  Read as "the extension is enough," the strongest of the three costed
+  options. **His premise needed a gentle correction, recorded alongside
+  his ruling rather than instead of it**: "the new compression standard"
+  describes an event that has not happened at the ISO level — Brotli is
+  still not in ISO 32000-2:2020 and carries no ISO work item. What he
+  authorised is implementation against the PDF Association's extension
+  specifically. The correction is to the sentence's phrasing, not to the
+  decision; both halves are on the record so a future reader cannot
+  mistake this for ISO adoption.
+
+**Findings + decisions:**
+- **Sourcing note:** no shell in this filing (librarian invocation).
+  Every figure below is relayed from the engineer's own dispatch, which
+  stated its method beside each figure, per hard rule 8.
+- **A false citation was the first thing a search would return, and it
+  is now refuted in the module docs.** Every web-search summary of
+  `/BrotliDecode` asserts "ISO 32000-2:2020 §7.4.11" — that clause does
+  not exist (§7.4 ends at 7.4.10; zero hits for the string in 1,023
+  pages). Traced to the body text of an unmerged pypdf PR (#3254);
+  pypdf's own maintainer-written issue (#3223) says the opposite and is
+  correct.
+- **The `Read`-wrapper trap was avoided because a prior module's doc
+  comment had already documented it.** `brotli::Decompressor` is a
+  `std::io::Read` wrapper, and such a wrapper reports a truncated stream
+  as a clean `Ok(0)` EOF — indistinguishable from success, which would
+  render a truncated content stream as a page silently missing its end.
+  The raw state-machine API is used instead; a test fails loudly if a
+  truncated stream ever returns `Ok`.
+- **Verified on a real file, not only in units** — two new fixtures
+  (`tools/gen-brotli-fixture.py`), one plain and one with a PNG-Up
+  predictor: both render with zero unsupported filters, draw identical
+  content (0 pixels differ), authored colours land exactly. A fixture
+  bug was found and fixed at source (75-byte content against `/Columns
+  4` decoded with a trailing pad byte; fixed by choosing a content
+  length that is a multiple of the column count, not by relaxing the
+  assertion).
+- **Dependency:** `brotli` 8.0.4, `BSD-3-Clause AND MIT` — both
+  permissive, no operator licence call needed under project rule 13.
+  Licence read from fetched crate metadata directly, not relayed.
+  Pure Rust deliberately — `cargo check --target wasm32-unknown-unknown`
+  clean, keeping the wasm32 web-fork target intact.
+  `THIRD_PARTY_LICENSES.md` regenerated via `cargo-about`.
+  `PRIOR_ART.md`'s Compression / LZW table gains a row.
+- **Standing filter obligations, both discharged:** output-size ceiling
+  (`ARCHITECTURE.md` §10, Brotli needs it more than deflate given its
+  far higher worst-case expansion ratio) plus a zero-byte-progress
+  guard; `cargo-fuzz` target extended to `BrotliDecode` in both
+  predictor states.
+- **Verification (relayed):** 4,220 workspace tests green; `cargo fmt
+  --all --check` and `cargo clippy --workspace --all-targets` clean;
+  all 16 gates green; `fuzz/` `cargo check` clean; wasm32 clean;
+  `cargo tree -p pdfce-core` shows no GUI dependency.
+
+**`ROADMAP.md`:**
+- New Shipped entry, `Pass 123.0` (`4163ad9`), top of file.
+- The CONDITIONAL Brotli Backlog entry (filed 2026-08-21) **fully
+  deleted** per this project's fully-delete-on-ship convention — its
+  sourcing detail (RFC citations, behavioural divergences, dependency
+  posture) is preserved in the new Shipped entry and in
+  `D:\Dev\Rag-Specialized\PDF_Spec\filters\filter__brotli.md`, which
+  remains the record of record.
+- Operator question `(bq)` closed in place with a nested amendment
+  (same shape as `(br)`'s closure) — ceiling stays `(bs)`, next free
+  `(bs)`; `(bq)` closes below the ceiling.
+
+**`FEATURES.md`:**
+- New *Implemented* row, Fonts & rendering: `[x]` core / `[x]` cli /
+  `[ ]` gui — states plainly that this is an extension, not ISO
+  32000-2, so the row cannot be read as a conformance claim.
+- The 2026-08-21 *Planned* row narrowed to the write side only (encode),
+  rather than deleted, since that half remains real, scoped and open.
+
+**`ARCHITECTURE.md`:**
+- §9 gains the `brotli` 8.0.4 dependency paragraph (fourth dependency
+  under rule 13's classification discipline, following jpeg-encoder/
+  aes/sha2).
+- §10.1's filter-decoder list gains `BrotliDecode`.
+- §12 gains decision 086 (full text above).
+
+**Still in flight:**
+- The write side (`/BrotliDecode` encoding) — a genuinely open,
+  unscoped Backlog item. Needs byte-copy-on-untouched-stream design
+  before it can be scoped into a Pass, per round-trip rule 3.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` not edited by this role (engineer-owned).
+- Ledger: standing rules ceiling stays `R217`, next free `R218`;
+  decisions ceiling `086`, next free `087`; Pass family ceiling `123`
+  (new family, unrelated to family `122`'s overprint/Ghent work), next
+  free `124`; operator-question ceiling unchanged at `(bs)`, next free
+  `(bs)` (`(bq)` closed below the ceiling); `render-page` metrics line
+  **92 keys**, unchanged (no new counter this Pass); filing ordinal
+  `250`.
+- Backup currency and git/CI state not independently checked this
+  filing — no shell. Everything above is either this role's own
+  documentation edits or relayed from the dispatching engineer's report,
+  per hard rule 8.
