@@ -488,6 +488,85 @@ impl ColorSpace {
     /// operand run is a tolerated structural oddity in this renderer, not a
     /// reason to abandon the page (§7.8.2 calls it an error; a viewer that
     /// gives up over one is conformant and useless).
+    /// The **authored colorants** for `comps`, when this space has some —
+    /// the colorant-preserving twin of [`Self::to_rgb`].
+    ///
+    /// # Why this exists, and what it is NOT
+    ///
+    /// [`Self::to_rgb`] is lossy by construction: it answers *"what does
+    /// this look like on a screen?"*, and once answered there is no way
+    /// back to which inks were asked for. That is fine for painting and
+    /// fatal for **overprint**, which §11.7.4.3 defines in terms of *"all
+    /// colour components **specified in the current colour space**"* — a
+    /// question about the authored space, not about the appearance.
+    ///
+    /// So this returns `Some([c, m, y, k])` only where those four numbers
+    /// are the ones the *file* asked for:
+    ///
+    /// * `DeviceCmyk` — the components themselves.
+    /// * `Separation` / `DeviceN` **whose alternate resolves to
+    ///   `DeviceCmyk`** — the tint transform's own output, taken *before*
+    ///   anything converts it. This is the case Ghent `GWG 1.0` exercises:
+    ///   `/DeviceN [/Cyan /Magenta]` over a `DeviceCMYK` alternate.
+    ///
+    /// **`None` everywhere else, and `None` is not a failure** — it is the
+    /// honest answer that this space has no colorants to preserve, and the
+    /// caller must fall back to the `to_rgb` route rather than invent
+    /// four numbers. In particular `DeviceGray` and `DeviceRgb` return
+    /// `None`: a grey *could* be mapped to `K` and an RGB *could* be
+    /// mapped through a conversion, but neither is what the file
+    /// specified, and §11.7.4.3 would then let pdfce claim components the
+    /// document never named. That is the exact error this function exists
+    /// to avoid, so it is refused rather than approximated.
+    ///
+    /// # `Colorant::All` and `Colorant::None`
+    ///
+    /// Both return `None` here. `/None` paints nothing at all (the caller
+    /// suppresses it upstream), and `/All` means *"every colorant at this
+    /// tint"* — which is a statement about the output device's full ink
+    /// set, not about four specific values, and pdfce's four-plane buffer
+    /// cannot express it faithfully. Answering `None` keeps that gap
+    /// visible instead of silently rendering `/All` as four equal inks.
+    #[must_use]
+    pub fn to_cmyk(&self, comps: &[f32], diag: &mut ColorDiagnostics) -> Option<[f32; 4]> {
+        match self {
+            Self::DeviceCmyk => Some([
+                comp(comps, 0),
+                comp(comps, 1),
+                comp(comps, 2),
+                comp(comps, 3),
+            ]),
+            Self::Separation {
+                colorant,
+                alternate,
+                tint,
+            } => {
+                if matches!(colorant, Colorant::None | Colorant::All) {
+                    return None;
+                }
+                tint_to_cmyk(tint.as_deref(), alternate, comps, diag)
+            }
+            Self::DeviceN {
+                names,
+                alternate,
+                tint,
+            } => {
+                if names.iter().all(|c| matches!(c, Colorant::None)) {
+                    return None;
+                }
+                tint_to_cmyk(tint.as_deref(), alternate, comps, diag)
+            }
+            // `Indexed` recurses into its base for the same reason
+            // `BlendSpace::of` does: §8.6.6.3 puts the colour values in the
+            // BASE space, so asking the index is a category error.
+            Self::Indexed { .. } => {
+                let (base, entry) = self.indexed_entry(comps)?;
+                base.to_cmyk(&entry, diag)
+            }
+            _ => None,
+        }
+    }
+
     #[must_use]
     pub fn to_rgb(
         &self,
@@ -1692,6 +1771,43 @@ fn load_tint(
 /// Now the document's own answer is used. `neutral_from_tint` remains as
 /// the fallback for a file whose transform is missing or malformed, and
 /// that case is still counted.
+/// Run a `/tintTransform` and keep its output **as colorants**, when the
+/// alternate space is `DeviceCmyk`.
+///
+/// The four numbers this returns are the same ones [`tint_through`] computes
+/// and then hands to `alternate.to_rgb(...)`. The only difference is that
+/// this stops one step earlier — which is the whole of what overprint needs
+/// and the whole of what the RGB route destroys.
+///
+/// `None` when there is no transform, when it fails to evaluate, or when the
+/// alternate is not `DeviceCmyk`. A four-component `ICCBased` alternate
+/// arrives here already resolved to `DeviceCmyk` by `crate::color`'s own
+/// `/Alternate` handling (§8.6.5.5 / Table 66), so it needs no arm of its own
+/// — the same reasoning `BlendSpace::of` documents.
+fn tint_to_cmyk(
+    transform: Option<&pdfce_core::function::PdfFunction>,
+    alternate: &ColorSpace,
+    comps: &[f32],
+    diag: &mut ColorDiagnostics,
+) -> Option<[f32; 4]> {
+    if !matches!(alternate, ColorSpace::DeviceCmyk) {
+        return None;
+    }
+    let f = transform?;
+    let inputs: Vec<f64> = comps.iter().map(|v| f64::from(*v)).collect();
+    let Ok(out) = f.eval(&inputs) else {
+        // Counted through the same channel the RGB route uses, so a file
+        // with a broken transform reports one failure rather than two.
+        diag.tint_transform_not_applied += 1;
+        return None;
+    };
+    if out.len() < 4 {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    Some([out[0] as f32, out[1] as f32, out[2] as f32, out[3] as f32])
+}
+
 fn tint_through(
     function: &pdfce_core::function::PdfFunction,
     alternate: &ColorSpace,

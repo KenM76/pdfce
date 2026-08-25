@@ -3943,19 +3943,69 @@ impl Interpreter<'_> {
                 self.diag.shading.refused += 1;
                 return;
             };
-            if shading
-                .paint(to_target, region, clip, alpha, &mut scratch)
-                .is_some()
+            // ★★ THE NATIVE INK ROUTE, `Pass 122.6`. Taken only when
+            // overprint is actually in force AND the ramp kept its authored
+            // colorants AND the source space is a `Separation`/`DeviceN`;
+            // everything else still bridges, so this Pass moves exactly the
+            // pixels overprint was being lost on and no others.
+            //
+            // Gating on overprint is deliberate rather than timid. The bridge
+            // is a DISCLOSED approximation for ordinary shadings
+            // (`cmyk_bridged_pixels`), and widening this route to every
+            // shading on an ink page would change a large population for a
+            // reason unrelated to the defect -- and would quietly empty a
+            // counter operators read. One defect, one behaviour change.
+            let op = self.gs.current.overprint_fill || self.gs.current.overprint_stroke;
+            let kind = crate::overprint::classify(&shading.color_space, false);
+            let mut painted_natively = false;
+            // ★ ONLY a Separation/DeviceN source may take this route, and the
+            // exclusion is a correctness guard rather than caution. Table
+            // 149's `DeviceCmykDirect` row under `/OPM 1` is the one
+            // VALUE-DEPENDENT cell in the table -- a zero tint selects the
+            // backdrop, a non-zero one selects the source -- so its rules
+            // cannot be computed once for a whole shading, which is exactly
+            // what this route does. A `DeviceCMYK` shading under overprint
+            // therefore keeps the bridge and keeps being disclosed, which is
+            // honest rather than silently wrong.
+            if op
+                && let Some(ramp) = shading.ramp.as_ref()
+                && ramp.has_colorants()
+                && let Some(kind @ crate::overprint::SourceKind::SeparationOrDeviceN { .. }) = kind
             {
-                // ★ `Blend::Normal`, EVEN WHEN OVERPRINT IS IN FORCE, and
-                // that is now disclosed instead of silent. Routing this
-                // through an overprint blend would not help: the scratch
-                // is bridged sRGB, so §11.7.4.3's "specified in the
-                // current colour space" is true of all three components
-                // and `B = c_s` everywhere regardless. The fix is native
-                // colorants in the ramp AND an overprint composite here,
-                // together -- see `overprint_shadings_unsupported`.
-                if self.gs.current.overprint_fill || self.gs.current.overprint_stroke {
+                // Rules ONCE, not per pixel: for this source kind Table 149
+                // selects on the colorant NAMES alone. See
+                // `composite_overprint_varying` for why that is a property of
+                // the source kind and not a shortcut.
+                let rules = crate::overprint::cmyk_group_rules(
+                    &kind,
+                    [0.0; 4],
+                    true,
+                    u8::from(self.gs.current.overprint_mode == 1),
+                );
+                if shading
+                    .paint_cmyk(to_target, region, clip, alpha, rules, buf)
+                    .is_some()
+                {
+                    self.diag.shading.painted += 1;
+                    self.diag.overprint_composited += 1;
+                    painted_natively = true;
+                }
+            }
+            if !painted_natively
+                && shading
+                    .paint(to_target, region, clip, alpha, &mut scratch)
+                    .is_some()
+            {
+                // `Blend::Normal`, even when overprint is in force, on every
+                // shading the native route could not take -- a ramp with no
+                // authored colorants (a `DeviceRGB` shading, or a
+                // `Separation` whose alternate is not `DeviceCmyk`), or a
+                // `DeviceCMYK` source excluded above. Routing THIS through an
+                // overprint blend would still not help: the scratch is
+                // bridged sRGB, so §11.7.4.3's "specified in the current
+                // colour space" is true of all three components and
+                // `B = c_s` everywhere regardless.
+                if op {
                     self.diag.overprint_shadings_unsupported += 1;
                 }
                 buf.composite_srgb(

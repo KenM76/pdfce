@@ -413,6 +413,22 @@ pub struct ColorRamp {
     /// so a partially-broken function does not silently gain invented
     /// colours at the broken end.
     samples: Vec<Option<Rgb>>,
+    /// The **authored colorants** for the same samples, when the shading's
+    /// colour space has any — see [`crate::color::ColorSpace::to_cmyk`].
+    ///
+    /// # Why the ramp carries two answers instead of one
+    ///
+    /// [`Self::samples`] is what the shading looks like; this is what it
+    /// asked for. The first is enough to paint with and useless for
+    /// overprint, because §11.7.4.3 is defined over *"colour components
+    /// specified in the current colour space"* and an sRGB triple has
+    /// specified all three of its own regardless of what the file said.
+    ///
+    /// **Empty when the space has no colorants to preserve** — a
+    /// `DeviceRGB` or `CalGray` shading, or a `Separation` whose alternate
+    /// is not `DeviceCmyk`. Empty is a real answer, not a missing one, and
+    /// callers fall back to the sRGB route rather than inventing inks.
+    cmyk: Vec<Option<[f32; 4]>>,
     /// The domain the samples span, `[t0, t1]`, as taken from the
     /// shading's own `/Domain`.
     domain: [f32; 2],
@@ -435,6 +451,12 @@ impl ColorRamp {
         diag: &mut ColorDiagnostics,
     ) -> Self {
         let mut samples = Vec::with_capacity(RAMP_SAMPLES);
+        // ★ Built in the SAME loop as `samples`, from the SAME `comps`, so
+        // the two answers cannot describe different points of the ramp. A
+        // second pass would be a second evaluation of a `/tintTransform`
+        // that is allowed to be arbitrary PostScript, and nothing would
+        // force the two passes to agree.
+        let mut cmyk = Vec::with_capacity(RAMP_SAMPLES);
         let mut raw = Vec::new();
         let mut comps: Vec<f32> = Vec::new();
         let span = f64::from(domain[1] - domain[0]);
@@ -444,14 +466,27 @@ impl ColorRamp {
             let t = f64::from(domain[0]) + span * frac;
             if !function.eval(&[t], &mut raw) {
                 samples.push(None);
+                cmyk.push(None);
                 continue;
             }
             comps.clear();
             #[allow(clippy::cast_possible_truncation)]
             comps.extend(raw.iter().map(|v| *v as f32));
             samples.push(space.to_rgb(&comps, intent, diag));
+            cmyk.push(space.to_cmyk(&comps, diag));
         }
-        Self { samples, domain }
+        // All-or-nothing: a ramp whose space yields colorants at some
+        // samples and not others would let a shading overprint across part
+        // of its span and not the rest, which is a seam no file asked for.
+        // Either the space has colorants or it does not.
+        if cmyk.iter().any(Option::is_none) {
+            cmyk.clear();
+        }
+        Self {
+            samples,
+            cmyk,
+            domain,
+        }
     }
 
     /// The colour at parametric coordinate `t`, or `None` where the
@@ -463,8 +498,45 @@ impl ColorRamp {
     /// question decided before this is called. Clamping here only ensures
     /// that when the geometry *does* ask for an out-of-domain colour, it
     /// gets the end colour rather than an index panic.
+    /// The **authored colorants** at `t`, or `None` where this ramp has
+    /// none — the colorant twin of [`Self::at`], clamped identically.
+    ///
+    /// A caller that gets `None` must paint through [`Self::at`] instead.
+    /// It must not substitute a converted value: the whole reason this
+    /// exists is that a converted value cannot answer the overprint
+    /// question.
+    #[must_use]
+    pub fn at_cmyk(&self, t: f32) -> Option<[f32; 4]> {
+        if self.cmyk.is_empty() {
+            return None;
+        }
+        *self.cmyk.get(self.index_of(t))?
+    }
+
+    /// Whether this ramp can be painted in ink at all.
+    #[must_use]
+    pub fn has_colorants(&self) -> bool {
+        !self.cmyk.is_empty()
+    }
+
     #[must_use]
     pub fn at(&self, t: f32) -> Option<Rgb> {
+        self.samples.get(self.index_of(t)).copied().flatten()
+    }
+
+    /// Map a parametric `t` onto a sample index, clamping out-of-domain to
+    /// the nearest end.
+    ///
+    /// ★ Shared by [`Self::at`] and [`Self::at_cmyk`] rather than written
+    /// twice, and that is a correctness property rather than tidiness: the
+    /// two lookups describe the SAME point of the same ramp, and two copies
+    /// of a rounding expression are two things that can drift. This is
+    /// decision 084's shared-predicate rule at the smallest possible scale.
+    ///
+    /// The clamp is the ramp's own contract and says nothing about
+    /// `/Extend`: whether anything is painted beyond a shading's ends is a
+    /// geometry question decided before this is called.
+    fn index_of(&self, t: f32) -> usize {
         let [t0, t1] = self.domain;
         let span = t1 - t0;
         let frac = if span.abs() < f32::EPSILON {
@@ -473,8 +545,9 @@ impl ColorRamp {
             ((t - t0) / span).clamp(0.0, 1.0)
         };
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let idx = (frac * (RAMP_SAMPLES - 1) as f32).round() as usize;
-        self.samples.get(idx).copied().flatten()
+        {
+            (frac * (RAMP_SAMPLES - 1) as f32).round() as usize
+        }
     }
 
     /// Whether every sample produced a colour.
@@ -1238,6 +1311,62 @@ fn radial_param(coords: [f32; 6], domain: [f32; 2], extend: [bool; 2], x: f32, y
 /// this slice paints only `sh`, where Table 77 says it is ignored. The
 /// parameter is absent rather than passed-and-unused so that adding the
 /// pattern route is a visible change here.
+/// The per-pixel geometry decision, shared by **both** paint routes.
+///
+/// Returns `Some((t, coverage))` when this device pixel is inside the
+/// shading's `/BBox`, has a parametric coordinate, and is not fully clipped
+/// away; `None` when it should be skipped.
+///
+/// # ★ Why this is a function rather than two copies of six lines
+///
+/// Because `paint_region` (sRGB) and `paint_region_cmyk` (ink) must agree
+/// about **which pixels a shading covers**, exactly and always. Two copies of
+/// a pixel-centre offset, a `/BBox` comparison and a clip lookup are two
+/// things that can drift, and the drift would show as a shading whose
+/// coverage changed when a page happened to composite in ink — a difference
+/// no file asked for and nothing would flag. This is decision 084's
+/// shared-predicate rule: two paths that must agree share the predicate that
+/// decides, rather than each computing it.
+///
+/// The pixel CENTRE offset in particular is load-bearing and is stated once
+/// here: a gradient sampled at pixel corners is a half-pixel shifted against
+/// every other paint in this renderer, which shows up as a seam where a
+/// shading abuts a path filled with the same colour.
+fn sample_at(
+    shading: &Shading,
+    to_target: tiny_skia::Transform,
+    px: i32,
+    py: i32,
+    width: i32,
+    clip: Option<&tiny_skia::Mask>,
+) -> Option<(f32, f32)> {
+    let mut pt = tiny_skia::Point::from_xy(px as f32 + 0.5, py as f32 + 0.5);
+    to_target.map_point(&mut pt);
+
+    // /BBox clips, in TARGET space (SH6, SH7).
+    if let Some([bx0, by0, bx1, by1]) = shading.bbox
+        && (pt.x < bx0.min(bx1)
+            || pt.x > bx0.max(bx1)
+            || pt.y < by0.min(by1)
+            || pt.y > by0.max(by1))
+    {
+        return None;
+    }
+
+    let Some(Param::At(t)) = shading.geometry.param_at(pt.x, pt.y) else {
+        return None;
+    };
+
+    let idx = (py as usize) * (width as usize) + (px as usize);
+    let coverage = match clip {
+        // The clip mask is one byte of coverage per device pixel, laid out
+        // in the same row-major order as the pixmap.
+        Some(mask) => f32::from(mask.data()[idx]) / 255.0,
+        None => 1.0,
+    };
+    Some((t, coverage))
+}
+
 fn paint_region(
     shading: &Shading,
     ramp: &ColorRamp,
@@ -1255,37 +1384,13 @@ fn paint_region(
 
     for py in y_lo.max(0)..y_hi.min(height) {
         for px in x_lo.max(0)..x_hi.min(width) {
-            // Pixel CENTRE, not corner: a gradient sampled at pixel corners
-            // is a half-pixel shifted against every other paint in this
-            // renderer, which shows up as a seam where a shading abuts a
-            // path filled with the same colour.
-            let mut pt = tiny_skia::Point::from_xy(px as f32 + 0.5, py as f32 + 0.5);
-            to_target.map_point(&mut pt);
-
-            // /BBox clips, in TARGET space (SH6, SH7).
-            if let Some([bx0, by0, bx1, by1]) = shading.bbox
-                && (pt.x < bx0.min(bx1)
-                    || pt.x > bx0.max(bx1)
-                    || pt.y < by0.min(by1)
-                    || pt.y > by0.max(by1))
-            {
-                continue;
-            }
-
-            let Some(Param::At(t)) = shading.geometry.param_at(pt.x, pt.y) else {
+            let Some((t, coverage)) = sample_at(shading, to_target, px, py, width, clip) else {
                 continue;
             };
             let Some(rgb) = ramp.at(t) else {
                 continue;
             };
-
             let idx = (py as usize) * (width as usize) + (px as usize);
-            let coverage = match clip {
-                // The clip mask is one byte of coverage per device pixel,
-                // laid out in the same row-major order as the pixmap.
-                Some(mask) => f32::from(mask.data()[idx]) / 255.0,
-                None => 1.0,
-            };
             let a = alpha * coverage;
             if a <= 0.0 {
                 continue;
@@ -1375,6 +1480,52 @@ impl Shading {
     /// `None` means this shading is of a type this build does not paint
     /// (type 1, and the meshes), which is a different fact from "painted
     /// zero pixels" and must not collapse into it.
+    /// Paint this shading **natively in ink**, honouring overprint.
+    ///
+    /// Returns `None` for the same reasons [`Shading::paint`] does, and
+    /// additionally when this shading's ramp carries no authored colorants —
+    /// in which case the caller must fall back to the sRGB route rather than
+    /// converting, because a converted colour cannot answer §11.7.4.3's
+    /// "which components did the source specify?".
+    ///
+    /// The geometry decision is [`sample_at`], the *same* function
+    /// [`Shading::paint`] uses, so the two routes cover exactly the same
+    /// pixels.
+    #[must_use]
+    pub(crate) fn paint_cmyk(
+        &self,
+        to_target: tiny_skia::Transform,
+        region: (i32, i32, i32, i32),
+        clip: Option<&tiny_skia::Mask>,
+        alpha: f32,
+        rules: [crate::overprint::ComponentRule; 4],
+        buf: &mut crate::cmyk_buffer::CmykBuffer,
+    ) -> Option<usize> {
+        if !self.geometry.is_analytic() || matches!(self.geometry, Geometry::FunctionBased { .. }) {
+            return None;
+        }
+        let ramp = self.ramp.as_ref()?;
+        if !ramp.has_colorants() {
+            return None;
+        }
+        let (x_lo, y_lo, x_hi, y_hi) = region;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let clamped = (
+            x_lo.max(0) as u32,
+            y_lo.max(0) as u32,
+            x_hi.max(0) as u32,
+            y_hi.max(0) as u32,
+        );
+        let width = buf.width() as i32;
+        #[allow(clippy::cast_possible_wrap)]
+        let changed = buf.composite_overprint_varying(clamped, rules, alpha, |x, y| {
+            let (t, coverage) = sample_at(self, to_target, x as i32, y as i32, width, clip)?;
+            let c = ramp.at_cmyk(t)?;
+            Some((c, coverage))
+        });
+        Some(changed as usize)
+    }
+
     #[must_use]
     pub fn paint(
         &self,
@@ -1790,6 +1941,10 @@ mod tests {
         // small error that is invisible on a subtle ramp and obvious on a
         // black-to-white one.
         let ramp = ColorRamp {
+            // Empty: these tests exercise the sRGB lookup, and an empty
+            // colorant vector is the honest state for a ramp built from a
+            // space that has none.
+            cmyk: Vec::new(),
             samples: (0..RAMP_SAMPLES)
                 .map(|i| {
                     #[allow(clippy::cast_precision_loss)]
@@ -1812,6 +1967,10 @@ mod tests {
     #[test]
     fn a_degenerate_ramp_domain_does_not_divide_by_zero() {
         let ramp = ColorRamp {
+            // Empty: these tests exercise the sRGB lookup, and an empty
+            // colorant vector is the honest state for a ramp built from a
+            // space that has none.
+            cmyk: Vec::new(),
             samples: vec![Some(Rgb::BLACK); RAMP_SAMPLES],
             domain: [3.0, 3.0],
         };

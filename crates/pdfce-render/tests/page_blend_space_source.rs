@@ -162,19 +162,24 @@ fn the_provenance_is_always_reported() {
     );
 }
 
-/// ★ A shading painted under overprint cannot honour it, and now says so.
+/// ★ A `DeviceN` shading under overprint is painted in ink and honours it.
 ///
 /// Found 2026-08-25 when the operator read `GWG 1.0` cells `e` and `j` and
 /// said they carry no trap X but are *"the wrong colour … always have been"*.
-/// He was right, and `shading.rs` contained no mention of overprint at all —
-/// the gap was real and, unlike the image equivalent, entirely undisclosed.
+/// He was right: `shading.rs` had no mention of overprint at all.
 ///
-/// The count is asserted as **exactly 2** rather than merely non-zero because
-/// two is the number of shading cells on that patch, and it is the figure that
-/// ties the counter to the cells he named. A counter that fired on the wrong
-/// population would still be non-zero.
+/// **This assertion was inverted on the day it was written**, and deliberately
+/// left in the record that way. It first read `overprint_shadings_unsupported
+/// == 2` and pinned the *gap* — two shadings that could not overprint. `Pass
+/// 122.6` closed the gap, the test failed, and that failure is exactly what a
+/// disclosure test is for: the counter it watches is the one the fix must
+/// empty. Rewriting it to `== 0` is the fix being observed, not the test being
+/// weakened.
+///
+/// Zero alone would be a weak claim, though — a counter is also zero when
+/// nothing was painted at all. So the paint is asserted beside it.
 #[test]
-fn a_shading_under_overprint_discloses_that_it_cannot_honour_it() {
+fn a_devicen_shading_under_overprint_is_painted_in_ink() {
     let Some(page) = render(
         "1_GWG010_CMYK_OP_x3.pdf",
         PageBlendSpaceSource::OutputIntentIfSubtractive,
@@ -182,8 +187,14 @@ fn a_shading_under_overprint_discloses_that_it_cannot_honour_it() {
         return;
     };
     assert_eq!(
-        page.diagnostics.overprint_shadings_unsupported, 2,
-        "GWG 1.0 paints two shadings under overprint; both are bridged \
-         through sRGB and neither can overprint, so both must be disclosed"
+        page.diagnostics.shading.painted, 4,
+        "GWG 1.0 paints four shadings; a zero disclosure below means nothing \
+         unless they were actually painted"
+    );
+    assert_eq!(
+        page.diagnostics.overprint_shadings_unsupported, 0,
+        "both of GWG 1.0's overprinting shadings are /DeviceN over a \
+         DeviceCMYK alternate, so both take the native ink route and neither \
+         needs disclosing"
     );
 }

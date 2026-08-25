@@ -819,6 +819,78 @@ impl CmykBuffer {
     /// # Returns
     ///
     /// The number of pixels changed.
+    /// §11.7.4.3's composite where the source colour **differs per pixel** —
+    /// the shading twin of [`CmykBuffer::composite_overprint`].
+    ///
+    /// # Why this exists beside its solid-colour sibling
+    ///
+    /// [`CmykBuffer::composite_overprint`] takes one `source: [Chan; 4]`,
+    /// because a filled path has one colour. The entire point of a shading is
+    /// that every pixel has a different one, so the source arrives as a
+    /// callback returning the pixel's authored colorants and its coverage.
+    ///
+    /// **`rules` are still computed once by the caller, not per pixel**, and
+    /// that is correct rather than an optimisation: for a
+    /// `SourceKind::SeparationOrDeviceN` — the case a shading reaches — Table
+    /// 149's selection depends only on **which colorants the space names**,
+    /// never on their tints. (It *is* tint-dependent for
+    /// `DeviceCmykDirect` under `/OPM 1`, which is why that source kind must
+    /// not be routed here without revisiting this.)
+    ///
+    /// # What overprint does here, in one sentence
+    ///
+    /// A `/DeviceN [/Cyan /Magenta]` shading names two of the four process
+    /// colorants, so under overprint `C` and `M` take the source while `Y`
+    /// and `K` keep the backdrop — which is how a cyan-to-magenta gradient
+    /// over an orange ground comes out green rather than blue.
+    pub(crate) fn composite_overprint_varying(
+        &mut self,
+        region: (u32, u32, u32, u32),
+        rules: [crate::overprint::ComponentRule; 4],
+        alpha: Chan,
+        mut source_at: impl FnMut(u32, u32) -> Option<([Chan; 4], Chan)>,
+    ) -> u32 {
+        let (x0, y0, x1, y1) = region;
+        let x1 = x1.min(self.width);
+        let y1 = y1.min(self.height);
+        if x0 >= x1 || y0 >= y1 {
+            return 0;
+        }
+        let alpha = alpha.clamp(0.0, 1.0);
+        self.mark_dirty((x0, y0, x1, y1));
+        let mut changed = 0_u32;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let Some((source, coverage)) = source_at(x, y) else {
+                    continue;
+                };
+                let a = alpha * coverage.clamp(0.0, 1.0);
+                if a <= 0.0 {
+                    continue;
+                }
+                let idx = (y * self.width + x) as usize;
+                let before = self.pixel(idx);
+                let mut out = before;
+                for ch in 0..4 {
+                    // Table 149 per colorant, then §11.4.4's ordinary
+                    // source-over weighting on the value the rule selected.
+                    // The rule decides WHICH tint competes; alpha decides how
+                    // much of it lands. Collapsing the two would make a
+                    // `Backdrop` component fade toward zero as alpha fell,
+                    // which is the opposite of preserving it.
+                    let target = rules[ch].apply(before.c[ch], source[ch]);
+                    out.c[ch] = target.mul_add(a, before.c[ch] * (1.0 - a));
+                }
+                out.a = a.mul_add(1.0 - before.a, before.a);
+                self.set_pixel(idx, out);
+                if out != before {
+                    changed += 1;
+                }
+            }
+        }
+        changed
+    }
+
     pub(crate) fn composite_overprint(
         &mut self,
         coverage: &Mask,
