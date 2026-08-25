@@ -257,7 +257,7 @@ fn a_mesh_reached_as_a_shading_pattern_paints_the_same_picture() {
     }
     assert_eq!(
         differing, 0,
-        "the two paint routes anchor differently and must still land the          same mesh on the same pixels when both transforms are the identity"
+        "the two routes anchor differently and must still land the same mesh on the same pixels"
     );
 }
 
