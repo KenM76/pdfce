@@ -61116,3 +61116,142 @@ of the live ledger.
    decision this filing); Pass family ceiling **`126`**, next free
    **`126.2`**; operator-question ceiling `(bu)`, next free `(bv)`,
    unchanged; filing ordinal **257**.
+
+## 2026-08-25 (two-hundred-and-fifty-eighth filing) — `Pass 126.0`/`Pass 126.1` SHIP: all 49 measured external-corpus Type 3 files now render (was 0); bitmap glyphs measured NOT smoothed, matching Acrobat; `docs/FEATURES.md` row moved to Implemented, extraction row split out to Planned
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+engineer's dispatch relayed the content of both commit messages in full
+(`1a5fc92` for `Pass 126.0`, `0f09780` for `Pass 126.1`); every figure below
+is filed as relayed, not independently re-measured by this role.
+
+**Shipped:**
+- `Pass 126.0` (`1a5fc92`) — Type 3 fonts render: glyph-procedure mechanism
+  + vector flavour (`d0`/`d1` per Table 113, `FontMatrix`-unit widths,
+  bounded recursion shared with the form-XObject guard). All 49 of 49
+  external-corpus PDFs measured at filing time as carrying a Type 3 font
+  now render — `unsupported_type3=0`, `type3_glyphs_missing=0` on every
+  one; `PDFBOX-3053-reduced.pdf`'s 43-glyph heading goes from a blank page
+  to legible text.
+- `Pass 126.1` (`0f09780`) — the bitmap flavour, and the measurement that
+  it is not smoothed. Framed honestly as a measurement Pass, not a code
+  Pass: the bitmap mechanism (`d1` + inline `ImageMask`) has rendered
+  correctly since `126.0` shipped; this Pass proves it and locks it with a
+  test. Acrobat does not interpolate bitmap Type 3 glyphs (source tier);
+  pdfce matches — a colour census returns exactly two distinct colours at
+  scales 0.25, 1, 4 and 16, chosen because they cross the mask's own
+  minify/magnify boundary (device size passes through its own 8×8 sample
+  count near scale ≈0.29) rather than merely spanning a "reasonable
+  range" — `R211` clause (e), cited not amended.
+
+**Decisions made this session:** none. No standing rule minted — the
+fixture-precondition finding below is a second instance of an existing
+cross-project finding, recorded as a second occurrence rather than a new
+rule or a new file.
+
+**Findings + decisions:**
+
+- **The `d1` colour-ignore rule, probed against Acrobat Reader at the
+  257th filing, is now the shipped and Acrobat-confirmed behaviour**: `d1`
+  paints in the graphics-state colour, ignoring its own colour operators;
+  `d0` keeps its own. §9.6.5 and Acrobat parity are the same criterion
+  here, recorded explicitly so a future session does not re-run the probe.
+- **Four implementation traps, all fixed before shipping, all of the kind
+  that render *something* plausible-looking when got wrong:** widths in
+  `FontMatrix` units, not thousandths (`width(code) / 1000.0` — correct
+  for two font kinds, silently wrong for Type 3 — no longer exists as a
+  call site; the conversion now lives in `LoadedFont::advance_text_space`);
+  `/Encoding` is total with no built-in fallback (§9.6.6.3); a missing
+  glyph still advances the pen (§9.6.5 step (b)); `/Resources` falls back
+  to the page's own dictionary.
+- **Three design notes carried forward for future sessions:** the
+  `d0`/`d1` state starts shape-only and `d0` raises it (the declaration
+  arrives inside the stream, not before it); the colour gag is one gate,
+  not per-operator arms, and deliberately excludes `gs` (§9.6.5 permits a
+  glyph procedure to set line width/join/cap/dash); the recursion guard is
+  shared with form XObjects because the two nest through each other and
+  separate budgets would each individually stay under their own limit
+  while the real combined stack did not.
+- **Disclosure: three new metrics keys** — `type3_glyphs`,
+  `type3_glyphs_missing`, `type3_colors_ignored`. The third is **not a
+  shortfall** — ignoring `d1`'s own colour operators is Table 113's
+  defined behaviour, not a gap — and is reported so an operator debugging
+  an unexpected glyph colour is told the visible colour operator was
+  deliberately dropped, not missed.
+- **Two stale claims retired in the same commit as the behaviour
+  change**, both instances of `R212`'s "published claim drifts from
+  enforced claim" shape, here caught rather than left to drift: a test
+  named `type3_font_is_counted_unsupported_not_rendered` was rewritten
+  (not deleted) into a pair asserting the narrower, still-true claim (an
+  empty `/Encoding` is a conformant blank page per §9.6.6.3, not an
+  "unsupported" verdict; a font missing `/CharProcs` entirely is still
+  refused by name); `UnsupportedFont::Type3`'s documented meaning narrowed
+  from "pdfce does not render Type 3" to "Table 112's irreducible entries
+  are missing," updated in both the crate's doc comments and the CLI's
+  per-key disclosure table in the same commit.
+- **Fixture-precondition finding, second occurrence of an existing
+  cross-project finding** (`D:\dev\rag\rust\a_fixture_that_avoids_a_feature_precondition_cannot_tell_a_fix_from_a_no_op.md`,
+  first occurrence `Pass 97.1g`): rows A–D of the colour fixture each
+  position their glyph with its own `Td`, so a renderer ignoring
+  `/Widths` entirely would still render them all correctly — nothing in
+  that fixture could tell a correct width implementation from a no-op.
+  Row E packs four glyphs into one string (the only construction where
+  width alone drives position) at 16 pt boxes on a 30 pt pitch. Recorded
+  as a second occurrence in the existing file plus an `index.md` bullet
+  update, not a new file and not a new standing rule — below this
+  project's own promotion bar and the RAG file's existence already is the
+  promotion.
+- **`type3_colors_ignored` is a discriminating number, not a census**: the
+  verification fixture holds one colour operator inside a `d1` and one
+  inside a `d0`; a renderer gagging both reports 2, gagging neither
+  reports 0, and only the correct §9.6.5/Table 113 implementation reports
+  1 — the count was designed to separate all three wrong implementations
+  from the right one.
+- **`docs/FEATURES.md` row moved from *Planned* to *Implemented*** (Fonts
+  & rendering section), `[x]` core / `[x]` cli / `[ ]` gui (paused, same
+  as every other render-fidelity row shipped this month). **New *Planned*
+  row added** for Type 3 text extraction/search, gated on `/ToUnicode`
+  presence, explicitly flagged not-requested this session — a reader
+  seeing "Type 3" ticked in *Implemented* should not assume search works;
+  it does not, and the row now says so where it will be read.
+- **Two Backlog cross-references amended with dated SHIPPED footers**
+  (append-only; the PROMOTED text from the 257th filing stands, not
+  deleted): Pass 1.1 item 4's own footer, and the Vector-graphics-editing
+  bucket's decision-007-fold-in cross-reference.
+
+**Verification** (relayed, covers both Passes as one verification pass):
+`cargo test --workspace` green; `cargo fmt --check` clean; `cargo clippy
+--workspace --all-targets --all-features -- -D warnings` clean, 0
+diagnostics; `cargo check -p pdfce-core -p pdfce-render --target
+wasm32-unknown-unknown` clean; `cargo tree` on both crates carries no GUI/
+windowing/HTTP dependency; 18 `tools/check-*` on disk, 17 runnable as bare
+gates, all 17 exit 0; new fuzz target `type3_font`, **168,923 runs, no
+crash**, over a font dictionary with a file-controlled `/Widths` array
+offset and a `/Differences` stack machine that can walk off a 256-slot
+table. Tests: 9 unit + 9 integration over 4 synthetic fixtures
+(`tools/gen-type3-fixtures.py`, `fixtures/synthetic/type3/`, own
+`PROVENANCE.md`).
+
+**Still in flight:**
+
+- `Tr` 4–7 text-clipping render modes remain unpromoted and unscoped —
+  Type 3's promotion and shipment does not cover this sibling half of the
+  old Pass 1.1 item 4 bucket.
+- Type 3 text extraction/search remains an open Backlog note, not a Pass,
+  not operator-requested.
+- `D:\Dev\Rag-Specialized\Acrobat_Features\index.md` registration for the
+  three Type 3 files from the 257th filing remains owed to
+  `pdfce-acrobat-librarian`, not this role — carried forward, unchanged.
+
+**For next session:**
+
+1. Version is still `0.9.0` at this filing's close. The operator has asked
+   for a release when Type 3 rendering ships (per this filing's own
+   dispatch); the engineer will bump, package, tag and publish, then this
+   role amends the `v0.9.0`/next-release ledger with the observed numbers,
+   same pattern as the `v0.9.0` cut.
+2. Ledger: standing rules ceiling **`R218`** unchanged, next free
+   **`R219`**; decisions ceiling `087`, next free `088`, unchanged (no
+   decision this filing); Pass family ceiling **`126`**, next free
+   **`126.2`**, unchanged (both `126.0`/`126.1` were minted at the 257th
+   filing, this filing ships them, mints nothing new); operator-question
+   ceiling `(bu)`, next free `(bv)`, unchanged; filing ordinal **258**.

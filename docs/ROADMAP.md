@@ -96,6 +96,206 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `0f09780` — `Pass 126.1` ships: the bitmap flavour of Type 3 rendering, and the measurement that it is not smoothed — matches Acrobat's fixed-resolution-stencil behaviour, verified across the minify/magnify boundary rather than a "reasonable range" (`R211` clause (e)) — 2026-08-25 (two-hundred-and-fifty-eighth filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). Every
+figure below is relayed from the engineer's dispatch, which itself quotes
+both `1a5fc92` and `0f09780` in full — this entry and `Pass 126.0`'s,
+immediately below, are that quoted content filed to the record.
+
+**Framing, stated honestly rather than rounded up.** The operator asked for
+"type 3 Vector and type 3 bitmap font support" as though naming two
+features. They are **one mechanism with two payload shapes** — the bitmap
+flavour (`d1` + inline `ImageMask`) has rendered correctly since `Pass
+126.0` shipped, and its fixture row (row D of the colour probe, and the
+dedicated bitmap fixture below) already proved it. **What `Pass 126.1` adds
+is not code — it is the measurement that the behaviour is right, plus a
+test that keeps it right.** Recorded as its own Pass rather than folded
+silently into `126.0` because the operator asked for two things by name and
+is entitled to see both answered on the record, not merged into a single
+line he'd have to infer covered both.
+
+**The measurement.** Acrobat does **not** interpolate bitmap Type 3 glyphs
+(Acrobat Features RAG, source tier — the practice this drove historically
+was converting TeX Computer-Modern Type 3 fonts to Type 1 rather than
+living with the blur). pdfce matches: a colour census inside the glyph box
+returns **exactly two** distinct colours — the page colour and the fill —
+at scales **0.25, 1, 4 and 16**.
+
+**★ Why those four scales, and not "a spread of zoom levels":** they cross
+the filter's own **predicate**, they do not merely span a range that looks
+reasonable (`R211` clause (e) — the standing rule this project already
+carries for exactly this shape of claim). The mask is 8×8 samples inside a
+28 pt glyph box, so its **device size passes through its own sample count**
+near scale ≈0.29 — below that the mask is being minified, above it,
+magnified, and minification/magnification are **different code paths with
+different filters** in any rasteriser. `0.25` sits on the minified side of
+that boundary; `1`, `4` and `16` sit on the magnified side. Sampling only
+the magnified side — the mistake a "reasonable range" of e.g. `{1, 2, 4,
+8}` would have made without anyone noticing — would have left the
+minifying filter free to smooth and nothing in the test suite would have
+caught it.
+
+**Verification.** Covers both `Pass 126.0` and `Pass 126.1`, run together as
+one verification pass:
+
+| check | result |
+|---|---|
+| `cargo test --workspace` | green |
+| `cargo fmt --check` | clean |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | clean, 0 diagnostics |
+| `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` | clean |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | neither crate carries a GUI, windowing or HTTP dependency |
+| `tools/check-*` | 18 on disk, 17 runnable as bare gates, all 17 exit 0 |
+| new fuzz target `type3_font` | **168,923 runs, no crash** — over a font dictionary whose `/Widths` is a file-controlled array at a file-controlled offset and whose `/Differences` is a stack machine that can walk off a 256-slot table |
+
+**Tests: 9 unit + 9 integration, over 4 synthetic fixtures**
+(`tools/gen-type3-fixtures.py`, `fixtures/synthetic/type3/`, with its own
+`PROVENANCE.md`).
+
+**★ Row E of the colour fixture was added late, and the reason belongs on
+the record, not just in the diff.** Rows A–D each position their glyph with
+its own `Td`, so a renderer that ignored `/Widths` entirely would still
+render all four of them perfectly — nothing in that fixture can tell a
+correct width implementation from one that silently drops `/Widths` and
+positions by luck. **Row E shows four glyphs inside ONE string** — the only
+construction where the pen is moved by the declared width and nothing
+else — and measures 16 pt glyph boxes on a 30 pt pitch, so a wrong or
+ignored width is visible as an overlap or a gap rather than needing a pixel
+diff to notice. **Same family as the mesh Pass's fixture-precondition
+lesson, now this project's second instance of it**
+(`D:\dev\rag\rust\a_fixture_that_avoids_a_feature_precondition_cannot_tell_a_fix_from_a_no_op.md`,
+second-occurrence note added this filing, below): *a fixture that avoids a
+feature's own precondition cannot tell a correct implementation from one
+that lacks the feature.*
+
+**★ `type3_colors_ignored` must read `1`, not `2`, on this fixture — and
+that is the discriminating number, not a census.** The fixture holds one
+colour operator inside a `d1` procedure and one inside a `d0` procedure. A
+renderer that (wrongly) gags both colour operators reports `2`; a renderer
+that (wrongly) gags neither reports `0`; only a renderer that gags `d1`'s
+and keeps `d0`'s — the actual §9.6.5/Table 113 rule, Acrobat-confirmed by
+`Pass 126.0`'s own probe — reports `1`. The counter was designed to
+distinguish all three wrong implementations from the right one, not merely
+to count "how many colour operators appeared."
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `126`, next free `126.2` | unchanged — `Pass 126.0`/`Pass 126.1` were both minted at the 257th filing; this filing moves them to *Shipped*, it mints nothing |
+| decisions (`ARCHITECTURE.md` §12) | `087` | unchanged — next free `088`; no decision this filing |
+| standing rules | `R218` | unchanged — next free `R219`; `R211` clause (e) cited, not amended |
+| `D:\dev\rag\rust\` | `a_fixture_that_avoids_a_feature_precondition_cannot_tell_a_fix_from_a_no_op.md` at its original (Pass 97.1g) instance | **second-occurrence note added this filing** — see below; `index.md` bullet updated to match |
+| `docs/FEATURES.md` | Type 3 rendering row `[ ]`/`[ ]`/`[ ]` under *Planned* | **moved to *Implemented***, `[x]` core / `[x]` cli / `[ ]` gui (paused); new *Planned* row added for Type 3 text extraction (`/ToUnicode`-gated, not requested this session) |
+
+---
+
+### `1a5fc92` — `Pass 126.0` ships: Type 3 fonts render — all 49 external-corpus PDFs carrying a Type 3 font now render, `PDFBOX-3053-reduced.pdf`'s 43-glyph heading goes from a blank page to legible text — 2026-08-25 (two-hundred-and-fifty-eighth filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). Every
+figure below is relayed from the engineer's dispatch, which quotes commit
+`1a5fc92` in full.
+
+**The headline, stated the way the operator will read it.** Not "a feature
+was added" — **text that was silently absent from the page is now on the
+page.** All 49 of the 49 external-corpus PDFs measured at filing time
+(257th filing, 1.3% of 3,735) carrying a Type 3 font now render — no
+panics, no timeouts, `unsupported_type3=0` and `type3_glyphs_missing=0` on
+every one. `PDFBOX-3053-reduced.pdf` draws its 43-glyph heading *"Traumatic
+Brain Injury Signs and Symptoms"*, which rendered as a **blank page**
+before this Pass.
+
+**The one unrecorded question was measured before any code was written.**
+The `d0`/`d1` colour rule was an open `GAP` in the Acrobat Features RAG; a
+four-row probe against the operator's own installed Acrobat Reader (filed
+at the 257th filing, reproduced in the now-deleted *Next up* entry this
+Shipped entry replaces) answered it — `d1` blue (graphics-state colour,
+ignoring its own colour operators), `d0` red (keeps its own procedure's
+colour), image-mask blue (row D, the mechanism `Pass 126.1` measures
+further, above). **Acrobat is spec-conformant on every point tested**, so
+§9.6.5 and Acrobat parity are the same criterion here — recorded explicitly
+so a future session does not re-run the probe to answer a question this one
+already closed.
+
+**Four traps the spec corpus named, all of which render *something* when
+got wrong — none of them silent failures, all of them plausible-looking
+wrong output:**
+- **Widths are in `FontMatrix` units, not thousandths of text space.**
+  Dividing by 1000 *and* applying a `[0.001 …]`-style matrix scales by
+  1e-6. The wrong call site — `width(code) / 1000.0`, correct for two of
+  pdfce's font kinds and silently wrong for the third — no longer exists;
+  the conversion now lives in `LoadedFont::advance_text_space`.
+- **The `/Encoding` is total, with no built-in fallback** (§9.6.6.3) — a
+  code with no `/Differences` entry paints nothing, by the standard, not
+  by an implementation gap.
+- **A missing glyph still advances the pen** — §9.6.5 step (b) withholds
+  the paint, not the width.
+- **`/Resources` falls back to the page's own resource dictionary** when
+  the font's own `/Resources` is absent.
+
+**Three design notes worth carrying forward, because they are the kind of
+decision a later session would otherwise re-derive from scratch:**
+- The `d0`/`d1` state starts **shape-only** and `d0` **raises** it, because
+  the declaration arrives *inside* the glyph procedure's own stream, not
+  before it starts running.
+- The colour gag is **one gate**, not twelve arms matching every colour
+  operator individually — and `gs` is **deliberately excluded** from the
+  gag, because §9.6.5 explicitly instructs a glyph procedure that it *may*
+  set line width, line join, line cap and dash pattern; gagging `gs` would
+  have silently broken a construction the spec names as legal.
+- The recursion guard is **shared with form XObjects**, not a fresh budget
+  of its own, because a Type 3 glyph procedure and a form XObject **nest
+  through each other** — a glyph procedure can `Do` a form, and vice versa —
+  and two independently-tracked budgets would each individually stay under
+  their own limit while the real, combined call stack did not.
+
+**Disclosure (`CLAUDE.md` rule 4).** Three new metrics keys:
+`type3_glyphs`, `type3_glyphs_missing`, `type3_colors_ignored`. **★ The
+third is not a shortfall — §9.6.5/Table 113 makes ignoring a `d1`
+procedure's own colour operators the *defined* behaviour, not a gap pdfce
+has.** It is reported anyway, because an operator debugging a glyph that
+rendered in the "wrong" colour needs to be told that the colour operator
+they can see sitting right there in the content stream was deliberately
+dropped rather than missed — the render is correct and the intuition that
+it should honour the operator is the thing that's wrong, and only the
+counter can say so.
+
+**Two stale claims retired, both instances of `R212`'s shape — a published
+claim and an enforced one drifting apart, here caught and fixed in the same
+commit rather than left to drift:**
+- A test named `type3_font_is_counted_unsupported_not_rendered` asserted
+  exactly the behaviour this Pass removes. **Rewritten rather than
+  deleted**, because the file it exercises became interesting for a new
+  reason: a Type 3 font with an empty `/Encoding` now paints nothing and is
+  **not thereby unsupported** — §9.6.6.3 makes that a conformant blank page
+  by the standard, not a pdfce shortfall. Its replacement pair asserts that
+  a font missing `/CharProcs` entirely *is* still refused by name, so "not
+  unsupported" cannot be misread as "never refuses anything."
+- `UnsupportedFont::Type3`'s documented meaning **narrowed**, from "pdfce
+  does not render Type 3" to "Table 112's irreducible entries are
+  missing." A counter whose *meaning* silently changes under a reader is a
+  worse defect than one whose *value* changes, so both the crate's own doc
+  comments and the CLI's per-key disclosure table now say so explicitly,
+  in the same commit as the behaviour change rather than as a follow-up.
+
+**Verification, tests, and the fuzz target are recorded jointly with `Pass
+126.1`, immediately above** — the two shipped in the same verification
+pass and the numbers do not split cleanly by Pass.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `125.1` (release-filing ledger) → `126`, next free `126.2` (257th filing) | unchanged this filing — moving `Next up` → `Shipped` mints no new ID |
+| decisions (`ARCHITECTURE.md` §12) | `087` | unchanged — next free `088`; no decision this filing |
+| standing rules | `R218` | unchanged — next free `R219`; `R212` cited (pre-existing rule, not amended) |
+| `docs/ROADMAP.md` Backlog | Pass 1.1 item 4's footer said "PROMOTED to `Pass 126.0`/`Pass 126.1`" | dated footer amended this filing to record SHIPPED status; the Vector-graphics-editing bucket's own cross-reference amended to match |
+| `docs/FEATURES.md` | row 307, *Planned*, both boxes unticked | **moved to *Implemented*, Fonts & rendering** — see `Pass 126.1`'s Ledger, above, for the full before/after |
+| operator questions | — | none opened, none closed this filing |
+
+---
+
 ### `ccf9ed3` — CORRECTION: CI does run `cargo fuzz build` — it runs it on Linux, and the break the `4b22c95` entry (254th filing) attributed to "not one of CI's jobs" is MSVC-only — 2026-08-25 (two-hundred-and-fifty-fifth filing)
 
 **Sourcing.** No shell this filing (librarian invocation). Every figure below
@@ -68152,54 +68352,6 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-**`Pass 126.0` — Type 3 fonts render: the glyph-procedure mechanism + the VECTOR flavour — filed 2026-08-25 (two-hundred-and-fifty-seventh filing), operator-requested verbatim: *"can we add type 3 Vector and type 3 bitmap font support next?"*** Not started. Filed with acceptance criteria rather than as an open question because, before this filing, the engineer had already dispatched `pdfce-acrobat-librarian` (three new files under `D:\Dev\Rag-Specialized\Acrobat_Features\` — `type3fonts__rendering_and_color_semantics.md`, `type3fonts__malformed_inputs_and_limits.md`, `type3fonts__extraction_editing_and_tagging.md`) and had run a purpose-built probe against the operator's installed Acrobat Reader.
-
-**Today's behaviour.** `crates/pdfce-render/src/text.rs`'s `load()` returns `Err(UnsupportedFont::Type3)` for `/Subtype /Type3`; the text is skipped entirely and counted under `fonts_unsupported` reason key `"Type3"`. Nothing is approximated — correct behaviour for an unshipped feature, not a defect.
-
-**Population, measured not estimated.** 49 of 3,735 external-corpus PDFs carry a Type 3 font on page 1 (**1.3%**), swept with `pdfce-cli render-page`/`unsupported_type3`; almost all are conformance fixtures (veraPDF Isartor/PDF_A, pdfium bug cases, PDFBox regressions) — expected of a corpus built from test files. The print-conformance suite separately records `unsupported_type3=2` on one page (see Backlog's Pass 1.1 item 4, below). **Frequency is low and the population skews toward conformance files — recorded honestly, not as "therefore unimportant": every hit is text silently absent from the page today, and the operator asked for this by name.**
-
-**Why cheap.** A Type 3 glyph procedure is an ordinary content stream — the existing interpreter runs it unchanged: no font-format parser, no rasteriser, no hinting needed. `interpret.rs` already has the re-entrant machinery `do_form` uses for form XObjects (a `depth` counter, an `active` cycle set, `MAX_XOBJECT_DEPTH`) — §9.6.5's "save gstate, run a nested stream, restore" is the same shape §8.10 already implements. Inline images and `ImageMask` stencils already work (relevant to `Pass 126.1`, below).
-
-**Acceptance criteria** (clause numbers as supplied by the engineer — verify each against the spec RAG before implementing, project rule 1):
-- Load Table 112: `CharProcs`, `Encoding` (§9.6.6.3 — required and total; a code with no `/Differences` entry paints nothing, there is no built-in encoding fallback for Type 3), `FontMatrix`, `Widths`, `FirstChar`/`LastChar`, `FontBBox`, `Resources` with the documented fallback to the PAGE's own resource dictionary when the font's own `/Resources` is absent.
-- Execute the glyph procedure with `CTM := FontMatrix × Trm`; save graphics state before, restore after; everything but the CTM inherited from the show operator's own environment.
-- `d0`/`d1` implemented per Table 113, including `d1`'s **colour-ignore** (now Acrobat-confirmed, see probe below) and `d0` **keeping its own procedure's colour**.
-- ★ **Widths are in `FontMatrix` units, NOT thousandths of text space.** Dividing by 1000 *and* applying a `[0.001 …]`-style matrix scales by 1e-6 — flagged by the engineer as the number-one Type 3 implementation bug.
-- **A missing `CharProcs` entry for a code paints nothing but STILL ADVANCES the pen** — §9.6.5 step (b) says no glyph is painted and says nothing about withholding the width; skipping the advance mis-positions the rest of the line.
-- **Bounded recursion** — a glyph procedure may show text in a Type 3 font, including itself; §9.6.5 sets no limit and Annex C sets none either, so this is a guaranteed stack-overflow input (`ARCHITECTURE.md` §10). Reuse the existing `depth`/`active` guards from `do_form` rather than building new ones.
-- `FontMatrix` treated as a **general matrix**, not a scale — rotated/skewed Type 3 fonts are the mechanism behind rotated stamp glyph sets; Table 112 legislates the rotation case for widths explicitly.
-- Disclosure: the `"Type3"` `fonts_unsupported` reason bucket stops counting once the vector flavour renders; whatever pdfce still declines (the bitmap flavour until `Pass 126.1` ships; any item in the unmeasured-Acrobat-behaviour list below) must be counted and **named**, not silently absorbed into a bucket that no longer describes it.
-
-**Acrobat ground truth — measured directly by this librarian against the operator's installed Acrobat Reader, not assumed (project rule 12):**
-
-| probe | glyph procedure | observed |
-|---|---|---|
-| A | `d1`, then `1 0 0 rg`, then a filled box | **BLUE** — the graphics-state colour |
-| B | `d1`, no colour operator (control) | **BLUE** |
-| C | `d0`, then `1 0 0 rg`, then the box | **RED** — the procedure's own colour |
-| D | `d1`, then a 1-bit inline `ImageMask` with `/Decode [1 0]` | **BLUE**, stencil shape correct |
-
-Acrobat honours §9.6.5's `d1` colour-ignore rule and treats `d0` differently — Acrobat is spec-conformant on every point this probe tests, so an acceptance criterion citing §9.6.5 is simultaneously an Acrobat-parity criterion here.
-
-**Still unmeasured for Acrobat — named as gaps, not silences:** behaviour on a glyph procedure whose first operator is neither `d0` nor `d1`; whether a missing `CharProcs` key still advances the width in Acrobat; a `d1` procedure containing a full-colour (not 1-bit) image; whether the `/Resources` page fallback actually happens in Acrobat; a wrong `/FontBBox`; any Acrobat recursion limit. Also on record from the Acrobat Features RAG at source tier: Acrobat does **not** smooth bitmap Type 3 glyphs at zoom (fixed-resolution-stencil behaviour, relevant to `Pass 126.1`), has **no in-place editing path** for Type 3 text, and extraction/search work **only** when `/ToUnicode` is present (see the new Backlog note below — deliberately not folded into this Pass).
-
----
-
-**`Pass 126.1` — Type 3 bitmap glyphs (`d1` + inline `ImageMask`) — filed 2026-08-25 (two-hundred-and-fifty-seventh filing), same operator request as `Pass 126.0`, split because the two payload shapes are one mechanism reported as two named asks** ("type 3 Vector **and** type 3 bitmap"). Not started; depends on `Pass 126.0`'s glyph-procedure execution mechanism.
-
-**What it is.** `d1` followed by a 1-bit inline `ImageMask` — the vehicle §9.6.5 explicitly permits where it forbids a colour image. This is what old TeX/`dvips` output, PK-bitmap conversions, and some fax-to-PDF converters emit.
-
-**Why expected small — stated as an expectation, not a result, so a surprise stays visible if the work turns out larger.** Inline images and `ImageMask` stencils already work in pdfce; this Pass is expected to be mostly wiring the already-implemented stencil path into a Type 3 glyph procedure's execution context, verified against probe row D above.
-
-**Acceptance criteria:**
-- `d1` + inline `ImageMask` glyph procedure paints in the CURRENT graphics-state colour (not any colour implied by the image data — there is none, it's 1-bit), matching probe row D.
-- **Zoom behaviour is an open implementation decision, not yet made.** Acrobat does not smooth bitmap Type 3 glyphs (fixed-resolution-stencil behaviour). pdfce should either match that or deliberately differ, disclosed per `CLAUDE.md` rule 4.
-- Verified against a purpose-built fixture reproducing probe row D, not only against the vector-flavour (`Pass 126.0`) test suite.
-
-**Explicitly out of scope for both `Pass 126.0` and `Pass 126.1`** — filed separately to Backlog, NOT a Pass, flagged as **not requested by the operator this session**: text extraction/search for Type 3, gated entirely on `/ToUnicode` presence. The operator asked for "font support," read here as rendering; extraction is a distinct capability and is named rather than silently assumed either way. See Backlog, below.
-
----
-
 **`Pass 124.2` — the suite-name scrub, `docs/ROADMAP.md`'s half — operator-ordered, 2026-08-25, opened this filing (two-hundred-and-fifty-second), closed the two-hundred-and-fifty-third.** Ken's ruling (quoted in elided form in `(bt)`'s own closure, below, *Open operator questions*) answers `(bt)` and goes further than it asked — see that entry's own nested closure for the full ruling. Five agents scrub in parallel from a shared private contract (`D:\Dev\pdfce-private\suite\SCRUB_SPEC.md`, outside this repository by design): this role owns `docs/ROADMAP.md` only — `SESSION_LOG.md`, `ARCHITECTURE.md`/`FEATURES.md`/the surveys, and `crates/`/`tools/`/`docs/NEXT_SESSION.md` are scrubbed by the other four filings/the engineer, not here.
 
 **Acceptance criterion, rewritten 253rd filing because the original was self-defeating: `python tools/check-suite-name-absent.py` exits `0`.** The original criterion (this paragraph, two-hundred-and-fifty-second filing) named the two forbidden terms literally inside the acceptance criterion meant to guarantee their absence — a checkable rule that was itself the rule's own first violation, and a reader could not then distinguish a real occurrence from the gate hunting them. `tools/check-suite-name-absent.py` (new, shipped by the engineer between the two filings) solves the bootstrapping problem: the two needles are stored **base64-encoded** in the script and decoded at run time, so the rule and its enforcement can coexist in one repository without contradicting each other. This is not obfuscation for its own sake and not secrecy — the private map (`D:\Dev\pdfce-private\suite\`) names the suite in full; it is the only way for a rule and its enforcement to coexist without contradicting each other. The script checks tracked file **contents** (`git grep -I -i`, binaries excluded — a binary OCR model matches a naive case-insensitive byte grep on its weights, and a model's weights are not a mention) **and** tracked file **names** (a scrubbed file still named after the suite fails the check, since the name is published in every directory listing and diff regardless of what the file's contents say). It prints `path:line` but **never the offending line's text**, because CI logs on a public repository are themselves public. Exit codes: `0` clean, `1` occurrences found, `2` could not run.
@@ -77430,6 +77582,17 @@ now priority order, set by that data:
    unscoped** — this item's other half; do not read the Type 3
    promotion as covering it (see `docs/FEATURES.md`'s *Planned* section,
    now split into two rows for exactly this reason).
+   **★ AMENDED 2026-08-25 (two-hundred-and-fifty-eighth filing) —
+   `Pass 126.0` and `Pass 126.1` SHIPPED, `1a5fc92`/`0f09780`.** All 49 of
+   49 measured external-corpus Type 3 files now render;
+   `unsupported_type3`/`type3_glyphs_missing` both reach `0` on that
+   population. Full build record: this file's own `1a5fc92`/`0f09780`
+   *Shipped* entries, top of *Shipped*. `Tr` 4-7 text-clipping remains
+   unpromoted and unscoped, unchanged by this amendment. The Type 3
+   text-extraction Backlog note immediately below **remains open** —
+   rendering shipping does not extend to extraction/search, a distinct
+   capability, still gated on `/ToUnicode` presence and still not
+   operator-requested.
    **New Backlog note, filed the same filing, NOT a Pass, flagged as
    NOT operator-requested this session so it is named rather than
    silently assumed either way:** Type 3 text extraction/search, gated
@@ -80710,9 +80873,10 @@ added. See that section below.
   implementing them twice is waste. The rest of "render completeness"
   is already filed elsewhere, not new work: Type 3 fonts + `Tr` 4–7
   text clipping = **Pass 1.1 item 4** (LOW, near-zero corpus
-  presence) [★ Type 3 half PROMOTED to `Pass 126.0`/`Pass 126.1`,
-  2026-08-25 — see Pass 1.1 item 4's own footer, above, and *Next up*;
-  `Tr` 4–7 remains here, unscoped]; `/SMask` + `/Mask` = **Pass 1.1 item
+  presence) [★ Type 3 half SHIPPED as `Pass 126.0`/`Pass 126.1`,
+  `1a5fc92`/`0f09780`, 2026-08-25 (258th filing) — see Pass 1.1 item 4's
+  own footer, above, and *Shipped*, top; `Tr` 4–7 remains here, unscoped];
+  `/SMask` + `/Mask` = **Pass 1.1 item
   6.3** (blocked on a
   clause-11 spec dispatch). Only general transparency groups and
   blend modes were scoped nowhere — they now live here. The
