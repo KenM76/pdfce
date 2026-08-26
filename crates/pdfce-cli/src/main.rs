@@ -142,7 +142,8 @@
 //!               blend_space_from_output_intent=<0|1> \
 //!               blends_in_wrong_space=<n> cmyk_buffer=<n> \
 //!               cmyk_buffer_refused=<n> cmyk_bridged_pixels=<n> \
-//!               cmyk_groups_approximated=<n> cmyk_unbridged_images=<n>
+//!               cmyk_groups_approximated=<n> cmyk_unbridged_images=<n> \
+//!               cmyk_native_image_pixels=<n>
 //! ```
 //!
 //! ★ **All 87 keys are now listed, and the placeholders are uniform.** Two
@@ -325,7 +326,8 @@
 //! | `cmyk_buffer` | `cmyk_buffer_engaged` (a `bool`, printed `0`/`1`) | "did this page composite in INK, or in sRGB?" (THE KEY THAT CHANGES WHAT THE PREVIOUS ONE MEANS, and the only non-count on this half of the line — a parser treating every metrics key as a magnitude will misread it. At `1`, the blends `blends_in_wrong_space` counted were PERFORMED subtractively: that counter is fixed at `/BM`-selection time and measures exposure to §11.3.4, not failure. Read the pair, never the second alone) |
 //! | `blend_space_from_output_intent` | `blend_space_from_output_intent` | "did pdfce INFER this page's blending space from the output intent?" (DISCLOSURE, and the only key here that is a word rather than a number. `page_group` — the page declared `/Group /CS`, Table 147, nothing inferred. `device_native` — ISO 32000-1 §11.4.7/§11.6.3's answer for a page that declared none, which for pdfce is sRGB. `output_intent` — ★ **pdfce INFERRED it from the document's output intent**, which ISO 32000-2's Annex P permits *informatively and without ranking it against the device*, so this is a choice the `page_blend_space_source` setting controls and not a fact about the file. Read it beside `blend_space_subtractive`: that one says a page composited in ink, this one says whether the FILE asked for that or pdfce decided it. A blending space changes every colour on the page and draws nothing to say so, which is why it is disclosed here rather than left to be deduced) |
 //! | `cmyk_buffer_refused` | `cmyk_buffer_refused` | "did the page ask for ink and not get it?" (DIVERGENCE with a named cause — the colorant buffer would not fit under `MAX_CMYK_BUFFER_BYTES`, a page-size ceiling. Non-zero means this render is the pre-colorant-buffer approximation and SAYS SO rather than failing, and it is the reason `cmyk_buffer=0` on a page whose `blend_space_subtractive` is non-zero) |
-//! | `cmyk_bridged_pixels` | `cmyk_bridged_pixels` | "how much of this ink page was never authored as ink?" (pixels that entered the colorant buffer through the sRGB BRIDGE — images, shadings, and the results of transparency groups. A DISCLOSURE, not a shortfall: an image's samples were flattened to sRGB inside the decode loop long before any canvas saw them, so bridging is the only information that reaches the compositor. It exists so that "this page composited in ink" cannot be read as "every colour on this page was authored ink") |
+//! | `cmyk_bridged_pixels` | `cmyk_bridged_pixels` | "how much of this ink page was never authored as ink?" (pixels that entered the colorant buffer through the sRGB BRIDGE — shadings, the results of transparency groups, and any image NOT authored in `DeviceCMYK`. ★ The parenthetical here used to say an image's samples "were flattened to sRGB inside the decode loop long before any canvas saw them, so bridging is the only information that reaches the compositor" — true of every image until `Pass 130.1`, and now true only of the ones with no ink to keep. A `DeviceCMYK` image, including one behind an `/Indexed` palette, now carries its colorants forward and is counted in `cmyk_native_image_pixels` instead) |
+//! | `cmyk_native_image_pixels` | `cmyk_native_image_pixels` | "how much of this ink page KEPT its ink?" (pixels a `DeviceCMYK` image contributed with no conversion in either direction. The complement of the row above, and not interchangeable with it: a bridged pixel has been through `CMYK → sRGB → CMYK`, and that first step is MANY-TO-ONE, so the ink that returns is not the ink that left) |
 //! | `cmyk_groups_approximated` | `cmyk_groups_approximated` | "how many groups on an ink page had their RESULT composited in ink and their INTERIOR not?" (DIVERGENCE. ★ **THIS KEY NARROWED IN `Pass 97.1g` and a reader comparing boards across that Pass must know it.** It used to count TWO populations: a KNOCKOUT group, whose §11.4.6 semantics are preserved but whose interior runs in sRGB — still counted — and EVERY NON-ISOLATED group, on the reasoning that all of them had §11.4.4's backdrop removal skipped. The second population is gone: a non-isolated group now gets its second content walk and its removal. What is left of it is the allocation-failure fallback alone, where the second buffer could not be had. ⇒ **A DROP IN THIS NUMBER ACROSS `97.1g` IS NOT ALL RENDERING IMPROVEMENT.** Measured on the print-conformance suite: 118 → 0, of which only 13 groups actually needed the walk; the other 105 were counted as approximations while rendering exactly right, because the old test asked "is this group non-isolated?" rather than §11.4.4 NOTE 2's "does its interior read the backdrop?". An ordinary isolated group is NOT counted — it gets a child colorant buffer and crosses no conversion at all) |
 //! | `cmyk_unbridged_images` | `cmyk_unbridged_images` | "did an image reach a subtractive paint with no bridge and therefore not get painted AT ALL?" (should always be zero: the only route is a replayed display list, and a subtractive page is refused for recording outright. Counted rather than asserted because a claim of unreachability decays as the code around it changes, and a counter that stays zero costs one `u64` and one line of output. Non-zero here is a bug report, not a document property) |
 //!
@@ -8764,7 +8766,7 @@ groups_backdrop_reruns={} soft_masks_on_group_result={} \
 overprint_images_unsupported={} overprint_shadings_unsupported={} \
 blend_space_subtractive={} blend_space_from_output_intent={} blends_in_wrong_space={} \
 cmyk_buffer={} cmyk_buffer_refused={} cmyk_bridged_pixels={} \
-cmyk_groups_approximated={} cmyk_unbridged_images={}",
+cmyk_groups_approximated={} cmyk_unbridged_images={} cmyk_native_image_pixels={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -9115,6 +9117,9 @@ cmyk_groups_approximated={} cmyk_unbridged_images={}",
         // Should always be zero; see the field's docs for why it is
         // counted rather than asserted.
         d.cmyk_unbridged_images,
+        // `Pass 130.1`. Appended per the stable-line append-never-reorder
+        // rule: the complement of `cmyk_bridged_pixels`.
+        d.cmyk_native_image_pixels,
     );
     report_diagnostics(d);
 

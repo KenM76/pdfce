@@ -706,6 +706,15 @@ pub struct Diagnostics {
     /// count exists so that "this page composited in ink" cannot be read
     /// as "every colour on this page was authored ink".
     pub cmyk_bridged_pixels: u64,
+    /// Pixels a `DeviceCMYK` image contributed **as authored ink**, with no
+    /// conversion in either direction.
+    ///
+    /// The complement of [`Self::cmyk_bridged_pixels`]. Together they answer
+    /// "how much of this ink page kept its ink?" — and the split matters
+    /// because the two are not interchangeable: a bridged pixel has been
+    /// through `CMYK -> sRGB -> CMYK`, and that first step is **many-to-one**,
+    /// so the ink that comes back is not the ink that left.
+    pub cmyk_native_image_pixels: u64,
     /// Transparency groups on a subtractive page that could **not** be
     /// composited natively in ink.
     ///
@@ -1480,6 +1489,7 @@ polarity unverifiable (decision 006 R30)",
         self.cmyk_buffer_engaged |= other.cmyk_buffer_engaged;
         self.cmyk_buffer_refused += other.cmyk_buffer_refused;
         self.cmyk_bridged_pixels += other.cmyk_bridged_pixels;
+        self.cmyk_native_image_pixels += other.cmyk_native_image_pixels;
         self.cmyk_groups_approximated += other.cmyk_groups_approximated;
         self.cmyk_unbridged_images += other.cmyk_unbridged_images;
         self.blends_in_wrong_space += other.blends_in_wrong_space;
@@ -6169,7 +6179,7 @@ impl Interpreter<'_> {
                           per-sample path; painted normally",
                     );
                 }
-                self.paint_image(&decoded.pixmap, interpolate, canvas);
+                self.paint_image(&decoded.pixmap, decoded.ink.as_ref(), interpolate, canvas);
                 self.diag.images_rendered += 1;
             }
             Err(err) => {
@@ -6268,7 +6278,17 @@ impl Interpreter<'_> {
     /// here: the consequence of being slightly wrong at the boundary is
     /// one filter rather than another on an image that is very nearly
     /// 1:1, where the two agree anyway.
-    fn paint_image(&self, texels: &Pixmap, interpolate: bool, canvas: &mut Canvas<'_>) {
+    fn paint_image(
+        &self,
+        texels: &Pixmap,
+        // The authored colorants, when the image is `DeviceCMYK`. Threaded
+        // from the decode rather than re-derived: `texels` has already been
+        // through a many-to-one conversion and the ink is not recoverable
+        // from it. See `crate::image::DecodedImage::ink`.
+        ink: Option<&crate::image::CmykTexels>,
+        interpolate: bool,
+        canvas: &mut Canvas<'_>,
+    ) {
         let (w, h) = (texels.width(), texels.height());
         if w == 0 || h == 0 {
             return;
@@ -6334,6 +6354,7 @@ impl Interpreter<'_> {
         canvas.fill_image(
             &path,
             texels,
+            ink,
             quality,
             image_to_user,
             blend,

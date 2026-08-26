@@ -422,8 +422,60 @@ pub struct ImageNotes {
 pub struct DecodedImage {
     /// The texels. Premultiplied RGBA, as tiny-skia requires.
     pub pixmap: Pixmap,
+    /// The image's **authored ink**, texel for texel, when its colour space
+    /// is `DeviceCMYK` — `None` for every other space.
+    ///
+    /// # ★★ WHY A SECOND COPY OF THE SAME PICTURE EXISTS
+    ///
+    /// [`Self::pixmap`] has already been through `CMYK → sRGB`, and **that
+    /// conversion is many-to-one**: different ink mixes produce identical
+    /// screen colour, K and CMY trading off against each other. So once a
+    /// texel is in `pixmap`, its ink is not recoverable — not approximately,
+    /// not with a better inverse. **No inverse exists.**
+    ///
+    /// That matters because a page whose blending space is subtractive
+    /// composites in ink. Feeding it `pixmap` means `CMYK → sRGB → CMYK`,
+    /// and the return leg is a *different function* from the outbound one
+    /// (a calibrated table out, a naive formula back), so the ink that
+    /// arrives is not the ink that left.
+    ///
+    /// Measured on a print-conformance patch built to catch exactly this: a
+    /// red square drawn as a path and the same red drawn as a `DeviceCMYK`
+    /// image land on `(238, 29, 35)` and `(225, 63, 50)`. The patch's own
+    /// instruction is that no difference should be visible. Set the
+    /// conversion to `naive` — where the two legs happen to be exact
+    /// inverses — and the difference vanishes, which is what identifies the
+    /// round trip as the cause rather than the decode.
+    ///
+    /// So the ink is carried forward instead of being reconstructed.
+    ///
+    /// # Why two pixmaps rather than one four-channel buffer
+    ///
+    /// Because the compositor's geometry must be **identical** to the sRGB
+    /// path's — same transform, same interpolation, same edge coverage — and
+    /// the cheapest way to guarantee that is to run the same rasteriser over
+    /// the same shape. `tiny_skia` rasterises RGBA, so the four colorants
+    /// travel as two RGB triples: `C,M,Y` in one and `K,K,K` in the other,
+    /// both carrying the image's own alpha.
+    ///
+    /// Reconstructing the mapping by inverting the device transform and
+    /// sampling per pixel would be a second implementation of the
+    /// resampling, and it would disagree with the first at every edge.
+    pub ink: Option<CmykTexels>,
     /// Divergences that still produced pixels.
     pub notes: ImageNotes,
+}
+
+/// A `DeviceCMYK` image's colorants, packed for rasterisation.
+///
+/// Both planes carry the image's own alpha, so either one un-premultiplied
+/// by that alpha yields the authored tint. See [`DecodedImage::ink`].
+#[derive(Debug)]
+pub struct CmykTexels {
+    /// `C`, `M`, `Y` in the red, green and blue channels.
+    pub cmy: Pixmap,
+    /// `K`, replicated across all three channels so any one of them reads it.
+    pub k: Pixmap,
 }
 
 /// Decode an image XObject or inline image into RGBA texels.
@@ -894,7 +946,16 @@ fn decode_stencil(
         }
     }
 
-    Ok(DecodedImage { pixmap, notes })
+    // A stencil mask paints the CURRENT FILL COLOUR through a
+    // 1-bit shape; it carries no colorants of its own, so there
+    // is no authored ink to preserve. (`ink` in this scope is
+    // that fill colour, not the CMYK planes -- a collision the
+    // type checker caught and a rename would only paper over.)
+    Ok(DecodedImage {
+        pixmap,
+        ink: None,
+        notes,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1049,6 +1110,13 @@ fn decode_sampled(
     // palette once, then the per-pixel loop is a table lookup with no
     // colour maths at all.
     let palette = space.palette();
+    // Borrowed ONCE, beside the palette and for the same reason: the texel
+    // loop cannot re-match on `space` per pixel without moving out of it, and
+    // an index is only meaningful while the table it indexes is in scope.
+    let palette_ink_table: Option<&Vec<[f32; 4]>> = match &space {
+        Space::Indexed { ink, .. } => ink.as_ref(),
+        _ => None,
+    };
 
     // §8.9.6.4's ranges are counted against the IMAGE's colour space, so
     // the component count is the one resolved above — 1 for `Indexed`
@@ -1140,13 +1208,46 @@ fn decode_sampled(
     };
 
     let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::TooLarge)?;
+    // The ink planes exist only for a `DeviceCMYK` image. Every other space
+    // either has no colorants to preserve (`DeviceRGB`, `Lab`) or resolves
+    // through a tint transform whose output is already the alternate's, and
+    // in both cases the sRGB texels lose nothing a subtractive page wanted.
+    //
+    // ★ Allocated unconditionally for CMYK rather than only when the page
+    // turns out to be subtractive, because THAT IS NOT KNOWN HERE — the
+    // blending space is a page-level decision made after the image is
+    // decoded, and an image is cached across pages. Two texel-sized pixmaps
+    // is the price; the alternative is threading a page property into the
+    // codec layer to save memory on a case that is already rare.
+    // Two shapes carry ink: a direct `DeviceCMYK` image, and an `/Indexed`
+    // image whose BASE is `DeviceCMYK` — the second is not a special case but
+    // the commoner one in print files, where a flat colour ships as a
+    // one-entry palette rather than as four planes of identical samples.
+    let carries_ink =
+        matches!(space, Space::Cmyk) || matches!(space, Space::Indexed { ink: Some(_), .. });
+    let mut ink = if carries_ink {
+        match (Pixmap::new(width, height), Pixmap::new(width, height)) {
+            (Some(cmy), Some(k)) => Some(CmykTexels { cmy, k }),
+            // Out of memory for the extra planes is not a reason to fail the
+            // image: the sRGB path still works and merely bridges, which is
+            // what happened before this existed.
+            _ => None,
+        }
+    } else {
+        None
+    };
     let mut out_of_range = false;
-    let texels = pixmap.pixels_mut();
 
     for y in 0..height as usize {
         let row_bit_base = y.saturating_mul(stride).saturating_mul(8);
         for x in 0..width as usize {
             let first = x.saturating_mul(layout.components);
+            // Reused across texels; see the `None` arm below for why the ink
+            // write needs it and why it must not be a per-arm local.
+            let mut last_comps = [0.0f32; MAX_IMAGE_COMPONENTS];
+            // Set by the palette arm below when the base is ink; `None` for
+            // a direct image, whose colorants are `last_comps` instead.
+            let mut palette_ink: Option<[f32; 4]> = None;
             // Read the plane BEFORE the colour work: §11.6.5.3's
             // un-premultiply divides by this very value, and it must be
             // applied before the colour-space conversion below.
@@ -1178,6 +1279,11 @@ fn decode_sampled(
                     let (dmin, slope) = ramp.first().copied().unwrap_or((0.0, 1.0));
                     let value = dmin + raw as f32 * slope;
                     let index = value.round().max(0.0) as usize;
+                    // The SAME index into the parallel ink table. Resolved
+                    // here rather than after the match because this is the
+                    // only point where the index still exists — one line
+                    // later it has become a colour.
+                    palette_ink = palette_ink_table.and_then(|t| t.get(index).copied());
                     match table.get(index) {
                         Some(&c) => c,
                         None => {
@@ -1187,7 +1293,13 @@ fn decode_sampled(
                     }
                 }
                 None => {
-                    let mut comps = [0.0f32; MAX_IMAGE_COMPONENTS];
+                    // ★ The OUTER buffer, not a fresh local. The ink write
+                    // below needs this tuple, and it is only valid here: by
+                    // the next statement the colour has been converted and
+                    // `comps` would be the previous texel's if it were not
+                    // shared. Reusing one array also keeps the loop
+                    // allocation-free, which it was before.
+                    let comps = &mut last_comps;
                     for c in 0..readable {
                         let raw = read_sample(
                             data,
@@ -1226,13 +1338,13 @@ fn decode_sampled(
                     // entry" — which is exactly the state `comps` is in
                     // on this line and nowhere after it.
                     if let Some(m) = matte {
-                        mask::undo_matte(&mut comps, components.min(4), m, plane_alpha);
+                        mask::undo_matte(comps, components.min(4), m, plane_alpha);
                     }
                     match &mut tint_cache {
                         Some(cache) => {
                             cache.lookup(&space, intent, &raw_comps[..readable], &comps[..readable])
                         }
-                        None => space.to_rgb(intent, &comps, &mut scratch_diag),
+                        None => space.to_rgb(intent, comps, &mut scratch_diag),
                     }
                 }
             };
@@ -1245,14 +1357,66 @@ fn decode_sampled(
                 Some(key) if key.masks(&raw_comps[..readable]) => 0,
                 _ => plane_alpha,
             };
-            if let Some(slot) = texels.get_mut(y * width as usize + x) {
+            let at = y * width as usize + x;
+            if let Some(slot) = pixmap.pixels_mut().get_mut(at) {
                 *slot = premultiplied(rgb, a);
+            }
+            // The authored ink, written texel-for-texel beside the sRGB.
+            // `comps` is still in the image's own colour space here and
+            // nowhere after this point.
+            if let Some(planes) = ink.as_mut() {
+                // A palette entry's colorants when the space is indexed,
+                // otherwise the texel's own components. Exactly one of the
+                // two is meaningful for any given image.
+                let tint = match palette_ink {
+                    Some(t) => t,
+                    None => [
+                        last_comps.first().copied().unwrap_or(0.0),
+                        last_comps.get(1).copied().unwrap_or(0.0),
+                        last_comps.get(2).copied().unwrap_or(0.0),
+                        last_comps.get(3).copied().unwrap_or(0.0),
+                    ],
+                };
+                write_ink(planes, at, tint, a);
             }
         }
     }
     notes.palette_out_of_range = out_of_range;
 
-    Ok(DecodedImage { pixmap, notes })
+    Ok(DecodedImage { pixmap, ink, notes })
+}
+
+/// Write one texel's authored `DeviceCMYK` tint into the ink planes.
+///
+/// `comps` is in the image's own colour space and `alpha` is the texel's
+/// resolved alpha, exactly as the sRGB write beside this one uses. Both
+/// planes are **premultiplied by that same alpha**, because `tiny_skia`
+/// rasterises premultiplied and the compositor un-premultiplies by the alpha
+/// it reads back — the identical dance `composite_srgb` already performs.
+///
+/// ★ `K` is replicated across all three channels rather than parked in one.
+/// A single channel would work and would also make a silent failure possible:
+/// if the packing and the unpacking ever disagreed about WHICH channel, two
+/// out of three reads would return zero — a plausible-looking lighter image
+/// rather than an obvious fault. Replicating means any channel is the right
+/// channel, so the two sides cannot disagree.
+fn write_ink(planes: &mut CmykTexels, at: usize, tint: [f32; 4], alpha: u8) {
+    let q = |v: f32| -> u8 {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        {
+            (v.clamp(0.0, 1.0) * 255.0).round() as u8
+        }
+    };
+    let c = |i: usize| tint.get(i).copied().unwrap_or(0.0);
+    let cmy = premultiplied(Rgb::from_rgb(c(0), c(1), c(2)), alpha);
+    let k = premultiplied(Rgb::from_rgb(c(3), c(3), c(3)), alpha);
+    let _ = q;
+    if let Some(slot) = planes.cmy.pixels_mut().get_mut(at) {
+        *slot = cmy;
+    }
+    if let Some(slot) = planes.k.pixels_mut().get_mut(at) {
+        *slot = k;
+    }
 }
 
 /// Row stride in bytes: `ceil(Width × components × BitsPerComponent / 8)`.
@@ -1484,7 +1648,27 @@ pub(crate) enum Space {
     Cmyk,
     /// `[/Indexed base hival lookup]` (§8.6.6.3). The palette is
     /// resolved to RGB at construction — see [`Space::palette`].
-    Indexed(Vec<Rgb>),
+    /// `/Indexed`: the resolved palette, plus the base's **authored ink**
+    /// when that base is `DeviceCMYK`.
+    ///
+    /// ★ The second table exists for the same reason
+    /// [`DecodedImage::ink`] does, one level further in. A palette entry is
+    /// resolved to `Rgb` when the table is BUILT, so by the time a texel
+    /// looks one up the colorants are already gone — and `CMYK -> sRGB` is
+    /// many-to-one, so they cannot be recovered from the `Rgb`.
+    ///
+    /// This is not a hypothetical arrangement: a print-conformance patch
+    /// ships `[/Indexed /DeviceCMYK 0 <lookup>]` for a JPEG 2000 image, and
+    /// on a subtractive page the same red drawn as a path and as that image
+    /// landed two visibly different colours until the ink was carried here.
+    ///
+    /// `None` for every other base, where there are no colorants to keep.
+    Indexed {
+        /// The palette, resolved to sRGB — what the screen path reads.
+        table: Vec<Rgb>,
+        /// The same entries' `DeviceCMYK` colorants, index for index.
+        ink: Option<Vec<[f32; 4]>>,
+    },
     /// Any space this rasterizer does not decode itself, delegated whole
     /// to [`crate::color::ColorSpace`]: `Separation`, `DeviceN`, `Lab`,
     /// `CalGray` and `CalRGB`.
@@ -1516,7 +1700,7 @@ impl Space {
     /// wrong shears the image (`color__indexed.md`).
     pub(crate) fn components(&self) -> usize {
         match self {
-            Self::Gray | Self::Indexed(_) => 1,
+            Self::Gray | Self::Indexed { .. } => 1,
             Self::Rgb => 3,
             Self::Cmyk => 4,
             // A `DeviceN` carries one component per colorant name, so this
@@ -1539,7 +1723,7 @@ impl Space {
     /// for every profile whose range is the usual 0–1.
     fn default_decode(&self, max_sample: f32) -> Vec<(f32, f32)> {
         match self {
-            Self::Indexed(_) => vec![(0.0, max_sample)],
+            Self::Indexed { .. } => vec![(0.0, max_sample)],
             // ★ NOT `[0 1]` per component. Table 90's default is the
             // space's own component RANGE, and `Lab` is the case where
             // that is not 0–1: its L runs 0–100 and its a/b run over the
@@ -1558,7 +1742,7 @@ impl Space {
     /// The resolved palette, for `Indexed` only.
     fn palette(&self) -> Option<&[Rgb]> {
         match self {
-            Self::Indexed(table) => Some(table),
+            Self::Indexed { table, .. } => Some(table),
             _ => None,
         }
     }
@@ -1590,7 +1774,7 @@ impl Space {
             // An Indexed space never reaches here — the palette path
             // short-circuits it — but returning grey rather than
             // panicking keeps this total.
-            Self::Gray | Self::Indexed(_) => Rgb::from_gray(c(0)),
+            Self::Gray | Self::Indexed { .. } => Rgb::from_gray(c(0)),
             Self::Rgb => Rgb::from_rgb(c(0), c(1), c(2)),
             // The same calibrated conversion the `k`/`K` operators use —
             // one function in `pdfce_core::color`, reached through the
@@ -1857,7 +2041,7 @@ fn resolve_indexed(
                 "/Indexed without a base space".into(),
             ))?;
     let base = resolve_space(doc, base_obj, resources, depth + 1, intent)?;
-    if matches!(base, Space::Indexed(_)) {
+    if matches!(base, Space::Indexed { .. }) {
         // §8.6.6.3: the base "shall not be … another Indexed space".
         return Err(ImageError::UnsupportedColorSpace(
             "/Indexed over /Indexed".into(),
@@ -1907,6 +2091,10 @@ fn resolve_indexed(
     };
 
     let mut table = Vec::with_capacity(hival + 1);
+    // The base's colorants, kept only when the base IS ink. Built in the
+    // same loop as the sRGB entries, so the two tables cannot come to
+    // disagree about which index means what.
+    let mut ink_table = matches!(base, Space::Cmyk).then(|| Vec::with_capacity(hival + 1));
     // ★ EXACTLY `m` COMPONENTS, AND THE BUFFER IS SIZED FROM `m`.
     //
     // This was a fixed `[0.0f32; 4]` passed whole to `to_rgb`, and it was
@@ -1941,9 +2129,20 @@ fn resolve_indexed(
             break;
         };
         let comps = palette_entry(entry, m);
+        if let Some(ink) = ink_table.as_mut() {
+            ink.push([
+                comps.first().copied().unwrap_or(0.0),
+                comps.get(1).copied().unwrap_or(0.0),
+                comps.get(2).copied().unwrap_or(0.0),
+                comps.get(3).copied().unwrap_or(0.0),
+            ]);
+        }
         table.push(base.to_rgb(intent, &comps, &mut palette_diag));
     }
-    Ok(Space::Indexed(table))
+    Ok(Space::Indexed {
+        table,
+        ink: ink_table,
+    })
 }
 
 #[cfg(test)]
@@ -2031,7 +2230,10 @@ mod tests {
     #[test]
     fn indexed_default_decode_is_the_identity() {
         // Table 90 / §8.9.5.2 NOTE 2: [0 2ⁿ−1], so y = x.
-        let space = Space::Indexed(vec![Rgb::BLACK]);
+        let space = Space::Indexed {
+            table: vec![Rgb::BLACK],
+            ink: None,
+        };
         assert_eq!(space.default_decode(255.0), vec![(0.0, 255.0)]);
         assert_eq!(space.components(), 1, "the sample is ONE index");
     }

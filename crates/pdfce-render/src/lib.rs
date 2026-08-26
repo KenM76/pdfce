@@ -668,6 +668,7 @@ fn render_impl(
     if let Some(buffer) = cmyk {
         diagnostics.cmyk_buffer_engaged = true;
         diagnostics.cmyk_bridged_pixels += buffer.bridged_pixels();
+        diagnostics.cmyk_native_image_pixels += buffer.native_image_pixels();
         diagnostics.cmyk_groups_approximated += buffer.groups_approximated();
         diagnostics.cmyk_unbridged_images += buffer.unbridged_images();
         // The one failure mode here is an allocation the page has already

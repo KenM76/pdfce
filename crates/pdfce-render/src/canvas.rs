@@ -547,6 +547,7 @@ impl<'a> Canvas<'a> {
         &mut self,
         path: &Path,
         texels: &Pixmap,
+        ink: Option<&crate::image::CmykTexels>,
         quality: FilterQuality,
         image_to_user: Transform,
         blend: BlendMode,
@@ -597,13 +598,69 @@ impl<'a> Canvas<'a> {
                 p.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
             }
             Self::Cmyk(b) => {
-                // ★ THE ONE PAINT KIND THAT CANNOT GO NATIVE AT THIS PASS,
-                // and the reason is upstream of this method: `DecodedImage`
-                // holds a `Pixmap`, so a `DeviceCMYK` image's samples were
-                // already flattened to sRGB inside the decode loop, one
-                // call before this one. Bridging here is therefore not a
-                // shortcut taken at the canvas -- it is the only
-                // information that reaches the canvas.
+                // ★★ THIS USED TO BE "THE ONE PAINT KIND THAT CANNOT GO
+                // NATIVE", and the comment explaining why is worth keeping
+                // because it was exactly right about the cause:
+                //
+                //   "the reason is upstream of this method: `DecodedImage`
+                //    holds a `Pixmap`, so a `DeviceCMYK` image's samples were
+                //    already flattened to sRGB inside the decode loop, one
+                //    call before this one. Bridging here is therefore not a
+                //    shortcut taken at the canvas -- it is the only
+                //    information that reaches the canvas."
+                //
+                // The fix was therefore upstream too: `DecodedImage::ink`
+                // now carries the authored colorants for a `DeviceCMYK`
+                // image, so the information DOES reach the canvas and the
+                // round trip is unnecessary. See `CmykBuffer::
+                // composite_cmyk_image` for why no better inverse would have
+                // served -- `CMYK -> sRGB` is many-to-one.
+                //
+                // The bridge below still runs for every other image, where
+                // sRGB genuinely is all there is.
+                if let Some(ink) = ink
+                    && let (Some(mut cmy), Some(mut k)) = (
+                        Pixmap::new(b.width(), b.height()),
+                        Pixmap::new(b.width(), b.height()),
+                    )
+                {
+                    // Rasterised TWICE through the identical shader, transform
+                    // and path, so the ink lands on exactly the pixels the
+                    // sRGB path would have covered. Any difference in
+                    // interpolation or edge coverage between the two would
+                    // show up as a fringe of the wrong colour.
+                    let draw = |src: &Pixmap, dst: &mut Pixmap| {
+                        let paint = Paint {
+                            shader: Pattern::new(
+                                src.as_ref(),
+                                SpreadMode::Pad,
+                                quality,
+                                1.0,
+                                image_to_user,
+                            ),
+                            blend_mode: BlendMode::SourceOver,
+                            anti_alias,
+                            force_hq_pipeline: false,
+                        };
+                        dst.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
+                    };
+                    draw(&ink.cmy, &mut cmy);
+                    draw(&ink.k, &mut k);
+                    if let Some(region) =
+                        device_region(fill_bounds(path, ctm), 1.0, b.width(), b.height())
+                    {
+                        b.composite_cmyk_image(
+                            &cmy,
+                            &k,
+                            region,
+                            1.0,
+                            crate::compositor::Blend::from_tiny_skia(blend)
+                                .unwrap_or(crate::compositor::Blend::Normal),
+                        );
+                    }
+                    return;
+                }
+                // Every other image: sRGB is the only information there is.
                 //
                 // The scratch is rasterised with `tiny_skia` exactly as the
                 // `Paint` arm above does, so an image edge has identical

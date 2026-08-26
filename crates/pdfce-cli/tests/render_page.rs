@@ -543,6 +543,10 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             "cmyk_bridged_pixels",
             "cmyk_groups_approximated",
             "cmyk_unbridged_images",
+            // `Pass 130.1` -- the complement of `cmyk_bridged_pixels`:
+            // pixels a DeviceCMYK image contributed as authored ink,
+            // with no conversion in either direction.
+            "cmyk_native_image_pixels",
         ],
         "metrics key order is part of the stable contract"
     );

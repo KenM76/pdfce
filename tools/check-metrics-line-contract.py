@@ -119,7 +119,11 @@ TABLE_ROW = re.compile(r"^//! \| `([a-z0-9_]+)` \|", re.M)
 # The println's format string, identified by its first literal bytes rather
 # than by line number so an edit above it cannot silently move the window.
 PRINTLN_HEAD = '"rendered {} page {page_number} -> {} {}x{}; '
-PRINTLN_TAIL = 'cmyk_unbridged_images={}"'
+# Updated 2026-08-26 (`Pass 130.1`) when `cmyk_native_image_pixels` was
+# appended. The anchor is the LAST key on the line, so every append moves it —
+# that is the intended cost: the gate's failure message names this constant so
+# the edit is a two-line follow-through rather than a hunt.
+PRINTLN_TAIL = 'cmyk_native_image_pixels={}"'
 
 
 def template_keys(src: str) -> list[str]:

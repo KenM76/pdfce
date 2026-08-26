@@ -339,6 +339,12 @@ pub(crate) struct CmykBuffer {
     /// rather than asserted because "unreachable" claims decay and a
     /// counter that stays zero costs nothing.
     unbridged_images: u64,
+    /// Pixels composited straight from a `DeviceCMYK` image's own colorants,
+    /// with no conversion in either direction.
+    ///
+    /// The complement of [`Self::bridged`]: together they say how much of a
+    /// subtractive page kept its ink and how much passed through sRGB.
+    native_images_pixels: u64,
     /// The `DeviceCMYK` → sRGB rendering intent this buffer converts with.
     ///
     /// # Why the buffer owns it rather than taking it per call
@@ -504,6 +510,7 @@ impl CmykBuffer {
             bridged: 0,
             groups_approximated: 0,
             unbridged_images: 0,
+            native_images_pixels: 0,
             intent,
             knockout: None,
             // Allocated once, here, and reused by every paint for the life
@@ -550,6 +557,12 @@ impl CmykBuffer {
         self.bridged += child.bridged;
         self.groups_approximated += child.groups_approximated;
         self.unbridged_images += child.unbridged_images;
+        self.native_images_pixels += child.native_images_pixels;
+    }
+
+    /// Pixels that kept their authored ink (see `composite_cmyk_image`).
+    pub(crate) const fn native_image_pixels(&self) -> u64 {
+        self.native_images_pixels
     }
 
     /// How many image brushes could not be bridged at all.
@@ -772,6 +785,95 @@ impl CmykBuffer {
                     changed += 1;
                 }
                 self.bridged += 1;
+            }
+        }
+        changed
+    }
+
+    /// Composite a `DeviceCMYK` image's **authored ink**, with no conversion
+    /// in either direction.
+    ///
+    /// # Why this exists beside [`Self::composite_srgb`]
+    ///
+    /// `composite_srgb` takes a rasterised sRGB pixmap and converts every
+    /// pixel back to ink with `rgb_to_cmyk`. For an image that was *authored*
+    /// in RGB that is the only information there is, and the bridge is
+    /// honest. For an image authored in `DeviceCMYK` it is a **round trip**,
+    /// and the return leg is not the inverse of the outbound one: out through
+    /// a calibrated table, back through a naive formula.
+    ///
+    /// ★★ AND NO BETTER INVERSE WOULD FIX IT. `CMYK → sRGB` is **many-to-one**
+    /// — a rich black and a flat K black can land on the same screen colour —
+    /// so the mapping is not injective and has no inverse to improve. The
+    /// only way to keep the ink is never to leave it.
+    ///
+    /// Measured on a print-conformance patch built to catch this: the same
+    /// red, drawn once as a path and once as a `DeviceCMYK` image, arrived at
+    /// `(238, 29, 35)` and `(225, 63, 50)`.
+    ///
+    /// # The two planes
+    ///
+    /// `cmy` and `k` are the image rasterised **twice through the identical
+    /// transform**, carrying `C,M,Y` and `K,K,K` respectively, both
+    /// premultiplied by the image's own alpha. Rasterising rather than
+    /// sampling is deliberate: it reuses `tiny_skia`'s interpolation and edge
+    /// coverage, so the ink lands on exactly the pixels the sRGB path would
+    /// have covered. A hand-rolled inverse-transform sampler would be a
+    /// second implementation of the resampling and would disagree at every
+    /// edge.
+    ///
+    /// Alpha is read from `cmy`; `k` carries the same alpha by construction
+    /// and is used only for its colour.
+    pub(crate) fn composite_cmyk_image(
+        &mut self,
+        cmy: &Pixmap,
+        k: &Pixmap,
+        region: (u32, u32, u32, u32),
+        alpha: Chan,
+        blend: Blend,
+    ) -> u32 {
+        debug_assert_eq!(
+            cmy.width(),
+            self.width,
+            "ink plane and colorant buffer must share a device grid"
+        );
+        let (x0, y0, x1, y1) = region;
+        let x1 = x1.min(self.width);
+        let y1 = y1.min(self.height);
+        let alpha = alpha.clamp(0.0, 1.0);
+        self.mark_dirty((x0, y0, x1, y1));
+        let cmy_px = cmy.pixels();
+        let k_px = k.pixels();
+        let mut changed = 0_u32;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let idx = (y * self.width + x) as usize;
+                let (Some(cm), Some(kk)) = (cmy_px.get(idx), k_px.get(idx)) else {
+                    continue;
+                };
+                let a = Chan::from(cm.alpha()) / 255.0;
+                if a <= 0.0 {
+                    continue;
+                }
+                // Un-premultiply by the same alpha both planes were
+                // multiplied by, exactly as the sRGB path does.
+                let un = |v: u8| Chan::from(v) / 255.0 / a;
+                let source = PixelCmyk {
+                    c: [un(cm.red()), un(cm.green()), un(cm.blue()), un(kk.red())],
+                    a: a * alpha,
+                };
+                // An image's own alpha is SHAPE, not opacity (§11.6.4.2), so
+                // `f_s = a` and the constant alpha is `q_s` — the same split
+                // `composite_srgb` makes, kept identical on purpose so the
+                // two paths differ ONLY in where the colour came from.
+                if self.composite_at(idx, source, a, blend) {
+                    changed += 1;
+                }
+                // Deliberately NOT counted as `bridged`: nothing was
+                // converted. That counter answers "how much of this page
+                // lost its ink identity", and adding these would make the
+                // fix look like the defect.
+                self.native_images_pixels += 1;
             }
         }
         changed
