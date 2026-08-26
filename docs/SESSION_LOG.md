@@ -64675,3 +64675,395 @@ refinement to `R215`, whose act minting is.**
   sampled-image exclusion (item 2 above).
 - **New:** **amend the open pdfceGUI note** rather than sending a second one
   (item 3 above).
+
+## 2026-08-26 (two-hundred-and-sixty-seventh filing) — A **267th**, NOT a third amendment to the 266th, and the reason is stated as a ruling: ★★★ **`1f66eae` — `v0.13.0` IS BUMPED AND THE HEADLINE IS NOT THE NEW ITEMS, IT IS THE BEHAVIOUR CHANGE THAT IS NOT ADDITIVE — a `DeviceCMYK` IMAGE ON A SUBTRACTIVE PAGE NOW COMPOSITES TO DIFFERENT PIXELS THAN IN `v0.12.0`, CORRECTLY BUT DIFFERENTLY, and `cmyk_bridged_pixels` CHANGED MEANING and reads MUCH LOWER on print files** — a consumer diffing renders byte-for-byte sees the first, and one treating the counter as a shortfall gauge reads a **false improvement** from the second; ★★★ **AND THE COMMIT MESSAGE'S OWN CLASSIFICATION IS CORRECTED HERE: FOUR OF THE FIVE "new public CORE items" ARE `pdfce-render`, NOT `pdfce-core`** — measured by grep, quoted rather than rewritten, **and it matters because the `768e934` precedent's minor case rested on `docs/core-api/`, whose verb count is UNCHANGED at 142**; ★★ **`6a9511a` — THE FIFTH SURVIVOR IS FIXED, the one `2c3210a` CREATED while repairing the other four, and NO GATE WAS EVER GOING TO CATCH IT**: `check-string-gaps.sh` clean, clippy clean, crate compiles — ★★★ **A SENTENCE CAN BE GRAMMATICALLY RUINED AND REMAIN A PERFECTLY VALID DOC COMMENT**, and it was found by **RE-READING THE DIFF**; ★★ **classified as a CLAUSE on the existing wrapped-literal/heredoc finding, NOT a new rule — the engineer's reading, put to this role and ADOPTED, with the ground stated: the mechanism is identical and only the DETECTION LIKELIHOOD differs**; ★★★ **THE `R215` REFINEMENT IS RECORDED AS A NAMED CANDIDATE IN `ROADMAP.md` ITSELF, both instances cited — and the warrant is stated HONESTLY DOWNWARD: n = 2 within ONE filing is WEAKER than n = 2 across two, because a sweep looking for a shape will find that shape**; ★★ **TAG / PUSH / RELEASE ALL ABSENT — CHECKED FROM A SHELL AT FILING TIME, not copied from an earlier entry's wording**; ★ **the outbound correction went as its OWN dated file WITH a supersession banner in the original's §5 — HALF this role's advice, and the operator said so rather than letting it read as agreement**; ★ **the Table 149 spec half is recorded as OWED with `pdfce-spec-librarian` NAMED**; ★ **both filing gates green, `--strict-tip` included, no deferral line; `tools/commits-filed-baseline.txt` UNTOUCHED**
+
+**Shipped:**
+
+- **`1f66eae`** — **VERSION BUMP `0.12.0` → `0.13.0`, MINOR**. No Pass ID;
+  infrastructure/release record, on the same footing as `81d1e30`, `768e934`,
+  `4267f84`, `e115947`.
+- **`6a9511a`** — one-line documentation correction, no behaviour change. No
+  Pass ID.
+
+Both filed as `ROADMAP.md` *Shipped* entries, `6a9511a` first
+(reverse-chronological: `09:39:24` vs `09:37:25`, same day, two minutes
+apart). **Neither is pushed** — `main` is **9 ahead of `origin`**, measured
+here.
+
+**Decisions made this session: none.** Decisions ceiling stays **`087`**;
+**`088` is still OWED** — six filings now. Standing-rule ceiling stays
+**`R219`**, next free **`R220`**; the `R215` refinement is a **named
+candidate**, not a mint. Open-question ceiling unchanged at **`(bt)`**.
+
+---
+
+### ★★ WHY A 267th AND NOT A THIRD AMENDMENT TO THE 266th — the ruling, since it was asked
+
+**The operator's lean was a 267th; this role agrees, and the ground is
+sharper than "these are new."**
+
+The 266th filing has been amended once already, **before** its commit landed —
+an amendment to an **uncommitted** entry is an edit to a draft, and costs
+nothing. `1e12154` is now **on the record**. Amending it again would mean
+**re-dirtying a committed filing**, and the test for that is not novelty but
+**whether the committed text is WRONG**.
+
+| the two commits | correct the 266th? | verdict |
+|---|---|---|
+| `1f66eae` (`v0.13.0`) | **no** — the 266th said nothing about a version; the bump happened after it | **new event** |
+| `6a9511a` (fifth survivor) | **no** — the 266th's amendment **reported** this defect as found-and-not-fixed, which was **true when written and is still true of that moment** | **new event: the owed work discharged** |
+
+⇢ **A filing that reported owed work is not falsified by the work being done.**
+It is *completed* by a later filing that says so. **The one thing that would
+have justified re-opening `1e12154` is if it had asserted something now
+false** — and it asserts the opposite: its "For next session" item 2 names the
+fix as owed, at the exact file and line. **This filing discharges it.**
+
+★ **Same reasoning as the stale ledger figure in the 266th's footer, which is
+LEFT ALONE** (the operator's third flag, and his agreement is on the record):
+each filing records **the tree it measured** and goes one behind when its own
+commit lands. **Chasing a number that is correct as of its own measurement
+would make it wrong as of a different one.**
+
+---
+
+### ★★★ `1f66eae` — THE NON-ADDITIVE HALF IS THE HEADLINE, AND IT IS TWO THINGS
+
+A consumer who upgrades `0.12.0` → `0.13.0` and changes **no code** sees both:
+
+1. **A `DeviceCMYK` image on a subtractive page composites to different
+   pixels.** `Pass 130.1` stopped the `CMYK → sRGB → CMYK` round trip. **The
+   new pixels are correct and the old ones were not** — but *correct* is not
+   *identical*, and **a byte-for-byte render diff will fire.** Measured at
+   `130.1`: **17 of 51 suite patches keep ink where they previously converted;
+   6 of those 17 fall to zero converted pixels.**
+2. **`cmyk_bridged_pixels` CHANGED MEANING** and reads **much lower** on print
+   files, because it no longer counts the images that keep their ink. ★ **The
+   dangerous reading: a consumer treating it as a shortfall gauge sees a large
+   false improvement.** Its complement `cmyk_native_image_pixels` is the
+   counter that moved. **The two are not interchangeable** — a bridged pixel
+   has been through a many-to-one conversion and back.
+
+⇢ **This is why the entry leads with the behaviour change rather than the item
+list.** A version bump's item list is what a *maintainer* reads; the behaviour
+change is what a *consumer* hits, and the consumer is the one who cannot see
+it coming.
+
+★★ **And the honesty point travels with the release**, as it does in every row
+of the 266th filing: both conformance patches now pass a **self-consistency**
+test, and **neither passes because pdfce's colour is right.** pdfce lands on
+**(238, 29, 35)**, Acrobat on **(227, 0, 11)**. ICC profiles remain unapplied —
+`iccce`'s side of **decision 064**.
+
+#### ★★★ THE CORRECTION THIS FILING'S OWN CHECK PRODUCED — "core" was wrong for four of five items
+
+The commit message reads *"New public **core** items: `DecodedImage::ink`,
+`CmykTexels`, `CodecNotes::jpx_palette_left_to_pdf`,
+`Diagnostics::cmyk_native_image_pixels`, and `Space::Indexed` changed from a
+tuple to a struct variant."* **Four of those five live in `pdfce-render`.**
+
+| item | crate | file:line |
+|---|---|---|
+| `DecodedImage::ink` | **`pdfce-render`** | `src/image.rs:464` |
+| `CmykTexels` | **`pdfce-render`** | `src/image.rs:474` |
+| `Diagnostics::cmyk_native_image_pixels` | **`pdfce-render`** | `src/interpret.rs:758` |
+| `Space::Indexed` (tuple → struct variant) | **`pdfce-render`** | `src/color.rs:303` |
+| `CodecNotes::jpx_palette_left_to_pdf` | **`pdfce-core`** | `src/image_codec/mod.rs:342` |
+
+*(Method named, per hard rule 10's corollary — **a correction is a claim**:
+`grep -rn` over `crates/pdfce-core/src` and `crates/pdfce-render/src`, run in
+this filing, not relayed.)*
+
+**★★ Why this is not pedantry.** The `768e934` bump argued MINOR from *"a
+consuming project builds against `docs/core-api/`, and a new callable verb is
+not a patch."* **That argument is unavailable here.** `docs/core-api/`
+documents **`pdfce-core`**, and its verb count is **unchanged at 142**
+*(`docs/core-api/index.md` line 17, read here; neither `f66a098` nor `5dd4083`
+touches `crates/pdfce-core/src/edit.rs`, confirmed by `git show --stat`)*.
+**The minor case here is a different and weaker one** — `pdfce-render`'s public
+surface, one `pdfce-core` field, and the behaviour change — **and it is stated
+as such so the next bump does not inherit a precedent it was never given.**
+
+★ **One genuinely source-breaking item, recorded rather than hidden:**
+`Space::Indexed` moving tuple → struct means **any external `match` on it
+fails to compile**. Filed under minor because pdfce is **pre-`1.0`**, where
+semver puts breaking changes in the minor position — **that is the rule, not a
+judgement that nothing broke.**
+
+#### ★ RELEASE STATUS — CHECKED, NOT COPIED, AND THE ANSWER IS "NOTHING HAS HAPPENED YET"
+
+The dispatch asked for this explicitly rather than allowing an earlier entry's
+wording to be carried forward. **Every row measured in this filing:**
+
+| question | command | answer |
+|---|---|---|
+| `v0.13.0` tagged locally? | `git tag --list v0.13.0` | **empty** |
+| `v0.13.0` on the remote? | `git ls-remote --tags origin` | **absent** — `grep -c v0.13.0` → **0** |
+| GitHub release? | `gh release view v0.13.0` | **`release not found`** |
+| latest release? | `gh release list` | **`v0.12.0`, `2026-08-26T06:52:51Z`, `Latest`** |
+| where does `v0.12.0` point? | `git ls-remote --tags origin` | **`v0.12.0^{}` → `61a9e5b`** — the 264th filing's commit; **the retag held** |
+| pushed? | `git status -sb` | **`## main...origin/main [ahead 9]`** |
+
+**⇒ `v0.13.0` is a version number in a tree and nothing else at filing time.**
+The operator has stated he cuts the release **immediately after committing this
+filing** — which is `docs/NEXT_SESSION.md` §0a's ordering being **obeyed**
+(the filing commit is the last commit before the tag), not re-learned.
+
+★ **`head`, not `tail`.** `git ls-remote --tags` sorts **lexicographically by
+refname**, so `v0.10.0`–`v0.12.0` sort **before** `v0.5.0`. The 263rd filing
+recorded the near-miss where a `tail -10` appeared to prove the remote had no
+recent tags at all.
+
+#### ★★ THE LOCK FILES — read, not grepped, and one stanza is deliberately not `0.13.0`
+
+| lock file | `pdfce-*` product stanzas | all `0.13.0`? |
+|---|---|---|
+| `Cargo.lock` | **6** — cli/core/fetch/gui/print/render | **6 of 6** |
+| `fuzz/Cargo.lock` | **2** — core/render | **2 of 2** |
+
+*(Hard rule 10: **8 `pdfce-*` product stanzas over 2 lock files, 8 at
+`0.13.0`** = **100 %**. ★ **A ninth `pdfce-` stanza exists and is deliberately
+NOT bumped**: `pdfce-fuzz` at `fuzz/Cargo.lock:356` carries **`0.0.0`**,
+because the fuzz harness is never published. **Recorded so a future reader
+counting stanzas does not file the `0.0.0` as a missed bump** — the exact
+failure the `81d1e30` entry warned about when it showed that a *grep count* is
+not even stable across releases.)*
+
+**`fuzz/Cargo.lock` remains the trap** — outside the workspace, so no ordinary
+`cargo build` refreshes it; it sat stranded at `0.7.0` for two releases on
+exactly that assumption. It moved here.
+
+---
+
+### ★★ `6a9511a` — THE FIFTH SURVIVOR, AND WHAT MAKES IT WORTH A FILING IS THAT NOTHING MECHANICAL COULD HAVE FOUND IT
+
+`2c3210a` fixed the four `crates/` staleness survivors this role's
+hard-rule-11 sweep reported. In one of them it shortened the heading
+`# Why a bridge exists at all, stated plainly` and inserted a new paragraph.
+**The splice matched the heading but not its trailing fragment**, so
+`, stated plainly` was carried down and welded **after the full stop** of the
+replacement sentence:
+
+```
+/// instead, immediately above, and crosses nothing., stated plainly
+```
+
+**Fixed at `crates/pdfce-render/src/cmyk_buffer.rs:721`. One line.**
+
+#### ★★★ NO GATE WAS EVER GOING TO CATCH IT — stated as a ruling, so the absence is not read as an omission
+
+| check | verdict on the broken text | why it cannot see it |
+|---|---|---|
+| `tools/check-string-gaps.sh` | **clean** | it hunts a **run of spaces** from a wrapped literal or heredoc continuation; there is none — the fragment is welded flush against the full stop |
+| `cargo clippy -- -D warnings` | **clean** | it is a **doc comment**; rustdoc has no grammar |
+| `cargo build` / `cargo test` | **green** | a comment cannot fail to compile |
+
+⇢ ***A sentence can be grammatically ruined and remain a perfectly valid doc
+comment.*** Every gate in `tools/` verifies a string's **location**, **route**
+or **shape**. **None reads a sentence**, and `R210`'s minting test answers this
+in the negative for the same reason it did for disclosure content: a gate would
+have to know what the prose is *supposed* to say.
+
+**It was found by RE-READING THE DIFF**, in the 266th filing's amendment —
+which is the same instrument that found three of the seven overprint survivors
+the engineer's greps missed on 2026-08-18. **Reading for meaning and grepping
+for text return different sets, and the grep's set is reliably the smaller.**
+
+#### ★★ CLASSIFICATION — the engineer's reading was put to this role, and it is ADOPTED
+
+The proposal: *this is the same family as the wrapped-literal and heredoc
+findings — a mechanical edit to prose, unverified by anything mechanical — and
+belongs as a clause on one of those rather than as a new rule.* **Agreed, and
+the ground is stated so the agreement is checkable:**
+
+- **The mechanism is identical.** All three are a **textual splice whose match
+  boundary was chosen by eye and landed one fragment short**. The heredoc case
+  loses indentation, the wrapped-literal case gains spaces, this one gains a
+  clause. ⇢ **The defect is the boundary, not the damage.**
+- **The only distinguishing feature is the SUBJECT of the containing commit** —
+  *"correct the stale documentation"* — which changes the **likelihood of
+  detection**, not the mechanism. That observation is real, and it is filed in
+  the `ROADMAP.md` entry; **but a rule minted on it would name a feeling about
+  diffs rather than a checkable condition.**
+- **n = 1 for this exact sub-shape**, below the two-occurrence bar, and the
+  shape it belongs to is already carried at **n = 6** (heredoc, 264th filing).
+
+★ **The half worth keeping visible, and it is this role's own hard-rule-11
+corollary pointed one step further:** *check a draft claim of your own against
+live source* became **check the repair against the file it repaired.** The
+sweep that discharges a staleness report should include the discharge.
+**n = 1; not proposed as a rule.**
+
+---
+
+### ★★★ THE `R215` REFINEMENT — RECORDED AS A NAMED CANDIDATE IN `ROADMAP.md`, NOT MINTED
+
+**Where it lives:** `docs/ROADMAP.md` *Standing rules*, immediately after
+`R215`'s own ceiling statement. ⇢ **Deliberately not left in a session-log
+paragraph or a chat reply** — the operator asked for it to be recorded, and a
+candidate nobody can find is not recorded. **The mint is his act; this role
+does not mint into `R215`.**
+
+**The candidate, one line:** ⇢ ***an acceptance criterion written against a
+COUNTER is written against an INSTRUMENT, not against the BEHAVIOUR. State it
+against the CLAUSE the counter reports on, and name the counter only as the way
+you will measure it.***
+
+**Both instances cited, as asked:**
+
+| # | criterion as filed | why it is now unsatisfiable |
+|---|---|---|
+| 1 | `Pass 97.1k` — *"`cmyk_bridged_pixels` reaches **0**"* | it would demand an `ICCBased`-RGB image **stop bridging**, and there is **no ink in it to keep**; `PCS3_172` bridges after `130.1` and that is **correct** |
+| 2 | `Pass 122.1` — *"`overprint_images_unsupported` reaches **0** on the suite"* | the counter is **deliberately over-inclusive** and keeps counting the **inert** process images Table 149 says are already right; reaching `0` would require narrowing the instrument, which **destroys the census** |
+
+**Shared cause:** both were written against a number pdfce **emits** rather
+than against the clause it **reports on**. A counter's scope is chosen for what
+is useful to **census**; a criterion's scope is fixed by what the **standard**
+requires. **Nothing forces the two sets to converge**, so when the
+classification is later understood the counter is right, the criterion is
+impossible, **and meeting it would be the regression.**
+
+#### ★★ THE WARRANT IS STATED HONESTLY DOWNWARD, WHICH IS THE PART THIS ROLE ADDS
+
+The engineer's dispatch said *"n = 2 within one filing, and both share a
+cause"*, and that is `R215`'s own trigger shape. **This filing records the
+weaker, truer version beside it:**
+
+> ⇢ **n = 2 within ONE filing is a weaker warrant than n = 2 across two,
+> because a single sweep looking for one shape will find that shape.** The
+> second instance is not an independent confirmation that the pattern recurs in
+> the wild.
+
+**What is corroborated:** the **mechanism**, at two independent authorships
+months apart. **What is not yet evidenced:** the **frequency**. ⇢ **A third
+instance found by a sweep that was not looking for it would settle it.**
+
+★ **Why it is filed as a refinement rather than `R220`.** `R215` (a)–(c)
+already oblige a row to state **the mechanism that produces its number**. This
+says **where the wrong number came from in the first place** — the author
+reached for a quantity the system already prints, because **a printed quantity
+feels measured.** That is the **provenance** clause `R215` lacks. Minting it
+separately would split one obligation across two numbers.
+
+★ **No gate, and do not propose one.** *"Is this expected value a property of
+an instrument rather than of the behaviour?"* requires knowing what the
+instrument counts and what the clause requires — `R210`'s minting test answered
+in the negative, the same answer `R215` itself got.
+
+---
+
+### ★ THE OUTBOUND CORRECTION — THE OPERATOR TOOK HALF THIS ROLE'S ADVICE AND SAID SO
+
+**Both files are named here, because that is what the recommendation was
+actually protecting:**
+
+| file | state |
+|---|---|
+| `D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/2026-08-26-correction-per-image-overprint-is-mostly-inert-not-owed.md` | **NEW**, dated, `3,894 B`, sent as its own note. Corrects §5 of the note below; cites `2c3210a` |
+| `D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/2026-08-26-cmyk-images-keep-their-ink-and-one-counter-changed-meaning.md` | **AMENDED at §5** with a prominent supersession banner (`★★ SUPERSEDED THE SAME DAY — read …`) naming the correction file and stating that §§1–4 and §6 are unaffected |
+
+**This role's recommendation was: amend the open note, do not send a second.**
+**The operator did both**, and — ★ **the part worth recording** — **he said so
+explicitly rather than letting the outcome read as agreement.**
+
+⇢ **The recommendation's stated objection is MET.** The objection was never
+"one file is tidier"; it was *"a separate note puts the two halves of one claim
+in two files a reader can find independently"* — the `FEATURES.md`-drifting-from-
+`ROADMAP.md` failure mode. **A banner at the head of the superseded section
+means a reader who finds either one is routed to the other.** The preference
+(one file) is not met; **the property the preference existed to protect is.**
+
+★ **And the correction note's own closing paragraph is the reason a separate
+file was defensible**: the original *"is already in your tree and you may have
+acted on it, and a correction that arrives as a quiet edit to a consumed file
+is a correction nobody sees."* ⇢ **A consumed note and an unconsumed note need
+different correction shapes** — this role's recommendation was written against
+the general case and the operator was reading the specific one.
+
+---
+
+### OWED — carried forward, each with an owner named
+
+1. **★ `pdfce-spec-librarian` — the Table 149 spec half.** *"Table 149 excludes
+   a sampled image from row 1 by name (`DeviceCMYK`, specified directly, **not
+   in a sampled image**), so a process image falls to row 2's `c_s` in all three
+   columns."* **This is what the standard SAYS**, which is
+   `D:/Dev/Rag-Specialized/PDF_Spec/`'s territory and **not this role's**
+   (hard rule 6). The spec corpus already owns §11.7.4. **Recorded here so it
+   does not sit in a chat reply.** ⇢ **Dispatch `pdfce-spec-librarian`.**
+2. **`C:/personal_rag/pdf/` — the empirical half only**, as a `Limits` clause on
+   `lesson_20260821_terminal_conversion_wants_accuracy_round_trip_wants_invertibility.md`:
+   *a conformance patch whose non-zero counter is not a defect*. **Amend in
+   place, do not add a file** (hard rule 4). Owner: **this role**, next filing.
+3. **`D:/dev/rag/rust/` — a clause on the heredoc-continuation finding**
+   recording that the same splice error appears in **doc-comment prose**, where
+   **no gate exists and none can**, and that the commit subject *"fix the stale
+   documentation"* is a **detection-suppressing context**. Owner: **this role**.
+4. **Decision `088`** — still owed, **six filings**. The unnumbered candidate
+   from the 266th stands unchanged: *a value authored in the destination space
+   is composited without conversion; where no inverse exists the crossing is
+   removed rather than improved.* **The engineer's act.**
+5. **`Pass 130.2`** — `Separation`/`DeviceN` images under overprint. Filed in
+   *Backlog* by the 266th, **not promoted**; narrow, mechanism already shipped
+   (`Pass 122.6`'s once-per-object colorant resolution, one object class over).
+6. **`R220` slot** — held, unminted. The `R215` refinement above is a
+   **candidate**, not a claim on that number.
+
+---
+
+### Ledger and gates — measured after these edits, commands named
+
+| item | value |
+|---|---|
+| `git rev-parse --short HEAD` | **`6a9511a`** |
+| `git log --oneline -1` | *"fix: my own repair welded stray text onto the sentence it replaced"* |
+| `git status -sb` | **`## main...origin/main [ahead 9]`** |
+| commits since the newest backup bundle (`git rev-list --count 61a9e5b..HEAD`) | **9** — the bundle at `D:\Dev\pdfce-backups\pdfce-20260826-0346-61a9e5b-full.bundle` is **9 commits stale**. Measured, not inferred (hard rule 8). ★ Note `61a9e5b` is also `v0.12.0^{}` on the remote |
+| workspace version | **`0.13.0`** (`Cargo.toml:77`) |
+| `v0.13.0` tag / push / release | **NONE OF THE THREE**, checked from a shell — see the table above |
+| Pass-ID ceiling | **`130`**; next free **`130.3`** — **no Pass assigned this filing** |
+| decisions ceiling | **`087`** — unchanged; **`088` still OWED** (six filings) |
+| standing-rule ceiling | **`R219`** — **unchanged, no mint**; `R220` slot held; the `R215` refinement recorded as a **named candidate** in `ROADMAP.md` |
+| open-question ceiling | **`(bt)`** — unchanged |
+| `crates/` survivors | **the fifth is FIXED** in `6a9511a`. ★ **Hard-rule-11 sweep RE-RUN in this filing, not assumed** — `grep -rn` over `crates/`, `tools/`, `docs/FEATURES.md`, `docs/core-api/` for **both** changed-meaning counters. `cmyk_bridged_pixels`: **4 prose sites** (`pdfce-cli/src/main.rs:329`, `pdfce-render/src/interpret.rs:753` and `:4397`, `pdfce-render/src/mesh.rs:92`) — **all four read correctly after `130.1`** (`main.rs:329` says *"any image NOT authored in `DeviceCMYK`"*; the mesh and shading sites still bridge and still say so). `overprint_images_unsupported`: **5 prose sites** (`main.rs:322`, `interpret.rs:417` and `:6213`, `color.rs:685`, `overprint.rs:574`) — **all updated by `2c3210a`**, plus `FEATURES.md` rows 233/316. ⇢ **9 prose sites swept across the two counters, 9 correct, 0 survivors** |
+| `docs/` locations edited by this filing | **3** — `ROADMAP.md` *Shipped* ×2 (new entries `6a9511a`, `1f66eae`), `ROADMAP.md` *Standing rules* ×1 (the `R215` named candidate). Plus this `SESSION_LOG.md` entry |
+| `docs/FEATURES.md` | **NO ROWS**, confirmed by sweep — a version bump and a rustdoc fix move no capability. Stated explicitly so the absence reads as confirmed, not overlooked |
+| `tools/commits-filed-baseline.txt` | **UNTOUCHED** |
+
+| gate run (working tree, after these edits, **before any commit**) | output | exit |
+|---|---|---|
+| `python tools/check-commits-filed.py` | `clean` — **both `1f66eae` and `6a9511a` now cited**; **no `DEFERRED` line** | **`0`** |
+| `python tools/check-commits-filed.py --strict-tip` | byte-identical to the above | **`0`** |
+| `python tools/check-suite-name-absent.py` | `clean — nothing in the work tree, staged or not, names it` | **`0`** |
+| `python tools/check-passes-filed.py` | `clean` + the pre-existing informational multi-commit `note` lines | **`0`** |
+
+★ **`--strict-tip` matters this filing and is not a formality.** Before these
+edits it reported **2 code commits in no filing** while the plain run reported
+**1** plus a deferral for the tip — the exact split the dispatch quoted. **Both
+now report zero, identically**, because both commits are cited by hash in
+`ROADMAP.md` and neither is the tip of an unfiled draft.
+
+★★ **Suite naming: `PCS` keys only**, throughout this filing and the two
+`ROADMAP.md` entries. `check-suite-name-absent.py` re-run **after every edit**,
+not once at the end.
+
+**For next session:**
+
+1. **The release is the operator's immediate next act** — tag `v0.13.0` at
+   **this filing's own commit** (§0a ordering), push, package, publish, then
+   `verify-release.py`. ★ **Two of the last three releases came back RED at the
+   tagged commit** (`v0.10.0` on `check-commits-filed.py`, `v0.12.0` on the
+   wasm32 cross-target job). **§0a protects against a tag whose filing cannot
+   exist in its own tree; it does NOT protect against a tag CI has not finished
+   judging.** ⇢ **Watch the CI run before calling the release done**, and expect
+   a **closing-the-loop filing** either way — this project has filed one for
+   every release since `v0.9.0`.
+2. **Dispatch `pdfce-spec-librarian`** for the Table 149 row-1 sampled-image
+   exclusion (owed item 1).
+3. **Decide whether `Pass 130.2` is taken now** — narrow, mechanism already
+   shipped.
+4. **Mint or decline `088`** and the `R215` refinement — both are the
+   operator's acts and both are recorded where they can be found.
+5. **A backup bundle is 9 commits stale** and a release is about to be cut.
+
