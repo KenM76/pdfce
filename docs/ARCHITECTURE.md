@@ -25204,3 +25204,99 @@ free 072.**
   a new pattern of its own.
 
   **Ceiling moves 086 → 087; next free 088.**
+
+- **2026-08-26 — Decision 088. `R54` GAINS A DISPATCH ALLOW-LIST: A
+  TRIGGER MAY FIRE IFF ITS ACTION SUBTYPE IS ON AN ENUMERATED SAFE LIST,
+  EVERY OTHER SUBTYPE REFUSED BY NAME.** (Librarian filing, 268th, no
+  shell — operator ruling relayed by the engineer's dispatch, sourced to
+  `D:\Dev\pdfce\docs\plan-scripting-submit-and-plugins.md` §§3.1/8.)
+
+  **The finding that made this a decision rather than a request.** Scoping
+  "make push buttons work" for the operator surfaced that pdfce authors no
+  `/A` action on anything, and separately that **`R54` — "no trigger event
+  ever fires" — blocks even a plain, script-free `/ResetForm` press.** `R54`
+  was written as a companion to `R53` (no JavaScript interpreter), and its
+  own stated justification is that a trigger action *can* reference
+  `/URI`/`/SubmitForm`/`/ImportData`/`/Launch` — **some** actions are
+  dangerous, not **all**. The rule's text is broader than its own
+  motivation, and nobody had tried to make a button work before this
+  session to notice.
+
+  **The operator's ruling, verbatim (O6, 2026-08-26): *"change the
+  rule."*** Singular, and it answers exactly one of the plan's open
+  questions (§9 Q1). It is **not** authority to touch `R53` — the same
+  conversation's O8 (*"defer for now and plan to deliver the first 3
+  phases without touching it"*) explicitly keeps the JavaScript
+  prohibition in place — nor `R13` clause 5 (add-in execution, still owed,
+  `ROADMAP.md` Backlog), nor `R12`'s own new-destination-class record for
+  form submission (§3.4 of the plan, also still owed). Three separately
+  owed rulings sit adjacent to this one; only this one was made.
+
+  **The amendment, filed against `R54`'s own text in `ROADMAP.md` *Standing
+  rules* in this same filing (same-filing propagation duty).** A trigger
+  fires **only** if its action subtype is on an explicitly enumerated safe
+  list; every subtype not on the list is **refused by name**, never
+  silently ignored. Initial list membership, per the plan's Phase 1/2
+  scoping: `/ResetForm`, `/GoTo` (in-document only), `/Named`
+  (`NextPage`/`PrevPage`/`FirstPage`/`LastPage`). `/SubmitForm` may be
+  **authored** as data under this decision but is not **dispatched** until
+  a further Pass lands `pdfceNet` and the submit posture ladder (plan §6).
+  `/JavaScript` and `/Launch` are refused by name, permanently, and may
+  never be added to this list under this decision — `/Launch` collides
+  with `R13`, and `/JavaScript` would author something `R53` refuses to
+  run.
+
+  **Two clauses carried into the rule text unconditionally, because they
+  are the load-bearing half:**
+
+  1. **The refusal-by-name half is not decoration.** A trigger whose
+     subtype is not enumerated must say so; a button that quietly does
+     nothing is indistinguishable from a broken one, which is the exact
+     failure this project's disclosure posture (`CLAUDE.md` rule 4) exists
+     to prevent.
+  2. **`R53` is untouched and this decision creates no path to executing
+     script.** The allow-list governs declared, non-script actions only.
+
+  **Body-section update.** There is no dedicated ARCHITECTURE.md body
+  section for the forms/JavaScript posture — it lives in `ROADMAP.md`'s
+  `R53`–`R57` text and in decision 009's own §12 entry above (with decision
+  061's addendum). This decision's body-section update is therefore that
+  same `R53`–`R57` block, amended in place at `R54` in `ROADMAP.md`, per
+  the same convention decision 061 used (append a dated, numbered
+  narrowing block after the rule's original text rather than rewrite it).
+  No `ARCHITECTURE.md` §1–§11 body text describes this surface, so none is
+  touched.
+
+  **Not decided here, named so a future session does not read this
+  decision as broader than it is:** whether `R53` is ever reversed (O8:
+  explicitly deferred, not sought); the `R12` decision record a submit
+  destination needs (a *new* destination class — "pdfce sends the
+  operator's data where a **file's author** said," not "where pdfce's own
+  authors said," per the plan's §3.4 reading of `R12`'s unlocking clause);
+  and the `R13` clause 5 ruling an installable plugin needs. All three
+  remain Backlog items, cross-referenced from `Pass 131.0`–`Pass 131.4`.
+
+  **A note on the decision NUMBER itself, because this project's own
+  hard-rule-10 discipline asks for it.** `088` had been tracked across six
+  consecutive prior filings (`ROADMAP.md`'s own ledger lines, and
+  `SESSION_LOG.md`'s 262nd through 267th entries) as *"OWED — the
+  `redact-mark` exit-code question."* That tracking was correct at every
+  moment it was written: no decision had been minted since `087`, and
+  `088` was the number whichever came next would take. **This filing's
+  ruling is what came next**, so `088` is this decision, not the
+  `redact-mark` one — the number was never reserved by topic, only by
+  order. The `redact-mark` exit-code question remains **open and
+  undecided**, and a future filing that resolves it should look for
+  `089` next free, not `088`. The six prior "088 OWED" entries in
+  `SESSION_LOG.md` are **not corrected** — each was a true statement of
+  the ledger at the moment it was written, and rewriting an append-only
+  log entry to match a later fact is the exact mistake this project's own
+  *"chasing a number that is correct as of its own measurement would make
+  it wrong as of a different one"* line (267th filing) warns against.
+
+  **No new standing rule minted at a fresh number.** This decision amends
+  an existing rule (`R54`) rather than establishing a new pattern — the
+  same disposition decision 087 above used for a restatement, applied here
+  to an amendment instead.
+
+  **Ceiling moves 087 → 088; next free 089.**

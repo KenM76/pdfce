@@ -543,7 +543,41 @@ _CARDINAL_UNITS = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
     "six": 6, "seven": 7, "eight": 8, "nine": 9,
 }
-FILING_HEADING = re.compile(r"^#{2,4}\s.*?\(([a-z][a-z-]*)\s+filing\)", re.I)
+# ★★ WIDENED 2026-08-26 — THE RECOGNISER MUST BE PERMISSIVE OR THE
+# UNPARSED-REPORTING SAFETY NET BELOW CANNOT FIRE.
+#
+# This pattern used to read `([a-z][a-z-]*)`, i.e. it only recognised a
+# heading whose ordinal was an ALPHABETIC word. The 268th filing was written
+# `## 2026-08-26 (268th filing) — …` — a NUMERAL — and the consequence was
+# not a parse error. It was **silence**: the line never matched, so it was
+# never a "filing heading" at all, so it never reached `ordinal_to_int()`,
+# so it never landed in `unparsed`, so the `UNCHECKED` report at the bottom
+# of this file — which exists precisely to make this loud — had nothing to
+# say. The summary printed `SESSION_LOG filings : 267 -> next free is 268`
+# while filing 268 sat in the document, and `ledger-numbers: clean`.
+#
+# ★ THE TRANSFERABLE SHAPE, and it is the whole reason this comment is long:
+# **a strict RECOGNISER upstream of a reporting PARSER converts every novel
+# spelling into a silent skip.** The reporting path was already correct,
+# already non-zero-exit, and already carried a comment explaining that a
+# hole must be loud — and it was unreachable for this input class. A safety
+# net downstream of a filter only catches what the filter admits.
+#
+# So the division of labour is now explicit: **this regex recognises the
+# SHAPE `(<anything> filing)` and decides nothing**; `ordinal_to_int()`
+# decides whether the token is meaningful and returns None if not; the
+# caller reports every None as `UNCHECKED` and fails. A future filing may
+# invent Roman numerals, a spelled-out hyphenation nobody has used, or a
+# typo — all three now surface as a named failure instead of a quiet
+# under-count.
+#
+# This is the THIRD instance of this class in this file. The Pass-heading
+# anchor was widened twice (once to admit `★ Pass`, once to `★+ Pass`), each
+# time repairing the one spelling that had been seen; `ordinal_to_int()`'s
+# own docstring records the hundreds vocabulary being added "on the day they
+# were first needed", failing OPEN until then. Same failure mode, three
+# sites. Fixing the CLASS is the point, not admitting `268th`.
+FILING_HEADING = re.compile(r"^#{2,4}\s.*?\(([^)\s]+)\s+filing\)", re.I)
 
 
 def ordinal_to_int(word):
@@ -570,6 +604,19 @@ def ordinal_to_int(word):
     fail over a hyphen the author chose differently.
     """
     w = word.lower()
+
+    # ★ NUMERAL FORM ADDED 2026-08-26, with the 268th filing, which wrote
+    # "(268th filing)" where every prior heading spelled the ordinal out.
+    # Accepted rather than rejected because the checker's job is to verify
+    # UNIQUENESS, not to enforce house style: refusing to parse a heading
+    # it can plainly understand would re-create the exact silent-skip this
+    # commit is fixing, only one layer further in. The spelling convention
+    # is `pdfce-librarian`'s to enforce in prose; the ledger's job is to
+    # know that 268 is taken.
+    m = re.match(r"^(\d+)(?:st|nd|rd|th)$", w)
+    if m:
+        return int(m.group(1))
+
     if w in _UNITS:
         return _UNITS.index(w)
     if w in _TENS:

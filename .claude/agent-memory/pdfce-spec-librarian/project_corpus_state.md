@@ -3894,3 +3894,166 @@ directory. Justification worth reusing: **the finding itself is an ISO 32000 fin
 every subset standard delegates rendering to ISO 32000, so the grid is a statement about
 ISO 32000's silences, indexed by which subset you claim. It also keeps the `*__ref__*`
 convention (derived cross-clause tables) intact.
+
+
+---
+
+## 58. The CLOSE-A-NAMED-EXCLUSION dispatch — *"file X says clause C is NOT ingested; ingest it"* (2026-08-26, §12.7.5.2 Submit-Form)
+
+**Shape.** A corpus file carries an explicit, self-authored **exclusion banner**; a
+dispatch quotes that banner back and says *close it*. Deliverable: a sibling file +
+the banner rewritten. Feels like the safest possible dispatch — the scope is
+already written down by a previous me. **It is not, and §58.1 is why.**
+
+Files: `iso32000\iso32000__s__12.7.5.2.md` (new), `iso32000__s__12.7.5.md`
+(banner + `FA-N1` + licence basis), `iso32000__ref__ambiguity_settings_register.md`
+(§11a intake `SF-A1`…`SF-A7`), `iso32000__ref__field_flags.md` (a GAP line),
+`index.md` (prefix row, file row, **7** trigger rows, 2 gap rows, recount).
+
+### 58.1 ★★ THE EXCLUSION BANNER WAS ITSELF WRONG, AND THE DISPATCH INHERITED THE ERROR VERBATIM
+
+The banner said Table 236 contained *"`/F`, `/Fields`, `/Flags`, **`/CharSet`** and the
+PDF-1.7 **`/URL`/`/URLType`** machinery"*. **Table 236 has FOUR entries: `/S`, `/F`,
+`/Fields`, `/Flags`.**
+
+- **`/URL` + `/URLType` are the last two rows of Table 235, the CERTIFICATE SEED VALUE
+  dictionary** (§12.7.4.5; 2.0 Table 238). Cause: **page-break interleave** — in BOTH
+  editions they are the last thing printed on the page immediately preceding §12.7.5, so
+  a page-range extraction of the submit clause swallows them. *This is item 4c-bis
+  recurring, in a NEW guise: previously it inverted an answer; here it invented two
+  entries and then advertised them as a gap for 16 days.*
+- **`/CharSet` is PDF 2.0 ONLY** (2.0 Table 239). In ISO 32000-1, `CharSet` is the
+  **Type 1 font descriptor** key — pure key-name overload.
+
+**★ THE GENERAL RULE: A SCOPE-EXCLUSION BANNER IS AN UNTESTED CLAIM ABOUT MATERIAL ITS
+AUTHOR DELIBERATELY DID NOT READ.** It is written at the moment of *lowest* knowledge
+about that clause, and it then reads as authoritative for as long as it stands.
+**Verify a banner's inventory against the source BEFORE trusting it as your work-list**,
+and when it is wrong, **keep the wrong text legible in the rewrite** (it names what a
+reader may already have acted on).
+
+**The internal tell that settled it in one grep:** the `/URLType` row says *"The **`Ff`
+attribute's `URL` bit** shall be ignored for this usage"* — and **Table 236 has no `Ff`
+entry**, while Table 235's own `Ff` row defines **bit 7 = `URL`**. A row that references
+a sibling key its supposed table does not have is in the wrong table.
+
+### 58.2 The two-table proof, and the cheap way to run it
+
+`grep -n "Table NNN –"` on the 1.7 dump (en-dash) / `"Table NNN —"` on the 2.0 dump
+(em-dash) lists **every caption including the `(continued)` ones**, and the continued
+caption of a table extracts at the **END** of its page (draw order), which is exactly
+what makes a page-range read look like one table when it is two. **Locate captions
+first, THEN slice.**
+
+### 58.3 A dispatch asking *"state which flag combinations are contradictory"* — answer BOTH halves
+
+Format precedence turned out to be **fully specified** and I nearly filed it as a
+silence. `SubmitPDF`(9) ≻ `XFDF`(6) ≻ `ExportFormat`(3), each link stated in the
+table's own rows (*"all other flags shall be ignored except `GetMethod`"* /
+*"shall be used only if … clear"* / *"meaningful only if … clear"*). **A "where is the
+spec silent?" dispatch biases you toward finding silence; run the positive search
+first.**
+
+**And then the ONE genuine contradiction was between the flag that is exempted and the
+flag that exempts it:** bit 9 says `GetMethod` survives `SubmitPDF`; bit 4 says
+`GetMethod` *"shall also be clear"* when `ExportFormat` is clear. `/Flags 264` is
+simultaneously contemplated and forbidden by two unranked `shall`s. **Contradictions
+live at the exception, not at the rule.**
+
+### 58.4 ★ A "does the spec address X?" QUESTION IS ANSWERED BY WHICH OBJECT THE SELECTORS OPERATE ON
+
+The dispatch asked whether **hidden** fields are submitted. There is no clause. The
+answer is nonetheless *strong*, from structure, three ways:
+1. `Hidden`/`NoView` are **annotation** flags (Table 165 bits 2/6) and their text
+   enumerates *display, printing, interaction* — export is not in the list;
+2. **every** submit selector (`/Fields`, `Include/Exclude`, `NoExport`, the
+   valueless rule) addresses **field dictionaries**, never widgets;
+3. **the standard HAS a field-level withhold flag and it is `NoExport`** — the
+   existence of the purpose-built mechanism is the deliberateness proof.
+**Generalise: when a term-frequency search returns nothing, ask what TYPE OF OBJECT the
+governing rules quantify over. A type mismatch is evidence; an absent sentence is not.**
+Same move produced `SF-N11` (a `Password` field's NOTE constrains **storage**, and only
+storage ⇒ the value is still submitted).
+
+### 58.5 The "(see the Bibliography)" erratum is NOT universal — it fired 3 of 4 here
+
+Corpus rule (item from `iso32000__s__12.6.3.md` §6.0): *"(see the Bibliography)" in ISO
+32000-1 usually points at **clause-3 NORMATIVE** references.* Measured on this clause's
+four format references: **RFC 2045 ✓ normative, Adobe XFDF TN ✓ normative, W3C XML 1.1
+✓ normative — and HTML 4.01 is GENUINELY BIBLIOGRAPHIC** (`[29]`, absent from clause 3).
+**★ And the one that was correct is the one that mattered**: HTML Form is the only
+submission format with no clause of its own, deferred to an *informative* document.
+**Do not apply a systematic-erratum rule as a blanket — measure it per site, and expect
+the exception to be load-bearing.**
+
+Bonus, same shape, in ISO 32000-2: `HTML4.01` = **2** whitespace-stripped hits, both in
+the body, **zero** in clause 2 *or* the Bibliography ⇒ **2.0 cites a document it
+references nowhere.**
+
+### 58.6 ★ AN ERRATA SCAN OF THE CLAUSE YOU ARE INGESTING CLOSES AMBIGUITIES IN THE NEIGHBOUR
+
+Scanning PDF pages 566–573 of the staged ISO 32000-2 (extraction item 3-ISO2-bis/ter)
+returned **four** markup clusters. Two were mine (#122, #176). **One was the sibling
+file's**: **Issue #174, state `Completed` (ISO-ratified)**, ADDS to 2.0's Table 242
+*"(All descendants … are also exempt from being reset.)"* ⇒ **`FA-N1` / register
+`RS-A1` — open since 2026-08-10 — is CLOSED for PDF 2.0, and the register's guessed
+default is CONFIRMED BY ISO.** The fourth (#683, the reset-side `inheritable` deletion)
+is **`Accepted` only**, i.e. TWG not ISO — the `/IRT` walk mattered again.
+**Scan a PAGE RANGE, not a clause: errata for adjacent clauses arrive free.**
+
+**#122 is the best-evidenced ambiguity resolution I have filed**: ISO **deleted** the
+word `inheritable` from 2.0's `/Flags` and `/CharSet`, and the **public GitHub issue
+body states the reasoning** (*"they are executed in sequential order not hierarchically
+so where is there any inheritance?"*) — free, quotable, and it converts a corpus
+ambiguity into tier-(a) evidence. **`api.github.com/repos/pdf-association/pdf-issues/issues/<N>`
+returns title + labels (`ISO approved`) + body as JSON.** Also
+`api.github.com/search/issues?q=repo:pdf-association/pdf-issues+<term>` — which found
+**two OPEN issues that ARE the gap** (#648 *"Is FDF trailer mandatory?"*, #756 *"There's
+no machine-readable schema for XFDF as defined by ISO 19444-1:2019"*). **A tracked open
+issue is better gap evidence than my own silence-measurement.**
+
+### 58.7 The payload half of a "what does this action DO?" dispatch lives OUTSIDE the clause
+
+The operator wanted pdfce to disclose **what is sent**. §12.7.5.2 names the flags; it
+does **not** say what any of them puts on the wire. Every load-bearing fact came from
+**one hop out**:
+- **`/Differences` (Table 243)** — *"all the bytes in all incremental updates … since it
+  was opened"*, *"An incremental update **shall be automatically performed just before
+  the submission**"*, *"the full set … **even if some of them may already have been
+  included in intervening submissions**"*. ⇒ **`IncludeAppendSaves` makes a submit a
+  SAVE** (a rule-3 minimal-diff consequence nobody would predict from the flag's name).
+- **FDF `/F` + `/ID` (Table 243)** ⇒ **the baseline `/Flags 0` payload already ships the
+  source document's PATH and trailer fingerprint.** `ExclFKey` is the only
+  privacy-narrowing bit in the whole table.
+- **`FileSelect` (§12.7.4.3)** ⇒ a text field whose `/V` is a pathname *"whose contents
+  shall be submitted"*. **And its own FDF bullet contradicts its lead sentence**
+  (contents vs *"a file specification identifying"*).
+- **FDF `/Status` (Table 243)** — *"shall be displayed"* ⇒ the **response** is partly
+  specified after all, and a server controls a string rendered in pdfce's UI. I had
+  already drafted "the response is unspecified" before finding it.
+**Rule: for an action clause, read the PAYLOAD FORMAT's dictionary before writing a
+single negative about what the action transmits.**
+
+### 58.8 Two flag-word habits that paid
+
+**(a) Never transcribe a bit value** (item 18) — computed all 14 in Python. **(b) Check
+for a MISSING row**: Table 237/240 runs **1…12 then 14**; **bit 13 has no name in either
+edition**. A gap in a bit table is invisible unless you enumerate.
+
+### 58.9 The counting failure, fourth session running — a THIRD distinct route
+
+Prefix cell said **96**; disk held **97** *before* this build. Not `_sources` pollution
+(item 57.11), not prefix omission — **a previous build updated the row's long
+`Contents` blurb and never touched the `Files` cell 4 000 characters later.**
+**Recount from disk every session; treat the cell as a hypothesis, always.**
+
+### 58.10 Sibling file vs extend-in-place — and the third edit that gets missed
+
+Chose a **sibling** (`__s__12.7.5.2.md`) on the `12.7.3.3`/`12.7.3.4` precedent: a
+subclause carrying two full verbatim tables earns a file. **Closing an exclusion touches
+FIVE things, and #4/#5 are the ones that rot:** (1) the new file; (2) the old banner;
+(3) `index.md`; (4) **any OTHER file whose cross-reference block says "GAP: that
+clause"** — `iso32000__ref__field_flags.md` had one, naming `NoExport`/`Required`;
+(5) **the old file's own frontmatter `license_basis`**, which was `free_primary` and
+became MIXED the moment the amendment quoted a 2.0 erratum. **Grep the corpus for the
+clause number, not just for the file name.**

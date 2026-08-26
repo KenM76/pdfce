@@ -101,6 +101,48 @@ and `pdfminer` installed. Extraction recipe that works:
    validated this way: 229 rows, 149/207/216/229 codes per encoding column,
    matching the published sizes of those encodings.
 
+
+4i. **★ A TABLE'S `(continued)` CAPTION EXTRACTS AT THE **END** OF ITS PAGE, WHICH IS
+   HOW A PAGE-RANGE READ FUSES TWO TABLES INTO ONE — AND IT HAS NOW PUT WRONG ENTRIES
+   INTO A CORPUS FILE.** Established 2026-08-26 on ISO 32000-1 §12.7.5.2. The page that
+   opens §12.7.5 also carries the **tail of Table 235 (certificate seed value
+   dictionary)**; its `/URL` and `/URLType` rows extract *above* the `Table 236 –
+   Additional entries specific to a submit-form action` caption, and Table 235's own
+   `(continued)` caption extracts *below* the whole thing. A previous build read that
+   page range and recorded `/URL`/`/URLType` as **Table 236 entries** — then advertised
+   them in a scope-exclusion banner for 16 days.
+   **Procedure that costs one command and prevents it:**
+   ```bash
+   grep -n "Table 235 –\|Table 236 –\|Table 237 –" /c/tmp/iso32000_dump.txt   # 1.7: EN dash
+   grep -n "Table 239 —\|Table 240 —"                /c/tmp/iso32000_2_dump.txt # 2.0: EM dash
+   ```
+   — this lists **every** caption *including the `(continued)` ones*, so the true page
+   span of each table is visible before you slice. **Locate captions, THEN `sed -n`.**
+   **The semantic tell (works without a second dump):** a row that references a sibling
+   key the table it is supposedly in does not have (`/URLType` cites *"the `Ff`
+   attribute's `URL` bit"*; Table 236 has no `Ff`) belongs to a different table.
+
+4j. **THE `pdf-issues` GITHUB **API** IS A FREE, QUOTABLE ERRATA + GAP SOURCE, and it
+   does two things the rendered errata pages cannot.** (a) `curl -s
+   "https://api.github.com/repos/pdf-association/pdf-issues/issues/<N>"` returns
+   `title`, `state`, `labels` (**`ISO approved`** corroborates a `Completed` annotation
+   state) and **`body` — the SUBMITTER'S REASONING**, which is often the clearest
+   statement of *why* a clause was ambiguous, and is free to quote where the licensed
+   2.0 text is not. (b) `curl -s
+   "https://api.github.com/search/issues?q=repo:pdf-association/pdf-issues+<term>"`
+   — **an OPEN issue is stronger gap evidence than your own 0-hit measurement**, because
+   it is the standards body agreeing the hole exists. 2026-08-26 this returned #648
+   (*"Is FDF trailer mandatory?"*) and #756 (*"There's no machine-readable schema for
+   XFDF as defined by ISO 19444-1:2019"*), both directly load-bearing.
+   **Caveat: a title search is narrow** — `submit in:title` returned **1** result for a
+   whole clause; search the KEY NAMES (`CharSet`, `XFDF`, `FDF`) as well.
+
+4k. **ERRATA-SCAN A PAGE RANGE, NOT A CLAUSE.** Running the `/Annots` sweep over
+   ±3 pages around the target clause (2026-08-26: staged 2.0 pp. 566–573) returned an
+   **ISO-ratified erratum for the NEIGHBOURING clause** that closed an ambiguity another
+   corpus file had carried open for 16 days (Issue #174, Reset-Form Table 242). The scan
+   costs the same either way; the extra pages are free findings.
+
 4a. **A spec EQUATION extracts as a scrambled glyph run — recover it by
    CHARACTER X-POSITION with `pdfminer`.** Established 2026-08-08 on ISO 32000-1
    §11.6.5.3's `/Matte` preblend formula. `pypdf` returned

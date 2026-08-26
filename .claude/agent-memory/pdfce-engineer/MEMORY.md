@@ -51,3 +51,4 @@
 - [Compositor state](project_compositor_state.md) — 2026-08-21 evening: the CMYK colorant buffer SHIPPED; wrong-space blends 107→0; the harness's own pass count is an OVER-COUNT (it implements one of the suite's two criteria)
 - [The banana scale demo is a showpiece AND an instrument](project_banana_scale_demo.md) — Ken's own artefact with a personal easter egg; it found a renderer defect and two silent geometry bugs in one session
 - [f32 and no threads in the engine](project_compositor_element_type_and_threading.md) — decided 2026-08-21; `rayon` and `std::thread` BOTH compile for wasm32, so the wasm gate cannot catch a threading regression
+- [Security defaults lean safe, plus a stricter mode](feedback_security_defaults_lean_safe_plus_stricter_mode.md) — he takes the safe default AND adds restrictions himself; offer the posture ladder, not a yes/no

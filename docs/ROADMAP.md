@@ -80716,6 +80716,290 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+### `Pass 131.0`–`Pass 131.4` — MAKING PUSH BUTTONS WORK: action authoring, in-app dispatch, and an out-of-tree scripting/network plugin model
+
+**Filed 2026-08-26 (268th filing), planning-only — no code shipped.
+Prerequisite 1 (below) updated 2026-08-26 (269th filing): the spec
+ingestion it tracked as in-flight has returned, unblocking `/SubmitForm`
+authoring; `Pass 131.1`'s payload-disclosure item is amended
+accordingly.** Five Pass IDs minted from one operator conversation that
+produced **eight verbatim rulings (O1–O8)** and an engineer-owned plan
+document, `D:\Dev\pdfce\docs\plan-scripting-submit-and-plugins.md` —
+read that document first; every entry below cites it rather than
+re-arguing it. **Nothing here is authorised to START** — the operator's
+own framing, *"plan only, we wont start it yet,"* still governs; O8's
+*"plan to deliver the first 3 phases"* sets a target, not a start order.
+
+**The scoping insight that splits five Passes out of one question.**
+pdfce can already **create** push buttons that are structurally correct
+in every viewer and do **nothing** when pressed, because pdfce authors no
+`/A` action on any field and dispatches no trigger for one — this is a
+capability the project has never had, not a regression. Making a button
+work splits into three genuinely separate problems: **(a)** authoring an
+action into the file, **(b)** honouring it when pressed, **(c)** executing
+embedded JavaScript. (a) and (b) are small, safe, and were blocked on a
+rule written for (c) — **`R54`**, "no trigger event ever fires," now
+amended (`ARCHITECTURE.md` §12 decision **088**, `Standing rules` above).
+(c) remains prohibited scope (`R53`, untouched) and is the subject of a
+plugin proposal the operator has explicitly deferred (O8).
+
+**The eight operator rulings, quoted verbatim because paraphrase has
+already caused trouble in this project — full context, scope notes and
+"what it does NOT settle" in the plan document's own §1:**
+
+| # | Verbatim | Settles |
+|---|---|---|
+| **O1** | *"would it work to create a separate project called `D:\Dev\pdfceJS` which developes javascript support, then in order to have Javascript support in pdfce the folder `plugins\pdfceJS` would have to exist in pdfce's folder?"* | An installed-folder-presence capability gate — a proposal, prefaced *"plan only, we wont start it yet."* |
+| **O2** | *"we'd let it do the server thing as long as it matches the same security that adobe already allows."* | Form submission permitted in principle, Acrobat's own security model as the acceptance criterion. |
+| **O3** | *"I assume that is still written into the separate script side so pdfce still stays server free."* | An assumption. **The plan departs from it** — see `Pass 131.2`'s entry below. |
+| **O4** | *"We'll allow a submit to send filled data wherever the document's author said."* | Default destination policy: **open**. A default, not a ceiling — see the scope note under `Pass 131.1`. |
+| **O5** | *"yes well we'll have support for allowing only submission to whitelists, and your default is good, plus we can show what is being sent as an option too."* | A whitelist-only mode as an option; the engineer's destination-disclosure default **approved**; payload disclosure as an option. |
+| **O6** | *"change the rule."* | **`R54` amended** — dispatch allow-list. Singular; does not touch `R53`/`R12`/`R13`. See `ARCHITECTURE.md` decision 088. |
+| **O7** | *"make it a message format so a web version is easier to make."* | The plugin boundary is a **versioned message protocol**, not a binary artefact — the operator supplied the web-fork rationale himself. |
+| **O8** | *"defer for now and plan to deliver the first 3 phases without touching it."* | `R53` reversal **deferred**. Phases 1–3 (`Pass 131.0`–`Pass 131.2`) are the delivery plan and must each stand up with **no JavaScript execution capability present at all**. |
+
+**Prerequisites owed against every phase below, tracked here so they are
+not rediscovered per-Pass:**
+
+1. **§12.7.5.2 Submit-Form Action spec ingestion — RETURNED 2026-08-26
+   (269th filing), UNBLOCKING `/SubmitForm` authoring.** New file
+   `PDF_Spec\iso32000\iso32000__s__12.7.5.2.md` (948 lines, both
+   editions, read from staged primaries). **Table 236 has exactly four
+   entries — `/S`, `/F`, `/Fields`, `/Flags` — not the five this entry
+   previously listed.** `/CharSet` and `/URL`/`/URLType` were never
+   Table 236 keys: `/CharSet` is PDF-2.0-only (2.0 Table 239, unrelated
+   to the Type-1-font-descriptor `/CharSet` of `ARCHITECTURE.md`
+   decision 047) and `/URL`/`/URLType` belong to Table 235, the
+   *certificate seed value* dictionary one page earlier — a page-break
+   interleave, caught only by the row citing an `Ff` attribute Table 236
+   does not have. **The false list was copied in good faith from the
+   corpus's own "not ingested" gap notice**, itself written by someone
+   who had not yet read the clause — a reminder that a gap marker
+   describing its own contents is an unverified claim like any other.
+   Full corrections: plan doc §11.1.
+   **The submit flag word (Table 237 / 2.0 Table 240)** carries a
+   `shall`-level format precedence (`SubmitPDF` ≻ `XFDF` ≻
+   `ExportFormat`; `/Flags 0` means FDF-by-POST, a decision, not an
+   absence) and one internal contradiction (`SubmitPDF`+`GetMethod`,
+   `/Flags 264`, contemplated by bit 9 and forbidden by bit 4).
+   **The payload facts are the load-bearing result and promote payload
+   disclosure from optional to necessary:** hidden fields ARE submitted
+   (structural — `Hidden` is an annotation flag, submission addresses
+   field dictionaries, and `NoExport` is the only field-level withhold);
+   `Password` field values ARE submitted (the flag's NOTE constrains
+   storage, not transmission); the baseline payload already includes the
+   source document's local path (FDF `/F`) and trailer `/ID` by default
+   — `ExclFKey` is the *only* privacy-narrowing bit in the flag word; a
+   `FileSelect` field submits a **local file** off the operator's disk;
+   `IncludeAppendSaves` performs an incremental save immediately before
+   transmission and sends every byte since the document was opened,
+   signatures included; `SubmitPDF` ignores `/Fields` — no partial-PDF
+   submission exists. `NoExport` has explicit precedence over
+   `/Fields`+Include/Exclude and must be applied **last** when computing
+   what a submit would send. **Consequently, `Pass 131.1`'s payload
+   disclosure item 3 (below) is amended**: the engineer's original
+   proposal — off by default, one gesture away — is **withdrawn as too
+   weak**, since four of the six payload facts above are undetectable by
+   any other means. A one-line summary (value count; whether the whole
+   file goes; whether any hidden or password field is included; whether
+   a local file or the document's own path is being sent) is now shown
+   **always**, itemised list one gesture away.
+   **Sixteen negatives recorded** (`SF-N1`–`SF-N16`); load-bearing: no
+   clause restricts `/F` to a network address (a local-path destination
+   is spec-legal); `https` appears **zero** times in ISO 32000-1; no
+   consent, privacy, TLS, redirect, timeout, size-limit, or
+   failure-handling rule exists in either edition. **Every safety control
+   in `Pass 131.1`'s posture ladder — whitelist, destination disclosure,
+   payload disclosure, per-hop redirect checking — is therefore a pdfce
+   product decision with a named conformance cost, never a conformance
+   requirement**, and must be disclosed as a deviation, never presented
+   as spec-mandated.
+   **Available follow-up, not yet built:** `EditSession::reset_form`'s
+   doc comment declines to offer exclude mode because Table 239's
+   descendant-expansion parenthetical is unspecified for exclude mode.
+   ISO-ratified Issue #174 (found by this ingestion's errata scan)
+   **closes that ambiguity for PDF 2.0** — reset exclude-mode does exempt
+   descendants — confirming the ambiguity register's guessed default.
+   Exclude mode is therefore now buildable on the reset side. **The
+   submit-side twin (Table 237 bit 1) remains unspecified.** Same
+   R143/R144 shape: re-verify a refusal's stated reason before assuming
+   it still holds.
+2. **Acrobat parity spot-check owed** on three of the six items
+   `Acrobat_Features\forms__submit_actions_and_network_trust.md` (new,
+   2026-08-26, `pdfce-acrobat-librarian`) could not establish from a
+   search-engine-only session (every direct Adobe-server fetch failed):
+   the factory-default Trust-Manager Internet-Access state, HTTP-vs-HTTPS
+   differential treatment, and whether a scripted `submitForm()` gets the
+   same cross-domain treatment as a declared action. Check against the
+   Acrobat Reader on this machine before any of the three grounds a
+   `must_have` acceptance criterion.
+3. **`pdfce-ui-specialist` dispatch owed** before any GUI surface for the
+   submit posture ladder (`Pass 131.1`/`Pass 131.2`) — the disclosure IS
+   the feature, and misplacing it is exactly how `CLAUDE.md` rule 4 was
+   narrowed twice already (024 §4.4, 059).
+4. **`R13` clause 5 ruling** — still owed from the operator (decision 061
+   §7 flag, standing rule `R13` above), deliberately **not forced** by
+   `Pass 131.2`'s hand-install-only design.
+
+---
+
+#### `Pass 131.0` — Action authoring, safe subset (core + cli). No plugin, no network, no interpreter, no standing rule touched.
+
+Author a declared `/A` action on a push button (the same primitive serves
+a future link-annotation Pass for free): `/ResetForm` (Table 238 `/Fields`
++ Table 239 `Include`/`Exclude`), `/GoTo` (in-document — must ride the
+existing `pageops/references.rs` rewrite machinery so page ops keep
+destinations correct across insert/delete/reorder), `/Named`
+(`NextPage`/`PrevPage`/`FirstPage`/`LastPage`), `/URI` (**authored as
+data only, never followed by pdfce**, disclosed), `/SubmitForm`
+(**authored** here as data; **honoured** only in `Pass 131.1`, blocked on
+prerequisite 1 above). Also: `/AP` `/D` (the pressed appearance) and
+`/MK` icon/label layout, neither of which pdfce builds today, so a
+button looks like a button when held.
+
+**`/JavaScript` and `/Launch` are refused by name, permanently** —
+authoring either would put bytes on disk that either collide with `R13`
+(`/Launch`) or ask pdfce to author something `R53` refuses to run
+(`/JavaScript`). Not a gap; a standing refusal.
+
+**Touches no standing rule.** Authoring is writing bytes, not firing
+triggers — `R54` governs dispatch, `Pass 131.1`, below. Ships to
+`pdfce-core` + `pdfce-cli`; the GUI request channel is `pdfceGUI`, a
+separate project (see `docs/FEATURES.md`'s ownership note).
+
+Full design: plan doc §8 Phase 1.
+
+---
+
+#### `Pass 131.1` — Honouring actions in-app: a dispatch allow-list on `/A`, riding `R54`'s amendment
+
+**Depends on `ARCHITECTURE.md` §12 decision 088** (`R54`'s dispatch
+allow-list, filed this session) and on `Pass 131.0` for the authoring
+half. Hit-test a widget, resolve its `/A`, perform it if the action
+subtype is on `R54`'s enumerated list (reset → the already-shipped
+`EditSession::reset_form`; navigate → the viewer's own destination
+resolver) or **refuse it by name** otherwise — refusal, not silence, is
+`R54`'s own load-bearing half.
+
+**`/SubmitForm` lands here only if `pdfceNet` (`Pass 131.2`) is installed
+and only behind the full submit posture ladder**, derived from O2/O4/O5
+and recorded here so it is agreed design rather than a per-Pass
+improvisation:
+
+1. **Destination policy** — open by default (O4); whitelist-only mode
+   available (O5), **operator-owned, never document-supplied** — no
+   destination may vouch for itself, and the whitelist check runs on
+   **every redirect hop**, not just the first.
+2. **Destination disclosure** — **on by default**, per O5's approval of
+   the engineer's proposal. Load-bearing, not paranoia: a button's
+   caption is author-supplied too ("Save Draft", "Print" can carry a
+   submit anywhere), so stating the destination is what makes the
+   operator's consent to *what the caption said* actually informed.
+3. **Payload disclosure — AMENDED 2026-08-26 (269th filing), self-corrected
+   by the engineer.** O5 offered payload disclosure as *an option*; the
+   engineer's first proposal within that option was off-by-default, one
+   gesture away. **That proposal is withdrawn as too weak**, once
+   §12.7.5.2 ingestion (prerequisite 1, above) established that hidden
+   fields, `Password` values, the source document's local path, and the
+   trailer `/ID` are ALL submitted by default and are otherwise
+   undetectable. A one-line summary — value count; whether the whole
+   file goes; whether any hidden or password field is included; whether
+   a local file or the document's own path is the destination — is now
+   shown **always**; the itemised list stays one gesture away. **This is
+   still where pdfce exceeds Acrobat** (Acrobat discloses the
+   destination, never the payload).
+4. **Transport** — an author may name a plain unencrypted destination;
+   proposed default is allow, disclosed as such (plan §6.4, open
+   question).
+
+**Never, in any mode:** fire without an operator gesture (no submit on
+open/close/page-change/field-change); auto-follow a submit with a second
+request; render or execute the server's response (a deliberate
+divergence from Acrobat's FDF-response form-update behaviour).
+
+**Also needs, before `/SubmitForm` specifically can dispatch:** the
+`R12` new-destination-class decision record (prerequisite in the parent
+entry above, plan §3.4) — a submit sends the operator's data where a
+**file's author** said, not where pdfce's own authors said, which is a
+materially different case from every destination `R12`'s 2026-08-13
+narrowing has permitted so far, and `R12`'s own unlocking clause requires
+a record naming the crate and the feature. **O2/O4 authorise the
+capability; they do not write that record.**
+
+★ **Reading note carried from the plan (do not over-read O4):** O4 read,
+at the time, like a preference for minimal friction. It was not — O5
+arrived unprompted and added two restrictions the engineer had not
+proposed. O4 is a ruling about the **default**, not the **ceiling**.
+
+Full design: plan doc §6, §8 Phase 2.
+
+---
+
+#### `Pass 131.2` — `pdfceNet`, a hand-installed HTTP-client plugin. No in-app download.
+
+Thin shell over the existing `crates/pdfce-fetch` primitive (`Pass 77.0`,
+currently a workspace member **no shell links** — `grep -rn
+"pdfce_fetch" crates/` outside the crate itself returns zero hits).
+Speaks a versioned message protocol (O7), never links in-process.
+
+**★ Departs from O3's stated assumption, and the departure is recorded
+rather than silently absorbed.** O3 assumed the network capability would
+live inside the scripting plugin (`pdfceJS`). It should not: a
+`/SubmitForm` action is a **plain declared action requiring no
+JavaScript at all**, so if the HTTP client lived inside `pdfceJS`, an
+ordinary submit button — the common case — would require installing a
+scripting engine to use it. The plan therefore specifies **two
+independent plugins** — `pdfceNet` (HTTP client, nothing else) and
+`pdfceJS` (`Pass 131.3`, deferred) — each installed independently, each
+absent from a default build. **O3's stated goal, "pdfce stays server
+free," is preserved and strengthened**: a stock build has neither
+plugin, and `cargo tree` on the shipped binary proves it.
+
+**Hand-installed only, no in-app download, deliberately.** This is the
+cheaper sequencing choice named in the plan (§3.3): a downloaded-and-run
+plugin would engage `R13` clause 5 ("never executes anything it
+fetched"), a ruling still owed from the operator. Copying the folder in
+by hand means pdfce fetched nothing, so clause 5 arguably is not engaged
+at all — deferring that ruling rather than forcing it.
+
+Full design: plan doc §5.1–§5.2, §8 Phase 3.
+
+---
+
+#### `Pass 131.3` — `pdfceJS`, a separate-process JavaScript engine plugin. DEFERRED per O8 — needs the `R53` reversal, not sought now.
+
+Filed as planned-but-unscheduled, not as a commitment. Separate process,
+versioned message protocol (effects, not edits — `SetFieldValue`,
+`SetFieldProperty`, `Message`/`Prompt`, `RejectKeystroke`/
+`ReplaceKeystroke`, `Submit`, `Navigate`, `DocumentStructure` behind a
+second-tier operator grant), plan doc §5.3–§5.5. **Would require
+reversing `R53`** via a new decision record superseding decision 009 §5
+openly — not a workaround that leaves `R53` on the books while routing
+around it (plan §3.2's explicit warning against letting the plugin
+architecture "launder" the reversal). **Buys the least per unit of work**
+of any phase here: posture B (`Pass 7.2`, native recompute of a built-in
+whitelist) already covers the common case — totals, dates, percentages,
+standard formatting masks — without executing anything.
+
+The honest argument *for* eventually building this (plan §5.4): the
+plugin model changes the three facts decision 009 reasoned from
+(always-on → absent-by-default-and-provably-so; in-process → out-of-
+process, which **is** the broker architecture decision 009 said a
+sandboxed engine re-imports rather than avoiding; every dangerous verb
+stays pdfce-side, subject to pdfce's own gates). That argument may
+eventually win. **It has not been made to the operator yet, and this
+entry does not make it — it only preserves it.**
+
+---
+
+#### `Pass 131.4` — In-app plugin download for `pdfceNet`/`pdfceJS`. DEFERRED — needs the `R13` clause 5 ruling.
+
+Optional and last. Everything in `Pass 131.1`–`Pass 131.3` works
+hand-installed without it. Filed so the option is not lost, not because
+it is expected soon.
+
+---
+
 ### APPLY THE OUTPUT INTENT FOR COLOUR CONVERSION — the capability `cmyk_intent` is currently STANDING IN FOR
 
 **Filed 2026-08-25 (two-hundred-and-sixty-second filing)**, **named by
@@ -89125,6 +89409,59 @@ not a judgment call:**
     became a single layer is exactly the thing worth knowing before
     someone leans on it** — a future session scoping JS or forms work
     must not cite the `R12` backstop as though it were still structural.
+
+    **★★ AMENDED 2026-08-26 (decision 088, 268th filing) — R54 GAINS A
+    DISPATCH ALLOW-LIST; THE "NO TRIGGER EVER FIRES" SENTENCE ABOVE IS NO
+    LONGER LITERALLY TRUE AND IS KEPT LEGIBLE RATHER THAN REWRITTEN.**
+    Operator ruling **O6**, verbatim: *"change the rule."* Sourced,
+    scoped and reasoned in full at
+    `D:\Dev\pdfce\docs\plan-scripting-submit-and-plugins.md` §3.1/§8 — this
+    is the addendum, not the argument.
+
+    **The gap this closes: `R54` was blocking a plain, script-free
+    `/ResetForm` button**, which is not a JavaScript action at all. `R54`'s
+    own justification (immediately above) is that a trigger *can* reach
+    `/URI`/`/SubmitForm`/`/ImportData`/`/Launch` — **some** actions are
+    dangerous, not **all** — so a rule that refuses every trigger
+    unconditionally is broader than its own stated reason.
+
+    **The amendment: a trigger fires IF AND ONLY IF its action subtype is
+    on an explicitly enumerated safe list; every subtype NOT on the list
+    is refused BY NAME, never silently ignored.** Current list membership
+    (Phase 1/2 of the plan above, `Pass 131.0`/`Pass 131.1`, Backlog):
+    `/ResetForm`, `/GoTo` (in-document destinations only), `/Named`
+    (`NextPage`/`PrevPage`/`FirstPage`/`LastPage`). `/SubmitForm` may be
+    **authored** as data (`Pass 131.0`) but is not **dispatched** until
+    `pdfceNet` and the full submit posture ladder land (`Pass 131.1`/
+    `Pass 131.2`). **`/JavaScript` and `/Launch` are refused by name,
+    permanently, and may never be added to this list under this
+    amendment** — `/Launch` collides with `R13`, `/JavaScript` would
+    author something `R53` refuses to run.
+
+    **Two clauses that survive this amendment unconditionally:**
+
+    1. **The refusal-by-name half is the load-bearing half, not a
+       decoration.** A trigger whose subtype is unenumerated must say so
+       — a button that quietly does nothing is indistinguishable from a
+       broken one, the exact failure `CLAUDE.md` rule 4's disclosure
+       posture exists to prevent.
+    2. **`R53` is untouched.** No JavaScript executes as a result of this
+       amendment; the allow-list governs declared, non-script actions
+       only.
+
+    **Scope note, because O6 is easy to over-read: this is the ONLY rule
+    this ruling touches.** *"Change the rule"* is singular and answers
+    exactly one open question (the plan's §9 Q1). It is **not** authority
+    to touch `R53` — the same conversation's **O8** (*"defer for now and
+    plan to deliver the first 3 phases without touching it"*) explicitly
+    keeps that prohibition in place — nor `R13` clause 5 (add-in
+    execution, still owed, above), nor `R12`'s own new-destination-class
+    decision record that a submit action needs (a submit sends the
+    operator's data where a **file's author** said, not where pdfce's own
+    authors said — a materially different case from every destination
+    `R12`'s narrowing has permitted so far; plan §3.4). All three remain
+    separately owed. See `ARCHITECTURE.md` §12 decision **088** and
+    `Pass 131.0`–`Pass 131.4` (Backlog).
   - **R55 (was R-JS-3) — JS carriers are byte-preserved; never stripped,
     never silently baked.** All `/JS` strings/streams, all `/AA` dicts,
     the `/CO` calculation-order array, the `/Names /JavaScript` name tree,
@@ -89143,10 +89480,25 @@ not a judgment call:**
     whitelist (`AFSimple_Calculate` SUM/AVG/PRD/MIN/MAX changes `/V`; the
     `AF*_Format` family changes display only, never `/V` — the two code
     paths must never merge), is **OFF by default** (no `--apply` = plan
-    only), and every recomputed value is a reviewable hint the operator
-    accepts or overrides (rule 4) — never silent, never authoritative,
-    always leaving the source script in place as the downstream
-    authority. The matcher errs hard toward `Custom` (false-negative =
+    only), and every recomputed value is disclosed per rule 4 — never
+    silent, never authoritative, always leaving the source script in place
+    as the downstream authority; **applying a recompute is an explicit
+    gesture (the `--apply` flag / its GUI equivalent), not an accept/reject
+    gate the operator clicks through.**
+    **★ WORDING CORRECTED 2026-08-26 (268th filing) — the struck citation
+    below is rule 4's PRE-NARROWING language.** ~~"every recomputed value
+    is a reviewable hint the operator accepts or overrides (rule 4)"~~
+    cited a framing decision **059** (2026-08-13) rejected **by name** —
+    rule 4 no longer describes an accept/reject gate anywhere. **No
+    behaviour changes here**: posture B was already off-by-default and
+    already applied by an explicit flag, never by a clickable gate, so
+    this is a citation-accuracy fix, not a scope correction — found
+    incidentally while reading `R53`–`R57` to scope `Pass 131.0`–
+    `Pass 131.4` (Backlog) and `ARCHITECTURE.md` §12 decision **088**.
+    Sourced by reading `CLAUDE.md` rule 4's current text and decision 059
+    directly, per hard rule 10's correction-sourcing corollary.
+
+    The matcher errs hard toward `Custom` (false-negative =
     safe disclosed stale value; false-positive = unsafe wrong bake). A
     blank operand participates as **zero**, not as skipped (matches
     Acrobat, verified via pdf.js behavioural reference — `LEGAL.md`
@@ -99761,6 +100113,47 @@ paid.** This instance had the first and never got the second.
 that GAP as closed by decision 020 §6 F3 and sweep the file's remaining
 GAP markers for the same condition. **Nothing else in the project will
 notice.**
+
+### Filing-heading ordinal spelling — RULED 2026-08-26 (269th filing): numerals are acceptable going forward; the 268th's heading is not renormalized
+
+Every `SESSION_LOG.md` filing heading before the 268th spelled its
+ordinal out (`two-hundred-and-sixty-seventh filing`). The 268th wrote
+`(268th filing)` instead, and `tools/check-ledger-numbers.py`'s
+`FILING_HEADING` regex — written to expect only the alphabetic spelling
+— never matched it: the heading was never handed to `ordinal_to_int()`,
+never landed in the `unparsed` list, and the gate's own `UNCHECKED`
+failure report — which exists precisely to make an unrecognised heading
+loud — had nothing to report. The gate printed `SESSION_LOG filings :
+267 -> next free is 268` with 268 already on disk, and still summarised
+`ledger-numbers: clean`. **Fixed by the engineer this same filing**: the
+regex now recognises `(<anything> filing)` and decides nothing;
+`ordinal_to_int()` decides and returns `None` — reported as `UNCHECKED`
+and failed — for anything it cannot parse. Numeral ordinals now parse
+correctly, and the re-run reads `SESSION_LOG filings : 268 -> next free
+is 269`. Filed as an instance of the established under-reporting-gate
+class (first named at the 183rd filing: *"a gate that under-reports is
+byte-indistinguishable from a green one"*) rather than a new one; no new
+standing rule minted, per that class's existing coverage.
+
+**Ruling: numerals are acceptable, and are the preferred spelling going
+forward.** Two reasons, both drawn from this project's own history
+rather than taste. First, a spelled-out ordinal is the harder format for
+a machine to parse correctly — `ordinal_to_int()`'s own vocabulary has
+had to be extended more than once as filings crossed spellings it did
+not yet know (`hundredth`, `hundred-and-Nth`, documented at the 103rd
+filing), each extension a place the parser could fail open instead of
+closed; a numeral has no such vocabulary to be missing. Second, at the
+filing counts this project has already reached, a spelled-out ordinal is
+materially harder for a human to typo-check on sight than the number it
+names.
+
+**The 268th's heading is left as written.** Rewriting it to match a
+convention decided after the fact would be editing an already-filed
+`SESSION_LOG.md` entry — the same append-only discipline this document
+applies to `Shipped` entries applies to itself. Both spellings are now
+attested in the ledger from here forward; the checker accepts either,
+and this ruling does not ask for a sweep of the 267 filings that came
+before it.
 
 ### How a figure is filed (added 2026-08-07, twenty-third filing — ADOPTED AS STANDING PRACTICE, DELIBERATELY NOT A NUMBERED RULE)
 
