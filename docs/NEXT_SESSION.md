@@ -13,10 +13,20 @@ can falsify it.
 
 ## §A — COLD START: everything you need, in one screen
 
-**`v0.12.0` is released. The working tree is clean, `origin/main` matches, a
-fresh backup bundle exists, and nothing is blocked on anybody.** Both
-FeatureRequests channels were checked; pdfceGUI has consumed everything sent
-and has already wired the newest verb.
+**`v0.12.0` is released and verified 7 of 7.** Both FeatureRequests channels
+were checked; pdfceGUI has consumed everything sent, wired the newest verb and
+the standards selector, and sent findings back.
+
+★ **`main` is AHEAD OF `origin/main` and that is deliberate.** Work continued
+after the release under an autonomous loop, and **pushing needs its own
+go-ahead** (`CLAUDE.md` rule 8) — the *"release and commit"* authorisation was
+spent on `v0.12.0`. Do not push to clear the divergence; ask.
+
+★ **A version bump may be owed before the next tag, and it is an open call.**
+`Pass 129.1` changed a shipped default's VALUE (`ocr --dpi` 300 → 150), which a
+scripted caller can observe, while adding no public core item. The `768e934`
+precedent (*"a new callable verb is not a patch"*) settles the additive case
+and does not settle this one. Decide before tagging, not after.
 
 ### What this run built (2026-08-25 evening → 2026-08-26)
 
@@ -27,7 +37,17 @@ and has already wired the newest verb.
 | `1f79cc1` | **`Pass 128.1`** — render presets per subset standard, each value carrying its evidence tier |
 | `181d9bd` | **`Pass 129.0`** — **OCR works.** It never had |
 | `9b941b9` | **`Pass 127.1`** — "redact every match" stops being silent about text it could not read |
-| `81d1e30` `b6f8cd5` | `v0.12.0` |
+| `81d1e30` `b6f8cd5` | `v0.12.0` — **briefly tagged at a commit CI rejected**; see below |
+| `a72a89b` `d68c621` | the OCR downloader made **opt-in**; a default build now carries **no network code at all** |
+| `7ad8b00` | **`Pass 129.1`** — `ocr --dpi` default 300 → 150. The old default was the **worst of five** |
+| `a3185ba` | two doc findings back from pdfceGUI, one about how a doc comment gets misread |
+
+★ **`v0.12.0` was tagged twice.** The first tag went on `b6f8cd5`, where CI
+failed the macOS cross-compile check: the OCR downloader was a DEFAULT feature
+and pulled a TLS stack that cannot cross-compile. Re-cut per §0a's recovery —
+re-tagged at the later filing commit, force-pushed, package rebuilt so
+`BUILD-INFO` names the tag, asset replaced, **smoke test re-run on the new
+artefact** (a re-cut release does not inherit the old one's test).
 
 ### ★★★ THE ONE THING TO CARRY OUT OF THIS RUN
 
@@ -395,9 +415,29 @@ pdfce does not have yet.
   history, `main` at `81d1e30`, **zero commits behind** at cut time. The
   previous bundle was **35 behind**.
 
-  **Re-measure before quoting** — `ls D:/Dev/pdfce-backups/`,
-  `git bundle list-heads <newest>`, `git rev-list --count <head>..main`. Every
-  number in every handoff was true at a different `HEAD`.
+  ★★ **DO NOT PICK THE NEWEST BUNDLE BY FILENAME. SORT BY MTIME.** On
+  2026-08-26 two bundles cut hours apart were hand-named with times that did
+  not match when they were written, so **alphabetical order was the REVERSE of
+  chronological order** — `ls | tail -1` returned the OLDER file and would have
+  reported the tree 6 commits stale when it was 2. Found by the librarian
+  cross-checking mtime against name, not by any gate.
+
+  Today's two were renamed to carry **the head commit in the filename**
+  (`pdfce-<date>-<HHMM>-<shorthash>-full.bundle`), which makes a bundle
+  self-describing and the mistake unavailable. **Name new ones the same way.**
+  Older files keep their historical names and still disagree; that is left
+  alone deliberately rather than mass-renamed, and it is why the rule is "sort
+  by mtime" rather than "trust the names now".
+
+  **Re-measure before quoting**, and check both orderings agree:
+
+  ```
+  ls -1rt D:/Dev/pdfce-backups/*.bundle | tail -1     # newest, by TIME
+  git bundle list-heads <newest> | grep refs/heads/main
+  git rev-list --count <head>..main
+  ```
+
+  Every number in every handoff was true at a different `HEAD`.
 
 - **OUTBOUND TO pdfceGUI — all consumed, nothing owed.** Three notes went out
   (the zero-result search disclosure, the X-4 preset vector, and the OCR

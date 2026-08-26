@@ -62192,6 +62192,63 @@ re-read). Survivors found, and what happened to each:
    measured curve, the chosen constant and the pinned test do not.**
    **Re-measure before trusting any of it.** Their `12,240,008 B` citation
    is stale on the same grounds. **Not touched — a separate repository.**
+
+   > **★★★ AMENDED 2026-08-26 (two-hundred-and-sixty-fifth filing) — THE
+   > MECHANISM AND THE HEADLINE SURVIVED RE-MEASUREMENT; ONLY THE SHAPE WAS
+   > NOISE. THE PARAGRAPH ABOVE IS KEPT AS WRITTEN AND IS HARSHER THAN THE
+   > FACTS NOW SUPPORT.**
+   >
+   > The sentence above — *"the measured curve, the chosen constant and the
+   > pinned test do not [survive]"* — was **true when written and is now
+   > known to be too broad**. `pdfce-gui` re-ran the sweep against the fixed
+   > detector, on a real CAD sheet, **130 ground-truth tokens** scored
+   > against the page's own vector text, and reported: **72 dpi 56.5 %,
+   > 100 dpi 56.7 %, 150 dpi 54.5 %, 200 dpi 53.9 %, 300 dpi 35.1 %.**
+   >
+   > **What survived, and it is the load-bearing half:**
+   >
+   > - **More resolution is worse.** Both sweeps agree on the direction.
+   > - **300 dpi is the worst value measured.** Both sweeps agree, and both
+   >   put it far below the rest.
+   > - **The mechanism is `ocrs` resizing to a FIXED MODEL INPUT**, so past
+   >   that size more pixels makes the text *smaller* relative to the
+   >   model's window. The paragraph above already predicted this half
+   >   would survive — *"a property of the crate and probably survives"* —
+   >   and it did. ★ **Two different detection models, one of them the
+   >   broken one, agreeing on the direction of an effect neither was
+   >   chosen to test, is a peculiar but real form of independent
+   >   confirmation.**
+   >
+   > **What did NOT survive is the SHAPE.** The old curve was jagged
+   > (72 → 34.8 %, 100 → 20.0 %, **150 → 44.7 %**, 200 → 27.5 %,
+   > 300 → 3.3 %) with a **false maximum at 150**. The real curve is a
+   > **plateau from 72 to 200 — 2.8 points across four values, inside the
+   > sampling noise of 130 tokens — and then a cliff.** Their own retraction
+   > is the sharpest statement of it: the worst-damaged part of their
+   > documentation *"was not a number: it was the sentence presenting 150 as
+   > a measured optimum. **There was no optimum.**"*
+   >
+   > **So the amendment is a NARROWING, not a reversal.** `TARGET_PIXELS`
+   > and the pinning test did need re-measuring, exactly as reported — but
+   > *"every one of those numbers was produced by the detector that returns
+   > noise"* invites the reading that **nothing** from that work stands, and
+   > the direction, the ranking of 300, and the mechanism all do. **Leaving
+   > the harsher version standing without this note would misrepresent
+   > them**, and this project's own `Pass 129.1` default was moved on the
+   > strength of the re-measurement — a filing cannot rely on someone's data
+   > and simultaneously leave a record calling all of it void.
+   >
+   > ★ **The transferable claim, which is why this is an amendment and not a
+   > correction:** *when a measurement is invalidated at the source, the
+   > DIRECTION and the MECHANISM often survive while the CURVE does not* —
+   > and they are separable, because a mechanism is a claim about the
+   > apparatus while a curve is a claim about a sample. **Saying "all of it
+   > is void" is cheap and usually wrong**; saying which half died costs one
+   > re-measurement and is what lets the surviving half be used.
+   >
+   > Consumed and shipped as `Pass 129.1` (`7ad8b00`, top of *Shipped*):
+   > `pdfce-cli ocr --dpi` defaults to **150**, chosen for **sitting inside
+   > the plateau**, explicitly **not** for being the maximum.
 3. **`pdfceGUI` `FEATURES.md`'s OCR section** also predates `pdfce-cli ocr`
    and the `/Rotate` fix; their acceptance criteria for the `gui` column in
    *this* project's `FEATURES.md` are unaffected (the dialog is reachable
@@ -63277,3 +63334,517 @@ acknowledged debt, and that file was **not touched** by this filing.)*
    > logs; the same question in the workflow is read by whoever touches the
    > job.** Answering it is still open work.
 7. **Decide where the `git ls-remote` lexicographic finding lives.**
+
+## 2026-08-26 (two-hundred-and-sixty-fifth filing) — `Pass 129.1` (`7ad8b00`) moves `pdfce-cli ocr --dpi` from **300 to 150** because ★★★ **MORE RESOLUTION IS MEASURABLY WORSE AND 300 WAS THE WORST OF FIVE VALUES BY TWENTY POINTS**, on a doc comment that asserted the obvious direction in every clause while having measured nothing; ★★★ **THE PLATEAU, NOT THE MAXIMUM — 100 dpi scored HIGHEST and was REJECTED**, because the reporter's own retraction is that their earlier curve's maximum was noise and *"there was no optimum"*; ★★★ **AND PDFCE'S OWN CORPUS CANNOT CONFIRM ANY OF IT — IT SATURATES AT 100 % ON FIVE OF SIX VALUES AND IS EXPLICITLY NOT CITED AS AGREEMENT**, which is filed as its own claim: *a corpus that scores 100 % on everything is not a corpus that agrees with you, it is one that has not been asked a question it can answer*; ★★ `a3185ba` — **two findings back from pdfceGUI, doc comments only, neither a code defect: both are places where CORRECT PROSE INVITED AN INCORRECT READING** — ★★★ **a default described as a "divergence" gets read as a divergence in VALUE**, and a downstream project re-implemented `cmyk_intent = NeutralBlack` believing it was diverging from a library that had shipped exactly that for weeks; ★★ **the 262nd filing's "their curve, constant and pinned test do not [survive]" is AMENDED — the MECHANISM and the HEADLINE survived re-measurement and only the SHAPE was noise**, and leaving the harsher version standing would misrepresent the people whose data moved our default; ★★ **HARD-RULE-11 SWEEP FOUND ONE NEAR-MISS AND IT IS REPORTED AS A NEAR-MISS, NOT AS A SURVIVOR** — `QuadPointOrder` narrates a divergence too, but from the CLAUSE rather than from the evidence, and calling that the same shape would manufacture an occurrence; ★ **`R220` CANDIDATE WEIGHED AND MINT DECLINED at n = 1**, ceiling stays `R219`; ★ **both filing gates green, including `--strict-tip`, with NO deferral line**
+
+**Shipped:**
+
+- **`Pass 129.1`** (`7ad8b00`) — `pdfce-cli ocr`'s default `--dpi` 300 → 150,
+  plus `fixtures/synthetic/ocr/PROVENANCE.md`, a file that did not exist.
+- **`a3185ba`** — two doc-comment findings returned by pdfceGUI. No Pass ID,
+  no behaviour change, documentation-only.
+
+Both filed as `ROADMAP.md` *Shipped* entries, `a3185ba` first
+(reverse-chronological). **Neither is pushed.** `v0.12.0` shipped with the
+300 default; these belong to the next release and pushing is its own
+operator act (`CLAUDE.md` rule 8).
+
+---
+
+### ★★★ THE FINDING OF THE FILING: MORE RESOLUTION IS WORSE, AND THE OLD DEFAULT'S JUSTIFICATION WAS ASSUMPTION IN EVERY CLAUSE
+
+`pdfce-cli ocr` defaulted to `--dpi 300` on this reasoning, which shipped in
+the flag's own doc comment:
+
+> ~~"300 is the default because it is what document scanners produce and what
+> `ocrs` was trained near; below about 150 recognition degrades sharply, and
+> above 400 costs memory for nothing."~~
+
+pdfceGUI re-ran their accuracy sweep after `Pass 129.0`'s detection-model
+fix, on **a real CAD sheet**, **130 ground-truth tokens** scored against the
+page's own vector text:
+
+| DPI | accuracy over 130 ground-truth tokens |
+|---|---|
+| 72 | **56.5 %** ≈ 73.5 / 130 |
+| 100 | **56.7 %** ≈ 73.7 / 130 |
+| 150 | **54.5 %** ≈ 70.9 / 130 |
+| 200 | **53.9 %** ≈ 70.1 / 130 |
+| **300** | **35.1 %** ≈ 45.6 / 130 — **the old default** |
+
+*(Hard rule 10: percentage beside its per-item form, denominator named in the
+table label — **130 ground-truth tokens, one real CAD sheet, one producer**.)*
+
+**A plateau from 72 to 200 — 2.8 points across four values, inside the
+sampling noise of 130 tokens — and then a cliff.** 300 was the worst of the
+five **by twenty points**.
+
+**Every clause of the old justification was an assumption and the measured
+direction is backwards.** That sentence is now **quoted in the code beside
+its correction** rather than deleted, because the next person to reach for
+300 will reach for it for exactly the same reason, and the strongest thing
+that can be put in their way is the reasoning they are about to have,
+already written down and already refuted.
+
+**The mechanism is a property of the CRATE, not of the weights**, which is
+what makes it trustworthy past one document: `ocrs` resizes its input to a
+**fixed model input size**, so past that size more pixels makes the text
+**smaller relative to the model's window**. ★ **Corroborated twice by two
+different detection models — one of them the broken one.** Two different
+failures agreeing on the *direction* of an effect that neither was chosen to
+test is a peculiar but real form of independent confirmation.
+
+### ★★★ THE PLATEAU, NOT THE MAXIMUM — 100 SCORED HIGHEST AND WAS REJECTED
+
+**100 dpi is the top of that table and it was not chosen.** The reason is
+pdfceGUI's own retraction, and it is the sharpest sentence anyone wrote this
+week: their previous curve had a maximum at 150 that turned out to be noise,
+and the worst-damaged part of their documentation
+
+> *"was not a number: it was the sentence presenting 150 as a measured
+> optimum. **There was no optimum.**"*
+
+**Picking 100 off a flat region would repeat exactly the mistake being
+corrected.** 150 was chosen for two reasons that are not "it won": it sits
+**inside** the plateau, and it is **independently** where a fitted-pixel-
+budget calculation lands for a US-Letter sheet.
+
+★ **The transferable claim:** *a maximum inside a flat region is a report
+about the noise, not about the quantity.* A curve flat within sampling error
+has **no argmax to read**, and reading one anyway manufactures a fact the
+next measurement will contradict.
+
+### ★★★ AND OUR OWN CORPUS CANNOT CONFIRM ANY OF IT — IT SATURATES
+
+Swept `fixtures/synthetic/ocr/scan.pdf` at 72/100/150/200/300/400 dpi:
+
+| DPI | content recall on `fixtures/synthetic/ocr/scan.pdf` (47 words) |
+|---|---|
+| 72 | **100 %** = 47/47 |
+| 100 | **100 %** = 47/47 |
+| 150 | **100 %** = 47/47 |
+| 200 | **100 %** = 47/47 |
+| 300 | **100 %** = 47/47 |
+| 400 | **97.9 %** = 46/47 |
+
+**Five of six values are a perfect score.** The corpus has **no power to
+discriminate** and is **explicitly NOT cited as agreement** — in the commit
+message, in the CLI doc comment, and in `PROVENANCE.md`. **The evidence for
+this change is entirely pdfceGUI's.**
+
+★★ **That is by design and the design is right.** The generator's docstring
+says the degradation is *"deliberately mild… not a stress test of the
+recogniser's tolerance for bad input. A fixture degraded until recognition
+fails proves nothing about pdfce and would turn every future run into an
+argument about the noise level."* **It proves the PIPELINE, not the
+DIFFICULTY.**
+
+> ★★★ **A CORPUS THAT SCORES 100 % ON EVERYTHING IS NOT A CORPUS THAT AGREES
+> WITH YOU; IT IS ONE THAT HAS NOT BEEN ASKED A QUESTION IT CAN ANSWER.**
+
+**Filed as its own claim because the failure mode is silent and
+flattering.** A green sweep across every configuration reads as
+confirmation. It is the **absence of a signal**: a saturated instrument
+returns the same reading whether the thing it measures is excellent or
+merely present. **A corpus's discriminating power is a property that has to
+be stated with its results** — otherwise the next reader quotes the 100 %
+against a finding it never tested. `PROVENANCE.md` now states it; so does
+the amended `personal_rag` lesson, below.
+
+★ **This is the same species as the 262nd filing's "the clean control's
+91.5 % is unexplained" item, from the other side.** That one is a number
+that disagrees and nobody knows why; this one is a number that agrees and
+**cannot** mean what it looks like it means. Both are reasons a measurement
+needs its instrument characterised before its result is quoted.
+
+### ★ `fixtures/synthetic/ocr/PROVENANCE.md` — the sibling file that was missing
+
+**Every other fixture directory has one; this one did not** — a gap left when
+the OCR corpus landed in `Pass 129.0`, and the kind of gap that is invisible
+because nothing indexes provenance files. 107 lines, recording the `LEGAL.md`
+§5(a) sourcing (wholly synthetic, nothing downloaded, no real document at any
+stage), the ground-truth conventions **in enough detail that another project
+can score comparably**, the saturation limit above, and what is deliberately
+**not** modelled — including that **handwriting is out of distribution for
+`ocrs`, so a poor result there is expected behaviour rather than a defect.**
+
+★ The comparability half is the one with a live consumer: pdfceGUI has asked
+for this corpus, and **a corpus scored two different ways by two projects
+produces two incomparable numbers**. That is the hazard the section closes,
+and it closes it in the tree rather than in a note.
+
+---
+
+### ★★ `a3185ba` — A DOC COMMENT THAT CALLS A DEFAULT A "DIVERGENCE" IS READ AS A DIVERGENCE IN VALUE
+
+**The better finding of the two, and it is pdfceGUI's, not ours.**
+
+They restated `cmyk_intent = NeutralBlack` in their own PDF/X preset
+**believing they were diverging from pdfce.** They never were — that has been
+the shipped default since the operator's ruling of 2026-08-08 was adopted.
+**Their own test caught the duplication**, which is the only reason this is a
+documentation finding and not a silently divergent second implementation.
+
+**The prose they read was accurate.** `CmykIntent`'s docs said, and still
+say, that the default *"is an OPERATOR RULING, and knowingly diverges"* —
+meaning pdfce ships a value it knows is not the best-evidenced answer,
+because Ken ruled for pure-K line art while the evidence (Acrobat's shipped
+profile plus pdfium) favours conformance rendering.
+
+| the claim | what it is about |
+|---|---|
+| *"the default diverges"* | the **reasoning** — pdfce chose against its own best evidence |
+| what the reader took away | the **value** — "pdfce must ship something other than `NeutralBlack`" |
+
+★ **Prose cannot separate them, because "diverges" is a RELATION and the
+paragraph names only one of its two operands.** The reader supplies the
+other, and the nearest available referent is the value on the page.
+
+**Their suggested fix, adopted verbatim: state it as DATA, not as
+narrative.**
+
+```text
+  shipped default : NeutralBlack     (operator ruling, 2026-08-08)
+  best-evidenced  : Calibrated       (Acrobat's shipped profile + pdfium)
+  they differ     : DELIBERATELY, and in REASONING, not in value
+```
+
+Three lines, and the misreading becomes **unavailable** rather than merely
+less likely. **A better paragraph would not have fixed it** — the paragraph
+was already correct.
+
+**The generalisation, now written into the type's own docs:** *any setting
+whose shipped default is knowingly NOT its best-evidenced one should carry
+the same pair.*
+
+★★ **Its relation to the existing EVIDENCE-TIER convention, stated because
+the two look interchangeable and are not.** Several settings already label a
+default *"EVIDENCE TIER (c)"* or *"(d)"* (`MinifyFilter`,
+`CmykJpegPolarity`). **A tier says how good the evidence is; it never says
+whether the shipped value follows it.** `cmyk_intent` carries the strongest
+tier in the whole ambiguity register — *"tier-(a)/(c), the strongest"* — and
+is still not the shipped value. **The tier label alone was never capable of
+disclosing this**, which is why the pair is an addition to that convention
+rather than a restatement of it.
+
+### `a3185ba`'s second finding — `PdfX1a` and `PdfX3` emit an identical preset, on purpose
+
+Reported by pdfceGUI: applying `PdfX3` leaves settings their matcher reports
+as `PdfX1a`. **Correct, and not a bug.** The two parts differ in **what
+colour spaces a FILE may contain**, which is a constraint on the document
+checked by a validator — **no render-radius setting can see it.**
+
+★ The docs now carry **both** halves of the instruction, and the second is
+the one worth having: *"do not merge them"* (the labels differ, and an
+operator selecting PDF/X-3 should see PDF/X-3 named back) **and "do not
+manufacture a difference to justify keeping them apart"** — inventing a
+divergence would assert a rendering requirement **neither standard
+contains**, which is exactly the failure `PresetAction::LeaveAlone` exists to
+prevent one level up. Written for a reader who has not arrived yet.
+
+### ★ And the placement of that block was itself a near-miss of the same species
+
+The data block **first landed ABOVE the type's summary line.** It merged
+cleanly. **It compiled.** And it buried the one-line description rustdoc
+renders in type lists — so `CmykIntent`'s generated index entry would have
+led with *"★★ THE DEFAULT, AS DATA…"* and its actual summary would have been
+invisible everywhere it is listed. Moved below the summary and the §8.6.4.4
+context, above the narrative it qualifies.
+
+**"It compiled and read wrong" is the same shape as everything else in that
+commit** — nothing in it was ever reachable by a compiler, a test or a gate,
+because none of them read for meaning.
+
+---
+
+### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for the string
+
+**Trigger: `--dpi`'s default changed meaning** (300 → 150), and a default is
+a capability's stated behaviour. Swept `docs/`, `crates/`, `tools/`,
+`fixtures/`, `README.md` and `docs/core-api/` for the claim *"OCR rasterises
+at 300 dpi by default"* in any phrasing — prose, table labels, column
+headers, `eprintln!`/`println!` strings, struct-field rustdoc, and
+`FEATURES.md` rows — not only for the literal `300`.
+
+| where | what it says | disposition |
+|---|---|---|
+| `crates/pdfce-cli/src/main.rs:2407` | *"at 72/100/150/200/300/400 dpi"* | **correct** — the sweep's own value list, not a default claim |
+| `fixtures/synthetic/ocr/PROVENANCE.md:72` | *"when `pdfce-cli ocr`'s default DPI moved from 300 to 150 on 2026-08-26"* | **correct and dated**, written by the same commit |
+| `docs/SESSION_LOG.md:62185` | pdfceGUI's `OCR_DPI = 300 → 3.3 %` | **another project's constant**, in a survivor report, and now **amended in place** — see below |
+| `docs/core-api/03-capabilities.md:1420,1435` | *"a clean 150 dpi render"*, *"a synthetic 200 dpi scan"* | **measurement descriptions, not defaults.** Left alone |
+| `docs/ARCHITECTURE.md:6440` | `render-page … --dpi 150` | **a different subcommand.** Left alone |
+| `docs/FEATURES.md` OCR row | named `--words` and `--dump-image` but **not `--dpi` at all** | **ROW EDITED THIS FILING** — the flag and its default are now in the row, with the counter-intuitive direction stated, because a features scan that omits the one flag whose default is surprising has failed at its only job |
+| `crates/pdfce-gui/`, `README.md`, `docs/core-api/index.md` | no OCR DPI claim in any form | clean |
+
+**No stale survivor.** ★ **That is itself worth recording rather than
+skipping past, because it is unusual for this project** — the last four
+sweeps found seven, three, two and one. The reason is visible in the diff:
+`7ad8b00` wrote `PROVENANCE.md`'s dated migration sentence **in the same
+commit as the change**, so the one place that could have gone stale was
+written already-current. **A meaning change that files its own note does not
+leave survivors**, which is the cheapest form this obligation can take.
+
+### ★★ THE AUDIT THE DISPATCH ASKED FOR, AND ITS ANSWER IS A NEAR-MISS RATHER THAN A SURVIVOR
+
+The dispatch asked whether **any OTHER setting in `crates/pdfce-core/src/settings/mod.rs`
+currently describes its default narratively in the same way**, and said
+plainly that it had not audited for one. **Audited: 2,779 lines, every
+`pub enum` and every field's rustdoc.**
+
+**One candidate, and it is NOT the same shape.** `QuadPointOrder`
+(`mod.rs:932`, ambiguity `QP-A1`) narrates a divergence in exactly the same
+register — *"it is a deliberate divergence from a `shall`-adjacent normative
+statement, and it is invisible at runtime"* — and carries **no data pair**.
+
+★ **But the second operand is different, and that difference is the whole
+reason it is reported as a near-miss.**
+
+| | `CmykIntent` | `QuadPointOrder` |
+|---|---|---|
+| shipped default | `NeutralBlack` | `ReadingOrder` |
+| what it diverges FROM | **the best evidence** (Acrobat + pdfium) | **the CLAUSE** (§12.5.6.10) |
+| what the best evidence says | `Calibrated` — **not** the shipped value | `ReadingOrder` — **is** the shipped value (Acrobat, PDFBox and pdf.js all emit it) |
+| does the generalisation bite? | **yes** | **no** — the shipped default *is* its best-evidenced answer |
+
+**`QuadPointOrder`'s shipped default already agrees with its evidence**; what
+it disagrees with is the normative text, and its docs say so in the variant
+comments (*"what Acrobat, PDFBox and pdf.js emit and expect"* / *"the
+counterclockwise walk §12.5.6.10 describes"*), which is the operand a reader
+would otherwise have to supply. **The value is on the page in both variants.**
+
+★★★ **Reporting this as a survivor would have been the easy and wrong move,
+and naming why is the point.** It matches the *wording* the finding is about
+("divergence", narrated, no data block) and not the *mechanism* (a reader
+cannot infer a wrong value from it). Counting it would have taken the new
+finding from **n = 1 to n = 2** and would have carried a standing-rule mint
+on a manufactured occurrence — the exact failure hard rule 11 exists to
+prevent, arriving from the opposite direction: **not a grep that finds too
+little, but a reading that finds too much.** A sweep that grades on wording
+inflates its own evidence.
+
+**Two other settings checked and cleared:** `MinifyFilter` (shipped default
+`Smooth`, **tier (c), agrees with its evidence** since the operator's
+2026-08-25 viewer check) and `XrefEntryEol` (shipped default `MatchSource`,
+which is **the ambiguity register's own recommendation** — the operator's
+ruling moved it *toward* the evidence, not away). Neither narrates a
+value-divergence.
+
+### ★ STANDING-RULE DISPOSITION — `R220` CANDIDATE WEIGHED, MINT DECLINED, CEILING STAYS `R219`
+
+The candidate: *a shipped default that is knowingly not its best-evidenced
+value must state both, labelled, with the date and authority.*
+
+**Declined, on three grounds:**
+
+1. **n = 1.** One occurrence, and the audit above establishes that the only
+   other candidate in the file is a different shape. This project's own bar
+   is two, and `R219`'s slot was held open at the 264th filing for the same
+   reason.
+2. **The convention is already written where it binds.** It is in
+   `CmykIntent`'s own doc comment, as a form the next such setting can copy,
+   and in the RAG. A standing rule adds reach only if the obligation needs to
+   travel to a reader who will not be looking at a settings type.
+3. **No mechanical gate is possible**, which is the same warrant hard rule 11
+   is stated with: a checker would have to know a setting's *best-evidenced*
+   value to compare it against the shipped one, and that is precisely the
+   fact the disclosure exists to supply.
+
+**The mint is the engineer's act, not this role's.** If a second setting
+turns up whose shipped default is knowingly off its own evidence, this
+paragraph is the candidate's first occurrence and `R220` is its number.
+
+### ★★ AMENDMENT TO THE 262nd FILING — THE MECHANISM SURVIVED, ONLY THE SHAPE WAS NOISE
+
+`docs/SESSION_LOG.md`, 262nd filing, *"survivors reported, not fixed"* item 2
+said pdfceGUI's DPI curve, `TARGET_PIXELS = 8_400_000` and its pinning test
+*"were all derived from the broken detector"* and that *"the measured curve,
+the chosen constant and the pinned test do not [survive]"*. **True when
+written, too broad now.** Amended in place, prose kept (`R215` (d)).
+
+| what was claimed | fate after re-measurement |
+|---|---|
+| more resolution is worse | **survived** |
+| 300 dpi is the worst value | **survived** |
+| `ocrs` resizes to a fixed model input | **survived** — the 262nd itself predicted this half would (*"a property of the crate and probably survives"*) |
+| the specific per-DPI numbers | **replaced** — jagged, false maximum at 150 |
+| `TARGET_PIXELS` and the pinning test | **replaced**, exactly as reported |
+
+★ **It is a NARROWING, not a reversal**, and it is owed for a reason beyond
+courtesy: **this project moved its own default on the strength of that
+re-measurement.** A filing cannot rely on someone's data and simultaneously
+leave a record on disk calling all of it void.
+
+★★ **The transferable claim:** *when a measurement is invalidated at the
+source, the DIRECTION and the MECHANISM often survive while the CURVE does
+not* — separable because a mechanism is a claim about the **apparatus** and a
+curve is a claim about a **sample**. Declaring the whole body of work void is
+cheap and usually wrong; saying which half died costs one re-measurement and
+is what lets the surviving half be used.
+
+---
+
+**Cross-project channel — named, because a deliverable recorded only in the
+producing tree has been FILED, not handed off:**
+
+**Outbound, written this session and not previously named in any filing:**
+
+- `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`
+  **`2026-08-26-reply-take-the-corpus-and-your-cliff-moved-our-default.md`**
+  — **present, 5,829 B, 05:42** (`ls -l`, checked here). Three things: **(a)**
+  hands pdfceGUI the OCR corpus **and its ground-truth conventions** so the
+  two projects' numbers stay comparable — they asked for it rather than
+  building a second one, which is the outcome worth protecting; **(b)** warns
+  them the corpus **SATURATES** and must not be cited as agreeing about DPI;
+  **(c)** tells them their data **moved our default**.
+
+**Inbound, consumed, no action owed — named so a later dispatch quoting a
+filename does not read as a lost deliverable:**
+
+- **`note_127_1_wired_the_rotate_bug_fixed_and_our_curve_retracted.md`** —
+  2,788 B, 2026-08-26 00:06. Already relied on by the 263rd filing (it
+  falsified a premise there) and now by this one: **the curve retraction in
+  its title is the source of the plateau finding.**
+- **`note_the_standards_selector_is_wired_and_your_gradings_are_on_screen.md`**
+  — 3,298 B, 2026-08-25 22:59. Reports that **our §6 closed itself**: their
+  migration **deleted itself on the first build after the `MinifyFilter`
+  re-pin**, exactly as designed. ★ Worth one line because a self-deleting
+  migration that actually self-deletes is the rare case where "no action
+  owed" is a *measured* outcome rather than an absence of news.
+
+**RAG escalations this filing — THREE WRITTEN, ONE AMENDED, all indexed in
+the same session (Quaternary/Quinary discipline):**
+
+1. **`D:/dev/rag/rust/a_default_documented_as_a_divergence_is_read_as_a_divergence_in_value.md`**
+   — **NEW.** The dispatch's own reading was that this finding *"is a
+   pdfce-conventions fact rather than a PDF or Rust one, so it may belong in
+   the ambiguity register"*. **Disagreed, and here is why, because the
+   dispatch asked to be told which was chosen.** Two reasons, and the second
+   is the stronger: **(i)** the ambiguity register is
+   `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__ambiguity_settings_register.md`,
+   which is **`pdfce-spec-librarian`'s exclusive territory** (hard rule 6) and
+   holds what the standard says — a documentation convention is not spec text
+   and would be the wrong kind of entry in the right-looking file; **(ii)** the
+   finding **is not pdfce-specific at all.** Its defining property is that it
+   **only manifests across a CRATE BOUNDARY**: a downstream consumer works
+   from rendered rustdoc, cannot see the `Default` impl, and **re-implements
+   rather than depends** — the failure surfaces as duplicated configuration,
+   invisible to every test on the library side. That is a Rust public-API
+   documentation fact, `C-DOC`-adjacent and covered by no existing API
+   Guidelines item, and it will bind on any future crate on this machine that
+   ships an opinionated default.
+2. **`D:/dev/rag/rust/a_doc_block_inserted_above_the_summary_line_buries_it_and_every_gate_passes.md`**
+   — **NEW.** The placement half. **rustdoc takes the FIRST paragraph as the
+   item's summary line**; a `#` heading inserted at the top of an existing
+   block promotes itself into every module index, type list and hover popup
+   and makes the real description invisible — while `rustc`, `cargo fmt`,
+   `clippy -D warnings`, `cargo doc` and a diff review all pass. Cross-linked
+   to the existing
+   `doc_comment_splice_attaches_to_the_next_declaration_invisibly_to_every_gate.md`,
+   which is the *wrong item* case; this is the *right item, wrong position*
+   case, and it is harder to see because the item is documented and the text
+   is accurate.
+3. **`C:\personal_rag\pdf\lesson_20260826_ocrs_resizes_to_a_fixed_model_input_so_higher_dpi_scores_worse.md`**
+   — **NEW, quirk / HIGH.** The DPI curve, the mechanism, the plateau-not-
+   maximum rule, and the direction/mechanism-survive-the-curve rule, with the
+   saturation limit stated under *Limits* so the number cannot be quoted
+   without it.
+4. **`C:\personal_rag\pdf\lesson_20260825_manufacture_the_test_corpus_when_licensing_forbids_a_real_one.md`**
+   — **AMENDED** (hard rule 4: amend, don't duplicate) with the saturation
+   half. That lesson already owns the manufactured-corpus subject and already
+   said the degradation is deliberately mild; **what it did not say is that
+   mildness SATURATES, and that a saturated corpus cannot rank anything.**
+   A finding whose leading advice has an unrecorded consequence is worse than
+   one that states it.
+
+**Both subdir `index.md` files and the master `C:\personal_rag\index.md`
+updated in the same session.**
+
+★ **What was deliberately NOT escalated:** the *"a corpus that scores 100 %
+on everything"* line has no file of its own. It is the amended lesson's
+finding, in the lesson that owns the corpus it is about, and a second file
+would split one subject in two.
+
+**Ledger (measured here, commands named):**
+
+| item | value |
+|---|---|
+| `git rev-parse --short HEAD` | **`a3185ba`** |
+| `git status -sb` | **`## main...origin/main [ahead 2]`** |
+| `git remote -v` | `origin https://github.com/KenM76/pdfce.git` (**public** — `CLAUDE.md` rule 8: anything committed is published by default) |
+| newest backup bundle **by mtime** | `D:\Dev\pdfce-backups\pdfce-20260826-0400-full.bundle`, **44,867,984 B**, mtime **2026-08-26 03:46** |
+| that bundle's `refs/heads/main` (`git bundle list-heads`) | **`61a9e5b`** |
+| commits since (`git rev-list --count 61a9e5b..HEAD`) | **2** — `7ad8b00` and `a3185ba`. **The bundle is 2 commits stale.** Measured, not inferred (hard rule 8) |
+| ★ **a trap in that directory, reported** | the file **named** `pdfce-20260826-**0630**-full.bundle` has mtime **02:46** and head **`81d1e30`** — it is **OLDER** than the one named `0400`. **Sorting the backup directory by FILENAME gives the wrong "newest bundle"** and would have reported the tree as 6 commits stale instead of 2. Use mtime, or `git bundle list-heads`, never the name |
+| `check-commits-filed.py` **before** these edits | **exit `1`** — `7ad8b00` in no filing; `a3185ba` excused as the **DEFERRED** tip |
+| `check-passes-filed.py` **before** these edits | **exit `1`** — `UNFILED 7ad8b00 Pass 129.1` |
+| `check-commits-filed.py` **after** | **exit `0`**, `clean — 584 code commit(s) checked (whole history)`, **no `DEFERRED` line** |
+| `check-commits-filed.py --strict-tip` **after** | **exit `0`, byte-identical output** — the tip is filed on the merits, not excused |
+| `check-passes-filed.py` **after** | **exit `0`**, `clean` (plus 11 pre-existing informational multi-commit `note` lines) |
+| `tools/commits-filed-baseline.txt` | **UNTOUCHED**, as instructed. **5 carried of 584 = 0.86 %** of history is acknowledged debt |
+| gate scripts on disk | **18** (`ls tools/check-*.py tools/check-*.sh`) — **17 bare**, one takes an argument |
+| decisions ceiling | **`087`** (**`088` still OWED**, carried from the 263rd) |
+| standing-rule ceiling | **`R219`** — a candidate was weighed and **DECLINED**, above |
+| Pass-ID ceiling | **`129`**, next free **`129.2`** |
+| open operator questions ceiling | **`(bl)`**, next free `(bm)` |
+| `crates/pdfce-core/src/settings/mod.rs` audited | **2,779 lines**, every `pub enum` and field rustdoc — **1 near-miss, 0 survivors** |
+
+**Gates — stated with their scope, because "green" has one.** Both scripts
+run against the working tree **after** these `ROADMAP.md`, `FEATURES.md` and
+`SESSION_LOG.md` edits and **before any commit**.
+
+| run | output | exit |
+|---|---|---|
+| `python tools/check-commits-filed.py` | `clean — 584 code commit(s) checked (whole history); 5 known-unfiled carried in the baseline` — **no `DEFERRED` line at all** | **`0`** |
+| `python tools/check-commits-filed.py --strict-tip` | **byte-identical** | **`0`** |
+| `python tools/check-passes-filed.py` | `clean` + 11 informational `note` lines, all pre-existing | **`0`** |
+
+★ **The two `check-commits-filed.py` runs agreeing is the fact worth having,
+not the exit code.** A plain pass can mean *"clean, or the one unfiled commit
+is the tip"*; a strict pass means **"clean, with no commit excused by any
+mechanism."** `a3185ba` is a **code** commit and it is filed on the merits.
+
+★★ **And the commit that will carry this filing is docs-only**, so the strict
+run keeps passing after it lands: `git status --short` shows
+`docs/ROADMAP.md`, `docs/FEATURES.md` and `docs/SESSION_LOG.md` and nothing
+under `crates/`, `tools/`, `fixtures/`, `fuzz/` or `.github/`. A commit
+touching none of the `CODE_PREFIXES` is skipped entirely — there is nothing
+to defer.
+
+**Still in flight:**
+
+- **Decision `088`** — the `redact-mark` exit-code question — still owed,
+  carried from the 263rd and the 264th.
+- **`Pass 127.2`** — the `redact-mark` `stdout` summary-line gap — in
+  *Backlog*, unblocked, still the ranked owed work.
+- **The clean control's 91.5 % OCR recall** — still unexplained, carried from
+  the 262nd. ★ **Now with a companion**: the corpus also saturates, so
+  **both** its anomaly and its agreement need explaining before any accuracy
+  figure is quoted outside this project.
+- **pdfceGUI's small ask** — a `fonts_without_unicode()` or
+  `unsearchable_fonts` total on `TextDiagnostics` — unactioned, carried from
+  the 263rd.
+- **The `git ls-remote` lexicographic finding** — still homeless; this role
+  still recommends a new `D:/dev/rag/git/` subdir over forcing it into
+  `gh-cli/`.
+- **The `--all-features` question on the cross-target CI job** — filed as a
+  question in the 264th and written into `ci.yml` itself by `d68c621`.
+  Unanswered; it is the engineer's call.
+
+**For next session:**
+
+1. **Take a fresh backup bundle** — 2 commits behind, and **read the
+   directory by mtime, not by filename** (see the ledger's trap row).
+2. **Mint decision `088`** — owed for three filings now.
+3. **`Pass 127.2`** — still the ranked owed work in *Backlog*.
+4. **★ Decide whether a version bump is owed before the next tag.**
+   `v0.12.0` is cut and published; `Pass 129.1` changes a **shipped
+   default's value**, which is behaviour a scripted caller can observe. It
+   adds no public core item, so the `768e934` precedent (*"a new callable
+   verb is not a patch"*) does not decide it. **A default flip that changes
+   what an unchanged command line does is the question**, and it is the
+   engineer's, not this role's.
+5. **Watch for a second setting whose shipped default is knowingly off its
+   own evidence.** That is `R220`'s second occurrence and the mint's
+   trigger; the audit above establishes the current count is **one**.
+6. **Answer the `--all-features` question**, or record that it stays open on
+   purpose.
