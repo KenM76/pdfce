@@ -96,6 +96,331 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 130.1` (`5dd4083`) — **A `DeviceCMYK` IMAGE KEEPS ITS INK INSTEAD OF TAKING A ROUND TRIP THROUGH THE SCREEN** — ★★★ **the cause was proved to be NEITHER conversion but the CROSSING ITSELF, and no better inverse could have fixed it, because `CMYK → sRGB` is MANY-TO-ONE and a non-injective map has no inverse to improve**; ★★★ **the confirming measurement is the one intent whose two legs ARE exact inverses (`naive`): under it the failure X vanishes, under `calibrated`/`neutral_black` it returns** — which identifies the ROUND TRIP rather than either leg; ★★ **NOT A JPEG 2000 BUG, and that was established BEFORE a line of code was written** — rendering with `page_blend_space_source = device_native` (no colorant buffer, no bridge) made image and square agree to within one level; ★★ **the canvas comment saying this was impossible was RIGHT, is KEPT, and it located the fix** — the ink was gone one call before the canvas, so the fix had to be upstream; ★★ **the first cut changed NOTHING on the patch, because the ink is lost when the PALETTE is built, not at the texel** — `Space::Indexed` now carries a parallel colorant table, and that is the COMMONER shape in print files; ★ **the colorants travel as TWO pixmaps through the IDENTICAL shader, transform and path**, so a hand-rolled inverse-transform sampler cannot become a second implementation of the resampling that disagrees at every edge; ★ **new counter `cmyk_native_image_pixels`, and `cmyk_bridged_pixels` CHANGED MEANING**; ★★ **and this PASSES a self-consistency test, which is NOT a colour-accuracy claim** — pdfce now agrees with itself and still not with Acrobat, because the ICC profile is unapplied — 2026-08-26 (two-hundred-and-sixty-sixth filing)
+
+**Eight files, `crates/` + `tools/`, +424 / −28 lines** *(over 8 files;
+`git show 5dd4083 --stat` — `pdfce-render/src/image.rs` **+232/−…**,
+`cmyk_buffer.rs` **+102**, `canvas.rs` **+71**, `interpret.rs` **+25**,
+`pdfce-cli/src/main.rs` **+11**, `tests/render_page.rs` **+4**, `lib.rs`
+**+1**, `tools/check-metrics-line-contract.py` **+6**)*.
+
+#### The defect, in one line
+
+`PCS1_170` — JPEG 2000 in `[/Indexed /DeviceCMYK 0 …]` — drew the print
+suite's own failure **X**. The same red, drawn once as a **path** and once
+as the **image**, landed on **(238, 29, 35)** and **(225, 63, 50)**. Two
+renderings of one authored colour, differing by enough to read as a mark.
+
+A page compositing in ink was handed an image whose samples were **already
+ink**, and converted them `CMYK → sRGB → CMYK` on the way in.
+
+#### ★★★ THE PART WORTH CARRYING: NO BETTER INVERSE WOULD HAVE FIXED IT
+
+The obvious repair is to make the return leg the inverse of the outbound
+one. **It cannot be done.** `CMYK → sRGB` is **many-to-one** — a rich black
+and a flat `K` black land on the same screen colour — so the mapping is not
+injective and **there is no inverse to improve**.
+
+**The confirming measurement is the one that makes this a finding rather
+than an assertion.** Under the `naive` intent the two legs *happen* to be
+exact inverses of each other: the X **vanishes completely**. Under
+`calibrated` and `neutral_black` it **returns**. That is what identifies the
+**round trip** as the cause rather than either conversion being wrong — a
+defect that disappears when a transform pair becomes invertible is a defect
+of the crossing, not of the transform.
+
+⇢ **So the fix is not a better bridge. It is not crossing.**
+
+★ **This narrows `Pass 97.1e`'s finding rather than contradicting it.** That
+Pass established *a terminal conversion wants accuracy, a round trip wants
+invertibility*, and swapped the round-trip transform for an exactly
+invertible max-GCR pair. **True, and it reduces the error of a crossing that
+has to happen.** `130.1` adds the stronger move available when the value was
+**authored in the destination space**: the crossing does not have to happen
+at all. The `personal_rag` lesson that owns the 97.1e finding is amended in
+place rather than duplicated.
+
+#### ★★ NOT A JPEG 2000 BUG, AND THAT WAS ESTABLISHED FIRST
+
+Rendering `PCS1_170` with `page_blend_space_source = device_native` — no
+colorant buffer, no bridge anywhere in the pipeline — made image and square
+agree **to within one level**. The codec had read the file correctly from
+the start; something **after** it introduced the error.
+
+⇢ **A patch that arrives in a codec-shaped file is not evidence about the
+codec.** The ablation costs one render and rules out a whole layer.
+
+#### What shipped
+
+`DecodedImage::ink: Option<CmykTexels>` carries a `DeviceCMYK` image's
+authored colorants texel-for-texel, and `CmykBuffer::composite_cmyk_image`
+composites them with **no conversion in either direction**.
+
+★ **The colorants travel as TWO pixmaps — `C,M,Y` and `K,K,K` — rasterised
+through the IDENTICAL shader, transform and path as the sRGB texels.** That
+is deliberate, and it is the same refusal-to-build-a-second-path that
+`PoisonReason::ColorantBuffer` is: reusing tiny_skia's interpolation and
+edge coverage means the ink lands on **exactly the pixels the sRGB path
+covered**. A hand-rolled inverse-transform sampler would be a second
+implementation of the resampling and would **disagree at every edge**.
+
+★ **`K` is replicated across all three channels rather than parked in one.**
+A single channel would work, and would also make a **silent** failure
+possible: if packing and unpacking ever disagreed about *which* channel, two
+reads in three would return zero — a plausible lighter image rather than an
+obvious fault.
+
+#### ★★ THE FIRST CUT CHANGED NOTHING ON THE PATCH, AND WHY THAT MATTERS
+
+`PCS1_170`'s image is **not** a plain `DeviceCMYK` image. Its space is
+`[/Indexed /DeviceCMYK 0 <lookup>]`, so **the ink is lost when the PALETTE
+is built, not at the texel**: every entry was resolved to `Rgb` up front,
+and by the time a texel looked one up the colorants were already gone.
+
+`Space::Indexed` now carries a **parallel table of the base's colorants**,
+built in the **same loop** as the sRGB entries so the two cannot come to
+disagree about which index means what.
+
+⇢ **That is the COMMONER shape in print files, not an edge case:** a flat
+colour ships as a one-entry palette rather than as four planes of identical
+samples.
+
+#### ★★ THE COMMENT THAT SAID THIS WAS IMPOSSIBLE WAS RIGHT, IS KEPT, AND LOCATED THE FIX
+
+The canvas carried, and still carries:
+
+> *"THE ONE PAINT KIND THAT CANNOT GO NATIVE AT THIS PASS … `DecodedImage`
+> holds a `Pixmap`, so a `DeviceCMYK` image's samples were already flattened
+> to sRGB inside the decode loop, one call before this one. Bridging here is
+> therefore not a shortcut taken at the canvas — it is the only information
+> that reaches the canvas."*
+
+**Every word true.** It also **located the fix exactly**: the problem was
+upstream, so the fix had to be upstream. Preserved in place rather than
+deleted, because it is the reasoning that made the change findable.
+
+#### Measured blast radius
+
+| measure | before | after |
+|---|---:|---:|
+| `cmyk_bridged_pixels` on `PCS1_170` | **16,216** | **0** |
+| suite patches that **keep ink where they previously bridged** | 0 of 51 | **17 of 51** |
+| of those 17, patches whose bridged pixels reach **zero** | — | **6** |
+| `PCS1_170` square vs image | (238,29,35) vs (225,63,50) | **both (238, 29, 35)** |
+
+★ **`PCS3_172` still bridges, and that is CORRECT** — its base is `ICCBased`
+RGB, so there is **no ink to keep** and the bridge is honest there. A
+counter that fell to zero everywhere would mean the classification was
+wrong, not that the feature was better.
+
+#### Disclosure
+
+`cmyk_native_image_pixels` joins `cmyk_bridged_pixels` on `render-page`'s
+stable line. **They are complements and are NOT interchangeable** — a
+bridged pixel has been through a many-to-one conversion and back.
+
+★ **`cmyk_bridged_pixels` CHANGED MEANING** and its own doc row was
+corrected rather than left standing. It claimed an image's samples *"were
+flattened to sRGB inside the decode loop long before any canvas saw them,
+so bridging is the only information that reaches the compositor"* — **true
+of every image until this Pass; now true only of the ones with no ink to
+keep.** The number will drop sharply on print files without anything having
+regressed.
+
+★ **All THREE copies of the metrics line moved together (`R212`)** — the
+`println!`, the `//!` template, and the test's key list — **and
+`tools/check-metrics-line-contract.py`'s own anchor constant moved with
+them.** The gate caught the reword, **named the constant to update**, and
+the fix was a two-line follow-through instead of a hunt. ⇢ *A gate that
+names its own repair converts a hunt into an edit.*
+
+#### ★★ THE HONESTY POINT: A SELF-CONSISTENCY TEST PASSING IS NOT A COLOUR-ACCURACY CLAIM
+
+| | pdfce | Acrobat |
+|---|---|---|
+| `PCS1_170` square | **(238, 29, 35)** | (227, 0, 11) |
+| `PCS1_170` image | **(238, 29, 35)** | (227, 0, 11) |
+
+**The patch tests "No X must be visible", i.e. that the two agree — and they
+now do.** pdfce **still does not agree with Acrobat**, because the ICC
+profile is unapplied; that is `iccce`'s side of **decision 064** and is not
+chased here. **Any reading of this row as "pdfce's CMYK colour is now right"
+is a misreading**, and it is stated here rather than left for the reader
+because a passing conformance patch is exactly the shape that invites it.
+
+#### Verification (engineer's)
+
+All 51 suite patches render, none fails. `cargo test --workspace` green,
+`cargo fmt --check` + `clippy -D warnings` clean, all 17 bare gates exit 0.
+**NOT PUSHED.**
+
+#### What this UNBLOCKS and does NOT deliver
+
+★ **`Pass 122.1` (per-sample image overprint) is UNBLOCKED and NOT BUILT.**
+Table 149 needs per-sample colorants and `composite_cmyk_image` now receives
+them — the prerequisite that entry names is **met**. The feature is not
+written: `overprint_images_unsupported` still counts **4** on `PCS1_010`.
+Recorded as **unblocked-not-built**, and deliberately **not** promoted; see
+the Backlog amendment on `Pass 97.1k` and `Pass 122.1`.
+
+> ★★★ **CORRECTED THE SAME DAY, in `2c3210a`, and the correction runs the
+> OTHER WAY: most of `Pass 122.1` MUST NOT BE BUILT.** The paragraph above is
+> kept rather than rewritten (`R215` (d)) because it is the wording the
+> outbound note to pdfceGUI was drafted from, so it travelled.
+>
+> **Table 149's first row is scoped, verbatim, `DeviceCMYK, specified
+> directly, NOT IN A SAMPLED IMAGE`.** A sampled image therefore falls to the
+> SECOND row — *"any process colour space (including other cases of
+> `DeviceCMYK`)"* — whose process-component entry is **`c_s` in all three
+> columns** (`OP false`; `OP true`/`OPM 0`; `OP true`/`OPM 1`). **For a
+> `DeviceCMYK` image, painting it normally IS the conforming behaviour**, and
+> applying row 1's value-dependent rule to one would be a DEVIATION rather
+> than a repair. `PCS1_010` — the 4 counted above — carries exactly that
+> shape, `[/Indexed /DeviceCMYK 0 …]`, read from its image dictionary rather
+> than inferred from the patch title.
+>
+> **What is genuinely owed is two narrower things:** (1) `Separation`/
+> `DeviceN` images — Table 149's THIRD row is not inert, a process component
+> takes `c_b` under `OP true`, so an overprinting `DeviceN` image must
+> PRESERVE the backdrop → now **`Pass 130.2`**, Backlog; (2) spot colorants
+> under any process source — the one row that is non-inert for a
+> `DeviceCMYK` image, and pdfce has four process planes and no spot planes,
+> so there is no spot backdrop to preserve → the n-channel buffer, already
+> filed (`FEATURES.md` row 313).
+>
+> ⇢ **A prerequisite falling is not evidence that the feature behind it is
+> owed. Read the table that DEFINES the feature before promoting the entry
+> that was waiting on it.** The unblocked-not-built reading above was filed
+> carefully, checked against the counter, and still overstated the debt by
+> most of a feature — because every check ran against pdfce's own plumbing
+> and none ran against the clause.
+
+**Residual on `Pass 97.1k`:** **mesh shadings** (a whole population, still
+resolving to sRGB before compositing) and **images with no ink to keep**
+(anything not authored in `DeviceCMYK`, directly or behind an `/Indexed`
+base).
+
+---
+
+### `Pass 130.0` (`f66a098`) — **A JPEG 2000 PALETTE AND A PDF `/Indexed` SPACE ARE THE SAME LOOKUP, AND pdfce APPLIED BOTH** — ★★★ **the file carries the IDENTICAL three bytes in two places, and applying EITHER alone is right while applying BOTH is the only way to be wrong** — which is precisely why a conformance suite ships the pair; ★★ **the prior reasoning was RIGHT FOR THE COMMON CASE and is preserved in the code rather than deleted** — it holds in every file where the dictionary supplies no `/Indexed` space; ★ **§8.9 Table 89 decides it**: with `JPXDecode`, if `/ColorSpace` is present the codestream's colour-space specifications *"shall be ignored"*, and a `pclr`/`cmap` pair is such a specification; ★ **the DEFAULT is unchanged and its limit is NAMED in the code, not left to be discovered** — resolution is disabled only where an `/Indexed` array is VISIBLE from the codec layer, so a `/ColorSpace` written as a NAME keeps the old behaviour; ★★ **the first hypothesis was WRONG and is recorded beside the right answer**, because the next reader will form it too; ★ **the test's palette carries 256 entries and not one, because a one-entry table produces a failure INDISTINGUISHABLE from the fix working** — 2026-08-26 (two-hundred-and-sixty-sixth filing)
+
+**Three files, `crates/pdfce-core/src/image_codec/` only, +365 / −7 lines**
+*(over 3 files; `git show f66a098 --stat` — `mod.rs` **+159**,
+`fixtures_jpx.rs` **+129** (new), `jpx.rs` **+84/−7**)*.
+
+#### The defect
+
+`PCS3_172` — JPEG 2000 in an `ICCBased`-RGB-based `/Indexed` space —
+rendered a **large black X** on the print suite's own failure marker. The
+patch's instruction to the reader is *"No X must be visible when rendered
+correctly."*
+
+**The file carries the SAME lookup table in two places**, which is the only
+construction in which a reader can be wrong:
+
+- the JP2 container has a **`pclr`** box (one RGB entry) plus a **`cmap`**
+  box routing three output channels through it;
+- the PDF has `/ColorSpace [/Indexed <ICCBased N=3> 0 <3-byte stream>]`, and
+  that stream holds the **IDENTICAL** three bytes — **(114, 247, 13)**.
+
+pdfce asked the decoder to resolve the palette (`resolve_palette_indices:
+true`), so the samples came back as **colours**. The renderer then read
+component 0 — the value **114** — as an **index**, asked a one-entry table
+for entry 114, found nothing, and painted **black**.
+
+> ★★★ **Apply either lookup alone and the answer is green. Applying both is
+> the ONLY way to fail.** That is what a conformance suite is for: the file
+> is constructed so that a reader who resolves the palette in the wrong
+> layer cannot get away with it.
+
+#### What the spec says, and why the old reasoning was ALMOST right
+
+**§8.9 Table 89**: with `JPXDecode`, if `/ColorSpace` is present then
+*"colour space specifications in the JPEG2000 data shall be ignored"*. A
+`pclr`/`cmap` pair **is** such a specification — it is how the codestream
+says what its samples MEAN — so the dictionary's space wins.
+
+**The prior comment is preserved in place because it was correct for the
+common case and wrong for exactly one shape:**
+
+> *"PDF has its own `Indexed` colour space and §7.4.9 permits one, but a JPX
+> **internal** palette is not that: leaving it unresolved would hand the
+> renderer grayscale index values with nothing to look them up in."*
+
+**Every clause holds WHEN THE DICTIONARY SUPPLIES NO `/Indexed` SPACE.**
+When it does, the renderer has precisely what to look them up in.
+
+★ **The DEFAULT is unchanged**, and the limit is **named in the code rather
+than left to be discovered**: resolution is disabled only where an
+`/Indexed` array is actually **VISIBLE from the codec layer**. A
+`/ColorSpace` written as a **NAME** (`/CS0`) resolves through the page's
+resource dictionary, which this layer does not have and **should not
+acquire** — so it answers `false` and keeps the old behaviour. A JPX image
+with a palette **and** a named `/Indexed` resource would still
+double-resolve. **No such file is known; the shape is checkable if one
+appears.**
+
+#### ★★ THE WRONG FIRST HYPOTHESIS, RECORDED BESIDE THE RIGHT ANSWER
+
+The first hypothesis was that **`/Decode [0.0 255.0]` was being applied**.
+It is not — `/Decode` is correctly **ignored** for `JPXDecode`, and pdfce
+already had that right. Recorded because it is the hypothesis the *shape* of
+the symptom suggests (an index-looking number reaching a colour-looking
+consumer), and **a future reader will form it too**.
+
+#### Result
+
+| measure | before | after |
+|---|---|---|
+| `PCS3_172` failure marker | **black X** | **pale green X** |
+| `codec_geometry_mismatch` | **1** | **0** |
+| image samples with the colorant buffer disabled | index-resolved twice | **(114, 247, 13) BYTE-EXACT** to both tables' shared entry |
+
+That byte-exact match is what **proves the palette is now applied exactly
+once** — not that it looks better.
+
+★ **The residual is NOT this Pass's, and is named so it is not read as a
+shortfall of the fix.** The image's green does not yet match the square's,
+because Acrobat turns (114,247,13) into **(77, 175, 46)** by applying the
+ICC profile. **Decision 064** puts that on the other side of the line: pdfce
+owns *"what a PDF's colour components mean"* — index versus colour, which is
+this fix — and `iccce` owns **conversion**. pdfce's `IccBased` is
+**reinterpretation, not conversion, by design.**
+
+#### ★ THE TEST FIXTURE, AND THE TRAP INSIDE IT
+
+`fixtures_jpx::jpx_gray_8_jp2_with_palette()` splices `pclr` + `cmap` into
+the **existing** grey JP2, so the **codestream is byte-identical** to the
+one other tests use and **only the container differs** — a decode difference
+therefore cannot be the image data.
+
+★★ **It carries 256 entries, not one, and the reason is recorded because it
+LOOKS LIKE THE BUG UNDER TEST.** A one-entry table makes almost every index
+in that codestream out of range, the decoder refuses the file, and *"palette
+not applied"* is **both the fix's intended behaviour and that failure's
+symptom**. They are told apart **only by the error**.
+
+★★ **And the non-`/Indexed` test asserts LESS than its first draft did.** The
+draft claimed *"1 channel in, 3 out"*, reasoned from the `cmap` box; the
+**measured** answer is **1**. That behaviour is pre-existing and untouched
+here, so asserting a number **derived from reasoning rather than from a run**
+would pin an expectation, not a fact. It now pins the **decision** — that the
+flag follows the dictionary — and **says what is unestablished**.
+
+`CodecNotes::jpx_palette_left_to_pdf` discloses **which authority won**,
+because the decision is invisible in the output: a correct render and a
+double-resolved one are **both just coloured pixels** (rule 4 — the
+inference renders normally, the disclosure lives off-canvas).
+
+#### Verification (engineer's)
+
+`cargo test --workspace` green; fmt + `clippy -D warnings` clean across the
+workspace — the fixture builder is **panic-free** (`pub` module, held to the
+parser's lints; *a fixture that can panic is a panic reachable from a
+dependent*). All 17 bare gates exit 0. **NOT PUSHED.**
+
+---
+
 ### `a3185ba` — **TWO FINDINGS BACK FROM pdfceGUI, NEITHER OF THEM A CODE DEFECT: BOTH ARE PLACES WHERE CORRECT PROSE INVITED AN INCORRECT READING** — ★★★ **a doc comment that describes a default as a "divergence" gets read as a divergence in VALUE**, and a downstream project re-implemented `cmyk_intent = NeutralBlack` believing it was diverging from pdfce when it had been the shipped default since the operator's ruling of 2026-08-08 was adopted; ★★ **the fix is to state the default as DATA, not as narrative** — `shipped default` / `best-evidenced` / `they differ, DELIBERATELY and in REASONING, not in value` — three lines that make the misreading unavailable; ★★ **`PdfX1a` and `PdfX3` produce an IDENTICAL preset and that is intended**, so the docs say both *"do not merge them"* **and** *"do not manufacture a difference to justify keeping them apart"*; ★ **the doc block first landed ABOVE the type's summary line — it merged cleanly, it COMPILED, and it buried the one-line description rustdoc renders in type lists** — no Pass ID, documentation-only, **no behaviour change** — 2026-08-26 (two-hundred-and-sixty-fifth filing)
 
 **Two files, doc comments only, +46 / −0 lines** *(over 2 files = the whole
@@ -80451,7 +80776,7 @@ parallelism is the one change that makes a bad constant factor look solved.*
 
 ---
 
-### `Pass 97.1k` — native colorant paths for IMAGES and SHADINGS (they bridge through sRGB today)
+### `Pass 97.1k` — native colorant paths for IMAGES and SHADINGS — ★★ **RE-SCOPED 2026-08-26: the IMAGE half is DELIVERED for `DeviceCMYK` sources; the residual is MESH SHADINGS and images with NO INK to keep**
 
 **Filed 2026-08-21 (two-hundred-and-twenty-fifth filing).** Both reach the
 colorant buffer as **resolved sRGB** and are bridged back per pixel — disclosed,
@@ -80467,6 +80792,36 @@ image cannot overprint until its samples carry colorants.
 **Acceptance:** `cmyk_bridged_pixels` and `cmyk_unbridged_images` both reach 0
 on a subtractive page carrying an image and a shading; byte-identical output on
 additive pages; corpus A/B.
+
+**★★ AMENDMENT 2026-08-26 (two-hundred-and-sixty-sixth filing) — the prose
+above is KEPT rather than rewritten, because the *reason* it gave is the half
+that went false.** It read *"`DecodedImage` holds a `Pixmap`"* and that is no
+longer the whole story: **`Pass 130.1` (`5dd4083`) added
+`DecodedImage::ink: Option<CmykTexels>` and `CmykBuffer::composite_cmyk_image`,
+and the type widening this entry called non-trivial has been done for the image
+half.** Analytic shadings were already done by `Pass 122.6` (`c743a69`,
+`ColorRamp::at_cmyk`).
+
+| population | state |
+|---|---|
+| **`DeviceCMYK` images**, direct | **DELIVERED** (`130.1`) |
+| **`DeviceCMYK` images behind an `/Indexed` base** | **DELIVERED** (`130.1`) — `Space::Indexed` carries a parallel colorant table |
+| **analytic (`Separation`/`DeviceN`) shadings** | **DELIVERED** (`122.6`) |
+| **mesh shadings** | **NOT DONE** — a whole population resolving to sRGB before compositing, uncounted by `122.6`'s colorant work |
+| **images with no ink to keep** (anything not authored in `DeviceCMYK`) | **CORRECTLY still bridged** — not a shortfall |
+
+★ **The acceptance criterion above is now WRONG AS WRITTEN and must not be
+used as a gate** (`R215`). *"`cmyk_bridged_pixels` reaches 0"* would demand
+that an `ICCBased`-RGB image stop bridging, and there is **no ink in it to
+keep** — `PCS3_172` bridges after `130.1` and that is **correct**. The
+measurable form is the complement: **`cmyk_native_image_pixels` non-zero
+wherever the source is `DeviceCMYK`**, with `cmyk_bridged_pixels` falling only
+on those. Measured at `130.1`: **17 of 51 suite patches keep ink where they
+previously bridged; 6 of those 17 reach zero bridged pixels.**
+
+**Residual acceptance, for the mesh half:** a mesh on a subtractive page
+composites its authored colorants and can honour Table 149; byte-identical
+output on additive pages; corpus A/B.
 
 ---
 
@@ -80496,6 +80851,133 @@ spot remainder, and it lands with it or after it, never before.
 
 **Acceptance:** `PCS 8.2`'s check mark visible; `overprint_images_unsupported`
 reaches 0 on the suite; corpus A/B.
+
+**★★ AMENDMENT 2026-08-26 (two-hundred-and-sixty-sixth filing) — THE
+PREREQUISITE IS MET AND THE FEATURE IS NOT BUILT. The two facts are recorded
+together on purpose, because separating them is how a Backlog entry gets read
+as done.**
+
+`Pass 130.1` (`5dd4083`) gives `CmykBuffer::composite_cmyk_image` **per-pixel
+colorants for a `DeviceCMYK` image**, which is exactly what **Table 149** needs
+and exactly what the *"Depends on `Pass 97.1k`"* clause above was waiting for.
+**The dependency this entry names is discharged for `DeviceCMYK` sources.**
+
+**Nothing about overprint was written.** `overprint::composite` still has
+**exactly one call site**, in the path and glyph painter, and an image XObject
+still does not reach it: `overprint_images_unsupported` counts **4** on
+`PCS1_010` after `130.1`. This entry stays in **Backlog**; it is **not**
+promoted, and its acceptance criteria are unchanged.
+
+⇢ **Status: UNBLOCKED, NOT BUILT.** ★ A prerequisite falling is the moment an
+entry is most likely to be mistaken for shipped, because the sentence that
+explained why it *could not* be done has just stopped being true. **The
+remaining work is the whole feature.**
+
+★ **One `crates/` survivor of this claim is reported, not edited** (hard rule
+11): `crates/pdfce-cli/src/main.rs`'s `overprint_images_unsupported` doc row
+still says *"an image's colorant identity is gone by the time its texels
+composite"*, which was the reason the feature was impossible and is now false
+for `DeviceCMYK` images. See the 266th `SESSION_LOG.md` filing's sweep table.
+**FIXED the same day in `2c3210a`**, along with three more.
+
+#### ★★★ SECOND AMENDMENT, SAME DAY (`2c3210a`) — MOST OF THIS ENTRY MUST NOT BE BUILT, AND ITS ACCEPTANCE CRITERION IS AN `R215` TRAP
+
+**The amendment above is not withdrawn — the prerequisite really did fall —
+but its consequence was overstated.** Reading **Table 149** rather than the
+counter changes what this entry owes.
+
+**Table 149's first row is scoped, verbatim: `DeviceCMYK, specified directly,
+NOT IN A SAMPLED IMAGE`.** An image falls to the SECOND row — *"any process
+colour space (including other cases of `DeviceCMYK`)"* — which is **`c_s` in
+all three columns**. **So for a process image, painting it normally IS the
+conforming behaviour**, and applying row 1's value-dependent rule to one would
+be a DEVIATION rather than a repair. `PCS1_010`, which contributes **4** to
+`overprint_images_unsupported`, is `[/Indexed /DeviceCMYK 0 …]` — verified by
+reading its image dictionary.
+
+**RE-SCOPED.** What remains of this entry is exactly one population:
+`Separation`/`DeviceN` images, where Table 149's THIRD row takes `c_b` for a
+process component under `OP true` and the backdrop must survive. **That is
+carved out as `Pass 130.2`** (Backlog, immediately below), because its blocker
+is specific and measurable and does not resemble the rest of this entry: the
+`DeviceN` base's tint-transform output is not carried by `Pass 130.1`'s
+colorant capture. Spot colorants under a process source are the other
+non-inert case and belong to the n-channel spot buffer, already filed.
+
+**★★ THE ACCEPTANCE CRITERION ABOVE IS NOW UNSATISFIABLE AND WOULD FAIL A
+CORRECT IMPLEMENTATION.** Quoted rather than silently rewritten, per `R215`
+(d): *"`overprint_images_unsupported` reaches 0 on the suite"*. It cannot,
+and it should not — the counter is **deliberately over-inclusive**: it
+answers *"was the composite offered this object class?"*, a fact about pdfce's
+plumbing, and it keeps counting the inert process images that Table 149 says
+are already correct. **Replacement criterion:** `PCS 8.2`'s check mark
+visible, and `overprint_images_unsupported` unchanged on the patches whose
+image sources are process spaces.
+
+⇢ **This is the SECOND `R215` instance in this filing** — the first was
+`Pass 97.1k`'s *"`cmyk_bridged_pixels` reaches 0"*. Both are the same shape:
+**a target number chosen before the classification was understood**, so
+meeting it would be the regression. ★ Both criteria were written against a
+COUNTER rather than against the CLAUSE the counter reports on, which is the
+transferable half.
+
+---
+
+### `Pass 130.2` — `Separation`/`DeviceN` IMAGES UNDER OVERPRINT — the ONE image population Table 149 does not make inert
+
+**Filed 2026-08-26 (two-hundred-and-sixty-sixth filing, amendment), carved out
+of `Pass 122.1` after `2c3210a` read Table 149.** Pass ID assigned by
+`pdfce-librarian` under the engineer's explicit delegation in that dispatch.
+
+**Why this is a Pass and not a Backlog note.** It has a named blocker, a named
+mechanism, and three named fixtures with measured numbers — everything a Pass
+entry is for — and leaving it welded to `Pass 122.1` would keep it attached to
+an entry that is now mostly INERT, which is precisely the misreading the
+`2c3210a` correction exists to prevent.
+
+**The clause.** ISO 32000-1 §11.7.4.3 Table 149, THIRD row (`Separation` /
+`DeviceN` source): a **process component takes `c_b` under `OP true`**, so an
+overprinting `DeviceN` image must **PRESERVE the backdrop** rather than paint
+over it. This is the row the second row's blanket `c_s` does not cover.
+
+★ **The rules depend on colorant NAMES alone**, so they resolve **once per
+image**, exactly as `Pass 122.6`'s shading path already resolves them once per
+shading. There is no per-pixel classification to invent — the shape is
+already shipped, one object class over.
+
+**The blocker, and it is narrower than "colorants":** `Pass 130.1` (`5dd4083`)
+captures per-pixel colorants **only for a `DeviceCMYK` base**. A `DeviceN`
+base's **tint-transform output is not carried**, so `composite_cmyk_image`
+receives nothing to overprint with. That, not the absence of a colorant path,
+is the work.
+
+**Measured, and the two numbers must be read together** (hard rule 10 — each
+figure beside the one that scopes it; denominator: three patches, one suite,
+one render configuration):
+
+| patch | `overprint_images_unsupported` | `cmyk_native_image_pixels` |
+|---|---:|---:|
+| `PCS1_190` | **2** | **0** |
+| `PCS1_191` | **2** | **0** |
+| `PCS1_192` | **2** | **0** |
+
+★ **The `0` is the load-bearing half.** A non-zero `overprint_images_unsupported`
+alone proves nothing after `2c3210a` — it counts inert process images too. It
+is `cmyk_native_image_pixels = 0` **beside** it that says these images reached
+the buffer with no ink of their own, which is the `DeviceN`-base gap.
+
+**Acceptance.** `cmyk_native_image_pixels` non-zero on `PCS1_190`/`191`/`192`;
+their `overprint_images_unsupported` falls to **0** *(these three are the
+non-inert population, so unlike `Pass 122.1`'s quoted criterion this one is
+satisfiable)*; no change to the suite-wide count on process-image patches;
+corpus A/B byte-identical elsewhere.
+
+⇢ **Possible, not established: this may be the Pass that delivers `Pass
+122.1`'s `PCS 8.2` check mark.** That entry's own diagnosis names **`DeviceN`
+images** overprinting a yellow mark, and records `overprint_images_unsupported
+= 2` for it — the same figure all three patches above carry. **Stated as a
+hypothesis with its check named**, not as a claim: confirm by rendering
+`PCS 8.2` after the fix, not by matching the number.
 
 ---
 

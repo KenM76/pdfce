@@ -63848,3 +63848,830 @@ to defer.
    trigger; the audit above establishes the current count is **one**.
 6. **Answer the `--all-features` question**, or record that it stays open on
    purpose.
+
+## 2026-08-26 (two-hundred-and-sixty-sixth filing) — TWO Passes on one print-conformance failure marker: ★★★ **`Pass 130.1` (`5dd4083`) — a `DeviceCMYK` image keeps its ink, and THE CAUSE WAS NEITHER CONVERSION BUT THE CROSSING ITSELF: `CMYK → sRGB` is MANY-TO-ONE, so it has NO INVERSE TO IMPROVE and no better bridge could ever have fixed it**; ★★★ **the confirming measurement is the one intent whose two legs ARE exact inverses — under `naive` the X vanishes, under `calibrated`/`neutral_black` it returns — which isolates the ROUND TRIP rather than either leg**; ★★ **NOT A JPEG 2000 BUG, PROVED BEFORE ANY CODE WAS WRITTEN** by rendering with the colorant buffer switched off; ★★ **the canvas comment that said this was impossible was RIGHT, is KEPT, and it LOCATED the fix** — the ink was gone one call upstream, so the fix had to be upstream; ★★ **the first cut changed NOTHING on the patch because the ink is lost when the PALETTE is built, not at the texel**, and a one-entry palette is the COMMONER shape in print files; ★★★ **`Pass 130.0` (`f66a098`) — a JP2 `pclr`/`cmap` palette and a PDF `/Indexed` space are THE SAME LOOKUP and pdfce applied BOTH; applying EITHER alone is right and applying both is the ONLY way to be wrong**, which is exactly why a conformance suite ships the pair; ★★ **the prior reasoning was RIGHT FOR THE COMMON CASE and is preserved in the code rather than deleted**; ★ **§8.9 Table 89 decides it, and the DEFAULT is unchanged with its limit NAMED in the code**; ★★★ **THE STALENESS SWEEP WAS THE MAIN REQUEST AND IT FOUND SURVIVORS THE DISPATCH DID NOT NAME — three in `crates/`, including the counter's OWN DEFINITION SITE, and one number (`87` keys) that has been wrong for twelve keys**; ★★ **`FEATURES.md` row 315 is NOT moved to Implemented and NOT left Planned-as-written — it is RE-SUBJECTED to mesh shadings, because a row titled "images" sitting under Planned was the misleading half**; ★★★ **AND THE HONESTY POINT IS WRITTEN INTO EVERY ROW THAT COULD BE READ AS A COLOUR CLAIM: BOTH PATCHES PASS, AND NEITHER PASSES BECAUSE pdfce's COLOUR IS RIGHT — a self-consistency test passing is NOT a colour-accuracy claim**; ★ **`Pass 122.1` recorded UNBLOCKED-NOT-BUILT and deliberately NOT promoted**; ★ **decision `088` still owed, `R220` mint not re-weighed, both filing gates green including `--strict-tip`**; ★★★ **AMENDED THE SAME DAY (`2c3210a`, docs-only) AND THE AMENDMENT SUPERSEDES THIS HEADING'S "UNBLOCKED, NOT BUILT": Table 149 EXCLUDES A SAMPLED IMAGE FROM ROW 1 BY NAME, so a process image falls to row 2's `c_s` in ALL THREE COLUMNS and PAINTING IT NORMALLY IS THE CONFORMING BEHAVIOUR — MOST OF `Pass 122.1` MUST NOT BE BUILT**; ★★ **the genuinely owed half is `Separation`/`DeviceN` IMAGES, carved out as `Pass 130.2`, plus the already-filed spot buffer**; ★★ **ALL FOUR `crates/` SURVIVORS FIXED in `2c3210a`, and the repair commit CREATED A FIFTH**; ★ **the counter's over-inclusiveness is now recorded as a DECISION, not an oversight** — see the amendment footer at the end of this entry
+
+**Shipped:**
+
+- **`Pass 130.1`** (`5dd4083`) — `DecodedImage::ink` +
+  `CmykBuffer::composite_cmyk_image` + `Space::Indexed`'s parallel colorant
+  table; new counter `cmyk_native_image_pixels`.
+- **`Pass 130.0`** (`f66a098`) — `JPXDecode` palette resolution follows the
+  PDF dictionary; `CodecNotes::jpx_palette_left_to_pdf`.
+
+Both filed as `ROADMAP.md` *Shipped* entries, `130.1` first
+(reverse-chronological). **Neither is pushed** — `main` is deliberately ahead
+of `origin`, and pushing is its own operator act (`CLAUDE.md` rule 8).
+
+---
+
+### ★★★ THE FINDING OF THE FILING: A MANY-TO-ONE CONVERSION HAS NO INVERSE TO IMPROVE, SO THE FIX IS NOT TO CONVERT
+
+`PCS1_170` drew the print suite's failure **X**. The same red, drawn once as
+a **path** and once as the **image**, landed on **(238, 29, 35)** and
+**(225, 63, 50)**.
+
+The cause: a page compositing **in ink**, handed an image whose samples were
+**already ink**, converted them `CMYK → sRGB → CMYK` on the way in.
+
+**The obvious repair — a better inverse — is unavailable, and that is the
+transferable half.** `CMYK → sRGB` is **many-to-one**: a rich black and a
+flat `K` black land on the same screen colour, so the map is **not
+injective** and **there is no inverse to improve**. Every candidate "better
+bridge" is a *different* pair that happens to be self-consistent, not an
+inverse of the accurate one.
+
+**The measurement that turns that from an argument into a finding**, because
+it isolates the crossing from the transforms:
+
+| round-trip transform pair | the failure X on `PCS1_170` |
+|---|---|
+| `naive` — the one intent whose two legs **are** exact inverses | **absent** |
+| `calibrated` | **present** |
+| `neutral_black` | **present** |
+
+> ★★★ **A defect that disappears exactly when the pair becomes invertible,
+> and returns for every accurate pair, is a defect of the CROSSING — not of
+> either leg.**
+
+⇢ **The diagnostic to run before writing code:** configure the exactly
+invertible pair. If the symptom clears, stop looking for a better transform
+and start looking for a way not to cross.
+
+★ **This NARROWS `Pass 97.1e` rather than contradicting it.** That Pass
+established *a terminal conversion wants accuracy, a round trip wants
+invertibility*, and swapped the round-trip transform for an exactly
+invertible max-GCR pair — **true, and it reduces the error of a crossing
+that has to happen.** `130.1` adds the stronger move available when the
+value was **authored in the destination space**: the crossing does not have
+to happen at all. The `personal_rag` lesson that owns `97.1e`'s finding is
+**amended in place, not duplicated** (hard rule 4).
+
+### ★★ NOT A JPEG 2000 BUG, AND THAT WAS ESTABLISHED BEFORE ANY CODE
+
+Rendering `PCS1_170` with `page_blend_space_source = device_native` — no
+colorant buffer, no bridge anywhere — made image and square agree **to
+within one level**. The codec had read the file correctly all along.
+
+⇢ **A patch that arrives in a codec-shaped file is not evidence about the
+codec.** One ablation render rules out a whole layer, and it ran first.
+
+### ★★ THE COMMENT THAT SAID THIS WAS IMPOSSIBLE WAS RIGHT, IS KEPT, AND LOCATED THE FIX
+
+The canvas carried, and still carries:
+
+> *"THE ONE PAINT KIND THAT CANNOT GO NATIVE AT THIS PASS … `DecodedImage`
+> holds a `Pixmap`, so a `DeviceCMYK` image's samples were already flattened
+> to sRGB inside the decode loop, one call before this one. Bridging here is
+> therefore not a shortcut taken at the canvas — it is the only information
+> that reaches the canvas."*
+
+**Every word true**, and it names the fix's address: the problem was
+upstream, so the fix had to be upstream. `crates/pdfce-render/src/canvas.rs`
+keeps it under a *"THIS USED TO BE…"* header with the correction beneath —
+the same preserve-and-correct shape `130.0` used for its own prior comment,
+twice in one session.
+
+★ **A comment that correctly explains why something is impossible is a
+map to where it becomes possible.** Deleting it on the day it stops being
+true throws away the reasoning that made the change findable.
+
+### ★★ THE FIRST CUT CHANGED NOTHING ON THE PATCH
+
+`PCS1_170`'s image is not a plain `DeviceCMYK` image. Its space is
+`[/Indexed /DeviceCMYK 0 <lookup>]`, so **the ink is lost when the PALETTE
+is built, not at the texel**: every entry was resolved to `Rgb` up front.
+`Space::Indexed` now carries a **parallel colorant table built in the SAME
+loop** as the sRGB entries, so the two cannot come to disagree about which
+index means what.
+
+⇢ **That is the COMMONER shape in print files, not an edge case:** a flat
+colour ships as a one-entry palette rather than as four planes of identical
+samples. A fix scoped to "direct `DeviceCMYK` images" is scoped to the rarer
+half.
+
+### ★ TWO IMPLEMENTATION CHOICES THAT GENERALISE
+
+- **The colorants travel as TWO pixmaps (`C,M,Y` and `K,K,K`) rasterised
+  through the IDENTICAL shader, transform and path as the sRGB texels.** A
+  hand-rolled inverse-transform sampler would be a **second implementation
+  of the resampling** and would disagree at every edge. Reusing the
+  rasteriser's interpolation and coverage makes the ink land on exactly the
+  pixels the sRGB path covered. Same refusal-to-build-a-second-path as
+  `PoisonReason::ColorantBuffer`.
+- **`K` is replicated across all three channels rather than parked in one.**
+  A single channel would work and would make a **silent** failure possible:
+  a packing/unpacking disagreement about *which* channel returns zero on two
+  reads in three — **a plausible lighter image rather than an obvious
+  fault.**
+
+### Measured blast radius
+
+| measure | before | after |
+|---|---:|---:|
+| `cmyk_bridged_pixels` on `PCS1_170` | **16,216** | **0** |
+| suite patches keeping ink where they previously bridged | **0 of 51** | **17 of 51 = 33.3 %** |
+| of those 17, patches reaching **zero** bridged pixels | — | **6 of 17 = 35.3 %** |
+| `PCS1_170` square vs image | (238,29,35) vs (225,63,50) | **both (238, 29, 35)** |
+
+*(Hard rule 10: each ratio beside its per-item form, denominator named —
+**51 print-conformance patches**, one suite, one render configuration.)*
+
+★ **`PCS3_172` still bridges, and that is CORRECT** — its base is `ICCBased`
+RGB, so there is **no ink to keep**. **A counter that fell to zero everywhere
+would mean the classification was wrong, not that the feature was better.**
+
+---
+
+### ★★★ `Pass 130.0` — THE SAME LOOKUP IN TWO PLACES, AND BOTH WERE APPLIED
+
+`PCS3_172` — JPEG 2000 in an `ICCBased`-RGB-based `/Indexed` space — painted
+a **large black X** on the suite's own failure marker.
+
+The file carries the **identical** table twice: the JP2 container's `pclr`
+(one RGB entry) + `cmap` boxes, and `/ColorSpace [/Indexed <ICCBased N=3> 0
+<3-byte stream>]` whose stream holds the same three bytes — **(114, 247,
+13)**.
+
+pdfce asked the decoder to resolve the palette, so samples came back as
+**colours**; the renderer then read component 0 — the value **114** — as an
+**index**, asked a one-entry table for entry 114, found nothing, and painted
+**black**.
+
+> ★★★ **Apply either lookup alone and the answer is green. Applying both is
+> the ONLY way to be wrong.** That is what the pair is for: the file is
+> constructed so a reader who resolves in the wrong layer cannot get away
+> with it.
+
+**§8.9 Table 89 decides it**: with `JPXDecode`, if `/ColorSpace` is present
+then *"colour space specifications in the JPEG2000 data shall be ignored"*.
+A `pclr`/`cmap` pair **is** such a specification.
+
+★★ **The prior reasoning was RIGHT FOR THE COMMON CASE and is preserved in
+the code rather than deleted:**
+
+> *"PDF has its own `Indexed` colour space and §7.4.9 permits one, but a JPX
+> **internal** palette is not that: leaving it unresolved would hand the
+> renderer grayscale index values with nothing to look them up in."*
+
+**Every clause holds when the dictionary supplies no `/Indexed` space.** When
+it does, the renderer has precisely what to look them up in.
+
+★ **The DEFAULT is unchanged and the limit is NAMED in the code**: resolution
+is disabled only where an `/Indexed` array is **visible from the codec
+layer**. A `/ColorSpace` written as a **NAME** resolves through page
+resources this layer does not have and **should not acquire**, so it keeps
+the old behaviour. A JPX image with a palette **and** a named `/Indexed`
+resource would still double-resolve — **no such file is known; the shape is
+checkable if one appears.**
+
+★★ **The wrong first hypothesis is recorded beside the right answer**: that
+`/Decode [0.0 255.0]` was being applied. It is not — `/Decode` is correctly
+ignored for `JPXDecode`, and pdfce already had that right. Recorded because
+**an index-looking number reaching a colour-looking consumer invites a
+`/Decode` theory**, and the next reader will form it too.
+
+★★ **The fixture's palette carries 256 entries and not one, and the reason is
+recorded because it LOOKS LIKE THE BUG UNDER TEST.** A one-entry table puts
+almost every index out of range, the decoder refuses the file, and *"palette
+not applied"* is **both the fix's intended behaviour and that refusal's
+symptom** — separated **only by the error text**.
+
+★★ **And the non-`/Indexed` test asserts LESS than its first draft did.** The
+draft claimed *"1 channel in, 3 out"*, reasoned from the `cmap` box; the
+**measured** answer is **1**. Asserting a number derived from reasoning
+rather than from a run pins an expectation, not a fact. It now pins the
+**decision** and **says what is unestablished.**
+
+**Result:** black X → pale green X; `codec_geometry_mismatch` **1 → 0**; with
+the colorant buffer disabled the image renders **(114, 247, 13) BYTE-EXACT**
+to the shared entry — *which is what proves the palette is applied exactly
+once, rather than that it looks better.*
+
+---
+
+### ★★★ THE HONESTY POINT, WRITTEN INTO EVERY ROW THAT COULD BE READ AS A COLOUR CLAIM
+
+**Both patches now PASS, and neither passes because pdfce's colour is
+right.**
+
+| | pdfce | Acrobat |
+|---|---|---|
+| `PCS1_170` square | **(238, 29, 35)** | (227, 0, 11) |
+| `PCS1_170` image | **(238, 29, 35)** | (227, 0, 11) |
+| `PCS3_172` image | **(114, 247, 13)** | (77, 175, 46) |
+
+pdfce now **agrees with itself**, which is exactly what these patches test
+(*"No X must be visible"*). It **still does not agree with Acrobat**, because
+the **ICC profile is unapplied** — `iccce`'s side of **decision 064**, where
+pdfce owns *"what a PDF's colour components mean"* and `iccce` owns
+**conversion**.
+
+> ★★★ **A SELF-CONSISTENCY TEST PASSING IS NOT A COLOUR-ACCURACY CLAIM**, and
+> a passing conformance patch is precisely the shape that invites the
+> misreading. Stated in **both `ROADMAP.md` entries**, in **`FEATURES.md` rows
+> 228 and 315** — the two that now assert native-ink compositing — and in the
+> outbound note, rather than left for the reader. *(Rows 230, 313 and 316
+> describe gaps rather than results, so the clause would be padding there and
+> was not added; `FEATURES.md`'s header forbids exactly that.)*
+
+★ **Same species as the 265th filing's saturated-corpus item, from a third
+side.** That one: a number that agrees and **cannot** mean what it looks like
+it means. This one: a **test** that passes and cannot mean what it looks like
+it means. Both are instruments whose reading needs its scope stated beside
+it.
+
+---
+
+### ★★★ THE STALENESS SWEEP — searched for the CLAIM, not for the string
+
+**Trigger, twice over (hard rule 11):** `cmyk_bridged_pixels` **changed
+meaning**, and a **capability** — "images cannot composite in ink" — stopped
+being true. Swept `docs/`, `crates/`, `tools/`, `fixtures/`, `README.md` and
+`docs/core-api/` for the claim in every phrasing: prose, table labels, column
+headers, `println!`/`eprintln!` strings, struct-field rustdoc, `FEATURES.md`
+rows — **not only for the literal counter name.**
+
+| where | what it says | disposition |
+|---|---|---|
+| `docs/FEATURES.md:228` (Subtractive colorant buffer) | *"images and shadings bridge through sRGB"*; *"**Five** counters"* | **EDITED THIS FILING** — CMYK images composite natively; **six** counters, with the complement stated |
+| `docs/FEATURES.md:230` (Blend modes) | *"Images and shadings still reach the buffer as resolved sRGB and are bridged back per pixel"* | **EDITED** — narrowed to mesh shadings and images with no ink |
+| `docs/FEATURES.md:313` (per-colorant spot buffer) | *"images have no overprint path at all **until per-sample colorants exist**"* | **EDITED** — prerequisite **MET**, feature **NOT BUILT**, `overprint_images_unsupported` still **4** on `PCS1_010` |
+| `docs/FEATURES.md:315` (native colorant paths for images) | whole *Planned* row, reason given as *"because `DecodedImage` holds a `Pixmap`"* | **RE-SUBJECTED** — see the judgement below |
+| `docs/FEATURES.md:316` (per-sample image overprint) | *"Needs the colorant buffer extended to image samples"* | **EDITED** — unblocked-not-built, ★ **found by reading the row below the one I was sent to**, not named in the dispatch |
+| `docs/ARCHITECTURE.md:1787` (crate layout, `pdfce-render`) | *"**images and shadings bridge through sRGB**"* | **EDITED** — dated amendment in place, prior wording quoted (`R215` (d)) |
+| `docs/ARCHITECTURE.md:24434` (§12, colorant-buffer decision) | *"**five** keys appended **last**"* | **AMENDED** — count kept as the audit trail of what **that** decision appended; a dated note records **six**, and that one of the five changed meaning |
+| `docs/ARCHITECTURE.md:4913/4924/4925` | *"59 of the 87 keys"*, *"59 → 87 of 87"* | **historical, dated, about `bd244d9`/`ea413a4`.** Left alone — audit trail |
+| `docs/ROADMAP.md` `Pass 97.1k` Backlog | *"`DecodedImage` holds a `Pixmap`"* + an acceptance criterion of *"`cmyk_bridged_pixels` reaches 0"* | **AMENDED** — and the **criterion is flagged as wrong-as-written** under `R215`; see below |
+| `docs/ROADMAP.md` `Pass 122.1` Backlog | *"Depends on `Pass 97.1k`"* | **AMENDED** — dependency discharged, entry **not** promoted |
+| `docs/ROADMAP.md:11648`, `:81752`, `docs/SESSION_LOG.md:55619` | the same claim inside **prior dated entries** | **audit trail.** Left alone — these record what was true when filed |
+| `docs/core-api/` (all files) | **no bridging claim and no `cmyk_*` counter** in any form | clean |
+| `README.md`, `crates/pdfce-gui/`, `fixtures/` | no claim in any form | clean |
+| `docs/NEXT_SESSION.md` §4 + §3 | engineer-owned — **reported, not edited**; see below | reported |
+
+#### ★★★ THREE `crates/` SURVIVORS — reported, not edited (hard rule 11 scope)
+
+**All three are the same claim in three places, and the dispatch named
+none of them.** The dispatch pointed at `FEATURES.md:313`'s copy; **the
+copy that will be read by whoever actually builds the feature is in the
+code.**
+
+1. **`crates/pdfce-cli/src/main.rs:322`** — the `overprint_images_unsupported`
+   per-key table row: *"It cannot be fixed at the call site: per-sample
+   overprint needs per-sample colorants, and **an image's colorant identity
+   is gone by the time its texels composite**."* ★ **The second clause is now
+   false for `DeviceCMYK` images**, and the sentence reads as *"this is
+   impossible"* when the true statement is *"this is unbuilt"* — **the more
+   expensive misreading of the two**, because it tells a reader not to try.
+2. **`crates/pdfce-render/src/interpret.rs:526`** — the counter's **own field
+   rustdoc**, under the heading *"# Why it cannot be fixed where it is
+   counted"*: *"pdfce's buffer is device sRGB — the image's own colorant
+   identity is gone by the time its texels are composited."* ★★ **This is the
+   DEFINITION SITE**, the place a reader arrives at without meaning to (the
+   same argument `crates/pdfce-render/src/color.rs:685` makes about itself).
+   And *"pdfce's buffer is device sRGB"* is separately stale — the colorant
+   buffer is not.
+3. **`crates/pdfce-render/src/cmyk_buffer.rs:718`** — `composite_srgb`'s
+   *"# Why a bridge exists at all, stated plainly"*: *"Images arrive at a
+   canvas as decoded sRGB texels (`DecodedImage` holds a `Pixmap`) … Neither
+   can hand this buffer authored colorants **at `Pass 97.1e`**."* ⇢ **A soft
+   survivor, and it is reported as one rather than dressed up.** The *"at
+   `Pass 97.1e`"* dates it, so it is not false. But it now sits **directly
+   above `composite_cmyk_image`, which does exactly what it says cannot be
+   done**, and a reader of the two together will take the leading clause as
+   current.
+
+#### ★★ A FOURTH SURVIVOR, A DIFFERENT SPECIES — A NUMBER, NOT A CAPABILITY
+
+**`crates/pdfce-cli/src/main.rs:149`** — *"★ **All 87 keys are now listed**,
+and the placeholders are uniform"*, and **`:169`** — *"At 87 keys that scheme
+had exhausted the alphabet"*.
+
+**The live count is 99.** Measured here: `python
+tools/check-metrics-line-contract.py` → `OK — 99 keys; the template matches
+the println and every key has a table row`.
+
+★★ **The gate is GREEN and the prose is WRONG, and that is the finding.** The
+gate holds the three copies **in agreement with each other**; **nothing holds
+the narrative sentence that counts them.** The count has drifted by **12 keys
+= 13.8 % of 87** since `ea413a4` wrote it, invisibly, because the number is
+in a paragraph *about* the contract rather than *in* the contract.
+
+⇢ **`R212`'s own instrument has an ungated (N+1)th copy: the prose that
+states its size.** This is `R213`'s shape (*a magnitude claim is a claim
+about one quantity*) landing on the very file `R212` was minted over. **Not
+promoted to a rule candidate at n = 1**, and not edited — `crates/` is the
+engineer's.
+
+★ *`docs/ROADMAP.md:9277` also shows `87 keys`, but as a **captured
+transcript** of a past gate run. That is a record of an observation, not a
+claim about now; left alone deliberately.*
+
+#### `docs/NEXT_SESSION.md` — engineer-owned, REPORTED not edited
+
+- **§4** — *"Mesh shadings bridge through sRGB … Queue item 3"* is **still
+  true and needs no change**; it is now the **whole** of that gap rather than
+  half of it. ★ **§4 has no images-bridge item to correct** — checked
+  explicitly, because an absent stale item is the kind a sweep reports as
+  "clean" without having looked.
+- **§3 item 5** — *"Per-image overprint (`Pass 122.1`) — the image sibling of
+  `122.6`"* is now **unblocked**; the prerequisite sentence that ranked it
+  below `97.1k` no longer applies to `DeviceCMYK` sources.
+- **§3 item 3** — *"Mesh shadings in ink — the mesh half of `Pass 97.1k`"*
+  is now the **only** remaining half of `97.1k`, which raises its standing in
+  the queue without any argument about it having changed.
+
+### ★★ THE `FEATURES.md` ROW-315 JUDGEMENT, ARGUED BECAUSE THE DISPATCH ASKED FOR A JUDGEMENT
+
+The dispatch offered two options — move to *Implemented* with a narrowed
+residual, or stay *Planned* re-scoped — and read the second as misleading.
+**Agreed that it is misleading, and the reason locates a third option that is
+better than either.**
+
+**The misleading part was never the section; it was the SUBJECT.** A row
+titled *"Native colorant paths for **images**"* sitting under *Planned*
+asserts that images have no colorant path — which is now false. Moving that
+same row to *Implemented* would assert the opposite over-broadly, because
+**mesh shadings, which the row also covers, are untouched.**
+
+**So the row is RE-SUBJECTED, not re-sectioned:** it is now *"Native colorant
+path for **mesh shadings** on a subtractive page"* and stays in *Planned*,
+where it is **true**. The delivered image half is recorded in the
+*Implemented* **Subtractive colorant buffer** row (228), which already
+enumerates what composites natively in ink and is where a scanner looks.
+
+★ **This keeps the file a SCAN.** Splitting out a third row would have grown
+the table to say what row 228 now says in one clause — and `FEATURES.md`'s
+own header forbids exactly that.
+
+★★ **And the row states the non-gap explicitly:** *an image with no ink to
+keep correctly still bridges — that is a classification, not a shortfall.*
+Without that sentence the next reader files a bug against `PCS3_172`.
+
+### ★ `R215` — AN ACCEPTANCE CRITERION THAT WOULD NOW BE A TRAP
+
+`Pass 97.1k`'s acceptance read *"`cmyk_bridged_pixels` and
+`cmyk_unbridged_images` both reach **0** on a subtractive page carrying an
+image and a shading."*
+
+**That is no longer satisfiable and would fail a correct implementation**: an
+`ICCBased`-RGB image has **no ink to keep**, so it bridges by design.
+Flagged in the entry, with the measurable replacement stated
+(`cmyk_native_image_pixels` non-zero wherever the source is `DeviceCMYK`).
+**Not silently rewritten** — the prior criterion is quoted, per `R215` (d).
+
+⇢ **Same shape as `R215`'s founding case** (*"11 of 11 forms"*): a criterion
+whose target number was chosen before the classification was understood, so
+meeting it would be the regression.
+
+---
+
+### ★ STANDING-RULE AND DECISION DISPOSITION
+
+- **No standing rule minted.** Ceiling stays **`R219`**. The `R220` slot
+  remains held for the 265th filing's candidate (*a shipped default knowingly
+  off its best-evidenced value*); **this filing found no second occurrence of
+  it** and did not go looking for a substitute. The
+  gate's-own-anchor finding above is **n = 1** and went to the RAG, not to a
+  rule.
+- **No decision minted.** Ceiling stays **`087`**; **`088` is still OWED**
+  (the `redact-mark` exit-code question, carried from the 263rd, 264th and
+  265th). ★ **A candidate was weighed and left to the engineer:** *"a value
+  authored in the destination space is composited without conversion; where
+  no inverse exists, the crossing is removed rather than improved"* is
+  arguably an architectural invariant rather than a Pass detail — but
+  **taking `088` for it would displace a number that has been earmarked for
+  three filings**, and minting is the engineer's act. Recorded here as a
+  candidate with no number.
+
+---
+
+**Cross-project channel — named, because a deliverable recorded only in the
+producing tree has been FILED, not handed off:**
+
+**Outbound, written this session:**
+
+- `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`
+  **`2026-08-26-cmyk-images-keep-their-ink-and-one-counter-changed-meaning.md`**
+  — **present, 5,053 B, 08:54** (`ls -l`, checked here). Four things: the new
+  counter `cmyk_native_image_pixels`; that **`cmyk_bridged_pixels` CHANGED
+  MEANING and will drop sharply** with nothing having regressed; that **the
+  ICC disclosure must NOT be softened** — pdfce still applies no profile, and
+  a passing patch is not permission to relax that sentence; and that
+  **per-image overprint is unblocked but unbuilt.**
+
+**RAG escalations this filing — ONE NEW, TWO AMENDED, all indexed in the same
+session (Quaternary/Quinary discipline). The dispatch asked which I chose for
+each of its two candidates; both answers are below.**
+
+1. **`C:\personal_rag\pdf\lesson_20260826_jpx_pclr_cmap_and_pdf_indexed_are_the_same_lookup_apply_exactly_one.md`**
+   — **NEW, format-spec / HIGH.** The dispatch's candidate (a). **Written as
+   its own file**, because no existing lesson owns the JPX-container-versus-
+   PDF-dictionary boundary: the nearest neighbours are about palette *depth*
+   (`hayro_jpeg2000_data_u8_shift_overflow_palette_depth`) and palette *entry
+   width* (`indexed_palette_entry_must_be_as_wide_as_its_base_space`), which
+   are different questions with the same nouns. Carries the §8.9 Table 89
+   citation, the named default-limit, **both fixture traps** (the one-entry
+   palette whose failure is indistinguishable from the fix; the channel count
+   asserted from reasoning instead of a run) and the **wrong first
+   hypothesis**.
+2. **`C:\personal_rag\pdf\lesson_20260821_terminal_conversion_wants_accuracy_round_trip_wants_invertibility.md`**
+   — **AMENDED, not duplicated** (hard rule 4). The dispatch's candidate (b),
+   and it asked whether this was *"too general to be worth a file"*. ★ **It is
+   not too general — it is too CLOSE to something already on disk.** That
+   lesson already owns the round-trip subject and already tells you to pick
+   the invertible transform. **What it did not say is that a many-to-one
+   conversion has no inverse to pick**, so its advice reduces the damage of a
+   crossing while a stronger move — not crossing — was available all along. A
+   separate file would have split one subject and left the *weaker* remedy as
+   the one with the index entry. The amendment carries the three-intent
+   isolation table, the palette-not-texel corollary, the two-pixmaps and
+   replicated-`K` implementation notes, the 17-of-51 blast radius, and the
+   self-consistency-is-not-accuracy limit.
+3. **`D:/dev/rag/rust/a_contract_with_a_tested_copy_and_a_published_copy_drifts_in_the_published_one.md`**
+   — **AMENDED** (`R212`'s own file). Not on the dispatch's list; **written
+   because the reword produced a genuinely new sub-finding.** `130.1` did not
+   append to the metrics line, it **reworded** it — the gate went red, and
+   because its message **named its own anchor constant**, the repair was two
+   lines instead of a hunt. ⇢ *A consistency gate's anchor is an **(N+1)th
+   copy of the contract** and the one copy with no gate above it; printing
+   its identifier and location in the failure message is the cheapest
+   available substitute for gating the gate.* Costs one f-string.
+
+**All three index files updated in the same session:**
+`C:\personal_rag\pdf\index.md`, `C:\personal_rag\index.md` (master, with a
+newest-first block) and `D:\dev\rag\rust\index.md`.
+
+★ **What was deliberately NOT escalated:** the *"a self-consistency test
+passing is not a colour-accuracy claim"* line has **no file of its own**. It
+is a limit on two findings that already have homes and is stated under
+*Limits* in both; a third file would make it findable in a place that does
+not carry the measurements it qualifies.
+
+★ **Flag, not an edit (hard rule 9 / the librarian's flag-don't-edit rule):**
+`C:\personal_rag\` — both the subject index and the master — contains the
+print suite's **name and patch filenames in plain text**, in entries
+predating this filing. `tools/check-suite-name-absent.py` gates **the pdfce
+work tree only**, so those occurrences are outside its reach by construction
+and were **not** introduced here. **Everything written this filing uses the
+`PCS` keys.** Whether the RAG tree should be brought under the same
+convention is the operator's call, not this role's.
+
+**Ledger (measured here, commands named):**
+
+| item | value |
+|---|---|
+| `git rev-parse --short HEAD` | **`5dd4083`** |
+| `git status -sb` | **`## main...origin/main [ahead 5]`** |
+| `git remote -v` | `origin https://github.com/KenM76/pdfce.git` (**public** — `CLAUDE.md` rule 8) |
+| newest backup bundle **by mtime** | `D:\Dev\pdfce-backups\pdfce-20260826-0346-61a9e5b-full.bundle`, **44,867,984 B**, mtime **2026-08-26 03:46** |
+| that bundle's `refs/heads/main` (`git bundle list-heads`) | **`61a9e5b`** |
+| commits since (`git rev-list --count 61a9e5b..HEAD`) | **5** — `7ad8b00`, `a3185ba`, `86d9214`, `f66a098`, `5dd4083`. **The bundle is 5 commits stale.** Measured, not inferred (hard rule 8) |
+| ★ **the 265th filing's backup trap is REPAIRED, and it is reported because a fixed trap left unreported gets re-reported** | that filing found a file **named** `…-0630-…` with mtime **02:46**, so **filename order and mtime order disagreed**. The directory now holds `pdfce-20260826-**0246**-**81d1e30**-full.bundle` and `pdfce-20260826-**0346**-**61a9e5b**-full.bundle` — **names carry the true time AND the head hash**, so name order, mtime order and history order now agree. ⇢ *The cheapest fix for "sorting by the wrong key" is to put the right key in the name.* Still verify with `git bundle list-heads` |
+| `check-commits-filed.py` **before** these edits | **exit `1`** — `f66a098` in no filing; `5dd4083` excused as the **DEFERRED** tip |
+| `check-passes-filed.py` **before** these edits | **exit `1`** — `UNFILED f66a098 Pass 130.0`, `DEFERRED 5dd4083 Pass 130.1` |
+| `check-commits-filed.py` **after** | **exit `0`** — see the gates table |
+| `check-commits-filed.py --strict-tip` **after** | **exit `0`** — the tip is filed on the merits |
+| `check-passes-filed.py` **after** | **exit `0`** |
+| `check-suite-name-absent.py` | **exit `0`**, `clean` — run **after** every edit in this filing |
+| `check-metrics-line-contract.py` | **exit `0`**, `OK — 99 keys` — ★ and this is the run that produced the `87`-vs-`99` survivor above |
+| `tools/commits-filed-baseline.txt` | **UNTOUCHED**, as instructed |
+| decisions ceiling | **`087`** (**`088` still OWED**, carried from the 263rd) |
+| standing-rule ceiling | **`R219`** — no mint; the `R220` slot stays held |
+| Pass-ID ceiling | **`130`**, next free **`130.2`** |
+| open operator questions ceiling | **`(bl)`**, next free `(bm)` |
+| `crates/` survivors found | **4** (3 capability claims + 1 count) — **all reported, none edited** |
+| `docs/` locations edited | **11** — `ROADMAP.md` **4** (2 new *Shipped* entries + 2 *Backlog* amendments), `FEATURES.md` **5** (rows 228/230/313/315/316), `ARCHITECTURE.md` **2** (crate-layout block, §12 decision note). Plus this `SESSION_LOG.md` entry |
+
+**Gates — stated with their scope, because "green" has one.** All runs are
+against the working tree **after** these `ROADMAP.md`, `FEATURES.md`,
+`ARCHITECTURE.md` and `SESSION_LOG.md` edits and **before any commit**.
+
+| run | output | exit |
+|---|---|---|
+| `python tools/check-commits-filed.py` | `clean` over the whole history; **no `DEFERRED` line** | **`0`** |
+| `python tools/check-commits-filed.py --strict-tip` | **byte-identical** | **`0`** |
+| `python tools/check-passes-filed.py` | `clean` + the pre-existing informational multi-commit `note` lines | **`0`** |
+| `python tools/check-suite-name-absent.py` | `clean — nothing in the work tree, staged or not, names it` | **`0`** |
+
+★ **The two `check-commits-filed.py` runs agreeing is the fact worth having,
+not the exit code.** A plain pass can mean *"clean, or the one unfiled commit
+is the tip"*; a strict pass means **"clean, with no commit excused by any
+mechanism."** Both `f66a098` and `5dd4083` are **code** commits and both are
+filed on the merits.
+
+★★ **And the commit that will carry this filing is docs-only**, so the strict
+run keeps passing after it lands — `git status --short` shows `docs/` only,
+nothing under `crates/`, `tools/`, `fixtures/`, `fuzz/` or `.github/`.
+
+**Still in flight:**
+
+- **Decision `088`** — the `redact-mark` exit-code question — **owed for four
+  filings now.**
+- **`Pass 127.2`** — the `redact-mark` `stdout` summary-line gap — in
+  *Backlog*, unblocked, still the ranked owed work.
+- **★ FOUR `crates/` SURVIVORS, reported above, owed to the engineer in their
+  own commit** — three copies of *"an image's colorant identity is gone"* (one
+  of them the counter's definition site) and the `87`-vs-`99` key count.
+- **`Pass 122.1` (per-image overprint) — UNBLOCKED, NOT BUILT.** The
+  prerequisite fell this session; **the remaining work is the whole feature.**
+  ★ Recorded twice, in `ROADMAP.md` and `FEATURES.md`, because *a prerequisite
+  falling is the moment an entry is most likely to be mistaken for shipped* —
+  the sentence explaining why it could not be done has just stopped being
+  true.
+- **`Pass 97.1k`'s mesh half** — now the entry's **only** residual, and its
+  old acceptance criterion is flagged as unusable.
+- **The clean control's 91.5 % OCR recall** — still unexplained, carried from
+  the 262nd, with the saturation companion from the 265th.
+- **pdfceGUI's small ask** — a `fonts_without_unicode()` /
+  `unsearchable_fonts` total on `TextDiagnostics` — carried from the 263rd.
+- **The `git ls-remote` lexicographic finding** — still homeless; this role
+  still recommends a new `D:/dev/rag/git/` subdir.
+- **The `--all-features` question on the cross-target CI job** — unanswered;
+  the engineer's call.
+- **The version-bump question from the 265th** — `v0.12.0` is cut; `129.1`
+  changed a shipped default's value and `130.0`/`130.1` change rendered
+  output. Still the engineer's, still unanswered.
+
+**For next session:**
+
+1. **Take a fresh backup bundle — 5 commits behind.** ★ The naming trap is
+   fixed (names now carry time **and** head hash), so filename order is
+   trustworthy again; still confirm with `git bundle list-heads`.
+2. **Fix the four `crates/` survivors in one commit.** The
+   `interpret.rs:526` one first — it is the counter's definition site and it
+   tells a reader the feature is *impossible* when it is merely *unbuilt*.
+3. **Mint decision `088`** — owed for four filings.
+4. **`Pass 127.2`** — still the ranked owed work in *Backlog*.
+5. **Decide whether per-image overprint (`Pass 122.1`) moves up the queue**
+   now that its dependency is discharged for `DeviceCMYK` sources. It is a
+   ranking question, not a scoping one; the entry is already diagnosed.
+6. **Decide whether the `130.1` composition rule earns a decision number**,
+   and if so whether it takes `088` or waits behind the `redact-mark` one.
+
+
+---
+
+### ★★★ AMENDMENT to the 266th filing — 2026-08-26, same day, same session: **READING TABLE 149 SUPERSEDES THE "UNBLOCKED, NOT BUILT" HALF OF THIS ENTRY**
+
+**Amended in place rather than opened as a 267th filing, and the reason is the
+finding itself.** Every claim corrected below was made *in this entry*, hours
+old and **uncommitted**; a separate entry would leave the too-generous version
+holding the heading and the correction sitting under a different date, which is
+the exact split that made *"unblocked, not built"* travel in the first place.
+The prior wording is **quoted, not deleted** (`R215` (d)) wherever it left this
+tree — which it did, in the outbound note.
+
+**New commit, named here so `check-commits-filed.py` stays green:**
+
+- **`2c3210a`** — *"docs: Table 149 makes overprint INERT for a process image,
+  so most of what we counted is not a shortfall"*. **Documentation only, no
+  behaviour change**; three files, all under `crates/`
+  (`pdfce-cli/src/main.rs`, `pdfce-render/src/interpret.rs`,
+  `pdfce-render/src/cmyk_buffer.rs`). It touches `crates/`, so the gate treats
+  it as a code commit and requires this citation.
+
+---
+
+#### ★★★ THE FINDING: A SAMPLED IMAGE IS EXCLUDED FROM TABLE 149'S FIRST ROW **BY NAME**
+
+The operator asked for per-image overprint to be **built** now that colorants
+exist. **Reading the table first says most of it must not be.**
+
+**Table 149's first row is scoped, verbatim: `DeviceCMYK, specified directly,
+NOT IN A SAMPLED IMAGE`.** An image therefore falls to the **SECOND** row —
+*"any process colour space (**including other cases of `DeviceCMYK`**)"* —
+whose process-component entry is **`c_s` in all three columns**: `OP false`,
+`OP true`/`OPM 0`, and `OP true`/`OPM 1` alike.
+
+> ★★★ **So for a `DeviceCMYK` image, PAINTING IT NORMALLY IS THE CONFORMING
+> BEHAVIOUR**, and applying row 1's value-dependent rule to one would be a
+> **DEVIATION rather than a repair.**
+
+`PCS1_010` — which contributes **4** to `overprint_images_unsupported`, the
+number this filing quoted five times as evidence of an owed feature — carries
+exactly that shape, `[/Indexed /DeviceCMYK 0 …]`. **Verified by reading its
+image dictionary, not inferred from the patch title.**
+
+#### ★★ WHAT THIS FILING GOT WRONG, IN THE OTHER DIRECTION FROM THE ERROR IT WAS SENT TO FIX
+
+This entry's sweep correctly found four documents saying the feature was
+**impossible** and corrected them to **unblocked**. **The correction
+overshot.** *"Unblocked"* was read as *"owed"*, and it is not: the prerequisite
+genuinely fell, and **most of the feature behind it still must not be built.**
+
+| filed earlier in this entry | corrected to |
+|---|---|
+| `FEATURES.md` row 316 — *"**UNBLOCKED, NOT BUILT since `Pass 130.1`**"*, whole per-image feature owed | **RE-SCOPED** to `Separation`/`DeviceN` images only, retitled, `Pass 130.2` assigned |
+| `FEATURES.md` row 313 — *"**Images have no overprint path — UNBLOCKED, NOT BUILT**"* | **RE-STATED**: this row's image debt is its **own subject, the SPOT row**; the process half is inert |
+| `FEATURES.md` row 233 | **clause added** — the counter's non-zero value is not a shortfall claim |
+| `ROADMAP.md` `Pass 122.1` Backlog amendment — *"the remaining work is the whole feature"* | **SECOND AMENDMENT** added beneath, first one kept intact |
+| `ROADMAP.md` `Pass 130.1` *Shipped*, **What this UNBLOCKS** | **correction block** added beneath the original paragraph, which is kept because the outbound note was drafted from it |
+| `ARCHITECTURE.md` § counter rationale | **dated addition** — the over-inclusiveness is a DECISION |
+
+⇢ **THE TRANSFERABLE HALF, and it is about the shape of the check rather than
+about overprint.** Every verification in this filing's sweep ran against
+**pdfce's own plumbing** — the call-site count, the counter's value, the
+prerequisite's presence — and **not one ran against the CLAUSE**. Plumbing can
+tell you a feature is *absent*; **only the clause can tell you it is *owed*.**
+A prerequisite falling is the moment an entry looks shipped (this filing said
+so, correctly) **and equally the moment it looks owed** (this filing did not
+say so, and was wrong by most of a feature).
+
+#### ★★ WHAT IS GENUINELY OWED — TWO NARROWER THINGS
+
+1. **`Separation`/`DeviceN` images — now `Pass 130.2`** (Backlog, filed this
+   amendment; ID assigned by this role under the engineer's explicit
+   delegation in the dispatch). Table 149's **third** row is **not** inert: a
+   process component takes **`c_b` under `OP true`**, so an overprinting
+   `DeviceN` image must **PRESERVE the backdrop**. ★ Its rules depend on
+   colorant **NAMES alone**, so they resolve **once per image**, exactly as
+   `Pass 122.6`'s shading path already does — the mechanism is shipped, one
+   object class over. **The blocker is narrower than "colorants":**
+   `Pass 130.1` captures them only for a **`DeviceCMYK` base**, and a
+   `DeviceN` base's **tint-transform output is not carried**.
+
+   **Measured** (hard rule 10 — both figures beside each other, denominator
+   named: three patches, one suite, one render configuration):
+
+   | patch | `overprint_images_unsupported` | `cmyk_native_image_pixels` |
+   |---|---:|---:|
+   | `PCS1_190` | **2** | **0** |
+   | `PCS1_191` | **2** | **0** |
+   | `PCS1_192` | **2** | **0** |
+
+   ★★ **The `0` is the load-bearing column, and after this amendment it is
+   the ONLY one that carries evidence.** A non-zero
+   `overprint_images_unsupported` no longer distinguishes an owed case from an
+   inert one — it counts both. It is `cmyk_native_image_pixels = 0` **beside**
+   it that says these images reached the buffer with **no ink of their own**.
+   ⇢ *When a counter is deliberately over-inclusive, every future citation of
+   it needs a second number to mean anything.*
+
+2. **Spot colorants under any process source** — the one Table 149 row that
+   **is** non-inert for a `DeviceCMYK` image (`c_b` under `OP true`). pdfce has
+   **four process planes and no spot planes**, so there is **no spot backdrop
+   to preserve**. That is the **n-channel buffer**, already filed as
+   `FEATURES.md` row 313 and unchanged in scope by any of this.
+
+#### ★★ THE FOUR `crates/` SURVIVORS ARE FIXED — AND THE REPAIR COMMIT CREATED A FIFTH
+
+All four reported by this role earlier in this entry are corrected in
+`2c3210a`. **Verified here by `git show 2c3210a`**, not taken from the commit
+subject.
+
+| survivor | disposition in `2c3210a` |
+|---|---|
+| `crates/pdfce-render/src/interpret.rs` — the counter's own field rustdoc, heading *"# Why it cannot be fixed where it is counted"* | **REPLACED** by the Table 149 reading; prior heading and paragraph **quoted in place** so the change is legible |
+| `crates/pdfce-cli/src/main.rs` — the per-key table row | **REPLACED**, same correction, for CLI readers |
+| `crates/pdfce-render/src/cmyk_buffer.rs` — *"Why a bridge exists at all"* | **NARROWED, not rewritten** — it was dated to `Pass 97.1e`, so it was never false |
+| `crates/pdfce-cli/src/main.rs` — *"All 87 keys are now listed"* / *"At 87 keys that scheme had exhausted the alphabet"*, live count **99** | **REWORDED TO STATE NO NUMBER AT ALL** — not corrected to `99` |
+
+★★★ **THE `interpret.rs` ONE MATTERED MOST, AND THE REASON GENERALISES.** It
+is the **DEFINITION SITE** — the place a reader arrives at *without meaning
+to*, following the counter's name from a metrics line. And its heading said
+**IMPOSSIBLE** when the truth was **UNNECESSARY** (for a process image) or
+merely **UNBUILT** (for a `DeviceN` one).
+
+> ⇢ **A comment that says IMPOSSIBLE when the truth is UNNECESSARY or UNBUILT
+> is more expensive than one that is merely stale: it CLOSES A QUESTION, where
+> a stale comment only AGES.** A reader who meets *"out of date"* re-derives;
+> a reader who meets *"cannot be done"* stops.
+
+★ **On the `87` → no-number choice: agreed, and it is the more durable repair.**
+Correcting the digit to `99` would have re-created the (N+1)th copy one value
+later — the same drift, reset to zero. **A count in prose beside a gated list
+is a copy with no gate above it**, and the only repair that survives the next
+append is to **stop stating the count in prose**. Removing a claim is stronger
+than making it true, when nothing will keep it true. ★ *This is the second
+number in two filings repaired by deleting rather than correcting it; the
+first was `R215`'s "11 of 11 forms".*
+
+##### ★★ A FIFTH `crates/` SURVIVOR, **CREATED BY THE REPAIR ITSELF** — reported, not edited (hard rule 11 scope)
+
+**`crates/pdfce-render/src/cmyk_buffer.rs:721`** (verified in the working tree
+by `grep -n "stated plainly"`, at `HEAD` = `2c3210a`):
+
+```
+/// instead, immediately above, and crosses nothing., stated plainly
+```
+
+The old heading read `# Why a bridge exists at all, stated plainly`. The
+narrowing shortened the heading to `# Why a bridge exists at all` and inserted
+a new paragraph beneath it — and **`, stated plainly` was carried down and
+welded onto the end of the new sentence**, after its full stop. **A one-line
+fix; rendered rustdoc shows it.**
+
+⇢ **A staleness repair is an edit like any other, and the sweep that follows a
+correction should include the correction.** This filing swept `crates/` for a
+stale *claim* and reported four; the commit that fixed all four introduced a
+fifth defect **in one of the same four spans**, and it was found only because
+this amendment re-read the diff rather than trusting the commit subject.
+★ *Same species as this role's own hard-rule-11 corollary — "check a draft
+claim of your own against live source" — pointed at the engineer's repair
+instead of at the librarian's draft.* **n = 1; not proposed as a rule.**
+
+#### ★★ THE COUNTER IS OVER-INCLUSIVE **BY DECISION**, AND THAT IS NOW ON THE RECORD
+
+`overprint_images_unsupported` is **not** narrowed to the two genuinely owed
+cases, and this is **a decision, not an oversight**. Recorded in
+`ARCHITECTURE.md` beside the counter's original rationale, precisely so a
+future session does not "fix" it.
+
+- **Its question is unchanged and stays worth asking:** *"was the composite
+  offered this object class?"* — a fact about pdfce's **plumbing**, true and
+  useful whether or not the clause would have changed a pixel.
+- **What changed is the READING**, and both doc sites now say so: a non-zero
+  value is **no longer evidence of a wrong picture**.
+- ⇢ **A PLUMBING counter and a CONFORMANCE counter are different instruments.**
+  Narrowing the first into the second **destroys the census** and cannot be
+  undone from the record. The scope gets written beside the instrument; the
+  instrument keeps its scope. Same shape as `blend_space_subtractive`, already
+  documented as *"a CENSUS OF EXPOSURE, not a shortfall"*.
+
+#### ★★ AN `R215` TRAP THIS AMENDMENT FOUND — THE SECOND IN THIS FILING
+
+`Pass 122.1`'s acceptance criterion reads *"`overprint_images_unsupported`
+reaches **0** on the suite"*. **It is now unsatisfiable and would fail a
+correct implementation** — the counter deliberately keeps counting the inert
+process images Table 149 says are already right. **Quoted, not silently
+rewritten**, per `R215` (d), with the replacement stated in the entry.
+
+⇢ **Both `R215` instances in this filing** — this one and `Pass 97.1k`'s
+*"`cmyk_bridged_pixels` reaches 0"* — have the **identical cause: the
+criterion was written against a COUNTER instead of against the CLAUSE the
+counter reports on.** ★ Recorded as a **pattern at n = 2 within one filing**,
+which is `R215`'s own trigger shape; **not minted as a rule here**, because
+`R215` already covers writing the correction and this is a statement about
+where such criteria come from. **Offered to the engineer as a candidate
+refinement to `R215`, whose act minting is.**
+
+#### Disposition of the dispatch's other four items
+
+1. **Decision candidate** — *"a value authored in the destination space is
+   composited without conversion; where no inverse exists the crossing is
+   removed rather than improved"* — **left unnumbered for the operator**, as
+   filed. Unchanged by this amendment: it is a statement about **conversion**,
+   and nothing here touches it.
+2. **RAG disposition — AGREED, and the reasoning is worth keeping.** This
+   finding adds a **`Limits` clause** to
+   `C:\personal_rag\pdf\lesson_20260821_terminal_conversion_wants_accuracy_round_trip_wants_invertibility.md`
+   rather than a new file. ★ **And the sharper half of the engineer's reading
+   is the tier, not the file count:** *"Table 149 excludes a sampled image from
+   its first row"* is **what the standard says**, which is
+   `D:\Dev\Rag-Specialized\PDF_Spec\`'s territory — `pdfce-spec-librarian`'s,
+   **not this role's** (hard rule 6). The spec corpus already owns §11.7.4.
+   **Recommend dispatching `pdfce-spec-librarian`** to record the row-1
+   sampled-image exclusion and the row-2 blanket `c_s` against the clause;
+   `personal_rag/pdf` keeps only the empirical half — *a conformance patch
+   whose non-zero counter is not a defect*. **Not written by this role.**
+3. **The outbound note to pdfceGUI — recommend an AMENDMENT to the existing
+   note, not a fresh correction note.** The note is
+   `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\2026-08-26-cmyk-images-keep-their-ink-and-one-counter-changed-meaning.md`,
+   **still open**, and **three of its four items remain exactly right** (the
+   new counter; `cmyk_bridged_pixels` changing meaning; the ICC disclosure not
+   to be softened). ★ **Only the fourth is wrong, and a separate note would
+   put the two halves of one claim in two files that a reader can find
+   independently** — which is the same failure mode as a `FEATURES.md` row
+   drifting from its `ROADMAP.md` entry, and the same failure mode this
+   amendment exists to avoid. **A dated amendment inside the open note keeps
+   claim and correction inseparable.** The engineer's call; this is the
+   recommendation.
+4. **Suite naming** — everything written in this amendment uses **`PCS` keys
+   only**; `check-suite-name-absent.py` re-run after every edit, below.
+
+#### Ledger and gates — re-measured after these edits, commands named
+
+| item | value |
+|---|---|
+| `git rev-parse --short HEAD` | **`2c3210a`** |
+| `git log --oneline -1` | *"docs: Table 149 makes overprint INERT for a process image…"* |
+| commits since the newest backup bundle (`git rev-list --count 61a9e5b..HEAD`) | **6** — the bundle at `D:\Dev\pdfce-backups\pdfce-20260826-0346-61a9e5b-full.bundle` is now **6 commits stale**, one more than this entry recorded above. Measured, not inferred (hard rule 8) |
+| Pass-ID ceiling | **`130`**; **`130.2` ASSIGNED this amendment**, next free **`130.3`** |
+| decisions ceiling | **`087`** — unchanged; **`088` still OWED** (five filings) |
+| standing-rule ceiling | **`R219`** — unchanged, no mint; the `R220` slot stays held |
+| `crates/` survivors | **4 FIXED** in `2c3210a`; **1 NEW**, created by that commit, reported above and **not edited** |
+| `docs/` locations edited **by this amendment** | **7** — `FEATURES.md` **3** (rows 233/313/316), `ROADMAP.md` **3** (`Pass 130.1` *Shipped* correction block, `Pass 122.1` second amendment, new `Pass 130.2` Backlog entry), `ARCHITECTURE.md` **1** (counter rationale). Plus this footer and this entry's heading |
+| `tools/commits-filed-baseline.txt` | **UNTOUCHED** |
+
+| gate run (working tree, after these edits, **before any commit**) | output | exit |
+|---|---|---|
+| `python tools/check-commits-filed.py` | `clean`; **no `DEFERRED` line** — `2c3210a` is cited above | **`0`** |
+| `python tools/check-commits-filed.py --strict-tip` | byte-identical | **`0`** |
+| `python tools/check-suite-name-absent.py` | `clean — nothing in the work tree, staged or not, names it` | **`0`** |
+| `python tools/check-passes-filed.py` | `clean` + the pre-existing informational multi-commit `note` lines | **`0`** |
+
+**Amended "For next session" items**, replacing this entry's numbers 2 and 5:
+
+- **2 (was "fix the four `crates/` survivors")** → **DONE in `2c3210a`.**
+  Replaced by: **fix the one-line dangling `, stated plainly` at
+  `crates/pdfce-render/src/cmyk_buffer.rs:721`**, created by that commit.
+- **5 (was "decide whether per-image overprint moves up the queue")** → the
+  ranking question is **moot for most of the entry**. Replaced by: **decide
+  whether `Pass 130.2` is taken now**, and note it is a **narrow, mechanism-
+  already-shipped** Pass — `Pass 122.6`'s once-per-object colorant resolution,
+  applied one object class over.
+- **New:** **dispatch `pdfce-spec-librarian`** for the Table 149 row-1
+  sampled-image exclusion (item 2 above).
+- **New:** **amend the open pdfceGUI note** rather than sending a second one
+  (item 3 above).

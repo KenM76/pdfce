@@ -1783,10 +1783,19 @@ D:\Dev\pdfce\
                                    dropped, §11.4.4's removal skipped,
                                    counted `cmyk_groups_approximated`) —
                                    the arithmetic exists, the **second
-                                   content walk** does not; **images and
-                                   shadings bridge through sRGB**
-                                   (`cmyk_bridged_pixels`,
-                                   `cmyk_unbridged_images`); **spot
+                                   content walk** does not; **MESH shadings,
+                                   and images with NO INK to keep, bridge
+                                   through sRGB** (`cmyk_bridged_pixels`,
+                                   `cmyk_unbridged_images`) — ★ **amended
+                                   2026-08-26 (`Pass 130.1`, `5dd4083`);
+                                   this clause read "**images and shadings
+                                   bridge through sRGB**" and that is now
+                                   FALSE for a `DeviceCMYK` image, direct
+                                   or behind an `/Indexed` base, which
+                                   composites its authored colorants with
+                                   no conversion in either direction and is
+                                   counted on the sixth counter,
+                                   `cmyk_native_image_pixels`**; **spot
                                    colorants are still flattened** (four
                                    planes, not runtime `N`); and everything
                                    the previous amendment listed — implicit
@@ -23417,6 +23426,34 @@ already be diffing between runs.** First measurement includes `PCS2_031`
 statement of why the two are separate: a patch can pass its own trap and
 still contain an object class the renderer never offered the feature to.
 
+**★★★ ADDED 2026-08-26 (`2c3210a`) — `overprint_images_unsupported` IS
+OVER-INCLUSIVE BY DECISION, NOT BY OVERSIGHT. Recorded here so nobody
+"fixes" it.** Reading **Table 149** rather than the counter establishes that
+**most of what it counts is not a shortfall at all**: the table's first row is
+scoped *"`DeviceCMYK`, specified directly, NOT IN A SAMPLED IMAGE"*, so a
+sampled image falls to the second row — *"any process colour space (including
+other cases of `DeviceCMYK`)"* — which is `c_s` in all three columns. **For a
+process image, painting it normally IS the conforming behaviour.** The only
+non-inert image cases are a `Separation`/`DeviceN` source (row 3, `c_b` under
+`OP true` — `Pass 130.2`) and spot colorants (no spot planes exist to
+preserve — the n-channel buffer).
+
+**The counter is NOT narrowed to those two**, and that is the decision. Its
+question is unchanged and remains worth asking: ***"was the composite offered
+this object class?"*** — a fact about pdfce's **plumbing**, which stays true
+and stays useful whether or not the clause would have changed the pixels.
+**What changed is the READING**: a non-zero value is **no longer evidence of a
+wrong picture**. Both documentation sites say so —
+`crates/pdfce-render/src/interpret.rs`'s field rustdoc (the definition site)
+and `crates/pdfce-cli/src/main.rs`'s per-key table row.
+
+⇢ **A counter that answers a PLUMBING question and a counter that answers a
+CONFORMANCE question are different instruments, and narrowing the first into
+the second destroys the census.** The instrument keeps its scope; the scope
+gets written down beside it. Same shape as `blend_space_subtractive`, a few
+rows down this same list, which is explicitly *"a CENSUS OF EXPOSURE, not a
+shortfall"*.
+
 **4. ★ THE REJECTED ALTERNATIVE, recorded because it was MEASURED, not
 reasoned about.** Table 149's SPOT row preserves the backdrop under
 overprint in **both** modes; pdfce flattens spots into RGB and so cannot
@@ -24426,6 +24463,18 @@ free 072.**
   to `render-page`'s stable stdout line — `cmyk_buffer`,
   `cmyk_buffer_refused`, `cmyk_bridged_pixels`, `cmyk_groups_approximated`,
   `cmyk_unbridged_images` — so no existing field position moves.
+
+  **★ AMENDED 2026-08-26 (`Pass 130.1`, `5dd4083`) — the count above is kept
+  as the audit trail of what THIS decision appended; the current line carries
+  SIX.** `cmyk_native_image_pixels` was appended after `cmyk_unbridged_images`
+  by the same append-last rule, so no existing field position moved then
+  either. **And one of the five CHANGED MEANING**: `cmyk_bridged_pixels` was
+  written when *every* image reached the buffer as resolved sRGB; it now
+  counts only the pixels with **no ink to keep** — mesh shadings, group
+  results, and images not authored in `DeviceCMYK`. The two are complements
+  and are **not** interchangeable, because a bridged pixel has been through a
+  many-to-one conversion and back. A print corpus will show
+  `cmyk_bridged_pixels` **drop sharply** with nothing having regressed.
 
   **(d) `f32`, on one type alias.** `cmyk_buffer::Chan`, so revisiting it is
   one line. §11.4.4's `1/α_gn` is what forces floats at all: an 8-bit
