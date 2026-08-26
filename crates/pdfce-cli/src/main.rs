@@ -2361,11 +2361,62 @@ enum Command {
         /// DPI rather than `render-page`'s `--scale`, deliberately: OCR is
         /// the one place in this CLI where the operator's own unit is the
         /// right one, because scanner output is described in DPI and
-        /// recognisers are tuned against it. 300 is the default because it
-        /// is what document scanners produce and what `ocrs` was trained
-        /// near; below about 150 recognition degrades sharply, and above
-        /// 400 costs memory for nothing.
-        #[arg(long, default_value_t = 300.0)]
+        /// recognisers are tuned against it.
+        ///
+        /// # ★★ MORE RESOLUTION IS WORSE, WHICH IS THE OPPOSITE OF THE
+        /// OBVIOUS EXPECTATION
+        ///
+        /// This defaulted to **300** on the reasoning quoted here until
+        /// 2026-08-26 — *"300 is what document scanners produce and what
+        /// `ocrs` was trained near; below about 150 recognition degrades
+        /// sharply"*. **Every clause of that was an assumption, and the
+        /// measured direction is backwards.**
+        ///
+        /// `pdfce-gui` scored a real CAD sheet (130 ground-truth tokens,
+        /// against the page's own vector text) after the detection-model fix
+        /// of `Pass 129.0`:
+        ///
+        /// ```text
+        ///   72 dpi  56.5 %     200 dpi  53.9 %
+        ///  100 dpi  56.7 %     300 dpi  35.1 %   <- the old default
+        ///  150 dpi  54.5 %
+        /// ```
+        ///
+        /// A **plateau from 72 to 200** — a spread under three points, inside
+        /// the noise of that sample — and then a **cliff**. 300 was the worst
+        /// of the five by twenty points.
+        ///
+        /// The mechanism is a property of the crate rather than of the
+        /// weights, which is why it is trustworthy beyond one document:
+        /// `ocrs` resizes its input to a **fixed model input size**, so past
+        /// that size more pixels means the text is *smaller* relative to the
+        /// model's window, not larger. Corroborated twice, by two different
+        /// detection models — one of which was the broken one, which is a
+        /// peculiar but real form of independent confirmation.
+        ///
+        /// 150 sits inside the plateau and is what a fitted-pixel-budget
+        /// approach independently lands on for a Letter sheet. There is **no
+        /// measured optimum** to pick: the plateau is flat within sampling
+        /// noise, and reading a maximum out of it would repeat the mistake
+        /// this correction is undoing.
+        ///
+        /// # What pdfce's OWN corpus can and cannot say about this
+        ///
+        /// ★ It **cannot** corroborate the cliff, and that is a limitation of
+        /// the fixture rather than a disagreement. Swept over
+        /// `fixtures/synthetic/ocr/scan.pdf` at 72/100/150/200/300/400 dpi,
+        /// content recall is **100 % at every value up to 300** and 97.9 % at
+        /// 400. It saturates, so it cannot rank anything.
+        ///
+        /// That is by design — the fixture's own docs say its degradation is
+        /// "deliberately mild… not a stress test of the recogniser's
+        /// tolerance". It proves the *pipeline*, not the *difficulty*. So the
+        /// DPI evidence here is entirely `pdfce-gui`'s, and pdfce's fixture
+        /// is not being cited as agreement.
+        ///
+        /// Raise it for genuinely small text; lower it for speed. Both are
+        /// cheap to try — the flag exists because no single value is right.
+        #[arg(long, default_value_t = 150.0)]
         dpi: f32,
         /// Directory holding the engine's model files.
         ///
