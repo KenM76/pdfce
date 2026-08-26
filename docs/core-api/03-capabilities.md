@@ -1397,17 +1397,47 @@ defect but a **security failure**. The cardinal rule, verbatim
 
 ## 5. OCR — substrate, writer, and engine
 
-`core [x] · cli [ ] · gui [ ]` for **writing** a text layer from words you
-supply. `core [ ] · cli [ ] · gui [ ]` for **OCR as a capability**, because the
-last piece — the model weights — is not in the repository yet. Both statements
-are true at once; §5.1 is the map of which is which, and it is the first thing
-to read before planning a panel.
+`core [x] · cli [x] · gui [x]` — **OCR works end to end**, and as of
+`Pass 129.0` (`181d9bd`, 2026-08-25) that is a measured statement rather than
+an architectural one.
 
-**This section was rewritten 2026-08-13** after `Pass 71.0` slices 2 and 3
-landed. Two earlier versions of it told a shell author that no code wrote a
-text layer and that no engine existed. Both were true when written. If you are
-holding a cached copy that says *"from here on you are on your own"*, discard
-it.
+**This section has now been rewritten three times and every prior version was
+wrong in a different direction**, which is worth knowing if you are holding a
+cached copy:
+
+| version | said | why it was wrong |
+|---|---|---|
+| pre-2026-08-13 | no code writes a text layer; no engine exists | true when written; `Pass 71.0` slices 2 and 3 landed |
+| 2026-08-13 → 2026-08-25 | *"the last piece — the model weights — is not in the repository yet"* | the weights landed the same day the operator answered the licence question `YES` |
+| — | *(implicitly)* that shipping the weights meant OCR worked | **it did not.** See the banner below |
+
+### ★★★ OCR PRODUCED GARBAGE ON EVERY PAGE UNTIL 2026-08-25
+
+Read this before trusting any OCR number you find in any document, including
+your own.
+
+The bundled **detection** model — the network that finds *where* words are —
+did not work with `ocrs` 0.12.2. On a clean 150 dpi render of a page of 12 pt
+Helvetica it returned sixteen fragments (`"1"`, `"?"`, `"E"`) at the right page
+margin plus one "word" whose bounding box was the entire page. Noise, not
+degraded output. The **recognition** model was fine throughout; the fault was
+isolated by swapping one file at a time, and the working detection build lives
+on a different channel from the recognition one. See
+`crates/pdfce-core/assets/models/ocrs/PROVENANCE.md` for the four-row table and
+the instruction not to "tidy" the two files back onto one channel.
+
+★ **The consequence for any consumer: every accuracy figure measured before
+`181d9bd` is a measurement of noise.** If you derived a DPI curve, a target
+pixel count, or a pinned test from OCR output, re-measure. Check which
+detection model you have first — 2,510,284 B / `f15cfb56…` works, 2,523,564 B
+/ `614aafab…` does not — or you will measure the same thing twice.
+
+**What it does now**, on a synthetic 200 dpi scan with blur, 0.35° skew, sensor
+noise and grey paper: **47 of 47 words**, with the invisible layer landing a
+median **0.90 pt** from the ink on the clean control (≈ 1/80 inch).
+`tools/ocr-accuracy.py` is the scorer; it measures **content and position
+separately**, because a mirrored or transposed text layer scores 100 % on
+content and is useless.
 
 ### 5.1 The four layers, and exactly where the boundary sits today
 
@@ -1444,7 +1474,9 @@ an API gap.
 | `OcrPage::mean_confidence() -> Option<f32>` | `ocr/mod.rs:132` |
 | `OcrPage::words_needing_review(threshold) -> Vec<&RecognizedWord>` | `ocr/mod.rs:148` |
 | `trait OcrEngine { recognize(w, h, pixels); reports_confidence() }` | `ocr/mod.rs:163` |
-| `words_to_page_space(words, img_w, img_h, page_rect)` — **the only y-flip** | `ocr/mod.rs:211` |
+| `words_to_page_space(words, img_w, img_h, page_rect)` — the y-flip, **`/Rotate 0` ONLY** | `ocr/mod.rs:211` |
+| ★ `words_to_page_space_on(words, img_w, img_h, PagePlacement)` — **use this one** | `ocr/mod.rs` |
+| `PagePlacement::new(rect, rotate)` / `PagePlacement::upright(rect)` | `ocr/mod.rs` |
 
 **Piece 2 — the writer** (`crates/pdfce-core/src/ocr/layer.rs`)
 
@@ -1472,7 +1504,8 @@ an API gap.
 
 | item | `file:line` |
 |---|---|
-| `resolve_model_dir(engine, explicit, exe_dir, user_data) -> Result<ModelSource, ModelsNotFound>` | `models.rs:164` |
+| `resolve_model_dir(engine, explicit, exe_dir, user_data) -> Result<ModelSource, ModelsNotFound>` | `models.rs` |
+| ★ `resolve_model_dir_with(…, required: &[&str])` — a dir only counts if it CONTAINS the files | `models.rs` |
 | `ModelSource` (`OperatorSupplied` / `BesideExecutable` / `UserData`), `.path()` | `models.rs:84`, `:100` |
 | `ModelsNotFound { engine, searched }` — **carries every path tried** | `models.rs:126` |
 
@@ -1480,12 +1513,20 @@ an API gap.
 
 ```rust
 use pdfce_core::document::Document;
-use pdfce_core::ocr::{OcrEngine as _, OcrPage, layer, models, words_to_page_space};
+use pdfce_core::ocr::{OcrEngine as _, OcrPage, PagePlacement, layer, models,
+                      words_to_page_space_on};
 use pdfce_core::ocr::engine_ocrs::{MODEL_DIR, OcrsEngine};
 
 // 1. Find the weights. An operator-named path that does not exist is REPORTED,
 //    never silently replaced by a bundled copy (models.rs:164).
-let src = models::resolve_model_dir(MODEL_DIR, explicit, exe_dir, user_data)?;
+// `_with`, naming the engine's two files. An EMPTY `models/ocrs` otherwise
+// resolves AND SHADOWS a good directory further down the search order, and
+// the failure then arrives later wearing the engine's vocabulary instead of
+// the resolver's.
+let src = models::resolve_model_dir_with(
+    MODEL_DIR, explicit, exe_dir, user_data,
+    &[engine_ocrs::DETECTION_MODEL, engine_ocrs::RECOGNITION_MODEL],
+)?;
 
 // 2. Load the engine once, not per page. Both models load eagerly, so a bad
 //    install fails here rather than on page 340 of a batch.
@@ -1498,7 +1539,20 @@ let words = engine.recognize(img_w, img_h, &grey)?;
 // 4. Flip to page space. This is the ONLY place a flip may happen.
 let page_rect = /* the page's crop box, or the region the image covers */;
 let page = OcrPage {
-    words: words_to_page_space(&words, img_w, img_h, page_rect),
+    // ★★ THE ROTATION TRAP. `pdfce-render` HONOURS `/Rotate` -
+    // `page_device_geometry` swaps the raster's axes at 90 and 270 - and
+    // `words_to_page_space` does not. A rotation-aware rasteriser feeding a
+    // rotation-blind mapping yields an invisible layer TRANSPOSED relative to
+    // the ink; the page still looks perfect and the only symptom is that
+    // selecting a word gets a different one. Scanner drivers write `/Rotate`
+    // rather than re-imaging, so this is the NORM in the population OCR
+    // exists for.
+    //
+    // `page_rect` must be the CROP box, which is what the rasteriser drew.
+    words: words_to_page_space_on(
+        &words, img_w, img_h,
+        PagePlacement::new(page.crop_box, i32::from(page.rotate)),
+    ),
     confidence_available: engine.reports_confidence(),
 };
 

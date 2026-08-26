@@ -813,18 +813,49 @@ reservation about it:
   is a thinner provenance record than one would want for the one
   non-permissive artifact in the build.
 - **The two distribution channels are not byte-identical**, measured in
-  survey §3.4:
+  survey §3.4 — **and ★ SINCE 2026-08-25 THIS TABLE ALSO RECORDS WHICH
+  COLUMN pdfce ACTUALLY SHIPS, WHICH IT PREVIOUSLY DID NOT** (`Pass
+  129.0`, `181d9bd`, two-hundred-and-sixty-second filing). The prior
+  version tabulated both channels and totalled them, describing a choice
+  pdfce **had not yet made in fact** while the repository had already made
+  it silently:
 
-| File role | S3 bytes | Hugging Face bytes | Delta (S3 − HF) |
-|---|---|---|---|
-| text detection | 2,510,284 | 2,523,564 | **−13,280 B** |
-| text recognition | 9,716,568 | 9,716,444 | **+124 B** |
-| **total, 2 files** | **12,226,852 (≈ 12.23 MB)** | **12,240,008 (≈ 12.24 MB)** | −13,156 B (0.11%) |
+| File role | S3 bytes | Hugging Face bytes | Delta (S3 − HF) | **BUNDLED** |
+|---|---|---|---|---|
+| text detection | **2,510,284** | 2,523,564 | **−13,280 B** | **★ S3** — `text-detection.rten`, sha `f15cfb56…` |
+| text recognition | 9,716,568 | **9,716,444** | +124 B | **HF** — `text-rec-checkpoint.rten`, sha unchanged since 2026-08-13 |
+| **total, 2 files, AS BUNDLED** | — | — | — | **12,226,728 B (≈ 12.23 MB) = 6.11 MB each** |
+| *(channel totals, for reference only)* | *12,226,852* | *12,240,008* | *−13,156 B (0.11 %)* | *neither is what ships* |
 
-  The filenames differ between channels as well. **So pdfce must pin
+  **★★ WHY THE S3 DETECTION ARTEFACT IS THE ONE BUNDLED, and this is a
+  FUNCTIONAL fact, not a licensing preference.** **The Hugging Face
+  detection build does not work with `ocrs` 0.12.2.** On a clean 150 dpi
+  render of 12 pt Helvetica it returns sixteen fragments at the right page
+  margin plus one "word" whose box is the whole page — noise, not degraded
+  output. Isolated by swapping **one file at a time** (4 runs over 2 files
+  × 2 channels): S3 detection + **HF** recognition is **perfect**, so the
+  recognition model was never at fault and **only the detection file was
+  replaced**. Between 2026-08-13 and 2026-08-25 **every OCR run pdfce made
+  produced garbage.**
+
+  **The licence consequence, stated because it is the reason this belongs
+  in this file.** The **S3 channel carries no licence text of its own** —
+  the **CC-BY-SA-4.0 declaration lives only on the Hugging Face model
+  card**, for the same author's same network. **The operator was told
+  exactly that and authorised bundling the S3 artefact on 2026-08-25.**
+  The licence conclusion below is therefore **unchanged** (unmodified
+  works in a **collection**, not an **adaptation**; pdfce's MIT licence
+  unaffected), but **the provenance chain for the detection file now runs
+  through a different host than the licence declaration**, and
+  `PROVENANCE.md` states that mixture rather than implying one channel.
+
+  **The filenames differ between channels as well** — which is precisely
+  how two different models came to look like one. **So pdfce must pin
   exactly which artifact it ships and hash it, rather than treating "the
-  ocrs models" as one thing.** That pinning is an engineering obligation
-  of `Pass 71.0`, not an open question.
+  ocrs models" as one thing.** That pinning was an engineering obligation
+  of `Pass 71.0` and **was honoured for provenance while the artefact
+  pinned was never run end to end** — see `docs/ocr-engine-survey.md`
+  §3.4's dated amendment.
 - **The weights are stale by construction:** S3 objects carry
   `Last-Modified: Mon, 01 Jan 2024`; `ocrs-models` last saw a push
   2024-08-20. Not a licence fact, but it travels with the same files and
@@ -1110,6 +1141,13 @@ evidence: `docs/ocr-engine-survey.md` §3.3–§3.5.
   12,240,008 B over 2 files** (0.11% apart). **pdfce must pin exactly
   which artifact it ships and hash it** — an engineering obligation of
   `Pass 71.0`, not an open question.
+  **★ AMENDED 2026-08-25 (`Pass 129.0`, `181d9bd`): what ships is MIXED —
+  S3 detection (2,510,284 B) + HF recognition (9,716,444 B) =
+  12,226,728 B over 2 files**, because **the HF detection build does not
+  work with `ocrs` 0.12.2 at all** and produced noise on every page from
+  2026-08-13 to 2026-08-25. **The S3 channel carries no licence text of
+  its own**; the operator was told that and authorised the bundle. Full
+  table and reasoning in §6.7.4 above.
   **Mirrors:** `ROADMAP.md`'s *Open operator questions* → `(bl)`
   (**answered, not retired — ceiling stays `(bl)`, next free `(bm)`**) and
   `Pass 71.0`'s *Next up* entry (**no longer blocked on an operator

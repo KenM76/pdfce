@@ -296,6 +296,50 @@ totals agree to within 0.1% (12.23 MB vs 12.24 MB), so nothing in this survey
 turns on it, but **pdfce must pin exactly which artifact it ships and hash
 it**, rather than treating "the ocrs models" as one thing.
 
+> ### ★★★ AMENDED 2026-08-25 — EVERYTHING TURNED ON IT (`Pass 129.0`, `181d9bd`, two-hundred-and-sixty-second filing)
+>
+> **The paragraph above is left exactly as written** (`R215` (d)) because
+> the wording is the finding.
+>
+> **"So nothing in this survey turns on it" was wrong.** The Hugging Face
+> detection build, `text-detection-ssfbcj81.rten` (2,523,564 B), **does not
+> work with `ocrs` 0.12.2.** pdfce shipped it on 2026-08-13 and **every OCR
+> run pdfce made until 2026-08-25 produced garbage on any page** — sixteen
+> fragments at the right page margin plus one "word" whose bounding box was
+> the whole page, on a clean 150 dpi render of 12 pt Helvetica. Not degraded
+> output. Noise.
+>
+> **This paragraph's own NEXT SENTENCE was exactly right, and was followed —
+> for provenance only.** The artefact was pinned and hashed; **it was never
+> run end to end.** Pinning the wrong file precisely is still shipping the
+> wrong file.
+>
+> **★ Where the reasoning went, in one line, because it is reusable:** the
+> discrepancy was **measured on the detection file** (13,280 B, **0.53 %**
+> of that file) and then **evaluated against the COMBINED two-file total**
+> (0.11 %). **The denominator swap is what made a different model look like
+> a rounding error.** Two builds of one network, under two filenames, in two
+> channels, are **two models** — no percentage of anything is evidence that
+> they behave the same. The only evidence for that is running them.
+>
+> **The isolation** (`Pass 129.0`) swapped **one file at a time**, 4 runs
+> over 2 files × 2 channels: `S3 detection + HF recognition` is **perfect**,
+> so the recognition model was never at fault and only the detection file
+> was replaced. **The first hypothesis was wrong and is recorded beside the
+> right answer**: the recognition file is named `text-rec-checkpoint`, so
+> the obvious theory was that pdfce ran a *training checkpoint* as its
+> recogniser. It did not. **A plausible filename is not evidence either.**
+>
+> **What ships now:** S3 detection (2,510,284 B) + HF recognition
+> (9,716,444 B) = **12,226,728 B over 2 files**. See
+> `crates/pdfce-core/assets/models/ocrs/PROVENANCE.md` (four-row table +
+> the wrong hypothesis), `LEGAL.md` §6.7.4, `ARCHITECTURE.md`'s weights
+> section, and `ROADMAP.md`'s `181d9bd` entry.
+>
+> **§3.5's "12 MB is small" comparison and every other figure in this
+> section are unaffected** — the correction is 13,280 B on a 12 MB payload.
+> **The conclusion that moved is not a size; it is whether the file worked.**
+
 **12 MB is small** — for comparison,
 KillerPDF's entire portable EXE is ~15.6 MB (`PRIOR_ART.md`), and a single
 Tesseract `tessdata_best` language file is roughly a third of this on its own

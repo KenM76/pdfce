@@ -96,6 +96,513 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `181d9bd` — `Pass 129.0` ships: ★★★ **pdfce's OCR PRODUCED GARBAGE ON ANY PAGE AND HAD SINCE THE ENGINE LANDED IN `Pass 71.0` — ONE WRONG MODEL FILE**, isolated by swapping one file at a time; ★★ a **SECOND, INDEPENDENT defect** — a rotation-AWARE rasteriser feeding a rotation-BLIND coordinate mapping transposed the invisible layer under `/Rotate`; the **first real accuracy measurement**, made against a scan this project MANUFACTURED because licensing forbids a real one; plus `pdfce-cli ocr` (there was no CLI surface at all), the weights actually shipping in a release build, and the downloader owed since 2026-08-13 — 2026-08-25 (two-hundred-and-sixty-second filing)
+
+**Fifteen files, 2,061 insertions, 43 deletions** *(`git show --stat
+181d9bd`, checked here)*. Closes the operator's report that pressing the
+GUI's OCR button on a page of handwriting produced text that "didn't seem
+to line up."
+
+#### ★★★ THE DEFECT: ONE WRONG MODEL FILE, AND IT WAS NEVER A DEGRADATION
+
+The bundled `text-detection.rten` — the network that finds **where** words
+are — **does not work with `ocrs` 0.12.2**. On a clean 150 dpi render of a
+page of 12 pt Helvetica it returned **sixteen fragments** (`"1"`, `"?"`,
+`"E"`) clustered at the right page margin, **plus one "word" whose bounding
+box was the whole page**. Not degraded output. Noise.
+
+| channel | artefact | bytes | SHA-256 (head) | works with `ocrs` 0.12.2? |
+|---|---|---|---|---|
+| Hugging Face `robertknight/ocrs` `main` | `text-detection-ssfbcj81.rten` | **2,523,564** | `614aafab…` | **NO** — the shipped state |
+| author's S3 bucket (what the crate's OWN example downloads) | `text-detection.rten` | **2,510,284** | `f15cfb56…` | **YES** |
+
+**★ ISOLATED BY SWAPPING ONE FILE AT A TIME**, which is the only reason the
+answer is *known* rather than merely *fixed* — **4 runs over 2 files × 2
+channels**:
+
+| detection | recognition | result |
+|---|---|---|
+| HF | HF | **garbage** — the shipped state |
+| HF | S3 | **garbage** |
+| **S3** | **HF** | **PERFECT** |
+| S3 | S3 | perfect |
+
+**Row 3 is the result**: the recognition model was **never at fault**.
+Swapping both at once would have "fixed" it while leaving *which file was
+broken* permanently unknown.
+
+**★★ AND THE FIRST HYPOTHESIS WAS WRONG — recorded BESIDE the right answer,
+because it is the one a future reader will form too.** The bundled
+recognition file is named **`text-rec-checkpoint.rten`**, sitting next to
+the crate example's `text-recognition.rten`, so the obvious theory was that
+pdfce was running a **training checkpoint** as its recogniser. The isolation
+says the **opposite** — the recogniser was fine in both channels and the
+*detector* was the broken half. **A plausible name is not evidence.**
+
+Hugging Face hosts **no** working detection model: its `main` branch was
+listed and holds exactly the two files pdfce already had.
+
+**Bundled total moved 12,240,008 B → 12,226,728 B over 2 files** (detection
+2,510,284 + recognition 9,716,444) — *checked here by `ls -l
+crates/pdfce-core/assets/models/ocrs/`*. **Only the detection file changed**;
+the recognition file is byte-for-byte the one that shipped on 2026-08-13.
+
+#### ★★ THE SURVEY SAW THE DISCREPANCY AND DISMISSED IT — the transferable half
+
+`docs/ocr-engine-survey.md` §3.4 **measured both channels in the same
+session**, recorded that the detection files differ by **13,280 B** under
+**different filenames**, and concluded:
+
+> *"The totals agree to within 0.1%, so nothing in this survey turns on it."*
+
+**Everything turned on it.** And its **own next sentence** was exactly
+right — *"pdfce must pin exactly which artifact it ships and hash it, rather
+than treating 'the ocrs models' as one thing"* — and **was followed, for
+PROVENANCE**, while the artefact it pinned **was never run end to end**.
+
+*(Filed in the form hard rule 10 requires: **13,280 B over a 2,523,564 B
+file = 0.53 % of the detection artefact**, which is **0.11 % of the
+12,240,008 B two-file total**. The 0.11 % is the figure the survey quoted
+and dismissed; **the denominator it chose is what made a whole different
+model look like a rounding error.** Two builds of one network under two
+filenames are **two models**, and no percentage of a *combined* total is
+evidence about either one.)*
+
+**A dated amendment has been added to `docs/ocr-engine-survey.md` §3.4 in
+this filing** — in place, prose kept, per `R215` (d) — because that sentence
+is the single most load-bearing stale claim this filing found.
+
+#### ★★ THE SECOND, INDEPENDENT DEFECT: `/Rotate`
+
+`pdfce-render` **honours** `/Rotate` — `page_device_geometry` swaps the
+raster's axes at 90/270 and composes a different transform for each of
+Table 30's four values. **The OCR chain did not**: it scaled and y-flipped
+and nothing else.
+
+**A rotation-AWARE rasteriser feeding a rotation-BLIND mapping produces an
+invisible text layer TRANSPOSED relative to the ink.** The page still
+renders perfectly; the only symptom is that **selecting a word gets a
+different one** — which is close to what the operator described.
+
+**★ This is not an edge case in the one population OCR exists for — it is
+the norm.** Scanner drivers, and every "rotate pages" command in every other
+tool, write `/Rotate` rather than re-imaging the page.
+
+Shipped: **`PagePlacement`** + **`words_to_page_space_on`**, inverting all
+four of the renderer's transforms. The rotation **travels with** the
+rectangle because the two are only meaningful together, and
+`PagePlacement::upright` makes **saying "zero" a deliberate act rather than
+an omission** — `/Rotate` is optional and absent on most pages, so code
+written against the common case never learns it exists.
+`words_to_page_space` is **kept, unchanged**, is public API, is correct for
+`/Rotate 0`, and **now says which case it is right for**.
+
+**The test is a ROUND TRIP through the renderer's own published formulas,
+not fixed expected numbers** (`R215`): a rectangle is pushed forward to
+image pixels and back through the mapping and must land where it started.
+Asserting expected values would have **pinned whatever the code did the day
+it was written, transposition included.** A companion test asserts the **old
+mapping DISAGREES** on a rotated page, so the round trip **cannot pass
+vacuously**.
+
+#### ★ THE FIRST REAL ACCURACY MEASUREMENT — and `Pass 71.0` said one could not be made
+
+`Pass 71.0` recorded: *"62 words returned is a COUNT, not an accuracy
+result… A real quality claim needs a genuine scanned page and this project
+has no rights-cleared one."*
+
+**★ So the scan was MANUFACTURED.** A scan is a **lossy picture of a
+document that already existed** — so: render a vector page pdfce itself
+authored, degrade it the way a sheet-fed scanner does (**200 dpi, box blur,
+0.35° skew, deterministic Gaussian noise, paper grey**), wrap it as an
+image-only PDF. Nothing downloaded; **`LEGAL.md` §5 category (a)
+throughout** (`CLAUDE.md` rule 7).
+
+**★★ AND THE GROUND TRUTH COMES FREE, which is the part that generalises.**
+A downloaded scan gives a picture and **no answer key**. Here **the vector
+original IS the answer key**, and it is machine-readable: `find-text` on
+`printed.pdf` says where a word is **from real Helvetica AFM metrics**;
+`find-text` on the OCR'd scan says where OCR put it. **Two rectangles
+arriving by completely different routes — font metrics vs neural
+recogniser — which must agree.**
+
+| corpus | words found | content accuracy | median offset |
+|---|---|---|---|
+| degraded scan (`scan.pdf`, 2,325,575 B) | **47 / 47** | **100 %** | **2.56 pt** |
+| clean control (`scan_clean.pdf`, 31,193 B) | **43 / 47** | **91.5 %** | **0.90 pt** |
+
+**The clean control's 0.90 pt is the TRUE positional accuracy — about
+1/80 inch.** The degraded scan's larger offset is **dominated by the 0.35°
+skew that was deliberately applied**, not by OCR error: the ground truth is
+the **unskewed** original, so OCR is correctly reporting where the text
+**actually is**. **The control is what makes that readable at all** — a
+single degraded figure would have been indistinguishable from a bad
+recogniser.
+
+**★ REPORTED RATHER THAN SMOOTHED: the clean control scores WORSE on recall
+(43/47 = 91.5 %) than the degraded scan (47/47 = 100 %).** Four words are
+missed on crisp text and found on degraded text. **It is real, it is
+reproducible, and nobody knows why.** Filed unexplained rather than dropped,
+because a measurement that only reports its flattering half is not a
+measurement.
+
+Fixtures (checked here by `ls -l fixtures/synthetic/ocr/`): `printed.pdf`
+(990 B), `scan.pdf`, `scan_clean.pdf`, `scan_rotated_90.pdf` (2,325,839 B),
+`GROUND_TRUTH.json` (7,151 B); generators `tools/gen-ocr-fixtures.py`
+(+602 lines) and `tools/ocr-accuracy.py` (+173 lines).
+
+#### `pdfce-cli ocr` — there was NO CLI SURFACE AT ALL
+
+**OCR could not be run, let alone measured, without a GUI** — which is the
+`CLAUDE.md` rule 11 default (each feature ships its CLI subcommand alongside
+the GUI flow) going unmet for eighteen days. It now rasterises, recognises,
+maps to page space, writes the mode-3 invisible layer (§9.3.6 Table 106) and
+saves — disclosing on **stderr** the word count, the model source, every
+substituted or dropped word, and **the fact that this engine reports NO
+per-word confidence** (`CLAUDE.md` rule 4: the CLI **prints** what it
+inferred, because the invocation *is* the commit).
+
+**`--words`** and **`--dump-image`** ship with it. **`--dump-image` writes
+the exact greyscale buffer handed to the recogniser, and that flag is why
+this defect was found.** When OCR returns nonsense there are **two suspects
+needing opposite fixes** — the recogniser cannot read the page, or *the page
+it was given is not the page you think* — and **every other diagnostic
+describes what came OUT.** Ruling the pipeline out **first** is what left
+the model as the only remaining suspect.
+
+#### THREE MORE GAPS CLOSED ON THE WAY, and the first is a release-only failure
+
+* **★ THE MODELS DID NOT SHIP.** `tools/package-portable.py` copied
+  **neither the weights nor `PROVENANCE.md`**, so `ocr` **failed in every
+  RELEASE build while working in every DEVELOPMENT one** — and failed naming
+  paths that exist on a developer's machine and not on the operator's. **The
+  worst shape a packaging defect can take**: invisible to everyone who could
+  fix it. **`PROVENANCE.md` is copied WITH the weights**, deliberately:
+  `tools/check-shipped-assets.py` enforces that a redistributed asset states
+  its licence, **but that gate reads the REPOSITORY**, so shipping the
+  weights without their provenance file **would satisfy the gate and breach
+  the licence.**
+* **The build listing UNDER-REPORTED.** Once the payload gained a
+  subdirectory, the **printed per-line sizes summed to less than the printed
+  TOTAL beside them.** Nobody adds up a file listing, and the total was
+  right — so the discrepancy could sit in plain sight. Now walks recursively.
+* **An EMPTY model directory resolved AND SHADOWED a good one.**
+  `resolve_model_dir` asked only `is_dir()`, so an empty `models/ocrs`
+  **passed and hid a populated directory further down the search order.**
+  `resolve_model_dir_with` now takes the **required filenames**.
+
+#### THE DOWNLOADER, OWED SINCE 2026-08-13 — an `R151` instance discharged
+
+The operator's ruling was **"do both"** — bundle the weights **and** build
+the downloader. **`pdfce-fetch` was written, tested and wired to NOTHING**:
+the exact `R151` shape this project has hit repeatedly (a core capability no
+shell reaches). **`pdfce-cli fetch-ocr-models` now consumes it**, pinning
+**both artefacts by URL and SHA-256**; verified against a fresh directory,
+**both hashes matched and the fetched pair scores the same 47/47**.
+
+**★ And a stale argument was struck through in place rather than deleted.**
+`crates/pdfce-core/src/ocr/models.rs`'s module doc **argued at length that a
+downloader had been withdrawn because pdfce contains no HTTP client.** That
+argument was **sound on 2026-08-12 and was overturned by the operator the
+next day** — **decision 061** narrowed `R12`: the **ENGINE** stays
+network-free permanently and gate-enforced, the **SHELLS** may fetch what
+the operator asks for. **Verified per crate: `pdfce-core` and `pdfce-render`
+pull ZERO network crates; the CLI pulls eight.** (`CLAUDE.md` rule 2's
+neighbour — the invariant that keeps the web fork a shell swap.)
+
+#### Verification
+
+**Relayed from the engineer's dispatch, not measured here:** `cargo test
+--workspace` green; `cargo fmt --check` clean; `cargo clippy --workspace
+--all-targets -- -D warnings` clean; **15 of 17 bare gates exit 0 — the two
+that did not are `check-commits-filed.py` and `check-passes-filed.py`,
+naming this Pass's own commits, which THIS FILING closes**;
+`THIRD_PARTY_LICENSES.md` regenerated **byte-identical**, because
+`pdfce-fetch` was already a workspace member.
+
+**Checked here, command named:** `git show --stat 181d9bd` → 15 files /
+2,061 insertions / 43 deletions; `ls -l
+crates/pdfce-core/assets/models/ocrs/` → `text-detection.rten` **2,510,284
+B**, `text-rec-checkpoint.rten` **9,716,444 B**, `PROVENANCE.md` **8,654 B**
+= **12,226,728 B over 2 weight files**; `ls -l fixtures/synthetic/ocr/` →
+the five files above; `ls tools/check-*.py tools/check-*.sh | wc -l` →
+**18 scripts on disk** (one takes an argument and is not a bare gate — the
+count `R209` insists is re-counted rather than quoted).
+
+#### What is NOT done — named so it does not read as done
+
+- **`pdfceGUI`'s measured DPI table was measured against the BROKEN
+  detector.** See *Sweep* in this filing's `SESSION_LOG.md` entry and the
+  Backlog note below — reported to the engineer as owed cross-project work,
+  not fixed here.
+- **The clean control's 91.5 % recall is unexplained.**
+- **No GUI change was made in this Pass** — `pdfceGUI` already had its OCR
+  dialog; what it lacked was a working detector, which arrives as a data
+  file.
+
+---
+
+### `1f79cc1` — `Pass 128.1` ships: **PER-STANDARD RENDER PRESETS, and every value SAYS WHERE IT CAME FROM** — ★★ the sourcing found that **only PDF/X claims to bind a renderer at all**, that **PDF/X ITSELF concedes more than one conforming rendering exists** (identical clause 17 years apart), and that **`cmyk_intent` is the WRONG MECHANISM rather than a mis-set value — NO value of it is conformant**; `PresetAction::LeaveAlone` is a real state because ~a third of the grid is axes a standard does not reach — 2026-08-25 (two-hundred-and-sixty-second filing)
+
+**Three files, 1,578 insertions, 1 deletion** *(`git show --stat 1f79cc1`,
+checked here)* — `crates/pdfce-core/src/settings/presets.rs` (**+1,065**,
+new), `crates/pdfce-cli/src/main.rs` (**+510**),
+`crates/pdfce-core/src/settings/mod.rs` (**+4**).
+
+Fulfils pdfceGUI's `request_the_conformant_setting_vector_for_iso_15930_7.md`,
+**widened by the operator**: *"rendering presets for each standard… for now
+they'd be as best as we can support."*
+
+**★ pdfceGUI was right to refuse to guess the values, and its reason is the
+design brief for this Pass:** *"A control labelled ISO 15930-7 carries that
+standard's authority whether or not we intended it to. A guessed vector
+would be worse than no preset."*
+
+#### The surface
+
+New `pdfce_core::settings::presets`: **`RenderStandard`** (9 variants),
+**`RenderPreset`**, **`PresetEntry`**, **`PresetKey`**, **`PresetAction`**,
+**`Evidence`**. Every entry carries `sourced` / `implied` / `best-effort` /
+`not-applicable`, and **`disclosures()` says so out loud** (`CLAUDE.md`
+rule 4: off-canvas, in the CLI's case printed).
+
+CLI: **`list-standards [--standard X]`** prints the grid **with its
+provenance column**; **`render-page --standard X`** applies a preset **for
+that invocation only — NEVER written back to the settings file**, because
+one `--standard pdf-x4` render silently changing every later render is
+exactly the surprise rule 4 exists to stop.
+
+`PresetAction::value_string` formats **in CORE, not in the shell**. The type
+is `#[non_exhaustive]`, so a shell must carry a wildcard arm, and **that
+wildcard is a trap**: a seventh variant keeps every shell compiling while
+printing the new setting as the fallback, **silently, under a button
+labelled with an ISO number.** Formatting in core makes a new variant **a
+compile error in the file somebody is already editing.**
+
+#### ★★ THREE SOURCED FINDINGS, EACH OF WHICH CHANGED THE DESIGN
+
+**1. ONLY PDF/X CLAIMS TO BIND A RENDERER.** PDF/A **and** PDF/UA both carry
+a **Scope bullet putting "operational details of rendering" outside their
+own scope** — **ISO 19005-3 §5.5**, **ISO 19005-4 §5.2**, **ISO 14289-1
+§6.3**. So **a PDF/A preset is thin BY RIGHT and a PDF/UA preset is EMPTY BY
+RIGHT** — neither is an oversight.
+
+**★ PDF/UA ships as a variant that SETS NOTHING, rather than as an absence,
+and the distinction is the whole point.** The measurement: **nine rendering
+terms searched across all 197 veraPDF PDF/UA rules = ZERO hits**, and
+**PDF/UA-2 deleted UA-1's conforming-reader clauses outright.** *An absence
+would have been indistinguishable from an oversight, and the next session
+would have filled it in.*
+
+**2. ★ PDF/X ITSELF CONCEDES MORE THAN ONE CONFORMING RENDERING EXISTS — and
+its stated remedy is NOT a setting vector.** **ISO 15930-4:2003 clause 5**
+and **ISO 15930-9:2020 clause 5**, **identical seventeen years apart**: a
+conforming processor *"may use embedded job ticket or metadata information
+to control the rendering more precisely."* **pdfce does not read those.** So
+**every PDF/X preset emits that sentence on stderr** — it is a reasonable
+second best and **says so**, rather than presenting itself as the standard's
+own answer.
+
+**3. ★★ `cmyk_intent` IS THE WRONG MECHANISM, NOT A MIS-SET VALUE.** Every
+PDF/X **and** PDF/A level guarantees a **COLORIMETRIC** definition of device
+colour — `DestOutputProfile`, `/DefaultCMYK`, or PDF/A-4's blending space.
+**`CmykIntent` picks among fixed built-in tables and is none of them**, so
+**NO value of it is conformant.** The preset sets **the least-wrong one** and
+**DISCLOSES that the file's own output intent was not applied** — which
+rule 4 makes **obligatory**, because a colour transform that **did not
+happen** leaves **nothing on screen to notice** (the invisible-by-
+construction class the rule was narrowed twice to protect).
+
+**★ This settles pdfceGUI's "contentious" framing.** The operator's
+**2026-08-08 `NeutralBlack` ruling** and a **conformance render** are **not
+two values competing for one knob** — they are **one knob standing in for a
+capability pdfce does not have.** The capability is now filed to *Backlog*
+below, named by this Pass.
+
+#### `PresetAction::LeaveAlone` IS A STATE — the load-bearing design choice
+
+**Roughly a third of the grid is axes a standard does not reach.** A preset
+modelled as a **fully-populated `Settings`** cannot express that: it writes
+a value for every key, and a shell reading it back reports *"ISO 15930-7
+requires per-record mesh padding"* — **a requirement that does not exist,
+asserted under the standard's name.**
+
+`LeaveAlone` touches nothing **and says which keys it deliberately did not
+touch.** The clearest case, and it is not a judgement call: **the complete
+clause lists of ISO 15930-7 and ISO 15930-9 contain NO SHADING CLAUSE AT
+ALL**, so **no PDF/X part reaches mesh padding.**
+
+#### THE GUARD TEST
+
+**`only_sourced_cells_may_claim_to_be_sourced`.** An entry may present
+itself as a claim about the standard **only if it sets nothing, or is one of
+the specific cells the sourcing established.** Everything else must be
+`best-effort`.
+
+**Without it, the cheapest way to make a preset look authoritative is to
+relabel a guess, and nothing in the type system would object.** The
+allow-list is **deliberately short and deliberately awkward to extend** —
+adding to it should require going and reading a clause.
+
+**`a_preset_changes_something_on_a_fresh_Settings`** is its companion: the
+exercise would be **theatre** if every preset were a no-op — click
+`ISO 15930-7`, get what you already had. **The divergence is `image_minify`:
+viewing defaults to `Smooth` as of today (`de2d93c`, below), conformance
+keeps the spec-literal `PointSample`.** *The two Passes in this filing are
+load-bearing on each other, and in that order.*
+
+#### ★ TWO CORRECTIONS THE ENGINEER MADE TO HIS OWN BRIEF — recorded because both changed the answer
+
+1. **`separations` is `SeparationPolicy`** — the **§14.11.4 preseparated-
+   page-set** policy — **NOT spot-colorant handling.** The brief had it
+   wrong. **The corrected question had a SHARPER answer**: **ISO 15930-1
+   §6.2, -3 §6.1 and -4 §6.1 each state a pre-separated file "shall not be
+   permitted"**, so the policy is **inert for PDF/X**. **PDF/A does not
+   forbid them, so the row does not transfer** — which a wrong question
+   would never have surfaced.
+2. **The corpus's own note that ISO 15930 has no free preview was a CORRECT
+   GREP OF THE WRONG PAGE.** Free previews for **parts 1, 3, 4, 7 and 9**
+   were obtained, so **real clause numbers are assertable**. *(Same shape as
+   the `XFA` item in `CLAUDE.md`'s open list: the corpus held the answer
+   while another document still recorded the question.)*
+
+#### Deliberate absences
+
+**PDF/X-5n and PDF/X-6n are absent on purpose** — **n-colorant process
+model; pdfce has four planes.** A preset that silently mapped an n-colorant
+standard onto four would be the `cmyk_intent` error repeated under a
+different ISO number.
+
+#### Backing RAG (`pdfce-spec-librarian`, same day)
+
+- `PDF_Spec/iso32000/iso32000__ref__subset_standard_rendering_presets.md` —
+  **the master grid**
+- `PDF_Spec/pdfx/pdfx__ref__conformance_and_rendering_axes.md`
+- `PDF_Spec/pdfa/pdfa__ref__conformance_and_rendering_axes.md` — **new**
+- `PDF_Spec/pdfua/pdfua__ref__rendering_scope_negative.md` — **new**
+
+**★ A new licence tier `free_iso_preview_primary` was introduced in that
+corpus. CITE BY CLAUSE; DO NOT PASTE ISO PREVIEW TEXT INTO THIS MIT REPO**
+(`LEGAL.md` §2/§5, `CLAUDE.md` rule 1).
+
+#### Verification
+
+**Relayed:** `cargo test --workspace` green, **10 new tests**; `cargo fmt
+--check` clean; `cargo clippy --workspace --all-targets -- -D warnings`
+clean; **all 17 bare gates exit 0**; **no new dependency**.
+**Checked here:** `git show --stat 1f79cc1` → 3 files / 1,578 insertions /
+1 deletion.
+
+---
+
+### `de2d93c` — `Pass 128.0` ships: **`MinifyFilter::default()` flips `PointSample` → `Smooth`** on a check the operator ran unprompted against Acrobat Reader — ★★ **and the flip turned YESTERDAY'S Type 3 test RED, revealing an interaction that had EXISTED SILENTLY ALL ALONG**: at 0.25× the new default interpolated a Type 3 bitmap glyph's stencil into **EIGHT distinct colours where Acrobat produces TWO**, so `image_minify` no longer applies inside a Type 3 glyph procedure; two tests **AMENDED, NOT DELETED** — 2026-08-25 (two-hundred-and-sixty-second filing)
+
+**Three files, 158 insertions, 25 deletions** *(`git show --stat de2d93c`,
+checked here)*. Fulfils pdfceGUI's
+`request_minify_default_the_viewer_evidence_you_asked_for_exists.md`.
+
+#### ★ THE ASK WAS ANSWERED RATHER THAN ARGUED, because the type had already written down what would move it
+
+`MinifyFilter`'s **own doc comment named the exact condition that would flip
+the default — and named it while the default was still labelled a guess:**
+
+> *"Default: PointSample — EVIDENCE TIER (d). Tier (d): reasoned inference
+> only, i.e. a guess… A viewer-behaviour check filed to
+> `C:\personal_rag\pdf\` would raise this to tier (c) and, if it confirms,
+> flip the default. Until then the status quo stands and is labelled a
+> guess."*
+
+**The operator ran that check, unprompted**, against **Acrobat Reader on his
+own CAD drawings**, and reported pdfce *"a little worse than it was, whereas
+before it was on par."*
+
+**★★ THE LOAD-BEARING DETAIL, and it is what makes this tier (c) rather than
+agreement: he described the MECHANISM from the SYMPTOM without being told it
+existed.** *"An image quality setting to discard smaller details than the
+screen sees"* **is `PointSample`, exactly.** **An observation that names the
+mechanism unprompted cannot have been led.**
+
+**NOT a regression, and this is recorded so nobody hunts for a commit:**
+`PointSample` had been the **shipped default throughout**, and
+`RenderOptions::default()` carried **the same value**, so **routing the
+setting through a GUI control changed no pixels.** There is no revert to
+find.
+
+#### ★★ THE NEIGHBOUR — the transferable half
+
+The flip turned **`a_bitmap_glyph_is_never_smoothed_at_any_zoom`** RED —
+**yesterday's `Pass 126.1` test (`0f09780`), whose expectation was MEASURED
+IN ACROBAT the day before.**
+
+**At 0.25× the new default interpolated a Type 3 bitmap glyph's stencil into
+EIGHT distinct colours where Acrobat produces TWO.**
+
+**§9.6.5 says why in its own words:** an image mask inside a glyph procedure
+is acceptable because *"it merely defines a **region of the page to be
+painted** with the current colour."* **A region is not a picture.**
+Resampling one **invents partial coverage along an edge the file defined as
+hard.**
+
+So **`image_minify` no longer applies inside a Type 3 glyph procedure.** Two
+things about that exclusion, both deliberate:
+
+* **★ IT IS SCOPED TO EXACTLY WHAT WAS MEASURED.** The same argument would
+  extend to **every `/ImageMask` drawn as page content**, and **that
+  extension is deliberately NOT made** — Acrobat's behaviour there **has not
+  been measured**, and *widening a rule from one observation to a class it
+  was not observed on is how a measurement becomes a guess wearing its
+  clothes.*
+* **★★ THE INTERACTION EXISTED SILENTLY BEFORE TODAY**, reachable by **any
+  operator who set the option by hand.** **The default flip did not create
+  it; it REVEALED it.** *A setting nobody had chosen was hiding a defect in
+  a setting somebody could.*
+
+#### TWO TESTS AMENDED, NOT DELETED
+
+**`every_shipped_default_is_the_behaviour_that_shipped_before_the_setting`**
+exists to stop a session flipping a default on its own authority. It now
+carries a **SECOND named exception**, beside the **2026-08-08 xref-EOL**
+one, **with the date, the attribution and the evidence** — because **the
+guarantee is that ADDING A KNOB changes nothing, not that a default may
+never move on evidence afterwards.** The latter reading would make **every
+default permanent the moment it shipped — including the ones the file openly
+calls guesses — and turn an honesty mechanism into a RATCHET.**
+
+**`the_default_minification_filter_renders_exactly_as_before` asserted the
+default BY NAME, which pinned the wrong thing.** It is now
+**`the_render_default_tracks_the_settings_default`** and asserts that
+**`RenderOptions::default()` cannot DRIFT from `MinifyFilter::default()`** —
+**the durable claim, and the silent failure mode** — plus an **`assert_ne!`
+on the other variant so it cannot pass vacuously.**
+
+**★ Written that way it needed NO EDIT for this flip, which is the point:** a
+test rewritten on every evidence-based default move **will eventually be
+rewritten without the evidence.**
+
+#### For pdfceGUI — relayed, and their side is already done
+
+Delete the one-time `Smooth` migration and its marker;
+`this_module_exists_because_the_defaults_differ` **should now fail**, which
+is the reminder it was built to be. `minify_point_label`'s *"(pdfce's
+default)"* parenthetical moves to the other option. *(Their `6061e69`,
+**"The image-smoothing migration deletes itself on schedule"**, is on their
+`main` — checked here by `git log --oneline -5` in `D:\dev\pdfceGUI`.)*
+
+Their reported workaround — that **`LoadReport` cannot say WHICH keys a
+settings file actually stated**, so a shell cannot tell *"absent,
+defaulted"* from *"explicitly chosen"* — **is real, is not fixed here, and
+is filed to *Backlog* below.**
+
+#### Verification
+
+**Relayed:** `cargo test --workspace` green, **115 suites**; fmt + clippy
+clean; `check-string-gaps`, `check-ui-strings` and `check-settings-consumed`
+all exit 0; **no new dependency**.
+**Checked here:** `git show --stat de2d93c` → 3 files / 158 insertions /
+25 deletions.
+
+---
+
 ### `768e934` — VERSION BUMP `0.10.0` → **`0.11.0`, MINOR NOT PATCH**: a new public core verb (`EditSession::search_text`, **140 verbs, was 139**), a new public type (`TextSearch`) and a new `TextDiagnostics` field — all ADDITIVE, nothing downstream breaks, and a bump anyway because a consuming project builds against `docs/core-api/` and a **new callable verb is not a patch**; both lock files moved, `fuzz/Cargo.lock` included — ★ **TAG / PUSH / RELEASE NOT YET DONE AS OF THIS FILING — this is a VERSION-BUMP record, not a release record** — no Pass ID, infrastructure/release record — 2026-08-25 (two-hundred-and-sixty-first filing, amendment)
 
 **Why this entry exists at all, and it is not bookkeeping.**
@@ -78569,6 +79076,118 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+### APPLY THE OUTPUT INTENT FOR COLOUR CONVERSION — the capability `cmyk_intent` is currently STANDING IN FOR
+
+**Filed 2026-08-25 (two-hundred-and-sixty-second filing)**, **named by
+`Pass 128.1`** (`1f79cc1`, top of *Shipped*) rather than left implicit,
+because that Pass could not have written an honest preset without
+discovering it.
+
+**The finding, restated so this entry can be read on its own.** Every
+**PDF/X** and **PDF/A** level guarantees a **COLORIMETRIC definition of
+device colour** — `/OutputIntents` → `DestOutputProfile`, `/DefaultCMYK`,
+or PDF/A-4's blending space. **pdfce's `CmykIntent` setting picks among
+fixed built-in conversion tables and is none of those**, so **no value of
+`cmyk_intent` is conformant under any of those standards.** This is **not a
+mis-set value that a better default would fix** — it is **the wrong
+mechanism**, and `Pass 128.1`'s preset therefore sets the least-wrong value
+and **discloses that the file's own output intent was not applied.**
+
+**★ Why this is filed as a capability and not as a settings tweak — it
+settles pdfceGUI's "contentious" framing.** The operator's **2026-08-08
+`NeutralBlack` ruling** and a **conformance render** looked like two values
+competing for one knob, and were argued that way. **They are not.** They are
+**one knob standing in for a capability pdfce does not have.** Once the
+output intent is actually applied, the `NeutralBlack` ruling governs
+**viewing a file that declares no intent**, and the conformance path stops
+needing a knob at all — **the contention dissolves rather than being
+resolved.**
+
+**Scope sketch, not yet a Pass.** (a) Resolve `/OutputIntents` →
+`/DestOutputProfile` **as a profile, not as its `/N` key** — `interpret.rs`
+currently reads `/N` only (see `Pass 124.0`'s entry, `7b1f47a`). (b) Apply
+it as the CMYK source transform. (c) Decide, **as a recorded decision rather
+than a silent pick**, what happens when a document carries **≥ 2**
+`/OutputIntents` entries — the population is measured at **1 in 51 of 51
+suite print files** (`Pass 124.0`), so the multi-intent case is rare enough
+to be got wrong quietly. (d) `cmyk_intent` then governs only the
+**no-declared-intent** case, and its doc comment must say so.
+
+**Blocked on nothing.** Ranked by the engineer.
+
+---
+
+### `LoadReport` CANNOT SAY WHICH KEYS A SETTINGS FILE ACTUALLY STATED — so a shell had to RE-IMPLEMENT A DEFAULT to tell "absent" from "chosen"
+
+**Filed 2026-08-25 (two-hundred-and-sixty-second filing)**, reported by
+**pdfceGUI** and surfaced during `Pass 128.0` (`de2d93c`, top of *Shipped*).
+
+**The defect.** `LoadReport` tells a shell that a settings file loaded and
+what its effective values are. **It cannot distinguish "the key was absent
+and pdfce defaulted it" from "the operator explicitly chose exactly the
+default value."** Those are different facts and a shell needs both: the
+first may be migrated, re-defaulted or explained; **the second must never be
+touched**, because the operator said it.
+
+**★ What it cost, which is why this is filed rather than noted.** pdfceGUI
+**re-implemented one of pdfce's defaults on its own side** in order to
+reconstruct the distinction — **a second copy of a value whose whole purpose
+is to be single-sourced.** That is the exact drift `Pass 128.0` then had to
+reason about: the `Smooth` migration and its
+`this_module_exists_because_the_defaults_differ` marker exist **because two
+projects were each holding an opinion about one default.**
+
+**Their two proposed shapes, recorded as proposed rather than chosen:**
+
+| shape | what it does |
+|---|---|
+| **`LoadReport::stated`** | the set of keys the file actually carried — additive, no behaviour change, a shell asks "did they say?" |
+| **`Settings::load_over(defaults)`** | load **over** a caller-supplied base, so the caller supplies the defaults and therefore already knows which were used |
+
+**Neither is endorsed here.** `stated` is the smaller change; `load_over` is
+the one that makes the question **unaskable** rather than merely
+**answerable**, which is usually the better shape in this project — but it
+moves a public signature and that is the engineer's call.
+
+**Acceptance criterion when scoped:** a settings file that **omits** a key
+and one that **states that key at its default value** must be
+**distinguishable through the public API**, with a test asserting exactly
+that pair — the negative half is required, or a shell can pass by reporting
+"stated" for everything.
+
+---
+
+### pdfceGUI REPORTS THE X-4 SUITE FILE'S TESTS ~16.8–16.11 SHOWING THE REFERENCE PATCH AND pdfce'S RENDERING DISAGREEING WHILE ACROBAT'S AGREE — **NOT INVESTIGATED**
+
+**Filed 2026-08-25 (two-hundred-and-sixty-second filing)**, **relayed from
+pdfceGUI, unverified on this side, and labelled that way deliberately.**
+
+**The report.** On the X-4 suite file, tests **~16.8–16.11**: the **reference
+patch** and **pdfce's rendering of the live patch** disagree, while
+**Acrobat's rendering of the two agrees.**
+
+**★ Why this is worth a Backlog entry despite being uninvestigated.** **If
+both halves of that report hold, it is a SELF-CONSISTENCY failure inside ONE
+PAGE, not a parity gap.** A parity gap is *"pdfce and Acrobat disagree about
+this file"* — ordinary, ranked against everything else. A self-consistency
+failure is *"pdfce renders two things that the file itself says must match,
+and they do not"* — and **the file supplies its own oracle**, so no external
+reference is needed to adjudicate it. **That is a much cheaper investigation
+and a much stronger signal**, and it would be lost if this were filed as
+"another suite cell."
+
+**First step when picked up:** confirm **both** halves independently —
+(a) that pdfce's two renderings disagree, and (b) that Acrobat's two agree —
+**before** looking for a cause. Only if **both** hold is the
+self-consistency reading available; if (b) fails it is an ordinary parity
+cell and ranks with the rest.
+
+**Suite-name discipline applies** (`Pass 124.2`,
+`tools/check-suite-name-absent.py`): the suite is referred to by cell
+identifiers only, never by name, in this repository.
+
+---
 
 ### `Pass 127.1` — `mark_redactions_by_search` must carry the diagnostics it now receives, so a "redact every hit" run over UNSEARCHABLE text stops marking nothing and saying nothing
 

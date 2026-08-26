@@ -106,6 +106,7 @@ builds `--no-default-features`, so both configurations compile.
 | Get the byte-exact origin of a glyph (for editing) | `ExtractOptions::default().with_provenance(true)` then `ExtractedGlyph::provenance` — `mod.rs:948`, `mod.rs:325` | §8.4 |
 | Search for text across the document | `EditSession::find_text_with(&needle, &TextSearchOptions)` — `edit.rs:11853` **(read-only in effect, but needs a session)** | §8.5 |
 | Search for text **and learn what was unreadable** | `EditSession::search_text(&needle, &TextSearchOptions)` — `edit.rs:16450` → `TextSearch { matches, diagnostics }` | §8.5 |
+| Render-setting preset for a subset standard (PDF/X, PDF/A, PDF/UA) | `pdfce_core::settings::presets::RenderPreset::for_standard(RenderStandard)` | §8.5a |
 | Decode a PDF text string (`/Title`, `/Author`, bookmark labels) | `textstring::decode_text_string(&[u8]) -> DecodedText` — `textstring.rs:363` | §8.6 |
 | Inventory every font the document uses | `fontinfo::inventory(&DocumentView) -> FontInventory` — `fontinfo.rs:1601` | §9.1 |
 | Know if a font is embedded / subsetted / removable | `FontRecord::program`, `::removability` — `fontinfo.rs:1209-1259`; `split_subset_tag` — `fontinfo.rs:1320` | §9.1 |
@@ -1063,6 +1064,57 @@ as a setting rather than picking one (R169).
 Case-insensitive matching is **ASCII-only and byte-offset preserving** by
 design (`edit.rs:6487-6496`): lower-casing would shift byte offsets for
 non-ASCII text and the offsets are what map a match back to its glyphs.
+
+### 8.5a Render presets for the subset standards (PDF/X, PDF/A, PDF/UA)
+
+`pdfce_core::settings::presets`, shipped `Pass 128.1` (`1f79cc1`).
+
+A preset is a **named bundle of values for settings that already exist**,
+applied in one act and individually editable afterwards. It adds no rendering
+mode, decides no conformance verdict, and validates nothing.
+
+```rust
+use pdfce_core::settings::presets::{RenderPreset, RenderStandard};
+
+let preset = RenderPreset::for_standard(RenderStandard::PdfX4);
+let changed: Vec<_> = preset.apply(&mut settings);   // the keys it MOVED
+for line in preset.disclosures() { /* show off-canvas */ }
+```
+
+**★★ EVERY ENTRY CARRIES ITS OWN EVIDENCE TIER, and that is the whole point.**
+`Evidence::{Sourced, Implied, BestEffort, NotApplicable}`. A control labelled
+`ISO 15930-7` carries that standard's authority whether or not you intended it
+to, so the interesting column is not the value — it is how much weight the
+value can bear. For PDF/X-4, **one of six** entries is a claim about the
+standard at all, and it is `Implied` rather than `Sourced`.
+
+**★ `PresetAction::LeaveAlone` is a real state and your UI needs it.** Roughly
+a third of the grid is axes a standard does not reach — the complete clause
+lists of ISO 15930-7 and -9 contain no shading clause at all, so no PDF/X part
+reaches mesh padding. Render those rows differently from rows with values
+(greyed, or "this standard does not specify"), **never blank**: a blank cell
+reads as missing data. `RenderPreset::left_alone()` gives you the keys and each
+entry carries a `why`.
+
+**Three things to surface, all from `disclosures()`:**
+
+1. Applying a preset **does not make a file conformant and does not check
+   whether it is.**
+2. PDF/X itself concedes more than one conforming rendering may exist, and its
+   stated remedy is embedded **job ticket** data pdfce does not read.
+3. Every PDF/X and PDF/A level guarantees a **colorimetric** device-colour
+   definition that pdfce does not apply — `CmykIntent` picks among fixed
+   built-in tables and is not an ICC path. That is a capability gap, not a
+   mis-set value, and it is invisible by construction: a colour transform that
+   did not happen leaves nothing on screen.
+
+**`RenderStandard::PdfUa1` sets nothing, and that is the sourced answer** —
+measured at zero hits for nine rendering terms across all 197 veraPDF PDF/UA
+rules. Surface it rather than hiding it; an absent entry reads as unfinished.
+
+`PresetAction::value_string()` formats a value for display. Use it rather than
+matching — the type is `#[non_exhaustive]`, so your `match` needs a wildcard,
+and that wildcard silently prints a future variant as the fallback.
 
 ### 8.6 Text strings (`/Title`, `/Author`, bookmark labels)
 

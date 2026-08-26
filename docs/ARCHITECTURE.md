@@ -4103,14 +4103,33 @@ text layer from words obtained some other way.
 
 #### ★ The weights SHIP, as DATA FILES — and the embed-vs-disk threshold is a design constraint, not a size preference
 
-**Added 2026-08-13 (`40c377a`, hundred-and-forty-sixth filing).** The two
-`.rten` files are committed at
-`crates/pdfce-core/assets/models/ocrs/`, **12,240,008 B over 2 files =
-6.12 MB each**, retrieved from `huggingface.co/robertknight/ocrs` on
-2026-08-13, licence **CC-BY-SA-4.0** (read from the model card's YAML
-front matter at source; the `ocrs-models` GitHub repository carries **no**
-`LICENSE` file), SHA-256-pinned in a hand-authored `PROVENANCE.md`
-**and** cited in `about.hbs`.
+**Added 2026-08-13 (`40c377a`, hundred-and-forty-sixth filing).
+★ CORRECTED 2026-08-25 (`181d9bd`, `Pass 129.0`, two-hundred-and-sixty-
+second filing) — the DETECTION artefact was replaced and the total moved.**
+The two `.rten` files are committed at
+`crates/pdfce-core/assets/models/ocrs/`, **12,226,728 B over 2 files =
+6.11 MB each** *(detection **2,510,284 B** + recognition **9,716,444 B**;
+measured by `ls -l` on the directory, 2026-08-25)*, licence
+**CC-BY-SA-4.0** (read from the model card's YAML front matter at source;
+the `ocrs-models` GitHub repository carries **no** `LICENSE` file),
+SHA-256-pinned in a hand-authored `PROVENANCE.md` **and** cited in
+`about.hbs`.
+
+**★ The prior wording said `12,240,008 B over 2 files = 6.12 MB each,
+retrieved from `huggingface.co/robertknight/ocrs` on 2026-08-13`, and it
+is kept legible here rather than silently rewritten** (`R215` (d)),
+because the number is not the interesting part of the correction.
+**The Hugging Face detection build (`text-detection-ssfbcj81.rten`,
+2,523,564 B) DOES NOT WORK with `ocrs` 0.12.2** — it returns noise, and did
+so for every OCR run pdfce ever made between 2026-08-13 and 2026-08-25. The
+**recognition** file is unchanged and still the Hugging Face one; only the
+**detection** file was replaced, with the author's S3 build
+(`text-detection.rten`, 2,510,284 B), which is **what the `ocrs` crate's own
+example downloads**. **So the provenance line is now MIXED-CHANNEL by
+necessity and must say so** — see `PROVENANCE.md`'s four-row isolation
+table, and `LEGAL.md` §6.7.4. **A 13,280 B difference between two builds of
+one network under two filenames is not a rounding error; it is two
+models.**
 
 **They are NOT `include_bytes!`, and the reason is architectural rather
 than about size.** The bundled Foxit faces **are** compiled in, which is
@@ -4118,7 +4137,24 @@ right for **264 KB**. Embedding 12 MB would **defeat
 `resolve_model_dir`'s design**: it loads **from disk** precisely so an
 operator can point at **their own** models. So the weights ship as files
 the packaging step places beside the binary. *(264 KB embedded vs
-12,240,008 B on disk — a **46×** ratio at the point the rule flips.)*
+**12,226,728 B** on disk — a **46×** ratio at the point the rule flips.
+Recomputed 2026-08-25 against the corrected total; the ratio is
+**46.3×**, unchanged at the stated precision, which is worth one clause
+because a reader who spots the moved numerator would otherwise have to
+redo the division to find out whether the conclusion moved. It did not.)*
+
+**★★ AND THE PACKAGING STEP DID NOT ACTUALLY PLACE THEM THERE, from
+2026-08-13 until `Pass 129.0` (`181d9bd`, 2026-08-25).** The sentence
+above described the design; `tools/package-portable.py` copied **neither
+the weights nor `PROVENANCE.md`**, so **`ocr` failed in every RELEASE
+build while working in every DEVELOPMENT one**, naming paths that exist
+on a developer's machine and not on the operator's. Fixed in `129.0`, and
+recorded here rather than only in the Pass entry because **this section is
+where the claim "the packaging step places them beside the binary" is
+made.** `PROVENANCE.md` is copied **with** the weights, deliberately:
+`tools/check-shipped-assets.py` reads the **repository**, so shipping the
+weights without their provenance file would **satisfy the gate and breach
+the licence.**
 
 **The licence boundary lives in `PROVENANCE.md`, deliberately, and is not
 duplicated into a decision record** — a second copy is a copy that can
