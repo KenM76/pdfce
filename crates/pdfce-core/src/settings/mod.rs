@@ -1136,7 +1136,7 @@ pub struct Settings {
     /// and discloses that it did. The consequence is operator-visible and is
     /// what prompted this field: **the same page rendered different colours
     /// at different zoom levels**, crossing the built-in ceiling at about
-    /// 534 % on A4, with nothing on screen able to say where the boundary
+    /// 518 % on A4, with nothing on screen able to say where the boundary
     /// was because nothing outside the renderer could read it.
     ///
     /// The right value is a function of the operator's screen and their
@@ -1986,8 +1986,10 @@ impl Settings {
              #   256mib, 1gib, 2gb, 268435456 = all accepted; mb and mib both mean\n\
              #                                  1,048,576 bytes here\n\
              #   0       = never blend in print colours at all\n\
-             # Rough guide, whole A4 page: 256mib reaches about 530% zoom, 1gib\n\
-             # about 1060%, 4gib about the largest page pdfce will raster at all.\n",
+             # Rough guide, whole A4 page: 256mib reaches about 518% zoom, 1gib\n\
+             # about 1035%, 4gib about the largest page pdfce will raster at all.
+\n             # A page with layered transparency can need up to about FOUR TIMES
+\n             # this at once, because each layer is given a buffer of its own.\n",
         );
         let _ = writeln!(
             out,

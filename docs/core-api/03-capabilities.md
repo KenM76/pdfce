@@ -2001,9 +2001,10 @@ predicate to the renderer.
 
 **★ Your render tier should end at this ceiling, not at `MAX_PIXMAP_EDGE`.**
 Those are two different bounds and the gap between them is a factor of four
-on A4 — a whole-page raster is *permitted* up to 2071 % zoom and stops
-compositing in ink at about **534 %**. Every raster in between comes back
-with approximate colours.
+on A4 — a whole-page raster is *permitted* up to **1946 %** zoom (where
+`MAX_PIXMAP_EDGE` bites on an 842 pt edge) and stops compositing in ink at
+about **518 %**. Every raster in between comes back with approximate
+colours.
 
 **★ And moving the switch down is NOT sufficient on a large display.** With
 50 % overscan a region raster needs ~110 MB at 1600×900, **~281 MB at
@@ -2032,8 +2033,24 @@ prevent the choice.
 **The cost, measured**, for whatever your settings UI says: 20 B/px, and
 compositing in ink ran roughly **50 % slower** than compositing on screen at
 the same pixel count (1.47 s / 1.39 s against 1.04 s / 0.85 s at the
-boundary). Whole-page A4 wants ~576 MB at 800 %, ~1.26 GB at 1200 %, ~3.8 GB
-at the end of the `MAX_PIXMAP_EDGE` tier; a square 16,384² raster, ~5.0 GB.
+boundary). Whole-page A4 (595 × 842 pt) wants **~641 MB at 800 %**, **~1.44 GB
+at 1200 %** and **~3.8 GB** at the end of the `MAX_PIXMAP_EDGE` tier; a square
+16,384² raster, **~5.4 GB**.
+
+*(Your request's table gave 576 MB / 1.26 GB / 3.77 GB, the ceiling at 534 %
+and the tier's end at 2071 %. Those are correct for the **596 × 791 pt** page
+you bisected on, which was labelled A4 and is not — and ours repeated the
+error for a day, which is how it propagated. The figures above are real A4.)*
+
+**★ AND THE CEILING BOUNDS ONE BUFFER, NOT THE RENDER.** Every buffer on a
+page is page-sized, and a page can hold several at once: the page buffer,
+plus a transparency group's child, plus the retained spare a sibling group
+reuses, plus — for a **knockout** group — a full copy of its initial
+backdrop. So peak resident memory is a small multiple of the ceiling, up to
+about **4×** on a page with a knockout group, and a ceiling that admits one
+large page is not a ceiling that admits one large *allocation*. Size a
+settings UI's advice accordingly: the honest sentence is *"up to about four
+times this on a page with nested transparency"*, not *"this much."*
 
 **Key on `cmyk_buffer_refused`, not `blends_in_wrong_space`.** The second is
 zero on a page whose transparency happens to fall outside the rendered

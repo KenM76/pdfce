@@ -454,11 +454,31 @@ fn the_settings_file_describes_the_ceiling_the_renderer_actually_enforces() {
     let max_px = pdfce_render::max_cmyk_composite_pixels(None) as f64;
     let a4_pt = 595.0 * 842.0;
     let zoom_percent = (max_px / a4_pt).sqrt() * 100.0;
+    // ★ A BAND OF FIVE POINTS, AND IT USED TO BE SIXTY. The wide band was
+    // written to be robust and is the reason this assertion passed while the
+    // sentence it guards was WRONG: every percentage in that paragraph had
+    // been computed on a 596 x 791 pt page -- the size of the file the
+    // request was bisected on, which was called A4 and is not (A4 is
+    // 595 x 842). The true figure is 518 %, the prose said 530 %, and a
+    // +-30 band swallowed the difference. A tolerance chosen for comfort
+    // rather than derived from the arithmetic hides the class of error it
+    // was pointed at.
     assert!(
-        (500.0..560.0).contains(&zoom_percent),
-        "the file says the default reaches about 530% on A4; it now reaches \
-         {zoom_percent:.0}% — move the prose or move the constant, but not \
-         one without the other"
+        (513.0..523.0).contains(&zoom_percent),
+        "the file says the default reaches about 518% on A4; it now reaches {zoom_percent:.0}% -- move the prose or move the constant, but not one without the other"
     );
-    assert!(text.contains("about 530% zoom"));
+    assert!(text.contains("about 518% zoom"));
+
+    // The 1 GiB figure in the same paragraph, from the same arithmetic. Two
+    // numbers rather than one, because the wrong-page error moved BOTH and a
+    // check on either alone would have caught it only by luck.
+    #[allow(clippy::cast_precision_loss)]
+    let gib_percent =
+        ((pdfce_render::max_cmyk_composite_pixels(Some(1024 * 1024 * 1024)) as f64) / a4_pt).sqrt()
+            * 100.0;
+    assert!(
+        (1030.0..1040.0).contains(&gib_percent),
+        "the file says 1gib reaches about 1035%; it now reaches {gib_percent:.0}%"
+    );
+    assert!(text.contains("about 1035%"));
 }

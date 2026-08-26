@@ -253,9 +253,9 @@ pub(crate) type Chan = f32;
 /// for as long as this constant was the only answer. The consequence was
 /// operator-visible and was reported by the shell building a viewer against
 /// this crate: the same page rendered different colours at different zooms,
-/// crossing this ceiling at about 534 % on A4, with a factor of four between
-/// it and [`crate::MAX_PIXMAP_EDGE`] where a whole-page raster is permitted
-/// but will not composite in ink.
+/// crossing this ceiling at about 518 % on A4, with very nearly a factor of
+/// four between it and [`crate::MAX_PIXMAP_EDGE`] (1946 % on the same page)
+/// where a whole-page raster is permitted but will not composite in ink.
 ///
 /// So [`CmykBuffer::new`] takes the ceiling as an argument, this constant is
 /// what an unset one resolves to, and the operator can raise it with no cap —

@@ -179,7 +179,7 @@ pub const CMYK_BYTES_PER_PIXEL: usize = cmyk_buffer::BYTES_PER_PIXEL;
 /// The default ceiling on a single subtractive compositing buffer, in bytes.
 ///
 /// At [`CMYK_BYTES_PER_PIXEL`] this permits **13,421,772 pixels** — a
-/// US-Letter page to roughly 375 DPI, or A4 to about 534 % zoom. Past it the
+/// US-Letter page to roughly 379 DPI, or A4 to about 518 % zoom. Past it the
 /// page composites in sRGB instead and **says so** (`cmyk_buffer_refused`),
 /// which is a disclosed approximation rather than a failed render.
 ///
@@ -195,9 +195,14 @@ pub const CMYK_BYTES_PER_PIXEL: usize = cmyk_buffer::BYTES_PER_PIXEL;
 ///
 /// Raising it costs memory **and time**: compositing in ink measured roughly
 /// 50 % slower than compositing on screen at the same pixel count. Whole-page
-/// A4 at the end of the [`MAX_PIXMAP_EDGE`] tier (2071 %) would want ~3.8 GB
-/// of buffer; a square 16,384² raster, ~5.0 GB. Those are the true numbers a
-/// shell should put beside the setting.
+/// A4 at the end of the [`MAX_PIXMAP_EDGE`] tier (1946 %) would want ~3.8 GB
+/// of buffer; a square 16,384² raster, ~5.4 GB.
+///
+/// **And this bounds ONE buffer, not the render.** A transparency group gets
+/// a page-sized child, a sibling group reuses a retained spare, and a
+/// knockout group also holds a full copy of its initial backdrop — so peak
+/// resident memory is up to roughly **4×** this on a page with nested
+/// transparency. That is the number a shell should put beside the setting.
 pub const DEFAULT_MAX_CMYK_BUFFER_BYTES: usize = cmyk_buffer::DEFAULT_MAX_CMYK_BUFFER_BYTES;
 
 /// How many pixels a subtractive compositing buffer may cover under
@@ -249,12 +254,12 @@ pub const fn max_cmyk_composite_pixels(max_bytes: Option<usize>) -> u64 {
 ///
 /// ```
 /// # use pdfce_render::will_composite_in_cmyk;
-/// // A4 at 5.33x — 13.39 M px, inside the default ceiling.
-/// assert!(will_composite_in_cmyk(3177, 4216, None));
-/// // A4 at 5.34x — 13.44 M px, past it.
-/// assert!(!will_composite_in_cmyk(3183, 4224, None));
+/// // A4 (595 x 842 pt) at 5.17x — 13.39 M px, inside the default ceiling.
+/// assert!(will_composite_in_cmyk(3076, 4353, None));
+/// // A4 at 5.18x — 13.44 M px, past it.
+/// assert!(!will_composite_in_cmyk(3082, 4362, None));
 /// // ...and inside it again once the operator pays for a bigger buffer.
-/// assert!(will_composite_in_cmyk(3183, 4224, Some(512 * 1024 * 1024)));
+/// assert!(will_composite_in_cmyk(3082, 4362, Some(512 * 1024 * 1024)));
 /// ```
 #[must_use]
 pub const fn will_composite_in_cmyk(
