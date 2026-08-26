@@ -164,6 +164,110 @@ pub use pdfce_core::{PdfError, PdfVersion};
 /// format, and it should be re-read whenever the use changes.
 pub const MAX_PIXMAP_EDGE: u32 = 16 * 1024;
 
+/// Bytes of storage each pixel of the **subtractive compositing buffer**
+/// costs: four colorant planes plus alpha.
+///
+/// Taken from the buffer's own element type rather than restated, so a
+/// change to that type cannot desynchronise this constant from the
+/// arithmetic it describes. **20 bytes** today (`f32` × 5).
+///
+/// Published because a caller sizing a raster needs the cost per pixel to
+/// predict the ceiling — but prefer [`will_composite_in_cmyk`], which asks
+/// the actual question and does the arithmetic here, where it cannot rot.
+pub const CMYK_BYTES_PER_PIXEL: usize = cmyk_buffer::BYTES_PER_PIXEL;
+
+/// The default ceiling on a single subtractive compositing buffer, in bytes.
+///
+/// At [`CMYK_BYTES_PER_PIXEL`] this permits **13,421,772 pixels** — a
+/// US-Letter page to roughly 375 DPI, or A4 to about 534 % zoom. Past it the
+/// page composites in sRGB instead and **says so** (`cmyk_buffer_refused`),
+/// which is a disclosed approximation rather than a failed render.
+///
+/// # This is a default, not a limit
+///
+/// [`RenderOptions::with_max_cmyk_buffer_bytes`] overrides it, and
+/// `pdfce_core::settings::Settings::max_cmyk_buffer_bytes` is where the
+/// operator's persisted choice arrives from. The ceiling exists because
+/// `ARCHITECTURE.md` §10 forbids an **untrusted-input-sized** allocation
+/// without one — page dimensions come from the file — and an operator who
+/// names a number is not untrusted input. So there is deliberately no cap on
+/// the override, exactly as `max_zoom_percent` has none.
+///
+/// Raising it costs memory **and time**: compositing in ink measured roughly
+/// 50 % slower than compositing on screen at the same pixel count. Whole-page
+/// A4 at the end of the [`MAX_PIXMAP_EDGE`] tier (2071 %) would want ~3.8 GB
+/// of buffer; a square 16,384² raster, ~5.0 GB. Those are the true numbers a
+/// shell should put beside the setting.
+pub const DEFAULT_MAX_CMYK_BUFFER_BYTES: usize = cmyk_buffer::DEFAULT_MAX_CMYK_BUFFER_BYTES;
+
+/// How many pixels a subtractive compositing buffer may cover under
+/// `max_bytes`, where `None` means [`DEFAULT_MAX_CMYK_BUFFER_BYTES`].
+///
+/// The argument is `Option<usize>` so that it takes
+/// `pdfce_core::settings::Settings::max_cmyk_buffer_bytes` verbatim: a
+/// caller never has to decide what "unset" means, because the answer lives
+/// here.
+///
+/// ```
+/// # use pdfce_render::{max_cmyk_composite_pixels, DEFAULT_MAX_CMYK_BUFFER_BYTES};
+/// assert_eq!(max_cmyk_composite_pixels(None), 13_421_772);
+/// assert_eq!(
+///     max_cmyk_composite_pixels(Some(DEFAULT_MAX_CMYK_BUFFER_BYTES)),
+///     max_cmyk_composite_pixels(None)
+/// );
+/// // Doubling the ceiling doubles the pixels — the relation is linear.
+/// assert_eq!(max_cmyk_composite_pixels(Some(40)), 2);
+/// ```
+#[must_use]
+pub const fn max_cmyk_composite_pixels(max_bytes: Option<usize>) -> u64 {
+    let bytes = match max_bytes {
+        Some(b) => b,
+        None => DEFAULT_MAX_CMYK_BUFFER_BYTES,
+    };
+    (bytes / CMYK_BYTES_PER_PIXEL) as u64
+}
+
+/// Would a raster of `width_px × height_px` composite in ink, or fall back
+/// to sRGB?
+///
+/// **This is the question a caller actually has**, which is why it is a
+/// function rather than a constant to divide by: a shell choosing between a
+/// whole-page raster and a region raster needs to know whether the choice
+/// changes the colours, and hiding the arithmetic here means a change to
+/// [`CMYK_BYTES_PER_PIXEL`] cannot leave a second copy of it behind.
+///
+/// `max_bytes` is `None` for the built-in default — see
+/// [`max_cmyk_composite_pixels`].
+///
+/// # What a `true` does and does not promise
+///
+/// It promises the **ceiling** does not refuse this size. It is not an
+/// allocation: a machine that cannot find the memory still refuses, and
+/// still discloses it the same way. And it says nothing about whether the
+/// page *wants* ink — a page whose group declares no subtractive blending
+/// space composites on screen at every size, correctly (§8.6.6.4).
+///
+/// ```
+/// # use pdfce_render::will_composite_in_cmyk;
+/// // A4 at 5.33x — 13.39 M px, inside the default ceiling.
+/// assert!(will_composite_in_cmyk(3177, 4216, None));
+/// // A4 at 5.34x — 13.44 M px, past it.
+/// assert!(!will_composite_in_cmyk(3183, 4224, None));
+/// // ...and inside it again once the operator pays for a bigger buffer.
+/// assert!(will_composite_in_cmyk(3183, 4224, Some(512 * 1024 * 1024)));
+/// ```
+#[must_use]
+pub const fn will_composite_in_cmyk(
+    width_px: u32,
+    height_px: u32,
+    max_bytes: Option<usize>,
+) -> bool {
+    if width_px == 0 || height_px == 0 {
+        return false;
+    }
+    (width_px as u64) * (height_px as u64) <= max_cmyk_composite_pixels(max_bytes)
+}
+
 /// Rasterization errors.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -523,7 +627,12 @@ fn render_impl(
     // empirical version of the same warning, where enabling overprint
     // preview visibly shifted unrelated RGB raster content.
     let mut cmyk = if page_space.is_subtractive() {
-        cmyk_buffer::CmykBuffer::new(width, height, options.policy().cmyk_intent)
+        cmyk_buffer::CmykBuffer::new(
+            width,
+            height,
+            options.policy().cmyk_intent,
+            options.policy().max_cmyk_buffer_bytes,
+        )
     } else {
         None
     };

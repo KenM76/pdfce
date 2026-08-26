@@ -603,6 +603,126 @@ fn r20_counters_disclose_a_substituted_font_on_stdout_and_stderr() {
     );
 }
 
+/// A subtractive page fixture: a `/Group /CS /DeviceCMYK` page whose
+/// content blends, which is the only kind of page the colorant buffer —
+/// and therefore the ceiling — has anything to do with.
+///
+/// Built here rather than reused from `multipage_pdf` because the page
+/// GROUP is the whole point: without `/Group /CS /DeviceCMYK` the render
+/// composites on screen at every ceiling and the test would pass while
+/// measuring nothing.
+fn subtractive_pdf() -> Vec<u8> {
+    let content = "0 0 0 1 k 0 0 200 100 re f /GS0 gs 0 1 0 0 k 0 0 200 100 re f";
+    build_pdf(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>".into()),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 100] >>".into(),
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+             /Group << /S /Transparency /CS /DeviceCMYK >> \
+             /Resources << /ExtGState << /GS0 5 0 R >> >> >>"
+                .into(),
+        ),
+        (
+            4,
+            format!(
+                "<< /Length {} >>\nstream\n{content}\nendstream",
+                content.len()
+            ),
+        ),
+        (5, "<< /Type /ExtGState /BM /Difference >>".into()),
+    ])
+}
+
+/// `--max-cmyk-buffer-bytes` moves the boundary in BOTH directions, and
+/// says which side of it this render landed on (`Pass 132.0`).
+///
+/// # Why both directions, on the same file, at the same scale
+///
+/// Only the pair is evidence. A test that merely lowered the ceiling and
+/// saw a refusal would pass against a build that had hard-wired the
+/// refusal; a test that merely raised it proves nothing, because the
+/// default already composites this page in ink. Changing ONLY the flag and
+/// watching `cmyk_buffer` flip is what says the flag is the cause.
+///
+/// The refusal message is asserted too, and deliberately on the phrase
+/// that names the way out. Before this Pass it said only "re-render at a
+/// lower resolution", which was the whole truth at the time and is now
+/// half of it — and an operator-facing paragraph that has gone stale is
+/// invisible, because nothing else tests one.
+#[test]
+fn the_cmyk_buffer_ceiling_is_settable_and_the_outcome_is_disclosed() {
+    let dir = TempDir::new("cmyk-ceiling");
+    let pdf = dir.write("ink.pdf", &subtractive_pdf());
+    let png = dir.join("ink.png");
+    let path = pdf.to_str().unwrap().to_owned();
+    let out_path = png.to_str().unwrap().to_owned();
+
+    // 200x100 pt at scale 1 is 20,000 px = 400,000 bytes of colorant
+    // buffer. The two ceilings straddle that number.
+    let low = run(&[
+        "render-page",
+        &path,
+        "--max-cmyk-buffer-bytes",
+        "128kib",
+        "-o",
+        &out_path,
+    ]);
+    assert_eq!(
+        code(&low),
+        0,
+        "a refusal is not a failure: {}",
+        stderr(&low)
+    );
+    assert!(
+        stdout(&low).contains("cmyk_buffer=0 cmyk_buffer_refused=1"),
+        "a ceiling below the raster must refuse and SAY so: {}",
+        stdout(&low)
+    );
+    assert!(
+        stderr(&low).contains("RAISE THE CEILING"),
+        "the refusal must name the new way out, not only the old one: {}",
+        stderr(&low)
+    );
+
+    let high = run(&[
+        "render-page",
+        &path,
+        "--max-cmyk-buffer-bytes",
+        "1mib",
+        "-o",
+        &out_path,
+    ]);
+    assert_eq!(code(&high), 0, "stderr: {}", stderr(&high));
+    assert!(
+        stdout(&high).contains("cmyk_buffer=1 cmyk_buffer_refused=0"),
+        "the same raster must composite in ink once the ceiling allows it: {}",
+        stdout(&high)
+    );
+
+    // An unreadable value is REPORTED and then ignored. The failure this
+    // guards against is a silent `0`, which would read as "pdfce stopped
+    // compositing in ink" rather than as "you typed something wrong".
+    let bad = run(&[
+        "render-page",
+        &path,
+        "--max-cmyk-buffer-bytes",
+        "plenty",
+        "-o",
+        &out_path,
+    ]);
+    assert_eq!(code(&bad), 0, "a bad flag value is a note, not a failure");
+    assert!(stderr(&bad).contains("is not a size"), "{}", stderr(&bad));
+    assert!(
+        stdout(&bad).contains("cmyk_buffer=1"),
+        "an unreadable ceiling must fall back to the SETTING, not to zero: {}",
+        stdout(&bad)
+    );
+}
+
 #[test]
 fn scale_multiplies_the_raster_size() {
     let dir = TempDir::new("scale");

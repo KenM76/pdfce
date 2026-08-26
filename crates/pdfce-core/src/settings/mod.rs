@@ -1124,6 +1124,41 @@ pub struct Settings {
     pub separations: SeparationPolicy,
     /// How `DeviceCMYK` is converted for display.
     pub cmyk_intent: CmykIntent,
+    /// The largest **subtractive compositing buffer** the renderer may
+    /// allocate, in bytes. `None` = the renderer's built-in default.
+    ///
+    /// # Why this is the operator's number and not a constant
+    ///
+    /// A page whose group declares a subtractive blending space
+    /// (ISO 32000-1 §11.4.7) is composited in a four-colorant buffer, and
+    /// that buffer costs 20 bytes per pixel — so it grows with the square of
+    /// the zoom. Past a ceiling the renderer composites on screen instead
+    /// and discloses that it did. The consequence is operator-visible and is
+    /// what prompted this field: **the same page rendered different colours
+    /// at different zoom levels**, crossing the built-in ceiling at about
+    /// 534 % on A4, with nothing on screen able to say where the boundary
+    /// was because nothing outside the renderer could read it.
+    ///
+    /// The right value is a function of the operator's screen and their
+    /// tolerance for memory — a 4K viewport with overscan wants ~633 MB
+    /// where a 1600×900 one wants ~110 MB — and **neither is knowable from
+    /// inside the renderer.** So it is a setting, uncapped, on the same
+    /// ruling the operator gave for the zoom ceiling: *"it is up to the user
+    /// to determine how much of a performance hit they want to take."*
+    ///
+    /// # It is uncapped, and that is safe for a specific reason
+    ///
+    /// `ARCHITECTURE.md` §10 forbids an **untrusted-input-sized**
+    /// allocation without a ceiling. A page's dimensions are untrusted
+    /// input; a number the operator typed is not. A value larger than the
+    /// machine can supply is not a crash either — the renderer attempts the
+    /// allocation fallibly and falls back to the disclosed sRGB path, the
+    /// same as if the ceiling had refused.
+    ///
+    /// Raising it costs time as well as memory: compositing in ink measured
+    /// roughly 50 % slower than compositing on screen at the same pixel
+    /// count.
+    pub max_cmyk_buffer_bytes: Option<usize>,
     /// Which visual theme the GUI uses, as an opaque token.
     ///
     /// # A `String`, deliberately, and core does not validate it
@@ -1239,6 +1274,13 @@ impl Default for Settings {
         Self {
             separations: SeparationPolicy::default(),
             cmyk_intent: CmykIntent::default(),
+            // `None`, and deliberately NOT a copy of the renderer's
+            // constant: `pdfce-core` cannot see `pdfce-render` (the
+            // dependency runs the other way), and a mirrored number is the
+            // exact drift this module's `word_gap_ratio` default already
+            // demonstrated once. `None` means "whatever the renderer's
+            // default is", which is true forever without being restated.
+            max_cmyk_buffer_bytes: None,
             // The shell's default preset name, as a literal rather than
             // an import, for the layering reason on the field. The GUI's
             // `theme::Preset::default().key()` must agree, and
@@ -1273,6 +1315,144 @@ impl Default for Settings {
             xref_entry_eol: crate::writer::SaveOptions::default().xref_entry_eol,
             trailing_eol: crate::writer::SaveOptions::default().trailing_eol,
         }
+    }
+}
+
+/// A byte size pdfce could not read.
+///
+/// Carries the offending text because the shell that reports it usually
+/// has nothing else to show the operator — the settings file reports the
+/// key and line itself through [`SettingNote::BadValue`], but a value typed
+/// into a settings window or passed on a command line has neither.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "{value:?} is not a size: write a number of bytes, a size such as `256mib` or `1.5gb`, or `default`"
+)]
+#[non_exhaustive]
+pub struct ByteSizeError {
+    /// The text as the operator wrote it, trimmed.
+    pub value: String,
+}
+
+/// Parse a byte size written the way a person writes one.
+///
+/// `Ok(None)` is the literal `default` — *"understood, and it means
+/// unset"* — so the return type is exactly the type of the setting it
+/// fills ([`Settings::max_cmyk_buffer_bytes`]) and a caller never has to
+/// translate.
+///
+/// Public because a shell offering the ceiling in a settings window must
+/// accept the **same** spellings the file does. A second parser would be a
+/// second vocabulary, and then a value the operator can type into pdfce is
+/// one pdfce's own file rejects.
+///
+/// # Errors
+///
+/// [`ByteSizeError`] for a negative, non-finite, empty, unparseable or
+/// absurdly large value, or an unknown suffix.
+///
+/// ```
+/// # use pdfce_core::settings::parse_byte_size;
+/// assert_eq!(parse_byte_size("default"), Ok(None));
+/// assert_eq!(parse_byte_size("256mib"), Ok(Some(268_435_456)));
+/// assert_eq!(parse_byte_size("0.25gb"), Ok(Some(268_435_456)));
+/// assert_eq!(parse_byte_size("268435456"), Ok(Some(268_435_456)));
+/// assert!(parse_byte_size("plenty").is_err());
+/// ```
+///
+/// # Accepted forms, and why more than one
+///
+/// A bare integer is bytes. A `mb` / `gb` / `mib` / `gib` suffix (any
+/// case, optional space) multiplies. Both are defensible and there is no
+/// reason to make the operator guess which one this file wants, so both
+/// are accepted — `268435456`, `256mb`, `256 MiB` and `0.25gb` are the
+/// same value.
+///
+/// **`mb` and `mib` both mean 1,048,576 here.** That is not sloppiness
+/// about SI: this number sizes an allocation, every figure pdfce reports
+/// about it is binary, and an operator who writes `512mb` after reading a
+/// ceiling described as 256 MB would otherwise get 488 MiB and a
+/// disclosure that disagreed with their own arithmetic. Being consistent
+/// with the rest of pdfce beats being right about a prefix nobody typed
+/// deliberately.
+///
+/// A fractional value is accepted (`1.5gb`) and truncated toward zero,
+/// because a size in gigabytes is the one place a decimal point is the
+/// natural way to write it.
+///
+/// # Failure conditions
+///
+/// A negative number, a non-finite one, an unknown suffix, an empty
+/// string, or a value too large for `usize` all return `None`. **Zero is
+/// accepted**, and means the ceiling refuses every buffer — a legitimate
+/// way to say *"never composite in ink"* and see what that costs, rather
+/// than a degenerate value worth rejecting.
+pub fn parse_byte_size(value: &str) -> Result<Option<usize>, ByteSizeError> {
+    let bad = || ByteSizeError {
+        value: value.trim().to_owned(),
+    };
+    let v = value.trim();
+    if v.eq_ignore_ascii_case("default") {
+        return Ok(None);
+    }
+    let lower = v.to_ascii_lowercase();
+    let (number, multiplier) = if let Some(rest) = lower.strip_suffix("gib") {
+        (rest, 1024.0 * 1024.0 * 1024.0)
+    } else if let Some(rest) = lower.strip_suffix("mib") {
+        (rest, 1024.0 * 1024.0)
+    } else if let Some(rest) = lower.strip_suffix("kib") {
+        (rest, 1024.0)
+    } else if let Some(rest) = lower.strip_suffix("gb") {
+        (rest, 1024.0 * 1024.0 * 1024.0)
+    } else if let Some(rest) = lower.strip_suffix("mb") {
+        (rest, 1024.0 * 1024.0)
+    } else if let Some(rest) = lower.strip_suffix("kb") {
+        (rest, 1024.0)
+    } else if let Some(rest) = lower.strip_suffix('b') {
+        (rest, 1.0)
+    } else {
+        (lower.as_str(), 1.0)
+    };
+    let parsed: f64 = number.trim().parse().map_err(|_| bad())?;
+    if !parsed.is_finite() || parsed < 0.0 {
+        return Err(bad());
+    }
+    let bytes = parsed * multiplier;
+    // `usize::MAX as f64` rounds UP, so comparing against it directly would
+    // admit a value that then truncates to a nonsense `usize`. Compare
+    // against a power of two that survives the conversion exactly.
+    if bytes >= 9_007_199_254_740_992.0 {
+        return Err(bad());
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let bytes = bytes as usize;
+    Ok(Some(bytes))
+}
+
+/// Render a byte size back in the friendliest exact form.
+///
+/// Public alongside [`parse_byte_size`] and for the same reason: a shell
+/// showing the current ceiling should show it in the spelling the file
+/// uses, so what the operator reads in a settings window and what they
+/// read in `settings.txt` are the same string.
+///
+/// Exactness first: a value that is a whole number of MiB or GiB is
+/// written that way, and anything else is written as bytes. The round trip
+/// through [`parse_byte_size`] is therefore lossless for every value,
+/// which is what the settings round-trip test demands — a "friendly"
+/// writer that rounded would silently change the operator's setting every
+/// time pdfce saved the file.
+#[must_use]
+pub fn format_byte_size(bytes: Option<usize>) -> String {
+    const KIB: usize = 1024;
+    const MIB: usize = 1024 * KIB;
+    const GIB: usize = 1024 * MIB;
+    match bytes {
+        None => "default".to_owned(),
+        Some(0) => "0".to_owned(),
+        Some(b) if b % GIB == 0 => format!("{}gib", b / GIB),
+        Some(b) if b % MIB == 0 => format!("{}mib", b / MIB),
+        Some(b) => b.to_string(),
     }
 }
 
@@ -1537,6 +1717,15 @@ impl Settings {
                     using: cmyk_token(Self::default().cmyk_intent).to_owned(),
                 }),
             },
+            "max_cmyk_buffer_bytes" => match parse_byte_size(value) {
+                Ok(parsed) => self.max_cmyk_buffer_bytes = parsed,
+                Err(_) => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: "default".to_owned(),
+                }),
+            },
             // Unvalidated on purpose — see the field docs.
             "theme" => self.theme = value.to_owned(),
             "parallel_epsilon_degrees" => match value.parse::<f64>() {
@@ -1778,6 +1967,32 @@ impl Settings {
                 CmykIntent::NeutralBlack => "neutral_black",
                 CmykIntent::Naive => "naive",
             }
+        );
+
+        out.push_str(
+            "# How much memory pdfce may use to blend a page in PRINT COLOURS.\n\
+             #\n\
+             # A page that declares a CMYK blending space is blended in ink rather\n\
+             # than on screen, which needs 20 bytes per pixel — so the memory grows\n\
+             # with the SQUARE of the zoom. Above this ceiling pdfce blends on screen\n\
+             # instead, says so, and the colours become approximate. That is why the\n\
+             # same page can look slightly different at different zoom levels.\n\
+             #\n\
+             # Raise it to keep exact colours further in. It costs memory, and about\n\
+             # 50% more time on the pages it applies to. There is NO UPPER LIMIT —\n\
+             # it is your machine and your call. A value your machine cannot supply\n\
+             # is not a crash: pdfce falls back and tells you.\n\
+             #   default = pdfce's built-in ceiling\n\
+             #   256mib, 1gib, 2gb, 268435456 = all accepted; mb and mib both mean\n\
+             #                                  1,048,576 bytes here\n\
+             #   0       = never blend in print colours at all\n\
+             # Rough guide, whole A4 page: 256mib reaches about 530% zoom, 1gib\n\
+             # about 1060%, 4gib about the largest page pdfce will raster at all.\n",
+        );
+        let _ = writeln!(
+            out,
+            "max_cmyk_buffer_bytes = {}\n",
+            format_byte_size(self.max_cmyk_buffer_bytes)
         );
 
         out.push_str(
@@ -2570,6 +2785,11 @@ mod tests {
             quad_point_order: QuadPointOrder::Counterclockwise,
             xref_entry_eol: XrefEntryEol::CrLf,
             trailing_eol: TrailingEol::None,
+            // NOT the default (`None`), and deliberately a value that is a
+            // whole number of GiB so the friendly writer's suffix branch is
+            // the one exercised — a round trip that only ever went through
+            // the bare-integer branch would not prove the suffix parses.
+            max_cmyk_buffer_bytes: Some(2 * 1024 * 1024 * 1024),
             // A token core does NOT know, on purpose: this pins that the
             // round trip preserves whatever the shell wrote rather than
             // normalising it to something core recognises — which is the
@@ -2657,6 +2877,77 @@ mod tests {
                 using: MAX_WORD_GAP_RATIO.to_string(),
             }]
         );
+    }
+
+    #[test]
+    fn a_byte_size_is_accepted_in_every_form_an_operator_would_write_it() {
+        // 256 MiB, written six ways. All six must mean the same number —
+        // the point of accepting more than one spelling is that the
+        // operator never has to guess which one the file wants, and that
+        // guarantee is only real if it is tested.
+        const EXPECT: usize = 256 * 1024 * 1024;
+        for text in [
+            "268435456",
+            "256mib",
+            "256 MiB",
+            "256mb",
+            "256MB",
+            "0.25gb",
+            "268435456b",
+        ] {
+            let mut notes = Vec::new();
+            let settings =
+                Settings::parse(&format!("max_cmyk_buffer_bytes = {text}\n"), &mut notes);
+            assert_eq!(
+                settings.max_cmyk_buffer_bytes,
+                Some(EXPECT),
+                "{text:?} should mean 256 MiB"
+            );
+            assert!(notes.is_empty(), "{text:?} should parse cleanly");
+        }
+    }
+
+    #[test]
+    fn an_unreadable_byte_size_falls_back_rather_than_becoming_zero() {
+        // The failure worth naming: a size that silently became `Some(0)`
+        // would turn "I typed something wrong" into "never composite in
+        // ink", which looks like a rendering regression rather than a typo.
+        // Zero itself is legal and IS that instruction, said deliberately.
+        for text in ["-1", "lots", "", "8gx", "NaN", "1e400gib"] {
+            let mut notes = Vec::new();
+            let settings =
+                Settings::parse(&format!("max_cmyk_buffer_bytes = {text}\n"), &mut notes);
+            assert_eq!(
+                settings.max_cmyk_buffer_bytes, None,
+                "{text:?} must fall back to the default"
+            );
+            assert_eq!(notes.len(), 1, "{text:?} must be reported, not swallowed");
+        }
+        let mut notes = Vec::new();
+        let settings = Settings::parse("max_cmyk_buffer_bytes = 0\n", &mut notes);
+        assert_eq!(settings.max_cmyk_buffer_bytes, Some(0));
+        assert!(notes.is_empty());
+    }
+
+    #[test]
+    fn every_byte_size_round_trips_through_the_friendly_writer() {
+        // `format_byte_size` is allowed to be friendly and is NOT allowed
+        // to be lossy: a writer that rounded 1.5 GiB to "1gib" would edit
+        // the operator's setting every time pdfce saved the file, which is
+        // indistinguishable from pdfce ignoring it.
+        for bytes in [
+            None,
+            Some(0),
+            Some(1),
+            Some(1023),
+            Some(256 * 1024 * 1024),
+            Some(3 * 1024 * 1024 * 1024 / 2),
+            Some(5 * 1024 * 1024 * 1024),
+            Some(usize::from(u16::MAX) * 7919),
+        ] {
+            let text = format_byte_size(bytes);
+            assert_eq!(parse_byte_size(&text), Ok(bytes), "wrote {text:?}");
+        }
     }
 
     #[test]

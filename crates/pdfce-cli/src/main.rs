@@ -2611,6 +2611,23 @@ enum Command {
         /// so a raster always carries the count of what it left out.
         #[arg(long)]
         fast_subpixel: bool,
+        /// Override the memory ceiling on the PRINT-COLOUR blending
+        /// buffer for this render, e.g. `1gib`, `512mb`, `268435456`,
+        /// `default`, or `0` to refuse it entirely.
+        ///
+        /// A page whose group declares a CMYK blending space is composited
+        /// in a four-colorant buffer at 20 bytes per pixel, so the cost
+        /// grows with the SQUARE of `--scale`. Above the ceiling pdfce
+        /// composites on screen instead and says so
+        /// (`cmyk_buffer_refused=1`), which is why the same page can come
+        /// out with slightly different colours at different scales.
+        ///
+        /// Without this flag the operator's `max_cmyk_buffer_bytes`
+        /// setting applies, and without that, pdfce's built-in ceiling.
+        /// There is deliberately NO UPPER LIMIT -- a ceiling this machine
+        /// cannot honour falls back and discloses it rather than crashing.
+        #[arg(long, value_name = "SIZE")]
+        max_cmyk_buffer_bytes: Option<String>,
         /// Directory of font files to supply for the document's
         /// NON-embedded fonts (decision 012). Repeatable. pdfce walks each
         /// directory, registers every readable `.ttf`/`.otf`/`.ttc`/`.cff`/
@@ -6413,6 +6430,7 @@ fn run() -> ExitCode {
             output,
             no_annotations,
             fast_subpixel,
+            max_cmyk_buffer_bytes,
             font_dirs,
             show_layers,
             hide_layers,
@@ -6426,6 +6444,7 @@ fn run() -> ExitCode {
             &output,
             !no_annotations,
             fast_subpixel,
+            max_cmyk_buffer_bytes.as_deref(),
             &font_dirs,
             &show_layers,
             &hide_layers,
@@ -8507,6 +8526,7 @@ fn cmd_render_page(
     output: &Path,
     annotations: bool,
     fast_subpixel: bool,
+    max_cmyk_buffer_bytes: Option<&str>,
     font_dirs: &[PathBuf],
     show_layers: &[String],
     hide_layers: &[String],
@@ -8616,9 +8636,37 @@ numbered 1..={})",
         }
     }
 
+    // The colorant-buffer ceiling: the flag overrides the setting, the
+    // setting overrides the built-in default, and an unreadable flag value
+    // is REPORTED and then ignored rather than quietly meaning zero -- the
+    // same shape as every other bad value in the settings file, because a
+    // silent zero here would read as "pdfce stopped compositing in ink".
+    let max_cmyk_buffer_bytes = match max_cmyk_buffer_bytes {
+        Some(text) => match pdfce_core::settings::parse_byte_size(text) {
+            Ok(parsed) => {
+                eprintln!(
+                    "pdfce-cli: note: --max-cmyk-buffer-bytes {} overrides the `max_cmyk_buffer_bytes` setting for this render ({} pixel(s) may composite in ink)",
+                    pdfce_core::settings::format_byte_size(parsed),
+                    pdfce_render::max_cmyk_composite_pixels(parsed)
+                );
+                parsed
+            }
+            Err(bad) => {
+                eprintln!("pdfce-cli: note: {bad} -- using the setting instead");
+                settings.max_cmyk_buffer_bytes
+            }
+        },
+        None => settings.max_cmyk_buffer_bytes,
+    };
+
     let mut render_options = pdfce_render::RenderOptions::default()
         .with_annotations(annotations)
         .with_cmyk_intent(settings.cmyk_intent)
+        // The subtractive compositing ceiling. Not a spec ambiguity and not
+        // a policy default: it is a MEMORY budget, and the right number is
+        // a function of the operator's machine and their tolerance, neither
+        // of which is knowable from inside the renderer.
+        .with_max_cmyk_buffer_bytes(max_cmyk_buffer_bytes)
         .with_page_blend_space_source(settings.page_blend_space_source)
         // `MSH-A1`: what a type 6/7 mesh-shading PATCH record pads to.
         // The clause states the rule for a VERTEX and the patch clauses
@@ -9121,7 +9169,11 @@ cmyk_groups_approximated={} cmyk_unbridged_images={} cmyk_native_image_pixels={}
         // rule: the complement of `cmyk_bridged_pixels`.
         d.cmyk_native_image_pixels,
     );
-    report_diagnostics(d);
+    report_diagnostics(
+        d,
+        max_cmyk_buffer_bytes,
+        u64::from(rendered.pixmap.width()) * u64::from(rendered.pixmap.height()),
+    );
 
     exit::SUCCESS
 }
@@ -9214,7 +9266,11 @@ fn fonts_unsupported_breakdown(d: &pdfce_render::Diagnostics) -> String {
 /// Silent when the render was fully faithful. That silence is the point:
 /// it makes "stderr had output" a usable signal in a batch script rather
 /// than noise the operator learns to ignore.
-fn report_diagnostics(d: &pdfce_render::Diagnostics) {
+fn report_diagnostics(
+    d: &pdfce_render::Diagnostics,
+    max_cmyk_buffer_bytes: Option<usize>,
+    raster_pixels: u64,
+) {
     if !d.substituted_fonts.is_empty() {
         eprintln!(
             "pdfce-cli: note: {} glyph(s) drawn with bundled substitute faces, not the \
@@ -9311,7 +9367,10 @@ when comparing against another renderer",
     }
     if d.cmyk_buffer_refused > 0 {
         eprintln!(
-            "pdfce-cli: note: this page's PAGE GROUP declares a SUBTRACTIVE blending colour space, and pdfce composited it on screen ANYWAY — the four-colorant buffer would have exceeded its allocation ceiling at this raster size. The page rendered; it rendered the way every pdfce release before this one rendered it, with §11.3.4's complement not applied. RE-RENDER AT A LOWER RESOLUTION to get the conforming composite"
+            "pdfce-cli: note: this page's PAGE GROUP declares a SUBTRACTIVE blending colour space, and pdfce composited it on screen ANYWAY — the four-colorant buffer would have exceeded its allocation ceiling at this raster size. The page rendered; it rendered the way every pdfce release before this one rendered it, with §11.3.4's complement not applied. ★ TWO WAYS OUT, and the second is new: RE-RENDER AT A LOWER RESOLUTION, or RAISE THE CEILING — it is {} here, which permits {} pixel(s) and this raster wanted {}. Set `max_cmyk_buffer_bytes` in settings.txt or pass --max-cmyk-buffer-bytes; there is no upper limit, it costs 20 bytes per pixel and roughly 50% more time",
+            pdfce_core::settings::format_byte_size(max_cmyk_buffer_bytes),
+            pdfce_render::max_cmyk_composite_pixels(max_cmyk_buffer_bytes),
+            raster_pixels
         );
     }
     if d.cmyk_unbridged_images > 0 {

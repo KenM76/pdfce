@@ -1950,7 +1950,9 @@ builders**, `:684-690`): `fonts: FontEnvironment` `:432`, `annotations: bool`
 `with_annotations` `:691`, `with_annotation_scope` `:707`, `with_cmyk_intent`
 `:764`, `with_cancel` `:775`, `with_mask_resample` `:784`, `with_image_minify`
 `:792`, `with_cmyk_jpeg_polarity` `:800`, `with_layers` `:816`,
-`with_view_magnification` `:826`, `with_missing_as` `:831`.
+`with_view_magnification` `:826`, `with_missing_as` `:831`, and
+`with_max_cmyk_buffer_bytes` (`Pass 132.0` — see **§7.3a**, which is the one
+knob whose value you should COMPUTE rather than pick).
 
 `AnnotationScope` (`annot.rs:348`) is the comments-and-forms filter:
 
@@ -1961,6 +1963,83 @@ builders**, `:684-690`): `fonts: FontEnvironment` `:432`, `annotations: bool`
 | Document and Stamps | `DocumentAndStamps` `:388` | page content + non-markup + `/Stamp` **only** |
 | Form fields only | `FormFieldsOnly` `:403` | `/Widget` appearances, **no page content at all** |
 | (pdfce's own) | `ContentOnly` `:360` | page content, no annotations |
+
+### 7.3a The CMYK compositing ceiling — READ it before you size a raster
+
+**Added `Pass 132.0`, at the request of the shell that hit it.** This is the
+one render input whose correct value is a function of *your* viewport and
+*your* memory tolerance, and it is the reason a page can come back with
+different colours at different zooms.
+
+**The mechanism.** A page whose group declares a subtractive blending space
+(§11.4.7 — `/Group /CS /DeviceCMYK`, `Separation`, `DeviceN`, or a
+four-component `ICCBased`) is composited in a four-colorant buffer at
+**`CMYK_BYTES_PER_PIXEL` = 20 bytes per pixel**. Above a ceiling the page
+composites in sRGB instead and **says so** (`cmyk_buffer_refused`). Both
+rasters are of the same page; only one of them ran §11.3.4's complement, and
+the difference on transparency patches measured up to **16 levels of 255**.
+
+**Four public items, and you want the third:**
+
+| item | answers |
+|---|---|
+| `CMYK_BYTES_PER_PIXEL` | the cost per pixel (20) |
+| `DEFAULT_MAX_CMYK_BUFFER_BYTES` | the built-in ceiling (256 MiB) |
+| `max_cmyk_composite_pixels(max_bytes: Option<usize>) -> u64` | how many pixels fit |
+| **`will_composite_in_cmyk(w: u32, h: u32, max_bytes: Option<usize>) -> bool`** | **"will this raster have exact colours?"** |
+
+`max_bytes: None` means the default, so all four take
+`Settings::max_cmyk_buffer_bytes` **verbatim** — there is nothing for a
+caller to resolve.
+
+**Do not hardcode 13,421,772.** The predicate exists so the 20-B/px
+arithmetic stays on this side of the crate boundary; a copy of a measured
+limit is a copy that rots the next time the buffer's element type changes.
+`the_operator_s_ceiling_decides_the_path_and_the_predicate_agrees`
+(`crates/pdfce-render/tests/transparency_is_disclosed.rs`) is what pins the
+predicate to the renderer.
+
+**★ Your render tier should end at this ceiling, not at `MAX_PIXMAP_EDGE`.**
+Those are two different bounds and the gap between them is a factor of four
+on A4 — a whole-page raster is *permitted* up to 2071 % zoom and stops
+compositing in ink at about **534 %**. Every raster in between comes back
+with approximate colours.
+
+**★ And moving the switch down is NOT sufficient on a large display.** With
+50 % overscan a region raster needs ~110 MB at 1600×900, **~281 MB at
+2560×1440** and **~633 MB at 3840×2160** — so on a 1440p monitor the region
+path already exceeds the default ceiling. The ceiling has to grow with the
+display *as well*.
+
+**SETTING it.** `RenderOptions::with_max_cmyk_buffer_bytes(Option<usize>)`,
+whose value should come from `pdfce_core::settings::Settings::max_cmyk_buffer_bytes`
+— it rides the existing preset machinery and the settings file, and
+`parse_byte_size` / `format_byte_size` (both `pub` in
+`pdfce_core::settings`) are the **same** vocabulary the file uses, so a
+settings window and `settings.txt` accept and show identical strings
+(`default`, `256mib`, `1.5gb`, a bare byte count; `mb` and `mib` both mean
+1,048,576 here).
+
+**It is deliberately UNCAPPED**, on the operator's own ruling — the same one
+that governs `max_zoom_percent`. `ARCHITECTURE.md` §10's no-unbounded-
+allocation rule is about **untrusted input**, and a page's dimensions are
+untrusted input while a number the operator typed is not. A ceiling the
+machine cannot honour is **not a crash**: the allocation is attempted
+fallibly and refuses down the same disclosed path. So a settings window
+offers it with **no guard and no preflight** — state the cost, do not
+prevent the choice.
+
+**The cost, measured**, for whatever your settings UI says: 20 B/px, and
+compositing in ink ran roughly **50 % slower** than compositing on screen at
+the same pixel count (1.47 s / 1.39 s against 1.04 s / 0.85 s at the
+boundary). Whole-page A4 wants ~576 MB at 800 %, ~1.26 GB at 1200 %, ~3.8 GB
+at the end of the `MAX_PIXMAP_EDGE` tier; a square 16,384² raster, ~5.0 GB.
+
+**Key on `cmyk_buffer_refused`, not `blends_in_wrong_space`.** The second is
+zero on a page whose transparency happens to fall outside the rendered
+region, so a status line keyed on it goes quiet exactly where the operator
+scrolled away from the affected patch. The first says *the correct buffer was
+not available*, which is a property of the raster.
 
 ### 7.3 Cancellation — the off-thread contract
 
@@ -2064,6 +2143,12 @@ is expected to surface these; **they are not decoration**."*
    guess**, i.e. an inference.
 7. **A cancelled render is discarded silently** — never surface it as an
    error (§7.3).
+8. **`cmyk_buffer_refused`** — *"are these the exact print colours, or the
+   approximation?"* (§7.3a). Off-canvas, like everything else here: the
+   inferred/approximate content still renders **normally** (`CLAUDE.md`
+   rule 4, narrowed 2026-08-13), and what is disclosed is that pdfce could
+   not blend in ink at this size — plus, now, that the ceiling is the
+   operator's to raise.
 
 ### 7.6 Traps
 

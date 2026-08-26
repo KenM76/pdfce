@@ -1369,8 +1369,12 @@ impl Canvas<'_> {
             return None;
         };
         let (w, h, intent) = (parent.width(), parent.height(), parent.intent());
+        // The parent's own ceiling, so a group cannot decline to composite
+        // on a page whose buffer was already paid for. See
+        // `CmykBuffer::max_bytes`.
+        let max_bytes = Some(parent.max_bytes());
         let initial = if isolated {
-            crate::cmyk_buffer::CmykBuffer::new(w, h, intent)?
+            crate::cmyk_buffer::CmykBuffer::new(w, h, intent, max_bytes)?
         } else {
             // A full copy of the parent, which is what §11.4.8's `C_b` is.
             // Expensive and unavoidable: the backdrop has to survive every
@@ -1378,8 +1382,8 @@ impl Canvas<'_> {
             // each one.
             parent.clone()
         };
-        let mut child =
-            crate::cmyk_buffer::CmykBuffer::new(w, h, intent)?.into_knockout(&initial)?;
+        let mut child = crate::cmyk_buffer::CmykBuffer::new(w, h, intent, max_bytes)?
+            .into_knockout(&initial)?;
         let (result, _dependent) = {
             let mut sub = Canvas::Cmyk(&mut child);
             f(&mut sub)

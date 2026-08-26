@@ -272,7 +272,7 @@ mod tests {
         // The whole point of `BrushSpec::cmyk`, pinned: `0 1 0 0` arrives
         // as `0 1 0 0`, where the sRGB reconstruction of the same paint
         // would land at roughly `0, 0.995, 0.409, 0.071`.
-        let mut buf = CmykBuffer::new(8, 8, CmykIntent::default()).unwrap();
+        let mut buf = CmykBuffer::new(8, 8, CmykIntent::default(), None).unwrap();
         let brush = BrushSpec::solid(
             crate::gstate::Rgb {
                 r: 0.9,
@@ -303,7 +303,7 @@ mod tests {
         // The fallback path, asserted so that its existence is visible in
         // the suite rather than only in a doc comment. Pure red through
         // max-GCR is `0 1 1 0`.
-        let mut buf = CmykBuffer::new(8, 8, CmykIntent::default()).unwrap();
+        let mut buf = CmykBuffer::new(8, 8, CmykIntent::default(), None).unwrap();
         let brush = BrushSpec::solid(
             crate::gstate::Rgb {
                 r: 1.0,
@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn an_off_page_paint_touches_nothing_and_is_not_an_error() {
-        let mut buf = CmykBuffer::new(4, 4, CmykIntent::default()).unwrap();
+        let mut buf = CmykBuffer::new(4, 4, CmykIntent::default(), None).unwrap();
         let brush = BrushSpec::solid(
             crate::gstate::Rgb {
                 r: 0.0,
@@ -364,7 +364,7 @@ mod tests {
         // Half the page clipped away: the clipped half must stay
         // untouched, which is what proves the clip reached the composite
         // rather than being dropped on the way in.
-        let mut buf = CmykBuffer::new(4, 1, CmykIntent::default()).unwrap();
+        let mut buf = CmykBuffer::new(4, 1, CmykIntent::default(), None).unwrap();
         let mut clip = Mask::new(4, 1).unwrap();
         clip.data_mut()[0] = 255;
         clip.data_mut()[1] = 255;

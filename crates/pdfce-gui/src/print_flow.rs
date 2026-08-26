@@ -236,6 +236,10 @@ struct PreviewInputs<'a> {
     font_generation: u64,
     /// The operator's CMYK conversion choice (R169).
     cmyk_intent: pdfce_core::settings::CmykIntent,
+    /// The operator's ceiling on the subtractive compositing buffer, or
+    /// `None` for the renderer's default. A print raster is usually the
+    /// largest one pdfce makes, so this is where the ceiling bites first.
+    max_cmyk_buffer_bytes: Option<usize>,
     /// Real device geometry TURNED FOR THIS JOB, or `None` when the
     /// driver would not answer.
     ///
@@ -347,6 +351,12 @@ struct PreviewKey {
     fonts: u64,
     /// The operator's CMYK conversion choice (R169).
     cmyk: pdfce_core::settings::CmykIntent,
+    /// The operator's subtractive-compositing ceiling. Part of the KEY
+    /// because it changes the pixels: raising it can move a preview from
+    /// approximate colours to exact ones, and a cache that did not notice
+    /// would show the operator the old answer to a question they just
+    /// changed.
+    max_cmyk_buffer_bytes: Option<usize>,
 }
 
 /// Parse `3`, `1-4`, `5,1-2` into zero-based indices.
@@ -711,6 +721,7 @@ impl PdfceApp {
         let fonts = &self.font_env;
         let font_generation = self.font_env_generation;
         let cmyk_intent = self.settings.cmyk_intent;
+        let max_cmyk_buffer_bytes = self.settings.max_cmyk_buffer_bytes;
         let danger = self.theme.palette.danger;
 
         let mut open = true;
@@ -863,6 +874,7 @@ impl PdfceApp {
                                             fonts,
                                             font_generation,
                                             cmyk_intent,
+                                            max_cmyk_buffer_bytes,
                                             geometry: geometry.as_ref(),
                                             plans: &plans,
                                             page_sizes: &page_sizes,
@@ -1387,6 +1399,7 @@ impl PdfceApp {
             scope: pending.scope,
             fonts: inputs.font_generation,
             cmyk: inputs.cmyk_intent,
+            max_cmyk_buffer_bytes: inputs.max_cmyk_buffer_bytes,
         };
         if let Some((cached, texture)) = &pending.preview_texture
             && *cached == key
@@ -1396,8 +1409,12 @@ impl PdfceApp {
         let page_obj = inputs.doc.pages.get(page)?;
         let media = page_obj.media_box;
         let size = ((media.urx - media.llx).abs(), (media.ury - media.lly).abs());
-        let options =
-            PdfceApp::print_render_options(pending.scope, inputs.fonts.clone(), inputs.cmyk_intent);
+        let options = PdfceApp::print_render_options(
+            pending.scope,
+            inputs.fonts.clone(),
+            inputs.cmyk_intent,
+            inputs.max_cmyk_buffer_bytes,
+        );
         let view = inputs.doc.session.view();
         let rendered = pdfce_render::render_page_with_view(
             &view,
@@ -1455,10 +1472,12 @@ impl PdfceApp {
         scope: pdfce_render::AnnotationScope,
         fonts: pdfce_render::FontEnvironment,
         cmyk_intent: pdfce_core::settings::CmykIntent,
+        max_cmyk_buffer_bytes: Option<usize>,
     ) -> pdfce_render::RenderOptions {
         let mut options = pdfce_render::RenderOptions::default()
             .with_annotation_scope(scope)
-            .with_cmyk_intent(cmyk_intent);
+            .with_cmyk_intent(cmyk_intent)
+            .with_max_cmyk_buffer_bytes(max_cmyk_buffer_bytes);
         options.fonts = fonts;
         options
     }
@@ -1805,8 +1824,12 @@ impl PdfceApp {
         // The SAME builder the preview calls (Pass 63.0). See
         // `print_render_options` for the three choices it encodes and why
         // a second copy of them here would defeat the preview's purpose.
-        let options =
-            Self::print_render_options(scope, self.font_env.clone(), self.settings.cmyk_intent);
+        let options = Self::print_render_options(
+            scope,
+            self.font_env.clone(),
+            self.settings.cmyk_intent,
+            self.settings.max_cmyk_buffer_bytes,
+        );
         let view = doc.session.view();
 
         let mut bitmaps = Vec::with_capacity(plans.len());

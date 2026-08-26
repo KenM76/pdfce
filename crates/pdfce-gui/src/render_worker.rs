@@ -225,6 +225,11 @@ pub struct RenderRequest {
     /// The operator's DeviceCMYK conversion choice (§8.6.4.4), carried on
     /// the request so a render always says which conversion produced it.
     pub cmyk_intent: CmykIntent,
+    /// The operator's ceiling on the subtractive compositing buffer, or
+    /// `None` for the renderer's default. Carried on the request for the
+    /// same reason the intent is: it changes the pixels, so a render must
+    /// say which budget produced it.
+    pub max_cmyk_buffer_bytes: Option<usize>,
 }
 
 impl RenderWorker {
@@ -425,7 +430,8 @@ impl Drop for RenderWorker {
 fn render_on_worker(request: &RenderRequest, cancel: &RenderCancel) -> Outcome {
     let mut options = pdfce_render::RenderOptions::default()
         .with_annotations(request.annotations)
-        .with_cmyk_intent(request.cmyk_intent);
+        .with_cmyk_intent(request.cmyk_intent)
+        .with_max_cmyk_buffer_bytes(request.max_cmyk_buffer_bytes);
     options.fonts = request.fonts.clone();
     options.cancel = Some(cancel.clone());
     // `None` stays `None`: a document nobody has toggled renders as the

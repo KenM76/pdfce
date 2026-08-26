@@ -230,7 +230,10 @@ struct KnockoutPlanes {
 ///   `f64` buffer would narrow there. Narrowing is lossy, widening is not.
 pub(crate) type Chan = f32;
 
-/// The largest buffer this module will allocate, in bytes.
+/// The largest buffer this module will allocate **when nobody says
+/// otherwise**, in bytes. Re-exported as
+/// [`crate::DEFAULT_MAX_CMYK_BUFFER_BYTES`], which is where a consumer
+/// reads it.
 ///
 /// Matched deliberately to [`crate::display_list::MAX_DISPLAY_LIST_BYTES`]
 /// so the two ceilings in this crate that bound a page-sized allocation
@@ -243,6 +246,26 @@ pub(crate) type Chan = f32;
 /// 13.4 M pixels — a US-Letter page up to roughly 375 DPI, or A0 at 96 DPI
 /// — and refuses beyond that.
 ///
+/// # ★ Why it is a DEFAULT rather than a limit, since `Pass 132.0`
+///
+/// The clause above says *untrusted-input-sized*. A **page** is untrusted
+/// input; an **operator naming a number** is not, and the two were conflated
+/// for as long as this constant was the only answer. The consequence was
+/// operator-visible and was reported by the shell building a viewer against
+/// this crate: the same page rendered different colours at different zooms,
+/// crossing this ceiling at about 534 % on A4, with a factor of four between
+/// it and [`crate::MAX_PIXMAP_EDGE`] where a whole-page raster is permitted
+/// but will not composite in ink.
+///
+/// So [`CmykBuffer::new`] takes the ceiling as an argument, this constant is
+/// what an unset one resolves to, and the operator can raise it with no cap —
+/// the same ruling that governs `max_zoom_percent`, in the operator's own
+/// words: *"it is up to the user to determine how much of a performance hit
+/// they want to take."* What protects the process from an over-ambitious
+/// number is [`CmykBuffer::try_planes`], which asks the allocator rather than
+/// asserting, so a ceiling the machine cannot honour becomes the same
+/// disclosed refusal as a ceiling the page exceeded.
+///
 /// # What happens at the ceiling, and why it is not an error
 ///
 /// The caller falls back to the ordinary sRGB path and **discloses that it
@@ -250,10 +273,24 @@ pub(crate) type Chan = f32;
 /// rendered in the wrong blending space is a known, counted approximation
 /// that pdfce has shipped for its entire life, whereas a failed render is
 /// a regression. Project rule 4 — the fallback prints what it did.
-pub(crate) const MAX_CMYK_BUFFER_BYTES: usize = 256 * 1024 * 1024;
+pub(crate) const DEFAULT_MAX_CMYK_BUFFER_BYTES: usize = 256 * 1024 * 1024;
 
 /// Bytes of storage per pixel: four colorant planes plus alpha.
-const BYTES_PER_PIXEL: usize = 5 * core::mem::size_of::<Chan>();
+/// Re-exported as [`crate::CMYK_BYTES_PER_PIXEL`].
+pub(crate) const BYTES_PER_PIXEL: usize = 5 * core::mem::size_of::<Chan>();
+
+/// Resolve a caller's optional ceiling to the number of bytes actually
+/// enforced.
+///
+/// One function, so that "unset means the default" is answered in exactly
+/// one place and the public [`crate::max_cmyk_composite_pixels`] and the
+/// private allocator cannot come to disagree about it.
+pub(crate) const fn resolve_max_bytes(max_bytes: Option<usize>) -> usize {
+    match max_bytes {
+        Some(b) => b,
+        None => DEFAULT_MAX_CMYK_BUFFER_BYTES,
+    }
+}
 
 /// A page- or group-sized **subtractive** compositing buffer.
 ///
@@ -363,6 +400,20 @@ pub(crate) struct CmykBuffer {
     /// conversion "unless the processor has an implementation-dependent way
     /// of specifying otherwise". This setting is that way.
     intent: pdfce_core::settings::CmykIntent,
+    /// The allocation ceiling this buffer was created under, in bytes,
+    /// already resolved (never `None`).
+    ///
+    /// # Why it is carried on the buffer rather than passed at each call
+    ///
+    /// For the same reason [`Self::intent`] is: every child buffer a
+    /// transparency group needs is made from its parent
+    /// ([`Self::take_child`], `Canvas::knockout_group_cmyk`), and a child
+    /// allocated under a *different* ceiling than its parent would be a
+    /// group that silently declines to composite on a page that was already
+    /// paid for. Storing it makes that unrepresentable; threading it through
+    /// the canvas as a parameter would make it a call site's job to
+    /// remember.
+    max_bytes: usize,
     /// The §11.4.6 knockout state, when this buffer **is** a knockout
     /// group's accumulator.
     ///
@@ -490,28 +541,55 @@ impl CmykBuffer {
     /// colorant plane with a **non**-zero alpha would be white paper, and
     /// a luminosity soft mask built over it would be inverted. See the
     /// module documentation's trap 2.
+    ///
+    /// # ★ `max_bytes`, and why refusing is a three-step ladder
+    ///
+    /// `None` means [`DEFAULT_MAX_CMYK_BUFFER_BYTES`]; `Some` is the
+    /// operator's own ceiling, uncapped (see that constant's docs for the
+    /// distinction between untrusted input and a number a person chose).
+    ///
+    /// Since the ceiling can now exceed what the machine has, three separate
+    /// things can refuse, and all three return `None` so that the caller has
+    /// exactly one fallback path to maintain:
+    ///
+    /// 1. degenerate or overflowing dimensions,
+    /// 2. the **policy** ceiling — the number the operator or the default set,
+    /// 3. the **allocator** — via [`Self::try_planes`], which asks rather
+    ///    than asserts. Without step 3 an operator who names 64 GiB gets a
+    ///    process abort out of `vec![0.0; n]`'s infallible allocation, which
+    ///    is not a disclosure, is not recoverable, and would make the
+    ///    uncapped setting a footgun instead of a choice.
     pub(crate) fn new(
         width: u32,
         height: u32,
         intent: pdfce_core::settings::CmykIntent,
+        max_bytes: Option<usize>,
     ) -> Option<Self> {
         if width == 0 || height == 0 {
             return None;
         }
+        let max_bytes = resolve_max_bytes(max_bytes);
         let n = (width as usize).checked_mul(height as usize)?;
-        if n.checked_mul(BYTES_PER_PIXEL)? > MAX_CMYK_BUFFER_BYTES {
+        if n.checked_mul(BYTES_PER_PIXEL)? > max_bytes {
             return None;
         }
+        let planes = [
+            Self::try_planes(n)?,
+            Self::try_planes(n)?,
+            Self::try_planes(n)?,
+            Self::try_planes(n)?,
+        ];
         Some(Self {
             width,
             height,
-            planes: [vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]],
-            alpha: vec![0.0; n],
+            planes,
+            alpha: Self::try_planes(n)?,
             bridged: 0,
             groups_approximated: 0,
             unbridged_images: 0,
             native_images_pixels: 0,
             intent,
+            max_bytes,
             knockout: None,
             // Allocated once, here, and reused by every paint for the life
             // of the buffer.
@@ -519,6 +597,30 @@ impl CmykBuffer {
             dirty: None,
             spare: None,
         })
+    }
+
+    /// A zero-filled plane of `n` elements, or `None` if the allocator
+    /// cannot supply one.
+    ///
+    /// # Why this exists rather than `vec![0.0; n]`
+    ///
+    /// `vec!` allocates **infallibly**: on failure it calls the allocation
+    /// error handler, which aborts the process. That was acceptable while
+    /// the only reachable size was bounded by a 256 MiB compile-time
+    /// constant. It stopped being acceptable the moment the ceiling became
+    /// the operator's to set, because a number they can raise is a number
+    /// they can raise past their RAM — and pdfce's answer to "this buffer
+    /// will not fit" is a documented, counted fallback
+    /// (`cmyk_buffer_refused`), not a crash with no page rendered.
+    ///
+    /// `try_reserve_exact` + `resize` is the fallible pair. `resize` on a
+    /// vector whose capacity is already reserved does not reallocate, so the
+    /// fill cannot introduce a second, infallible allocation behind it.
+    fn try_planes(n: usize) -> Option<Vec<Chan>> {
+        let mut v: Vec<Chan> = Vec::new();
+        v.try_reserve_exact(n).ok()?;
+        v.resize(n, 0.0);
+        Some(v)
     }
 
     /// Device width in pixels.
@@ -1059,6 +1161,17 @@ impl CmykBuffer {
         self.intent
     }
 
+    /// The ceiling this buffer was allocated under, so a child buffer is
+    /// built under the same one.
+    ///
+    /// Already resolved, so a caller passes it straight back in as
+    /// `Some(parent.max_bytes())` and never re-decides what "unset" means.
+    /// See the field's documentation for why a child under a different
+    /// ceiling would be a defect rather than a saving.
+    pub(crate) const fn max_bytes(&self) -> usize {
+        self.max_bytes
+    }
+
     /// Multiply this buffer's alpha by a soft mask — §11.4.5.
     ///
     /// The subtractive twin of `canvas::apply_mask`, and it is **simpler**
@@ -1268,7 +1381,7 @@ impl CmykBuffer {
     pub(crate) fn take_child(&mut self) -> Option<Self> {
         match self.spare.take() {
             Some(b) => Some(*b),
-            None => Self::new(self.width, self.height, self.intent),
+            None => Self::new(self.width, self.height, self.intent, Some(self.max_bytes)),
         }
     }
 
@@ -1795,14 +1908,14 @@ mod tests {
         let inner = [0.0, 0.7, 0.3, 0.0];
 
         // --- one walk: the isolated route -------------------------------
-        let mut one = CmykBuffer::new(4, 4, intent).unwrap();
+        let mut one = CmykBuffer::new(4, 4, intent, None).unwrap();
         paint_all(&mut one, backdrop, 1.0, Blend::Normal);
         let mut iso = one.take_child().unwrap();
         paint_all(&mut iso, inner, 0.5, Blend::Normal);
         one.composite_buffer(&iso, 0.8, Blend::Normal);
 
         // --- two walks: the non-isolated route ---------------------------
-        let mut two = CmykBuffer::new(4, 4, intent).unwrap();
+        let mut two = CmykBuffer::new(4, 4, intent, None).unwrap();
         paint_all(&mut two, backdrop, 1.0, Blend::Normal);
         let mut iso2 = two.take_child().unwrap();
         paint_all(&mut iso2, inner, 0.5, Blend::Normal);
@@ -1845,13 +1958,13 @@ mod tests {
         let backdrop = [0.6, 0.1, 0.0, 0.05];
         let inner = [0.0, 0.7, 0.3, 0.0];
 
-        let mut one = CmykBuffer::new(2, 2, intent).unwrap();
+        let mut one = CmykBuffer::new(2, 2, intent, None).unwrap();
         paint_all(&mut one, backdrop, 1.0, Blend::Normal);
         let mut iso = one.take_child().unwrap();
         paint_all(&mut iso, inner, 1.0, Blend::Multiply);
         one.composite_buffer(&iso, 1.0, Blend::Normal);
 
-        let mut two = CmykBuffer::new(2, 2, intent).unwrap();
+        let mut two = CmykBuffer::new(2, 2, intent, None).unwrap();
         paint_all(&mut two, backdrop, 1.0, Blend::Normal);
         let mut iso2 = two.take_child().unwrap();
         paint_all(&mut iso2, inner, 1.0, Blend::Multiply);
@@ -1883,7 +1996,7 @@ mod tests {
     #[test]
     fn a_backdrop_seeded_child_comes_back_clean() {
         let intent = CmykIntent::default();
-        let mut b = CmykBuffer::new(4, 4, intent).unwrap();
+        let mut b = CmykBuffer::new(4, 4, intent, None).unwrap();
         paint_all(&mut b, [0.9, 0.9, 0.9, 0.9], 1.0, Blend::Normal);
         let seeded = b.child_from_backdrop().unwrap();
         assert!(seeded.pixel(0).a > 0.0, "the seed must actually carry ink");
@@ -1907,7 +2020,7 @@ mod tests {
     #[test]
     fn a_written_but_transparent_backdrop_is_still_absent() {
         let intent = CmykIntent::default();
-        let mut b = CmykBuffer::new(4, 4, intent).unwrap();
+        let mut b = CmykBuffer::new(4, 4, intent, None).unwrap();
         assert!(!b.backdrop_present(), "an untouched buffer has no backdrop");
         paint_all(&mut b, [0.5; 4], 0.0, Blend::Normal);
         assert!(
@@ -1921,7 +2034,7 @@ mod tests {
 
     #[test]
     fn a_fresh_buffer_is_transparent_and_not_white() {
-        let b = CmykBuffer::new(4, 4, CmykIntent::default()).unwrap();
+        let b = CmykBuffer::new(4, 4, CmykIntent::default(), None).unwrap();
         let px = b.pixel(0);
         assert_eq!(px.a, 0.0, "a new buffer must be transparent");
         // The colorants are zero -- which is NO INK -- and that is only
@@ -1935,15 +2048,29 @@ mod tests {
     fn the_ceiling_refuses_rather_than_allocating() {
         // One pixel past the ceiling, computed from the constant so the
         // test cannot drift away from the value it is checking.
-        let px = MAX_CMYK_BUFFER_BYTES / BYTES_PER_PIXEL + 1;
+        let px = DEFAULT_MAX_CMYK_BUFFER_BYTES / BYTES_PER_PIXEL + 1;
         #[allow(clippy::cast_possible_truncation)]
         let w = px as u32;
         assert!(
-            CmykBuffer::new(w, 1, CmykIntent::default()).is_none(),
+            CmykBuffer::new(w, 1, CmykIntent::default(), None).is_none(),
             "a buffer past the byte ceiling must be refused, not allocated"
         );
-        assert!(CmykBuffer::new(0, 10, CmykIntent::default()).is_none());
-        assert!(CmykBuffer::new(10, 0, CmykIntent::default()).is_none());
+        // ...and the SAME size is permitted once the operator raises the
+        // ceiling, which is the whole point of `Pass 132.0`. Deliberately
+        // asserted on the refusal path rather than by allocating 256 MiB in
+        // a unit test: what is under test is the POLICY arithmetic, and
+        // `will_composite_in_cmyk` is the public statement of it.
+        assert!(crate::will_composite_in_cmyk(
+            w,
+            1,
+            Some(DEFAULT_MAX_CMYK_BUFFER_BYTES * 2)
+        ));
+        assert!(!crate::will_composite_in_cmyk(w, 1, None));
+        // A ceiling of zero refuses everything, including one pixel — a
+        // caller passing `Some(0)` gets no ink rather than a panic.
+        assert!(CmykBuffer::new(1, 1, CmykIntent::default(), Some(0)).is_none());
+        assert!(CmykBuffer::new(0, 10, CmykIntent::default(), None).is_none());
+        assert!(CmykBuffer::new(10, 0, CmykIntent::default(), None).is_none());
     }
 
     #[test]
@@ -1951,7 +2078,7 @@ mod tests {
         // The measurement in the module docs, run forwards: `0 1 0 0`
         // painted into this buffer comes back as `0 1 0 0`, where the sRGB
         // round trip returned `(0, 0.995, 0.409, 0.071)`.
-        let mut b = CmykBuffer::new(2, 2, CmykIntent::default()).unwrap();
+        let mut b = CmykBuffer::new(2, 2, CmykIntent::default(), None).unwrap();
         let m = full_mask(2, 2);
         b.composite_mask(&m, (0, 0, 2, 2), [0.0, 1.0, 0.0, 0.0], 1.0, Blend::Normal);
         assert_eq!(b.pixel(0).c, [0.0, 1.0, 0.0, 0.0]);
@@ -1964,7 +2091,7 @@ mod tests {
         // full-magenta, NOT full-alpha half-magenta. Getting this
         // backwards yields edges of the right shape and the wrong colour,
         // and both look plausible.
-        let mut b = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        let mut b = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
         let mut m = Mask::new(1, 1).unwrap();
         m.data_mut()[0] = 128;
         b.composite_mask(&m, (0, 0, 1, 1), [0.0, 1.0, 0.0, 0.0], 1.0, Blend::Normal);
@@ -1991,7 +2118,7 @@ mod tests {
         // The arithmetic itself is pinned by `compositor.rs`'s own test;
         // this one pins that the BUFFER delivers the same answer, which is
         // the claim `Pass 97.1e` actually makes.
-        let mut b = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        let mut b = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
         let m = full_mask(1, 1);
         b.composite_mask(&m, (0, 0, 1, 1), [0.0, 0.0, 0.0, 1.0], 1.0, Blend::Normal);
         b.composite_mask(
@@ -2030,7 +2157,7 @@ mod tests {
         // proves nothing while looking like it proves everything, which
         // is why the inequality below is asserted rather than assumed.
         let ink = [0.9_f32, 0.9, 0.9, 0.9];
-        let mut b = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        let mut b = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
         b.set_pixel(0, PixelCmyk { c: ink, a: 0.5 });
         let out = b.to_srgb_over_white().unwrap();
         let got = out.pixels()[0];
@@ -2069,7 +2196,7 @@ mod tests {
 
     #[test]
     fn the_bridge_counts_every_pixel_it_converts() {
-        let mut b = CmykBuffer::new(2, 1, CmykIntent::default()).unwrap();
+        let mut b = CmykBuffer::new(2, 1, CmykIntent::default(), None).unwrap();
         let mut src = Pixmap::new(2, 1).unwrap();
         src.fill(tiny_skia::Color::from_rgba8(255, 0, 0, 255));
         let changed = b.composite_srgb(&src, (0, 0, 2, 1), 1.0, Blend::Normal);
@@ -2107,13 +2234,13 @@ mod tests {
         let magenta = [0.0, 1.0, 0.0, 0.0];
 
         // The ordinary group, for contrast.
-        let mut plain = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        let mut plain = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
         plain.composite_mask(&full, (0, 0, 1, 1), cyan, 0.5, Blend::Normal);
         plain.composite_mask(&full, (0, 0, 1, 1), magenta, 0.5, Blend::Normal);
 
         // The knockout group over the same (transparent) backdrop.
-        let backdrop = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
-        let mut ko = CmykBuffer::new(1, 1, CmykIntent::default())
+        let backdrop = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
+        let mut ko = CmykBuffer::new(1, 1, CmykIntent::default(), None)
             .unwrap()
             .into_knockout(&backdrop)
             .unwrap();
@@ -2151,7 +2278,7 @@ mod tests {
     #[test]
     fn a_knockout_element_blends_against_the_initial_backdrop() {
         let full = full_mask(1, 1);
-        let mut backdrop = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        let mut backdrop = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
         backdrop.set_pixel(
             0,
             PixelCmyk {
@@ -2159,7 +2286,7 @@ mod tests {
                 a: 1.0,
             },
         );
-        let mut ko = CmykBuffer::new(1, 1, CmykIntent::default())
+        let mut ko = CmykBuffer::new(1, 1, CmykIntent::default(), None)
             .unwrap()
             .into_knockout(&backdrop)
             .unwrap();
@@ -2202,7 +2329,7 @@ mod tests {
     #[test]
     fn a_non_isolated_knockout_group_does_not_count_its_backdrop_twice() {
         let full = full_mask(1, 1);
-        let mut backdrop = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        let mut backdrop = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
         backdrop.set_pixel(
             0,
             PixelCmyk {
@@ -2210,7 +2337,7 @@ mod tests {
                 a: 0.5,
             },
         );
-        let mut ko = CmykBuffer::new(1, 1, CmykIntent::default())
+        let mut ko = CmykBuffer::new(1, 1, CmykIntent::default(), None)
             .unwrap()
             .into_knockout(&backdrop)
             .unwrap();
@@ -2231,7 +2358,7 @@ mod tests {
 
     #[test]
     fn a_transparent_source_leaves_the_buffer_alone() {
-        let mut b = CmykBuffer::new(1, 1, CmykIntent::default()).unwrap();
+        let mut b = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
         b.set_pixel(
             0,
             PixelCmyk {

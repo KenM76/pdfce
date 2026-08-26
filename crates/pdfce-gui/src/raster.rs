@@ -159,6 +159,7 @@ fn rasterize(
     annotations: bool,
     fonts: &FontEnvironment,
     cmyk_intent: CmykIntent,
+    max_cmyk_buffer_bytes: Option<usize>,
 ) -> Result<(egui::TextureHandle, Diagnostics), String> {
     // Pass 6.0: paint annotation appearances (§12.5) unless the operator
     // toggled them off. `render_page` (annotations on) is the reader
@@ -169,7 +170,12 @@ fn rasterize(
     // travels with every render rather than being decided here (R169).
     let mut options = pdfce_render::RenderOptions::default()
         .with_annotations(annotations)
-        .with_cmyk_intent(cmyk_intent);
+        .with_cmyk_intent(cmyk_intent)
+        // The operator's memory budget for subtractive compositing. Carried
+        // on every render for the same reason the intent is: a canvas whose
+        // ceiling differed from a thumbnail's would show two different sets
+        // of colours for one page and neither would be wrong.
+        .with_max_cmyk_buffer_bytes(max_cmyk_buffer_bytes);
     options.fonts = fonts.clone();
     let rendered = pdfce_render::render_page_with_view(doc, page, scale, &options)
         .map_err(|e| e.to_string())?;
@@ -299,6 +305,12 @@ impl ThumbnailCache {
     ///
     /// A failure is recorded, not propagated: one unrenderable page
     /// should cost that page's thumbnail, not the whole rail.
+    // Eight, one past clippy's default. Every one is a render INPUT that
+    // must match the canvas's -- a thumbnail rail whose colours or
+    // compositing budget differed from the page would read as a rendering
+    // bug. Bundling them into a struct would move the same list one file
+    // over and add a type whose only member is this call.
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         &mut self,
         ctx: &egui::Context,
@@ -307,6 +319,7 @@ impl ThumbnailCache {
         page_index: usize,
         pixels_per_point: f32,
         cmyk_intent: CmykIntent,
+        max_cmyk_buffer_bytes: Option<usize>,
     ) {
         let (w, _) = crate::viewer::page_extent_pts(page);
         // Guard against a degenerate CropBox before dividing. A zero
@@ -336,6 +349,7 @@ impl ThumbnailCache {
             // else: a rail whose blacks differed from the canvas's would
             // read as a rendering bug, not as a deliberate default.
             cmyk_intent,
+            max_cmyk_buffer_bytes,
         ) {
             Ok((texture, _diagnostics)) => {
                 // Thumbnail diagnostics are deliberately dropped. R20's

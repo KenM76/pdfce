@@ -595,6 +595,19 @@ pub struct RenderOptions {
     /// [`CmykIntent::NeutralBlack`] is the answer for CAD and line
     /// drawings, where every stroke is pure K and true black is expected.
     pub cmyk_intent: CmykIntent,
+    /// The ceiling on the subtractive compositing buffer, in bytes.
+    /// `None` = [`crate::DEFAULT_MAX_CMYK_BUFFER_BYTES`].
+    ///
+    /// Raising it lets a **larger raster** composite in ink rather than
+    /// falling back to sRGB and disclosing it (`cmyk_buffer_refused`). It
+    /// changes nothing about a page that does not declare a subtractive
+    /// blending space, and nothing about the colours of a raster that was
+    /// already under the ceiling.
+    ///
+    /// Deliberately uncapped — see [`crate::DEFAULT_MAX_CMYK_BUFFER_BYTES`]
+    /// for why the §10 allocation rule does not reach an operator's own
+    /// number, and for the memory and time it costs.
+    pub max_cmyk_buffer_bytes: Option<usize>,
     /// Where a page's blending colour space comes from when its group
     /// declares none — spec ambiguity `PGB-A1`. See
     /// [`pdfce_core::settings::PageBlendSpaceSource`], whose docs carry the
@@ -678,6 +691,8 @@ pub struct RenderOptions {
 pub struct RenderPolicy<'a> {
     /// See [`RenderOptions::cmyk_intent`].
     pub cmyk_intent: CmykIntent,
+    /// See [`RenderOptions::max_cmyk_buffer_bytes`].
+    pub max_cmyk_buffer_bytes: Option<usize>,
     /// See [`RenderOptions::page_blend_space_source`].
     pub page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource,
     /// See [`RenderOptions::mesh_patch_padding`].
@@ -742,6 +757,10 @@ impl Default for RenderOptions {
             // of the box. `settings_defaults_match_render_defaults` in
             // this module pins that.
             cmyk_intent: CmykIntent::default(),
+            // `None` rather than the constant: "unset" has exactly one
+            // resolution point (`cmyk_buffer::resolve_max_bytes`), so a
+            // default restated here could drift from it.
+            max_cmyk_buffer_bytes: None,
             mesh_patch_padding: pdfce_core::settings::MeshPatchPadding::default(),
             mask_resample: MaskResample::default(),
             image_minify: MinifyFilter::default(),
@@ -845,6 +864,31 @@ impl RenderOptions {
     #[must_use]
     pub fn with_cmyk_intent(mut self, intent: CmykIntent) -> Self {
         self.cmyk_intent = intent;
+        self
+    }
+
+    /// Set the ceiling on the subtractive compositing buffer, in bytes,
+    /// returning `self` for chaining. `None` restores the built-in default.
+    ///
+    /// Same `#[non_exhaustive]` reasoning as [`Self::with_annotations`].
+    /// This is the seam the operator's persisted setting arrives through:
+    /// `RenderOptions::default().with_max_cmyk_buffer_bytes(settings.max_cmyk_buffer_bytes)`.
+    ///
+    /// # What it changes, and what it cannot
+    ///
+    /// Whether a raster **this large** composites in ink or falls back to
+    /// sRGB and discloses it. It is a *permission*, not a request: a page
+    /// with no subtractive blending space still composites on screen at any
+    /// setting, which §8.6.6.4 makes the specified behaviour rather than a
+    /// shortfall. Ask [`crate::will_composite_in_cmyk`] before rastering if
+    /// the answer would change what you ask for.
+    ///
+    /// A ceiling larger than the machine can allocate is not an error and
+    /// not a crash: the allocation is attempted fallibly and refuses through
+    /// the same disclosed path as the ceiling itself.
+    #[must_use]
+    pub fn with_max_cmyk_buffer_bytes(mut self, max_bytes: Option<usize>) -> Self {
+        self.max_cmyk_buffer_bytes = max_bytes;
         self
     }
 
@@ -969,6 +1013,7 @@ impl RenderOptions {
     pub const fn policy(&self) -> RenderPolicy<'_> {
         RenderPolicy {
             cmyk_intent: self.cmyk_intent,
+            max_cmyk_buffer_bytes: self.max_cmyk_buffer_bytes,
             page_blend_space_source: self.page_blend_space_source,
             mesh_patch_padding: self.mesh_patch_padding,
             mask_resample: self.mask_resample,
@@ -1023,12 +1068,17 @@ mod render_policy_tests {
             .with_image_minify(pdfce_core::settings::MinifyFilter::Smooth)
             .with_cmyk_jpeg_polarity(pdfce_core::settings::CmykJpegPolarity::InvertOnApp14)
             .with_missing_as(pdfce_core::settings::MissingAppearanceState::FirstEntry)
+            .with_max_cmyk_buffer_bytes(Some(64 * 1024 * 1024))
             .with_layers(hidden.clone())
             .with_view_magnification(2.5);
         assert_eq!(
             options.policy(),
             RenderPolicy {
                 cmyk_intent: pdfce_core::settings::CmykIntent::Naive,
+                // NOT the default, and deliberately SMALLER than it — a
+                // ceiling test that only ever moves upward would pass on a
+                // projection that quietly substituted the constant.
+                max_cmyk_buffer_bytes: Some(64 * 1024 * 1024),
                 // NOT the default. This test proves a builder call reaches
                 // the policy, and a field left at its default would pass
                 // whether or not `with_page_blend_space_source` did anything.

@@ -2778,6 +2778,61 @@ Whatever you set here, you can still tick \"treat as parallel\" on any single \
 dimension without changing this."
 }
 
+// --- Memory ceiling for print-colour compositing --------------------------
+
+/// Heading for the subtractive-compositing memory ceiling.
+pub fn setting_cmyk_buffer_title() -> &'static str {
+    "Memory for blending a page in print colours"
+}
+
+/// What this is about — and why the operator may already have SEEN it
+/// without knowing what it was.
+///
+/// Leads with the symptom rather than the mechanism, because the symptom is
+/// what brings someone to this control: the same page looking slightly
+/// different at different zoom levels.
+pub fn setting_cmyk_buffer_silence() -> &'static str {
+    "A page that specifies print colours is blended in ink rather than on \
+screen, which needs 20 bytes per pixel — so the memory grows with the square \
+of the zoom. Past this ceiling pdfce blends on screen instead and tells you \
+in the status bar. That is why one page can look slightly different zoomed \
+in and zoomed out."
+}
+
+/// What changing it affects.
+pub fn setting_cmyk_buffer_radius() -> &'static str {
+    "Affects how pages are drawn and printed. Does not change the file, and \
+does nothing at all to a page that does not specify print colours."
+}
+
+/// The checkbox that returns the ceiling to pdfce's own number.
+pub fn setting_cmyk_buffer_default_label() -> &'static str {
+    "Use pdfce's default"
+}
+
+/// The number field's own label.
+pub fn setting_cmyk_buffer_value_label() -> &'static str {
+    "Ceiling"
+}
+
+/// The suffix on the number field — mebibytes, the unit the whole setting
+/// is expressed in.
+pub fn setting_cmyk_buffer_suffix() -> &'static str {
+    " MB"
+}
+
+/// The explanation, stating the cost honestly in both currencies.
+///
+/// Says outright that it is uncapped and what happens if the number is too
+/// big for the machine, because the alternative — a silent cap — would be a
+/// guard the operator did not ask for on a value they were told is theirs.
+pub fn setting_cmyk_buffer_note() -> &'static str {
+    "Raise it to keep exact colours further in. It costs that much memory \
+while a page is being drawn, and about 50% more time on the pages it applies \
+to. There is no upper limit — a value your machine cannot supply is not a \
+crash, pdfce falls back and says so. Zero means never blend in print colours."
+}
+
 // --- Mask resampling ------------------------------------------------------
 
 /// Heading for the soft-mask resampling setting.

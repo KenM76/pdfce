@@ -4324,6 +4324,7 @@ impl OpenDoc {
         fonts: &pdfce_render::FontEnvironment,
         font_env_generation: u64,
         cmyk_intent: pdfce_core::settings::CmykIntent,
+        max_cmyk_buffer_bytes: Option<usize>,
         layers: Option<pdfce_render::LayerVisibility>,
         layers_generation: u64,
         view_magnification: f32,
@@ -4360,6 +4361,7 @@ impl OpenDoc {
             fonts: fonts.clone(),
             font_env_generation,
             cmyk_intent,
+            max_cmyk_buffer_bytes,
             layers,
             layers_generation,
             view_magnification,
@@ -15984,6 +15986,9 @@ impl PdfceApp {
         // `CmykIntent` is `Copy`, so this costs nothing and keeps the
         // borrow checker out of the rail's way.
         let settings_cmyk_intent = self.settings.cmyk_intent;
+        // Read out beside the intent and for the same borrow reason: an
+        // `Option<usize>` is `Copy`.
+        let settings_max_cmyk_buffer_bytes = self.settings.max_cmyk_buffer_bytes;
         let Status::Open(doc) = &mut self.status else {
             return;
         };
@@ -16176,6 +16181,7 @@ impl PdfceApp {
                                                 index,
                                                 pixels_per_point,
                                                 settings_cmyk_intent,
+                                                settings_max_cmyk_buffer_bytes,
                                             );
                                         }
                                     } else if doc.thumbnails.is_pending(index) {
@@ -17339,6 +17345,7 @@ impl PdfceApp {
         // Same disjoint-field reasoning, and `CmykIntent` is `Copy`, so
         // this is read out rather than borrowed.
         let cmyk_intent = self.settings.cmyk_intent;
+        let max_cmyk_buffer_bytes = self.settings.max_cmyk_buffer_bytes;
         // Derived before the `self.status` borrow, for the same
         // disjoint-field reason the font environment is read out here.
         let layers_generation = self.layers_generation;
@@ -17425,6 +17432,7 @@ impl PdfceApp {
                 font_env,
                 font_env_generation,
                 cmyk_intent,
+                max_cmyk_buffer_bytes,
                 layers.clone(),
                 layers_generation,
                 doc.view.zoom,
@@ -17437,6 +17445,7 @@ impl PdfceApp {
                     font_env,
                     font_env_generation,
                     cmyk_intent,
+                    max_cmyk_buffer_bytes,
                     layers.clone(),
                     layers_generation,
                     doc.view.zoom,

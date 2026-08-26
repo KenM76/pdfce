@@ -891,6 +891,87 @@ stream
     }
 }
 
+/// The ceiling is the OPERATOR'S, and the public predicate does not lie
+/// about where it falls (`Pass 132.0`).
+///
+/// # Why this is one test and not three
+///
+/// Three claims are only worth anything together:
+///
+/// 1. A ceiling too small for the raster **refuses** — the same disclosed
+///    fallback a huge page has always taken, now reachable deliberately.
+/// 2. Raising the ceiling **engages** it again at the same raster size, so
+///    the setting is a real permission and not a decoration.
+/// 3. [`pdfce_render::will_composite_in_cmyk`] **predicted both**.
+///
+/// The third is the one the request from the shell was actually about. A
+/// caller sizing a raster has to decide BEFORE rendering whether the
+/// colours it gets back will be the exact ones, and it cannot do that by
+/// looking at `cmyk_buffer_refused` afterwards. If the predicate and the
+/// renderer ever disagree, the shell's tier choice is wrong in exactly the
+/// band it was written to fix — silently, because both answers still look
+/// like a page.
+#[test]
+fn the_operator_s_ceiling_decides_the_path_and_the_predicate_agrees() {
+    let content = "0 0 0 1 k 0 0 20 20 re f /GS0 gs 0 1 0 0 k 0 0 20 20 re f";
+    let stream = format!(
+        "{content}
+"
+    );
+    let bytes = build(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 20 20] >>",
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R              /Group << /S /Transparency /CS /DeviceCMYK >>              /Resources << /ExtGState << /GS0 5 0 R >> >> >>",
+        ),
+        (
+            4,
+            &format!(
+                "<< /Length {} >>
+stream
+{stream}endstream",
+                stream.len()
+            ),
+        ),
+        (5, "<< /Type /ExtGState /BM /Difference >>"),
+    ]);
+    let doc = Document::from_bytes(bytes).expect("fixture parses");
+    let p = page_tree::pages(&doc).expect("page tree").remove(0);
+
+    // The raster is 20x20 = 400 px, so 8,000 bytes of colorant buffer.
+    // Both ceilings below are chosen against that number rather than
+    // against a round one, so the test says WHY it expects each answer.
+    for (ceiling, expect_ink) in [
+        (Some(4_000_usize), false),
+        (Some(8_000), true),
+        (None, true),
+        (Some(0), false),
+    ] {
+        let options = RenderOptions::default().with_max_cmyk_buffer_bytes(ceiling);
+        let r = render_page_with(&doc, &p, 1.0, &options).expect("render");
+        assert_eq!(
+            r.diagnostics.cmyk_buffer_engaged,
+            expect_ink,
+            "ceiling {ceiling:?} should {} the colorant buffer",
+            if expect_ink { "engage" } else { "refuse" }
+        );
+        assert_eq!(
+            r.diagnostics.cmyk_buffer_refused,
+            usize::from(!expect_ink),
+            "a refusal must be DISCLOSED, never silent"
+        );
+        assert_eq!(
+            pdfce_render::will_composite_in_cmyk(20, 20, ceiling),
+            expect_ink,
+            "the public predicate disagreed with the renderer at {ceiling:?} —              a caller sizing a raster would be told the wrong thing"
+        );
+    }
+}
+
 /// The other half of the switch, and the one that protects every ordinary
 /// document: a page with **no** subtractive group keeps the sRGB path.
 ///

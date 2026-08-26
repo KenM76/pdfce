@@ -411,3 +411,54 @@ fn the_default_polarity_renders_exactly_as_before() {
     );
     assert_eq!(pixels(&implicit), pixels(&explicit), "R29 was moved");
 }
+
+/// The settings file's own prose about the CMYK ceiling agrees with the
+/// renderer's actual constants (`Pass 132.0`).
+///
+/// # Why this test exists at this crate boundary
+///
+/// `pdfce-core` writes the settings file and CANNOT see `pdfce-render` —
+/// the dependency runs the other way — so the paragraph describing the
+/// ceiling quotes numbers (20 bytes per pixel; roughly 530 % zoom on a
+/// whole A4 page at the default) that live in a crate it cannot check
+/// against. That is exactly the arrangement in which a comment goes quietly
+/// wrong: the constant moves, every test still passes, and the operator
+/// reads a stale sentence in a file pdfce itself generated.
+///
+/// `pdfce-render` can see both. So the check lives here, and it is a check
+/// on the DOCUMENTATION, which is otherwise the one thing in this project
+/// nothing tests.
+#[test]
+fn the_settings_file_describes_the_ceiling_the_renderer_actually_enforces() {
+    let text = pdfce_core::settings::Settings::default().write_to_string();
+
+    assert!(
+        text.contains("max_cmyk_buffer_bytes = default"),
+        "an unset ceiling must be written as `default`, not as a number that \
+         would then be frozen into the operator's file"
+    );
+
+    // The per-pixel cost, quoted in the file's own comment.
+    assert_eq!(
+        pdfce_render::CMYK_BYTES_PER_PIXEL,
+        20,
+        "the settings file tells the operator 20 bytes per pixel"
+    );
+    assert!(text.contains("20 bytes per pixel"));
+
+    // The zoom the default ceiling reaches on a whole A4 page (595x842 pt).
+    // Recomputed from the constant rather than restated, so moving the
+    // constant fails HERE with a number, instead of silently making the
+    // sentence wrong.
+    #[allow(clippy::cast_precision_loss)]
+    let max_px = pdfce_render::max_cmyk_composite_pixels(None) as f64;
+    let a4_pt = 595.0 * 842.0;
+    let zoom_percent = (max_px / a4_pt).sqrt() * 100.0;
+    assert!(
+        (500.0..560.0).contains(&zoom_percent),
+        "the file says the default reaches about 530% on A4; it now reaches \
+         {zoom_percent:.0}% — move the prose or move the constant, but not \
+         one without the other"
+    );
+    assert!(text.contains("about 530% zoom"));
+}

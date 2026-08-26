@@ -235,6 +235,12 @@ pub fn show(
                         page_blend_space_setting(ui, draft);
                         ui.add_space(10.0);
                         cmyk_jpeg_setting(ui, draft);
+                        ui.add_space(10.0);
+                        // Grouped with colour rather than with a
+                        // hypothetical "performance" group: what the
+                        // operator notices is the COLOUR changing with
+                        // zoom, and this is the control that stops it.
+                        cmyk_buffer_setting(ui, draft);
                     });
                     group(ui, ui_text::settings_group_images(), false, |ui| {
                         mask_setting(ui, draft);
@@ -619,6 +625,91 @@ fn word_gap_setting(ui: &mut egui::Ui, draft: &mut Draft) {
             .weak(),
     );
 }
+
+/// How much memory the renderer may spend blending a page in ink
+/// (`Pass 132.0`).
+///
+/// Requested by the shell building a viewer against `pdfce-render`, from an
+/// operator report that reads as a rendering bug and is not one: *"seems I
+/// get different results depending on Zoom level … up to 474% they are
+/// mismatched, but at 579% they match."* A page whose group declares a
+/// subtractive blending space is composited in a four-colorant buffer at 20
+/// bytes per pixel; past a ceiling it composites on screen and discloses
+/// that it did. The ceiling is therefore a **zoom boundary** for colour
+/// accuracy, and nothing outside the renderer could read or move it.
+///
+/// # ★ A checkbox plus a number, and NOT a slider
+///
+/// Every other numeric setting in this window is a slider over the store's
+/// own accepted range, for a reason spelled out at [`word_gap_setting`]: a
+/// slider whose range is narrower than the file's would silently drag a
+/// hand-edited value into range simply by opening this window.
+///
+/// **That reasoning inverts here, because this setting has no accepted
+/// range.** It is uncapped on the operator's own ruling — the same one he
+/// gave for the zoom ceiling: *"it is up to the user to determine how much
+/// of a performance hit they want to take."* A slider must have two ends,
+/// so a slider would *invent* a cap and then clamp to it, which is exactly
+/// the unrequested edit that reasoning exists to prevent. A `DragValue` has
+/// no far end and accepts a typed number.
+///
+/// The checkbox exists because `None` and a number are genuinely different
+/// answers — *"whatever pdfce thinks"* versus *"this many bytes"* — and a
+/// number field alone cannot say the first one.
+fn cmyk_buffer_setting(ui: &mut egui::Ui, draft: &mut Draft) {
+    header(
+        ui,
+        ui_text::setting_cmyk_buffer_title(),
+        ui_text::setting_cmyk_buffer_silence(),
+        ui_text::setting_cmyk_buffer_radius(),
+    );
+    let mut use_default = draft.working.max_cmyk_buffer_bytes.is_none();
+    if ui
+        .checkbox(
+            &mut use_default,
+            ui_text::setting_cmyk_buffer_default_label(),
+        )
+        .changed()
+    {
+        // Un-ticking seeds the field with the renderer's OWN default rather
+        // than with zero: the operator is saying "let me change this", not
+        // "turn it off", and landing on zero would silently disable
+        // print-colour blending on the way past.
+        draft.working.max_cmyk_buffer_bytes = if use_default {
+            None
+        } else {
+            Some(pdfce_render::DEFAULT_MAX_CMYK_BUFFER_BYTES)
+        };
+    }
+    if let Some(bytes) = draft.working.max_cmyk_buffer_bytes {
+        let mut mib = bytes / MIB;
+        ui.horizontal(|ui| {
+            ui.label(ui_text::setting_cmyk_buffer_value_label());
+            if ui
+                .add(
+                    egui::DragValue::new(&mut mib)
+                        .speed(16.0)
+                        .suffix(ui_text::setting_cmyk_buffer_suffix()),
+                )
+                .changed()
+            {
+                draft.working.max_cmyk_buffer_bytes = Some(mib.saturating_mul(MIB));
+            }
+        });
+    }
+    ui.label(
+        egui::RichText::new(ui_text::setting_cmyk_buffer_note())
+            .small()
+            .weak(),
+    );
+}
+
+/// One mebibyte, the unit [`cmyk_buffer_setting`] presents the ceiling in.
+///
+/// Whole MiB rather than raw bytes because the number is a *budget* — an
+/// operator picks 512 or 1024, never 536,870,913 — and because the settings
+/// file writes whole MiB back in the same unit, so the two agree.
+const MIB: usize = 1024 * 1024;
 
 /// How close to parallel two lines must be to be dimensioned as a distance
 /// rather than as an angle (`Pass 68.0`).
