@@ -712,7 +712,13 @@ impl CmykBuffer {
 
     /// Composite an **sRGB pixmap** into this buffer — the bridge.
     ///
-    /// # Why a bridge exists at all, stated plainly
+    /// # Why a bridge exists at all
+    ///
+    /// ★ Narrowed 2026-08-26. What follows was written at `Pass 97.1e`, when
+    /// it was true of EVERY image; it is now true only of the ones with no
+    /// ink to keep. A `DeviceCMYK` image — including one behind an
+    /// `/Indexed` palette — goes through [`Self::composite_cmyk_image`]
+    /// instead, immediately above, and crosses nothing., stated plainly
     ///
     /// Images arrive at a canvas as decoded sRGB texels (`DecodedImage`
     /// holds a `Pixmap`), and shadings evaluate their colour ramp to sRGB

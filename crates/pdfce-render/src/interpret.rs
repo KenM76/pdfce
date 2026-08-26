@@ -520,12 +520,53 @@ pub struct Diagnostics {
     /// and would have moved a number an operator may already be diffing
     /// between runs.
     ///
-    /// # Why it cannot be fixed where it is counted
+    /// # ★★★ MOST OF WHAT THIS COUNTS IS NOT A SHORTFALL — Table 149 MAKES
+    /// OVERPRINT INERT FOR A PROCESS IMAGE
     ///
-    /// Per-sample overprint needs per-sample colorants, and pdfce's buffer
-    /// is device sRGB — the image's own colorant identity is gone by the
-    /// time its texels are composited. That is `Pass 97.1`'s colorant
-    /// buffer, not a call-site change. Counting it first is deliberate:
+    /// Read this before trying to make the number go down. Corrected
+    /// 2026-08-26; the heading here used to read *"Why it cannot be fixed
+    /// where it is counted"* and the paragraph under it said *"per-sample
+    /// overprint needs per-sample colorants, and pdfce's buffer is device
+    /// sRGB — the image's own colorant identity is gone by the time its
+    /// texels are composited."* The second half stopped being true at
+    /// `Pass 130.1`. The first half was never the whole story.
+    ///
+    /// **Table 149's first row is scoped `DeviceCMYK, specified directly,
+    /// NOT IN A SAMPLED IMAGE`.** An image therefore falls to the second
+    /// row — *"any process colour space (**including other cases of
+    /// `DeviceCMYK`**)"* — whose process-component entry is `c_s` in all
+    /// three columns: `OP false`, `OP true / OPM 0`, and `OP true / OPM 1`
+    /// alike.
+    ///
+    /// So for a `DeviceCMYK` image, **painting it normally IS the
+    /// conforming behaviour**, and applying row 1's value-dependent rule to
+    /// one would be a deviation rather than a repair. `PCS1_010`, which
+    /// contributes 4 to this counter, carries exactly that shape:
+    /// `[/Indexed /DeviceCMYK 0 …]`.
+    ///
+    /// # What is genuinely missing, and it is two narrower things
+    ///
+    /// 1. **`Separation`/`DeviceN` images.** Table 149's third row is *not*
+    ///    inert: a process component takes `c_b` under `OP true`, so an
+    ///    overprinting `DeviceN` image must PRESERVE the backdrop. Its
+    ///    rules depend on colorant NAMES alone, so they resolve once per
+    ///    image exactly as the shading path's do — the hard part is that
+    ///    `Pass 130.1` captures colorants only for a `DeviceCMYK` base, and
+    ///    a `DeviceN` base's tint-transform output is not yet carried.
+    ///    Measurable on `PCS1_190`/`191`/`192`.
+    /// 2. **Spot colorants under any process source.** The row that is not
+    ///    inert for a `DeviceCMYK` image is the SPOT one (`c_b` under
+    ///    `OP true`), and pdfce's buffer has four process planes and no
+    ///    spot planes — so there is no spot backdrop to preserve. That is
+    ///    the n-channel buffer, already filed.
+    ///
+    /// ★ The counter is therefore **over-inclusive** and is left that way
+    /// deliberately rather than narrowed: it answers "was the composite
+    /// offered this object class?", which is a fact about pdfce's plumbing
+    /// and stays worth knowing. What changed is the reading — a non-zero
+    /// value is no longer evidence of a wrong picture.
+    ///
+    /// Counting it first is deliberate:
     /// **a counter blind to a whole object class reports a smaller problem
     /// than exists**, which this project has already paid for once in the
     /// glyph painter (`bf75351`).
