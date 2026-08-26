@@ -530,13 +530,58 @@ jobs:
       #
       # WHAT IS CONSEQUENTLY NOT CHECKED, stated rather than gestured at
       # (`a_gate_states_what_it_cannot_see`, D:/dev/rag/rust): `pdfce-fetch`
-      # is not type-checked for macOS by this job. It is a ~200-line shell
-      # crate with NO dependents in the workspace, it is excluded from the
+      # is not type-checked for macOS by this job. It is excluded from the
       # wasm32 check below for the same reason it exists (it is a native
       # network shell, and R12 forbids the engine from having one), and it
       # is still fully type-checked on ubuntu and windows by `cargo test`.
-      # If it ever gains a dependent, this exclusion silently widens — that
-      # is the thing to watch.
+      #
+      # ★★ THE PARAGRAPH ABOVE USED TO SAY `pdfce-fetch` HAD "NO DEPENDENTS
+      # IN THE WORKSPACE", AND ENDED WITH THIS WARNING:
+      #
+      #     "If it ever gains a dependent, this exclusion silently widens
+      #      — that is the thing to watch."
+      #
+      # It gained one. `Pass 129.0` (2026-08-25) made `pdfce-cli` depend on
+      # it with the `download` feature DEFAULT ON, this job went red at the
+      # `v0.12.0` tag, and the prediction had been sitting two lines above
+      # the failure the whole time.
+      #
+      # ★ THE CORRECTION IS THE FACT, NOT THE WARNING. The warning was
+      # already perfect and it did not help: nobody reads a CI comment
+      # before adding a Cargo dependency. What WOULD have helped is the
+      # sentence beside it being true — "no dependents" is checkable in one
+      # `grep`, and a reader who checks a false premise finds the trap. So
+      # the standing claim is now written to stay checkable:
+      #
+      #   `pdfce-cli` depends on `pdfce-fetch` behind its OPT-IN `download`
+      #   feature (NOT default, `crates/pdfce-cli/Cargo.toml`). A default
+      #   `cargo check --workspace` therefore does not build it, which is
+      #   why this exclusion still means what it says.
+      #
+      # ★★★ AND THE THING TO WATCH IS NOW DIFFERENT, so it is restated
+      # rather than left pointing at a hazard that already fired: this
+      # exclusion holds only while `download` is OFF BY DEFAULT. Flip that
+      # default and `ureq -> rustls -> ring` re-enters the tree, `ring`
+      # needs a C compiler and target assembly, and this job goes red
+      # again. `--exclude` drops a package from the BUILD LIST; it does not
+      # stop something else dragging it in. **`--exclude` is not
+      # isolation.**
+      #
+      # Deliberately NOT fixed by widening the exclusion. That was the
+      # convenient repair and it ends with a check that no longer checks
+      # anything; the architectural fix (opt-in) restores
+      # `ARCHITECTURE.md` §1.1's claim that a default pdfce build carries
+      # no network stack, which default-on had made false for every build
+      # anybody would actually make.
+      #
+      # NOT DONE, and it is a real gap rather than an oversight: this job
+      # does not pass `--all-features`, so the `download` path is never
+      # cross-checked at all. `--all-features` here would go red
+      # immediately on the same `ring` toolchain gap, so turning it on
+      # needs the toolchain question answered first. The feature IS
+      # type-checked natively — `--all-features` runs on ubuntu and
+      # windows — so it cannot silently rot; it is only its PORTABILITY
+      # that is unmeasured.
       - run: cargo check --workspace --exclude pdfce-fetch --target aarch64-apple-darwin
       # The web-fork invariant, checked positively rather than only by
       # the absence of GUI crates: pdfce-core + pdfce-render must stay
