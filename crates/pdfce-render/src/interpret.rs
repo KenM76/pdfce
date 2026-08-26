@@ -6280,8 +6280,35 @@ impl Interpreter<'_> {
         // `/Interpolate true` still wins outright — a document that asked
         // for smoothing gets it in both directions, whatever this is set
         // to, because that request IS spec-governed.
-        let smooth_minified =
-            matches!(self.policy.image_minify, MinifyFilter::Smooth) && self.is_minified(w, h);
+        //
+        // ★★ AND NOT INSIDE A TYPE 3 GLYPH PROCEDURE, which is a
+        // MEASURED exclusion rather than a cautious one.
+        //
+        // `Pass 126.1` rendered a `d1` + inline `/ImageMask` glyph in Acrobat
+        // Reader across the mask's own minify/magnify boundary and recorded
+        // that Acrobat does NOT smooth it at any zoom
+        // (`Acrobat_Features/type3fonts__rendering_and_color_semantics.md`).
+        // §9.6.5 says why in its own words: an image mask in a glyph
+        // procedure is acceptable because "it merely defines a REGION OF THE
+        // PAGE TO BE PAINTED with the current colour". A region is not a
+        // picture. Resampling it invents partial coverage along an edge that
+        // the file defined as a hard boundary, and at 0.25x it turned a
+        // two-colour stencil into eight colours.
+        //
+        // ★ SCOPED TO EXACTLY WHAT WAS MEASURED, deliberately. The same
+        // argument would extend to every `/ImageMask` drawn as page content,
+        // and that extension is NOT made here: Acrobat's behaviour on a
+        // page-content image mask has not been measured, and widening a rule
+        // from one observation to a class it was not observed on is how a
+        // measurement becomes a guess wearing its clothes. If somebody wants
+        // the wider rule, the measurement is cheap and it should be made.
+        //
+        // This surfaced only because the `image_minify` DEFAULT flipped to
+        // `Smooth` on 2026-08-25; the interaction existed silently before
+        // that, reachable by any operator who set the option.
+        let smooth_minified = matches!(self.policy.image_minify, MinifyFilter::Smooth)
+            && self.type3_glyph.is_none()
+            && self.is_minified(w, h);
         let quality = if interpolate || smooth_minified {
             FilterQuality::Bilinear
         } else {

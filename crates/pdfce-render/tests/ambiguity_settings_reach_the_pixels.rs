@@ -286,13 +286,48 @@ fn minification_smoothing_does_not_touch_a_magnified_image() {
 }
 
 #[test]
-fn the_default_minification_filter_renders_exactly_as_before() {
+fn the_render_default_tracks_the_settings_default() {
+    // ★ THIS TEST WAS `the_default_minification_filter_renders_exactly_as_
+    // _before` and asserted the default was `PointSample` by name. That
+    // pinned the wrong thing: the durable claim is not WHICH variant is
+    // default, it is that `RenderOptions::default()` and
+    // `MinifyFilter::default()` cannot DRIFT APART. Two defaults for one
+    // value is how a shell ends up rendering differently from the engine it
+    // is a shell for, and it is silent — the pixels simply differ from the
+    // ones the settings file describes.
+    //
+    // The operator flipped `MinifyFilter::default()` to `Smooth` on
+    // 2026-08-25 (see its own docs for the evidence). Written this way, that
+    // flip needed no edit here, which is the point: a test that has to be
+    // rewritten every time an evidence-based default moves is a test that
+    // will eventually be rewritten WITHOUT the evidence.
     let implicit = render(minified_image_page(), &RenderOptions::default());
     let explicit = render(
         minified_image_page(),
-        &RenderOptions::default().with_image_minify(MinifyFilter::PointSample),
+        &RenderOptions::default().with_image_minify(MinifyFilter::default()),
     );
-    assert_eq!(pixels(&implicit), pixels(&explicit), "the default moved");
+    assert_eq!(
+        pixels(&implicit),
+        pixels(&explicit),
+        "RenderOptions::default() no longer carries MinifyFilter::default()"
+    );
+
+    // …and the pairing that stops the above being vacuous. If the two
+    // variants rendered identically on this fixture, the assertion would
+    // hold for any wiring at all, including none.
+    let other = match MinifyFilter::default() {
+        MinifyFilter::Smooth => MinifyFilter::PointSample,
+        _ => MinifyFilter::Smooth,
+    };
+    let differing = render(
+        minified_image_page(),
+        &RenderOptions::default().with_image_minify(other),
+    );
+    assert_ne!(
+        pixels(&implicit),
+        pixels(&differing),
+        "the two filters render this fixture identically, so the assertion above could not have failed however the default were wired"
+    );
 }
 
 // ---------------------------------------------------------------------------
