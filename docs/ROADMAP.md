@@ -960,7 +960,7 @@ now is `code → file`, which is one of the two that work.*
 | open operator questions | `(bq)` | **`(bq)`** (unchanged). |
 | `SESSION_LOG.md` filings | **270** | **271**. Next free **272**. |
 | releases | `v0.13.0` | **`v0.14.0` cut, pushed, released** (`d3b4f5a`); **tag move AND asset rebuild in flight**, see above — the published asset still carries the settings-file defect, and only the rebuild fixes that. |
-| gates on disk | 18 | **18** — `ls tools/check-*`, run here, counts **18**, of which **17 run with no arguments** (`check-image-colorspace-truth.py` needs a fixture dir). **`check-string-gaps.sh` was WIDENED** by `ffe9d4c`; **no gate was added**, so the count is unchanged and the widening would be invisible to anyone reading only this row — which is why it is stated. |
+| gates on disk | 18 | **18** — `ls tools/check-*`, run here, counts **18**, of which **17 run with no arguments** (`check-image-colorspace-truth.py` needs a fixture dir). **`check-string-gaps.sh` was WIDENED** by `ffe9d4c` and its **header repaired** by `18b0438` (two dangling `check-strong-text.sh` citations dropped); **no gate was added**, so the count is unchanged and both changes would be invisible to anyone reading only this row — which is why they are stated. |
 
 **Gates, run by this role after writing** — all **17** argument-free
 `tools/check-*` gates green on the tree **with** this filing's edits in it,
@@ -968,6 +968,20 @@ including `check-string-gaps.sh --self-test` and ★ **`check-commits-filed.py`
 clean**, which is the job that was red at the tag: `ffe9d4c` is now joined by
 this amendment, and the baseline was not extended. Full report at the foot of
 this entry's `SESSION_LOG.md` twin.
+
+★ **RE-RUN TWICE MORE, because the tree moved under this paragraph both times.**
+At `HEAD` = `18b0438`: all **17** argument-free gates **green**,
+`check-commits-filed.py` `clean — 595 code commit(s) checked`, with `18b0438`
+**deferred as the tip** — one trailing code commit, which is exactly the width
+`R217`'s window covers. Then the engineer committed the filing as **`b135dec`**
+while these last two rows were being written, so at `HEAD` = `b135dec`:
+`check-commits-filed.py` **clean with no deferral at all** (`b135dec` cites
+`18b0438` by hash, so nothing is outstanding), `check-string-gaps.sh
+--self-test` **PASS**, ledger **271 / next free 272**. ⇢ ***This is the third
+time in one filing that a report described a tree that had already changed***
+— and it is the same ordering fact the `R217` candidate above records, arriving
+this time inside the gate report itself rather than at the tag. **Two rows of
+this ledger therefore sit OUTSIDE `b135dec`** and are the engineer's to carry.
 
 **RAG escalations from this amendment:** none written. The
 formatter-shape/gate-blindness finding is the strongest candidate — ⇢ *a gate
