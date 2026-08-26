@@ -62692,3 +62692,588 @@ not used, deliberately: the tip here is a *code* commit, not this filing.
    so this role reported rather than edited, but it is the **first document
    a resuming session reads** (per this project's own memory note), which is
    exactly what makes a stale next-free-ID line expensive.
+
+---
+
+> **★ AMENDED 2026-08-26 (two-hundred-and-sixty-fourth filing) — THIS
+> ENTRY'S HEADING SAYS `v0.12.0` IS "BUMPED BUT NOT CUT", WHICH WAS TRUE
+> WHEN WRITTEN AND STOPPED BEING TRUE ABOUT THREE HOURS LATER.** Prose kept,
+> not rewritten. The filing was committed as **`b6f8cd5`**, `v0.12.0` was
+> **tagged there, pushed, packaged, smoke-tested and published**, and **CI
+> then came back RED at the tagged commit**. Everything from the cut onward
+> — the red job, its cause, the hotfix `a72a89b`, and the finding worth
+> carrying — is the **264th filing below**. Two items on this entry's *For
+> next session* list are also closed there: **item 7** (`PROVENANCE.md` line
+> 46, read and correct) and, in part, **item 2** (tag/push/release — done,
+> then re-cut). **The tag does not stay at `b6f8cd5`.**
+
+## 2026-08-26 (two-hundred-and-sixty-fourth filing) — `v0.12.0` was TAGGED, PUSHED AND PUBLISHED at `b6f8cd5` and **CI CAME BACK RED AT THE TAGGED COMMIT**, 1 job of 9; ★★★ the finding is **not** the dependency — **`--exclude` IN A WORKSPACE CHECK IS NOT ISOLATION**, it drops a package from the BUILD LIST, not from being pulled in as a DEPENDENCY; ★★★ **the CI job's own comment PREDICTED THIS VERBATIM and sat unread in the file the dependency was added against — a CORRECT warning at the EXACT line, which is a different failure class from every stale-claim finding this project has filed**; ★★ **the convenient fix (widen the exclusion until the check stopped checking) was available and REFUSED** — `download` goes opt-in, and the architectural argument is the better one; ★ **second release in three red after tagging**, and `verify-release.py` caught both; ★ **and this filing hit the heredoc defect LIVE while writing itself — n = 5**; ★★ **AMENDED IN PLACE BEFORE COMMIT: the survivor this filing REPORTED was then FIXED by the engineer as `d68c621`, now filed as its own `ROADMAP.md` entry — and the correction is a rewrite of the FACT, not of the WARNING, because a comment that predicts a hazard while stating a stale precondition READS AS ALREADY-HANDLED**; ★ **the classification of my own bundled-commit misstep is stated: the EXISTING rule disobeyed, NOT a new `R217` candidate — `--strict-tip` DECLINES to defer, it does not EVAPORATE a deferral**; ★ **and the heredoc defect fired a SIXTH time inside the amendment about the fifth — n = 6**
+
+**WHY THIS IS A 264TH FILING AND NOT AN AMENDMENT TO THE 263RD — the call
+was left to this role and it went the other way from the dispatch's lean,
+so the reasoning is stated rather than assumed.**
+
+The dispatch preferred folding this into the 263rd entry, to *"keep the
+release's story in one place."* That is a real cost and it has been paid for
+directly: **the 263rd entry now carries a forward-pointing amendment
+footer** (above), and so does its `ROADMAP.md` `81d1e30` release-status
+section. The story is navigable from either end.
+
+Three reasons it is nevertheless its own entry:
+
+1. **Hard rule 1 draws the line at corrections versus events.** *"Corrections
+   get a dated amendment footer on the affected entry"* — and **nothing here
+   corrects the 263rd.** *"Bumped but not cut"* was true when measured and
+   the entry says so in those words. The cut, the red CI, `a72a89b` and the
+   retag are all **subsequent events**. An append-only log takes new events
+   as new entries.
+2. **`a72a89b` is a new code commit** and needs a `ROADMAP.md` *Shipped*
+   entry regardless; in this project a `ROADMAP.md` entry and a
+   `SESSION_LOG.md` filing move together. Filing the commit while pretending
+   no filing occurred would leave `check-commits-filed.py` satisfied by a
+   footnote.
+3. **n = 2 on the established shape.** `v0.9.0` to the 256th filing and
+   `v0.10.0` to the 260th were both *"CLOSING THE LOOP … amendment, not
+   correction"* as their own entries. This is the same shape carrying
+   strictly more: a red gate, a root cause, a rejected alternative fix, and
+   a transferable Cargo fact.
+
+**Sourcing — MIXED, split stated before any figure is quoted (hard rule 8).**
+
+- **Measured here, commands named:** `git log --oneline -8`, `git status
+  -sb`, `git tag --list`, `git ls-remote --tags origin`, `git rev-list -n1
+  v0.12.0`, `git remote -v`; `git show a72a89b` (message plus the full diff
+  of `crates/pdfce-cli/Cargo.toml`); `grep -rn "exclude pdfce-fetch"
+  .github/`; `sed -n '500,575p' .github/workflows/ci.yml` and
+  `sed -n '55,85p'`; `grep -nE "^  [a-z0-9-]+:$" .github/workflows/ci.yml |
+  wc -l`; **`cargo tree -p pdfce-cli`** and **`cargo tree -p pdfce-cli
+  --features download`**, both grepped for the network stack; `grep -n
+  "^default" crates/pdfce-fetch/Cargo.toml`; `grep -n pdfce-fetch
+  crates/pdfce-gui/Cargo.toml crates/pdfce-cli/Cargo.toml Cargo.toml`;
+  `sed -n '46p'` on the OCR `PROVENANCE.md`; `python
+  tools/check-commits-filed.py` and `tools/check-passes-filed.py`.
+- **Relayed from the engineer's dispatch, NOT measured here:** that CI was
+  red on `cross-target compile check (macOS / wasm32)` and green on
+  everything else; `cargo test --workspace` green; `clippy -D warnings`
+  clean in both configurations; the 17-bare-gate sweep; `check-ci-parity`
+  clean; the `--features download` build fetching both artefacts with hashes
+  verified; that the stripped build was run and printed the refusal; and the
+  entire tag / push / package / smoke-test / publish sequence.
+
+**Shipped:**
+
+- **`a72a89b`** — *"HOTFIX: the downloader is opt-in, and CI's own comment
+  predicted why."* **No Pass ID**; infrastructure/hotfix record, on the same
+  footing as `81d1e30`, `768e934`, `4267f84`. Filed to *Shipped*, top.
+- **★ `d68c621`** — *"ci: pdfce-fetch HAS a dependent now, and the false
+  sentence sat two lines above the warning."* **Added to this filing AFTER it
+  was first written and BEFORE it was committed**, when the engineer acted on
+  the survivor this filing had reported. **No Pass ID**; infrastructure/
+  correction record, same class as the version bumps. Filed to *Shipped* as
+  its own entry, **above** `a72a89b`. **`.github/` is one of
+  `check-commits-filed.py`'s `CODE_PREFIXES` (`:229`), so a CI-workflow
+  commit owes a `ROADMAP.md` entry like any other code commit** — this is not
+  a courtesy filing.
+- **Both commits are therefore filed in the tree this filing will be
+  committed into**, and the commit carrying the filing is **docs-only** —
+  which is what makes `--strict-tip` pass with no deferral line at all. See
+  *Gates*, below.
+
+**Decisions made this session: none minted here.** Decisions ceiling stays
+**`087`**; **`088` is still OWED** (the `redact-mark` exit-code question,
+carried from the 263rd). Standing-rule ceiling stays **`R219`**; Pass-ID
+ceiling stays **`127`**, next free **`127.3`**; open-question ceiling stays
+**`(bl)`**. **A candidate rule was weighed and DECLINED below.**
+
+**Findings + decisions:**
+
+- **★★★ THE HEADLINE, and it is a Cargo semantics fact with nothing
+  pdfce-specific in it.** `cargo check --workspace --exclude <pkg>` drops
+  `<pkg>` from the **build list** — the set of workspace members selected as
+  **roots** — and says **nothing** about whether another selected member
+  pulls it in as a **dependency**. While `pdfce-fetch` had no dependents the
+  two readings coincided, so the flag *looked* like isolation for as long as
+  nothing tested the difference. `Pass 129.0` gave it a dependent with
+  `download` default-ON, `ureq` to `rustls` to `ring` entered `pdfce-cli`'s
+  graph, `ring`'s build script wanted a C compiler and target assembly, and
+  the `aarch64-apple-darwin` check failed. **`--exclude` does not warn that
+  an excluded package is still in the graph**, so the widening is silent by
+  construction.
+
+- **★★★ THE FAILURE CLASS IS NEW FOR THIS PROJECT, and that is why it is in
+  the heading.** `.github/workflows/ci.yml:538-539` carries, from the day
+  `pdfce-fetch` was created: *"If it ever gains a dependent, this exclusion
+  silently widens — that is the thing to watch."* **It gained one, it
+  widened, and the sentence was in the file the whole time.** Every
+  comparable finding this project has filed — `R215`, `R217`, hard rule 11's
+  sweeps — is about a claim **going stale** and nobody sweeping for it.
+  **Nothing went stale here.** The comment was correct when written, correct
+  when the dependency was added, correct when the job went red. **A correct,
+  specific, load-bearing warning sat at the exact line of the exact file
+  being invalidated and was not read.** So the transferable half is *not*
+  "keep comments current" — it is that **a comment describing a precondition
+  is only ever read by someone already looking at that line, and the person
+  adding a dependency is looking at a `Cargo.toml`, not at a CI workflow.**
+
+- **★★ THE CONVENIENT FIX WAS AVAILABLE AND WAS REFUSED, which is the part
+  worth preserving.** Widening the exclusion until the check no longer
+  checked anything would have turned the job green in one line. The
+  architectural argument is independent of CI and is stronger:
+  `ARCHITECTURE.md` §1.1 states pdfce needs no network to work and states it
+  as *"verifiable by any reader of the generated
+  `THIRD_PARTY_LICENSES.md`"* — **default-on made that claim FALSE for every
+  build anybody would actually make.** Opt-in makes it true again.
+
+- **★ RE-MEASURED HERE RATHER THAN RELAYED**, because the claim is the whole
+  point *(`cargo tree -p pdfce-cli`, grepped for
+  `ureq|rustls|ring|pdfce-fetch|webpki|tokio|hyper|reqwest`)*:
+
+  | build | matching lines | what they are |
+  |---|---|---|
+  | **default** | **1** | **`windows-strings v0.5.1`** — the pattern `ring` matching inside `strings`. **Zero real network crates.** |
+  | **`--features download`** | **10** | the `ureq` / `rustls` / `ring` stack, as intended |
+
+  *(Hard rule 10: **1 apparent hit of which 0 are real** in the default
+  graph; **10 lines** with the feature on. The denominator is "lines
+  matching an 8-alternative pattern", not "crates" — a crate can appear on
+  several lines of a tree.)*
+
+- **★★ THE EXCLUSION IS STILL NOT ISOLATION — only the TRIGGER was removed,
+  and a future reader will over-read this fix.** `a72a89b` does not repair
+  `--exclude`'s semantics. The identical failure returns unchanged if
+  `download` is flipped back into any shell's `default`, **or if
+  `--all-features` is ever added to the cross-target job.** That second is
+  not hypothetical: **`ci.yml:66` and `:80` already use `--all-features`**
+  (`cargo clippy --workspace --all-targets --all-features`, `cargo test
+  --workspace --all-features`). They are **native** ubuntu/windows builds
+  where `ring` compiles fine, so they stay green — **and they are also why
+  the `download` path does not now rot.** Opt-in has **not** removed the
+  feature from CI coverage; it is still built and tested on both native
+  platforms. Only the *cross-target* job avoids it, and only because it does
+  not pass `--all-features`. **Recorded because "we made it opt-in" and "we
+  stopped testing it" are the same sentence to a careless reader, and here
+  they are not the same fact.**
+
+- **★ WHAT THE FLIP COSTS THE OPERATOR: nothing, because the weights ship.**
+  `tools/package-portable.py` stages `models/ocrs` into the portable folder,
+  so OCR works with no network. The downloader is for a build that does not
+  carry them — a `cargo install`, a stripped package. And without the
+  feature `fetch-ocr-models` **refuses by name rather than vanishing** (the
+  operator's modularity rule, 2026-08-13: a missing subcommand reads as a
+  version difference, a named refusal reads as a build choice). **That path
+  was run, not assumed.**
+
+- **★★ SECOND RELEASE IN THREE RED AFTER TAGGING — RECORDED AS A PATTERN,
+  AND A STANDING RULE IS DECLINED.** `v0.10.0` was red at its tag for a
+  different reason (an unfiled version bump tripping
+  `check-commits-filed.py`); `v0.12.0` is red for this one. **2 of the last
+  3 releases.** The dispatch's own reading — that the gate is working as
+  designed and no rule is owed — is **agreed with, and for a reason worth
+  writing down rather than just concurring**: `tools/verify-release.py`
+  **refused to call either release verified while CI was unfinished or
+  failing**, which is precisely the behaviour a rule would be minted to
+  demand. **Minting a rule that restates what a passing gate already
+  enforces is how a rulebook stops being readable** — and this project's own
+  `ci_gate_red_at_baseline_enforces_nothing` finding is the argument against
+  adding ceremony to a gate that works.
+
+  **What IS owed, and it is a sentence rather than a rule:** *the release is
+  not done when the tag is pushed.* Section 0a's ordering discipline
+  protects against **a tag whose own filing cannot exist in its own tree** —
+  it held perfectly here, `b6f8cd5` was the filing commit — and it **does
+  not protect against a tag on a commit CI has not finished judging.** Those
+  are two different hazards and the project has now hit the second twice.
+  Filed into the `81d1e30` amendment footer where the section 0a ordering
+  claim is made, so the caveat sits beside the rule it qualifies rather than
+  in a filing nobody re-reads.
+
+- **★ AND THE HEREDOC DEFECT HAPPENED TO THIS FILING, WHILE IT WAS BEING
+  WRITTEN — n = 5, live.** This entry was first appended with `cat >>
+  docs/SESSION_LOG.md <<'ENDOFENTRY'`. The shell aborted with `unexpected
+  EOF while looking for matching '` — an apostrophe in ordinary English
+  prose (`entry's`, `pdfce-cli's`, `ring's`), inside a **quoted** heredoc
+  that a reasonable person expects to be literal. **This is precisely the
+  failure the RAG's second amendment describes, hit by the role writing the
+  third amendment about it, in the paragraph documenting it.** Recorded
+  because it is the strongest possible evidence for the practice the finding
+  now recommends: **the fix was to `Write` the payload to a file and `cat`
+  the file**, which worked first time. It also confirms the finding's own
+  observation about which way the danger runs — **this failure was loud and
+  cost about a minute**; the silent Rust-literal version of the same defect
+  cost four shipped strings.
+
+  > **★ AMENDED WITHIN THIS SAME FILING — IT HAPPENED AGAIN, n = 6**, in the
+  > amendment paragraph about n = 5, roughly an hour later, same shell, same
+  > quoted heredoc, same ordinary English apostrophes. **The count moves 5 →
+  > 6 and the RAG file's "3 → 4 in one day" becomes 3 → 5 in one day.**
+  > Recorded rather than quietly incremented because the pair is the
+  > argument: **a role that had just finished writing the finding still
+  > reached for the heredoc first.** That is not a memory failure to be
+  > exhorted away — it means the discipline has to be **the default way the
+  > payload is produced** (`Write` the text to a file, have a script read the
+  > file), not a thing recalled after the shell complains.
+
+**★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string. THE
+MEANING-CHANGE EVENT IS THAT `pdfce-fetch` GAINED A DEPENDENT.** Every
+sentence anywhere in the tree asserting it had none, or that no shell reached
+it, had to be re-read. **Four candidates, two real survivors, two cleared by
+checking rather than by assuming.**
+
+| # | where | the claim | disposition |
+|---|---|---|---|
+| 1 | **`.github/workflows/ci.yml:534`** | *"It is a ~200-line shell crate with **NO dependents in the workspace**…"* | **FALSE — REPORTED, NOT EDITED.** `crates/pdfce-cli/Cargo.toml:108` declares `pdfce-fetch = { workspace = true, optional = true }`. `.github/` is a live gate and the engineer's. ★ **Note the shape: this sentence is two lines above the prediction that came true, and it is the sentence that would have made the prediction actionable.** The hotfix corrected the manifest and left the comment asserting the precondition whose failure caused the incident. **★ AMENDED WITHIN THIS SAME FILING: FIXED, as `d68c621`** — reported, acted on by the engineer, filed as its own `ROADMAP.md` *Shipped* entry. Prose kept: the report and the boundary it observed are both true records |
+| 2 | **`docs/FEATURES.md`**, *Planned* section | *"built and tested, **but no shell depends on it**, so nothing is operator-reachable"*, boxes `— / [ ] / [ ] / —` | **FALSE — ROW CORRECTED AND MOVED.** `cli` `[ ]` becomes **`◐`** (reachable, but only in a `--features download` build; the default binary refuses by name), and the row **moved out of *Planned* into *Implemented*, section *Shell & UX***. A `◐` row stranded under *Planned* is read as "not built", which is exactly the drift that file exists to prevent |
+| 3 | **`docs/ROADMAP.md`**, the `pdfce-fetch` bucket-versus-shipped table | *"depended on **optionally** by `pdfce-cli` and `pdfce-gui` — **NOT YET** ✘ *(not built)*"* | **HALF FALSE — AMENDED IN PLACE, prose kept** (`R215` (d)). **1 of the 2 named shells, not 0**: `pdfce-cli` yes; `pdfce-gui` **no** — checked, `grep -n pdfce-fetch crates/pdfce-gui/Cargo.toml` returns nothing. ★ And the bucket asked for **optional** while `Pass 129.0` shipped **default-ON** — that difference *is* the incident |
+| 4 | `docs/ARCHITECTURE.md:1920` and `docs/ROADMAP.md`'s bucket-table row *"default **ON** — `default = ["download"]` ✔"* | that `pdfce-fetch`'s own manifest default is `["download"]` | **STILL TRUE — CLEARED BY CHECKING, NOT ASSUMED.** `grep -n "^default" crates/pdfce-fetch/Cargo.toml` gives line 40, `default = ["download"]`, unchanged by the hotfix. **The hotfix changed `pdfce-cli`'s default, not `pdfce-fetch`'s.** ★ Two manifest lines have to be read together or you get the wrong answer: the **workspace root** pins `pdfce-fetch = { path = …, default-features = false }` (`Cargo.toml:120`), so the crate's own default is off at the workspace edge and re-enabled only by a shell forwarding `pdfce-fetch/download`. Recorded in the ROADMAP amendment so the next reader does not "correct" a correct line |
+
+**★★★ AMENDMENT WITHIN THIS SAME FILING — THE SURVIVOR ABOVE WAS FIXED
+BEFORE THIS FILING WAS COMMITTED, AND THE FIX IS ITS OWN COMMIT: `d68c621`,
+*"ci: pdfce-fetch HAS a dependent now, and the false sentence sat two lines
+above the warning"*.** No Pass ID; infrastructure/correction record, same
+class as the version bumps. Filed to `ROADMAP.md` *Shipped* as its own entry,
+which is what `check-commits-filed.py` needs — `.github/` is one of that
+gate's `CODE_PREFIXES` (`tools/check-commits-filed.py:229`), so a CI-workflow
+commit is a **code** commit and owes a `ROADMAP.md` entry like any other.
+**One file, `+49 / −4` lines** *(over 1 file = the whole diff, `git show
+d68c621 --stat`)*; the `--exclude` invocation itself is **untouched**, now at
+`ci.yml:585`. Four things worth carrying, and only the first is "it fixed a
+comment":
+
+- **★★★ THE CORRECTION IS THE FACT, NOT THE WARNING — this is the
+  generalisable half.** The warning at `:539` was **correct, specific,
+  load-bearing, and at the exact line of the exact file the dependency
+  invalidated**, and it did not help. Not through a lapse: **nobody reads a
+  CI workflow comment before adding a Cargo dependency** — the person adding
+  one is looking at a `Cargo.toml`. **No improvement to the warning reaches
+  them.** What *would* have reached them is the sentence beside it being
+  **true**: *"no dependents"* is falsifiable in one `grep`, and a reader who
+  checks a premise and finds it false **has found the trap**. The check is
+  the delivery mechanism the warning did not have.
+
+- **★★ AND THE SHARPER CLAIM, which is the one to remember: A COMMENT THAT
+  PREDICTS A HAZARD WHILE STATING A STALE PRECONDITION IS WORSE THAN ONE
+  THAT DOES NEITHER — IT READS AS ALREADY-HANDLED.** The pair *"there are no
+  dependents"* + *"watch out if it gains one"* parses as **a condition
+  considered and not occurring**. The stale premise does not merely sit there
+  wrongly; it **cancels** the live warning. ★ **This is a second, independent
+  reason hard rule 11's sweeps matter**, and it is not the reason already on
+  file: `R215`/`R217` treat staleness as a wrong fact nobody swept for, and
+  the remedy is the sweep. This records that **a stale fact can INVERT the
+  meaning of a correct fact next to it** — so the cost of missing one is not
+  bounded by that one sentence.
+
+- **★ The replacement is written to STAY checkable, and the thing-to-watch is
+  RESTATED rather than left in the past tense.** The standing claim is now
+  *"`pdfce-cli` depends on `pdfce-fetch` behind its **OPT-IN** `download`
+  feature (NOT default) — a default `cargo check --workspace` therefore does
+  not build it, which is why this exclusion still means what it says"*, and
+  the live hazard is *"this exclusion holds only while `download` is OFF BY
+  DEFAULT"* plus **`--exclude` is not isolation**. The old prediction is
+  **quoted verbatim inside the new block** rather than deleted, so a reader
+  sees that it was made, that it came true, and that it was not enough alone.
+
+- **★ THE `--all-features` GAP IS NOW WRITTEN INTO THE GATE, not only into
+  this filing.** *For next session* item 6 below files it as an **open
+  question for the engineer**; `d68c621` puts the statement of the gap where
+  someone reading the job will see it. **Three facts that must be held
+  together** *(measured here: `grep -n "all-features" .github/workflows/ci.yml`
+  → **4 hits, of which 2 are invocations** (`:66` clippy, `:80` test) **and 2
+  are the new comment**; `grep -n "exclude pdfce-fetch"` → **1 hit, `:585`**,
+  carrying no `--all-features`)*:
+
+  | fact | consequence |
+  |---|---|
+  | `--all-features` runs natively on ubuntu + windows | the `download` path **is** compiled, clippy'd and tested — **it cannot silently rot** |
+  | `--all-features` does **not** run on the cross-target job | only its **PORTABILITY** to `aarch64-apple-darwin` / `wasm32` is **unmeasured** |
+  | turning it on there would go red **immediately** | on `ring`'s toolchain gap, not on any pdfce defect — the state `ci_gate_red_at_baseline_enforces_nothing` warns about |
+
+  ★ That is the *"a gate states what it cannot see"* discipline pointed at
+  the gate's **own** remaining blind spot, in the comment block that already
+  cites `a_gate_states_what_it_cannot_see`. **The question stays open and
+  stays the engineer's.**
+
+**★★ MY OWN SEQUENCING WENT WRONG FIRST, AND IT BELONGS ON THE RECORD.**
+The engineer initially committed the `ci.yml` change **bundled into the
+filing commit**, and `python tools/check-commits-filed.py --strict-tip`
+**went red immediately**. Mechanism, exactly: `.github/` is a `CODE_PREFIX`
+(`:229`), and that gate's 2026-08-11 correction makes **a commit with code in
+it checked whatever else it touches** — so a filing commit carrying a `ci.yml`
+change **is a code commit**, and **a code commit cannot cite its own hash**.
+**The gate fails on the very commit written to make it green.** The commit
+was split before anything was pushed; nothing reached the remote in the bad
+shape.
+
+**★ THE CLASSIFICATION, since the dispatch left the call here: THIS IS THE
+EXISTING RULE BEING DISOBEYED, NOT A NEW NAMED CANDIDATE.** Standing-rule
+ceiling stays **`R219`**; **two rules were weighed this filing and both were
+declined.** Reasons, third decisive:
+
+1. **The counter-measure is already written down twice, and one of the two
+   places is this gate's own docstring** — corrected 2026-08-18 *because* it
+   *"misled a librarian filing into planning a mixed code+docs commit on the
+   belief that the code half would be exempt."* The document that would carry
+   a new rule already names this exact planning error and the date it last
+   cost something.
+2. **Nothing here is un-anticipated.** `R217`'s named candidate (n=1,
+   `4267f84` entry) exists because *interposition* had **no rule and no code
+   fix**. Here the rule exists and is one line: **the filing commit contains
+   ONLY the filing.**
+3. **This filing already declined a rule on exactly this warrant** (the
+   two-red-releases-in-three finding above): *minting a rule that restates
+   what a documented gate already enforces is how a rulebook stops being
+   readable.* Declining there and minting here would be incoherent.
+
+**★ ONE CORRECTION TO THE DISPATCH'S READING, and it is not cosmetic.** The
+dispatch reads this as *"the same family as `R217` (tip-deferral
+evaporating)"*. **Tip deferral did not evaporate.** `R217`'s mechanism is a
+deferral correctly granted and then **destroyed by a later commit landing on
+top** — the tip's status changes without its content changing. **Nothing
+landed on top here.** `--strict-tip` **declines to defer, by flag**, which is
+the flag's whole purpose. Same one-line discipline, **different mechanisms**,
+and the difference decides where the counter-measure sits: `R217`'s candidate
+is about **what lands BETWEEN dispatch and filing**; this is about **what
+lands INSIDE the filing**. So this is *adjacent* to that candidate and
+**does not increment its occurrence count** — it strengthens the shared
+counter-measure without being a second sighting of the same shape.
+
+**★ AND THE HEREDOC DEFECT FIRED AGAIN WHILE WRITING THIS AMENDMENT — n = 6,
+in the paragraph amending the n = 5 note about it.** `cat > … <<'ENDOFENTRY'`
+aborted with `unexpected EOF while looking for matching '` on ordinary
+apostrophes (`sentence's`, `gate's`) inside a **quoted** heredoc. **The fix
+that worked, first time, is the one the RAG finding now ranks #1: `Write` the
+payload to a file, then have a script read the file.** Recorded because n = 5
+and n = 6 occurred **in the same filing, an hour apart, to a role that had
+just written the amendment describing the defect** — which is the strongest
+available evidence that the discipline has to be *the default way the payload
+is produced*, not a thing recalled after the shell complains.
+
+**★ CARRY-FORWARD CLOSED — `PROVENANCE.md` line 46, unread across two
+filings, now read.** `crates/pdfce-core/assets/models/ocrs/PROVENANCE.md:46`
+reads `` `text-detection-ssfbcj81.rten`, 2,523,564 bytes, SHA-256 ``. **It is
+correct and nothing is owed.** It sits inside the section headed *"★★ THE
+DETECTION MODEL WAS REPLACED ON 2026-08-25, AND OCR DID NOT WORK BEFORE
+IT"*, whose opening line is *"Read this before 'tidying' the two files back
+onto one channel"* — the line is the **historical record of the REPLACED
+Hugging Face detection file**, deliberately retained so a reader can identify
+**which artefact they have** before re-measuring anything. **The dispatch's
+reading is confirmed by this role's own read**, which is the point of
+confirming rather than relaying it. **Removing that line would destroy the
+only way to tell the broken file from the good one.** Struck from the
+carry-forward list.
+
+**★ `NEXT_SESSION.md` section 2 item 4 versus the `D:/dev/rag/rust/` heredoc
+finding — CHECKED, AND THEY AGREE ON THE FIX BUT THE RAG WAS ONE OCCURRENCE
+AND ONE MECHANISM BEHIND.** Reported precisely, because the dispatch asked
+whether they agree and the honest answer is "on the fix, yes; completely,
+no."
+
+| | `docs/NEXT_SESSION.md` section 2 item 4 | the RAG finding, **before** this filing |
+|---|---|---|
+| the fix | **write the script to a FILE**, raw string, literal Unicode typed directly | **write the patch script to a FILE**, raw string, run the file — ranked #1 |
+| a raw string is not sufficient | stated | stated (*"correct and it is not enough"*) |
+| never a heredoc, `-c`, or `python - <<EOF` | stated | stated, with the shell-parser reason |
+| **occurrences that day** | **four** | **three** |
+| **★ the raw-string `\u` trap** | **stated** — a raw string does **not** process `\uXXXX`, so `\u00a7` lands **literally**; *"43 escape sequences written literally into this very file by a raw string"*; *"the third row is the one that gets you AFTER you have learned the second"* | **ABSENT** |
+
+**So `NEXT_SESSION`'s sentence — *"`D:\dev\rag\rust\` has the amended
+finding, and it now records that `r'''...'''` is not the fix that works"* —
+is true of the RAG as it stood, and its stronger implication is not.** The
+RAG recorded that raw strings are *insufficient because you must remember to
+use them*; it did **not** record that a raw string **introduces a second,
+opposite defect** — the fix for the backslash problem *is* the cause of the
+`\u`-literal problem, in the same file, ten minutes later. **This role wrote
+the third amendment** (below) rather than merely reporting the gap, since
+`D:/dev/rag/rust/` is its own territory (hard rule 7).
+
+**RAG escalations this filing — TWO WRITTEN, both as amendments to existing
+files rather than as new ones (hard rule 4).**
+
+1. **`D:/dev/rag/rust/cross_target_cargo_check_portability_gate.md`** —
+   amended with the **`--exclude` is not isolation** finding. That file
+   already owns this exact CI job and this exact recipe, so a new file would
+   have split one subject in two. Agreeing with the dispatch's reading:
+   **this is a general Cargo fact with nothing pdfce-specific in it** — the
+   mechanism, the silence, the `--all-features` re-trigger and the
+   "precondition comments are read by the wrong person" corollary all
+   transfer to any workspace.
+2. **`D:/dev/rag/rust/a_python_heredoc_eats_the_backslash_continuation_in_a_rust_string_literal.md`**
+   — **third amendment**, adding the **raw-string `\u` trap**, the **live
+   n = 5 occurrence in this filing**, and moving the count **3 to 4 in one
+   day**. Written because the finding's own top recommendation is now known
+   to cause a second defect, and a RAG whose leading advice has an
+   unrecorded failure mode is worse than one that says so.
+
+Both subdir `index.md` bullets updated in the same session, per the
+Quaternary discipline.
+
+**Ledger (measured here, commands named):**
+
+| item | value |
+|---|---|
+| `git rev-parse --short HEAD` | **`a72a89b`** |
+| `git status -sb` | **`## main...origin/main [ahead 1]`** |
+| `git rev-list -n1 v0.12.0` | **`b6f8cd5`** — the 263rd filing's commit, **the one CI rejected**; the retag to this filing's commit is the engineer's next act |
+| `git ls-remote --tags origin` | `refs/tags/v0.12.0^{}` gives **`b6f8cd5`** — the bad tag **is on the remote**, which is why the recovery is a force-push and not a fresh tag |
+| `git remote -v` | `origin https://github.com/KenM76/pdfce.git` (**public**) |
+| CI jobs defined | **9** (`fmt`, `clippy`, `test`, `gui-core-separation`, `ui-strings`, `cross-check`, `no-network`, `third-party-licenses`, `fuzz-smoke`); `test` is a 2-OS matrix, so **10 runs**. **1 red of 9**, relayed |
+| `cargo tree -p pdfce-cli` network hits | **1 apparent, 0 real** (`windows-strings`) |
+| `cargo tree -p pdfce-cli --features download` | **10** matching lines |
+| `crates/pdfce-fetch/Cargo.toml:40` | `default = ["download"]` — **unchanged by the hotfix** |
+| `crates/pdfce-cli/Cargo.toml` | `default = ["jpx", "ocrs"]` (was `[…, "download"]`); `download = ["dep:pdfce-fetch", "pdfce-fetch/download"]` |
+| `grep -n pdfce-fetch crates/pdfce-gui/Cargo.toml` | **no match** — the GUI has no fetch dependency |
+| `tools/check-commits-filed.py` **before** these edits | **exit `0`**, but only because `a72a89b` is the **tip** and therefore **DEFERRED** *(`tip a72a89b is DEFERRED, not yet filed`)*; **581 code commits checked, 5 carried in the baseline** |
+| `tools/check-commits-filed.py` **after** these edits | **exit `0`, and the `DEFERRED` line is GONE** — `a72a89b` is filed on the merits, not excused as the tip. See *Gates*, below |
+| `tools/check-passes-filed.py` **before / after** | **exit `0` / exit `0`** — `a72a89b` claims no Pass ID, so this gate never had an opinion on it |
+| `tools/commits-filed-baseline.txt` | **UNTOUCHED** — it is debt, not an allowlist |
+| decisions ceiling | **`087`** (**`088` still OWED**) |
+| standing-rule ceiling | **`R219`** — **a candidate was weighed and DECLINED**, above |
+| Pass-ID ceiling | **`127`**, next free **`127.3`** |
+| open operator questions ceiling | **`(bl)`**, next free `(bm)` |
+| backup bundle currency | **NOT re-measured in this filing.** The 263rd measured **35 commits stale** at `81d1e30`; **that figure is deliberately NOT carried forward** (hard rule 8 — a stale number stated confidently is worse than silence). **The engineer should re-check `D:\Dev\pdfce-backups\` before the retag** |
+
+**Gates — stated with their scope, because "green" has one, and the BEFORE
+and AFTER runs do not say the same thing.** Both scripts were run against the
+working tree **after** these `ROADMAP.md` and `FEATURES.md` edits and
+**before** any commit.
+
+| run | `check-commits-filed.py` output | reading |
+|---|---|---|
+| **before** the edits | `tip a72a89b is DEFERRED, not yet filed` **+** `clean — 581 code commit(s) checked` | exit `0`, **but only by deferral** — a commit cannot cite its own hash, so the tip is excused rather than checked |
+| **after** the edits | `clean — 581 code commit(s) checked` — **no `DEFERRED` line at all** | exit `0` **on the merits**: the new `ROADMAP.md` entry names `a72a89b`, so the gate no longer needs to excuse it |
+
+**★ That difference is the point of filing before the retag, and it is
+stronger than the position the 263rd filing was in.** `81d1e30` was still
+being carried by deferral when that entry was written and only became
+genuinely checked once a later commit landed on top. **`a72a89b` is already
+checked in full, right now, in the working tree** — so the commit carrying
+this filing is not merely *permitted* to be the tag target, it is a tree in
+which no code commit is unfiled by any mechanism, deferral included. This is
+`R217`'s shape working as designed, and the **third consecutive release**
+where the mechanic was exercised deliberately rather than tripped over.
+`--strict-tip` was not used and was not needed: the tip is a **code** commit,
+not a filing, and it is filed.
+
+*(Hard rule 10: **581 code commits checked over the whole history, 5 carried
+in `tools/commits-filed-baseline.txt`** — 0.86 % of the history is
+acknowledged debt, and that file was **not touched** by this filing.)*
+
+> **★★★ LEDGER AND GATES RE-MEASURED WITHIN THIS SAME FILING, AFTER
+> `d68c621` LANDED AND AFTER THE `ROADMAP.md` ENTRY FILING IT WAS WRITTEN.**
+> The rows and the two-row table above are **kept, not rewritten** — they
+> were measured correctly at their own moment, and the whole point of hard
+> rule 8 is that a figure states when it was taken. **Every figure below
+> supersedes its counterpart above.** Commands named, all run against the
+> working tree **before any commit**:
+>
+> | item | value above (superseded) | **value now** |
+> |---|---|---|
+> | `git rev-parse --short HEAD` | `a72a89b` | **`d68c621`** |
+> | `git status -sb` | `## main...origin/main [ahead 1]` | **`## main...origin/main [ahead 2]`** |
+> | `check-commits-filed.py` code commits checked | 581 | **582** — `d68c621` is the 582nd; `.github/` is a `CODE_PREFIX` (`tools/check-commits-filed.py:229`) |
+> | `tools/commits-filed-baseline.txt` | UNTOUCHED | **still UNTOUCHED** — 5 carried, **5 of 582 = 0.86 %** of history is acknowledged debt |
+> | `check-passes-filed.py` | exit `0` | **exit `0`** — `d68c621` claims no Pass ID either, so this gate still has no opinion on it |
+>
+> **★★ AND THE GATE RESULT IS NOW STRICTLY STRONGER THAN THE ONE RECORDED
+> ABOVE, WHICH IS THE STATE THIS AMENDMENT WAS AIMING AT.** Both runs, after
+> these edits:
+>
+> | run | output | exit |
+> |---|---|---|
+> | `python tools/check-commits-filed.py` | `clean — 582 code commit(s) checked (whole history); 5 known-unfiled carried in the baseline` — **no `DEFERRED` line** | **`0`** |
+> | `python tools/check-commits-filed.py --strict-tip` | **byte-identical output — same `clean` line, still no deferral** | **`0`** |
+> | `python tools/check-passes-filed.py` | `clean - every Pass-claiming commit is filed` (plus 11 informational multi-commit `note` lines, all pre-existing) | **`0`** |
+>
+> **★ The two runs agreeing is the fact worth having, not the exit code.**
+> The table above records `--strict-tip` as *"not used and not needed"*,
+> which was a correct reading of a weaker position: `a72a89b` was filed, but
+> the argument that the tree was clean rested on the plain run. **Now the
+> strict run is exercised and says the same thing** — and it is a different
+> claim, because `--strict-tip` **refuses to excuse the tip at all**. A plain
+> pass can mean *"clean, or the one unfiled commit is the tip"*; a strict
+> pass means **"clean, with no commit excused by any mechanism."**
+>
+> **★★ AND THE COMMIT THAT CARRIES THIS FILING IS DOCS-ONLY, WHICH IS WHY
+> THE STRICT RUN WILL KEEP PASSING AFTER IT LANDS.** `git status --short`
+> shows exactly three modified paths — `docs/ROADMAP.md`,
+> `docs/SESSION_LOG.md`, `docs/FEATURES.md` — **no `crates/`, no `tools/`,
+> no `.github/`, no `fixtures/`, no `fuzz/`.** A commit touching none of the
+> `CODE_PREFIXES` is skipped by the gate entirely, so it cannot be asked to
+> cite itself and **no deferral line appears at all**. **That is a stronger
+> state than "the deferral was granted and was correct"**: there is nothing
+> to defer. It is also **exactly what the bundled first attempt destroyed** —
+> a `ci.yml` change inside this commit would have made it a code commit and
+> put `--strict-tip` red on the commit written to make it green.
+
+
+**Still in flight:**
+
+- **★ `v0.12.0`'s TAG IS ON A REJECTED COMMIT, ON THE REMOTE, RIGHT NOW.**
+  `git ls-remote` puts `v0.12.0^{}` at `b6f8cd5`. The recovery — retag at
+  this filing's commit, force-push, **rebuild the package so `BUILD-INFO`
+  names the tagged commit**, replace the asset with `--clobber`, **re-run
+  the smoke test on the new artefact** — is the engineer's next act and is
+  **not** observed by this filing. **A re-cut release is a new artefact and
+  does not inherit the old one's test**; that sentence is the whole reason
+  the rebuild is not optional.
+- **Decision `088`** — the `redact-mark` exit-code question — still owed,
+  carried from the 263rd.
+- **`Pass 127.2`** — the `redact-mark` `stdout` summary-line gap — in
+  *Backlog*, unblocked.
+- ~~**`ci.yml:534`'s "NO dependents" comment** — reported above, unedited, the
+  engineer's.~~ **★ CLOSED WITHIN THIS FILING — fixed as `d68c621`**, filed
+  as its own `ROADMAP.md` *Shipped* entry. **Struck rather than deleted**, so
+  the report-then-fix sequence stays legible. What replaced it is **not just
+  a true sentence**: the claim is written to stay checkable (the OPT-IN
+  `download` feature is named as the condition), and the thing-to-watch is
+  **restated** rather than left aimed at a hazard that already fired.
+- **The clean control's 91.5 % OCR recall** — still unexplained, carried from
+  the 262nd.
+- **pdfceGUI's small ask** — a `fonts_without_unicode()` or
+  `unsearchable_fonts` total on `TextDiagnostics` — unactioned, carried from
+  the 263rd.
+- **The `git ls-remote` lexicographic finding** — still homeless; this role
+  still recommends a new `D:/dev/rag/git/` subdir over forcing it into
+  `gh-cli/`, and still declines to create one mid-release-cut.
+
+**For next session:**
+
+1. **Re-check the backup bundle BEFORE the retag** — the 263rd's "35 commits
+   stale" is deliberately not carried forward here.
+2. **Retag `v0.12.0` at this filing's commit**, force-push, **rebuild the
+   package**, `--clobber` the asset, **re-run the smoke test**, then
+   `tools/verify-release.py`.
+3. ~~**★ Fix `.github/workflows/ci.yml:534`** — *"NO dependents in the
+   workspace"* is false. One sentence, and it is the sentence that would have
+   made the line-539 prediction actionable next time.~~ **★ DONE BEFORE THIS
+   FILING WAS COMMITTED — `d68c621`.** Struck, not deleted. ★ **It took more
+   than the one sentence this item asked for, and the difference is the
+   lesson:** deleting the false clause was necessary and insufficient. The
+   replacement **names the condition it depends on** (`pdfce-cli`'s **OPT-IN**
+   `download` feature), so the `grep` that falsifies it also tells the reader
+   what changed — and **the thing-to-watch was restated**, because a warning
+   pointed at a hazard that already fired is a warning nobody can act on.
+   **THE CORRECTION IS THE FACT, NOT THE WARNING**; the warning here was
+   already perfect.
+4. **Mint decision `088`** — still owed.
+5. **`Pass 127.2`** — still the ranked owed work in *Backlog*.
+6. **Consider whether the cross-target job should pass `--all-features`.** It
+   would have caught this **at `Pass 129.0` instead of at the tag** — and it
+   would go red immediately, because `ring` still cannot cross-compile from
+   the Linux runner. **That is the honest trade and it is the engineer's
+   call, not this role's:** a job that catches the real defect and also fails
+   on a known-unfixable toolchain gap is the state
+   `ci_gate_red_at_baseline_enforces_nothing` warns about. **Filed as a
+   question, deliberately not as a recommendation.**
+
+   > **★ AMENDED WITHIN THIS FILING — the question is UNCHANGED and still the
+   > engineer's, but it no longer lives only here.** `d68c621` writes the gap
+   > **into `.github/workflows/ci.yml` itself**, beside the job that has it,
+   > naming the three facts that have to be held together: `--all-features`
+   > **runs natively** on ubuntu and windows (`:66`, `:80`), **so the
+   > `download` path cannot silently rot**; it does **not** run on the
+   > cross-target job, **so only its PORTABILITY is unmeasured**; and turning
+   > it on there **would go red immediately** on `ring`'s toolchain gap. **A
+   > question filed only in a session log is read by whoever reads session
+   > logs; the same question in the workflow is read by whoever touches the
+   > job.** Answering it is still open work.
+7. **Decide where the `git ls-remote` lexicographic finding lives.**
