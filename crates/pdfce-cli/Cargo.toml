@@ -16,7 +16,7 @@ path = "src/main.rs"
 # Mirrors `pdfce-core`'s strippable-capability features so a lighter CLI is
 # one flag rather than a manifest edit. Default ON: `--no-default-features`
 # is the deliberate act, never the accident.
-default = ["jpx", "ocrs", "download"]
+default = ["jpx", "ocrs"]
 jpx = ["pdfce-core/jpx", "pdfce-render/jpx"]
 # The `ocrs` text-recognition engine (`Pass 71.0` slice 3).
 ocrs = ["pdfce-core/ocrs", "pdfce-render/ocrs"]
@@ -40,6 +40,40 @@ ocrs = ["pdfce-core/ocrs", "pdfce-render/ocrs"]
 # licence callback, or a startup update check. Every fetch here is one an
 # operator typed. An operator narrowing one clause is not consent to widen its
 # neighbour.
+# ★★ OPT-IN, NOT DEFAULT, AND CI IS WHY — BUT THE ARCHITECTURE IS THE BETTER
+# REASON. Do not flip this back on for convenience.
+#
+# THE MECHANICAL REASON. `pdfce-fetch` pulls `ureq` -> `rustls` -> `ring`, and
+# `ring` needs a C compiler and target assembly. CI's cross-target job runs
+# `cargo check --workspace --exclude pdfce-fetch --target aarch64-apple-darwin`,
+# and `--exclude` drops a package from the BUILD LIST, not from being pulled in
+# as a DEPENDENCY. So the moment `pdfce-cli` depended on it by default, the
+# exclusion stopped meaning what it said and the job went red.
+#
+# ★ That job's own comment predicted this, in these words: "If it ever gains a
+# dependent, this exclusion silently widens - that is the thing to watch." It
+# gained one, it widened, and the prediction was sitting in the file the whole
+# time. Left default-on, the fix would have been to widen the exclusion until
+# the check no longer checked anything.
+#
+# THE BETTER REASON. `ARCHITECTURE.md` §1.1's claim is that pdfce does not need
+# a network to work, and it is stated as something "verifiable by any reader of
+# the generated THIRD_PARTY_LICENSES.md". Default-on made that claim false for
+# every build anybody would actually make. Opt-in makes it true again: the
+# DEFAULT binary contains no HTTP client and no TLS stack at all, and an
+# operator who wants a downloader asks for one.
+#
+# ★ And nothing is lost, because the WEIGHTS SHIP. `tools/package-portable.py`
+# stages `models/ocrs` into the portable folder, so OCR works out of the box
+# with no network. The downloader exists for a build that does NOT carry them -
+# a `cargo install`, a stripped package - which is exactly the case an operator
+# opting in already knows they are in.
+#
+# Build it with:  cargo build -p pdfce-cli --features download
+#
+# Without it, `fetch-ocr-models` REFUSES BY NAME rather than vanishing - the
+# operator's own modularity rule. A missing subcommand reads as a version
+# difference; a named refusal reads as a build choice.
 download = ["dep:pdfce-fetch", "pdfce-fetch/download"]
 
 [dependencies]

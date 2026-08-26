@@ -8200,8 +8200,9 @@ fn cmd_ocr(
             eprintln!(
                 "pdfce-cli: ocr: the model files are not bundled inside the executable — they \
                  are two files (`text-detection.rten`, `text-rec-checkpoint.rten`) that live in \
-                 a `models/ocrs` folder. Pass --model-dir to point at them, or run \
-                 `pdfce-cli fetch-ocr-models` to download the pinned copies."
+                 a `models/ocrs` folder, which the portable package ships. Pass \
+                 --model-dir to point at them, or, in a build compiled with the `download` \
+                 feature, run `pdfce-cli fetch-ocr-models` to fetch the pinned copies."
             );
             return exit::RUNTIME_ERROR;
         }

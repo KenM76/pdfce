@@ -13,110 +13,109 @@ can falsify it.
 
 ## §A — COLD START: everything you need, in one screen
 
-**`v0.11.0` is released and verified. The working tree is clean, `origin/main`
-matches, and nothing is blocked on anybody.** Both FeatureRequests channels
-were checked; nothing new inbound. One note went **out** to pdfceGUI — see §5.
+**`v0.12.0` is released. The working tree is clean, `origin/main` matches, a
+fresh backup bundle exists, and nothing is blocked on anybody.** Both
+FeatureRequests channels were checked; pdfceGUI has consumed everything sent
+and has already wired the newest verb.
 
-### What this run built (2026-08-25, evening — the same day as v0.10.0)
-
-One Pass, and a defect it flushed out that had nothing to do with it.
+### What this run built (2026-08-25 evening → 2026-08-26)
 
 | commit | what an operator would notice |
 |---|---|
-| `2104d38` | **`Pass 127.0` — Type 3 text SEARCHES and COPIES**, wherever the file carries a `/ToUnicode` CMap. And where it does not, pdfce **says so, per font, by name** |
-| `35fce5f` | The three CLI tests that prove the disclosure reaches the operator, not just the counter |
-| `768e934` | `v0.11.0` |
+| `2104d38` `35fce5f` | **`Pass 127.0`** — Type 3 text searches and copies; where it cannot, each font is **named** |
+| `de2d93c` | **`Pass 128.0`** — image quality matches Acrobat again, and a Type 3 stencil is exempted from the change |
+| `1f79cc1` | **`Pass 128.1`** — render presets per subset standard, each value carrying its evidence tier |
+| `181d9bd` | **`Pass 129.0`** — **OCR works.** It never had |
+| `9b941b9` | **`Pass 127.1`** — "redact every match" stops being silent about text it could not read |
+| `81d1e30` `b6f8cd5` | `v0.12.0` |
 
-### ★★ THE SHAPE OF THIS PASS IS THE LESSON
+### ★★★ THE ONE THING TO CARRY OUT OF THIS RUN
 
-The queue item read *"Type 3 text EXTRACTION and search"*. **The extraction
-half was already shipped and unnamed.** A probe fixture built **before any
-code was written** extracted `HI!` at `via_tounicode=3`, `sourced_pct=100.0`,
-`failed=0` — because `ExtractFont::resolve` has routed `Type3` through the
-simple-font path since Pass 4, and §9.10.2 rung 1 is font-subtype-agnostic.
+**pdfce shipped an OCR engine on 2026-08-12 that produced garbage on every
+page, and nothing noticed for two weeks.** The cause was one wrong model file.
+What made it survivable was that it was *never measured end to end* — there
+was no `pdfce-cli ocr`, so the only way to run it was a GUI, and the GUI's own
+end-to-end test was `#[ignore]`d because the weights were not beside its
+binary.
 
-**Checking first turned a feature into a sentence.** What actually shipped is
-a *disclosure* Pass. Take the measurement before the scope.
+Three separate absences, each individually reasonable, and together they made
+a completely broken feature indistinguishable from a working one:
 
-### What the disclosure is, and why it is not cosmetic
+1. no shell surface ⇒ nobody could run it cheaply;
+2. no shipped weights ⇒ the one surface that existed refused before it ran;
+3. no ground truth ⇒ even a run that happened produced a *count*, and a count
+   cannot tell reading from hallucinating.
 
-A Type 3 glyph is a content stream named by an **arbitrary `/CharProcs`
-key** (§9.6.5). `/g13` means nothing outside its own document, so §9.10.2
-method 2's precondition is false **by construction** and `/ToUnicode` is the
-font's only route. Without it the text **renders perfectly** and cannot be
-searched, copied or extracted.
+**A feature with no cheap way to run it is a feature nobody has run.** When a
+capability lands with its surface deferred, the surface is not polish — it is
+the only thing that will ever tell you the capability works.
 
-So `matches=0` has two causes and one appearance: *the needle is absent*, and
-*this document's text was never recoverable as Unicode*. Nothing in
-`TextMatch` can tell them apart, because the second case produces no
-`TextMatch` to carry the news.
+### The measurement, and how to get one when licensing forbids the input
 
-- `EditSession::search_text(needle, &opts) -> TextSearch { matches,
-  diagnostics }` — new public verb, 140 now. Identical scan, identical hits;
-  `find_text_with` delegates to it. It simply does not throw half of it away.
-- `TextDiagnostics::type3_fonts_without_to_unicode`, the simple-font twin of
-  `identity_fonts_without_to_unicode`, raised from the **font dictionary
-  alone** — not from whether a code happened to fail, or a document whose
-  Type 3 text is on page 40 would report nothing for the first 39.
-- `extract-text` prints `type3_no_tounicode=`; `find-text` prints
-  `unreadable_codes=`, `type3_no_tounicode=`, `identity_no_tounicode=` and
-  prose on stderr.
+`ROADMAP.md` had recorded that OCR accuracy could not be measured because the
+project may not check in a real scan (`LEGAL.md` §5, rule 7). **So the scan was
+manufactured**: render a vector page pdfce authored, degrade it the way a
+sheet-fed scanner does (200 dpi, box blur, 0.35° skew, deterministic noise,
+paper grey), wrap it as an image-only PDF.
 
-★ **Acrobat has the identical limit and gives up silently.** Matching the
-limit is parity; saying so is not. The Acrobat RAG
-(`type3fonts__extraction_editing_and_tagging.md`) recommended this posture by
-name.
+★ **The ground truth falls out of the generator.** The vector original says
+where each word really is, via `find-text` and real font metrics; the OCR'd
+copy says where OCR put it. Two rectangles, **two completely different
+routes**, which must agree — and that catches the failure a word count cannot:
+a layer that reads every word perfectly and lands in the wrong place.
 
-### ★★★ THE SECOND DEFECT — the one worth carrying forward
+    degraded  47/47 words, 100% content, median offset 2.56 pt
+    clean     43/47 words,  91.5%,       median offset 0.90 pt
 
-The per-font diagnostic de-duplicated on `/BaseFont`. **ISO 32000-1 Table 112
-has NO `/BaseFont` ENTRY** — a conformant Type 3 font has no name — so every
-unnamed font on a page shared one slot.
+The clean control's **0.90 pt** is the true positional accuracy. The degraded
+figure is dominated by the deliberate skew, not by OCR error — the truth is
+the *unskewed* original. **The control is what makes that readable**, and it is
+the load-bearing half of the fixture.
 
-**A/B'd rather than reasoned about, and the measurement was worse than the
-prediction.** The expectation written down first was that N unnamed dead ends
-would report `1`. Reverted to the old key, the fixture reported **`0`**:
-`/TA` is unnamed too, is resolved **first**, has a `/ToUnicode` and therefore
-no note to emit — it claimed the empty key and both fonts behind it were
-skipped before their notes were ever read. **One clean unnamed font silenced
-every unnamed font behind it.**
+★ Reported honestly and still unexplained: the **clean** control scores worse
+on recall (91.5 % vs 100 %). Four words missed on crisp text and found on
+degraded text. Reproducible. Nobody knows why.
 
-The prediction was recorded, then corrected in the doc comment, the test
-rationale *and* the fixture's `PROVENANCE.md`. Write the measured value, not
-the one you expected.
+### What else is worth knowing before you start
 
-★ **This was never Type-3-specific.** It suppressed `UnknownSubtype`,
-`BuiltinEncodingUnreadable` and every other per-font note for any font with a
-missing or malformed `/BaseFont`. It surfaced only because Type 3 makes
-namelessness the **conformant** case.
+- **`/Rotate` was ignored by the whole OCR chain** while the rasteriser
+  honoured it — a transposed invisible layer on a page that still looks
+  perfect. Fixed via `PagePlacement` + `words_to_page_space_on`. Scanner
+  drivers write `/Rotate` rather than re-imaging, so this is the norm in the
+  one population OCR exists for.
+- **`MinifyFilter::default()` moved to `Smooth`**, and it took a Type 3 bitmap
+  stencil with it — caught by yesterday's Acrobat-measured test. The exclusion
+  is scoped to exactly what was measured; page-content `/ImageMask` is
+  deliberately NOT covered.
+- **Render presets carry an evidence tier per value.** For PDF/X-4, one of six
+  is a claim about the standard at all. `only_sourced_cells_may_claim_to_be_
+  sourced` is the guard that stops a guess being relabelled.
+## §0 — ★★ A DISPATCH IS A SET OF CLAIMS, AND YOURS WILL BE WRONG
 
----
+Read this before dispatching any agent that files, records, or decides.
 
-## §0 — ★★ A DISPATCHED LIBRARIAN SEES A SNAPSHOT, AND YOU KEEP TYPING
+The 263rd filing dispatch carried three factual premises. **All three were
+false**, and the librarian checked rather than filed them:
 
-Read this before dispatching a filing agent and then continuing to work.
+1. an outbound note was "at" a path pdfceGUI had already consumed and renamed;
+2. a `FEATURES.md` box was asserted `[ ]` when the other project had wired the
+   verb **six hours earlier**;
+3. ★ **a feature was credited to the wrong commit** — `pdfce-cli ocr` was
+   attributed to `de2d93c`; it is present at `1f79cc1` and `181d9bd` only made
+   it *work*. Established by measuring four trees, not by reading a message.
 
-The librarian reported, from its own shell and correctly:
+None was careless. Each was a reasonable inference from what the engineer
+remembered doing. **Memory of one's own session is exactly the kind of source
+that feels like a fact.**
 
-> *"`crates/pdfce-cli/tests/find_text.rs` is dirty and holds this Pass's own
-> CLI tests… They are not in `2104d38`. So the commit ships the `find-text`
-> disclosure **without the tests that prove it**."*
+Two consequences worth carrying:
 
-**True when it looked. False by the time it said so.** The tests were written
-after the dispatch and committed as `35fce5f` while it was still working.
-Nobody was wrong: it read the tree it was given.
-
-This is `R218`'s shape one scale up — *a check whose input is "what exists
-now" cannot see what you are about to do* — and it is the reason underneath
-§0a below. It cost one amendment dispatch. It could just as easily have cost
-a filing that names two of three commits, which is what turned CI red at
-`v0.10.0`.
-
-**The mitigation is ordering, not vigilance:** finish the code, *then*
-dispatch, *then* commit the filing last.
-
----
-
+- **Write dispatches so a premise is checkable**, and expect the agent to
+  check. A dispatch that says "X is at path P" invites verification; one that
+  says "as we discussed" does not.
+- **The prior session's hazard still holds** (a dispatched agent sees a
+  *snapshot* and you keep typing). Both failure modes point the same way:
+  **finish the code, then dispatch, then commit the filing last.**
 ## §0a — ★★★ THE FILING COMMIT MUST BE THE LAST COMMIT BEFORE THE TAG
 
 Held this release, deliberately, after it cost a red CI run and a re-tag at
@@ -213,14 +212,34 @@ from any Type 3 font at all. And its glyphs are named `/ga1`, `/gb1`, `/gc1`
 — **deliberately not standard names** — because pdfce's counted AGL extension
 would otherwise resolve them by luck and paper the dead end over.
 
-**4. ★ NEVER PATCH RUST THROUGH A NON-RAW PYTHON STRING.** A trailing
-backslash before a newline is a **Python** line continuation: it eats the
-backslash *and* the newline, silently turning a wrapped Rust string literal
-into one line with the next line's indentation baked in. **It compiles.**
-Four literals shipped that way this session and `check-string-gaps.sh` caught
-all four — a re-read did not. Use `r'''…'''`, or write the file and use
-`Edit`. This is the second occurrence of the wrapped-literal class in this
-project; `D:\dev\rag\rust\` has the file, amended.
+**4. ★★★ WRITE THE PATCH SCRIPT TO A FILE. DO NOT PIPE IT THROUGH A
+HEREDOC. FOUR TIMES TODAY.**
+
+This item said *"use `r'''…'''`, or write the file"* and offered them as
+equivalent. **They are not, and the difference cost three further failures
+after that sentence was written.** The escape layers are independent and each
+one bites differently:
+
+| layer | what it eats | how it shows up |
+|---|---|---|
+| **shell heredoc** | a backslash, before Python ever sees it | `re.error: incomplete escape \u` — **loud**, costs a minute |
+| **non-raw Python string** | a trailing `\` + newline (a Python line continuation) | a wrapped Rust literal silently becomes one line with the next line's indentation baked in. **It compiles.** Only `check-string-gaps.sh` catches it |
+| **raw Python string** | nothing — *and that is the trap* | `\uXXXX` is **not** processed, so `\u00a7` lands in the file literally. A document full of `\u2605` where the stars should be |
+
+★ **The third row is the one that gets you after you have learned the second**,
+and it did: the raw string was the correct fix for the backslash problem and
+introduced the escape problem, in the same file, ten minutes later.
+
+**The rule that survives all three:** write the script to a **file**, as a
+**raw** string, containing **literal Unicode characters** (§, —, ★) typed
+directly. Never `\u` escapes inside `r'''…'''`. Never a heredoc for anything
+containing a backslash.
+
+Today's tally: four wrapped Rust literals (caught by `check-string-gaps.sh`,
+not by re-reading), one `re` pattern killed by a heredoc, and 43 escape
+sequences written literally into this very file by a raw string. `D:\dev\rag\rust\`
+has the amended finding, and it now records that **`r'''...'''` is not the fix
+that works.**
 
 **5. Two layers of test, because a correct model can sit behind a silent
 front end.** The core tests prove the counter reaches `2`; they prove nothing
@@ -356,36 +375,43 @@ pdfce does not have yet.
 
 ## §5 — THE OPERATOR ITEMS
 
-- **PUSHING AND RELEASING — DISCHARGED ONCE, FOR `v0.11.0`.** The
-  authorisation was *"once complete release to git"*, given with this
-  session's task. **One authorisation covers one act** (`CLAUDE.md` rule 8).
-  The next push and the next release each need their own go-ahead. Three
-  releases in one day does not make a standing one.
+- **PUSHING AND RELEASING — DISCHARGED FOR `v0.12.0` AND SPENT.** The
+  authorisation was *"release and commit"*, given 2026-08-26. **One
+  authorisation covers one act** (`CLAUDE.md` rule 8). The next push and the
+  next release each need their own go-ahead.
 
-  ★ **Asset policy, unchanged and worth re-reading before the temptation
-  arrives:** **never attach a render of a suite patch to a release.** Its
-  artwork is licensed and must not be redistributed (`docs/LEGAL.md` §5, plus
-  the 2026-08-25 name ruling). Synthetic fixtures from
-  `fixtures/synthetic/` are MIT-clean and *are* attachable.
+  ★ Asset policy unchanged: **never attach a render of a suite patch** — its
+  artwork is licensed (`LEGAL.md` §5). Synthetic fixtures are MIT-clean and
+  *are* attachable; `v0.12.0` ships `fixtures/synthetic/ocr/scan.pdf` as the
+  OCR demo for exactly that reason.
 
-  ★★ **Smoke-test the ZIP, not the build folder.** Extract to a fresh path
-  and run `pdfce-cli.exe` from the extraction; the artefact people download
-  is what needs verifying, not what a build produced.
+  ★★ **Smoke-test the ZIP, not the build folder** — extract to a fresh path and
+  run from the extraction. For `v0.12.0` that test did the real work: it
+  confirmed OCR runs **with no `--model-dir`**, which is the thing that was
+  broken in every release build before this one.
 
-- **CUTTING A BACKUP — STILL NOT DISCHARGED, and now three releases stale.**
-  A GitHub release is an offsite copy of one build; it is **not a `git
-  bundle`** and contains no history. Measured this session: the newest bundle
-  `D:\Dev\pdfce-backups\pdfce-20260825-0218-full.bundle` holds `main` at
-  `81e5aab`. **Re-measure before quoting** — `ls D:/Dev/pdfce-backups/`,
-  `git bundle list-heads <newest>`, `git rev-list --count <head>..main`. Do
-  not carry a number forward from any handoff; each was true at a different
-  `HEAD`.
+- **CUTTING A BACKUP — DISCHARGED 2026-08-26, and the habit is what matters.**
+  `pdfce-20260826-0630-full.bundle`, `git bundle verify` reports a complete
+  history, `main` at `81d1e30`, **zero commits behind** at cut time. The
+  previous bundle was **35 behind**.
 
-- **OUTBOUND TO pdfceGUI, sent this session, needs no reply from Ken:**
-  `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\2026-08-25-a-zero-result-search-is-not-proof-the-word-is-absent.md`
-  — tells that project to swap its Find bar from `find_text_with` to
-  `search_text`, points at `docs/core-api/` §8.5 as the real documentation
-  (not the note), and warns explicitly that `mark_redactions_by_search` does
-  **not** disclose yet. Per the standing discipline: a cross-project
-  deliverable recorded only in the producing tree has been *filed*, not
-  *handed off*, so `ROADMAP.md`'s filing names that file too.
+  **Re-measure before quoting** — `ls D:/Dev/pdfce-backups/`,
+  `git bundle list-heads <newest>`, `git rev-list --count <head>..main`. Every
+  number in every handoff was true at a different `HEAD`.
+
+- **OUTBOUND TO pdfceGUI — all consumed, nothing owed.** Three notes went out
+  (the zero-result search disclosure, the X-4 preset vector, and the OCR
+  DPI-curve warning). pdfceGUI has renamed all three to `done_*_CONSUMED.md`,
+  **retracted its DPI curve rather than adjusting it**, rewritten its pinning
+  test to solve the fitting equation instead of asserting a value, fixed its
+  own `/Rotate` handling, and wired `search_and_mark_redactions_styled`.
+
+  ★ A note is *filed* when you write it and *handed off* when the other side
+  names it. All three are handed off; check the channel rather than assuming
+  either way.
+
+- **`git ls-remote --tags | tail` DOES NOT SHOW YOU THE NEWEST TAGS.** It
+  sorts **lexicographically**, so `v0.10.0` sorts before `v0.5.0` and sits at
+  the *head* of the list. The moment a minor number reaches two digits, a
+  `tail` on a version list hides exactly the versions you are looking for. Use
+  `gh release list`, or `git tag --sort=-v:refname`.
