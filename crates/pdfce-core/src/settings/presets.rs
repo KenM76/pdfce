@@ -119,6 +119,26 @@ pub enum RenderStandard {
     /// Shares most of X-1a's requirements but permits device-independent
     /// colour, and permits a device space only where the output intent's
     /// profile is that same space. Transparency still forbidden.
+    ///
+    /// # ★ THIS PRODUCES AN IDENTICAL VECTOR TO [`Self::PdfX1a`], ON PURPOSE
+    ///
+    /// Reported by `pdfce-gui` 2026-08-25: applying X-3 leaves settings its
+    /// matcher then reports as X-1a. That is **correct, and not a bug to
+    /// fix.**
+    ///
+    /// The two parts differ in **what colour spaces a FILE may contain** —
+    /// X-1a restricts print elements to CMYK, greyscale and spot; X-3 permits
+    /// device-independent colour against a matching output intent. **No
+    /// render-radius setting can see that difference.** It is a constraint on
+    /// the document, checked by a validator, not a knob a renderer turns.
+    ///
+    /// So the honest preset for both is the same preset, and the variants
+    /// stay separate because the *labels* differ and an operator selecting
+    /// "PDF/X-3" should see PDF/X-3 named back to them. **Do not merge them,
+    /// and do not manufacture a difference to justify keeping them apart.**
+    /// A preset that invented a divergence here would be asserting a
+    /// rendering requirement neither standard contains — the exact failure
+    /// [`PresetAction::LeaveAlone`] exists to prevent, one level up.
     PdfX3,
     /// **PDF/X-4 and PDF/X-4p** — ISO 15930-7:2010.
     ///

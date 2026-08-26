@@ -290,6 +290,32 @@ impl LoadReport {
 /// this the textbook case for R169: the standard is silent, so the choice
 /// is the operator's.
 ///
+/// # ★★ THE DEFAULT, AS DATA RATHER THAN AS A STORY ABOUT A DIVERGENCE
+///
+/// ```text
+///   shipped default : NeutralBlack     (operator ruling, 2026-08-08)
+///   best-evidenced  : Calibrated       (Acrobat's shipped profile + pdfium)
+///   they differ     : DELIBERATELY, and in REASONING, not in value
+/// ```
+///
+/// This block exists because a downstream project read the prose below and
+/// **mis-implemented it in the safe direction**. `pdfce-gui` restated
+/// `NeutralBlack` in its own PDF/X preset believing it was diverging from
+/// pdfce; it never was — `NeutralBlack` has been the shipped default since
+/// the operator's ruling was adopted. Its own test caught the duplication.
+///
+/// ★ The lesson, which its author passed back and which generalises past this
+/// type: **a doc comment that describes a default as a divergence invites
+/// being read as a divergence in VALUE.** What actually diverges here is the
+/// *reasoning* — pdfce ships a default it knows is not the best-evidenced
+/// answer, because the operator ruled for line art and the evidence favours
+/// conformance rendering. Both statements are true; only one of them is about
+/// a value.
+///
+/// Stating both as data costs three lines and makes the misreading
+/// unavailable. Any setting whose shipped default is knowingly not its
+/// best-evidenced one should carry the same two-line pair.
+///
 /// # The default is an OPERATOR RULING, and knowingly diverges
 ///
 /// R169 says a shipped default should be "the best guess of what is
