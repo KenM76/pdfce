@@ -2000,8 +2000,9 @@ limit is a copy that rots the next time the buffer's element type changes.
 predicate to the renderer.
 
 **★ Your render tier should end at this ceiling, not at `MAX_PIXMAP_EDGE`.**
-Those are two different bounds and the gap between them is a factor of four
-on A4 — a whole-page raster is *permitted* up to **1946 %** zoom (where
+Those are two different bounds and the gap between them is very nearly a
+factor of four on A4 (3.76×) — a whole-page raster is *permitted* up to
+**1946 %** zoom (where
 `MAX_PIXMAP_EDGE` bites on an 842 pt edge) and stops compositing in ink at
 about **518 %**. Every raster in between comes back with approximate
 colours.

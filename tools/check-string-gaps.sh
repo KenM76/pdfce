@@ -176,13 +176,55 @@ scan() {
                 prose = (in_error || was_error)
                 if (in_error && index(code, ")]")) in_error = 0
 
+                # ★ THE DISPLACED ESCAPE — added 2026-08-26 after this gate
+                # was GREEN on an instance of the very family it exists for.
+                #
+                # When a `\n\` continuation loses only its TRAILING backslash,
+                # the `\n` is left stranded at the start of the NEXT source
+                # line. That is the same defect and it ships the same garbage
+                # — a raw newline plus the indentation of the source itself,
+                # into a file the operator reads — but the spaces end up at
+                # the START of the line, with no word character in front of
+                # it, so the class below cannot match it.
+                #
+                # ⇢ The reason it was invisible is worth stating, because it
+                # generalises: the class below assumes `rustfmt` FOLDED the
+                # two lines together, and `rustfmt` cannot fold across a raw
+                # newline inside a literal. A gate that recognises a defect by
+                # its post-formatting shape misses every instance the
+                # formatter was unable to reshape.
+                #
+                # ★ THE DISCRIMINATOR, and the first spelling of it was WRONG.
+                #
+                # The legitimate use is a line holding NOTHING BUT `\n\` — the
+                # way a blank line is emitted inside a long literal. There are
+                # four in the tree and every one is exactly that.
+                #
+                # The first attempt keyed on the line NOT ending in a
+                # backslash, which sounded right and let a real variant
+                # through: when the continuation is lost on one line but the
+                # NEXT line keeps its own, the stranded `\n` sits in front of
+                # text on a line that still ends in `\`. That variant ships
+                # the same blank line and the same indentation. Caught only
+                # because the repair was tested by REPRODUCING the defect
+                # rather than by reading the rule.
+                #
+                # So: a displaced `\n` is any line whose first two characters
+                # are the escape and which carries anything else besides the
+                # continuation. Measured tree-wide: 4 legitimate, 0 flagged.
+                body = code
+                sub(/^[[:space:]]+/, "", body)
+                if (substr(body, 1, 2) == "\\n" && body != "\\n\\" && body != "\\n") {
+                    print "  " FILENAME ":" FNR ": a displaced `\\n` — the line ABOVE lost its trailing backslash"
+                    print "      " substr(body, 1, 100)
+                    next
+                }
+
                 if (code !~ /"/) next
                 hit = 0
                 if (code ~ /[A-Za-z,.:;)]   +[A-Za-z]/) hit = 1
                 if (prose && code ~ /[A-Za-z0-9,.:;)}]   +[A-Za-z0-9{]/) hit = 1
                 if (hit) {
-                    body = code
-                    sub(/^[[:space:]]+/, "", body)
                     print "  " FILENAME ":" FNR ": a run of spaces baked into a string literal"
                     print "      " substr(body, 1, 100)
                 }
@@ -227,6 +269,18 @@ EOF
 #[error("it has exactly {count}          picked points and cannot gain one")]
 struct B;
 EOF
+    # The 2026-08-26 widening: a `\n\` continuation that kept its escape and
+    # lost its trailing backslash, stranding the `\n` at the start of the next
+    # line. This is the shape that shipped into a generated settings file
+    # while this gate reported PASS.
+    mkdir -p "$tmp/dirty4"
+    cat > "$tmp/dirty4/displaced.rs" <<'EOF'
+pub const fn note() -> &'static str {
+    "# a comment line pdfce writes to disk\n\
+     # a second line, correctly continued.
+\n             # a third, whose predecessor lost its backslash\n"
+}
+EOF
     cat > "$tmp/clean/good.rs" <<'EOF'
 //! A doc comment may align a table:
 //!     Mode(id: "read",   label: "Read")
@@ -245,6 +299,15 @@ pub const fn block_marked() -> &'static str {
 }
 pub const fn short() -> &'static str {
     "Two spaces after a stop.  That is a convention, not a defect."
+}
+/// The LEGITIMATE displaced escape: a line that is nothing but `\n\`, used to
+/// emit a blank line inside a long literal. It ends in a backslash, which is
+/// exactly what distinguishes it from the defect, and there are four of these
+/// in the tree.
+pub const fn blank_line_inside_a_literal() -> &'static str {
+    "pdfce-gui — the desktop application.\n\
+     \n\
+     Usage: pdfce-gui [FILE]\n"
 }
 /// An ALIGNED REPORT COLUMN. Deliberate, ubiquitous in this repo's sweep
 /// tools, and the reason the `{}`-aware class is scoped to `#[error(...)]`
@@ -277,6 +340,10 @@ EOF
     fi
     if scan "$tmp/dirty3" > /dev/null; then
         echo "SELF-TEST FAILED: a gap after a {placeholder} was not detected"
+        fail=1
+    fi
+    if scan "$tmp/dirty4" > /dev/null; then
+        echo "SELF-TEST FAILED: a displaced \\n (lost trailing backslash) was not detected"
         fail=1
     fi
     if ! scan "$tmp/clean"; then

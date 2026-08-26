@@ -1987,9 +1987,9 @@ impl Settings {
              #                                  1,048,576 bytes here\n\
              #   0       = never blend in print colours at all\n\
              # Rough guide, whole A4 page: 256mib reaches about 518% zoom, 1gib\n\
-             # about 1035%, 4gib about the largest page pdfce will raster at all.
-\n             # A page with layered transparency can need up to about FOUR TIMES
-\n             # this at once, because each layer is given a buffer of its own.\n",
+             # about 1035%, 4gib about the largest page pdfce will raster at all.\n\
+             # A page with layered transparency can need up to about FOUR TIMES\n\
+             # this at once, because each layer is given a buffer of its own.\n",
         );
         let _ = writeln!(
             out,
@@ -3021,6 +3021,56 @@ mod tests {
         assert_eq!(
             Settings::default().save(&nowhere),
             Err(SaveError::NoWritableLocation)
+        );
+    }
+
+    #[test]
+    fn every_line_of_the_written_file_is_a_comment_a_setting_or_a_blank() {
+        // ★ WHY THIS EXISTS, AND IT IS NOT HYPOTHETICAL.
+        //
+        // The file's comment block is one enormous Rust string literal held
+        // together by `\n\` line continuations. Lose one backslash and the
+        // literal STILL COMPILES, still round-trips, still passes every
+        // other test here — and emits a stray blank line plus thirteen
+        // spaces of source indentation into a file pdfce writes onto the
+        // operator's own disk. That happened on 2026-08-26, inside the very
+        // commit whose purpose was correcting this paragraph, and it was
+        // caught by a reading agent rather than by anything mechanical:
+        // `check-string-gaps.sh` looks for a run of spaces INSIDE a
+        // sentence, and this defect puts the run at the START of a line,
+        // where that gate cannot see it.
+        //
+        // So the assertion is on the OUTPUT, not on the source. Every line
+        // pdfce writes must be a comment, a `key = value`, or empty —
+        // which is exactly what `parse` demands of an operator, and there
+        // is no reason pdfce's own output should be held to a looser
+        // standard than the file it will read back.
+        let text = Settings::default().write_to_string();
+        for (index, line) in text.lines().enumerate() {
+            let n = index + 1;
+            assert!(
+                line.is_empty() || line.starts_with('#') || line.contains(" = "),
+                "line {n} of the written file is neither comment, setting nor blank: {line:?}"
+            );
+            assert_eq!(
+                line.trim_end(),
+                line,
+                "line {n} has trailing whitespace: {line:?}"
+            );
+            assert_eq!(
+                line.trim_start(),
+                line,
+                "line {n} is INDENTED, which means a `\\n\\` continuation lost \
+                 its backslash and leaked the source's own indentation: {line:?}"
+            );
+        }
+        // A blank line separates settings; two in a row means a continuation
+        // emitted an extra newline, which is the other half of the same
+        // defect and is invisible to the per-line checks above.
+        assert!(
+            !text.contains("\n\n\n"),
+            "the written file has a doubled blank line — a `\\n\\` continuation \
+             emitted a raw newline as well as its escape"
         );
     }
 
