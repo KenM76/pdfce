@@ -328,3 +328,71 @@ fn a_fully_readable_document_gets_no_warning() {
         stderr(&out)
     );
 }
+
+/// `Pass 127.1` — `redact-mark --search` warns about text it could not read,
+/// **even when it marked something**.
+///
+/// The partial case is the dangerous one. A run that authors two marks reads
+/// as success at the shell, and the exit code says so; nothing in either
+/// hints that a third occurrence sat in a font the scan could never match.
+#[test]
+fn a_search_driven_redaction_warns_about_unreadable_text() {
+    let f = type3_fixture("tounicode_gate.pdf");
+    let out_pdf = std::env::temp_dir().join("pdfce-redact-disclosure-test.pdf");
+    let out = run(&[
+        "redact-mark",
+        &f.display().to_string(),
+        "--search",
+        "HI!",
+        "--output",
+        &out_pdf.display().to_string(),
+    ]);
+    assert_eq!(code(&out), 0);
+
+    let s = stdout(&out);
+    assert!(
+        s.contains("marks_created=2"),
+        "the readable run is still marked: {s}"
+    );
+
+    let e = stderr(&out);
+    assert!(
+        e.contains("could not be mapped to Unicode"),
+        "the unreadable codes must be named on a SUCCESSFUL run: {e}"
+    );
+    assert!(
+        e.contains("Type 3 font(s)") && e.contains("§9.6.5"),
+        "with the reason and the clause: {e}"
+    );
+    assert!(
+        e.contains("DO NOT treat this document as cleared"),
+        "and the conclusion the operator must not draw, said outright: {e}"
+    );
+
+    let _ = std::fs::remove_file(&out_pdf);
+}
+
+/// A fully readable document gets no redaction warning.
+///
+/// The control. A warning printed on every run is a warning nobody reads, and
+/// it would make the real one worthless.
+#[test]
+fn a_readable_document_gets_no_redaction_warning() {
+    let f = fixture("text/composite-editable.pdf");
+    let out_pdf = std::env::temp_dir().join("pdfce-redact-clean-test.pdf");
+    let out = run(&[
+        "redact-mark",
+        &f.display().to_string(),
+        "--search",
+        "ABC",
+        "--output",
+        &out_pdf.display().to_string(),
+    ]);
+    assert_eq!(code(&out), 0);
+    assert!(
+        !stderr(&out).contains("could not be mapped to Unicode"),
+        "nothing was unreadable here: {}",
+        stderr(&out)
+    );
+    let _ = std::fs::remove_file(&out_pdf);
+}

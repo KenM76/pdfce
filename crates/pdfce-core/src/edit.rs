@@ -10129,6 +10129,53 @@ pub struct TextSearch {
     pub diagnostics: crate::text_extract::TextDiagnostics,
 }
 
+/// What a search-driven redaction marked **and what it could not read**.
+///
+/// The return type of [`EditSession::search_and_mark_redactions`], and the
+/// redaction twin of [`TextSearch`].
+///
+/// # ★★ WHY THIS MATTERS MORE HERE THAN IT DOES FOR A SEARCH
+///
+/// A search that finds nothing is a question answered badly. A **redaction**
+/// that marks nothing is a *safety* failure, and it fails in the direction
+/// that cannot be undone by noticing later: the operator asked for every
+/// occurrence of a name to be removed, was told the run succeeded, and ships
+/// a document that still contains it.
+///
+/// [`Self::created`] being empty has the same two causes an empty
+/// `Vec<TextMatch>` has — the term is absent, or **the document's text was
+/// never recoverable as Unicode so no term could have matched it** — and the
+/// second is not exotic. A Type 3 font with no `/ToUnicode` (ISO 32000-1
+/// §9.6.5) and an `Identity-H` font with no `/ToUnicode` both **render
+/// perfectly** while being unsearchable, which is precisely what makes the
+/// failure invisible: the operator can see the name on the page and the tool
+/// reports it marked nothing.
+///
+/// A scanned document with an OCR text layer is the same shape one step on —
+/// the visible ink is an image, and only the invisible layer is searchable.
+/// Redaction covers what the search found, which is not necessarily what a
+/// reader can see.
+///
+/// **So a shell must not report "0 marked" from this verb without also
+/// reporting the diagnostics.** That is project rule 4 applied where it bites
+/// hardest: an inference the operator cannot see, in front of an
+/// irreversible act.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
+pub struct RedactionMarking {
+    /// The `/Redact` annotations created, in page then content order.
+    ///
+    /// Identical to what [`EditSession::mark_redactions_by_search_with`]
+    /// returns for the same arguments.
+    pub created: Vec<ObjId>,
+    /// The whole-document extraction diagnostics the scan produced.
+    ///
+    /// Document-wide, **not** filtered to the pages that matched — a font
+    /// that swallowed the term on page 40 is exactly the one an operator with
+    /// zero marks needs to hear about.
+    pub diagnostics: crate::text_extract::TextDiagnostics,
+}
+
 /// How pdfce decides what a **word** is, for whole-word text search.
 ///
 /// # Why this is a setting and not a constant (R169)
@@ -16081,6 +16128,108 @@ impl EditSession {
             options.boundary_rule(),
             appearance,
         )
+        .map(|m| m.created)
+    }
+
+    /// [`EditSession::mark_redactions_by_search_with`], **plus what the scan
+    /// could not read** — the annotations created and the extraction
+    /// diagnostics together, in one [`RedactionMarking`].
+    ///
+    /// # ★★ USE THIS ONE FOR ANY OPERATOR-FACING REDACTION
+    ///
+    /// The sibling verbs return `Vec<ObjId>`, and an empty one has two causes
+    /// with a single appearance: **the term is not in the document**, or
+    /// **the document's text was never recoverable as Unicode**, so no term
+    /// could ever have matched it.
+    ///
+    /// For a search that ambiguity is an annoyance. For a redaction it is a
+    /// safety failure, and it fails in the direction nobody catches: the
+    /// operator asked for every occurrence of a name to be removed, the run
+    /// reported success, and the document still contains it.
+    ///
+    /// The populations are named, not hypothetical, and both **render
+    /// perfectly** — which is what makes the failure invisible.
+    /// [`TextDiagnostics::type3_fonts_without_to_unicode`] is a Type 3 font
+    /// whose glyphs are content streams named by arbitrary `/CharProcs` keys
+    /// (§9.6.5), so without a `/ToUnicode` CMap there is no route to Unicode
+    /// at all. [`TextDiagnostics::identity_fonts_without_to_unicode`] is the
+    /// composite twin. [`TextDiagnostics::ladder_failures`] is the per-code
+    /// total across every cause.
+    ///
+    /// # What this does NOT protect against, stated so it is not over-read
+    ///
+    /// ★ Redaction covers **what the search found**, which is not
+    /// necessarily what a reader can see. A scanned page is an image; only
+    /// its OCR layer is searchable, and an OCR layer is a *guess* about the
+    /// ink. A term the recogniser misread is a term this verb cannot mark,
+    /// and no diagnostic here will say so — the layer looks complete because
+    /// it is complete, just wrong. Marking by search over a scan is
+    /// assistance, never a guarantee, and a shell should say that where the
+    /// operator chooses the method.
+    ///
+    /// Nothing here changes what [`EditSession::apply_redactions`] then does.
+    /// This is about which marks exist, not about how thoroughly a mark is
+    /// honoured.
+    ///
+    /// # Errors
+    ///
+    /// As [`EditSession::mark_redactions_by_search`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::{EditSession, TextSearchOptions}};
+    /// # fn demo(doc: Document) -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut session = EditSession::new(doc);
+    /// let marked = session
+    ///     .search_and_mark_redactions("Ackerman", &TextSearchOptions::default())?;
+    ///
+    /// if marked.created.is_empty() && marked.diagnostics.ladder_failures > 0 {
+    ///     // NOT "the name is absent". Some of this document's text could not
+    ///     // be read at all, so nothing could have matched it there.
+    ///     eprintln!(
+    ///         "marked nothing, but {} character(s) were unreadable — do not \
+    ///          treat this document as cleared",
+    ///         marked.diagnostics.ladder_failures
+    ///     );
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn search_and_mark_redactions(
+        &mut self,
+        query: &str,
+        options: &TextSearchOptions,
+    ) -> Result<RedactionMarking, EditError> {
+        self.search_and_mark_redactions_styled(
+            query,
+            options,
+            &crate::annot_author::RedactAppearance::default(),
+        )
+    }
+
+    /// [`EditSession::search_and_mark_redactions`] with an explicit mark
+    /// appearance.
+    ///
+    /// # Errors
+    ///
+    /// As [`EditSession::mark_redactions_by_search`].
+    pub fn search_and_mark_redactions_styled(
+        &mut self,
+        query: &str,
+        options: &TextSearchOptions,
+        appearance: &crate::annot_author::RedactAppearance,
+    ) -> Result<RedactionMarking, EditError> {
+        if query.is_empty() {
+            return Ok(RedactionMarking::default());
+        }
+        let q = query.to_string();
+        let case_insensitive = options.case_insensitive;
+        self.author_text_matches(
+            |text| find_matches(text, &q, case_insensitive),
+            options.boundary_rule(),
+            appearance,
+        )
     }
 
     /// Mark every match of a simple pattern for redaction (Pass 8). In the
@@ -16139,6 +16288,7 @@ impl EditSession {
             None,
             appearance,
         )
+        .map(|m| m.created)
     }
 
     /// Shared engine for search/pattern redaction: extract the document's
@@ -16178,7 +16328,7 @@ impl EditSession {
         matcher: F,
         whole_word: Option<WordBoundary>,
         appearance: &crate::annot_author::RedactAppearance,
-    ) -> Result<Vec<ObjId>, EditError>
+    ) -> Result<RedactionMarking, EditError>
     where
         F: Fn(&str) -> Vec<(usize, usize)>,
     {
@@ -16216,15 +16366,16 @@ impl EditSession {
         // glyph-span-to-quad geometry would drift, and the way they would
         // drift is the worst possible: a redaction covering a slightly
         // different box than the search that found it.
-        // The diagnostics half is deliberately dropped HERE and nowhere
-        // else. `mark_redactions_by_search` already returns the ids it
-        // created, and a caller that marked nothing has that fact in
-        // hand; what it does NOT yet have is *why*, and wiring that
-        // through this verb's return type is a separate, operator-facing
-        // change (`Pass 127.1`, filed). Naming the drop is the point —
-        // an unnamed `.0` here is how a disclosure quietly stops
-        // happening.
-        let matches: Vec<TextMatch> = self.scan_text_matches(&matcher, whole_word)?.matches;
+        // ★ `Pass 127.1`: the diagnostics are no longer dropped here.
+        //
+        // The comment this replaces said the drop was deliberate and that
+        // wiring it through was "a separate, operator-facing change". It was
+        // right about that, and this is that change — the drop lasted one
+        // Pass. Recorded rather than silently removed, because the interval
+        // between "we know this is missing" and "it is missing" is exactly
+        // where a disclosure stops happening.
+        let found = self.scan_text_matches(&matcher, whole_word)?;
+        let matches: Vec<TextMatch> = found.matches;
 
         let mut created = Vec::with_capacity(matches.len());
         for m in matches {
@@ -16235,7 +16386,10 @@ impl EditSession {
             let spec = appearance.to_spec(vec![m.quad]);
             created.push(self.add_redaction(m.page_index, &spec)?);
         }
-        Ok(created)
+        Ok(RedactionMarking {
+            created,
+            diagnostics: found.diagnostics,
+        })
     }
 
     /// **Find every occurrence of `needle` in the document's page text**,

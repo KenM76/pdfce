@@ -1154,3 +1154,76 @@ fn a_search_reports_the_text_it_could_not_read() {
         "search_text and find_text must not be able to disagree about hits"
     );
 }
+
+/// `Pass 127.1` — a search-driven REDACTION reports what it could not read.
+///
+/// # Why this is a separate test from the search one
+///
+/// Because the consequence is different in kind, and a shared test would let
+/// one path regress while the other stayed green. A search that misses is a
+/// question answered badly; a redaction that misses is a document shipped
+/// with the thing in it that the operator asked to have removed, after being
+/// told the run succeeded.
+///
+/// ★ The fixture's `/TA` run IS readable and `/TB`/`/TC` are not, so this
+/// exercises the case that actually ships: a **partial** result. That is the
+/// more dangerous one, not the safer one — "2 marks authored" reads as
+/// success, and nothing in the count hints that a third occurrence sat in a
+/// font the scan could not read.
+#[test]
+fn a_search_driven_redaction_reports_the_text_it_could_not_read() {
+    use pdfce_core::edit::{EditSession, TextSearchOptions};
+
+    let doc = Document::load(&type3_fixture("tounicode_gate.pdf")).expect("fixture loads");
+    let mut session = EditSession::new(doc);
+
+    let marked = session
+        .search_and_mark_redactions("HI!", &TextSearchOptions::default())
+        .expect("marking runs");
+
+    assert!(
+        !marked.created.is_empty(),
+        "the readable run must still be marked -- the disclosure is additional, not a refusal"
+    );
+    assert_eq!(
+        marked.diagnostics.type3_fonts_without_to_unicode, 2,
+        "the two fonts that could NOT be searched are reported alongside a SUCCESSFUL \
+         marking run; a disclosure that only fired on zero marks would be silent in \
+         exactly the mixed case real documents produce"
+    );
+    assert!(marked.diagnostics.ladder_failures > 0);
+
+    // And the legacy verb still returns exactly the ids, unchanged.
+    let doc2 = Document::load(&type3_fixture("tounicode_gate.pdf")).expect("fixture loads");
+    let mut session2 = EditSession::new(doc2);
+    let ids = session2
+        .mark_redactions_by_search("HI!", false)
+        .expect("marking runs");
+    assert_eq!(
+        ids.len(),
+        marked.created.len(),
+        "the reporting verb and the plain verb must not be able to disagree about what \
+         they marked"
+    );
+}
+
+/// An empty query marks nothing and reports nothing, without extracting.
+///
+/// The early return exists so a shell that clears its search box does not pay
+/// for a whole-document extraction; asserting it keeps that from being
+/// quietly lost to a refactor that "simplifies" the guard away.
+#[test]
+fn an_empty_redaction_query_is_a_no_op() {
+    use pdfce_core::edit::{EditSession, TextSearchOptions};
+
+    let doc = Document::load(&type3_fixture("tounicode_gate.pdf")).expect("fixture loads");
+    let mut session = EditSession::new(doc);
+    let marked = session
+        .search_and_mark_redactions("", &TextSearchOptions::default())
+        .expect("an empty query is not an error");
+    assert!(marked.created.is_empty());
+    assert_eq!(
+        marked.diagnostics.codes_total, 0,
+        "no extraction should have run at all"
+    );
+}

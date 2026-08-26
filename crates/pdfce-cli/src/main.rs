@@ -8052,6 +8052,61 @@ fn cmd_list_standards(only: Option<&str>) -> u8 {
     exit::SUCCESS
 }
 
+/// Say what a search-driven redaction **could not read**.
+///
+/// # Why a redaction owes this louder than a search does
+///
+/// `find-text` reporting zero hits wastes a minute. `redact-mark --search`
+/// reporting zero marks, on a document whose text was never recoverable as
+/// Unicode, tells an operator that a name is not present when it is on the
+/// page in front of them — and the next thing they do is send the file.
+///
+/// The two populations both **render perfectly**, which is exactly what makes
+/// the failure invisible: a Type 3 font with no `/ToUnicode` (ISO 32000-1
+/// §9.6.5, glyphs that are content streams named by arbitrary `/CharProcs`
+/// keys) and an `Identity-H` font with no `/ToUnicode` (§9.10.2 excludes it
+/// from every ladder rung).
+///
+/// ★ Printed whether or not anything matched, and that is deliberate. A
+/// partial match is the more dangerous case, not the safer one: "3 marks
+/// authored" reads as success, and the operator has no reason to suspect a
+/// fourth occurrence sat in a font the scan could not read.
+fn report_unsearchable_redaction(input: &Path, d: &pdfce_core::text_extract::TextDiagnostics) {
+    if d.ladder_failures == 0 {
+        return;
+    }
+    eprintln!(
+        "pdfce-cli: {}: WARNING — {} of {} character code(s) in this document could not be \
+         mapped to Unicode, so a search CANNOT have matched them. Marks were authored only \
+         where the text was readable",
+        input.display(),
+        d.ladder_failures,
+        d.codes_total
+    );
+    if d.type3_fonts_without_to_unicode > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} Type 3 font(s) carry no /ToUnicode CMap (ISO 32000-1 §9.6.5) — \
+             text set in them renders correctly and cannot be searched or redacted by search",
+            input.display(),
+            d.type3_fonts_without_to_unicode
+        );
+    }
+    if d.identity_fonts_without_to_unicode > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} font(s) are Identity-H/Adobe-Identity-0 with no /ToUnicode — \
+             §9.10.2 excludes them from every ladder rung, so text set in them cannot be \
+             searched or redacted by search",
+            input.display(),
+            d.identity_fonts_without_to_unicode
+        );
+    }
+    eprintln!(
+        "pdfce-cli: {}: DO NOT treat this document as cleared on the strength of a \
+         search-driven redaction. Check the unreadable runs by eye, or mark them with --rect",
+        input.display()
+    );
+}
+
 /// `ocr` — recognise a scanned page and add an invisible text layer.
 ///
 /// # The pipeline, and where each step can go wrong
@@ -16497,8 +16552,15 @@ fn cmd_redact_mark(args: &RedactMarkArgs<'_>) -> u8 {
     } else if let Some(query) = args.search {
         let options =
             pdfce_core::edit::TextSearchOptions::default().with_case_insensitive(args.ignore_case);
-        match session.mark_redactions_by_search_styled(query, &options, &appearance) {
-            Ok(ids) => ids.len(),
+        // `search_and_mark_redactions_styled`, not the `Vec<ObjId>` sibling:
+        // the diagnostics are what separate "the term is not here" from
+        // "this document's text was never readable", and on a redaction path
+        // those need opposite reactions from the operator.
+        match session.search_and_mark_redactions_styled(query, &options, &appearance) {
+            Ok(marked) => {
+                report_unsearchable_redaction(args.input, &marked.diagnostics);
+                marked.created.len()
+            }
             Err(err) => return report_edit_error(args.input, &err),
         }
     } else if let Some(pattern) = args.pattern {
