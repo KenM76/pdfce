@@ -2281,6 +2281,96 @@ enum Command {
     },
 
     /// Render a page to a PNG image.
+    /// **List the rendering presets** pdfce holds for the PDF subset
+    /// standards (PDF/X, PDF/A, PDF/UA), and what each one would set.
+    ///
+    /// Prints, per standard, every setting it states, the value, and **where
+    /// that value comes from** — `sourced`, `implied`, `best-effort` or
+    /// `not applicable`. That last column is the point: a preset labelled
+    /// with an ISO number is a claim about a standard, and a claim without a
+    /// provenance is an opinion wearing a committee's name.
+    ListStandards {
+        /// Show only this standard.
+        #[arg(long)]
+        standard: Option<String>,
+    },
+    /// **Recognise the text in a scanned page** and add it as an
+    /// invisible, selectable layer (ISO 32000-1 §9.3.6, Table 106 mode 3).
+    ///
+    /// # What this does to the page, which is nothing
+    ///
+    /// The recognised words are drawn in text rendering mode **3** —
+    /// *"neither fill nor stroke text (invisible)"* — on top of the scan,
+    /// which is left **byte-identical**. The saved file therefore looks
+    /// EXACTLY like the input at every zoom and on every printer, and
+    /// `find-text`, `extract-text` and any viewer's copy/search now work on
+    /// it. This is the "sandwich" OCRmyPDF popularised and the one Acrobat
+    /// produces.
+    ///
+    /// ★ **So there is nothing to LOOK at afterwards, and that is success,
+    /// not failure.** An OCR layer you can see is a defect. To check it
+    /// worked, search the output rather than looking at it:
+    /// `pdfce-cli find-text out.pdf --needle <a word on the page>`.
+    ///
+    /// # It is a guess, and it says so
+    ///
+    /// Every word is an inference (project rule 4). The word count, the
+    /// engine's confidence support, where the models came from and every
+    /// word that had to be substituted or dropped are all reported on
+    /// stderr. The `ocrs` engine reports **no per-word confidence at all**,
+    /// and that is stated rather than presented as a clean bill of health.
+    Ocr {
+        /// The PDF to read. Never modified.
+        input: PathBuf,
+        /// 1-based page number to recognise.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// Where to write the result. The input is left untouched.
+        #[arg(long, short = 'o')]
+        output: PathBuf,
+        /// Rasterisation resolution, dots per inch.
+        ///
+        /// DPI rather than `render-page`'s `--scale`, deliberately: OCR is
+        /// the one place in this CLI where the operator's own unit is the
+        /// right one, because scanner output is described in DPI and
+        /// recognisers are tuned against it. 300 is the default because it
+        /// is what document scanners produce and what `ocrs` was trained
+        /// near; below about 150 recognition degrades sharply, and above
+        /// 400 costs memory for nothing.
+        #[arg(long, default_value_t = 300.0)]
+        dpi: f32,
+        /// Directory holding the engine's model files.
+        ///
+        /// When omitted, `models/ocrs` beside this executable is used. A
+        /// path given here that does not exist is REPORTED, never quietly
+        /// replaced by the bundled copy — running a different model from
+        /// the one you named is the sneaky half of rule 4.
+        #[arg(long)]
+        model_dir: Option<PathBuf>,
+        /// Print each recognised word and its page-space rectangle.
+        ///
+        /// The way to check POSITION rather than content: a layer can be
+        /// perfectly recognised and land in the wrong place, and no word
+        /// count can tell you so.
+        #[arg(long)]
+        words: bool,
+        /// Write the exact greyscale image handed to the recogniser, as a PNG.
+        ///
+        /// # Why this is a shipped flag and not a debug print
+        ///
+        /// When OCR returns nonsense there are two suspects and they need
+        /// completely different fixes: the recogniser cannot read the page,
+        /// or the page it was given is not the page you think. Nothing in
+        /// the output distinguishes them - garbage words look identical
+        /// either way - and every other diagnostic here describes what came
+        /// OUT.
+        ///
+        /// This is the only way to see what went IN. It is the buffer
+        /// itself, after rasterisation and after the RGBA-to-luma
+        /// conversion, not a re-render that might differ.
+        #[arg(long)]
+        dump_image: Option<PathBuf>,
+    },
     RenderPage {
         /// Input PDF.
         input: PathBuf,
@@ -2301,6 +2391,23 @@ enum Command {
         /// to be kept in sync.
         #[arg(long, default_value_t = 1.0)]
         scale: f32,
+        /// Render with the **preset for a PDF subset standard** —
+        /// `pdf-x4`, `pdf-a2`, `pdf-ua`… (`list-standards` shows them all).
+        ///
+        /// # What this does, and the much larger thing it does not
+        ///
+        /// It applies a named bundle of render settings on top of your saved
+        /// ones, for this invocation only. Nothing is written to your
+        /// settings file.
+        ///
+        /// ★ **It does not make the output conformant and does not check
+        /// whether the input is.** A control carrying an ISO number invites
+        /// exactly that reading, so the preset says otherwise on stderr every
+        /// time it is used, along with which of its values are sourced to the
+        /// standard and which are pdfce's own judgement where the standard is
+        /// silent — which, for most of these axes, is most of them.
+        #[arg(long)]
+        standard: Option<String>,
         /// Render only a **region** of the page, as
         /// `llx,lly,urx,ury` in PDF user-space points.
         ///
@@ -6197,10 +6304,29 @@ fn run() -> ExitCode {
             json,
             include_artifacts,
         } => cmd_extract_text(&input, &pages, output.as_deref(), json, include_artifacts),
+        Command::ListStandards { standard } => cmd_list_standards(standard.as_deref()),
+        Command::Ocr {
+            input,
+            page,
+            output,
+            dpi,
+            model_dir,
+            words,
+            dump_image,
+        } => cmd_ocr(
+            &input,
+            page,
+            &output,
+            dpi,
+            model_dir.as_deref(),
+            words,
+            dump_image.as_deref(),
+        ),
         Command::RenderPage {
             input,
             page,
             scale,
+            standard,
             region,
             output,
             no_annotations,
@@ -6213,6 +6339,7 @@ fn run() -> ExitCode {
             &input,
             page,
             scale,
+            standard.as_deref(),
             region.as_deref(),
             &output,
             !no_annotations,
@@ -7731,6 +7858,337 @@ fn parse_region(spec: &str) -> Result<pdfce_core::page_tree::Rect, String> {
     })
 }
 
+/// `list-standards` — the render presets, and the provenance of every value.
+///
+/// # Why the provenance is a COLUMN and not a footnote
+///
+/// `pdfce-gui` asked pdfce for this vector and declined to guess it, on the
+/// grounds that *"a control labelled `ISO 15930-7` carries that standard's
+/// authority whether or not we intended it to."* That is right, and it means
+/// the interesting information is not the value — it is how much weight the
+/// value can bear. Most of these are `best-effort`: the standards mostly do
+/// not legislate this far, and saying so is the honest output.
+fn cmd_list_standards(only: Option<&str>) -> u8 {
+    use pdfce_core::settings::presets::{RenderPreset, RenderStandard};
+
+    let wanted: Vec<RenderStandard> = match only {
+        None => RenderStandard::all().to_vec(),
+        Some(tok) => match RenderStandard::parse(tok) {
+            Ok(s) => vec![s],
+            Err(bad) => {
+                eprintln!(
+                    "pdfce-cli: list-standards: unknown standard {bad:?} — known: {}",
+                    RenderStandard::all()
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        },
+    };
+
+    for std in wanted {
+        let preset = RenderPreset::for_standard(std);
+        println!("standard {} title={:?}", std.as_str(), std.title());
+        for e in preset.entries() {
+            // Formatted by core, deliberately: `PresetAction` is
+            // `#[non_exhaustive]`, so a match here would need a wildcard and a
+            // seventh variant would print as the fallback while still
+            // compiling. See `PresetAction::value_string`.
+            let value = e.action.value_string();
+            println!(
+                "  setting {:<24} value={:<28} evidence={:<15} why={:?}",
+                e.key.as_str(),
+                value,
+                e.evidence.label(),
+                e.why
+            );
+        }
+        for line in preset.disclosures() {
+            eprintln!("pdfce-cli: {line}");
+        }
+    }
+    exit::SUCCESS
+}
+
+/// `ocr` — recognise a scanned page and add an invisible text layer.
+///
+/// # The pipeline, and where each step can go wrong
+///
+/// 1. **Rasterise** the page at `--dpi` (`pdfce_render::render_page_with`).
+/// 2. **Convert RGBA to 8-bit grey**, which is the only layout
+///    [`OcrEngine::recognize`] accepts.
+/// 3. **Recognise**, producing words in IMAGE pixels, y-down.
+/// 4. **Map to page space**, y-up — the step that must undo the rasteriser's
+///    geometry EXACTLY, including `/Rotate`.
+/// 5. **Write the layer** and save incrementally.
+///
+/// ★ Step 4 is the one that fails silently. Steps 1-3 announce their own
+/// failures (a render error, a size mismatch, zero words); step 4 cannot,
+/// because a mis-mapped word is a perfectly well-formed word in the wrong
+/// place, and the page still looks right because the layer is invisible. That
+/// is why `--words` exists and why `PagePlacement` carries the rotation.
+///
+/// # Why the crop box and not the media box
+///
+/// `pdfce_render::page_device_geometry` rasterises the **crop** box. Handing
+/// the mapping a media box that differs from it scales every word by the ratio
+/// between the two — a uniform, plausible-looking error that no word count
+/// detects.
+fn cmd_ocr(
+    input: &Path,
+    page_number: u32,
+    output: &Path,
+    dpi: f32,
+    model_dir: Option<&Path>,
+    show_words: bool,
+    dump_image: Option<&Path>,
+) -> u8 {
+    use pdfce_core::ocr::{
+        OcrEngine, OcrPage, PagePlacement, layer, models, words_to_page_space_on,
+    };
+
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+
+    let pages = match pdfce_core::page_tree::pages(&doc) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let index = match usize::try_from(page_number)
+        .ok()
+        .and_then(|n| n.checked_sub(1))
+    {
+        Some(i) if i < pages.len() => i,
+        _ => {
+            eprintln!(
+                "pdfce-cli: page {page_number} is out of range — the document has {} page(s)",
+                pages.len()
+            );
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let page = &pages[index];
+
+    // The models, resolved before any expensive work. `resolve_model_dir`
+    // reports EVERY path it tried, which is the difference between "OCR is
+    // broken" and "put the models here".
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(std::path::Path::to_path_buf));
+    let source = match models::resolve_model_dir(
+        pdfce_core::ocr::engine_ocrs::MODEL_DIR,
+        model_dir,
+        exe_dir.as_deref(),
+        None,
+    ) {
+        Ok(src) => src,
+        Err(err) => {
+            eprintln!("pdfce-cli: ocr: {err}");
+            eprintln!(
+                "pdfce-cli: ocr: the model files are not bundled inside the executable — they \
+                 are two files (`text-detection.rten`, `text-rec-checkpoint.rten`) that live in \
+                 a `models/ocrs` folder. Pass --model-dir to point at them, or run \
+                 `pdfce-cli fetch-ocr-models` to download the pinned copies."
+            );
+            return exit::RUNTIME_ERROR;
+        }
+    };
+
+    let engine = match pdfce_core::ocr::engine_ocrs::OcrsEngine::from_model_dir(source.path()) {
+        Ok(e) => e,
+        Err(err) => {
+            eprintln!("pdfce-cli: ocr: {err}");
+            return exit::RUNTIME_ERROR;
+        }
+    };
+
+    // Rasterise. `scale` is the engine's own unit; DPI is the operator's.
+    let scale = dpi / 72.0;
+    if !(scale.is_finite() && scale > 0.0) {
+        eprintln!("pdfce-cli: ocr: --dpi must be a positive number, got {dpi}");
+        return exit::RUNTIME_ERROR;
+    }
+    let rendered = match pdfce_render::render_page_with(
+        &doc,
+        page,
+        scale,
+        &pdfce_render::RenderOptions::default(),
+    ) {
+        Ok(r) => r,
+        Err(err) => {
+            eprintln!("pdfce-cli: ocr: could not rasterise page {page_number}: {err}");
+            return exit::RUNTIME_ERROR;
+        }
+    };
+
+    // ★ The pixmap's OWN dimensions, not `crop * scale` recomputed. The
+    // rasteriser rounds up to whole pixels, so a recomputed size is a
+    // fraction of a pixel out and every word inherits the discrepancy. The
+    // measured value cannot disagree with what was actually drawn.
+    let (iw, ih) = (rendered.pixmap.width(), rendered.pixmap.height());
+
+    // RGBA -> 8-bit grey, Rec.601 luma. One byte per pixel is the layout the
+    // trait documents; handing it four would be inferred as a 4-channel image
+    // and recognised as nonsense rather than refused.
+    let grey: Vec<u8> = rendered
+        .pixmap
+        .data()
+        .chunks_exact(4)
+        .map(|px| {
+            let (r, g, b) = (u32::from(px[0]), u32::from(px[1]), u32::from(px[2]));
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                ((r * 299 + g * 587 + b * 114) / 1000) as u8
+            }
+        })
+        .collect();
+
+    if let Some(path) = dump_image {
+        // Encoded through a fresh opaque pixmap rather than by hand: this
+        // must show the BUFFER, and a hand-rolled PNG writer here would be a
+        // second thing that could be wrong in the same place.
+        let mut dump = match pdfce_render::tiny_skia::Pixmap::new(iw, ih) {
+            Some(p) => p,
+            None => {
+                eprintln!("pdfce-cli: ocr: --dump-image: could not allocate {iw}x{ih}");
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        for (px, &g) in dump.pixels_mut().iter_mut().zip(grey.iter()) {
+            if let Some(v) = pdfce_render::tiny_skia::PremultipliedColorU8::from_rgba(g, g, g, 255)
+            {
+                *px = v;
+            }
+        }
+        match dump.encode_png() {
+            Ok(png) => {
+                if let Err(err) = std::fs::write(path, &png) {
+                    eprintln!("pdfce-cli: {}: {err}", path.display());
+                    return exit::IO_ERROR;
+                }
+                eprintln!(
+                    "pdfce-cli: ocr: wrote the recogniser's own input to {} ({iw}x{ih} grey)",
+                    path.display()
+                );
+            }
+            Err(err) => {
+                eprintln!("pdfce-cli: ocr: --dump-image: {err}");
+                return exit::RUNTIME_ERROR;
+            }
+        }
+    }
+
+    let raw = match engine.recognize(iw, ih, &grey) {
+        Ok(w) => w,
+        Err(err) => {
+            eprintln!("pdfce-cli: ocr: recognition failed: {err}");
+            return exit::RUNTIME_ERROR;
+        }
+    };
+
+    // ★★ THE STEP THAT USED TO BE SILENTLY WRONG ON A ROTATED PAGE.
+    // `page.rotate` is read and passed; `words_to_page_space_on` inverts the
+    // renderer's own four transforms. Using `words_to_page_space` here would
+    // be correct on `/Rotate 0` and wrong on every scan a driver rotated.
+    let placement = PagePlacement::new(page.crop_box, i32::from(page.rotate));
+    let placed = words_to_page_space_on(&raw, iw, ih, placement);
+
+    let confidence_available = engine.reports_confidence();
+    let ocr_page = OcrPage {
+        words: placed,
+        confidence_available,
+    };
+
+    if show_words {
+        for w in &ocr_page.words {
+            println!(
+                "word text={:?} rect={:.2},{:.2},{:.2},{:.2} confidence={}",
+                w.text,
+                w.rect.llx,
+                w.rect.lly,
+                w.rect.urx,
+                w.rect.ury,
+                w.confidence
+                    .map_or_else(|| "none".to_owned(), |c| format!("{c:.3}"))
+            );
+        }
+    }
+
+    let outcome = match layer::add_ocr_layer(&doc, index, &ocr_page, &layer::OcrLayerOptions::new())
+    {
+        Ok(o) => o,
+        Err(err) => {
+            eprintln!("pdfce-cli: ocr: {err}");
+            // Recognising nothing is not a crash and not a malformed file; it
+            // is an answer, and a common one on a blank or unreadable page.
+            // Giving it the same exit code as "the PDF is broken" would make a
+            // script unable to tell them apart.
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    if let Err(err) = std::fs::write(output, &outcome.bytes) {
+        eprintln!("pdfce-cli: {}: {err}", output.display());
+        return exit::IO_ERROR;
+    }
+
+    println!(
+        "ocr {} page={page_number} -> {} dpi={dpi} image={iw}x{ih} rotate={} \
+recognised={} written={} confidence={}",
+        input.display(),
+        output.display(),
+        page.rotate,
+        raw.len(),
+        outcome.report.words_written,
+        if confidence_available {
+            "reported"
+        } else {
+            "none"
+        },
+    );
+
+    // Rule 4: every inference discloses itself, and in the CLI the invocation
+    // IS the commit, so it is printed on the way past rather than offered for
+    // review. `disclosures()` leads with the word count and adds a line for
+    // every word substituted, skipped or scale-clamped.
+    for line in outcome.report.disclosures() {
+        eprintln!("pdfce-cli: ocr: {line}");
+    }
+    eprintln!(
+        "pdfce-cli: ocr: models loaded from {} ({})",
+        source.path().display(),
+        match source {
+            models::ModelSource::OperatorSupplied(_) => "--model-dir",
+            models::ModelSource::BesideExecutable(_) => "beside the executable",
+            models::ModelSource::UserData(_) => "user data",
+        }
+    );
+    if !confidence_available {
+        eprintln!(
+            "pdfce-cli: ocr: this engine reports NO per-word confidence, so nothing above has \
+             been scored — that is not the same as everything being right"
+        );
+    }
+    eprintln!(
+        "pdfce-cli: ocr: the layer is INVISIBLE (mode 3) and the page is unchanged — check it \
+         with `find-text {} --needle <a word on the page>`, not by looking at it",
+        output.display()
+    );
+
+    exit::SUCCESS
+}
+
 /// Implement `pdfce-cli render-page <input> [--page N] [--scale S] -o <out>`.
 ///
 /// # The pipeline
@@ -7788,6 +8246,7 @@ fn cmd_render_page(
     input: &Path,
     page_number: u32,
     scale: f32,
+    standard: Option<&str>,
     region: Option<&str>,
     output: &Path,
     annotations: bool,
@@ -7849,9 +8308,58 @@ numbered 1..={})",
     // uses, so `render-page` and the canvas cannot disagree about what
     // black looks like. Loading cannot fail — a missing or broken file
     // yields defaults plus notes, which are reported and never fatal.
-    let (settings, settings_report) =
+    let (mut settings, settings_report) =
         pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
     report_settings(&settings_report);
+
+    // The subset-standard preset, applied OVER the operator's saved settings
+    // and never written back. A render flag must not mutate a settings file:
+    // one `--standard pdf-x4` render would otherwise silently change how every
+    // later render behaved, which is the shape of surprise rule 4 exists to
+    // stop.
+    if let Some(token) = standard {
+        use pdfce_core::settings::presets::{RenderPreset, RenderStandard};
+        match RenderStandard::parse(token) {
+            Ok(std) => {
+                let preset = RenderPreset::for_standard(std);
+                let changed = preset.apply(&mut settings);
+                // Rule 4: what the preset MOVED, by name. "4 settings changed"
+                // is not actionable; knowing it was `image_minify` is.
+                if changed.is_empty() {
+                    eprintln!(
+                        "pdfce-cli: render preset {}: your settings already match it; \
+                         nothing changed",
+                        std.as_str()
+                    );
+                } else {
+                    eprintln!(
+                        "pdfce-cli: render preset {}: changed {}",
+                        std.as_str(),
+                        changed
+                            .iter()
+                            .map(|k| k.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                for line in preset.disclosures() {
+                    eprintln!("pdfce-cli: {line}");
+                }
+            }
+            Err(bad) => {
+                eprintln!(
+                    "pdfce-cli: render-page: unknown --standard {bad:?} — known: {}",
+                    RenderStandard::all()
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        }
+    }
+
     let mut render_options = pdfce_render::RenderOptions::default()
         .with_annotations(annotations)
         .with_cmyk_intent(settings.cmyk_intent)

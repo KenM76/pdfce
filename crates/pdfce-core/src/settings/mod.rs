@@ -137,6 +137,10 @@
 //!   state, and an operator's hand-edited file is never rewritten behind
 //!   their back with pdfce's own formatting.
 
+/// Named render-setting bundles for the PDF subset standards
+/// (PDF/X, PDF/A, PDF/UA) - each value carrying its own evidence tier.
+pub mod presets;
+
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
