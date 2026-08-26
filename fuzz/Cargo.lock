@@ -336,7 +336,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-core"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "aes",
  "brotli",
@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-render"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "pdfce-core",
  "skrifa",
