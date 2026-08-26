@@ -96,7 +96,302 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
-### `181d9bd` — `Pass 129.0` ships: ★★★ **pdfce's OCR PRODUCED GARBAGE ON ANY PAGE AND HAD SINCE THE ENGINE LANDED IN `Pass 71.0` — ONE WRONG MODEL FILE**, isolated by swapping one file at a time; ★★ a **SECOND, INDEPENDENT defect** — a rotation-AWARE rasteriser feeding a rotation-BLIND coordinate mapping transposed the invisible layer under `/Rotate`; the **first real accuracy measurement**, made against a scan this project MANUFACTURED because licensing forbids a real one; plus `pdfce-cli ocr` (there was no CLI surface at all), the weights actually shipping in a release build, and the downloader owed since 2026-08-13 — 2026-08-25 (two-hundred-and-sixty-second filing)
+### `81d1e30` — VERSION BUMP `0.11.0` → **`0.12.0`, MINOR, AND NOT A CLOSE CALL THIS TIME**: a whole new public core **MODULE** (`settings::presets`, six public types), four new public core items (`PagePlacement`, `words_to_page_space_on`, `resolve_model_dir_with`, `RedactionMarking`), two new `EditSession` verbs (**142, was 140**), three new CLI subcommands (`ocr`, `fetch-ocr-models`, `list-standards`), and a new optional workspace feature putting a **network stack in a shell binary for the first time** — ★★ **and ONE CHANGE THAT IS NOT ADDITIVE, named here rather than left to be discovered: `MinifyFilter::default()` moved `PointSample` → `Smooth`**, so any consumer asserting exact pixels on a minified image gets different bytes; ★ **TAG / PUSH / GITHUB RELEASE ALL ABSENT AT FILING TIME — CHECKED FROM A SHELL, not carried forward from the two version-bump entries below** — no Pass ID, infrastructure/release record — 2026-08-26 (two-hundred-and-sixty-third filing)
+
+**Why this entry exists at all, and it is the same reason as `768e934`'s
+below.** `tools/check-commits-filed.py` treats any commit touching
+`crates/`, `tools/`, `fixtures/`, `.github/` or **`fuzz/`** as a code
+commit. `81d1e30` touches `Cargo.toml`, `Cargo.lock` and
+**`fuzz/Cargo.lock`** — and it is `fuzz/` that trips the gate;
+`Cargo.toml` + `Cargo.lock` alone would not have. At the time this filing
+was drafted `81d1e30` was the tip and therefore **DEFERRED** rather than
+failed *(`python tools/check-commits-filed.py`, run here: `tip 81d1e30 is
+DEFERRED, not yet filed`)*; **the moment the commit carrying this entry
+lands on top of it, it stops being the tip and is checked in full.** This
+entry is what makes that check pass.
+
+#### ★ RELEASE STATUS, CHECKED FROM A SHELL — and the check itself nearly went wrong
+
+**Every row below was measured here. None was copied from the `768e934` or
+`4267f84` entries**, whose "NOT YET DONE" wording describes their own
+moment, not this one (hard rule 8: a claim about disk state does not come
+from a document).
+
+| question | command run here | answer |
+|---|---|---|
+| is `v0.12.0` tagged locally? | `git tag --list v0.12.0` | **empty** |
+| is `v0.12.0` on the remote? | `git ls-remote --tags origin` | **absent** |
+| is there a GitHub release? | `gh release view v0.12.0` | **`release not found`** |
+| what is the latest release? | `gh release list` | **`v0.11.0`, `2026-08-25T23:13:09Z`, marked `Latest`** |
+| is the tree pushed? | `git status -sb` | **`## main...origin/main [ahead 7]`** |
+
+**⇒ `v0.12.0` is a version number in a tree and nothing else.** The bump
+has moved, the tag has not been cut, nothing has been pushed, no release
+exists. `CLAUDE.md` rule 8 — **each publish is its own operator
+go-ahead** — and this role neither holds one nor acts on one.
+
+**★★ THE NEAR-MISS, RECORDED BECAUSE IT WOULD HAVE PRODUCED A CONFIDENT
+WRONG ANSWER.** The first reading of `git ls-remote --tags origin` was
+`| tail -10`, which returned `v0.5.0 … v0.9.0` and **appeared to say the
+remote had no `v0.10.0` or `v0.11.0` at all** — flatly contradicting
+`gh release list`, which lists both. **`git ls-remote` sorts by refname,
+lexicographically, so `v0.10.0` and `v0.11.0` sort BEFORE `v0.5.0`** and
+sit at the **head** of the listing. `head -12` shows them. **A `tail` on a
+lexicographically-sorted version list hides exactly the newest versions
+once the minor number reaches two digits**, which is the moment a release
+history stops being toy-sized. *(Measured: `refs/tags/v0.10.0^{}` →
+`8567647`, `refs/tags/v0.11.0^{}` → `1ceac07`.)* Filed here rather than in
+a RAG — see this filing's report for why, and for the recommendation that
+it graduate.
+
+**★ AND THE DEREFERENCED TARGETS ARE THE GOOD NEWS.** `v0.10.0^{}` is
+**`8567647`** and `v0.11.0^{}` is **`1ceac07`** — **both are librarian
+FILING commits**, not code commits. `docs/NEXT_SESSION.md` §0a's ordering
+(*the filing commit must be the LAST commit before the tag*) held for both
+of the last two releases, the second of them without a retag. The hazard
+recorded in the `4267f84` entry below — a tag on a code commit whose own
+filing cannot exist in its own tree — **has not recurred.** It applies
+unchanged to `v0.12.0`: the commit carrying **this** filing is the one to
+tag.
+
+#### What `81d1e30` carries
+
+Workspace version `0.11.0` → `0.12.0`. **Three files, 9 insertions, 9
+deletions** *(`git show --stat 81d1e30`, checked here)*: `Cargo.toml`,
+`Cargo.lock`, `fuzz/Cargo.lock`.
+
+**Both lock files moved, and `fuzz/Cargo.lock` is still the trap.** It
+sits **outside the workspace**, so no ordinary `cargo build` refreshes it;
+it was stranded at `0.7.0` for two releases by exactly that assumption.
+Refreshed by running `cargo check` from **inside** `fuzz/`.
+
+**★★ VERIFIED BY READING THE `pdfce-*` STANZAS, NOT BY GREPPING FOR THE
+OLD VERSION STRING — and the two methods do not agree.** The previous two
+bumps recorded a **grep count** as their verification. That is a weaker
+instrument than it looks:
+
+| method | `Cargo.lock` | `fuzz/Cargo.lock` | what it actually tells you |
+|---|---|---|---|
+| `grep -cF -- '0.11.0'` | **2** | **1** | **nothing** — all three hits are `sha2`: `Cargo.lock:2584` (`"sha2 0.11.0"` in a dependency list) and `Cargo.lock:3289` / `fuzz/Cargo.lock:430` (the `sha2` package stanzas) |
+| `grep -n -A1 'name = "pdfce'` | **six** `pdfce-*` stanzas, all `0.12.0` | **two** `pdfce-*` stanzas (`pdfce-core`, `pdfce-render`), both `0.12.0` | the actual answer |
+
+**A grep for a version number is a grep for a NUMBER; "did the bump land"
+is a question about which PACKAGE carries it.** Recorded because the count
+is not even stable — `Cargo.lock` returns **2**, not the 1-per-lock a
+reader of the previous entries would expect, and a future session
+comparing counts across releases would read that drift as a regression.
+*(Hard rule 10: **3 residual `0.11.0` hits over 2 lock files**, **0 of
+them `pdfce-*`**; **8 `pdfce-*` stanzas across the two locks, 8 at
+`0.12.0`**.)*
+
+#### Why MINOR — the reasoning, filed so the next bump is not argued from scratch
+
+The `768e934` entry below had to make a case from **one** new verb. This
+one does not have to make a case at all.
+
+| addition | where | kind |
+|---|---|---|
+| **`pdfce_core::settings::presets`** — a whole new public **module**, six public types | `crates/pdfce-core/src/settings/presets.rs` (`1f79cc1`) | new module |
+| `PagePlacement`, `words_to_page_space_on`, `resolve_model_dir_with` | `pdfce-core` (`181d9bd`) | new public items |
+| `RedactionMarking` | `crates/pdfce-core/src/edit.rs` (`9b941b9`) | new public type |
+| `EditSession::search_and_mark_redactions` + `_styled` | same | **142 public verbs, was 140** *(`docs/core-api/index.md` line 17 and `02-editing-and-saving.md` §1, both checked here)* |
+| CLI `ocr`, `fetch-ocr-models`, `list-standards` | `crates/pdfce-cli/src/main.rs` | three new subcommands |
+| the `download` workspace feature | `pdfce-fetch` → `pdfce-cli` | **first network stack in a shell binary** |
+
+**Every one of those is additive** — the three pre-existing
+`mark_redactions_by_*` verbs still return `Vec<ObjId>` unchanged, and
+`TextDiagnostics` is `#[non_exhaustive]`.
+
+**★★ AND ONE THING IS NOT ADDITIVE, which is why it is in the heading and
+not down here on its own.** `MinifyFilter::default()` moved
+**`PointSample` → `Smooth`** in `de2d93c` (`Pass 128.0`). Nothing fails to
+**compile**; a consumer that asserts **exact pixels** on a minified image
+gets **different bytes**. That is the intent — it is what *"images look
+like Acrobat again"* means, and it was made on the operator's own
+unprompted comparison against his CAD drawings — but it is a real
+behaviour change under a **minor** bump, and a reader deserves to meet it
+in the record rather than in a red test. *(Semver treats a behaviour
+change with no API change as minor-eligible; this is filed as **disclosed
+minor**, not as a claim that nothing observable moved.)*
+
+#### ★ A CORRECTION FALLING OUT OF THIS ENTRY'S OWN ARITHMETIC
+
+The commit message for `81d1e30` reads *"**two** new CLI subcommands
+(`ocr`, `fetch-ocr-models`, plus `list-standards`)"* — **a count of two
+followed by a list of three.** The correct figure is **three**, and this
+entry states three. Preserved rather than silently corrected (`R215` (d)):
+the commit message is immutable and a future reader will hit that sentence.
+
+#### Verification relayed, not measured here
+
+`cargo test --workspace`, `cargo fmt --check`, `cargo clippy -D warnings`
+and the bare-gate sweep for the three Passes in this version window are
+**relayed from the engineer's dispatches** for `de2d93c` / `1f79cc1` /
+`181d9bd` / `9b941b9` and were not re-run in this filing. What **was** run
+here: `python tools/check-commits-filed.py` and
+`python tools/check-passes-filed.py`, both before and after these edits —
+figures in the Ledger of the `SESSION_LOG.md` entry for this filing.
+
+---
+
+### `9b941b9` — `Pass 127.1` ships: a search-driven REDACTION stops being silent about text it could never have matched — ★★★ **the dangerous sibling of `Pass 127.0`, because a zero-hit SEARCH leaves the operator UNCERTAIN and a zero-hit REDACTION leaves them CONFIDENT AND WRONG**; ★★ **the warning prints WHETHER OR NOT ANYTHING MATCHED — the PARTIAL case is the dangerous one, and a warning that only fired on zero marks would be silent in exactly the mixed case real documents produce**; ★ **the diagnostics drop the `127.0` comment called "a separate, operator-facing change, filed" LASTED EXACTLY ONE PASS** — 2026-08-25 23:25 (two-hundred-and-sixty-third filing; **filed 2026-08-26**, see the straddle note)
+
+**Six files, 377 insertions, 18 deletions** *(`git show --stat 9b941b9`,
+checked here)*. Promoted from *Backlog*, where it was filed by the
+two-hundred-and-sixty-first filing and named as owed by `Pass 127.0`'s own
+entry rather than left implicit. **The Backlog entry is removed by this
+filing** — moved, not deleted; its scope text is reproduced in the
+disposition table below so nothing filed there is lost.
+
+**★ DATE STRADDLE, stated because two entries in this one filing carry
+different dates.** `9b941b9` was committed **2026-08-25 23:25:30 -0400**;
+`81d1e30` above was committed **2026-08-26 02:23:49 -0400**; this filing
+is written on **2026-08-26**. The two entries are dated by their **commit**
+timestamps, in reverse-chronological order, and both are attributed to the
+**two-hundred-and-sixty-third filing**. The straddle matters for exactly
+one reading: this Pass is *not* a day older than the version bump above it
+in any meaningful sense — they are three hours apart across a midnight.
+
+#### THE DEFECT — one return type with two meanings, and only one of them safe
+
+`mark_redactions_by_search` returns `Vec<ObjId>`. **An empty one has two
+causes and a single appearance:**
+
+1. the term is genuinely not in the document, or
+2. **the document's text was NEVER RECOVERABLE AS UNICODE**, so no term
+   could ever have matched it.
+
+**For a search that ambiguity wastes a minute. For a redaction it fails in
+the direction nobody catches**: the operator asked for every occurrence of
+a name to be removed, the run reported success and exited `0`, and the
+file still contains it. **Then they send it.**
+
+**★★ AND BOTH POPULATIONS RENDER PERFECTLY, which is precisely what makes
+it invisible.** A **Type 3** font with no `/ToUnicode` (ISO 32000-1
+**§9.6.5** — glyphs are content streams named by arbitrary `/CharProcs`
+keys, so `/ToUnicode` is the only route to Unicode that exists) and an
+**`Identity-H`** font with no `/ToUnicode` (**§9.10.2** excludes it from
+every rung of the ladder). **The operator can see the name on the page
+while the tool reports nothing matched.** This is `CLAUDE.md` rule 4's
+exact failure mode — **silence about an inference** — pointed at the one
+operation in this project that is deliberately, irreversibly destructive
+(`ARCHITECTURE.md` §5's named exception to minimal-diff).
+
+#### WHAT SHIPPED
+
+* **`EditSession::search_and_mark_redactions`** and
+  **`search_and_mark_redactions_styled`**, returning
+  **`RedactionMarking { created, diagnostics }`**. **The three existing
+  `mark_redactions_by_*` verbs are UNCHANGED and still return
+  `Vec<ObjId>`** — additive, so nothing downstream breaks. **`EditSession`
+  verb count `140` → `142`.**
+* **`author_text_matches` now returns both halves.** ★ The comment it
+  replaced said the drop was deliberate and that wiring it through was
+  *"a separate, operator-facing change (`Pass 127.1`, filed)"*. **It was
+  right, and the drop lasted exactly one Pass.** Recorded rather than
+  silently removed, because **the interval between "we know this is
+  missing" and "it is missing" is where a disclosure stops happening** —
+  and this one is now measurable: **one Pass, `2104d38`/`35fce5f` →
+  `9b941b9`, roughly four hours.**
+* **`redact-mark --search`** prints the unmappable-code count, names each
+  offending font with its clause (§9.6.5 for Type 3, §9.10.2 for
+  `Identity-H`), and ends with **the conclusion the operator must NOT
+  draw**, said outright: *"DO NOT treat this document as cleared on the
+  strength of a search-driven redaction. Check the unreadable runs by eye,
+  or mark them with `--rect`."* Routed through a new
+  `report_unsearchable_redaction` helper.
+
+#### ★★ THE DESIGN CHOICE WORTH RECORDING: IT PRINTS WHETHER OR NOT ANYTHING MATCHED
+
+**The PARTIAL case is the dangerous one, not the safe one.** *"2 marks
+authored"* reads as success at the shell **and the exit code agrees**, and
+nothing in either hints that a third occurrence sat in a font the scan
+could never match. **A warning that only fired on zero marks would be
+silent in exactly the mixed case real documents produce** — a titleblock in
+a Type 3 font over a body in an ordinary one is the *normal* shape of a CAD
+drawing, not an edge case.
+
+**Both new tests assert on a run that DID mark something**
+(`marks_created=2`), and **each is paired with a control asserting a fully
+readable document gets NO warning** — the negative half is required,
+because **a disclosure that always fires discloses nothing**.
+
+#### ★ WHAT IT DELIBERATELY DOES NOT CLAIM — recorded because a future reader will over-read the feature
+
+**Redaction covers what the SEARCH FOUND, which is not necessarily what a
+reader can SEE.** A scanned page is an image; only its OCR layer is
+searchable, and **an OCR layer is a GUESS about the ink**. A term the
+recogniser misread is a term this verb cannot mark, **and no diagnostic
+here will say so** — the layer looks complete because it **is** complete,
+just wrong. Stated in the doc comment so a shell can put it where the
+operator picks the method.
+
+**Nothing here changes what `apply_redactions` does.** This Pass is about
+**which marks exist**, not about how thoroughly one is honoured.
+
+#### The filed scope, item by item, and where the shipped work diverges from it
+
+| filed scope (261st filing) | shipped? | note |
+|---|---|---|
+| **(a)** change the redaction verb's return type to carry the diagnostics | **yes** | as two *new* verbs rather than by changing the three existing ones — **stronger than filed**, since the filed form would have been a breaking change |
+| **(b)** surface them on the CLI `redact` path's **summary line**, appended, never reordered | **★ NO — see below** | the disclosure is **stderr prose only**; `stdout` still reads `redact-mark … marks_created=2 -> …; changed=… appended=… out_bytes=…` with **no diagnostics field** |
+| **(c)** a stderr prose line so the two shells word it identically | **yes** | `report_unsearchable_redaction`, mirroring `report_unsearchable_text` |
+| **(d)** decide, **and record as a decision**, whether the finding should make the command exit non-zero | **decided in effect, NOT recorded as a numbered decision** | the code returns `exit::SUCCESS`; the commit message argues the position (*"the exit code agrees"*, and the warning prints unconditionally **instead**). See below |
+
+**★★ (b) IS A REAL GAP AND IT IS THE ONE THIS PASS'S OWN ARGUMENT
+CONDEMNS.** The Backlog entry's stated reason for ranking this work was
+that *"a batch caller that cannot see stderr is exactly the caller this
+defect hurts most"* — **and that caller is still not served.** The
+asymmetry is measurable against the sibling verb, in the same binary:
+
+| command | machine-readable summary line on `stdout` |
+|---|---|
+| `find-text` | `find-text … matches=N **unreadable_codes=N** …` *(`main.rs:13914`)* |
+| `redact-mark` | `redact-mark … marks_created=N -> …; changed=… appended=… out_bytes=…` — **no diagnostics field** *(`main.rs:16601`)* |
+
+A script that parses `stdout` — the documented, stable channel — **gets
+the same output for a clean redaction and for one over a document pdfce
+could not read.** The prose *is* on stderr and the tests assert it lands
+there, so this is **a narrower gap than the one the Pass closed**, not a
+re-opening of it. **Reported, not fixed: `crates/` is outside this role's
+remit** (hard rule 11). Filed to *Backlog* below as `Pass 127.2`.
+
+**(d) — the exit-code question was answered by the code without being
+minted.** The Backlog entry asked for it *"as a decision rather than a
+silent pick"*, on the ground that *"warn but exit 0"* versus *"refuse
+loudly"* is a judgement about destructive-operation safety. The shipped
+behaviour is **warn loudly, exit `0`**, and the commit message carries a
+sound argument for it — the unconditional warning is what replaces the
+exit-code signal. **What is missing is the number**: decisions ceiling
+stays `087`, so nothing in `ARCHITECTURE.md` §12 records this. **Flagged
+to the engineer as a candidate decision `088`**, not minted here — this
+role does not take architectural decisions.
+
+#### Verification (relayed from the engineer's dispatch, not re-run here)
+
+* `cargo test --workspace` **green, 115 suites**; **4 new tests** — 2 core
+  (`crates/pdfce-core/tests/text_extract.rs`, +73) and 2 CLI
+  (`crates/pdfce-cli/tests/find_text.rs`, +68).
+* `cargo fmt --check` and `cargo clippy -- -D warnings` clean.
+* **All 17 bare gates exit `0`.** `tools/check-core-api-verbs.py` caught
+  the two new verbs and **required them documented before the commit could
+  pass** — which is why `docs/core-api/` moved **in the same commit** and
+  not in a follow-up.
+
+#### Documentation moved in the same commit — checked here, not relayed
+
+| claim | checked | value |
+|---|---|---|
+| `docs/core-api/index.md` verb count | `grep -n 142` | **`all 142 public verbs`**, line 17 |
+| `docs/core-api/02-editing-and-saving.md` verb count | `grep -n 142` | **142**, in the header table, the §1 heading and its "Count:" line |
+| stated `edit.rs` length | `wc -l crates/pdfce-core/src/edit.rs` | **30,560** — and the document says `30560`. **They agree.** |
+
+*(Hard rule 10: **2 new verbs over a surface of 142** = the surface grew
+**1.4 %**; the denominator is what makes "two verbs" legible as a small
+additive change rather than a rewrite. The `768e934` entry filed the same
+figure at **1 over 140 = 0.71 %** one release earlier.)*
+
+--- ★★★ **pdfce's OCR PRODUCED GARBAGE ON ANY PAGE AND HAD SINCE THE ENGINE LANDED IN `Pass 71.0` — ONE WRONG MODEL FILE**, isolated by swapping one file at a time; ★★ a **SECOND, INDEPENDENT defect** — a rotation-AWARE rasteriser feeding a rotation-BLIND coordinate mapping transposed the invisible layer under `/Rotate`; the **first real accuracy measurement**, made against a scan this project MANUFACTURED because licensing forbids a real one; plus `pdfce-cli ocr` (there was no CLI surface at all), the weights actually shipping in a release build, and the downloader owed since 2026-08-13 — 2026-08-25 (two-hundred-and-sixty-second filing)
 
 **Fifteen files, 2,061 insertions, 43 deletions** *(`git show --stat
 181d9bd`, checked here)*. Closes the operator's report that pressing the
@@ -339,6 +634,43 @@ count `R209` insists is re-counted rather than quoted).
 - **No GUI change was made in this Pass** — `pdfceGUI` already had its OCR
   dialog; what it lacked was a working detector, which arrives as a data
   file.
+
+**★ AMENDED 2026-08-26 (two-hundred-and-sixty-third filing) — A
+PROVENANCE CORRECTION, NOT A CONTENT ONE. The `pdfce-cli ocr` SURFACE
+LANDED IN `1f79cc1`, THE `Pass 128.1` COMMIT, NOT IN `181d9bd`.**
+
+Nothing in the section above headed *"`pdfce-cli ocr` — there was NO CLI
+SURFACE AT ALL"* is wrong about pdfce: there genuinely was no CLI surface
+before this session, and `--dump-image` genuinely is why the model defect
+was found. **What is wrong is which commit is credited.** Measured here
+with `git show <commit>:crates/pdfce-cli/src/main.rs`:
+
+| commit | Pass filed as | `Ocr {` subcommand variant | `fn cmd_ocr` | `dump_image` occurrences |
+|---|---|---|---|---|
+| `768e934` (v0.11.0 bump) | — | **0** | 0 | 0 |
+| `de2d93c` | `Pass 128.0` | **0** | 0 | 0 |
+| **`1f79cc1`** | **`Pass 128.1`** | **1** | **1** | **7** |
+| `181d9bd` | `Pass 129.0` | 1 | 1 | 7 |
+
+⇒ **the whole `ocr` subcommand, including `--dump-image`, shipped inside
+the commit filed as `Pass 128.1`** (22:10), and `181d9bd` (22:35) is the
+commit that made it *produce correct output*. **The ordering is coherent
+and rather better than the filing implies** — the diagnostic surface was
+built first, *then* used to isolate the model defect, *then* the fix was
+committed — but the record credited the surface to the wrong Pass.
+
+**Prose above kept, not rewritten (`R215` (d)).** The correction is
+recorded here so a reader who greps for the origin of `pdfce-cli ocr`
+lands on the right commit; the section's argument about *why* the flag
+mattered stands unchanged. **Consequence for anything downstream: none** —
+both commits sit inside the same `0.11.0` → `0.12.0` version window, so
+the `81d1e30` entry's "three new CLI subcommands" count is unaffected.
+
+**Note the shape, because this project has now recorded it several
+times:** the defect was not a wrong fact, it was a **correct fact attached
+to the wrong identifier**, and no gate can see it — `check-passes-filed.py`
+verifies that a Pass ID reaches the roadmap, not that the work it names is
+in the commit claiming it.
 
 ---
 
@@ -1112,6 +1444,32 @@ exactly the class librarians produce most.
 particular inter-agent form, and `R218` plus §0a between them already carry
 the obligation. If it recurs, the mint is `R219` and this paragraph is its
 first occurrence.)*
+
+**★ AMENDED 2026-08-26 (two-hundred-and-sixty-third filing) — TWO
+PRESENT-TENSE CLAIMS IN THIS ENTRY ARE NOW FALSE, AND BOTH WERE TRUE WHEN
+WRITTEN.** Prose kept, not rewritten (`R215` (d)).
+
+1. The outbound-note paragraph above says the note asks pdfceGUI for *"an
+   explicit warning that `mark_redactions_by_search` does NOT disclose
+   **yet** — that is `Pass 127.1`, *Backlog*, unshipped"*. **`Pass 127.1`
+   shipped in `9b941b9`** (top of *Shipped*), so the redaction verb now
+   discloses via `search_and_mark_redactions{,_styled}`. The description of
+   *what the note asked for* remains accurate; only its parenthetical
+   about the Pass's status has gone stale.
+2. The same paragraph's ask (a) — *"swap the Find bar from
+   `find_text_with` to `search_text`"* — **has been done by pdfceGUI**, and
+   ask (c) has been overtaken by (1). *(Checked here: `ls -l
+   D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` shows the note
+   consumed and renamed `done_2026-08-25-zero-result-search-CONSUMED.md`,
+   and their reply `note_the_zero_result_disclosure_is_wired.md`,
+   2,942 B, 2026-08-25 19:30, states the Find bar calls `search_text` and
+   sums the two counters into an off-canvas second-row line.)*
+
+**Note the shape:** this is not a wrong fact, it is a **correct fact with
+an expiry date that nothing in the document could enforce**. An entry that
+names another Pass's status is asserting something the other Pass can
+falsify at any moment — the same class as `R216`'s self-referential
+claims, one document further out.
 
 ---
 
@@ -79189,59 +79547,77 @@ identifiers only, never by name, in this repository.
 
 ---
 
-### `Pass 127.1` — `mark_redactions_by_search` must carry the diagnostics it now receives, so a "redact every hit" run over UNSEARCHABLE text stops marking nothing and saying nothing
+### `Pass 127.2` — `redact-mark`'s unreadable-text finding reaches STDERR but not the machine-readable SUMMARY LINE, so the batch caller `Pass 127.1` was ranked for is still not served
 
-**Filed 2026-08-25 (two-hundred-and-sixty-first filing)**, owed by
-`Pass 127.0` (`2104d38`, top of *Shipped*) and named there rather than
-left implicit.
+**Filed 2026-08-26 (two-hundred-and-sixty-third filing)**, owed by
+`Pass 127.1` (`9b941b9`, *Shipped*) — specifically by **scope item (b) of
+that Pass's own filed scope**, which read *"surface them on the CLI
+`redact` path's summary line, appended, never reordered (same contract
+`extract-text` and `find-text` honour)"* and which the shipped work did
+not do.
 
-**The defect.** `Pass 127.0` made the private `scan_text_matches` return
-**both** halves — matches **and** `TextDiagnostics` — and added the public
-`EditSession::search_text` so an operator-facing search can say *"this
-document holds text I could not read as Unicode."* **The redaction path
-was not converted.** `mark_redactions_by_search` still takes the matches
-and **discards the diagnostics on the floor.** The consequence is exact: a
-*"redact every occurrence of X"* run over a document whose text is
-unrecoverable — a Type 3 font with no `/ToUnicode`, an `Identity-H` CID
-font with no `/ToUnicode`, any run that fell off §9.10.2's ladder —
-**marks nothing and reports nothing**, and exits `0`.
+**The gap, measured against the sibling verb in the same binary.**
 
-**★★ Why this is ranked above the search case it descends from, and the
-ranking is the argument for doing it.** A zero-hit *search* leaves the
-operator uncertain; a zero-hit *redaction* leaves the operator
-**confident and wrong**. His mental model after the command is *"I
-redacted everything that matched"*, and pdfce has just agreed with him in
-silence about a page it could not read. That is `CLAUDE.md` rule 4's
-failure mode — **silence about an inference** — pointed at the one
-operation in this project that is deliberately, irreversibly destructive
-(`ARCHITECTURE.md` §5's named exception to minimal-diff, §11.2's
-save-time confirmation). **Redaction is where a silent miss is not
-recoverable by undo**, because the operator's next act is to distribute
-the file.
+| command | `stdout` summary line | carries the diagnostics? |
+|---|---|---|
+| `find-text` | `find-text {path} needle={..} ignore_case={..} matches={N} unreadable_codes={N} …` *(`crates/pdfce-cli/src/main.rs:13914`)* | **yes** |
+| `redact-mark` | `redact-mark {path} marks_created={N} -> {out}; changed={..} appended={..} out_bytes={..}` *(`crates/pdfce-cli/src/main.rs:16601`)* | **no** |
 
-**Scope, and it is small precisely because `127.0` did the structural
-half.** (a) Change the return type of the redaction verb to carry the
-diagnostics — the scan already produces them, nothing new is computed.
-(b) Surface them on the CLI `redact` path's summary line, **appended,
-never reordered** (same contract `extract-text` and `find-text` honour).
-(c) A stderr prose line through the existing `report_unsearchable_text`
-helper, so the two shells word it identically. (d) Decide, and record as
-a decision rather than a silent pick, whether an unsearchable-text
-finding should also make the command **exit non-zero** in a scripted
-redaction — a batch caller that cannot see stderr is exactly the caller
-this defect hurts most, and "warn but exit 0" versus "refuse loudly" is a
-judgement about destructive-operation safety, not a style question.
+`Pass 127.1` routes the whole disclosure through `eprintln!`
+(`report_unsearchable_redaction`), and its two CLI tests assert it lands on
+**stderr**. Nothing reaches `stdout`, and the exit code is `exit::SUCCESS`
+either way.
 
-**Acceptance criteria.** A fixture whose text is unrecoverable (reuse
-`fixtures/synthetic/type3/tounicode_gate.pdf`, or its `Identity-H` twin)
-run through a redact-by-search invocation **names the unreadable
-population on the summary line and in prose**, and a fully readable
-document produces **no such warning** — the negative half is required,
-because a disclosure that always fires discloses nothing. Non-vacuity
-A/B: reverting the change must make the new assertions fail.
+**★ Why this is ranked rather than shrugged at: it is the exact caller
+`Pass 127.1`'s own Backlog entry used to justify the work.** That entry
+read *"a batch caller that cannot see stderr is exactly the caller this
+defect hurts most"*. A script parsing the documented, stable `stdout`
+channel **gets byte-identical output for a clean redaction and for one over
+a document pdfce could not read as Unicode.** The human at an interactive
+shell is now served; the pipeline is not.
 
-**Not blocked on anything.** No spec question is open; §9.10.2's ladder
-and the clause citations are already in the code from `Pass 127.0`.
+**This is narrower than the defect `127.1` closed, and saying so is part of
+the filing.** The prose disclosure exists, is tested, and is worded
+identically to the search path's. What is missing is the *field*, on the
+one channel a program can consume without heuristics.
+
+**Scope.** (a) Append a diagnostics field to `redact-mark`'s summary line —
+**appended, never reordered**, the contract `extract-text` and `find-text`
+already honour, so existing parsers do not break. Name it to match
+`find-text`'s (`unreadable_codes=`) rather than inventing a second spelling
+for one population. (b) Extend the existing CLI test
+`a_search_driven_redaction_warns_about_unreadable_text` to assert the field
+on `stdout` as well as the prose on `stderr`, and its control
+(`a_readable_document_gets_no_redaction_warning`) to assert the field reads
+zero rather than being absent — an absent field and a zero field are
+different contracts for a parser, and picking one silently is what this
+entry exists to prevent. (c) The `--pattern` and `--rect` branches of
+`cmd_redact_mark` take the same summary line; decide whether they emit the
+field too (they cannot produce the finding, so a constant `0` is honest and
+keeps the line shape stable) or whether the line varies by branch.
+
+**Acceptance criteria.** `redact-mark --search` over
+`fixtures/synthetic/type3/tounicode_gate.pdf` prints a non-zero
+`unreadable_codes=` on **stdout** alongside `marks_created=2`, and the same
+invocation over a fully readable document prints the field at zero.
+Non-vacuity A/B: reverting the change must make both assertions fail.
+
+**Not blocked on anything.** The diagnostics are already in hand at the
+call site — `marked.diagnostics` — and `report_unsearchable_redaction`
+already reads every field the line would need.
+
+**★ Also owed from `Pass 127.1`, and it is a decision rather than code:**
+scope item (d) — *whether an unreadable-text finding should make a scripted
+redaction exit non-zero* — was answered **in effect** (`exit::SUCCESS`,
+with the warning printing unconditionally as the replacement signal) and
+**never minted as a numbered decision**, which is what that scope item
+explicitly asked for. Decisions ceiling is unchanged at `087`; a decision
+`088` recording *"warn loudly, exit 0, because the unconditional warning is
+the signal"* would close it. **The engineer's call, not this role's.**
+Worth settling **with** (a) rather than after it: if the summary-line field
+lands, a batch caller has a machine-readable signal for the first time, and
+that materially strengthens the case for leaving the exit code at `0`.
+
 
 ### Wire `cargo +nightly fuzz build` into CI — unscoped, no Pass ID
 

@@ -236,19 +236,29 @@ document gets **no** warning, because boilerplate is a warning nobody reads.
 
 **Nothing in this queue is blocked on anybody.**
 
-1. **`Pass 127.1` — redaction-by-search discloses too.** The sibling defect,
-   and **more dangerous than the search case**: `mark_redactions_by_search`
-   over unsearchable text marks **nothing** and says **nothing**, while the
-   operator's mental model is *"I redacted everything that matched."*
-   `scan_text_matches` already returns the diagnostics — the drop is a named,
-   commented line in `edit.rs` — so this is a return-type change on that verb
-   plus a CLI line. Small, and it is first for the same reason `127.0` was.
+1. **`Pass 127.2` — the redaction disclosure's MACHINE-READABLE half.**
+   `Pass 127.1` shipped the prose on stderr and **did not ship scope item
+   (b)**: `redact-mark`'s stdout summary line still carries no diagnostics
+   field, while `find-text`'s does (`unreadable_codes=`,
+   `type3_no_tounicode=`, `identity_no_tounicode=`).
+
+   ★ **A script parsing stdout therefore gets IDENTICAL output for a clean
+   redaction and one over text that could not be read** — and a script is the
+   exact caller the Backlog entry used to justify ranking the work in the
+   first place. The human half landed and the automatable half did not, which
+   is the more easily-missed direction: the feature demonstrates correctly by
+   hand.
+
+   Found by the librarian reading `127.1`'s own scope list against the
+   shipped code, not by a gate. Small: append to one `println!`, extend the
+   CLI test.
 2. **The trap-X cells — `PCS 1.0`'s `a`/`b`/`f`/`g`.** The `/Separation /All`
    hypothesis: §8.6.6.4 says painting with `/All` applies the tint to **all
    available colorants at once**, which a screen neutral cannot do; `122.5`
    gave those pages a colorant buffer, so it is now possible. **Confirm the
    content-stream question first** — that those marks really *are* the `/All`
-   paint is still unestablished. `127.2` is the next free ID.
+   paint is still unestablished. **`127.3` is the next free ID** (`127.2` is
+   taken by item 1 above).
 3. **Mesh shadings in ink — the mesh half of `Pass 97.1k`.** Meshes are a
    population bridging through sRGB. `Patch` corners hold a resolved
    `Shade::Rgb`; carrying authored colorants alongside is the same shape

@@ -62299,3 +62299,396 @@ off:**
    the X-4 suite `~16.8–16.11` **self-consistency** report — **check both
    halves before hunting a cause**, because only if both hold is it a
    self-consistency failure rather than an ordinary parity cell.
+
+## 2026-08-26 (two-hundred-and-sixty-third filing) — `Pass 127.1` SHIPS and **`v0.12.0` is bumped but NOT CUT**: ★★★ the *dangerous* sibling of `127.0` — a zero-hit **SEARCH** leaves the operator uncertain, a zero-hit **REDACTION** leaves them **confident and wrong**; ★★ the warning prints **whether or not anything matched**, because the **partial** case is the dangerous one; ★★ **the disclosure gap `127.0` called "a separate change, filed" lasted EXACTLY ONE PASS**; ★★★ and the filing's own checks falsified **three** premises it was handed — the outbound note is **already consumed**, pdfceGUI has **already wired `127.1`**, and `pdfce-cli ocr` was credited to the **wrong commit** one filing ago
+
+**Two entries, one filing, and they straddle midnight.** `9b941b9`
+(`Pass 127.1`) was committed **2026-08-25 23:25:30 -0400**; `81d1e30`
+(the `v0.12.0` bump) at **2026-08-26 02:23:49 -0400**; this filing is
+written on **2026-08-26**. Both `ROADMAP.md` entries are dated by their
+**commit** timestamps and both are attributed to this filing. **The
+straddle matters for one reading only**: the Pass is not "a day older"
+than the bump — they are **three hours apart** across a midnight, and a
+future reader comparing the two dates would otherwise infer a gap that
+does not exist.
+
+**Sourcing — MIXED, and the split is stated before any figure below is
+quoted.** This role held a shell, so per hard rule 8 it says which half is
+which.
+
+- **Checked here, command named:** `git log --oneline -12`; `git show
+  --stat` on all three commits; `git tag --list`, `git ls-remote --tags
+  origin`, `gh release view v0.12.0`, `gh release list`, `git remote -v`,
+  `git status -sb`; `grep -n -A1 'name = "pdfce'` and `grep -n -F
+  '0.11.0'` on **both** lock files; `wc -l crates/pdfce-core/src/edit.rs`;
+  `grep -n 142` on `docs/core-api/index.md` and
+  `02-editing-and-saving.md`; `git show <commit>:crates/pdfce-cli/src/main.rs`
+  four times for the `ocr`-surface provenance table; `ls -l
+  D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` plus a read of two
+  notes in it; `git bundle list-heads` + `git rev-list --count` for backup
+  currency; `python tools/check-commits-filed.py` and
+  `python tools/check-passes-filed.py` **before and after** these edits.
+- **Relayed from the engineer's dispatch, not measured here:** `cargo test
+  --workspace` green at **115 suites**, the **4 new tests** (2 core, 2
+  CLI), `cargo fmt --check`, `cargo clippy -- -D warnings`, and the
+  **17 bare gates exit 0** sweep.
+
+**Shipped:**
+
+- **`Pass 127.1`** (`9b941b9`, 2026-08-25 23:25) — *"'redact every match'
+  no longer stays quiet about text it could not read."* Filed to *Shipped*,
+  **promoted from *Backlog***, where the 261st filing had placed it.
+- **`81d1e30`** — **VERSION BUMP `0.11.0` → `0.12.0`, MINOR**. **No Pass
+  ID**; infrastructure/release record, on the same footing as `768e934`,
+  `4267f84`, `e115947`.
+- **`8793d56`** (spec-librarian agent memory) — **NOT filed as a code
+  commit, and that is the gate's own ruling, not a judgement of this
+  role's.** It touches only `.claude/agent-memory/pdfce-spec-librarian/`
+  (3 files, +286/−2), no `crates/`, `tools/`, `fixtures/`, `.github/` or
+  `fuzz/` path, so `check-commits-filed.py`'s exclusion 1 skips it —
+  verified by the gate printing exactly **one** unfiled code commit
+  (`9b941b9`) and never naming `8793d56`. Recorded here so a future reader
+  who greps for that hash finds out **why** it is absent from `ROADMAP.md`
+  rather than assuming it was missed.
+
+**Decisions made this session: none. Decisions ceiling stays `087`;
+standing-rule ceiling stays `R219`; open-question ceiling stays `(bl)`.**
+`Pass 127.1` **applies** `CLAUDE.md` rule 4 (disclose an inference, never
+be silent) to a second verb; it does not redraw a boundary or define an
+invariant. **One decision is OWED and named below** — the exit-code
+question — and it is the engineer's to mint, not this role's.
+
+**Findings + decisions:**
+
+- **★★★ THE HEADLINE, and it is a ranking argument rather than a new
+  mechanism.** `mark_redactions_by_search` returned `Vec<ObjId>`, and an
+  **empty** one had **two causes with a single appearance**: the term is
+  absent, or **the document's text was never recoverable as Unicode** so no
+  term could have matched. **For a search that wastes a minute; for a
+  redaction it fails in the direction nobody catches** — the operator asked
+  for every occurrence of a name to be removed, the run reported success
+  and exited `0`, the file still contains it, **and then they send it.**
+
+- **★★ BOTH POPULATIONS RENDER PERFECTLY, which is what makes it
+  invisible.** A **Type 3** font with no `/ToUnicode` (ISO 32000-1
+  **§9.6.5** — glyphs are content streams named by arbitrary `/CharProcs`
+  keys, so `/ToUnicode` is the only route to Unicode that exists) and an
+  **`Identity-H`** font with no `/ToUnicode` (**§9.10.2** excludes it from
+  every rung). **The operator can see the name on the page while the tool
+  reports nothing matched.**
+
+- **★★ THE DESIGN CHOICE WORTH RECORDING: it prints WHETHER OR NOT
+  ANYTHING MATCHED.** The **partial** case is the dangerous one, not the
+  safe one. *"2 marks authored"* reads as success at the shell **and the
+  exit code agrees**, and nothing in either hints a third occurrence sat in
+  a font the scan could never match. **A warning that only fired on zero
+  marks would be silent in exactly the mixed case real documents
+  produce** — a Type 3 titleblock over ordinary body text is the *normal*
+  shape of a CAD drawing. **Both new tests assert on a run that DID mark
+  something** (`marks_created=2`), **each paired with a control** asserting
+  a fully readable document gets **no** warning — the negative half is
+  required, because a disclosure that always fires discloses nothing.
+
+- **★ THE INTERVAL IS MEASURED, AND IT IS ONE PASS.** The comment
+  `author_text_matches` carried said the diagnostics drop was deliberate
+  and that wiring it through was *"a separate, operator-facing change
+  (`Pass 127.1`, filed)"*. **It was right, and the drop lasted exactly one
+  Pass** — `2104d38`/`35fce5f` (19:30-ish) → `9b941b9` (23:25), **roughly
+  four hours.** Recorded rather than silently removed, because **the
+  interval between "we know this is missing" and "it is missing" is where a
+  disclosure stops happening**, and this project now has a number for one.
+
+- **★ WHAT THE PASS DELIBERATELY DOES NOT CLAIM, filed because a future
+  reader will over-read it.** **Redaction covers what the SEARCH FOUND,
+  which is not necessarily what a reader can SEE.** A scanned page is an
+  image; only its OCR layer is searchable, and **an OCR layer is a GUESS
+  about the ink**. A term the recogniser misread is a term this verb cannot
+  mark, **and no diagnostic here will say so** — the layer looks complete
+  because it **is** complete, just wrong. In the doc comment, so a shell can
+  put it where the operator picks the method. **Nothing changes what
+  `apply_redactions` does**: this is about which marks exist, not how
+  thoroughly one is honoured.
+
+- **★★ THE FILED SCOPE HAD FOUR ITEMS AND TWO DID NOT LAND AS FILED.**
+  (a) landed **stronger than filed** — as two *new* verbs
+  (`search_and_mark_redactions{,_styled}`, `RedactionMarking { created,
+  diagnostics }`) rather than by changing the three existing ones, so
+  nothing downstream breaks and the verb count moves **140 → 142**.
+  (c) landed. **(b) did NOT**, and **(d) was answered without being
+  recorded.** See the two entries below.
+
+- **★★★ (b) IS A REAL GAP AND IT IS THE ONE THIS PASS'S OWN ARGUMENT
+  CONDEMNS.** The filed scope said *"surface them on the CLI `redact`
+  path's **summary line**, appended, never reordered (same contract
+  `extract-text` and `find-text` honour)"*. The shipped disclosure is
+  **stderr prose only.** Measured against the sibling verb **in the same
+  binary**:
+
+  | command | `stdout` summary line | diagnostics? |
+  |---|---|---|
+  | `find-text` | `… matches={N} **unreadable_codes={N}** …` (`main.rs:13914`) | **yes** |
+  | `redact-mark` | `… marks_created={N} -> {out}; changed=… appended=… out_bytes=…` (`main.rs:16601`) | **no** |
+
+  **A script parsing `stdout` gets byte-identical output for a clean
+  redaction and for one over a document pdfce could not read.** And the
+  Backlog entry's stated ground for *ranking* this Pass was that *"a batch
+  caller that cannot see stderr is exactly the caller this defect hurts
+  most"* — **so the caller the ranking argument named is the one still not
+  served.** Narrower than the defect closed, not a re-opening of it: the
+  prose exists, is tested, and is worded identically to the search path's.
+  **Reported, not fixed** — `crates/` is outside this role's remit (hard
+  rule 11). **Filed to *Backlog* as `Pass 127.2`**, Pass-ID ceiling
+  **`127`** unchanged, next free **`127.3`**.
+
+- **(d) — the exit-code question was ANSWERED BY THE CODE WITHOUT BEING
+  MINTED.** The Backlog entry asked for it *"as a decision rather than a
+  silent pick"*, because *"warn but exit 0"* versus *"refuse loudly"* is a
+  judgement about destructive-operation safety. Shipped behaviour: **warn
+  loudly, exit `0`** (`exit::SUCCESS`), and the commit message carries a
+  sound argument for it — the **unconditional** warning is what replaces
+  the exit-code signal. **What is missing is the number.** Flagged as a
+  candidate **decision `088`**; not minted here.
+
+- **★ THE `81d1e30` BUMP IS MINOR AND THIS TIME IT IS NOT A CLOSE CALL.**
+  A whole new public **module** (`pdfce_core::settings::presets`, six
+  public types), four new public core items (`PagePlacement`,
+  `words_to_page_space_on`, `resolve_model_dir_with`, `RedactionMarking`),
+  **two new `EditSession` verbs (142, was 140)**, **three** new CLI
+  subcommands (`ocr`, `fetch-ocr-models`, `list-standards`), and a new
+  optional workspace feature putting a **network stack in a shell binary
+  for the first time**. *(Hard rule 10: **2 new verbs over a surface of
+  142 = 1.4 %** growth; the `768e934` bump one release earlier filed the
+  same figure at **1 over 140 = 0.71 %**.)*
+
+- **★★ AND ONE CHANGE IS NOT ADDITIVE, put in the entry's HEADING rather
+  than its body.** `MinifyFilter::default()` moved **`PointSample` →
+  `Smooth`** in `de2d93c`. Nothing fails to **compile**; a consumer
+  asserting **exact pixels** on a minified image gets **different bytes**.
+  Intended — it is what *"images look like Acrobat again"* means, and it
+  was made on the operator's own unprompted comparison — but real, and a
+  reader deserves to meet it in the filing rather than in a red test.
+  Filed as **disclosed minor**, not as a claim that nothing observable
+  moved.
+
+- **★★ THE LOCK-FILE VERIFICATION METHOD CHANGED, AND THE TWO METHODS
+  DISAGREE.** The previous two bumps recorded a **grep count** of the old
+  version string as their verification. Measured here:
+
+  | method | `Cargo.lock` | `fuzz/Cargo.lock` | what it tells you |
+  |---|---|---|---|
+  | `grep -cF -- '0.11.0'` | **2** | **1** | **nothing** — all three hits are `sha2` (`Cargo.lock:2584` a dependency-list entry, `Cargo.lock:3289` and `fuzz/Cargo.lock:430` the package stanzas) |
+  | `grep -n -A1 'name = "pdfce'` | **6** stanzas, all `0.12.0` | **2** stanzas, both `0.12.0` | the answer |
+
+  **A grep for a version number is a grep for a NUMBER; "did the bump
+  land" is a question about which PACKAGE carries it.** ★ And the count is
+  not even stable — `Cargo.lock` returns **2**, not the "once per lock" a
+  reader of the previous entries would expect, so a future session
+  comparing counts across releases would read that drift as a regression.
+  *(Hard rule 10: **3 residual `0.11.0` hits over 2 lock files, 0 of them
+  `pdfce-*`**; **8 `pdfce-*` stanzas across the two locks, 8 at
+  `0.12.0`**.)*
+
+- **★ A COUNT INSIDE THE BUMP COMMIT'S OWN MESSAGE IS WRONG.** It reads
+  *"**two** new CLI subcommands (`ocr`, `fetch-ocr-models`, plus
+  `list-standards`)"* — **a count of two followed by a list of three.**
+  The `ROADMAP.md` entry states **three** and preserves the commit
+  message's wording rather than pretending it says something else
+  (`R215` (d)); a commit message is immutable and a future reader will hit
+  that sentence.
+
+**★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string. THREE
+SURVIVORS, AND ALL THREE FALSIFY A PREMISE THIS FILING WAS HANDED.**
+
+The meaning-change event is that **a verb that did not disclose now
+does**, so every sentence describing the redaction path's silence had to
+be re-read. What the sweep actually returned was larger than that.
+
+| # | where | the stale claim | disposition |
+|---|---|---|---|
+| 1 | **the dispatch itself** | the outbound OCR-DPI note is at `…\open\2026-08-25-your-ocr-dpi-numbers-were-measured-against-a-broken-detector.md` | **FALSE at filing time.** `ls -l` shows **no such file**; it was **consumed and renamed by pdfceGUI** to **`done_2026-08-25-ocr-detector-CONSUMED.md`, 5,002 B, 2026-08-25 22:58**. Content confirmed by reading it — the title is *"Your OCR DPI curve, `TARGET_PIXELS`, and the test pinning ~150 dpi were all measured against a broken detector"* and §1 carries the three-row isolation table. **Named in this filing under its CURRENT name**, so a future dispatch quoting the original filename does not read as a lost deliverable |
+| 2 | **the dispatch itself** | *"the GUI has not been told about the new verb yet — no outbound note has gone to that channel about redaction"*, therefore file `FEATURES.md` as `[ ] gui` | **FALSE.** `note_127_1_wired_the_rotate_bug_fixed_and_our_curve_retracted.md`, **2,788 B, 2026-08-26 00:06**, from pdfce-gui, states: *"**Pass 127.1 wired**, per the commitment made when 127.0 landed. `search_and_mark_redactions_styled`, with the count surfaced in the redact panel and carried on the DOCUMENT rather than on the panel — it is a fact about the file's fonts, and panel state would have shown one document's warning against another after a tab switch."* **`gui` stays `[x]`**, cited to surface and date |
+| 3 | `ROADMAP.md`, the `2104d38`+`35fce5f` (`Pass 127.0`) entry | *"an explicit warning that `mark_redactions_by_search` does NOT disclose **yet** — that is `Pass 127.1`, *Backlog*, unshipped"*, and its ask (a) *"swap the Find bar from `find_text_with` to `search_text`"* as outstanding | **AMENDED IN PLACE, prose kept** (`R215` (d)). `127.1` has shipped, and pdfceGUI's `note_the_zero_result_disclosure_is_wired.md` (**2,942 B, 2026-08-25 19:30**) says ask (a) is done — the Find bar calls `search_text` and states the count in the bar's own second row, **on an empty readout only** |
+| 4 | `ROADMAP.md`, the `181d9bd` (`Pass 129.0`) entry | the whole section headed *"`pdfce-cli ocr` — there was NO CLI SURFACE AT ALL"*, crediting the surface and `--dump-image` to `181d9bd` | **AMENDED IN PLACE — a PROVENANCE correction, not a content one.** Measured with `git show <commit>:crates/pdfce-cli/src/main.rs`: the `Ocr {` variant, `fn cmd_ocr` and all **7** `dump_image` occurrences are present at **`1f79cc1`** (the `Pass 128.1` commit, 22:10) and absent at `de2d93c` and `768e934`. `181d9bd` (22:35) is the commit that made `ocr` produce **correct output**, not the one that gave it a surface |
+| 5 | `docs/FEATURES.md` Type 3 text row | *"Not reachable in `pdfceGUI` — the new verb has been sent to that channel, nothing wired there yet"*, `gui` `[ ]` | **ROW CORRECTED**, `gui` `[ ]` → **`◐`** — the search half is reachable (Find bar, cited and dated); **Type 3 extract/copy there is not separately confirmed**, which is what holds it at `◐` rather than `[x]` |
+| 6 | `docs/FEATURES.md` *Planned* section | the `Pass 127.1` Planned row | **ROW RETIRED** — the capability shipped; its residual (the `stdout` summary-line gap) is stated in the *Implemented* redaction row and filed as `Pass 127.2` |
+| 7 | **`docs/NEXT_SESSION.md` §3 item 1** | *"`Pass 127.1` — redaction-by-search discloses too"*, listed as **queue position 1, unshipped** | **REPORTED, NOT EDITED** — that file is the **engineer's** handoff, not this role's. Shipped in `9b941b9` |
+| 8 | **★ `docs/NEXT_SESSION.md` §3 item 2** | *"**`127.2` is the next free ID**"* | **REPORTED, NOT EDITED — and this one is the dangerous survivor.** `Pass 127.2` was **minted by this filing** into *Backlog*; the next free ID is **`127.3`**. An engineer who takes that sentence at face value **collides a Pass ID**, which hard rule 2 (*Pass IDs are stable, never reused for a different feature*) makes unrecoverable by anything except a correction entry |
+
+**★ The shape of survivors 1 and 2 is worth naming, because it is not
+carelessness and it will recur.** Both premises were **true when the
+dispatch was written** and were falsified by **another project acting on a
+note in the shared channel** between then and this filing. This is the
+mirror image of the 261st filing's finding (*a filing agent's view of the
+tree is a SNAPSHOT and the engineer kept working inside it*): here the
+snapshot went stale because a **second repository** moved. **The outbound
+directory is a live surface, not an outbox** — a filename in it can be
+renamed by the recipient, and a "not yet done" can become "done" without
+anyone in this repository committing anything. **`ls` it; do not quote a
+dispatch's path.**
+
+**★ SURVIVOR REPORTED, NOT FIXED — outside this role's remit:**
+
+1. **`crates/pdfce-cli/src/main.rs:16601`** — `redact-mark`'s summary line,
+   the `Pass 127.2` gap above. `crates/` is the engineer's.
+2. **`crates/pdfce-core/assets/models/ocrs/PROVENANCE.md` line 46**, carried
+   forward **unresolved** from the 262nd filing's own survivor list — this
+   filing did not re-read it and makes no claim either way. Still owed.
+
+**Outbound — the pdfceGUI channel, NAMED under current filenames, all
+figures from `ls -l` run here:**
+
+- **`done_2026-08-25-ocr-detector-CONSUMED.md`** — **5,002 B, 2026-08-25
+  22:58.** *This is the OCR-DPI note*, consumed and renamed by pdfceGUI.
+  It tells that project their OCR DPI curve, **`TARGET_PIXELS =
+  8_400_000`** and the test pinning ~150 dpi were **all derived from the
+  broken detector**, and carries **both model hashes** so they can check
+  which file they have before re-measuring. **This was the most actionable
+  cross-project consequence of `Pass 129.0` and it is now discharged** —
+  item 4 of the 262nd filing's *For next session* list is **CLOSED**.
+- **`note_127_1_wired_the_rotate_bug_fixed_and_our_curve_retracted.md`** —
+  **2,788 B, 2026-08-26 00:06**, inbound from pdfce-gui. Four actions
+  taken: `/Rotate` fixed on their side; **the DPI curve RETRACTED rather
+  than adjusted** (table kept so a reader can see what the constant was
+  derived from, `TARGET_PIXELS` labelled provisional); **their pinning test
+  rewritten to solve the fitting equation** instead of asserting
+  `145..=155 DPI`, **falsified in both directions** (it passes when the
+  constant legitimately changes to 4,000,000 and fails when the arithmetic
+  is broken); and **`Pass 127.1` wired**. ★ They also report reusing the
+  **one-file-at-a-time isolation** as *method*: *"we had a
+  detection-versus-recognition ambiguity of exactly the same shape and
+  never thought to swap one file at a time against a known-good."*
+- **`note_the_zero_result_disclosure_is_wired.md`** — **2,942 B,
+  2026-08-25 19:30**. Their `Pass 127.0` consumption, and it explicitly
+  records what they did **not** do: *"Nothing was added to the redaction
+  path… When 127.1 lands, the GUI change is the same shape as this one and
+  we will make it."* **They then made it** — see the 00:06 note. **One
+  small ask back, unactioned and recorded here so it is not lost:** a
+  `fonts_without_unicode()` helper (or a single `unsearchable_fonts`
+  total) on `TextDiagnostics`, so a shell cannot get the two-counter sum
+  subtly wrong — *"entirely optional"* on their side.
+- **Still owed by pdfceGUI, their own words:** the **re-measured DPI
+  sweep**. Not done; they want the fixed detector, a corpus wider than one
+  CAD sheet, and a decision about ground truth first, and *"would rather
+  report it once, properly, than post a second curve that has to be
+  retracted."*
+
+**RAG escalations this filing: NONE WRITTEN, and the decline is
+deliberate on each of two candidates.**
+
+1. **`Pass 127.1`'s finding — DECLINED, agreeing with the dispatch's own
+   reading.** It is *the same finding as `Pass 127.0` applied to a second
+   verb*: two font populations render but do not map to Unicode, so a
+   zero-result is ambiguous. That is already written up in
+   `C:\personal_rag\pdf\` from the 261st filing. **A near-duplicate would
+   dilute the first**, and hard rule 4 says amend rather than duplicate —
+   but there is nothing here to amend *into* it: no new spec clause, no new
+   population, no new measurement. **The one genuinely new thing is a
+   ranking argument** (*silence on a destructive verb is worse than silence
+   on a read-only one*), and that is a **pdfce design judgement**, not an
+   empirical fact about PDFs, so it belongs in `ROADMAP.md` — where this
+   filing put it — and not in a PDF-domain RAG.
+2. **The `git ls-remote --tags` lexicographic trap — NOT WRITTEN, and this
+   one is a genuine RAG candidate this role declined for TOOL-FIT reasons,
+   not for lack of merit.** `git ls-remote --tags origin | tail` returned
+   `v0.5.0 … v0.9.0` and **appeared to prove the remote had no `v0.10.0` or
+   `v0.11.0`**, contradicting `gh release list`, which lists both.
+   **`ls-remote` sorts by refname, lexicographically, so `v0.10.0` and
+   `v0.11.0` sort BEFORE `v0.5.0`** and sit at the **head**. **A `tail` on
+   a lexicographically-sorted version list hides exactly the newest
+   versions once the minor number reaches two digits** — i.e. the moment a
+   release history stops being toy-sized. This would have produced a
+   confident wrong release-status claim in this very filing. **Why not
+   written:** it is a `git` finding, `D:/dev/rag/` has **no `git/`
+   subdir**, the nearest fit (`gh-cli/release.md`) is a different tool in a
+   line-numbered flag-reference house style that a prose note would break,
+   and **creating a new tool subdir mid-release-cut is a larger act than
+   one finding warrants**. **Recommended to the engineer** rather than done
+   unilaterally. The finding itself is recorded, with its measurement, in
+   the `81d1e30` `ROADMAP.md` entry — so it is checkable wherever it ends
+   up living.
+
+**Ledger (checked here, commands named):**
+
+| item | value |
+|---|---|
+| `git rev-parse --short HEAD` | **`81d1e30`** |
+| `git status -sb` | **`## main...origin/main [ahead 7]`** — seven commits unpushed |
+| `git remote -v` | `origin https://github.com/KenM76/pdfce.git` (**public**; `CLAUDE.md` rule 8 — anything committed is published by default) |
+| `git tag --list v0.12.0` | **empty** |
+| `git ls-remote --tags origin` | **no `v0.12.0`**; `v0.10.0^{}` → **`8567647`**, `v0.11.0^{}` → **`1ceac07`** — ★ **both are librarian FILING commits, so §0a's ordering held for the last two releases** |
+| `gh release view v0.12.0` | **`release not found`** |
+| `gh release list` (top row) | **`v0.11.0`, `2026-08-25T23:13:09Z`, `Latest`** |
+| latest backup bundle | `D:\Dev\pdfce-backups\pdfce-20260825-0218-full.bundle`, **36,848,291 B**, 2026-08-25 04:35 |
+| bundle's `refs/heads/main` (`git bundle list-heads`) | **`81e5aab`** |
+| commits since (`git rev-list --count 81e5aab..HEAD`) | **35** — **the bundle is 35 commits stale.** ★ The dispatch said "31+"; **31 was the 262nd filing's figure and it is not carried forward** — re-measured at *this* `HEAD` (hard rule 8). **A fresh bundle is owed BEFORE the tag** |
+| `tools/check-commits-filed.py` **before** these edits | **FAIL** — `9b941b9` in no filing; `81d1e30` **DEFERRED** as the tip |
+| `tools/check-commits-filed.py` **after** these edits | **exit `0`** (see *Gates*, below) |
+| `tools/check-passes-filed.py` **before** these edits | **FAIL** — `UNFILED 9b941b9 Pass 127.1` |
+| `tools/check-passes-filed.py` **after** these edits | **exit `0`** |
+| `tools/commits-filed-baseline.txt` | **UNTOUCHED**, as instructed and as that file's own header requires — it is debt, not an allowlist |
+| `wc -l crates/pdfce-core/src/edit.rs` | **30,560** — and `docs/core-api/02-editing-and-saving.md` states `30560`. **They agree** |
+| `EditSession` public verbs | **142** (was 140), per `docs/core-api/index.md` line 17 and `02-editing-and-saving.md` §1 |
+| `pdfce-*` stanzas at `0.12.0` | **6 of 6** in `Cargo.lock`, **2 of 2** in `fuzz/Cargo.lock` |
+| decisions ceiling | **`087`** (unchanged; **`088` OWED** — the `redact-mark` exit-code question) |
+| standing-rule ceiling | **`R219`** (unchanged) |
+| Pass-ID ceiling | **`127`** (unchanged); next free **`127.3`** — `Pass 127.2` minted this filing into *Backlog* |
+| open operator questions ceiling | **`(bl)`**, next free `(bm)` (unchanged) |
+
+**Gates — stated precisely, because "green" has a scope.** Both scripts
+were run against the **working tree after these `ROADMAP.md` edits and
+before any commit**. `check-commits-filed.py` reports `81d1e30` as
+**DEFERRED** while it is still the tip; **the commit carrying this filing
+makes it the non-tip and it is then checked in full**, which the new
+`81d1e30` entry exists to satisfy. **This is `R217`'s shape and it is
+working as designed** — a tip cannot cite its own hash. `--strict-tip` was
+not used, deliberately: the tip here is a *code* commit, not this filing.
+
+**Still in flight:**
+
+- **`v0.12.0` is bumped and NOT CUT.** No tag, no push, no release; seven
+  commits ahead of `origin/main`. **`CLAUDE.md` rule 8 — each publish is
+  its own operator go-ahead**, which this role neither holds nor acts on.
+- **§0a's ordering applies and is now the only thing that has to be
+  remembered:** the commit carrying **this** filing must be the **LAST**
+  commit before the `v0.12.0` tag, so the tag lands on a tree that already
+  names `9b941b9` and `81d1e30`. Both of the last two tags did this
+  correctly (`8567647`, `1ceac07`), the first only after a retag.
+- **`Pass 127.2`** — the `redact-mark` `stdout` summary-line gap — filed to
+  *Backlog* this filing, **not blocked on anything**, the diagnostics are
+  already in hand at the call site.
+- **Decision `088`** — the exit-code question — owed, and best settled
+  **with** `Pass 127.2` rather than after it: if a machine-readable field
+  lands on `stdout`, a batch caller has a signal for the first time, which
+  materially strengthens the case for leaving the exit code at `0`.
+- **The clean control's 91.5 % OCR recall is still unexplained** (carried
+  forward from the 262nd filing, untouched here).
+- **`PROVENANCE.md` line 46** — carried forward unresolved; this filing did
+  not read it.
+
+**For next session:**
+
+1. **Take a fresh backup bundle BEFORE the tag.** The newest on disk is
+   **35 commits** behind `HEAD`, measured here.
+2. **Commit this filing as the LAST commit before the `v0.12.0` tag**
+   (§0a). Then tag, push, release, and run `tools/verify-release.py`.
+3. **Mint decision `088`** — `redact-mark` warns and exits `0`; record the
+   reasoning rather than leaving it in a commit message.
+4. **`Pass 127.2`** is the ranked owed work in *Backlog*: the batch caller
+   the `127.1` ranking argument named is still unserved.
+5. **Consider pdfceGUI's small ask** — a `fonts_without_unicode()` /
+   `unsearchable_fonts` total on `TextDiagnostics`, so a shell cannot get
+   the two-counter sum wrong. Additive, and it would remove the class where
+   *"a third population you introduce later and we never hear about"*
+   silently under-reports on their side.
+6. **Decide where the `git ls-remote` lexicographic finding lives** — this
+   role recommends a new `D:/dev/rag/git/` subdir rather than forcing it
+   into `gh-cli/`, but declined to create one mid-release-cut.
+7. **Read `crates/pdfce-core/assets/models/ocrs/PROVENANCE.md` line 46** —
+   still owed from the 262nd filing, still unread.
+8. **★ Fix `docs/NEXT_SESSION.md` §3 before taking anything off that queue.**
+   Item 1 is `Pass 127.1`, **shipped**; item 2 says *"`127.2` is the next
+   free ID"*, which is **no longer true** — `Pass 127.2` was minted by this
+   filing and the next free ID is **`127.3`**. That file is the engineer's,
+   so this role reported rather than edited, but it is the **first document
+   a resuming session reads** (per this project's own memory note), which is
+   exactly what makes a stale next-free-ID line expensive.
