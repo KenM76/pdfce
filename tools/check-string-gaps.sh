@@ -104,8 +104,20 @@
 # treated as carrying a literal. Comments are stripped first, which removes the
 # aligned tables in `egui-shell`'s manifest docs and every `#[expect(reason =
 # …)]` justification — none of which an operator ever reads. The direction of
-# the error is the same trade `check-strong-text.sh` records: a false positive
-# costs one reflow, and there is no false NEGATIVE that ships anything inert.
+# the error is a deliberate trade: a false positive costs one reflow, and there
+# is no false NEGATIVE that ships anything inert.
+#
+# ★ THAT SENTENCE USED TO CITE `check-strong-text.sh`, WHICH DOES NOT EXIST.
+# So did the one further down about source lines versus code lines. No such
+# gate is on disk and `git log --all -- 'tools/check-strong-text*'` returns
+# nothing — it was planned and never written, and this header cited it twice
+# as though it were a settled precedent. A later filing then repeated the name
+# three times, on the strength of reading it here.
+#
+# ⇢ A dangling reference inside a trusted document is indistinguishable from a
+# real one until somebody runs `ls`. The arguments were sound; only their
+# attribution was invented, so they are now stated on their own account. If
+# that gate is ever written, cite it then.
 #
 # A literal that genuinely needs the run of spaces — a test fixture holding
 # escaped Rust source, an aligned report column — says so with a comment
@@ -119,10 +131,10 @@
 # line long enough to trip this gate is already long, and R5 says the reason a
 # rule is being set aside is exactly the kind of thing this project writes at
 # length. A one-line-only marker would mean the better-documented exemption
-# fails a gate the terse one passes — the same backwards incentive
-# `check-strong-text.sh` records about measuring source lines instead of code
-# lines, and it would push the next person to shorten the explanation to
-# appease the tool.
+# fails a gate the terse one passes — a backwards incentive that would push
+# the next person to shorten the explanation to appease the tool. (This is the
+# second of the two sentences that cited a gate which was never written; see
+# the note above.)
 #
 # So the marker arms the NEXT code line, and blank and comment-only lines in
 # between hold the arming. It covers one line, deliberately: an exemption that
