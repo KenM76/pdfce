@@ -741,3 +741,102 @@ strongest citation obtainable, and informative in its own document;
 with plain `curl`, `pypdf`-readable, and are **the authors of the test suite the
 engineer is measuring against**; (4) vendor whitepapers (Esko) and preflight-rule
 help centres (DUON) for the rule as implementers state it.
+
+---
+
+## 4h — ★★★ THE ITEH FREE-PREVIEW ROUTE **DOES** WORK FOR ISO 15930 / 19005 / 14289. Item 4g's negative was about the WRONG PAGE. (2026-08-25)
+
+**Item 4g says PDF/X is "the HARDEST paywall" and that `iteh has no sample`.** The
+evidence behind that was a fetch of
+`standards.iteh.ai/catalog/standards/iso/<uuid>/iso-15930-7-2010`, grepped for
+`cdn.standards.iteh.ai` / `samples/` / `href="*pdf*"` → zero matches.
+
+**The grep was right. The conclusion was wrong.** The catalogue page **does not link
+its own sample.** The sample is on a *different host*, at a *content-hash path*:
+
+```
+https://cdn.standards.iteh.ai/samples/<isoStdNumber>/<32-hex-hash>/<ISO-NAME>.pdf
+```
+
+**★ THE ONLY WORKING DISCOVERY METHOD IS A WEB SEARCH ON THE FILENAME.** The hash is
+not derivable and the catalogue never emits it. Query shape that worked every time:
+
+```
+WebSearch: "cdn.standards.iteh.ai/samples" "ISO-15930-8-2010" OR "ISO-15930-6-2003"
+WebSearch: standards.iteh.ai samples ISO 15930-7 2010 PDF/X-4 preview pdf
+```
+
+The search engine has the CDN URLs indexed even though nothing links them.
+`<isoStdNumber>` is the number in `iso.org/standard/<N>.html` (15930-7 = 55843,
+19005-4 = 71832, 14289-1 = 64599, 14289-2 = 82278) — so once you have the ISO
+catalogue page you have half the URL, but **not the hash**.
+
+**Obtained and staged 2026-08-25 at `PDF_Spec\_sources\iso_free_previews\` (11 PDFs):**
+
+| Standard | `samples/` path | Deepest clause |
+|---|---|---|
+| ISO 15930-1:2001 | `29061/baa5b934475947e8a8ebc601fd87918c/ISO-15930-1-2001.pdf` | §6.3.1 |
+| ISO 15930-3:2002 | `34941/fb094556ab7b43d19dfd369de10b7402/ISO-15930-3-2002.pdf` | **§6.2.4** |
+| ISO 15930-4:2003 | `39938/062626a2642e4e7cb566ae982e54fd9f/ISO-15930-4-2003.pdf` | §6.1 |
+| ISO 15930-7:2010 | `55843/22387ef2259840d4a53f02edbd4faf30/ISO-15930-7-2010.pdf` | §3 (TOC + Intro + Table 1) |
+| ISO 15930-9:2020 | `77103/362e4413c370427589009c0f4d95f0bd/ISO-15930-9-2020.pdf` | **§6.2.3** |
+| ISO 19005-1:2005 | `38920/f0f121090348465280cfdb8095df04e9/ISO-19005-1-2005.pdf` | §6.1.7 |
+| ISO 19005-2:2011 | `50655/73a6c1c5b54c44d2b3ad15a048990f84/ISO-19005-2-2011.pdf` | §6.1.11 |
+| ISO 19005-3:2012 | `57229/c82288be2ba4477380a07c31c3818eef/ISO-19005-3-2012.pdf` | **§6.2.4.1** ← deepest |
+| ISO 19005-4:2020 | `71832/339ef0926f5f4edd9be9861eefb174ea/ISO-19005-4-2020.pdf` | §6.1.4 |
+| ISO 14289-1:2014 | `64599/f43fa811a07343258173535d830fed18/ISO-14289-1-2014.pdf` | **§7.3** |
+| ISO 14289-2:2024 | `82278/61329d7c9eb54e3fbc58a69f6036031d/ISO-14289-2-2024.pdf` | **§8.2.5.3** |
+
+Plain `curl -s -L -o`, no proxy, no Cloudflare. `pypdf` `extract_text()` reads them
+cleanly (11–15 pages each). **STAGE THEM** — hash URLs rot and are unreconstructible.
+
+**★ PREVIEW DEPTH IS NOT UNIFORM AND IT IS NOT PREDICTABLE FROM THE FAMILY.** The
+*third* part of a series can go four clauses deeper than the *first*. **Download every
+part of a family, even the ones you think you don't need** — ISO 19005-3's preview
+supplied the conformance-clause text for PDF/A-2 and PDF/A-1, which their own previews
+truncate before.
+
+### ★★ THE INFERENCE RULE — write it into any file built from a preview
+
+| Region | A hit proves | A MISS proves |
+|---|---|---|
+| **table of contents** | the clause exists, with that number and title | **the clause does NOT exist.** TOCs are complete |
+| Foreword / Introduction / a numbered front-matter table | the stated fact | nothing |
+| body text the preview **reached** | the normative text | nothing |
+| body text the preview **did NOT reach** | — | **NOTHING** |
+
+A term-frequency scan over a preview is **worthless as a negative** — it covers ~10 % of
+the document. **The TOC is where the negatives come from.** *"No clause of ISO 15930-7
+covers shadings"* is provable from `PXC-5`'s complete §6.1–§6.27 list; *"`shading` = 0
+hits in the preview"* proves nothing and must not be reported as if it did.
+
+### The other free routes confirmed the same session
+
+- **veraPDF validation profiles are a clause-number source, not just a rule source.**
+  `raw.githubusercontent.com/veraPDF/veraPDF-validation-profiles/integration/PDF_A/{PDFA-1B,PDFA-2B,PDFA-4}.xml`
+  and `PDF_UA/{PDFUA-1,PDFUA-2}.xml`. Each `<rule>` carries
+  `<id specification="ISO_19005_n" clause="6.2.10" testNumber="2"/>` + a `<description>`
+  restating the requirement. **That is how a paywalled ISO 19005 clause number becomes
+  citable.** 15-line `xml.etree` extractor keyed on `{http://www.verapdf.org/ValidationProfile}`.
+  The repo also holds `WCAG-2-2*.xml` and `WTPDF-1-0-*.xml` profiles and
+  `ISO-32000-{1,2}-Tagged.xml` / `ISO-32005-Tagged.xml`.
+  **★ Item 4g's "veraPDF has PDF_A + PDF_UA ONLY" is still true and still the reason
+  there is no PDF/X rule mirror** — that half of 4g stands.
+- **A ZERO-HIT COUNT OVER A VALIDATION PROFILE IS A REAL NEGATIVE**, unlike one over a
+  preview: the profile encodes the whole standard's machine-checkable content.
+  9 rendering terms × 197 PDF/UA rules = 0 hits was the strongest evidence in the
+  session.
+- **`pdf-association/pdf-issues` errata labels are per-STANDARD**: `PDF/A-2`, `PDF/A-3`,
+  `PDF/A-4`, `PDF/A-next`, `PDF/UA-1`, `PDF/UA-2`, `PDF/X-6`, `PDF/X-next`. **There is
+  no `PDF/X-4` label** — errata only track current editions. Query:
+  `api.github.com/search/issues?q=repo:pdf-association/pdf-issues+label:%22PDF/X-6%22`.
+  **★ An issue body can contain a WRONG CITATION** — #197 says "15930-9:2010 6.23" for a
+  clause that is ISO 15930-**7**:2010 §6.23. The preview's TOC caught it. **Cross-check
+  an errata issue's clause number against a TOC before repeating it.**
+- **`pdfa.org/wp-content/uploads/.../TechNote0010.pdf` still 403s** to plain `curl`
+  (returns a 103-byte HTML error page — **check the body, not just the size**). The
+  Wayback route of item 4d was NOT attempted this session; it remains the cheapest
+  unexplored closure for PDF/A.
+- **ISO 14289-1 is free IN FULL from the PDF Association**, sponsored, but behind a
+  **cart flow** (`pdfa-inc.org/cart/?add-to-cart=11541`) — not machine-fetchable.
+  Needs the operator.

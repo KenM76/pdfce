@@ -3709,3 +3709,188 @@ deliverable is auditing it. Nine findings, most generalisable:
        *neither*, because the two clauses disagree about which axis the gate is
        on. **A scope banner partitions on the axis its author could see.**
        (Same shape as item 54's `SEP-A1`; third instance.)
+
+---
+
+## Item 57 — the **BUILD-A-PRESET-FOR-EACH-STANDARD** dispatch: *"`pdfce-gui` wants the conformant rendering setting vector for PDF/X-4; the operator widened it to every standard"* (2026-08-25)
+
+**Shape:** the engineer names N settings that already exist, asks what each standard
+requires for each, and states the stakes precisely — *"a control labelled `ISO 15930-7`
+carries that standard's authority whether or not we intended it to"*, so every value
+must be **sourced** or **explicitly marked best-effort**, and *"a guessed vector is
+worse than no preset."* Deliverable = a paste-ready grid, not prose.
+
+### 57.1 ★★★ THE HEADLINE WAS THAT **NOTHING NEEDED TO CHANGE** — and that is a result, not a null
+
+Every value in the finished 16-standard × 6-setting grid that was not "do not set" was
+**already pdfce's shipped default**. No standard, at any conformance level, required a
+single setting change.
+
+**Do not read that as "the dispatch was unnecessary."** The deliverable turned out to be
+(a) the **evidence tier** on each cell, (b) the **"do not set" cells**, and (c) a
+disclosure obligation. **A preset whose values are all defaults is still a claim** —
+it asserts "these values are conformant", and that assertion is exactly what had never
+been checked. Say so plainly to the engineer; "you were already right" is good news and
+reads as such.
+
+### 57.2 ★★ THE THREE FAMILIES SPLIT 2–1 ON WHETHER THEY BIND THE RENDERER, AND THE SPLIT IS THE WHOLE ANALYSIS
+
+- **PDF/A** (ISO 19005-1 §1, -4 §1) and **PDF/UA** (ISO 14289-1 §1, -2 §1) carry the
+  *same Scope bullet*: *"does not apply to … operational details of rendering"* — and
+  both delegate: *"The rendering and other processing of conforming files shall be
+  performed as defined in ISO 32000-x subject to the additional restrictions specified
+  by this document"* (ISO 19005-3 §5.5, ISO 19005-4 §5.2, ISO 14289-1 §6.3).
+- **PDF/X** does the opposite: ISO 15930-7:2010's Introduction — *"All parts of ISO 15930
+  define **requirements and restrictions on the process of rendering** … such renderings
+  do not conform to PDF/X."*
+
+⇒ **"A rendering preset for standard S" is a different KIND of object per family.**
+For PDF/A and PDF/UA it is *derived from file constraints*; for PDF/X it is *a reading
+of actual reader obligations*. **Deciding which kind you are building is step one.**
+
+### 57.3 ★★★ AND THE ONE FAMILY THAT BINDS RENDERING **CONCEDES THAT MORE THAN ONE CONFORMING RENDERING EXISTS**
+
+ISO 15930-4:2003 §5 and ISO 15930-9:2020 §5, **the same sentence 17 years and two PDF
+base versions apart**: *"To the extent that [the PDF Reference / ISO 32000-2] and this
+document permit **more than one rendering of a conforming file**, a conforming processor
+**may** use embedded **job ticket** or metadata information to control the rendering of
+the file more precisely."*
+
+**★ THE STANDARD'S OWN REMEDY FOR UNDER-DETERMINED RENDERING IS OUT-OF-BAND DATA, NOT A
+NORMATIVE SETTING VECTOR.** This is the single sentence that should sit next to any
+conformance preset in the UI copy. **Generalise: when a dispatch asks "what does standard
+S require here?", check whether S has a clause CONCEDING it does not require a unique
+answer.** That clause outranks any inference you would otherwise make.
+
+### 57.4 ★★ "IS THIS THE WRONG VALUE?" CAN RESOLVE TO "IT IS THE WRONG MECHANISM"
+
+The dispatch asked, of `CmykIntent`: *"does the mandatory `/OutputIntent` make pdfce's
+fixed-table setting the WRONG MECHANISM rather than a mis-set one?"* — **and it does.**
+ISO 15930-3 §6.2.2 NOTE makes `DestOutputProfile` the transform authority; §6.2.3
+requires a colorimetric `/DefaultCMYK` when the device disagrees; ISO 19005-2/-4 §6.2.4.3
+permit `DeviceCMYK` **only** via `/DefaultCMYK`, a CMYK `DestOutputProfile`, or (A-4) the
+blending space. ⇒ **a conforming file ALWAYS carries a colorimetric definition of its
+device colour, and a fixed built-in table is none of them.**
+
+**The right deliverable for a wrong-mechanism cell is not a value — it is a DISCLOSURE
+obligation** (project rule 4: the operator cannot see that the output intent was ignored,
+because the page renders plausibly either way). Say "best-effort value + mandatory
+off-canvas disclosure", not "best-effort value".
+
+**★ And check the sibling clause for a tie-break anyway.** ISO 15930-3 **§6.2.4** —
+*"If the intended output condition is CMYK, `DeviceGray` shall be taken as referring to
+the **black separation** of the intended output condition"* — is a genuine rendering
+`shall` that favours pdfce's `NeutralBlack` default over `Calibrated`. It is about
+`DeviceGray`, not about a CMYK→display table, so it is `implied`, not `sourced` — **but
+it is the only located clause pointing either way, and finding it turned a bare guess
+into a reasoned one.**
+
+### 57.5 ★★★ THE DISPATCH MISNAMED A SETTING, AND THE CORRECTION FLIPPED THE ANSWER
+
+The brief described axis 6 as *"`separations` — spot colorant handling (pdfce has four
+planes, not runtime N)"*. **`Settings::separations` is `pageops::separation::SeparationPolicy`
+(`Repair`/`Discard`/`Refuse`) — the policy for a page operation that SPLITS a
+`/SeparationInfo` preseparated page set (ISO 32000-1 §14.11.4).** An *editing* policy.
+pdfce's own doc comment says so verbatim (*"a **product policy**, not a spec ambiguity"*).
+
+**Reading `settings/mod.rs` before answering is what caught it** — and the corrected
+question had a much better answer: **ISO 15930-1 §6.2, ISO 15930-3 §6.1 and ISO 15930-4
+§6.1 each say a pre-separated PDF file *"shall not be permitted"*** ⇒ the setting is
+inert on any conforming PDF/X file ⇒ **`not-applicable`, do not set it**. Whereas **no
+PDF/A part forbids preseparated files** ⇒ the PDF/X row **does not transfer**.
+
+**Generalise (this is item 55/56's "everything a dispatch asserts is a hypothesis",
+now extended to the dispatch's description of the CALLER'S OWN CODE):** a dispatch's
+one-line gloss of a setting it owns can be wrong. **Read the definition, not the gloss.**
+
+### 57.6 ★★ A PRESET NEEDS A PER-KEY **DO-NOT-SET** STATE — half the grid is `not-applicable`
+
+Tier vocabulary that worked: **`sourced`** (an obtained clause says it) · **`implied`**
+(one inference step from an obtained clause, and the step is stated) · **`best-effort`**
+(nothing found; pdfce's default stands, **labelled a guess in the shipped UI, not only in
+the code**) · **`not-applicable`** (a conforming file cannot reach the code path).
+
+**A preset modelled as a fully-populated `Settings` value cannot express
+`not-applicable`, and would silently assert ~11 requirements that do not exist.** That is
+precisely the dispatch's own "noise dressed as authority" failure mode, reached by an
+implementation choice rather than by a research error. **Flag the data-model consequence,
+not just the values.**
+
+### 57.7 The negatives worth building a whole file around
+
+**PDF/UA got a file whose entire content is "this standard says nothing"** — and it was
+worth it, because *"here is why there is no preset"* is what stops the next session
+inventing one. Evidence stack that made it credible:
+
+1. the Scope exclusion in **both** parts (and the 2014→2024 widening, *rendering* →
+   *presentation*);
+2. **PDF/UA-2 DELETED UA-1's clauses 8 and 9 and §6.3/§6.4** — there is no
+   reader-conformance concept left to attach a preset to (TOC-sourced, complete);
+3. all 13 UA-1 reader/AT subclause **titles**, none of them imaging;
+4. **9 rendering terms × 197 veraPDF PDF/UA rules = 0 hits.**
+
+**Layer 4 is what makes 1–3 more than an argument from silence** — see extraction item
+4h on why a zero-hit over a *validation profile* is a real negative while a zero-hit over
+a *preview* is not.
+
+### 57.8 The two near-misses to name explicitly, so nobody mistakes them for rendering rules
+
+- ISO 14289-1 §7.1: *"Information shall not be conveyed by contrast, colour, format or
+  layout"* — an **authoring** rule. ISO 14289-2 §6.2 NOTE 5 hands colour-contrast to
+  **WCAG 2.2** outright.
+- Every PDF/A part: **`/Interpolate` shall be false** — a **file** rule about
+  **magnification** (ISO 32000-1 §8.9.5.3 defines interpolation only for the
+  lower-resolution case), so it does **not** constrain minification. **And PDF/A's own
+  Introduction concedes the creation process *"might … downsample images"*** — the
+  standard disclaims the very thing the setting governs.
+
+### 57.9 A previously-recorded ACQUISITION NEGATIVE was wrong, and retracting it was half the value
+
+`pdfx__ref__transparency_blending_space.md` §0 (2026-08-24) recorded *"no iteh preview
+sample exists for ISO 15930-7"*, from a correct grep of the **catalogue page**. The
+sample exists on a different host at a hash path (extraction item **4h**). Consequences
+filed the same session: a dated UPDATE footer retracting §0 and correcting §4's family
+map (**PDF/X-2 is Part 5; there is no Part 2**), `PX-2`/`PX-4` **upgraded from
+`[PDFA]` secondary to primary**, a new `license_basis` tier, and a LEGAL_NOTE.md update
+**narrowing** (not lifting) the "no ISO 15930 clause number" prohibition to "only the
+numbers in the obtained TOCs".
+
+**★ THE GENERAL RULE: A RECORDED ACQUISITION NEGATIVE HAS A SCOPE, AND THE SCOPE IS THE
+METHOD YOU TRIED — NOT THE RESOURCE.** *"I grepped page P and found no link"* is not
+*"the resource does not exist."* Re-try a recorded acquisition failure with a **different
+discovery channel** before inheriting it. (Sibling of item 51's *"a recorded negative
+saying 'no ingestion closes it' is a PREDICTION and expires"* — this one expired in
+**one day**.)
+
+### 57.10 A NEW LICENCE TIER: `free_iso_preview_primary`, and it is STRICTER than `free_primary`
+
+It **is** the standard's own text (⇒ primary), but it is a **marketing extract of a
+document ISO sells** (⇒ not free-to-republish). **Binding: quote it inside the private
+RAG; NEVER paste it into pdfce's public MIT repo — cite by clause and paraphrase.**
+Contrast `free_primary` (Adobe/ITU-T/ETSI/W3C publish for unrestricted use ⇒ short
+quotation into public source is fine) and `licensed_primary_private_rag` (clause
+reference only, never quoted anywhere outside `_sources`). Defined in `LEGAL_NOTE.md`'s
+2026-08-25 note and in `_TEMPLATE.md`.
+
+**★ Adding a tier means updating THREE places, and the third is the one that gets
+missed:** `LEGAL_NOTE.md` (the definition), every new file's frontmatter (the use), and
+**`_TEMPLATE.md`'s `license_basis:` line** (so the next file offers it).
+
+### 57.11 The file-count arithmetic was wrong AGAIN, by a NEW route
+
+The 2026-08-24 note recorded **"158 content / 161 files"**; a `find . -name "*.md"` on
+2026-08-25 gave 165/168 while the per-prefix sums gave **162**. **The 3-file gap is three
+staged-source READMEs under `_sources\agl\`** (`README.md`, `LICENSE.md`,
+`agl-specification-README.md`) — not corpus content. **Count with per-prefix `ls`, or
+`find … -not -path './_sources/*'`.** Third consecutive session in which a corpus total
+was wrong; **the failure mode has now been over-count-by-prefix-omission AND
+over-count-by-including-`_sources`.**
+
+### 57.12 Where to put a CROSS-SPEC consolidator
+
+Four files: `pdfx\`, `pdfa\` (new dir), `pdfua\` (new dir) — and the **master grid** in
+`iso32000\iso32000__ref__subset_standard_rendering_presets.md`, **not** in any subset
+directory. Justification worth reusing: **the finding itself is an ISO 32000 finding** —
+every subset standard delegates rendering to ISO 32000, so the grid is a statement about
+ISO 32000's silences, indexed by which subset you claim. It also keeps the `*__ref__*`
+convention (derived cross-clause tables) intact.
