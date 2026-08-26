@@ -290,3 +290,132 @@ pub const JPX_CMYK_8_JP2: &[u8] = &[
     0xF7, 0xC7, 0xDA, 0x05, 0x0F, 0xA8, 0x0A, 0x7E, 0x60, 0x40, 0x0B, 0x8B, 0x0B, 0x87, 0x0C, 0x47,
     0xFF, 0xD9,
 ];
+
+/// [`JPX_GRAY_8_JP2`] with a **palette**: a `pclr` box of one RGB entry and a
+/// `cmap` box routing three output channels through it.
+///
+/// # What this fixture is for
+///
+/// It is the only shape in which a JPEG 2000 image and its PDF colour space
+/// can each carry a lookup table for the same samples — and applying **both**
+/// is the one way to render it wrong.
+///
+/// A file built to catch that ships a JP2 whose `pclr` entry and whose PDF
+/// `/Indexed` lookup hold **identical bytes**. Resolve the palette in the
+/// codec and the samples become colours; the renderer then reads a colour as
+/// an index, asks a one-entry table for entry 114, and paints black. Apply
+/// either lookup alone and the answer is correct.
+///
+/// ISO 32000-1 §8.9 Table 89 decides which: with `JPXDecode`, if
+/// `/ColorSpace` is present then "colour space specifications in the JPEG2000
+/// data shall be ignored". A `pclr`/`cmap` pair is such a specification.
+///
+/// # Construction
+///
+/// Built from [`JPX_GRAY_8_JP2`] rather than hand-authored, so the codestream
+/// is byte-identical to the one the other tests use and **only the container
+/// differs** — if a decode difference appears, it cannot be the image data.
+///
+/// The two boxes are spliced into `jp2h` and its length is repaired:
+/// 45 + 17 (`pclr`) + 20 (`cmap`) = **82**, which is exactly the arithmetic a
+/// real palette-bearing file shows.
+/// # Why 256 entries and not one
+///
+/// A real file built to trap the double-resolution bug can ship a **single**
+/// palette entry, because its codestream is a flat field of zeroes and index
+/// 0 is the only one ever used. This fixture reuses [`JPX_GRAY_8_JP2`]'s
+/// codestream, whose samples deliberately span `0x00..=0xFF` — so a one-entry
+/// table makes almost every index out of range and the decoder refuses the
+/// file outright (`failed to resolve palette indices`).
+///
+/// ★ That refusal is CORRECT and was hit while writing this fixture. It is
+/// recorded because it looks like the bug under test: "palette not applied"
+/// is both the fix's intended behaviour and this failure's symptom, and the
+/// two are told apart only by the error. A full table keeps the fixture
+/// exercising the branch rather than the guard.
+///
+/// Entry `i` is `[i, 255 - i, 13]`. The constant third channel is a
+/// fingerprint: if a resolved sample's blue is not 13, the palette was not
+/// what produced it.
+#[must_use]
+pub fn jpx_gray_8_jp2_with_palette() -> Vec<u8> {
+    const NE: usize = 256;
+    // `pclr` (ISO/IEC 15444-1 I.5.3.4): NE entries, NPC=3 components, each
+    // 8-bit (the depth byte is `bits - 1`, high bit clear for unsigned).
+    let body_len = 2 + 1 + 3 + NE * 3;
+    let mut pclr = Vec::with_capacity(8 + body_len);
+    pclr.extend_from_slice(
+        &u32::try_from(8 + body_len)
+            .unwrap_or(u32::MAX)
+            .to_be_bytes(),
+    );
+    pclr.extend_from_slice(b"pclr");
+    pclr.extend_from_slice(&u16::try_from(NE).unwrap_or(u16::MAX).to_be_bytes()); // NE
+    pclr.push(3); // NPC
+    pclr.extend_from_slice(&[7, 7, 7]); // Bi: 8-bit unsigned x3
+    for i in 0..NE {
+        let i = u8::try_from(i).unwrap_or(u8::MAX);
+        pclr.extend_from_slice(&[i, 255 - i, 13]);
+    }
+
+    // `cmap` (I.5.3.5): three output channels, all from component 0, each
+    // taking a different palette column.
+    let mut cmap = vec![0u8, 0u8, 0u8, 20u8, b'c', b'm', b'a', b'p'];
+    for col in 0..3u8 {
+        cmap.extend_from_slice(&0u16.to_be_bytes()); // CMP: component 0
+        cmap.push(1); // MTYP 1 = palette mapping
+        cmap.push(col); // PCOL
+    }
+
+    let src = JPX_GRAY_8_JP2;
+
+    // ★ TOTAL, NOT PANICKING, and that is this crate's lint policy rather
+    // than defensiveness for its own sake: `fixtures_jpx` is a `pub` module
+    // compiled into the library, so `expect` and raw slicing are denied here
+    // exactly as they are in the parser. A fixture builder that can panic is
+    // a panic reachable from a dependent.
+    //
+    // If the grey fixture ever stops containing a `jp2h` box, this returns it
+    // UNCHANGED — and the palette tests then fail on the flag they assert
+    // rather than crashing, which points at the fixture instead of at the
+    // decoder.
+    let Some((start, len)) = find_box(src, b"jp2h") else {
+        return src.to_vec();
+    };
+    let (Some(head), Some(inner), Some(tail)) = (
+        src.get(..start),
+        src.get(start + 8..start + len),
+        src.get(start + len..),
+    ) else {
+        return src.to_vec();
+    };
+
+    let mut out = Vec::with_capacity(src.len() + pclr.len() + cmap.len());
+    out.extend_from_slice(head);
+    // The repaired `jp2h` header, then its original contents, then the two
+    // new boxes appended INSIDE it.
+    let new_len = u32::try_from(len + pclr.len() + cmap.len()).unwrap_or(u32::MAX);
+    out.extend_from_slice(&new_len.to_be_bytes());
+    out.extend_from_slice(b"jp2h");
+    out.extend_from_slice(inner);
+    out.extend_from_slice(&pclr);
+    out.extend_from_slice(&cmap);
+    out.extend_from_slice(tail);
+    out
+}
+
+/// Byte offset and length of the first top-level box with `tag`.
+fn find_box(buf: &[u8], tag: &[u8; 4]) -> Option<(usize, usize)> {
+    let mut i = 0usize;
+    while i + 8 <= buf.len() {
+        let len = u32::from_be_bytes(buf.get(i..i + 4)?.try_into().ok()?) as usize;
+        if buf.get(i + 4..i + 8)? == tag {
+            return Some((i, len));
+        }
+        if len == 0 {
+            return None;
+        }
+        i = i.checked_add(len)?;
+    }
+    None
+}

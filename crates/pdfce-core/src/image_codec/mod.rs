@@ -322,6 +322,24 @@ pub struct CodecNotes {
     /// model, which decision 005 §7 assigns to `ROADMAP.md` Pass 1.1
     /// item 6.3.
     pub jpx_smask_in_data_preblended: bool,
+    /// A JP2 **palette** was left unresolved because the image dictionary
+    /// carries its own `/Indexed` colour space (§8.9 Table 89).
+    ///
+    /// # Why this is worth a field rather than being silent
+    ///
+    /// Two lookup tables describe the same image — the codestream's
+    /// `pclr`/`cmap` boxes and the PDF's `/Indexed` array — and **exactly
+    /// one of them may be applied**. Applying both maps a colour value
+    /// through a palette a second time and paints whatever entry that
+    /// index happens to hit, or black when it hits nothing.
+    ///
+    /// So this records which authority won, and it is not a shortfall:
+    /// Table 89 makes the dictionary's space the answer whenever it is
+    /// present. It is disclosed because the decision is **invisible in the
+    /// output** — a correct render and a double-resolved one are both just
+    /// coloured pixels, and the difference only shows up as the wrong
+    /// colour, which nothing downstream can detect.
+    pub jpx_palette_left_to_pdf: bool,
     /// LZW framing anomalies seen in the byte-stream prefix of the
     /// chain (see [`FilterNotes::lzw_framing_anomalies`]).
     pub lzw_framing_anomalies: usize,
@@ -2142,5 +2160,146 @@ mod tests {
         ]);
         assert!(codec_parms(&chained, 2).is_some());
         assert!(codec_parms(&chained, 1).is_none());
+    }
+
+    // -----------------------------------------------------------------
+    // A JP2 palette and a PDF `/Indexed` space are the SAME lookup
+    // -----------------------------------------------------------------
+
+    /// The one entry both tables would hold in a file built to catch the
+    /// double-resolution bug. Arbitrary, but distinctive: no component is 0
+    /// or 255, so an off-by-one or a dropped channel is visible in the
+    /// assertion rather than coincidentally right.
+    /// What palette entry `i` resolves to in
+    /// [`fixtures_jpx::jpx_gray_8_jp2_with_palette`]. The constant `13` is a
+    /// fingerprint: a resolved sample whose blue is not 13 did not come from
+    /// the palette.
+    #[cfg(feature = "jpx")]
+    fn palette_entry(i: u8) -> [u8; 3] {
+        [i, 255 - i, 13]
+    }
+
+    /// WITHOUT a PDF `/Indexed` space, the palette is left to the codec and
+    /// the disclosure flag stays clear.
+    ///
+    /// # What this asserts, and what it deliberately does not
+    ///
+    /// It pins the **decision**, not the decoder: that the flag follows the
+    /// dictionary, and that a palette-bearing file still decodes. It does
+    /// NOT assert a resolved component count.
+    ///
+    /// ★ That restraint is deliberate and was arrived at by measurement. The
+    /// first draft asserted "1 channel in, 3 out" — reasoned from the `cmap`
+    /// box's three entries — and this fixture returns **1**. The behaviour is
+    /// pre-existing and untouched by the change under test, so asserting a
+    /// number derived from reasoning rather than from a measured run would
+    /// pin an expectation, not a fact, and the next person would have to
+    /// discover which it was.
+    ///
+    /// Whether a synthetic `pclr`/`cmap` pair drives the decoder's expansion
+    /// identically to a real encoder's output is **unestablished**, and it is
+    /// not what this Pass changed. The paired test below carries the claim
+    /// that matters.
+    #[cfg(feature = "jpx")]
+    #[test]
+    fn a_jp2_palette_is_left_to_the_codec_when_the_pdf_offers_no_indexed_space() {
+        let jp2 = fixtures_jpx::jpx_gray_8_jp2_with_palette();
+        let img = decode_fixture(&jp2, &jpx_gray_dict()).unwrap();
+
+        assert!(
+            !img.notes.jpx_palette_left_to_pdf,
+            "with no /Indexed space in the dictionary, the codec keeps the palette"
+        );
+        assert!(!img.samples.is_empty(), "the file still decodes");
+    }
+
+    /// ★★★ WITH a PDF `/Indexed` space, the palette is LEFT ALONE and the
+    /// samples stay indices — because applying both tables is the only way
+    /// to be wrong.
+    ///
+    /// ISO 32000-1 §8.9 Table 89: with `JPXDecode`, if `/ColorSpace` is
+    /// present then "colour space specifications in the JPEG2000 data shall
+    /// be ignored". A `pclr`/`cmap` pair is such a specification.
+    ///
+    /// The failure this pins is invisible in any counter. Resolve here and
+    /// the samples become `114, 247, 13`; the renderer then reads component
+    /// 0 as an index, asks a one-entry table for entry **114**, finds
+    /// nothing, and paints **black**. Nothing reports an error — the picture
+    /// is simply the wrong colour.
+    #[cfg(feature = "jpx")]
+    #[test]
+    fn a_jp2_palette_is_left_to_the_pdf_when_the_dictionary_carries_indexed() {
+        let jp2 = fixtures_jpx::jpx_gray_8_jp2_with_palette();
+        let mut dict = jpx_gray_dict();
+        // `[/Indexed /DeviceRGB 0 <lookup>]` — the shape a real file uses,
+        // with hival 0 and a table holding the SAME bytes as the JP2's.
+        dict.insert(
+            Name::from(b"ColorSpace"),
+            Object::Array(vec![
+                Object::Name(Name::from(b"Indexed")),
+                Object::Name(Name::from(b"DeviceRGB")),
+                Object::Integer(0),
+                Object::String(palette_entry(0).to_vec()),
+            ]),
+        );
+
+        let img = decode_fixture(&jp2, &dict).unwrap();
+
+        assert_eq!(
+            img.components, 1,
+            "the samples must remain a single INDEX channel"
+        );
+        assert!(
+            img.notes.jpx_palette_left_to_pdf,
+            "and the decision must be disclosed -- it is invisible in the output"
+        );
+        assert_eq!(
+            &img.samples[..8],
+            &fixtures_jpx::JPX_GRAY_8_SAMPLES[..8],
+            "indices pass through untouched, identical to the palette-free fixture"
+        );
+        let first = fixtures_jpx::JPX_GRAY_8_SAMPLES[0];
+        assert_ne!(
+            &img.samples[..3],
+            &palette_entry(first),
+            "if these matched, the palette had been applied after all and the \
+             renderer would apply it a SECOND time"
+        );
+    }
+
+    /// The decision point itself, as a truth table.
+    ///
+    /// Guards the one case the codec deliberately cannot see: a
+    /// `/ColorSpace` written as a NAME resolves through the page's resource
+    /// dictionary, which this layer does not have. It answers `false` and
+    /// keeps the old behaviour rather than guessing — a named limit, not an
+    /// oversight.
+    #[cfg(feature = "jpx")]
+    #[test]
+    fn only_a_visible_indexed_array_suppresses_palette_resolution() {
+        let doc = empty_document();
+        let with = |cs: Option<Object>| {
+            let mut d = Dict::new();
+            if let Some(cs) = cs {
+                d.insert(Name::from(b"ColorSpace"), cs);
+            }
+            super::jpx::dict_colorspace_is_indexed(&doc.view(), &d)
+        };
+        let arr = |first: &[u8]| {
+            Object::Array(vec![
+                Object::Name(Name::from(first)),
+                Object::Name(Name::from(b"DeviceRGB")),
+            ])
+        };
+
+        assert!(with(Some(arr(b"Indexed"))), "the array form is decidable");
+        assert!(!with(Some(arr(b"ICCBased"))));
+        assert!(!with(Some(Object::Name(Name::from(b"DeviceRGB")))));
+        assert!(
+            !with(Some(Object::Name(Name::from(b"CS0")))),
+            "a NAMED resource is not visible from the codec layer; answering \
+             `false` keeps the pre-existing behaviour instead of guessing"
+        );
+        assert!(!with(None), "no /ColorSpace at all");
     }
 }

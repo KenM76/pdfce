@@ -361,14 +361,49 @@ pub(super) fn decode(
     dict: &Dict,
     notes: &mut CodecNotes,
 ) -> Result<CodedImage, ImageCodecError> {
+    // ★★ A JP2 PALETTE AND A PDF `/Indexed` SPACE ARE THE SAME LOOKUP, AND
+    // APPLYING BOTH PAINTS THE WRONG COLOUR.
+    //
+    // This was unconditionally `true`, on reasoning that was right for the
+    // common case and wrong for exactly one shape. The prior comment read:
+    //
+    //   "JP2 palette boxes are resolved to real component values here rather
+    //    than surfaced as indices. PDF has its own `Indexed` colour space and
+    //    §7.4.9 permits one, but a JPX *internal* palette is not that:
+    //    leaving it unresolved would hand the renderer grayscale index values
+    //    with nothing to look them up in."
+    //
+    // Every clause of that holds **when the image dictionary supplies no
+    // `/Indexed` space**. When it does, the renderer has exactly what to look
+    // them up in, and resolving here means the lookup happens TWICE.
+    //
+    // What that does, concretely, on a file built to catch it: a JP2 with a
+    // one-entry `pclr` palette of `(114, 247, 13)` and a PDF `/ColorSpace` of
+    // `[/Indexed <ICCBased N=3> 0 <3-byte lookup>]` holding **the same three
+    // bytes**. Resolve here and the samples become `114, 247, 13`; the
+    // renderer then reads component 0 as an INDEX, asks a one-entry table for
+    // entry 114, gets nothing, and paints **black**. Apply either lookup
+    // alone and the answer is green. Applying both is the only way to be
+    // wrong, which is precisely why a conformance suite ships the pair.
+    //
+    // §8.9 Table 89 decides it: with `JPXDecode`, if `/ColorSpace` is present
+    // then "colour space specifications in the JPEG2000 data shall be
+    // ignored". A `pclr`/`cmap` pair is such a specification — it is how the
+    // codestream says what its samples MEAN — so the dictionary's space wins
+    // and the samples must stay indices.
+    //
+    // ★ THE DEFAULT IS UNCHANGED, DELIBERATELY. This disables resolution only
+    // where an `/Indexed` array is actually VISIBLE from here. A `/ColorSpace`
+    // naming a resource (`/CS0`) needs the page's resource dictionary, which
+    // this function does not have, so it cannot be inspected — and there the
+    // old behaviour stands. Changing an unreadable case on a guess would
+    // trade a rare wrong render for a common one.
+    let pdf_supplies_indexed = dict_colorspace_is_indexed(doc, dict);
+    if pdf_supplies_indexed {
+        notes.jpx_palette_left_to_pdf = true;
+    }
     let settings = DecodeSettings {
-        // JP2 palette boxes are resolved to real component values here
-        // rather than surfaced as indices. PDF has its own `Indexed`
-        // colour space and §7.4.9 permits one, but a JPX *internal*
-        // palette is not that: leaving it unresolved would hand the
-        // renderer grayscale index values with nothing to look them up
-        // in.
-        resolve_palette_indices: true,
+        resolve_palette_indices: !pdf_supplies_indexed,
         // Non-strict, on upstream's own recommendation ("leave this flag
         // disabled unless you have a specific reason not to"). Strict
         // mode rejects a missing EOC marker and other end-of-stream
@@ -681,6 +716,41 @@ fn geometry_disagrees(
         // dictionary and is checked by the renderer.
         || dict_colorspace_components(doc, dict)
             .is_some_and(|n| n != components)
+}
+
+/// Whether the image dictionary's `/ColorSpace` is an `/Indexed` array.
+///
+/// # Why this is a separate question from the component count
+///
+/// `dict_colorspace_components` answers *"how many channels does the PDF
+/// expect?"*, which for `/Indexed` is always 1 and says nothing about who
+/// owns the palette. This answers *"does the PDF carry its own lookup
+/// table?"* — and that decides whether the JPEG 2000 decoder should resolve
+/// the codestream's own palette or leave the samples as indices.
+///
+/// # What it deliberately cannot see
+///
+/// A `/ColorSpace` written as a **name** (`/CS0`) resolves through the page's
+/// resource dictionary, which the codec layer does not have and should not
+/// acquire — the codec's job is bytes, not page structure. Such a name
+/// returns `false`, keeping the pre-existing behaviour rather than guessing.
+///
+/// That is a real, named limit rather than an oversight: a JPX image with a
+/// palette AND a named `/Indexed` resource would still double-resolve. No
+/// such file is known, the shape is checkable if one turns up, and the
+/// alternative — plumbing resources into the codec to catch a hypothetical —
+/// costs more than it protects.
+pub(super) fn dict_colorspace_is_indexed(doc: &DocumentView<'_>, dict: &Dict) -> bool {
+    let Some(cs) = dict.get(b"ColorSpace").map(|o| doc.resolve(o)) else {
+        return false;
+    };
+    // Only the array form is decidable here. A bare name is either a device
+    // space (never Indexed) or a resource lookup (not visible from here).
+    cs.as_array()
+        .and_then(|items| items.first())
+        .map(|o| doc.resolve(o))
+        .and_then(Object::as_name)
+        .is_some_and(|n| n.as_bytes() == b"Indexed")
 }
 
 /// The component count implied by a `/ColorSpace` given as a device
