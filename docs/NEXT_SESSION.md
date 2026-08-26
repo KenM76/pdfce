@@ -18,70 +18,62 @@ became readable (four `pub` items in `pdfce-render`) and settable
 (`Settings::max_cmyk_buffer_bytes`, uncapped), because a sibling project could
 neither size a raster to stay inside it nor let the operator move it. It then
 **corrected nine operator-facing "A4" figures that had been computed on a page
-that is not A4** (`daefceb`) and **cut, pushed and published `v0.14.0`**
-(`d3b4f5a`).
+that is not A4**, repaired two string literals its own correction broke,
+widened the gate that could not see them, and **cut, released and verified
+`v0.14.0`**.
+
+**Nothing from that session is outstanding.** The release is green end to end
+and the backup is current. Start at `§C`.
 
 ### ★ Verified from a shell at write time — do not copy forward without re-running
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `d3b4f5a` | `git rev-parse HEAD` |
-| `git describe --tags` | `v0.14.0` | `git describe --tags` |
-| `origin/main` | `d3b4f5a` — **0 ahead, everything is public** | `git rev-list --count origin/main..main` |
-| tag at `HEAD` | **`v0.14.0`** (annotated), **and it is being MOVED — see `§B`** | `git tag --points-at HEAD` |
-| release | `v0.14.0` published 2026-08-26T20:17:37Z, one asset, 24,708,755 B | `gh release view v0.14.0` |
-| CI at the tag | **RED on 1 job of 10**, and only for the filing gap `§B` closes | `gh run view 33010309213` |
-| working tree | clean at read time, **dirty with the 271st filing when you get it** | `git status --porcelain` |
-| newest backup bundle | `pdfce-20260826-0958-9a4fb18-full.bundle`, **4 commits behind `HEAD`** — **a bundle is OWED** | `ls -lt D:\Dev\pdfce-backups\` |
+| `HEAD` | `4bea7fe` | `git rev-parse HEAD` |
+| `git describe --tags` | `v0.14.0` — exact, no `-dirty`, no distance | `git describe --tags` |
+| `origin/main` | `4bea7fe` — **level, 0 ahead** | `git rev-list --count origin/main..main` |
+| tag `v0.14.0` | annotated, at `HEAD`, **pushed (force-moved from `d3b4f5a`)** | `git rev-parse v0.14.0^{}` |
+| release | published, one asset, **24,708,897 B**, built FROM the tagged commit | `gh release view v0.14.0` |
+| CI at the tag | **GREEN — all 10 jobs** | `gh run view 33016470319` |
+| `verify-release.py v0.14.0` | **clean — all 7 checks** | `python tools/verify-release.py v0.14.0` |
+| working tree | clean | `git status --porcelain` |
+| newest backup bundle | `pdfce-20260826-1740-4bea7fe-full.bundle`, **at `HEAD`**, `git bundle verify` OK | `ls -lt D:\Dev\pdfce-backups\` |
 | gates on disk | **18**; **17 run with no arguments**, the 18th (`check-image-colorspace-truth.py`) needs a fixture dir | `ls tools/check-*`, then run them |
+| disk | **99 % used, ~15 GB free on `D:`** — `target/debug` was deleted to package; it will rebuild | `df -h /d` |
 
 ---
 
-## §B — ★★★ DO THIS FIRST: `v0.14.0` IS RELEASED, BUT ITS TAG POINTS AT A COMMIT WHOSE CI IS RED — FINISH THE MOVE
+## §B — THE RELEASE IS FINISHED. This section is history, kept for the ordering lesson only
 
-**The release exists and the portable contract holds.** `d3b4f5a` bumped the
-workspace `0.13.0` → `0.14.0`, the tag was pushed, the GitHub release was
-created with `pdfce-v0.14.0-windows-x64-portable.zip` (24.7 MB), and the
-packaging smoke test passed on a fresh path: `pdfce-cli.exe --version` reported
-`0.14.0` / revision `v0.14.0`, a render with `--max-cmyk-buffer-bytes 512mib`
-succeeded **and disclosed the override**, and `pdfce-gui.exe` launched there
-and created its own `userdata/`.
+**Everything the previous version of this section listed as owed is done**, and
+the numbers above are the proof rather than the claim. `v0.14.0` was cut at
+`d3b4f5a`, CI came back **red on one job of ten**, the tag was moved onto the
+filing commit, the package was rebuilt so `BUILD-INFO.txt` and the binary's own
+`--version` name the tagged commit, the asset was replaced with `--clobber`,
+the smoke test was re-run on the **new** artefact, and CI is green at the tag.
 
-**What is unfinished is the tag's target.** CI at the tag is **red on exactly
-one job of ten** — *verify `pdfce-gui` strings live in `ui_text.rs`* → its
-`check-commits-filed.py` step → **`daefceb` in no filing**. **All nine others
-are green**, including `cargo test` on **both** operating systems, clippy,
-fmt, the macOS/wasm32 cross-target check, the zero-GUI-deps check, the
-no-network check, the third-party licence audit and `cargo fuzz build` on
-nightly.
+**Why it went red, because this is the reusable half.** The session ran all 17
+gates clean — and then made two more commits. **A clean sweep certifies the
+tree it ran on, not the tree that gets pushed.** `check-commits-filed.py` is
+*structurally* unable to be green on a code commit made after the filing that
+was meant to narrate it: a commit cannot cite its own hash, so its filing is
+always a later commit. Only two orders work:
 
-**The 271st filing closes that gap**, so once it is committed the reason for
-the red no longer exists — but the **tag still points at the commit that was
-red**. Finish it:
+> `code → file` **and then stop**, or `code → file → code → file`.
 
-> **1.** Commit the 271st filing. **2.** Force-push `v0.14.0` onto that commit.
-> **3.** **Rebuild the package**, so `BUILD-INFO.txt` names the newly-tagged
-> commit. **4.** Replace the asset with `--clobber`. **5.** **Re-run the smoke
-> test on the NEW artefact** — a re-cut release is a new artefact and does not
-> inherit the old one's test. **6.** Confirm CI green at the tag.
-> **7.** Take a backup bundle; the newest is 4 commits behind.
+There is no order in which *file, then commit more code, then push* is green.
+The **tip** is deferred and checked on the next run, which is what makes a
+trailing version-bump commit safe — but **the deferral is one commit wide**,
+and a second trailing commit shields the first out of it.
 
-**Nothing is wrong with the gate.** `R217`'s deferral excuses the tip and
-`d3b4f5a` is duly deferred; `daefceb` sits *behind* the tip and is real,
-unfiled debt, which `R217` says still hard-fails. See `§J` for the ordering
-lesson, which is the reusable half.
+**The cost was real but bounded:** a re-tag, a rebuild, an asset replacement
+and a second smoke test. **The cost of not noticing** would have been a
+published release whose tag pointed at a commit CI had rejected.
 
-★ **The outbound reply's forward-dated sentence is now TRUE** —
-`open/reply_cmyk_buffer_ceiling.md:4`'s *"released as `v0.14.0`"* was ahead of
-the repository and is not any more. That file also now carries the corrected
-A4 table and the peak-memory caveat, so the copy the other project reads is
-correct in both.
-
-★ **Still unanswered, and it will bite at the NEXT tag rather than this one:**
-`Pass 129.1` changed a shipped default's *value* (`ocr --dpi` 300 → 150), which
-a scripted caller can observe while adding no public core item. `768e934`
-settles the additive case and does **not** settle this one. **Decide before the
-next bump, not after.**
+Filed as a candidate under `R217`, `n = 1`, nothing minted. Also in engineer
+memory at `.claude/agent-memory/pdfce-engineer/feedback_a_gate_sweep_certifies_the_tree_it_ran_on.md`
+— which is read by the agent about to do the thing, whereas this file is read
+at session start.
 
 ---
 
