@@ -1,4 +1,5 @@
-//! Where OCR models come from — and why pdfce does not download them.
+//! Where OCR models come from: bundled beside the binary, fetched on request,
+//! or supplied by the operator.
 //!
 //! # The decision this encodes
 //!
@@ -8,20 +9,53 @@
 //! a licence pdfce would rather not *redistribute* inside an MIT portable
 //! folder.
 //!
-//! The obvious answer — have pdfce download those models on request — was
-//! proposed and then WITHDRAWN on inspection, because it is far more expensive
-//! than it looks:
+//! ★★ **THE WITHDRAWAL RECORDED HERE IS DEAD, AND THIS MODULE'S OWN TITLE
+//! WAS WRONG FOR TWELVE DAYS.** Corrected 2026-08-25.
 //!
-//! - `ARCHITECTURE.md` §1.1 states pdfce contains **no HTTP client and no TLS
-//!   stack**, and says so as a claim *"verifiable by any reader of the
-//!   generated `THIRD_PARTY_LICENSES.md`"*. A downloader ends that.
-//! - A **fail-closed CI job** (`no-network`, standing rule R12) refuses any
-//!   HTTP/TLS/socket client crate entering any pdfce crate without a new
-//!   decision record.
-//! - §1.1 puts this posture at *"the same weight as the GUI-core-separation
-//!   and round-trip invariants"* — so trading it for a convenience inside a
-//!   feature Pass would be taking a load-bearing architectural decision
-//!   sideways, which this project has explicitly refused to do before.
+//! This module header used to say *"and why pdfce does not download them"*,
+//! and argued the point at length. The argument was sound when written on
+//! 2026-08-12 and was overturned by the operator the very next day. It is
+//! kept below rather than deleted, because a reader who has met the old
+//! reasoning elsewhere needs to see it retired rather than vanished:
+//!
+//! > ~~"The obvious answer — have pdfce download those models on request —
+//! > was proposed and then WITHDRAWN on inspection… `ARCHITECTURE.md` §1.1
+//! > states pdfce contains **no HTTP client and no TLS stack**… A
+//! > fail-closed CI job (`no-network`, standing rule R12) refuses any
+//! > HTTP/TLS/socket client crate entering any pdfce crate… §1.1 puts this
+//! > posture at the same weight as the GUI-core-separation and round-trip
+//! > invariants."~~
+//!
+//! **Decision 061 (2026-08-13) narrowed exactly that rule, and by the
+//! operator's own correction** — he said the no-network rule *"was made too
+//! broad"*, that what he meant was the software must not *depend* on a
+//! network to function, and that *"it is fine to have download update or
+//! download addin capability."*
+//!
+//! The line is **what the software needs to RUN versus what the operator can
+//! ASK it to fetch**:
+//!
+//! - `pdfce-core` and `pdfce-render` remain network-free **permanently and
+//!   gate-enforced**. That half was never narrowed and is justified twice
+//!   over: the engine must not need a network to parse or render, and both
+//!   crates must cross into the wasm32 fork where no native HTTP stack
+//!   exists. **This module is in `pdfce-core`, so it still contains no
+//!   network code and never will.**
+//! - The **shells** may fetch on the operator's explicit request. That is
+//!   what `pdfce-fetch` is — a separate crate on the far side of the line,
+//!   pinning each artefact by URL **and SHA-256** so a substituted or
+//!   truncated download is refused rather than installed.
+//!
+//! So the resolution order below is no longer the only way models arrive; it
+//! is where a shell's downloader **puts** them, and where a bundled copy is
+//! found. Both remain true, and neither is a workaround for a prohibition
+//! that no longer exists.
+//!
+//! ★ **What decision 061 did NOT relax**, stated because an operator
+//! narrowing one clause is not consent to widen its neighbour: no telemetry,
+//! no analytics, no crash reporting, no licence callback, and **no startup
+//! update check**. Every fetch is one an operator asked for at the moment it
+//! happens.
 //!
 //! # What this module does instead
 //!
@@ -38,20 +72,26 @@
 //! does nothing until they go and find a model. That would be a real cost and
 //! it is not the design.
 //!
-//! The intended arrangement is:
+//! ★ **The arrangement this paragraph used to predict is not the one that
+//! shipped, and the difference is worth stating rather than quietly
+//! rewriting.** It said the multi-language engine's permissive weights would
+//! be bundled and only the CC-BY-SA-4.0 WASM-capable engine's would be
+//! operator-supplied. What actually happened: the multi-language engine was
+//! never adopted, and the operator **answered the open question YES** on
+//! 2026-08-13 — the share-alike weights **are** bundled, at
+//! `crates/pdfce-core/assets/models/ocrs/`, with their licence recorded in a
+//! `PROVENANCE.md` that `tools/check-shipped-assets.py` enforces the
+//! existence of.
 //!
-//! - The **multi-language engine's models are BUNDLED.** Its weights are
-//!   permissively licensed, so shipping them costs nothing but disk, and
-//!   [`ModelSource::BesideExecutable`] is exactly how they are found in the
-//!   single-folder portable layout. OCR works out of the box.
-//! - Only the **second, WASM-capable engine** — whose weights are
-//!   CC-BY-SA-4.0 — is operator-supplied, because *redistribution* is what
-//!   triggers that licence's obligations and pdfce declines to trigger them.
+//! So today:
 //!
-//! So the operator-supplied path is the escape hatch for one specific licence
-//! problem, not the normal way OCR is obtained. Whether to bundle
-//! share-alike weights at all remains the operator's open question; this
-//! module is what makes "no" cost him nothing.
+//! - **The `ocrs` weights are BUNDLED** and found via
+//!   [`ModelSource::BesideExecutable`] in the single-folder portable layout.
+//!   OCR works out of the box.
+//! - **A shell may also fetch them**, pinned by hash, for a build that does
+//!   not carry them.
+//! - **An operator may still name a directory**, which takes precedence over
+//!   both and is never silently overridden.
 //!
 //! The precedent matters. `embed-font --font-dir` solved an identical shape
 //! (pdfce needs a large licensed asset it should not necessarily ship) and it
@@ -167,6 +207,40 @@ pub fn resolve_model_dir(
     exe_dir: Option<&Path>,
     user_data: Option<&Path>,
 ) -> Result<ModelSource, ModelsNotFound> {
+    resolve_model_dir_with(engine, explicit, exe_dir, user_data, &[])
+}
+
+/// [`resolve_model_dir`], but a directory only counts if it CONTAINS
+/// `required`.
+///
+/// # Why the directory's existence was not enough
+///
+/// The original only asked `is_dir()`. An **empty** `models/ocrs` therefore
+/// passed resolution, and the failure surfaced much later and in the wrong
+/// vocabulary — the engine reported a missing model file after a shell had
+/// already told the operator the models were found. Worse, an empty directory
+/// SHADOWED a perfectly good one further down the search order: create
+/// `models/ocrs` beside the executable and the operator's own `--model-dir`
+/// copy would never be reached.
+///
+/// Passing an empty `required` reproduces the old behaviour exactly, which is
+/// what [`resolve_model_dir`] does — a caller that does not know an engine's
+/// filenames should not be forced to invent them.
+///
+/// # Errors
+///
+/// [`ModelsNotFound`], carrying every path that was tried. A directory that
+/// existed but lacked a required file is reported as a searched path, because
+/// from the operator's side *"I made that folder and it still says no"* needs
+/// the folder named.
+pub fn resolve_model_dir_with(
+    engine: EngineDirName,
+    explicit: Option<&Path>,
+    exe_dir: Option<&Path>,
+    user_data: Option<&Path>,
+    required: &[&str],
+) -> Result<ModelSource, ModelsNotFound> {
+    let usable = |dir: &Path| dir.is_dir() && required.iter().all(|f| dir.join(f).is_file());
     let mut searched = Vec::new();
 
     if let Some(dir) = explicit {
@@ -175,7 +249,7 @@ pub fn resolve_model_dir(
         // they named a specific folder is the sneaky half of rule 4: they
         // would believe they were running the model they pointed at.
         searched.push(dir.to_path_buf());
-        if dir.is_dir() {
+        if usable(dir) {
             return Ok(ModelSource::OperatorSupplied(dir.to_path_buf()));
         }
         return Err(ModelsNotFound { engine, searched });
@@ -184,7 +258,7 @@ pub fn resolve_model_dir(
     if let Some(base) = exe_dir {
         let candidate = base.join("models").join(engine);
         searched.push(candidate.clone());
-        if candidate.is_dir() {
+        if usable(&candidate) {
             return Ok(ModelSource::BesideExecutable(candidate));
         }
     }
@@ -192,7 +266,7 @@ pub fn resolve_model_dir(
     if let Some(base) = user_data {
         let candidate = base.join("models").join(engine);
         searched.push(candidate.clone());
-        if candidate.is_dir() {
+        if usable(&candidate) {
             return Ok(ModelSource::UserData(candidate));
         }
     }

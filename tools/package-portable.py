@@ -261,6 +261,47 @@ def main() -> int:
         else:
             print(f"package-portable: WARNING — {d} not found at the repo root")
 
+    # --- shipped assets: the OCR model weights ------------------------------
+    #
+    # ★ WITHOUT THIS BLOCK, `pdfce-cli ocr` AND THE GUI'S RECOGNISE BUTTON
+    # DO NOT WORK IN A RELEASE BUILD AT ALL, and they fail in the way that is
+    # hardest to diagnose from outside: `resolve_model_dir` looks for
+    # `models/<engine>` beside the executable, finds nothing, and reports a
+    # clean refusal naming paths that do not exist on the operator's machine
+    # and do exist on the developer's. The feature works everywhere it is
+    # built and nowhere it is shipped.
+    #
+    # The weights are NOT compiled into the binary (`include_bytes!` would add
+    # 12 MB to every build, including builds of features that never touch
+    # OCR), so the portable folder is the only route.
+    #
+    # ★★ PROVENANCE.md IS COPIED WITH THEM, DELIBERATELY. The weights are
+    # CC-BY-SA-4.0 and `tools/check-shipped-assets.py` enforces that every
+    # redistributed asset states its licensing — but that gate reads the
+    # REPOSITORY. Shipping the weights to an operator without the file that
+    # names their licence would satisfy the gate and breach the licence, which
+    # is exactly the gap R218's shape describes: the check and the artefact
+    # look at different things.
+    copied_assets = []
+    assets_src = REPO / "crates" / "pdfce-core" / "assets" / "models"
+    if assets_src.is_dir():
+        for engine_dir in sorted(p for p in assets_src.iterdir() if p.is_dir()):
+            dest = out / "models" / engine_dir.name
+            dest.mkdir(parents=True, exist_ok=True)
+            for f in sorted(engine_dir.iterdir()):
+                if f.is_file():
+                    shutil.copy2(f, dest / f.name)
+                    copied_assets.append(f"models/{engine_dir.name}/{f.name}")
+            if not (dest / "PROVENANCE.md").is_file():
+                print(
+                    f"package-portable: WARNING — models/{engine_dir.name} ships "
+                    "without a PROVENANCE.md naming its licence"
+                )
+    else:
+        print(f"package-portable: WARNING — no asset tree at {assets_src}")
+    if copied_assets:
+        print(f"package-portable: staged {len(copied_assets)} model file(s)")
+
     # --- what changed since the last build ----------------------------------
     prev = previous_build_commit(args.dest)
     if prev:
@@ -332,11 +373,19 @@ Files in this build: {", ".join(BINARIES + copied_docs)}
         encoding="utf-8",
     )
 
-    total = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())
+    # ★ `rglob`, matching the TOTAL, not `iterdir`. The moment the payload
+    # gained a `models/` subdirectory this listing printed one line for the
+    # DIRECTORY — whose own size is 0 — while the total counted the 12 MB
+    # inside it. The lines then did not sum to the total printed beside them,
+    # which is the shape of under-reporting that reads as correct: nobody adds
+    # up a file listing, they read the total, and the total was right. Two
+    # numbers disagreeing silently is worse than either being wrong.
+    files = sorted(f for f in out.rglob("*") if f.is_file())
+    total = sum(f.stat().st_size for f in files)
     print(f"\npackage-portable: wrote {out}")
-    for f in sorted(out.iterdir()):
-        print(f"  {f.name:<26} {f.stat().st_size:>10,} bytes")
-    print(f"  {'TOTAL':<26} {total:>10,} bytes")
+    for f in files:
+        print(f"  {f.relative_to(out).as_posix():<32} {f.stat().st_size:>10,} bytes")
+    print(f"  {'TOTAL':<32} {total:>10,} bytes")
     if dirty:
         print("\n  WARNING: built from an uncommitted working tree (-dirty).")
     return 0

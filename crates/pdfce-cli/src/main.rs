@@ -2281,6 +2281,34 @@ enum Command {
     },
 
     /// Render a page to a PNG image.
+    /// **Download the OCR model weights**, verified against a pinned
+    /// SHA-256 before anything is written.
+    ///
+    /// # When you need this, which is rarely
+    ///
+    /// The weights normally ship **inside the portable folder** at
+    /// `models/ocrs`, so OCR works with no network at all. This exists for a
+    /// build that does not carry them — a `cargo install`, a stripped
+    /// package, or a machine where the folder was not copied.
+    ///
+    /// # What it will not do
+    ///
+    /// It refuses to write a file whose SHA-256 does not match the pinned
+    /// one, and refuses **without leaving a partial file behind**. That is a
+    /// supply-chain control, not a corruption check: a truncated download and
+    /// a substituted file are indistinguishable to a caller, so both are
+    /// refused identically. There is no mirror fallback and no retry against
+    /// a different URL — a pinned artefact has one source, and silently
+    /// reaching for a second is how you end up running the copy nobody
+    /// measured.
+    ///
+    /// Nothing here runs on a timer, at startup, or in the background.
+    FetchOcrModels {
+        /// Where to write them. Defaults to `models/ocrs` beside this
+        /// executable, which is where `ocr` looks first.
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
     /// **List the rendering presets** pdfce holds for the PDF subset
     /// standards (PDF/X, PDF/A, PDF/UA), and what each one would set.
     ///
@@ -6304,6 +6332,7 @@ fn run() -> ExitCode {
             json,
             include_artifacts,
         } => cmd_extract_text(&input, &pages, output.as_deref(), json, include_artifacts),
+        Command::FetchOcrModels { dir } => cmd_fetch_ocr_models(dir.as_deref()),
         Command::ListStandards { standard } => cmd_list_standards(standard.as_deref()),
         Command::Ocr {
             input,
@@ -7858,6 +7887,116 @@ fn parse_region(spec: &str) -> Result<pdfce_core::page_tree::Rect, String> {
     })
 }
 
+/// `fetch-ocr-models` — download the pinned `ocrs` weights.
+///
+/// # The pins, and why the detection model's URL is not the obvious one
+///
+/// ★ The two files come from **different channels**, and that is a measured
+/// defect rather than an oversight. Hugging Face hosts a detection model that
+/// **does not work with `ocrs` 0.12.2** — on a clean render of a page of 12 pt
+/// text it returns fragments at the page margin and one "word" whose box is
+/// the whole page. The author's S3 bucket, which the `ocrs` crate's own
+/// example fetches from, hosts one that works. The recognition model is fine
+/// on either channel and stays on Hugging Face.
+///
+/// Established by swapping **one file at a time** rather than both; see
+/// `crates/pdfce-core/assets/models/ocrs/PROVENANCE.md` for the four-row
+/// table. Do not "tidy" these back onto one channel.
+///
+/// # Why a hash and not just a URL
+///
+/// `docs/ocr-engine-survey.md` measured both channels in one session and found
+/// the detection files differ by 13,280 bytes under different names. "The ocrs
+/// models" is not one thing. A fetch that trusted a URL alone would install
+/// weights nobody tested, and would do it silently.
+#[cfg(feature = "download")]
+fn cmd_fetch_ocr_models(dir: Option<&Path>) -> u8 {
+    use pdfce_fetch::{PinnedArtifact, fetch_verified};
+
+    let target = match dir {
+        Some(d) => d.to_path_buf(),
+        None => match std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+        {
+            Some(exe_dir) => exe_dir.join("models").join("ocrs"),
+            None => {
+                eprintln!(
+                    "pdfce-cli: fetch-ocr-models: could not locate this executable's directory \
+                     — pass --dir"
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        },
+    };
+    if let Err(err) = std::fs::create_dir_all(&target) {
+        eprintln!("pdfce-cli: {}: {err}", target.display());
+        return exit::IO_ERROR;
+    }
+
+    // Pinned by URL AND hash. Measured 2026-08-25; see this function's docs
+    // for why the two channels differ.
+    let artifacts = [
+        PinnedArtifact::new(
+            "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten",
+            "f15cfb56bd02c4bf478a20343986504a1f01e1665c2b3a0ad66340f054b1b5ca",
+            "text-detection.rten",
+        ),
+        PinnedArtifact::new(
+            "https://huggingface.co/robertknight/ocrs/resolve/main/text-rec-checkpoint-s52qdbqt.rten",
+            "606d9a0414c6b73c99df75b707c11c70d1c8b12e1d4f900922e185fc37bfca65",
+            "text-rec-checkpoint.rten",
+        ),
+    ];
+
+    eprintln!(
+        "pdfce-cli: fetch-ocr-models: downloading 2 file(s) to {} — these weights are \
+         CC-BY-SA-4.0, by Robert Knight (the ocrs project)",
+        target.display()
+    );
+    for art in &artifacts {
+        match fetch_verified(art, &target) {
+            Ok(path) => println!("fetched {} -> {}", art.url, path.display()),
+            Err(err) => {
+                eprintln!("pdfce-cli: fetch-ocr-models: {err}");
+                return exit::RUNTIME_ERROR;
+            }
+        }
+    }
+    println!(
+        "fetch-ocr-models {} files=2 verified=sha256",
+        target.display()
+    );
+    // Rule 4, and a licence obligation rather than a nicety: CC-BY-SA
+    // requires attribution, and a file arriving with none attached is one an
+    // operator cannot comply with. The bundled copy ships a PROVENANCE.md
+    // beside it; a fetched copy has to be told.
+    eprintln!(
+        "pdfce-cli: fetch-ocr-models: licence CC-BY-SA-4.0 \
+         <https://creativecommons.org/licenses/by-sa/4.0/>, creator Robert Knight, source the \
+         ocrs project. Redistributing these files carries that licence's attribution and \
+         share-alike terms"
+    );
+    exit::SUCCESS
+}
+
+/// `fetch-ocr-models`, in a build compiled WITHOUT the `download` feature.
+///
+/// Refuses **by name**, which is the operator's own modularity rule: a
+/// stripped capability says what is missing and how to get it back, rather
+/// than the subcommand quietly not existing. A missing subcommand reads as a
+/// version difference; a named refusal reads as a build choice.
+#[cfg(not(feature = "download"))]
+fn cmd_fetch_ocr_models(_dir: Option<&Path>) -> u8 {
+    eprintln!(
+        "pdfce-cli: fetch-ocr-models: this build was compiled without the `download` feature, \
+         so it contains no network code at all and cannot fetch anything. The OCR weights \
+         normally ship in `models/ocrs` beside the executable; copy that folder, or point \
+         `ocr --model-dir` at one"
+    );
+    exit::UNIMPLEMENTED
+}
+
 /// `list-standards` — the render presets, and the provenance of every value.
 ///
 /// # Why the provenance is a COLUMN and not a footnote
@@ -7986,11 +8125,19 @@ fn cmd_ocr(
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(std::path::Path::to_path_buf));
-    let source = match models::resolve_model_dir(
+    // `_with`, naming the two files: a directory that exists but is EMPTY
+    // must not resolve, or it shadows a good one further down the search
+    // order and the failure arrives later wearing the engine's vocabulary
+    // instead of the resolver's.
+    let source = match models::resolve_model_dir_with(
         pdfce_core::ocr::engine_ocrs::MODEL_DIR,
         model_dir,
         exe_dir.as_deref(),
         None,
+        &[
+            pdfce_core::ocr::engine_ocrs::DETECTION_MODEL,
+            pdfce_core::ocr::engine_ocrs::RECOGNITION_MODEL,
+        ],
     ) {
         Ok(src) => src,
         Err(err) => {

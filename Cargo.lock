@@ -2562,6 +2562,7 @@ version = "0.11.0"
 dependencies = [
  "clap",
  "pdfce-core",
+ "pdfce-fetch",
  "pdfce-print",
  "pdfce-render",
 ]

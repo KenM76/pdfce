@@ -207,6 +207,27 @@ pub trait OcrEngine {
 /// `page_rect` is the region of the page the image covers, in user space —
 /// normally the full crop box for a scanned page, but not necessarily, which
 /// is why it is a parameter rather than assumed.
+///
+/// # ★★ THIS FUNCTION ASSUMES THE PAGE IS NOT ROTATED
+///
+/// It applies a scale and a y-flip and nothing else, which is correct for a
+/// page whose `/Rotate` is `0` (ISO 32000-1 Table 30) and **silently wrong for
+/// every other value**. There is no way for it to be otherwise: the rotation
+/// is not in its signature, so it cannot see one.
+///
+/// This matters because `pdfce-render` **does** honour `/Rotate` — see
+/// `page_device_geometry`, which swaps width and height at 90° and 270° and
+/// composes a different transform for each of the four values. So a caller
+/// that rasterises a rotated page and then hands the result here is combining
+/// a rotation-aware rasteriser with a rotation-blind mapping, and gets an
+/// invisible text layer that is transposed or inverted relative to the ink.
+/// The page still looks perfect — nothing visible was added — and the defect
+/// surfaces only as *"the OCR text does not line up with the image"*.
+///
+/// **Use [`words_to_page_space_on`] instead unless you have established the
+/// page's `/Rotate` is zero.** This function is kept, unchanged, because it is
+/// public API and because it is exactly right for the case it names; it now
+/// says which case that is.
 #[must_use]
 pub fn words_to_page_space(
     words: &[RecognizedWord],
@@ -233,6 +254,170 @@ pub fn words_to_page_space(
                     w.rect.urx.mul_add(sx, page_rect.llx),
                     bottom.max(top),
                 ),
+                confidence: w.confidence,
+            }
+        })
+        .collect()
+}
+
+/// How the rasterised image sits on the page: the region it covers, and the
+/// page's `/Rotate`.
+///
+/// # Why the rotation travels WITH the rectangle rather than as a loose
+/// argument
+///
+/// Because they are only meaningful together, and separating them is how the
+/// defect this type exists to prevent got in. A `Rect` alone cannot say which
+/// way up the raster is; a rotation alone cannot say what it is a rotation OF.
+/// A caller holding both as bare parameters can pass a crop box it read from
+/// the page and a rotation it forgot to read — and that is not a hypothetical
+/// shape, it is the default one, because `/Rotate` is optional and absent on
+/// most pages, so code written against the common case never learns it exists.
+///
+/// Bundling them means the type system asks the question. [`PagePlacement`]
+/// cannot be constructed without stating a rotation, and
+/// [`PagePlacement::upright`] makes saying "zero" a deliberate, greppable act
+/// rather than an omission.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PagePlacement {
+    /// The region of the page the image covers, in **user space**.
+    ///
+    /// For a scanned page this is normally the whole crop box — and it must be
+    /// the **crop** box, not the media box, whenever the two differ, because
+    /// `pdfce-render::page_device_geometry` rasterises the crop box. Handing
+    /// this the media box of a page that has a smaller crop box scales every
+    /// word by the ratio between them.
+    pub rect: Rect,
+    /// The page's `/Rotate`, normalised to 0, 90, 180 or 270 (Table 30).
+    ///
+    /// This is the value the RASTERISER used. If a caller renders with one
+    /// rotation and maps with another the words land somewhere neither
+    /// explains, so it is read once and passed, never re-derived.
+    pub rotate: u16,
+}
+
+impl PagePlacement {
+    /// A placement on an **unrotated** page.
+    ///
+    /// Named rather than defaulted so that "this page is upright" is something
+    /// the code SAYS. A `Default` impl would let the commonest mistake —
+    /// never thinking about rotation at all — look identical to having
+    /// checked.
+    #[must_use]
+    pub fn upright(rect: Rect) -> Self {
+        Self { rect, rotate: 0 }
+    }
+
+    /// A placement carrying a page's `/Rotate`, normalised.
+    ///
+    /// Table 30 requires a multiple of 90 and permits negatives; anything else
+    /// is malformed. Rather than refuse — this is a positioning helper, not a
+    /// validator, and refusing would lose an otherwise good OCR run over a
+    /// stray dictionary value — a non-conforming value is normalised toward
+    /// the nearest legal quarter turn by the same modular arithmetic the
+    /// renderer uses, so the mapping and the raster agree whatever the file
+    /// said.
+    #[must_use]
+    pub fn new(rect: Rect, rotate: i32) -> Self {
+        let r = rotate.rem_euclid(360);
+        let quarter = ((r + 45) / 90) % 4;
+        Self {
+            rect,
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            rotate: (quarter * 90) as u16,
+        }
+    }
+}
+
+/// Convert engine output from image pixels (y-down) to PDF user space (y-up),
+/// **honouring the page's rotation**.
+///
+/// The rotation-aware sibling of [`words_to_page_space`], and the one to
+/// reach for by default. On an upright page the two agree exactly, and a test
+/// asserts that rather than leaving it to inspection.
+///
+/// # The four inverses, and why they are written out
+///
+/// `pdfce-render::page_device_geometry` maps user space to device space, and
+/// this function has to undo precisely that map — so the four cases below are
+/// its four cases, inverted, and are kept in the same order and the same
+/// notation deliberately. `s` is the rasterisation scale; the image is
+/// `image_width` x `image_height` pixels; the placement's rect is
+/// `(llx, lly) .. (urx, ury)`:
+///
+/// ```text
+///   rotate    forward (render)                inverse (here)
+///   0         x' = (x-llx)*s                  x = llx + x'/s
+///             y' = (ury-y)*s                  y = ury - y'/s
+///   90        x' = (y-lly)*s                  y = lly + x'/s
+///             y' = (x-llx)*s                  x = llx + y'/s
+///   180       x' = (urx-x)*s                  x = urx - x'/s
+///             y' = (y-lly)*s                  y = lly + y'/s
+///   270       x' = (ury-y)*s                  y = ury - x'/s
+///             y' = (urx-x)*s                  x = urx - y'/s
+/// ```
+///
+/// ★ Note that at 90 and 270 the image's WIDTH spans the page's HEIGHT. The
+/// two scale factors are therefore derived from the axes the image actually
+/// covers, not from a single `sx`/`sy` pair assigned by position — assigning
+/// them by position is the transposition bug, and it produces a layer that is
+/// the right shape on a square page and wrong on every other.
+///
+/// # Corners, not edges
+///
+/// Each word's rectangle is mapped as **two opposite corners** and then
+/// re-normalised with [`Rect::from_corners`], rather than by mapping `llx`,
+/// `lly`, `urx`, `ury` independently and reassembling them in place. Under an
+/// odd quarter turn "lower-left" becomes "upper-left", so a component-wise
+/// map produces a rectangle whose `lly` exceeds its `ury` — an inverted box
+/// that many consumers will silently treat as empty, giving a text layer that
+/// is present, correct, and selects nothing.
+#[must_use]
+pub fn words_to_page_space_on(
+    words: &[RecognizedWord],
+    image_width: u32,
+    image_height: u32,
+    placement: PagePlacement,
+) -> Vec<RecognizedWord> {
+    if image_width == 0 || image_height == 0 {
+        return Vec::new();
+    }
+    let rect = placement.rect;
+    let (iw, ih) = (f64::from(image_width), f64::from(image_height));
+    let page_w = rect.urx - rect.llx;
+    let page_h = rect.ury - rect.lly;
+
+    // At an odd quarter turn the raster is the page transposed, so the image's
+    // x axis measures the page's HEIGHT and vice versa. Deriving each scale
+    // from the axis it actually spans is what makes the odd cases work on a
+    // non-square page.
+    let (sx, sy) = if placement.rotate == 90 || placement.rotate == 270 {
+        (page_h / iw, page_w / ih)
+    } else {
+        (page_w / iw, page_h / ih)
+    };
+
+    // One corner mapper, applied to both corners of every word. Written once
+    // so the two corners cannot be mapped by different arithmetic — which is
+    // the other way a rotation fix goes wrong, and a way that looks right on
+    // any word whose box happens to be square.
+    let to_user = |ix: f64, iy: f64| -> (f64, f64) {
+        match placement.rotate {
+            90 => (rect.llx + iy * sy, rect.lly + ix * sx),
+            180 => (rect.urx - ix * sx, rect.lly + iy * sy),
+            270 => (rect.urx - iy * sy, rect.ury - ix * sx),
+            _ => (rect.llx + ix * sx, rect.ury - iy * sy),
+        }
+    };
+
+    words
+        .iter()
+        .map(|w| {
+            let (ax, ay) = to_user(w.rect.llx, w.rect.lly);
+            let (bx, by) = to_user(w.rect.urx, w.rect.ury);
+            RecognizedWord {
+                text: w.text.clone(),
+                rect: Rect::from_corners(ax.min(bx), ay.min(by), ax.max(bx), ay.max(by)),
                 confidence: w.confidence,
             }
         })
@@ -381,5 +566,186 @@ mod tests {
         assert!(
             words_to_page_space(&[word("x", 0.0, 0.0, 1.0, 1.0, None)], 100, 0, page).is_empty()
         );
+    }
+
+    // -----------------------------------------------------------------
+    // `/Rotate` — the mapping the rasteriser honours and this module did not
+    // -----------------------------------------------------------------
+
+    /// On an UPRIGHT page the rotation-aware mapping and the original agree
+    /// exactly.
+    ///
+    /// This is the test that makes `words_to_page_space_on` safe to recommend
+    /// as the default. Without it, "use the new one" would be an invitation to
+    /// swap a function whose behaviour on the overwhelmingly common case
+    /// nobody had checked — and the common case is the one where a regression
+    /// would go unnoticed longest, precisely because it is the one that works
+    /// today.
+    #[test]
+    fn upright_placement_agrees_with_the_rotation_blind_mapping() {
+        let words = vec![
+            word("alpha", 10.0, 20.0, 60.0, 40.0, None),
+            word("beta", 100.0, 200.0, 180.0, 230.0, Some(0.9)),
+        ];
+        let page = Rect::from_corners(0.0, 0.0, 612.0, 792.0);
+
+        let old = words_to_page_space(&words, 1224, 1584, page);
+        let new = words_to_page_space_on(&words, 1224, 1584, PagePlacement::upright(page));
+
+        assert_eq!(old.len(), new.len());
+        for (a, b) in old.iter().zip(new.iter()) {
+            assert_eq!(a.text, b.text);
+            assert_eq!(a.confidence, b.confidence);
+            for (x, y) in [
+                (a.rect.llx, b.rect.llx),
+                (a.rect.lly, b.rect.lly),
+                (a.rect.urx, b.rect.urx),
+                (a.rect.ury, b.rect.ury),
+            ] {
+                assert!(
+                    (x - y).abs() < 1e-9,
+                    "upright must be bit-for-bit the old behaviour: {x} vs {y}"
+                );
+            }
+        }
+    }
+
+    /// ★ THE ROUND TRIP, which is the only assertion here that could not pass
+    /// for the wrong reason.
+    ///
+    /// A word is placed at a known spot in USER space. It is pushed forward
+    /// through `page_device_geometry`'s own published formulas — copied into
+    /// the doc comment on `words_to_page_space_on`, and reproduced here
+    /// independently — to get the image pixels a rasteriser would have
+    /// produced. Those pixels go back through the mapping. The result must be
+    /// where it started.
+    ///
+    /// Asserting fixed expected numbers instead would be asserting this
+    /// function's own output, which is `R215`'s blessed-screenshot failure:
+    /// it would pin whatever the code did the day it was written, including a
+    /// transposition, and go green forever. A round trip cannot do that,
+    /// because the forward half is the RENDERER's contract and not this
+    /// function's.
+    #[test]
+    fn every_rotation_round_trips_a_known_user_space_rectangle() {
+        // A deliberately NON-SQUARE page and a NON-ORIGIN box. A square page
+        // hides every transposition bug, and a box at the origin hides every
+        // dropped-offset bug — the two commonest ways this arithmetic goes
+        // wrong, and both invisible to the tidy case.
+        let page = Rect::from_corners(20.0, 30.0, 632.0, 822.0);
+        let (pw, ph) = (page.urx - page.llx, page.ury - page.lly);
+        let s = 2.0_f64;
+
+        // An asymmetric word box, so a mirrored result cannot coincide with a
+        // correct one.
+        let truth = Rect::from_corners(120.0, 300.0, 260.0, 340.0);
+
+        for rotate in [0_u16, 90, 180, 270] {
+            // The forward map, exactly as `page_device_geometry` documents it.
+            let fwd = |x: f64, y: f64| -> (f64, f64) {
+                match rotate {
+                    90 => ((y - page.lly) * s, (x - page.llx) * s),
+                    180 => ((page.urx - x) * s, (y - page.lly) * s),
+                    270 => ((page.ury - y) * s, (page.urx - x) * s),
+                    _ => ((x - page.llx) * s, (page.ury - y) * s),
+                }
+            };
+            // …and the pixmap the renderer would have made, axes swapped on an
+            // odd quarter turn exactly as `page_device_geometry` returns them.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let (iw, ih) = if rotate == 90 || rotate == 270 {
+                ((ph * s) as u32, (pw * s) as u32)
+            } else {
+                ((pw * s) as u32, (ph * s) as u32)
+            };
+
+            let (ax, ay) = fwd(truth.llx, truth.lly);
+            let (bx, by) = fwd(truth.urx, truth.ury);
+            let in_image = vec![word(
+                "roundtrip",
+                ax.min(bx),
+                ay.min(by),
+                ax.max(bx),
+                ay.max(by),
+                None,
+            )];
+
+            let out = words_to_page_space_on(
+                &in_image,
+                iw,
+                ih,
+                PagePlacement::new(page, i32::from(rotate)),
+            );
+            assert_eq!(out.len(), 1);
+            let r = out[0].rect;
+            for (got, want, which) in [
+                (r.llx, truth.llx, "llx"),
+                (r.lly, truth.lly, "lly"),
+                (r.urx, truth.urx, "urx"),
+                (r.ury, truth.ury, "ury"),
+            ] {
+                assert!(
+                    (got - want).abs() < 1e-6,
+                    "/Rotate {rotate}: {which} came back {got}, started at {want}"
+                );
+            }
+            assert!(
+                r.ury > r.lly && r.urx > r.llx,
+                "/Rotate {rotate}: inverted box"
+            );
+        }
+    }
+
+    /// The rotation-blind mapping is DEMONSTRABLY wrong on a rotated page.
+    ///
+    /// Without this, the fix has no evidence that it fixed anything: a new
+    /// function that agrees with the old one everywhere would pass every test
+    /// above and change nothing. This asserts the disagreement is real and
+    /// large — not a rounding difference — which is what makes the round-trip
+    /// test above a result rather than a tautology.
+    #[test]
+    fn the_rotation_blind_mapping_is_wrong_on_a_rotated_page() {
+        let page = Rect::from_corners(0.0, 0.0, 612.0, 792.0);
+        let s = 2.0_f64;
+        // A 90-degree page: the raster is 1584 x 1224, the page 612 x 792.
+        let (iw, ih) = (1584_u32, 1224_u32);
+        let w = vec![word("corner", 40.0, 60.0, 140.0, 100.0, None)];
+
+        let blind = words_to_page_space(&w, iw, ih, page);
+        let aware = words_to_page_space_on(&w, iw, ih, PagePlacement::new(page, 90));
+
+        let dx = (blind[0].rect.llx - aware[0].rect.llx).abs();
+        let dy = (blind[0].rect.lly - aware[0].rect.lly).abs();
+        assert!(
+            dx > 1.0 || dy > 1.0,
+            "if these agreed on a rotated page the fix would be a no-op: \
+             blind={:?} aware={:?}",
+            blind[0].rect,
+            aware[0].rect
+        );
+        let _ = s;
+    }
+
+    /// Table 30 permits negative and over-turned values; they normalise.
+    ///
+    /// A page carrying `/Rotate -90` is conformant and a reader that treated
+    /// it as `0` would mis-place every word on it while reporting nothing. And
+    /// a NON-multiple of 90 is malformed — this normalises to the nearest
+    /// quarter turn rather than refusing, because losing an entire OCR run
+    /// over a stray dictionary value helps nobody, and because whatever it
+    /// picks must match what the renderer picked.
+    #[test]
+    fn rotation_values_normalise_the_way_table_30_allows() {
+        let page = Rect::from_corners(0.0, 0.0, 100.0, 200.0);
+        assert_eq!(PagePlacement::new(page, -90).rotate, 270);
+        assert_eq!(PagePlacement::new(page, 450).rotate, 90);
+        assert_eq!(PagePlacement::new(page, 360).rotate, 0);
+        assert_eq!(PagePlacement::new(page, -360).rotate, 0);
+        // Malformed, nearest quarter turn.
+        assert_eq!(PagePlacement::new(page, 89).rotate, 90);
+        assert_eq!(PagePlacement::new(page, 46).rotate, 90);
+        assert_eq!(PagePlacement::new(page, 44).rotate, 0);
+        // And `upright` says zero out loud.
+        assert_eq!(PagePlacement::upright(page).rotate, 0);
     }
 }

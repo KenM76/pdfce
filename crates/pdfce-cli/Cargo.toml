@@ -16,10 +16,31 @@ path = "src/main.rs"
 # Mirrors `pdfce-core`'s strippable-capability features so a lighter CLI is
 # one flag rather than a manifest edit. Default ON: `--no-default-features`
 # is the deliberate act, never the accident.
-default = ["jpx", "ocrs"]
+default = ["jpx", "ocrs", "download"]
 jpx = ["pdfce-core/jpx", "pdfce-render/jpx"]
 # The `ocrs` text-recognition engine (`Pass 71.0` slice 3).
 ocrs = ["pdfce-core/ocrs", "pdfce-render/ocrs"]
+
+# `download` — operator-initiated fetching of pinned artefacts, currently the
+# OCR model weights (`fetch-ocr-models`).
+#
+# ★ THE ONE FEATURE THAT PUTS A NETWORK STACK IN A pdfce BINARY, and it is
+# permitted by name. Decision 061 (2026-08-13) narrowed R12 on the operator's
+# own correction: the ENGINE (`pdfce-core`, `pdfce-render`) stays network-free
+# permanently and gate-enforced, because it must not need a network to parse
+# or render and must cross into wasm32 where no native HTTP stack exists. The
+# SHELLS may fetch what the operator asks for. CI's `no-network` job encodes
+# exactly that split and lists `pdfce-cli` as ALLOWED.
+#
+# Strippable per the operator's modularity instruction: build without it and
+# `fetch-ocr-models` refuses BY NAME rather than vanishing, and the binary
+# contains no HTTP or TLS code at all.
+#
+# ★ What this does NOT license: telemetry, analytics, crash reporting, a
+# licence callback, or a startup update check. Every fetch here is one an
+# operator typed. An operator narrowing one clause is not consent to widen its
+# neighbour.
+download = ["dep:pdfce-fetch", "pdfce-fetch/download"]
 
 [dependencies]
 # clap (derive API): the de facto standard argument parser
@@ -43,6 +64,14 @@ pdfce-print.workspace = true
 # docs/LEGAL.md §6.1, already covered by the generated
 # THIRD_PARTY_LICENSES.md. No new package enters the graph for this Pass.
 pdfce-render.workspace = true
+
+# pdfce-fetch: pinned, hash-verified, operator-initiated downloads.
+# OPTIONAL and gated by the `download` feature above - see its header for
+# why a network stack is permitted in a SHELL and forbidden in the engine.
+# Declared in the workspace and, until now, consumed by nothing: the crate
+# shipped complete and unwired (the R151 shape - a capability that exists
+# and no caller reaches).
+pdfce-fetch = { workspace = true, optional = true }
 
 # Windows printing (Reader-parity sweep). TARGET-GATED so the Linux and
 # macOS CI jobs still compile this crate — printing is the one genuinely
