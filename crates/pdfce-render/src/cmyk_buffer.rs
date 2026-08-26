@@ -718,7 +718,7 @@ impl CmykBuffer {
     /// it was true of EVERY image; it is now true only of the ones with no
     /// ink to keep. A `DeviceCMYK` image — including one behind an
     /// `/Indexed` palette — goes through [`Self::composite_cmyk_image`]
-    /// instead, immediately above, and crosses nothing., stated plainly
+    /// instead, immediately above, and crosses nothing.
     ///
     /// Images arrive at a canvas as decoded sRGB texels (`DecodedImage`
     /// holds a `Pixmap`), and shadings evaluate their colour ramp to sRGB
