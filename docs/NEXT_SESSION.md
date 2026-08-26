@@ -16,61 +16,72 @@ can falsify it.
 **The previous session shipped `Pass 132.0`** — the CMYK compositing ceiling
 became readable (four `pub` items in `pdfce-render`) and settable
 (`Settings::max_cmyk_buffer_bytes`, uncapped), because a sibling project could
-neither size a raster to stay inside it nor let the operator move it. It also
-committed the *preceding* session's plan-only tree, unchanged, as its own
-commit.
+neither size a raster to stay inside it nor let the operator move it. It then
+**corrected nine operator-facing "A4" figures that had been computed on a page
+that is not A4** (`daefceb`) and **cut, pushed and published `v0.14.0`**
+(`d3b4f5a`).
 
 ### ★ Verified from a shell at write time — do not copy forward without re-running
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `76eb04c` | `git rev-parse HEAD` |
-| `git describe` | `v0.13.0-2-g76eb04c` | `git describe` |
-| `origin/main` | `9a4fb18` — **`main` is 2 AHEAD** | `git rev-list --count origin/main..main` |
-| tag at `HEAD` | **none**; highest tag on disk is `v0.13.0` | `git tag --points-at HEAD` |
-| working tree | clean at read time, **dirty with the 270th filing when you get it** | `git status --porcelain` |
-| newest backup bundle | `pdfce-20260826-0958-9a4fb18-full.bundle`, **2 commits behind `HEAD`** | `ls -lt D:\Dev\pdfce-backups\` |
-| gates on disk | **18**; **17 run with no arguments and all 17 were green after the 270th filing**, the 18th (`check-image-colorspace-truth.py`) needs a fixture dir | `ls tools/check-*`, then run them |
+| `HEAD` | `d3b4f5a` | `git rev-parse HEAD` |
+| `git describe --tags` | `v0.14.0` | `git describe --tags` |
+| `origin/main` | `d3b4f5a` — **0 ahead, everything is public** | `git rev-list --count origin/main..main` |
+| tag at `HEAD` | **`v0.14.0`** (annotated), **and it is being MOVED — see `§B`** | `git tag --points-at HEAD` |
+| release | `v0.14.0` published 2026-08-26T20:17:37Z, one asset, 24,708,755 B | `gh release view v0.14.0` |
+| CI at the tag | **RED on 1 job of 10**, and only for the filing gap `§B` closes | `gh run view 33010309213` |
+| working tree | clean at read time, **dirty with the 271st filing when you get it** | `git status --porcelain` |
+| newest backup bundle | `pdfce-20260826-0958-9a4fb18-full.bundle`, **4 commits behind `HEAD`** — **a bundle is OWED** | `ls -lt D:\Dev\pdfce-backups\` |
+| gates on disk | **18**; **17 run with no arguments**, the 18th (`check-image-colorspace-truth.py`) needs a fixture dir | `ls tools/check-*`, then run them |
 
 ---
 
-## §B — ★★★ DO THIS FIRST: `v0.14.0` WAS INSTRUCTED AND HAS NOT BEEN CUT, AND A FILE ALREADY SAYS IT WAS
+## §B — ★★★ DO THIS FIRST: `v0.14.0` IS RELEASED, BUT ITS TAG POINTS AT A COMMIT WHOSE CI IS RED — FINISH THE MOVE
 
-The operator explicitly instructed a release for `Pass 132.0`. **No `v0.14.0`
-tag exists** and `main` is 2 commits ahead of `origin/main`. ★ **The version
-bump itself was in the working tree, uncommitted, when the 270th filing was
-written** (`Cargo.toml` `0.13.0` → `0.14.0`, both lock files) — so the bump may
-already be committed by the time you read this and the **tag** still may not
-exist. **Check both separately.**
+**The release exists and the portable contract holds.** `d3b4f5a` bumped the
+workspace `0.13.0` → `0.14.0`, the tag was pushed, the GitHub release was
+created with `pdfce-v0.14.0-windows-x64-portable.zip` (24.7 MB), and the
+packaging smoke test passed on a fresh path: `pdfce-cli.exe --version` reported
+`0.14.0` / revision `v0.14.0`, a render with `--max-cmyk-buffer-bytes 512mib`
+succeeded **and disclosed the override**, and `pdfce-gui.exe` launched there
+and created its own `userdata/`.
 
-★★ **The outbound reply at
-`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\reply_cmyk_buffer_ceiling.md`
-already states *"released as `v0.14.0`"*.** That sentence is **ahead of the
-repository**, in a file another project reads. Either cut the release and make
-it true, or correct the file — **do not leave it standing while the tag does
-not exist.**
+**What is unfinished is the tag's target.** CI at the tag is **red on exactly
+one job of ten** — *verify `pdfce-gui` strings live in `ui_text.rs`* → its
+`check-commits-filed.py` step → **`daefceb` in no filing**. **All nine others
+are green**, including `cargo test` on **both** operating systems, clippy,
+fmt, the macOS/wasm32 cross-target check, the zero-GUI-deps check, the
+no-network check, the third-party licence audit and `cargo fuzz build` on
+nightly.
 
-**Order matters and `§H` is why.** `check-commits-filed.py` counts commits no
-filing names, and the tip-deferral only excuses the tip:
+**The 271st filing closes that gap**, so once it is committed the reason for
+the red no longer exists — but the **tag still points at the commit that was
+red**. Finish it:
 
-> **Commit the 270th filing FIRST. Then bump, tag, push, publish, and run
-> `verify-release.py`.**
+> **1.** Commit the 271st filing. **2.** Force-push `v0.14.0` onto that commit.
+> **3.** **Rebuild the package**, so `BUILD-INFO.txt` names the newly-tagged
+> commit. **4.** Replace the asset with `--clobber`. **5.** **Re-run the smoke
+> test on the NEW artefact** — a re-cut release is a new artefact and does not
+> inherit the old one's test. **6.** Confirm CI green at the tag.
+> **7.** Take a backup bundle; the newest is 4 commits behind.
 
-**The version call.** `Pass 132.0` adds **new public items in `pdfce-render`**
-(`CMYK_BYTES_PER_PIXEL`, `DEFAULT_MAX_CMYK_BUFFER_BYTES`,
-`max_cmyk_composite_pixels`, `will_composite_in_cmyk`) and **three in
-`pdfce-core::settings`** (`parse_byte_size`, `format_byte_size`,
-`ByteSizeError`) plus a **new `Settings` field**. All additive; no behaviour
-changes at the default ceiling. **`docs/core-api/`'s verb count is unchanged**
-— the `768e934` precedent's minor case rested on that file, and the `1f66eae`
-entry corrected an identical "new public core items" misclassification a day
-earlier, so **check which crate before writing the bump message**.
+**Nothing is wrong with the gate.** `R217`'s deferral excuses the tip and
+`d3b4f5a` is duly deferred; `daefceb` sits *behind* the tip and is real,
+unfiled debt, which `R217` says still hard-fails. See `§J` for the ordering
+lesson, which is the reusable half.
 
-★ **Also still unanswered from the last handoff, and it bites at tag time:**
+★ **The outbound reply's forward-dated sentence is now TRUE** —
+`open/reply_cmyk_buffer_ceiling.md:4`'s *"released as `v0.14.0`"* was ahead of
+the repository and is not any more. That file also now carries the corrected
+A4 table and the peak-memory caveat, so the copy the other project reads is
+correct in both.
+
+★ **Still unanswered, and it will bite at the NEXT tag rather than this one:**
 `Pass 129.1` changed a shipped default's *value* (`ocr --dpi` 300 → 150), which
 a scripted caller can observe while adding no public core item. `768e934`
-settles the additive case and does **not** settle this one. **Decide before
-tagging, not after.**
+settles the additive case and does **not** settle this one. **Decide before the
+next bump, not after.**
 
 ---
 
@@ -114,63 +125,102 @@ this project keeps meeting.
 
 ---
 
-## §D — ★★ THE "A4" NUMBERS WERE ARITHMETIC ON A DIFFERENT SHEET. REPAIR WAS IN FLIGHT WHEN THIS WAS WRITTEN — VERIFY, DO NOT TRUST THIS SECTION
+## §D — ★★ THE "A4" REPAIR IS DONE — AND THE COMMIT THAT DID IT BROKE A STRING LITERAL IN THE PARAGRAPH IT WAS FIXING
 
-**Every "A4" percentage shipped with `Pass 132.0` was computed on a 596 × 791 pt
-page** — the print-conformance file named in the incoming request — **and
-labelled A4.** A4 is 595 × 842 pt.
+**All nine sites are repaired** by `daefceb`, on the *recompute-for-A4* branch,
+whole rather than by halves. On true A4 (595 × 842 pt = 500,990 pt², against
+`max_cmyk_composite_pixels(None)` = **13,421,772 px**): the default ceiling
+reaches **518 %**, 1 GiB reaches **1035 %**, the `MAX_PIXMAP_EDGE` tier ends at
+**1946 %**, the buffer wants **641 MB at 800 %** and **1.44 GB at 1200 %**, and
+a square 16,384² raster wants **5.4 GB**. US-Letter is **379 DPI**. Every one
+of those was re-derived independently in the 271st filing and all seven agree.
 
-| page | ceiling reached at | `MAX_PIXMAP_EDGE` tier ends at |
-|---|---:|---:|
-| **A4, 595 × 842 pt** | **517.6 %** | **1946 %** |
-| **596 × 791 pt** (what the prose computed) | **533.6 %** | **2071.3 %** |
-| US-Letter, 612 × 792 pt | 526.2 % (≈ 379 DPI) | 2069 % |
+`grep -rn "534 %\|about 530\|2071\|5\.33x" crates/ docs/core-api/` returns
+**one** hit, and it is the deliberate parenthetical at
+`docs/core-api/03-capabilities.md:2040` telling the consuming project which of
+*its own* request figures were on the wrong sheet. **Nothing stale survives.**
 
-**The figures were right and the sheet was wrong** — every number survived an
-internal consistency check and only the label failed against the world. The
-270th filing found **nine sites**; full list with line numbers is in the
-`Pass 132.0` entry's hard-rule-11 sweep in `ROADMAP.md` (**append-only — that
-list is a record of `76eb04c`, not of your tree**).
+The doctest was fixed by moving the **literals** — `3076 × 4353` inside,
+`3082 × 4362` past — which is the right half to move, because the compiler runs
+the literal and nothing runs the label. The documentation test's ±30-point band
+became **±5** (`513.0..523.0`), its bare `contains` moved to `"about 518%
+zoom"`, and **a second number is now checked beside it** (1 GiB / `1035`),
+because the wrong-page error moved both and a check on either alone would have
+caught it only by luck.
 
-★★ **The engineer began repairing them in the working tree while the filing was
-being written, taking the *recompute-for-A4* branch** (`534 %` → `518 %`,
-`2071 %` → `1946 %`, `375 DPI` → `379 DPI`). **So this section is the section
-most likely to be stale.** Re-derive rather than re-read:
+### ★★★ WHAT THE REPAIR LEFT BEHIND: TWO REJOINED LINES IN THE GENERATED `settings.txt`, AND A GATE THAT CANNOT SEE THEM
 
+> **★★ EVERYTHING IN THIS SUBSECTION IS DONE — read it as HISTORY, not as a
+> work order.** It was written while the repairs were in flight and is left
+> standing because the analysis is the part worth keeping. Three commits closed
+> it: **`ffe9d4c`** repaired the two rejoined lines, **widened the gate** (with
+> a `dirty4` fixture pinning the defect and a `blank_line_inside_a_literal`
+> fixture pinning the legitimate shape), added a test asserting on **pdfce's own
+> output** rather than on a round trip, and closed the
+> `03-capabilities.md:2003` survivor; **`18b0438`** removed the header's two
+> dangling `check-strong-text.sh` citations. **`rg '^\s*\\n' --glob '*.rs'
+> crates/` now returns four, the four legitimate lines.**
+>
+> ★ **Two corrections to what is written below, both earned:** the
+> discriminator recommended here — *"does not end in `\`"* — is **wrong**, and
+> let a second variant through (one line loses its continuation while the next
+> keeps its own); the shipped test is *"the line's first two characters are the
+> escape AND it carries anything besides the continuation."* And the "0 false
+> positives" measurement was sound, but ⇢ *a discriminator derived from one
+> observed instance is a hypothesis about the whole family; the second variant
+> is the test, and it costs one reproduction.*
+>
+> **The one thing still owed from this subsection is the SIBLING check** —
+> queue item 2 above.
+
+`crates/pdfce-core/src/settings/mod.rs:1990–1992`. The two new peak-memory
+lines were appended to the settings-file prose literal **without their line
+continuations** — each `\n\` became a **raw newline** with the `\n` escape
+displaced to the start of the following line:
+
+```rust
+             # about 1035%, 4gib about the largest page pdfce will raster at all.
+\n             # A page with layered transparency can need up to about FOUR TIMES
+\n             # this at once, because each layer is given a buffer of its own.\n",
 ```
-grep -rn "534\|530%\|2071\|5\.33x\|5\.34x" crates/ docs/core-api/
-```
 
-**Known still-open at write time** (both in `crates/pdfce-render/`):
+A bare newline inside a Rust string literal is legal and kept verbatim, so the
+generated `settings.txt` gets **two blank lines and 13 spaces of source
+indentation** in the middle of the paragraph. **Verified by compiling the
+literal with `rustc` and printing it**, not by reading it. Non-fatal — the
+parser trims before testing `starts_with('#')` (`settings/mod.rs:1663–1664`) —
+**cosmetic and still wrong**, in a file pdfce writes onto the operator's disk.
 
-1. **The doctest comments** at `src/lib.rs:257`/`:259` — *"A4 at 5.33x"* over
-   `will_composite_in_cmyk(3177, 4216, None)`. ★★ **These are the proof, not
-   two more instances:** `3177 × 4216` px **is** 596 × 791 pt at 5.33×; true A4
-   at 5.33× is 14.23 M px, **past** the ceiling — so the assertion would be
-   **false** if its own comment were true. **The compiler runs the literal;
-   nothing runs the label.** Either relabel the comment or move the literals.
-2. **`tests/ambiguity_settings_reach_the_pixels.rs:459`/`:463`** still assert
-   `"about 530% zoom"`, which **the settings-file prose no longer says** — so
-   `cargo test` should be red on that until it moves.
+★★★ **`check-string-gaps.sh` IS GREEN ON IT, and that is the transferable
+half.** `daefceb`'s own message credits that gate with catching this family,
+one file earlier. The gate matches **three or more spaces between two word-ish
+characters on ONE source line** — a model that assumes **`rustfmt` folded the
+two lines together**. `rustfmt` **cannot** fold these: the raw newline is part
+of the literal's value, so the gap stays as **leading indentation at the start
+of a line**, with no word-ish character in front of it. ⇢ ***A gate that
+detects a defect by its POST-FORMATTING shape misses every instance the
+formatter could not reshape.*** The gate's header claims *"there is no false
+NEGATIVE that ships anything inert"*; **this is one.**
 
-★★★ **And fix that test properly rather than swapping its literal, because it
-is the interesting half.**
-`the_settings_file_describes_the_ceiling_the_renderer_actually_enforces` was
-written *in the same commit* to prevent exactly this class, and it passed
-anyway. Its two halves check different things and never meet: one is
-`text.contains("about 530% zoom")` — a **string** check that compares the prose
-to nothing — and the other recomputes **517.6 %** on true A4 and asserts
-`(500.0..560.0)`. **A ±30-point band holds 517.6, 530 and 534 at once.**
-Replace the band with an equality between the recomputed figure and the number
-**parsed out of** the prose. ⇢ *A tolerance band chosen to survive rounding will
-also survive being wrong.* Recorded as a named candidate under `R212`; a
-**second** instance found by a different filing should mint it as an `R212`
-clause.
+**The widening is measured, not speculative.** `rg '^\s*\\n' --glob '*.rs'
+crates/` returns **six lines tree-wide**: four in `crates/pdfce-gui/src/main.rs`
+(535, 537, 541, 545) that are **correct** — they carry their trailing
+continuation backslash — and the two defects, which do not. **2 true positives,
+0 false positives.** Pin **both** shapes in that gate's self-test, which it
+already has the discipline for.
 
-★ **One consequence of the repair worth carrying:** the ceiling and
-`MAX_PIXMAP_EDGE` are **very nearly** a factor of four apart on A4 (3.76×), not
-exactly — the *"factor of four"* phrasing survives, but do not restate it as
-exact.
+★ **Third occurrence of this family, second consecutive one inside a "correct
+the prose" commit** (`2c3210a` → `6a9511a` → `daefceb`). ⇢ *A commit that names
+a defect class in its own message is not thereby immune to it.*
+
+~~★ **One minor survivor, reported not fixed:**~~ — **CLOSED in `ffe9d4c`.**
+`docs/core-api/03-capabilities.md:2003` said **"a factor of four on A4"** flat,
+where the crate's own doc comment was softened in the same commit to **"very
+nearly a factor of four"** (1946 ÷ 518 = **3.757×**) — same quantity, two
+precisions, in the document a sibling project reads. It now reads *"the gap
+between them is very nearly a factor of four on A4 (3.76×)"*: the crate's own
+wording plus the figure. ⇢ *`R212` satisfied — the two copies of the contract
+agree.*
 
 ---
 
@@ -182,11 +232,22 @@ not re-open it.
 
 Ordered by engineering judgement, not by Pass number:
 
-1. **§C — the `/A` disclosure defect.** Do it first.
-2. **§D — finish the A4 repair and fix the documentation test properly.**
-   Mostly done in the working tree at write time; two doctest comments and the
-   test's own literal were still open, and the test's ±30-point band is the
-   durable item. Cheap.
+0. **§B — finish the `v0.14.0` tag move.** Ahead of everything, because a
+   public tag on a red CI run is what a downloader sees.
+1. **§C — the `/A` disclosure defect.** Do it first among the code work.
+2. **§D — the sibling-gate check.** ★ **The widening itself is DONE** in
+   `ffe9d4c`, and the discriminator this role recommended was the wrong one —
+   see §D. **What is still owed is the SIBLING check:** do
+   `check-ui-strings.sh` and `check-theme-colors.sh` carry the same
+   post-formatting-shape assumption? A sibling carrying it is what would earn
+   the general form a `D:/dev/rag/rust/` file. ★★ **These are the two
+   line-scanners that EXIST.** This item named `check-strong-text.sh` until
+   `18b0438`; **there is no such gate and there never has been** — the name was
+   read out of `check-string-gaps.sh`'s own header, which cited it twice, and
+   repeated here as a work item. `18b0438` rewrote both sentences to argue on
+   their own account and left a note saying so. ⇢ *A dangling reference inside
+   a trusted document is indistinguishable from a real one until somebody runs
+   `ls`.*
 3. **`Pass 130.2` — per-sample image overprint for `Separation`/`DeviceN`
    images.** Re-scoped 2026-08-26 and **smaller than it looks**: Table 149
    excludes a sampled image from row 1 by name, so painting a **process** image
@@ -310,9 +371,11 @@ D:\Dev\FeatureRequests\iccce_FeatureRequests\open\
 ```
 
 At write time the pdfce channel's two newest files are
-`reply_cmyk_buffer_ceiling.md` (**the one claiming `v0.14.0` is released — see
-§B**) and the `request_cmyk_buffer_ceiling_is_invisible_to_the_gui.md` it
-answers. **Four `request_*` notes remain unanswered:** `adopt_widget`
+`reply_cmyk_buffer_ceiling.md` — **checked, and it is now correct in all three
+respects: the release it claims exists, its A4 table is the recomputed one, and
+it carries the peak-memory caveat** — and the
+`request_cmyk_buffer_ceiling_is_invisible_to_the_gui.md` it answers. **Four
+`request_*` notes remain unanswered:** `adopt_widget`
 pre-flight, markup-opacity-in-two-verbs, `insert_pages` orphaned widgets, and
 restyle-an-existing-text-run. The iccce channel's newest is
 `note_your_name_gate_has_the_two_defects_mine_had.md` — **unanswered, and it is
@@ -354,7 +417,15 @@ source that feels like a fact.**
 zoom on A4" as an established fact.** It was arithmetic on a different sheet,
 repeated from the crate's own doc comments into the dispatch and then into a
 decision. **It was caught by division**, not by review — which is hard rule
-10's whole point. Nine sites survive; see §D.
+10's whole point. **All nine sites are now repaired** (`daefceb`); what the
+repair left behind is in §D.
+
+★★ **And the repair's own dispatch carried a false premise in turn:** it stated
+that the commit's one rejoined string literal had been *caught and fixed*. One
+was. **Two more, in a different file, were shipped in the same commit and no
+gate saw them** — found by the filing, not by the sweep. **A dispatch's claim
+about what a gate caught is a claim about the gate's coverage, and that is
+exactly the kind nobody re-checks.**
 
 **Write dispatches so a premise is checkable, and expect the agent to check.** A
 dispatch that says *"X is at path P"* invites verification; *"as we discussed"*
@@ -362,7 +433,7 @@ does not. **Finish the code, then dispatch, then commit the filing last.**
 
 ---
 
-## §J — THE FILING COMMIT MUST BE THE LAST COMMIT BEFORE ANY TAG
+## §J — THE FILING COMMIT MUST BE THE LAST COMMIT BEFORE ANY TAG — AND ★ THE DEFERRAL IS EXACTLY ONE COMMIT WIDE
 
 `check-commits-filed.py` counts commits that no filing names. The tip-deferral
 excuses a commit that cannot cite its own hash — **but only while it is the
@@ -372,9 +443,26 @@ flips red without anything about that commit changing.
 > **Dispatch the librarian LAST, and commit its filing LAST.** Any code commit
 > made after the dispatch has, by construction, no filing that can name it.
 
-★ **Both `c29f5bd` and `76eb04c` are named by filings on disk** — the
-268th/269th name the first, the 270th names the second — so the gate has
-nothing outstanding *provided the 270th's commit is the tip when you tag*.
+★★ **THIS JUST HAPPENED, AND IT SHOWS WHERE `R217`'s CLOSING CLAIM RUNS OUT.**
+The engineer ran the full 17-gate sweep, it was clean, and **then made two more
+commits** — so **the sweep certified a tree that no longer existed**, and CI
+was red at the tag. `R217` ends *"a tag on a code commit is green whenever the
+history behind it is filed; there is nothing left to remember or get wrong by
+ordering."* **The tip-deferral covers exactly ONE trailing unfiled code
+commit.** Make **two** and the second shields the first out of the deferral
+window — it is no longer the tip — and the gate is red on the very first CI
+run, with nothing about either commit having changed.
+
+⇢ ***A one-commit deferral tolerates one trailing code commit. The second is
+not deferred — it is merely no longer the tip.*** Recorded as a **named
+candidate under `R217`** (n = 1, not minted; the mint is the operator's act) in
+the `Pass 132.0` entry's 271st-filing amendment. **The orders that work are
+(file → code → file) or (code → file, then stop).**
+
+★ **`c29f5bd`, `76eb04c`, `daefceb` and `d3b4f5a` are all named by filings on
+disk** — the 268th/269th name the first, the 270th the second, the 271st the
+last two — so the gate has nothing outstanding *provided the 271st's commit is
+the tip when you re-tag*.
 
 Recovery if it goes wrong anyway (precedent: `v0.8.0`, `v0.10.0`, `v0.12.0`):
 file the orphan, re-tag at the filing commit, force-push the tag, **rebuild the

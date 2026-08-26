@@ -65632,3 +65632,461 @@ engineer's *later* in-flight `crates/` edit, per the note above. The engineer's
 own sweep at commit time is the authoritative one.
 
 ---
+
+## 2026-08-26 (271st filing) — the nine "A4" figures are repaired (`daefceb`) and `v0.14.0` is CUT, PUSHED AND RELEASED (`d3b4f5a`) — ★★★ **CI is RED at the tag on exactly ONE job of TEN, and the one job is this filing's own absence**; ★★★ **the repair commit BROKE A STRING LITERAL IN THE VERY PARAGRAPH IT EXISTED TO CORRECT, third occurrence of that family and second consecutive one inside a "correct the prose" commit — and `check-string-gaps.sh`, which that commit's own message CREDITS with catching the family, is GREEN on it, because its detector assumes `rustfmt` folded the evidence onto one line and `rustfmt` CANNOT fold a raw newline inside a literal**; ★★ **the tag was MOVED, deliberately, and the reason is recorded here because a moved public tag must not live only in a shell history**; ★★ **the ordering error is the reusable half: the sweep certified a tree that no longer existed, and `R217`'s "nothing left to get wrong by ordering" is TRUE FOR ONE TRAILING CODE COMMIT AND FALSE FOR TWO**; ★ **every corrected figure re-derived here from the shipped constants rather than copied from the commit message — all seven agree**; ★★★ **AMENDED IN PLACE BEFORE COMMIT: `ffe9d4c` repairs the literal, WIDENS the blind gate — and names a THIRD failure this role did not find, that NOTHING TESTED PDFCE'S OWN OUTPUT, because every settings test asserts on a ROUND TRIP and a stray blank line survives one perfectly**
+
+> **★ THIS ENTRY WAS EXTENDED IN PLACE, NOT SUPERSEDED BY A 272ND FILING.** The
+> `ffe9d4c` material was written after the rest and after the engineer's commit.
+> Statements about what was true of `daefceb` and of the **released `v0.14.0`
+> asset** are deliberately left as written — the defect *was* in that commit and
+> *did* ship in that asset. Statements that something was **owed** are
+> corrected. ⇢ *Say which moment a sentence describes.*
+
+**Shipped:**
+
+- **`daefceb`** — *fix: every "A4" figure I shipped an hour ago was computed on
+  a page that is not A4.* Five files, **+69 / −25**. All nine sites from the
+  270th filing's hard-rule-11 sweep repaired, on the **recompute-for-A4**
+  branch. No behaviour change; no Pass ID, because there is no feature here.
+- **`d3b4f5a`** — *v0.14.0: the ceiling on print-colour blending is yours to
+  set.* Three files, **+9 / −9** (workspace `0.13.0` → `0.14.0`, both lock
+  files). **A minor bump**, on the additive-public-items case `768e934`
+  settles.
+- **`ffe9d4c`** — *fix: the repair commit broke the paragraph it repaired, and
+  the gate credited with catching that could not see it.* Three files,
+  **+125 / −7** (`check-string-gaps.sh` **+69/−2**, `settings/mod.rs`
+  **+53/−3**, `03-capabilities.md` **+3/−2** — the parts sum to the total). The
+  lost continuations repaired, the gate widened with a self-test fixture, a new
+  test on pdfce's own output, and the `03-capabilities.md:2003` survivor closed.
+  **No behaviour change; no Pass ID.**
+- **`18b0438`** — *fix: this gate's header cited a gate that has never existed,
+  twice.* One file, `tools/check-string-gaps.sh`. **Closes the two dangling
+  `check-strong-text.sh` citations this role reported below**, on the
+  *drop-the-attribution* branch rather than the *re-point-it* branch: both
+  sentences now make their argument **directly**, and a marked note between them
+  records that no such gate is on disk, that this header cited it **twice**, and
+  that a filing repeated the name **three times** on the strength of reading it
+  here. `--self-test` and the live scan both **PASS**. **No behaviour change;
+  no Pass ID.**
+
+**Filed as an amendment to `Pass 132.0`, not as a new Pass.** `daefceb`
+corrects that Pass's own prose hours after it shipped; `d3b4f5a` is the bump
+its ledger already recorded as *instructed-and-pending*. Full entry:
+`ROADMAP.md`, the `Pass 132.0` Shipped entry's *AMENDED 2026-08-26 (271st
+filing)* block, which carries the arithmetic table, the survivor reports and
+the ledger.
+
+**Decisions made this session:**
+
+- **The `R212` named candidate is NOT promoted by the repair.** It was recorded
+  at n = 1 by the 270th filing and stays there. **The instance being FIXED is
+  not the shape RECURRING** — and the commit message reaching the same
+  disposition independently (*"filed as a named candidate under R212 … one
+  occurrence"*) is agreement between the engineer and this role, not a second
+  occurrence. Ceiling stays `R218`; next free `R219`.
+- **The ordering error is recorded as a NAMED CANDIDATE under `R217`, not
+  minted, and NOT filed under `R212`.** The dispatch asked which; `R212` is
+  about two copies of a *contract* disagreeing, while this is about the width
+  of a *gate's deferral window*, which is `R217`'s own subject. n = 1. **The
+  mint is the operator's act.**
+- **★ `18b0438` MINTS NOTHING, and the call is deliberate.** Both shapes this
+  filing named — *post-formatting-shape gate blindness* and *a dangling
+  reference inside a trusted document* — stay at **n = 1**. `18b0438` is the
+  **repair** of the dangling reference this role found, not a second one. ⇢ *The
+  instance being FIXED is not the shape RECURRING* — the third time that
+  distinction has decided a disposition in this filing. **Ceiling stays `R218`;
+  next free `R219`.**
+- **The gate-blindness finding is recorded, not escalated to
+  `D:/dev/rag/rust/`.** It is n = 1 in one gate, and this project's own bar
+  (`R205`; `R217`'s three-occurrence warrant) is that a gate finding earns a
+  general form once a **sibling** gate is shown to carry the same assumption.
+  **Named next step:** check whether `check-ui-strings.sh` and
+  `check-strong-text.sh` — both text scanners over `rustfmt`-formatted source
+  — share it.
+
+  ★★★ **CORRECTION, THIS ROLE'S OWN: `check-strong-text.sh` DOES NOT EXIST.**
+  `ls tools/check-*`, run here, lists **18** gates and that is not one;
+  `git log --all -- 'tools/check-strong-text*'` returns **nothing**. The next
+  step named three times in this filing cited a file that is not there. **And
+  the name did not come from nowhere** — `check-string-gaps.sh` cites it twice
+  in its own header, at lines **107** and **123** (read here), and this role
+  read it, believed it, and repeated it as a work item. ⇢ ***A dangling
+  reference inside a trusted document is indistinguishable from a real one
+  until somebody runs `ls`.*** ~~**Two survivors reported, not edited**~~
+  (`tools/` is outside this role's remit): `check-string-gaps.sh:107` and
+  `:123` — ★ **BOTH FIXED in `18b0438`**, struck rather than deleted because
+  they were genuinely survivors when this was written. **The attribution was
+  dropped, not re-pointed:** the arguments were sound and are now stated on
+  their own account, with a note between them recording the dangling name, the
+  two citations, and the three repetitions it caused. ★ **Checked here at
+  `HEAD` = `18b0438`:** `grep -c check-strong-text tools/check-string-gaps.sh`
+  → **2**, both inside that explanatory note (lines 110, 112), so the string
+  count went **up** while the count of the *claim* went to **zero** — worth
+  stating, or a later grep reads `2` as unrepaired. ⇢ *Its commit message adds
+  the half that makes this expensive:* ***the citation was believed*** *— a
+  header that reads as carefully maintained is exactly what deters the `ls`
+  that would catch it, same shape as the `"A4"` figures two commits earlier and
+  as `R197`.* **Restated against gates that exist:** the other line-scanners over
+  `.rs` are `check-ui-strings.sh` and `check-theme-colors.sh`; both read text
+  rather than a syntax tree, but whether either keys on a **post-formatting
+  layout shape** — the specific defect here — is **unchecked, and is the owed
+  work.**
+
+**Findings + decisions:**
+
+- **★★★ THE REPAIR COMMIT CREATED A TENTH DEFECT, IN THE ONE PARAGRAPH IT
+  EXISTED TO FIX.** `crates/pdfce-core/src/settings/mod.rs:1990–1992`. The two
+  new peak-memory lines were appended to the settings-file prose literal
+  **without their line continuations**: each `\n\` became a **raw newline**
+  with the `\n` escape displaced to the **start of the following line**. A bare
+  newline inside a Rust string literal is legal and kept verbatim, so the
+  generated `settings.txt` — a file pdfce writes onto the operator's own disk —
+  now gets **two blank lines and 13 spaces of source indentation** in the
+  middle of the ceiling paragraph.
+
+  ★ **Verified by COMPILING the literal, not by reading it.** The three source
+  lines were extracted with `sed`, wrapped in a `fn main`, built with
+  `rustc -O` and printed; `cat -A` on the output shows both blank lines and
+  both indented comment lines. **Non-fatal** — the parser trims before testing
+  `starts_with('#')` (`settings/mod.rs:1663–1664`, read here), so nothing
+  mis-parses. **Cosmetic and still wrong.** `crates/` is outside this role's
+  remit: **reported as owed, not repaired.**
+
+  ★ **NOW DONE — COMMITTED AS `ffe9d4c`.** First seen in the working tree while
+  this entry was being written (`git diff -- crates/pdfce-core/src/settings/mod.rs`,
+  run here after the report reached the engineer, showed both lines restored to
+  `…\n\`), **uncommitted at that moment**; now committed as a `−3 / +3` hunk.
+  `sed -n '1989,1992p' … | cat -A` at `HEAD`, run here, shows the paragraph's
+  four lines each ending `\n\` with nothing after the backslash. Stated in the
+  present tense above rather than rewritten, because **the defect was in
+  `daefceb` and shipped in `v0.14.0`'s asset**, and a later repair does not
+  make it not have been there. ⇢ *Same shape the 270th filing recorded: a
+  repair in flight during a filing means the filing and the tree describe
+  different moments; say which.*
+
+  ★★ **AND THE SHIPPED `v0.14.0` ASSET STILL CARRIES IT.** The published
+  `pdfce-v0.14.0-windows-x64-portable.zip` was built from `d3b4f5a`, which is
+  **behind** `ffe9d4c`; a `pdfce-gui.exe` from that download still writes the
+  two blank lines and the thirteen spaces. **The re-tag and rebuild is what
+  fixes the artefact** — the source repair alone does not. **Owed and in
+  flight**, not done.
+
+- **★★★ AND THE GATE THAT COMMIT CREDITS IS GREEN ON IT.** `daefceb`'s own
+  message says *"one rejoined string literal, caught by `check-string-gaps.sh`
+  … same family as `6a9511a` and the same trigger"* — and then ships two more
+  in a different file. Run here: `check-string-gaps: PASS — no baked-in gaps.`
+
+  **The reason is structural, and it is the transferable half.** The gate
+  matches **three or more spaces between two word-ish characters on one source
+  line**. That model assumes **`rustfmt` folds the two source lines together**,
+  leaving the run of spaces mid-line. **`rustfmt` cannot fold these** — the raw
+  newline is part of the literal's value — so the gap stays as **leading
+  indentation at the start of a line**, with no word-ish character in front of
+  it, and the regex cannot see it. ⇢ ***A gate that detects a defect by its
+  POST-FORMATTING shape misses every instance the formatter could not
+  reshape.*** The gate's own header claims *"there is no false NEGATIVE that
+  ships anything inert"*; **this is one.**
+
+  **A cheap discriminator exists and is measured, so a widening would not be
+  speculative.** `rg '^\s*\\n' --glob '*.rs' crates/` returns **exactly six
+  lines tree-wide**: four in `crates/pdfce-gui/src/main.rs` (535, 537, 541,
+  545) which are **correct** — they carry their trailing continuation backslash
+  — and the two defects, which do not. **2 true positives, 0 false positives.**
+  Recommended with that gate's own self-test discipline: pin **both** shapes.
+
+  ★ **NOW DONE IN `ffe9d4c` — AND THE DISCRIMINATOR THIS ROLE RECOMMENDED WAS
+  THE WRONG ONE.** *"Does not end in `\`"* is exactly what the engineer wrote
+  first, and it **let a second variant through**: when one line loses its
+  continuation while the **next** keeps its own, the stranded `\n` sits in
+  front of text on a line that still ends in `\`, ships the same blank line and
+  the same indentation, and passes that test. The shipped discriminator is
+  **"the line's first two characters are the escape AND it carries anything
+  besides the continuation"** —
+  `substr(body,1,2) == "\\n" && body != "\\n\\" && body != "\\n"`.
+
+  ★★ **Found by REPRODUCING BOTH VARIANTS against the gate, not by re-reading
+  the rule.** Variant A (consecutive lines lose their continuations — what
+  shipped) and variant B (one loses it, the next keeps its own) were each
+  applied to the real file and the gate re-run; **the first widening caught
+  neither by the rule as written, and A only by accident of shape.** ⇢ ***A
+  discriminator derived by reasoning about one observed instance is a
+  hypothesis about the whole family; the second variant is the test, and it
+  costs one reproduction.*** `rg '^\s*\\n' --glob '*.rs' crates/`, re-run here
+  at `HEAD`, now returns **exactly four** — the four legitimate lines, both
+  defects gone. Clean tree passes; `--self-test` passes, with a new `dirty4`
+  fixture pinning the defect and a `blank_line_inside_a_literal` fixture
+  pinning the legitimate shape.
+
+- **★★ THIRD OCCURRENCE OF THE FAMILY, SECOND CONSECUTIVE ONE INSIDE A
+  "CORRECT THE PROSE" COMMIT.** `2c3210a` created the welded sentence,
+  `6a9511a` fixed it and was itself filed as the same family, `daefceb` names
+  the family in its own message and then commits two more instances of it.
+  ⇢ *A commit that names a defect class in its own message is not thereby
+  immune to it.*
+
+- **Every corrected figure re-derived here, from the shipped constants** (hard
+  rule 10 — a figure is filed beside arithmetic that can disagree with it).
+  Denominator: **A4 = 595 × 842 pt = 500,990 pt²**; budget = 256 MiB ÷ 20 B/px
+  = **13,421,772 px**. Default ceiling **517.6 %** (prose says 518) · 1 GiB
+  **1035.2 %** (prose says 1035) · `MAX_PIXMAP_EDGE` tier ends **1945.8 %**
+  (prose says 1946) · 800 % buffer **641.3 MB** · 1200 % buffer **1.443 GB** ·
+  16,384² raster **5.369 GB** · US-Letter **378.9 DPI** (doc says 379).
+  **All seven agree with the commit message.** ⇢ *The mechanism was never in
+  question; only the denominator was wrong.*
+
+- **The doctest was fixed by moving the LITERALS, not the label** — which is
+  the right half to move, because the compiler runs the literal. `3177 × 4216`
+  → **`3076 × 4353`** (A4 at 5.17× = 13,389,828 px, inside 13,421,772) and
+  `3183 × 4224` → **`3082 × 4362`** (5.18× = 13,443,684 px, past it). Both
+  re-checked here; the 512 MiB arm still passes.
+
+- **The documentation test was fixed properly, not by swapping its literal.**
+  The band went from `(500.0..560.0)` — **60 points**, wide enough to hold
+  517.6, 530 and 534 at once — to `(513.0..523.0)`, **10 points**, centred on
+  the derived figure; the bare `contains("about 530% zoom")` became
+  `contains("about 518% zoom")`; and **a second number is now checked beside
+  it** (1 GiB: `(1030.0..1040.0)` plus `contains("about 1035%")`). ★ The second
+  number is the part worth carrying: **the wrong-page error moved BOTH figures,
+  so a check on either alone would have caught it only by luck** — and this
+  test's entire defect was passing by luck.
+
+- **`grep` for the wrong figures now returns ONE hit tree-wide**, and it is the
+  deliberate parenthetical at `docs/core-api/03-capabilities.md:2040` telling
+  the consuming project which figures in *its own request* were computed on the
+  wrong sheet. **Nothing stale survives.**
+
+- **Sweep survivor, minor, reported not edited — ★ NOW DONE in `ffe9d4c`.**
+  `docs/core-api/03-capabilities.md:2003` still says **"a factor of four on
+  A4"** flat, where the crate's doc comment was softened in the same commit to
+  **"very nearly a factor of four"** (1946 ÷ 518 = **3.757×**). The
+  consumer-facing copy and the authoritative copy describe the same quantity at
+  different precision — `R212`'s exact subject, in the document a sibling
+  project reads. ★ **Repaired** (`+3 / −2` in that file): it now reads *"the gap
+  between them is very nearly a factor of four on A4 (3.76×)"* — the crate's own
+  wording plus the figure. Read here at `HEAD`, lines 2002–2008. ⇢ *The two
+  copies of the contract now agree, which is what `R212` asks for.*
+
+- **★★★ THE THIRD FAILURE, WHICH THIS ROLE DID NOT FIND: NOTHING TESTED
+  PDFCE'S OWN OUTPUT.** `ffe9d4c`'s message names three failures and says only
+  the first is the typo. This role's report had found the defect and the blind
+  gate, and had **not** found this.
+
+  **Every settings test in that module asserts on the ROUND TRIP** — write,
+  parse, compare — and **a stray blank line survives a round trip perfectly**,
+  because `parse` trims before it looks for `#` (`settings/mod.rs:1663–1664`,
+  the very lines this filing cited above as the reason the defect was
+  *non-fatal*). ⇢ ***A round-trip test cannot see any defect the parser is
+  tolerant of, and tolerance is exactly what a parser is FOR.*** The module's
+  entire test surface was structurally incapable of observing this class of
+  malformation, which is why nine months of green tests meant nothing here.
+
+  `every_line_of_the_written_file_is_a_comment_a_setting_or_a_blank` now
+  asserts on **what pdfce actually writes**: every line is a comment, a
+  `key = value`, or empty; none is indented; none has trailing whitespace; no
+  doubled blank. ⇢ ***pdfce's own output is now held to exactly what `parse`
+  demands of an operator, which it was not before.***
+
+  ★★ **Verified by sabotage, in both directions** — with the defect reproduced
+  the test **fails, naming the offending output line**; restored, it **passes**.
+  ⇢ *A test added after a defect is a claim that it would have caught it, and
+  that claim is checkable in about a minute by putting the defect back.*
+
+- **`FEATURES.md` row 229 was a FOURTH site for the peak-memory caveat and had
+  it in neither form.** The Pass entry recorded *"peak resident memory is up to
+  about 4× the ceiling"*; `daefceb` put it into the settings file, the
+  constant's doc comment and `docs/core-api` §7.3a; the outbound reply carries
+  it (checked, lines 118–129). **Row 229 is the row a consuming shell reads
+  before building a settings UI**, which is precisely who the caveat is for.
+  **Added in this filing** — `FEATURES.md` is this role's own document, so it
+  is edited rather than reported.
+
+**★★★ `v0.14.0` IS RELEASED — checked from a shell, every figure naming its
+command (hard rule 8):**
+
+- `git rev-parse HEAD` → **`d3b4f5a`**; `git describe --tags` → **`v0.14.0`**.
+- `git rev-parse origin/main` → **`d3b4f5a`**; `git rev-list --count
+  origin/main..main` → **0**. ★ **`origin/main` contains everything** —
+  `c29f5bd`, `76eb04c`, `daefceb`, `d3b4f5a` are all public.
+- `git tag --points-at HEAD` → **`v0.14.0`**; `git cat-file -t v0.14.0` →
+  **`tag`** (annotated); `git rev-list -n1 v0.14.0` → **`d3b4f5a`**.
+- `gh release view v0.14.0` → created **2026-08-26T20:17:37Z**, one asset,
+  `pdfce-v0.14.0-windows-x64-portable.zip`, **24,708,755 bytes**, uploaded
+  20:25:44Z, `sha256:d606be1c…b91b4b1c`.
+- `ls -lt D:\Dev\pdfce-backups\` → newest bundle still
+  **`pdfce-20260826-0958-9a4fb18-full.bundle`** at `9a4fb18`, **4 commits
+  behind `HEAD`**. It contains **none** of the four commits above. **A bundle
+  is owed.**
+
+> ★ **REPOSITORY STATE WHEN THIS ENTRY WAS EXTENDED**, `git rev-parse` run
+> here — and it differs from the block above, which is the point of dating it:
+> `HEAD` = **`ffe9d4c`**; `origin/main` = **`d3b4f5a`**, so **`main` is 2 ahead
+> and UNPUSHED** (`ffe9d4c` plus this filing's commit once it exists);
+> `git rev-list -n1 v0.14.0` = **`d3b4f5a`**, so **the tag has not moved yet**
+> and the published asset is still the 20:25:44Z one.
+>
+> ★ **And the bundle figure above is understated.** `git rev-list --count
+> 9a4fb18..HEAD`, run here, returns **6**, not 4 — the block above named four
+> commits and counted those, but `54dae84` (the 270th filing's own commit) sits
+> between them and was not counted, and `ffe9d4c` has since landed. **Six
+> commits behind at `ffe9d4c`, seven once this filing commits.** ⇢ *A count
+> assembled by naming the commits you remember is not the same operation as
+> asking git for the count — hard rule 10's corollary, and the source is named
+> because a correction is itself a claim.* **A bundle is owed, more so.**
+
+**Packaging smoke test — the engineer's, reported rather than re-run.** Folder
+copied to a fresh path; `pdfce-cli.exe --version` → **`0.14.0`**, revision
+**`v0.14.0`**; a render with `--max-cmyk-buffer-bytes 512mib` succeeded **and
+disclosed the override**; `pdfce-gui.exe` launched there and created its own
+`userdata/`. **The single-folder portable contract holds at the new version.**
+
+★ **The outbound reply's forward-dated sentence is now TRUE.** The 270th filing
+recorded `open/reply_cmyk_buffer_ceiling.md:4`'s *"released as `v0.14.0`"* as
+**ahead of the repository**; it is not any more. **Checked here** — and the same
+file now carries the corrected A4 table (§a) and the peak-memory caveat (§b),
+so **the copy that travelled to the other project is correct in both.**
+
+**★★★ CI AT THE TAG: RED ON EXACTLY ONE JOB OF TEN, AND IT IS THIS FILING.**
+`gh run view 33010309213`, run here. **Nine green** — `cargo test` on
+**windows-latest** and **ubuntu-latest**, clippy `-D warnings`, `fmt --check`,
+the macOS/wasm32 cross-target check, the zero-GUI-deps check, the no-network
+check, the third-party licence audit, and `cargo fuzz build` on nightly. **One
+failure:** *verify `pdfce-gui` strings live in `ui_text.rs`* → its
+`check-commits-filed.py` step → `daefceb` in no filing.
+
+★ **Both `cargo test` legs green means `daefceb`'s tightened band and moved
+doctest literals pass on both operating systems, and the wasm32 web-fork
+invariant holds at `v0.14.0`.** `python tools/check-commits-filed.py`, run here
+before writing, printed exactly one offender and deferred the tip.
+**`tools/commits-filed-baseline.txt` is UNTOUCHED** — the gate's own message
+forbids extending it and this filing does not.
+
+**★★ THE TAG WAS MOVED, AND WHY.** At the moment this entry was written
+`v0.14.0` pointed at **`d3b4f5a`**. **The engineer stated he is re-tagging it
+onto this filing's commit and rebuilding the release asset**, so the tag points
+at a commit CI can pass. **Recorded as instructed-and-in-flight, not as done**
+— the same distinction the Pass ledger drew for the bump, and for the same
+reason: a later reader must be able to tell which sentence was measured.
+
+**Nothing is wrong with the gate.** `R217`'s deferral excuses the **tip**, and
+`d3b4f5a` is duly deferred; `daefceb` sits **behind** it and is real, unfiled
+debt, which `R217` says explicitly still hard-fails. But a public tag whose CI
+run is red is one a downloader cannot distinguish from a broken build, and this
+project has moved a tag for that reason three times (`v0.8.0`, `v0.10.0`,
+`v0.12.0`). **The re-tag obliges:** force-push the moved tag, **rebuild the
+package** so `BUILD-INFO.txt` names the newly-tagged commit, replace the asset
+with `--clobber`, and **re-run the smoke test on the new artefact** — a re-cut
+release is a **new artefact** and does not inherit the old one's test. The
+digest above is the **old** artefact's; expect a different one after the
+re-tag, and that is correct rather than a discrepancy.
+
+**★★ THE ORDERING ERROR, WHICH IS THE REUSABLE HALF.** The engineer ran the
+full 17-gate sweep, it was clean, and **then made two more commits** — so **the
+sweep certified a tree that no longer existed.** `check-commits-filed.py` is
+structurally unable to be green on a code commit made after its own filing;
+the orders that work are **(file → code → file)** or **(code → file, then
+stop)**.
+
+★ **The refinement, and it is a real gap in `R217`'s closing claim.** `R217`
+ends *"a tag on a code commit is green whenever the history behind it is filed;
+there is nothing left to remember or get wrong by ordering."* **The tip-deferral
+covers exactly ONE trailing unfiled code commit.** Make **two** after the
+dispatch and the second shields the first out of the deferral window — it is no
+longer the tip — and the gate is red on the very first CI run, with nothing
+about either commit having changed. ⇢ ***A one-commit deferral tolerates one
+trailing code commit. The second is not deferred — it is merely no longer the
+tip.*** Recorded as a named candidate under `R217`; **the operational rule
+needs no new number**, because `NEXT_SESSION.md` §J already carries *"dispatch
+the librarian LAST, and commit its filing LAST"* — **sharpened in this filing**
+to state that the deferral is one commit wide, so a reader does not conclude
+from `R217` that ordering is a solved problem.
+
+★★ **AND IT IS NOW IN ENGINEER MEMORY, WHICH IS THE HALF `NEXT_SESSION.md`
+CANNOT DO.** `.claude/agent-memory/pdfce-engineer/feedback_a_gate_sweep_certifies_the_tree_it_ran_on.md`
+(read here) states it as *"a clean gate sweep certifies the tree it ran on, not
+the tree you push"* and reaches the same two working orders independently —
+**`code → file` then stop, or `code → file → code → file`** — with the
+structural reason spelled out: *"a commit cannot cite its own hash, so its
+filing is always a LATER commit."* ⇢ *`NEXT_SESSION.md` is read at the start of
+the next session; a memory note is read by the agent about to do the thing. The
+same rule needs both homes, and this is the first time this one has had the
+second.* ★ **Still nothing minted** — n = 1 stands, and `ffe9d4c`, a **third**
+code commit after the same sweep, is **not** a second occurrence: it was made
+deliberately **before** this filing's commit, which is one of the two orders
+that work.
+
+**Still in flight:**
+
+- **The tag move AND the asset rebuild** — see above. Until they land, the
+  public `v0.14.0` points at a commit whose CI run is red for a reason that no
+  longer exists once this filing is committed, **and the published zip still
+  contains the settings-file defect** — only the rebuild fixes the artefact.
+- **A backup bundle is owed** — the newest on disk is 4 commits behind
+  `d3b4f5a`, and `HEAD` has since moved to `ffe9d4c`.
+- ~~**The rejoined literal at `settings/mod.rs:1990–1992`**~~ — **DONE** in
+  `ffe9d4c`, along with the gate widening and the `03-capabilities.md:2003`
+  survivor. Struck rather than deleted, so the list still shows what was owed
+  when this entry was drafted.
+- **The `/A`-vs-`/AA` scanning defect** (`NEXT_SESSION.md` §C) — untouched by
+  any commit in this window and **still the right first task**: pdfce cannot
+  see that a push button submits to a website, on three surfaces.
+- **The `try_reserve_exact` RAG escalation** the 270th filing recorded as owed
+  — still owed, unchanged, still wanting an induced OOM rather than reasoning.
+
+**For next session:**
+
+1. **Land the tag move and the asset rebuild**, then confirm CI green at the
+   tag before treating `v0.14.0` as finished. **Push first** — `main` is
+   **2 ahead of `origin/main`** (`ffe9d4c` and this filing's commit).
+2. ~~Repair the two rejoined lines, and widen `check-string-gaps.sh`~~ —
+   **DONE in `ffe9d4c`**, and the recommended discriminator turned out to be
+   wrong; see the correction above.
+3. **Check `check-ui-strings.sh` and `check-theme-colors.sh`** for the same
+   post-formatting-shape assumption — ★ **not `check-strong-text.sh`, which
+   does not exist**; see the correction above. ~~and fix the two dangling
+   references to it at `tools/check-string-gaps.sh:107` and `:123` while you
+   are in there~~ — **that half is DONE in `18b0438`**; only the sibling check
+   remains. **Still owed, and unchanged by the widening** — the widening
+   fixed the instance; the warrant asked for was a *sibling* gate carrying the
+   assumption, and no sibling has been checked. A sibling carrying it is what
+   would earn the general form a `D:/dev/rag/rust/` file.
+4. **Then §C**, the `/A` disclosure defect. Nothing above changes its ranking.
+
+**RAG candidates, three, all n = 1, none written.** ⇢ *A gate that detects a
+defect by its post-formatting shape misses every instance the formatter could
+not reshape* (needs a sibling gate — item 3 above); ⇢ *a round-trip test cannot
+see any defect the parser is tolerant of* (the better-travelling of the three —
+true of every serialise/parse pair in any language — but wants a second instance
+from a different module first); and ⇢ *a discriminator derived from one observed
+instance is a hypothesis about the whole family, and the second variant is the
+test* (from the wrong first widening). **Reported as owed, not written.**
+
+**Gates — run by this role, on the tree WITH this filing's edits in it, after
+the amendment was written.** All **17** argument-free `tools/check-*` gates
+**green**, including `check-ledger-numbers.py` (`SESSION_LOG` filings: **271**,
+next free 272 — **no 272nd was opened**), `check-string-gaps.sh --self-test`
+(**PASS**), and ★ **`check-commits-filed.py`: `clean — 594 code commit(s)
+checked (whole history); 5 known-unfiled carried in the baseline`** — so
+**`ffe9d4c` is now joined by this amendment** and the one job that was red at
+the tag has nothing outstanding once this filing commits. The baseline was
+**not** extended.
+
+★★ **RE-RUN AFTER `18b0438`, because the tree changed under the paragraph
+above** — and that is the ordering lesson of this very filing applied to its own
+gate report. All **17** argument-free gates **green again** at `HEAD` =
+`18b0438` with these edits in the tree, and `check-commits-filed.py` now reads
+`clean — 595 code commit(s) checked (whole history); 5 known-unfiled carried in
+the baseline`, with **`18b0438` DEFERRED as the tip** — which is `R217`'s
+one-commit window used correctly: `18b0438` is a *single* trailing code commit
+and this filing's commit is the next one. `check-string-gaps.sh --self-test`
+**PASS**; `check-ledger-numbers.py` still reports **filings 271, next free 272**
+— ★ **no 272nd filing was opened, and this is the third in-place extension of
+the 271st.** The baseline was not extended.
+
+★ **The engineer separately reported `cargo fmt --check`, `cargo clippy -D
+warnings`, `cargo test --workspace` and all 17 gates green on `ffe9d4c` itself**
+— that certifies the tree *without* this filing's edits, and the run above
+certifies it *with* them. ⇢ *Both runs are named because they are different
+trees, which is exactly the distinction §J's sharpening is about.* **Re-run
+once more if anything is touched between here and the commit.**
+
+---

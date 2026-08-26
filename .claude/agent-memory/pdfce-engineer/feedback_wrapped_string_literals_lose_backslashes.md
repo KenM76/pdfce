@@ -67,5 +67,37 @@ same string. It shipped in that state and was caught hours later by the
 stable-line test failing for an unrelated reason. **Repairing this bug with
 the tool that causes it is the actual trap**, not the original mistake.
 
+## ★ 2026-08-26 — it happened AGAIN, in the repair commit again, and the gate that exists for it was GREEN
+
+Exactly the trap above, third occurrence, same session shape: a heredoc
+edit to `settings/mod.rs` lost the trailing backslash on two `\n\`
+continuations. Two new facts, both worth more than the reminder:
+
+**1. `check-string-gaps.sh` did not see it, and its header claims no false
+negatives.** That gate matches a run of 3+ spaces *between word characters on
+one source line*, which silently assumes `rustfmt` FOLDED the broken
+continuation into its successor. **`rustfmt` cannot fold across a raw newline
+inside a literal**, so the gap survives as *leading* indentation with no word
+character in front of it. The gate is now widened to flag a displaced `\n`.
+
+⇢ **Generalisation worth carrying past this file:** a gate that recognises a
+defect by its POST-FORMATTING shape misses every instance the formatter was
+unable to reshape.
+
+**2. Round-trip tests cannot see it either.** Every settings test was
+write → parse → compare, and a stray blank line round-trips *perfectly*
+because `parse` trims before checking for `#`. The output was malformed in a
+way no existing test could observe. The fix is an assertion on **what is
+written**, not on what survives a round trip:
+`every_line_of_the_written_file_is_a_comment_a_setting_or_a_blank`.
+
+**And test the repair by REPRODUCING the defect.** My first widening of the
+gate had a wrong discriminator (it keyed on "line does not end in a
+backslash") that let a real variant through. Re-reading the rule would not
+have found it; applying both variants to the real file and re-running the
+gate did, in about a minute.
+
 Related: [[windows-paths-need-literal-edits]] — same root cause (backslashes
 crossing shell layers), same fix (Edit, or a written script file).
+[[feedback_a_gate_that_underreports_looks_green]] — the same class one level
+up: a gate whose output is wrong reads as a gate that passed.
