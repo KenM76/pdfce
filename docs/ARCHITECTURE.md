@@ -6795,6 +6795,48 @@ this. Concretely:
   **first to ship ahead of it, and first discharged by a ratio rather
   than by a refusal.**
 
+#### ★★★ 10.1a — THE SCOPE OF THIS SECTION IS **UNTRUSTED INPUT**, AND AN OPERATOR-SET BOUND IS NOT IN IT (added 2026-08-26, `Pass 132.0`, `76eb04c`, §12 decision **089**)
+
+**Everything above is about sizes that come from a FILE.** A decoded-output
+cap, a nesting depth, an xref object count, a display-list ceiling — each
+bounds a quantity an adversary chooses. **That is the property that makes the
+bound necessary**, and it had been conflated with *"any large allocation"* for
+as long as every ceiling in the renderer happened to be a compile-time
+constant.
+
+**A number the operator typed is not untrusted input.** So a ceiling the
+operator sets is **uncapped**: no guard, no warning, no preflight. The first
+one is
+`pdfce_core::settings::Settings::max_cmyk_buffer_bytes` — the subtractive
+compositing buffer's size limit — on the operator's own ruling for
+`max_zoom_percent`: *"it is up to the user to determine how much of a
+performance hit they want to take."* The renderer's built-in
+`DEFAULT_MAX_CMYK_BUFFER_BYTES` (256 MiB) remains, as a **default**, because
+the *page's* dimensions are still untrusted and still decide whether the
+default is reached.
+
+**★★ THE OBLIGATION THAT COMES WITH IT, AND IT IS NOT OPTIONAL.** Removing a
+cap on a size the operator names is safe **only where the allocation behind it
+is fallible.** `vec![0.0; n]` and `Vec::with_capacity` allocate **infallibly**:
+on failure they call the allocation error handler, which **aborts the
+process** — no unwind, no error path, no page rendered, no disclosure. That is
+tolerable while the only reachable size is a compile-time constant the project
+chose. It stops being tolerable the moment an operator can name 64 GiB in a
+text file.
+
+`CmykBuffer::try_planes` therefore uses **`try_reserve_exact` + `resize`**, so
+a ceiling the machine cannot honour produces **the same disclosed refusal**
+(`cmyk_buffer_refused`, the page composited in sRGB and said so) as a ceiling
+the page exceeded. **One failure mode, one disclosure, whichever end it came
+from.**
+
+⇢ **Binding on any future session that raises or removes an operator-settable
+allocation bound: check that the allocation behind it is fallible, in the same
+change.** Widening the bound and hardening the allocation are one edit.
+Shipping the first without the second converts an operator's typo into a
+crash. See §12 decision **089** for the full reasoning and the alternatives
+weighed.
+
 ### 10.2 Fuzz-testing (required, not optional, before Pass 1 ships)
 
 Set up a `cargo-fuzz` target against the tokenizer/object-parser as
@@ -25300,3 +25342,110 @@ free 072.**
   to an amendment instead.
 
   **Ceiling moves 087 → 088; next free 089.**
+
+- **2026-08-26 — Decision 089. §10's ALLOCATION-CEILING RULE IS ABOUT
+  UNTRUSTED INPUT, SO AN OPERATOR-SET BOUND IS UNCAPPED — AND THAT IS ONLY
+  SAFE BECAUSE THE ALLOCATION BEHIND IT BECAME FALLIBLE IN THE SAME COMMIT.
+  THE TWO HALVES ARE ONE DECISION AND MUST NEVER BE SEPARATED.** (`Pass
+  132.0`, `76eb04c`; librarian filing, 270th, shell held.)
+
+  **What prompted it.** A sibling project building a viewer against
+  `pdfce-render` reported an operator-visible symptom, not a defect:
+
+  > *"seems I get different results depending on Zoom level … up to 474% they
+  > are mismatched, but at 579% they match."*
+
+  A page whose group declares a subtractive blending space composites in a
+  four-colorant buffer at **20 bytes per pixel**. Above a fixed **256 MiB**
+  ceiling it composited in sRGB and **disclosed that it had**
+  (`cmyk_buffer_refused`). **The behaviour was right and the disclosure was
+  right.** The defect was that **no caller outside `pdfce-render` could read
+  the ceiling**, so a shell could not size a raster to stay inside it, and
+  **the operator could not move it**, so there was no way to buy the correct
+  colour space with memory. The ceiling permits **13,421,772 px**;
+  `MAX_PIXMAP_EDGE` permits a whole-page raster roughly **four times
+  further** — a whole tier in which the shell is allowed to ask for a raster
+  the engine will not composite in ink.
+
+  **Part 1 — the scope correction.** §10 forbids an allocation sized by
+  **untrusted input** without a ceiling. Every guard in that section bounds a
+  quantity an adversary chooses: a decoded stream's length, a nesting depth, a
+  claimed object count, a display list's byte total. **A page's dimensions are
+  untrusted input. A number the operator typed into `settings.txt` is not.**
+  Those had been conflated for as long as every ceiling in the renderer was a
+  compile-time constant, because the distinction had never had to do any work.
+
+  So `Settings::max_cmyk_buffer_bytes: Option<usize>` is **uncapped** — no
+  guard, no warning, no preflight — on the ruling the operator gave for
+  `max_zoom_percent`, quoted verbatim: ***"it is up to the user to determine
+  how much of a performance hit they want to take."*** The renderer's
+  `DEFAULT_MAX_CMYK_BUFFER_BYTES` survives **as a default**, because the
+  page's own size still decides whether the default is reached.
+
+  ★ **What the shell is asked to do instead of preventing the choice: state
+  the cost.** 20 B/px, and compositing in ink measured roughly **50 % slower**
+  than compositing on screen at the same pixel count. `docs/core-api/03-capabilities.md`
+  §7.3a carries the memory figures for a consuming shell to put beside the
+  control.
+
+  **Part 2 — and it is the half a future session will be tempted to read as
+  an implementation detail.** `vec![0.0; n]` allocates **infallibly**: on
+  failure it calls the allocation error handler, which **aborts the process**.
+  No unwind, no `Err`, no page, no disclosure. **That was acceptable while the
+  only reachable size was a compile-time 256 MiB constant this project chose.
+  It stopped being acceptable the instant the operator could name 64 GiB.**
+
+  `CmykBuffer::try_planes` now uses **`try_reserve_exact` + `resize`**, so a
+  ceiling the *machine* cannot honour becomes **the same disclosed refusal** as
+  a ceiling the *page* exceeded. One failure mode, one disclosure, whichever
+  end it arrived from.
+
+  ⇢ **The generalisable rule, and the reason this is a decision rather than a
+  Pass note: a future session that raises or removes an operator-settable
+  allocation bound must check that the allocation behind it is fallible, in
+  the same change.** Widening the bound and hardening the allocation are one
+  edit. Shipping the first without the second converts an operator's typo into
+  a crash with nothing rendered — which is strictly worse than the ceiling it
+  replaced, because the ceiling at least drew the page.
+
+  **Alternatives weighed and rejected:**
+
+  | alternative | why rejected |
+  |---|---|
+  | keep the constant, expose it read-only | answers half the request; the operator still cannot buy correct colour with memory, and the symptom that prompted this is *the same page in two colour spaces* |
+  | cap the override at some large multiple | **a cap is a number, and no number is knowable from inside the renderer** — the right value is a function of the operator's screen and their tolerance for memory; a 4K viewport with overscan and a 1600×900 one differ by ~6× |
+  | warn or preflight above a threshold | the threshold is the same unknowable number, wearing a different hat; and `CLAUDE.md` rule 4's second narrowing (decision 059) is explicit that a gate in front of an operator's own act is friction, not disclosure |
+  | let the infallible allocation stand and document the risk | **an abort has no disclosure channel.** This project's whole posture is that a shortfall is reported; a process that dies reports nothing, and the operator cannot tell it from a hang |
+
+  **What this does NOT decide, named so the decision is not read as broader
+  than it is:**
+
+  - **It does not make every ceiling in §10 negotiable.** Every guard in §10.1
+    bounds a file-supplied quantity and stays exactly as it is. The scope
+    correction applies only where the number's *source* is the operator.
+  - **It does not make a large whole-page render composite in ink.** It makes
+    the boundary legible and movable. **Banding is still the real answer** —
+    `ROADMAP.md`'s `Pass 122.3`, whose other two acceptance clauses this Pass
+    discharges — because peak usage is a *multiple* of nominal (parent + child
+    + spare), so raising the number admits three large pages where it admits
+    one. **An operator-set ceiling trades memory for correctness; banding
+    removes the trade.**
+  - **It does not settle whether a shell should offer the control at all.**
+    `crates/pdfce-gui` does; `D:\dev\pdfceGUI` has asked for the API and has
+    not wired it. `FEATURES.md`'s `gui` column tracks the latter (decision
+    073), so the capability is filed `[ ]` there deliberately.
+
+  **Body-section update, filed in this same edit:** `ARCHITECTURE.md`
+  **§10.1a**, which states the untrusted-input scope and the fallible-
+  allocation obligation where the guards it qualifies actually live. §10.1's
+  existing text is untouched — this adds a scope statement, it does not
+  weaken a guard.
+
+  **No new standing rule minted.** A named candidate *was* produced by this
+  Pass and it belongs to **`R212`**, not here: ⇢ *a gate between two copies of
+  a contract must compare the two copies; one that compares each copy to a
+  tolerance band instead passes when both are wrong.* Recorded under `R212` in
+  `ROADMAP.md`'s *Standing rules* at n = 1. Ceiling stays `R218`, next free
+  `R219`.
+
+  **Ceiling moves 088 → 089; next free 090.**

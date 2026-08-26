@@ -65341,3 +65341,294 @@ discharged:**
 3. The three Acrobat-parity spot-checks and the two owed operator
    rulings (`R12`, `R13` clause 5) remain the gating items before
    `Pass 131.1`/`Pass 131.2` can be scheduled.
+
+## 2026-08-26 (270th filing) — `Pass 132.0` ships: the CMYK compositing ceiling is READABLE and SETTABLE — ★★★ **the behaviour was right and the disclosure was right; what was wrong is that nothing outside `pdfce-render` could READ the line and the operator could not MOVE it**; ★★★ **§10's allocation-ceiling rule is about UNTRUSTED INPUT, and that had been conflated with "any large allocation" for as long as the constant was the only answer — a page's dimensions are untrusted, a number the operator typed is not, so the override is UNCAPPED**; ★★★ **AND THAT IS ONLY SAFE BECAUSE `vec![0.0; n]` ALLOCATES INFALLIBLY AND ABORTS THE PROCESS — the fallible allocation shipped in the SAME COMMIT and the two halves must never be separated**; ★★ **a new test checks the DOCUMENTATION, which is otherwise the one thing in this project nothing tests**; ★★★ **AND THIS FILING'S SWEEP FOUND THAT THE PROSE THAT TEST GUARDS IS WRONG IN NINE PLACES — every "A4" percentage was computed on a 596 × 791 pt page, and the test passes anyway because its band is ±30 points wide**; ★★ **a plan-only session's uncommitted tree was committed UNCHANGED by this session as its own commit, separately from its code** — so `check-commits-filed.py` has two commits to account for, not one
+
+**Shipped:**
+
+- **`Pass 132.0` (`76eb04c`)** — the subtractive compositing buffer's byte
+  ceiling becomes readable and operator-settable. Seventeen files,
+  `crates/` + `docs/core-api/`, **+1,225 / −50** (`git show --stat`, run
+  here). **Minted directly into *Shipped*** — requested and delivered in the
+  same session, so it never existed under *Next up*.
+
+**Also committed this session, and it is worth its own line:**
+
+- **`c29f5bd`** — the previous session's **268th and 269th filings**,
+  committed **unchanged**. That session was plan-only and deliberately made
+  no commit, leaving a dirty tree (docs + one `tools/` gate fix). This
+  session committed it **separately from its own code**, which is why
+  `76eb04c` is a clean code-only commit. ⇢ *A plan-only session that leaves
+  an uncommitted tree hands the next session a commit-shape decision before
+  it writes a line, and `check-commits-filed.py` / `check-passes-filed.py`
+  both care how it is answered.* Both commits are now filed — this entry
+  names `76eb04c`; the 268th/269th entries name what is in `c29f5bd`.
+
+**What prompted the Pass.** A feature request from the sibling GUI project
+(`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_cmyk_buffer_ceiling_is_invisible_to_the_gui.md`,
+2026-08-26, with a same-day addendum carrying an operator ruling). The
+operator-visible symptom, verbatim:
+
+> *"seems I get different results depending on Zoom level … up to 474% they
+> are mismatched, but at 579% they match."*
+
+**Findings + decisions:**
+
+- **The defect was NOT the behaviour and NOT the disclosure.** A page whose
+  group declares a subtractive blending space composites in four colorant
+  planes at 20 B/px; above 256 MiB it composited in sRGB and reported
+  `cmyk_buffer_refused`. Both correct. **The ceiling was unreadable from
+  outside the crate and immovable from anywhere**, so a shell could not size
+  a raster to stay inside it and the operator could not buy the right colour
+  space with memory. **The gap between it and `MAX_PIXMAP_EDGE` is a factor
+  of four** — a whole tier in which a shell may ask for a raster the engine
+  will not composite in ink.
+
+- **Decision `089` minted** (`ARCHITECTURE.md` §12, with a §10.1a body
+  update). **Two halves, one decision.** (1) §10's no-unbounded-allocation
+  rule bounds **untrusted input** — every guard in §10.1 bounds a
+  file-supplied quantity — and a number the operator typed is not that. So
+  `Settings::max_cmyk_buffer_bytes` is **uncapped**: no guard, no warning, no
+  preflight, on his own `max_zoom_percent` ruling (*"it is up to the user to
+  determine how much of a performance hit they want to take"*). (2) **That is
+  only safe because the allocation became fallible in the same commit.**
+  `vec![0.0; n]` calls the allocation error handler on failure, which
+  **aborts the process** — no unwind, no error path, no page, no disclosure.
+  Fine while the only reachable size was a compile-time constant; not fine
+  the moment 64 GiB is typeable. `CmykBuffer::try_planes` uses
+  `try_reserve_exact`, so a ceiling the *machine* cannot honour is the same
+  disclosed refusal as one the *page* exceeded.
+
+  ⇢ **The transferable rule: a future session that raises or removes an
+  operator-settable allocation bound must check that the allocation behind it
+  is fallible, in the same change.** Widening the bound and hardening the
+  allocation are one edit; shipping the first alone converts a typo into a
+  crash with nothing rendered — strictly worse than the ceiling, which at
+  least drew the page.
+
+- **What the API looks like, and why.** Four `pub` items in `pdfce-render`
+  (`CMYK_BYTES_PER_PIXEL`, `DEFAULT_MAX_CMYK_BUFFER_BYTES`,
+  `max_cmyk_composite_pixels`, `will_composite_in_cmyk`), **all taking
+  `Option<usize>` — exactly the type of the new setting**, so a caller never
+  resolves *unset* itself. `CMYK_BYTES_PER_PIXEL` is **taken from the
+  buffer's own element type**, not restated. The budget is **carried on the
+  buffer**, so a transparency group's child inherits its parent's rather than
+  re-deciding it. `parse_byte_size` / `format_byte_size` / `ByteSizeError`
+  are public in `pdfce_core::settings` so a settings window and
+  `settings.txt` speak **one** vocabulary.
+
+- **★★ A test that checks DOCUMENTATION, which is otherwise the one thing in
+  this project nothing tests.**
+  `the_settings_file_describes_the_ceiling_the_renderer_actually_enforces`
+  lives in `pdfce-render` because `pdfce-core` writes the operator-facing
+  settings file, quotes numbers from `pdfce-render`, and **cannot see it** —
+  the dependency runs the other way. Every other gate in this project checks
+  a literal's *location*, a note's *route* or a number's *uniqueness*; none
+  checks whether a sentence is **true**. This one checks the narrow,
+  arithmetic kind of true, which is the checkable kind, for prose pdfce
+  writes onto the operator's own disk. **It is a genuine `R212` discharge.**
+
+- **★★★ AND THE SWEEP FOUND THAT TEST'S OWN SUBJECT IS WRONG — nine sites,
+  and the shape is worse than staleness because the claim was never right.**
+  Every *"A4"* percentage shipped with this Pass was computed on a **596 ×
+  791 pt** page (the print-conformance file named in the incoming request)
+  and labelled A4. **A4 is 595 × 842 pt.**
+
+  | page | ceiling reached at | `MAX_PIXMAP_EDGE` tier ends at |
+  |---|---:|---:|
+  | **A4, 595 × 842 pt** (what the prose says) | **517.6 %** | **1946 %** |
+  | **596 × 791 pt** (what the prose computed) | **533.6 %** | **2071.3 %** |
+  | US-Letter, 612 × 792 pt | 526.2 % (≈ 379 DPI) | 2069 % |
+
+  **The figures are right and the page label is wrong**, which is the harder
+  version: every number survives an internal consistency check and only the
+  label fails against the world. The memory figures agree with the same
+  page — `~576 MB at 800 %` is **575.5 MiB** for 596 × 791, `~1.26 GB at
+  1200 %` is **1.265 GiB** for it. Correct arithmetic on the wrong sheet.
+
+  **Two sites are the proof rather than two more instances**: the doctest on
+  `will_composite_in_cmyk(3177, 4216, None)` is commented *"A4 at 5.33x"*,
+  and `3177 × 4216` px **is** 596 × 791 pt at 5.33×. True A4 at 5.33× is
+  14.23 M px, **past** the ceiling — so the assertion would be **false** if
+  its own comment were true. **The label and the literal beneath it disagree,
+  and the compiler runs the literal.**
+
+  **One site reaches the operator**: the generated `settings.txt` comment
+  (`settings/mod.rs:1989`), which carries a **third** number — `530 %` —
+  that is neither A4's `517.6 %` nor the measured page's `533.6 %`.
+
+  All nine listed, with paths and line numbers, in the `Pass 132.0` entry's
+  hard-rule-11 sweep. **Reported as owed work — this role does not edit
+  `crates/`.**
+
+- **★★★ AND THE DOCUMENTATION TEST DOES NOT CATCH ANY OF IT, WHICH IS THE
+  TRANSFERABLE HALF.** Its two halves check different things and never meet:
+  one asserts `text.contains("about 530% zoom")` (a **string** check, which
+  pins the prose to a literal without comparing it to anything), the other
+  asserts `(500.0..560.0).contains(&zoom_percent)` on a figure **recomputed
+  on true A4** — 517.6 %. **A ±30-point band holds 517.6, 530 and 534 at
+  once.** ⇢ **The test guards against the CONSTANT MOVING; it does not guard
+  against the PROSE BEING WRONG TODAY** — and it was written, in the same
+  commit, as the answer to exactly that risk. **A tolerance band chosen to
+  survive rounding will also survive being wrong.**
+
+  **Recorded as a named candidate under `R212`**, not minted (n = 1, below
+  the two-occurrence bar), because it is a defect in `R212`'s own prescribed
+  remedy — *"gate the two against each other"* — rather than a new pattern:
+  ⇢ ***a gate between two copies of a contract must compare the two copies; one
+  that compares each copy to a tolerance band instead passes when both are
+  wrong.*** Ceiling stays `R218`, next free `R219`.
+
+- **Checked and CLEAN, reported because a sweep that only reports hits is not
+  a sweep.** The **outbound reply** to pdfceGUI says only *"the gap is a
+  factor of four on A4"* — 3.76× for A4, 3.88× for the measured page, **true
+  either way**, so the copy that travelled does not carry the defect. The
+  **CLI refusal note** quotes no page at all, computing the ceiling, the
+  pixels permitted and the pixels wanted at runtime — **nothing to rot**.
+  `ROADMAP.md`'s **`Pass 122.3`** states *"13.4 Mpx ≈ US-Letter at 375 DPI"*
+  — 378.9 DPI measured, correct within its own rounding, and it names
+  US-Letter rather than A4.
+
+- **`Pass 122.3` is two-thirds discharged and stays in Backlog** (dated
+  amendment filed on it). Discharged: the refusal note now names the way out
+  with numbers, and the ceiling's doc comment now carries the arithmetic
+  argument naming DPI and page size that the entry demanded instead of the
+  by-analogy-with-`MAX_DISPLAY_LIST_BYTES` reasoning it objected to. **Not
+  discharged: banding.** ⇢ *An operator-set ceiling trades memory for
+  correctness; banding removes the trade* — and peak usage is a multiple of
+  nominal (parent + child + spare), so a ceiling admitting one large page
+  admits three.
+
+- **`FEATURES.md`: the new row is filed `[ ]` gui deliberately, and the
+  judgement is stated rather than left implicit.** `crates/pdfce-gui` **has**
+  the control and honours it on all three of its render paths. But that file's
+  own ownership statement (decision 073, 2026-08-19) says the `gui` column
+  tracks **`D:\dev\pdfceGUI`**, whose own `FEATURES.md` treats this column as
+  its acceptance criteria, with the ticking bar *"reachable by an operator in
+  a real `pdfceGUI` build."* That project asked for the API and has **not**
+  wired it. **So `[ ]`, with the in-repo control named in the row. Not
+  rounded up.** Two existing rows were also corrected — the subtractive-buffer
+  row (which stated the ceiling as fixed and the refusal as *"silent"*) and
+  the Planned banding row.
+
+**Verification (engineer's, relayed — not re-run by this role):**
+`cargo test --workspace` green, zero failures across 80 test binaries;
+`cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D
+warnings` clean; 14 runnable `tools/check-*` gates clean; `cargo check -p
+pdfce-core -p pdfce-render --target wasm32-unknown-unknown` passes (**the
+web-fork invariant holds**); `cargo +nightly fuzz build` passes, all 24
+targets, **on Windows/MSVC**; `cargo tree -p pdfce-core` / `-p pdfce-render`
+show no GUI, windowing or network dependency and **neither manifest was
+touched**.
+
+**Live verification, not only unit tests.** On a real subtractive
+conformance page at a fixed scale, `--max-cmyk-buffer-bytes 1mib` gave
+`cmyk_buffer=0 cmyk_buffer_refused=1 blends_in_wrong_space=15`; `128mib`
+gave `cmyk_buffer=1 cmyk_buffer_refused=0 blends_in_wrong_space=0`. **Only
+the flag changed.** Both directions also verified through
+`userdata/settings.txt` with no flag at all. *(Suite not named —
+`tools/check-suite-name-absent.py`.)*
+
+**Checked by this role, from a shell (hard rule 8 — each figure names its
+command):**
+
+- `ls tools/check-*` → **18 files on disk**, all 18 **run by this role after
+  filing**: **17 take no arguments and all 17 exit 0**; the eighteenth,
+  `check-image-colorspace-truth.py`, requires a fixture directory. **That is
+  17, not the engineer's 14** — reported as a disagreement rather than
+  reconciled (`R209`). ★ **`check-suite-name-absent.py` went RED on this
+  filing's own first draft**, three lines of which named the licensed suite
+  while explaining that it must not be named. Scrubbed before writing; clean
+  on the tree as filed. ⇢ *A sentence about a prohibition is still subject to
+  it.*
+- `python tools/check-settings-consumed.py` → *clean — **17** persisted
+  setting(s) parsed, written and read; 19 option field(s) across 2 struct(s)
+  read by at least one caller.* **The new setting is one of the 17.**
+- `python tools/check-ledger-numbers.py` → clean; ceilings at read time
+  `Pass 131.4` / `R218` / decision `088` / filing `269`.
+- `git rev-parse HEAD` → **`76eb04c`**; `git describe` →
+  **`v0.13.0-2-g76eb04c`**; `git rev-parse origin/main` → **`9a4fb18`**;
+  `git rev-list --count origin/main..main` → **2**.
+- `git tag --points-at HEAD` → **empty**; `git tag --list` highest is
+  **`v0.13.0`**.
+- `ls -lt D:\Dev\pdfce-backups\` → newest bundle
+  **`pdfce-20260826-0958-9a4fb18-full.bundle`**, 2026-08-26 09:58, at
+  **`9a4fb18`** — **2 commits behind `HEAD`**, the same two that are
+  unpushed. **No bundle on disk contains either commit filed here.**
+- `git status --porcelain` → **empty at read time**, before this filing's own
+  edits.
+
+**★★ NO `v0.14.0` TAG EXISTS AT FILING TIME, and the outbound reply already
+says it is released.** ★ **The version BUMP appeared in the working tree while
+this filing was being written** — `Cargo.toml` `0.13.0` → `0.14.0`, both lock
+files moved, **uncommitted at last check**. **Tag and bump are different facts;
+both are stated separately rather than collapsed into "released".** The operator instructed a release be cut for
+`Pass 132.0`. `open/reply_cmyk_buffer_ceiling.md` states *"released as
+`v0.14.0`"* — **that sentence is ahead of the repository.** Per `§I` of the
+handoff the filing commit must be the last commit before any tag, so the
+correct order is: **commit this filing, then bump, tag, push, publish, and
+run `verify-release.py`.** Recorded as **instructed-and-pending**, not as
+done. The reply file will be true once the release is cut; if it is not cut,
+that file needs a correction rather than a quiet deletion.
+
+**Ledger:**
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `131.4` highest | **`132.0` SHIPPED**, minted directly into *Shipped*. Next free in the family **`132.1`** |
+| decisions | **088** | **089** MINTED. Next free **090** |
+| standing rules | **`R218`** | **`R218`** unchanged — mint declined at n = 1; **named candidate recorded under `R212`**. Next free **`R219`** |
+| open operator questions | `(bq)` | **`(bq)`** unchanged — no new question; the uncapped override reuses his existing `max_zoom_percent` ruling |
+| `SESSION_LOG.md` filings | 269 | **270**. Next free **271** |
+
+**Still in flight:**
+
+- **`v0.14.0` not cut.** See above. Engineer's next act, after committing
+  this filing.
+- **Nine A4-label survivors in `crates/` and `docs/core-api/`**, listed in
+  the `Pass 132.0` entry. **Suggested repair, so the next session is not left
+  to choose:** name the sheet the numbers were computed on (596 × 791 pt),
+  **or** recompute for A4 and move all nine — **not both by halves**, which
+  is how the third number (`530 %`) arose. And tighten the documentation
+  test's band, or replace it with an equality between the recomputed figure
+  and the string it already finds.
+- **A `D:/dev/rag/rust/` escalation is OWED and was NOT written.** The
+  general form — *an infallible allocation is a bound's silent partner; a
+  ceiling removed without `try_reserve` converts a typo into an abort* — is a
+  real ecosystem finding, but no OOM was actually induced this session, so it
+  would be filed on reasoning rather than on measurement. **Reported as owed
+  rather than written on a weak warrant.** The pdfce-visible half is in
+  `ARCHITECTURE.md` §10.1a and decision 089.
+- **`Pass 122.3`** stays Backlog for banding.
+
+**For next session:** `docs/NEXT_SESSION.md` is rewritten in this filing.
+The `/A`-vs-`/AA` scanning defect — `scan_javascript` misses a push button's
+**primary** action — **is still unfixed and is still the right first task**;
+the uncommitted-tree half of the previous handoff is now stale and has been
+removed.
+
+**★★★ OBSERVED WHILE FILING, AND REPORTED RATHER THAN FIXED — THE A4 REPAIR
+TRIPPED `check-string-gaps.sh`, WHICH IS THE SAME SHAPE AS `6a9511a`.** The
+engineer began the §D repair in the working tree while this filing was being
+written, taking the **recompute-for-A4** branch (`534 %` → `518 %`, `2071 %` →
+`1946 %`, `375 DPI` → `379 DPI`). Re-running the gates against that live tree
+turned `check-string-gaps.sh` **red** at
+`crates/pdfce-render/tests/ambiguity_settings_reach_the_pixels.rs:468` — a run
+of spaces baked into the rewritten assertion message, a line continuation that
+lost its trailing backslash. **`crates/` is outside this role's remit, so it
+was reported, not repaired.**
+
+⇢ **Same family as the 267th filing's `6a9511a`, and the same trigger: a
+mechanical edit to PROSE, inside a commit whose subject is *"correct the
+documentation"*, which is the commit least likely to have its prose re-read.**
+The difference is the outcome, and it is the encouraging half — **`6a9511a`'s
+defect was in a doc comment, which no gate could see; this one is in a string
+literal, which `check-string-gaps.sh` caught immediately.** The gate exists
+because of that family and it earned its place here.
+
+**Gates, run after this filing** — 17 argument-free gates run by this role,
+**all 17 green on the tree as filed**; `check-string-gaps.sh` red on the
+engineer's *later* in-flight `crates/` edit, per the note above. The engineer's
+own sweep at commit time is the authoritative one.
+
+---

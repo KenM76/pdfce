@@ -96,6 +96,388 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 132.0` (`76eb04c`) — **THE CMYK COMPOSITING CEILING IS READABLE AND SETTABLE** — ★★★ **the behaviour was right and the disclosure was right; what was wrong is that NOBODY OUTSIDE `pdfce-render` COULD READ THE LINE and the operator could not move it** — the same page rendered different colours at different zoom levels and nothing on screen could say where the boundary was; ★★★ **§10's allocation ceiling is about UNTRUSTED INPUT, and that had been conflated with "any large allocation" for as long as the constant was the only answer** — a page's dimensions come from the file and are untrusted; a number the operator typed is not, so the override is **uncapped**, no guard, no warning, no preflight, on his own `max_zoom_percent` ruling; ★★★ **AND THAT IS ONLY SAFE BECAUSE OF A SECOND CHANGE THAT MUST NEVER BE SEPARATED FROM IT — `vec![0.0; n]` ALLOCATES INFALLIBLY AND ABORTS THE PROCESS ON FAILURE**, acceptable while the only reachable size was a compile-time 256 MiB and not acceptable the moment the operator can name 64 GiB: `CmykBuffer::try_planes` now uses `try_reserve_exact`, so a ceiling the machine cannot honour becomes the same **disclosed refusal** as a ceiling the page exceeded; ★★ **four `pub` items in `pdfce-render`, all taking `Option<usize>` — exactly the type of the new setting — so a caller never resolves "unset" itself**; ★★ **the budget is carried ON the buffer, so a transparency group's child inherits its parent's rather than re-deciding it**; ★★ **a new test checks the DOCUMENTATION, which is otherwise the one thing in this project nothing tests** — `pdfce-core` writes the settings file's operator-facing prose and cannot see `pdfce-render`, so the check lives at the one boundary that can see both; ★★★ **AND THIS FILING'S SWEEP FOUND THAT THE PROSE THAT TEST GUARDS IS WRONG IN NINE PLACES — every "A4" percentage in it was computed on a 596 × 791 pt page, and the test passes anyway because its band is ±30 points wide** — 2026-08-26 (270th filing)
+
+**Seventeen files, `crates/` + `docs/core-api/`, +1,225 / −50 lines** *(`git
+show --stat 76eb04c`, run here — `pdfce-core/src/settings/mod.rs` **+291**,
+`pdfce-render/src/cmyk_buffer.rs` **+189**, `pdfce-cli/tests/render_page.rs`
+**+120**, `pdfce-render/src/lib.rs` **+111**, `pdfce-gui/src/settings_panel.rs`
+**+91**, `docs/core-api/03-capabilities.md` **+87**,
+`pdfce-render/tests/transparency_is_disclosed.rs` **+81**,
+`pdfce-cli/src/main.rs` **+65**, `pdfce-gui/src/ui_text.rs` **+55**,
+`pdfce-render/src/font/mod.rs` **+50**,
+`pdfce-render/tests/ambiguity_settings_reach_the_pixels.rs` **+51**, six
+smaller)*.
+
+**Minted directly into *Shipped*.** Requested and delivered in the same
+session, so it never existed under *Next up* — recorded here rather than
+back-dated into a queue it was never in.
+
+#### Origin — an outside project reported a symptom, not a defect
+
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_cmyk_buffer_ceiling_is_invisible_to_the_gui.md`
+(2026-08-26, plus a same-day addendum carrying an operator ruling). The
+operator-visible symptom, verbatim:
+
+> *"seems I get different results depending on Zoom level … up to 474% they
+> are mismatched, but at 579% they match."*
+
+#### The defect, in one line
+
+A page whose group declares a subtractive blending space composites in a
+four-colorant buffer at **20 bytes per pixel**. Above a fixed **256 MiB**
+ceiling it composited in sRGB and **said so** (`cmyk_buffer_refused`). **Both
+of those are correct.** What was wrong is that the ceiling was **unreadable
+from outside the crate** and **immovable from anywhere**.
+
+★ **The gap is a factor of four, and that is the shape of the problem.** The
+ceiling permits **13,421,772 px**; `MAX_PIXMAP_EDGE` permits a whole-page
+raster roughly four times further. **Every raster in between is one the shell
+is allowed to ask for and the engine will not composite in the right space.**
+
+#### What shipped — READABLE
+
+Four public items in `pdfce-render`, beside `MAX_PIXMAP_EDGE`:
+
+| item | what it answers |
+|---|---|
+| `CMYK_BYTES_PER_PIXEL` | 20 — **taken from the buffer's own element type**, not restated |
+| `DEFAULT_MAX_CMYK_BUFFER_BYTES` | 256 MiB |
+| `max_cmyk_composite_pixels(Option<usize>) -> u64` | how many pixels fit under a ceiling |
+| `will_composite_in_cmyk(w, h, Option<usize>) -> bool` | **the question a caller actually has** |
+
+★ **All four take `Option<usize>`, which is exactly the type of the new
+setting**, so a caller never has to decide what *unset* means — the answer
+lives on this side of the boundary. ⇢ *A measured limit copied into a second
+place is one that rots;* the predicate exists so the 20 B/px arithmetic stays
+in one crate.
+
+#### What shipped — SETTABLE
+
+`pdfce_core::settings::Settings::max_cmyk_buffer_bytes: Option<usize>`, plus
+three new public items in that module: `parse_byte_size` (returns
+`Result<Option<usize>, ByteSizeError>` — accepts `default`, a bare byte count,
+or `kb`/`kib`/`mb`/`mib`/`gb`/`gib`, fractional values allowed),
+`format_byte_size`, and the `ByteSizeError` type. Threaded
+`RenderOptions::with_max_cmyk_buffer_bytes` → `RenderPolicy` → `CmykBuffer`.
+
+★ **Carried ON the buffer**, so a transparency group's child **inherits its
+parent's budget** rather than re-deciding it — the alternative is a nested
+group that disagrees with its own parent about which colour space the page is
+in.
+
+★ **`parse_byte_size`/`format_byte_size` are the SAME vocabulary the settings
+file uses**, so a settings window and `settings.txt` accept and display
+identical strings. That is the anti-second-implementation move this project
+keeps making, applied to a text format instead of to a render path.
+
+**`pdfce-cli`:** `render-page --max-cmyk-buffer-bytes <SIZE>`. **An unreadable
+value is reported and ignored, never silently read as zero** — a zero ceiling
+would refuse every page and look exactly like a correctly-honoured tiny one.
+The refusal note now names **both** ways out with real numbers — *"it is `{}`
+here, which permits `{}` pixel(s) and this raster wanted `{}`"* — where it
+previously said only *"re-render at a lower resolution"*, which was the whole
+truth when it was written and is now half of it.
+
+**`crates/pdfce-gui`** (the in-repo shell): a control in the settings window's
+Colour group — a checkbox (*"use pdfce's default"*) plus an **uncapped**
+`DragValue` in MiB, **deliberately not a slider**, ★ *because a slider must
+have two ends and would invent the cap this setting is not allowed to have*.
+Honoured on the canvas, the thumbnail rail and the print preview, which it
+joins the cache key of **because it changes the pixels**.
+
+#### ★★★ THE DECISION, AND ITS TWO HALVES ARE ONE DECISION
+
+Filed as **decision 089** (`ARCHITECTURE.md` §12), with a §10 body-section
+update. Restated here because the two halves are separable in reading and
+must not be separable in practice:
+
+1. **`ARCHITECTURE.md` §10's allocation-ceiling rule is about UNTRUSTED
+   INPUT.** A page's `/MediaBox` comes from the file; a number the operator
+   typed does not. Those had been conflated for as long as the constant was
+   the only answer. So the override is **uncapped**, on the ruling the
+   operator gave for `max_zoom_percent`: *"it is up to the user to determine
+   how much of a performance hit they want to take."* No guard, no warning,
+   no preflight — **state the cost, do not prevent the choice.**
+2. **That is only safe because the allocation became FALLIBLE in the same
+   commit.** `vec![0.0; n]` calls the allocation error handler on failure,
+   which **aborts the process**. `CmykBuffer::try_planes` now uses
+   `try_reserve_exact` + `resize`.
+
+⇢ **The generalisable lesson, and it is the reason this is a decision rather
+than a Pass note: a future session that raises or removes an
+operator-settable allocation bound must check that the allocation behind it
+is fallible.** Widening the bound and hardening the allocation are one change;
+shipping the first without the second converts an operator's typo into a
+crash with no page rendered.
+
+#### ★★ THE DOCUMENTATION TEST — a check on the one thing nothing tests
+
+`the_settings_file_describes_the_ceiling_the_renderer_actually_enforces`
+(`crates/pdfce-render/tests/ambiguity_settings_reach_the_pixels.rs`).
+
+**`pdfce-core` writes the settings file's operator-facing prose and CANNOT see
+`pdfce-render`** — the dependency runs the other way — so that paragraph
+quotes numbers (20 bytes per pixel; a zoom percentage) that live in a crate it
+cannot check against. **That is exactly the arrangement in which a comment goes
+quietly wrong:** the constant moves, every test still passes, and the operator
+reads a stale sentence **in a file pdfce itself generated onto their disk**.
+
+`pdfce-render` can see both, so the test lives there and recomputes the figure
+from the constant rather than restating it.
+
+★ **This is a check on DOCUMENTATION.** Every other gate in this project checks
+a literal's *location* (`check-ui-strings.sh`), a note's *route*
+(`check-disclosure-channel.sh`) or a number's *uniqueness*
+(`check-ledger-numbers.py`). None of them checks whether a sentence is **true**,
+and hard rule 11's own text says no mechanical gate can. **This one checks a
+narrow, arithmetic kind of true**, which is the kind that is checkable — and it
+is worth having for exactly the sentences pdfce writes into the operator's own
+files.
+
+★ **This test is a genuine `R212` discharge** — *"name which copy is
+authoritative, and either generate the other from it or gate the two against
+each other."* `pdfce-render`'s constant is authoritative; the settings file's
+sentence is the published copy; the test is the gate.
+
+**Standing-rule disposition: MINT DECLINED at n = 1, and the decline is
+argued — but the candidate it produced is a defect in `R212`'s OWN REMEDY,
+not a new pattern.** ⇢ ***A gate between two copies of a contract must compare
+the two copies; one that compares each copy to a tolerance band instead passes
+when both are wrong.*** **Recorded as a named candidate under `R212`** in
+*Standing rules* — see the sweep below for why this test is the instance.
+Ceiling stays `R218`, next free `R219`.
+
+#### ★★★ HARD-RULE-11 SWEEP — searched for the CLAIM, and the claim is wrong in nine places
+
+**The sweep's finding is not a stale claim. It is a claim that was never
+right**, and it is in the prose the documentation test above was written to
+protect.
+
+**Every "A4" percentage shipped with this Pass was computed on a 596 × 791 pt
+page** — the print-conformance file named in the incoming request — **and
+labelled A4.** A4 is 595 × 842 pt.
+
+**Checked here, by arithmetic on the shipped constants** (`13,421,772` px from
+`max_cmyk_composite_pixels(None)`; `MAX_PIXMAP_EDGE` = 16,384):
+
+| page | ceiling reached at | `MAX_PIXMAP_EDGE` tier ends at |
+|---|---:|---:|
+| **A4, 595 × 842 pt** (what the prose says) | **517.6 %** | **1946 %** |
+| **596 × 791 pt** (what the prose computed) | **533.6 %** | **2071.3 %** |
+| US-Letter, 612 × 792 pt | 526.2 % (≈ **379 DPI**) | 2069 % |
+
+★ **The figures are RIGHT and the page LABEL is wrong** — which is the harder
+version of this error, because every figure survives an internal
+consistency check and only the label fails against the world. The
+memory figures agree with the same page: `~576 MB at 800 %` is
+**575.5 MiB** for 596 × 791, and `~1.26 GB at 1200 %` is **1.265 GiB** for the
+same page. Both are correct arithmetic on the wrong sheet.
+
+**Survivors, reported as owed work — this role does not edit `crates/`:**
+
+| # | site | claim |
+|---|---|---|
+| 1 | `crates/pdfce-render/src/lib.rs:182` | *"or A4 to about 534 % zoom"* |
+| 2 | `crates/pdfce-render/src/lib.rs:198` | *"A4 at the end of the `MAX_PIXMAP_EDGE` tier (2071 %)"* |
+| 3 | `crates/pdfce-render/src/lib.rs:252` | doctest comment *"A4 at 5.33x — 13.39 M px"* over `will_composite_in_cmyk(3177, 4216, None)` |
+| 4 | `crates/pdfce-render/src/lib.rs:254` | doctest comment *"A4 at 5.34x — 13.44 M px"* over `(3183, 4224)` |
+| 5 | `crates/pdfce-render/src/cmyk_buffer.rs:256` | *"crossing this ceiling at about 534 % on A4"* |
+| 6 | `crates/pdfce-core/src/settings/mod.rs:1139` | *"crossing the built-in ceiling at about 534 % on A4"* |
+| 7 | `crates/pdfce-core/src/settings/mod.rs:1989` | ★ **the generated `settings.txt` comment** — *"Rough guide, whole A4 page: 256mib reaches about 530% zoom"* |
+| 8 | `docs/core-api/03-capabilities.md:2004` | *"a factor of four on A4 … permitted up to 2071 % … stops compositing in ink at about 534 %"* |
+| 9 | `docs/core-api/03-capabilities.md:2035` | *"Whole-page A4 wants ~576 MB at 800 %, ~1.26 GB at 1200 %"* |
+
+★★ **Sites 3 and 4 are the proof, not merely two more instances.** `3177 ×
+4216` px **is** 596 × 791 pt at 5.33×; true A4 at 5.33× is `3172 × 4487` =
+**14.23 M px**, which is **past** the ceiling — so the doctest's own
+`assert!(will_composite_in_cmyk(3177, 4216, None))` would be **false** if the
+comment above it were true. The label and the literal beneath it disagree, and
+the compiler runs the literal.
+
+★★ **Site 7 is the one that reaches the operator.** It is written into
+`settings.txt` on their disk, by pdfce, describing their own machine's
+behaviour. It also carries a **third** number — `530 %` — which is neither
+A4's `517.6 %` nor the measured page's `533.6 %`.
+
+★★★ **AND THE DOCUMENTATION TEST DOES NOT CATCH ANY OF IT, WHICH IS THE
+TRANSFERABLE HALF.** The test computes on `595.0 * 842.0` — **true A4, the
+only place in this Pass that got the sheet right** — obtains **517.6 %**, and
+then asserts `(500.0..560.0).contains(&zoom_percent)`. **A ±30-point band is
+wide enough to hold 517.6, 530 and 534 at once.** The other half of the test
+is `assert!(text.contains("about 530% zoom"))` — a **string** check, which
+pins the prose to a literal without ever comparing it to the number the same
+test just computed. ⇢ **The test guards against the CONSTANT MOVING. It does
+not guard against the PROSE BEING WRONG TODAY** — and it was written, in this
+same commit, as the answer to exactly that risk. **A tolerance band chosen to
+survive rounding will also survive being wrong.**
+
+**Checked and CLEAN, reported because a sweep that only reports hits is not a
+sweep:**
+
+- **The outbound reply** (`open/reply_cmyk_buffer_ceiling.md`) says only *"the
+  gap is a factor of four on A4"* — **3.76× for A4, 3.88× for the measured
+  page; true either way.** The copy that travelled to the other project does
+  **not** carry the defect.
+- **`crates/pdfce-cli/src/main.rs`'s refusal note** quotes no page at all — it
+  prints the ceiling, the pixels permitted and the pixels wanted, all
+  computed at runtime. **Nothing to rot.**
+- **`ROADMAP.md`'s `Pass 122.3` entry** states the ceiling as *"13.4 Mpx ≈
+  US-Letter at 375 DPI"* — **378.9 DPI measured, so correct within its own
+  rounding**, and it names US-Letter rather than A4.
+
+**Suggested repair, so the next session is not left to choose:** name the
+sheet the numbers were computed on (596 × 791 pt, the file the request was
+measured against), **or** recompute for A4 and move all nine. **Do not do
+both by halves** — that is how site 7's third number arose. And tighten the
+test's band, or drop the band in favour of asserting the recomputed figure
+against the string it just found.
+
+#### Verification (engineer's, reported here rather than re-run by this role)
+
+| check | result |
+|---|---|
+| `cargo test --workspace` | green, zero failures (80 test binaries) |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `tools/check-*` gates, runnable set | 14 clean, incl. `check-settings-consumed.py` and `check-ui-strings.sh` — **this role measured 17, see below** |
+| `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` | passes — **the web-fork invariant holds** |
+| `cargo +nightly fuzz build` | passes, all 24 targets, **on Windows/MSVC** |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | no GUI, windowing or network dependency; **neither manifest was touched** |
+
+**Checked by this role, from a shell, at filing time:**
+
+- `ls tools/check-*` → **18 files on disk**, and this role **ran all 18 after
+  filing**: **17 take no arguments and all 17 exit 0**; the eighteenth,
+  `check-image-colorspace-truth.py`, requires a fixture directory and prints
+  its usage. **That is 17, not the engineer's 14** — reported as a
+  disagreement rather than reconciled, per `R209` (*a green sweep names a
+  set, and the set somebody runs is not the set CI runs*). The engineer's
+  figure is presumably a narrower subset; **neither of us said which set we
+  meant, which is the whole of `R209`'s point.**
+- ★ **`tools/check-suite-name-absent.py` went RED on this filing's own first
+  draft** — three lines of it named the licensed suite while explaining that
+  the suite must not be named. Scrubbed before writing; the gate is clean on
+  the tree as filed. ⇢ *A sentence about a prohibition is still subject to
+  it.*
+- `python tools/check-settings-consumed.py` → *"clean — **17** persisted
+  setting(s) parsed, written and read; 19 option field(s) across 2 struct(s)
+  read by at least one caller."* **The new setting is one of the 17.**
+- `python tools/check-ledger-numbers.py` → `clean`; ceilings
+  `Pass 131.4` / `R218` / decision `088` / filing `269` at read time, which is
+  what makes `132.0`, `089` and `270` free.
+
+**New tests:**
+
+| test | crate |
+|---|---|
+| `the_operator_s_ceiling_decides_the_path_and_the_predicate_agrees` | `pdfce-render` |
+| `the_settings_file_describes_the_ceiling_the_renderer_actually_enforces` | `pdfce-render` |
+| `the_cmyk_buffer_ceiling_is_settable_and_the_outcome_is_disclosed` | `pdfce-cli` |
+| three `parse_byte_size` round-trip/rejection tests | `pdfce-core` |
+
+★ **The first one's pairing is the point.** It asserts that the ceiling
+decides the path **and** that the public predicate agrees, at four ceilings —
+because a caller sizing a raster **cannot consult `cmyk_buffer_refused` before
+rendering**. A predicate that disagreed with the buffer would be worse than no
+predicate: it would be a confident wrong answer at exactly the moment the
+shell had committed to a raster size.
+
+#### Live verification, not only unit tests
+
+On a real subtractive conformance page at a **fixed** scale:
+
+| `--max-cmyk-buffer-bytes` | `cmyk_buffer` | `cmyk_buffer_refused` | `blends_in_wrong_space` |
+|---|---:|---:|---:|
+| `1mib` | 0 | **1** | **15** |
+| `128mib` | **1** | 0 | **0** |
+
+**Only the flag changed.** Both directions were also verified through
+`userdata/settings.txt` with no flag at all, which is the path the operator
+actually takes. *(The conformance suite is not named — `tools/check-suite-name-absent.py`
+gates that.)*
+
+#### What this discharges, and what it does not
+
+★ **Two of `Pass 122.3`'s three acceptance clauses are now met** — see the
+dated amendment on that Backlog entry. **The third, banding, is not**, and
+`FEATURES.md`'s *Planned* row for it stands.
+
+★ **This does not make a large whole-page render composite in ink.** It makes
+the boundary **legible and movable**. A shell that wants ink at 1200 % on a
+large sheet still has to pay ~1.26 GiB for it, and that is now a choice
+somebody can make rather than a wall nobody could see.
+
+★★ **AND THE CEILING BOUNDS ONE BUFFER, NOT THE RENDER — recorded here
+because a settings UI that quotes the ceiling as a memory figure will
+understate it.** Every buffer on a page is page-sized and a page can hold
+several at once: the page buffer, a transparency group's child, the retained
+spare a sibling group reuses, and — for a **knockout** group — a full copy of
+its initial backdrop. **Peak resident memory is up to about 4× the ceiling.**
+`docs/core-api/03-capabilities.md` §7.3a carries the consuming shell's copy of
+this. It is also the standing argument for banding (`Pass 122.3`): *a ceiling
+that admits one large page is not a ceiling that admits one large
+allocation.*
+
+★ **`crates/pdfce-gui` has the control; `D:\dev\pdfceGUI` does not yet.**
+`FEATURES.md`'s `gui` column tracks the latter by its own stated ownership
+rule (decision 073), so the new row is filed **`[ ]` gui** with the in-repo
+control named in the row. **Not rounded up.**
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `131.4` highest; `132` family unused | **`132.0` SHIPPED**, minted by this filing directly into *Shipped*. Next free in the family is **`132.1`**; `130.2` and `131.0`–`131.4` remain Backlog. |
+| decisions (`ARCHITECTURE.md` §12) | **088** | **089** (**MINTED** — *§10's ceiling rule is about untrusted input, so an operator-set bound is uncapped — and that is only safe because the allocation behind it became fallible in the same commit*). Next free **090**. |
+| standing rules | **`R218`** | **`R218`** (unchanged — **mint DECLINED at n = 1**, warrant above; recorded as a **named candidate under `R212`**, whose own prescribed remedy it refines). Next free **`R219`**. |
+| open operator questions | ceiling `(bq)` | **`(bq)`** (unchanged — no new question; the uncapped-override ruling reuses the operator's existing `max_zoom_percent` answer rather than asking again). |
+| `SESSION_LOG.md` filings | **269** | **270**. Next free **271**. |
+
+**Git state, checked rather than inferred** (hard rule 8; every figure names
+its command):
+
+- `git rev-parse HEAD` → **`76eb04c`**. `git describe` → **`v0.13.0-2-g76eb04c`**.
+- `git rev-parse origin/main` → **`9a4fb18`**; `git rev-list --count
+  origin/main..main` → **2**. `c29f5bd` and `76eb04c` are **local only**.
+- `git tag --points-at HEAD` → **empty**. `git tag --list` → highest is
+  **`v0.13.0`**. ★★ **NO `v0.14.0` TAG EXISTS AT FILING TIME.** ★ **The
+  version BUMP, however, appeared in the working tree while this filing was
+  being written** — `Cargo.toml` `0.13.0` → `0.14.0`, both lock files moved,
+  **uncommitted at last check** (`git diff Cargo.toml`, run here). **Tag and
+  bump are different facts and this entry states both separately**; re-run
+  `git tag --list` rather than trusting either sentence an hour from now. The
+  operator instructed a release be cut for this Pass, and the outbound reply
+  at `open/reply_cmyk_buffer_ceiling.md` already states *"released as
+  `v0.14.0`"* — **that sentence is ahead of the repository.** Per `§I` of the
+  handoff the filing commit must be the last commit before any tag, so the
+  correct order is: commit this filing, **then** bump, tag, push and publish.
+  **Recorded as instructed-and-pending, not as done.**
+- `ls -lt D:\Dev\pdfce-backups\` → newest bundle
+  **`pdfce-20260826-0958-9a4fb18-full.bundle`**, 2026-08-26 09:58, at
+  **`9a4fb18`** — **2 commits behind `HEAD`**, the same two that are
+  unpushed. **No bundle on disk contains either commit filed here.**
+- `git status --porcelain` → **empty at read time**, before this filing's own
+  edits. ★ Note the shape: the 268th/269th filings' tree was left uncommitted
+  by a plan-only session and was committed **unchanged** by this one, as
+  `c29f5bd`, separately from its own code — which is why `76eb04c` is a clean
+  code-only commit and why `check-commits-filed.py` has two commits to
+  account for rather than one.
+
+**Gates, run after this filing** — reported at the foot of this entry's
+`SESSION_LOG.md` twin.
+
+**RAG escalations from this entry:** none written. The `try_reserve_exact`
+half is a genuine Rust-ecosystem finding, but it is one this project has now
+recorded in `ARCHITECTURE.md` §10 and §12 where the rule it constrains lives;
+escalating it to `D:/dev/rag/rust/` is **recommended to the engineer** rather
+than done here, because the crisp general form — *an infallible allocation is
+a bound's silent partner* — deserves a measurement this filing does not have
+(no OOM was actually induced). **Reported as owed, not written.** (Forward
+slashes deliberately — see hard rule 11's own note.)
+
+---
+
 ### `6a9511a` — **THE STALENESS REPAIR CREATED THE NEXT DEFECT ONE LINE INSIDE ITS OWN EDIT** — ★★★ **`2c3210a`'s splice matched the heading text but NOT its trailing fragment, so `, stated plainly` was carried down and welded on AFTER the full stop of the replacement sentence**: `… and crosses nothing., stated plainly`; ★★★ **NO GATE WAS EVER GOING TO CATCH IT, and that is the transferable half — `check-string-gaps.sh` is clean (there is no run of spaces), `clippy -D warnings` is clean (it is a doc comment), the crate compiles: A SENTENCE CAN BE GRAMMATICALLY RUINED AND REMAIN A PERFECTLY VALID DOC COMMENT**; ★★ **found by RE-READING THE DIFF, inside the amendment to the filing of the very commit that created it**; ★★ **and the shape is the reason it survived: a commit whose SUBJECT is *"correct the stale documentation"* is the commit LEAST likely to have its prose re-read, because the diff looks exactly like the intended change**; ★ **classified as a CLAUSE on an existing finding, NOT a new rule** — same family as the wrapped-literal and heredoc defects, a mechanical edit to prose with nothing mechanical checking the prose — no Pass ID, one-line documentation correction, **no behaviour change** — 2026-08-26 (two-hundred-and-sixty-seventh filing)
 
 **One file, 1 insertion, 1 deletion** *(`git show --stat 6a9511a`, run here)*:
@@ -81602,6 +81984,41 @@ with the scale at which it fired; the ceiling's value is justified in its own
 doc comment **by an arithmetic argument naming DPI and page size**, not by
 agreement with a sibling constant.
 
+> **★★ 2026-08-26 (270th filing) — TWO OF THREE ACCEPTANCE CLAUSES ARE
+> DISCHARGED BY `Pass 132.0` (`76eb04c`). THIS ENTRY STAYS IN BACKLOG FOR THE
+> THIRD, WHICH IS BANDING.**
+>
+> **Discharged.** (1) *"the refusal is disclosed on the stable stdout line"* —
+> `cmyk_buffer_refused` already was; `Pass 132.0` adds **the ceiling in force,
+> the pixels it permits and the pixels the raster wanted** to the operator
+> note, so the disclosure now names the way out instead of only the fact.
+> (2) *"the ceiling's value is justified in its own doc comment by an
+> arithmetic argument naming DPI and page size, not by agreement with a
+> sibling constant"* — `DEFAULT_MAX_CMYK_BUFFER_BYTES` now carries exactly
+> that argument, and the by-analogy-with-`MAX_DISPLAY_LIST_BYTES` reasoning
+> this entry objected to is gone. **`CMYK_BYTES_PER_PIXEL` is derived from the
+> buffer's own element type**, so the arithmetic cannot desynchronise from
+> what it describes.
+>
+> ★ **The arithmetic is right and its page LABEL is not** — every "A4"
+> percentage shipped with that Pass was computed on a **596 × 791 pt** page.
+> Nine sites, listed in the `Pass 132.0` entry's hard-rule-11 sweep, reported
+> as owed. **This entry's own `"13.4 Mpx ≈ US-Letter at 375 DPI"` was checked
+> and is correct** (378.9 DPI measured) — it names US-Letter, not A4.
+>
+> **NOT discharged, and the wording above is now half-stale rather than
+> wrong:** a whole-page render past the ceiling still changes colour space
+> with scale. It is **no longer "silently"** — it never was, on the CLI's
+> stable line — and it is **no longer fixed**, because the operator can move
+> the ceiling. **Banding remains the real answer** and remains this entry's
+> reason to exist, for the argument this entry already makes: peak usage is a
+> **multiple** of nominal (parent + child + spare), so raising the number
+> admits three large pages where it admits one. **An operator-set ceiling
+> trades memory for correctness; banding removes the trade.**
+>
+> `FEATURES.md`'s *Planned* row *"Band a large page render"* is re-worded in
+> the same filing and stands.
+
 ---
 
 ### `Pass 122.7` — ★★ RE-SCOPED AGAIN — from "reduce the blue floor" to "adopt a conformant transform" — a fitted table cannot reach the target, `iccce` proved it structurally, decision 087
@@ -99171,6 +99588,51 @@ same cause (hashes exist only at commit time), two different failure modes.
   by `R213`'s mint — next free is now `R214`. Left in place because this line
   is a record of what was true when `R212` was written, per the append-only
   convention.)*
+
+  **★★★ NAMED CANDIDATE, RECORDED 2026-08-26 (270th filing) — NOT MINTED, NOT
+  AN AMENDMENT, AND THE CEILING DOES NOT MOVE. `R212` STANDS UNCHANGED; NEXT
+  FREE IS STILL `R219`.** Recorded against `R212` rather than at a fresh number
+  because it is a defect in `R212`'s own prescribed remedy — *"gate the two
+  against each other"* — not a new pattern. n = 1; below this project's
+  two-occurrence bar. **The mint is the operator's act.**
+
+  **The candidate, in one line:** ⇢ ***A GATE BETWEEN TWO COPIES OF A CONTRACT
+  MUST COMPARE THE TWO COPIES. A GATE THAT COMPARES EACH COPY TO A TOLERANCE
+  BAND INSTEAD PASSES WHEN BOTH ARE WRONG, AND A BAND CHOSEN TO SURVIVE
+  ROUNDING WILL ALSO SURVIVE BEING WRONG.***
+
+  **The instance, and it is `Pass 132.0`'s own headline test.**
+  `the_settings_file_describes_the_ceiling_the_renderer_actually_enforces` was
+  written — correctly, and as a genuine `R212` discharge — because
+  `pdfce-core` writes an operator-facing settings file quoting a number that
+  lives in `pdfce-render`, a crate it cannot see. The test lives at the one
+  boundary that can see both. **Its two halves then check different things and
+  never meet:**
+
+  | half | what it does | what it would catch |
+  |---|---|---|
+  | `assert!(text.contains("about 530% zoom"))` | pins the **prose** to a string literal | the sentence being **deleted or reworded** |
+  | `(500.0..560.0).contains(&zoom_percent)` | pins a **recomputed** figure to a band | the **constant moving** far enough |
+
+  **Neither half compares the prose to the recomputation.** The recomputation
+  yields **517.6 %**; the prose says **530 %** in the file it guards and
+  **534 %** in the four `crates/` sites beside it. **A ±30-point band holds all
+  three at once**, so the test is green while the two copies disagree — the
+  exact condition `R212` exists to make impossible.
+
+  ⇢ **The prescribed form:** derive the published string **from** the
+  authoritative number and assert equality on the formatted result, or assert
+  the parsed number **out of the prose** against the recomputation. A band is
+  appropriate for a *measurement*; a number two documents both claim to state
+  is not a measurement, and giving it a tolerance converts an equality check
+  into a plausibility check.
+
+  ★ **Occurrence warrant, stated honestly downward.** n = 1, and the instance
+  was found by the same filing that filed the test — a sweep looking for stale
+  claims found a weak assertion, which is not independent evidence that the
+  shape recurs. **A second instance found by a different filing should mint
+  this as an `R212` clause, not at a fresh number.** Full context and the nine
+  affected sites: the `Pass 132.0` entry's hard-rule-11 sweep, above.
 
 
 - **R213 — A MAGNITUDE CLAIM IS A CLAIM ABOUT *ONE* QUANTITY. NAME THE QUANTITY
