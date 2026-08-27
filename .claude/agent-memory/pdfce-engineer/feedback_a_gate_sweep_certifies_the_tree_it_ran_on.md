@@ -35,6 +35,35 @@ a commit, dispatch the librarian BEFORE pushing — filing after the push means
 the tag points at a commit CI will reject, and moving a public tag is a fact
 that then has to be recorded too.
 
+---
+
+## ★★ RECURRED 2026-08-27, IN THE FORM THE RULE ABOVE DOES NOT NAME
+
+CI went red on `4c32afe`. Nothing was wrong with it: `check-commits-filed`
+named `51c30d6`, the commit *behind* it, which was still unfiled.
+
+**The sharpening: pushing TWO commits in a row with no filing between them
+makes the first one permanently red.** The tip is deferred — so pushing one
+unfiled commit is safe, and I had internalised that as "pushing before filing
+is fine". It is fine exactly once. The moment a second commit lands on top,
+the first stops being the tip and gets checked in full, and the red run on it
+is now permanent history on a public repository.
+
+**Why I did it:** decision 090's *"always push"* removed the pause that used
+to make me check. It grants the push; it does not grant pushing **twice**
+before the librarian has run. That is not a narrowing of Ken's ruling — it is
+a fact about a gate, and the ruling was never about gates.
+
+⇒ **One unfiled commit may sit at the tip. Never two.** If a second is ready
+and the first is unfiled, dispatch the librarian first, or commit the filing
+before pushing either.
+
+The self-correcting part is a trap of its own: `HEAD` goes green on the next
+run, the tree is clean, every local gate passes, and the only surviving
+evidence is a red run on an intermediate commit that nobody will look at
+again. It costs nothing *now* and it is exactly the kind of thing that makes
+"CI is green" stop meaning anything.
+
 Related: [[feedback_never_bundle_code_into_a_filing_commit]] (the same gate,
 the opposite mistake), [[feedback_gates_i_owe_myself]],
 [[feedback_run_the_projects_own_gates]].
