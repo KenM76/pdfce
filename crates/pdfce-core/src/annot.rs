@@ -438,6 +438,58 @@ pub struct Annotation {
     /// with [`Self::effective_reply_type`] rather than being unable to
     /// tell "the file said `R`" from "the file said nothing".
     pub reply_type: Option<ReplyType>,
+    /// `/A` — the **action performed when this annotation is activated**
+    /// (§12.5.2 Table 164), as its `/S` type name. `None` when the
+    /// annotation carries no `/A`.
+    ///
+    /// # Why the read model carries it, when R43 keeps most of Table 164 out
+    ///
+    /// Everything else pdfce declines to model here is *cosmetic* — `/MK`'s
+    /// colours, `/BE`'s border effect — and the argument for leaving it out
+    /// is that nothing consumes it. `/A` is the opposite: it is the only
+    /// entry in the annotation dictionary that says **what happens to the
+    /// operator**, and until `Pass 133.0` it was the one thing
+    /// `list-annotations` could not tell them. A widget that submits a form
+    /// to a web server printed identically to a widget that does nothing.
+    ///
+    /// # The `/S` NAME only, deliberately — not the action dictionary
+    ///
+    /// The type is the whole disclosure: *`SubmitForm`* answers "what does
+    /// this do to me", and the action's own parameters (`/F`, `/URI`,
+    /// `/Flags`) do not change the answer. Modelling them would mean
+    /// modelling twelve action types' worth of dictionaries into a reader
+    /// whose one consumer prints a token — and would put a URL into a
+    /// structure that gets logged, which is a different decision needing its
+    /// own reason.
+    ///
+    /// **This does not follow `/Next`.** A chain is a document-level property
+    /// and is counted by [`crate::forms::scan_javascript`]; making a
+    /// per-annotation field mean "this one plus everything it leads to" would
+    /// give one name to a set. What it does instead is say that the chain is
+    /// there — see [`Self::action_chains`].
+    pub action_type: Option<Vec<u8>>,
+    /// Whether this annotation's `/A` carries a **`/Next`** (§12.6.1) — that
+    /// is, whether activating it performs more than the one action
+    /// [`Self::action_type`] names.
+    ///
+    /// # ★ Why one bool, and why it is not optional polish
+    ///
+    /// Without it, `action_type` is a disclosure that can MISLEAD, which is
+    /// worse than one that is absent. The worked case is in this project's
+    /// own action fixture: a link whose `/A` is `/S /GoTo` — utterly benign,
+    /// the most ordinary thing in a PDF — with a `/SubmitForm` hanging off
+    /// its `/Next`. Reported as `action=GoTo` and nothing else, an operator
+    /// reads *"this link goes to a page"* and is wrong.
+    ///
+    /// That is the same *"a check that under-reports reads as a clean bill of
+    /// health"* shape as the `/AA`-only scan this field was added alongside,
+    /// so fixing one while shipping the other would have been no fix at all.
+    ///
+    /// A bool rather than the chain's contents, deliberately: this says
+    /// **"there is more here than the name above"** and sends the reader to
+    /// [`crate::forms::scan_javascript`] for what it is. Summarising a whole
+    /// chain into one annotation's line is the set-of-names problem again.
+    pub action_chains: bool,
 }
 
 /// `/RT` — the relationship [`Annotation::in_reply_to`] expresses
@@ -698,6 +750,23 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
             other => ReplyType::Other(other.to_vec()),
         });
 
+    // `/A`'s `/S` type name (§12.5.2 Table 164). Resolved through the graph
+    // because an action dictionary is routinely indirect, and taken as the
+    // NAME only — see the field's documentation for why the parameters stay
+    // out of the model.
+    let action = dict
+        .get(b"A")
+        .map(|o| graph.resolve(o))
+        .and_then(Object::as_dict);
+    let action_type = action
+        .and_then(|a| a.get(b"S"))
+        .and_then(Object::as_name)
+        .map(|n| n.as_bytes().to_vec());
+    // Presence only — the chain is walked document-wide by
+    // `forms::scan_javascript`, never here. `/Next` may be one action or an
+    // array of them; both spellings mean the same thing to this bool.
+    let action_chains = action.is_some_and(|a| a.get(b"Next").is_some());
+
     Annotation {
         id,
         subtype,
@@ -713,6 +782,8 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
         popup,
         in_reply_to,
         reply_type,
+        action_type,
+        action_chains,
     }
 }
 

@@ -92,6 +92,19 @@
 //! list-fields:  field name=<"quoted"|(unnamed)> type=<T> button=<B> \
 //!               flags=0x<H> value=<"quoted"|-> widgets=<N> ap=<0|1> \
 //!               fillable=<0|1> readonly=<0|1> aa=<0|1> caption=<"quoted"|->
+//!               …and a summary line whose action half (`Pass 133.0`) is
+//!               emitted WHETHER OR NOT THE DOCUMENT HAS A FORM, because an
+//!               action is a document property: `js_network_actions=<n>`
+//!               `js_launch_actions=<n>` `annot_actions=<n>`
+//!               `chained_actions=<n>` `page_trigger_actions=<n>`
+//!               `outline_actions=<n>` `js_actions_anywhere=<n>`
+//!               `actions_scanned=<n>` `action_scan_truncated=<0|1>`.
+//!               ★ Read the last one BEFORE the rest: a hazard count of zero
+//!               from a truncated scan means pdfce stopped looking, not that
+//!               the document is clean.
+//! list-annotations: …`action=<Type|Type+next|none>` — what the annotation
+//!               does when activated. `+next` means the action carries a
+//!               `/Next` chain, so the named type is NOT the whole story.
 //! round-trip:   round-trip <input> mode=<M> -> <output>; \
 //!               identical=<0|1> in_bytes=<N> out_bytes=<N> appended=<N> \
 //!               objects=<N> verbatim=<N> reserialized=<N> reloaded=<0|1> \
@@ -7662,6 +7675,7 @@ fn cmd_inspect(file: &Path) -> u8 {
             if let Some(loaded) = full.as_ref() {
                 disclose_wrapper(file, loaded);
                 disclose_repaired_contents(file, loaded);
+                disclose_actions(file, loaded);
             }
             exit::SUCCESS
         }
@@ -7670,6 +7684,67 @@ fn cmd_inspect(file: &Path) -> u8 {
             eprintln!("pdfce-cli: {}: {err}", file.display());
             exit_code_for(err)
         }
+    }
+}
+
+/// Disclose what this document would RUN in a reader that runs things
+/// (`Pass 133.0`).
+///
+/// # Why `inspect`, and why this was the missing surface rather than a new one
+///
+/// `list-fields` has carried the action histogram since decision 009, and it
+/// is the wrong and only place for it. `list-fields` is a FORMS command: an
+/// operator reaches for it when they already believe the document has fields.
+/// A document whose only hazard is a `/Launch` on a bookmark has no fields at
+/// all, and the operator asking *"what is this file?"* runs `inspect` — which
+/// said nothing about actions, on any document, ever.
+///
+/// So the same reasoning the encryption and wrapper disclosures above give
+/// applies exactly: **`inspect` is what a sweep runs first**, and a hazard it
+/// declines to mention is a hazard the sweep reports as absent.
+///
+/// # It is deliberately quiet on an ordinary interactive form
+///
+/// The line fires on [`FormJavaScript::reaches_outside`] or on a script, not
+/// on [`FormJavaScript::any`]. A form with buttons that fill in and reset
+/// itself reaches nothing and gets no warning, because a warning that fires on
+/// every form is one operators learn to scroll past — and then the one that
+/// matters scrolls past too.
+///
+/// Stderr, so the stable `path: PDF version` line a script parses is
+/// undisturbed.
+fn disclose_actions(file: &Path, doc: &pdfce_core::document::Document) {
+    let js = pdfce_core::forms::scan_javascript(doc);
+    if js.reaches_outside() {
+        eprintln!(
+            "pdfce-cli: {}: ★ THIS DOCUMENT REACHES OUTSIDE ITSELF. It carries {} action(s) that would contact the NETWORK and {} that would LAUNCH A PROCESS in Adobe Acrobat or Reader. pdfce RECOGNISES them and NEVER runs any of them (R12/R13/R54) — this is a description of the file, not of anything pdfce did. Where they are: {} on an annotation (something the operator clicks — a button or a link), {} on a page or navigation trigger (fires from MOVING THROUGH the document with nothing clicked, and a navigation node's /Dur fires it on a TIMER), {} on an outline item (a bookmark), and {} reachable ONLY by following an action's /Next chain — that is to say, not visible at any of the places you would look. Run `pdfce-cli list-fields` for the full histogram, which is printed whether or not the document has a form",
+            file.display(),
+            js.network_action_count,
+            js.launch_action_count,
+            js.annotation_actions,
+            js.page_trigger_actions,
+            js.outline_actions,
+            js.chained_actions,
+        );
+    } else if js.javascript_actions > 0 || js.doc_level_scripts > 0 {
+        eprintln!(
+            "pdfce-cli: {}: this document carries {} JavaScript action(s) and {} document-level script(s) that Acrobat/Reader would run. pdfce recognises them and runs none (R53/R54). None of them reaches the network or launches a process — the values a form calculates for itself are shown as last saved, never recomputed",
+            file.display(),
+            js.javascript_actions,
+            js.doc_level_scripts,
+        );
+    }
+    // ★ SAID SEPARATELY, AND SAID EVEN WHEN NOTHING WAS FOUND, because these
+    // are not the same claim: "pdfce found no hazard" and "pdfce stopped
+    // looking" produce the identical silence otherwise, and for a
+    // security-shaped disclosure that is the one confusion that must not be
+    // possible.
+    if js.scan_truncated {
+        eprintln!(
+            "pdfce-cli: {}: ★ THE ACTION SCAN DID NOT FINISH — it hit its own traversal ceiling after {} action(s). Whatever is reported above is a LOWER BOUND, not a total, and an absence of hazards above means pdfce stopped looking rather than that the document is clean",
+            file.display(),
+            js.actions_scanned,
+        );
     }
 }
 
@@ -10006,10 +10081,30 @@ fn cmd_list_annotations(input: &Path, pages_spec: &str) -> u8 {
             };
             println!(
                 "annot page={} index={array_index} subtype={subtype} rect={rect} \
-flags=0x{:X} widget={} disposition={disposition} ap={ap_shape} author={} note={} modified={}",
+flags=0x{:X} widget={} disposition={disposition} ap={ap_shape} action={} author={} note={} modified={}",
                 page_index + 1,
                 annot.flags.0,
                 usize::from(annot.is_widget()),
+                // `Pass 133.0`. WHAT THIS ANNOTATION DOES WHEN CLICKED —
+                // the one entry in Table 164 that describes a consequence
+                // for the operator, and the one this line used to omit. A
+                // widget that submits a form to a web server printed
+                // identically to one that does nothing.
+                annot.action_type.as_deref().map_or_else(
+                    || "none".to_owned(),
+                    |a| {
+                        let name = sanitize_token(&String::from_utf8_lossy(a));
+                        // `+next` is NOT decoration. A `/GoTo` that chains to
+                        // a `/SubmitForm` reads as an ordinary navigation
+                        // link without it, which is a disclosure that
+                        // MISLEADS rather than one that is merely thin.
+                        if annot.action_chains {
+                            format!("{name}+next")
+                        } else {
+                            name
+                        }
+                    },
+                ),
                 opt_token(annot.title.as_ref()),
                 opt_token(annot.contents.as_ref()),
                 opt_token(annot.mod_date.as_ref()),
@@ -14195,7 +14290,38 @@ fn cmd_list_fields(input: &Path, fillable_only: bool, rich_text: bool) -> u8 {
     let Some(form) = pdfce_core::forms::parse_acroform(&doc) else {
         // No form is not an error — report zero and exit clean, so a batch
         // sweep can tally form-bearing vs form-free files.
-        println!("list-fields {} fields=0 no_acroform=1", input.display());
+        //
+        // ★ BUT THE ACTIONS ARE STILL REPORTED, and that is the point of
+        // `Pass 133.0`. Actions are a DOCUMENT property, not a forms
+        // property: a file whose only hazard is a `/Launch` on a bookmark or
+        // a `/URI` on a link has no AcroForm at all, and this branch used to
+        // return before saying so. Worse, `inspect`'s own hazard line points
+        // the operator HERE for the breakdown — so on exactly the documents
+        // where the breakdown matters most, the pointer led to one word.
+        let js = pdfce_core::forms::scan_javascript(&doc);
+        println!(
+            "list-fields {} fields=0 no_acroform=1 js_network_actions={} \
+js_launch_actions={} annot_actions={} chained_actions={} page_trigger_actions={} \
+outline_actions={} js_actions_anywhere={} actions_scanned={} action_scan_truncated={}",
+            input.display(),
+            js.network_action_count,
+            js.launch_action_count,
+            js.annotation_actions,
+            js.chained_actions,
+            js.page_trigger_actions,
+            js.outline_actions,
+            js.javascript_actions,
+            js.actions_scanned,
+            u32::from(js.scan_truncated),
+        );
+        if js.reaches_outside() {
+            eprintln!(
+                "pdfce-cli: {}: this document has NO form, and still carries {} network and {} process-launch action trigger(s) that Adobe Acrobat/Reader would run; pdfce recognizes them but NEVER executes any (R12/R13/R54).",
+                input.display(),
+                js.network_action_count,
+                js.launch_action_count,
+            );
+        }
         return exit::SUCCESS;
     };
 
@@ -14357,7 +14483,9 @@ widgets={} ap={} fillable={} readonly={} aa={} caption={caption} rich={rich}",
         "list-fields {} fields={} shown={shown} need_appearances={} sig_flags=0x{:X} \
 calc_order={} fields_with_aa={fields_with_aa} xfa={xfa} default_resources={} \
 js_calc={} js_format={} js_validate={} js_keystroke={} js_custom={} js_doc_level={} \
-open_action_js={} js_network_actions={} js_launch_actions={}",
+open_action_js={} js_network_actions={} js_launch_actions={} annot_actions={} \
+chained_actions={} page_trigger_actions={} outline_actions={} js_actions_anywhere={} \
+actions_scanned={} action_scan_truncated={}",
         input.display(),
         form.fields.len(),
         u32::from(form.need_appearances),
@@ -14373,8 +14501,23 @@ open_action_js={} js_network_actions={} js_launch_actions={}",
         u32::from(js.open_action_is_javascript),
         js.network_action_count,
         js.launch_action_count,
+        // `Pass 133.0`. Appended per the stable-line append-never-reorder
+        // rule. The first four are carriers the scan used to miss entirely;
+        // the last two are the honesty pair — a hazard count of zero from a
+        // truncated scan is not the same fact as one from a complete scan,
+        // and a reader with only the first number cannot tell them apart.
+        js.annotation_actions,
+        js.chained_actions,
+        js.page_trigger_actions,
+        js.outline_actions,
+        // The superset counter: a JavaScript action ANYWHERE, not only the
+        // four field-level hooks. A page-open script used to report zero in
+        // every script counter this line had.
+        js.javascript_actions,
+        js.actions_scanned,
+        u32::from(js.scan_truncated),
     );
-    if js.network_action_count > 0 || js.launch_action_count > 0 {
+    if js.reaches_outside() {
         eprintln!(
             "pdfce-cli: {}: this form carries {} network and {} process-launch action trigger(s) \
 that Adobe Acrobat/Reader would run; pdfce recognizes them but NEVER executes any (R12/R13/R54).",

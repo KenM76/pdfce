@@ -1636,11 +1636,45 @@ fn string_bytes(obj: &Object) -> Option<Vec<u8>> {
 /// field is script-driven (its stored `/V` is shown as-last-saved, never
 /// recomputed) and knows a document runs scripts on open.
 ///
-/// The `/AA` action-type counts flag the R12 (no-network) and R13
+/// The action-type counts flag the R12 (no-network) and R13
 /// (no-process-launch) hazards loudly: a trigger action can be `/URI`,
 /// `/SubmitForm`, or `/ImportData` (network) or `/Launch` (process); pdfce
 /// recognizes and counts them but has **no JS/action dispatcher** to run them.
+///
+/// # ★★★ IT USED TO SCAN `/AA` ONLY, AND THAT MADE IT LIE
+///
+/// Until `Pass 133.0` every field on this struct was documented as counting
+/// *"`/AA` actions"*, and the scan behind it walked the field tree's `/AA`
+/// dictionaries and nothing else. **A widget's PRIMARY action lives in `/A`**
+/// (§12.5.2 Table 164) — `/AA` carries only the *additional* triggers. So a
+/// push button that submits a form to a web server was reported as
+/// `js_network_actions=0`, on a file Acrobat demonstrably submits from.
+/// Measured against a live local HTTP endpoint.
+///
+/// ⇢ **The failure mode is the one that matters for a security disclosure: a
+/// check that under-reports reads as a clean bill of health.** An operator
+/// asking pdfce whether a document phones home got "no" about a document that
+/// does. Silence and safety are indistinguishable to the reader, which is why
+/// this is a defect of a different order from a missing feature.
+///
+/// Four carriers were missed, not one, and fixing only the reported one would
+/// have left three:
+///
+/// | carrier | clause | what was missed |
+/// |---|---|---|
+/// | annotation `/A` | §12.5.2 Table 164 | the reported case — submit/URI/launch on a widget or link |
+/// | annotation `/AA` | §12.6.3 Table 194 | `/E` `/X` `/D` `/U` `/Fo` `/Bl` on ANY annotation, not just a field |
+/// | page `/AA` | §12.6.3 Table 195 | `/O` and `/C` — an action that fires on page open |
+/// | outline item `/A` | §12.3.3 Table 153 | a bookmark that launches or submits |
+///
+/// ★ **And `/Next` chaining, which is the one that makes a naive scan
+/// unsafe.** §12.6.1: an action dictionary may carry `/Next`, one action or
+/// an array of them, performed after it — and those may chain further. A
+/// document can therefore put a benign `/S /GoTo` where a scanner looks and
+/// hide a `/SubmitForm` behind it. Every walk here follows `/Next` to a
+/// bounded depth and classifies every action in the chain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct FormJavaScript {
     /// Fields with a calculate (`/AA` `/C`) JavaScript action.
     pub fields_with_calculate_script: usize,
@@ -1659,13 +1693,79 @@ pub struct FormJavaScript {
     /// Whether the catalog `/OpenAction` is (or contains) a JavaScript
     /// action — a document that runs a script the instant it opens.
     pub open_action_is_javascript: bool,
-    /// `/AA` actions referencing the **network** — `/URI`, `/SubmitForm`,
-    /// or `/ImportData`. A **blocked capability** under R12; counted and
-    /// flagged loudly, never dispatched.
+    /// Actions referencing the **network** — `/URI`, `/SubmitForm`, or
+    /// `/ImportData` — found on ANY carrier this scan walks, not only `/AA`.
+    /// A **blocked capability** under R12; counted and flagged loudly, never
+    /// dispatched.
     pub network_action_count: usize,
-    /// `/AA` actions referencing a **process launch** (`/Launch`). A blocked
-    /// capability under R13; counted, never dispatched.
+    /// Actions referencing a **process launch** (`/Launch`), on any carrier.
+    /// A blocked capability under R13; counted, never dispatched.
     pub launch_action_count: usize,
+    /// Actions found on an annotation's **`/A`** — the *primary* action, the
+    /// one that fires when the annotation is activated (§12.5.2 Table 164).
+    ///
+    /// Counted separately from the hazard totals above because it answers a
+    /// different question: those say *what could happen*, this says *how much
+    /// of this document is click-activated at all*. A form whose every button
+    /// carries an `/A` is a normal interactive form; the hazard counters are
+    /// what say whether any of it reaches outside the file.
+    pub annotation_actions: usize,
+    /// Actions reached only by following an action's **`/Next`** chain
+    /// (§12.6.1) — actions that do not appear on any carrier directly.
+    ///
+    /// ★ **A non-zero value here is the interesting case**, and it is why the
+    /// counter exists rather than the chain being silently folded into the
+    /// totals: it means the document performs something that is not visible
+    /// at any of the places a reader (human or otherwise) would look. That is
+    /// not by itself sinister — a chain is a legitimate authoring device —
+    /// but it is exactly the shape a scanner that did not recurse would
+    /// report as clean.
+    pub chained_actions: usize,
+    /// Actions on a **page's** `/AA` (`/O` open, `/C` close — §12.6.3
+    /// Table 195): things that fire from turning to a page rather than from
+    /// anything the operator clicked.
+    pub page_trigger_actions: usize,
+    /// Actions on an **outline item's** `/A` (§12.3.3 Table 153) — a
+    /// bookmark that does something other than go to a destination.
+    ///
+    /// Table 153 makes `/A` and `/Dest` mutually exclusive, so an outline
+    /// item counted here is one that is NOT a plain navigation bookmark.
+    pub outline_actions: usize,
+    /// Whether the scan hit its own traversal ceiling and therefore may have
+    /// stopped early.
+    ///
+    /// ★ **This is the honesty bit, and it is the one a caller must not
+    /// ignore.** Every other field here is a count, and a count of zero from
+    /// a truncated scan means *"nothing found so far"*, not *"nothing is
+    /// there" —* which for a security-shaped disclosure is the difference
+    /// between a fact and a guess. When this is `true` the correct
+    /// operator-facing sentence is "pdfce stopped looking", never "pdfce
+    /// found none".
+    pub scan_truncated: bool,
+    /// Every action whose `/S` is `/JavaScript`, on ANY carrier — including
+    /// the ones that are not form fields.
+    ///
+    /// # Why this exists beside `custom_scripts`
+    ///
+    /// [`Self::custom_scripts`] counts field-level `/AA` hooks — calculate,
+    /// format, validate, keystroke — and that is all it has ever counted.
+    /// Which meant a document whose script hangs off a **page open** trigger,
+    /// a **link**, or a **bookmark** reported `js_custom=0`, `js_doc_level=0`
+    /// and `open_action_js=0`: three zeroes, adding up to "this document runs
+    /// no scripts", about a document that runs one the moment a page is
+    /// turned to.
+    ///
+    /// The hazard counters caught it as an *action*; nothing said it was a
+    /// SCRIPT. This is that number, and it is a superset — a field's
+    /// calculate hook is counted here as well as in `custom_scripts`.
+    pub javascript_actions: usize,
+    /// How many action dictionaries this scan classified, in total.
+    ///
+    /// The denominator for every other number here, and the value
+    /// [`MAX_ACTIONS_SCANNED`] bounds. Published rather than kept private
+    /// because a caller comparing two documents needs to know whether a
+    /// smaller hazard count came from a safer file or a shorter walk.
+    pub actions_scanned: usize,
 }
 
 impl FormJavaScript {
@@ -1678,6 +1778,26 @@ impl FormJavaScript {
             || self.open_action_is_javascript
             || self.network_action_count > 0
             || self.launch_action_count > 0
+            || self.annotation_actions > 0
+            || self.page_trigger_actions > 0
+            || self.outline_actions > 0
+            || self.javascript_actions > 0
+    }
+
+    /// Whether anything here reaches **outside the file** — the network or a
+    /// process.
+    ///
+    /// Separate from [`Self::any`] because the two answer questions an
+    /// operator asks at different moments. `any` is *"is this document
+    /// interactive?"*, which is true of most ordinary forms and is not a
+    /// warning. This is *"could opening or clicking in this document contact
+    /// something, or run something?"*, which is.
+    ///
+    /// Collapsing them would make the warning fire on every form that has a
+    /// button, and a warning that always fires is one nobody reads.
+    #[must_use]
+    pub const fn reaches_outside(&self) -> bool {
+        self.network_action_count > 0 || self.launch_action_count > 0
     }
 }
 
@@ -1722,7 +1842,7 @@ pub fn scan_javascript<G: ObjectGraph + ?Sized>(graph: &G) -> FormJavaScript {
         .and_then(Object::as_dict)
     {
         for (_, action) in aa.iter() {
-            classify_action_hazard(graph, action, &mut js);
+            classify_action(graph, action, &mut js);
         }
     }
 
@@ -1731,13 +1851,258 @@ pub fn scan_javascript<G: ObjectGraph + ?Sized>(graph: &G) -> FormJavaScript {
         if action_is_javascript(oa) {
             js.open_action_is_javascript = true;
         }
-        classify_action_hazard(graph, oa, &mut js);
+        classify_action(graph, oa, &mut js);
     }
 
     // /Names /JavaScript document-level name tree.
     js.doc_level_scripts = count_name_tree_scripts(graph, &catalog);
 
+    // ★ EVERY PAGE'S ANNOTATIONS AND ITS OWN /AA.
+    //
+    // Walked from the PAGE TREE rather than from `/AcroForm /Fields`, and
+    // that is the whole repair. The field tree reaches only widgets that are
+    // wired into the form; it does not reach a LINK annotation at all, it
+    // does not reach a widget an authoring tool left off `/Fields`, and it
+    // has no way to reach the page dictionary that owns them. Scanning the
+    // page tree reaches every annotation the file can actually present to
+    // the operator, which is the population the question is about.
+    if let Ok(slots) = crate::page_tree::page_slots(graph) {
+        for slot in slots {
+            if js.actions_scanned >= MAX_ACTIONS_SCANNED {
+                js.scan_truncated = true;
+                break;
+            }
+            let Some(page) = graph.resolved(slot.id).as_dict().cloned() else {
+                continue;
+            };
+            // Page /AA — /O on open, /C on close (§12.6.3 Table 195). Fires
+            // from NAVIGATION, with nothing clicked, which is why it is
+            // counted apart from the annotation actions below.
+            if let Some(aa) = page
+                .get(b"AA")
+                .map(|o| graph.resolve(o))
+                .and_then(Object::as_dict)
+                .cloned()
+            {
+                for (_, action) in aa.iter() {
+                    js.page_trigger_actions += 1;
+                    classify_action(graph, action, &mut js);
+                }
+            }
+            // ★ SUB-PAGE NAVIGATION NODES (§12.4.4.2, PDF 1.5), reached from
+            // the page's `/PresSteps`. Table 163: `/NA` and `/PA` are each
+            // *"an action (WHICH MAY BE THE FIRST IN A SEQUENCE OF ACTIONS)
+            // that shall be executed when a user navigates forward /
+            // backward"*.
+            //
+            // ★★ AND A NODE'S `/Dur` FIRES THEM WITH NO USER INPUT — this is
+            // the only carrier in the standard that runs on a TIMER. A
+            // document can therefore reach the network without the operator
+            // clicking anything and without turning a page.
+            //
+            // Neither ISO 32000-2's enumeration of action carriers nor the
+            // reported defect mentions these. They are here because the scan
+            // was rebuilt from the carrier set rather than from the symptom.
+            if let Some(steps) = page.get(b"PresSteps").and_then(Object::as_reference) {
+                let mut visited = HashSet::new();
+                scan_nav_node_actions(graph, steps, 0, &mut visited, &mut js);
+            }
+            let Some(annots) = page
+                .get(b"Annots")
+                .map(|o| graph.resolve(o))
+                .and_then(Object::as_array)
+                .map(<[Object]>::to_vec)
+            else {
+                continue;
+            };
+            for annot in annots {
+                let Some(dict) = graph.resolve(&annot).as_dict().cloned() else {
+                    continue;
+                };
+                let subtype = dict
+                    .get(b"Subtype")
+                    .and_then(Object::as_name)
+                    .map(|n| n.as_bytes().to_vec())
+                    .unwrap_or_default();
+                // ★ THE TYPE TRAP. On a `/Movie` annotation (Table 186) `/A`
+                // is *"a BOOLEAN OR DICTIONARY specifying whether and how to
+                // play the movie"* — a movie ACTIVATION dictionary, not an
+                // action dictionary, and `/A true` is a legal value. Every
+                // other `/A` in the standard is an action.
+                //
+                // Excluded by name rather than left to fail softly on the
+                // missing `/S`: soft failure gives the right answer for the
+                // wrong reason, and the next person to add a
+                // "classify actions without an /S" branch would silently
+                // start counting movies.
+                //
+                // `/A` is NOT a common annotation entry (Table 164 has
+                // neither `/A` nor `/AA`) — it is subtype-specific, defined
+                // on Link, Screen and Widget. Read on every other subtype
+                // anyway, because a file that carries it elsewhere is a fact
+                // about the file, and a type-gated reader would make pdfce
+                // report a document as inert on the strength of its own
+                // whitelist.
+                if subtype != b"Movie"
+                    && let Some(action) = dict.get(b"A")
+                {
+                    js.annotation_actions += 1;
+                    classify_action(graph, action, &mut js);
+                }
+                // ★ `/PA` ON A LINK — a live URI action parked under a key
+                // nobody looks for. Table 173: *"A URI action FORMERLY
+                // associated with this annotation. When Web Capture changes
+                // an annotation from a URI to a go-to action, it uses this
+                // entry to save the data from the original URI action."*
+                //
+                // "Formerly" describes its provenance, not its potency: it is
+                // a complete, well-formed URI action dictionary sitting in
+                // the file. ISO 32000-2's own enumeration of where actions
+                // live does not name it.
+                if subtype == b"Link"
+                    && let Some(action) = dict.get(b"PA")
+                {
+                    js.annotation_actions += 1;
+                    classify_action(graph, action, &mut js);
+                }
+                // `/AA` on the ANNOTATION (§12.6.3 Table 194) — /E /X /D /U
+                // /Fo /Bl. Distinct from the field `/AA` walked above: a
+                // widget's Table 194 keys and its Table 196 keys live in one
+                // dictionary, but a non-widget annotation has Table 194 keys
+                // and no field tree to be found from.
+                if let Some(aa) = dict
+                    .get(b"AA")
+                    .map(|o| graph.resolve(o))
+                    .and_then(Object::as_dict)
+                    .cloned()
+                {
+                    for (_, action) in aa.iter() {
+                        classify_action(graph, action, &mut js);
+                    }
+                }
+            }
+        }
+    }
+
+    // ★ THE OUTLINE TREE. Table 153 makes `/A` and `/Dest` mutually
+    // exclusive, so an outline item with an `/A` is by construction NOT a
+    // plain navigation bookmark — it is a bookmark that does something else,
+    // and "something else" includes `/Launch`.
+    if let Some(outlines) = catalog
+        .get(b"Outlines")
+        .and_then(Object::as_reference)
+        .filter(|_| true)
+    {
+        let mut visited = HashSet::new();
+        scan_outline_actions(graph, outlines, 0, &mut visited, &mut js);
+    }
+
     js
+}
+
+/// Walk a sub-page navigation-node chain, classifying `/NA` and `/PA`
+/// (§12.4.4.2 Table 163, PDF 1.5).
+///
+/// Nodes form a doubly-linked list through `/Next` and `/Prev` — and **this
+/// `/Next` is not an action's `/Next`** any more than an outline item's is.
+/// Three unrelated dictionaries in this standard use that key for three
+/// different structures; the walk is separated per carrier so none of them
+/// can be mistaken for another.
+///
+/// Only `/Next` is followed, not `/Prev`: a doubly-linked list traversed both
+/// ways revisits every node, and the cycle guard would then be doing the work
+/// the traversal should not be creating.
+fn scan_nav_node_actions<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    id: ObjId,
+    depth: usize,
+    visited: &mut HashSet<ObjId>,
+    js: &mut FormJavaScript,
+) {
+    if depth >= MAX_FIELD_TREE_DEPTH || js.actions_scanned >= MAX_ACTIONS_SCANNED {
+        js.scan_truncated = true;
+        return;
+    }
+    if !visited.insert(id) {
+        return;
+    }
+    let Some(dict) = graph.resolved(id).as_dict().cloned() else {
+        return;
+    };
+    for key in [&b"NA"[..], b"PA"] {
+        if let Some(action) = dict.get(key) {
+            // Counted with the page triggers rather than with the annotation
+            // actions, because that is what they are: something that happens
+            // from MOVING THROUGH the document rather than from clicking on
+            // it. A `/Dur` makes it happen from waiting.
+            js.page_trigger_actions += 1;
+            classify_action(graph, action, js);
+        }
+    }
+    // ★ THE TRAVERSAL HAZARD, named because the key is the same word in two
+    // unrelated dictionaries and the wrong reading is silent.
+    //
+    // A navigation node's `/Next` is **the next NAVIGATION NODE**. An
+    // action's `/Next` is the next ACTION. `/Type` is optional on both, so
+    // the object itself does not say which it is — and treating a nav node as
+    // an action would classify a whole presentation sequence as an action
+    // chain, while treating an action as a nav node would walk its `/NA`.
+    //
+    // The discriminator is **the presence of `/S`**: an action dictionary's
+    // `/S` is Required (Table 193), a navigation node has none. Checked
+    // rather than assumed, because "it came from `/PresSteps` so it must be a
+    // node" is exactly the reasoning that a malformed or hostile file breaks.
+    if let Some(next) = dict.get(b"Next").and_then(Object::as_reference) {
+        let is_action = graph
+            .resolved(next)
+            .as_dict()
+            .is_some_and(|d| d.contains_key(b"S"));
+        if is_action {
+            // Not a node. Classify it as what it is rather than walking it as
+            // a node and finding no `/NA` — the count is the same either way,
+            // and only one of them is true.
+            js.page_trigger_actions += 1;
+            classify_action(graph, &Object::Reference(next), js);
+        } else {
+            scan_nav_node_actions(graph, next, depth + 1, visited, js);
+        }
+    }
+}
+
+/// Walk the outline tree, classifying every item's `/A` (§12.3.3 Table 153).
+///
+/// The tree is a doubly-linked structure — `/First`/`/Last` for children,
+/// `/Next` for siblings — and **`/Next` here means something entirely
+/// different from `/Next` on an action** (§12.6.1). They are unrelated keys
+/// in unrelated dictionaries that happen to share a name; conflating them
+/// would walk a bookmark's siblings as though they were chained actions.
+/// Named apart here so that a future reader does not have to rediscover it.
+fn scan_outline_actions<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    id: ObjId,
+    depth: usize,
+    visited: &mut HashSet<ObjId>,
+    js: &mut FormJavaScript,
+) {
+    if depth >= MAX_FIELD_TREE_DEPTH || js.actions_scanned >= MAX_ACTIONS_SCANNED {
+        js.scan_truncated = true;
+        return;
+    }
+    if !visited.insert(id) {
+        return;
+    }
+    let Some(dict) = graph.resolved(id).as_dict().cloned() else {
+        return;
+    };
+    if let Some(action) = dict.get(b"A") {
+        js.outline_actions += 1;
+        classify_action(graph, action, js);
+    }
+    for key in [&b"First"[..], b"Next"] {
+        if let Some(child) = dict.get(key).and_then(Object::as_reference) {
+            scan_outline_actions(graph, child, depth + 1, visited, js);
+        }
+    }
 }
 
 /// Whether an object is (resolves to) an `/S /JavaScript` action dictionary.
@@ -1749,25 +2114,240 @@ fn action_is_javascript(action: &Object) -> bool {
         .is_some_and(|n| n.as_bytes() == b"JavaScript")
 }
 
-/// Flag an action's R12 (network) / R13 (launch) hazard by its `/S` type.
-fn classify_action_hazard<G: ObjectGraph + ?Sized>(
+/// How deep an action's `/Next` chain is followed (§12.6.1).
+///
+/// ISO 32000-1 places **no bound** on chain length — the entry is *"the next
+/// action or sequence of actions that shall be performed after this one"*,
+/// and a `/Next` may itself carry a `/Next`, so the structure is a tree of
+/// unbounded depth whose nodes are ordinary indirect objects and may
+/// therefore form a cycle. `ARCHITECTURE.md` §10 forbids an
+/// untrusted-input-driven walk without a depth guard, so pdfce sets one.
+///
+/// 32 is chosen against the same reasoning [`MAX_FIELD_TREE_DEPTH`] uses and
+/// is deliberately generous: a hand-authored chain is two or three long, and
+/// a chain 32 deep is a document doing something no authoring tool produces.
+/// Hitting it sets [`FormJavaScript::scan_truncated`] rather than failing,
+/// because a partial answer that says it is partial is worth more than no
+/// answer at all — and, for this scan in particular, worth much more than a
+/// zero that cannot be distinguished from a clean file.
+pub const MAX_ACTION_CHAIN_DEPTH: usize = 32;
+
+/// The most actions one scan will classify, across every carrier.
+///
+/// The same class of guard as [`MAX_FORM_FIELDS`] and for the same reason:
+/// the count comes from the file. A document can name the same action object
+/// from ten thousand annotations, and the visited set is per-chain rather
+/// than global (an action legitimately reachable from two buttons should
+/// count twice), so the cycle guard alone does not bound the total.
+pub const MAX_ACTIONS_SCANNED: usize = 100_000;
+
+/// Classify one action and everything its `/Next` chain reaches (§12.6.1).
+///
+/// # Why every carrier goes through here rather than calling the classifier
+///
+/// `/Next` is what makes a per-carrier scan unsafe: a document can put a
+/// benign `/S /GoTo` in the place a scanner looks and hang the `/SubmitForm`
+/// off its `/Next`. If following the chain were the caller's job then every
+/// caller would have to remember, and the one that forgot would report the
+/// document clean. Making it impossible to classify an action *without*
+/// walking its chain is the only arrangement where that cannot happen.
+///
+/// `chained` distinguishes the head of the chain from its tail: the head was
+/// found on a carrier and is visible to anyone reading the file, the tail was
+/// not. See [`FormJavaScript::chained_actions`].
+fn classify_action_chain<G: ObjectGraph + ?Sized>(
     graph: &G,
     action: &Object,
     js: &mut FormJavaScript,
+    seen: &mut HashSet<ObjId>,
+    depth: usize,
+    chained: bool,
 ) {
-    let Some(s) = graph
-        .resolve(action)
-        .as_dict()
-        .and_then(|d| d.get(b"S"))
-        .and_then(Object::as_name)
-    else {
+    if depth >= MAX_ACTION_CHAIN_DEPTH || js.actions_scanned >= MAX_ACTIONS_SCANNED {
+        js.scan_truncated = true;
+        return;
+    }
+    // A cycle guard on the OBJECT, not on the dictionary: `/Next` naming an
+    // ancestor is how a malformed (or deliberate) file makes this walk
+    // infinite, and only an indirect reference can do it.
+    if let Some(id) = action.as_reference()
+        && !seen.insert(id)
+    {
+        js.scan_truncated = true;
+        return;
+    }
+    let resolved = graph.resolve(action);
+    let Some(dict) = resolved.as_dict() else {
+        return;
+    };
+    js.actions_scanned += 1;
+    if chained {
+        js.chained_actions += 1;
+    }
+    classify_action_hazard_dict(graph, dict, js);
+
+    // `/Next` is one action or an ARRAY of them (§12.6.1), and both spellings
+    // are ordinary.
+    //
+    // ★★ THE RAW VALUE IS PASSED DOWN, NEVER THE RESOLVED ONE, AND THAT IS
+    // THE WHOLE CYCLE GUARD.
+    //
+    // The first cut here did `dict.get(b"Next").map(|o| graph.resolve(o))`
+    // and recursed on the result. That looks equivalent and is not: resolving
+    // turns `Object::Reference(5)` into `Object::Dict(…)`, so the next frame's
+    // `action.as_reference()` is `None`, so the `seen` set is never consulted,
+    // so a two-object cycle is not a cycle at all — it just runs to the depth
+    // ceiling. Measured: a `5 → 6 → 5` loop counted its one `/URI` **sixteen
+    // times** and reported the scan truncated on a file that is merely
+    // malformed.
+    //
+    // ⇢ **A guard keyed on identity is disarmed by anything that normalises
+    // away the identity**, and resolution is exactly such a normalisation.
+    // Found by the cycle test, which existed only because §12.6.2 bounds the
+    // chain nowhere; without it this would have shipped as an inflated hazard
+    // count, which is the one direction of error this scan is allowed to make
+    // and still the wrong number.
+    let next_raw = dict.get(b"Next").cloned();
+    if let Some(next_raw) = next_raw {
+        // Resolved ONLY to discriminate the shape. An array's elements are
+        // then recursed on RAW, for the same reason.
+        let items = match graph.resolve(&next_raw) {
+            Object::Array(items) => Some(items.clone()),
+            _ => None,
+        };
+        match items {
+            Some(items) => {
+                for item in items {
+                    classify_action_chain(graph, &item, js, seen, depth + 1, true);
+                }
+            }
+            None => {
+                if graph.resolve(&next_raw).as_dict().is_some() {
+                    classify_action_chain(graph, &next_raw, js, seen, depth + 1, true);
+                }
+            }
+        }
+    }
+    // The head of the chain may legitimately be reachable again from another
+    // carrier; only a cycle WITHIN one chain is a defect.
+    if let Some(id) = action.as_reference() {
+        seen.remove(&id);
+    }
+}
+
+/// Entry point for a carrier: classify `action` and its whole `/Next` chain,
+/// with a fresh cycle set.
+fn classify_action<G: ObjectGraph + ?Sized>(graph: &G, action: &Object, js: &mut FormJavaScript) {
+    let mut seen = HashSet::new();
+    classify_action_chain(graph, action, js, &mut seen, 0, false);
+}
+
+/// Flag an already-resolved action dictionary's R12 (network) / R13 (launch)
+/// hazard by its `/S` type.
+///
+/// Split from the chain walk so that the hazard vocabulary lives in exactly
+/// one place: every carrier, and every link of every chain, is classified by
+/// this function and no other.
+/// ★ THE REACH TABLE, and it is DERIVED, not quoted.
+///
+/// ISO 32000-1 Table 198 (2.0 Table 201) defines the action types and says
+/// what each one *does*; **it does not classify them by what they reach**.
+/// The classification below is derived key-by-key from each type's own table
+/// and is recorded as derived in `iso32000__s__12.6.md` § 3. Getting it from
+/// there rather than from memory changed it substantially — the previous
+/// four-name list was **wrong by omission in five places**:
+///
+/// | type | why it reaches, and what pdfce used to say |
+/// |---|---|
+/// | `GoToR` | `/F` is a **file specification** and may be `/FS /URL`. Counted as nothing. |
+/// | `GoToE` | `/F` names the **root** document of an embedded chain. Counted as nothing. |
+/// | `Thread` | `/F` optional — *"if absent, the thread is in the current file"*, so present means it is **not**. Commonly mis-read as internal. Counted as nothing. |
+/// | `Movie` | reaches a movie annotation whose movie dictionary has a **Required `/F`**. Counted as nothing. |
+/// | `Rendition` | carries **`/JS`** — a script on an action whose `/S` is not `JavaScript` — and a media clip `/D` file specification. Counted as nothing. |
+///
+/// Two deliberate non-decisions, so a later reader does not think they were
+/// oversights:
+///
+/// - **`Named` is an OPEN REGISTRY.** Table 211 defines four page-navigation
+///   names and the clause says *"further names may be added"* and that
+///   processors *"can support additional, nonstandard named actions"*. pdfce
+///   counts it as reaching nothing, because the four standard names reach
+///   nothing — and a nonstandard name is by definition something pdfce
+///   cannot classify. It is counted in `actions_scanned` either way, so it is
+///   never invisible.
+/// - **`GoTo`, `GoToDp`, `Hide`, `ResetForm`, `SetOCGState`, `Trans`,
+///   `GoTo3DView`** reach nothing. `Trans` in particular exists *because of*
+///   `/Next` — it controls drawing during a sequence — so its presence is a
+///   hint that a chain is nearby, which is already counted.
+fn classify_action_hazard_dict<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    dict: &Dict,
+    js: &mut FormJavaScript,
+) {
+    let Some(s) = dict.get(b"S").and_then(Object::as_name) else {
         return;
     };
     match s.as_bytes() {
-        b"URI" | b"SubmitForm" | b"ImportData" => js.network_action_count += 1,
+        // NETWORK, unconditionally: the whole point of the type.
+        b"URI" | b"SubmitForm" => js.network_action_count += 1,
+        // FILE **or** NETWORK, because the file specification these carry may
+        // be a `/FS /URL`. pdfce counts them as network-reaching rather than
+        // inspecting the spec to decide, and that is the deliberately
+        // cautious direction: the disclosure exists to stop an operator
+        // concluding a document is inert, so a false "this could reach out"
+        // costs a second look and a false "it cannot" costs the whole point.
+        b"ImportData" | b"GoToR" | b"GoToE" | b"Thread" | b"Movie" | b"Rendition" => {
+            js.network_action_count += 1;
+        }
+        // LAUNCH — the highest reach in the standard. `/Win` carries a bare
+        // path, a directory, an open-or-print verb, and `/P`, *"a parameter
+        // string passed to the application"*.
         b"Launch" => js.launch_action_count += 1,
         _ => {}
     }
+    // ★ A SCRIPT ON AN ACTION WHOSE TYPE IS NOT `JavaScript`.
+    //
+    // The rendition action's `/JS` (Table 214) is *"a text string or stream
+    // containing a JavaScript script that shall be executed when the action
+    // is triggered"*. A scan keyed on `/S /JavaScript` alone misses it —
+    // which is the same shape as keying on `/AA` alone, one level down, and
+    // is why this is checked on every action rather than on that one type.
+    // ★ COUNTED ONCE, not once per spelling. An `/S /JavaScript` action
+    // always carries `/JS`, so testing the two separately double-counted the
+    // ordinary case — found by writing the second test rather than by
+    // reading the first.
+    let script = dict.get(b"JS");
+    let is_script = s.as_bytes() == b"JavaScript" || script.is_some();
+    if is_script {
+        js.javascript_actions += 1;
+        // ★ AND A SCRIPT WHOSE BODY IS ELSEWHERE REACHES THE NETWORK, even
+        // though its `/S` says only `JavaScript`. See below.
+        if script_body_is_external(graph, script) {
+            js.network_action_count += 1;
+        }
+    }
+}
+
+/// Whether an action's `/JS` script body is an **external stream** — a
+/// script whose bytes are not in this file (§7.3.8.2 Table 5 `/F`).
+///
+/// # Why a script's own storage is a network question
+///
+/// `/JS` is *"a text string **or stream**"*, and Table 5 makes `/F` legal on
+/// **any** stream: *"the file containing the stream data"*. So a document can
+/// carry a JavaScript action whose script is a URL and whose body is zero
+/// bytes long — the hazard is real, the script is invisible to anyone reading
+/// the file, and the action's own `/S` says only `JavaScript`.
+///
+/// pdfce counts that as network-reaching. It is the one place where the
+/// classification depends on how a value is STORED rather than on what the
+/// action is, which is exactly why it is a named function with this comment
+/// rather than a condition inside the match above.
+fn script_body_is_external<G: ObjectGraph + ?Sized>(graph: &G, script: Option<&Object>) -> bool {
+    matches!(
+        script.map(|o| graph.resolve(o)),
+        Some(Object::Stream(s)) if s.dict.contains_key(b"F")
+    )
 }
 
 /// DFS one field, counting its `/AA` JavaScript hooks and action hazards, then
@@ -1806,7 +2386,7 @@ fn scan_field_js<G: ObjectGraph + ?Sized>(
                 }
                 js.custom_scripts += 1;
             }
-            classify_action_hazard(graph, action, js);
+            classify_action(graph, action, js);
         }
     }
     if let Some(kids) = dict
@@ -2425,5 +3005,529 @@ mod tests {
         };
         assert!(!sig.is_rich_text());
         assert!(!sig.radios_in_unison());
+    }
+
+    // -----------------------------------------------------------------
+    // `Pass 133.0` — the action scan, and every carrier it used to miss.
+    //
+    // ★ ONE TEST PER CARRIER, DELIBERATELY, rather than one fixture
+    // exercising all of them. A single omnibus fixture proves the totals
+    // add up and cannot say WHICH branch produced them — so a repair that
+    // fixed one carrier and broke another would still pass it. These are
+    // the four carriers that shipped unscanned; each one gets its own
+    // failure message.
+    // -----------------------------------------------------------------
+
+    /// The reported defect, minimal: a push button whose submit lives in
+    /// `/A`. Table 194's `U` row makes `/A` take PRECEDENCE over `/AA`, so
+    /// scanning `/AA` alone was blind to the entry the standard says wins.
+    #[test]
+    fn a_submit_in_a_widgets_primary_action_is_seen() {
+        let doc = build_pdf(&[
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>".to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>".to_vec(),
+            ),
+            (
+                4,
+                b"<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (Go) \
+/Rect [10 10 90 40] /P 3 0 R /A 5 0 R >>"
+                    .to_vec(),
+            ),
+            (
+                5,
+                b"<< /S /SubmitForm /F (http://example.invalid/post) >>".to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(
+            js.network_action_count, 1,
+            "a /SubmitForm in a widget's /A is the reported defect; scanning \
+             /AA alone reported this document as reaching nothing"
+        );
+        assert_eq!(js.annotation_actions, 1);
+        assert!(js.reaches_outside());
+    }
+
+    /// ★ The chain. §12.6.2 NOTE 1 makes `/Next` recursive and a TREE, so a
+    /// benign `/GoTo` can front a `/SubmitForm` — and a scanner that stops
+    /// at the head reports the document clean. This is the case that makes
+    /// a per-carrier scan unsafe rather than merely incomplete.
+    #[test]
+    fn a_hazard_hidden_behind_a_benign_action_is_still_found() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>".to_vec(),
+            ),
+            (
+                4,
+                b"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] \
+/A << /S /GoTo /D [3 0 R /Fit] /Next << /S /Launch /F (cmd.exe) >> >> >>"
+                    .to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(
+            js.launch_action_count, 1,
+            "a /Launch behind a /GoTo's /Next must be found — the head of the \
+             chain is the only thing a reader sees, and it is harmless"
+        );
+        assert_eq!(
+            js.chained_actions, 1,
+            "the chained action must be COUNTED AS CHAINED, because \
+             'reachable only by following /Next' is the fact that makes it \
+             invisible to inspection"
+        );
+    }
+
+    /// The chain is a TREE — `/Next` may be an array, and each element may
+    /// chain further. Two levels and two branches, so a walk that handled
+    /// only the single-dictionary spelling, or only one level, fails.
+    #[test]
+    fn a_next_array_is_walked_to_its_leaves() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>".to_vec(),
+            ),
+            (
+                4,
+                b"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] \
+/A << /S /GoTo /Next [ << /S /URI /URI (http://a.invalid) >> \
+<< /S /GoTo /Next << /S /Launch /F (x) >> >> ] >> >>"
+                    .to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(js.network_action_count, 1, "the array's first branch");
+        assert_eq!(
+            js.launch_action_count, 1,
+            "the array's second branch, one level deeper — a walk that \
+             stopped at the array's elements would miss this"
+        );
+        assert_eq!(js.chained_actions, 3);
+    }
+
+    /// A cycle in a `/Next` chain must terminate and SAY it terminated
+    /// early. The standard bounds chain depth nowhere, so this is pdfce's
+    /// ceiling doing its job — and `scan_truncated` is what stops the
+    /// resulting partial count from reading as a complete one.
+    #[test]
+    fn a_cyclic_action_chain_terminates_and_discloses() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>".to_vec(),
+            ),
+            (
+                4,
+                b"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A 5 0 R >>".to_vec(),
+            ),
+            (5, b"<< /S /GoTo /Next 6 0 R >>".to_vec()),
+            (
+                6,
+                b"<< /S /URI /URI (http://a.invalid) /Next 5 0 R >>".to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(js.network_action_count, 1, "the URI is still found");
+        assert!(
+            js.scan_truncated,
+            "a cycle must set scan_truncated — otherwise a count produced by \
+             giving up is indistinguishable from a complete one"
+        );
+    }
+
+    /// A page `/AA` `/O` fires on NAVIGATION, with nothing clicked
+    /// (Table 195). The old scan walked the field tree, which cannot reach
+    /// a page dictionary at all.
+    #[test]
+    fn a_page_open_action_is_seen() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /AA << /O << /S /JavaScript /JS (x) >> >> >>"
+                    .to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(js.page_trigger_actions, 1);
+        assert_eq!(
+            js.javascript_actions, 1,
+            "a page-open script used to report zero in EVERY script counter \
+             this struct had: js_custom, js_doc_level and open_action_js"
+        );
+        assert!(
+            js.any(),
+            "a document that runs a script on page-turn is \
+                           script-driven, whatever the field counters say"
+        );
+    }
+
+    /// An outline item's `/A` (Table 153). `/A` and `/Dest` are mutually
+    /// exclusive there, so an item with an `/A` is by construction NOT a
+    /// plain navigation bookmark.
+    #[test]
+    fn an_outline_items_action_is_seen() {
+        let doc = build_pdf(&[
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /Outlines 4 0 R >>".to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (
+                4,
+                b"<< /Type /Outlines /First 5 0 R /Last 5 0 R /Count 1 >>".to_vec(),
+            ),
+            (
+                5,
+                b"<< /Title (Run) /Parent 4 0 R /A << /S /Launch /F (cmd.exe) >> >>".to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(js.outline_actions, 1);
+        assert_eq!(
+            js.launch_action_count, 1,
+            "a bookmark that launches a process is a document with no form \
+             and no annotation — nothing the old scan walked reached it"
+        );
+    }
+
+    /// ★ A link's `/PA` — Table 173's *"URI action FORMERLY associated with
+    /// this annotation"*. "Formerly" describes its provenance, not its
+    /// potency: it is a complete, live URI action under a key that ISO
+    /// 32000-2's own enumeration of action carriers does not name.
+    #[test]
+    fn a_links_formerly_associated_uri_action_is_seen() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>".to_vec(),
+            ),
+            (
+                4,
+                b"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] \
+/A << /S /GoTo /D [3 0 R /Fit] >> \
+/PA << /S /URI /URI (http://a.invalid/formerly) >> >>"
+                    .to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(
+            js.network_action_count, 1,
+            "/PA holds a live URI action; the visible /A is a harmless /GoTo"
+        );
+    }
+
+    /// ★★ A navigation node's `/NA` (Table 163, via the page's
+    /// `/PresSteps`) — the ONLY carrier in the standard that can fire on a
+    /// TIMER, through the node's `/Dur`, with no user input and no page
+    /// turn.
+    #[test]
+    fn a_navigation_nodes_action_is_seen() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /PresSteps 4 0 R >>".to_vec(),
+            ),
+            (
+                4,
+                b"<< /Type /NavNode /Dur 2 /NA << /S /URI /URI (http://a.invalid/timer) >> >>"
+                    .to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(js.page_trigger_actions, 1);
+        assert_eq!(
+            js.network_action_count, 1,
+            "a /Dur on a navigation node fires its /NA on a timer — this is \
+             the one action carrier that needs no operator at all"
+        );
+    }
+
+    /// ★ THE TYPE TRAP. On a `/Movie` annotation `/A` is *"a BOOLEAN or
+    /// dictionary specifying whether and how to play the movie"* — a movie
+    /// ACTIVATION dictionary, not an action. `/A true` is legal.
+    #[test]
+    fn a_movie_annotations_a_is_not_an_action() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>".to_vec(),
+            ),
+            (
+                4,
+                b"<< /Type /Annot /Subtype /Movie /Rect [0 0 10 10] /A true >>".to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(
+            js.annotation_actions, 0,
+            "a movie's /A is an activation dictionary, not an action — \
+             counting it would report a hazard-free document as interactive"
+        );
+        assert_eq!(js.actions_scanned, 0);
+    }
+
+    /// A `/Rendition` action carries `/JS`: a script on an action whose
+    /// `/S` is not `JavaScript`. Keying script detection on the type name
+    /// alone is the same mistake as keying the carrier scan on `/AA`.
+    #[test]
+    fn a_script_on_a_non_javascript_action_is_seen() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>".to_vec(),
+            ),
+            (
+                4,
+                b"<< /Type /Annot /Subtype /Screen /Rect [0 0 10 10] \
+/A << /S /Rendition /OP 0 /JS (this.print\\(\\);) >> >>"
+                    .to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(
+            js.javascript_actions, 1,
+            "the rendition action's /JS is a script the standard says shall \
+             be executed; /S is /Rendition, not /JavaScript"
+        );
+    }
+
+    /// An ordinary `/S /JavaScript` action is counted ONCE, not once per
+    /// spelling. It always carries `/JS`, so testing `/S` and `/JS`
+    /// separately double-counted every script in every document.
+    #[test]
+    fn an_ordinary_script_action_is_counted_once() {
+        let doc = build_pdf(&[
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OpenAction << /S /JavaScript /JS (x) >> >>"
+                    .to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(js.javascript_actions, 1);
+        assert!(js.open_action_is_javascript);
+    }
+
+    /// The reach classification is DERIVED from each action type's own
+    /// table, and the derivation moved five types that used to count as
+    /// nothing. Pinned by name so a future edit to the match arms has to
+    /// argue with a test rather than with a comment.
+    #[test]
+    fn every_reaching_action_type_is_classified() {
+        for (s, network, launch) in [
+            ("/URI /URI (http://a.invalid)", 1, 0),
+            ("/SubmitForm /F (http://a.invalid)", 1, 0),
+            ("/ImportData /F (x.fdf)", 1, 0),
+            ("/GoToR /F (other.pdf)", 1, 0),
+            ("/GoToE /T << >>", 1, 0),
+            ("/Thread /F (other.pdf)", 1, 0),
+            ("/Movie /T (m)", 1, 0),
+            ("/Rendition /OP 0", 1, 0),
+            ("/Launch /F (cmd.exe)", 0, 1),
+            // Reaching nothing, and asserted as such: a classifier that
+            // widened would make the warning fire on ordinary documents,
+            // and a warning that always fires is not read.
+            ("/GoTo /D [3 0 R /Fit]", 0, 0),
+            ("/Hide /T (f)", 0, 0),
+            ("/ResetForm", 0, 0),
+            ("/SetOCGState /State []", 0, 0),
+            ("/Trans /Trans << >>", 0, 0),
+            ("/Named /N /NextPage", 0, 0),
+        ] {
+            let doc = build_pdf(&[
+                (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+                (
+                    2,
+                    b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+                ),
+                (
+                    3,
+                    b"<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>".to_vec(),
+                ),
+                (
+                    4,
+                    format!("<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A << /S {s} >> >>")
+                        .into_bytes(),
+                ),
+            ]);
+            let js = scan_javascript(&doc);
+            assert_eq!(js.network_action_count, network, "network reach of /S {s}");
+            assert_eq!(js.launch_action_count, launch, "launch reach of /S {s}");
+        }
+    }
+
+    /// ★ A script whose BODY IS NOT IN THE FILE. `/JS` is *"a text string or
+    /// stream"*, and Table 5 puts `/F` on any stream — so a document can
+    /// carry a JavaScript action whose script is a URL and whose body is
+    /// empty. The action's `/S` says only `JavaScript`; the reach is in how
+    /// the value is STORED.
+    #[test]
+    fn a_script_body_stored_outside_the_file_reaches_the_network() {
+        let doc = build_pdf(&[
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OpenAction 4 0 R >>".to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (4, b"<< /S /JavaScript /JS 5 0 R >>".to_vec()),
+            (
+                5,
+                b"<< /Length 0 /F (http://a.invalid/payload.js) >>\nstream\n\nendstream".to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(js.javascript_actions, 1);
+        assert_eq!(
+            js.network_action_count, 1,
+            "the script body is a URL — an empty /JS stream with an /F is a \
+             document that fetches its own code, and /S /JavaScript alone \
+             says nothing about that"
+        );
+    }
+
+    /// An in-file script stream is NOT network-reaching. The pair matters:
+    /// without it, the test above would pass against an implementation that
+    /// simply called every stream-bodied script external.
+    #[test]
+    fn a_script_body_stored_in_the_file_reaches_nothing() {
+        let doc = build_pdf(&[
+            (
+                1,
+                b"<< /Type /Catalog /Pages 2 0 R /OpenAction 4 0 R >>".to_vec(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+            (4, b"<< /S /JavaScript /JS 5 0 R >>".to_vec()),
+            (5, b"<< /Length 4 >>\nstream\nx=1;\nendstream".to_vec()),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(js.javascript_actions, 1);
+        assert_eq!(js.network_action_count, 0);
+    }
+
+    /// ★ THE TRAVERSAL HAZARD. `/Next` means *the next navigation node* in a
+    /// nav node and *the next action* in an action, `/Type` is optional on
+    /// both, and the discriminator is the Required `/S`. A file that hangs an
+    /// ACTION off a node's `/Next` must still have it classified.
+    #[test]
+    fn an_action_on_a_nav_nodes_next_is_still_classified() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /PresSteps 4 0 R >>".to_vec(),
+            ),
+            // A node with no /NA of its own, whose /Next is an ACTION rather
+            // than another node — distinguishable only by the /S.
+            (4, b"<< /Type /NavNode /Next 5 0 R >>".to_vec()),
+            (5, b"<< /S /Launch /F (cmd.exe) >>".to_vec()),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(
+            js.launch_action_count, 1,
+            "walking this as a node would look for an /NA, find none, and \
+             report the document clean"
+        );
+    }
+
+    /// The ordinary nav-node chain still walks as nodes. The pair again: a
+    /// discriminator that always said "action" would pass the test above and
+    /// break every real presentation.
+    #[test]
+    fn a_nav_node_chain_still_walks_as_nodes() {
+        let doc = build_pdf(&[
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /PresSteps 4 0 R >>".to_vec(),
+            ),
+            (
+                4,
+                b"<< /Type /NavNode /NA << /S /GoTo /D [3 0 R /Fit] >> /Next 5 0 R >>".to_vec(),
+            ),
+            (
+                5,
+                b"<< /Type /NavNode /NA << /S /URI /URI (http://a.invalid) >> >>".to_vec(),
+            ),
+        ]);
+        let js = scan_javascript(&doc);
+        assert_eq!(js.page_trigger_actions, 2, "both nodes' /NA");
+        assert_eq!(js.network_action_count, 1, "the second node's /URI");
     }
 }

@@ -143,6 +143,37 @@ and `pdfminer` installed. Extraction recipe that works:
    corpus file had carried open for 16 days (Issue #174, Reset-Form Table 242). The scan
    costs the same either way; the extra pages are free findings.
 
+4l. **★★ THE SEMANTIC TABLE-ROW SWEEP — how to enumerate "every place the standard
+   does X", when a key-name grep will under-count.** Established 2026-08-26 building the
+   action-carrier catalogue. A `^A dictionary` / `^AA dictionary` grep gave a clean,
+   symmetric, **incomplete** answer; the sweep below found three more carriers, two of
+   which appear in **no enumeration anywhere in either edition, including ISO 32000-2
+   §12.6.1's own attempt at one**.
+
+   ```python
+   # walk the dump, remember the last table caption, match a KEY row of ANY name,
+   # then test the following ~4 lines for the concept word.
+   capre  = re.compile(r'^Table (\d+) [–—]')          # 1.7 EN dash, 2.0 EM dash
+   keyre  = re.compile(r'^([A-Za-z][A-Za-z0-9]{0,20})\s+'
+                       r'(dictionary|array|name tree|stream|text string|integer|name)')
+   for i, l in enumerate(lines):
+       m = capre.match(l.strip())
+       if m: cur = m.group(1)
+       mk = keyre.match(l)
+       if not mk: continue
+       blob = " ".join(lines[i:i+4]).lower()
+       if re.search(r'\bactions?\b', blob) and not re.search(r'additional-?\s*actions', blob):
+           print(cur, mk.group(1), i+1, lines[i][:150])
+   ```
+   Two details that make it work: **the 4-line lookahead** (a row's prose wraps, and the
+   concept word is usually on line 2 or 3, not line 1), and **the exclusion regex** for
+   the term that would otherwise swamp the result (`additional-actions` here). The
+   caption tracker gives you the owning table for free — but remember item 4i: a
+   `(continued)` caption extracts at the END of its page, so a row's "preceding caption"
+   can be one table late. **Cross-check any hit's table against `grep -n "Table N [–—]"`
+   before quoting it.** Generalises to any "find every X" question: substitute the
+   concept regex (`\bcolourant\b`, `\bencrypt`, `\bfile specification\b`, …).
+
 4a. **A spec EQUATION extracts as a scrambled glyph run — recover it by
    CHARACTER X-POSITION with `pdfminer`.** Established 2026-08-08 on ISO 32000-1
    §11.6.5.3's `/Matte` preblend formula. `pypdf` returned

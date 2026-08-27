@@ -4057,3 +4057,153 @@ clause"** — `iso32000__ref__field_flags.md` had one, naming `NoExport`/`Requir
 (5) **the old file's own frontmatter `license_basis`**, which was `free_primary` and
 became MIXED the moment the amendment quoted a 2.0 erratum. **Grep the corpus for the
 clause number, not just for the file name.**
+
+---
+
+## 59. The COMPLETE-SET dispatch — "give me every X in the standard, not the one I noticed" (2026-08-26)
+
+Shape: engineer finds a real defect (a scanner walks `/AA` only, so a push-button
+`/SubmitForm` in `/A` is invisible), and **explicitly refuses the point fix**: *"the
+deliverable is the COMPLETE carrier set, sourced."* Hands over a working list "to be
+corrected and completed rather than confirmed". Built
+`iso32000__s__12.6.md` (clause file) + `iso32000__ref__action_carriers.md`
+(derived catalogue). Both landed; the lessons below are about the METHOD, and two of
+them are corrections to work I had already written in this same session.
+
+### 59.1 ★★★ A KEY-NAME SWEEP UNDER-COUNTS. RUN A SEMANTIC SWEEP OVER THE VALUE TEXT.
+
+I grepped every table row matching `^A dictionary` / `^AA dictionary` in both editions,
+got a clean symmetric answer (5 `/A` sites, 6 `/AA` sites, identical across editions),
+**and wrote it into the file as "the carrier set"**. Then a second sweep — *every table
+row of ANY key name whose value text contains "an action"* — returned **three more
+carrier keys**:
+
+- **link annotation `/PA`** (Table 173/2.0-176, PDF 1.3): *"A **URI action** … formerly
+  associated with this annotation"* — a live, dereferenceable URI action under a key
+  no `/A`-shaped model looks for.
+- **navigation node `/NA` and `/PA`** (Table 163/2.0-165, §12.4.4.2 sub-page
+  navigation, PDF 1.5): *"An action (which may be the first in a **sequence of
+  actions**) that **shall be executed**"* — normative body text, entered from a page's
+  **`/PresSteps`**, and the node's **`/Dur`** fires it **on a timer with no user input**.
+- catalog **`/OpenAction`** (which the dispatch did have).
+
+**The sweep that finds these is 15 lines of Python: walk the dump, track the last
+`Table N –`/`Table N —` caption, match `^([A-Za-z][A-Za-z0-9]{0,20})\s+(dictionary|
+array|name tree|stream|…)`, then test the next ~4 lines for `\bactions?\b` while
+excluding `additional-actions`.** Keep it. **Whenever a dispatch asks for a COMPLETE
+set of anything, the key-name sweep is the FIRST pass, never the answer.**
+
+### 59.2 ★★ THE STANDARD'S OWN "HERE IS THE COMPLETE LIST" SENTENCE IS A HYPOTHESIS
+
+ISO 32000-2 §12.6.1 **fixed** 1.7's vague *"the annotation or outline item dictionary
+(see Tables 168 and 153)"* by **enumerating** the tables: outline item, link, screen,
+widget, FDF field. It reads as authoritative and it is the kind of sentence you quote
+and stop. **It omits `/OpenAction`** (named two sentences later, so arguably fine)
+**and it omits `/PA` and `/NA` entirely** — including `/PA` on the *link annotation*,
+which is in one of the very tables it cites. An edition that improves a sentence from
+vague to enumerated has made it **checkable**, not necessarily **complete**.
+
+### 59.3 ★★ A NEGATIVE HAS A SCOPE — I MEASURED A KEY NAME AND WROTE IT AS A CONCEPT
+
+`AC-N2` as first written: *"The `/A` carrier set is exactly 5 sites … **No sixth site
+in 1023 pages**."* Every word true **about the string `A`**, and read by any future
+lookup as *"there are no other action carriers"*. Caught only because I ran 59.1's
+sweep for a different reason. The fix was to **scope the negative in its own text**
+(*"the set of sites carrying an action under the KEY NAME `/A`"*) and add `AC-N2b`.
+Same family as item 44's stranded rule and item 54's device-class banner: **the
+measurement was fine; the SENTENCE claimed more than the measurement.** Before writing
+a negative, re-read it asking *what exactly did I grep for, and is that the noun in
+this sentence?*
+
+### 59.4 ★★ A COUNT I ASSERTED WAS WRONG — COMPUTE IT, AND PRINT THE ENUMERATION
+
+Wrote *"12 distinct carrier keys, on 14 distinct dictionary types, plus 1 name tree"*
+from a mental tally. Actually **17 sites · 10 container types · 7 distinct key names ·
+11 of the 17 are `/A`//`/AA`**. Fixed by building a literal Python list of
+`(container, key)` pairs, computing all four numbers from it, **and emitting the list
+into the file as §1.5** so the number is re-checkable instead of trusted. **Any count
+that goes into a corpus file gets its source list printed beside it** — this is item
+47's "a COUNT in the corpus is a hypothesis" applied to a count I was creating rather
+than inheriting.
+
+### 59.5 A KEY NAME CAN COLLIDE ACROSS CONTAINERS — AND `/Next` IS THE DANGEROUS ONE
+
+- **`/PA`**: link annotation = a *former* URI action; navigation node = the
+  *backward*-navigation action sequence. Two tables, two meanings.
+- **★ `/Next`**: in an **action** dictionary it is the next **action**; in a
+  **navigation node** it is the next **NavNode**, which is not an action (`/Type
+  /NavNode`, **no `/S`**). A recursive `/Next` walker that does not check its container
+  walks a NavNode chain as an action chain. **And `/Type` is OPTIONAL on both sides, so
+  the only usable discriminator is the presence of `/S`** (`Required` on an action).
+
+**Generalise:** when cataloguing a traversal, list the EDGES with their source
+container, not just the key names. I printed the closure as an explicit edge list with
+the two poison edges marked — cheaper to read than prose and impossible to misapply.
+
+### 59.6 ★ THE REACH LIVES IN A TYPE, NOT IN A NAME
+
+The dispatch asked "which action TYPES are network-reaching?" The honest answer is that
+the question is keyed wrong: **§7.11.5 makes any value typed *file specification* a URL
+whenever `/FS /URL`**, so `GoToR`, `GoToE`, `Thread`, `Launch`, `ImportData`,
+`SubmitForm` + the movie dict `/F` + the media-clip `/D` all reach — **`Thread` being
+the one everyone misses** — and **Table 5's `/F` makes ANY STREAM external**, so a `/JS`
+script stream can be a URL with no bytes in the file. **When a dispatch asks you to
+classify a closed enumeration, check whether the property is actually carried by a TYPE
+that cuts across it.** That reframing was the single most useful paragraph produced.
+
+### 59.7 A CAPABILITY IS A THIRD CLASSIFICATION STATE, AND SAYING SO IS THE DELIVERABLE
+
+`/S /JavaScript` cannot be classified network-or-not **from the standard**: ISO 32000-1
+hands every script effect out to two clause-3 references, ISO 32000-2 to **ISO
+21757-1:2020 — which is NOT in the corpus** (new GAP `AX-G1`, escalate via the PDF
+Association sponsored-standards route that landed 32000-2). So *both* buckets are
+un-sourced, and the file says so and names the third state. **Refusing a binary the
+dispatch offered is a legitimate answer when the source supports neither branch** —
+compare item 57's "it is the wrong MECHANISM, not the wrong VALUE".
+
+### 59.8 THE ERRATA SWEEP CORROBORATED MY OWN MEASUREMENT (a new use)
+
+`pdf-issues` #618 (`bug`, **not** `ISO approved`) argues #313's fix is incomplete and
+states in passing *"the only other Annotation with an `AA` entry seems to be the
+**Screen** Annotation"* — **an independent third-party confirmation of my own `/AA`
+site count**, from someone reading the same standard for a different purpose. Item 4j
+records an open issue as *gap* evidence; this is the same source used as
+*corroboration*. Also found: a **cross-reference erratum CLUSTER** — clause 12.6 points
+at the **appearance dictionary** for the annotation `/A` in *both* editions (`AC-E1`,
+`AC-E3`), and Table 193's `/S` row cites the wrong table for its own value registry
+(`AC-E2`, already in the corpus as `GT-E1`). **Three defective cross-references in one
+clause ⇒ verify every clause-12.6 cross-reference against the caption index.** Two more
+defects propagate BACKWARDS: #313's and #265's corrected sentences are **identically
+wrong in ISO 32000-1 and uncorrected there**, because the errata process only edits 2.0.
+
+### 59.9 A 2.0 TABLE CAN OMIT A KEY ITS OWN EXAMPLE USES
+
+`/Scripts` in a `RichMediaActivation` dictionary: **1 occurrence in all 1023 pages, in
+an informative EXAMPLE; Table 335 does not define it** (legacy Adobe RichMedia
+ExtensionLevel 3 residue). Recorded as `AX-A2` — recognise it, but say no ISO clause
+defines it. **Grep a token you saw in an EXAMPLE against the whole document before
+assuming a table defines it.**
+
+### 59.10 Modality moved between editions in the direction that matters
+
+`Named`'s *"it shall take no action"* for an unrecognised `/N` sits **inside a NOTE in
+1.7** (hollow) and **outside it as normative body text in 2.0**. Meanwhile §12.6.2's
+cycle guidance went the other way — 1.7 `should` → 2.0 `ought`/`It is recommended`.
+**Check the modality's CONTAINER, not just its verb, on both editions** (item 49).
+
+### 59.11 The counting failure did NOT recur — because I recounted first
+
+Item 58.9 predicted a fifth. Ran `ls <subdir>/<prefix>*.md | wc -l` **before** writing:
+`iso32000__s__` = 98 and `iso32000__ref__` = 22, **both cells already correct**. Bumped
+to 99 / 23. **The recount is now cheap and habitual; keep it that way.** The stale claim
+this session was elsewhere: a trigger row said *"any of Table 198's **20** action
+types"* — **1.7's Table 198 has 18; 20 is 2.0's Table 201.** A number silently
+edition-shifted inside a sentence about the older edition.
+
+### 59.12 Tooling: two failures that cost commands
+
+- **Bash heredoc broke again** on the spec punctuation in a Python patch script (item
+  51's rule). **Write the script with the Write tool, then run it.** No exceptions.
+- **`PYTHONIOENCODING=utf-8` must be exported, or an error `print()` containing `→`
+  raises mid-loop AFTER earlier files were already written** — a half-applied patch set
+  that looks like a logic bug. Set it on every patch invocation, not just extraction.
