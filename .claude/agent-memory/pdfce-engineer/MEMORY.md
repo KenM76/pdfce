@@ -56,3 +56,5 @@
 - [Security defaults lean safe, plus a stricter mode](feedback_security_defaults_lean_safe_plus_stricter_mode.md) — he takes the safe default AND adds restrictions himself; offer the posture ladder, not a yes/no
 - [A claim about callers is a measurement](feedback_a_claim_about_callers_is_a_measurement.md) — one comment was wrong about its own callers THREE times; correcting one by inference makes a fresh stale claim
 - [A rising failure count can mean a false pass was removed](feedback_a_rising_failure_count_can_mean_a_false_pass_was_removed.md) — measure distance-to-oracle before reverting; and ablate candidates rather than arguing
+- [Fixing one route makes the others look broken](feedback_fixing_one_route_makes_the_others_look_broken.md) — three instances in 72h; enumerate every route in the SAME Pass, don't wait for the bug reports
+- [A crop rectangle is a measurement instrument](feedback_a_crop_rectangle_is_a_measurement_instrument.md) — a region picked by eye reported edge antialiasing as colour error AND hid two real defects, in one table
