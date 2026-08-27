@@ -61,3 +61,7 @@
 - [An extrapolation reported as a measurement](feedback_an_extrapolation_reported_as_a_measurement.md) - weighting one per-group sample by group size assumes the thing being tested; 91 vs a measured 2, and the detail export kept the bug after the aggregate was fixed
 - [Documented, accurate, gate-green and unfindable](feedback_documented_accurate_gate_green_and_unfindable.md) - pdfceGUI filed a request for a verb that shipped 5 days earlier; findability is not checkable by any script
 - [A test can become vacuous LATER](feedback_a_test_can_become_vacuous_later.md) - an upstream fix can change WHY a downstream test passes; only sabotage tells them apart, and it found a second copy of one bug
+- [A census counter that omits a producer](feedback_a_census_counter_that_omits_a_producer.md) — a different question, not a smaller number; only an image-ONLY page could see the zero
+- [A rising failure count: the four-step method](feedback_a_rising_failure_count_measure_the_oracle.md) — ablate, segment by exact value, run the detector on the REFERENCE, measure changed pixels only
+- [The unreported route was the whole fix](feedback_the_unreported_route_was_the_whole_fix.md) — R219 proved by ablation: the route named in the bug report contributed 0%
+- [Sabotage catches false COMMENTS too](feedback_sabotage_catches_false_comments.md) — a surviving sabotage meant my code comment's claim about coverage was wrong, not that the test was weak
