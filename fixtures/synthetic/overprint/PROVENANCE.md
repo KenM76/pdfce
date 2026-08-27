@@ -28,7 +28,7 @@ table with no object streams and no compression on the structure, so a failing
 test can be diagnosed in a hex editor and a fuzzer mutating one keeps producing
 something a parser will engage with.
 
-## The six files
+## The eight files
 
 Every one is 100 × 100 pt and paints the same 40 × 40 pt mark at (30, 30) over
 the same 80 × 80 pt `1 0 0 1 k` backdrop — 100 % cyan **and** 100 % black.
@@ -42,6 +42,8 @@ They differ in exactly one variable each.
 | `devicen_all4_op_cmyk.pdf` | image | `/DeviceCMYK` | `[/Cyan /Magenta /Yellow /Black]` | true | **white** — naming every process colorant makes overprint inert |
 | `sep_devicen_op_rgb.pdf` | image | *(none)* | `[/Black]` | true | the sRGB arm of the same composite |
 | `devicen_op_path_rgb.pdf` | **path** | *(none)* | `[/Black]` | true | **the same pixels as the row above** |
+| `spot_only_noop_cmyk.pdf` | path | `/DeviceCMYK` | `[/SpotInk]` | **false** | a pure-spot mark **puts ink on the sheet** |
+| `spot_only_noop_rgb.pdf` | path | *(none)* | `[/SpotInk]` | **false** | the additive control for the row above |
 
 ### ★ Why the two `_path_` twins are the load-bearing pair
 
@@ -70,6 +72,47 @@ the round-trip property `rgb_to_cmyk`/`cmyk_to_rgb` exist to guarantee.
 The real fix is the per-colorant buffer, which the subtractive pair already
 demonstrates: give the page a `/DeviceCMYK` group and the ambiguity disappears,
 because the planes *are* the backdrop.
+
+### ★ The two `spot_only_` files carry no overprint at all, and that is the point
+
+They were added by `Pass 130.3` for a defect that lives one function away from
+everything else in this directory and is **not** an overprint defect.
+
+`overprint::authored_tints` answers *"which **process** tints did this source
+state?"* — Table 149's question. A spot colorant has no process channel to
+state a tint into, so a `/Separation /SpotInk /DeviceCMYK` source answers
+`[0, 0, 0, 0]`, **correctly**. `Interpreter::authored_cmyk` was handing that
+same answer to the colorant buffer as the paint's **colour**, where zero ink is
+blank paper. So a spot square on a page whose group declares `/CS /DeviceCMYK`
+rendered **completely invisible**, with overprint off, with no diagnostic, and
+with every counter green.
+
+The identical square on an additive page rendered correctly — which is why
+nothing caught it. **The defect needs a page group to reproduce**, and a page
+group is exactly what a print-bound PDF carries and what a hand-written fixture
+usually does not. Hence the pair: the assertion is not on either colour (the
+two pages legitimately disagree, because only one crosses `CMYK → sRGB` on the
+way out) but on the fact that **both put ink down**.
+
+The spot's tint transform is deliberately **chromatic** (`C 0.8 M 0.2 Y 0.9
+K 0`, green-dominant) rather than the `Black`-routing transform the rest of this
+directory uses. A renderer that lost the transform entirely and painted "some
+ink" would land on black and satisfy a merely-not-blank assertion; nothing
+lands on green by accident.
+
+### ★★ A measured consequence that looks like a regression and is not
+
+Fixing this moved two print-conformance patches **closer** to Acrobat — mean
+absolute distance `24.8 → 19.9` and `41.4 → 28.5` — while **raising** that
+suite's failure count from 4 to 5. Both patches paint CMYK over a spot
+backdrop. While the spot was invisible there was nothing for the CMYK to
+wrongly knock out, and a white trap cross on white paper has no contrast for a
+detector to find. **They were passing because they were rendering nothing** —
+five of six cells on one of them were blank.
+
+That number is worth carrying: a failure count that rises when a renderer
+improves is the signature of a false pass being removed, and this project's
+harness has produced that signature before.
 
 ## How to regenerate
 

@@ -106,6 +106,13 @@ def build(
     """
     n_colorants = len(colorants)
     names = b"".join(b"/" + c.encode() for c in colorants)
+    # The `scn` operands for the path twin: full tint on a SPOT-ONLY space (so
+    # the mark has ink to lose), zero elsewhere (so an overprinting process
+    # colorant leaves the backdrop and the trap can be read).
+    spot_only = not any(
+        c.lower() in ("cyan", "magenta", "yellow", "black", "all") for c in colorants
+    )
+    tints = (b"1 " if spot_only else b"0 ") * n_colorants
 
     # The tint transform, §8.6.6.5: n inputs (one per declared colorant),
     # four outputs (the DeviceCMYK alternate). A type 2 (exponential
@@ -119,7 +126,20 @@ def build(
     # `overprint::authored_tints`, never from this function. Writing an
     # identity-ish transform here keeps the two readings agreeing so that a
     # failure is unambiguous, rather than being a disagreement between them.
-    if n_colorants == 1:
+    if spot_only and n_colorants == 1:
+        # A CHROMATIC transform for the spot-visibility fixtures, and the
+        # chroma is the point rather than decoration. The other single-colorant
+        # transform below routes its tint to `Black`, so a renderer that lost
+        # the tint transform entirely and painted "some ink" would still land on
+        # black and satisfy a not-blank assertion. Mapping to C=0.8 M=0.2 Y=0.9
+        # K=0 makes the correct answer GREEN-DOMINANT, which no accident
+        # produces. Stack trace, since a type 4 function is write-only
+        # otherwise: [t] dup -> [t,t] 0.8 mul -> [t,0.8t] exch -> [0.8t,t]
+        # dup -> [0.8t,t,t] 0.2 mul -> [0.8t,t,0.2t] exch -> [0.8t,0.2t,t]
+        # 0.9 mul -> [0.8t,0.2t,0.9t] 0 -> [C,M,Y,K].
+        tint_body = b"{ dup 0.8 mul exch dup 0.2 mul exch 0.9 mul 0 }"
+        domain = b"[0 1]"
+    elif n_colorants == 1:
         # One input, four outputs: pop the input and push 0 0 0 t back, i.e.
         # route the single tint to `Black` and zero the rest. (`/Cyan`-only
         # would route to C; this fixture family only ever declares `/Black`
@@ -160,7 +180,7 @@ def build(
         + (
             b"40 0 0 40 30 30 cm\n/Im0 Do\n"
             if mark == "image"
-            else b"/CS0 cs " + b"0 " * n_colorants + b"scn\n30 30 40 40 re f\n"
+            else b"/CS0 cs " + tints + b"scn\n30 30 40 40 re f\n"
         )
         + b"Q\n"
     )
@@ -296,6 +316,16 @@ def main() -> None:
         ),
         "devicen_op_path_rgb.pdf": build(
             colorants=["Black"], overprint=True, subtractive=False, mark="path"
+        ),
+        # ★★ THE SPOT-VISIBILITY PAIR. A `/Separation`-style spot square, no
+        # overprint at all, on the two kinds of page. They must BOTH put ink on
+        # the sheet.
+        #
+        "spot_only_noop_cmyk.pdf": build(
+            colorants=["SpotInk"], overprint=False, subtractive=True, mark="path"
+        ),
+        "spot_only_noop_rgb.pdf": build(
+            colorants=["SpotInk"], overprint=False, subtractive=False, mark="path"
         ),
     }
     for name, data in written.items():

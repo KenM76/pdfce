@@ -867,6 +867,134 @@ pub fn composite(
     changed
 }
 
+/// Whether this source space names at least one **process** colorant.
+///
+/// `/All` counts — §8.6.6.4 makes it refer collectively to every colorant on
+/// the device, so it names all four. `/None` never counts. A process colour
+/// space trivially counts. A `Separation`/`DeviceN` counts only if one of its
+/// declared colorant names matches `Cyan`, `Magenta`, `Yellow` or `Black`.
+///
+/// # ★★ WHY THIS EXISTS: `authored_tints` ANSWERS A QUESTION THAT IS NOT
+/// "WHAT COLOUR IS THIS PAINT"
+///
+/// [`authored_tints`] reads the operands the file wrote and reports them as
+/// process tints. For a spot colorant there is **no process channel to report
+/// into**, so it contributes nothing and the function returns `[0, 0, 0, 0]`.
+/// That is the correct and intended answer to *"which process tints did this
+/// source state?"* — the question Table 149 asks — and it is a **catastrophic**
+/// answer to *"what ink does this paint put on the sheet?"*, because zero ink
+/// is blank paper.
+///
+/// The two questions were being answered by one function. Measured: a
+/// `/Separation /SpotInk /DeviceCMYK` square filled over white paper on a page
+/// whose group colour space is `/DeviceCMYK` rendered **completely invisible**,
+/// with overprint OFF, no diagnostic, and every counter green. The same square
+/// on an additive page rendered correctly, so the defect was invisible to any
+/// check that did not set a page group — and a page group is exactly what a
+/// print-bound PDF carries.
+///
+/// So a caller asking for a PAINT colour must test this first and fall back to
+/// the space's own tint transform (already resolved into the paint's sRGB)
+/// when it is `false`. A caller asking Table 149's question must not.
+#[must_use]
+pub fn names_a_process_colorant(kind: &SourceKind) -> bool {
+    match kind {
+        SourceKind::DeviceCmykDirect | SourceKind::OtherProcess | SourceKind::Group => true,
+        SourceKind::SeparationOrDeviceN { names } => names.iter().any(|n| match n {
+            Colorant::All => true,
+            Colorant::None => false,
+            Colorant::Named(name) => process_channel(name).is_some(),
+        }),
+    }
+}
+
+/// Whether Table 149 leaves **any** component to the backdrop — i.e.
+/// whether honouring overprint on this source changes anything at all.
+///
+/// `false` means the source space specifies every component of the group, so
+/// `CompatibleOverprint` degenerates to Normal and an **ordinary paint is
+/// already the correct answer**. A caller that takes the native route anyway
+/// gets the same pixels for more work; a caller that COUNTS it as an
+/// effective overprint reports a divergence where the table promises none,
+/// and an operator diffing that number between files will chase it.
+///
+/// # Why this is a function and not four lines at each call site
+///
+/// Because there are now three call sites — the path/glyph painter, the
+/// shading painter and the image painter — and the three-way outcome they
+/// each have to distinguish (inert / erasing / mixed) is *the same reading of
+/// the same table*. `Pass 130.3` exists because one of them was missing the
+/// second branch, and a whole gradient bar disappeared from a page.
+#[must_use]
+pub fn changes_anything(rules: [ComponentRule; 4]) -> bool {
+    rules.iter().any(|r| r.preserves_backdrop())
+}
+
+/// Whether Table 149 leaves **every** component to the backdrop — the
+/// spot-only case, where compositing natively would **erase the paint**.
+///
+/// # ★★ WHY THIS IS A REFUSAL AND NOT A RESULT
+///
+/// A `Separation`/`DeviceN` source that names no *process* colorant at all —
+/// `/Separation /PANTONE 185 C`, or `/DeviceN [/PANTONE 265 C /Suite Green]`
+/// — has, under Table 149's third row, every one of the group's four
+/// components in the "not named in source space" column. Under `OP true`
+/// that column is `c_b`. So the literal answer is: **preserve the entire
+/// backdrop, and paint nothing into the process planes.**
+///
+/// That is *correct for a press*, where the ink goes on its own plate and the
+/// four process plates genuinely are untouched. It is **catastrophic for a
+/// renderer with four process planes and no spot plane**, because the mark
+/// simply vanishes — not shifted, not desaturated, *absent*. And it vanishes
+/// SILENTLY: every counter reads as a successful composite, because the
+/// composite did succeed at doing what the table said.
+///
+/// Measured, and this is what the function is named after: a print-
+/// conformance patch whose spot-colour gradient bar is a `ShadingType 2` in
+/// `[/DeviceN [/PANTONE 265 C /Suite Green] /DeviceCMYK …]` under `/OP true`
+/// rendered as **bare white paper, 451 × 29 device pixels of it**, while
+/// `shadings_painted` said 1 and `overprint_shadings_unsupported` said 0.
+/// The check marks drawn *on top of* the bar were all present and correct,
+/// which made the page look like a rendering that had merely lost a
+/// background rather than one that had followed a rule off a cliff.
+///
+/// # ★★★ AND YET THE ANSWER IS TO COMPOSITE IT ANYWAY. DO NOT "FIX" THIS.
+///
+/// The obvious repairs are to paint the flattened tint normally, or to
+/// composite an ink union (`max(c_b, c_s)`) so that nothing is ever knocked
+/// out. **Both were built, both were ablated across the whole
+/// print-conformance suite on 2026-08-26, and both are REFUTED:**
+///
+/// | behaviour for a spot-only source under `OP true` | suite failures |
+/// |---|---|
+/// | preserve the backdrop — what pdfce does | **4** |
+/// | ink union, `max(c_b, c_s)` | 6 |
+/// | paint the flattened tint normally | 8 |
+///
+/// The suite ships **three patches whose entire subject** is that a *white*
+/// spot set to overprint must not knock out what lies under it, and both
+/// alternatives break all three. Knocking out is the one thing overprint
+/// promises never to do, so those two are refuted by the artefact rather than
+/// merely out-scored, and neither should be re-attempted without an oracle
+/// stronger than this one.
+///
+/// So a caller that sees `true` here should **let the composite run** — the
+/// result marks nothing, which is Table 149's answer — and **disclose that it
+/// did**, because an object that marks nothing is exactly what an operator
+/// cannot see. The real fix is the per-colorant buffer, which is filed and is
+/// not reachable from any of these call sites.
+///
+/// ★ What IS a defect in this area, and is fixed, is a different function
+/// being asked this one's question: [`authored_tints`] reports a spot-only
+/// source as `[0, 0, 0, 0]` — correct for *"which process tints did the file
+/// state?"* and blank paper when used as a **paint colour**. That made a spot
+/// invisible on a subtractive page *with overprint off*, which no reading of
+/// Table 149 sanctions. See [`names_a_process_colorant`].
+#[must_use]
+pub fn erases_the_paint(rules: [ComponentRule; 4]) -> bool {
+    rules.iter().all(|r| r.preserves_backdrop())
+}
+
 /// [`composite`]'s twin for a paint whose source colour **differs per
 /// pixel** — an overprinting `Separation`/`DeviceN` *image*.
 ///

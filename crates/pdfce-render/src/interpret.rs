@@ -4457,6 +4457,31 @@ impl Interpreter<'_> {
                     true,
                     u8::from(self.gs.current.overprint_mode == 1),
                 );
+                // ★★ THE SPOT-ONLY REFUSAL, `Pass 130.3`. WITHOUT IT THIS
+                // ROUTE ERASES THE SHADING AND EVERY COUNTER READS GREEN.
+                //
+                // A `/DeviceN` naming only SPOT colorants puts all four of
+                // the group's components in Table 149's "not named in source
+                // space" column, which under `OP true` is `c_b`. Composited
+                // literally, the shading preserves the entire backdrop and
+                // paints NOTHING — correct for a press, where the ink is on
+                // its own plate, and a vanished mark for a renderer with four
+                // process planes and no spot plane.
+                //
+                // Measured on a print-conformance patch whose spot-colour
+                // gradient bar is exactly this shape
+                // (`[/DeviceN [/PANTONE 265 C /Suite Green] /DeviceCMYK …]`,
+                // `ShadingType 2`, `/OP true`): 451 × 29 device pixels of bare
+                // white paper, with `shadings_painted = 1` and
+                // `overprint_shadings_unsupported = 0`. The check marks drawn
+                // ON TOP of the bar were all present and correct, so the page
+                // read as one that had merely lost a background rather than
+                // one that had followed a rule off a cliff.
+                //
+                // The bridge below flattens the spot through its tint
+                // transform — a disclosed approximation this project has
+                // carried from the start, and a far better answer than
+                // nothing. The real fix is the per-colorant buffer.
                 if shading
                     .paint_cmyk(to_target, region, clip, alpha, rules, buf)
                     .is_some()
@@ -4929,6 +4954,41 @@ impl Interpreter<'_> {
             .as_ref()
             .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
         let kind = crate::overprint::classify(space, false)?;
+        // ★★ THE SPOT-ONLY FALL-THROUGH, AND WITHOUT IT A SPOT COLOUR PAINTS
+        // NOTHING AT ALL ON A SUBTRACTIVE PAGE.
+        //
+        // `authored_tints` answers "which PROCESS tints did this source
+        // state?" -- Table 149's question. A spot colorant has no process
+        // channel to state a tint into, so a spot-only space answers
+        // `[0, 0, 0, 0]`, correctly. Handed to a PAINT as its colour, that is
+        // zero ink, which is blank paper.
+        //
+        // Measured before the guard: a `/Separation /SpotInk /DeviceCMYK`
+        // square over white paper, on a page whose group declares
+        // `/CS /DeviceCMYK`, rendered COMPLETELY INVISIBLE -- with overprint
+        // OFF, with no diagnostic, and with every counter reading green. The
+        // identical square on an additive page rendered correctly, so the
+        // defect could not be reproduced without a page group, and a page
+        // group is exactly what a print-bound PDF carries.
+        //
+        // `None` here is not a failure: it is this function's documented way
+        // of saying "this space states no tints", and the colorant buffer's
+        // response is §11.6.6's required conversion of the already-resolved
+        // sRGB -- which for a `Separation` IS its tint transform's output,
+        // i.e. the ink the document asked for, flattened. Flattened is a
+        // disclosed approximation this project has always carried. Absent is
+        // not an approximation of anything.
+        //
+        // ★ Deliberately NOT extended to a MIXED source (`/DeviceN
+        // [/Black /PANTONE 265 C]`). There the authored read is right for the
+        // channel it names and merely incomplete for the spot, and falling
+        // back to the flattened sRGB would smear the spot's contribution
+        // across the process channels -- the exact failure `authored_tints`
+        // was written to prevent, recorded against `PCS2_030`. One defect,
+        // one behaviour change.
+        if !crate::overprint::names_a_process_colorant(&kind) {
+            return None;
+        }
         crate::overprint::authored_tints(&kind, comps)
     }
 
@@ -5012,7 +5072,17 @@ impl Interpreter<'_> {
         // `rgb_to_cmyk`/`cmyk_to_rgb` (see their docs), and which CHANNELS
         // that source is entitled to paint is decided from the colorant
         // names by `cmyk_group_rules`, not from these numbers.
-        let source_cmyk: [f32; 4] = overprint::authored_tints(&kind, comps).unwrap_or_else(|| {
+        // ★ `names_a_process_colorant` gates the authored read for the same
+        // reason `authored_cmyk` does: for a SPOT-ONLY source `authored_tints`
+        // truthfully answers "no process tints were stated" as `[0, 0, 0, 0]`,
+        // and that is zero ink -- blank paper -- when used as a paint colour.
+        // The fall-through below recovers the tint transform's own output from
+        // the already-resolved paint colour, which is the ink the document
+        // asked for, flattened.
+        let authored = overprint::names_a_process_colorant(&kind)
+            .then(|| overprint::authored_tints(&kind, comps))
+            .flatten();
+        let source_cmyk: [f32; 4] = authored.unwrap_or_else(|| {
             let c = if stroking {
                 self.gs.current.stroke_color
             } else {
@@ -5037,7 +5107,63 @@ impl Interpreter<'_> {
             // is mode 0 -- the conservative reading, pinned by a test.
             u8::from(self.gs.current.overprint_mode == 1),
         );
-
+        // ★★★ THE SPOT-ONLY REFUSAL. WITHOUT IT A SPOT MARK UNDER `/OP true`
+        // IS INVISIBLE, ON EVERY PAGE, AND NOTHING SAYS SO.
+        //
+        // A source naming no PROCESS colorant puts all four of the group's
+        // components in Table 149's "not named in source space" column, which
+        // under `OP true` is `c_b`. Composited literally, the paint preserves
+        // the entire backdrop and marks nothing.
+        //
+        // ★ THAT IS NOT "THE STANDARD'S LITERAL ANSWER", and reading it that
+        // way is what let it survive. Table 149's rule presupposes the spot
+        // has a PLATE OF ITS OWN to be marked on -- the backdrop's four
+        // process components are preserved precisely BECAUSE the ink is going
+        // somewhere else. pdfce has no somewhere else. Applying the
+        // preservation half without the plate half is half a model, and the
+        // half that is missing is the one that puts ink on paper.
+        //
+        // ★★ The incoherence is what settles it, not a preference. Measured:
+        // a `/Separation /SpotInk /DeviceCMYK` square over WHITE PAPER --
+        // nothing beneath it to overprint at all -- rendered as its flattened
+        // tint with `/OP false` and as NOTHING with `/OP true`. On a press
+        // those two are the same sheet. A flag that changes nothing physically
+        // cannot decide whether the mark exists.
+        //
+        // So: refuse, paint the flattened tint through the ordinary path
+        // (a disclosed approximation this project has always carried), and
+        // count it. `overprint_refused` is exactly the counter for "the
+        // composite was offered this paint and could not run it". The real
+        // fix is the per-colorant buffer, filed and not reachable from here.
+        // ★★★ A SPOT-ONLY SOURCE PRESERVES THE WHOLE BACKDROP, AND THAT IS
+        // CORRECT. Two "obvious fixes" were built here and both are REFUTED.
+        //
+        // Table 149 puts every component of a source that names no process
+        // colorant in the "not named in source space" column, which under
+        // `OP true` is `c_b`. So the paint marks nothing in the four process
+        // planes — which reads like a defect, because on screen the mark
+        // simply is not there.
+        //
+        // Measured on the print-conformance suite, 2026-08-26:
+        //
+        //   preserve the backdrop (this)          4 failures
+        //   ink union, max(c_b, c_s)              6 failures
+        //   paint the flattened tint normally     8 failures
+        //
+        // Three patches exist for the express purpose of checking that a
+        // WHITE spot set to overprint does not knock out what is under it, and
+        // both alternatives break them. Knocking out is the one thing
+        // overprint promises never to do, so those two are refuted rather than
+        // merely lower-scoring, and neither should be re-attempted without an
+        // oracle stronger than this one.
+        //
+        // ★ What IS a defect, and was fixed beside this: `authored_tints`
+        // answers Table 149's question ("which process tints did the source
+        // state?") and was being used as the PAINT COLOUR, where a spot-only
+        // source's honest `[0, 0, 0, 0]` means blank paper. See the gate above
+        // and `authored_cmyk`. That made a spot invisible on a subtractive
+        // page even with overprint OFF, which no reading of Table 149
+        // sanctions.
         // Coverage: the path, rasterised exactly as tiny_skia would have
         // rasterised it for a normal paint, then intersected with the clip.
         // Using the same rasteriser is what keeps an overprinted edge
@@ -6538,10 +6664,7 @@ impl Interpreter<'_> {
             true,
             u8::from(self.gs.current.overprint_mode == 1),
         );
-        if !rules
-            .iter()
-            .any(|r| crate::overprint::ComponentRule::preserves_backdrop(*r))
-        {
+        if !crate::overprint::changes_anything(rules) {
             // Case 1: inert. Not a shortfall, not counted, painted normally.
             return false;
         }
@@ -6550,16 +6673,7 @@ impl Interpreter<'_> {
         // the composite then cannot run — the same ordering `paint_path`
         // uses, and for the same reason.
         self.diag.overprint_effective += 1;
-        if rules
-            .iter()
-            .all(|r| crate::overprint::ComponentRule::preserves_backdrop(*r))
-        {
-            // Case 2: every colorant this image names is a SPOT, and pdfce
-            // has no plane for one. Compositing would leave the backdrop
-            // untouched — correct for a press, and a vanished image on
-            // screen. Painting the flattened tint transform instead is the
-            // better approximation AND the one the disclosure already
-            // describes; what must not happen is doing it silently.
+        if crate::overprint::erases_the_paint(rules) {
             self.diag.overprint_refused += 1;
             self.diag.overprint_images_unsupported += 1;
             self.diag.note(

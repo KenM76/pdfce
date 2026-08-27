@@ -282,3 +282,88 @@ fn the_counters_say_what_happened() {
          not fire for a source space that specifies every component"
     );
 }
+
+/// ★★★ A SPOT COLOUR MUST PUT INK ON THE SHEET ON BOTH KINDS OF PAGE.
+///
+/// `Pass 130.3`. This is not an overprint test at all — **both fixtures set
+/// `/OP false`** — and it lives in this file because the defect and its cause
+/// are one function away from everything above.
+///
+/// # What was wrong
+///
+/// `overprint::authored_tints` answers *"which **process** tints did this
+/// source state?"* — Table 149's question. A spot colorant has no process
+/// channel to state a tint into, so a `/Separation /SpotInk /DeviceCMYK`
+/// source answers `[0, 0, 0, 0]`, **correctly**. `Interpreter::authored_cmyk`
+/// was handing that same answer to the colorant buffer as the paint's
+/// **colour**, where zero ink is blank paper.
+///
+/// So on a page whose group declares `/CS /DeviceCMYK`, a spot square
+/// rendered **completely invisible** — with overprint off, with no
+/// diagnostic, and with every counter reading green. The identical square on
+/// an additive page rendered correctly, which is why nothing caught it: the
+/// defect needs a page group to reproduce, and a page group is exactly what a
+/// print-bound PDF carries and a hand-written fixture usually does not.
+///
+/// # The oracle, and why it is again a PAIR
+///
+/// Neither fixture's colour is asserted, because the two pages legitimately
+/// disagree about it — the subtractive one crosses `CMYK → sRGB` on the way
+/// out and the additive one does not. What they must not disagree about is
+/// **whether the mark exists**. So the assertion is: both put ink down, both
+/// put down *the same kind* of ink (the tint transform is the same function),
+/// and neither is paper.
+///
+/// ★ Measured consequence, recorded because it looks like a regression and is
+/// not: this fix moved two print-conformance patches CLOSER to Acrobat
+/// (mean absolute distance 24.8 → 19.9 and 41.4 → 28.5) while *raising* the
+/// suite's failure count. Both patches paint CMYK over a spot backdrop, and
+/// while the spot was invisible there was nothing for the CMYK to wrongly
+/// knock out — a white trap cross on white paper has no contrast, so the
+/// detector could not fire. **They were passing because they were rendering
+/// nothing.** Five of six cells on one of them were blank.
+#[test]
+fn a_spot_colour_paints_ink_on_a_subtractive_page_too() {
+    let cmyk = render("spot_only_noop_cmyk.pdf");
+    let rgb = render("spot_only_noop_rgb.pdf");
+
+    let (cr, cg, cb) = inside_mark(&cmyk);
+    let (rr, rg, rb) = inside_mark(&rgb);
+
+    assert_ne!(
+        inside_mark(&cmyk),
+        PAPER,
+        "a /Separation spot square painted NOTHING on a subtractive page. \
+         `authored_tints` reports a spot as zero PROCESS tints -- true for \
+         Table 149, and blank paper when used as a paint colour"
+    );
+    assert_ne!(
+        inside_mark(&rgb),
+        PAPER,
+        "the additive control must paint too"
+    );
+
+    // Same ink, same tint transform, so the two must at least agree on which
+    // channel dominates. Asserting the exact triple would freeze the
+    // subtractive page's CMYK -> sRGB conversion, which is iccce's to improve.
+    assert!(
+        cg > cr && cg > cb && rg > rr && rg > rb,
+        "both pages should render this spot green-dominant; \
+         subtractive ({cr}, {cg}, {cb}) additive ({rr}, {rg}, {rb})"
+    );
+    // These fixtures carry the same `1 0 0 1 k` backdrop square as the rest of
+    // the family, so outside the mark is dark cyan-black rather than paper.
+    // Asserted from both ends: the mark must differ from the backdrop (or a
+    // renderer that painted nothing at all and left the backdrop showing would
+    // satisfy every assertion above), and the backdrop must itself be ink (or
+    // one that flooded the page white would).
+    assert_ne!(
+        inside_mark(&cmyk),
+        on_backdrop(&cmyk),
+        "the spot mark is indistinguishable from the backdrop it sits on -- \
+         which is what painting nothing looks like"
+    );
+    assert_ne!(inside_mark(&rgb), on_backdrop(&rgb));
+    assert_ne!(on_backdrop(&cmyk), PAPER);
+    assert_ne!(on_backdrop(&rgb), PAPER);
+}
