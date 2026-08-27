@@ -114,9 +114,11 @@ builds `--no-default-features`, so both configurations compile.
 | Resolve one font resource for text decoding | `ExtractFont::resolve(&DocumentView, &Dict)` — `text_extract/font.rs:381` | §9.2 |
 | Map a character code to Unicode via `/ToUnicode` | `ToUnicodeCMap::parse(&[u8])` → `::lookup(u32)` — `cmap.rs:272`, `cmap.rs:552` | §9.3 |
 | Get Base-14 metrics without any font file | `fontdata::std14_width`, `std14_descriptor` — `fontdata/mod.rs:382`, `:489` | §9.4 |
-| Turn a page into selectable vector/text/image objects | `vector::decompose_page(&DocumentView, &Page, Matrix)` — `vector/decompose.rs:1293` | §10.1 |
-| Find what the user clicked | `vector::hit_test_point(&PageObjects, Point, tolerance)` — `vector/hit.rs:126` | §10.3 |
+| Turn a page into selectable vector/text/image objects | `vector::decompose_page(&DocumentView, &Page, Matrix)` — `vector/decompose.rs:1626` | §10.1 |
+| **Find what the user clicked** | **`vector::hit_test_point_deep(&PageObjects, Point, tolerance)` — `vector/hit.rs:255`** | §10.3 |
+| Find what the user clicked, **page stream only** | `vector::hit_test_point(&PageObjects, Point, tolerance)` — `vector/hit.rs:126` | §10.3 |
 | Cycle through overlapping objects under the cursor | `vector::hit_test_point_all` — `vector/hit.rs:174` | §10.3 |
+| Reach objects drawn **inside** a form XObject | `PageObjects::leaves` → `vector::decompose::FormLeaf` — `vector/decompose.rs:1011` | §10.3 |
 | Marquee-select a region | `vector::hit_test_rect(&PageObjects, Bounds, MarqueeMode)` — `vector/hit.rs:181` | §10.3 |
 | Drill into which text run / subpath was clicked | `vector::hit_test_text_runs` — `hit.rs:277`; `vector::hit_test_subpaths` — `hit.rs:340` | §10.3 |
 | Snap a point to geometry | `vector::snap_candidates(Point, &SnapConfig, &PageObjects)` — `vector/snap.rs:449` | §10.4 |
@@ -1435,8 +1437,81 @@ let b: Option<Bounds>    = subpath_bounds(&model, obj_idx, subpath_idx);  // hit
 
 `hit_test_point` is defined as the head of `hit_test_point_all` — one
 private iterator underneath both, so they cannot disagree (`hit.rs:39-50`,
-`ARCHITECTURE.md` §4 continuation-60). Use `hit_test_point` for click,
-`hit_test_point_all` for alt-click cycling; never reimplement either.
+`ARCHITECTURE.md` §4 continuation-60). Use `hit_test_point_all` for alt-click
+cycling; never reimplement either.
+
+#### ★★★ For a click, use `hit_test_point_deep`. The others cannot see inside a form.
+
+```rust
+use pdfce_core::vector::{hit_test_point_deep, HitTarget};
+
+match hit_test_point_deep(&model, at, tol).first() {              // hit.rs:255
+    Some(HitTarget::Object(i)) => { /* model.objects[*i] -- editable */ }
+    Some(HitTarget::Leaf(i))   => { /* model.leaves[*i]  -- read-only  */ }
+    None => { /* nothing drawn here */ }
+}
+```
+
+**`hit_test_point` treats a form XObject as its bounding box, so on a page
+whose body is wrapped in a form it answers with the wrapper no matter where
+you click.** That is what the operator hit: *"when I click on one of the
+objects all I get is the page selected."* He was selecting a real object.
+
+The bbox rule is right for a **raster image**, whose quad genuinely is its ink.
+It is wrong for a **form**, whose `/BBox` is a §8.10.1 clipping-**extent**
+declaration that says nothing about coverage — a form declaring the whole
+MediaBox and drawing one small line is legal and common. So
+`hit_test_point_deep` **excludes forms outright** and answers with what is
+drawn inside them. A click on empty space inside a form's bbox returns nothing.
+
+The form is still reachable: `FormLeaf::containment` names every enclosing
+form, so "select the container" is available as a **deliberate second act**,
+which is a different thing from winning by default.
+
+#### `PageObjects::leaves` — and why it is a second list
+
+`decompose_page` descends into every reachable form and returns the objects
+inside on `PageObjects::leaves`. Each `FormLeaf` carries:
+
+| field / method | meaning |
+|---|---|
+| `object` | the object, geometry already in **page space** — one hit test serves both lists |
+| `containment` | enclosing forms, **outermost first**; never empty |
+| `paint_order` | index in `objects` of the **outermost** enclosing form |
+| `stream()` | `ContentStreamRef::Form { object }` — **which buffer** its token range indexes |
+| `is_editable()` | **always `false`** today |
+
+**★★ It is a separate list for a safety reason, not a stylistic one.** Eleven
+call sites in `edit.rs` resolve a paint-order index and apply content-stream
+surgery **to the page's stream**. A leaf's token range indexes the **form's**
+stream — a different buffer, and an *in-range* one. A leaf in `objects` would
+be handed to those verbs and corrupt the page silently. Keeping the lists apart
+makes them correct by construction, and means **your stored paint-order indices
+do not move**.
+
+⇒ For **selection**, use the deep test. For **editing**, use `hit_test_point`
+and you get back something you can actually edit.
+
+**★ Ordering is an interleave, not a concatenation.** Leaves and page objects
+are two lists but **one paint order**: a form's contents are painted where its
+`Do` sits, so something drawn after a form is on top of everything inside it.
+`hit_test_point_deep` interleaves on `paint_order`. If you build your own
+ordering, do the same — "leaves first" and "leaves last" are both wrong on any
+page that draws anything outside its forms.
+
+**Vocabulary note.** `FormLeaf::stream()` and `is_editable()` are deliberately
+the **same** `ContentStreamRef` / `is_editable` pair `text_extract` uses for a
+`TextRun` inside a form. A form-interior path and a form-interior text run
+describe themselves identically, so one selection model covers both.
+
+**Guards, and their disclosure.** Nesting is bounded by
+`content::MAX_FORM_DEPTH` (64 — corpus-corrected: veraPDF ships a *conformant*
+32-deep chain), and cycles are caught by a guard keyed on the form's **object
+number**, because the same stream is reachable under different resource names
+and a name-keyed guard misses the cycle. Both are counted on
+`DecomposeDiagnostics::{form_depth_overflows, form_cycles}` — **non-zero means
+the leaf list is incomplete**, and presenting it as "everything on the page"
+would be wrong.
 
 `MarqueeMode` — `hit.rs:82`: `Enclosed` | `Touched`.
 `FLATTEN_STEPS` = 16 — `hit.rs:78` (Bézier flattening for hit-testing).

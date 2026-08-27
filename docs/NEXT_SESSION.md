@@ -13,8 +13,9 @@ can falsify it.
 
 ## §A — COLD START
 
-**The previous session shipped two Passes, both print-colour, both found by
-running the print-conformance suite rather than by reading code:**
+**The previous session shipped SIX Passes: two print-colour, two OCR, two
+form-recursion. The print-colour pair were found by running the suite; the
+other four came from the operator's own reports on the GUI channel:**
 
 - **`Pass 130.2`** (`fafc0c2`) — **an overprinting image ignored overprint
   while a rectangle of the same colour did not.** §11.7.4.3 now runs for a
@@ -26,7 +27,7 @@ running the print-conformance suite rather than by reading code:**
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `3b9a277` | `git rev-parse --short HEAD` |
+| `HEAD` | `f62df4e` (before this session's final filings) | `git rev-parse --short HEAD` |
 | `git describe --tags` | `v0.14.0-13-g3b9a277` | `git describe --tags` |
 | `origin/main` | ★ **8 commits BEHIND `main` — this work is NOT PUSHED** | `git rev-list --count origin/main..main` |
 | tag at `HEAD` | none; highest is `v0.14.0` | `git tag --points-at HEAD` |
@@ -77,129 +78,53 @@ not this role's to touch. **This is an operator item — surface it.**
 
 ---
 
-## §C — WHAT TO DO NEXT: TWO NEW REQUESTS, AND ONE IS OPERATOR-BLOCKING
+## §C — BOTH OPERATOR REQUESTS ARE SHIPPED. WHAT IS LEFT OF THEM
 
-★ **Both arrived at 22:58 on 2026-08-26, i.e. AFTER the pre-flight `ls` earlier
-that evening.** The channel is checked at the start of a session and things land
-during one. Check it again at the end.
+★ **Do not start either from scratch — read this first.** Both 2026-08-26
+requests from `pdfceGUI` are done, answered on their channel
+(`open/note_form_recursion_and_ocr_as_an_edit_both_shipped.md`) and filed.
 
-### 1. ★★★ `request_decompose_recurses_into_form_xobjects.md` — TAKE THIS FIRST
+### Shipped
 
-**The operator cannot click on objects to edit them.** His words, quoted in the
-request: *"when I click on one of the objects all I get is the page selected."*
-He is right, and he is selecting a real object — a page-sized **form XObject**.
+- **Clicking objects works.** `PageObjects::leaves` (`FormLeaf`) +
+  `hit_test_point_deep` + `HitTarget`. A form is **excluded** from the
+  first-click candidate list outright, because a `/BBox` is a §8.10.1
+  clipping-**extent** declaration and not a statement about coverage.
+- **OCR is an edit.** `EditSession::add_ocr_layer`, one undo entry per run,
+  reads the session's current revision. Plus `pdfce-cli ocr --in-place`
+  through the same verb.
 
-`pdfceGUI` ran a fourteen-agent audit and concluded this is **the single item
-it cannot work around**. It is `pdfce-core` work, not GUI work.
+### ★★ What is OWED out of them, in priority order
 
-**Both line-level claims were verified against the tree this session, so you can
-start from them rather than re-deriving:**
+1. **`unshare_form` (`Pass 119.1`) — an outstanding obligation from a SHIPPED
+   decision, not an ordinary Backlog item.** Decision 076 certified its own
+   `R206` compliance on the claim that both the default *and* the option had
+   shipped. The option never existed. Until it does, an operator who moves a
+   leaf inside a form used in four places moves it in all four **with no verb
+   that gives him one**, and the GUI has been told not to offer the button.
+2. **`--in-place` on the other editing subcommands.** Two subcommands' `--help`
+   promised the flag for who-knows-how-long while it existed nowhere. The
+   wording is corrected and `ocr` has it; the rest do not.
+3. **A CLI surface for leaves.** `object-list` still prints the flat list only,
+   so nothing on the command line can see inside a form. `R151` shape.
+4. **Retire `pdfce-render`'s `MAX_XOBJECT_DEPTH`.** The nesting bound now lives
+   once, in `content::MAX_FORM_DEPTH`, and `text_extract` and `vector` both
+   take it from there. Render still has its own `pub const`; retiring it is a
+   cross-crate breaking change, which is why it was not done in passing.
 
-- `crates/pdfce-core/src/vector/decompose.rs` — the `XObjectShape::Form` arm
-  calls `emit_image(ImageSource::Form, …)` with the form's `/BBox` corners and
-  **returns without entering the form's content stream**.
-- `crates/pdfce-core/src/vector/hit.rs` — `object_hit`'s `VectorObject::Image`
-  arm is `i.page_bbox.inflate(tolerance).contains(point)`, a plain rectangle.
+### ★★★ THE THING TO NOT UNDO
 
-⇒ a page-sized form is a page-sized hit target above everything drawn before
-it, and it wins every click at every point.
+**The recursion is not a read-only change**, and the design turns on it.
+Thirteen CLI verbs take a paint-order object index and **eleven sites in
+`edit.rs` resolve one** — every one writing to the **page's** content stream. A
+leaf's token range indexes the **form's** stream: a different buffer, and an
+*in-range* one, so the corruption would be silent.
 
-**The request is unusually good and has already done work for you**: it inventories
-what recursion costs *on the GUI side* (index renumbering, count explosion, its
-own truncating `.find()`) and explicitly takes those as theirs. It asks for
-**read access to the leaves only** — not editing through the recursion, not a
-`PageText` change, and it explicitly asks that the *editing-through-recursion*
-question be **answered as a decision before anything is built on it**.
-
-★★ **THE DESIGN IS ALREADY SETTLED AND ANSWERED ON THEIR CHANNEL** —
-`open/reply_decompose_form_recursion_the_editing_question_is_already_ruled.md`.
-Do not re-litigate it; build it. In short:
-
-1. **Recursion is the model, not a flag.** A flag means two walks over the same
-   content that can disagree.
-2. **★ Their object indices do NOT renumber.** One walk, **two projections**:
-   the existing flat list keeps its exact present meaning (page-stream objects,
-   same order, same indices), and the leaves are an *additional* view. They
-   listed renumbering first among what recursion costs them; they do not have
-   to pay it.
-3. **★★★ AND THAT IS A SAFETY PROPERTY, NOT A COURTESY — it is the finding
-   that decides the design.** Thirteen CLI verbs take a paint-order object
-   index and **eleven core sites resolve one**, and every one writes to the
-   **page's** stream. A leaf inside a form carries a token range into the
-   **form's** stream. Put leaves in the same list and those verbs will apply a
-   form-relative range to the page and corrupt it, silently. ⇒ **the recursion
-   is not a read-only change**, which is the one thing the request did not say.
-   Keeping leaves out of the list those eleven sites read makes them
-   unreachable rather than guarded — and "add a guard to eleven sites" is
-   exactly the shape that produced `Pass 130.3`.
-4. **The form container stays in the flat list**, so "select the container"
-   remains a distinct act; part 3 (the form's bbox not answering a first click)
-   lands in the **hit test**, which consumes the leaf view.
-5. **Read access only**, as they asked.
-
-★★★ **AND MOST OF THE HARD WORK ALREADY EXISTS IN `pdfce-core` — GREP BEFORE
-YOU BUILD.** `text_extract` has recursed into form XObjects since `Pass 1.1`
-(`text_extract/page.rs`, around the `Subtype /Form` arm) and already solves
-every difficult part: an **object-number-keyed** cycle guard (a name-keyed one
-misses the cycle, because one stream is reachable under two names), a depth
-bound with a diagnostic, resource inheritance with fallback to the invoker's,
-and the `view.slice(span)` subtlety for a form the **session** authored.
-
-It also already carries the two types the vector model needs and I was about to
-invent:
-
-- **`ContentStreamRef::{Page, Form { object }}`** — "which buffer does this
-  span index?"
-- **`TextRun::is_editable()`** — "can this be edited through the page-stream
-  path?", which the GUI **already binds for text**.
-
-⇒ a vector leaf must carry a `ContentStreamRef` and answer `is_editable()` the
-same way a `TextRun` does, so a form-interior path and a form-interior text run
-describe themselves **identically**. The GUI has to reconcile both in one
-selection; two vocabularies for one fact would be its problem and our fault.
-
-**Depth/cycle constants:** the renderer's `MAX_XOBJECT_DEPTH = 64` is
-corpus-corrected (veraPDF ships a *conformant* 32-deep chain) and
-`text_extract` hand-duplicates it as `max_form_depth`. That is already two
-copies; **do not make a third.** Consolidating them into one is a small,
-worthwhile part of this Pass.
-
-### ★ The editing question they asked to be ruled on — ALREADY ANSWERED, and a
-### correction came out of answering it
-
-They asked: a leaf inside a form invoked in several places — edit in place,
-clone the form, or refuse? **Decision 076 already ruled it for text
-(edit-in-place, disclosed), and its decisive reason is not text-specific**: a
-form invoked from *inside another form* cannot be re-bound without editing the
-parent, which may itself be shared. Extended to vector by reference; not
-re-decided.
-
-★★ **Answering it exposed a false claim in decision 076 itself**, now corrected
-(`6787e7b`): it certified `R206` compliance on the basis that *"Both are
-shipped — `Pass 119.0` and `Pass 119.1` (`unshare_form`)"*. **`unshare_form`
-has never existed** — grepped under six plausible names, zero hits — and
-`Pass 119.1` is still Backlog. So `R206`'s "ship both" is **outstanding**, and
-there is currently **no verb that lets an operator break a form's sharing**.
-The GUI has been told not to offer one.
-
-### 2. `request_ocr_as_an_edit_to_the_open_session.md`
-
-`add_ocr_layer` takes `&Document` and returns a whole new PDF, so OCR cannot be
-an undoable edit to the open document. Operator: *"Why do I have to save a copy
-instead of just go back into my pdf and save over it?"* The request surveys six
-tools and reports **zero of six** force a Save-As on the open-document path.
-
-Smaller than the first and unblocked by it.
-
-### 3. Still unanswered from earlier
-
-`request_extraction_drops_the_writing_direction.md` (root, 2026-08-26 16:29),
-plus four under `open/`: `adopt_widget` pre-flight, markup-opacity-in-two-verbs,
-`insert_pages` orphaned widgets, restyle-an-existing-text-run. On the `iccce`
-channel, `note_your_name_gate_has_the_two_defects_mine_had.md` is unanswered and
-is about a gate this project also owns.
-
----
+⇒ `PageObjects::leaves` is a **separate list** from `PageObjects::objects`, and
+`the_flat_object_list_is_unchanged_by_recursion` guards it. Merging them
+"for tidiness" re-points eleven write sites at the wrong buffer. If editing
+*through* the recursion is ever built, it needs a vector-side invocation census
+first and a verb that takes a containment path — not an object index.
 
 ## §D — WHAT THE TWO PASSES DECIDED, IF YOU TOUCH THIS GROUND
 

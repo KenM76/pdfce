@@ -67200,3 +67200,111 @@ outstanding `R206` obligation flagged in the 277th filing.
   decisions `089` (next free `090`), `SESSION_LOG` filings **279**.
 
 ---
+
+## 2026-08-27 (280th filing) — `Pass 136.0` (`83fca59`) + `Pass 136.1` (`f62df4e`, `HEAD`) SHIP: the objects inside a form XObject are reachable, and a form no longer wins every click
+
+**Shipped:**
+- `Pass 136.0` (`83fca59`) — `decompose_page` now descends into every form
+  XObject a page paints and returns the leaves on a new
+  `PageObjects::leaves`, each `FormLeaf` carrying its object in **page
+  space** and its containment path (enclosing forms, outermost first).
+  Measured on the print-conformance corpus: 13 pages gain leaves, 0 depth
+  overflows, 0 cycles; one page goes from 133 flat objects to 133 + 49
+  leaves.
+- `Pass 136.1` (`f62df4e`, current `HEAD`) — new `hit_test_point_deep` +
+  `HitTarget::{Object, Leaf}` picks the innermost leaf under a click
+  instead of the enclosing form's whole `/BBox`. `hit_test_point` /
+  `hit_test_point_all` are unchanged on purpose — they still answer with
+  the wrapper, which is what the eleven paint-order-index editing sites in
+  `edit.rs` resolve against.
+
+**The request, in the operator's terms:** *"I can't figure out how to
+click on objects… when I click on one of the objects all I get is the
+page selected."* He was selecting a real object — a page-sized form
+XObject wrapping the page's visible body. At least the fifth reported
+"can't click on objects" complaint against this project (Passes
+18.0–18.6), each time a different root cause behind the same symptom.
+
+**Decisions made this session:** none new — decision 076 (shared-form
+editing edits every invocation in place) was **applied** to the vector
+model, not extended or amended. Ledger stays `R218`/next free `R219`,
+decisions `089`/next free `090` (per the engineer, not independently
+re-run this filing — no shell).
+
+**Findings + decisions:**
+- **★★★ The recursion is not a read-only change, and the request never
+  raised this.** Eleven sites in `edit.rs` resolve a paint-order object
+  index and write to the **page's** content stream; a leaf's token range
+  indexes the **form's** stream — a different buffer. Mixing leaves into
+  the flat `PageObjects::objects` list would let one of those eleven sites
+  apply a form-relative range to the page and corrupt it silently, in
+  bounds, with nothing to catch it. Leaves are kept as a **separate list**,
+  which makes all eleven sites correct by construction rather than by a
+  guard someone must remember to add to each — the exact shape that
+  produced `Pass 130.3` the day before. The GUI's stored paint-order
+  indices also do not move, a cost it had budgeted for and does not have
+  to pay.
+- **★★ Grepping before building turned a large Pass small.** `text_extract`
+  has recursed into forms since `Pass 1.1` and already had the cycle
+  guard, depth bound, resource inheritance and the two types this Pass
+  needed: `ContentStreamRef::{Page, Form { object }}` and
+  `TextRun::is_editable()`. `FormLeaf::stream()` and
+  `FormLeaf::is_editable()` reuse both, so a form-interior path and a
+  form-interior text run now describe themselves identically — which
+  matters because the shell reconciles both models in one selection.
+- **★ A depth constant that existed twice, about to exist a third time.**
+  `pdfce-render`'s `MAX_XOBJECT_DEPTH` and `text_extract`'s
+  `max_form_depth` (documented as "matching `pdfce-render`'s" — an
+  assertion, not a mechanism) are joined by a single
+  `content::MAX_FORM_DEPTH` = 64, justified once: veraPDF ships a
+  conformant 32-deep chain, so 64 is 2× the deepest real structure
+  measured. Retiring `pdfce-render`'s own copy is a cross-crate breaking
+  change and is filed as owed, not done.
+- **★ No committed fixture had a form XObject at all.** New
+  `fixtures/synthetic/forms-xobject/`: the operator's page-sized case,
+  two-level nesting, a form that invokes itself (legal per §8.10.1, merely
+  unbounded to a naive walker), and a form invoked twice (contributes its
+  contents twice — why editing a shared form changes every invocation,
+  decision 076).
+- **★★★ A form's `/BBox` is a §8.10.1 clipping extent, not a coverage
+  claim.** `hit_test_point` treated it as one, which meant a form was
+  excluded outright as a hit-test surface once a deep test existed — not
+  merely ranked below its contents. `a_click_on_empty_space_inside_a_form_
+  hits_nothing` proves the exclusion, not a tie-break.
+- **★★ Two lists, one shared paint order, not a concatenation.** "Leaves
+  first" and "leaves last" are both wrong on a page painting anything
+  outside its forms. `FormLeaf::paint_order` carries the outermost
+  enclosing form's index down through the recursion unchanged.
+  `a_leaf_is_found_under_its_own_invocation` distinguishes an interleave
+  from a concatenation, which a single-point test could not have.
+
+**Tests + gates:** new `crates/pdfce-core/tests/form_recursion.rs`, 9
+tests, all pass; `cargo test --workspace` 4,365 passing, zero failures;
+fmt/clippy clean; 17 argument-free gates green; `cargo +nightly fuzz build`
+green on Windows (stub now supplies both `Some` and `None` XObject
+identities); `cargo tree -p pdfce-core`/`-p pdfce-render` invariant
+unaffected (not independently re-run this filing, no shell).
+
+**`FEATURES.md`:** one new *Planned* row under Vector objects — click
+through a form to select the object inside it. `[x]` core, `[ ]` cli
+(`object-list` still prints only the flat list), `[ ]` gui (tracks
+`D:\dev\pdfceGUI` separately). Neither box rounded up.
+
+**Still in flight / filed as owed, not done:**
+- A `pdfce-cli` surface for `PageObjects::leaves` (no Pass ID minted).
+- Retiring `pdfce-render`'s `MAX_XOBJECT_DEPTH` for `content::MAX_FORM_DEPTH`.
+- Editing through the recursion — needs a vector-side invocation census
+  first; `FormLeaf::is_editable()` returns `false` today.
+- `docs/core-api/` not yet updated for `FormLeaf`, `PageObjects::leaves`,
+  `HitTarget`, `hit_test_point_deep`, `content::MAX_FORM_DEPTH` — the
+  engineer's own document, flagged as next rather than recorded as done.
+- `Pass 119.1` (`unshare_form`) remains the outstanding `R206` obligation
+  flagged in the 277th filing.
+- `--in-place` still owed on the other `pdfce-cli` editing subcommands
+  (277th–279th filings).
+
+**For next session:**
+- Ledger unchanged this filing: rules `R218` (next free `R219`),
+  decisions `089` (next free `090`), `SESSION_LOG` filings **280**.
+
+---

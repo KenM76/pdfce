@@ -96,6 +96,248 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 136.1` (`f62df4e`) — **A FORM NO LONGER WINS EVERY CLICK** — ★★★ **a form's `/BBox` is a §8.10.1 CLIPPING EXTENT, not a coverage claim — treating it as one was excluding the correct hit, not merely ranking it low** — ★★ **two separate lists, one shared paint order — a leaf is found under its OWN invocation, not concatenated before or after the flat list** — ★ **`hit_test_point` is unchanged on purpose: eleven `edit.rs` sites still get the wrapper, because that is the object they can actually edit** — 2026-08-27 (280th filing)
+
+**Shipped 2026-08-27.** Commit `f62df4e`, the current `HEAD`. The commit
+immediately before it is `83fca59` (`Pass 136.0`, below); the commit before
+both is `c7201b7` (this role's own 279th filing). Hashes and date as
+supplied in the engineer's dispatch — this filing has no shell and could
+not run `git log` itself to confirm them independently; treat the commit
+identity as relayed, not verified.
+
+#### The headline, in the operator's terms
+
+*"I can't figure out how to click on objects… when I click on one of the
+objects all I get is the page selected."* He was selecting a real object —
+a page-sized **form XObject** wrapping the page's visible body — and the
+selection model handed him the wrapper every time, no matter where inside
+it he clicked. This is at least the fifth reported instance of a "can't
+click on objects" complaint against this project (Passes 18.0–18.6, the
+selection-outline fix at `c998521`), each time a genuinely different root
+cause behind the same operator-visible symptom.
+
+#### What shipped
+
+New `hit_test_point_deep` and `HitTarget::{Object, Leaf}`, built on
+`Pass 136.0`'s `PageObjects::leaves`:
+
+```
+hit_test_point(&m, inside_the_square)      -> Some(0)   the wrapper
+hit_test_point_deep(&m, inside_the_square) -> [Leaf(0)] the square
+```
+
+**★★★ A form is excluded outright as a hit-test surface, not ranked lower
+than its contents.** `hit_test_point` treats an image or a form as its
+bounding box — correct for a raster image, whose quad genuinely is its ink,
+and wrong for a form, whose `/BBox` is a §8.10.1 clipping-extent
+declaration that says nothing about coverage. A form legally declares the
+whole `/MediaBox` and paints one small line inside it — common, not
+pathological. `a_click_on_empty_space_inside_a_form_hits_nothing` proves
+the exclusion is real rather than the leaf merely winning a tie-break race
+against the wrapper.
+
+**★★ Two lists, one paint order — not a concatenation.** The easy wrong
+answer is "leaves first" or "leaves last"; both are wrong on any page that
+paints anything outside its forms, because a form's contents are painted
+exactly where its `Do` operator sits in the page's own stream, not before
+or after it. `FormLeaf` carries `paint_order` — the index of the
+**outermost** enclosing form, unchanged as the recursion descends, because
+a doubly-nested form is still painted where its outermost ancestor's `Do`
+sits. `a_leaf_is_found_under_its_own_invocation` is built to distinguish an
+*interleave* from a *concatenation*; a single-point test would have passed
+either shape.
+
+**Unchanged, deliberately.** `hit_test_point` / `hit_test_point_all` still
+answer with the wrapper. They index the list the eleven paint-order-index
+editing sites in `edit.rs` resolve against, so leaving them alone is what
+keeps those sites correct without touching them. A caller wanting
+*selection* now has `hit_test_point_deep`; a caller wanting to *edit* keeps
+using the shallow test and gets back something it can actually act on.
+
+#### Scope, and what is still owed
+
+**Read access only**, as the operator's request asked. Editing *through*
+the recursion needs a vector-side invocation census first — `FormLeaf`'s
+`is_editable()` (mirroring `TextRun`'s) returns `false` and says why. The
+shared-form editing *policy* question is already ruled (decision 076,
+extended to vector by reference in the 277th filing) — what is unbuilt is
+the plumbing, not the decision.
+
+#### Tests + gates (as supplied by the engineer, this Pass covers both `136.0` and `136.1`)
+
+- New `crates/pdfce-core/tests/form_recursion.rs` — **9 tests**, all pass.
+- `cargo test --workspace` — **4,365 passing, zero failures**.
+- `cargo fmt --all --check` clean; `cargo clippy --workspace --all-targets
+  -- -D warnings` clean.
+- All 17 argument-free gates green, exit codes read individually.
+- `cargo +nightly fuzz build` green **on Windows** — the fuzz stub now
+  supplies both `Some` and `None` XObject identities, so the guard's
+  no-identity path is fuzzed too.
+- `cargo tree -p pdfce-core` / `-p pdfce-render` — zero GUI, zero network
+  dependencies (per the standing invariant; not independently re-run by
+  this role, no shell this filing).
+
+#### `FEATURES.md` — updated in this same filing
+
+New row under *Planned* (Vector objects): descending into a form to select
+the object inside it — `[x]` core, `[ ]` cli (`object-list` still prints
+only the flat list — filed as owed below), `[ ]` gui (tracks `D:\dev\pdfceGUI`
+separately; no shell change reaches it in this Pass). **Not rounded up**
+per the engineer's own instruction — core alone does not earn a tick in
+either shell column.
+
+#### Filed as owed, not done
+
+New Backlog entry (below, no Pass ID minted yet): a `pdfce-cli` surface for
+`PageObjects::leaves` — `object-list` (or a sibling verb) should be able to
+print the leaves a page's forms contain, the way `inspect --forms`
+(`Pass 119.0`) already prints which forms a page paints and how often each
+is invoked. Retiring `pdfce-render`'s own `MAX_XOBJECT_DEPTH` in favour of
+the new `content::MAX_FORM_DEPTH` (flagged under `Pass 136.0` below) is
+also still owed — a cross-crate breaking change, not done in this Pass.
+
+#### Note from the engineer, recorded rather than acted on
+
+`docs/core-api/` has not yet been updated for the new public items
+(`FormLeaf`, `PageObjects::leaves`, `HitTarget`, `hit_test_point_deep`,
+`content::MAX_FORM_DEPTH`). That document is the engineer's own, not this
+role's — the engineer is doing it next. `check-core-api-verbs` only governs
+`EditSession` verbs, so it stays green in the meantime. Recorded here so it
+is not mistaken for done.
+
+#### No new rule or decision minted
+
+Ceiling unchanged: rules `R218` (next free `R219`), decisions `089` (next
+free `090`) — per the engineer's dispatch. Decision 076 was **applied**
+this session, not extended or amended. Not independently re-run by this
+role (no shell this filing); engineer should confirm with
+`python tools/check-ledger-numbers.py`.
+
+---
+
+### `Pass 136.0` (`83fca59`) — **THE OBJECTS INSIDE A FORM ARE NOW REACHABLE** — ★★★ **the recursion is not a read-only change: eleven `edit.rs` sites resolve a paint-order index against the PAGE'S own content stream, and a leaf's token range indexes the FORM'S — mixing the two lists would corrupt a document silently, in bounds, with no error to catch it** — ★★ **grepping before building turned a large Pass into a small one: `text_extract` already solved every hard part of this recursion, and now shares its depth constant and its `ContentStreamRef`/`is_editable()` vocabulary with the new vector-side leaf** — ★ **the whole form branch had no fixture at all — every committed vector fixture drew straight onto the page** — 2026-08-27 (280th filing)
+
+**Shipped 2026-08-27.** Commit `83fca59`; the commit immediately before it
+is `c7201b7` (this role's own 279th filing). Hashes and date as supplied in
+the engineer's dispatch — this filing has no shell and could not run
+`git log` itself to confirm them independently; treat the commit identity
+as relayed, not verified.
+
+#### What was wrong
+
+`decompose_page` emitted a form XObject as one opaque object, bounded by
+its own `/BBox`, and never entered it. Every object a form painted — every
+line, every glyph, every nested shape — was invisible to the selection
+model, reachable only as "the form." Measured across the print-conformance
+corpus: **13 pages gain leaves under the fix, 0 depth overflows, 0
+cycles**; one page goes from **133** flat objects to **133 + 49** leaves.
+
+#### What shipped
+
+`decompose_page` now descends into every form XObject it encounters and
+returns the leaves it finds on a new `PageObjects::leaves` list. Each
+`FormLeaf` carries its object — geometry already resolved into **page
+space**, not form-local space — and its **containment path**: the chain of
+enclosing forms, outermost first.
+
+#### ★★★ The finding that decided the design, and the operator's request never raised it
+
+The recursion is **not a read-only change**, because thirteen `pdfce-cli`
+verbs take a paint-order object index and **eleven sites in `edit.rs`**
+resolve one of them, and every one of those eleven writes to the **page's**
+content stream. A leaf's token range indexes the **form's** stream — a
+different buffer entirely. Putting leaves into `PageObjects::objects`
+alongside the flat, page-level list would let one of those eleven sites
+apply a form-relative token range to the page's own stream and corrupt it
+**silently**, because the range would still be in bounds — no panic, no
+error, just a mis-edited page nobody would notice until they compared
+bytes.
+
+**⇒ Leaves are kept as a separate list.** That makes all eleven editing
+sites correct **by construction**, rather than correct because someone
+remembered to add a guard to each of them individually — and "add a guard
+to eleven sites" is the exact shape of defect that produced `Pass 130.3`
+the day before this one. Keeping the lists separate also means the GUI's
+already-stored paint-order indices **do not move** — a cost the shell had
+budgeted for and, because of this design, does not have to pay.
+
+#### ★★ Grepping before building turned a large Pass into a small one
+
+`text_extract` has recursed into forms since `Pass 1.1` and had already
+solved every hard part of this problem: an object-number-keyed cycle
+guard, a depth bound, resource inheritance across the form boundary, and
+the subtlety of a session-authored form's own span. It also already had
+the two types this Pass needed: `ContentStreamRef::{Page, Form { object }}`
+and `TextRun::is_editable()`. `FormLeaf::stream()` now returns a
+`ContentStreamRef`, and `FormLeaf::is_editable()` answers the same
+question `TextRun::is_editable()` does. **A form-interior path and a
+form-interior text run now describe themselves identically** — which
+matters directly, because the shell has to reconcile both models inside
+one selection gesture.
+
+#### ★ A depth constant that existed twice and was about to exist a third time
+
+`pdfce-render` had its own `MAX_XOBJECT_DEPTH`; `text_extract` had its own
+`max_form_depth`, documented in a comment as *"matching `pdfce-render`'s"*
+— a comment asserting agreement, not a mechanism enforcing it. This Pass
+introduces a single `content::MAX_FORM_DEPTH`, with the corpus
+justification for its value recorded in one place: veraPDF ships a
+**conformant** 32-deep form-nesting chain, so a limit of 64 is 2× the
+deepest structure anyone has actually measured. Both `text_extract` and the
+new vector recursion now read from this one constant.
+
+**Retiring `pdfce-render`'s own copy is a cross-crate breaking change and
+is filed as owed, not done in this Pass** — see the Backlog entry filed
+under `Pass 136.1` above.
+
+#### ★ A new fixture directory, because the form branch had never been exercised
+
+`fixtures/synthetic/forms-xobject/` — no committed vector fixture drew
+through a form XObject at all; every existing fixture painted straight
+onto the page, so the entire form-recursion branch was previously
+exercised only by a stub resolver that returned a shape and no content —
+precisely the branch this Pass needed real coverage for. Four new files:
+
+- the operator's own reported case — a page-sized form wrapping visible
+  content;
+- two-level form nesting;
+- a form that invokes **itself** — not corrupt: §8.10.1 permits this, it
+  is merely unbounded to a naive walker, which is exactly why
+  `MAX_FORM_DEPTH` exists;
+- a form invoked twice from the same page — its contents are painted, and
+  now enumerated, **twice**, which is what makes editing a shared form
+  change every one of its invocations (decision 076).
+
+#### Tests + gates
+
+Covered jointly with `Pass 136.1` above — see that entry for the shared
+test run (`form_recursion.rs`, 9 tests; `cargo test --workspace`, 4,365
+passing; fmt/clippy clean; 17 gates green; fuzz build green on Windows;
+`cargo tree` invariant unaffected).
+
+#### `FEATURES.md`
+
+Covered jointly with `Pass 136.1` above — one new Planned row for the
+combined capability (core landed across both Passes; cli and gui still
+gaps).
+
+#### Filed as owed, not done
+
+- `pdfce-cli` surface for `PageObjects::leaves` (see `Pass 136.1` above).
+- Retiring `pdfce-render`'s `MAX_XOBJECT_DEPTH` in favour of
+  `content::MAX_FORM_DEPTH` (this entry, above).
+
+#### No new rule or decision minted
+
+Ceiling unchanged: rules `R218` (next free `R219`), decisions `089` (next
+free `090`) — per the engineer's dispatch. Decision 076 (shared-form
+editing edits every invocation in place) was applied to the vector model
+this session, not amended. Not independently re-run by this role (no shell
+this filing); engineer should confirm with
+`python tools/check-ledger-numbers.py`.
+
+---
+
 ### `Pass 135.1` (`b352656`) — **`pdfce-cli ocr --in-place`** — ★★★ **THE CLI HALF OF `Pass 135.0` WAS NEVER BLOCKED; IT WAS HALF-BUILT AND POINTED AT THE WRONG WRITER, AND THE LIBRARIAN'S OWN GREP IS WHAT FOUND THAT, NOT THE ENGINEER'S DISPATCH** — ★★ **ONE PLAN, TWO WRITERS — `--output` and `--in-place` both call `plan_ocr_layer`, so the font, the resources merge and the emitted content stream are decided once, not twice** — ★ **a `--in-place` help string had been promising a flag that did not exist, on two other subcommands, since before this Pass** — 2026-08-27 (279th filing)
 
 **Shipped 2026-08-27.** Commit `b352656`; the commit immediately before it is
