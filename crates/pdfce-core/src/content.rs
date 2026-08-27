@@ -64,6 +64,42 @@ use crate::filters::{self, FilterError};
 // graph via `DocumentView::graph()`, whose `&dyn ObjectGraph` resolves trait
 // methods without the trait being in scope.
 use crate::lexer::{Lexer, Token, TokenKind};
+/// How deep a chain of form XObjects invoking form XObjects may go before a
+/// walker stops descending (ISO 32000-1 §8.10.1).
+///
+/// # ★★ 64, AND THE NUMBER IS CORPUS-CORRECTED RATHER THAN CHOSEN
+///
+/// Real documents nest two or three deep — a page invokes a template, which
+/// invokes a logo — which is exactly what makes a small value *look* safe. But
+/// veraPDF's PDF/A-1b §6.1.12 implementation-limits suite ships a
+/// **conformant** file with a deliberate chain of **32** nested forms, and a
+/// reader that refuses it is wrong. 64 is 2× the deepest conformant structure
+/// anyone has measured, and Annex C sets no form-nesting limit at all.
+///
+/// # ★ It is a backstop, NOT the real defence
+///
+/// The attack it would have to stop is unbounded *recursion*, and that is
+/// caught at any depth by a **cycle guard keyed on the form's object number**
+/// — §8.10.1 does not forbid a form invoking itself, and the same stream is
+/// reachable under different resource names, so a name-keyed guard misses the
+/// cycle entirely. What this value actually bounds is the linear memory a
+/// legitimate-but-absurd chain can pin.
+///
+/// # ★★★ WHY IT LIVES HERE, WHICH IS THE POINT OF THIS CONSTANT EXISTING
+///
+/// It was written down **twice** independently — `pdfce-render`'s
+/// `MAX_XOBJECT_DEPTH` and `text_extract`'s `ExtractOptions::max_form_depth`,
+/// the second documented as *"matching `pdfce-render`'s"* — and a third walker
+/// (the vector decomposer) was about to add a fourth. Three hand-copied
+/// constants that must agree is a disagreement waiting to happen, and the
+/// disagreement would show as **the same file yielding different content
+/// depending on which walker asked**.
+///
+/// `text_extract` and `vector` now both take it from here. `pdfce-render`'s
+/// copy is a `pub const` in another crate that its own callers name, so
+/// retiring it is a separate, breaking change and is **owed rather than done**.
+pub const MAX_FORM_DEPTH: usize = 64;
+
 use crate::object::{Dict, Name, ObjId, Object};
 use crate::page_tree::Page;
 use crate::span::ByteSpan;

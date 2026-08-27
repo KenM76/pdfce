@@ -100,7 +100,7 @@ use std::sync::Arc;
 
 use crate::content::{ContentStream, ContentToken, ContentTokenKind};
 use crate::graph::ObjectGraph;
-use crate::object::{Dict, Object};
+use crate::object::{Dict, ObjId, Object};
 use crate::page_tree::Page;
 use crate::settings::UnmappableCode;
 use crate::span::ByteSpan;
@@ -415,6 +415,23 @@ pub struct ImageObject {
     pub page_bbox: Bounds,
     /// Where the object came from.
     pub source: ImageSource,
+    /// The XObject stream's identity, for an object drawn by `Do`.
+    ///
+    /// `None` for an inline image (§8.9.7 — it *is* the content, it has no
+    /// object of its own) and for a `Do` whose resource entry was a direct
+    /// stream rather than a reference.
+    ///
+    /// # ★ What a caller does with it
+    ///
+    /// For a **form**, this names the content stream that a token range from
+    /// *inside* that form indexes — a different buffer from the page's. It is
+    /// also the key a recursion has to guard on: §8.10.1 does not forbid a
+    /// form invoking itself, and the same stream is reachable under different
+    /// resource names, so a name-keyed cycle guard misses the cycle.
+    ///
+    /// For an **image**, it is the identity of the sample data, which is what
+    /// tells two placements of one image apart from two separate images.
+    pub xobject: Option<ObjId>,
     /// The image's size in **samples** — `(width, height)` from the image
     /// dictionary's `/Width` and `/Height` (ISO 32000-1 §8.9.5, Table 89:
     /// both **required** integers, "width/height … in samples"), or the
@@ -940,6 +957,118 @@ pub struct DecomposeDiagnostics {
     pub nodes_dropped: usize,
     /// Objects dropped because [`MAX_OBJECTS`] was hit.
     pub objects_dropped: usize,
+    /// Form XObjects not descended into because the nesting chain had already
+    /// reached [`crate::content::MAX_FORM_DEPTH`].
+    ///
+    /// Non-zero means the leaf list is INCOMPLETE, and a caller that presents
+    /// it as "everything on the page" would be wrong. Counted rather than
+    /// silently truncated for that reason.
+    pub form_depth_overflows: usize,
+    /// Form XObjects not descended into because the form was already on the
+    /// current chain — a cycle (§8.10.1 does not forbid one).
+    ///
+    /// Keyed on the form's **object number**: the same stream is reachable
+    /// under different resource names, so a name-keyed guard would miss it.
+    pub form_cycles: usize,
+}
+
+/// One object reached by **descending into a form XObject** — the unit a hit
+/// test answers with, and the thing a page-sized form was hiding.
+///
+/// # ★★★ WHY THIS TYPE EXISTS
+///
+/// [`decompose_page`] emits a form XObject as **one opaque object** bounded by
+/// its `/BBox`, and never enters it. On a page whose visible body is wrapped
+/// in a form — which is what SolidWorks emits per orthographic view, and what
+/// a great many print files emit per panel — that means:
+///
+/// * the form is a page-sized object sitting in paint order **above**
+///   everything drawn before it, and
+/// * a hit test answers every click, anywhere, with the form.
+///
+/// The operator's report, relayed from the GUI project: *"when I click on one
+/// of the objects all I get is the page selected."* He was selecting a real
+/// object. It was a form.
+///
+/// Measured on one print-conformance page: **sixteen** ~20 × 20 pt forms, one
+/// per blend-mode cell, each swallowing every click aimed at the swatch inside
+/// it. Acrobat, on the same file, selects the individual path — its
+/// editable-item model cannot return a form wrapper at all.
+///
+/// # ★★ WHY THESE ARE A SEPARATE LIST AND NOT MIXED INTO `objects`
+///
+/// **Because a leaf's token range indexes a different buffer**, and eleven
+/// call sites in `edit.rs` resolve a paint-order index and apply surgery to
+/// the *page's* content stream. Put leaves in [`PageObjects::objects`] and
+/// every one of those verbs would happily apply a form-relative token range to
+/// the page and corrupt it — silently, because the range is in bounds.
+///
+/// Keeping them out of that list makes those eleven sites correct **by
+/// construction** rather than by a guard somebody has to remember to add to
+/// each. It also means a caller's stored paint-order indices do not move,
+/// which the GUI had budgeted to absorb and now does not have to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FormLeaf {
+    /// The object, with its geometry already mapped into **page space** — the
+    /// same space [`PageObjects::objects`] uses, so a caller can hit-test both
+    /// lists against one point without transforming anything.
+    pub object: VectorObject,
+    /// The chain of enclosing form XObjects, **outermost first**, ending with
+    /// the form this object is directly inside.
+    ///
+    /// Never empty: an object with no enclosing form is not a leaf, it is an
+    /// ordinary entry in [`PageObjects::objects`].
+    ///
+    /// This is what lets a shell say *"inside Title block (form)"* and offer
+    /// "select the container" as a distinct act. Without it the operator gains
+    /// reach and loses all sense of structure, which is a different kind of
+    /// lost.
+    pub containment: Vec<ObjId>,
+}
+
+impl FormLeaf {
+    /// The form this object is **directly** inside.
+    #[must_use]
+    pub fn parent(&self) -> Option<ObjId> {
+        self.containment.last().copied()
+    }
+
+    /// Which content stream this leaf's [`VectorObject::tokens`] range indexes.
+    ///
+    /// # ★ Read this before doing anything with `tokens()`
+    ///
+    /// A form XObject's decoded bytes are **a different buffer** from the
+    /// page's (§8.10.1 — it is its own content stream). A token range from
+    /// inside a form is meaningless against the page's stream, and *in range*,
+    /// which is the dangerous combination.
+    ///
+    /// Deliberately the **same type** `text_extract` uses for the same fact
+    /// about a [`crate::text_extract::TextRun`], so a form-interior path and a
+    /// form-interior text run describe themselves identically. A shell has to
+    /// reconcile both models in one selection; two vocabularies for one fact
+    /// would be its problem and our fault.
+    #[must_use]
+    pub fn stream(&self) -> crate::text_extract::ContentStreamRef {
+        self.parent()
+            .map_or(crate::text_extract::ContentStreamRef::Page, |id| {
+                crate::text_extract::ContentStreamRef::Form { object: id.num }
+            })
+    }
+
+    /// Whether this object can be edited through the page-stream surgeries.
+    ///
+    /// **Always `false`**, and it is a method rather than a constant so that
+    /// the answer has somewhere to change when editing-through-recursion is
+    /// built. Mirrors [`crate::text_extract::TextRun::is_editable`], which a
+    /// consuming shell already calls for text.
+    ///
+    /// A caller that wants to know *why* should read [`Self::stream`]: the
+    /// object lives in a form's buffer, and the verbs that take a paint-order
+    /// index all write to the page's.
+    #[must_use]
+    pub const fn is_editable(&self) -> bool {
+        false
+    }
 }
 
 /// The decomposition of one page (or one content stream): the ordered
@@ -957,6 +1086,22 @@ pub struct PageObjects {
     pub initial: Matrix,
     /// Tolerated-oddity counts (module docs).
     pub diagnostics: DecomposeDiagnostics,
+    /// Objects reached by descending **into** the form XObjects in
+    /// [`Self::objects`] — see [`FormLeaf`].
+    ///
+    /// # ★ Empty unless the walk had a document to descend with
+    ///
+    /// Populated by [`decompose_page`], which has a [`DocumentView`]. The
+    /// resolver-only entry points ([`decompose`], [`decompose_with_fonts`])
+    /// leave it empty, because descending needs the form's *content stream*
+    /// and the classification seam deliberately exposes only its shape — that
+    /// is what lets the fuzz target and the unit tests drive the walk with no
+    /// document at all.
+    ///
+    /// So an empty `leaves` means *"nobody looked"*, not *"nothing there"*,
+    /// and the two are distinguished by which entry point was called rather
+    /// than by a flag.
+    pub leaves: Vec<FormLeaf>,
 }
 
 impl PageObjects {
@@ -985,6 +1130,9 @@ pub enum XObjectShape {
         /// the dictionary does not carry a usable pair — see
         /// [`ImageObject::pixel_size`], which this becomes.
         pixel_size: Option<(u32, u32)>,
+        /// The XObject stream's identity, when the `Do` name resolved to an
+        /// indirect reference — see [`XObjectShape::Form::object`].
+        object: Option<ObjId>,
     },
     /// A form XObject (§8.10): bounded by its `/BBox` (in form space) under
     /// `matrix × ctm`.
@@ -993,6 +1141,30 @@ pub enum XObjectShape {
         bbox: Bounds,
         /// The form's `/Matrix` (default identity).
         matrix: Matrix,
+        /// The form stream's identity, when the `Do` name resolved to an
+        /// indirect reference.
+        ///
+        /// # ★★ Why this is here, and why it is keyed on the OBJECT
+        ///
+        /// Two things need it and neither can be done from the resource name:
+        ///
+        /// 1. **A cycle guard.** §8.10.1 does not forbid a form invoking
+        ///    itself, directly or through a chain. The same stream is
+        ///    reachable under *different names* in different resource
+        ///    dictionaries, so a name-keyed guard misses the cycle entirely —
+        ///    the reason `text_extract`'s form walk keys on the object number
+        ///    and says so at the site.
+        /// 2. **Stream identity for anything inside the form.** A token range
+        ///    from inside a form indexes the FORM's decoded bytes, which are
+        ///    *a different buffer* from the page's. Naming the buffer is what
+        ///    lets a caller tell an editable page-stream object from one it
+        ///    can only read — the same distinction `ContentStreamRef` draws
+        ///    for text.
+        ///
+        /// `None` when the `Do` name resolved to a direct stream object
+        /// rather than a reference, which is legal and carries no identity to
+        /// record.
+        object: Option<ObjId>,
     },
 }
 
@@ -1052,6 +1224,9 @@ impl XObjectResolver for DocumentXObjects<'_> {
             .map(|o| self.view.resolve(o))
             .and_then(Object::as_dict)?
             .get(name)?;
+        // Captured BEFORE the resolve, because resolving is exactly what
+        // discards it: one line later `entry` has become the stream it names.
+        let object = entry.as_reference();
         let Object::Stream(stream) = self.view.resolve(entry) else {
             return None;
         };
@@ -1064,10 +1239,12 @@ impl XObjectResolver for DocumentXObjects<'_> {
         match subtype {
             Some(b"Image") => Some(XObjectShape::Image {
                 pixel_size: dict_pixel_size(self.view, &stream.dict),
+                object,
             }),
             Some(b"Form") => Some(XObjectShape::Form {
                 bbox: dict_rect(self.view, &stream.dict, b"BBox").unwrap_or(Bounds::EMPTY),
                 matrix: dict_matrix(self.view, &stream.dict).unwrap_or(Matrix::IDENTITY),
+                object,
             }),
             // Structural inference for a malformed missing /Subtype, matching
             // the renderer's Width+Height ⇒ image, BBox ⇒ form heuristic.
@@ -1075,11 +1252,13 @@ impl XObjectResolver for DocumentXObjects<'_> {
                 if stream.dict.contains_key(b"Width") && stream.dict.contains_key(b"Height") {
                     Some(XObjectShape::Image {
                         pixel_size: dict_pixel_size(self.view, &stream.dict),
+                        object,
                     })
                 } else if stream.dict.contains_key(b"BBox") {
                     Some(XObjectShape::Form {
                         bbox: dict_rect(self.view, &stream.dict, b"BBox").unwrap_or(Bounds::EMPTY),
                         matrix: dict_matrix(self.view, &stream.dict).unwrap_or(Matrix::IDENTITY),
+                        object,
                     })
                 } else {
                     None
@@ -1267,6 +1446,114 @@ impl FontResolver for DocumentFonts<'_> {
 // Entry points
 // ---------------------------------------------------------------------------
 
+/// Descend into every form XObject reachable from `objects`, collecting the
+/// leaves in paint order.
+///
+/// # The two guards, and why one of them is not optional
+///
+/// * **Depth**, [`crate::content::MAX_FORM_DEPTH`] — a backstop against the
+///   linear memory a legitimate-but-absurd chain pins.
+/// * **★ Cycle, keyed on the form's OBJECT NUMBER** — this is the real
+///   defence. §8.10.1 does not forbid a form invoking itself, directly or
+///   through a chain, and **the same stream is reachable under different
+///   resource names in different resource dictionaries**, so a name-keyed
+///   guard misses the cycle entirely. The same reasoning, and the same key,
+///   as `text_extract`'s form walk.
+///
+/// A `Do` naming a **direct** stream carries no object number and so cannot be
+/// cycle-guarded. Such a form is descended into once at the current depth and
+/// relies on the depth bound alone — which is sound, because a direct stream
+/// cannot be referenced twice and therefore cannot form a cycle with itself.
+///
+/// # Geometry
+///
+/// The form object's own `ctm` is *already* `/Matrix × CTM-at-the-`Do``, so it
+/// is exactly the form-space → page-space transform and is handed straight to
+/// the nested walk as its initial matrix. Every leaf therefore comes back in
+/// **page space**, and a caller can hit-test the flat list and the leaf list
+/// against one point without transforming anything.
+fn collect_form_leaves(
+    view: &DocumentView<'_>,
+    objects: &[VectorObject],
+    path: &mut Vec<ObjId>,
+    out: &mut Vec<FormLeaf>,
+    diag: &mut DecomposeDiagnostics,
+) {
+    for obj in objects {
+        let VectorObject::Image(img) = obj else {
+            continue;
+        };
+        if img.source != ImageSource::Form {
+            continue;
+        }
+        let Some(id) = img.xobject else {
+            // A direct stream: no identity to guard on, and none needed.
+            continue;
+        };
+        if path.contains(&id) {
+            diag.form_cycles += 1;
+            continue;
+        }
+        if path.len() >= crate::content::MAX_FORM_DEPTH {
+            diag.form_depth_overflows += 1;
+            continue;
+        }
+        let Object::Stream(stream) = view.resolved(id) else {
+            continue;
+        };
+        // `view.slice(span)`, not `span.slice(view.bytes())`: a form the
+        // SESSION authored carries an R45 span starting past the end of the
+        // base buffer, and only the view's stream source knows which of its
+        // two halves such a span indexes. An unresolvable or undecodable form
+        // is skipped, not fatal — it is already on the page as an opaque
+        // object either way.
+        let Some(content) = view
+            .slice(stream.data_span)
+            .and_then(|raw| crate::filters::decode_stream(&stream.dict, raw).ok())
+            .and_then(|decoded| ContentStream::parse(decoded).ok())
+        else {
+            continue;
+        };
+        // §7.8.3: a form's own `/Resources` if it has one, otherwise the
+        // invoking context's — which is what the outer walk already resolved,
+        // and is why this is inherited rather than defaulted to empty.
+        let resources = view
+            .resolve(stream.dict.get(b"Resources").unwrap_or(&Object::Null))
+            .as_dict()
+            .cloned()
+            .unwrap_or_default();
+
+        let nested = {
+            let xobjects = DocumentXObjects {
+                view,
+                resources: &resources,
+            };
+            let fonts = DocumentFonts::new(view, &resources);
+            decompose_with_fonts(&content, img.ctm, &xobjects, &fonts)
+        };
+
+        path.push(id);
+        for child in &nested.objects {
+            // A nested form is a container, not a leaf: recursion below emits
+            // what is inside it. Emitting the container here too would put a
+            // second page-sized hit target into the very list built to stop
+            // the first one winning every click.
+            let is_form = matches!(
+                child,
+                VectorObject::Image(c) if c.source == ImageSource::Form
+            );
+            if !is_form {
+                out.push(FormLeaf {
+                    object: child.clone(),
+                    containment: path.clone(),
+                });
+            }
+        }
+        collect_form_leaves(view, &nested.objects, path, out, diag);
+        path.pop();
+    }
+}
+
 /// Decompose a page's content into selectable vector objects.
 ///
 /// The page's `Contents` streams are concatenated, decoded, and tokenized
@@ -1327,7 +1614,22 @@ pub fn decompose_page(
     // not as a cheaper mode a real caller should choose — `DocumentFonts`
     // memoizes, so the cost is one resolution per distinct font resource.
     let fonts = DocumentFonts::new(view, &page.resources);
-    Ok(decompose_with_fonts(&content, initial, &xobjects, &fonts))
+    let mut model = decompose_with_fonts(&content, initial, &xobjects, &fonts);
+    // ★ The descent happens HERE and not inside the walk, because it needs the
+    // form's CONTENT STREAM and the walk only has the classification seam --
+    // which is deliberate, and is what lets the fuzz target and the unit tests
+    // drive the geometry with no document at all.
+    let mut path = Vec::new();
+    let mut leaves = Vec::new();
+    collect_form_leaves(
+        view,
+        &model.objects,
+        &mut path,
+        &mut leaves,
+        &mut model.diagnostics,
+    );
+    model.leaves = leaves;
+    Ok(model)
 }
 
 /// Decompose an already-tokenized content stream, with an explicit
@@ -1400,6 +1702,11 @@ pub fn decompose_with_fonts(
         objects: d.objects,
         initial,
         diagnostics: d.diag,
+        // Empty, and that means "nobody looked". Descending into a form needs
+        // its CONTENT STREAM, and this entry point has only the classification
+        // seam -- which is exactly what lets the fuzz target and the unit tests
+        // drive the walk with no document at all. `decompose_page` fills it.
+        leaves: Vec::new(),
     }
 }
 
@@ -1714,6 +2021,9 @@ impl<'a> Decomposer<'a> {
                 self.gs.ctm,
                 unit_square(),
                 pixel_size,
+                // §8.9.7: an inline image IS the content stream's own bytes.
+                // It has no object of its own to name.
+                None,
                 first,
                 op_index,
             );
@@ -2654,21 +2964,34 @@ impl<'a> Decomposer<'a> {
             return;
         };
         match self.xobjects.classify(&name) {
-            Some(XObjectShape::Image { pixel_size }) => {
+            Some(XObjectShape::Image { pixel_size, object }) => {
                 self.emit_image(
                     ImageSource::XObject,
                     self.gs.ctm,
                     unit_square(),
                     pixel_size,
+                    object,
                     first,
                     op_index,
                 );
             }
-            Some(XObjectShape::Form { bbox, matrix }) => {
+            Some(XObjectShape::Form {
+                bbox,
+                matrix,
+                object,
+            }) => {
                 let ctm = matrix.post_concat(self.gs.ctm);
                 let corners = bounds_corners(bbox);
                 // A form has no samples (§8.10) — `None`, not `Some((0, 0))`.
-                self.emit_image(ImageSource::Form, ctm, corners, None, first, op_index);
+                self.emit_image(
+                    ImageSource::Form,
+                    ctm,
+                    corners,
+                    None,
+                    object,
+                    first,
+                    op_index,
+                );
             }
             None => self.diag.unresolved_xobject += 1,
         }
@@ -2678,12 +3001,14 @@ impl<'a> Decomposer<'a> {
     /// the object's own space (unit square, or a form `/BBox`), mapped to
     /// page space by `ctm`; `pixel_size` is the sample count for an image
     /// and `None` for a form.
+    #[allow(clippy::too_many_arguments)]
     fn emit_image(
         &mut self,
         source: ImageSource,
         ctm: Matrix,
         local_corners: [Point; 4],
         pixel_size: Option<(u32, u32)>,
+        xobject: Option<ObjId>,
         first: usize,
         op_index: usize,
     ) {
@@ -2700,6 +3025,7 @@ impl<'a> Decomposer<'a> {
             ImageSource::Inline | ImageSource::XObject => self.diag.images += 1,
         }
         self.objects.push(VectorObject::Image(ImageObject {
+            xobject,
             ctm,
             page_bbox,
             source,
@@ -3643,6 +3969,7 @@ mod tests {
                 match name {
                     b"Im0" => Some(XObjectShape::Image {
                         pixel_size: Some((640, 480)),
+                        object: Some(ObjId::new(7, 0)),
                     }),
                     b"Fm0" => Some(XObjectShape::Form {
                         bbox: Bounds {
@@ -3650,6 +3977,7 @@ mod tests {
                             max: Point::new(4.0, 2.0),
                         },
                         matrix: Matrix::IDENTITY,
+                        object: Some(ObjId::new(8, 0)),
                     }),
                     _ => None,
                 }

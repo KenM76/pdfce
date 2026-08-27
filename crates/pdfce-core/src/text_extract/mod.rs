@@ -958,11 +958,13 @@ pub struct ExtractOptions {
     /// file, so this is a guess about a thing the standard declines to
     /// define.
     pub backward_jump_ratio: f32,
-    /// Maximum form-XObject nesting depth (§8.10.1). Default 64 —
-    /// matching `pdfce-render`'s `MAX_XOBJECT_DEPTH`, which was itself
-    /// **corpus-corrected**: a *conformant* veraPDF PDF/A file contains
-    /// a deliberate 32-deep form chain, and Annex C sets no form-nesting
-    /// limit at all.
+    /// Maximum form-XObject nesting depth (§8.10.1).
+    ///
+    /// Defaults to [`crate::content::MAX_FORM_DEPTH`], which is where the
+    /// number and its corpus justification now live. This used to carry its
+    /// own literal `64` documented as *"matching `pdfce-render`'s
+    /// `MAX_XOBJECT_DEPTH`"* — a hand-copied constant whose only guarantee of
+    /// agreement was a comment saying it agreed.
     pub max_form_depth: usize,
     /// Capture per-glyph [`GlyphProvenance`] during the walk. Default
     /// `false`.
@@ -1009,7 +1011,7 @@ impl Default for ExtractOptions {
             word_gap_ratio: 0.20,
             line_gap_ratio: 0.30,
             backward_jump_ratio: 0.50,
-            max_form_depth: 64,
+            max_form_depth: crate::content::MAX_FORM_DEPTH,
             capture_provenance: false,
             // Read off the enum rather than restated, so the settings
             // store, the engine and the file's own documentation cannot

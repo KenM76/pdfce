@@ -32,6 +32,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use pdfce_core::content::ContentStream;
+use pdfce_core::object::ObjId;
 use pdfce_core::vector::{
     Bounds, MarqueeMode, Matrix, Point, VectorObject, XObjectResolver, XObjectShape, decompose,
     hit_test_point, hit_test_rect, page_candidates,
@@ -53,6 +54,11 @@ impl XObjectResolver for FuzzResolver {
                     max: Point::new(s, s + 1.0),
                 },
                 matrix: Matrix::new(1.0, 0.0, 0.0, 1.0, s, -s),
+                // Derived from the name so the walk sees both `Some` and
+                // `None` identities -- a `Do` naming a DIRECT stream carries
+                // no object number, and a cycle guard keyed on the identity
+                // has to cope with that rather than assume it is always there.
+                object: (first % 3 == 0).then(|| ObjId::new(u32::from(first), 0)),
             })
         } else {
             // The sample count is derived from the name too, so the
@@ -60,7 +66,10 @@ impl XObjectResolver for FuzzResolver {
             // (§8.9.5 Table 89 requires both; a resolver may legitimately
             // fail to produce either).
             let pixel_size = (first % 4 == 0).then(|| (u32::from(first), u32::from(first) + 1));
-            Some(XObjectShape::Image { pixel_size })
+            Some(XObjectShape::Image {
+                pixel_size,
+                object: (first % 3 == 0).then(|| ObjId::new(u32::from(first), 0)),
+            })
         }
     }
 }
