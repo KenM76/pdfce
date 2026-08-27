@@ -3878,6 +3878,103 @@ impl MarkupStyle {
     }
 }
 
+/// Whole-annotation properties applied **at author time** by
+/// [`EditSession::add_markup_with`] (`Pass 81.1`).
+///
+/// Every field is `None` by default and
+/// [`EditSession::add_markup`] is exactly `add_markup_with(…,
+/// &MarkupOptions::default())`, so nothing that existed before this type
+/// changes behaviour.
+///
+/// # What belongs here, and what belongs on [`MarkupSpec`]
+///
+/// [`MarkupSpec`] describes what the appearance **draws** — the geometry,
+/// the colours, the pen width, the line endings. This struct describes
+/// properties of the **annotation object** that the appearance stream
+/// knows nothing about. `/CA` is the clearest case: §12.5.2 Table 164
+/// makes it the constant alpha with which the annotation is *composited
+/// onto the page*, and pdfce's generated appearances deliberately leave
+/// their own graphics-state alpha at 1.0 so the two cannot compound.
+///
+/// That split is why this is a second parameter rather than eight new
+/// fields on `MarkupSpec`'s eight geometric variants. The requesting
+/// shell asked for the field-on-the-enum shape; the enum is the wrong
+/// home for it, and the reasoning is worth more than the convenience.
+///
+/// # Why it exists at all: undo, not ergonomics
+///
+/// `/CA` used to be reachable only through
+/// [`EditSession::set_markup_style`], which by definition acts on an
+/// annotation that already exists. Authoring a translucent highlight was
+/// therefore *author opaque, then restyle* — **two undo entries**, so one
+/// Ctrl+Z left an **opaque highlight** on the page: a state the operator
+/// never asked for and could not have created any other way. See
+/// [`EditSession::add_markup_with`].
+///
+/// # Deliberately not `#[non_exhaustive]`
+///
+/// Same reasoning as [`MarkupStyle`], and the same cost: this is an INPUT
+/// struct a consumer *constructs*, and `#[non_exhaustive]` would make it
+/// unbuildable from outside this crate — `pdfce-cli` could not write
+/// `MarkupOptions { .. }` at all. Adding a field here is a breaking
+/// change; that is the honest price of a struct callers build, and it is
+/// paid here rather than pushed onto every consumer as an
+/// unconstructable type.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct MarkupOptions {
+    /// `/CA` — the annotation's constant opacity, `0.0`–`1.0` (§12.5.2,
+    /// Table 164). `None` omits the key entirely.
+    ///
+    /// `None` is **not** the same as `Some(1.0)` in the bytes, though it
+    /// is the same on screen: Table 164's default is 1.0, so writing it
+    /// explicitly adds a key that changes nothing and makes a
+    /// pdfce-authored opaque annotation textually distinguishable from
+    /// every other producer's, for no gain.
+    ///
+    /// Out of range or non-finite is **refused by name**
+    /// ([`EditError::MarkupOpacityOutOfRange`]), not clamped — unlike
+    /// [`MarkupStyle::opacity`], which clamps. The asymmetry is
+    /// deliberate: a *restyle* is correcting a value that already exists
+    /// and clamping keeps the annotation renderable, whereas an *author*
+    /// call with alpha 4.0 is a caller bug, and quietly authoring 1.0
+    /// would put an opaque annotation on the page while reporting success.
+    pub opacity: Option<f64>,
+}
+
+impl MarkupOptions {
+    /// Check every option, before any guard that costs work and before any
+    /// object is allocated — so a rejected value leaves the session
+    /// byte-identical rather than partway through a command.
+    ///
+    /// # A function rather than two copies, deliberately
+    ///
+    /// [`EditSession::add_markup_with`] and
+    /// [`EditSession::add_text_annotation_with`] both call it. Written
+    /// inline in each, this would be **two expressions of one rule** —
+    /// `R92`'s failure mode, and precisely the shape that let `/CA` be
+    /// reachable from the restyle verb and not the author verb in the
+    /// first place. Two validators drift silently: the second route ends
+    /// up accepting what the first refuses, and the divergence surfaces
+    /// as "the opacity control works on a rectangle and not on a sticky
+    /// note".
+    ///
+    /// It is also what makes a future field's validation land on both
+    /// routes by construction rather than by whoever remembers.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::MarkupOpacityOutOfRange`] when [`Self::opacity`] is
+    /// outside `0.0..=1.0`, `NaN`, or infinite.
+    pub fn validate(&self) -> Result<(), EditError> {
+        if let Some(alpha) = self.opacity
+            && (!alpha.is_finite() || !(0.0..=1.0).contains(&alpha))
+        {
+            return Err(EditError::MarkupOpacityOutOfRange { value: alpha });
+        }
+        Ok(())
+    }
+}
+
 /// A property the original annotation carried that pdfce's regenerated
 /// appearance does **not** reproduce.
 ///
@@ -4832,6 +4929,25 @@ pub enum EditError {
     /// would be an invisible annotation the operator could not find.
     #[error("the annotation has no geometry to draw")]
     EmptyGeometry,
+    /// [`MarkupOptions::opacity`] was outside `0.0..=1.0`, or was `NaN` or
+    /// infinite (`Pass 81.1`).
+    ///
+    /// **Refused rather than clamped**, which is the opposite of what
+    /// [`MarkupStyle::opacity`] does, and the asymmetry is the point. A
+    /// *restyle* corrects a value that already exists on an annotation the
+    /// operator can see, so clamping keeps that annotation renderable and
+    /// visibly changes it. An *author* call with alpha 4.0 is a caller
+    /// bug: clamping it would put a fully opaque annotation on the page
+    /// while returning `Ok`, and the shell would report success for a
+    /// gesture whose whole point was the transparency.
+    #[error(
+        "annotation opacity {value} is outside 0.0..=1.0 (ISO 32000-1 §12.5.2 Table 164 /CA); \
+         nothing was authored"
+    )]
+    MarkupOpacityOutOfRange {
+        /// The value the caller supplied.
+        value: f64,
+    },
     /// A cloudy border effect `/BE /I` was given an intensity outside the
     /// range the standard defines.
     ///
@@ -15667,6 +15783,90 @@ impl EditSession {
     /// [`EditError::AnnotsNotAnArray`], or [`EditError::NotADictionary`]
     /// (a page that is not a dictionary).
     pub fn add_markup(&mut self, page_index: usize, spec: &MarkupSpec) -> Result<ObjId, EditError> {
+        self.add_markup_with(page_index, spec, &MarkupOptions::default())
+    }
+
+    /// Author a geometric-markup annotation **at a whole-annotation
+    /// opacity**, in one act and one undo entry (`Pass 81.1`).
+    ///
+    /// Identical to [`Self::add_markup`] in every respect except that
+    /// [`MarkupOptions`] is applied to the annotation dictionary as it is
+    /// built. `add_markup` is exactly this call with
+    /// [`MarkupOptions::default`].
+    ///
+    /// # The bug this verb exists to remove, which is an UNDO bug
+    ///
+    /// `/CA` was reachable only through
+    /// [`Self::set_markup_style`] — a *restyle* verb, which by definition
+    /// operates on an annotation that already exists. So a shell placing a
+    /// 40 %-opaque highlight had to author it opaque and then restyle it:
+    ///
+    /// ```text
+    /// let id = session.add_markup(page, &spec)?;         // opaque
+    /// session.set_markup_style(id, &MarkupStyle {        // now translucent
+    ///     opacity: Some(StyleEdit::Set(0.4)),
+    ///     ..Default::default()
+    /// })?;
+    /// ```
+    ///
+    /// Two verbs, and — the part that is a defect rather than an
+    /// inconvenience — **two undo entries**. An operator who draws a
+    /// translucent highlight and presses Ctrl+Z once gets an **opaque
+    /// highlight**: a state they never asked for and could not have
+    /// created any other way. That reads as a bug in undo, and it is one.
+    ///
+    /// The consuming shell reported it under decision 058 rather than
+    /// coalescing the pair on its side, which is what let it be fixed
+    /// where it belongs. A shell-side coalesce would have worked and would
+    /// have left every other consumer with the same defect.
+    ///
+    /// # Why an options struct rather than a field on [`MarkupSpec`]
+    ///
+    /// The request asked for `opacity: Option<f64>` on `MarkupSpec`.
+    /// `MarkupSpec` is an **enum of eight geometric variants**, so that
+    /// would be eight copies of one field and eight construction sites to
+    /// update — and, worse, it would put a whole-annotation property
+    /// alongside `rect`, `border_width` and `endings`, which describe what
+    /// the appearance **draws**.
+    ///
+    /// `/CA` does not affect what the appearance draws. §12.5.2 Table 164
+    /// makes it the constant alpha with which the **annotation is
+    /// composited onto the page**, and pdfce's generated appearances
+    /// deliberately leave their own graphics-state alpha at 1.0 so the two
+    /// cannot compound. That is a property of the annotation, not of its
+    /// geometry — the same category as `/T`, `/Contents`, `/NM` and `/M`,
+    /// which is what this struct is shaped to carry as they land.
+    ///
+    /// # Errors
+    ///
+    /// Exactly [`Self::add_markup`]'s, plus
+    /// [`EditError::MarkupOpacityOutOfRange`] when
+    /// [`MarkupOptions::opacity`] is outside `0.0..=1.0` or is not finite.
+    /// **Refused by name rather than clamped**, unlike
+    /// [`Self::set_markup_style`], which clamps: a restyle is correcting a
+    /// value that already exists and clamping keeps the annotation
+    /// renderable, whereas an *author* call with an out-of-range alpha is a
+    /// caller bug, and silently authoring 1.0 for a requested 4.0 would put
+    /// an opaque annotation on the page while reporting success.
+    pub fn add_markup_with(
+        &mut self,
+        page_index: usize,
+        spec: &MarkupSpec,
+        options: &MarkupOptions,
+    ) -> Result<ObjId, EditError> {
+        // Validated BEFORE any guard that costs work and before any object
+        // is allocated, so a rejected opacity leaves the session
+        // byte-identical rather than partway through a command.
+        options.validate()?;
+        self.add_markup_inner(page_index, spec, options)
+    }
+
+    fn add_markup_inner(
+        &mut self,
+        page_index: usize,
+        spec: &MarkupSpec,
+        options: &MarkupOptions,
+    ) -> Result<ObjId, EditError> {
         // Guard 1 (X10): encryption. Checked against the base trailer —
         // pdfce does not yet load most encrypted files, but a defensive
         // named refusal here is the R37 seam the Pass-5 fix plugs into.
@@ -15743,6 +15943,25 @@ impl EditSession {
             Name::from(b"F"),
             Object::Integer(i64::from(AnnotFlags::PRINT)),
         );
+        // `Pass 81.1`: whole-annotation opacity, §12.5.2 Table 164 `/CA`.
+        //
+        // Written to the DICTIONARY, never into the appearance stream —
+        // the same placement `set_markup_style` uses, and for the reason
+        // that verb's own code states: `/CA` composites the annotation
+        // onto the page, while pdfce's generated appearances leave their
+        // graphics-state alpha at 1.0. Putting it in the stream would make
+        // the two compound, so a 0.5 authored here and a 0.5 restyled
+        // later would render at 0.25 while every dictionary in the file
+        // said 0.5.
+        //
+        // `None` OMITS the key rather than writing `1.0`. Table 164's
+        // default is 1.0, so writing it would add a key that changes
+        // nothing — and would make an opaque pdfce-authored annotation
+        // textually distinguishable from an opaque one from any other
+        // producer, for no gain.
+        if let Some(alpha) = options.opacity {
+            annot.insert(Name::from(b"CA"), Object::Real(alpha));
+        }
 
         // Patch the page's /Annots (X7: create / append / copy-on-write a
         // shared array). May allocate one more object number.
@@ -18400,6 +18619,51 @@ impl EditSession {
         page_index: usize,
         spec: &TextAnnotSpec,
     ) -> Result<ObjId, EditError> {
+        self.add_text_annotation_with(page_index, spec, &MarkupOptions::default())
+    }
+
+    /// Author a text-bearing annotation **at a whole-annotation opacity**,
+    /// in one act and one undo entry (`Pass 81.1`).
+    ///
+    /// The [`Self::add_markup_with`] twin, and it exists in the same Pass
+    /// deliberately rather than being left for a follow-up.
+    ///
+    /// # Why both routes, in one Pass
+    ///
+    /// §12.5.2 Table 164 puts `/CA` on the **markup annotation** entries,
+    /// and `FreeText`, `Text` (sticky note) and `Stamp` are markup
+    /// annotations exactly as `Square` and `Highlight` are. Shipping the
+    /// opacity option on only one of pdfce's two authoring verbs would
+    /// have produced the failure this project has now hit three times in
+    /// three days: **fixing one route makes the others look broken**, and
+    /// the shell discovers the asymmetry by pressing a control that works
+    /// on a rectangle and not on a sticky note.
+    ///
+    /// The requesting shell asked about geometric markup only. That is not
+    /// the same question as *which annotations does `/CA` apply to*, and
+    /// the standard answers the second one.
+    ///
+    /// # Errors
+    ///
+    /// Exactly [`Self::add_text_annotation`]'s, plus
+    /// [`EditError::MarkupOpacityOutOfRange`] — refused, not clamped, for
+    /// the reason given on [`MarkupOptions::opacity`].
+    pub fn add_text_annotation_with(
+        &mut self,
+        page_index: usize,
+        spec: &TextAnnotSpec,
+        options: &MarkupOptions,
+    ) -> Result<ObjId, EditError> {
+        options.validate()?;
+        self.add_text_annotation_inner(page_index, spec, options)
+    }
+
+    fn add_text_annotation_inner(
+        &mut self,
+        page_index: usize,
+        spec: &TextAnnotSpec,
+        options: &MarkupOptions,
+    ) -> Result<ObjId, EditError> {
         // Guards, identical order to add_markup (X10, X11, /Size) — and
         // identical GATE as of `Pass 38.5`: the annotation-aware one, since
         // a FreeText or Stamp is annotation creation, which §12.8.2.2
@@ -18458,6 +18722,18 @@ impl EditSession {
         annot.insert(Name::from(b"AP"), Object::Dict(ap));
         annot.insert(Name::from(b"P"), Object::Reference(page_id));
         annot.insert(Name::from(b"F"), Object::Integer(i64::from(authored.flags)));
+        // `Pass 81.1`: §12.5.2 Table 164 `/CA`, on the annotation
+        // dictionary and never inside the appearance stream — see
+        // `add_markup_with` for why the two must not compound.
+        //
+        // ★ Applied to the PARENT annotation only, never to the `/Popup`
+        // below. A popup is not itself a markup annotation (§12.5.6.14
+        // gives it no `/CA`), it is chrome the viewer draws for one, and a
+        // half-transparent note window is not what "author this note at
+        // 40 %" asks for.
+        if let Some(alpha) = options.opacity {
+            annot.insert(Name::from(b"CA"), Object::Real(alpha));
+        }
         if let Some(pid) = popup_id {
             annot.insert(Name::from(b"Popup"), Object::Reference(pid));
         }

@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (32159 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 146 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (32435 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 148 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 146 public `EditSession` methods
+## 1. Verb index — all 148 public `EditSession` methods
 
-**Count: 146.** Established by brace-matched extraction of the four
+**Count: 148.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -895,12 +895,14 @@ always errors.
 | Why a flatten would refuse, before attempting it | `flatten_refusal(&self) -> Option<EditError>` | 13915 | `None` when a flatten would proceed. |
 | Where a page's widgets are | `widget_rects(&self, page_index: usize) -> Vec<(ObjId, [f64; 4])>` | 17893 | Annotation id and `/Rect`. A **query**, not an edit — useful for hit-testing and for reporting orphans (see `insert_pages`). |
 
-### 1.15 Annotations (11) — detail in part 3
+### 1.15 Annotations (13) — detail in part 3
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
-| Author a geometric markup | `add_markup(&mut self, page_index, spec: &MarkupSpec) -> Result<ObjId, EditError>` | 9986 | New annotation id. |
-| Author a text-bearing annotation | `add_text_annotation(&mut self, page_index, spec: &TextAnnotSpec) -> Result<ObjId, EditError>` | 12034 | FreeText / Text+`/Popup` / Stamp. |
+| Author a geometric markup | `add_markup(&mut self, page_index, spec: &MarkupSpec) -> Result<ObjId, EditError>` | 9986 | New annotation id. Exactly `add_markup_with(.., &MarkupOptions::default())`. |
+| Author a geometric markup **at an opacity** | `add_markup_with(&mut self, page_index, spec: &MarkupSpec, options: &MarkupOptions) -> Result<ObjId, EditError>` | — | `Pass 81.1`. `MarkupOptions { opacity: Option<f64> }` writes §12.5.2 Table 164 `/CA` onto the annotation dictionary. **One verb, one undo entry** — see the note below. |
+| Author a text-bearing annotation | `add_text_annotation(&mut self, page_index, spec: &TextAnnotSpec) -> Result<ObjId, EditError>` | 12034 | FreeText / Text+`/Popup` / Stamp. Exactly `add_text_annotation_with(.., &MarkupOptions::default())`. |
+| Author a text-bearing annotation **at an opacity** | `add_text_annotation_with(&mut self, page_index, spec: &TextAnnotSpec, options: &MarkupOptions) -> Result<ObjId, EditError>` | — | `Pass 81.1`. The twin of the above, shipped in the same Pass because Table 164 is the **markup-annotation** entry list and a sticky note is a markup annotation. `/CA` goes on the parent, never on its `/Popup`. |
 | Author a `/Redact` mark (non-destructive) | `add_redaction(&mut self, page_index, spec: &RedactSpec) -> Result<ObjId, EditError>` | 10480 | A **mark**. Nothing is removed yet. |
 | Un-mark a redaction | `delete_redaction_mark(&mut self, annot_id) -> Result<(), EditError>` | 10617 | Refuses any non-`/Redact` annotation. |
 | Delete any annotation | `delete_annotation(&mut self, annot_id) -> Result<AnnotationDeletion, EditError>` | 10847 | **Routes** to the two specialised verbs above for `/Redact` and ce dimensions. |
@@ -908,8 +910,64 @@ always errors.
 | Ask whether annotation deletion is refused document-wide | `annotation_deletion_refusal(&self) -> Option<EditError>` | 11492 | ⚠️ Takes no `annot_id`, so it cannot see the three per-annotation refusals. |
 
 | Restyle an existing markup annotation | `set_markup_style(&mut self, annot_id: ObjId, style: &MarkupStyle) -> Result<MarkupStyleChange, EditError>` | 12372 | Rebuilds the baked `/AP`. |
-| Set the `/QuadPoints` corner order | `set_quad_point_order(&mut self, order: QuadPointOrder)` | 5476 | ⚠️ **Session state, not a per-call argument** — decision 062 fixes markup authoring at one entry point, so an `add_markup_with` would be a second. Governs what is AUTHORED from now on; does **not** sweep the document. |
+| Set the `/QuadPoints` corner order | `set_quad_point_order(&mut self, order: QuadPointOrder)` | 5476 | ⚠️ **Session state, not a per-call argument.** Governs what is AUTHORED from now on; does **not** sweep the document. ~~*"decision 062 fixes markup authoring at one entry point, so an `add_markup_with` would be a second"*~~ — **corrected 2026-08-27**: `add_markup_with` now exists and is **not** a second entry point (see §1.15.1). The ruling stands on its own ground: quad order is a **document-wide convention**, so a per-call argument would let two annotations in one file disagree about what UL/UR/LL/LR means, which is the divergence `Pass 62.x` exists to prevent. |
 | Read it back | `quad_point_order(&self) -> QuadPointOrder` | 5482 | Defaults to `ReadingOrder` — what Acrobat, PDFBox and pdf.js emit and expect. |
+
+#### 1.15.1 ★ `add_markup_with` is not a second entry point, and decision 062 is intact
+
+`Pass 81.1` added `add_markup_with` / `add_text_annotation_with`. **Decision
+062 refused a second markup entry point by name**, so this needs saying
+plainly rather than leaving a reader to reconcile the two.
+
+**What 062 refused** was `add_markup_appearance` — a hatch letting a caller
+hand the engine a **prebuilt annotation dictionary plus appearance stream**.
+That would have bypassed four guards, three of which are document-safety
+properties whose failure is *silent in the saved file*: an encrypted
+document, a certified document that forbids annotation, and a document whose
+`/Size` is hiding objects.
+
+**What `add_markup_with` does** is take one more **validated scalar**
+alongside the same `MarkupSpec`. There is **one body**: `add_markup`
+delegates to `add_markup_with`, which validates and delegates to the private
+`add_markup_inner`, which runs all four guards and calls the same
+`annot_author::build_appearance` builder. Nothing is bypassed and nothing is
+caller-supplied that the engine does not check — the Pass in fact adds a
+*fifth* validation.
+
+062's own words are the test: *"a guard that a second entry point can bypass
+is not a guard, it is a convention."* This entry point bypasses no guard.
+
+**Why it exists at all is an UNDO defect, not ergonomics.** `/CA` used to be
+reachable only through `set_markup_style`, a **restyle** verb, so authoring a
+40 %-opaque highlight meant *author opaque, then restyle* — **two undo
+entries**. One Ctrl+Z left an **opaque highlight** on the page: a state the
+operator never asked for and could not have created any other way.
+
+**Why an options struct rather than a field on `MarkupSpec`.** The
+requesting shell asked for `opacity: Option<f64>` on `MarkupSpec`.
+`MarkupSpec` is an **enum of eight geometric variants**, so that is eight
+copies of one field — and, worse, it puts a whole-annotation property
+alongside `rect`, `border_width` and `endings`, which describe what the
+appearance *draws*. `/CA` does not affect what the appearance draws:
+§12.5.2 Table 164 makes it the alpha with which the **annotation is
+composited onto the page**, and pdfce's generated appearances deliberately
+leave their own graphics-state alpha at 1.0 so the two cannot compound.
+`MarkupOptions` is shaped to carry `/T`, `/Contents`, `/NM` and `/M` as they
+land.
+
+**Three behaviours a shell should not have to discover:**
+
+| | |
+|---|---|
+| `None` | **omits `/CA` entirely.** Table 164's default is 1.0, so writing it would add a key that changes nothing and make a pdfce-authored opaque annotation textually distinguishable from every other producer's. |
+| `Some(1.0)` | **written.** Renders identically to `None` and is *not* the same bytes — a caller round-tripping an explicit 1.0 gets its key back, because collapsing it would be pdfce deciding what the caller meant. |
+| out of range / `NaN` | **refused by name** (`EditError::MarkupOpacityOutOfRange`), **nothing authored**, session untouched. This is the *opposite* of `MarkupStyle::opacity`, which **clamps** — deliberately. A restyle corrects a value on an annotation the operator can see, so clamping keeps it renderable and visibly changes it; an author call with alpha 4.0 is a caller bug, and clamping would put a fully opaque annotation on the page while returning `Ok`. |
+
+**`MarkupOptions` is deliberately not `#[non_exhaustive]`**, for the same
+reason `MarkupStyle` is not: it is an INPUT struct a consumer *constructs*,
+and `#[non_exhaustive]` would make it unbuildable from outside `pdfce-core`.
+Adding a field is a breaking change; that is the honest price, paid here
+rather than pushed onto every consumer as an unconstructable type.
 
 ### 1.16 Search-driven redaction marking (5)
 

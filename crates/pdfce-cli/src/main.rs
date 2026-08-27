@@ -1245,6 +1245,22 @@ enum Command {
         /// conformant and accepted.
         #[arg(long, value_name = "INTENSITY")]
         cloud: Option<f64>,
+        /// Whole-annotation opacity `/CA`, `0.0`-`1.0` (ISO 32000-1
+        /// §12.5.2 Table 164). Absent omits the key, which is the
+        /// standard's default of fully opaque.
+        ///
+        /// Applied to the ANNOTATION as composited onto the page, not
+        /// inside its appearance stream, so it never compounds with the
+        /// appearance's own alpha. Valid for every subtype this
+        /// subcommand authors -- Table 164 is the markup-annotation
+        /// entry list, and a sticky note is a markup annotation exactly
+        /// as a square is.
+        ///
+        /// Out of range is REFUSED, not clamped: authoring an opaque
+        /// annotation and reporting success would hide the one thing the
+        /// operator asked for.
+        #[arg(long, value_name = "ALPHA")]
+        opacity: Option<f64>,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -7867,6 +7883,7 @@ fn run() -> ExitCode {
             fill,
             width,
             cloud,
+            opacity,
             text,
             font,
             size,
@@ -7890,6 +7907,7 @@ fn run() -> ExitCode {
             fill: fill.as_deref(),
             width,
             cloud,
+            opacity,
             text: text.as_deref(),
             font: &font,
             size,
@@ -17073,6 +17091,8 @@ struct AnnotateArgs<'a> {
     fill: Option<&'a str>,
     width: f64,
     cloud: Option<f64>,
+    /// `/CA` (Pass 81.1). `None` omits the key.
+    opacity: Option<f64>,
     text: Option<&'a str>,
     font: &'a str,
     size: f64,
@@ -17130,9 +17150,19 @@ fn cmd_annotate(args: &AnnotateArgs<'_>) -> u8 {
     // Pass 6.2 text-bearing subtypes take the variable-text path
     // (add_text_annotation); the Pass 6.1 geometric subtypes take
     // add_markup. Both share every guard and the same save/undo plumbing.
+    // `Pass 81.1`: one options value, threaded to BOTH authoring verbs.
+    // Built once rather than at each call site so the two routes cannot
+    // drift into disagreeing about what `--opacity` means -- which is R92's
+    // failure mode, and is exactly how `/CA` came to be reachable from the
+    // restyle verb and not the author verb in the first place.
+    let markup_options = pdfce_core::edit::MarkupOptions {
+        opacity: args.opacity,
+    };
     let add_result = if is_text_bearing(args.kind) {
         match build_text_annot_spec(args) {
-            Ok(spec) => session.add_text_annotation(index, &spec).map(|_| ()),
+            Ok(spec) => session
+                .add_text_annotation_with(index, &spec, &markup_options)
+                .map(|_| ()),
             Err(msg) => {
                 eprintln!("pdfce-cli: {}: {msg}", input.display());
                 return exit::EDIT_REFUSED;
@@ -17140,7 +17170,9 @@ fn cmd_annotate(args: &AnnotateArgs<'_>) -> u8 {
         }
     } else {
         match build_markup_spec(args) {
-            Ok(spec) => session.add_markup(index, &spec).map(|_| ()),
+            Ok(spec) => session
+                .add_markup_with(index, &spec, &markup_options)
+                .map(|_| ()),
             Err(msg) => {
                 eprintln!("pdfce-cli: {}: {msg}", input.display());
                 return exit::EDIT_REFUSED;
