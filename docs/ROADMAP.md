@@ -96,6 +96,405 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 141.0` (`51f94ca` + `96b6ded`) + `3ffd86f` — ★★★★★ **THE BIGGEST FINDING OF THIS FILING IS A CORRECTION TO THE COMMIT IT WAS DISPATCHED TO FILE: `3ffd86f` AND THE REPLY IT SENT BOTH SAY BOLD AND ITALIC ARE UNAVAILABLE ON EXISTING TEXT, AND `FormatRequest::set_synthetic` HAS SHIPPED SINCE 2026-08-03** — ★★★★ so the commit about *"a shipped verb that was documented, accurate, gate-green and unfindable"* **reproduced its own defect inside its own repair**, and `FEATURES.md` was the document that had it right all along — ★★★ `tools/icc-census`: **the maximum CLUT grid in 2,494 real-world profile embeddings is 11 nodes, not 33**, so the sibling colour project's load-bearing constant now has a population behind it instead of one profile pair — ★★ **enumeration BY SIGNATURE, not by reference-following**, so the census's error direction is *"found something nobody indexed"* rather than *"silently missed some"* — ★ **three of the tool's own numbers were wrong before anything left the repository, and all three were caught by READING THE OUTPUT rather than by a test** — decision **093** minted (the `iccce` ICC-reading boundary), standing rule **`R220`** minted — 2026-08-27 (293rd filing)
+
+**Sourcing.** Shell held and used (hard rule 8). Every claim this role makes
+about the source tree was produced here by `grep`/`sed` on live files, and the
+command is named beside it. Every corpus figure is the engineer's, relayed
+from the two commit messages and **labelled as relayed** — this role did not
+build or run `icc-census`. **Nothing was committed or staged by this filing.**
+
+**Scope.** Three commits, one Pass ID and one no-ID docs entry:
+
+| commit | what | ID |
+|---|---|---|
+| `3ffd86f` | `docs/core-api/03-capabilities.md` §3.6 — restyling existing text, capability-shaped | **no Pass ID** (docs-only) |
+| `51f94ca` | `tools/icc-census/` — the ICC profile population census | **`Pass 141.0`** (minted by this filing) |
+| `96b6ded` | `icc-census` names each `/N` disagreement; `pdf_n` → `pdf_n_FIRST_SEEN` | **`Pass 141.0`** (same Pass, second commit) |
+
+`3ffd86f` was already **flagged but not filed** by the 292nd filing, which
+saw it arrive mid-write and recorded that no gate would ever ask for it
+(`check-commits-filed.py` counts **code** commits). It is filed here.
+
+#### ★★★★★ FIRST, THE CORRECTION, BECAUSE IT INVALIDATES A CLAIM IN THE COMMIT BEING FILED AND IN A DOCUMENT ALREADY SENT TO ANOTHER PROJECT
+
+**`3ffd86f`'s §3.6 says bold and italic are unavailable on existing text.
+They are not. They have shipped since 2026-08-03.**
+
+The section's own table reads:
+
+| the operator's button | field | works? |
+|---|---|---|
+| **face** | `set_font: Option<FontSelector>` | ⚠️ only to a font ALREADY a resource on the page |
+| **bold / italic** | `set_font` | ❌ in general, for that reason |
+
+**Both rows are about `set_font`, and `set_font` is not the only route.**
+`FormatRequest` carries a **second** field for exactly this case:
+
+```
+pub set_synthetic: Option<StyleSynthesis>   crates/pdfce-core/src/text_edit/format.rs:677
+FormatRequest::synthetic(self, StyleSynthesis) -> Self                            :773
+pdfce-cli format-text --bold-synthetic --italic-synthetic
+                                            crates/pdfce-cli/src/main.rs:4265, 4272
+```
+
+Shipped as **`Pass 19.2`** (`ebe35d8`, 2026-08-03, decision 019 §3.6,
+standing rule **`R90`**), with **`Pass 19.3`** (`74052d3`) adding the
+side-effect-free query `EditSession::preview_style_resolution`. Bold is
+emitted as **§9.3.6 Table 106 text rendering mode 2** (fill-then-stroke) with
+a user-space stroke width derived from the rendered size and the stroking
+colour matched to the fill; italic as a **§9.4.2 Table 108 shear
+premultiplied into `Tm`**. Neither writes a private marker — decision 019
+§3.6 chose **P-selfevident**, so the result is re-detectable by inspection
+(`synth::detect`), including **other producers'** faux styles.
+
+**★★ AND THE GATE RUNS THE OPPOSITE WAY FROM THE ONE §3.6 DESCRIBES.**
+`gate_synthesis` (`format.rs:2132`, read here) refuses with
+`FormatError::RealFaceAvailable` **when a real bold/italic face IS already a
+resource on the page**, because `R90` makes synthesis a *fallback*, never an
+alternative to a real typeface. Its first branch is explicit:
+
+```rust
+// No font resources to search: nothing better exists, so the
+// fallback is genuinely the only option. Proceed.
+```
+
+So on the very page §3.6 uses as its worked example — Helvetica-only, no
+`Helvetica-Bold` resource — `--set-font Helvetica-Bold` is refused with
+`TargetFontMissing` **and `--bold-synthetic` proceeds.** The two routes'
+predicates are **exact complements.** Between them, **bold is reachable on
+every page**, and italic on every page except one narrow case: a
+`Td`/`TD`/`T*` next-line operator following the run inside the same text
+object, refused by name because a shear left in `Tm` would propagate into
+every later line (`format.rs:2712`).
+
+**What is actually blocked by FF-C is narrower than either document says:
+a REAL bold or italic FACE cannot be added to a page that does not already
+carry one.** That is a typographic-quality gap, not a capability gap.
+
+**★★★ WHERE THIS WENT OUTSIDE THE REPOSITORY, WHICH IS WHY IT IS THE HEAD OF
+THIS ENTRY.** The outbound reply
+`D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/reply_restyle_already_exists_and_the_real_gap_is_narrower_than_your_table.md`
+(read here) carries the same error in two places:
+
+- line 76 — *"**bold** ❌ unless the page already carries a bold resource — which most pages do not"*
+- line 171 — *"**bold / italic** in general — blocked on FF-C. Say the word and we scope it"*
+
+**A consuming project has been told a shipped capability does not exist.**
+That is the same harm `3ffd86f` exists to repair, pointed the other way, and
+it is **owed work for the engineer** — this role does not edit that channel,
+nor `docs/core-api/`, nor `crates/`.
+
+**★★★★ THE SHAPE, AND IT IS WHY THIS IS A FINDING AND NOT A TYPO.** `3ffd86f`
+argues, correctly, that a capability documented only under its **mechanism**
+is unfindable by the reader's **question**. Its own §3.6 is then organised
+around a mechanism — `set_font` — and the *second* mechanism for the same
+question fell out of the table. **The repair reproduced the defect it
+repaired, in the same commit, against the same capability.** Neither malice
+nor carelessness: `docs/core-api/02-editing-and-saving.md` lists
+`preview_style_resolution` (a **verb**) and cannot list `set_synthetic` (a
+**field on a request struct**), so a verb-indexed document is *structurally
+incapable* of surfacing it. That is `R220` below.
+
+**★ `docs/FEATURES.md` had it right the whole time.** Its Text row has read
+*"size, colour, family/style, char and word spacing, horizontal scale,
+super/subscript, **synthetic bold/italic**"* since `Pass 19.2` shipped. The
+capability-shaped document that already existed was accurate; the new one
+disagreed with it. **Reading the two against each other is what surfaced
+this**, and it took under a minute (`grep -n "synthetic" docs/FEATURES.md`).
+
+#### `Pass 141.0` — `tools/icc-census/`, and a sibling project's constant now has a population behind it
+
+**What it is.** A standalone binary at `tools/icc-census/` (`main.rs`
+**1,060** lines, `tests.rs` **265**, plus a tracked `Cargo.lock` matching
+every sibling census tool) that walks pdfce's rights-cleared corpus and
+inventories every embedded ICC profile.
+
+**Why it exists.** `iccce` filed two requests on 2026-08-17 with a reply owed
+and never given — `request_profile_population_census.md` and
+`request_header_tag_channel_disagreement.md`. Their stated reason is an audit
+of their own load-bearing constant, in their words:
+
+> *"iccce recommends a 33-node CLUT grid for 3- and 4-channel sources in its
+> compiled fast path […] That evidence rests on ONE profile pair, ONE
+> direction, ONE tag type […] I have no way to find out from inside this
+> repository. Every profile iccce has ever been tested against was synthetic,
+> OS-shipped, or standards-body issued."*
+
+Twenty profiles from one publisher's test corpus is a **sample**. Four
+thousand real-world documents is a **population**. This is the one question
+in this ecosystem only pdfce can answer, which is the whole justification for
+spending a Pass on a tool that ships nothing.
+
+**★★ THE METHOD, WHICH IS THE OPPOSITE OF THE OBVIOUS ONE, AND IT IS THE
+DESIGN DECISION WORTH CARRYING.** The obvious census follows the references
+the request enumerates — `/OutputIntents /DestOutputProfile`, `ICCBased`,
+image `/ColorSpace`. **That design under-counts BY CONSTRUCTION:** it finds
+only the paths its author thought of, and **a census whose error direction is
+"silently missed some" is worse than useless, because the miss looks like a
+finding about the population.**
+
+`icc-census` instead decodes **every stream in every file** and treats one as
+a profile **iff it carries `acsp` at offset 36** (ICC.1:2010 §7.2.6, fixed
+for every conformant profile of every version). It cannot miss a profile
+present as a stream, whatever names the file uses to reach it, and its error
+direction is the safe one.
+
+**The reference paths are still recorded — as a CLASSIFICATION of what was
+found, never as the search.** Profiles reachable by no recognised path land
+in `unclassified`, **a bucket that is itself the measurement of what a
+reference-following census would have dropped.** It is **1 of 2,494**.
+
+★ That bucket caught a defect in the tool on its first smoke run. The
+classification walk originally inspected only top-level object values, and an
+`[/ICCBased <stream>]` array is very rarely an indirect object — it sits
+inline inside a page's `/Resources /ColorSpace`. It reported **1 of 2**
+unclassified, *"which reads as a finding about the corpus and was a finding
+about the loop"*. Now recursive, depth-guarded.
+
+**What it found** (engineer's figures, relayed).
+
+**4,023 files scanned; 3,912 parsed; 111 failed to load; 0 timed out; 0
+panicked. 2,234 files carry at least one profile = 2,494 embeddings over 49
+distinct profiles** — so **1.12 embeddings per profile-bearing file** and
+**50.9 embeddings per distinct profile**, the two denominators the tool
+prints every distribution over, because they answer different questions.
+
+| axis | measurement |
+|---|---|
+| transform shape, **share of 2,494 embeddings** | 85.2 % `matrix+curv`, 9.3 % `kTRC`-only, 5.4 % `mft2`; **one each** of `mAB`, `matrix+para`, `mft1` |
+| **CLUT grid nodes, share of 2,494 embeddings** | **94.6 % carry NO CLUT AT ALL**; 9 nodes 4.3 %, 11 nodes 1.0 %, 6 nodes 0.04 % |
+| **★ maximum CLUT grid OBSERVED in the population** | **11 nodes** — not 33 |
+| version, share of 2,494 embeddings | 99.1 % v2.1; **four** v4 embeddings; **two claiming v5.0**, which no published ICC spec defines |
+| data colour space, share of 2,494 embeddings | 85.2 % RGB, 9.3 % GRAY, 5.4 % CMYK, plus non-conformant `LAB ` and `YYY ` signatures |
+| request ask 3 — header/tag channel disagreement | **136 CHECKABLE embeddings of 2,494, ZERO disagreements**; the other 94.5 % carry no LUT tag to check |
+| PDF `/N` vs profile header channel count | **2 disagreements of 2,493**, and **BOTH DIRECTIONS OCCUR** |
+
+The two `/N` disagreements, named rather than counted (`96b6ded`):
+
+```
+profile says 4 channel(s), the PDF says /N 3  --  Coated FOGRA27
+profile says 3 channel(s), the PDF says /N 4  --  Adobe RGB (1998)
+```
+
+**★ THE CAVEAT THE ENGINEER ASKED TO BE ON THE RECORD, AND IT IS THE
+DIFFERENCE BETWEEN A MEASUREMENT AND A DIRECTIVE.** The census measures the
+grid **profiles CARRY**. `iccce`'s constant is the grid **`iccce` BUILDS**.
+Those are different quantities, and 11-vs-33 fits *too* well to be acted on
+without saying so. The reply says so rather than letting the number be
+mistaken for an instruction, and it also records a **disagreement to
+resolve**: `iccce`'s own evidence names `USWebCoatedSWOP.icc` as carrying a
+33-node `lut8`, while the `U.S. Web Coated (SWOP) v2` in this corpus reports
+**9**.
+
+**Tests: 11, byte-authored, no ICC file on disk.** A parser of untrusted
+input gets tests even when it is *"only"* a measurement tool, because its
+numbers are about to be written into another project's `NUMERIC_CLAIMS.md`.
+Three sabotages, **each failing exactly one test**:
+
+| sabotage | tests failed | why it is a real trap |
+|---|---|---|
+| `B2A0` checked on its **INPUT** channels | **1** | `B2A0` runs PCS→device, so the **output** count is the data space's; checking byte 8 for both directions reports **every conformant CMYK `B2A0`** as a 3-vs-4 disagreement — a false positive **on the exact axis being measured** |
+| version byte read **whole** rather than as BCD nibbles | **1** | §7.2.4 packs minor and bug-fix as two nibbles; reading the byte whole reports **v2.16 for v2.1** — plausible and wrong |
+| matrix preferred over a LUT tag | **1** | §8.3 makes `A2B0`/`B2A0` the general path; a profile carrying both is using the tables, and preferring the matrix would misattribute **every CMYK profile that also carries one** |
+
+Plus a truncation sweep over **every prefix** of a well-formed profile, and a
+hostile tag count.
+
+**Boundary.** See decision **093** below. Nothing here converts colour;
+`tools/icc-census` is in the root manifest's `exclude`, so
+`check-fmt-excluded.py` is clean at **13 crates** and the tool is absent from
+`THIRD_PARTY_LICENSES.md`. **No profile bytes are ever written** — `iccce`
+asked not to receive them, citing the licensing on several. `--tsv` emits one
+row per distinct profile so they can re-cut it without a re-run.
+
+**Verification** (engineer's, relayed): **11 tests green; workspace suite
+unaffected at 4,410 passing**; `cargo fmt` clean; `cargo clippy --release
+--all-targets -- -D warnings` clean; `check-string-gaps` clean (*"worth
+stating, since the new print line is a wrapped format string and that is the
+seventh-time-recurring defect in this repository"*); corpus re-run gives the
+same totals plus the two named rows.
+
+**Cross-project handoff, named by path per the engineer's own agent-file
+rule** — a deliverable produced for another project to consume is not handed
+off until a pdfce document names it:
+`D:/Dev/FeatureRequests/iccce_FeatureRequests/open/reply_the_profile_census_and_your_33_node_constant.md`.
+
+#### ★ THREE SELF-CORRECTIONS BEFORE ANYTHING LEFT THE REPOSITORY, AND THE THIRD IS THE TRANSFERABLE ONE
+
+All three were caught by **reading the output**, not by a test — recorded
+because a number that is wrong *and* internally consistent is exactly the
+kind a test cannot see.
+
+1. **An extrapolation reported as a measurement, wrong by 45×.** The
+   embedding-weighted `/N`-disagreement count multiplied each **distinct**
+   profile's first-seen `/N` by its embedding count — which silently assumes
+   **every embedding of one profile declares the same `/N`**, the very thing
+   the axis exists to test. **It said 91. The measured figure is 2.** Now
+   tallied per embedding.
+2. **A bucket that could not distinguish "checked and clean" from "not
+   checked".** Ask 3 first reported *"100 % agree, or no LUT tag"* across
+   2,494 embeddings — **which looks like a strong negative result and is
+   equally consistent with the check never having run.** Split into three
+   states; the honest answer is **136 checkable, all 136 agreeing.**
+3. **★ THE SAME EXTRAPOLATION SURVIVING IN THE DETAIL EXPORT.** Fixing (1)
+   in the **aggregate** did nothing about the `/N` column in the **TSV**,
+   which is still one sample per fingerprint — and a sentence was then
+   written from it (*"the single culprit is one Coated FOGRA27 stream"*) that
+   the column could not support. It is **two profiles and two directions**,
+   and the opposite direction is the more surprising half. Column renamed
+   `pdf_n_FIRST_SEEN`, *"so that a reader cannot make the mistake I made,
+   which is worth more than a comment saying not to."*
+
+**Why (3) generalises:** the aggregate was corrected by adding a
+per-embedding counter; the detail export went on presenting a first-seen
+sample under a name that reads like a fact about the row; and **nothing
+connected the two.** One assumption, two artefacts, one fix. Written up at
+`D:/dev/rag/rust/correcting_an_extrapolation_in_the_aggregate_leaves_the_same_extrapolation_in_the_detail_export.md`.
+
+#### Decision minted — **093**
+
+**Reading a profile's header and tag table to COUNT things is inventory, not
+conversion — permitted under decision 064, and it lives in `tools/`, never in
+`pdfce-core` or `pdfce-render`.** Full text in `ARCHITECTURE.md` §12;
+decision **064** gains a third forward pointer to it.
+
+The question is real rather than pedantic: 064 gives `iccce` *"profile
+**parsing**"*, and that phrase is what a future session will grep. A tool
+that decodes a stream, checks `acsp` and walks a tag table **is** parsing a
+profile by that phrase. The discriminator written down instead: **could this
+code be wrong in a way that shows up as a wrong PIXEL?** Every figure
+`icc-census` produces is a count or a label; not one is a colour. And the
+**placement is half the decision** — pdfce told `iccce` in writing on
+2026-08-25 that *"nothing in pdfce has ever decoded an ICC profile"*, and
+keeping the tool out of the workspace is what keeps that sentence true **of
+the shipping engine**, which is the scope in which it was made.
+
+#### Standing rule minted — **`R220`**
+
+**A capability is documented where the reader's QUESTION lives, not only
+where its MECHANISM lives; and a claim that pdfce has no verb for something
+is checked against SOURCE before it is sent anywhere.**
+
+Full text in *Standing rules*. Minted at **n = 2 in one day, with the second
+instance found inside the repair for the first** — a stronger warrant than a
+count, because it shows the failure survives being named.
+
+**The mint is argued against the immediately preceding precedent, decision
+092, which DECLINED a rule at n = 3.** That decline was correct and this mint
+does not weaken it: 092's three instances were *"three sites of one design
+question"* — a principle a reader is **sent to**, which a decision record
+carries. `R220`'s two instances are **two independent recurrences**, in
+different documents, by different authors, against different verbs, one of
+which **left the repository as a false statement to another project**. It is
+a **habit a filing must demonstrate**, not a principle to consult, and that
+is the `R`-rule shape. **No gate can enforce it** —
+`tools/check-core-api-verbs.py` fires on a verb being **absent**, and
+findability is not a property any script can evaluate — which is exactly why
+it belongs in the reading rather than in CI.
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string
+
+The claim swept: **"bold/italic is unavailable on existing text / blocked on
+FF-C."** Survivors found, **none edited by this role** (`crates/`,
+`docs/core-api/` and the outbound channels are outside this remit):
+
+| # | where | what it says | status |
+|---|---|---|---|
+| 1 | `docs/core-api/03-capabilities.md` §3.6, table row | *"**bold / italic** — `set_font` — ❌ in general"* | **WRONG** — omits `set_synthetic`; **owed to the engineer** |
+| 2 | same §3.6, *"★ The one real limit"* | *"`FF-C` … **Not scoped as a Pass — ask if bold/italic matters.**"* | **MISLEADING** — FF-C gates a *real face*, not bold/italic as such |
+| 3 | `reply_restyle_already_exists…md:76` | *"**bold** ❌ unless the page already carries a bold resource"* | **WRONG, and already sent** |
+| 4 | `reply_restyle_already_exists…md:171` | *"**bold / italic** in general — blocked on FF-C"* | **WRONG, and already sent** |
+| 5 | `docs/core-api/02-editing-and-saving.md:339` | lists `preview_style_resolution` (the **query**) and no applying route | **INCOMPLETE, structurally** — `set_synthetic` is a field, and a verb-indexed table cannot hold it. `R220`'s second instance, in situ |
+
+**Checked and found CORRECT, reported because a sweep that lists only
+failures cannot be audited:**
+
+- `docs/FEATURES.md` Text-formatting row — names *"synthetic bold/italic"*,
+  accurate since `Pass 19.2`;
+- `docs/ROADMAP.md` `Pass 19.2` and `Pass 19.x` (FF-H) entries — accurate,
+  and explicitly record FF-H as **COMPLETE, all five slices shipped**;
+- `crates/pdfce-core/src/text_edit/synth.rs` module header — the most
+  complete description of the capability anywhere in the project, and
+  **nobody looking for "how do I make this bold" would open it**;
+- `ARCHITECTURE.md` §12 decision 019 §3.6 — accurate.
+
+**The distribution is the point.** Four accurate records and five wrong or
+incomplete ones, and **the wrong ones are all in the documents a consumer
+actually reads.** Grepping for `synthetic` finds the accurate set in seconds;
+nobody grepped, because nobody doubted.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `140.0` (highest) | **`141.0` SHIPPED** (minted by this filing); **`142.0`**, **`142.1`** filed to *Backlog*. Highest ID now **`142.1`**; next free family **`143`**. `3ffd86f` takes **no ID** (docs-only). |
+| decisions (`ARCHITECTURE.md` §12) | **092** | **093** (**MINTED** — ICC reading is inventory, not conversion, and it lives in `tools/`). Next free **094**. |
+| standing rules | **`R219`** | **`R220`** (**MINTED** — document a capability where the reader's question lives; check an absence claim against source). Next free **`R221`**. |
+| `SESSION_LOG.md` filings | **292** | **293**. Next free **294**. |
+
+Ceilings taken from `python tools/check-ledger-numbers.py`, **run here**
+before any edit (*"Pass families … up to 140 · standing rules : R219 -> next
+free is R220 · decision records : 092 -> next free is 093 · SESSION_LOG
+filings : 292 -> next free is 293"*), not copied from a prior entry.
+
+**Git state, checked rather than inferred** (`git log --oneline`,
+`git log origin/main..main`, `git status --porcelain`, `git rev-list
+--count`, `git describe`, `ls -lt`, all run here):
+
+**★★ THE TIP MOVED WHILE THIS FILING WAS BEING WRITTEN, AND THE FIRST
+VERSION OF THIS PARAGRAPH WAS ALREADY WRONG WHEN IT WAS SAVED.** It is
+corrected here rather than quietly overwritten, because *a correction is a
+claim* and this one names its world-source (this role's own `git log`, re-run
+after the last edit — **not** the one run at dispatch time). The struck text
+read:
+
+> ~~"`HEAD` is **`96b6ded`** … **Working tree is DIRTY and this role did not
+> touch it:** `.claude/agent-memory/pdfce-engineer/MEMORY.md` … plus three
+> untracked feedback files."~~
+
+Both halves were true when observed and false ten minutes later, for one
+reason: **the engineer committed those very agent-memory files.** This is
+the 292nd filing's hazard recurring at `n = 2` in consecutive filings — a
+filing that reads the tree at dispatch and reports it at save is reporting a
+**moment**, not a state.
+
+- `HEAD` is **`b341fd2`**; `git describe` = **`v0.14.0-51-gb341fd2`**.
+- **`b341fd2` (`memory + handoff: three new lessons, a recurrence count I got
+  wrong by five, and the disk is now the nearest hard limit`) is NOT filed
+  here and does not need to be** — it touches `.claude/agent-memory/` and
+  `docs/NEXT_SESSION.md` only, and `check-commits-filed.py` runs **clean**
+  with it as tip. Recorded so the next filing knows it was seen and skipped
+  deliberately, not missed. **It carries an operational warning worth
+  reading: the disk is now the nearest hard limit.** Its three memory entries
+  are the same three findings this filing sent to
+  `D:/dev/rag/rust/` — independently written, which is the two-role
+  convergence working rather than duplication.
+- **`origin/main` is at `91741a4`** — so **`51f94ca`, `96b6ded` and
+  `b341fd2` are unpushed** (three commits), and `3ffd86f` is already public.
+  Pushing `main` is standing-authorized (decision 090); scrub
+  `check-suite-name-absent.py` green first, and **read CI's colour from
+  GitHub** rather than from this entry, which asserts none.
+- **Working tree, re-checked after the last edit:** `git status --porcelain`
+  shows exactly the four documents this filing edited —
+  `docs/ARCHITECTURE.md`, `docs/FEATURES.md`, `docs/ROADMAP.md`,
+  `docs/SESSION_LOG.md`. **Nothing staged, nothing committed by this role**,
+  and **no `crates/` or `tools/` change is in flight.**
+- **Backups: the newest bundle on disk is
+  `pdfce-20260827-shutdown-a2b4e16-full.bundle` (2026-08-27 12:04, by
+  `ls -lt D:/Dev/pdfce-backups/`), and `git rev-list --count a2b4e16..HEAD`
+  = 8** (7 when first measured, before `b341fd2` landed — the recount is
+  reported rather than the stale figure). **No bundle on disk contains any
+  commit filed here.** Cutting one is the operator's call and this role did
+  not.
+
+**`check-commits-filed.py` was RED before this filing** — naming `51f94ca` in
+full and deferring the tip `96b6ded` — and both are filed above, the tip
+deliberately included so the next run starts clean. **Re-run reported at the
+foot of this entry's `SESSION_LOG.md` twin.**
+
+---
+
 ### `Pass 81.1` (`4eaea20`) — AUTHORING A MARKUP AT AN OPACITY TOOK TWO VERBS AND LEFT **TWO UNDO ENTRIES**, SO ONE `Ctrl+Z` GAVE THE OPERATOR AN OPAQUE HIGHLIGHT NOBODY ASKED FOR — ★★★★ **IT SHIPPED IN A DIFFERENT SHAPE FROM THE ONE FILED ON 2026-08-14, AND THE DIVERGENCE IS THE ENTRY** (`MarkupOptions`, an options struct, **not** `opacity` on `MarkupSpec`) — ★★★ **BOTH AUTHORING ROUTES IN ONE PASS**, because Table 164 is the **markup-annotation** entry list and a sticky note is a markup annotation — ★★ **REFUSE AT THE AUTHOR VERB, CLAMP AT THE RESTYLE VERB**, and the asymmetry is now decision **092** — ★ **DECISION 062 WAS CHECKED, NOT ASSUMED, AND A NAMED-BY-NAME STALE CLAIM IN `docs/core-api/` WAS CORRECTED** — 2026-08-27 (292nd filing)
 
 #### ★★★★ FIRST, THE DIVERGENCE FROM THE FILED SCOPE, BECAUSE THE *Next up* ENTRY BELOW STILL SAYS SOMETHING ELSE
@@ -85334,6 +85733,112 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+### `Pass 142.0` — **FF-C WIRED INTO `format_text`: RESTYLE EXISTING TEXT TO A FACE THE PAGE DOES NOT ALREADY CARRY** — ★★ **READ THE SCOPE CORRECTION FIRST, BECAUSE THE COMMIT THAT PROMPTED THIS ENTRY STATES THE GAP TOO WIDELY** — filed 2026-08-27 (293rd filing), **NOT STARTED, and blocked on an operator/requester answer rather than on engineering**
+
+> **★★ SCOPE CORRECTION, MADE AT FILING TIME AND NOT AFTERWARDS.** The
+> dispatch that opened this entry, and `3ffd86f`'s
+> `docs/core-api/03-capabilities.md` §3.6, both say **bold and italic do
+> not work on existing text**. **They do**, via
+> `FormatRequest::set_synthetic` (`Pass 19.2`, `ebe35d8`, 2026-08-03;
+> CLI `format-text --bold-synthetic --italic-synthetic`), and
+> `gate_synthesis` permits synthesis **precisely when no real face is a
+> page resource** — the exact complement of `set_font`'s predicate. Full
+> evidence in the 293rd filing's *Shipped* entry. **This Pass is therefore
+> about TYPOGRAPHIC QUALITY, not about capability**: a real `Helvetica-Bold`
+> outline instead of a §9.3.6 mode-2 stroke-widened `Helvetica`.
+
+**The gap, stated accurately.** `EditSession::format_text`'s
+`set_font: Option<FontSelector>` **selects** a font; it does not **create**
+one. The target must already be in the page's `/Resources /Font`, located by
+resource key or by `/BaseFont` with the §9.6.4 subset tag stripped. Where it
+is not, the verb refuses by name:
+
+```
+pdfce-cli: format-text refused: the target font "Helvetica-Bold" is not an
+existing font resource on this page; adding a new font resource / embedding
+a new face is deferred (FF-C)
+```
+
+(`FormatError::TargetFontMissing`.) So today, on a page carrying only
+`Helvetica`, an operator asking for real bold gets **synthesised** bold —
+correct, disclosed, self-evident by inspection (decision 019 §3.6's
+*P-selfevident*), and **not the same as a designed Bold face**: mode-2
+stroke widening inflates weight uniformly and does not reshape counters,
+terminals or sidebearings.
+
+**Why it is plausibly small.** The machinery exists and is proven:
+`add_text` already creates **Standard-14** font resources and, via
+`--embed-font`, **subsetted embedded donor** resources. What is missing is
+the wiring — `format_text`'s plan currently produces a **new content buffer
+and no new objects**, so there is no place in it for a resource to be
+created and referenced.
+
+**Why it is nonetheless a decision and not a chore.**
+
+- **`R90` interacts.** Synthesis is a *fallback*, refused when a real face
+  is available. Creating a real face on demand **changes what "available"
+  means mid-verb** — a request for synthetic bold on a Helvetica-only page
+  succeeds today and would have to keep succeeding, or the change is a
+  regression for every existing caller.
+- **Round-trip rule 3.** Creating objects inside a verb whose contract is
+  "one content buffer" widens the minimal diff. The `add_text` precedent
+  says this is acceptable; it needs saying explicitly for `format_text`.
+- **Which face, and from where.** Standard-14 has no embedded program;
+  a donor face needs a source the operator names. There is no honest
+  default.
+
+**Acceptance criteria, provisional** (a real scoping pass should run
+`pdfce-acrobat-librarian` first, per the *Feature-fidelity discipline*
+standing rule):
+
+1. `format_text` may create a Standard-14 font resource on the target page
+   when `set_font` names one and it is absent, referencing it from the new
+   content buffer, as **one undo entry**.
+2. The synthesis fallback's behaviour is **unchanged for every input that
+   works today** — pinned by a test authored to fail if creation silently
+   pre-empts `R90`'s gate.
+3. The disclosure says a resource was **created**, off-canvas, per
+   `CLAUDE.md` rule 4 as amended by decision 059; `pdfce-cli` prints it
+   (rule 11).
+4. Embedded-donor creation is a **separate slice** if it lands at all.
+
+**Open question, and it is the requester's, not the engineer's.**
+`pdfceGUI` filed `request_restyle_an_existing_text_run.md` (2026-08-25)
+describing five buttons. Four of the five work today; the fifth — *a real
+bold/italic FACE* — is this Pass. **Whether that is worth a Pass is their
+call**, and the reply currently in
+`D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/` asks the wrong version
+of the question (it asks whether bold/italic matters at all). **Owed: a
+correction to that reply before the answer is acted on.**
+
+### `Pass 142.1` — **A PRE-FLIGHT THAT ENUMERATES A PAGE'S FONT RESOURCES, SO A SHELL CAN DISABLE A CONTROL INSTEAD OF DRIVING IT FROM AN ERROR** — filed 2026-08-27 (293rd filing), NOT STARTED
+
+Named as a gap by `docs/core-api/03-capabilities.md` §3.6 and by the reply
+to `pdfceGUI`: *"a pre-flight enumerating a page's font resources would be
+better, and none exists yet."*
+
+**The problem it solves is a UI one and is worse than a run-level limit.**
+`set_font`'s predicate is a property of the **page**, not of the selection,
+so **the same button on identical-looking text behaves differently in two
+files.** Today a shell's only way to know is to attempt the edit and read
+`FormatError::TargetFontMissing` — which is a *named* refusal rather than a
+silent no-op (that part is already right), but it means the control must be
+offered, pressed and then apologised for.
+
+**Shape, provisional.** A `&self`, side-effect-free query over the
+session-current content for a page — the same discipline
+`preview_style_resolution` already follows, and for the same reason: the
+answer must be about the page **as the operator is looking at it**, which
+after any accepted edit is the session's staged content, not the base
+document's. Returns the page's font resource keys with their `/BaseFont`
+names (subset tags stripped, §9.6.4) and enough per-entry information for a
+shell to answer *"is a real bold face available here?"* without attempting
+an edit.
+
+**Cheap, and it does not depend on `Pass 142.0`.** It is worth shipping even
+if `142.0` is declined, because it is the difference between a greyed-out
+control and a failed one. `pdfce-cli` surface per rule 11.
+
 ### `Pass 140.0` — A `DeviceN` PHOTOGRAPH RENDERS DESATURATED AGAINST ACROBAT: A `Separation`/`DeviceN` IMAGE BRIDGES THROUGH sRGB AND NEVER REACHES ITS `DeviceCMYK` ALTERNATE — FOURTH INSTANCE OF `R219`'S SHAPE, THE FIRST FOUND BY APPLYING THE RULE RATHER THAN BY REPORT — filed 2026-08-27 (289th filing) as `Pass 139.0`, **RENUMBERED `Pass 140.0` on 2026-08-27 (291st filing)**, fully diagnosed, deliberately not started
 
 > **★ RENUMBER NOTE, 2026-08-27 (291st filing).** This entry was opened
@@ -104888,6 +105393,95 @@ same cause (hashes exist only at commit time), two different failure modes.
   step that finds the sibling inside the same Pass**, before the operator
   files it as a fresh bug. No re-mint; ceiling stays `R219`, next free
   `R220`.
+
+- **R220 — A CAPABILITY IS DOCUMENTED WHERE THE READER'S *QUESTION* LIVES,
+  NOT ONLY WHERE ITS *MECHANISM* LIVES; AND A CLAIM THAT PDFCE HAS NO VERB
+  FOR SOMETHING IS CHECKED AGAINST **SOURCE** BEFORE IT IS SENT ANYWHERE.**
+  Minted 2026-08-27 (293rd filing), from the `Pass 141.0` / `3ffd86f`
+  Shipped entry above.
+
+  **The shape, and why no gate can catch it.** A verb can be **present,
+  accurate, and green under every check this project owns** and still be
+  unreachable by the person who needs it, because it is filed under the
+  mechanism it was built as rather than the question it answers.
+  `tools/check-core-api-verbs.py` fires on a verb being **ABSENT** — that
+  is the failure it was built for (the `insert_pages` incident) and it
+  catches it well. **Findability is not a property any script can
+  evaluate**, so there is no gate to extend and none should be proposed;
+  the obligation lives in the writing, checkable after the fact by a
+  reader asking whether the capability document gained an entry.
+
+  **Two instances, one day, and the second is inside the repair for the
+  first — which is the warrant, more than the count is.**
+
+  1. **`EditSession::format_text`** shipped 2026-08-20, fully and
+     correctly documented in `docs/core-api/02-editing-and-saving.md`
+     under *text editing mechanics*. On 2026-08-25 `pdfceGUI` filed
+     `request_restyle_an_existing_text_run.md` whose table read **"none
+     available"** across face, bold, italic, size and colour for existing
+     text. **They had looked.** They found `writer::content::set_font`,
+     correctly concluded it was not the answer, and had nothing else to
+     find. Nobody asking *"how do I make this bold"* opens a document
+     called *text editing mechanics*. Cost: a filed request, a reply, and
+     a consuming project believing a shipped capability did not exist.
+  2. **`FormatRequest::set_synthetic`** (`Pass 19.2`, 2026-08-03 — real
+     synthetic bold and italic, CLI-wired) was **omitted from the repair
+     for instance 1**. `3ffd86f`'s new §3.6 organised its table around
+     `set_font` and marked bold/italic **"❌ in general"**; the reply sent
+     to `pdfceGUI` says the same thing in two places. The second
+     mechanism for the same question fell out of a table indexed by the
+     first mechanism. **The commit about mechanism-indexed documentation
+     was itself mechanism-indexed.**
+
+  **★ Instance 2 also shows the structural half, which is why the rule is
+  not just "write better docs."** `02-editing-and-saving.md` is a **verb
+  table**. `set_synthetic` is a **field on a request struct**, not a verb,
+  so that document is *incapable* of listing it however diligently it is
+  maintained — only `preview_style_resolution`, the read-only *query*, is
+  verb-shaped enough to appear. **A capability whose surface is not a verb
+  has no home in a verb-indexed document**, and the capability document is
+  the only place it can land.
+
+  **What the rule asks for, concretely.**
+
+  (a) **When a Pass ships a capability, the capability-shaped document
+  (`docs/core-api/03-capabilities.md`) gains an entry titled by the
+  operator's question**, not only the mechanics document keyed by the
+  verb. One entry may cover several verbs and fields; that is the point.
+
+  (b) **A capability entry enumerates every route to the capability**, not
+  the one the author reached for. This is `R219` pointed at documentation
+  rather than at code, and the two failed together here: a table with one
+  route per row is an enumeration that silently ends at the author's
+  memory.
+
+  (c) **Before writing that pdfce cannot do something — in a doc, a reply,
+  a request-channel file or a commit message — grep the source for the
+  capability, not for the name you expect it to have.** `grep -n
+  "synthetic" docs/FEATURES.md` would have taken under a minute and
+  returned the correct answer. Nobody ran it, because nobody doubted. An
+  absence claim about your own codebase is the cheapest claim in the world
+  to check and one of the most expensive to publish wrong, because the
+  reader has no way to falsify it.
+
+  **★★ `docs/FEATURES.md` was the document that had it right**, and that
+  is not a coincidence — it is organised by capability, which is exactly
+  what (a) asks for. Its Text row has named *"synthetic bold/italic"*
+  since `Pass 19.2`. **Reading the capability-shaped document against the
+  mechanism-shaped one is the cheap check**, and it is what surfaced this.
+
+  **What this rule does NOT ask for.** Not a second copy of every verb's
+  documentation — a capability entry points at the mechanics document
+  rather than restating it, and carries only what the mechanics document
+  cannot: the operator-facing limit, the routes, and the disclosures a
+  shell owes. Not a gate, per the paragraph above. And not a licence to
+  let the mechanics document rot: `check-core-api-verbs.py` still binds.
+
+  **Sibling of `R219`** (enumerate the other routes) and **`R203`** (never
+  state a bare verdict about a repository this project does not build):
+  all three are about a record that is true as far as it goes and read as
+  though it went further. **Ceiling moves `R219` → `R220`; next free
+  `R221`.**
 
 ## Update protocol
 

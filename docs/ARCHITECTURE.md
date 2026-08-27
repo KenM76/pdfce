@@ -23164,6 +23164,18 @@ correction, with the `Destination::None` safety obligation: `ROADMAP.md`'s
 §3's `pdfce-render\` planned-direction paragraph, all corrected this
 filing.
 
+**★★ THIRD FORWARD POINTER, added 2026-08-27 (293rd filing) — and this
+one is a REFINEMENT with its own number, because the phrase above is
+ambiguous in a way that matters.** This entry gives `iccce` *"profile
+**parsing**"*, and on 2026-08-27 pdfce shipped `tools/icc-census/`
+(`Pass 141.0`), which decodes streams, tests for `acsp` at offset 36 and
+walks a tag table — *parsing a profile*, by that phrase. **Decision 093
+(below) settles it:** reading a header and a tag table to COUNT things is
+**inventory**, not conversion; the discriminator is *"could this code be
+wrong in a way that shows up as a wrong PIXEL?"*; and such code lives in
+`tools/`, outside the workspace, never in `pdfce-core`/`pdfce-render`.
+**The boundary in this entry is unchanged** — no conversion moved.
+
 ### 2026-08-17 (hundred-and-fiftieth filing) — decision 065: **AMB-3 RESOLVED — pdfce paints a radial shading's `s`-circles ON their circumference (`|P−c(s)|=r(s)`, ISO 32000-2's "on"), never as a filled disc (ISO 32000-1's "within")**
 
 **Status: DECIDED, SHIPPED.** `Pass 85.0` (`33ea830` model +
@@ -25991,3 +26003,85 @@ free 072.**
   decoder case it was minted on, and the mis-citation above is corrected
   where it was made, not by widening the rule. `R219` is unchanged; next
   free `R220`. **Ceiling moves 091 → 092; next free 093.**
+
+- **2026-08-27 — Decision 093. READING A PROFILE'S HEADER AND TAG TABLE TO
+  *COUNT* THINGS IS INVENTORY, NOT CONVERSION — SO IT IS PERMITTED UNDER
+  DECISION 064, AND IT LIVES IN `tools/`, NEVER IN `pdfce-core` OR
+  `pdfce-render`.** Settled while shipping `Pass 141.0`
+  (`51f94ca` + `96b6ded`, `tools/icc-census/`), which reads ICC bytes for
+  the first time anywhere in this repository. Refines decision **064**
+  rather than revising it; 064's boundary is unchanged and gains a forward
+  pointer to this entry.
+
+  **Why the question is real and not pedantry.** Decision 064 gives `iccce`
+  *"profile parsing, transform construction, rendering intents, ΔE"* — and
+  **"profile parsing" is the phrase a future session will grep.** A tool
+  that decodes a stream, checks `acsp` at offset 36 and walks a tag table
+  is, by that phrase, parsing a profile. Read that way, `Pass 141.0` is a
+  boundary violation. **It is not**, and the discriminator has to be
+  written down, because "it felt fine" does not survive a session that
+  reads only the phrase.
+
+  **The discriminator: does the code produce a COLOUR?** `iccce`'s
+  territory is everything that turns one colour into another colour —
+  evaluating a curve, applying a matrix, interpolating a CLUT, choosing an
+  intent, computing a ΔE. `tools/icc-census` does **none** of those. It
+  reads:
+
+  - the **128-byte header** (ICC.1:2010 §7.2) — version BCD nibbles,
+    data-colour-space signature, profile class, the `acsp` marker;
+  - the **tag table** (§7.3) — which tag signatures exist and how big each
+    one is, an *inventory*, not a decode;
+  - a handful of **structural integers at fixed offsets** inside a lookup
+    tag — input channels, output channels, CLUT grid points.
+
+  Every one of those is a **count or a label**. Not one is a colour. The
+  test to apply at any future site: **could the output of this code be
+  wrong in a way that shows up as a wrong PIXEL?** If yes, it is
+  conversion and it belongs to `iccce`. If the only way it can be wrong is
+  a wrong *number in a report*, it is inventory.
+
+  **★ THE PLACEMENT IS HALF THE DECISION, AND IT IS THE HALF THAT KEEPS A
+  SENTENCE TRUE.** On 2026-08-25 this project told `iccce`, in writing,
+  that **"nothing in pdfce has ever decoded an ICC profile."** That
+  sentence is load-bearing for the boundary — it is why `iccce` can assume
+  it owns the whole conversion path rather than negotiating with a
+  half-built one. `tools/icc-census` is registered in the root manifest's
+  `exclude` alongside every sibling census tool
+  (`check-fmt-excluded.py` clean at **13 crates**), so it is **not a
+  workspace member, not a dependency of any shipping crate, and not in
+  `THIRD_PARTY_LICENSES.md`**. The statement therefore stays true **of the
+  shipping engine**, which is the scope in which it was made and the scope
+  that matters.
+
+  **So the rule has two halves and neither is sufficient alone:** a
+  measurement may read profile bytes; a measurement that reads profile
+  bytes **lives outside the workspace**. Putting the same parser in
+  `pdfce-core` would be a violation even though the code is identical,
+  because the boundary `iccce` relies on is about **what pdfce ships**,
+  not about what a session once ran.
+
+  **What this decision does NOT do.**
+
+  - It does **not** license a CMM, a transform, or an `/ICCBased`
+    resolution that consults the profile instead of `/Alternate`. Those
+    stay gated on `iccce` exactly as the two `FEATURES.md` *Planned* rows
+    say.
+  - It does **not** move `/OutputIntents`-aware conversion. 064's
+    legal-calculus paragraph (an embedded destination profile arrives
+    inside the operator's own document, so the redistribution objection
+    that forced `cmyk_table.rs` does not apply on that path) is untouched
+    and still describes a **conversion**, which is still `iccce`'s.
+  - It does **not** create a general "tools may do anything" exemption.
+    The `tools/` tree is excluded from the workspace and from shipping;
+    that is what makes this narrow, and a future tool that produced
+    colour would still be refused.
+
+  **Body-section update, filed in this same edit:** a forward pointer on
+  decision 064 above. §3's crate-layout narrative is unchanged and
+  deliberately so — `tools/` is not a crate-layout member, and adding it
+  to the layout would assert the opposite of what this decision decides.
+
+  **No standing rule minted for this half.** It is a project-boundary
+  refinement, exactly as 064 was, and 064's own *"no standing rule minted"*
+  reasoning applies unchanged. **Ceiling moves 092 → 093; next free 094.**
