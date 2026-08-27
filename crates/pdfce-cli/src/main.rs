@@ -3406,6 +3406,139 @@ enum Command {
         mode: SaveMode,
     },
 
+    /// Change an existing field's FIELD-SCOPE properties (`Pass 134.0`).
+    ///
+    /// Every property here lives on the field and is therefore shared by
+    /// every widget the field owns -- change `--required` on a radio group
+    /// and the whole group is required. The per-placement properties
+    /// (position, border, visibility, caption) are `edit-widget`.
+    ///
+    /// A flag not passed is LEFT ALONE. There is no way to say "reset this
+    /// to the default", because a default is not a thing a file records.
+    ///
+    /// ★ The standard's gates are checked against the RESULT, not against
+    /// what you typed: clearing `--max-len` on a comb field is refused even
+    /// though the request never mentions comb, because Table 228 permits
+    /// Comb only when /MaxLen is present.
+    EditField {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's fully-qualified name, as `list-fields` reports it.
+        #[arg(long)]
+        name: String,
+        /// `/Ff` bit 2 -- the field must have a value when the form is
+        /// submitted.
+        #[arg(long)]
+        required: Option<bool>,
+        /// `/Ff` bit 1 -- the value may not be changed by the operator.
+        #[arg(long)]
+        read_only: Option<bool>,
+        /// `/TU`, the accessibility name a screen reader announces INSTEAD
+        /// of the field name. Pass an empty string to remove it.
+        #[arg(long)]
+        tooltip: Option<String>,
+        /// `/Ff` bit 13 (text fields) -- accept multiple lines.
+        #[arg(long)]
+        multiline: Option<bool>,
+        /// `/Ff` bit 14 (text fields) -- echo the value as bullets.
+        #[arg(long)]
+        password: Option<bool>,
+        /// `/Ff` bit 25 (text fields) -- lay the value out in equal cells.
+        /// Requires a `--max-len`, and refuses multiline or password.
+        #[arg(long)]
+        comb: Option<bool>,
+        /// `/MaxLen` (text fields) -- the maximum character count. Pass 0 to
+        /// REMOVE the limit.
+        #[arg(long)]
+        max_len: Option<i64>,
+        /// `/Ff` bit 15 (radio groups) -- the selected button cannot be
+        /// clicked off.
+        #[arg(long)]
+        no_toggle_to_off: Option<bool>,
+        /// `/Ff` bit 26 (radio groups) -- radios sharing an on-state move
+        /// together.
+        #[arg(long)]
+        radios_in_unison: Option<bool>,
+        /// `/Ff` bit 18 (choice fields) -- a drop-down rather than a list.
+        #[arg(long)]
+        combo: Option<bool>,
+        /// `/Ff` bit 19 (choice fields) -- the operator may type a value
+        /// that is not in the list. Permitted only on a `--combo` field.
+        #[arg(long)]
+        editable: Option<bool>,
+        /// `/Ff` bit 22 (choice fields) -- more than one option may be
+        /// selected.
+        #[arg(long)]
+        multi_select: Option<bool>,
+        /// `/Ff` bit 20 (choice fields) -- RECORD that the options were
+        /// sorted. Sorts nothing: Table 230 makes this a claim about the
+        /// writer, and says conforming readers "shall display the options in
+        /// the order in which they occur".
+        #[arg(long)]
+        sort: Option<bool>,
+        /// Replace a choice field's option list. Repeatable, in order.
+        /// `Label` for a plain option, or `export=Label` when the submitted
+        /// value differs from what the operator sees.
+        #[arg(long = "option", value_name = "OPTION")]
+        options: Vec<String>,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
+    /// Change ONE widget's position, size, border, visibility or caption
+    /// (`Pass 134.0`).
+    ///
+    /// A field may own widgets on several pages -- every radio group does,
+    /// and so does any field placed twice. This changes one of them and
+    /// reports how many it left alone.
+    ///
+    /// ★ `--rect` REPLACES the rectangle, so it both moves and resizes.
+    /// `move-widget` shifts by a delta and is the cheaper path when you only
+    /// want to move: a translation keeps the baked appearance exact, whereas
+    /// a changed width or height means the appearance must be rebuilt or a
+    /// viewer will stretch it (§12.5.5).
+    EditWidget {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's fully-qualified name, as `list-fields` reports it.
+        #[arg(long)]
+        name: String,
+        /// Which widget, numbered from 0 in the order `list-fields` reports
+        /// the field's widgets.
+        #[arg(long, default_value_t = 0)]
+        index: usize,
+        /// The new rectangle in points, `llx,lly,urx,ury`. PDF user space
+        /// has its origin at the BOTTOM-left (§8.3.2.3).
+        #[arg(long, value_name = "LLX,LLY,URX,URY")]
+        rect: Option<String>,
+        /// Border style: solid, dashed, beveled, inset or underline.
+        #[arg(long)]
+        border_style: Option<String>,
+        /// Border width in points. Zero means no border, which Table 166
+        /// states explicitly.
+        #[arg(long)]
+        border_width: Option<f64>,
+        /// Where the widget is visible: screen-and-print, screen-only,
+        /// print-only or hidden.
+        #[arg(long)]
+        visibility: Option<String>,
+        /// `/MK` `/CA` -- the widget's caption. On a push button this is the
+        /// only human-readable thing distinguishing Submit from Reset, since
+        /// a push button has no value at all. Pass an empty string to remove.
+        #[arg(long)]
+        caption: Option<String>,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
     /// Author a new push button (ISO 32000-1 §12.7.4.2.2).
     ///
     /// The button is created WITH NO ACTION and does nothing when clicked —
@@ -6679,6 +6812,68 @@ fn run() -> ExitCode {
             output,
             mode,
         } => cmd_move_widget(&input, &name, index, dx, dy, &output, mode),
+        Command::EditField {
+            input,
+            name,
+            required,
+            read_only,
+            tooltip,
+            multiline,
+            password,
+            comb,
+            max_len,
+            no_toggle_to_off,
+            radios_in_unison,
+            combo,
+            editable,
+            multi_select,
+            sort,
+            options,
+            output,
+            mode,
+        } => cmd_edit_field(&EditFieldArgs {
+            input: &input,
+            name: &name,
+            required,
+            read_only,
+            tooltip: tooltip.as_deref(),
+            multiline,
+            password,
+            comb,
+            max_len,
+            no_toggle_to_off,
+            radios_in_unison,
+            combo,
+            editable,
+            multi_select,
+            sort,
+            options: &options,
+            output: &output,
+            mode,
+        }),
+        Command::EditWidget {
+            input,
+            name,
+            index,
+            rect,
+            border_style,
+            border_width,
+            visibility,
+            caption,
+            output,
+            mode,
+        } => cmd_edit_widget(&EditWidgetArgs {
+            input: &input,
+            name: &name,
+            index,
+            rect: rect.as_deref(),
+            border_style: border_style.as_deref(),
+            border_width,
+            visibility: visibility.as_deref(),
+            caption: caption.as_deref(),
+            output: &output,
+            mode,
+        }),
         Command::RenameField {
             input,
             name,
@@ -21736,6 +21931,297 @@ fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
     );
     finish_edit(args.input, &outcome)
 }
+/// Everything `edit-field` takes. A struct because clippy's
+/// `too_many_arguments` is right here: eighteen positional parameters, most
+/// of them `Option<bool>`, is a call site where two can be swapped without
+/// the compiler noticing.
+struct EditFieldArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    required: Option<bool>,
+    read_only: Option<bool>,
+    tooltip: Option<&'a str>,
+    multiline: Option<bool>,
+    password: Option<bool>,
+    comb: Option<bool>,
+    max_len: Option<i64>,
+    no_toggle_to_off: Option<bool>,
+    radios_in_unison: Option<bool>,
+    combo: Option<bool>,
+    editable: Option<bool>,
+    multi_select: Option<bool>,
+    sort: Option<bool>,
+    options: &'a [String],
+    output: &'a Path,
+    mode: SaveMode,
+}
+
+/// `edit-field` — change an existing field's field-scope properties.
+///
+/// # What this command exists to carry, beyond doing the edit
+///
+/// Two disclosures, and the second is the reason the whole surface was
+/// asked for:
+///
+/// 1. **How many widgets a field-scope change reached.** "I changed one
+///    field" and "three things on screen look different" are the same event.
+/// 2. **★ Whether the stored value still fits.** Shortening `/MaxLen` below
+///    the current value, or removing a choice option that is selected, leaves
+///    the file inconsistent — and Acrobat does both SILENTLY. pdfce does not
+///    truncate the operator's data and does not re-point their selection;
+///    both would be inventing document state. It says so instead.
+fn cmd_edit_field(args: &EditFieldArgs<'_>) -> u8 {
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let mut edit = pdfce_core::edit::FieldEdit::new();
+    if let Some(v) = args.required {
+        edit = edit.with_required(v);
+    }
+    if let Some(v) = args.read_only {
+        edit = edit.with_read_only(v);
+    }
+    if let Some(t) = args.tooltip {
+        // An empty string is "remove it", which R105 models as an explicit
+        // DECLINE rather than as an empty `/TU` — a screen reader announcing
+        // an empty accessibility name is worse than one falling back to the
+        // field's name.
+        edit = edit.with_tooltip(if t.is_empty() {
+            pdfce_core::edit::TooltipChoice::Declined
+        } else {
+            pdfce_core::edit::TooltipChoice::Text(t.to_owned())
+        });
+    }
+    if let Some(v) = args.multiline {
+        edit = edit.with_multiline(v);
+    }
+    if let Some(v) = args.password {
+        edit = edit.with_password(v);
+    }
+    if let Some(v) = args.comb {
+        edit = edit.with_comb(v);
+    }
+    if let Some(n) = args.max_len {
+        // Zero REMOVES the limit rather than setting one of zero. A
+        // /MaxLen of 0 is a field that accepts nothing, which is not a thing
+        // anyone means to author, and the CLI has no other spelling for
+        // "absent" on a numeric flag.
+        edit = edit.with_max_len(if n <= 0 { None } else { Some(n) });
+    }
+    if let Some(v) = args.no_toggle_to_off {
+        edit = edit.with_no_toggle_to_off(v);
+    }
+    if let Some(v) = args.radios_in_unison {
+        edit = edit.with_radios_in_unison(v);
+    }
+    if let Some(v) = args.combo {
+        edit = edit.with_combo(v);
+    }
+    if let Some(v) = args.editable {
+        edit = edit.with_editable(v);
+    }
+    if let Some(v) = args.multi_select {
+        edit = edit.with_multi_select(v);
+    }
+    if let Some(v) = args.sort {
+        edit = edit.with_sort(v);
+    }
+    if !args.options.is_empty() {
+        let parsed: Vec<pdfce_core::edit::ChoiceOption> = args
+            .options
+            .iter()
+            .map(|raw| match raw.split_once('=') {
+                Some((export, display)) => pdfce_core::edit::ChoiceOption::new(export, display),
+                None => pdfce_core::edit::ChoiceOption::plain(raw.clone()),
+            })
+            .collect();
+        edit = edit.with_options(parsed);
+    }
+
+    let outcome = match session.edit_field(args.name, &edit) {
+        Ok(o) => o,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+
+    if let Some(complaint) = &outcome.value_no_longer_fits {
+        eprintln!("pdfce-cli: field {:?}: ★ {complaint}", args.name);
+    }
+    if outcome.sort_claim_unmet {
+        eprintln!(
+            "pdfce-cli: field {:?}: the Sort flag is now set and the option list is NOT in alphabetical order. ISO 32000-1 Table 230 makes that flag a record of what the WRITER did, and says conforming readers \"shall display the options in the order in which they occur\" — so pdfce did not reorder anything, and the file now claims something that is not true. Pass the options in the order you want them.",
+            args.name
+        );
+    }
+    if outcome.widgets_affected > 1 {
+        eprintln!(
+            "pdfce-cli: field {:?}: this is ONE field with {} widgets, so the change applies to all {} of them — that is what a field-scope property is. Use `edit-widget` for the per-placement ones (position, border, visibility, caption).",
+            args.name, outcome.widgets_affected, outcome.widgets_affected
+        );
+    }
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(saved) => saved,
+        Err(code) => return code,
+    };
+    println!(
+        "edit-field {} name={:?} -> {} flags=0x{:X}->0x{:X} widgets={} regenerated={} value_fits={} changed_objects={}",
+        args.input.display(),
+        args.name,
+        args.output.display(),
+        outcome.flags_before,
+        outcome.flags_after,
+        outcome.widgets_affected,
+        u32::from(outcome.appearance_regenerated),
+        u32::from(outcome.value_no_longer_fits.is_none()),
+        saved.changed,
+    );
+    finish_edit(args.input, &saved)
+}
+
+/// Everything `edit-widget` takes. Same reasoning as [`EditFieldArgs`].
+struct EditWidgetArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    index: usize,
+    rect: Option<&'a str>,
+    border_style: Option<&'a str>,
+    border_width: Option<f64>,
+    visibility: Option<&'a str>,
+    caption: Option<&'a str>,
+    output: &'a Path,
+    mode: SaveMode,
+}
+
+/// `edit-widget` — change one widget's geometry, border, visibility or
+/// caption.
+fn cmd_edit_widget(args: &EditWidgetArgs<'_>) -> u8 {
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let mut edit = pdfce_core::edit::WidgetEdit::new();
+    if let Some(spec) = args.rect {
+        let parts: Vec<f64> = spec
+            .split(',')
+            .map(|p| p.trim().parse::<f64>())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_default();
+        let [llx, lly, urx, ury] = parts.as_slice() else {
+            eprintln!(
+                "pdfce-cli: --rect {spec:?} is not four comma-separated numbers (llx,lly,urx,ury in points, origin BOTTOM-left)"
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        edit = edit.with_rect(pdfce_core::page_tree::Rect {
+            llx: *llx,
+            lly: *lly,
+            urx: *urx,
+            ury: *ury,
+        });
+    }
+    // Border style and width are ONE dictionary in the file (`/BS`), so
+    // supplying either means writing both — the other half is taken from the
+    // Table 166 default rather than from the file, which is stated here
+    // because it is the one place this command is lossy.
+    if args.border_style.is_some() || args.border_width.is_some() {
+        let style = match args.border_style.unwrap_or("solid") {
+            "solid" => pdfce_core::edit::BorderStyle::Solid,
+            "dashed" => pdfce_core::edit::BorderStyle::Dashed,
+            "beveled" => pdfce_core::edit::BorderStyle::Beveled,
+            "inset" => pdfce_core::edit::BorderStyle::Inset,
+            "underline" => pdfce_core::edit::BorderStyle::Underline,
+            other => {
+                eprintln!(
+                    "pdfce-cli: --border-style {other:?} — known: solid, dashed, beveled, inset, underline"
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        edit = edit.with_border(pdfce_core::edit::BorderSpec {
+            style,
+            width: args.border_width.unwrap_or(1.0),
+        });
+    }
+    if let Some(v) = args.visibility {
+        let visibility = match v {
+            "screen-and-print" => pdfce_core::edit::Visibility::VisibleAndPrints,
+            "screen-only" => pdfce_core::edit::Visibility::ScreenOnly,
+            "print-only" => pdfce_core::edit::Visibility::PrintOnly,
+            "hidden" => pdfce_core::edit::Visibility::Hidden,
+            other => {
+                eprintln!(
+                    "pdfce-cli: --visibility {other:?} — known: screen-and-print, screen-only, print-only, hidden"
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        edit = edit.with_visibility(visibility);
+    }
+    if let Some(c) = args.caption {
+        edit = edit.with_caption(c);
+    }
+
+    let outcome = match session.edit_widget(args.name, args.index, &edit) {
+        Ok(o) => o,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+
+    if let Some(stale) = &outcome.appearance_stale {
+        eprintln!(
+            "pdfce-cli: field {:?} widget {}: ★ {stale}",
+            args.name, args.index
+        );
+    }
+    if outcome.siblings_untouched > 0 {
+        eprintln!(
+            "pdfce-cli: field {:?}: {} OTHER widget(s) of this field are unchanged and stand where they were. Position, border, visibility and caption are per-placement, so this is correct — but a field that looks like one thing to an operator now has two appearances.",
+            args.name, outcome.siblings_untouched
+        );
+    }
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(saved) => saved,
+        Err(code) => return code,
+    };
+    let rect_token = |r: Option<pdfce_core::page_tree::Rect>| {
+        r.map_or_else(
+            || "-".to_owned(),
+            |r| format!("{},{},{},{}", r.llx, r.lly, r.urx, r.ury),
+        )
+    };
+    println!(
+        "edit-widget {} name={:?} index={} -> {} rect={}->{} resized={} regenerated={} siblings_untouched={} changed_objects={}",
+        args.input.display(),
+        args.name,
+        args.index,
+        args.output.display(),
+        rect_token(outcome.rect_before),
+        rect_token(outcome.rect_after),
+        u32::from(outcome.resized),
+        u32::from(outcome.appearance_regenerated),
+        outcome.siblings_untouched,
+        saved.changed,
+    );
+    finish_edit(args.input, &saved)
+}
+
 /// `rename-field` — change a field's partial name `/T` (decision 020's F6).
 ///
 /// The disclosure this exists to carry is `descendants_renamed`. Renaming a

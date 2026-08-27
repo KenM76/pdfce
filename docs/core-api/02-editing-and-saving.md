@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (30560 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 142 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (31655 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 144 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 142 public `EditSession` methods
+## 1. Verb index — all 144 public `EditSession` methods
 
-**Count: 142.** Established by brace-matched extraction of the four
+**Count: 144.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -703,6 +703,81 @@ only creation verb whose successful result is a control that does not work"*
 | Rename a field | `rename_field(&mut self, fqn, new_partial: &str) -> Result<FieldRename, EditError>` | 8889 | `new_partial` is **one path segment**, never an FQN; a period is refused. |
 | Move one widget's `/Rect` | `move_widget(&mut self, fqn, index, dx, dy) -> Result<WidgetMove, EditError>` | 9032 | **No appearance regeneration** — §12.5.5 step b makes matrix **A** a pure translation. |
 | Read an existing field's copyable properties | `field_defaults(&self, source: &str) -> Result<FieldDefaults, EditError>` | 9211 | For `--defaults-from` / "copy style from". |
+| **Change a field's field-scope properties** | `edit_field(&mut self, fqn, edit: &FieldEdit) -> Result<FieldEditOutcome, EditError>` | — | `Pass 134.0`. Flags, `/MaxLen`, `/TU`, `/Opt`. **Shared by every widget the field owns.** |
+| **Change ONE widget's properties** | `edit_widget(&mut self, fqn, index, edit: &WidgetEdit) -> Result<WidgetEditOutcome, EditError>` | — | `Pass 134.0`. `/Rect` (move **and resize**), `/BS`, `/F`, `/MK` `/CA`. **Per placement.** |
+
+#### ★ 1.12a Editing a field after it exists (`Pass 134.0`) — read this before wiring a properties pane
+
+Until this Pass every property was settable **only at creation**, and the
+only way to change one was to delete the field and place a new one — losing
+its position, its name, its tab order and any value in it.
+
+**The verbs come in two, and the split is not pdfce's invention.** Acrobat's
+own scripting model states it: some properties *"apply to all widgets that
+are children of that field"*, others *"are specific to individual widgets"*.
+
+| scope | verb | what lives there |
+|---|---|---|
+| **field** — one write, every widget | `edit_field` | `required`, `read_only`, `tooltip`, `multiline`, `password`, `comb`, `max_len`, `no_toggle_to_off`, `radios_in_unison`, `combo`, `editable`, `multi_select`, `sort`, `options` |
+| **widget** — per placement | `edit_widget` | `rect`, `border`, `visibility`, `caption` |
+
+Getting it backwards is **invisible on the ordinary one-widget field and
+wrong on every radio group**, where "the border" can only mean one button and
+"required" can only mean the group.
+
+**Both specs are `#[non_exhaustive]`, so use the builders**, not struct
+literals — `FieldEdit::new().with_required(true).with_max_len(Some(8))`. A
+property you do not name is **left alone**; there is no "reset to default",
+because a default is not a thing a file records.
+
+**★ The standard's producer gates are checked against the RESULT, not against
+your request.** This is the part that is easy to get wrong from outside:
+
+- `edit_field(f, FieldEdit::new().with_max_len(None))` on a **comb** field is
+  refused with `CombPreconditionUnmet` — Table 228 permits `Comb` only when
+  `/MaxLen` is present, and your request never mentioned comb.
+- `edit_field(f, FieldEdit::new().with_combo(false))` on an **editable**
+  drop-down is refused with `ChoiceEditWithoutCombo` — Table 230 permits
+  `Edit` only alongside `Combo`.
+- Supplying both halves in **one** edit is accepted: `with_comb(true)` plus
+  `with_max_len(Some(8))` is exactly the precondition met.
+
+**There is no type change and there never will be.** Acrobat has offered none
+since Acrobat 6; pdfce makes it *unrepresentable* rather than returning an
+error for it. Delete and re-place.
+
+**★ What you must surface (rule 4).** Three property changes leave the stored
+value inconsistent, and **Acrobat performs all three silently**:
+
+| change | what happens |
+|---|---|
+| `/MaxLen` shortened below the current value | the field is over its own limit |
+| a selected choice option removed | the selection points at nothing |
+| a check box's export value changed while checked | it renders **unchecked** |
+
+pdfce neither truncates the operator's data nor re-points their selection —
+both would be inventing document state — and does not refuse the edit, because
+shortening a limit is a legitimate authoring act. It reports
+`FieldEditOutcome::value_no_longer_fits`, a ready-made sentence. **Show it.**
+
+Also surface `widgets_affected` when it is `> 1` ("one field, three things on
+screen changed"), `siblings_untouched` from `edit_widget` for the same reason
+in reverse, and `sort_claim_unmet` — setting `Sort` over an unsorted `/Opt`
+makes the file claim something untrue, and pdfce will not silently reorder a
+list whose order Table 230 makes significant.
+
+**On geometry, `edit_widget` vs `move_widget`.** `move_widget` takes a delta
+and regenerates nothing, because §12.5.5 makes a pure translation exact for
+free. `edit_widget`'s `rect` **replaces**, so it both moves and resizes — and
+a changed *extent* rebuilds the appearance, because the same clause would
+otherwise SCALE the old artwork into the new box (a text field dragged twice
+as wide would render its text twice as wide rather than gaining room).
+`WidgetEditOutcome::resized` says which happened; a translation through
+`edit_widget` takes the cheap path automatically.
+
+`WidgetEditOutcome::appearance_stale` is non-empty when a resize could not
+rebuild the artwork — a push button's baked caption, or a signature. The
+widget now renders **distorted**, and that string says so.
 
 ### 1.13 Form-field values (10)
 

@@ -408,6 +408,23 @@ pub enum CommandKind {
     /// unscaled. A regeneration here would rewrite a stream to produce
     /// bytes the placement algorithm already produces for free.
     MoveWidget,
+    /// An existing field's **field-scope** properties were changed
+    /// (`Pass 134.0`) — `/Ff` flags, `/MaxLen`, `/TU`, `/Opt`.
+    ///
+    /// ONE undo entry for the whole set, however many properties the
+    /// operator touched. That is not a convenience: several of these
+    /// properties are gated against each other by the standard (Table 228's
+    /// comb precondition, Table 230's `Edit`-needs-`Combo`), so a per-property
+    /// undo could step BACKWARDS through a state the file may not be in.
+    EditFormField,
+    /// One widget annotation's **widget-scope** properties were changed
+    /// (`Pass 134.0`) — `/Rect`, `/BS`, `/F`, `/MK` `/CA`.
+    ///
+    /// Distinct from [`Self::MoveWidget`] because a `/Rect` change here may
+    /// alter the EXTENT, which §12.5.5 would scale the existing appearance
+    /// to; the appearance is rebuilt in the same command so that undo
+    /// restores geometry and artwork together.
+    EditWidget,
     /// A text or choice field's value was set and its appearance
     /// regenerated (Pass 7, §12.7.3.3). One fill — the field's `/V` and
     /// every widget's `/AP` — is one undo entry.
@@ -988,6 +1005,40 @@ fn destination_kind(d: &crate::outline::Destination) -> &'static str {
 /// the two inline would be two implementations of one rule that could drift
 /// — R171 — and the drift would show only as a merged field and a separate
 /// widget disagreeing about a border the operator set once.
+/// A choice field's `/Opt` array (§12.7.4.4).
+///
+/// An element is a bare `(Display)` string when export and display coincide,
+/// or `[(export) (display)]` when they differ. Writing the short form where
+/// it applies keeps the file the shape a hand-written one would be rather
+/// than uniformly verbose.
+///
+/// # Shared by creation and editing, deliberately
+///
+/// `add_choice_field` built this inline until `Pass 134.0` added a second
+/// caller. Two builders of the same array is exactly the arrangement in which
+/// a created field and an edited one come to disagree about the short form —
+/// and the disagreement is invisible, because both files open and both
+/// drop-downs read correctly. The Acrobat reference names the failure this
+/// pair guards: collapsing export into display *"would silently break
+/// forms"*, the document still opens and the SUBMITTED DATA is wrong.
+fn choice_opt_array(options: &[ChoiceOption]) -> Object {
+    Object::Array(
+        options
+            .iter()
+            .map(|o| {
+                if o.is_plain() {
+                    Object::String(encode_text_string(&o.display))
+                } else {
+                    Object::Array(vec![
+                        Object::String(encode_text_string(&o.export)),
+                        Object::String(encode_text_string(&o.display)),
+                    ])
+                }
+            })
+            .collect(),
+    )
+}
+
 fn border_dict(border: BorderSpec) -> Dict {
     let mut bs = Dict::new();
     bs.insert(
@@ -4340,6 +4391,50 @@ pub enum EditError {
         name: String,
         /// Which precondition failed.
         reason: &'static str,
+    },
+    /// A property was applied to a field type that does not have it
+    /// (`Pass 134.0`).
+    ///
+    /// # Why this is refused rather than ignored
+    ///
+    /// `/Ff` is one shared 32-bit word and **its bits mean different things
+    /// per field type**: bit 26 is `RadiosInUnison` on a `/Btn` and
+    /// `RichText` on a `/Tx` (§12.7.4, the only true collision in the word).
+    /// So writing "multiline" onto a check box does not do nothing — it sets
+    /// bit 13, which Table 226 does not define for `/Btn`, and pdfce would
+    /// have authored a flag with no meaning that some future reader may
+    /// give one.
+    ///
+    /// The error names the property AND the type, because the operator's
+    /// mental model is usually "this is a text box" and the file's is not.
+    #[error(
+        "{name} is a {field_type} field, and `{property}` is not one of its properties (ISO 32000-1 §12.7.4 gives each field type its own flag table, and the same bit means different things in different tables)"
+    )]
+    FieldPropertyTypeMismatch {
+        /// The field's fully-qualified name.
+        name: String,
+        /// The property that does not apply.
+        property: &'static str,
+        /// What kind of field it actually is, in the operator's words.
+        field_type: String,
+    },
+    /// A choice field would end up `Edit` without `Combo` (`Pass 134.0`).
+    ///
+    /// Table 230 bit 19: `Edit` *"shall be used only if"* `Combo` is set — an
+    /// editable **list box** is not a thing the standard defines, and it is
+    /// the third of the four producer gates with no reader recovery rule.
+    ///
+    /// Reachable from either direction, which is the reason it is its own
+    /// variant rather than a branch of the comb refusal: setting `editable`
+    /// on a list box, and **clearing `combo` on an editable drop-down**,
+    /// break the same gate — and the second request never mentions
+    /// `editable` at all.
+    #[error(
+        "{name} would be an editable list box: ISO 32000-1 Table 230 permits the Edit flag only on a Combo field, so either keep it a drop-down or turn editing off"
+    )]
+    ChoiceEditWithoutCombo {
+        /// The field's fully-qualified name.
+        name: String,
     },
     /// An authoring write could not resolve its name against the field tree.
     ///
@@ -10833,6 +10928,402 @@ pub struct FieldGroupDeletion {
     pub nodes: Vec<String>,
 }
 
+/// A **partial update to an existing field's field-scope properties**
+/// (`Pass 134.0`).
+///
+/// # Why a partial-update struct and not a verb per property
+///
+/// Fourteen setters would be fourteen undo entries for one operator gesture,
+/// fourteen appearance regenerations where one is needed, and fourteen
+/// chances to leave the field in a state the standard forbids **between**
+/// two of them. A properties pane naturally edits one control at a time and
+/// commits a set; this is that set. Every field is `Option`, and `None`
+/// means *leave it exactly as it is* — which is not the same as "set it to
+/// the default", and is the distinction that makes an edit composable with
+/// what is already in the file.
+///
+/// # ★ FIELD-SCOPE ONLY, and the split is not pdfce's invention
+///
+/// Everything here lives on the **field** dictionary and is therefore shared
+/// by every widget the field owns. Acrobat's own scripting model states it:
+/// some properties *"apply to all widgets that are children of that field"*,
+/// while others *"are specific to individual widgets"*. Position, border,
+/// visibility and caption are the second kind and live on
+/// [`WidgetEdit`].
+///
+/// Getting that split wrong is invisible on the ordinary one-widget field
+/// and wrong on every radio group — where changing "the border" can only
+/// sensibly mean one button, and changing "required" can only sensibly mean
+/// the group.
+///
+/// # What is deliberately ABSENT
+///
+/// **There is no `field_type`.** Acrobat has offered no field-type
+/// conversion since Acrobat 6 — the only route is delete-and-recreate — and
+/// pdfce models the same limit by making the request *unrepresentable*
+/// rather than by accepting it and returning an error. An API that cannot
+/// express a bad request needs no refusal for it.
+///
+/// **There is no `name`.** Renaming is [`EditSession::rename_field`], which
+/// exists, has a collision rule, and re-derives every descendant's
+/// fully-qualified name. Duplicating it here would give two answers to one
+/// question.
+///
+/// **There is no `value`.** Filling is [`EditSession::fill_text_field`],
+/// [`EditSession::set_choice_value`] and [`EditSession::set_button_state`] —
+/// three verbs because the three field families store a value differently,
+/// and each regenerates the appearance its own way (R49).
+#[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
+pub struct FieldEdit {
+    /// `/TU`, the accessibility name (R105). `Some(TooltipChoice::Declined)`
+    /// REMOVES an existing `/TU`; `None` leaves whatever is there.
+    ///
+    /// Note that the three-state choice means something slightly different
+    /// on an edit than on a creation: at creation `Undecided` is refused
+    /// because nobody has thought about it, and here it is refused for the
+    /// same reason — an edit that touches the tooltip must say what it wants
+    /// it to be.
+    pub tooltip: Option<TooltipChoice>,
+    /// `/Ff` bit 2 — the field must have a value when the form is submitted.
+    pub required: Option<bool>,
+    /// `/Ff` bit 1 — the value may not be changed by the operator.
+    pub read_only: Option<bool>,
+    /// `/Ff` bit 13 (`/Tx` only) — the field accepts multiple lines.
+    pub multiline: Option<bool>,
+    /// `/Ff` bit 14 (`/Tx` only) — the value is echoed as bullets.
+    pub password: Option<bool>,
+    /// `/Ff` bit 25 (`/Tx` only) — the value is laid out in equal cells.
+    ///
+    /// Gated by Table 228: comb *"may be set only if"* `/MaxLen` is present
+    /// and `Multiline`, `Password` and `FileSelect` are all clear. The gate
+    /// is checked against the **resulting** field, not against this struct —
+    /// see [`EditSession::edit_field`].
+    pub comb: Option<bool>,
+    /// `/MaxLen` (`/Tx` only). The outer `Option` is *touched or not*; the
+    /// inner is *present or absent*, so `Some(None)` REMOVES `/MaxLen`.
+    ///
+    /// The double option is ugly and is the honest shape: `/MaxLen` is
+    /// genuinely optional in the file, so an edit has three things to say
+    /// about it and not two.
+    pub max_len: Option<Option<i64>>,
+    /// `/Ff` bit 15 (`/Btn` radio only) — clicking the selected button does
+    /// not turn it off.
+    pub no_toggle_to_off: Option<bool>,
+    /// `/Ff` bit 26 (`/Btn` radio only) — radios with the same on-state turn
+    /// on and off together.
+    pub radios_in_unison: Option<bool>,
+    /// `/Ff` bit 18 (`/Ch` only) — a drop-down rather than a list box.
+    pub combo: Option<bool>,
+    /// `/Ff` bit 19 (`/Ch` only) — the operator may type a value not in the
+    /// list. Table 230 makes this *"shall be used only if"* `Combo` is set.
+    pub editable: Option<bool>,
+    /// `/Ff` bit 22 (`/Ch` only) — more than one option may be selected.
+    pub multi_select: Option<bool>,
+    /// `/Ff` bit 20 (`/Ch` only) — records that the WRITER sorted `/Opt`.
+    ///
+    /// Table 230 is explicit that this is *"intended for use by writers, not
+    /// by readers"* and that conforming readers *"shall display the options
+    /// in the order in which they occur in the `Opt` array"*. So setting it
+    /// does not reorder anything and pdfce does not reorder anything: it is
+    /// a statement about provenance. Setting it while leaving `/Opt`
+    /// unsorted makes the file say something untrue, which is why
+    /// [`EditSession::edit_field`] discloses that combination rather than
+    /// silently sorting on the operator's behalf.
+    pub sort: Option<bool>,
+    /// `/Opt` (`/Ch` only) — the complete option list, REPLACING the
+    /// existing one.
+    ///
+    /// Replace rather than merge, because a merge has no defined meaning
+    /// for a list whose order is significant (Table 230's display rule
+    /// above). A caller that wants to add one option sends the whole list
+    /// with one more in it, which is also exactly what a properties pane
+    /// holds.
+    pub options: Option<Vec<ChoiceOption>>,
+}
+
+/// A **partial update to one widget's** properties (`Pass 134.0`) — the
+/// annotation half, independent per placement.
+///
+/// See [`FieldEdit`] for why the two halves are separate types. In one
+/// sentence: a field with three widgets has one "required" and three
+/// borders.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
+pub struct WidgetEdit {
+    /// `/Rect` — the widget's rectangle in default user space, **replacing**
+    /// the existing one.
+    ///
+    /// # This is the RESIZE half, and it is why the appearance is rebuilt
+    ///
+    /// [`EditSession::move_widget`] translates and deliberately does **not**
+    /// regenerate: §12.5.5's algorithm makes matrix **A** a pure translation
+    /// for a pure translation, so the baked `/AP` stays exact. A resize is a
+    /// different matter — the same algorithm SCALES the appearance to the new
+    /// rectangle, so a text field made twice as wide would show text twice as
+    /// wide rather than more room for text. So this verb rebuilds the
+    /// appearance whenever the extent changes, and skips the rebuild when it
+    /// has not (a pure translation), which keeps the cheap case cheap and the
+    /// correct case correct.
+    pub rect: Option<page_tree::Rect>,
+    /// `/BS` — border style and width (§12.5.4 Table 166).
+    pub border: Option<BorderSpec>,
+    /// `/F` — where this widget is visible (§12.5.3 Table 165).
+    pub visibility: Option<Visibility>,
+    /// `/MK` `/CA` — the widget's normal caption (Table 189).
+    ///
+    /// On a push button this is not cosmetic: a push button has no `/V` at
+    /// all (§12.7.4.2.2), so the caption is the only thing distinguishing
+    /// *Submit* from *Reset* to anyone reading the field list. `Some("")`
+    /// removes it.
+    pub caption: Option<String>,
+}
+
+impl FieldEdit {
+    /// An edit that changes nothing. Chain `with_*` calls onto it.
+    ///
+    /// # Why a builder and not a struct literal
+    ///
+    /// [`FieldEdit`] is `#[non_exhaustive]`, so a caller outside this crate
+    /// cannot write `FieldEdit { .. }` at all. That is deliberate — this
+    /// struct will gain properties, and a struct literal in a consuming crate
+    /// would fail to compile every time it does. The cost is that
+    /// construction has to go through something, and these are that
+    /// something. Same arrangement as `RenderOptions` and the five `New*`
+    /// field specs.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set `/TU`, the accessibility name (R105).
+    /// [`TooltipChoice::Declined`] REMOVES an existing one.
+    #[must_use]
+    pub fn with_tooltip(mut self, tooltip: TooltipChoice) -> Self {
+        self.tooltip = Some(tooltip);
+        self
+    }
+
+    /// Set `/Ff` bit 2 — the field must have a value at submit.
+    #[must_use]
+    pub const fn with_required(mut self, required: bool) -> Self {
+        self.required = Some(required);
+        self
+    }
+
+    /// Set `/Ff` bit 1 — the value may not be changed by the operator.
+    #[must_use]
+    pub const fn with_read_only(mut self, read_only: bool) -> Self {
+        self.read_only = Some(read_only);
+        self
+    }
+
+    /// Set `/Ff` bit 13 (`/Tx` only) — accept multiple lines.
+    #[must_use]
+    pub const fn with_multiline(mut self, multiline: bool) -> Self {
+        self.multiline = Some(multiline);
+        self
+    }
+
+    /// Set `/Ff` bit 14 (`/Tx` only) — echo the value as bullets.
+    #[must_use]
+    pub const fn with_password(mut self, password: bool) -> Self {
+        self.password = Some(password);
+        self
+    }
+
+    /// Set `/Ff` bit 25 (`/Tx` only) — lay the value out in equal cells.
+    /// Gated by Table 228 against the RESULTING field, not this call.
+    #[must_use]
+    pub const fn with_comb(mut self, comb: bool) -> Self {
+        self.comb = Some(comb);
+        self
+    }
+
+    /// Set `/MaxLen` (`/Tx` only). `None` REMOVES it.
+    #[must_use]
+    pub const fn with_max_len(mut self, max_len: Option<i64>) -> Self {
+        self.max_len = Some(max_len);
+        self
+    }
+
+    /// Set `/Ff` bit 15 (radio only) — the selected button cannot be
+    /// clicked off.
+    #[must_use]
+    pub const fn with_no_toggle_to_off(mut self, value: bool) -> Self {
+        self.no_toggle_to_off = Some(value);
+        self
+    }
+
+    /// Set `/Ff` bit 26 (radio only) — same-named radios move together.
+    #[must_use]
+    pub const fn with_radios_in_unison(mut self, value: bool) -> Self {
+        self.radios_in_unison = Some(value);
+        self
+    }
+
+    /// Set `/Ff` bit 18 (`/Ch` only) — a drop-down rather than a list box.
+    #[must_use]
+    pub const fn with_combo(mut self, combo: bool) -> Self {
+        self.combo = Some(combo);
+        self
+    }
+
+    /// Set `/Ff` bit 19 (`/Ch` only) — the operator may type a value not in
+    /// the list. Table 230 permits this only alongside `Combo`.
+    #[must_use]
+    pub const fn with_editable(mut self, editable: bool) -> Self {
+        self.editable = Some(editable);
+        self
+    }
+
+    /// Set `/Ff` bit 22 (`/Ch` only) — more than one option may be selected.
+    #[must_use]
+    pub const fn with_multi_select(mut self, value: bool) -> Self {
+        self.multi_select = Some(value);
+        self
+    }
+
+    /// Set `/Ff` bit 20 (`/Ch` only) — record that the WRITER sorted `/Opt`.
+    /// Sorts nothing; see the field's documentation.
+    #[must_use]
+    pub const fn with_sort(mut self, sort: bool) -> Self {
+        self.sort = Some(sort);
+        self
+    }
+
+    /// Replace `/Opt` (`/Ch` only) with this complete option list.
+    #[must_use]
+    pub fn with_options(mut self, options: Vec<ChoiceOption>) -> Self {
+        self.options = Some(options);
+        self
+    }
+}
+
+impl WidgetEdit {
+    /// An edit that changes nothing. Chain `with_*` calls onto it.
+    /// Same `#[non_exhaustive]` reasoning as [`FieldEdit::new`].
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Replace `/Rect`. A changed EXTENT rebuilds the appearance; a pure
+    /// translation does not.
+    #[must_use]
+    pub const fn with_rect(mut self, rect: page_tree::Rect) -> Self {
+        self.rect = Some(rect);
+        self
+    }
+
+    /// Set `/BS` — border style and width.
+    #[must_use]
+    pub const fn with_border(mut self, border: BorderSpec) -> Self {
+        self.border = Some(border);
+        self
+    }
+
+    /// Set `/F` — where this widget is visible.
+    #[must_use]
+    pub const fn with_visibility(mut self, visibility: Visibility) -> Self {
+        self.visibility = Some(visibility);
+        self
+    }
+
+    /// Set `/MK` `/CA` — the widget's caption. An empty string removes it.
+    #[must_use]
+    pub fn with_caption(mut self, caption: impl Into<String>) -> Self {
+        self.caption = Some(caption.into());
+        self
+    }
+}
+
+/// What [`EditSession::edit_field`] changed, and everything about it the
+/// operator must be told (rule 4).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct FieldEditOutcome {
+    /// The field's fully-qualified name, echoed.
+    pub name: String,
+    /// `/Ff` before the edit.
+    pub flags_before: u32,
+    /// `/Ff` after it. Equal to `flags_before` when the edit touched no flag.
+    pub flags_after: u32,
+    /// How many widgets share this field — the blast radius of a field-scope
+    /// change, and the number that makes "I changed one field" mean "three
+    /// things on screen look different".
+    pub widgets_affected: usize,
+    /// Whether the appearance streams were rebuilt.
+    pub appearance_regenerated: bool,
+    /// ★ **The stored value no longer fits the field**, and pdfce did not
+    /// change it.
+    ///
+    /// # Why this is disclosed rather than repaired, and rather than refused
+    ///
+    /// Acrobat performs three edits of this shape SILENTLY, leaving the file
+    /// inconsistent with no warning: shortening `/MaxLen` below the current
+    /// value, removing a choice option that is currently selected, and
+    /// changing a check box's export value while it is checked (the box then
+    /// renders unchecked, because a viewer compares `/V` against the on-state
+    /// name and finds no match).
+    ///
+    /// pdfce neither copies that silence nor refuses the edit. Refusing would
+    /// make a legitimate operation impossible — shortening a limit *is* a
+    /// thing an author does, and the old value is the author's problem to
+    /// resolve, not pdfce's to decide. Repairing would be pdfce inventing
+    /// document state: truncating someone's data, or re-pointing a selection
+    /// at an option they did not choose. So the edit happens, the value is
+    /// left alone, and the operator is told exactly what no longer fits.
+    pub value_no_longer_fits: Option<String>,
+    /// The tooltip was declined, so any existing `/TU` was removed (R105).
+    pub tooltip_removed: bool,
+    /// `Sort` was set on a field whose `/Opt` is not in sorted order.
+    ///
+    /// Table 230 makes `Sort` a claim about what the WRITER did, and readers
+    /// *"shall display the options in the order in which they occur"*. So a
+    /// set `Sort` over an unsorted `/Opt` is a file that says something
+    /// untrue. pdfce does not sort on the operator's behalf — that would
+    /// silently reorder a list whose order the standard makes significant —
+    /// so it says so instead.
+    pub sort_claim_unmet: bool,
+}
+
+/// What [`EditSession::edit_widget`] changed.
+#[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
+pub struct WidgetEditOutcome {
+    /// The field's fully-qualified name, echoed.
+    pub name: String,
+    /// Which widget of that field, as an index into `forms::Field::widgets`.
+    pub index: usize,
+    /// The `/Rect` before and after, when the edit moved or resized it.
+    pub rect_before: Option<page_tree::Rect>,
+    /// The `/Rect` after. `None` when the edit did not touch geometry.
+    pub rect_after: Option<page_tree::Rect>,
+    /// Whether the extent (not merely the position) changed — the condition
+    /// under which the appearance must be rebuilt rather than carried.
+    pub resized: bool,
+    /// Whether the appearance stream was rebuilt.
+    pub appearance_regenerated: bool,
+    /// **A disclosure, not a statistic.** How many other widgets this field
+    /// has that this edit did NOT touch.
+    ///
+    /// Same reasoning as [`WidgetMove::siblings_left_behind`]: a field with
+    /// widgets on three pages looks like one thing to the operator, and
+    /// changing one border while leaving two is a partial result that reads
+    /// as a bug later unless it is said out loud.
+    pub siblings_untouched: usize,
+    /// ★ The widget was resized and its appearance could NOT be rebuilt, so
+    /// the old stream is still there and §12.5.5 will STRETCH it to the new
+    /// rectangle.
+    ///
+    /// Non-empty means the widget now renders distorted, and says why. A
+    /// push button's baked caption artwork is the ordinary case: pdfce has
+    /// one text-appearance builder (R49) and a button's appearance is not
+    /// text laid out by it.
+    pub appearance_stale: Option<String>,
+}
+
 /// What a [`EditSession::rename_field`] changed.
 ///
 /// # Why a rename is ONE object write, and this struct exists to say what
@@ -12926,6 +13417,627 @@ impl EditSession {
         })
     }
 
+    /// Rebuild every widget appearance of `field` after a **property**
+    /// change, using the field's own stored value and its POST-EDIT flags.
+    ///
+    /// # Why a property change needs this at all
+    ///
+    /// `multiline`, `comb`, `combo` and `/MaxLen` are not cosmetic: they
+    /// decide how the value is LAID OUT inside the box. A field whose
+    /// `multiline` was just cleared still has a two-line appearance stream
+    /// baked into it, and a viewer paints the stream, not the flags (R43).
+    /// So the file would say "one line" and look like two, indefinitely,
+    /// with nothing wrong that any check could see.
+    ///
+    /// Routed through [`Self::regen_field_appearance`] — the single
+    /// §12.7.3.3 engine (R49) — rather than through a second builder, so a
+    /// field whose flags were edited and a field that was filled cannot
+    /// disagree about how the same value is drawn.
+    ///
+    /// Returns whether anything was rebuilt: a button or signature field has
+    /// no text appearance for this engine to make, and saying so is more
+    /// useful than silently doing nothing.
+    fn regen_after_property_change(
+        &mut self,
+        field: &forms::Field,
+        flags: forms::FieldFlags,
+        objects: &mut Vec<ObjectWrite>,
+    ) -> Result<bool, EditError> {
+        let (display, multiline) = match field.field_type {
+            Some(forms::FieldType::Text) => match &field.value {
+                forms::FieldValue::Text(b) => (
+                    decode_text_string(b).text,
+                    flags.has(forms::FieldFlags::MULTILINE),
+                ),
+                // An unfilled text field: rebuild it EMPTY rather than skip.
+                // The box's own geometry and border are what changed, and an
+                // empty field still has an appearance stream that draws them.
+                _ => (String::new(), flags.has(forms::FieldFlags::MULTILINE)),
+            },
+            Some(forms::FieldType::Choice) => (
+                choice_display_text(field).unwrap_or_default(),
+                !flags.has(forms::FieldFlags::COMBO),
+            ),
+            _ => return Ok(false),
+        };
+        let default_da = crate::vartext::default_appearance_string(
+            b"Helv",
+            0.0,
+            crate::vartext::TextColor::Gray(0.0),
+        );
+        let fonts = [crate::vartext::FontResource {
+            name: b"Helv".to_vec(),
+            font: crate::fontdata::Std14::Helvetica,
+        }];
+        let mut applied_autosize = None;
+        let mut unencodable = 0usize;
+        let merged_ap = self.regen_field_appearance(
+            field,
+            &display,
+            &default_da,
+            multiline,
+            &fonts,
+            objects,
+            &mut applied_autosize,
+            &mut unencodable,
+        )?;
+        // Shape A: the field dict IS the widget, so its `/AP` `/N` is folded
+        // into the dictionary write the caller is already making — found by
+        // looking for it, because a second write to the same object in one
+        // command is how an undo entry comes to hold two `before` states.
+        if let Some(ap_id) = merged_ap
+            && let Some(write) = objects.iter_mut().find(|w| w.id == field.id)
+            && let Some(Object::Dict(d)) = write.after.as_mut()
+        {
+            let mut ap = Dict::new();
+            ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+            d.insert(Name::from(b"AP"), Object::Dict(ap));
+        }
+        Ok(true)
+    }
+
+    /// Change one widget's **widget-scope** properties — geometry, border,
+    /// visibility, caption (`Pass 134.0`).
+    ///
+    /// The field half is [`Self::edit_field`]. `index` is into
+    /// [`forms::Field::widgets`], the order `list-fields` prints, so the
+    /// operator can see what they are choosing between before choosing —
+    /// the same addressing [`Self::delete_widget`] and [`Self::move_widget`]
+    /// use.
+    ///
+    /// # ★ WHY THIS EXISTS BESIDE `move_widget` RATHER THAN REPLACING IT
+    ///
+    /// [`Self::move_widget`] takes a **delta** and deliberately regenerates
+    /// nothing: §12.5.5 step b derives its matrix **A** from the appearance
+    /// box's corners and the `/Rect` corners, so a translation that does not
+    /// change the extent makes **A** a pure translation and the baked artwork
+    /// moves with it, exact and free.
+    ///
+    /// **A resize is a different operation wearing the same clothes.** The
+    /// same algorithm SCALES the appearance into the new rectangle — so a
+    /// text field dragged twice as wide would render its text twice as wide
+    /// rather than gaining room for more text, and a comb field's cells would
+    /// stretch instead of widening. That is not a bug in §12.5.5; it is what
+    /// the clause is for, and it is the wrong answer for a form field.
+    ///
+    /// So this verb compares the EXTENT, not the corners: unchanged width and
+    /// height take `move_widget`'s cheap exact path, and a changed extent
+    /// rebuilds the appearance through the one §12.7.3.3 engine (R49).
+    /// [`WidgetEditOutcome::resized`] reports which happened.
+    ///
+    /// # A widget is not a field, and the sibling count says so
+    ///
+    /// A field may own widgets on several pages — every radio group does, and
+    /// so does any field placed twice. Changing this one's border leaves the
+    /// others alone, which is correct (Acrobat's own scripting model makes
+    /// border, background, position and visibility per-widget) and is exactly
+    /// the partial result that reads as a bug later unless it is said out
+    /// loud. [`WidgetEditOutcome::siblings_untouched`] is that disclosure.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FieldNotFound`]; [`EditError::WidgetIndexOutOfRange`];
+    /// [`EditError::WidgetRectMissing`] when a geometry edit is asked of a
+    /// widget that has no usable `/Rect` to change (§12.5.2 requires one, and
+    /// inventing coordinates for a broken annotation would be fabricating
+    /// geometry the file never had); [`EditError::DegenerateFieldRect`] for a
+    /// zero-or-negative-area rectangle; plus the encryption and **strict**
+    /// certification guards.
+    pub fn edit_widget(
+        &mut self,
+        fqn: &str,
+        index: usize,
+        edit: &WidgetEdit,
+    ) -> Result<WidgetEditOutcome, EditError> {
+        let (field, ()) = self.deletion_preflight(fqn)?;
+        let Some(widget) = field.widgets.get(index).cloned() else {
+            return Err(EditError::WidgetIndexOutOfRange {
+                name: fqn.to_owned(),
+                index,
+                widgets: field.widgets.len(),
+            });
+        };
+
+        // Geometry preflight, before anything is written.
+        let (rect_before, rect_after, resized) = match edit.rect {
+            None => (None, None, false),
+            Some(target) => {
+                let Some(current) = widget.rect else {
+                    return Err(EditError::WidgetRectMissing {
+                        name: fqn.to_owned(),
+                        index,
+                    });
+                };
+                let target =
+                    page_tree::Rect::from_corners(target.llx, target.lly, target.urx, target.ury);
+                let (w, h) = (target.width(), target.height());
+                if w <= 0.0 || h <= 0.0 {
+                    // The SAME refusal creation uses. A field resized to
+                    // nothing is exactly the field creation declines to
+                    // author: it exists, accepts a value, and can never be
+                    // seen or clicked.
+                    return Err(EditError::FieldRectDegenerate { w, h });
+                }
+                // THE EXTENT, not the corners. A pure translation keeps the
+                // baked artwork exact; a changed extent would have §12.5.5
+                // stretch it. Compared with a tolerance because these are
+                // floats that have been through a text serialisation: an
+                // operator dragging a box sideways must not be told it was
+                // resized because the width came back 1e-13 different.
+                let same_extent =
+                    (w - current.width()).abs() < 1e-6 && (h - current.height()).abs() < 1e-6;
+                (Some(current), Some(target), !same_extent)
+            }
+        };
+
+        let Some(Object::Dict(widget_dict)) = self.value(widget.id) else {
+            return Err(EditError::NotADictionary {
+                id: widget.id,
+                key: "Rect",
+            });
+        };
+        let mut updated = widget_dict.clone();
+        if let Some(r) = rect_after {
+            updated.insert(
+                Name::from(b"Rect"),
+                Object::Array(vec![
+                    Object::Real(r.llx),
+                    Object::Real(r.lly),
+                    Object::Real(r.urx),
+                    Object::Real(r.ury),
+                ]),
+            );
+        }
+        if let Some(border) = edit.border {
+            updated.insert(Name::from(b"BS"), Object::Dict(border_dict(border)));
+        }
+        if let Some(visibility) = edit.visibility {
+            updated.insert(Name::from(b"F"), Object::Integer(visibility.flags()));
+        }
+        if let Some(caption) = &edit.caption {
+            // `/MK` is a dictionary of appearance characteristics (Table 189)
+            // and the caption is one entry in it. PRESERVED-AND-PATCHED
+            // rather than replaced: `/MK` also carries `/BC`, `/BG`, `/R` and
+            // six more that pdfce does not model (R43), and writing a fresh
+            // dictionary would silently delete an operator's border colour
+            // because pdfce has no field for it.
+            let mut mk = updated
+                .get(b"MK")
+                .and_then(Object::as_dict)
+                .cloned()
+                .unwrap_or_default();
+            if caption.is_empty() {
+                mk.remove(b"CA");
+            } else {
+                mk.insert(
+                    Name::from(b"CA"),
+                    Object::String(encode_text_string(caption)),
+                );
+            }
+            if mk.is_empty() {
+                updated.remove(b"MK");
+            } else {
+                updated.insert(Name::from(b"MK"), Object::Dict(mk));
+            }
+        }
+
+        let mut objects = vec![ObjectWrite {
+            id: widget.id,
+            before: self.state.get(&widget.id).cloned(),
+            after: Some(Object::Dict(updated)),
+        }];
+
+        // A resize invalidates the baked appearance; a border change does
+        // too, because the border is drawn INTO the stream rather than
+        // synthesised from `/BS` at display time (R43 — pdfce paints the
+        // baked `/AP`, it does not reconstruct appearance from `/MK`).
+        let mut appearance_stale = None;
+        let needs_regen = resized || edit.border.is_some();
+        let appearance_regenerated = if needs_regen {
+            let done = self.regen_after_property_change(&field, field.flags, &mut objects)?;
+            if !done {
+                // A button or signature field: this engine builds a TEXT
+                // appearance and such a field has none. Said out loud,
+                // because the widget now has a stale stream that §12.5.5 will
+                // stretch — which is a visible defect the operator would
+                // otherwise discover by looking at a distorted button.
+                appearance_stale = Some(
+                    "this field's appearance is not text laid out by pdfce (a push button's \
+                     caption artwork, or a signature), so the existing stream was kept and a \
+                     viewer will SCALE it into the new rectangle — re-place the field if it \
+                     now looks distorted"
+                        .to_owned(),
+                );
+            }
+            done
+        } else {
+            false
+        };
+
+        let siblings_untouched = field.widgets.len().saturating_sub(1);
+        self.commit(Command {
+            kind: CommandKind::EditWidget,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(WidgetEditOutcome {
+            name: fqn.to_owned(),
+            index,
+            rect_before,
+            rect_after,
+            resized,
+            appearance_regenerated,
+            siblings_untouched,
+            appearance_stale,
+        })
+    }
+
+    /// Change an existing field's **field-scope** properties (`Pass 134.0`).
+    ///
+    /// Every property here lives on the field dictionary and is therefore
+    /// shared by every widget the field owns; the widget half is
+    /// [`Self::edit_widget`]. See [`FieldEdit`] for why the two are separate
+    /// and for what is deliberately absent (there is no type change, no
+    /// rename and no value).
+    ///
+    /// # ★ THE GATES ARE CHECKED AGAINST THE RESULT, NOT AGAINST THE REQUEST
+    ///
+    /// This is the one thing an edit verb must do that a creation verb does
+    /// not, and getting it wrong is silent. At creation the whole field is in
+    /// front of you, so `comb && max_len.is_none()` is a complete test. On an
+    /// edit, **the request and the file each hold half of the answer**:
+    ///
+    /// - setting `comb` on a field that already has `/MaxLen` is legal;
+    /// - setting `comb` on a field that does not is not;
+    /// - and **clearing `/MaxLen` on a field that is already comb** breaks
+    ///   the same gate without the request mentioning comb at all.
+    ///
+    /// So the flags and `/MaxLen` are resolved to their post-edit values
+    /// first, and Table 228's precondition (and Table 230's
+    /// `Edit`-requires-`Combo`) are checked against *that*. A verb that
+    /// validated the delta would accept the third case and write a file with
+    /// no defined rendering — the ambiguity register records comb-without-
+    /// `/MaxLen` as one of four producer gates with **no reader recovery rule
+    /// at all**, so every viewer is free to do something different with it.
+    ///
+    /// # Type mismatch is refused by name
+    ///
+    /// `multiline` on a check box is not a no-op and not a silent success —
+    /// it is [`EditError::FieldPropertyTypeMismatch`], naming the property
+    /// and both types. The `/Ff` word is shared across field types and its
+    /// bits mean **different things** in each (bit 26 is `RadiosInUnison` on
+    /// `/Btn` and `RichText` on `/Tx`), so a mis-typed edit does not do
+    /// nothing — it does something else.
+    ///
+    /// # What it discloses
+    ///
+    /// [`FieldEditOutcome`] carries the flag word before and after, how many
+    /// widgets a field-scope change reached, and — the rule-4 half — whether
+    /// the stored value no longer fits the field the edit just made. pdfce
+    /// does not repair that value and does not refuse the edit; see
+    /// [`FieldEditOutcome::value_no_longer_fits`].
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FieldNotFound`] when nothing bears the name;
+    /// [`EditError::FieldPropertyTypeMismatch`] for a property that does not
+    /// belong to this field's type; [`EditError::CombPreconditionUnmet`] when
+    /// the RESULTING field would break Table 228's comb gate;
+    /// [`EditError::TooltipDecisionRequired`] for
+    /// [`TooltipChoice::Undecided`]; plus the encryption and **strict**
+    /// certification guards, for the same reason a rename takes them —
+    /// changing a field's flags changes the form's structure, which is what a
+    /// certification signature exists to freeze.
+    #[allow(clippy::too_many_lines)]
+    pub fn edit_field(
+        &mut self,
+        fqn: &str,
+        edit: &FieldEdit,
+    ) -> Result<FieldEditOutcome, EditError> {
+        let (field, ()) = self.deletion_preflight(fqn)?;
+
+        // R105: an edit that TOUCHES the tooltip must say what it wants. Not
+        // touching it is fine, which is why this tests the inner value.
+        if matches!(edit.tooltip, Some(TooltipChoice::Undecided)) {
+            return Err(EditError::TooltipDecisionRequired {
+                name: fqn.to_owned(),
+            });
+        }
+
+        let ft = field.field_type;
+        let is_text = ft == Some(forms::FieldType::Text);
+        let is_choice = ft == Some(forms::FieldType::Choice);
+        let is_radio = field.button_kind == Some(forms::ButtonKind::Radio);
+        let type_name = match ft {
+            Some(forms::FieldType::Text) => "text",
+            Some(forms::FieldType::Choice) => "choice",
+            Some(forms::FieldType::Button) => match field.button_kind {
+                Some(forms::ButtonKind::Radio) => "radio button",
+                Some(forms::ButtonKind::Push) => "push button",
+                _ => "check box",
+            },
+            Some(forms::FieldType::Signature) => "signature",
+            None => "untyped",
+        };
+
+        // Every type-gated property, checked before anything is written so a
+        // refusal costs nothing and stages nothing.
+        let mismatch = |prop: &'static str| EditError::FieldPropertyTypeMismatch {
+            name: fqn.to_owned(),
+            property: prop,
+            field_type: type_name.to_owned(),
+        };
+        if !is_text {
+            for (touched, prop) in [
+                (edit.multiline.is_some(), "multiline"),
+                (edit.password.is_some(), "password"),
+                (edit.comb.is_some(), "comb"),
+                (edit.max_len.is_some(), "max_len"),
+            ] {
+                if touched {
+                    return Err(mismatch(prop));
+                }
+            }
+        }
+        if !is_choice {
+            for (touched, prop) in [
+                (edit.combo.is_some(), "combo"),
+                (edit.editable.is_some(), "editable"),
+                (edit.multi_select.is_some(), "multi_select"),
+                (edit.sort.is_some(), "sort"),
+                (edit.options.is_some(), "options"),
+            ] {
+                if touched {
+                    return Err(mismatch(prop));
+                }
+            }
+        }
+        if !is_radio {
+            for (touched, prop) in [
+                (edit.no_toggle_to_off.is_some(), "no_toggle_to_off"),
+                (edit.radios_in_unison.is_some(), "radios_in_unison"),
+            ] {
+                if touched {
+                    return Err(mismatch(prop));
+                }
+            }
+        }
+
+        // ---- resolve the POST-EDIT state -----------------------------
+        let before_flags = field.flags.0;
+        let mut flags = field.flags;
+        for (touched, bit) in [
+            (edit.required, forms::FieldFlags::REQUIRED),
+            (edit.read_only, forms::FieldFlags::READ_ONLY),
+            (edit.multiline, forms::FieldFlags::MULTILINE),
+            (edit.password, forms::FieldFlags::PASSWORD),
+            (edit.comb, forms::FieldFlags::COMB),
+            (edit.no_toggle_to_off, forms::FieldFlags::NO_TOGGLE_TO_OFF),
+            (edit.radios_in_unison, forms::FieldFlags::RADIOS_IN_UNISON),
+            (edit.combo, forms::FieldFlags::COMBO),
+            (edit.editable, forms::FieldFlags::EDIT),
+            (edit.multi_select, forms::FieldFlags::MULTI_SELECT),
+            (edit.sort, forms::FieldFlags::SORT),
+        ] {
+            match touched {
+                Some(true) => flags.0 |= bit,
+                Some(false) => flags.0 &= !bit,
+                None => {}
+            }
+        }
+        // `/MaxLen` after the edit: `None` = untouched, `Some(None)` = removed.
+        let max_len_after = match edit.max_len {
+            Some(v) => v,
+            None => field.max_len,
+        };
+
+        // Table 228 bit 25, checked on the RESULT. See the doc comment.
+        if flags.has(forms::FieldFlags::COMB) {
+            let reason = if max_len_after.is_none() {
+                Some(
+                    "the field has no /MaxLen, and Table 228 permits Comb only when /MaxLen is present",
+                )
+            } else if flags.has(forms::FieldFlags::MULTILINE) {
+                Some(
+                    "the field is Multiline, and Table 228 permits Comb only when Multiline is clear",
+                )
+            } else if flags.has(forms::FieldFlags::PASSWORD) {
+                Some(
+                    "the field is Password, and Table 228 permits Comb only when Password is clear",
+                )
+            } else if flags.has(forms::FieldFlags::FILE_SELECT) {
+                Some(
+                    "the field is FileSelect, and Table 228 permits Comb only when FileSelect is clear",
+                )
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                return Err(EditError::CombPreconditionUnmet {
+                    name: fqn.to_owned(),
+                    reason,
+                });
+            }
+        }
+        // Table 230 bit 19: `Edit` "shall be used only if" `Combo` is set.
+        // Same post-state reasoning: clearing `combo` on an editable combo
+        // breaks this without the request naming `editable`.
+        if flags.has(forms::FieldFlags::EDIT) && !flags.has(forms::FieldFlags::COMBO) {
+            return Err(EditError::ChoiceEditWithoutCombo {
+                name: fqn.to_owned(),
+            });
+        }
+
+        // ---- rule 4: does the stored value still fit? -----------------
+        let options_after = edit.options.clone();
+        let value_no_longer_fits =
+            Self::value_fit_complaint(&field, max_len_after, options_after.as_deref());
+
+        // Table 230's Sort is a claim about the writer, and readers "shall
+        // display the options in the order in which they occur". Setting it
+        // over an unsorted list makes the file say something untrue; pdfce
+        // says so rather than silently reordering a list whose order the
+        // standard makes significant.
+        // Compared over the list that will BE there: the edit's own list
+        // when it supplied one, otherwise the file's, decoded to text so the
+        // comparison is on what the operator reads rather than on raw bytes.
+        let existing: Vec<String> = field
+            .options
+            .iter()
+            .map(|o| decode_text_string(&o.display).text)
+            .collect();
+        let effective: Vec<String> = match &options_after {
+            Some(list) => list.iter().map(|o| o.display.clone()).collect(),
+            None => existing,
+        };
+        // `is_sorted` rather than `windows(2)` + indexing: the pairwise form
+        // needs two indexes clippy cannot prove are in range, and the
+        // standard-library predicate says what is meant in one word.
+        let sort_claim_unmet = flags.has(forms::FieldFlags::SORT) && !effective.is_sorted();
+
+        // ---- write ----------------------------------------------------
+        let Some(Object::Dict(dict)) = self.value(field.id) else {
+            return Err(EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            });
+        };
+        let mut dict = dict.clone();
+        if flags.0 == 0 {
+            dict.remove(b"Ff");
+        } else {
+            dict.insert(Name::from(b"Ff"), Object::Integer(i64::from(flags.0)));
+        }
+        if edit.max_len.is_some() {
+            match max_len_after {
+                Some(n) => {
+                    dict.insert(Name::from(b"MaxLen"), Object::Integer(n));
+                }
+                None => {
+                    dict.remove(b"MaxLen");
+                }
+            }
+        }
+        let mut tooltip_removed = false;
+        match &edit.tooltip {
+            Some(TooltipChoice::Text(t)) => {
+                dict.insert(Name::from(b"TU"), Object::String(encode_text_string(t)));
+            }
+            Some(TooltipChoice::Declined) => {
+                tooltip_removed = dict.remove(b"TU").is_some();
+            }
+            Some(TooltipChoice::Undecided) | None => {}
+        }
+        if let Some(options) = &options_after {
+            dict.insert(Name::from(b"Opt"), choice_opt_array(options));
+        }
+
+        let mut objects = vec![ObjectWrite {
+            id: field.id,
+            before: self.state.get(&field.id).cloned(),
+            after: Some(Object::Dict(dict)),
+        }];
+
+        // The appearance depends on `multiline` and `comb` for a text field
+        // and on `combo` for a choice field, so a change to any of them makes
+        // the baked stream wrong. Rebuilt through the ONE regenerator (R49)
+        // rather than a second builder, so an edited field and a filled one
+        // cannot disagree about how a value is drawn.
+        let layout_changed = edit.multiline.is_some()
+            || edit.comb.is_some()
+            || edit.combo.is_some()
+            || edit.max_len.is_some()
+            || options_after.is_some();
+        let appearance_regenerated = if layout_changed {
+            self.regen_after_property_change(&field, flags, &mut objects)?
+        } else {
+            false
+        };
+
+        let widgets_affected = field.widgets.len();
+        self.commit(Command {
+            kind: CommandKind::EditFormField,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(FieldEditOutcome {
+            name: fqn.to_owned(),
+            flags_before: before_flags,
+            flags_after: flags.0,
+            widgets_affected,
+            appearance_regenerated,
+            value_no_longer_fits,
+            tooltip_removed,
+            sort_claim_unmet,
+        })
+    }
+
+    /// Whether the field's STORED value still fits the field the edit is
+    /// about to make, as a sentence for the operator.
+    ///
+    /// Three cases, and all three are ones Acrobat performs silently — see
+    /// [`FieldEditOutcome::value_no_longer_fits`] for why pdfce discloses
+    /// instead of repairing or refusing.
+    fn value_fit_complaint(
+        field: &forms::Field,
+        max_len_after: Option<i64>,
+        options_after: Option<&[ChoiceOption]>,
+    ) -> Option<String> {
+        match &field.value {
+            forms::FieldValue::Text(bytes) => {
+                let len = decode_text_string(bytes).text.chars().count();
+                let limit = usize::try_from(max_len_after?).ok()?;
+                (len > limit).then(|| {
+                    format!(
+                        "the field holds {len} character(s) and the new /MaxLen is {limit}; \
+                         pdfce did NOT truncate the value, so the field is over its own limit \
+                         until someone shortens it"
+                    )
+                })
+            }
+            forms::FieldValue::Choice(selected) => {
+                let options = options_after?;
+                let orphaned: Vec<String> = selected
+                    .iter()
+                    .map(|v| decode_text_string(v).text)
+                    .filter(|v| !options.iter().any(|o| o.export == *v))
+                    .collect();
+                (!orphaned.is_empty()).then(|| {
+                    format!(
+                        "the field's selected value(s) {} are not in the new option list; \
+                         pdfce did NOT re-point the selection, because choosing a different \
+                         option on the operator's behalf is inventing an answer they did not give",
+                        orphaned.join(", ")
+                    )
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// The guards and lookup both deletion entry points share.
     ///
     /// Shared so the two cannot drift about which documents refuse deletion —
@@ -13790,24 +14902,7 @@ impl EditSession {
         // coincide, or `[(export) (display)]` when they differ. Writing the
         // short form where it applies keeps the file the shape a hand-written
         // one would be, rather than uniformly verbose.
-        d.insert(
-            Name::from(b"Opt"),
-            Object::Array(
-                options
-                    .iter()
-                    .map(|o| {
-                        if o.is_plain() {
-                            Object::String(encode_text_string(&o.display))
-                        } else {
-                            Object::Array(vec![
-                                Object::String(encode_text_string(&o.export)),
-                                Object::String(encode_text_string(&o.display)),
-                            ])
-                        }
-                    })
-                    .collect(),
-            ),
-        );
+        d.insert(Name::from(b"Opt"), choice_opt_array(&options));
         // NO `/V`: §12.7.4.4 defaults it to null (nothing selected).
         let mut mk = Dict::new();
         mk.insert(
