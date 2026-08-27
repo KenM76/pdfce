@@ -24842,6 +24842,31 @@ free 072.**
   survivors in `crates/` at `70c5919`, reported to the engineer rather than
   edited by the librarian role.
 
+  > **★★ CORRECTED 2026-08-27 (295th filing) — THERE WERE FIVE, NOT FOUR, AND
+  > THE FIFTH IS THE INTERESTING ONE.** The four above are real and all four
+  > were corrected in `25d73d7` (`Pass 140.2`). The fifth —
+  > `crates/pdfce-cli/src/main.rs`'s operator-facing **runtime note** — was
+  > found by the engineer **only by grepping FORMAT STRINGS**, the class the
+  > 288th filing recorded as invisible to every gate. World-source: `git show
+  > 25d73d7`, read here.
+  >
+  > It was stale in the **opposite direction**: the rustdoc copies were wrong
+  > because the code moved past them, while the runtime note had listed the
+  > population **correctly** since `Pass 130.1` and `Pass 140.0` is what made
+  > **it** false. **Two copies of one claim disagreed for ten Passes and the
+  > more visible copy was the accurate one.** Worse for auditing: survivor 3's
+  > sentence was **repaired by a code change rather than an edit**, so it is
+  > true today with no trace of having been false — `git blame` on a
+  > currently-true claim proves nothing.
+  >
+  > ⇒ Promoted to standing rule **`R222`** (`ROADMAP.md`, *Standing rules*):
+  > when a doc-comment claim is corrected, grep the format strings for the
+  > same claim **in the same change**. **The "no gate can content-check a
+  > disclosure" reasoning quoted immediately above is UNCHANGED and is why
+  > `R222` is a habit and not a gate** — a second occurrence does not weaken
+  > that warrant, it only moves the obligation earlier, from the librarian's
+  > filing-time sweep to the engineer's own change.
+
   **★ One counter did NOT change and is worth stating so the pair is not
   read as symmetric:** `cmyk_bridged_pixels` and
   `cmyk_native_image_pixels` remain **complements, and remain

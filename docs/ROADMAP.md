@@ -96,6 +96,391 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 140.2` (`25d73d7`) — ★★★★★ **AN IMAGE'S OWN COLOUR CONVERSIONS REACHED NOTHING AT ALL: `image::decode` CONSTRUCTED TWO `ColorDiagnostics`, WROTE TO BOTH, AND DROPPED BOTH — SO A BROKEN `/tintTransform` PAINTED A NEUTRAL STAND-IN AND PDFCE SAID NOTHING, WHICH IS A RULE 4 *SILENCE* AND NOT A MISSING STATISTIC** — ★★★★ **TWO CORRECTIONS TO `70c5919`'s COMMIT MESSAGE, WHICH THE 294th FILING RELAYED AS ITS OWN:** the *"292 distinct tuples behind 25,870 texels"* cost figure is **WRONG** (that counter had **no image contribution at all**), and **ROUTE 4 ALONE ACCOUNTS FOR THE ENTIRE FIX ON THE REPORTED PATCH** — established by ablation, and **route 4 was not in the bug report** — ★★★ **THE 294th FILING'S HARD-RULE-11 SWEEP REPORTED FOUR SURVIVORS AND THERE WERE FIVE**; the fifth was a **format string**, and three findings come out of it, all new — ★★ standing rule **`R222`** minted: **when a doc-comment claim is corrected, grep the FORMAT STRINGS for the same claim in the same change** — ★ **A SABOTAGE SURVIVED AND IS RECORDED RATHER THAN PAPERED OVER: it falsified a claim in the CODE COMMENT, not a defect in the code** — 2026-08-27 (295th filing)
+
+**Sourcing.** Shell held and used (hard rule 8). `git show 25d73d7` is the
+primary source and every engineering figure below is the **engineer's,
+relayed** and labelled as such — this role ran no build, no test and no
+render. Every claim about the source tree or the git state was produced
+here by `git`/`grep`/`sed` on live files, and the command is named beside
+it. `python tools/check-ledger-numbers.py` was run **before** any edit and
+**again after**; both runs are quoted in the *Ledger* below.
+
+**`Pass 140.2` was confirmed free before minting.** The pre-edit run
+reported *"Pass families with headings : up to 143 (highest ID 143.0)"* and
+listed `140` under **CLAIMED BUT NOT YET HEADED** — the 294th filing's own
+reservation (*"`Pass 140.2` is claimed in the engineer's uncommitted working
+tree — do not reuse it"*). Claimed by this Pass, headed here for the first
+time, so hard rule 2 is satisfied: the ID goes to the work it was reserved
+for.
+
+#### What was wrong
+
+`crates/pdfce-render/src/image.rs`'s `decode_sampled` converts every texel
+through `crate::color`, which counts its own shortfalls — a missing or
+malformed `/tintTransform`, a `/Separation /All` approximation, an ICC
+alternate taken. Those counts went into **two local `ColorDiagnostics`
+values (`scratch_diag`, and the `TintCache`'s own `diag`) that were
+constructed, written to, and dropped at the end of the function.**
+
+The visible consequence: an image whose `/Separation` carries a broken
+transform renders as `separation_to_rgb`'s **neutral stand-in** — a colour
+the document never specified, whose own note says *"lightness preserved,
+hue is not the document's"* — and **pdfce reported nothing at all.**
+
+**This is a `CLAUDE.md` rule 4 violation, not a missing statistic**, and the
+distinction is the entry. Rule 4 forbids **silence** about an inference, and
+its own text says the obligation *"bites hardest on inferences the operator
+**cannot see by definition**"* — naming a font substitution that renders
+plausibly. **A substituted image colour is the same case**: a plausible grey
+looks exactly like a grey the file might have asked for. The fix routes the
+account off-canvas to the CLI's printed note, which is where rule 4 says it
+belongs; nothing about the **rendering** changes.
+
+#### Measured, before → after (engineer's figures, relayed)
+
+On a purpose-built **image-only** page whose `/Separation` carries a
+deliberately malformed transform (wrong arity, wrong output count):
+
+| fixture | `tint_applied` before | after | `tint_not_applied` before | after |
+|---|---:|---:|---:|---:|
+| `image-only-good-tint.pdf` | 0 | **1** | 0 | 0 |
+| `image-only-broken-tint.pdf` | 0 | 0 | 0 | **1** |
+
+**Both counters read zero on both fixtures before the fix** — the good page
+and the broken page were indistinguishable from a page with no spot content
+at all. Per hard rule 10a the denominator is stated: these are **counts per
+distinct sample tuple, not per texel**, because `TintCache` exists precisely
+so that one broken transform reports **once per distinct colour** rather
+than once per texel; on these two fixtures the palette is one entry, so 1
+tuple = 1 image. The shortfall half also produces prose on the CLI's note:
+*"1 spot-colour conversion(s) had no usable `/tintTransform` … the lightness
+is right and the HUE IS NOT the document's"*.
+
+**Why the GOOD fixture is asserted as well as the broken one, and is not
+padding.** A fix that routed only **failures** to the caller would satisfy
+the shortfall half and leave the **census** half still lying by omission.
+Only the good page tells those two apart.
+
+---
+
+#### ★★★★ TWO CORRECTIONS TO `70c5919`'s COMMIT MESSAGE — AND THEREFORE TO THE 294th FILING, WHICH RELAYED BOTH
+
+`70c5919` is **not amended**; its hash is cited by the 294th filing's
+*Shipped* entry, by `SESSION_LOG.md` and by `ARCHITECTURE.md`, and this
+project has direct evidence of what rewriting a cited commit costs
+(`tools/check-cited-commits-exist.py`, `0d9f4df`, fourteen pre-existing
+casualties). The corrections are recorded **here**, and a dated correction
+note has been placed in-line at each site in `docs/` that repeated either
+claim — **corrected in place with a visible note, never silently
+rewritten** (append-only discipline, hard rule 1).
+
+**(a) The cost figure was wrong, and the true statement is STRONGER.**
+`70c5919`'s message said *"292 distinct tuples behind 25,870 texels"* on the
+patch that opened `Pass 140.0`, attributing `tint_applied = 292` to that
+image's `TintCache`. **That counter had no image contribution whatsoever**
+— it was the page's **path fills** — because the decode's diagnostics
+reached nothing, which is the very defect this Pass fixes. The engineer
+wrote a number into a commit message by attributing a counter to a producer
+**that could not have reached it.**
+
+Corrected, and better than the figure it replaces: **both images on that
+patch are `/Indexed` with 256-entry palettes**, so their tint work is
+bounded by the **palette** — **≤ 256 conversions per image, at decode time,
+independent of the image's pixel count** — and `TintCache` is not involved
+at all. That is a *stronger* cost claim than "one evaluation per 88.6
+texels", because it is bounded by a structural constant rather than by a
+measured ratio on one page.
+
+**The synthetic worst case stands unchanged**: 16 bpc × 5 colorants (an
+**80-bit key** the cache cannot pack), **490,000 texels**, a type 4
+PostScript transform, **~670 ms → ~925 ms median = 1.37 µs → 1.89 µs per
+texel, about +38 %**, filed as a **range not a point** because run-to-run
+spread on this machine is ~15 %. It was measured on a **direct `DeviceN`
+image**, which is the genuinely unbounded shape — so the worst case was
+never resting on the wrong figure.
+
+**(b) ★★ ROUTE 4 ALONE ACCOUNTS FOR THE ENTIRE FIX ON THE REPORTED PATCH,
+AND ROUTE 4 WAS NOT IN THE REPORT.** Ablated on a debug build:
+
+| configuration | `cmyk_bridged_pixels` | `cmyk_native_image_pixels` |
+|---|---:|---:|
+| `/Indexed`-over-`DeviceN` ink table **reverted**, direct `Separation`/`DeviceN` route left in place | **25,870** | **0** |
+| both restored (shipped state) | **0** | **25,870** |
+
+Reading the table: with **only the route the bug report named** in place, the
+patch is **fully bridged** — that is, **completely unfixed**. The two
+counters are complements, so the same 25,870 pixels are the whole patch in
+both rows; there is no partial credit anywhere in it.
+
+⇒ **Had the engineer implemented only the route the bug report named, the
+reported defect would not have been fixed at all.** The route that actually
+carried the fix — `/Indexed` over a `Separation`/`DeviceN` base, a duotone —
+was found **by walking `R219`'s own checklist**, not by the report, not by a
+test, and not by the operator.
+
+**This is the strongest datum this project has for `R219`**, and it has been
+folded into `R219`'s own entry under *Standing rules* as well as recorded
+here. It converts the rule from *"enumerating the siblings is cheap and
+saves the next session a bug report"* into *"on this instance, enumerating
+the siblings is the only reason the fix worked."* A standing rule whose
+value has been demonstrated this concretely should say so **where the rule
+is read**, not only where the Pass is filed.
+
+---
+
+#### ★★★ THE STALE-CLAIM SWEEP — FIVE SITES, AND THE 294th FILING'S SWEEP FOUND FOUR
+
+The 294th filing's hard-rule-11 sweep reported **four survivors** at
+`70c5919` and recorded them as owed work. **All four were real and all four
+are corrected in `25d73d7`.** There was a **fifth**, found only by grepping
+**format strings**: `crates/pdfce-cli/src/main.rs`'s runtime note — the class
+the **288th** filing recorded as invisible to every gate and left unresolved.
+
+**Three findings, all new, and none of them is "the sweep should have been
+more thorough":**
+
+**(i) A stale claim can be repaired by a CODE CHANGE rather than by an edit,
+leaving no trace of ever having been wrong.** From `Pass 130.1` until `Pass
+140.0`, a `Separation`/`DeviceN` image outside overprint **did** bridge, and
+`interpret.rs`'s *"what is left"* enumeration did not mention it — **false
+for ten Passes**. `Pass 140.0` removed that population, which made the
+**unchanged** sentence true again. Nobody edited it, nobody noticed it, and
+the repaired text carries no marker that it was ever wrong. **A `git blame`
+on a true sentence is not evidence the sentence was always true.**
+
+**(ii) Two copies of one population claim disagreed for ten Passes, and the
+MORE VISIBLE copy was the accurate one — so recency and location are both
+worthless as evidence.** The CLI's runtime note (operator-facing, printed on
+every subtractive page) listed that population **correctly** over exactly the
+period the rustdoc comment (internal, read by maintainers) had it wrong. Then
+`Pass 140.0` made **the accurate one** false. The natural heuristics both
+fail here: *"the internal comment is closer to the code, trust it"* is wrong,
+and *"the operator-facing string is more exposed, so it gets corrected more
+often"* is wrong in the other direction. **When two copies of a population
+claim disagree, neither's recency nor its audience is evidence of which is
+right — only the code is.**
+
+**(iii) The format-string gap has now cost a SECOND occurrence.** The 288th
+filing recorded this class — a claim living in a `println!`/`eprintln!`
+template, invisible to every gate this project owns — and said *"a fourth
+occurrence would argue harder for promotion"*. **This is the second for the
+format-string half specifically**, counted separately and deliberately: the
+288th filing's tally was for the broader stale-disclosure class, and
+conflating the two would inflate the count.
+
+**★ THE PROMOTION QUESTION, DECIDED: MINTED AS `R222`, AND THE ENGINEER'S
+REASONING FOR *NOT* GATING IT IS ACCEPTED IN FULL.** The engineer's view,
+relayed verbatim in the dispatch, was that this *"still cannot be gated
+mechanically (no script can content-check a claim's truth)"* but that the
+**habit** is now clearly worth a standing rule. Both halves are accepted:
+
+- **The gate half is DECLINED, permanently, and should not be re-proposed.**
+  A gate would have to know what the current behaviour *is* — which is the
+  very fact the disclosure exists to report. This is the identical warrant
+  on which three prior requests to gate the disclosure-staleness class were
+  declined (librarian hard rule 11's own text), and it is not weakened by a
+  second occurrence.
+- **The habit half is MINTED as `R222`** — see *Standing rules*. It is a
+  **procedural commitment on the engineer's side**, the mirror of librarian
+  hard rule 11's commitment on the filing side, and like both of its
+  siblings (`R219`, `R220`) it is **checkable after the fact**: a reader asks
+  whether the change that corrected a doc comment also grepped the format
+  strings. Minted at **n = 2**, the project's standing bar, with the second
+  instance found by a sweep that had already run once and reported clean.
+
+**Why a librarian hard rule was not sufficient on its own.** Hard rule 11
+already names `eprintln!`/`println!` strings in its scope, and it is what
+found survivors 1–4. But hard rule 11 runs **at filing time — one commit
+later at best**, and it binds the librarian, not the engineer making the
+edit. The gap `R222` closes is the window between *"the engineer corrects a
+doc comment"* and *"the librarian sweeps"*, which is exactly where this
+survivor lived.
+
+---
+
+#### ★ A SABOTAGE THAT SURVIVED, RECORDED RATHER THAN PAPERED OVER
+
+Three sabotages of `Pass 140.2`'s two new tests (engineer's, relayed):
+
+| sabotage | result |
+|---|---|
+| `decode` never merges its diagnostics into `notes` | **2 of 7 fail** |
+| the interpreter drops what `decode` handed it | **2 of 7 fail** |
+| only the **cache** is merged, not `scratch_diag` | **0 of 7 fail — SURVIVES** |
+
+**The survivor is the entry, and it is a POSITIVE instance: the sabotage
+caught a false claim in a CODE COMMENT, not a defect in the code.** The
+engineer's first draft of that comment claimed the `scratch_diag` merge kept
+*"every non-`Special` image"* from being silent. **That was false, and the
+sabotage is what proved it** — deleting the merge changes no test because:
+
+- `tint_cache` is `Some` **exactly when** the space is `Space::Special`, so
+  the non-cache arm of the texel loop is reached only by `Gray`, `Rgb`,
+  `Cmyk` and `Indexed` — whose conversions are **closed-form arithmetic that
+  records nothing at all**. There is no shortfall for a non-`Special` image
+  to report.
+- `scratch_diag`'s **only** possible contribution is the `yields_cmyk` probe,
+  and only for a transform that **LOADS** successfully and then **fails to
+  EVALUATE** at an all-zero operand. A transform that fails to load leaves
+  `tint: None` and `tint_to_cmyk` returns early without counting.
+- **The fixtures' transform fails at LOAD**, which is the commoner
+  malformation and the one worth pinning.
+
+The comment now records the merge as **deliberately uncovered** and says
+exactly why, rather than leaving it to read as tested. **A green sabotage
+that is explained is a different artifact from a green sabotage that is
+ignored**, and this project has a lesson on the distinction already
+(`C:/personal_rag/pdf/lesson_20260819_green_sabotage_can_signal_fixture_insufficiency_not_just_untested_or_equivalent_code.md`).
+
+---
+
+#### ★ ONE OF THIS PROJECT'S OWN GATES BROKE ONE OF ITS OWN TESTS — filed as an OBSERVATION, not decided
+
+`tools/check-image-colorspace-truth.py` writes a `_truth/` **subdirectory
+beside the images it scores**. Pointing it at `fixtures/synthetic/images` —
+the obvious thing to do, and what the engineer did while running the gate
+sweep — made `every_fixture_either_imports_or_refuses_by_name` die on
+`std::fs::read` of a **directory**, which on Windows is `PermissionDenied` /
+*"Access is denied."*
+
+**So the panic reads as a filesystem-rights problem and sends the reader
+after their antivirus.** Fixed in `25d73d7`: the test now **skips
+directories** and **names the failing path**.
+
+**★ `.gitignore` would not have helped.** The failure is on **disk** and has
+nothing to do with what is **tracked** — a distinction worth stating,
+because `.gitignore` is the reflex answer to "a tool wrote a directory into
+my tree" and it addresses a different problem entirely.
+
+**⇒ OPEN OBSERVATION FOR THE ENGINEER, deliberately NOT decided by this
+role:** *should the gate be writing into a fixture directory at all?* An
+output directory beside the input is convenient and is why nobody noticed;
+an output directory **outside** the fixture tree would make this class
+structurally impossible rather than defended against per-test. That is an
+engineering call about a tool this role does not own, and it is recorded
+here so it does not evaporate — **not** promoted to a Pass, and **not**
+answered.
+
+---
+
+#### ★ `ImageNotes` LOSES `Copy` AND `Eq` — a public type change, recorded, and a rule candidate at n = 1
+
+`ImageNotes` is `pub` in `pdfce-render`; `Pass 140.2` drops `Copy` and `Eq`
+from its derives, because `ColorDiagnostics` owns a deduped-and-capped
+`Vec<String>` of notes and is neither. **This is a breaking change to a
+public type's trait surface** and is filed as such rather than left to be
+discovered.
+
+The engineer's reasoning, relayed: keeping the derives would have meant
+**leaving the field off the struct** — *which is the arrangement that made
+this silent in the first place*. *"A diagnostics bag that grows is the
+normal case; a `Copy` bound that decides what may be diagnosed is the tail
+wagging the dog."*
+
+**Recorded as a NAMED CANDIDATE at n = 1, not minted:** *a trait bound must
+not decide what a type is allowed to record.* It is a real principle and it
+is a sibling of `R221` (a parallel description of a capability drifts from
+the capability); it is **one instance**, and this project's bar is two. If a
+second derive-driven omission turns up, this is the entry to cite.
+
+---
+
+#### Gates (engineer's, relayed — this role ran none of them)
+
+`cargo test --workspace` **4,419 passing / 0 failing** (was **4,417** — the
+two new integration tests); `cargo fmt` clean; `cargo clippy -D warnings`
+clean; **all 18 bare `check-*` gates green**, plus
+`check-image-colorspace-truth.py` green **with its fixture-directory
+argument** and `check-metrics-line-contract.py` green over the edited
+strings.
+
+**Not asserted here, because this role did not check them:** `cargo tree`
+(rule 2), the `wasm32` check, and the fuzz targets. `25d73d7` touches
+`pdfce-render`, `pdfce-cli` and tests only, adds no dependency and no
+`Cargo.toml` line (`git show --stat`, run here), so the rule 2 invariant has
+no new way to have been broken — **but "no new way to break it" is not a
+`cargo tree` run**, and the difference is exactly the one hard rule 8 exists
+to police.
+
+---
+
+#### Hard-rule-11 sweep for THIS Pass — the counters that changed meaning
+
+**The claim that changed meaning:** `tint_applied` and `tint_not_applied`
+now include **an image's own texel conversions**, which they never did
+before. Every description of them is a claim about **which producers are
+counted**, and all of them were written when the answer was "paths and
+shadings only".
+
+`grep -rn` over `crates/`, `tools/`, `docs/`, `fixtures/`, searching for the
+**claim** rather than for the counter names:
+
+| site | verdict |
+|---|---|
+| `docs/FEATURES.md` row 229 (*"twelve render-diagnostic counters … tint success/failure"*) | **CORRECTED by this filing** — it named the counters without naming their population, which read as "all of it". Now states that an image's own conversions arrived in `Pass 140.2` and that a palette's do not. |
+| `docs/FEATURES.md` row 230 (*"A tint failure INSIDE a palette is still not disclosed — the palette builder's diagnostics are discarded"*) | **CHECKED AND STILL TRUE — deliberately.** `Pass 140.2` explicitly excludes `resolve_indexed`'s `palette_diag`, and says why in the code: a palette is built once, bounded by `hival + 1`, and folding it in would report a 256-entry palette's single bad transform as **256 texel conversions**. Reported so the sweep can be audited rather than only its failures. |
+| `crates/pdfce-cli/src/main.rs` — the metrics table rows for both tint counters | **the engineer's**, outside this role's remit; not inspected line-by-line here. **Owed work if stale** — flagged rather than asserted either way. |
+| `crates/pdfce-render/src/interpret.rs` — `Diagnostics::color` rustdoc | same; flagged, not asserted. |
+
+**★ The engineer's own commit message anticipates the palette exclusion in
+the rustdoc for `ImageNotes::color`** — *"NOT included, and deliberately"* —
+which is why row 230 survives the sweep instead of failing it. **An
+exclusion stated at the point of the change is what makes a later sweep
+cheap**; the four survivors at `70c5919` are what it looks like when one
+is not.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `143.0` (highest); `140.2` **claimed, not headed** | **`Pass 140.2` MINTED and SHIPPED** (the ID reserved by the 294th filing, used by the work it was reserved for). Highest ID still **`143.0`**; next free family **`144`**. |
+| decisions (`ARCHITECTURE.md` §12) | **093** | **093** (unchanged — **no mint**. The two findings that could have wanted one are a *habit* (→ `R222`) and an *observation the engineer must answer* (the gate's output directory), and neither is an architectural decision this role may take). Next free **094**. |
+| standing rules | **`R221`** | **`R222`** (**MINTED** — when a doc-comment claim is corrected, grep the FORMAT STRINGS for the same claim in the same change). `R219` **amended in place, not re-minted**. Next free **`R223`**. |
+| `SESSION_LOG.md` filings | **294** | **295**. Next free **296**. |
+
+Ceilings from `python tools/check-ledger-numbers.py`, **run here before any
+edit** (*"Pass families with headings : up to 143 (highest ID 143.0) ·
+standing rules : R221 -> next free is R222 · decision records : 093 -> next
+free is 094 · SESSION_LOG filings : 294 -> next free is 295"*, and *"clean —
+no duplicate Pass, rule, or decision numbers"*), **not copied from a prior
+entry** — and re-run after these edits, quoted in the session log.
+
+#### Git state, checked rather than inferred
+
+`git log --oneline`, `git rev-parse HEAD origin/main`, `git status
+--porcelain`, `git describe`, `ls -lt D:/Dev/pdfce-backups/`, `git rev-list
+--count` — all run here, at the time of writing:
+
+- **`HEAD` is `25d73d7`**, and **`main` is LEVEL with `origin/main`** — both
+  resolve to `25d73d70c94ebb96c59ba191d2714bd12b677467` (`git rev-parse HEAD
+  origin/main`, run here). Nothing to push at the moment this entry was
+  written; pushing `main` is standing-authorized regardless (decision
+  **090**), and CI's colour is **not asserted here** because this role did
+  not read it from GitHub.
+- **`25d73d7` was the one unfiled commit at the tip (`R217`); this filing
+  discharges it.**
+- `git describe` = **`v0.14.0-58-g25d73d7`**.
+- **The working tree is NOT clean, and it grew TWICE while this entry was
+  being written** — fourth consecutive filing to hit that shape. Reported
+  from `git status --porcelain` **re-run after this role's last edit**, not
+  from the run made at dispatch (which returned **empty**): besides this
+  filing's own four `docs/` files, six files this role did not touch have
+  appeared — `docs/NEXT_SESSION.md` and
+  `.claude/agent-memory/pdfce-engineer/MEMORY.md` modified, plus five
+  untracked (four `.claude/agent-memory/pdfce-engineer/feedback_*.md` and
+  `fixtures/synthetic/devicen-image/PROVENANCE.md`). **All are the
+  engineer's**; `docs/NEXT_SESSION.md` is engineer-owned and was
+  deliberately not touched here. **Nothing was committed or staged by this
+  filing.**
+- **Backup currency is NOT asserted by this entry.** This role did not
+  re-run `ls -lt D:/Dev/pdfce-backups/` after its last edit, and the 294th
+  filing's figure is stale by construction (hard rule 8) — the engineer
+  should check.
+
+
 ### `Pass 140.0` + `Pass 140.1` (`70c5919`) — ★★★★★ **THE PRINT-CONFORMANCE SUITE WENT 5 FAIL → 6 FAIL AND BOTH HALVES SHIPPED ANYWAY: THE NEW FAILURE IS A FALSE PASS BEING REMOVED, ESTABLISHED BY ABLATION AND BY SEGMENTING THE PATCH BY EXACT GREY LEVEL, NOT BY ARGUMENT** — ★★★★ `Pass 140.1` (the path-FILL half) **DID NOT EXIST BEFORE THIS SESSION AND IS MINTED HERE**: fixing the image half is what exposed it, and **the ADDITIVE CONTROL PAGE is what identified which half was wrong** — ★★★ `R219`'s fourth instance is CLOSED and **grew a fifth and a sixth route while being closed** (an unreported `/Indexed`-over-`Separation` duotone, found by walking the rule's own checklist; then the path fill; then a `DeviceGray` overprint divergence in a neighbouring subsystem, filed `Pass 143.0`) — ★★ **the cost claim the Backlog entry demanded was MEASURED, not asserted** — ★ `Space::yields_cmyk` is a **PROBE, not a structural predicate**, so there is one answer to *"does this space have colorants"* instead of two that can drift; standing rule **`R221`** minted for that shape — 2026-08-27 (294th filing)
 
 **Sourcing.** Shell held and used (hard rule 8). Every claim this role makes
@@ -171,11 +556,37 @@ The Backlog entry closed with *"cost needs measuring before committing to this
 shape."* It was measured before the shape was committed to, and it is filed
 here **beside its per-item form** (hard rule 10a):
 
-- **Typical case.** `TintCache` now caches **both** answers per distinct
+- **Typical case.** ~~`TintCache` now caches **both** answers per distinct
   sample tuple, so the extra tint-transform evaluation is bounded exactly as
   the sRGB one always was: **292 distinct tuples behind 25,870 texels** on the
   patch that opened the Pass = **one evaluation per 88.6 texels**, not one per
-  texel.
+  texel.~~
+
+  > **★★ CORRECTED 2026-08-27 (295th filing) — THE STRUCK SENTENCE ABOVE IS
+  > WRONG, AND IS KEPT LEGIBLE RATHER THAN REWRITTEN.** The figure was
+  > relayed from `70c5919`'s commit message and this role repeated it. **The
+  > `tint_applied = 292` reading had NO IMAGE CONTRIBUTION AT ALL** — it was
+  > the page's **path fills**. The counter never saw an image, because
+  > `image::decode` constructed its `ColorDiagnostics`, wrote to them and
+  > **dropped them**; that is the defect `Pass 140.2` (`25d73d7`) fixes. A
+  > number was attributed to **a producer that could not have reached the
+  > counter.**
+  >
+  > **The corrected statement, which is STRONGER than the one it replaces:**
+  > both images on that patch are **`/Indexed` with 256-entry palettes**, so
+  > their tint work is bounded by the **palette** — **≤ 256 conversions per
+  > image, at decode time, independent of the image's pixel count** — and
+  > `TintCache` is **not involved**. A structural bound, not a measured ratio
+  > on one page.
+  >
+  > **The worst-case bullet below is UNAFFECTED and stands as written**: it
+  > was measured on a **direct `DeviceN` image**, which is the genuinely
+  > unbounded shape. World-source: `git show 25d73d7`, read here; full
+  > treatment in the `Pass 140.2` *Shipped* entry at the top of this file.
+  >
+  > **`70c5919` is NOT amended** — its hash is cited here, in
+  > `SESSION_LOG.md` and in `ARCHITECTURE.md`, and rewriting a cited commit
+  > is what `tools/check-cited-commits-exist.py` exists to catch.
 - **Deliberate worst case**, built to defeat the cache (16 bpc × 5 colorants =
   an **80-bit key** the cache cannot pack; **490,000 texels**; a type 4
   PostScript transform): **~670 ms → ~925 ms median = 1.37 µs → 1.89 µs per
@@ -394,6 +805,30 @@ audited rather than only its failures: `crates/pdfce-render/src/mesh.rs:122`
 (scoped to meshes, unaffected) and `fixtures/synthetic/mesh-ink/PROVENANCE.md`
 (a measured `0`, still `0`).
 
+> **★★★ CORRECTED 2026-08-27 (295th filing) — THERE WERE FIVE SURVIVORS, NOT
+> FOUR. The heading and the count above are kept as written.** All four
+> listed are real and all four were corrected in `25d73d7`. **A fifth was
+> found by the engineer, only by grepping FORMAT STRINGS**:
+> `crates/pdfce-cli/src/main.rs`'s **runtime note** — the operator-facing
+> `println!` template printed on every subtractive page — which is the class
+> the **288th** filing recorded as invisible to every gate and left
+> unresolved. World-source: `git show 25d73d7`, read here.
+>
+> **★ It was stale in the OPPOSITE direction from survivors 1–4, and that is
+> the finding, not the miss.** The rustdoc comments were wrong because the
+> code moved *past* them; the runtime note had listed the same population
+> **correctly** since `Pass 130.1`, and `Pass 140.0` is what made **it**
+> false. So two copies of one population claim **disagreed for ten Passes,
+> and the MORE VISIBLE copy was the accurate one** — recency and audience are
+> both worthless as evidence of which copy to believe.
+>
+> ⇒ Two consequences carried forward, both in the `Pass 140.2` entry at the
+> top of this file: **a stale claim can be repaired by a CODE CHANGE rather
+> than an edit, leaving no trace of ever having been wrong** (survivor 3's
+> sentence did exactly that); and the format-string gap, at its **second**
+> occurrence for that half specifically, is **promoted to standing rule
+> `R222`** — the habit only, never a gate.
+
 **Four repaired by this filing, in documents this role owns:**
 `docs/FEATURES.md` rows for the colorant buffer, blend modes and the *Planned*
 n-channel buffer; and `docs/ARCHITECTURE.md` §3's crate-layout clause plus §12
@@ -423,13 +858,19 @@ therefore spoken for** and must not be reused, and (b) it overlaps survivors 1
 and 3 above, so the next filing should re-run the sweep rather than assume
 this list is still current.
 
+> **★ RESOLVED 2026-08-27 (295th filing).** `Pass 140.2` is committed as
+> **`25d73d7`** and is filed as a *Shipped* entry at the top of this file.
+> The reservation above did its job: the ID went to the work it was held
+> for. **Instruction (b) also paid** — re-running the sweep is what turned up
+> the fifth survivor the four-item list above did not have.
+
 ---
 
 #### Ledger
 
 | ledger | before | after |
 |---|---|---|
-| Pass IDs | `142.1` (highest); `140.0` in *Backlog* | **`Pass 140.0` moved Backlog → SHIPPED**; **`Pass 140.1` MINTED and SHIPPED**; **`Pass 143.0` filed to *Backlog***. **Highest ID now `143.0`** (`python tools/check-ledger-numbers.py`, re-run after these edits: *"Pass families with headings : up to 143 (highest ID 143.0)"*); next free family **`144`**. ★ **`Pass 140.2` is claimed in the engineer's uncommitted working tree** (see above) — do **not** reuse it. |
+| Pass IDs | `142.1` (highest); `140.0` in *Backlog* | **`Pass 140.0` moved Backlog → SHIPPED**; **`Pass 140.1` MINTED and SHIPPED**; **`Pass 143.0` filed to *Backlog***. **Highest ID now `143.0`** (`python tools/check-ledger-numbers.py`, re-run after these edits: *"Pass families with headings : up to 143 (highest ID 143.0)"*); next free family **`144`**. ★ **`Pass 140.2` is claimed in the engineer's uncommitted working tree** (see above) — do **not** reuse it. **[★ 295th filing: `Pass 140.2` shipped as `25d73d7` and is now headed at the top of this file. Ceiling unchanged at `143.0`; rules moved `R221` → `R222`, next free `R223`.]** |
 | decisions (`ARCHITECTURE.md` §12) | **093** | **093** (unchanged — **no mint**; the probe finding is a *habit*, so it went to an `R`-rule, and the false-pass adjudication has an existing precedent it corroborates rather than a new principle). Next free **094**. |
 | standing rules | **`R220`** | **`R221`** (**MINTED** — a predicate about a capability is computed by the code that provides it, never by a parallel description of when it would succeed). `R219` **amended in place, not re-minted**. Next free **`R222`**. |
 | `SESSION_LOG.md` filings | **293** | **294**. Next free **295**. |
@@ -105832,6 +106273,50 @@ same cause (hashes exist only at commit time), two different failure modes.
   consecutive Pass where the sibling was found inside the Pass. No re-mint;
   ceiling moves for `R221` below, not for this rule.
 
+  **★★★★★ AMENDED AGAIN 2026-08-27 (295th filing) — THE STRONGEST DATUM THIS
+  RULE HAS, AND IT ARRIVED A COMMIT LATE: ON THE REPORTED PATCH, THE ROUTE
+  THE BUG REPORT NAMED ACCOUNTS FOR *NONE* OF THE FIX.** Every amendment
+  above argues the rule from **cost** — enumerating siblings is cheap now and
+  expensive later, and it saves the next session a bug report. `Pass 140.2`
+  (`25d73d7`) supplies something categorically better: an **ablation** on a
+  debug build, filed in the commit that found it.
+
+  | configuration | `cmyk_bridged_pixels` | `cmyk_native_image_pixels` |
+  |---|---:|---:|
+  | route 5 (`/Indexed` over a `Separation`/`DeviceN` base) **reverted**, route 4 (the direct image — **the reported one**) left in place | **25,870** | **0** |
+  | both restored (shipped state) | **0** | **25,870** |
+
+  The two counters are complements, so those 25,870 pixels are the **whole
+  patch** in both rows: with only the reported route implemented, the patch
+  is **fully bridged — completely unfixed**. There is no partial credit
+  anywhere in the table.
+
+  ⇒ **Had the engineer implemented only the route the bug report named, the
+  reported defect would not have been fixed at all.** Route 5 was found by
+  **walking this rule's own checklist** — not by the report, not by a test,
+  not by the operator.
+
+  **★ Why this is filed against the RULE and not only against the Pass.** A
+  cost argument can be discounted by a session in a hurry: *"I'll enumerate
+  next time; the fix works."* **This instance removes that escape** — here
+  the fix did **not** work without the enumeration, and nothing short of
+  ablating the two routes against each other could have shown it, because
+  both routes bridge in the same direction and a reference diff cannot see a
+  defect two producers share equally (see
+  `C:/personal_rag/pdf/lesson_20260827_two_routes_wrong_in_the_same_direction_look_correct_to_a_reference_diff.md`).
+  **A standing rule whose value has been demonstrated this concretely should
+  say so where the rule is READ, not only where the Pass is filed** — that is
+  `R220`'s lesson (a capability documented under its mechanism is
+  unfindable) pointed at this rule's own evidence.
+
+  **★ And note when it arrived: one commit AFTER the Pass it belongs to.**
+  The ablation was run while investigating a *different* error — a wrong cost
+  figure in `70c5919`'s own commit message — so even a Pass that enumerated
+  its routes correctly did not know **which** route mattered until afterwards.
+  **The enumeration is owed a third time: after the fix is planned, after it
+  is measured, and again when a later session measures something adjacent.**
+  No re-mint; ceiling moves for `R222` below, not for this rule.
+
 - **R220 — A CAPABILITY IS DOCUMENTED WHERE THE READER'S *QUESTION* LIVES,
   NOT ONLY WHERE ITS *MECHANISM* LIVES; AND A CLAIM THAT PDFCE HAS NO VERB
   FOR SOMETHING IS CHECKED AGAINST **SOURCE** BEFORE IT IS SENT ANYWHERE.**
@@ -105984,6 +106469,100 @@ same cause (hashes exist only at commit time), two different failure modes.
   **`R151`** (a capability has no caller): this one is about a **gate** having
   less reach than it appears to, which is the same failure one layer down.
   **Ceiling moves `R220` → `R221`; next free `R222`.**
+
+- **R222 — WHEN A DOC-COMMENT CLAIM IS CORRECTED, GREP THE FORMAT STRINGS
+  FOR THE SAME CLAIM IN THE SAME CHANGE.** Minted 2026-08-27 (295th filing),
+  from the `Pass 140.2` / `25d73d7` *Shipped* entry above, at **n = 2** for
+  this half specifically — and the second instance was found by a sweep that
+  had **already run once and reported clean**.
+
+  **The shape.** A claim about *how pdfce currently behaves* — which
+  populations a counter covers, which content still takes a fallback, what a
+  feature does and does not reach — is written down in more than one place,
+  and the copies live in **structurally different kinds of text**:
+
+  - **rustdoc / `//!` module docs** — greppable, close to the code, read by
+    maintainers;
+  - **`println!` / `eprintln!` / `format!` TEMPLATES** — greppable only if
+    you think to look, far from the code they describe, and **read by the
+    operator on every run.**
+
+  An engineer correcting a stale claim greps for **the wording they
+  remember writing**, which is the doc comment. The format string says the
+  same thing in different words, at a different indentation, split across
+  `{}` placeholders and escaped quotes — so it does not match, and it
+  survives. **Every gate this project owns walks past it**:
+  `check-ui-strings.sh` verifies a literal's *location*,
+  `check-disclosure-channel.sh` verifies a note's *route*,
+  `check-metrics-line-contract.py` verifies a metrics line's *shape*. None
+  of them can verify that a sentence is **true**.
+
+  **Two instances:**
+
+  1. **288th filing (`6256c93`, 2026-08-27)** — recorded the class explicitly
+     and left it **unresolved**, with the note that *"a fourth occurrence
+     would argue harder for promotion"* (that tally being the broader
+     stale-disclosure class, `R93`'s family).
+  2. **`Pass 140.2` (`25d73d7`, 2026-08-27)** — the 294th filing's
+     hard-rule-11 sweep reported **four** survivors of a population claim and
+     there were **five**. The fifth was `crates/pdfce-cli/src/main.rs`'s
+     runtime note, found **only** by grepping format strings.
+
+  **★ The half that makes this more than a thoroughness reminder.** The
+  fifth site was stale in the **opposite direction** from the other four.
+  The rustdoc copies were wrong because the code moved past them; the format
+  string had listed the population **correctly** since `Pass 130.1`, and
+  `Pass 140.0` is what made **it** false. So **two copies of one claim
+  disagreed for ten Passes, and the MORE VISIBLE copy was the accurate
+  one.** Both natural heuristics fail: *"the comment is closer to the code"*
+  is wrong, and *"the operator-facing string gets corrected more often"* is
+  wrong in the other direction. **Neither recency nor audience is evidence
+  of which copy to believe — only the code is**, which is why the rule asks
+  for a grep rather than a judgement.
+
+  **★★ A corollary worth its own sentence, because it defeats
+  after-the-fact auditing.** In the same commit, one stale enumeration was
+  **repaired by a code change rather than by an edit**: `Pass 140.0` removed
+  the population the sentence had failed to mention, making an **untouched**
+  sentence true again after ten Passes of being false. **A stale claim can
+  stop being stale with no edit and no trace** — so `git blame` on a
+  currently-true sentence is not evidence it was ever true, and an audit
+  that samples current text cannot recover the history. The grep at
+  correction time is the only cheap moment.
+
+  **What the rule asks for, concretely.** When a change corrects a claim in
+  a doc comment, in the same change: grep the tree for **the claim** — the
+  population, the behaviour, the "what is left" list — across `println!`,
+  `eprintln!`, `format!`, `write!`, `panic!`, `assert!` messages and any
+  string constant assembled into operator-facing output. Search for the
+  **meaning**, not the wording you just edited; the copy you are looking for
+  is by construction the one phrased differently.
+
+  **What this rule does NOT ask for, and it is DECLINED PERMANENTLY: a
+  gate.** Three prior requests to gate the stale-disclosure class were
+  declined on the warrant that **no mechanical gate can content-check a
+  disclosure**, because such a gate would have to know "current behaviour" —
+  the very fact the disclosure exists to report. That warrant is **not
+  weakened by a second occurrence** and the engineer, who found this
+  survivor, states it himself. Do not re-propose one; extend the habit
+  instead. `D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md` is
+  the companion argument.
+
+  **Relation to librarian hard rule 11**, which already names
+  `eprintln!`/`println!` strings in its sweep scope and is what found
+  survivors 1–4. That rule binds the **librarian**, and runs at **filing
+  time — one commit later at best.** `R222` binds the **engineer**, in the
+  **same change**. The window between them is exactly where this survivor
+  lived. Both are **procedural commitments, checkable after the fact** — a
+  reader asks whether the change that corrected a doc comment also grepped
+  the format strings — which is the same species as `R219` and `R220`.
+
+  **Sibling of `R93`** (never trust a comment/label/disclosure without
+  verifying it against the code path it claims to describe) and of **`R220`**
+  (a claim about what pdfce cannot do is checked against **source** before it
+  is sent anywhere). Full derivation:
+  `D:/dev/rag/rust/disclosure_text_must_be_tested_against_producing_branch.md`.
+  **Ceiling moves `R221` → `R222`; next free `R223`.**
 
 ## Update protocol
 
