@@ -96,6 +96,91 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `0d9f4df` — A GATE FOR CITED COMMITS THAT NO LONGER EXIST, AND FOURTEEN THAT ALREADY DIDN'T — no Pass ID, tools/CI commit — 2026-08-27 (284th filing)
+
+**Sourcing.** Hash and adjacency **verified by this role directly**, by
+reading `.git/refs/heads/main` and `.git/logs/HEAD` (no shell tool this
+filing, but git's own on-disk refs are readable as files). `0d9f4df` is
+`HEAD~1`; the one commit that landed after it is `cb45dec` ("docs: the
+handoff's cold-start table, refreshed at the end of the session"), now
+`HEAD`. So: `0d9f4df` **is** an ancestor of `HEAD` — the hash handed to
+this role was correct, unlike the earlier occasion in this same session
+that prompted the "verify it yourself" instruction.
+
+#### What shipped
+
+**`tools/check-cited-commits-exist.py`** — a new gate: every commit hash
+cited anywhere under `docs/` must be an ancestor of `HEAD`. Wired into
+`ci.yml`'s already-full-history job; registered in `check-ci-parity.py`,
+which caught its own omission the first time the CI step was added
+without a matching registration.
+
+```
+cited-commits-exist: clean — every cited commit in 79 document(s) is an ancestor of HEAD.
+```
+
+**The class it catches:** `git commit --amend` / rebase rewrites a commit;
+the old object survives as a **dangling** commit, so `git show` keeps
+resolving it and the citation reads as healthy — until `git gc` (default
+~2 weeks) collects it, after which it resolves to nothing, permanently,
+repairable only from its own subject line. This is a distinct failure mode
+from a claim being *wrong*: it is a claim becoming *unverifiable*, and only
+a check reading a different source (`git`) than the document it validates
+could ever find it.
+
+**Found fourteen pre-existing casualties on first run**, repaired in the
+283rd filing (this role) and by the engineer directly — five of them in
+`docs/core-api/`, the document a separate project builds against. See the
+283rd `SESSION_LOG.md` entry for the per-hash mapping table.
+
+#### ★★ Two design faults in the gate, both found by running it, not by reasoning about it
+
+1. **It flagged the correction notes themselves.** This project corrects
+   in place with the old value kept legible, which legitimately contains an
+   off-`main` hash — the *correct* thing to have written. A gate that fires
+   on the behaviour the project wants is worse than no gate; the only way
+   to satisfy the first version would have been to delete honest history.
+   Fixed by treating a stale hash as **explained** (and silent) when its
+   live replacement appears within a defined window of the citation.
+
+2. **The "explained" window was originally 8 lines — modelling the wrong
+   document.** `SESSION_LOG.md` is append-only and ~68,000 lines; one
+   stale hash can appear seven times across entries written weeks apart,
+   paired with its replacement in a single mapping table placed once. That
+   is the correct shape for an append-only log — the alternative is seven
+   inline notes bloating seven historical entries that must not be
+   rewritten — and an 8-line window called six of those seven occurrences
+   a defect. **Widened to the whole file** after measuring the actual
+   occurrence pattern (counting repeats and their distances) rather than
+   arguing from either side's assertion.
+
+3. **Its file list was hand-written** (`ROADMAP.md`, `SESSION_LOG.md`,
+   `ARCHITECTURE.md`), which is why the five `docs/core-api/` casualties
+   were missed on the first sweep. A hand-maintained list of documents goes
+   stale the same way a hand-copied hash does. **Now discovers every
+   `.md` under `docs/` itself.**
+
+#### The sentence worth carrying forward
+
+> **The documents can rot in a way that reads as perfectly healthy.** A
+> stale citation resolves today, looks right, and is on a timer. That is a
+> different failure from a claim being *wrong* — it is a claim becoming
+> *unverifiable* — and only a check reading a different source (git) than
+> the document it validates could ever have found it.
+
+#### `FEATURES.md`
+
+**No row added.** This is tooling/CI, not a capability — per this file's
+own scope rule.
+
+#### Ledger
+
+No new Pass, no new decision, no new standing rule. Ceiling unchanged:
+rules `R218` (next free `R219`), decisions `089` (next free `090`).
+Confirm with `python tools/check-ledger-numbers.py`.
+
+---
+
 ### `Pass 136.2` (`5f6ac58`) — `object-list` CAN SEE INSIDE FORM XOBJECTS — ★★★ **A SEPARATE `leaf` LINE TYPE, NOT MORE `object` ROWS: A LEAF'S TOKEN RANGE INDEXES THE FORM'S CONTENT STREAM, NOT THE PAGE'S, AND HANDING IT OUT AS AN `object` INDEX WOULD LET A SCRIPT CORRUPT THE PAGE SILENTLY** — ★★ an incomplete leaf list now discloses itself: `form_cycles`/`form_depth_overflows` on the stable line, plus a named sentence for a human — ★ the commit message for this very Pass shipped mangled once, by the exact hazard already recorded in this role's own agent-memory — 2026-08-27 (282nd filing)
 
 **Shipped 2026-08-27.** Commit `5f6ac58` (`5f6ac58e4d233fddebb1fccb9ab425f6b501d74b`). The commit immediately before it

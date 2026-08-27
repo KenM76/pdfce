@@ -67591,3 +67591,73 @@ said it should print `clean` and that confirmation is his to make.
   remembered set alongside the project's other `tools/check-*` gates.
 
 ---
+
+## 2026-08-27 (284th filing) — `0d9f4df`: the gate that finds a stale citation before `git gc` makes it unrepairable, wired into CI and `check-ci-parity.py`; two design faults in it recorded, both found by running it against the real corpus
+
+**Documentation-only filing. No Pass shipped, no code changed, no
+decision or standing rule minted.** Files: `tools/check-cited-commits-exist.py`.
+
+**Ledger, carried forward:** standing rules ceiling **R218** (next free
+R219), decision records ceiling **089** (next free 090), `SESSION_LOG`
+filings **283** (next free **284**, consumed by this entry). Not
+re-verified against `tools/check-ledger-numbers.py` this filing.
+
+**★ Hash verified directly, not relayed on trust this time.** The
+dispatch flagged that this role had been handed a stale hash once
+already today and asked for a check. No shell tool this filing, but
+`.git/refs/heads/main` and `.git/logs/HEAD` are ordinary files and
+readable as such: `0d9f4df` is `HEAD~1`; the sole commit landed after it
+is `cb45dec` ("docs: the handoff's cold-start table, refreshed at the end
+of the session"), which is current `HEAD`. `0d9f4df` **is** an ancestor
+of `HEAD` — this time the hash handed over was correct.
+
+**What shipped.** `tools/check-cited-commits-exist.py`: every commit hash
+cited anywhere under `docs/` must be an ancestor of `HEAD`. Wired into
+`ci.yml`'s full-history job and registered in `check-ci-parity.py`
+(which caught its own initial omission from that registry). Found
+**fourteen** pre-existing stale citations on first run — the same
+casualties the 283rd filing repaired.
+
+**The class it catches, and why no earlier gate saw it:** `git commit
+--amend`/rebase rewrites a commit; the old object survives as a
+**dangling** commit, so `git show` on it keeps working and the citation
+reads as healthy — until `git gc` (default ~2 weeks) collects it, after
+which it resolves to nothing, permanently, repairable only from its
+subject line. `check-passes-filed.py`/`check-commits-filed.py` both
+examine commits that *claim a Pass*; an ordinary prose hash citation
+claims nothing, so neither ever looked at this class.
+
+**Two design faults, both found by running the gate against the real
+corpus, not by reasoning about it in advance:**
+1. **It flagged the project's own correction notes** — a stale hash kept
+   legible beside its live replacement, which is the *correct* thing to
+   have written. A gate that fires on the behaviour the project wants is
+   worse than no gate. Fixed: a stale hash is **explained** (and silent)
+   when its live replacement appears near the citation.
+2. **The "near" window was 8 lines, which modelled the wrong document.**
+   `SESSION_LOG.md` is append-only, ~68,000 lines; one stale hash recurs
+   seven times across entries written weeks apart, paired with its
+   replacement in one mapping table. An 8-line window called six of
+   those seven a defect. Widened to the whole file, after **measuring**
+   the actual occurrence/distance pattern rather than taking either
+   side's assertion.
+3. **Its file list was hand-written** (three named files), which is why
+   five `docs/core-api/` casualties were missed on the first sweep. Now
+   discovers every `.md` under `docs/` directly.
+
+**The sentence worth keeping:** *the documents can rot in a way that
+reads as perfectly healthy. A stale citation resolves today, looks
+right, and is on a timer. That is a different failure from a claim
+being wrong — it is a claim becoming unverifiable — and only a check
+reading a different source (git) than the document it validates could
+ever have found it.*
+
+**`FEATURES.md`:** no row added — tooling/CI, not a capability, per this
+file's own scope rule.
+
+**Still in flight:** none named by this filing.
+
+**For next session:** none named by this filing; the engineer's own
+next-session notes carry any open items from the rest of the session.
+
+---
