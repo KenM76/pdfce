@@ -27,25 +27,27 @@ other four came from the operator's own reports on the GUI channel:**
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `f62df4e` (before this session's final filings) | `git rev-parse --short HEAD` |
-| `git describe --tags` | `v0.14.0-13-g3b9a277` | `git describe --tags` |
-| `origin/main` | ★ **8 commits BEHIND `main` — this work is NOT PUSHED** | `git rev-list --count origin/main..main` |
+| `HEAD` | `0d9f4df` | `git rev-parse --short HEAD` |
+| `git describe --tags` | `v0.14.0-27-g0d9f4df` | `git describe --tags` |
+| `origin/main` | ★ **22 commits BEHIND `main` — none of this is PUSHED** | `git rev-list --count origin/main..main` |
 | tag at `HEAD` | none; highest is `v0.14.0` | `git tag --points-at HEAD` |
 | working tree | **clean** | `git status --porcelain` |
-| newest backup bundle | `pdfce-20260827-0130-3b9a277-full.bundle`, `git bundle verify` says **okay** and *"records a complete history"*; **it covers both code Passes and every filing** — only later *docs* commits can post-date it, which is unavoidable since this file is one of them | `ls -lt D:\Dev\pdfce-backups\` |
-| gates on disk | **18**; 17 run with no arguments | `ls tools/check-*` |
-| CI at `HEAD` | **UNKNOWN AND UNKNOWABLE — `HEAD` HAS NEVER BEEN PUSHED.** There is no run to read | — |
-| `docs/core-api` verbs | **144** | `python tools/check-core-api-verbs.py` |
-| `crates/pdfce-core/src/edit.rs` | **31,655** lines | `grep -c "" …` |
+| newest backup bundle | `pdfce-20260827-end-0d9f4df-full.bundle`, `git bundle verify` **okay** — covers every commit including this handoff's predecessor | `ls -lt D:\Dev\pdfce-backups\` |
+| gates on disk | **19**; 18 run with no arguments | `ls tools/check-*` |
+| CI at `HEAD` | **UNKNOWABLE — `HEAD` HAS NEVER BEEN PUSHED.** No run exists to read | — |
+| `docs/core-api` verbs | **146** | `python tools/check-core-api-verbs.py` |
+| `crates/pdfce-core/src/edit.rs` | **32,159** lines | `grep -c "" …` |
 
-★★ **`main` is 8 commits ahead of `origin` and was deliberately NOT pushed** —
-`CLAUDE.md` rule 8 wants a current go-ahead and none was given. Everything is
-bundled and the bundle verifies, so nothing is at risk; the operator simply has
-not said "push". **Ask before you do.**
+★★ **`main` is 22 commits ahead of `origin` and deliberately NOT pushed.**
+`CLAUDE.md` rule 8 wants a current go-ahead and none was given; the operator was
+asked twice and the question is still open. Everything is bundled and the bundle
+verifies, so nothing is at risk. **Ask before you push.**
 
-★ The eight are: two code Passes (`130.2`, `130.3`), one tool-docstring
-correction, four librarian filings (`273`–`277`), and this handoff. Only the
-first three are code; `check-commits-filed` is green.
+★ **A NEW GATE EXISTS: `check-cited-commits-exist.py`.** Every commit hash cited
+anywhere under `docs/` must be an ancestor of `HEAD`. It found **fourteen**
+pre-existing stale citations, five of them in `docs/core-api/` — the document a
+separate project builds against. All repaired. **If you `git commit --amend` or
+rebase anything that a document already names, this is what will tell you.**
 
 ---
 
