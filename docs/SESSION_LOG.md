@@ -66805,3 +66805,155 @@ at read time (before this filing's own append).
   tag — this filing could not verify it (see above).
 
 ---
+
+## 2026-08-27 (275th filing) — `Pass 130.3` SHIPS (`cd4de8d`): a spot colour painted nothing at all on a subtractive page; a failure count that rose because the renderer improved; recorded suite ground truth found wrong on two patches
+
+**Shipped:**
+- `Pass 130.3` — a `/Separation` spot colour, filled solid with overprint
+  OFF on a page whose group declared `/CS /DeviceCMYK`, rendered completely
+  invisible. `Interpreter::authored_cmyk` was handing Table 149's "which
+  process tints did the source state" answer (`[0,0,0,0]` for any spot-only
+  source, correctly) to the colorant buffer as the paint's own COLOUR,
+  where zero ink is blank paper. New predicate
+  `overprint::names_a_process_colorant` routes a spot-only source to
+  §11.6.6's ordinary sRGB-conversion fallback instead. Deliberately not
+  extended to a mixed `/DeviceN [/Black /Spot]` source. Full writeup:
+  `docs/ROADMAP.md`'s `Pass 130.3` entry (minted directly into Shipped).
+
+**Decisions made this session:**
+- None minted. Ceiling reported unchanged by the engineer: rules `R218`
+  (next free `R219`), decisions `089` (next free `090`) — **relayed, not
+  independently re-run**; this filing has no shell.
+
+**Findings + decisions:**
+- Two obvious repairs for the adjacent `/OP true` case (a spot-only source
+  under overprint, which correctly preserves the backdrop) were built,
+  measured against the suite's own three anti-erasure patches, and
+  **reverted**: ink union `max(c_b, c_s)` broke 6 of 51 patches, painting
+  the flattened tint normally broke 8 of 51, against 4 for the shipped
+  unchanged behaviour. Knocking out is the one thing overprint promises
+  never to do, and both alternatives did it. The refuted
+  `ComponentRule::MoreInk` was removed rather than left callable-and-
+  uncalled (R151).
+- **The fix took the print-conformance suite from 4 failures to 5** —
+  `PCS2_020` and `PCS2_040` were previously scoring `ok` only because the
+  spot ink they should have shown was invisible, so there was nothing for
+  the CMYK painted over it to visibly knock out. Both patches moved
+  measurably closer to Acrobat (mean abs distance `24.76→19.88` and
+  `41.40→28.52`) while the suite verdict moved the other way. **A failure
+  count that rises when the renderer improves is the signature of a false
+  pass being removed**, not a regression — recorded as the transferable
+  finding of this Pass.
+- `tools/suite-check.py`'s own module docstring records a 2026-08-24
+  measurement claiming pdfce draws none of the check marks on two
+  DeviceN-support patches. **Re-measured this session: pdfce draws BOTH
+  image check marks and all ~15 gradient check marks** on those patches;
+  what it actually misses on one of them is the gradient bar behind the
+  marks — a different defect. Not corrected in the tool by this role
+  (`suite-check.py` is a tool, not a doc this role owns) — **flagged as
+  owed to the engineer** to decide whether to amend the docstring.
+- Control measurement: the trap detector run against Acrobat's own
+  renders of the four previously-failing patches trips zero traps on
+  three of them (confirming those failures are pdfce's) and **two** traps
+  on `PCS3_161`, so that patch's reported count of 12 includes instrument
+  noise and is not 12 pdfce defects.
+- Suite state now, adjudicated mode (`tools/suite-check.py
+  --reference-dir`, all 51 reference strips): **51 patches — 5 FAIL, 35
+  pass, 11 UNRESOLVED, 0 render errors.** This figure is **not directly
+  comparable** to the un-adjudicated harness figures recorded elsewhere in
+  `ROADMAP.md`/`FEATURES.md` — the qualifier travels with the number.
+  Remaining FAILs: `PCS2_020`/`PCS2_040`/`PCS2_081` (spot-plane, the
+  n-channel compositing buffer is the blocker), `PCS3_130`/`PCS3_161`
+  (ICC — `iccce`'s side of decision 064, not pdfce's).
+- Tests: new `a_spot_colour_paints_ink_on_a_subtractive_page_too`,
+  confirmed to fail pre-fix and pass post-fix. `cargo test --workspace` —
+  4,348 tests across 118 binaries, zero failures. `cargo fmt --all
+  --check` clean; `cargo clippy --workspace --all-targets -- -D warnings`
+  clean. All 17 argument-free gates green, read individually this time
+  (the engineer flags a prior sweep had misread `tail`'s exit code in
+  place of the gate's own — a general caution on piped gate output worth
+  carrying forward). `cargo +nightly fuzz build` green on Windows.
+  `cargo tree -p pdfce-core`/`-p pdfce-render` — zero GUI, zero network
+  dependencies. Two new committed fixtures; the six older ones regenerated
+  byte-identical.
+
+**Still in flight:**
+- The n-channel spot-colorant compositing buffer remains the single
+  blocker on the three remaining spot-plane FAILs
+  (`PCS2_020`/`PCS2_040`/`PCS2_081`) — `PCS2_040` is a **new** addition to
+  that list this session, not previously named as blocked on it.
+- The `tools/suite-check.py` docstring correction (flagged above) is not
+  yet made — it is a tool file, outside this role's remit to edit
+  directly.
+
+**For next session:**
+- Same as the 274th filing's pointer: the n-channel spot-colorant buffer
+  (`FEATURES.md`'s per-colorant compositing buffer row, `ROADMAP.md`
+  Backlog) is the next natural target — it now blocks three patches, not
+  two.
+- **Operator item, not a pdfce defect:** the engineering machine's D:
+  drive filled to under 3 GB free of 954 GB mid-session, corrupting a
+  debug build and producing linker failures that read like code defects.
+  Recovered by deleting regenerable build artefacts (incremental cache,
+  two cross-compilation target dirs, the fuzz target) and running the
+  test sweep with debug info off; `D:\Dev\pdfce\target` is roughly 12 GB
+  of the total. **Not fixed** — the drive is still ~99% full and the next
+  session will hit it again.
+- Git/backup state still unverified from this role (no shell this
+  filing) — check `D:\Dev\pdfce-backups\` and `git log`/`git remote -v`
+  from a shell before the next commit or tag.
+
+---
+
+## 2026-08-27 (276th filing) — CORRECTION to the 275th filing: the docstring fix recorded as owed was already shipped, one commit later
+
+**Shipped:** none this filing — a records-only correction.
+
+**Decisions made this session:** none.
+
+**Findings + decisions:**
+- The 275th filing (`Pass 130.3`) recorded, in both `ROADMAP.md`'s `Pass
+  130.3` entry and its own "Still in flight" section, that
+  `tools/suite-check.py`'s docstring correction was **owed** to the
+  engineer — that role could not edit a tool file directly. **That was
+  already stale at the moment it was filed**: the engineer had, by then,
+  shipped the fix as `3e70cdb` (*"docs: the harness recorded pdfce failing
+  a criterion it satisfies, and hid a flag that resolves five patches"*),
+  a docs-only, single-file, no-executable-line-changed commit immediately
+  after `cd4de8d` and, as of this filing, current `HEAD`. The 275th filing
+  could not have known — the correction landed after it was dispatched.
+  `ROADMAP.md`'s `Pass 130.3` entry now carries a dated `★ AMENDED
+  2026-08-27, same day` block recording what `3e70cdb` actually changed
+  (the docstring's ground truth, the mechanism of the original
+  misreading, and the `--reference-dir` USAGE rewrite); nothing in the
+  274th/275th filings' own content was otherwise wrong and none of it is
+  retracted.
+- **Sharper statement of the remaining suite state, requested explicitly
+  so a future session does not misfile ICC work as pdfce's:** every
+  remaining **pdfce-owned** failure in the print-conformance suite is now
+  the same single thing — there is no plane for a spot colorant
+  (`PCS2_020`/`PCS2_040`/`PCS2_081`, all blocked on the n-channel
+  spot-colorant compositing buffer). The other two failures
+  (`PCS3_130`/`PCS3_161`) are **ICC transforms** — `iccce`'s side of
+  decision 064 — **and are not pdfce's to fix.** This is stronger than
+  "the buffer blocks three FAILs, not two," which is true but invites a
+  future reader to keep counting toward five; the useful reading stops at
+  three.
+
+**Still in flight:** unchanged from the 275th filing — the n-channel
+spot-colorant compositing buffer remains the next natural target.
+
+**For next session:**
+- **Push/backup state, as relayed by the operator and NOT independently
+  verified by this role (no shell available this filing, per hard rule
+  8):** `main` is reported **4 commits ahead of `origin`, not yet
+  pushed** — `CLAUDE.md` rule 8 requires a current, explicit go-ahead
+  before any push, and none has been given as of this filing. A full
+  backup bundle, **`pdfce-20260827-0049-3e70cdb-full.bundle`**, is
+  reported created, with `git bundle verify` reported as passing
+  (okay and complete). Both figures are recorded here as **operator-
+  reported**, not as this role's own measurement — a future session with
+  a shell should confirm via `git log`/`git remote -v`/`git bundle
+  verify` before treating either as settled.
+
+---

@@ -96,6 +96,215 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 130.3` (`cd4de8d`) — **A SPOT COLOUR PAINTED NOTHING AT ALL ON A PRINT-BOUND PAGE** — ★★★ **`Interpreter::authored_cmyk` was answering Table 149's "which process tints did the source state" question and handing the answer to the colorant buffer as the paint's own COLOUR, where zero ink is blank paper — every spot colour on a page carrying a `/Group /CS` was invisible, and the defect NEEDS a page group to reproduce, which is exactly what a print-bound file carries and a hand fixture usually does not**; ★★★ **A FAILURE COUNT THAT ROSE BECAUSE THE RENDERER IMPROVED — 4 → 5 FAILs, because two patches were "passing" by painting nothing at all**; ★★ **TWO OBVIOUS REPAIRS BUILT, MEASURED AND REVERTED — both broke the exact "overprint must never erase" invariant three other suite patches exist to test**; ★ **recorded ground truth in `tools/suite-check.py`'s own docstring is WRONG about two patches — pdfce actually draws what the docstring says it doesn't** — 2026-08-27 (275th filing)
+
+**Shipped 2026-08-27.** Commit `cd4de8d`; the commit immediately before it is
+`92f8fd3` (the docs-only repair filed as the 274th filing). Both hashes and
+the date are as supplied in the engineer's dispatch — **this filing has no
+shell** and could not run `git log` itself to confirm them independently;
+treat the commit identity as relayed, not verified.
+
+#### The gap, in the operator's terms
+
+A `/Separation /SpotInk /DeviceCMYK` square, filled solid over white paper,
+overprint **OFF**, on a page whose group declares `/CS /DeviceCMYK`, rendered
+**completely invisible** — no diagnostic, every counter green. The identical
+square on a page with no group rendered correctly. The defect needs a page
+group to reproduce, and a page group is exactly what a print-bound PDF
+carries and a hand-authored fixture usually does not — which is why nothing
+caught this for as long as the colorant buffer has existed. Every spot
+colour in every print file pdfce has rendered subtractively was affected.
+
+#### One function, two questions — the transferable part
+
+`overprint::authored_tints` answers ISO 32000-1 Table 149's question — *which
+PROCESS tints did this source state?* A spot colorant has no process
+channel, so a spot-only source correctly answers `[0, 0, 0, 0]`.
+
+`Interpreter::authored_cmyk` was handing that same answer to the colorant
+buffer as the paint's own **colour**, where zero ink means blank paper.
+Neither function was wrong; the bug was routing one question's answer
+through the other's caller, and the two diverge only for a source naming no
+process colorant — every spot, and nothing else.
+
+**Fix:** new predicate `overprint::names_a_process_colorant` gates the
+hand-off. For a source that names none, `authored_cmyk` now returns `None`
+— its own documented way of saying "this space states no tints" — and the
+buffer falls through to §11.6.6's required conversion of the already-resolved
+sRGB, which for a `Separation` **is** its tint transform's output. Flattened
+is a disclosed approximation this project has always carried; absent was not
+an approximation of anything.
+
+**Deliberately not extended** to a mixed source (e.g. `/DeviceN [/Black
+/Spot]`) — the authored read is correct for the channel it names and merely
+incomplete for the spot; falling back there would smear the spot across the
+process channels, the exact failure `authored_tints` exists to prevent.
+
+#### Two candidate fixes built, measured, and reverted
+
+A neighbouring, easily-confused question this Pass deliberately leaves
+alone: a spot-only source under `/OP true` puts every component in Table
+149's "not named in source space" column, so the paint preserves the whole
+backdrop and marks nothing — which reads like the same defect but isn't.
+Both obvious repairs were built and are **refuted**, not merely
+lower-scoring, against the print-conformance suite's own three patches whose
+entire subject is that a white overprinting spot must not knock out what's
+under it:
+
+| behaviour for a spot-only source under `/OP true` | print-suite failures |
+|---|---|
+| preserve the backdrop — unchanged, shipped | **4** |
+| ink union, `max(c_b, c_s)` | 6 |
+| paint the flattened tint normally | 8 |
+
+Knocking out is the one thing overprint promises never to do; both
+alternatives do it. Reasoning recorded at length on
+`overprint::erases_the_paint`; the refuted `ComponentRule::MoreInk` was
+**removed** rather than left callable-and-uncalled (R151).
+
+A shading-site refusal was also built and reverted — it made a missing
+451×29 spot-colour gradient bar appear but **took away the check marks
+drawn under it**, which is the actual pass criterion for that patch.
+Reasoning left at the site.
+
+#### A failure count that rose because the renderer improved
+
+The fix takes the print-conformance suite from **4 failures to 5**. Both
+newly-visible failures were previously counted as passes for the wrong
+reason:
+
+| patch | mean abs distance from Acrobat, before → after | rms, before → after |
+|---|---|---|
+| `PCS2_020` | 24.76 → 19.88 | 63.06 → 55.68 |
+| `PCS2_040` | 41.40 → 28.52 | 79.68 → 63.25 |
+
+Both patches paint CMYK over a spot backdrop and moved **closer** to Acrobat
+on every measure above, while the suite's pass/fail verdict moved the other
+way — because while the spot was invisible there was nothing for the CMYK
+to wrongly knock out, and a white trap cross on white paper has no contrast
+for the detector to find. Five of six cells on `PCS2_040` were blank and
+the harness scored it `ok`. **A failure count that rises when a renderer
+improves is the signature of a false pass being removed** — this harness
+has produced that signature before and will again.
+
+#### Recorded ground truth found wrong, not corrected by this role
+
+`tools/suite-check.py`'s module docstring records, from a 2026-08-24
+measurement, that on two DeviceN-support patches "Acrobat draws two ...
+check marks ... pdfce draws none of them. FAIL." **Re-measured this session
+against the reference renders: pdfce draws BOTH image check marks and all
+~15 gradient check marks**, in the right colour and the right places. What
+pdfce actually misses on one of the two patches is the gradient **bar
+behind** the marks — a different defect, in a different subsystem, that the
+recorded sentence would have pointed a future reader away from. Not edited
+here (`suite-check.py` is a tool, not a doc this role owns) — **flagged as
+owed**: the engineer should decide whether to amend the docstring.
+
+Also measured as a control: the trap detector run against **Acrobat's own
+renders** of the four then-failing patches. Three trip zero traps (those
+failures are pdfce's); one (`PCS3_161`) trips two, so its reported count of
+12 includes instrument noise and is not 12 pdfce defects.
+
+**★ AMENDED 2026-08-27, same day — CORRECTED, NOT OWED: shipped as
+`3e70cdb`.** The paragraph above ("flagged as owed") is superseded within the
+hour of this Pass shipping; the librarian filing that recorded it could not
+have known, because the fix landed after that filing was dispatched. The
+engineer corrected `tools/suite-check.py`'s docstring directly, in commit
+`3e70cdb` (*"docs: the harness recorded pdfce failing a criterion it
+satisfies, and hid a flag that resolves five patches"*) — a docs-only
+commit, one file touched, no executable line changed, the commit
+immediately after this Pass's own `cd4de8d` and (as of this amendment)
+current `HEAD`.
+
+What `3e70cdb` did:
+
+1. Corrected the ground truth **in place**, keeping the wrong original text
+   visible as a quotation, because the shape of the error is the
+   transferable part. The docstring now records pdfce drawing **both**
+   image check marks on one patch, and **both image marks plus all ~15
+   gradient marks** on the other; what pdfce actually misses is the
+   **gradient bar behind them** on one patch — 451×29 device pixels of
+   missing background, marks floating correctly on top of nothing, a
+   different defect in a different subsystem than the one originally
+   recorded.
+2. Recorded the mechanism of the original error: the 2026-08-24 measurement
+   asked the right question — "are the marks there?" — of a **whole-page
+   pixel diff dominated by the missing bar**, with the marks sitting
+   *inside* the region that diff covers. *"This region differs enormously
+   and the marks are in it"* was read as *"the marks are missing."* A
+   large, real, correctly-detected difference swallowed a smaller question
+   asked about the same pixels.
+3. Kept the original warning intact beside the correction — the mark's
+   colour is not a constant of the criterion, so a hue-keyed detector can
+   be fooled by matching the gradient bar instead of the marks — that half
+   was already right and stays.
+4. Rewrote the USAGE block to lead with `--reference-dir`, with both
+   measurements shown: **without** → 5 FAIL, 30 pass, 16 UNRESOLVED;
+   **with** → 5 FAIL, 35 pass, 11 UNRESOLVED — noting `--reference-dir` is
+   the only way to run the control that separates a pdfce defect from an
+   instrument artefact.
+
+#### Suite state now (adjudicated mode, `--reference-dir`, all 51 reference strips)
+
+**51 patches — 5 FAIL, 35 pass, 11 UNRESOLVED, 0 render errors.** This is
+the adjudicated figure (`tools/suite-check.py --reference-dir`, which
+resolves several reference-strip patches otherwise left UNRESOLVED by the
+plain harness run) — **not directly comparable** to the un-adjudicated
+harness figures recorded elsewhere in this file and in `FEATURES.md`'s
+preamble; that qualifier stays attached to this number rather than assumed.
+
+Remaining FAILs: `PCS2_020`, `PCS2_040`, `PCS2_081` — all three the
+spot-plane gap, now visible rather than hidden by the fixed defect;
+`PCS3_130`, `PCS3_161` — both ICC, which is `iccce`'s side of decision 064,
+not pdfce's, and should not be filed as pdfce work.
+
+#### Tests + gates (all measured this session, per the engineer)
+
+- New test `a_spot_colour_paints_ink_on_a_subtractive_page_too` — confirmed
+  to FAIL against the pre-fix binary and pass after; the other five tests
+  in its file unaffected.
+- `cargo test --workspace` — **4,348 tests across 118 binaries, zero
+  failures.**
+- `cargo fmt --all --check` clean; `cargo clippy --workspace --all-targets
+  -- -D warnings` clean.
+- All 17 argument-free gates green, exit codes read individually this
+  time — the engineer notes a first sweep misread `tail`'s exit code in
+  place of the gate's own, which would have shown a red gate as green;
+  worth carrying as a general caution on piped gate output.
+- `cargo +nightly fuzz build` green on Windows.
+- `cargo tree -p pdfce-core` / `-p pdfce-render` — zero GUI and zero
+  network dependencies.
+- Two new committed fixtures; the generator regenerated the six older ones
+  byte-identical.
+
+#### No new rule or decision minted
+
+Ceiling reported unchanged: rules `R218` (next free `R219`), decisions
+`089` (next free `090`) — per the engineer's own run of `python
+tools/check-ledger-numbers.py`. **Not independently re-run by this role**
+(no shell this filing).
+
+#### `FEATURES.md` — updated in this same filing
+
+Overprint SIMULATION row (Fonts & rendering) — folded in the spot-only-
+source fix, the refuted-alternatives table, and the suite figure with its
+adjudicated-mode qualifier attached. Boxes unchanged: **`[x]` core · `[x]`
+cli · `[ ]` gui** — not rounded up; the `gui` column still tracks
+`D:\dev\pdfceGUI` and nothing shipped there this Pass.
+
+#### Outside the repo, worth recording here (operator item, not a pdfce defect)
+
+The engineering machine's D: drive filled to under 3 GB free (of 954 GB)
+mid-session, corrupting a debug build and producing linker failures that
+read like code defects. Recovered by deleting regenerable build artefacts
+(incremental cache, two cross-compilation target dirs, the fuzz target) and
+running the test sweep with debug info off. `D:\Dev\pdfce\target` accounts
+for roughly 12 GB of the total. **Not fixed** — the drive is still ~99%
+full and the next session will hit it again; this is an operator
+disk-management item, not a project one.
+
+---
+
 ### `Pass 130.2` (`fafc0c2`) — **AN OVERPRINTING IMAGE IGNORED OVERPRINT WHILE A RECTANGLE OF THE SAME COLOUR DID NOT** — ★★★ **`Separation`/`DeviceN` image XObjects now composite under ISO 32000-1 §11.7.4.3 Table 149, the one image population the standard does NOT make inert** — 2026-08-26 (273rd filing)
 
 **Shipped 2026-08-26.** Commit `fafc0c2` (`git log`, run here; the commit
