@@ -23522,9 +23522,13 @@ the page**, because the page looks like an ordinary correct render.
 the distinction is the point rather than a naming preference.**
 `overprint_refused` means *the composite **was offered** this paint and
 could not run it*; `overprint_images_unsupported` means *the composite was
-**never offered** this object class at all* — `overprint::composite` has
+**never offered** this object class at all* — ~~`overprint::composite` has
 exactly one call site, in the path and glyph painter, so an image XObject
-never reaches it. Before `97.1b` **nothing counted that**: a page full of
+never reaches it.~~ **True as of this decision's filing date (2026-08-18);
+FALSE since `Pass 130.2` (`fafc0c2`, 2026-08-26) added
+`Canvas::fill_image_overprint` as a second call site for `Separation`/
+`DeviceN`-sourced images — see the dated amendment below.** Before `97.1b`
+**nothing counted that**: a page full of
 images under `/OP true` reported **zero** overprint shortfall. Widening the
 older counter would have made a whole missing object class look like a run
 of ordinary failures **and would have moved a number an operator may
@@ -23540,10 +23544,14 @@ OVER-INCLUSIVE BY DECISION, NOT BY OVERSIGHT. Recorded here so nobody
 scoped *"`DeviceCMYK`, specified directly, NOT IN A SAMPLED IMAGE"*, so a
 sampled image falls to the second row — *"any process colour space (including
 other cases of `DeviceCMYK`)"* — which is `c_s` in all three columns. **For a
-process image, painting it normally IS the conforming behaviour.** The only
+process image, painting it normally IS the conforming behaviour.** ~~The only
 non-inert image cases are a `Separation`/`DeviceN` source (row 3, `c_b` under
 `OP true` — `Pass 130.2`) and spot colorants (no spot planes exist to
-preserve — the n-channel buffer).
+preserve — the n-channel buffer).~~ **`Pass 130.2` SHIPPED the same day
+(`fafc0c2`), later in this same session — the `Separation`/`DeviceN` case is
+no longer owed. The only remaining non-inert, unhandled image case is spot
+colorants with no process colorant present — the n-channel buffer, still
+Backlog. See the dated amendment below.**
 
 **The counter is NOT narrowed to those two**, and that is the decision. Its
 question is unchanged and remains worth asking: ***"was the composite offered
@@ -23675,6 +23683,43 @@ asserting a non-zero gap is *expected* to fail when the gap closes, and
 that failure is the fix being observed) — one occurrence, below this
 project's two-occurrence promotion bar; recorded in `ROADMAP.md`'s
 `Pass 122.6` *Shipped* entry as a named candidate.
+
+**★ AMENDED 2026-08-26 (273rd filing, `Pass 130.2`, `fafc0c2`, no new decision
+number) — `overprint::composite`'s "exactly one call site" now has a second,
+and one of the two population claims made about it two amendments up is
+stale.** Both corrected sentences were true when written and are quoted
+rather than silently rewritten (`R215` (d) discipline, same as this decision's
+own §2 above):
+
+- **Point 3 above** (this decision's own body, dated 2026-08-18) reads
+  *"`overprint::composite` has one call site, in the path and glyph
+  painter"* and *"an image XObject never reaches it."* **An image XObject
+  now DOES reach a composite** — `Canvas::fill_image_overprint`, a second
+  call site, for a `Separation`/`DeviceN`-sourced image. Read the sentence as
+  scoped to 2026-08-18: it was correct of every image population that
+  existed as image-overprint code at the time (none did), and is now correct
+  only of the population Table 149 makes inert (process-space images).
+- **The 2026-08-26 amendment two blocks up** (the "OVER-INCLUSIVE BY
+  DECISION" note, same date as this one but an earlier filing) lists *"the
+  only non-inert image cases are a `Separation`/`DeviceN` source (row 3, `c_b`
+  under `OP true` — `Pass 130.2`) and spot colorants"* — naming `Pass 130.2`
+  as **owed**. `Pass 130.2` **shipped this same day**, later in the session:
+  `fafc0c2`. The `Separation`/`DeviceN` population is done; **spot colorants
+  with no process colorant present remain the only open image case**, and
+  still belong to the n-channel buffer (`ROADMAP.md` Backlog).
+
+**What did NOT change:** the counter's deliberate over-inclusiveness itself.
+`overprint_images_unsupported` still answers *"was the composite offered this
+object class?"*, still counts inert process images by design, and a non-zero
+value is still not evidence of a wrong picture on its own — see the
+disclosure-row correction immediately below, itself amended in this same
+filing. Measured: suite **28 → 31 of 51 patches**, `PCS1_190`/`191`/`192`
+(DeviceN Overprint Black/Yellow/White), `overprint_images_unsupported` 2 → 0
+on each, 0 regressions. Full account: `ROADMAP.md`'s `Pass 130.2` *Shipped*
+entry.
+
+**No standing rule minted; no new decision number.** Same disposition as the
+amendment it corrects.
 
 ### 2026-08-18 (hundred-and-sixty-seventh filing) — decision 070: **A SOFT MASK IS MULTIPLIED INTO THE CLIP, NOT THREADED AS A SECOND MASK THROUGH EVERY PAINT SITE — AND THE PRICE IS PAID IN ONE PLACE, DISCLOSED, RATHER THAN SPREAD ACROSS TEN**
 

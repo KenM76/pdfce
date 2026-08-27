@@ -96,6 +96,207 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 130.2` (`fafc0c2`) — **AN OVERPRINTING IMAGE IGNORED OVERPRINT WHILE A RECTANGLE OF THE SAME COLOUR DID NOT** — ★★★ **`Separation`/`DeviceN` image XObjects now composite under ISO 32000-1 §11.7.4.3 Table 149, the one image population the standard does NOT make inert** — 2026-08-26 (273rd filing)
+
+**Shipped 2026-08-26.** Commit `fafc0c2` (`git log`, run here; the commit
+immediately before it is `a3ad2a5`). Carved out of `Pass 122.1`/`97.1k` on the
+same day (`2c3210a`, 266th filing) once Table 149's own row scoping showed most
+of that entry must NOT be built — see `Pass 122.1`'s Backlog history above,
+now itself pointing here.
+
+#### The gap, in the operator's terms
+
+An overprinting **image** ignored overprint while an overprinting **rectangle
+of the same colour** did not. Before this Pass, `overprint::composite` had
+exactly one call site — the path and glyph painter — so an image XObject
+reached the destination through an ordinary paint whatever `/OP` said, and
+Table 149's third row was never consulted for one.
+
+#### What shipped
+
+- **`Canvas::fill_image_overprint`** (`crates/pdfce-render/src/canvas.rs`) —
+  the image's authored process tints are rasterised a second and third time
+  through the **identical** shader, transform, filter-quality and clip the
+  sRGB texels use — one plane carrying C, M, Y and one carrying K — then
+  composited per sample. Same technique `Pass 130.1` used to carry a
+  `DeviceCMYK` image's ink.
+- **`Interpreter::paint_image_overprint`** and **`Interpreter::image_geometry`**
+  (`interpret.rs`) — the geometry extracted into a shared helper so the
+  ordinary paint and the overprint paint cannot drift apart on filter quality,
+  the anti-alias switch, or the y-flip.
+- **`DecodedImage::overprint`** / **`image::OverprintSource`** /
+  **`image::IndexedOverprint`** (`image.rs`) — the per-texel Table 149 source
+  tints, carried forward from decode.
+- **`overprint::composite_varying`** (`overprint.rs`) — the additive-canvas
+  twin of the CMYK-buffer compositor, so the two arms of one clause cannot
+  disagree with each other.
+
+#### The spec scoping, which is most of the Pass
+
+Table 149's **first row** is scoped, verbatim: *"`DeviceCMYK`, specified
+directly, **NOT IN A SAMPLED IMAGE**"* — excluded by name. The **second row**,
+*"any process colour space (including other cases of `DeviceCMYK`)"*, is
+`c_s` in all three columns, so painting a `DeviceGray`/`DeviceRGB`/`DeviceCMYK`
+image normally under `/OP true` **IS the conforming result** and must **not**
+be "fixed". The **third row** (`Separation`/`DeviceN`) is the only one that is
+not inert: a process component the source space does **not** name takes `c_b`
+under `OP true`.
+
+Within row 3 the code distinguishes **three** outcomes, not two:
+
+1. the space names **every** process colorant → inert, ordinary paint already
+   correct, nothing counted;
+2. the space names **only spot** colorants → Table 149 would preserve the
+   whole backdrop, which with no spot plane means an **erased** image, so
+   pdfce paints the flattened tint transform and **discloses** it;
+3. a **mix** → composited.
+
+#### Measured result (print-conformance suite)
+
+Baseline before this Pass: **51 patches — 7 FAIL, 28 pass, 16 UNRESOLVED, 0
+render errors.** After: **51 patches — 4 FAIL, 31 pass, 16 UNRESOLVED, 0 render
+errors.** No patch regressed.
+
+The three that flipped: `PCS1_190`, `PCS1_191`, `PCS1_192` (DeviceN Overprint
+Black/Yellow/White). Per-patch `overprint_images_unsupported` went **2 → 0** on
+each.
+
+Still failing (four, unrelated to this Pass): `PCS2_020`, `PCS2_081` (both the
+spot-plane gap — the n-channel buffer, Backlog); `PCS3_130` and `PCS3_161`
+(both ICC).
+
+#### ★★★ A counter changed meaning — recorded so nobody diffs across it blind
+
+`overprint_images_unsupported` now counts a **strictly smaller** set. It used
+to answer *"was the composite offered this object class?"* (the answer was no
+for every image, so it counted every image painted under `/OP` whether or not
+anything was owed). It now answers *"was it owed HERE, and did it fail to
+run?"*. A script diffing this number across releases is comparing two
+different questions. `PCS1_010` contributed **4** to it for the counter's
+entire prior life with nothing wrong with the render; it contributes **0**
+now. Both remaining spot-plane cases also raise `overprint_refused`, so the
+`composited = effective − refused` identity now holds across paths, shadings
+and images alike. Both documentation sites (`interpret.rs`'s field rustdoc and
+`main.rs`'s per-key CLI table row) are updated to say so.
+
+#### Three stale claims corrected, and the shape is the finding
+
+`overprint::classify`'s `Indexed` arm, that arm's test, and
+`ColorSpace::indexed_entry` all carried a **measured negative** from
+2026-08-21: `/Indexed` is present in four of the suite's overprint patches and
+was reachable in **none** of them, because every one of those spaces is an
+image colour space and `composite` had no image call site. Every word was true
+when written. Three of those four patches now **pass** on the strength of that
+arm. **Corrected rather than deleted**, because the shape recurs:
+**present-in-the-file and reachable-by-the-renderer are different claims, and
+the first reads as the second unless it says so.** Related finding: a green
+test over an unreachable rule is not a wasted test — it is the half of the fix
+that was already done when the other half arrived.
+
+Also: the `overprint_requested` doc had been wrong about images **twice in
+opposite directions**. The second correction was made by grepping for the
+**claim** ("no image call site", "does not reach it") rather than for the
+counter — because a claim phrased as an **absence** is invisible to a search
+for the thing that now exists, which is how the first one survived a sweep.
+
+#### ★ A doc edit handed to the engineer, not made here
+
+`docs/ARCHITECTURE.md` around its overprint-counter passage still said
+*"`overprint_images_unsupported` means the composite was **never offered**
+this object class at all — `overprint::composite` has exactly one call site,
+in the path and glyph painter, so an image XObject never reaches it"*, and the
+**"IS OVER-INCLUSIVE BY DECISION"** block immediately below it. Both were
+accurate when written and are now false — **corrected in this same filing**
+(see `ARCHITECTURE.md` §12 amendment, below), rather than left for a future
+sweep.
+
+#### Tests + gates (all measured this session, not inferred)
+
+- New: `crates/pdfce-render/tests/overprint_image.rs`, **5 tests**, all pass.
+- `cargo test --workspace` — GREEN, no failures anywhere.
+- `cargo fmt --all --check` — clean. `cargo clippy --workspace --all-targets
+  -- -D warnings` — clean.
+- All **17** argument-free gates in `tools/check-*` run and GREEN (the 18th,
+  `check-image-colorspace-truth.py`, needs a fixture dir).
+- `cargo +nightly fuzz build` — GREEN, run on Windows.
+- `cargo tree -p pdfce-core` (99 lines) and `-p pdfce-render` (135 lines): zero
+  egui/eframe/winit/wgpu/glow and zero network-client hits. **Rule 2 (GUI-core
+  separation) intact.**
+
+#### New committed fixtures
+
+`fixtures/synthetic/overprint/` — six hand-authored 100×100 pt PDFs plus
+`PROVENANCE.md`, generated by the new `tools/gen-overprint-image-fixtures.py`.
+**No byte of the print-conformance suite is reproduced**; the shapes are read
+off Table 149 and use a colorant set (`/Black` over a cyan-plus-black
+backdrop) no patch in the suite uses.
+
+The load-bearing pair needs no reference render and no remembered constant:
+§11.7.4.3 is written about a source **colour**, not a source **object**, so an
+overprinting `/DeviceN [/Black]` rectangle and an overprinting
+`/DeviceN [/Black]` image of the same tint over the same backdrop must land on
+identical pixels. Before this Pass they were 255 levels apart in two channels
+— rectangle cyan, image white — and nothing but the comparison could say
+which was wrong.
+
+The additive twins render `(0, 22, 255)` rather than cyan, **symmetrically**,
+and the test asserts the symmetry and **not** the colour, so the per-colorant
+buffer can improve it later without a test having frozen the approximation.
+Reason: an sRGB canvas has no colorant planes, so a 100C+100K backdrop
+reconstructs through `rgb_to_cmyk` as `C=1 M=0.914 Y=0 K=0.863` — the same
+colour by a different route — and preserving that reconstructed M is what
+turns the result blue.
+
+#### No new rule or decision minted
+
+Ceiling unchanged: rules **`R218`** (next free `R219`), decisions **`089`**
+(next free `090`). Confirmed against `python tools/check-ledger-numbers.py`,
+which reported exactly that this session.
+
+#### `FEATURES.md` — updated in this same filing
+
+- **Overprint SIMULATION** row (Fonts & rendering) — corrected the false
+  *"Image XObjects have no overprint path at all"* claim; folded in the shipped
+  mechanism, the row-3 three-way outcome, and the **28 → 31 of 51** figure.
+  Boxes unchanged: **`[x]` core · `[x]` cli · `[ ]` gui**, per the general
+  overprint/blend-space GUI pause — the `gui` column tracks `D:\dev\pdfceGUI`
+  and nothing was sent there for this Pass. **Not rounded up.**
+- **Planned → Per-sample image overprint (Separation/DeviceN images only,
+  `Pass 130.2`)** row — **removed**, folded entirely into the Implemented row
+  above; the capability has fully shipped.
+- **Planned → native colorant path for mesh shadings** row — corrected its
+  forward pointer ("prerequisite MET, feature still unbuilt" → now built for
+  `Separation`/`DeviceN` images; this row's own scope, mesh, is unaffected).
+- **Planned → per-colorant (n-channel) compositing buffer** row — corrected
+  its forward pointer ("is now `Pass 130.2`" → "has now shipped"); only the
+  spot-colorant image population remains this row's own scope.
+
+#### Verification
+
+`cargo test --workspace` green; `cargo fmt --check` clean; `cargo clippy
+--workspace --all-targets -- -D warnings` clean; all 17 argument-free gates
+green; `cargo +nightly fuzz build` green (Windows); `cargo tree` invariant
+verified on both `pdfce-core` and `pdfce-render`.
+
+#### Still open, not touched by this Pass
+
+The remaining 4 suite FAILs split 2 spot-plane / 2 ICC. The per-colorant
+(spot) compositing buffer is now the single blocker on both `PCS2_020` and
+`PCS2_081`.
+
+#### Outside the repo, worth recording here
+
+`D:\Dev\pdfce-private\suite\manifest.json` and its `README.md` pointed
+`PDFCE_SUITE_DIR` at a **pre-scrub directory name that no longer exists** —
+the corpus directory had been renamed to `D:\Dev\temp\suite-patches` and the
+private map was never updated. A session following it gets "corpus not
+found" and would reasonably conclude the corpus is missing. **Repaired
+2026-08-26** — worth a line here because that map is the **only** place the
+two vocabularies meet, and nothing in this repository can ever contradict a
+stale path in it.
+
+---
+
 ### `Pass 134.0` (`fd71e4f`) — **A FIELD'S PROPERTIES ARE EDITABLE AFTER IT IS PLACED, INCLUDING ITS SIZE** — ★★★ **every property the five `New*` specs accept was settable ONLY at creation, so the only way to change one was DELETE AND RE-PLACE — losing position, name, tab order and value to change a tooltip**; ★★★ **THE PRODUCER GATES ARE CHECKED AGAINST THE RESULT, NOT AGAINST THE REQUEST, and that is the one thing an edit verb must do that a creation verb does not** — clearing `/MaxLen` breaks Table 228's comb gate *without the request mentioning comb*, and clearing `combo` breaks Table 230's `Edit` gate *without mentioning `editable`*; ★★★ **THREE PLACES ACROBAT SILENTLY CORRUPTS AND PDFCE DOES NOT** — shortening `/MaxLen` under a stored value, removing a selected option, changing a check box's export value while it is checked — and pdfce neither refuses (shortening a limit is a legitimate authoring act) nor repairs (truncating data is inventing document state): it **discloses**, via `FieldEditOutcome::value_no_longer_fits`; ★★ **the FIELD/WIDGET split is SOURCED, not invented** — Acrobat's own scripting model divides properties that *"apply to all widgets that are children of that field"* from ones *"specific to individual widgets"*, and getting it backwards is **invisible on a one-widget field and wrong on every radio group**; ★★ **RESIZE IS A DIFFERENT OPERATION FROM MOVE, and §12.5.5 is why** — a pure translation is exact for free, a changed extent scales the appearance, so `edit_widget` compares the **extent** and rebuilds only then (measured: resize → 2 objects `regenerated=1`; translation → 1 object `regenerated=0`); ★★ **`move_widget` ALREADY EXISTED, public and CLI-wired, and the request's survey of `EditSession` verbs missed it while presenting itself as complete**; ★ **`#[non_exhaustive]` blocks struct literals from OUTSIDE the crate — which is exactly what `pdfceGUI` is — and it was found by writing the INTEGRATION test, the only test that stands where the consumer stands**; ★ **no `field_type` property exists, deliberately: Acrobat has offered no type conversion since Acrobat 6, and pdfce models the limit by making the request IMPOSSIBLE TO EXPRESS rather than by returning an error for it** — 2026-08-26 (272nd filing)
 
 **Six files, +2,663 / −23 lines** *(`git show --stat fd71e4f`, run here —
@@ -2257,6 +2458,12 @@ the Backlog amendment on `Pass 97.1k` and `Pass 122.1`.
 > carefully, checked against the counter, and still overstated the debt by
 > most of a feature — because every check ran against pdfce's own plumbing
 > and none ran against the clause.
+>
+> **★ AMENDED 2026-08-26, 273rd filing — `Pass 130.2` (`fafc0c2`) SHIPPED.**
+> The *"now `Pass 130.2`, Backlog"* pointer two paragraphs up is stale; that
+> entry moved to *Shipped* the same day it was written. Suite **28 → 31 of 51
+> patches**. The spot-colorant half named alongside it is unaffected and
+> still belongs to the n-channel buffer, still Backlog.
 
 **Residual on `Pass 97.1k`:** **mesh shadings** (a whole population, still
 resolving to sRGB before compositing) and **images with no ink to keep**
@@ -83145,11 +83352,12 @@ reading its image dictionary.
 **RE-SCOPED.** What remains of this entry is exactly one population:
 `Separation`/`DeviceN` images, where Table 149's THIRD row takes `c_b` for a
 process component under `OP true` and the backdrop must survive. **That is
-carved out as `Pass 130.2`** (Backlog, immediately below), because its blocker
-is specific and measurable and does not resemble the rest of this entry: the
-`DeviceN` base's tint-transform output is not carried by `Pass 130.1`'s
-colorant capture. Spot colorants under a process source are the other
-non-inert case and belong to the n-channel spot buffer, already filed.
+carved out as `Pass 130.2`** — **SHIPPED 2026-08-26** (`fafc0c2`; see
+*Shipped*, top of section) — because its blocker was specific and measurable
+and did not resemble the rest of this entry: the `DeviceN` base's
+tint-transform output was not carried by `Pass 130.1`'s colorant capture, and
+now is. Spot colorants under a process source are the other non-inert case
+and belong to the n-channel spot buffer, still Backlog.
 
 **★★ THE ACCEPTANCE CRITERION ABOVE IS NOW UNSATISFIABLE AND WOULD FAIL A
 CORRECT IMPLEMENTATION.** Quoted rather than silently rewritten, per `R215`
@@ -83167,64 +83375,6 @@ image sources are process spaces.
 meeting it would be the regression. ★ Both criteria were written against a
 COUNTER rather than against the CLAUSE the counter reports on, which is the
 transferable half.
-
----
-
-### `Pass 130.2` — `Separation`/`DeviceN` IMAGES UNDER OVERPRINT — the ONE image population Table 149 does not make inert
-
-**Filed 2026-08-26 (two-hundred-and-sixty-sixth filing, amendment), carved out
-of `Pass 122.1` after `2c3210a` read Table 149.** Pass ID assigned by
-`pdfce-librarian` under the engineer's explicit delegation in that dispatch.
-
-**Why this is a Pass and not a Backlog note.** It has a named blocker, a named
-mechanism, and three named fixtures with measured numbers — everything a Pass
-entry is for — and leaving it welded to `Pass 122.1` would keep it attached to
-an entry that is now mostly INERT, which is precisely the misreading the
-`2c3210a` correction exists to prevent.
-
-**The clause.** ISO 32000-1 §11.7.4.3 Table 149, THIRD row (`Separation` /
-`DeviceN` source): a **process component takes `c_b` under `OP true`**, so an
-overprinting `DeviceN` image must **PRESERVE the backdrop** rather than paint
-over it. This is the row the second row's blanket `c_s` does not cover.
-
-★ **The rules depend on colorant NAMES alone**, so they resolve **once per
-image**, exactly as `Pass 122.6`'s shading path already resolves them once per
-shading. There is no per-pixel classification to invent — the shape is
-already shipped, one object class over.
-
-**The blocker, and it is narrower than "colorants":** `Pass 130.1` (`5dd4083`)
-captures per-pixel colorants **only for a `DeviceCMYK` base**. A `DeviceN`
-base's **tint-transform output is not carried**, so `composite_cmyk_image`
-receives nothing to overprint with. That, not the absence of a colorant path,
-is the work.
-
-**Measured, and the two numbers must be read together** (hard rule 10 — each
-figure beside the one that scopes it; denominator: three patches, one suite,
-one render configuration):
-
-| patch | `overprint_images_unsupported` | `cmyk_native_image_pixels` |
-|---|---:|---:|
-| `PCS1_190` | **2** | **0** |
-| `PCS1_191` | **2** | **0** |
-| `PCS1_192` | **2** | **0** |
-
-★ **The `0` is the load-bearing half.** A non-zero `overprint_images_unsupported`
-alone proves nothing after `2c3210a` — it counts inert process images too. It
-is `cmyk_native_image_pixels = 0` **beside** it that says these images reached
-the buffer with no ink of their own, which is the `DeviceN`-base gap.
-
-**Acceptance.** `cmyk_native_image_pixels` non-zero on `PCS1_190`/`191`/`192`;
-their `overprint_images_unsupported` falls to **0** *(these three are the
-non-inert population, so unlike `Pass 122.1`'s quoted criterion this one is
-satisfiable)*; no change to the suite-wide count on process-image patches;
-corpus A/B byte-identical elsewhere.
-
-⇢ **Possible, not established: this may be the Pass that delivers `Pass
-122.1`'s `PCS 8.2` check mark.** That entry's own diagnosis names **`DeviceN`
-images** overprinting a yellow mark, and records `overprint_images_unsupported
-= 2` for it — the same figure all three patches above carry. **Stated as a
-hypothesis with its check named**, not as a claim: confirm by rendering
-`PCS 8.2` after the fix, not by matching the number.
 
 ---
 
