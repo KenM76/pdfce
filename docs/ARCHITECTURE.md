@@ -8186,9 +8186,15 @@ with a forward pointer.
   - **Open residuals (named):** `/Alt`/`/E` counted-not-substituted;
     nested `/ActualText` outermost-wins; artifacts
     excluded-by-policy but present in runs; structure-tree order
-    recognition-only; derived layout assumes axis-aligned text
+    recognition-only; ~~derived layout assumes axis-aligned text
     (rotated text over-produces line breaks — cannot affect sourced
-    chars); canvas text-selection deferred WITH its spec written
+    chars)~~ **[DISCHARGED 2026-08-27, `Pass 139.0`/`139.1`/`139.2`,
+    `c362b6b`, decision 091 below — `ExtractedGlyph::direction` is
+    published and every derived-layout threshold is resolved into the
+    line's own frame. The parenthetical's "cannot affect sourced chars"
+    was true and was also the reason this residual was survivable for so
+    long; what it did affect was every glyph BOX and therefore every
+    hit test.]**; canvas text-selection deferred WITH its spec written
     (verified needing no core addition — `ExtractedGlyph` already
     carries per-glyph `LadderRung` + geometry).
   - Ship stats: 5,469 new `pdfce-core` lines (`textstring.rs`,
@@ -25742,3 +25748,89 @@ free 072.**
   **No new standing rule number.** Rule 8 is amended, not replaced;
   `R218` is unchanged, next free `R219`. **Ceiling moves 089 → 090; next
   free 091.**
+
+- **2026-08-27 — Decision 091. A READING API PUBLISHES THE PLACEMENT, NOT
+  THE PROVENANCE; AND WHEN A SCALAR CANNOT REPRESENT THE ANSWER, PUBLISH
+  THE PAIR BESIDE IT RATHER THAN REDEFINING THE SCALAR.** Two halves of
+  one principle, both settled while shipping `Pass 139.0`/`139.1`/`139.2`
+  (`c362b6b`) — text extraction publishing a glyph's writing direction.
+  Recorded together because they answer the same question from opposite
+  ends: *what does a reading surface owe its consumer, and what may it
+  charge them for it?*
+
+  **Half one — publish the placement, not the provenance.**
+  `ExtractedGlyph` published `advance` and `size` as **magnitudes** (the
+  lengths of the two transformed basis vectors of ISO 32000-1 §9.4.4's
+  text rendering matrix) and discarded their directions, so every
+  consumer had to assume text ran along `+x`. The direction **was**
+  already derivable — `GlyphProvenance` carries `text_matrix` and `ctm` —
+  and the tempting fix was to tell consumers to enable
+  `capture_provenance`. **Rejected.** Provenance is the **editing**
+  substrate: it is off by default, and it costs an owned font-resource
+  name plus an `Arc` clone **per glyph**. A reader that only wants to
+  know which way a line runs must not pay the surgery's price.
+
+  > **The test: is the fact a property of the thing's PLACEMENT, or a
+  > record of HOW IT CAME TO BE PLACED?** `direction` is the former —
+  > exactly like `x`, `y`, `advance` and `size`, the four numbers it now
+  > sits beside — so it belongs on the always-published struct. A
+  > resource name, an operator index, a source-object id are the latter,
+  > and belong behind the opt-in.
+
+  Concretely: `ExtractedGlyph::direction: (f32, f32)`, the normalised `x`
+  basis of `Trm`, `(1.0, 0.0)` for ordinary horizontal text **and for a
+  degenerate matrix**, so a consumer that ignores the field is unchanged.
+  `up()`, `advance_end()`, `cell()`, `TextRun::direction()` and the free
+  function `text_extract::glyph_cell(..)` follow from it. That free
+  function is itself an application of **`R92`**: the box arithmetic it
+  replaces had been written out **four times** — `layout`,
+  `page::extend_covered`, `text_edit::model`'s line accumulator, and the
+  CLI — each assuming `(1, 0)`, i.e. one question answered in four places
+  with no single place to fix it.
+
+  **Half two — keep the scalar, publish the pair.** `caret_x` and
+  `caret_on_line_nearest_x` return a page-space `x` for a caret slot.
+  On a vertical line every slot shares one `x`, so the scalar's answer is
+  degenerate. The tempting fix was to **redefine** the scalar as
+  "distance along the line" and let callers reinterpret it.
+  **Rejected, and both are kept, undeprecated.** A scalar returning the
+  same number for every slot on a vertical line is **the honest answer a
+  scalar can give**; and for horizontal text — which is what an Up/Down
+  "desired column" *means* — it is exactly right. Redefining it would
+  silently change the meaning of every existing call site while the type
+  stayed identical, which is the least detectable kind of breaking
+  change. New verbs were added instead: `EditableTextModel::caret_point`
+  → `Option<(f32, f32)>` and `caret_on_line_nearest_point(line, x, y)`.
+
+  **Why these are the same decision.** Both are cases where the true
+  answer is a **vector** and the published type was a **scalar**, and in
+  both the cheap-looking repair (derive it from somewhere else; reinterpret
+  the existing field) preserves the type signature while moving the cost
+  onto the consumer. **The pattern to recognise: an extraction or query
+  API that publishes a magnitude where the source had a vector.** It is
+  invisible until a file exercises the missing component — here, `Tm =
+  [0 1 -1 0 e f]`, which virtually every CAD exporter emits and virtually
+  no word processor does — and by then every consumer has baked in the
+  assumption. `pdfceGUI` had: ~400 lines of `canvas::textsel::writing`
+  existed only because eight bytes were not published, and the workaround
+  could not work, because the broken segmentation had already destroyed
+  the evidence it needed (only **10 of 72 runs** held two glyphs).
+
+  **Precedent, one Pass earlier, same shape:** `Pass 138.0`'s
+  `PickedLine::object_index: usize` could not name a leaf inside a form
+  XObject, so **the field itself was the bug**, not a symptom of one.
+  That one was fixed by widening the type (`target: HitTarget`) because
+  no correct answer existed in the old type at all; **this one was fixed
+  by adding beside it**, because the old type's answer stays correct for
+  the case it was written for. **The discriminator is whether the
+  existing type has any true answer left** — if yes, add; if no, widen.
+
+  **Body-section update, filed in this same edit:** none required beyond
+  §12. §4's API-contract narrative does not enumerate `ExtractedGlyph`'s
+  fields; the field-level contract lives in
+  `docs/core-api/01-reading-and-model.md` §8.4.1, written by the engineer
+  in `c362b6b` itself and checked by `tools/check-core-api-verbs.py`.
+
+  **No new standing rule number.** `R219` is amended in place (its first
+  filed enumeration), not re-minted; next free `R220`. **Ceiling moves
+  090 → 091; next free 092.**

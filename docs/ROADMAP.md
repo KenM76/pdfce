@@ -96,6 +96,345 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 139.0` + `Pass 139.1` + `Pass 139.2` (`c362b6b`) — TEXT EXTRACTION PUBLISHED THE ADVANCE AS A LENGTH AND THREW THE DIRECTION AWAY, SO EVERY CAD TITLE BLOCK CAME BACK ONE LETTER PER LINE — ★★★★ A PASS-ID COLLISION IS RESOLVED IN THIS FILING AND THE BACKLOG `Pass 139.0` FILED YESTERDAY IS RENUMBERED `Pass 140.0` — ★★★ THE SECOND COPY OF THE ASSUMPTION LIVED IN A SECOND MODULE AND ITS TESTS WENT ON PASSING FOR A DIFFERENT REASON — ★★ THREE FIXTURES BECAUSE SABOTAGE PROVED THE FIRST COVERED NOTHING — ★ FIRST FILED ENUMERATION UNDER `R219` — 2026-08-27 (291st filing)
+
+#### ★★★★★ FIRST, THE PASS-ID COLLISION, BECAUSE IT RENAMES AN ENTRY CITED IN THE TWO FILINGS DIRECTLY BELOW THIS ONE
+
+**`Pass 139.0` names two different features as of this dispatch, and that
+is a hard-rule-2 violation that had to be resolved before anything else
+could be filed.**
+
+- **`c362b6b`** — pushed to `origin/main`, its commit message titled
+  *"Pass 139.0/139.1/139.2 — text extraction publishes the writing
+  direction…"*, and `docs/core-api/01-reading-and-model.md` §8.4.1 inside
+  that same commit headed *"Text is not always horizontal — `direction`
+  (`Pass 139.0`)"*.
+- **The Backlog entry opened yesterday by the 289th filing** — a
+  `Separation`/`DeviceN` image bridging through sRGB — also headed
+  `Pass 139.0`, and cited as `Pass 139.0` at four places in
+  `SESSION_LOG.md` and three in this file.
+
+**Resolution: the shipped work keeps `139.0`/`139.1`/`139.2`; the
+un-started Backlog entry is renumbered `Pass 140.0`.** The reasoning, so
+a later session does not re-open it:
+
+1. **A commit message is immutable and a Backlog heading is not.** The
+   shipped ID is written into a pushed commit's subject line, its body,
+   and a committed document inside the same diff. Renumbering *that* half
+   would either require rewriting published history — categorically
+   forbidden by `CLAUDE.md` rule 8, and the exact mechanism
+   `tools/check-cited-commits-exist.py` (`0d9f4df`) was built after
+   fourteen casualties of — or leave a permanent, unfixable disagreement
+   between `ROADMAP.md` and a commit anybody can read on GitHub.
+2. **The Backlog entry has shipped nothing, cites no hash, and is one
+   day old.** Every citation of it is in this project's own documents,
+   all of which this filing can reach and amend in the same edit.
+3. **`140` was free** — `python tools/check-ledger-numbers.py`, run this
+   filing, reported *"Pass families with headings : up to 139"* and did
+   not list `140` among the thirty CLAIMED-BUT-NOT-YET-HEADED ids
+   (`5, 9, 9c, 10, 13, 22, 31, 54…129`). Verified before the renumber,
+   not assumed.
+
+**★ This is still a reuse, and it is recorded as one rather than tidied
+away.** Hard rule 2 says a Pass ID is never reused for a different
+feature; between the 289th filing and this one, `139.0` named the
+`DeviceN` image defect, and it now names rotated-text extraction. The
+rule was broken by the *allocation*, not by this repair — and the repair
+that costs least is the one that leaves the immutable half alone. Every
+document that said `Pass 139.0` and meant the `DeviceN` defect carries a
+dated pointer to `Pass 140.0` as of this filing: the Backlog heading
+itself, the 289th filing's ROADMAP entry (amendment footer), `R219`'s own
+amendment text in *Standing rules*, and the 289th/290th `SESSION_LOG.md`
+entries (amendment footers).
+
+**★★ The mechanism, because it will recur and is cheap to prevent.** The
+Backlog opener and the shipped work were allocated by two different
+readers of the same ceiling within about twenty hours. `check-ledger-
+numbers.py` reported the ceiling as *"up to 138"* at both moments,
+because **the gate reads headings, and a number claimed in a Backlog
+heading is only visible once that heading exists** — the engineer
+allocating `139.0` for a code Pass had no way to see that the librarian
+had allocated `139.0` for a Backlog entry unless he read the Backlog. The
+gate did not fail: it reported *"clean — no duplicate Pass, rule, or
+decision numbers"* on the pre-collision tree, because only one of the two
+`139.0`s was written down at that point. **Not promoted to a standing
+rule this filing** (`n = 1`), but recorded as a named candidate: *a
+number allocated in one document and consumed in another is allocated
+twice unless the allocator is the same role.* The cheap habit that would
+have caught it: re-run `check-ledger-numbers.py` at the moment of
+allocation, not only at the moment of filing.
+
+#### The defect
+
+`ExtractedGlyph` published `advance` and `size` as **magnitudes** — the
+lengths of the two transformed basis vectors of ISO 32000-1 §9.4.4's text
+rendering matrix — and discarded their **directions**. `x`/`y` were exact
+and orientation-independent; everything downstream then had no choice but
+to assume the text ran along the page's `+x` axis.
+
+True of virtually every word-processor page. **False of every CAD title
+block**, which stamps its source path with `Tm = [0 1 -1 0 e f]` — that
+is ordinary horizontal-mode text placed by a rotated matrix, **not**
+§9.7.4.3 vertical writing mode (`/WMode 1`), which is a different feature
+and is still not implemented.
+
+Every derived-layout threshold in `text_extract::layout` was stated in
+page axes, so a rotated line failed them in **two independent ways**:
+
+| angle | what happens | clause that fires |
+|---|---|---|
+| **90° / 270°** | one advance lands entirely in `Δy`, exceeding `line_gap_ratio × size` for any glyph wider than a third of an em | the **baseline** clause |
+| **180°** | the step is in `−x` while `advance` is a positive magnitude, so `Δx − advance ≈ −2·advance` | the **backward-jump** clause |
+
+Either way, the verdict was **a derived line break between every letter**.
+
+**Measured on the operator's own SOLIDWORKS drawing set** (`SW41177.pdf`,
+page 36, title-block source path stamped vertically): **82 glyphs in 72
+runs separated by 71 derived line breaks, for one line of text** — 71
+breaks over 81 inter-glyph steps, **88 %**. It pasted into a text editor
+as one character per line. Acrobat returns one line.
+
+The same assumption corrupted **every box**. For a 90° glyph at
+`(100, 300)` with `advance 8.7` and `size 12`, `min(x, x + advance)` gives
+`x ∈ 100..108.7` while the ink is at `x ∈ 91..103` — a box overlapping its
+own glyph by about a third and hung off the wrong corner.
+`EditableTextModel::hit_test` uses those boxes, so a press on the middle
+of a rotated letter was **outside every line box** and the nearest-line
+fallback decided. Driven by the consuming shell: a sweep down a
+six-letter 90° string selected **five of six**; a sweep along an
+eight-letter 180° string selected **none of eight**, both ends having
+collapsed onto one caret slot.
+
+**Origin:** an open request on the `pdfceGUI` channel,
+`D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/request_extraction_drops_the_writing_direction.md`
+(from `pdfceGUI`, 2026-08-26), carrying two asks plus a doc-comment
+correction reported alongside. **All three shipped.** The empirical half
+is filed at
+`C:/personal_rag/pdf/lesson_20260826_rotated_text_extraction_axis_aligned_segmentation.md`
+(updated this filing to record the resolution) — it is not duplicated
+here.
+
+#### `Pass 139.0` — publish the direction
+
+```
+ExtractedGlyph::direction: (f32, f32)   normalised x basis of Trm
+ExtractedGlyph::up() / advance_end() / cell()
+TextRun::direction() -> (f32, f32)
+text_extract::glyph_cell(x, y, advance, size, direction) -> Rect
+text_extract::SAME_DIRECTION_COS: f32 = 0.999_39      (≈ 2.0°)
+ExtractOptions::same_direction_cos                    (new knob)
+```
+
+`(1.0, 0.0)` for ordinary horizontal text **and for a degenerate matrix**,
+so a consumer that ignores the field is unchanged.
+
+**★ NOT via `capture_provenance`, and the reason is a design principle
+worth recording.** `GlyphProvenance` carries `text_matrix` and `ctm`, from
+which the direction **is** derivable — but provenance is the **editing**
+substrate, is **off by default**, and costs an owned font-resource name
+plus an `Arc` clone **per glyph**. A reader that only wants to know which
+way a line runs should not pay the surgery's price. **Direction is a
+property of the glyph's placement, exactly like the four numbers beside
+it.** Minted as **decision `091`** (`ARCHITECTURE.md` §12), first half.
+
+**★ `glyph_cell` is a function because the expression it replaces was
+written out four times** — in `layout`, in `page::extend_covered`, in
+`text_edit::model`'s line accumulator, and in the CLI — each time
+assuming `(1, 0)`. That is `R92`'s failure mode exactly: one question
+answered in four places, drifting into being wrong **together**, with no
+single place to fix it.
+
+**★ `advance`'s doc comment was wrong on both its claims** and is
+corrected. It read *"Horizontal advance in default user space, including
+`Tc`, `Tw`, `Tz` and any `TJ` adjustment attributed to this glyph."* It
+is not horizontal, **and `TJ` is not in it** — `show_array` applies the
+adjustment to the text matrix **before** the glyph is placed (Table 109:
+the number *"shall be subtracted from the current horizontal
+coordinate"*), so it is already visible in `x`/`y`. **Two readers
+believed that sentence and lost time to it.**
+
+**★ `advance` stays unsigned, and that limit is now named rather than
+hidden.** A glyph whose §9.4.4 displacement came out negative steps
+*backward* along `direction`, and the sign is not published. The
+alternative — a signed advance with `direction` flipping 180° mid-run —
+is worse for every consumer that wants to orient a caret, and no such
+glyph exists in the corpus.
+
+#### `Pass 139.1` — segment in the line's own frame
+
+`layout::classify` resolves the step from the previous glyph's **end**
+into the line's frame: `along = d · dir`, `perp = d × dir`. **No new
+ratio and no threshold retuned** — for `dir = (1, 0)` these are
+`Δx − advance` and the `|Δy|` term, term for term, so a horizontal page's
+output is **unchanged**. The cursor now carries the end **point** (origin
+advanced along its own direction) rather than a scalar.
+
+**One rule is new: a direction change is itself a line break, tested
+first.** Without it, a horizontal run ending exactly where a vertical run
+begins has `along = 0` and `perp = 0` and would merge — and **the merged
+run would publish one direction for glyphs that do not share one.**
+
+The `/ActualText` boundary test **deliberately stays in page axes**, and
+says so at its call site: a replacement publishes an axis-aligned box and
+no baseline at all (§14.9.4 N4 forbids per-character correspondence), so
+**there is no frame to resolve into**.
+
+#### `Pass 139.2` — the editable model, which was a second copy of the assumption
+
+`EditableTextModel`'s Stage-1 defensive baseline-jump split was **also**
+written in page axes, so with the extraction already fixed it
+**re-fragmented the runs immediately — 16 lines for four lines of text**
+on the new fixture. Now measured perpendicular to the line, plus the same
+direction-change rule: **4 lines for four lines of text.**
+
+```
+Line::direction                                   (new pub field)
+Line::bbox                                        via glyph_cell
+hit_in_line                                       projects the point onto the line's direction
+EditableTextModel::caret_point(pos) -> Option<(f32, f32)>
+EditableTextModel::caret_on_line_nearest_point(line_index, x, y)
+BlockRecognitionOptions::same_direction_cos       (new knob)
+```
+
+**★ `caret_x` and `caret_on_line_nearest_x` are kept and NOT
+deprecated.** A scalar returning the same number for every slot on a
+vertical line is the honest answer a scalar can give, and for horizontal
+text — which is what Up/Down "desired column" *means* — it is exactly
+right. **The fix was to publish the pair, not to redefine the scalar.**
+Same shape as `Pass 138.0`'s `PickedLine::object_index`: an answer made
+unrepresentable by its own type. Minted as **decision `091`**, second
+half.
+
+**★ Block and column recognition are NOT rotated**, and `Line::direction`'s
+doc comment says so. Those stages stack lines by page-space `y` and band
+them by page-space `x` — a model of laid-out prose, not of a title block.
+**A rotated line is recognised as a line and is hit-testable; it is not
+meaningfully assigned to a paragraph.**
+
+#### CLI (rule 11)
+
+`extract-text --json` emits `direction` per glyph **and** once per
+glyph-bearing run. **Omitted for a glyph-less run** — derived whitespace
+and `/ActualText` have no baseline, and printing `[1, 0]` there would be
+inventing one.
+
+#### Fixtures: three, and sabotage is why
+
+`tools/gen-rotated-text-fixtures.py`, byte-authored, no PDF library,
+`LEGAL.md` §5 category (a), **capitals throughout**:
+
+| fixture | bytes | what it holds |
+|---|---:|---|
+| `fixtures/synthetic/text/rotated-text.pdf` | 777 | 0°/90°/180°/270°; **22 derived breaks → 3**. The horizontal block is a **control**. |
+| `fixtures/synthetic/text/rotated-text-abutting.pdf` | 668 | a horizontal run whose end is **exactly** where a vertical run begins: `perp = 0`, gap `= 0`, so **only the direction rule can separate them**. |
+| `fixtures/synthetic/text/rotated-text-columns.pdf` | 712 | a **3.332 pt** gap *along* a vertical baseline (a word space a page-axis reader drops entirely) and a second column **30 pt** *across* it with `Δy = 0` exactly (a line break a page-axis reader calls a word space, joining two columns). **Both wrong answers are quiet** — neither fragments visibly. |
+
+**★★ The second and third fixtures exist because sabotage proved the
+first did not cover what it appeared to.** Deleting the direction rule
+outright left **all nine** of its tests green — its four blocks sit far
+apart, so the perpendicular clause separates them regardless. Then
+reverting `perp`/gap to page axes left **all fourteen** green, because
+within a run the glyphs abut and `Δy` is zero, so **both formulas agree**.
+
+**★★★ The Stage-1 defect in `139.2` was found the same way, and is the
+sharper case.** With the extraction already fixed, the hit-test tests
+passed **for the wrong reason** — every glyph of a vertical run had
+become its own line, so every probe trivially found "its" line.
+**Reverting the glyph-cell fix changed nothing**, which is what gave it
+away.
+
+> **When a fix upstream makes a downstream test start passing, the test
+> may now be passing for a different reason than it was written for, and
+> only sabotage distinguishes those.**
+
+**Recorded as a named candidate for a standing rule at `n = 1`, mint
+deliberately declined this filing** — the mint is the operator's/
+engineer's act, this project's bar is two occurrences, and the class is
+already covered in general terms by `R162` (*"could my assertion ever
+have come out false?"*) and by
+`D:/dev/rag/rust/prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`.
+What is **new** here, and is why it was written up rather than folded
+into either, is that the vacuity was **acquired later**: the test was
+sensitive when written and was rendered insensitive by a fix in a
+*different module* three hours afterwards. Filed ecosystem-wide as
+`D:/dev/rag/rust/a_test_can_become_vacuous_later_when_an_upstream_fix_changes_why_it_passes.md`.
+
+**★ Capitals deliberately.** At 12 pt Helvetica every capital's advance
+exceeds `line_gap_ratio × size = 3.6 pt`, so under the old rule **no run
+held two glyphs**. A fixture of narrow lowercase letters hides that. The
+consuming shell learned it the expensive way: it built a workaround
+recovering the direction from the vector between a run's first and last
+glyph — **sound reasoning and useless**, because on the real file only
+**10 of 72 runs (13.9 %)** held two glyphs at all. **The segmentation was
+so thorough on rotated text that it destroyed the evidence needed to undo
+it.** That workaround — ~400 lines in `canvas::textsel::writing`, which
+existed only because eight bytes were not published — can now be deleted.
+
+#### Verification (engineer's, this session; all run, all real)
+
+| check | result |
+|---|---|
+| new tests | **16** in `crates/pdfce-core/tests/rotated_text.rs` (new file, 723 lines) |
+| workspace suite | **4,401 passing / 0 failing** (was 4,385 — **+16**, all from the new file) |
+| sabotage | **six** separate mutations, each failing a **different** set (below) |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| argument-free gates | **18 green**; `check-image-colorspace-truth.py` requires a fixture-dir argument and **was not run bare** |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | **no GUI dependency** (rule 2 invariant) |
+| `wasm32-unknown-unknown` | `pdfce-core` + `pdfce-render` compile |
+| `cargo +nightly fuzz build` | all targets compile |
+| docs | `docs/core-api/01-reading-and-model.md` new §8.4.1; `tools/check-core-api-verbs.py` green |
+| fixtures | `fixtures/synthetic/text/PROVENANCE.md` updated with all three |
+| diff | 13 files, **+1,823 / −70** |
+
+**The six sabotages, and the count each failed** — 15 test-failures over
+six mutations, no two overlapping:
+
+| mutation | tests failed |
+|---|---:|
+| `direction` hard-coded to `(1, 0)` | **5** |
+| cursor end point back to page axes | **6** |
+| direction-change rule deleted | **1** (abutting fixture) |
+| `perp`/gap reverted to page axes | **1** (columns fixture) |
+| Stage-1 `perp` back to page `y` | **1** (clustering test) |
+| `RawLine::push` cell back to page axes | **1** (line-box assertion) |
+
+#### ★ `R219` enumeration — the routes left, named
+
+**This is the first Shipped entry to carry the enumeration `R219` asks
+for, in the form the rule prescribes** (name routes B, C, … by
+identifier, and say for each whether it is fixed, filed, or not checked).
+Three routes still assume `(1, 0)`, **deliberately**:
+
+| route | identifier | disposition |
+|---|---|---|
+| reflow width accumulation | `text_edit::reflow` | **left, by design** — a rotated line is not reflowable |
+| reflow apply | `reflow_apply`'s `max_right` | **left, by design** — same |
+| block + column recognition | `text_edit::model` stages 2 and 3 | **left, by design** — a rotated line is not a paragraph |
+
+All three are prose-layout machinery whose thresholds are page-axis **by
+design, not by oversight**. Recorded so a later session does not have to
+rediscover which halves were left — which is `R219`'s entire purpose.
+
+#### Ledger
+
+New Passes **`Pass 139.0`**, **`Pass 139.1`**, **`Pass 139.2`**. One
+renumber: the Backlog `Pass 139.0` opened by the 289th filing is now
+**`Pass 140.0`** (see the collision section above). New decision
+**`091`** (`ARCHITECTURE.md` §12) — *publish the placement, not the
+provenance; and when a scalar cannot represent the answer, publish the
+pair beside it rather than redefining the scalar.* No new standing rule;
+`R219` **amended in place** with its first filed enumeration, not
+re-minted. Ceiling: Passes **`140`**, rules **`R219`** (next free
+`R220`), decisions **`091`** (next free `092`), filings **291**.
+Ceilings re-derived by `python tools/check-ledger-numbers.py`, run this
+filing (hard rule 8), not copied from a prior entry. `c362b6b` confirmed
+present on `main` by `git log --oneline`, run this filing. **Backup
+currency not checked this filing** — engineer should confirm
+`D:/Dev/pdfce-backups/`.
+
+---
+
 ### `cde21f5` — CI went red on `4c32afe` because two unfiled commits stacked, not one; `R217`'s closing sentence corrected for the second time by an actual occurrence — no Pass ID, memory/docs only — 2026-08-27 (290th filing)
 
 **What happened.** `tools/check-commits-filed.py` failed CI on `4c32afe`,
@@ -261,6 +600,18 @@ free `091`). Standing rule `R219` **amended, not re-minted** — see
 rules `R219` (next free `R220`), decisions `090` (next free `091`). Not
 re-derived by shell this filing (hard rule 8); consistent with the prior
 filing's own figure.
+
+> **★ AMENDMENT, 2026-08-27 (291st filing).** The Pass this entry opens
+> and calls **`Pass 139.0`** — the `Separation`/`DeviceN` image bridging
+> through sRGB — **is now `Pass 140.0`.** `139.0`/`139.1`/`139.2` were
+> independently allocated the same day for the rotated-text extraction
+> work and were written into `c362b6b`'s immutable commit message and
+> into `docs/core-api/01-reading-and-model.md` §8.4.1 in the same diff.
+> The un-started Backlog entry was the cheaper half to renumber; the full
+> reasoning, and the allocation mechanism that produced the collision, is
+> in the 291st filing's entry at the top of *Shipped*. The prose above is
+> left as written (append-only); read every `Pass 139.0` in it as
+> `Pass 140.0`.
 
 ---
 
@@ -84695,7 +85046,21 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
-### `Pass 139.0` — A `DeviceN` PHOTOGRAPH RENDERS DESATURATED AGAINST ACROBAT: A `Separation`/`DeviceN` IMAGE BRIDGES THROUGH sRGB AND NEVER REACHES ITS `DeviceCMYK` ALTERNATE — FOURTH INSTANCE OF `R219`'S SHAPE, THE FIRST FOUND BY APPLYING THE RULE RATHER THAN BY REPORT — filed 2026-08-27 (289th filing), fully diagnosed, deliberately not started
+### `Pass 140.0` — A `DeviceN` PHOTOGRAPH RENDERS DESATURATED AGAINST ACROBAT: A `Separation`/`DeviceN` IMAGE BRIDGES THROUGH sRGB AND NEVER REACHES ITS `DeviceCMYK` ALTERNATE — FOURTH INSTANCE OF `R219`'S SHAPE, THE FIRST FOUND BY APPLYING THE RULE RATHER THAN BY REPORT — filed 2026-08-27 (289th filing) as `Pass 139.0`, **RENUMBERED `Pass 140.0` on 2026-08-27 (291st filing)**, fully diagnosed, deliberately not started
+
+> **★ RENUMBER NOTE, 2026-08-27 (291st filing).** This entry was opened
+> yesterday as **`Pass 139.0`**. `Pass 139.0`/`139.1`/`139.2` were
+> independently allocated the same day for the rotated-text extraction
+> work and shipped in `c362b6b`, whose commit message and in-diff
+> `docs/core-api/01-reading-and-model.md` §8.4.1 both name them — an
+> immutable half that cannot be renumbered without rewriting published
+> history. This entry, having shipped nothing and cited no hash, is the
+> half that moved. `140` was confirmed free by
+> `python tools/check-ledger-numbers.py` before the renumber. Full
+> reasoning, and the two-role allocation mechanism that produced the
+> collision, in the 291st filing's *Shipped* entry. **Grepping for
+> `Pass 139.0` and expecting the `DeviceN` defect will now find the wrong
+> Pass** — this note exists to catch that reader.
 
 **Symptom.** A five-colorant `DeviceN` photograph renders visibly
 desaturated against Acrobat — washed toward grey where the reference is
@@ -104204,6 +104569,37 @@ same cause (hashes exist only at commit time), two different failure modes.
   the rule asks for," above, predicted: the mental model built fixing one
   route is the cheapest moment to ask whether a sibling route shares the
   gap. No re-mint; ceiling stays `R219`, next free `R220`.
+
+  **★ AMENDED AGAIN 2026-08-27 (291st filing) — the first Shipped entry
+  that actually CARRIES the enumeration, and a renumber this rule's own
+  text is affected by.** Two things:
+
+  1. **The `Pass 139.0` named in the amendment immediately above is now
+     `Pass 140.0`.** The `DeviceN`-image defect was renumbered in the
+     291st filing because `139.0`/`139.1`/`139.2` had been independently
+     allocated the same day for the rotated-text extraction work and
+     written into `c362b6b`'s immutable commit message. The rule's own
+     text is left as written; read that `Pass 139.0` as `Pass 140.0`.
+  2. **`Pass 139.0`/`139.1`/`139.2` (`c362b6b`) is the first Pass to file
+     the enumeration in the prescribed form** — a table naming each
+     remaining route by identifier with a disposition. It named three
+     (`text_edit::reflow`'s width accumulation, `reflow_apply`'s
+     `max_right`, block/column recognition in `text_edit::model` stages 2
+     and 3), each marked *left, by design* rather than *not yet checked*,
+     with the reason stated: prose-layout machinery whose thresholds are
+     page-axis by design, since a rotated line is neither reflowable nor
+     a paragraph.
+
+  **★★ Worth recording, because it sharpens what the rule is FOR.** Two
+  of that Pass's three sub-Passes are themselves an instance of the
+  shape: `139.1` fixed segmentation in `text_extract::layout`, and
+  `139.2` existed only because **the identical page-axis assumption had a
+  second copy in a second module** (`EditableTextModel`'s Stage-1
+  baseline-jump split) which the first fix made **visibly** wrong. The
+  enumeration is not only a courtesy to the next session — **it is the
+  step that finds the sibling inside the same Pass**, before the operator
+  files it as a fresh bug. No re-mint; ceiling stays `R219`, next free
+  `R220`.
 
 ## Update protocol
 
