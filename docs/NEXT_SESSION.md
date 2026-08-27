@@ -13,264 +13,252 @@ can falsify it.
 
 ## §A — COLD START
 
-**The previous session shipped three Passes and closed four operator
-reports.** Every one of them came from Ken or from the `pdfceGUI` channel
-looking at something on a screen; **none was found by a gate.**
+**The previous session cleared the feature-request backlog on both channels.**
+Two Passes shipped, one request was answered by pointing at a verb that
+already existed, and two eighteen-month-stale asks from the sibling colour
+project were finally measured.
 
-- **`Pass 137.0`** (`523ca6d`) — **a gradient and a solid of the same ink
-  were different colours.** Analytic shadings now composite in authored ink
-  whether or not overprint is in force.
-- **`Pass 137.1`** (`d1ce4ac`) — **the mesh half, which `137.0` structurally
-  could not reach.** A mesh has no `ColorRamp`; `Shade::Ink` is the carrier
-  it needed. Overprint for meshes came along free.
-- **`Pass 138.0`** (`6256c93`) — **the marquee and the measure tool still
-  could not see inside a form XObject.** Three `pdfceGUI` requests, all
-  closed, plus one judgement call they explicitly asked the engine to make.
+- **`Pass 139.0`/`139.1`/`139.2`** (`c362b6b`) — **text stamped sideways in a
+  CAD title block came out one character per line.** Extraction now publishes
+  the writing direction and measures every layout threshold in the line's own
+  frame. 22 derived line breaks → 3 on the fixture; 16 lines → 4 in the
+  editable model.
+- **`Pass 81.1`** (`4eaea20`) — **drawing a translucent highlight took two
+  verbs, so one Ctrl+Z left an opaque one behind.** Now one verb and one undo
+  entry, on both authoring routes.
+- **`3ffd86f`** — a docs repair with a finding in it. See `§D`.
+- **`51f94ca` + `96b6ded`** — `tools/icc-census`, the ICC profile population
+  census the `iccce` project asked for on 2026-08-17 and never got.
 
 ### ★ Verified from a shell at write time — re-run, do not copy forward
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `51c30d6` | `git rev-parse --short HEAD` |
-| `git describe --tags` | `v0.14.0-39-g51c30d6` | `git describe --tags` |
-| `origin/main` | **LEVEL — everything is PUSHED** | `git rev-list --count origin/main..main` |
+| `HEAD` | `96b6ded` | `git rev-parse --short HEAD` |
+| `git describe --tags` | `v0.14.0-50-g96b6ded` | `git describe --tags` |
+| `origin/main` | **2 behind — see `§B`, they are unfiled** | `git rev-list --count origin/main..main` |
 | tag at `HEAD` | none; highest is `v0.14.0` | `git tag --points-at HEAD` |
-| working tree | **clean** | `git status --porcelain` |
-| tests | **4,385 passing, 0 failing** | `cargo test --workspace --release` |
-| gates | **19 on disk; 18 run with no arguments; all green** | `ls tools/check-*` |
+| tests | **4,410 passing, 0 failing** | `cargo test --workspace` |
+| gates | **19 on disk; 18 run bare; all green** | `ls tools/check-*` |
 | `fmt` / `clippy` | clean | `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` |
 | fuzz | all targets compile | `cargo +nightly fuzz build` |
 | wasm32 | `pdfce-core` + `pdfce-render` compile | `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` |
 | GUI-core invariant | no GUI dep in either engine crate | `cargo tree -p pdfce-core` |
-| print-conformance | **5 FAIL, 35 pass, 11 UNRESOLVED** | see `§C` |
 | **CI at `HEAD`** | **READ IT FROM GITHUB. Do not believe this table about it.** | `gh run list --branch main --limit 3` |
 
-★★ **ONE RED RUN IN THE HISTORY IS EXPECTED AND IS NOT A DEFECT — `4c32afe`.**
-`check-commits-filed` named `51c30d6`, the commit *behind* it, which was
-unfiled when that run started. It is filed now, so `HEAD` passes; the red run
-stays in public history because CI history cannot be rewritten.
+★★★ **PUSHING NEEDS NO ASKING — decision `090`, 2026-08-27.** Ken's ruling,
+verbatim and in full: ***"always push."*** An ordinary fast-forward push of
+`main` is standing-authorized.
 
-**The mechanism, and the habit it should change.** That gate **defers the tip
-commit** — a commit cannot cite its own hash, so its filing is always a later
-commit. Pushing **one** unfiled commit is therefore safe. The moment a second
-lands on top, the first stops being the tip and is checked in full.
+★ **Three things it does NOT cover**, narrowed deliberately: cutting a **tag
+or release**; **`git push --force`** or anything rewriting published history
+(`check-cited-commits-exist.py` exists because that broke fourteen document
+citations); and **any branch other than `main`**.
 
-⇒ **One unfiled commit may sit at the tip of `main`. Never two.** `R217` was
-amended in place for this on 2026-08-27; it is the second occurrence, the
-first being the `v0.14.0` re-tag on 2026-08-26.
-
-★ **Decision `090` is NOT the thing to narrow.** *"Always push"* authorises
-the push; it does not authorise pushing **twice** before a filing lands. That
-is a fact about a gate, and the ruling was never about gates. Narrowing an
-operator's ruling to compensate for an agent's habit is the wrong repair.
-
-★★★ **PUSHING NO LONGER NEEDS TO BE ASKED — decision `090`, 2026-08-27.**
-Ken's ruling, verbatim and in full: ***"always push."*** An ordinary
-fast-forward push of `main` is **standing-authorized**; do not ask again.
-
-★ **Three things it does NOT cover**, narrowed deliberately rather than read
-generously, with the reasoning in decision `090`:
-
-- **cutting a tag or a release** — a release claims a state is *fit to use*,
-  which is a different act from making commits visible;
-- **`git push --force`, or any push that rewrites published history** — that
-  *removes* commits from a public repository and is unrecoverable for anyone
-  who has cloned. ★ Not hypothetical: `check-cited-commits-exist.py` exists
-  because rewriting commits broke fourteen document citations;
-- **any branch other than `main`**, or creating remote branches/tags.
-
-★ **Scrub the public-facing gate green before pushing regardless.** The
-repository is public, so a push publishes (`LEGAL.md` §1.1).
-`tools/check-suite-name-absent.py` scans **untracked** files too — which is
-why scratch renders belong in `D:\Dev\temp\`, never in the tree.
+★ **Scrub `tools/check-suite-name-absent.py` green before every push.** The
+repository is public, so a push publishes (`LEGAL.md` §1.1). That gate scans
+**untracked** files too — which is why scratch renders belong in
+`D:\Dev\temp\pdfce\`, never in the tree.
 
 ---
 
-## §B — THE DISK
+## §B — DO THIS FIRST: two commits are unfiled
 
-**35 GB free of 954 GB (97 % used).** `target/` is 9.7 GB and `fuzz/target/`
-is 1.1 GB; both are regenerable and both were left in place, because the next
-session will want them warm and a cold `cargo test --workspace --release` is
-several minutes.
+`check-commits-filed.py` is **red** at `HEAD`, naming `51f94ca`, with
+`96b6ded` deferred as the tip.
 
-If you need space: `cargo clean` and `cargo clean --manifest-path
-fuzz/Cargo.toml` recover ~11 GB between them. Last session's scratch renders
-under `D:\Dev\temp\pdfce\` were **already deleted** at shutdown; put new ones
-there, never in the tree.
+**A librarian dispatch covering `3ffd86f`, `51f94ca` and `96b6ded` was in
+flight when this file was written.** Check `git log` first — if a
+`librarian: 293rd filing` commit exists, this is done; if not, dispatch one
+with those three commits' full messages (`git show --format=%B <hash>`).
+
+⇒ **`R217`: one unfiled commit may sit at the tip of `main`. Never two.**
+That gate defers the tip — a commit cannot cite its own hash — so pushing
+*one* unfiled commit is safe and the moment a second lands the first is
+checked in full. This is the second time in two days the two-unfiled state
+has been reached.
+
+★ **`3ffd86f` is docs-only, so `check-commits-filed.py` will never ask for
+it.** It counts *code* commits. It carries a real finding anyway (`§D`), and
+nothing but a human will notice if it goes unfiled.
 
 ---
 
-## §C — THE FIVE REMAINING CONFORMANCE FAILURES, AND THE ONE THAT IS SCOPED
+## §C — THE DISK, WHICH IS NOW THE NEAREST HARD LIMIT
 
-Run: `python tools/suite-check.py <corpus> --reference-dir <refs>` — the
-private map names both directories. Current standing:
+**16 GB free of 954 GB (99 % used)**, after deleting `target/debug/incremental`
+(7.1 GB) at the end of the session. It was **9 GB** before that, having been
+35 GB the same morning — a full workspace test run, a fuzz build, a wasm
+check and a new tool crate between them ate 26 GB in a day.
 
-★ **Patch stems are deliberately NOT listed here** — operator ruling
-2026-08-25, enforced by `tools/check-suite-name-absent.py`, which scans
-untracked files as well as tracked ones. The gate caught this table on its
-first draft. Get the stems from the harness's own output; they are stable and
-the private map names the corpus.
+If you need more: `cargo clean` recovers ~21 GB, `cargo clean --manifest-path
+fuzz/Cargo.toml` another 1.1 GB, and the seven `tools/*/target` directories
+about 3.1 GB between them. All regenerable; all cold-rebuild expensive.
 
-| what it tests | traps | note |
-|---|---:|---|
-| spot-colour overprint | 6 | |
-| white overprint | 5 | |
-| **five-colorant `DeviceN` image** | 1 | ★ **diagnosed — see below** |
-| ICC source profile | 4 | colour management |
-| blend modes in an ICC RGB group | 12 | |
+**Do not let this reach zero mid-run.** A `cargo test --workspace` that dies
+on a full disk leaves a corrupt `target/` that has to be cleaned anyway.
 
-### ★★★ THE FIVE-COLORANT `DeviceN` ONE is diagnosed and NOT started — start here if you want a clean win
+---
 
-**The trap detector fires on a photograph, and that firing is a red herring.**
-The real defect is visible to the eye: a **five-colorant `DeviceN` photograph
-renders visibly desaturated** — washed toward grey where Acrobat's reference
-is saturated green.
+## §D — THE FINDING IN `3ffd86f`, WHICH IS NOT ABOUT DOCUMENTATION
 
-Measured on that page: `cmyk_bridged_pixels = 25870`,
-`cmyk_native_image_pixels = 0`. The image is bridged through sRGB on a page
-that composites in ink.
+`EditSession::format_text` shipped 2026-08-20. It restyles **existing** page
+text — size, fill colour, font family, plus `Tc`/`Tw`/`Tz`/script/rise. It is
+fully and correctly documented in `docs/core-api/02-editing-and-saving.md`.
 
-**Cause**, in `crates/pdfce-render/src/image.rs`:
+On 2026-08-25 `pdfceGUI` filed a request saying **no such verb existed**,
+with a table reading *"none available"* for every restyle button. They had
+looked.
+
+★★ **Nothing was wrong in either document and
+`tools/check-core-api-verbs.py` was green.** That gate fires on a verb being
+**absent** — the `insert_pages` failure mode. This verb was present,
+accurate, and **unfindable by the question the reader actually had**, because
+it was filed under *text editing mechanics* and the question was *how do I
+make this bold*.
+
+**Findability is not a property any script can evaluate**, so this is not a
+gate that can be extended. The repair was structural:
+`docs/core-api/03-capabilities.md` **§3.6**, written capability-shaped.
+
+⇒ **A verb ships in two documents, not one.** `02` answers *what does this
+call do*; `03` answers *how do I do X*. A verb only in `02` is reachable only
+by somebody who already knows its name.
+
+---
+
+## §E — WHAT IS OPEN AND ACTIONABLE
+
+### `FF-C` wired into `format_text` — the highest-value scoped-but-unstarted item
+
+**Measured, not guessed:**
+
+```
+$ pdfce-cli format-text runs-two-explicit.pdf --find ALPHA \
+      --set-font Helvetica-Bold --output bold.pdf
+pdfce-cli: format-text refused: the target font "Helvetica-Bold" is not an
+existing font resource on this page; adding a new font resource / embedding
+a new face is deferred (FF-C)
+```
+
+`set_font` **selects** a font; it does not **create** one. So of the five
+restyle buttons `pdfceGUI` described: size and colour always work, face works
+if the target is already resident, and **bold and italic do not**, on any page
+not already carrying such a resource — which is most pages.
+
+★ For a UI this is worse than a run-level limit, and it is why it is worth a
+Pass: **the predicate is a property of the PAGE, not of the selection**, so
+the same button on identical-looking text behaves differently in two files.
+
+The machinery exists — `add_text` already creates Standard-14 resources and
+embeds donor faces. What does not exist is a `FormatPlan` that can carry new
+objects and a resource-dictionary patch; today it produces a content buffer
+and nothing else. `R107` applies: FF-C must only ever **add** font resources,
+never rewrite an existing one.
+
+**Not scoped as a Pass, deliberately** — it was put back to `pdfceGUI` as a
+question in
+`open/reply_restyle_already_exists_and_the_real_gap_is_narrower_than_your_table.md`.
+If they say bold matters, scope it.
+
+### `Pass 140.0` — the five-colorant `DeviceN` image
+
+Still diagnosed and unstarted. **★ Renumbered from `139.0` on 2026-08-27** —
+that ID was allocated in a Backlog heading and independently consumed by a
+shipped commit, because `check-ledger-numbers.py` reads *headings* and a
+number claimed in one document is invisible to it until that heading exists.
+The shipped side kept its numbers; this moved.
+
+A five-colorant `DeviceN` photograph renders **visibly desaturated** because
+`Separation`/`DeviceN` images convert through their tint transform to sRGB
+and never to their `DeviceCMYK` alternate. In `pdfce-render/src/image.rs`:
 
 ```rust
 let carries_ink =
     matches!(space, Space::Cmyk) || matches!(space, Space::Indexed { ink: Some(_), .. });
 ```
 
-A `Separation`/`DeviceN` image converts through its tint transform **to
-sRGB** and never to its `DeviceCMYK` alternate, so it round-trips.
+★★ **DO NOT REUSE THE OVERPRINT PLANES.** They exist texel-for-texel in the
+same layout and are the obvious wrong move: they hold `authored_tints`, which
+answers Table 149's *"which components did the source SPECIFY"* — a different
+question — and return `None` for a **spot-only** `DeviceN`, where the code
+writes `[0,0,0,0]`. Correct for the overprint route (which preserves the
+backdrop, `Pass 130.3`); it would paint **bare white paper** on a plain one.
 
-**★ This is the FOURTH instance of `R219`'s shape in four days, and it was
-found by applying `R219` rather than by a bug report:**
+The right shape is a per-texel `space.to_cmyk(comps, diag)` captured *beside*
+the existing `to_rgb`, in the same loop from the same operands — what
+`ColorRamp::new` and `mesh::read_shade` already do. **Measure the cost
+first**: that is a second tint-transform evaluation per texel unless the sRGB
+value is derived from the CMYK one, and `tint_applied = 292` on the measured
+page suggests a cache is already doing work. Find out what it is keyed on.
 
-| Pass | gave authored ink to | what it left |
-|---|---|---|
-| `130.1` | `DeviceCMYK` images | `Separation`/`DeviceN` images |
-| `130.2` | `Separation`/`DeviceN` images **only under overprint** | the same images outside overprint |
-| `137.0` | analytic shadings, past their overprint gate | mesh shadings |
-| `137.1` | mesh shadings | ← **this row is the gap nobody went back for** |
+**This is the fourth instance of `R219`'s shape in four days**, and it was
+found by applying the rule rather than by a bug report — `130.1` gave ink to
+`DeviceCMYK` images, `130.2` to `Separation`/`DeviceN` **only under
+overprint**, `137.0` to analytic shadings, `137.1` to meshes, and this row is
+the gap nobody went back for.
 
-**★★ DO NOT REUSE THE OVERPRINT PLANES.** They already exist, texel for
-texel, in the same `CmykTexels` layout, and reaching for them is the obvious
-move and the wrong one:
+### The other four print-conformance failures
 
-- they hold `authored_tints`, which answers Table 149's *"which components did
-  the source SPECIFY"* — **a different question** from *"what does the tint
-  transform produce in the alternate space"*;
-- `authored_tints` returns `None` for a **spot-only** `DeviceN`, where the
-  existing code writes `[0,0,0,0]`. That is correct for the overprint route,
-  which preserves the backdrop (`Pass 130.3`), and would paint **bare white
-  paper** on a plain one.
-
-**The right shape** is a per-texel `space.to_cmyk(comps, diag)` captured
-**beside** the existing `to_rgb`, in the same loop and from the same
-operands — exactly what `ColorRamp::new` and `mesh::read_shade` do, and for
-the same reason: a tint transform may be arbitrary PostScript and nothing
-forces two evaluations of it to agree.
-
-**Measure the cost first.** That is a second evaluation per texel unless the
-sRGB value is derived from the CMYK one. `tint_applied = 292` on the measured
-page suggests a cache is doing real work already; find out what it is keyed
-on before adding a second lookup.
-
-### The instrument caveat, which cost time this session
-
-`find_traps` fired at `(324, 50)` on a **photographic highlight**, not on a
-trap X. The reference render tripped zero traps there — but the reference is
-`786 × 439` where pdfce's is `511 × 284`, so the detector ran at a different
-resolution and **that control is weaker than it looks**. The diagnosis above
-came from cropping both renders, scaling one to the other, and looking.
-
-⇒ On a patch whose content is a photograph, the trap count is not the
-evidence. The pixels are.
+spot-colour overprint (6 traps), white overprint (5), ICC source profile (4),
+blend modes in an ICC RGB group (12). Run:
+`python tools/suite-check.py <corpus> --reference-dir <refs>` — the private
+map at `D:\Dev\pdfce-private\suite\` names both directories. **Patch stems are
+deliberately not listed here** (operator ruling 2026-08-25, enforced by
+`check-suite-name-absent.py`, which caught this table on its first draft).
 
 ---
 
-## §D — WHAT LAST SESSION DECIDED, IF YOU TOUCH THIS GROUND
+## §F — HABITS THIS SESSION PAID FOR
 
-### Shading and mesh ink (`137.0`, `137.1`)
+### Sabotage every fix, including the ones whose tests already pass
 
-- A shading with authored colorants composites natively **whether or not
-  overprint is in force**. The `DeviceCmykDirect`-under-`OPM 1` exclusion
-  still applies to the *overprint* route only, because Table 149's `OPM 1`
-  row is **value-dependent** and its rules cannot be computed once for a
-  whole ramp.
-- `Shade::Ink` carries **both** the converted sRGB value and the authored
-  colorants, and interpolates them **independently**. Consequence, stated so
-  it is not discovered: where the conversion is non-linear the two paths
-  differ in a triangle's *interior* while agreeing at every vertex. ISO
-  32000-1 §8.7.4.5.5 picks neither; both are defensible.
-- `MeshColorants` is decided **once, at parse, all-or-nothing**. A mesh with
-  ink at some vertices and not others would composite part of its area
-  natively and part bridged, and those do not agree — the boundary would be a
-  **seam no file asked for**.
+`Pass 139.1` fixed extraction; the `EditableTextModel` hit-test tests then
+passed — **for the wrong reason.** A second copy of the same page-axis
+assumption in a second module had turned every glyph of a vertical run into
+its own line, so every probe trivially found "its" line. Reverting the fix
+changed nothing, which is what gave it away.
 
-### Form recursion, second wave (`138.0`)
+> **When a fix upstream makes a downstream test start passing, that test may
+> now be passing for a different reason than it was written for, and only
+> sabotage distinguishes those.**
 
-- `hit_test_rect_deep` returns **paint order, front-most LAST** — the
-  *opposite* of `hit_test_point_deep`. Deliberate: one answers *"which
-  one?"*, the other *"which ones?"*.
-- `FormMarquee::Exclude` is the default. **The tie-breaker is not which
-  reading is better supported** — it is that a click can never yield a form,
-  so a marquee that can hands the operator, by one gesture and not the other,
-  a selection every edit verb refuses.
-- `FormMarquee::Include` returns the form **and** its leaves. It is **not** a
-  route back to the shallow `hit_test_rect`, which returns the container
-  alone.
-- `PickedLine::object_index: usize` → `target: HitTarget`. **The `usize` was
-  the bug**: it could only name an entry in one of two lists, so the
-  signature made an answer about form contents unrepresentable — which is why
-  the two-line measure tool was **inert**, not degraded, on any wrapped CAD
-  drawing. `page_object_index()` returns an `Option`, not a sentinel, because
-  a leaf ordinal handed to something expecting a page index is a number that
-  is *in range and wrong*.
-- `object-list --hit` is **deep by default**; `--hit-scope page` is the old
-  query. A leaf prints under `leaf=N`, **never** `index=N` — `index=` is what
-  the editing subcommands take, and they write to the *page's* stream.
+Six sabotages across that Pass failed 5/6/1/1/1/1 tests, none overlapping.
+**Two of the three fixtures exist only because a sabotage found a hole** — the
+first fixture alone left the direction-change rule and both dot products
+entirely uncovered.
 
----
+### A per-group sample weighted by group size is an extrapolation
 
-## §E — TWO HABITS THIS SESSION PAID FOR
+`icc-census` reported **91** `/N` disagreements. Measured per embedding, the
+answer is **2** — wrong by 45×, because weighting one distinct profile's
+first-seen `/N` by its embedding count assumes exactly what the axis tests.
 
-### `R219` is the highest-value thing on the board
+★ And **fixing it in the aggregate did nothing about the detail export**: the
+TSV column was still a first-seen sample, and a sentence written from it was
+wrong in a *different* way (two profiles and two directions, not one). The
+repair that worked was renaming the column `pdf_n_FIRST_SEEN` so the mistake
+is unavailable. A comment would have been read by nobody, including me,
+twice.
 
-*When a Pass fixes one route to a shared behaviour, enumerate the other
-routes and say which are left.* Minted after **three** instances in
-seventy-two hours; `§C` above is the **fourth**, and it was found by applying
-the rule rather than by waiting for a report.
+### A bucket that cannot distinguish "clean" from "not measured" is not evidence
 
-**The reason it keeps happening:** a system where every route is wrong in the
-*same* way looks consistent. The first fix is what makes the rest look
-broken. That is an argument **for** fixing halves — the disagreement is
-information a passing suite was not giving you — but the leftover half
-becomes urgent in a way it was not before, and it will reach the operator
-first if you do not name it.
+The same tool first reported *"100 % agree, or no LUT tag"* across 2,494
+embeddings — which reads as a strong negative result and is equally
+consistent with the check never having run. Split three ways, the honest
+answer is **136 checkable, 136 agreeing, 2,358 not checkable**.
 
-### A crop rectangle is a measurement instrument
+All three of those were caught by **reading the output**, never by a test.
 
-`Pass 137.0` shipped with a four-row table of live-vs-reference distances
-that **mixed two panels**, labelled a fixed type 3 radial as an unfixed mesh,
-and reported **edge antialiasing on a hard-edged circle as a colour error**.
-Corrected in place in `ROADMAP.md` with the wrong figures kept legible.
+### `git checkout --` is not an undo
 
-Before quoting any number off a render: find the region by **scanning for
-non-white runs**, inset 6–8 px, and read **mean-abs, rms and the two mean
-colours together**. High mean-abs with matching mean colours and high rms is
-*misalignment*, not a colour error.
-
-### And a doc comment that enumerates a population decays silently
-
-`cmyk_bridged_pixels`'s description was wrong **three times in two days**,
-each correction written by somebody who had just read it and believed it.
-The **sixth** copy — the one `render-page` prints to the operator's terminal
-— was still wrong a day later and was found by running the tool on a real
-file, not by grepping. **Nothing in this repository checks operator-facing
-strings for claims about implementation state.** If that recurs, a gate is
-the fix.
+Used mid-session to revert a one-line sabotage; it reverted the **whole file
+to `HEAD`** and discarded forty minutes of work. `cp x /tmp/x.bak` first and
+restore from that.
 
 ---
 
-## §F — OPEN, UNCHANGED
+## §G — OPEN, UNCHANGED
 
 - **`(bl)`** — may a **CC-BY-SA-4.0** OCR model ship inside pdfce's **MIT**
   portable folder? Ken's call; default if unanswered is **ship neither model
@@ -279,7 +267,27 @@ the fix.
   **executing** what was downloaded is not, and that ruling is owed from the
   operator. **No add-in Pass can be scoped until it lands.**
 - **`(p)`** — whether to narrow the XFA item to read/fill only, or retire it.
-- The `pdfceGUI` reply for `Pass 138.0` is filed at
-  `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\note_all_three_form_gaps_closed_and_one_judgement_made.md`.
-  **It contains a retraction owed to them**: they were told two type 7
-  shading pairs would still disagree, and after `137.1` they do not.
+
+## §H — THE CHANNELS ARE CLEAR, AND CHECK THEM ANYWAY
+
+Both `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` and
+`iccce_FeatureRequests\open\` were worked to zero outstanding asks this
+session. **They live outside the repository, so no gate can contradict a
+stale "it's empty" claim** — list them yourself at session start.
+
+Replies filed and awaiting the other side:
+
+| file | awaiting |
+|---|---|
+| `note_the_writing_direction_is_published_and_your_400_lines_can_go.md` | pdfceGUI deleting `canvas::textsel::writing` (~400 lines) |
+| `note_opacity_at_author_time_shipped_and_it_was_an_undo_bug.md` | pdfceGUI wiring `add_markup_with` |
+| `reply_restyle_already_exists_and_the_real_gap_is_narrower_than_your_table.md` | **a decision from them**: is bold/italic worth `FF-C`? |
+| `iccce/reply_the_profile_census_and_your_33_node_constant.md` | iccce re-examining their 33-node constant |
+
+★ **One disagreement in that last one needs resolving rather than
+averaging.** `iccce`'s evidence names `USWebCoatedSWOP.icc` as carrying a
+33-node `lut8`; the `U.S. Web Coated (SWOP) v2` in this corpus reports **9**.
+Either they are different files or one of us reads the grid byte from a
+different offset. pdfce's is byte 10 of the tag per ICC.1:2010 §10.10/§10.11
+and is sabotage-tested — but a disagreement about a specific named file is
+the kind of thing to settle, not split.

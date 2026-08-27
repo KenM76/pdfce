@@ -121,7 +121,54 @@ backslash") that let a real variant through. Re-reading the rule would not
 have found it; applying both variants to the real file and re-running the
 gate did, in about a minute.
 
+## ★★ 2026-08-27 — SEVENTH occurrence, and I called it the second
+
+Two facts, and the second is the one that matters.
+
+**1. I under-counted my own history by five.** The dispatch I wrote said
+*"that is the SECOND time this exact mechanism has bitten"*. The
+cross-project file `D:\dev\rag\rust\a_python_heredoc_eats_the_backslash_
+continuation_in_a_rust_string_literal.md` keeps a running count and says
+**n = 7**. The librarian corrected it.
+
+⇢ **Do not state a recurrence count from memory. The RAG file that tracks it
+is one grep away, and a wrong count argues for the wrong response** — "twice"
+sounds like bad luck, "seven times" is a process defect.
+
+**2. This one landed in a TEST'S ASSERTION MESSAGE, which the suite is
+structurally blind to.** Every prior instance was in shipped code. An
+`assert!` message is read *only when the test fails*, so it cannot affect
+whether the test passes — no amount of green tells you anything about it.
+`check-string-gaps.sh` caught it, and this is exactly why that gate must
+**not** be scoped to `src/`, however tempting "it is only a test" sounds.
+
+**Also this session: the same shell layer swallowed a whole heredoc twice**
+when the payload contained a stray quote — `unexpected EOF while looking for
+matching '`. The failure was loud rather than silent, which was luck. Both
+times the fix was the same: write the payload to a file with the Write tool.
+
+★ And a *different* failure mode of the same habit, worth its own line:
+**a multi-edit `python - <<PY` script that asserts, then writes at the end,
+loses every edit when a later assert fails.** Three substitutions succeeded,
+the fourth `assert` blew up, nothing was written, and I did not notice until
+a later `grep` showed two of the four missing. **Write after each
+substitution, or use Edit.**
+
+## ★ And a sibling mistake with the same shape: `git checkout --`
+
+Not a heredoc, but the same *class* — a shell command whose blast radius is
+wider than the intent. Mid-session I ran `git checkout -- page.rs` to undo a
+deliberate one-line sabotage, and it reverted **the entire file to HEAD**,
+discarding forty minutes of edits I then had to re-apply from context.
+
+**Never use `git checkout --` to undo a sabotage.** Copy the file to a backup
+first (`cp x /tmp/x.bak`) and restore from that. It is one extra command and
+it is scoped to what you actually changed.
+
 Related: [[windows-paths-need-literal-edits]] — same root cause (backslashes
 crossing shell layers), same fix (Edit, or a written script file).
 [[feedback_a_gate_that_underreports_looks_green]] — the same class one level
 up: a gate whose output is wrong reads as a gate that passed.
+[[feedback_run_the_projects_own_gates]] — `check-string-gaps.sh` is the only
+thing that has ever caught this, and it is not one of the gates I reach for
+by habit.

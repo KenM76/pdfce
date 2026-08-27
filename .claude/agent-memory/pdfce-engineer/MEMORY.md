@@ -58,3 +58,6 @@
 - [A rising failure count can mean a false pass was removed](feedback_a_rising_failure_count_can_mean_a_false_pass_was_removed.md) — measure distance-to-oracle before reverting; and ablate candidates rather than arguing
 - [Fixing one route makes the others look broken](feedback_fixing_one_route_makes_the_others_look_broken.md) — three instances in 72h; enumerate every route in the SAME Pass, don't wait for the bug reports
 - [A crop rectangle is a measurement instrument](feedback_a_crop_rectangle_is_a_measurement_instrument.md) — a region picked by eye reported edge antialiasing as colour error AND hid two real defects, in one table
+- [An extrapolation reported as a measurement](feedback_an_extrapolation_reported_as_a_measurement.md) - weighting one per-group sample by group size assumes the thing being tested; 91 vs a measured 2, and the detail export kept the bug after the aggregate was fixed
+- [Documented, accurate, gate-green and unfindable](feedback_documented_accurate_gate_green_and_unfindable.md) - pdfceGUI filed a request for a verb that shipped 5 days earlier; findability is not checkable by any script
+- [A test can become vacuous LATER](feedback_a_test_can_become_vacuous_later.md) - an upstream fix can change WHY a downstream test passes; only sabotage tells them apart, and it found a second copy of one bug
