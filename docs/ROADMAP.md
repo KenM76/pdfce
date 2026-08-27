@@ -96,6 +96,287 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 137.1` (`d1ce4ac`) — THE MESH HALF OF YESTERDAY'S COLOUR FIX, WHICH YESTERDAY COULD NOT REACH — ★★ a mesh has no `ColorRamp` to carry colorants in, so `Pass 137.0`'s widening was structurally incapable of reaching it — a NEW carrier (`Shade::Ink`, `MeshColorants`) shipped instead — 2026-08-27 (287th filing)
+
+**Shipped 2026-08-27.** Commit `d1ce4ac` (`d1ce4ace5550eff794d215937ac8d0f89b29d27d`),
+pushed to `main`, `HEAD` at filing time. **Hash verified directly by this
+role** by reading `.git/logs/HEAD` (no shell tool this filing, but git's
+own on-disk reflog is readable as a file) — the chain reads `523ca6d`
+(`Pass 137.0`) → `36628bb` (docs correction, filed below) →
+`e9f9f25` (this project's 286th librarian filing) → `d1ce4ac`
+(`Pass 137.1`, `HEAD`). Hard rule 8: checked, not relayed.
+
+#### Why `Pass 137.0` could not have covered this
+
+An analytic shading keeps its colour in a `ColorRamp`, which has carried
+colorants since `Pass 122.6`. **A mesh has no ramp at all unless it is
+parametric**: its colour is per-vertex, decoded from the mesh stream and
+converted to sRGB **inside the parser**, one value per vertex, before any
+geometry exists. There was nowhere for the authored ink to live — so on
+an ink page every mesh took the `CMYK → sRGB → CMYK` round trip a flat
+fill of the same colour did not, and `Pass 137.0`'s widened gate
+(`ramp.is_some_and(has_colorants)`) reads `false` for a fully ink-bearing
+mesh and quietly answers "no colorants" without failing. **A predicate
+about the wrong carrier is indistinguishable, at the call site, from a
+predicate about the right one** — that is the transferable finding from
+this Pass.
+
+#### What shipped
+
+- **`Shade::Ink`** carrying **both** the converted sRGB value and the
+  authored colorants. Both are needed and neither is recoverable from the
+  other: deriving `rgb` from `cmyk` would run the conversion once per
+  **pixel** instead of once per **vertex**, and deriving `cmyk` from `rgb`
+  is the exact round trip being removed. Carrying both also leaves the
+  sRGB path **byte-identical**, which is why no existing mesh test needed
+  re-blessing.
+- **Interpolation moves the two independently and linearly.** A mesh's
+  colour is stated in its own `/ColorSpace`, so the ink path interpolating
+  ink is the faithful reading; the sRGB path keeps interpolating sRGB
+  because that is what it already did. Where the conversion is non-linear
+  the two paths differ in a triangle's **interior** while agreeing at
+  every vertex — both defensible, ISO 32000-1 §8.7.4.5.5 picks neither.
+- **`Mesh::colorants`** (`MeshColorants::{None, Vertex, Parametric}`),
+  decided **once, at parse, all-or-nothing.** A mesh yielding ink for some
+  vertices and not others would composite part of its area natively and
+  part through the bridge, and those do not agree, so the boundary would
+  show as **a seam no file asked for**. One flag per mesh cannot produce a
+  seam. It also keeps the paint-time test `O(1)` instead of walking a
+  megabyte of geometry per frame for an answer that never changes.
+- **The rasteriser is shared, not duplicated.** Everything hard about
+  mesh rasterisation — the crack margin, `MSH32`'s fold-over ordering, the
+  "has this pixel been claimed" test — reads **only the alpha channel**,
+  never the colour. The ink path writes a second value at the same index
+  in a sidecar plane, and the RGBA plane stays the **sole** authority on
+  occupancy, so the two composites cover exactly the same pixels by
+  construction rather than by two implementations agreeing.
+- **`Shading::has_colorants()`** now lives beside the paint method it
+  predicts, so a call-site gate cannot drift from what it is predicting
+  the way `Pass 137.0`'s did.
+- **★ A bonus this Pass's own dispatch did not claim, found by this role
+  reading the shipped code rather than only the prose**: `Shading::paint_cmyk`
+  was already generic — it dispatches to the mesh route when `self.mesh`
+  is `Some`, **before** the analytic checks — and `interpret.rs`'s two call
+  sites (the overprint-in-force native route and the no-overprint native
+  route) are unchanged by this Pass. So a mesh whose `/ColorSpace` is
+  `Separation`/`DeviceN` now ALSO composites correctly **under overprint**
+  via the identical `Table 149` route the analytic case uses, not merely
+  gaining colour-transport fidelity — `overprint_shadings_unsupported` no
+  longer increments for such a mesh. **Only a `DeviceCMYK`-direct mesh
+  under `/OPM 1` remains excluded**, for the identical value-dependence
+  reason the analytic route excludes it. This was verified by reading
+  `crates/pdfce-render/src/interpret.rs` lines ~4469–4516 and
+  `crates/pdfce-render/src/shading.rs`'s `paint_cmyk` dispatch directly,
+  not asserted from the dispatch's own prose (which described only the
+  colour-transport half).
+
+#### Measured
+
+On the operator's file, live shading versus its own reference image, mean
+absolute levels:
+
+| pair | before | after |
+|---|---|---|
+| panel A pair a (type 7) | 24.06 | **6.29** |
+| panel A pair d (type 7) | 16.87 | **2.15** |
+| everything else | — | unchanged, as it must be |
+
+The residual 6.29 is **edge detail, not colour**: mean colour matches the
+reference to within 2.4 of 255 while rms stays at 19.7, which is the
+signature of geometry rather than transport.
+
+**Print-conformance corpus: 5 FAIL, 35 pass, 11 UNRESOLVED — byte-identical
+to before. No regression.**
+
+A/B on the committed fixtures with the mesh branch disabled: fill
+`(151, 64, 133)`, both meshes `(160, 90, 113)`, mean |diff| **18.33**,
+`cmyk_bridged_pixels` **153,600**. With the fix: all three identical,
+bridged pixels **0**.
+
+**All eight pairs on the operator's own conformance sheet now agree** —
+he was told after `Pass 137.0` shipped that two would still disagree
+(shading type 7); that is no longer true as of this Pass.
+
+#### Fixtures and tests
+
+`fixtures/synthetic/mesh-ink/` — two wholly synthetic 300×100 pt PDFs plus
+`PROVENANCE.md`, generated by the new committed
+`tools/gen-mesh-ink-fixtures.py`. Each paints the same `DeviceCMYK` colour
+three times: a flat fill, a **type 4** triangle mesh, a **type 6** Coons
+patch. Three decisions in the fixture design worth recording, because each
+prevents a specific way a test stops being able to fail:
+
+1. **Two mesh types deliberately** — a triangle's shades go straight into
+   the barycentric interpolator, a patch's four corner shades go through
+   `Patch::shade_at` and `Shade::lerp` first, and the file that exposed the
+   defect contains **patches**. Testing only the simpler shape would have
+   been the comfortable choice and the wrong one.
+2. **The colour is FLAT even though a mesh exists to vary**, because the
+   claim is about colour **transport** and a varying mesh cannot be
+   compared to a flat fill without choosing a point and then arguing about
+   it — which is exactly how `Pass 137.0`'s own table went wrong the day
+   before (see the correction filed below). Interpolation is asserted
+   separately in unit tests where the arithmetic is exact.
+3. **The ink is quantised to 8 bits BEFORE the flat fill is written**, so
+   the three marks are the same colour by construction rather than to
+   within 1/255. Otherwise the tolerance would have to be loosened to
+   accommodate a difference that is nobody's bug, and **a loosened
+   tolerance is how a test quietly stops being able to fail.**
+
+Four integration tests (`crates/pdfce-render/tests/mesh_ink.rs`) and three
+unit tests in `mesh.rs`. One of the four asserts **the meshes are not bare
+paper** — without it every other assertion in the file would pass on an
+unpainted page, since two white marks agree with each other perfectly.
+**This project has shipped that exact confusion before** (`Pass 130.3`'s
+five blank cells scored `ok`), which is why it is asserted rather than
+assumed.
+
+**`LEGAL.md` §5 category (a).** Nothing derives from any third-party file,
+and no byte or structure of the licensed conformance suite: different
+colour, different page size, no reference image, flat where it is graded,
+types 4 and 6 where it is 7. `tools/check-suite-name-absent.py` green.
+
+#### Gate results (all on the committed tree, per the engineer's dispatch)
+
+- `cargo test --workspace --release`: **4379 passing, 0 failing**
+- `cargo fmt --all --check` clean; `cargo clippy --workspace
+  --all-targets -- -D warnings` clean
+- All 18 argument-free `tools/check-*` gates green
+- `cargo +nightly fuzz build`: all targets compile
+- `cargo check -p pdfce-core -p pdfce-render --target
+  wasm32-unknown-unknown`: ok
+- `cargo tree -p pdfce-core` / `-p pdfce-render`: no GUI dependency — this
+  role has no shell this filing and did not re-run it independently.
+
+#### `FEATURES.md` — updated in this same filing
+
+- **Paint mesh shadings** row (*Implemented*) — the overprint sentence
+  replaced: a mesh now composites its own authored ink natively, and under
+  overprint too for `Separation`/`DeviceN` sources; only `DeviceCMYK`-direct
+  under `/OPM 1` (same exclusion as analytic) still bridges.
+- **Subtractive (colorant) compositing buffer** and **Blend modes** rows
+  (*Implemented*) — both had a clause reading "mesh shadings, and images
+  with no ink to keep, still bridge through sRGB"; both narrowed to "only
+  images with no ink to keep".
+- **Per-colorant (n-channel) compositing buffer** and **Per-sample shading
+  overprint** rows (*Planned*) — both had a mesh clause; both updated to
+  reflect that mesh now shares the analytic route (`Separation`/`DeviceN`)
+  and only excludes the identical `DeviceCMYK`-direct case.
+- **"Native colorant path for mesh shadings" row (*Planned*) — DELETED.**
+  Fully delivered; its content folded into the *Implemented* rows above
+  rather than kept as a second row describing the same capability, per
+  this file's own "replace, never append" rule. Core-only: no new CLI
+  subcommand, no new GUI control — both shells already reached mesh
+  painting through `pdfce-render` (row's `core`/`cli` boxes were already
+  `[x]`/`[x]` for the paint capability itself; `gui` stays `[ ]`, not
+  rounded up).
+
+#### `crates/` survivors reported, not edited (hard rule 11 — searched for
+the CLAIM, not for a string)
+
+Five doc comments now describe a state `Pass 137.1` ended. None touched by
+this filing:
+
+1. `crates/pdfce-render/src/mesh.rs`'s module-level doc, **"What is
+   deliberately NOT done here"** section — the "No native-ink (colorant)
+   route" and "No overprint" bullets are both now false (fully, for the
+   first; partially — only the `DeviceCMYK`-direct case remains — for the
+   second). This is the most consequential survivor: a module's own "not
+   done" list contradicted by its own new code is exactly the shape hard
+   rule 11 exists to catch, and it is a **whole section**, not a sentence.
+2. `crates/pdfce-render/src/interpret.rs`'s `cmyk_bridged_pixels` field
+   doc — "**What is left**: additive images, **mesh** shadings (types
+   4–7, whose colour is resolved when the mesh is parsed and has no
+   colorant carrier to survive in), and the results of transparency
+   groups" — the parenthetical is now false; mesh has a carrier
+   (`Shade::Ink`) as of this Pass. Should fold mesh out of this list the
+   same way `Pass 137.0` folded analytic shadings out of it.
+3. `crates/pdfce-cli/src/main.rs`'s twin copy of the same
+   `cmyk_bridged_pixels` disclosure row — same fix needed, same location
+   pattern as the three survivors `36628bb` already fixed (below).
+4. `crates/pdfce-cli/src/main.rs`'s `overprint_shadings_unsupported` row —
+   "a **mesh** painted under `/OP` (no colorants survive parsing)" — false
+   for a `Separation`/`DeviceN`-sourced mesh, which now has colorants that
+   survive parsing and composites under overprint; still true for a
+   `DeviceCMYK`-direct mesh and an additive one. Needs the same two-way
+   split the row already gives the analytic case.
+5. `crates/pdfce-render/tests/shading_ink.rs`'s **"What this does NOT
+   cover"** section — "a mesh still bridges through sRGB and still
+   disagrees with an image of the same colour. That is a known, filed
+   residual" — false; the residual is discharged and its own tests now
+   live in `crates/pdfce-render/tests/mesh_ink.rs`. This section should
+   point forward rather than restate a defect that is fixed.
+
+#### Ledger
+
+No new Pass sub-ID beyond `137.1`, no new decision, no new standing rule.
+Ceiling unchanged: rules **`R218`** (next free `R219`), decisions **`090`**
+(next free `091`) — per the engineer, not independently re-run this
+filing (no shell); engineer should confirm with
+`python tools/check-ledger-numbers.py`.
+
+#### Findings flagged for `C:\personal_rag\pdf\` (written this filing —
+see below)
+
+1. A mesh shading's colour is decoded and converted at **parse** time, per
+   vertex, with no ramp to carry colorants in — any renderer keeping a
+   colorant path has to give the mesh its own carrier; the analytic
+   path's ramp cannot be reused, because the two algorithms are opposite
+   (forward-rasterised vs. inverse-mapped), not variations of each other.
+2. A gate that tests the wrong carrier is **silent, not loud**:
+   `ramp.is_some_and(has_colorants)` reads `false` for an ink-bearing mesh
+   and routes it to the fallback with no error, no counter, no disclosure
+   that the question asked was the wrong one.
+
+---
+
+### `36628bb` — three counter descriptions that outlived the code, and a table I mislabelled — no Pass ID, docs-only correction commit — 2026-08-27 (287th filing)
+
+Full hash `36628bb50c2ff4c0e5cad74e13e5c66c6c069d0e`, an ancestor of `HEAD`
+(`523ca6d` → `36628bb` → `e9f9f25` → `d1ce4ac`), verified by reading
+`.git/logs/HEAD` directly.
+
+**Discharges three of the 286th filing's own survivors** (hard rule 11):
+`cmyk_bridged_pixels`'s rustdoc in `crates/pdfce-render/src/interpret.rs`
+and its twin metrics-line row in `crates/pdfce-cli/src/main.rs` said it
+counted "images, shadings, and the results of transparency groups" —
+images left in `Pass 130.1`, analytic shadings left in `Pass 137.0`; both
+copies now name the surviving population and state **a FALL in this
+number is the intended outcome, not a counter going quiet**.
+`overprint_shadings_unsupported`'s problem statement described the whole
+class until `Pass 122.6` and now describes only the mesh part, split by
+**reason**: a mesh (no colorants survive parsing — narrowed again by
+`Pass 137.1`, above) and a `DeviceCMYK`-direct analytic shading under
+`/OPM 1` (Table 149's value-dependent row, refused deliberately).
+
+**★★ THE CORRECTION THAT MATTERS MOST: `Pass 137.0`'s own Shipped-entry
+table was mislabelled, and the mistake is instructive enough to keep
+visible rather than silently replace.** The engineer's dispatch to the
+286th filing said "the four shading pairs of the sheet that exposed it" —
+**the sheet has TWO shading panels of four pairs each**, and the table
+silently mixed them, reporting one pair as an unfixed **mesh** when it was
+actually a **type 3 radial that had already been fixed**, its apparent
+`23.8` being **edge antialiasing on a hard-edged circle**, not a colour
+error.
+
+Re-measured — swatch bounds found by scanning for non-white runs instead
+of guessed by eye, then inset 6–8 px so no border pixel enters the mean —
+see the corrected table filed in place in `Pass 137.0`'s own entry, below.
+**Six of eight pairs correct; the two that remain are exactly the two type
+7 meshes** — which is what `Pass 137.0` concluded, **but by luck rather
+than from those numbers.**
+
+**The lesson, recorded in the code beside the fix:** a crop rectangle
+chosen by eye is a **measurement instrument**, and an unverified one
+reports edge misalignment as colour error in both directions — it hid a
+real defect's identity and invented a false one in the same table.
+
+#### Ledger
+
+No new Pass, no new decision, no new standing rule.
+
+---
+
 ### `Pass 137.0` (`523ca6d`) — A GRADIENT AND A SOLID OF THE SAME INK WERE DIFFERENT COLOURS — ★★★ **A SECOND NATIVE INK ROUTE FOR SHADINGS, TAKEN WHEN OVERPRINT IS NOT IN FORCE** — the pre-existing route only engaged UNDER overprint, so every gradient on an ordinary (non-overprinting) subtractive page still took a `CMYK → sRGB → CMYK` round trip that a flat fill of the same colour never took — ★★ **FOUND BY THE OPERATOR LOOKING AT A SCREEN, NOT BY ANY GATE** — the print-conformance harness scores trap crosses, and the box that exposed this carries none — ★ **fixing one half of a two-halves-agree-wrongly defect is what made the other half visible**: every object on the page used to take the same round trip and be wrong together, until `Pass 130.1` gave images their authored ink and a shading started disagreeing with an image of the same colour — 2026-08-27 (286th filing)
 
 **Shipped 2026-08-27.** Commit `523ca6d` (`523ca6dda4cdb3501c3eb292f24330d37eaab7a4`),
@@ -175,8 +456,17 @@ identity on the way to the compositor, and these no longer do.
 
 #### Measured
 
-Live-vs-reference mean colour distance on the four shading pairs of
-the sheet that exposed this:
+★★ **CORRECTED 2026-08-27 (287th filing) — the table below as first
+filed was WRONG, and is kept rather than deleted because the mistake is
+more instructive than the number.** The engineer's dispatch said "the
+four shading pairs of the sheet that exposed it"; **the sheet has TWO
+shading panels of four pairs each**, and this table silently mixed them.
+Verified by this role reading `crates/pdfce-render/src/interpret.rs`'s
+own corrected inline comment (written by the engineer beside the fix,
+`commit 36628bb`), which carries the identical re-measured numbers.
+
+**As first filed (WRONG — a crop rectangle chosen by eye, mixing two
+different four-pair panels into one table):**
 
 | pair | before | after |
 |---|---|---|
@@ -185,6 +475,28 @@ the sheet that exposed this:
 | b | 0.1 | 0.1 (already correct) |
 | d | 21.3 | 23.8 (mesh — see residual below) |
 
+**Corrected (swatch bounds found by scanning for non-white runs, then
+inset 6–8 px so no border pixel enters the mean — by `commit 36628bb`,
+source of this table):**
+
+| panel | pair | type | mean abs diff | verdict |
+|---|---|---|---|---|
+| A | a | 7 (mesh) | 24.06 | still wrong at the time — fixed by `Pass 137.1` |
+| A | b | 3 | 3.52 | ok |
+| A | c | 2 | 1.16 | ok |
+| A | d | 7 (mesh) | 16.87 | still wrong at the time — fixed by `Pass 137.1` |
+| B | a | 3 | 5.14 | ok |
+| B | b | 2 | 1.40 | ok |
+| B | c | 2 | 1.43 | ok |
+| B | d | 3 | 8.74 | edge only — the two mean colours agree to 0.7 of 255, not a colour error |
+
+The pair the first table labelled "d … mesh, 23.8" was panel B's pair d —
+a **type 3** shading whose apparent mismatch was edge antialiasing on a
+hard-edged circle, not colour at all. **Six of eight pairs were already
+correct at this Pass; the two that remained wrong are exactly the two
+type 7 meshes** — which is what this Pass's original text concluded, but
+**by luck rather than from the (wrong) numbers above it.**
+
 The type-2 gradient on the neighbouring sheet now matches its
 reference. Print-conformance corpus, 51 patches: **5 FAIL, 35 pass, 11
 UNRESOLVED — identical to before this Pass, no regression anywhere.**
@@ -192,18 +504,24 @@ UNRESOLVED — identical to before this Pass, no regression anywhere.**
 A/B against a build with the fix disabled, on the committed fixture:
 **without** it `|diff| = 18.33`; **with** it `|diff| = 0.00`.
 
-#### ★ Residual — must not read as done
+#### ★ Residual — must not read as done (★★ DISCHARGED 2026-08-27, `Pass 137.1`)
 
-**Mesh shadings (types 4–7) are unchanged.** `Shading::paint_cmyk`
-refuses non-analytic geometry, so a mesh still bridges through sRGB
-and still disagrees with an image of the same ink. Both pairs still
-mismatched on the operator's sheet (row `d` above) are shading type 7.
-This is the **pre-existing residual filed under `Pass 97.1k`**, not
-something this Pass introduced or widened — see that entry's own
-Backlog history, and its **Planned → native colorant path for mesh
-shadings** row in `FEATURES.md`, updated in this same filing to say
-mesh is now the *only* population still bridging through sRGB on a
-subtractive page.
+**Mesh shadings (types 4–7) were unchanged at THIS Pass.** `Shading::paint_cmyk`
+refused non-analytic geometry, so a mesh still bridged through sRGB
+and still disagreed with an image of the same ink. The two mismatched
+pairs on the operator's sheet (panel A, pairs a and d, per the corrected
+table above) were both shading type 7. This was the **pre-existing
+residual filed under `Pass 97.1k`**, not something this Pass introduced
+or widened — see that entry's own Backlog history.
+
+**This residual is now discharged.** `Pass 137.1` (`d1ce4ac`, filed
+above, same date) gave a mesh its own colorant carrier (`Shade::Ink`,
+`MeshColorants`) — a `ColorRamp`-shaped fix could not reach it, because a
+mesh has no ramp to widen. `FEATURES.md`'s "Planned → native colorant
+path for mesh shadings" row, updated in THIS filing to say mesh was the
+*only* population still bridging, is now **deleted from Planned
+entirely** (folded into the *Implemented* rows) rather than merely
+narrowed again — see `Pass 137.1`'s own `FEATURES.md` section, above.
 
 #### Fixtures and tests
 
@@ -84625,6 +84943,44 @@ correctly, not defectively, bridged. Found by the operator comparing a
 live shading against a reference image on screen, not by any gate; see
 `Pass 137.0`'s own Shipped entry for the full account and the 18-level
 measured defect.
+
+**★★★ AMENDMENT 2026-08-27 (287th filing) — THE MESH ROW IS DISCHARGED.
+EVERY POPULATION THIS ENTRY EVER TRACKED IS NOW RESOLVED, ONE WAY OR THE
+OTHER, AND THE ENTRY IS CLOSED.** `Pass 137.1` (`d1ce4ac`) gave a mesh its
+own colorant carrier (`Shade::Ink`, `MeshColorants::{Vertex,Parametric}`),
+because a mesh has no `ColorRamp` for the analytic widening above to
+reach — the two algorithms are opposite (forward-rasterised vs.
+inverse-mapped), not variations of one route, which is why this was
+always going to need its own carrier rather than a flag flip.
+
+Updated population table:
+
+| population | state |
+|---|---|
+| **`DeviceCMYK` images**, direct | **DELIVERED** (`130.1`) |
+| **`DeviceCMYK` images behind an `/Indexed` base** | **DELIVERED** (`130.1`) |
+| **analytic (`Separation`/`DeviceN`) shadings** | **DELIVERED** (`122.6`, widened `137.0`) |
+| **mesh shadings** | **DELIVERED** (`137.1`) |
+| **images with no ink to keep** (anything not authored in `DeviceCMYK`) | **CORRECTLY still bridged** — not a shortfall |
+
+★ **A bonus this entry did not anticipate:** `Shading::paint_cmyk` was
+already generic before `137.1` — it dispatches to whichever geometry
+(`self.mesh` vs. the analytic ramp) carries the ink — so `interpret.rs`'s
+existing overprint-in-force call site reaches a mesh too, with no change
+of its own. A mesh sharing a `Separation`/`DeviceN` source now composites
+correctly **under overprint**, not merely with correct colour transport;
+only a `DeviceCMYK`-direct mesh under `/OPM 1` remains excluded, for the
+same value-dependence reason the analytic case is. This entry's own
+acceptance criterion never asked for that; it is recorded because a
+reader tracking `overprint_shadings_unsupported` needs to know the mesh
+population inside it shrank too, not only `cmyk_bridged_pixels`'s.
+
+**This Backlog entry is retained as the historical record of a
+four-Pass saga (`130.1`, `122.6`, `137.0`, `137.1`) rather than deleted
+or moved** — no single Pass ID covers its full scope, so there is no one
+Shipped entry to fold it into. Every population it named is now either
+delivered or correctly out of scope; there is no remaining acceptance
+criterion for this entry to owe.
 
 ---
 

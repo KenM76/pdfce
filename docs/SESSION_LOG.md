@@ -67828,3 +67828,85 @@ engineer's own next-session notes carry any other open items.
   work in this area; no Pass ID has been minted for it yet.
 
 ---
+
+## 2026-08-27 (287th filing) — `Pass 137.1` (`d1ce4ac`) SHIPS: the mesh residual `Pass 137.0` could not reach discharged; `36628bb` files a docs-only correction to `Pass 137.0`'s own measured table
+
+**Shipped:**
+- Pass 137.1 — a mesh shading now composites its own authored ink
+  natively, closing the residual `Pass 137.0` explicitly could not reach:
+  a mesh has no `ColorRamp`, so `137.0`'s widened gate
+  (`ramp.is_some_and(has_colorants)`) read `false` for a fully ink-bearing
+  mesh and silently answered "no colorants" without failing. New carrier
+  `Shade::Ink` + `MeshColorants::{None,Vertex,Parametric}`, decided once
+  per mesh at parse (never per-vertex, which would make a seam a file
+  never asked for). **Bonus this role found by reading the shipped code,
+  not claimed in the dispatch's own prose**: `Shading::paint_cmyk` was
+  already generic and dispatches to the mesh route before the analytic
+  checks, so the *existing* overprint call sites in `interpret.rs` reach
+  a mesh too — a `Separation`/`DeviceN`-sourced mesh now also composites
+  correctly **under overprint**, not merely with correct colour, and
+  `overprint_shadings_unsupported` no longer counts it. Only a
+  `DeviceCMYK`-direct mesh under `/OPM 1` remains excluded, same reason
+  the analytic case is. Full account: `ROADMAP.md`'s `Pass 137.1`
+  Shipped entry.
+- `36628bb` (docs-only, no Pass ID) — the engineer's own correction
+  commit, discharging three of the 286th filing's hard-rule-11 survivors
+  (`cmyk_bridged_pixels` and `overprint_shadings_unsupported`'s
+  descriptions in `interpret.rs` and `main.rs`) and correcting `Pass
+  137.0`'s own measured table.
+
+**Decisions made this session:**
+- None new. Both commits are engineering fixes/corrections within
+  existing scope; no architectural boundary moved.
+
+**Findings + decisions:**
+- **All eight pairs on the operator's own conformance sheet now agree.**
+  He was told after `Pass 137.0` that two would still disagree (both
+  type 7 mesh); that is no longer true.
+- **A predicate that tests the wrong carrier is silent, not loud.**
+  `ramp.is_some_and(has_colorants)` answers `false` for an ink-bearing
+  mesh with no error, no counter, and no disclosure that the question
+  itself was aimed at the wrong place. The fix that generalizes: move the
+  predicate beside the method it predicts (`Shading::has_colorants()`
+  now lives next to `paint_cmyk`), so it cannot drift the way a
+  hand-written call-site gate can.
+- **`Pass 137.0`'s own measured table was wrong, and the mistake is
+  recorded rather than quietly replaced.** The dispatch said "the four
+  shading pairs of the sheet that exposed it"; the sheet has TWO
+  four-pair panels, and the table silently mixed them — one pair scored
+  as an unfixed mesh (23.8) was actually an already-fixed type 3 radial
+  showing edge antialiasing, not colour error. Re-measured with swatch
+  bounds found by scanning for non-white runs (not guessed by eye), inset
+  6–8 px so no border pixel enters the mean: six of eight pairs were
+  already correct, and the two that remained wrong were exactly the two
+  type 7 meshes — the right conclusion, reached by luck rather than by
+  the numbers that accompanied it. **Lesson: a crop rectangle chosen by
+  eye is a measurement instrument, and an unverified one reports edge
+  misalignment as colour error in both directions.**
+- Five `crates/` doc-comment survivors of `Pass 137.1`'s own meaning
+  change reported to the engineer, not edited (hard rule 11 — see
+  `ROADMAP.md`'s `Pass 137.1` entry for the full list): most notably
+  `mesh.rs`'s own module-level **"What is deliberately NOT done here"**
+  section, whose "No native-ink route" and "No overprint" bullets are
+  now false — a module's own not-done list contradicted by its own new
+  code.
+- **Two findings graduated to `C:\personal_rag\pdf\` this filing** (see
+  below): a mesh shading's colour has no ramp-shaped carrier for
+  colorants, so a colorant-path project must budget a *second*, opposite
+  carrier for mesh geometry rather than assuming the analytic route
+  generalizes; and a gate on the wrong carrier fails by answering "no"
+  convincingly, not by erroring.
+
+**Still in flight:**
+- None specific to this shading/mesh saga — `Pass 97.1k`'s Backlog entry
+  is now closed (every population it tracked is delivered or correctly
+  out of scope) and no further Pass ID is queued in this area.
+
+**For next session:**
+- Discharge the five `crates/` survivors listed in `ROADMAP.md`'s
+  `Pass 137.1` entry (doc comments only — no behavior change owed).
+- `python tools/check-commits-filed.py` should now report both `36628bb`
+  and `d1ce4ac` as filed (their abbreviated hashes appear above and in
+  `ROADMAP.md`); confirm on the next run with a shell.
+
+---

@@ -1783,9 +1783,9 @@ D:\Dev\pdfce\
                                    dropped, §11.4.4's removal skipped,
                                    counted `cmyk_groups_approximated`) —
                                    the arithmetic exists, the **second
-                                   content walk** does not; **MESH shadings,
-                                   and images with NO INK to keep, bridge
-                                   through sRGB** (`cmyk_bridged_pixels`,
+                                   content walk** does not; **images with
+                                   NO INK to keep bridge through sRGB**
+                                   (`cmyk_bridged_pixels`,
                                    `cmyk_unbridged_images`) — ★ **amended
                                    2026-08-26 (`Pass 130.1`, `5dd4083`);
                                    this clause read "**images and shadings
@@ -1803,6 +1803,26 @@ D:\Dev\pdfce\
                                    `B`/`b`, §11.6.7 shading patterns),
                                    `/AIS`, and **`/TR` still read, counted
                                    and NOT evaluated** — is **unchanged**.
+                                   ★★ **AMENDED AGAIN 2026-08-27
+                                   (`Pass 137.0` `523ca6d` +
+                                   `Pass 137.1` `d1ce4ac`) — this clause
+                                   read "MESH shadings, and images with NO
+                                   INK to keep, bridge through sRGB", and
+                                   the MESH half is now FALSE too.**
+                                   `Pass 137.0` widened the analytic native
+                                   route to run regardless of overprint
+                                   state; `Pass 137.1` gave a mesh its own
+                                   colorant carrier (`Shade::Ink`,
+                                   `MeshColorants`) because a mesh has no
+                                   `ColorRamp` for that widening to reach.
+                                   Only images (and meshes) with genuinely
+                                   **no ink to keep** — an additive colour
+                                   space — still bridge; a
+                                   `DeviceCMYK`-direct source under
+                                   `/OPM 1` overprint is a separate,
+                                   narrower exclusion (Table 149's
+                                   value-dependent row), unchanged by
+                                   either Pass.
     pdfce-print\                 <- Printing: job planning + spooling. Shipped with
                                    `Pass 55.2` (2026-08-10) but never documented in this
                                    tree until the eighty-fifth filing — a filing gap this
@@ -24699,6 +24719,15 @@ free 072.**
   and are **not** interchangeable, because a bridged pixel has been through a
   many-to-one conversion and back. A print corpus will show
   `cmyk_bridged_pixels` **drop sharply** with nothing having regressed.
+
+  **★★ AMENDED 2026-08-27 (`Pass 137.1`, `d1ce4ac`) — "mesh shadings" no
+  longer belongs in the list two paragraphs above.** It was accurate when
+  written (2026-08-26, before `Pass 137.0`/`137.1` shipped): at that time
+  every shading, analytic or mesh, bridged. It is not accurate now — a
+  mesh got its own colorant carrier (`Shade::Ink`, `MeshColorants`) the
+  next day, and only genuinely additive meshes and group results remain
+  in the "no ink to keep" population. Kept legible rather than rewritten,
+  per this section's own append-only convention.
 
   **(d) `f32`, on one type alias.** `cmyk_buffer::Chan`, so revisiting it is
   one line. §11.4.4's `1/α_gn` is what forces floats at all: an 8-bit
