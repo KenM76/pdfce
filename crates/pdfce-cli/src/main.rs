@@ -25735,6 +25735,36 @@ numbered 1..={})",
         );
     }
 
+    // ★ THE OBJECTS INSIDE FORM XOBJECTS, which the rows above cannot show.
+    //
+    // A form is emitted above as ONE object bounded by its `/BBox`, so on a
+    // page whose body is wrapped in a form -- a CAD sheet's orthographic view,
+    // a print panel -- every `object` row above is furniture and everything
+    // the operator came for is in here.
+    //
+    // A SEPARATE line type, not more `object` rows, and the reason is not
+    // cosmetic: an `object` index is what the editing subcommands take, and
+    // every one of them writes to the PAGE's content stream. A leaf's tokens
+    // index the FORM's stream -- a different buffer. Printing leaves as
+    // `object` rows would hand a script indices that corrupt the page when
+    // used, silently, because they are in range. `editable=false` says so on
+    // every row.
+    for (index, leaf) in model.leaves.iter().enumerate() {
+        let (kind, detail) = object_detail(&leaf.object);
+        let containment = leaf
+            .containment
+            .iter()
+            .map(|id| id.num.to_string())
+            .collect::<Vec<_>>()
+            .join(">");
+        println!(
+            "leaf page={page_number} index={index} kind={kind} bbox={} containment={containment} \
+paint_order={} editable=false {detail}",
+            bbox_token(leaf.object.page_bbox()),
+            leaf.paint_order,
+        );
+    }
+
     if let Some(point) = hit_point {
         // The tolerance is passed through verbatim so the operator can
         // reproduce any zoom's catch radius; a non-finite or negative value
@@ -25817,12 +25847,31 @@ bbox={}",
     let d = &model.diagnostics;
     println!(
         "object-list {} page={page_number} objects={} paths={paths} text={text} images={images} \
-forms={forms} dropped_objects={} dropped_nodes={}",
+forms={forms} dropped_objects={} dropped_nodes={} leaves={} form_cycles={} \
+form_depth_overflows={}",
         input.display(),
         model.objects.len(),
         d.objects_dropped,
         d.nodes_dropped,
+        model.leaves.len(),
+        d.form_cycles,
+        d.form_depth_overflows,
     );
+    // Rule 4. A truncated leaf list is INVISIBLE in the rows above -- it looks
+    // exactly like a page with fewer objects. Both counts are on the stable
+    // line for a script, and named here for a human.
+    if d.form_cycles > 0 || d.form_depth_overflows > 0 {
+        eprintln!(
+            "pdfce-cli: {}: the leaf list is INCOMPLETE. {} form invocation(s) were skipped as \
+cycles (a form that invokes itself, directly or through a chain -- legal under ISO 32000-1 \
+§8.10.1, merely unbounded) and {} because the nesting exceeded {} levels. Objects inside those \
+forms are not listed above.",
+            input.display(),
+            d.form_cycles,
+            d.form_depth_overflows,
+            pdfce_core::content::MAX_FORM_DEPTH,
+        );
+    }
     exit::SUCCESS
 }
 
