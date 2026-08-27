@@ -1024,6 +1024,24 @@ pub struct FormLeaf {
     /// reach and loses all sense of structure, which is a different kind of
     /// lost.
     pub containment: Vec<ObjId>,
+    /// The index, in [`PageObjects::objects`], of the **outermost** form this
+    /// object is inside — i.e. where on the page's own paint order this leaf
+    /// was drawn.
+    ///
+    /// # ★ Why a hit test cannot be correct without it
+    ///
+    /// Leaves and page-stream objects are two lists, but they are **one paint
+    /// order**: a form's contents are painted exactly where its `Do` sits
+    /// among the page's other objects. Something drawn on the page *after* a
+    /// form is on top of everything inside that form, and something drawn
+    /// before it is underneath.
+    ///
+    /// Without this field the only orderings available are "all leaves first"
+    /// or "all leaves last", and both are wrong for any page that draws
+    /// anything outside its forms. With it, a caller — or
+    /// [`super::hit_test_point_deep`] — can interleave the two lists into the
+    /// order the renderer actually painted them.
+    pub paint_order: usize,
 }
 
 impl FormLeaf {
@@ -1478,8 +1496,15 @@ fn collect_form_leaves(
     path: &mut Vec<ObjId>,
     out: &mut Vec<FormLeaf>,
     diag: &mut DecomposeDiagnostics,
+    root: Option<usize>,
 ) {
-    for obj in objects {
+    for (index, obj) in objects.iter().enumerate() {
+        // `root` is the OUTERMOST form's index in the page's own object list.
+        // At the top level that is this object's own index; deeper down it is
+        // whatever the top level already decided, carried unchanged -- a nested
+        // form is painted where its outermost ancestor's `Do` sits, not
+        // somewhere of its own.
+        let root = root.unwrap_or(index);
         let VectorObject::Image(img) = obj else {
             continue;
         };
@@ -1546,10 +1571,11 @@ fn collect_form_leaves(
                 out.push(FormLeaf {
                     object: child.clone(),
                     containment: path.clone(),
+                    paint_order: root,
                 });
             }
         }
-        collect_form_leaves(view, &nested.objects, path, out, diag);
+        collect_form_leaves(view, &nested.objects, path, out, diag, Some(root));
         path.pop();
     }
 }
@@ -1627,6 +1653,7 @@ pub fn decompose_page(
         &mut path,
         &mut leaves,
         &mut model.diagnostics,
+        None,
     );
     model.leaves = leaves;
     Ok(model)

@@ -68,7 +68,7 @@
 //! for the tolerances selection uses.
 
 use super::decompose::{
-    FillRule, PageObjects, PathObject, Segment, Subpath, TextObject, VectorObject,
+    FillRule, ImageSource, PageObjects, PathObject, Segment, Subpath, TextObject, VectorObject,
 };
 use super::geometry::{Bounds, Matrix, Point};
 
@@ -173,6 +173,116 @@ pub fn hit_test_point(model: &PageObjects, point: Point, tolerance: f64) -> Opti
 #[must_use]
 pub fn hit_test_point_all(model: &PageObjects, point: Point, tolerance: f64) -> Vec<usize> {
     hits_front_to_back(model, point, tolerance).collect()
+}
+
+/// What a deep hit test found.
+///
+/// Two lists, one paint order — see [`hit_test_point_deep`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HitTarget {
+    /// An index into [`PageObjects::objects`] — an object drawn by the page's
+    /// own content stream, and therefore editable by the paint-order verbs.
+    Object(usize),
+    /// An index into [`PageObjects::leaves`] — an object drawn from **inside**
+    /// a form XObject.
+    ///
+    /// Read [`FormLeaf::stream`] before doing anything but selecting it: its
+    /// token range indexes the form's buffer, not the page's.
+    Leaf(usize),
+}
+
+/// Every target a page-space `point` hits, **topmost first**, descending into
+/// form XObjects and **excluding the forms themselves**.
+///
+/// # ★★★ WHY A FORM IS NOT A CANDIDATE
+///
+/// [`hit_test_point`] treats an image/form object as its bounding box inflated
+/// by the tolerance. That is right for a **raster image**, whose quad genuinely
+/// is its ink. It is wrong for a **form**, whose `/BBox` is a declaration about
+/// extent (§8.10.1 — a clipping boundary) and says nothing about coverage: a
+/// form declaring the whole `MediaBox` and drawing one small line is legal and
+/// common.
+///
+/// The consequence, which the operator met: a page-sized form is a page-sized
+/// hit target sitting in paint order above everything drawn before it, and it
+/// wins every click at every point. *"When I click on one of the objects all I
+/// get is the page selected."* He was selecting a real object; it was a form.
+///
+/// So this function answers with what is **inside** the form. The form itself
+/// is still reachable — [`FormLeaf::containment`] names every enclosing form,
+/// so a shell can offer "select the container" as a deliberate second act,
+/// which is a different thing from having it win by default.
+///
+/// # ★★ The ordering, which is the part that is easy to get wrong
+///
+/// Leaves and page objects are **two lists and one paint order**: a form's
+/// contents are painted exactly where its `Do` sits among the page's other
+/// objects. Something drawn on the page *after* a form sits on top of
+/// everything inside it. So this does not concatenate the lists — it
+/// interleaves them on [`FormLeaf::paint_order`], which is why that field
+/// exists. Returning "all leaves first" or "all leaves last" would be wrong on
+/// any page that draws anything outside its forms.
+///
+/// Within one form, leaves keep their own paint order; ties therefore resolve
+/// to the later-painted leaf, exactly as they do between page objects.
+///
+/// # Returns
+///
+/// Topmost first, so `.first()` is the object a single click should select.
+/// **Empty** for a miss and for a non-finite point — never a `None`-vs-empty
+/// ambiguity. A caller offering click-through cycling steps down the list, and
+/// gets objects inside forms as first-class stops on that walk.
+///
+/// # Examples
+///
+/// ```
+/// # use pdfce_core::document::Document;
+/// # use pdfce_core::page_tree;
+/// # use pdfce_core::vector::{decompose_page, hit_test_point_deep, HitTarget, Matrix, Point};
+/// # fn demo(doc: &Document) -> Result<(), Box<dyn std::error::Error>> {
+/// let page = &page_tree::pages(doc)?[0];
+/// let model = decompose_page(&doc.view(), page, Matrix::IDENTITY)?;
+///
+/// // A click inside a page-sized form now finds what is drawn in it.
+/// if let Some(HitTarget::Leaf(i)) = hit_test_point_deep(&model, Point::new(30.0, 30.0), 1.0).first() {
+///     let leaf = &model.leaves[*i];
+///     println!("inside {} nested form(s)", leaf.containment.len());
+/// }
+/// # Ok(())
+/// # }
+/// ```
+#[must_use]
+pub fn hit_test_point_deep(model: &PageObjects, point: Point, tolerance: f64) -> Vec<HitTarget> {
+    if !point.is_finite() {
+        return Vec::new();
+    }
+
+    // (paint position, tie-breaker within that position, target). The
+    // tie-breaker keeps leaves of one form in their own paint order and puts a
+    // page object at its own index unambiguously.
+    let mut hits: Vec<(usize, usize, HitTarget)> = Vec::new();
+
+    for (i, obj) in model.objects.iter().enumerate() {
+        // ★ The exclusion. A form's bbox is an extent declaration, not ink.
+        if matches!(obj, VectorObject::Image(img) if img.source == ImageSource::Form) {
+            continue;
+        }
+        if object_hit(obj, point, tolerance) {
+            hits.push((i, 0, HitTarget::Object(i)));
+        }
+    }
+    for (i, leaf) in model.leaves.iter().enumerate() {
+        if object_hit(&leaf.object, point, tolerance) {
+            // `i + 1` so a leaf of the form at index `n` sorts after a page
+            // object at index `n` could ever be -- there is no page object at
+            // `n` in that case, because `n` IS the form and forms are skipped.
+            hits.push((leaf.paint_order, i + 1, HitTarget::Leaf(i)));
+        }
+    }
+
+    // Topmost first: reverse paint order.
+    hits.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+    hits.into_iter().map(|(_, _, t)| t).collect()
 }
 
 /// The indices of every object selected by a page-space marquee `rect`,

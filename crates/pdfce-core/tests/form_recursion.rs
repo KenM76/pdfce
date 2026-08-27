@@ -64,7 +64,9 @@ use pdfce_core::document::Document;
 use pdfce_core::page_tree;
 use pdfce_core::text_extract::ContentStreamRef;
 use pdfce_core::vector::decompose::{ImageSource, PageObjects};
-use pdfce_core::vector::{Matrix, VectorObject, decompose_page};
+use pdfce_core::vector::{
+    HitTarget, Matrix, Point, VectorObject, decompose_page, hit_test_point, hit_test_point_deep,
+};
 
 fn model(name: &str) -> PageObjects {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -272,4 +274,95 @@ fn a_leaf_names_its_own_stream_and_is_not_editable() {
         "editing through the recursion is not built; claiming otherwise is how \
          a caller reaches for a verb that would corrupt the page"
     );
+}
+
+/// ★★★ THE OPERATOR'S CLICK. Before: the wrapper. After: the square.
+///
+/// This is the whole feature in one assertion. `hit_test_point` treats a form
+/// as its bounding box, so on a page-sized form it answers with the form no
+/// matter where you click — *"all I get is the page selected."*
+/// `hit_test_point_deep` excludes the form and answers with what is drawn
+/// inside it.
+#[test]
+fn a_click_inside_a_page_sized_form_now_finds_the_object_not_the_wrapper() {
+    let m = model("page-sized-form.pdf");
+    let inside_the_first_square = Point::new(30.0, 30.0);
+
+    // The old answer: object 0, which is the page-sized form.
+    assert_eq!(
+        hit_test_point(&m, inside_the_first_square, 1.0),
+        Some(0),
+        "the shallow test still answers with the wrapper -- unchanged on \
+         purpose, because eleven editing verbs index that list"
+    );
+
+    // The new answer: a leaf, and specifically the square under the point.
+    let deep = hit_test_point_deep(&m, inside_the_first_square, 1.0);
+    let Some(HitTarget::Leaf(i)) = deep.first().copied() else {
+        panic!("expected a leaf under the point, got {deep:?}");
+    };
+    let b = m.leaves[i].object.page_bbox();
+    assert_eq!(
+        (b.min.x.round() as i64, b.min.y.round() as i64),
+        (10, 10),
+        "the square the click was actually on"
+    );
+
+    // ★ And the form itself is NOT in the candidate list at all. Its `/BBox` is
+    // an extent declaration (§8.10.1), not a statement about coverage.
+    assert!(
+        !deep.iter().any(|t| matches!(t, HitTarget::Object(_))),
+        "a form must not answer a first click; it is still reachable through \
+         the leaf's containment path, which is a deliberate second act"
+    );
+}
+
+/// A click on empty space inside the form's bbox hits nothing.
+///
+/// The counterpart to the test above, and the one that proves the exclusion is
+/// real rather than the leaf merely winning a race: the form's bbox covers this
+/// point, so if forms were still candidates this would return the form.
+#[test]
+fn a_click_on_empty_space_inside_a_form_hits_nothing() {
+    let m = model("page-sized-form.pdf");
+    // (60,60) is inside the 200x200 form and inside none of its three squares.
+    let empty = Point::new(60.0, 60.0);
+
+    assert_eq!(
+        hit_test_point(&m, empty, 1.0),
+        Some(0),
+        "the shallow test answers with the form, because its bbox covers this"
+    );
+    assert!(
+        hit_test_point_deep(&m, empty, 1.0).is_empty(),
+        "★ nothing is drawn here, so nothing should be selectable here"
+    );
+}
+
+/// Leaves and page objects are ONE paint order, interleaved on
+/// `paint_order` — not two lists concatenated.
+///
+/// `shared-form-twice.pdf` places the same form at (10,10) and (120,120), so
+/// each invocation's leaf must be found under its own invocation's point and
+/// must name that invocation's position. A concatenation would still pass a
+/// single-point test; two points at two invocations is what distinguishes it.
+#[test]
+fn a_leaf_is_found_under_its_own_invocation() {
+    let m = model("shared-form-twice.pdf");
+
+    for (point, expected_origin) in [
+        (Point::new(20.0, 20.0), (10_i64, 10_i64)),
+        (Point::new(130.0, 130.0), (120, 120)),
+    ] {
+        let deep = hit_test_point_deep(&m, point, 1.0);
+        let Some(HitTarget::Leaf(i)) = deep.first().copied() else {
+            panic!("expected a leaf at {point:?}, got {deep:?}");
+        };
+        let b = m.leaves[i].object.page_bbox();
+        assert_eq!(
+            (b.min.x.round() as i64, b.min.y.round() as i64),
+            expected_origin,
+            "the leaf under {point:?} must belong to the invocation drawn there"
+        );
+    }
 }
