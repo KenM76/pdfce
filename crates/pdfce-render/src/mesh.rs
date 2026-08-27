@@ -254,10 +254,51 @@ const MAX_SUBDIVISION: u32 = 64;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Shade {
     /// `n` colour components, already through the shading's `/ColorSpace`
-    /// and into sRGB. The mesh had no `/Function`.
+    /// and into sRGB, with **no colorants to keep** — the mesh had no
+    /// `/Function` and its colour space is additive.
     Rgb(Rgb),
+    /// The same, but the space **was** subtractive, so the authored ink is
+    /// carried alongside the converted value.
+    ///
+    /// # ★★ Why both, rather than the ink alone
+    ///
+    /// The two are needed at different times and neither can be recovered
+    /// from the other. `rgb` is what an additive page composites with, and
+    /// deriving it from `cmyk` at paint time would run the conversion once
+    /// per **pixel** instead of once per **vertex**. `cmyk` is what an ink
+    /// page composites with, and deriving it from `rgb` is the exact round
+    /// trip this variant exists to avoid — `CMYK → sRGB` is many-to-one, so
+    /// the ink that comes back is not the ink that left.
+    ///
+    /// Carrying both also makes the sRGB path **byte-identical** to what it
+    /// was before this variant existed, which is the property that let this
+    /// ship without re-blessing every mesh test.
+    ///
+    /// # ★ Interpolation happens in BOTH, independently
+    ///
+    /// [`lerp`](Shade::lerp) moves `rgb` and `cmyk` separately and linearly,
+    /// so a triangle's interior is *not* the conversion of the interpolated
+    /// ink, nor the interpolation of converted values — each space is
+    /// interpolated in itself. That is deliberate: §8.7.4.5.5 interpolates
+    /// *colour*, and a mesh's colour is stated in its own `/ColorSpace`, so
+    /// the ink path interpolating ink is the faithful reading. The sRGB
+    /// path keeps interpolating sRGB because that is what it already did
+    /// and because changing it would alter every additive mesh render for
+    /// no defect.
+    ///
+    /// A consequence worth stating rather than discovering: on a mesh whose
+    /// conversion is non-linear, the two paths differ in the interior even
+    /// though they agree at every vertex. Both are defensible; the spec
+    /// picks neither.
+    Ink {
+        /// The converted value, for an additive destination.
+        rgb: Rgb,
+        /// The authored colorants, for a subtractive one.
+        cmyk: [f32; 4],
+    },
     /// The parametric `t` of `MSH14`, still unevaluated. Resolved through
-    /// [`ColorRamp::at`] **after** interpolation.
+    /// [`ColorRamp::at`] — or [`ColorRamp::at_cmyk`] — **after**
+    /// interpolation.
     Parametric(f32),
 }
 
@@ -271,13 +312,29 @@ impl Shade {
                 g: f.mul_add(b.g - a.g, a.g),
                 b: f.mul_add(b.b - a.b, a.b),
             }),
+            (Self::Ink { rgb: ra, cmyk: ca }, Self::Ink { rgb: rb, cmyk: cb }) => Self::Ink {
+                rgb: Rgb {
+                    r: f.mul_add(rb.r - ra.r, ra.r),
+                    g: f.mul_add(rb.g - ra.g, ra.g),
+                    b: f.mul_add(rb.b - ra.b, ra.b),
+                },
+                cmyk: [
+                    f.mul_add(cb[0] - ca[0], ca[0]),
+                    f.mul_add(cb[1] - ca[1], ca[1]),
+                    f.mul_add(cb[2] - ca[2], ca[2]),
+                    f.mul_add(cb[3] - ca[3], ca[3]),
+                ],
+            },
             (Self::Parametric(a), Self::Parametric(b)) => Self::Parametric(f.mul_add(b - a, a)),
             // Unreachable by construction — a mesh is parametric or it is
-            // not, decided once from `/Function`'s presence. Kept total
-            // rather than `unreachable!()` because a panic in a renderer
-            // reached from a malformed file is a worse failure than a
-            // wrong pixel, and this branch cannot produce a wrong pixel
-            // without the parser already having produced a mixed mesh.
+            // not, decided once from `/Function`'s presence, and within the
+            // non-parametric branch a mesh's colour space either yields
+            // colorants for every vertex or for none (see
+            // [`MeshColorants`]). Kept total rather than `unreachable!()`
+            // because a panic in a renderer reached from a malformed file is
+            // a worse failure than a wrong pixel, and this branch cannot
+            // produce a wrong pixel without the parser already having
+            // produced a mixed mesh.
             (a, _) => a,
         }
     }
@@ -291,10 +348,61 @@ impl Shade {
     #[must_use]
     fn resolve(self, ramp: Option<&ColorRamp>) -> Option<Rgb> {
         match self {
-            Self::Rgb(c) => Some(c),
+            Self::Rgb(c) | Self::Ink { rgb: c, .. } => Some(c),
             Self::Parametric(t) => ramp?.at(t),
         }
     }
+
+    /// Resolve to **authored colorants**, the ink twin of [`Self::resolve`].
+    ///
+    /// # ★ `None` here must never be answered by converting
+    ///
+    /// A caller that gets `None` has to paint through [`Self::resolve`] and
+    /// let the sRGB bridge do its work — it must **not** convert the sRGB
+    /// value back to ink and pretend that is the authored value. The whole
+    /// reason this method exists is that the converted value cannot answer
+    /// the question, and a fallback that converts would reintroduce exactly
+    /// the round trip the ink path removes, while making the counter that
+    /// measures the round trip read zero.
+    ///
+    /// This is the same contract [`ColorRamp::at_cmyk`] states, for the same
+    /// reason, and the two are worded alike deliberately.
+    #[must_use]
+    fn resolve_cmyk(self, ramp: Option<&ColorRamp>) -> Option<[f32; 4]> {
+        match self {
+            Self::Ink { cmyk, .. } => Some(cmyk),
+            Self::Parametric(t) => ramp?.at_cmyk(t),
+            Self::Rgb(_) => None,
+        }
+    }
+}
+
+/// Where a mesh's ink comes from, or that it has none.
+///
+/// # Why this is a field on [`Mesh`] and not recomputed at paint time
+///
+/// Deciding it once, at parse, is what makes it **all-or-nothing** — the
+/// same discipline [`ColorRamp`] applies to its own colorant samples, and
+/// for the same reason: a mesh that yielded ink for some vertices and not
+/// others would composite part of its area natively and part through the
+/// bridge, and the two do not agree, so the boundary would show as a seam
+/// no file asked for. One flag for the whole mesh cannot produce a seam.
+///
+/// It also keeps the paint-time test `O(1)`. Walking every vertex on every
+/// paint would be `O(n)` on geometry that can run to a megabyte, once per
+/// frame, to answer a question whose answer never changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeshColorants {
+    /// No ink: an additive colour space with nothing to preserve. Painting
+    /// must go through the sRGB bridge.
+    None,
+    /// Every vertex carries authored colorants ([`Shade::Ink`]).
+    Vertex,
+    /// The mesh is parametric, so its ink — if any — lives in the
+    /// [`ColorRamp`], which is not known at parse time. **A caller must
+    /// still check [`ColorRamp::has_colorants`]**; this variant says only
+    /// that the question is the ramp's to answer.
+    Parametric,
 }
 
 /// One triangle of a type 4 or type 5 mesh, in the shading's **target
@@ -378,6 +486,10 @@ pub struct Mesh {
     /// carry and which is therefore **inferred** from the stream length
     /// (`MSH21`). `None` for every other type.
     pub rows_inferred: Option<usize>,
+    /// Whether this mesh's colour can reach a compositor **as ink**, and
+    /// where that ink lives. Decided once, at parse — see
+    /// [`MeshColorants`].
+    pub colorants: MeshColorants,
 }
 
 impl Mesh {
@@ -540,9 +652,16 @@ impl Params {
         if self.parametric {
             return Some(Shade::Parametric(comps[0]));
         }
-        Some(Shade::Rgb(
-            space.to_rgb(comps, intent, diag).unwrap_or(Rgb::BLACK),
-        ))
+        let rgb = space.to_rgb(comps, intent, diag).unwrap_or(Rgb::BLACK);
+        // ★ Both answers come out of the SAME `comps`, in the same call, for
+        // the same reason `ColorRamp::new` builds its two vectors in one
+        // loop: a `/Separation` or `/DeviceN` space converts through a
+        // `/tintTransform` that is allowed to be arbitrary PostScript, and
+        // nothing would force two separate evaluations of it to agree.
+        match space.to_cmyk(comps, diag) {
+            Some(cmyk) => Some(Shade::Ink { rgb, cmyk }),
+            None => Some(Shade::Rgb(rgb)),
+        }
     }
 
     /// Bits in one type 4 or type 5 vertex record, before padding.
@@ -754,13 +873,66 @@ pub fn parse(input: &ParseInput<'_>, diag: &mut ColorDiagnostics) -> Result<Mesh
         MeshData::Patches(p) => p.len(),
     };
 
+    let colorants = classify_colorants(&data_colorant_census(&data));
     Ok(Mesh {
         shading_type: input.shading_type,
         data,
         records,
         truncated,
         rows_inferred,
+        colorants,
     })
+}
+
+/// Census of what the decoded shades actually are: `(ink, rgb, parametric)`.
+///
+/// Counted rather than sampled. A mesh whose first vertex converts and whose
+/// thousandth does not is exactly the case [`MeshColorants`] exists to make
+/// impossible, and a first-vertex probe would miss it while looking rigorous.
+fn data_colorant_census(data: &MeshData) -> (usize, usize, usize) {
+    let mut census = (0usize, 0usize, 0usize);
+    let mut count = |s: &Shade| match s {
+        Shade::Ink { .. } => census.0 += 1,
+        Shade::Rgb(_) => census.1 += 1,
+        Shade::Parametric(_) => census.2 += 1,
+    };
+    match data {
+        MeshData::Triangles(tris) => {
+            for t in tris {
+                for s in &t.shade {
+                    count(s);
+                }
+            }
+        }
+        MeshData::Patches(patches) => {
+            for p in patches {
+                for s in &p.corner {
+                    count(s);
+                }
+            }
+        }
+    }
+    census
+}
+
+/// Turn the census into a verdict, **all-or-nothing**.
+///
+/// Any `Rgb` at all demotes the whole mesh to [`MeshColorants::None`], even
+/// beside a thousand `Ink` vertices. That is the seam argument in
+/// [`MeshColorants`]: half a mesh painted natively and half bridged do not
+/// meet, and a visible boundary inside one object is a worse outcome than
+/// the whole object taking the conversion every other renderer takes.
+///
+/// An empty mesh is [`MeshColorants::None`] — there is nothing to paint, so
+/// the answer is the one that promises least.
+const fn classify_colorants((ink, rgb, parametric): &(usize, usize, usize)) -> MeshColorants {
+    if *parametric > 0 {
+        return MeshColorants::Parametric;
+    }
+    if *ink > 0 && *rgb == 0 {
+        return MeshColorants::Vertex;
+    }
+    MeshColorants::None
 }
 
 /// Type 4 — free-form Gouraud-shaded triangle mesh (§8.7.4.5.5).
@@ -1324,23 +1496,208 @@ pub(crate) fn paint(
     alpha: f32,
     pixmap: &mut tiny_skia::Pixmap,
 ) -> Option<usize> {
+    #[allow(clippy::cast_possible_wrap)]
+    let (scratch, ox, oy) = rasterise(
+        mesh,
+        ramp,
+        to_target,
+        region,
+        (pixmap.width() as i32, pixmap.height() as i32),
+        false,
+    )?;
+    if scratch.empty {
+        return Some(0);
+    }
+    Some(composite(
+        &scratch.rgba,
+        ox,
+        oy,
+        to_target,
+        bbox,
+        clip,
+        alpha,
+        pixmap,
+    ))
+}
+
+/// Paint a mesh into a **colorant buffer**, as authored ink.
+///
+/// The ink twin of [`paint`], and the reason `Pass 137.1` exists: until it,
+/// every mesh reached an ink page through the sRGB bridge, so a mesh and an
+/// image of the same `DeviceCMYK` colour rendered differently on the same
+/// page. Measured on the sheet that exposed it: mean |diff| of 24.1 and
+/// 16.9 between a live type 7 mesh and its own reference image, on a page
+/// where every other shading type agreed to within 3.5.
+///
+/// # Returns `None` — meaning "not paintable in ink", not "failed"
+///
+/// The caller must fall back to [`paint`] on `None`, and must **not**
+/// convert. Four ways to get it, all of them legitimate document states
+/// rather than errors:
+///
+/// - the mesh's colour space is additive ([`MeshColorants::None`]), so
+///   there is no authored ink to preserve and the bridge is the honest
+///   route;
+/// - the mesh is parametric and its `ColorRamp` carries no colorants;
+/// - the transform is not invertible, so the geometry has no area;
+/// - the scratch could not be allocated.
+///
+/// # Why the `rules` argument, when nothing here reads Table 149 per pixel
+///
+/// So an overprinting mesh composites through the *same* function every
+/// other ink source does. `[ComponentRule::Source; 4]` is `Blend::Normal`
+/// in ink, so a non-overprinting caller passes that and gets ordinary
+/// source-over — one code path, not two that have to be kept agreeing.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn paint_cmyk(
+    mesh: &Mesh,
+    ramp: Option<&ColorRamp>,
+    to_target: tiny_skia::Transform,
+    bbox: Option<[f32; 4]>,
+    region: (i32, i32, i32, i32),
+    clip: Option<&tiny_skia::Mask>,
+    alpha: f32,
+    rules: [crate::overprint::ComponentRule; 4],
+    buf: &mut crate::cmyk_buffer::CmykBuffer,
+) -> Option<usize> {
+    match mesh.colorants {
+        MeshColorants::None => return None,
+        MeshColorants::Parametric => {
+            if !ramp.is_some_and(ColorRamp::has_colorants) {
+                return None;
+            }
+        }
+        MeshColorants::Vertex => {}
+    }
+
+    #[allow(clippy::cast_possible_wrap)]
+    let (scratch, ox, oy) = rasterise(
+        mesh,
+        ramp,
+        to_target,
+        region,
+        (buf.width() as i32, buf.height() as i32),
+        true,
+    )?;
+    if scratch.empty {
+        return Some(0);
+    }
+    let ink = scratch.ink.as_ref()?;
+
+    let sw = scratch.rgba.width() as usize;
+    let pixels = scratch.rgba.pixels();
+    #[allow(clippy::cast_sign_loss)]
+    let (ox_u, oy_u) = (ox.max(0) as u32, oy.max(0) as u32);
+    let region_u = (
+        ox_u,
+        oy_u,
+        ox_u + scratch.rgba.width(),
+        oy_u + scratch.rgba.height(),
+    );
+    let dst_w = buf.width() as usize;
+
+    // ★ Everything `composite` does — /BBox, the clip, the alpha — is done
+    // HERE, per pixel, inside the closure `composite_overprint_varying`
+    // drives. The two composites are therefore the same three tests in the
+    // same order against the same scratch; only the arithmetic that lands
+    // the value differs, and that arithmetic is the buffer's, not this
+    // module's.
+    let changed = buf.composite_overprint_varying(region_u, rules, alpha, |x, y| {
+        let (sx, sy) = ((x - ox_u) as usize, (y - oy_u) as usize);
+        let idx = sy * sw + sx;
+        // `rgba`'s alpha is the sole occupancy authority — see [`Scratch`].
+        if pixels.get(idx)?.alpha() == 0 {
+            return None;
+        }
+        if let Some([bx0, by0, bx1, by1]) = bbox {
+            #[allow(clippy::cast_precision_loss)]
+            let mut pt = tiny_skia::Point::from_xy(x as f32 + 0.5, y as f32 + 0.5);
+            to_target.map_point(&mut pt);
+            if pt.x < bx0.min(bx1)
+                || pt.x > bx0.max(bx1)
+                || pt.y < by0.min(by1)
+                || pt.y > by0.max(by1)
+            {
+                return None;
+            }
+        }
+        let coverage = match clip {
+            Some(mask) => f32::from(*mask.data().get(y as usize * dst_w + x as usize)?) / 255.0,
+            None => 1.0,
+        };
+        if coverage <= 0.0 {
+            return None;
+        }
+        Some((*ink.get(idx)?, coverage))
+    });
+    Some(changed as usize)
+}
+
+/// Rasterise the mesh into a [`Scratch`], returning it with its device
+/// origin.
+///
+/// Shared verbatim by [`paint`] and [`paint_cmyk`] — **the geometry is not
+/// duplicated for the two destinations**, which is the property that stops
+/// an ink render and an sRGB render of the same mesh disagreeing about
+/// where the mesh *is* as well as what colour it is. Only the composite
+/// step differs.
+///
+/// Returns `None` if the transform is not invertible (the geometry has no
+/// area on the page) or the scratch could not be allocated. A zero-width
+/// scratch means the clipped region was empty, which is "painted nothing"
+/// rather than a failure and is reported as such by both callers.
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+fn rasterise(
+    mesh: &Mesh,
+    ramp: Option<&ColorRamp>,
+    to_target: tiny_skia::Transform,
+    region: (i32, i32, i32, i32),
+    dst: (i32, i32),
+    want_ink: bool,
+) -> Option<(Scratch, i32, i32)> {
     let to_device = to_target.invert()?;
 
-    // Clamp the paint area to the pixmap. Everything below is in device
-    // pixels relative to (ox, oy).
+    // Clamp the paint area to the destination. Everything below is in
+    // device pixels relative to (ox, oy).
     let (x_lo, y_lo, x_hi, y_hi) = region;
     let ox = x_lo.max(0);
     let oy = y_lo.max(0);
-    #[allow(clippy::cast_possible_wrap)]
-    let x_hi = x_hi.min(pixmap.width() as i32);
-    #[allow(clippy::cast_possible_wrap)]
-    let y_hi = y_hi.min(pixmap.height() as i32);
+    let x_hi = x_hi.min(dst.0);
+    let y_hi = y_hi.min(dst.1);
     if x_hi <= ox || y_hi <= oy {
-        return Some(0);
+        // ★ Flagged rather than signalled by a zero-sized pixmap, because
+        // `tiny_skia::Pixmap::new(0, 0)` returns `None` and would be
+        // indistinguishable from an allocation failure — "the clip left
+        // nothing to draw" and "the machine is out of memory" are opposite
+        // outcomes and must not share a representation.
+        return Some((
+            Scratch {
+                rgba: tiny_skia::Pixmap::new(1, 1)?,
+                ink: None,
+                empty: true,
+            },
+            ox,
+            oy,
+        ));
     }
-    #[allow(clippy::cast_sign_loss)]
     let (sw, sh) = ((x_hi - ox) as u32, (y_hi - oy) as u32);
-    let mut scratch = tiny_skia::Pixmap::new(sw, sh)?;
+    let mut scratch = Scratch {
+        empty: false,
+        rgba: tiny_skia::Pixmap::new(sw, sh)?,
+        ink: if want_ink {
+            let n = (sw as usize).checked_mul(sh as usize)?;
+            let mut v: Vec<[f32; 4]> = Vec::new();
+            // `try_reserve` rather than `vec![]`, for the same reason
+            // `CmykBuffer::try_planes` uses it: a mesh's clipped region is
+            // attacker-influenced, and an allocation failure here must be a
+            // refusal the caller can disclose, not an abort.
+            v.try_reserve_exact(n).ok()?;
+            v.resize(n, [0.0; 4]);
+            Some(v)
+        } else {
+            None
+        },
+    };
 
     let mut budget = MAX_TRIANGLES;
 
@@ -1418,9 +1775,7 @@ pub(crate) fn paint(
         }
     }
 
-    Some(composite(
-        &scratch, ox, oy, to_target, bbox, clip, alpha, pixmap,
-    ))
+    Some((scratch, ox, oy))
 }
 
 /// Apply a transform to a bare `[x, y]`.
@@ -1471,7 +1826,7 @@ fn patch_device_extent(patch: &Patch, to_device: tiny_skia::Transform) -> f32 {
 /// half of why [`paint`] uses a scratch.
 ///
 fn fill_triangle(
-    scratch: &mut tiny_skia::Pixmap,
+    scratch: &mut Scratch,
     ox: i32,
     oy: i32,
     dev: [[f32; 2]; 3],
@@ -1528,9 +1883,9 @@ fn fill_triangle(
     let max_y = y0.max(y1).max(y2).ceil() as i32;
 
     #[allow(clippy::cast_possible_wrap)]
-    let w = scratch.width() as i32;
+    let w = scratch.rgba.width() as i32;
     #[allow(clippy::cast_possible_wrap)]
-    let h = scratch.height() as i32;
+    let h = scratch.rgba.height() as i32;
     let lo_x = (min_x - ox).max(0);
     let hi_x = (max_x - ox + 1).min(w);
     let lo_y = (min_y - oy).max(0);
@@ -1550,13 +1905,13 @@ fn fill_triangle(
             let w2 = (x1 - x0).mul_add(cy - y0, -((y1 - y0) * (cx - x0))) * inv_area;
             let w0 = 1.0 - w1 - w2;
             #[allow(clippy::cast_sign_loss)]
-            let idx = (py as usize) * (scratch.width() as usize) + (px as usize);
+            let idx = (py as usize) * (scratch.rgba.width() as usize) + (px as usize);
             // Exact coverage first. The margin is consulted only when the
             // exact test says no AND nothing has painted this pixel -- see
             // CRACK_MARGIN_PX for why the unconditional form was wrong.
             if w0 < 0.0 || w1 < 0.0 || w2 < 0.0 {
                 let in_margin = w0 >= t0 && w1 >= t1 && w2 >= t2;
-                if !in_margin || scratch.pixels()[idx].alpha() != 0 {
+                if !in_margin || scratch.rgba.pixels()[idx].alpha() != 0 {
                     continue;
                 }
             }
@@ -1580,10 +1935,58 @@ fn fill_triangle(
             if let Some(c) =
                 tiny_skia::PremultipliedColorU8::from_rgba(to8(rgb.r), to8(rgb.g), to8(rgb.b), 255)
             {
-                scratch.pixels_mut()[idx] = c;
+                scratch.rgba.pixels_mut()[idx] = c;
+                // ★ The ink plane is written INSIDE the same `if`, keyed on
+                // the same `idx`, so a pixel is never marked painted in one
+                // plane and not the other. `alpha != 0` in `rgba` is the
+                // single authority on coverage for BOTH composites -- the
+                // ink plane deliberately carries no occupancy of its own,
+                // because two occupancy tests are two things that can
+                // disagree.
+                if let Some(ink) = scratch.ink.as_mut()
+                    && let Some(c) = shaded.resolve_cmyk(ramp)
+                {
+                    ink[idx] = c;
+                }
             }
         }
     }
+}
+
+/// The two-plane rasterisation target.
+///
+/// # Why the ink plane is a sidecar rather than a replacement
+///
+/// Everything the mesh rasteriser does that is *hard* — the crack margin,
+/// the fold-over ordering of `MSH32`, the "has this pixel been claimed yet"
+/// test — reads **only the alpha channel**, never the colour. So the ink
+/// path does not need its own rasteriser: it needs the same one, writing a
+/// second value at the same index.
+///
+/// Keeping `rgba` authoritative for occupancy means the ink composite and
+/// the sRGB composite cover **exactly** the same pixels by construction,
+/// rather than by two implementations agreeing. If the ink plane carried
+/// its own occupancy flag, a mesh with a ramp hole would paint a pixel in
+/// one plane and not the other, and which one you got would depend on the
+/// destination — a difference nobody would look for.
+///
+/// # Cost
+///
+/// 16 bytes per pixel of the shading's clipped region, allocated **only**
+/// when a subtractive destination asked for it. An additive page allocates
+/// exactly what it did before this existed.
+struct Scratch {
+    /// Colour and, in its alpha, the sole record of which pixels the mesh
+    /// covered.
+    rgba: tiny_skia::Pixmap,
+    /// Authored colorants at the same indices. `None` when the destination
+    /// composites in sRGB and the plane would never be read.
+    ink: Option<Vec<[f32; 4]>>,
+    /// The clipped region had no area, so `rgba` is a placeholder and must
+    /// not be composited. Distinct from a failed allocation, which is
+    /// `None` from [`rasterise`] — see the comment at the flag's only
+    /// assignment.
+    empty: bool,
 }
 
 /// Barycentric interpolation of three shades.
@@ -1594,6 +1997,23 @@ fn interpolate(shade: [Shade; 3], w: [f32; 3]) -> Shade {
             g: w[0].mul_add(a.g, w[1].mul_add(b.g, w[2] * c.g)),
             b: w[0].mul_add(a.b, w[1].mul_add(b.b, w[2] * c.b)),
         }),
+        [
+            Shade::Ink { rgb: ra, cmyk: ca },
+            Shade::Ink { rgb: rb, cmyk: cb },
+            Shade::Ink { rgb: rc, cmyk: cc },
+        ] => Shade::Ink {
+            rgb: Rgb {
+                r: w[0].mul_add(ra.r, w[1].mul_add(rb.r, w[2] * rc.r)),
+                g: w[0].mul_add(ra.g, w[1].mul_add(rb.g, w[2] * rc.g)),
+                b: w[0].mul_add(ra.b, w[1].mul_add(rb.b, w[2] * rc.b)),
+            },
+            cmyk: [
+                w[0].mul_add(ca[0], w[1].mul_add(cb[0], w[2] * cc[0])),
+                w[0].mul_add(ca[1], w[1].mul_add(cb[1], w[2] * cc[1])),
+                w[0].mul_add(ca[2], w[1].mul_add(cb[2], w[2] * cc[2])),
+                w[0].mul_add(ca[3], w[1].mul_add(cb[3], w[2] * cc[3])),
+            ],
+        },
         [
             Shade::Parametric(a),
             Shade::Parametric(b),
@@ -1933,5 +2353,76 @@ mod tests {
         // happens rather than lerp(f(t)) — the distinction MSH14 clause 3
         // exists for.
         assert_eq!(Shade::Parametric(0.5).resolve(None), None);
+    }
+
+    /// The ink survives interpolation, and it survives it **in its own
+    /// space** rather than as a by-product of the sRGB result.
+    #[test]
+    fn ink_and_srgb_are_interpolated_independently() {
+        let a = Shade::Ink {
+            rgb: Rgb {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+            },
+            cmyk: [0.0, 0.0, 0.0, 1.0],
+        };
+        let b = Shade::Ink {
+            rgb: Rgb {
+                r: 1.0,
+                g: 1.0,
+                b: 1.0,
+            },
+            cmyk: [1.0, 0.0, 0.0, 0.0],
+        };
+        let Shade::Ink { rgb, cmyk } = a.lerp(b, 0.25) else {
+            panic!(
+                "lerp of two Ink shades must stay Ink — if it falls back to \
+                    Rgb the colorants are lost silently, which is the whole \
+                    defect this variant exists to prevent"
+            );
+        };
+        assert!((rgb.r - 0.25).abs() < 1e-6);
+        assert!((cmyk[0] - 0.25).abs() < 1e-6);
+        assert!((cmyk[3] - 0.75).abs() < 1e-6);
+    }
+
+    /// `resolve_cmyk` must never invent ink from an additive shade.
+    ///
+    /// A `Some(converted)` here would make every counter read as though the
+    /// page composited natively while it had in fact done the exact round
+    /// trip the ink path exists to avoid — a wrong answer that reports
+    /// itself as the right one.
+    #[test]
+    fn an_additive_shade_has_no_ink_and_does_not_manufacture_any() {
+        let rgb = Shade::Rgb(Rgb {
+            r: 0.5,
+            g: 0.5,
+            b: 0.5,
+        });
+        assert_eq!(rgb.resolve_cmyk(None), None);
+        // ...and a parametric shade with no ramp is likewise None rather
+        // than a default, for the same reason.
+        assert_eq!(Shade::Parametric(0.5).resolve_cmyk(None), None);
+    }
+
+    /// The classification is **all-or-nothing**, and one additive vertex
+    /// demotes the whole mesh.
+    ///
+    /// Asserted rather than left to the comment because the failure it
+    /// prevents is a *seam* — half a mesh composited natively and half
+    /// bridged, meeting along a line no file asked for — and a seam is
+    /// exactly the kind of defect that survives review by looking like
+    /// anti-aliasing.
+    #[test]
+    fn one_additive_vertex_demotes_the_whole_mesh() {
+        assert_eq!(classify_colorants(&(9, 0, 0)), MeshColorants::Vertex);
+        assert_eq!(classify_colorants(&(9, 1, 0)), MeshColorants::None);
+        assert_eq!(classify_colorants(&(0, 9, 0)), MeshColorants::None);
+        // Parametric wins outright: the ramp, not the vertices, owns the
+        // answer, and the caller is told to go ask it.
+        assert_eq!(classify_colorants(&(0, 0, 9)), MeshColorants::Parametric);
+        // An empty mesh promises least.
+        assert_eq!(classify_colorants(&(0, 0, 0)), MeshColorants::None);
     }
 }

@@ -1657,9 +1657,59 @@ impl Shading {
     /// converting, because a converted colour cannot answer §11.7.4.3's
     /// "which components did the source specify?".
     ///
+    /// Whether [`Self::paint_cmyk`] has any authored ink to paint with.
+    ///
+    /// # ★ Why callers must ask THIS and not `self.ramp.has_colorants()`
+    ///
+    /// Because a **mesh keeps its ink somewhere else**. A non-parametric
+    /// mesh has no `ColorRamp` at all — its colour is per-vertex, decided
+    /// when the stream was decoded — so a gate written as
+    /// `ramp.is_some_and(has_colorants)` reads `false` for a fully
+    /// ink-bearing `DeviceCMYK` mesh and silently sends it to the bridge.
+    ///
+    /// That is not hypothetical: it is precisely the shape of the two type
+    /// 7 patches that survived `Pass 137.0`. The widened analytic route was
+    /// correct and could not reach them, because the *test in front of it*
+    /// asked about the wrong carrier. A predicate that lives beside the
+    /// paint method it predicts cannot drift the way a hand-written gate at
+    /// a call site can.
+    ///
+    /// `true` here does not promise a paint will write pixels — the
+    /// geometry may miss the region or be fully clipped — only that ink
+    /// exists to write.
+    #[must_use]
+    pub(crate) fn has_colorants(&self) -> bool {
+        if let Some(mesh) = self.mesh.as_ref() {
+            return match mesh.colorants {
+                crate::mesh::MeshColorants::None => false,
+                crate::mesh::MeshColorants::Vertex => true,
+                crate::mesh::MeshColorants::Parametric => {
+                    self.ramp.as_ref().is_some_and(ColorRamp::has_colorants)
+                }
+            };
+        }
+        self.ramp.as_ref().is_some_and(ColorRamp::has_colorants)
+    }
+
     /// The geometry decision is [`sample_at`], the *same* function
     /// [`Shading::paint`] uses, so the two routes cover exactly the same
     /// pixels.
+    ///
+    /// # ★ A mesh takes the first branch and shares nothing below it
+    ///
+    /// `Pass 137.1` added the mesh route, and it dispatches on `self.mesh`
+    /// **before** the analytic checks, exactly as [`Shading::paint`] does.
+    /// The two algorithms are opposite rather than variations — a mesh is
+    /// forward-rasterised from triangles, an analytic shading is
+    /// inverse-mapped per pixel — so there is no shared ramp lookup, no
+    /// `Param`, and no shared inverse map except for `/BBox`.
+    ///
+    /// **This method returning `None` for a mesh no longer means "meshes
+    /// cannot paint in ink".** It now means this *particular* mesh has no
+    /// authored ink to paint with: an additive colour space, or a
+    /// parametric mesh whose ramp has no colorants. The caller's fallback
+    /// is unchanged either way, but a reader diagnosing a bridged mesh
+    /// needs to know which of the two questions the `None` answered.
     #[must_use]
     pub(crate) fn paint_cmyk(
         &self,
@@ -1670,6 +1720,19 @@ impl Shading {
         rules: [crate::overprint::ComponentRule; 4],
         buf: &mut crate::cmyk_buffer::CmykBuffer,
     ) -> Option<usize> {
+        if let Some(mesh) = self.mesh.as_ref() {
+            return crate::mesh::paint_cmyk(
+                mesh,
+                self.ramp.as_ref(),
+                to_target,
+                self.bbox,
+                region,
+                clip,
+                alpha,
+                rules,
+                buf,
+            );
+        }
         if !self.geometry.is_analytic() || matches!(self.geometry, Geometry::FunctionBased { .. }) {
             return None;
         }

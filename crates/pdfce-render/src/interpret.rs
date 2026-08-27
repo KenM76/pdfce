@@ -4467,8 +4467,7 @@ impl Interpreter<'_> {
             // therefore keeps the bridge and keeps being disclosed, which is
             // honest rather than silently wrong.
             if op
-                && let Some(ramp) = shading.ramp.as_ref()
-                && ramp.has_colorants()
+                && shading.has_colorants()
                 && let Some(kind @ crate::overprint::SourceKind::SeparationOrDeviceN { .. }) = kind
             {
                 // Rules ONCE, not per pixel: for this source kind Table 149
@@ -4592,8 +4591,7 @@ impl Interpreter<'_> {
             // both directions -- it hid a real defect's identity and
             // invented a false one in the same table.
             if !painted_natively
-                && let Some(ramp) = shading.ramp.as_ref()
-                && ramp.has_colorants()
+                && shading.has_colorants()
                 && shading
                     .paint_cmyk(
                         to_target,
