@@ -1142,6 +1142,102 @@ fn comments(session: &EditSession, page_id: pdfce_core::object::ObjId) {
 
 ---
 
+## 3.6 Restyling existing text — **the capability-shaped answer**
+
+**Added 2026-08-27 because it was missing, and its absence cost a consuming
+project a filed request.** `EditSession::format_text` shipped 2026-08-20 and
+is fully documented in
+[`02-editing-and-saving.md`](02-editing-and-saving.md) — under *text editing
+mechanics*. A shell asking **"how do I make this selection bold"** did not
+find it there, concluded no such verb existed, and filed
+`request_restyle_an_existing_text_run.md` with a table whose
+"on EXISTING text" column read *"none available"* across the board.
+
+Nothing was wrong in either document. `tools/check-core-api-verbs.py` was
+green, because it catches a verb that is **absent** — and this one was
+present, correct, and **unfindable by the question a reader actually has**.
+That is a distinct failure and this section is the repair for it.
+
+### What works on existing text, today
+
+| the operator's button | field on `FormatRequest` | works? |
+|---|---|---|
+| **size** | `set_size: Option<f64>` | ✅ always. Changes only the `Tf` operand; the line is relaid out and `advance_delta` is reported |
+| **colour** | `set_fill: Option<NewFill>` | ✅ always. **Stores the chosen device space** (`rgb:`→`rg`, `cmyk:`→`k`, `gray:`→`g`) — pdfce does *not* force-convert to DeviceRGB the way Acrobat does. A run originally painted in a non-device space is disclosed as a narrowing conversion |
+| **face** | `set_font: Option<FontSelector>` | ⚠️ **only to a font that is ALREADY a resource on the page** — see below |
+| **bold / italic** | `set_font` | ❌ in general, for that reason |
+| character spacing | `set_char_spacing` (`Tc`, §9.3.2) | ✅ |
+| word spacing | `set_word_spacing` (`Tw`, §9.3.3) | ✅ simple fonts; **refused by name on a composite run** (`Tw` is spec-void for multi-byte codes, so emitting it would do nothing) |
+| horizontal scale | `set_h_scale` (`Tz`, §9.3.4) | ✅ |
+| super/subscript | `set_script` | ✅ |
+| free-form baseline | `set_rise` (`Ts`, §9.3.7) | ✅ — an exceed over Acrobat, which dropped it |
+| **alignment, leading** | — | ❌ not a run-level property; those live on `reflow_block` |
+
+Targeting is by `find` text or by `pinned_span` — the same
+`GlyphProvenance::operator_span` pin `edit_text` takes — with the same
+`EditTarget` selector, so a shell that has decided which stream a caret is in
+does not translate that decision between the two verbs. Form XObject content
+is reachable (`Pass 119.2`).
+
+CLI: `pdfce-cli format-text --set-size / --set-color / --set-font / …`.
+
+### ★ The one real limit, and it is a property of the DOCUMENT
+
+```
+$ pdfce-cli format-text runs-two-explicit.pdf --find ALPHA       --set-font Helvetica-Bold --output bold.pdf
+pdfce-cli: format-text refused: the target font "Helvetica-Bold" is not an
+existing font resource on this page; adding a new font resource / embedding
+a new face is deferred (FF-C)
+```
+
+**`set_font` selects; it does not create.** The target must already be in
+`/Resources /Font`, located by resource key or by `/BaseFont` (subset tag
+stripped per §9.6.4).
+
+For a UI this is worse than a run-level limit would be: the predicate is a
+property of the **page**, not of the selection, so the same button on
+identical-looking text behaves differently in two files. It is a **named
+refusal** (`FormatError::TargetFontMissing`), never a silent no-op, so a
+shell can drive its control from the error — but a pre-flight enumerating a
+page's font resources would be better, and none exists yet.
+
+`FF-C` is the tracked identifier for *add a font resource / embed a new
+face*. `add_text` already does it, for Standard-14 and (via `--embed-font`)
+for donor faces; it is not wired into `format_text`, whose plan currently
+produces a new content buffer and no new objects. **Not scoped as a Pass —
+ask if bold/italic matters.**
+
+### What is refused, and it is never a silent substitution
+
+- **coverage failure** — a target face that cannot show every character in
+  the run. Never `.notdef`;
+- **an outlined/vector run** — there is no font to swap;
+- **an embedded-subset target** not already carrying the resulting code
+  (also FF-C).
+
+### ★ What the UI must disclose
+
+- a **narrowing colour conversion**, when the run was painted in a non-device
+  space;
+- the **relayout**: the line was shifted by `advance_delta` and *may* now
+  overflow its original right margin. Reflow is the default; pinning the tail
+  is the alternative;
+- a formatting change inside a **tagged** run preserves its BDC/EMC+MCID
+  wrapper and discloses that the structure tree went stale — pdfce does not
+  reproduce Acrobat's tag-corruption defect (`R72`);
+- changing a run's width inside a **justified** line invalidates that line's
+  slack; pdfce discloses that and offers re-justification rather than leaving
+  it wrong.
+
+### Trap
+
+`writer::content::set_font` is **not** this. Its name makes it look like the
+answer and it is a low-level content-stream emitter, not a session verb. The
+requesting shell found it, correctly concluded it was not the answer, and
+then had nothing else to find.
+
+---
+
 ## 4. Redaction
 
 `core [x] · cli [x] · gui [x]` for mark and apply; **`gui [ ]`** for the
