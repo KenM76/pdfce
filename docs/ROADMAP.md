@@ -96,6 +96,387 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 140.0` + `Pass 140.1` (`70c5919`) — ★★★★★ **THE PRINT-CONFORMANCE SUITE WENT 5 FAIL → 6 FAIL AND BOTH HALVES SHIPPED ANYWAY: THE NEW FAILURE IS A FALSE PASS BEING REMOVED, ESTABLISHED BY ABLATION AND BY SEGMENTING THE PATCH BY EXACT GREY LEVEL, NOT BY ARGUMENT** — ★★★★ `Pass 140.1` (the path-FILL half) **DID NOT EXIST BEFORE THIS SESSION AND IS MINTED HERE**: fixing the image half is what exposed it, and **the ADDITIVE CONTROL PAGE is what identified which half was wrong** — ★★★ `R219`'s fourth instance is CLOSED and **grew a fifth and a sixth route while being closed** (an unreported `/Indexed`-over-`Separation` duotone, found by walking the rule's own checklist; then the path fill; then a `DeviceGray` overprint divergence in a neighbouring subsystem, filed `Pass 143.0`) — ★★ **the cost claim the Backlog entry demanded was MEASURED, not asserted** — ★ `Space::yields_cmyk` is a **PROBE, not a structural predicate**, so there is one answer to *"does this space have colorants"* instead of two that can drift; standing rule **`R221`** minted for that shape — 2026-08-27 (294th filing)
+
+**Sourcing.** Shell held and used (hard rule 8). Every claim this role makes
+about the repository — Pass-ID availability, the survivors of the hard-rule-11
+sweep, git state, backup currency — was produced here by `git`, `grep` or
+`python tools/…` on live files, and the command is named beside it. **Every
+render, dE, timing, trap-count, suite and gate figure below is the engineer's,
+relayed from `70c5919`'s commit message and labelled as relayed** — this role
+did not build pdfce, run the suite, or render a page. **Nothing was committed
+or staged by this filing.**
+
+**Scope.** One commit, two Pass IDs:
+
+| commit | what | ID |
+|---|---|---|
+| `70c5919` | a `Separation`/`DeviceN` **image** (direct, and behind an `/Indexed` base) keeps its ink on a subtractive page | **`Pass 140.0`** (was Backlog; moved to *Shipped* by this filing) |
+| `70c5919` | a `Separation`/`DeviceN` **path fill** keeps its ink on the same page | **`Pass 140.1`** (**MINTED** by this filing — it did not exist before this session) |
+
+`140.1` was confirmed free by `python tools/check-ledger-numbers.py`, run
+here before any edit (*"Pass families with headings : up to 142 (highest ID
+142.1)"*), and by `grep -n "140\.1" docs/*.md`, which returned nothing.
+
+---
+
+#### `Pass 140.0` — the image routes, and there are TWO of them
+
+**Symptom, as reported.** A five-colorant `DeviceN` photograph rendered
+visibly desaturated against the Acrobat reference — washed toward grey where
+the reference is saturated green.
+
+**Cause.** On a page compositing in a four-colorant buffer, a
+`Separation`/`DeviceN` image resolved through its tint transform **to sRGB**
+and never to its `DeviceCMYK` alternate, so it entered the buffer through a
+`CMYK → sRGB → CMYK` round trip. **The two legs are different functions.**
+The outbound leg is `Rgb::from_cmyk`, the calibrated conversion carrying a
+rendering intent; the return leg is `overprint::rgb_to_cmyk`, naive
+maximum-GCR — which is an exact inverse of `cmyk_to_rgb`, a *third* function
+the paint colour never went through. **They are not an inverse pair, and code
+that pairs them reads as an exact recovery.**
+
+**Two routes were fixed, and only one was reported:**
+
+3. a **direct** `Separation`/`DeviceN` image over a `DeviceCMYK` alternate — the reported one;
+4. an **`/Indexed` image over such a base — a duotone** — **not in the report**, found by walking `R219`'s checklist.
+
+Both now route through one new answer, `Space::to_cmyk`, so the per-texel path
+and the palette-build path **cannot come to disagree**. (The numbering 3/4
+continues the `R219` route enumeration below.)
+
+**The trap the Backlog entry named is avoided.** The overprint colorant planes
+are **not** reused. They hold `authored_tints`, which answers Table 149's
+*"which components did the source SPECIFY"* — a different question — and they
+return `None` for a spot-only `DeviceN`, where a plain render needs the
+flattened tint and would otherwise paint **bare white paper**.
+
+**Measured against the Acrobat reference on the patch that opened the Pass, at
+scale 2** (engineer's figures, relayed):
+
+| what | before | after | Acrobat |
+|---|---:|---:|---:|
+| photograph region, dE | 33.06 | **16.85** | — |
+| an inset patch of it, dE | 29.57 | **7.13** | — |
+| saturation spread | 51.8 | **90.2** | 87.3 |
+| `cmyk_bridged_pixels` | 25,870 | **0** | — |
+| `cmyk_native_image_pixels` | 0 | **25,870** | — |
+
+**The two counters are complements and moved as complements** — the same
+25,870 pixels, relabelled from *"lost its ink on the way in"* to *"kept it"*.
+
+#### ★ The cost claim the Backlog entry demanded, MEASURED
+
+The Backlog entry closed with *"cost needs measuring before committing to this
+shape."* It was measured before the shape was committed to, and it is filed
+here **beside its per-item form** (hard rule 10a):
+
+- **Typical case.** `TintCache` now caches **both** answers per distinct
+  sample tuple, so the extra tint-transform evaluation is bounded exactly as
+  the sRGB one always was: **292 distinct tuples behind 25,870 texels** on the
+  patch that opened the Pass = **one evaluation per 88.6 texels**, not one per
+  texel.
+- **Deliberate worst case**, built to defeat the cache (16 bpc × 5 colorants =
+  an **80-bit key** the cache cannot pack; **490,000 texels**; a type 4
+  PostScript transform): **~670 ms → ~925 ms median = 1.37 µs → 1.89 µs per
+  texel, about +38 %.** Run-to-run spread on this machine is **~15 %**, so it
+  is filed as a **range, not a point** — the engineer said so explicitly and
+  this role is not narrowing it.
+
+#### ★ `Space::yields_cmyk` is a PROBE, not a structural predicate — and that was deliberate
+
+The gate could have pattern-matched the colour space's **shape** (*is this a
+`Separation`/`DeviceN` whose alternate is `DeviceCMYK`?*). It instead **asks
+the real conversion function** with an all-zero operand, so there is **one**
+answer to *"does this space have colorants"* rather than two descriptions that
+can drift apart.
+
+**A wrong probe cannot paint a wrong colour in either direction**, which is
+what makes the choice cheap: a **false negative** bridges exactly as before
+(the status quo, disclosed), and a **false positive** is caught by an
+**all-or-nothing discard** that drops the planes for the whole image rather
+than leaving a seam mid-photograph.
+
+Standing rule **`R221`** is minted from this, at n = 2 — see *Standing rules*.
+
+---
+
+#### `Pass 140.1` — the path fill, and `Pass 140.0` is what exposed it
+
+**It did not exist as a filed Pass before this session.** With only the image
+half fixed, the new fixtures reported the **fill** and the **image** 8.3 to
+9.0 mean levels apart on the same authored colour, and the **additive control
+page** — which allocates no colorant buffer and therefore never took the round
+trip — identified which half was wrong (engineer's figures, relayed; mean over
+a 40×100 pt patch of each half, scale 2):
+
+| page | fill | image | |
+|---|---|---|---|
+| `Separation`, **additive** | 157,207,185 | 158,208,186 | agree — no round trip on this page |
+| `Separation`, subtractive | 159,192,194 | 158,208,186 | ← the **FILL** is the outlier |
+| `DeviceN`, subtractive | 160, 86,161 | 160,108,156 | ← likewise |
+
+**The image agrees with its own additive rendering; the subtractive fill does
+not.** So the fill was reconstructing its colorants from the already-resolved
+sRGB by the same round trip. `Interpreter::authored_cmyk` now asks
+`ColorSpace::to_cmyk` **first** and **falls through unchanged** for every
+space that has no `DeviceCMYK` answer — a `Separation` over a `DeviceRGB`
+alternate, a `DeviceGray` fill, a `Lab` fill: none of them reaches the early
+return and none of their behaviour moves.
+
+**★ Why nothing had ever reported this.** Before `Pass 140.0`, *both* halves
+took the round trip and were wrong **together**. Fixing one half converts a
+silent shared error into a visible disagreement, **and the disagreement is the
+information** — the exact history `tests/shading_ink.rs` already records for
+the shading half, one object type over.
+
+---
+
+#### ★★★★★ THE HEADLINE NUMBER MOVED THE WRONG WAY, AND IT IS FILED AS SUCH
+
+**The print-conformance suite went from 5 FAIL to 6 FAIL of 51.** The engineer
+shipped both halves anyway, made the ruling rather than asking, and the
+evidence is measurement rather than argument. All of it belongs here, because
+a future session reading only the count will read a regression.
+
+**(1) Ablated.** `Pass 140.0` **alone** scores **identically to the
+baseline** (5 FAIL). **Every movement is `140.1`'s.** That is what makes the
+rest of this attributable at all.
+
+**(2) The newly-failing patch, segmented by exact grey level.** On a
+grey/K-black overprint patch (named by description only — see the note below),
+the trap box splits into two objects:
+
+| object | Acrobat | before | after |
+|---|---|---|---|
+| the surround | 84,120,34 | 127,127,127 | 127,127,127 ← **still wrong** |
+| the trap X | 84,120,34 | 128,128,128 | **76,117,31** ← **now correct** |
+
+**Acrobat paints both the same colour, so its X is invisible. pdfce painted
+both the same WRONG colour, so its X was invisible too — and the patch scored
+clean.** `140.1` made the X correct and left the surround, so the X appeared.
+**The false pass was a matched pair of errors, and the fix broke the pair.**
+
+**(3) The marks are adjudicated, not detector noise.** The trap detector run
+**on the Acrobat reference itself** finds **zero** traps; run on the new render
+it finds **three real 49×49 marks with diagonality 1.00**.
+
+**(4) Distance to Acrobat fell where the pixels actually changed:
+108.6 → 25.0 over the 20,790 pixels that moved.** The other two affected
+patches also improved: one **5 traps → 3, dE 62.1 → 24.4**; the other **dE
+77.8 → 70.2**.
+
+⇒ **The engineer's ruling: ship both.** Reverting `140.1` would restore a
+matched pair of errors, re-open an 8–9 level fill-vs-image disagreement that
+`Pass 140.0` itself creates, and make two patches worse. **A rising failure
+count is not automatically a regression.**
+
+**★ This corroborates a precedent already in this file, at a second
+occurrence.** The `Pass 130.3` entry records *"a failure count that rises when
+the renderer improves is the removed-false-pass signature"* — there, two
+patches were scoring `ok` only because a spot ink that should have shown was
+invisible. **Same shape, different mechanism**: there the missing ink was
+invisible, here the wrong colour was *shared by both objects in the
+comparison*. **The transferable half is the diagnostic, not the anecdote:
+segment the failing region by the objects the patch is actually comparing, and
+check the detector against the reference render, before reading a count as a
+verdict.** No rule minted for it — the precedent is recorded twice now, and a
+third occurrence should mint one.
+
+**★ PATCH STEMS ARE DELIBERATELY NOT NAMED IN THIS ENTRY.** Operator ruling
+2026-08-25, enforced by `tools/check-suite-name-absent.py`, open question
+`(bt)`. The affected patch is referred to by description only (*"a grey/K-black
+overprint patch"*). `python tools/check-suite-name-absent.py` was run after
+these edits — result in the *Verification* block below.
+
+---
+
+#### ★★★ `R219` enumeration — the fourth instance CLOSED, and it grew a fifth and a sixth while being closed
+
+The rule asks a Pass that fixes one route to a shared behaviour to **name the
+other routes and state each one's disposition**. Doing that here is what
+produced half this Pass:
+
+| # | route | Pass | disposition |
+|---|---|---|---|
+| 1 | `DeviceCMYK` images (direct and `/Indexed`) | `130.1` | closed |
+| 2 | `Separation`/`DeviceN` images, **only under overprint** | `130.2` | closed |
+| 3 | analytic shadings | `137.0` | closed |
+| 3b | mesh shadings | `137.1` | closed |
+| **4** | **direct `Separation`/`DeviceN` image outside overprint** | **`140.0`** | **closed here — the reported one** |
+| **5** | **`/Indexed` over a `Separation`/`DeviceN` base (a duotone)** | **`140.0`** | **closed here — NOT REPORTED, found by walking this checklist** |
+| **6** | **`Separation`/`DeviceN` path FILL** | **`140.1`** | **closed here — EXPOSED by closing 4 and 5** |
+| **7** | **`DeviceGray` fill overprinting a spot backdrop** | **`143.0`** | **OPEN — filed to *Backlog* by this filing, deliberately not bolted on** |
+
+**★ The shape worth carrying.** Route 5 was found by *reading the rule*; route
+6 was found by *fixing routes 4 and 5*; route 7 was found by *measuring what
+route 6 revealed*. The enumeration is not only a courtesy to the next
+session — as the 291st filing already recorded, **it is the step that finds
+the sibling inside the same Pass, before the operator files it as a fresh
+bug.** This is now the second consecutive Pass where that held.
+
+`R219` **amended in place** with this instance, not re-minted — see *Standing
+rules*.
+
+---
+
+#### Tests, and the sabotage that proves route 5 is genuinely covered
+
+`tools/gen-devicen-image-fixtures.py` builds **four pages**; each draws the
+same authored colour **twice**, once as a fill and once as an image, **so the
+oracle is `fill == image` and needs no reference render at all.** The
+`/DeviceN` page's tint transform is **deliberately not a pass-through**, so
+*"what did the source specify"* and *"what does the transform produce"* have
+different answers and a renderer cannot pass by confusing them.
+
+Five integration tests plus two unit tests, **each sabotaged**:
+
+| sabotage | tests failed, of 5 |
+|---|---:|
+| `carries_ink` loses the probe | 3 |
+| indexed ink table only for `DeviceCMYK` | **1** (the duotone alone) |
+| `Space::to_cmyk`'s `Special` arm → `None` | 4 |
+| `Pass 140.1`'s early return removed | 4 |
+| the `tinting` discriminator dropped | 3 |
+
+**No two sabotages fail the same set**, and **the duotone route is caught by
+exactly one test** — which is the evidence that route 5 is genuinely covered
+rather than incidentally passing. A route covered by *zero* distinguishing
+tests and a route covered by *one* look identical on a green run.
+
+#### ★ A generator bug worth a line, because the error message names the symptom and not the cause
+
+**A classic cross-reference table is written as ONE CONTIGUOUS SUBSECTION**, so
+a gap in the object numbering **silently shifts every entry after it** and the
+file dies with a message that names the symptom (a bad object at some offset)
+and not the cause (a missing number, hundreds of bytes earlier). The fixture
+generator now **asserts contiguity** rather than trusting it. This is the
+write-side twin of §7.5.4's completeness requirement already recorded in
+`C:/personal_rag/pdf/` — see *RAG escalation* in the session log.
+
+#### Gates (engineer's, relayed — this role ran none of them)
+
+`cargo test --workspace` **4,417 passing / 0 failing** (was 4,410 — **+7**,
+the five integration and two unit tests above); `cargo fmt` clean; `cargo
+clippy -D warnings` clean; **all 19 `check-*` gates green**; `cargo +nightly
+fuzz build` clean with `image_import` **53,595 runs** and `load_document`
+**165,969 runs**, no artifacts; `wasm32` check clean; **`cargo tree` shows no
+GUI dependency in `pdfce-core` or `pdfce-render`** (rule 2 invariant).
+
+---
+
+#### Hard-rule-11 sweep — searched for the CLAIM, not for a string
+
+The claim that changed meaning: **which populations still bridge through sRGB
+into the colorant buffer, and which keep their authored ink.** `Pass 140.0`
+moved `Separation`/`DeviceN` images (direct and `/Indexed`) out of the bridged
+population, which changes what **both** counters mean for the fourth time.
+
+**Four survivors at `70c5919`, none edited by this role** (`crates/` is outside
+this role's remit; `grep -rn` over `crates/`, `tools/`, `docs/`, `fixtures/`):
+
+1. **`crates/pdfce-render/src/interpret.rs:797`** — `cmyk_native_image_pixels`'
+   rustdoc opens *"Pixels a `DeviceCMYK` image contributed as authored ink"*.
+   It now also counts `Separation`/`DeviceN` and `/Indexed`-over-those.
+2. **`crates/pdfce-cli/src/main.rs:343`** — the same sentence, in the
+   operator-facing metrics table: *"pixels a `DeviceCMYK` image contributed"*.
+   **This is the copy a consumer reads.**
+3. **`crates/pdfce-render/src/interpret.rs:763–768`** — `cmyk_bridged_pixels`'
+   rustdoc: *"**Images** stopped bridging in `Pass 130.1`. … What remains here
+   is an image with **no ink to keep**."* ★ **That sentence was FALSE from
+   `Pass 130.1` until this commit** — a `Separation`/`DeviceN` image had ink
+   and bridged anyway — **and `Pass 140.0` is what made it true.** It needs a
+   fifth entry naming `140.0`, not a correction: the enumeration is the value.
+4. **`crates/pdfce-cli/src/main.rs:342`** — the same enumeration, same gap.
+
+**Two records checked and found CORRECT**, reported so the sweep can be
+audited rather than only its failures: `crates/pdfce-render/src/mesh.rs:122`
+(scoped to meshes, unaffected) and `fixtures/synthetic/mesh-ink/PROVENANCE.md`
+(a measured `0`, still `0`).
+
+**Four repaired by this filing, in documents this role owns:**
+`docs/FEATURES.md` rows for the colorant buffer, blend modes and the *Planned*
+n-channel buffer; and `docs/ARCHITECTURE.md` §3's crate-layout clause plus §12
+decision 079's amendment chain. See *Files edited* in the session log.
+
+**★★ THE COUNTER-DESCRIPTION HAS NOW BEEN WRONG FOUR TIMES, EACH BY STANDING
+STILL WHILE THE CODE MOVED**, and its own doc comment already says so — the
+comment predicting its own decay decayed again on schedule. **`Pass 130.1`
+→ `137.0` → `137.1` → `140.0`**: four population changes, four filings, and
+the engineer's own working tree (below) shows a fifth in flight. **A
+description that enumerates a POPULATION is a claim that decays whenever the
+population changes, and nothing compiles it.** This role has no remedy to
+propose beyond the sweep itself — `check-ui-strings.sh` can verify a literal's
+*location* and `check-disclosure-channel.sh` a note's *route*; neither can
+verify that a sentence is **true**.
+
+**★ IN FLIGHT AND NOT FILED HERE: `Pass 140.2`.** `git status --porcelain`
+and `git diff`, run here, show **uncommitted modifications to
+`crates/pdfce-render/src/image.rs` (+79) and `interpret.rs` (+29)** whose own
+comments mint and name **`Pass 140.2`** — an image's colour-conversion
+diagnostics were *constructed, written to, and dropped*, so a broken
+`/tintTransform` in an image rendered as a neutral stand-in and reported
+nothing (a **rule 4** silence, not a missing statistic), and `tint_applied`
+counted only paths and shadings. **That work is the engineer's and is NOT
+filed by this filing.** It is recorded because (a) **`Pass 140.2` is
+therefore spoken for** and must not be reused, and (b) it overlaps survivors 1
+and 3 above, so the next filing should re-run the sweep rather than assume
+this list is still current.
+
+---
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | `142.1` (highest); `140.0` in *Backlog* | **`Pass 140.0` moved Backlog → SHIPPED**; **`Pass 140.1` MINTED and SHIPPED**; **`Pass 143.0` filed to *Backlog***. **Highest ID now `143.0`** (`python tools/check-ledger-numbers.py`, re-run after these edits: *"Pass families with headings : up to 143 (highest ID 143.0)"*); next free family **`144`**. ★ **`Pass 140.2` is claimed in the engineer's uncommitted working tree** (see above) — do **not** reuse it. |
+| decisions (`ARCHITECTURE.md` §12) | **093** | **093** (unchanged — **no mint**; the probe finding is a *habit*, so it went to an `R`-rule, and the false-pass adjudication has an existing precedent it corroborates rather than a new principle). Next free **094**. |
+| standing rules | **`R220`** | **`R221`** (**MINTED** — a predicate about a capability is computed by the code that provides it, never by a parallel description of when it would succeed). `R219` **amended in place, not re-minted**. Next free **`R222`**. |
+| `SESSION_LOG.md` filings | **293** | **294**. Next free **295**. |
+
+Ceilings taken from `python tools/check-ledger-numbers.py`, **run here before
+any edit** (*"Pass families with headings : up to 142 (highest ID 142.1) ·
+standing rules : R220 -> next free is R221 · decision records : 093 -> next
+free is 094 · SESSION_LOG filings : 293 -> next free is 294"*, and *"clean — no
+duplicate Pass, rule, or decision numbers"*), **not copied from a prior
+entry.**
+
+#### Git state, checked rather than inferred
+
+`git log --oneline`, `git log origin/main..main`, `git status --porcelain`,
+`git describe`, `ls -lt D:/Dev/pdfce-backups/`, `git rev-list --count` — all
+run here, at the time of writing:
+
+- **`HEAD` is `70c5919`**; `git describe` = **`v0.14.0-56-g70c5919`**.
+- **`main` is 1 commit ahead of `origin/main`** (`914389c`) — `70c5919` is the
+  single unpushed commit and **the one unfiled commit at the tip**
+  (`R217`); this filing makes it filed. Pushing `main` is
+  standing-authorized (decision **090**); scrub
+  `check-suite-name-absent.py` green first and **read CI's colour from
+  GitHub**, which this entry does not assert.
+- **The working tree is NOT clean, and IT GREW WHILE THIS ENTRY WAS BEING
+  WRITTEN.** Corrected here rather than overwritten, naming its world-source:
+  `git status --porcelain` **re-run after the last edit**, not the run made at
+  dispatch. The first version of this bullet read *"`image.rs` and
+  `interpret.rs` are modified and unstaged"* — true when observed, incomplete
+  minutes later. **Current, re-checked:** five modified files
+  (`crates/pdfce-render/src/image.rs`, `crates/pdfce-render/src/interpret.rs`,
+  `crates/pdfce-render/tests/devicen_image_ink.rs`,
+  `tools/gen-devicen-image-fixtures.py`, plus this filing's four `docs/`
+  files) and **two untracked fixtures** under
+  `fixtures/synthetic/devicen-image/` (`image-only-good-tint.pdf`,
+  `image-only-broken-tint.pdf`) — all of the non-`docs/` half being
+  `Pass 140.2`. **This is the third consecutive filing to hit the same shape:
+  a filing that reads the tree at dispatch and reports it at save is reporting
+  a MOMENT, not a state.** **No `docs/` change was in flight when this filing
+  began**; the only `docs/` changes are this filing's own.
+- **Backups: the newest bundle on disk is
+  `pdfce-20260827-shutdown-a2b4e16-full.bundle` (2026-08-27 12:04)**, by
+  `ls -lt D:/Dev/pdfce-backups/` run here; `git rev-list --count a2b4e16..HEAD`
+  = **13**. **No bundle on disk contains `70c5919`.** Cutting one is the
+  operator's call, not this role's.
+
+
 ### `Pass 141.0` (`51f94ca` + `96b6ded`) + `3ffd86f` — ★★★★★ **THE BIGGEST FINDING OF THIS FILING IS A CORRECTION TO THE COMMIT IT WAS DISPATCHED TO FILE: `3ffd86f` AND THE REPLY IT SENT BOTH SAY BOLD AND ITALIC ARE UNAVAILABLE ON EXISTING TEXT, AND `FormatRequest::set_synthetic` HAS SHIPPED SINCE 2026-08-03** — ★★★★ so the commit about *"a shipped verb that was documented, accurate, gate-green and unfindable"* **reproduced its own defect inside its own repair**, and `FEATURES.md` was the document that had it right all along — ★★★ `tools/icc-census`: **the maximum CLUT grid in 2,494 real-world profile embeddings is 11 nodes, not 33**, so the sibling colour project's load-bearing constant now has a population behind it instead of one profile pair — ★★ **enumeration BY SIGNATURE, not by reference-following**, so the census's error direction is *"found something nobody indexed"* rather than *"silently missed some"* — ★ **three of the tool's own numbers were wrong before anything left the repository, and all three were caught by READING THE OUTPUT rather than by a test** — decision **093** minted (the `iccce` ICC-reading boundary), standing rule **`R220`** minted — 2026-08-27 (293rd filing)
 
 **Sourcing.** Shell held and used (hard rule 8). Every claim this role makes
@@ -85839,78 +86220,100 @@ an edit.
 if `142.0` is declined, because it is the difference between a greyed-out
 control and a failed one. `pdfce-cli` surface per rule 11.
 
-### `Pass 140.0` — A `DeviceN` PHOTOGRAPH RENDERS DESATURATED AGAINST ACROBAT: A `Separation`/`DeviceN` IMAGE BRIDGES THROUGH sRGB AND NEVER REACHES ITS `DeviceCMYK` ALTERNATE — FOURTH INSTANCE OF `R219`'S SHAPE, THE FIRST FOUND BY APPLYING THE RULE RATHER THAN BY REPORT — filed 2026-08-27 (289th filing) as `Pass 139.0`, **RENUMBERED `Pass 140.0` on 2026-08-27 (291st filing)**, fully diagnosed, deliberately not started
+### `Pass 140.0` — MOVED TO *SHIPPED* on 2026-08-27 (294th filing). Shipped in `70c5919` together with `Pass 140.1`.
 
-> **★ RENUMBER NOTE, 2026-08-27 (291st filing).** This entry was opened
-> yesterday as **`Pass 139.0`**. `Pass 139.0`/`139.1`/`139.2` were
-> independently allocated the same day for the rotated-text extraction
-> work and shipped in `c362b6b`, whose commit message and in-diff
-> `docs/core-api/01-reading-and-model.md` §8.4.1 both name them — an
-> immutable half that cannot be renumbered without rewriting published
-> history. This entry, having shipped nothing and cited no hash, is the
-> half that moved. `140` was confirmed free by
-> `python tools/check-ledger-numbers.py` before the renumber. Full
-> reasoning, and the two-role allocation mechanism that produced the
-> collision, in the 291st filing's *Shipped* entry. **Grepping for
-> `Pass 139.0` and expecting the `DeviceN` defect will now find the wrong
-> Pass** — this note exists to catch that reader.
+**This entry is a forwarding stub, kept because a reader may grep here for the
+`DeviceN` image defect.** The full diagnosis that used to live here — the
+`carries_ink` gate, the *"do not reuse the overprint colorant planes"* trap,
+the per-texel `space.to_cmyk()` shape, and the demand that the cost be
+**measured** before the shape was committed to — is preserved in the
+**`Pass 140.0` + `Pass 140.1` *Shipped* entry** at the top of this file,
+together with what each of those turned into.
 
-**Symptom.** A five-colorant `DeviceN` photograph renders visibly
-desaturated against Acrobat — washed toward grey where the reference is
-saturated green. Measured on the affected page: `cmyk_bridged_pixels =
-25870`, `cmyk_native_image_pixels = 0` — the image is bridged through
-sRGB on a page that composites in ink.
+**Two things a grepping reader needs and will not find above:**
 
-**Cause**, `crates/pdfce-render/src/image.rs`:
+1. **This entry was opened on 2026-08-27 (289th filing) as `Pass 139.0` and
+   renumbered `Pass 140.0` by the 291st filing**, because `139.0`/`139.1`/
+   `139.2` had been independently allocated the same day to the rotated-text
+   extraction work and written into `c362b6b`'s immutable commit message.
+   **Grepping for `Pass 139.0` and expecting the `DeviceN` defect finds the
+   wrong Pass.**
+2. **The `Separation`/`DeviceN` path FILL half was never in this entry.** It
+   is **`Pass 140.1`**, minted by the 294th filing, and it exists only because
+   fixing the image half exposed it.
 
-```rust
-let carries_ink =
-    matches!(space, Space::Cmyk) || matches!(space, Space::Indexed { ink: Some(_), .. });
-```
+**The secondary finding recorded here is still live and is NOT closed by
+`Pass 140.0`:** the trap detector fired on a photographic highlight rather
+than a trap cross, and the reference-render control was weaker than it looked,
+because the two renders being compared are at different resolutions
+(`511×284` vs `786×439`) while `find_traps` uses fixed pixel-size thresholds.
+**On a patch whose content is a photograph, the trap count is not the
+evidence; the pixels are.** The 294th filing's adjudication leaned on the same
+caution from the other side — it ran the detector against the **Acrobat
+reference itself** (zero traps found) before believing a count on the new
+render.
 
-A `Separation`/`DeviceN` image converts through its tint transform **to
-sRGB** and never to its `DeviceCMYK` alternate — `carries_ink` does not
-recognise it at all.
+**The remaining open route from this entry's own subsystem is `Pass 143.0`**
+(a `DeviceGray` fill overprinting a spot backdrop), below.
 
-**★★ Fourth instance of `R219`'s shape in four days**, and the first one
-this project found by deliberately applying the rule's own checklist
-rather than by a bug report:
+---
 
-| # | Pass | gave native ink to | left unfixed |
-|---|---|---|---|
-| 1 | `130.1` | `DeviceCMYK` images | `Separation`/`DeviceN` images |
-| 2 | `130.2` | `Separation`/`DeviceN` images, **only under overprint** | the same images outside overprint |
-| 3 | `137.0` → `137.1` | analytic shadings, then mesh shadings | (closed) |
-| 4 | *(this entry)* | — | `Separation`/`DeviceN` images outside overprint — the gap nobody went back for |
+### `Pass 143.0` — A `DeviceGray` FILL OVERPRINTING A SPOT BACKDROP KNOCKS IT OUT; ACROBAT PRESERVES IT — ★ **THIS IS A SPEC READING, NOT A BUG, AND THE FIX IS AN AMBIGUITY SETTING** — filed 2026-08-27 (294th filing), fully diagnosed, **deliberately not started**
 
-**★★★ The trap, which must survive into whoever scopes this
-verbatim-in-spirit: do not reuse the overprint colorant planes.** They
-exist, texel-for-texel, in the right layout, and reaching for them is
-the obvious move and the wrong one. They hold `authored_tints`, which
-answers Table 149's *"which components did the source SPECIFY"* — a
-different question from *"what does the tint transform PRODUCE in the
-alternate space."* They also return `None` for a **spot-only**
-`DeviceN`, where the existing plain-render code path writes `[0,0,0,0]`:
-correct for the overprint route (which preserves the backdrop, `Pass
-130.3`) and **bare white paper** on a plain one.
+**Provenance.** Found by `Pass 140.1` (`70c5919`), not reported by anyone.
+Closing routes 4–6 of `R219`'s enumeration made this one visible: it is the
+**surround** in the segmentation table in that Pass's *Shipped* entry, the
+half that stayed `127,127,127` while the trap X became correct. **It is the
+seventh and only open route in that enumeration** — see the `R219` table there
+before scoping this.
 
-**The right shape**, per the engineer's own diagnosis: a per-texel
-`space.to_cmyk()` captured **beside** the existing `to_rgb`, in the same
-loop, from the same operands — the same pattern `ColorRamp::new` and
-`mesh::read_shade` already use, because a tint transform may be
-arbitrary PostScript and nothing forces two evaluations of it to agree.
-**Cost needs measuring before committing to this shape** — an extra
-transform evaluation per texel, on images that can be large.
+**Symptom.** A **50 % `DeviceGray` fill overprinting a spot backdrop knocks
+the backdrop out.** Acrobat preserves it. Measured on a grey/K-black overprint
+patch (stem deliberately unnamed — operator ruling 2026-08-25, open question
+`(bt)`, gate `tools/check-suite-name-absent.py`):
 
-**Secondary finding, same investigation: the trap detector fired on a
-photographic highlight, not a trap cross**, and the reference-render
-control was weaker than it looked — the two renders being compared are
-at different resolutions (`511×284` vs `786×439`) and `find_traps` uses
-fixed pixel-size thresholds. On a patch whose content is a photograph,
-**the trap count is not the evidence here; the pixels are.**
+| object | Acrobat | pdfce at `70c5919` |
+|---|---|---|
+| the surround (this defect) | 84,120,34 | 127,127,127 |
 
-**Not started.** Scope next session, or on the first idle slot if no
-higher-priority operator request has arrived.
+**Cause.** `overprint::classify` maps `ColorSpace::DeviceGray` to
+`SourceKind::OtherProcess`, which `cmyk_group_rules` gives
+`[ComponentRule::Source; 4]` — **the source in all four components** — so the
+paint replaces the backdrop everywhere instead of preserving the components it
+did not specify.
+
+**★ THIS IS A SPEC READING, NOT A BUG, AND SCOPING IT AS A BUG IS THE MISTAKE
+TO AVOID.** ISO 32000-1 **§8.6.7** scopes `OPM 1` to *"a tint value of 0.0 for
+a colour component **in a `DeviceCMYK` colour space**"* — and `DeviceGray` is
+not one. **pdfce's literal reading is defensible.** Acrobat converts grey to
+K-only CMYK **first** and *then* applies `OPM 1`, which is the other
+defensible reading.
+
+**Sourcing:** `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.7.md`,
+whose **`OPM-2` row already records the neighbouring case** — a CIE-based space
+that is *implicitly converted* to `DeviceCMYK` **does** get `OPM 1`. So the
+standard already contemplates conversion-then-`OPM` for one space and is silent
+about it for `DeviceGray`; that silence is the ambiguity, and it is exactly the
+shape the project's standing practice covers.
+
+**Shape of the fix**, per the standing *"two defensible answers? ship both,
+pick the default"* rule (`R169`; global memory *"make spec ambiguity a
+setting"*, Ken 2026-08-08): **an ambiguity setting, defaulting to Acrobat's
+behaviour**, because this is a **print-conformance axis** and the suite is
+authored to press behaviour. **Not an operator question** — the default is
+determined by what the measurement instrument is for, and the literal reading
+stays reachable by setting.
+
+**Expected result:** closing this should take the suite **back to 5 FAIL or
+better** of 51, undoing the `6 FAIL` that `Pass 140.1` correctly produced by
+removing a false pass. **Do not read that as `140.1` being reverted** — the
+trap X stays correct either way; this fixes the surround it was hiding behind.
+
+**Acceptance criteria owed at scoping time**, not decided here: the setting's
+name and enum values; whether the conversion applies to `DeviceGray` only or
+to every non-`DeviceCMYK` process space `classify` currently calls
+`OtherProcess`; and whether `pdfce-cli` gets a flag or only the settings file
+(rule 11 says a subcommand surface ships with the feature).
 
 ---
 
@@ -105394,6 +105797,41 @@ same cause (hashes exist only at commit time), two different failure modes.
   files it as a fresh bug. No re-mint; ceiling stays `R219`, next free
   `R220`.
 
+  **★★★ AMENDED AGAIN 2026-08-27 (294th filing) — THE FOURTH INSTANCE IS
+  CLOSED, AND IT GREW A FIFTH AND A SIXTH ROUTE WHILE BEING CLOSED, PLUS A
+  SEVENTH IN A NEIGHBOURING SUBSYSTEM.** `Pass 140.0` + `Pass 140.1`
+  (`70c5919`) shipped the defect the 289th filing's amendment above predicted,
+  and the enumeration is now the strongest evidence this rule has produced.
+  The full table is in that Pass's *Shipped* entry; the shape, in one line
+  each:
+
+  - **Route 5, the duotone** (`/Indexed` over a `Separation`/`DeviceN` base)
+    was **NOT IN THE REPORT** and was found by **reading this rule's own
+    checklist**. Fixed in the same Pass. It is caught by **exactly one** of
+    the five integration tests — the sabotage matrix proves it, and a route
+    covered by zero distinguishing tests and one covered by one look identical
+    on a green run.
+  - **Route 6, the path FILL** (`Pass 140.1`) was **created as a visible
+    defect by fixing routes 4 and 5**: before that, fill and image took the
+    same round trip and were wrong **together**, so nothing disagreed with
+    anything. It is a **new Pass ID minted mid-session**, not a scoped one.
+  - **Route 7, a `DeviceGray` fill overprinting a spot backdrop**, surfaced
+    from route 6's measurement and is filed to *Backlog* as **`Pass 143.0`**,
+    **deliberately not bolted on** — it is a spec reading needing its own
+    ambiguity setting, not a bug.
+
+  **★ What this adds to the rule, beyond a fourth tally mark.** The 291st
+  filing's amendment said the enumeration *"is the step that finds the sibling
+  inside the same Pass."* This instance shows the **three ways a sibling
+  arrives**, and only the first is what the rule's original wording
+  anticipated: **read** (route 5, found by the checklist), **exposed** (route
+  6, made visible by the fix itself), and **measured** (route 7, found in the
+  numbers the fix moved). **A Pass that enumerates only what it can already
+  name will miss the second and third kinds** — so the enumeration is owed
+  again *after* the fix is measured, not only when it is planned. Second
+  consecutive Pass where the sibling was found inside the Pass. No re-mint;
+  ceiling moves for `R221` below, not for this rule.
+
 - **R220 — A CAPABILITY IS DOCUMENTED WHERE THE READER'S *QUESTION* LIVES,
   NOT ONLY WHERE ITS *MECHANISM* LIVES; AND A CLAIM THAT PDFCE HAS NO VERB
   FOR SOMETHING IS CHECKED AGAINST **SOURCE** BEFORE IT IS SENT ANYWHERE.**
@@ -105482,6 +105920,70 @@ same cause (hashes exist only at commit time), two different failure modes.
   all three are about a record that is true as far as it goes and read as
   though it went further. **Ceiling moves `R219` → `R220`; next free
   `R221`.**
+
+- **R221 — A PREDICATE THAT DECIDES WHETHER A CAPABILITY APPLIES IS COMPUTED
+  BY THE CODE THAT PROVIDES THE CAPABILITY — ASK THE REAL FUNCTION, NEVER
+  PATTERN-MATCH A PARALLEL DESCRIPTION OF WHEN IT WOULD SUCCEED.** Minted
+  2026-08-27 (294th filing), from the `Pass 140.0` / `Pass 140.1` *Shipped*
+  entry above, at **n = 2** — the project's standing bar — with both instances
+  in the same subsystem four days apart.
+
+  **The shape.** A feature needs a gate: *does this object have the thing my
+  fast path needs?* The obvious gate is a **structural predicate** — match on
+  the object's shape, enumerate the cases that qualify. That predicate is a
+  **second, independent description of the same rule**, written by hand, at a
+  different call site, at a different time from the code that actually
+  performs the work. **Two descriptions of one rule drift**, and the drift is
+  silent: the predicate returns a perfectly ordinary `false` and the fast path
+  simply never runs, so the symptom is *"the feature quietly does not apply
+  here"* — indistinguishable from *"this object genuinely does not qualify."*
+
+  **The remedy, which is cheap and is the whole rule:** make the predicate
+  **call the real function** and report whether it produced an answer — a
+  **probe** — or, where that is too expensive, put the predicate **beside the
+  method it predicts** so there is exactly one place that can be wrong instead
+  of one per caller.
+
+  **Two instances:**
+
+  1. **`Pass 137.1` (`d1ce4ac`, 2026-08-27) — a gate on the wrong carrier.**
+     `ramp.is_some_and(has_colorants)` read **`false`** for a fully
+     ink-bearing mesh shading, because a mesh's `ramp` field is legitimately
+     `None`. Not an error, not a panic — a normal-looking *"no colorants
+     here."* **A predicate asking the wrong object cannot distinguish "this
+     object has no ink" from "I asked the wrong object"; both return `false`.**
+     Fixed by moving the predicate beside the method it predicts
+     (`Shading::has_colorants()`, checking `self.mesh` before falling back to
+     the ramp).
+  2. **`Pass 140.0` (`70c5919`, 2026-08-27) — the probe, chosen up front.**
+     `Space::yields_cmyk` **asks `to_cmyk` with an all-zero operand** rather
+     than matching on the colour space's shape, so there is **one** answer to
+     *"does this space have colorants"* instead of two that can drift.
+     Deliberate, and stated as such in the commit: the engineer applied the
+     first instance's lesson before it had a rule.
+
+  **★ The risk-analysis half, which is what makes a probe cheap enough to
+  prefer by default.** A probe can be wrong; the question is what a wrong
+  answer costs. Here: a **false negative** takes the pre-existing slow path,
+  which is the status quo and already disclosed; a **false positive** is
+  caught by an **all-or-nothing discard** that drops the fast path's data for
+  the whole object rather than leaving a seam through the middle of it.
+  **Neither error direction can paint a wrong colour.** State that analysis
+  when adopting a probe — a probe whose failure modes have *not* been shown
+  harmless is not automatically better than a structural predicate, it is just
+  differently wrong.
+
+  **What this rule does NOT ask for.** It is not a ban on cheap structural
+  fast-outs (an `is_empty()` guard, a null check) and it is not an argument
+  for evaluating something expensive to decide whether to evaluate it. The
+  obligation binds where the predicate is **a restatement of the conditions
+  under which another function succeeds** — that restatement is the thing that
+  decays.
+
+  **Sibling of `R219`** (a fix has less reach than it appears to) and of
+  **`R151`** (a capability has no caller): this one is about a **gate** having
+  less reach than it appears to, which is the same failure one layer down.
+  **Ceiling moves `R220` → `R221`; next free `R222`.**
 
 ## Update protocol
 

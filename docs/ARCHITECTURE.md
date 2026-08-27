@@ -1823,6 +1823,34 @@ D:\Dev\pdfce\
                                    narrower exclusion (Table 149's
                                    value-dependent row), unchanged by
                                    either Pass.
+                                   ★★★ **AMENDED A THIRD TIME 2026-08-27**
+                                   (`Pass 140.0` + `Pass 140.1`, `70c5919`)
+                                   — **the clause above was FALSE when it
+                                   was written, and this Pass is what made
+                                   it true.** A `Separation`/`DeviceN` image
+                                   had ink and bridged anyway, because it
+                                   resolved through its tint transform to
+                                   sRGB and never to its `DeviceCMYK`
+                                   alternate; so did an `/Indexed` duotone
+                                   over such a base, and so did a path
+                                   FILL of the same colour. All three now
+                                   keep their ink (`Space::to_cmyk`,
+                                   `Space::yields_cmyk`,
+                                   `Interpreter::authored_cmyk`). ★ The
+                                   round trip they took is not the identity:
+                                   the outbound leg is `Rgb::from_cmyk`
+                                   (calibrated, carries a rendering intent)
+                                   and the return leg is
+                                   `overprint::rgb_to_cmyk` (naive
+                                   maximum-GCR, the exact inverse of a
+                                   DIFFERENT function, `cmyk_to_rgb`).
+                                   ★★ Note the shape rather than only the
+                                   correction: this clause has now been
+                                   amended three times and was wrong in the
+                                   interval after each of the first two — a
+                                   sentence that enumerates a POPULATION
+                                   decays whenever the population changes,
+                                   and nothing compiles it.
     pdfce-print\                 <- Printing: job planning + spooling. Shipped with
                                    `Pass 55.2` (2026-08-10) but never documented in this
                                    tree until the eighty-fifth filing — a filing gap this
@@ -24789,6 +24817,38 @@ free 072.**
   next day, and only genuinely additive meshes and group results remain
   in the "no ink to keep" population. Kept legible rather than rewritten,
   per this section's own append-only convention.
+
+  **★★★ AMENDED AGAIN 2026-08-27 (`Pass 140.0` + `Pass 140.1`, `70c5919`)
+  — "images not authored in `DeviceCMYK`" no longer belongs in the list
+  either, and `cmyk_native_image_pixels`' own one-line description is now
+  too narrow.** A `Separation`/`DeviceN` image — directly, or behind an
+  `/Indexed` base as a duotone — now carries its colorants forward through
+  `Space::to_cmyk` and is counted as native, not bridged. The same round
+  trip was independently reconstructing colorants for a `Separation`/
+  `DeviceN` **path fill**, fixed as `Pass 140.1`. **What remains in the
+  bridged population is content with genuinely no ink to keep — an
+  additive colour space — and the results of transparency groups.**
+
+  **★★ THIS IS THE FOURTH TIME THIS COUNTER'S POPULATION HAS CHANGED**
+  (`Pass 130.1` → `137.0` → `137.1` → `140.0`), and on each occasion the
+  description in some other document stayed still. The engineer's own
+  rustdoc for `cmyk_bridged_pixels` predicts exactly this and decayed again
+  on schedule. **The transferable half is not the correction, it is the
+  shape**: a description that enumerates a POPULATION is a claim, and it is
+  falsified by work that never touches it. No gate can check it —
+  `check-ui-strings.sh` verifies a literal's *location* and
+  `check-disclosure-channel.sh` a note's *route*; neither can verify that a
+  sentence is **true**. The 294th filing's hard-rule-11 sweep records four
+  survivors in `crates/` at `70c5919`, reported to the engineer rather than
+  edited by the librarian role.
+
+  **★ One counter did NOT change and is worth stating so the pair is not
+  read as symmetric:** `cmyk_bridged_pixels` and
+  `cmyk_native_image_pixels` remain **complements, and remain
+  non-interchangeable** — on the patch that opened `Pass 140.0` the same
+  **25,870** pixels simply moved from one to the other (25,870 → 0 and
+  0 → 25,870). A bridged pixel has been through a many-to-one conversion
+  and back; a native one has not.
 
   **(d) `f32`, on one type alias.** `cmyk_buffer::Chan`, so revisiting it is
   one line. §11.4.4's `1/α_gn` is what forces floats at all: an 8-bit
