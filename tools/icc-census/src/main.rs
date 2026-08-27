@@ -706,6 +706,13 @@ struct Census {
     /// the same profile can and do declare different `/N`, and only a
     /// per-embedding tally can say so.
     n_disagree_embeddings: usize,
+    /// Every `/N`-disagreeing embedding, named.
+    ///
+    /// A count alone cannot say WHICH profiles disagree, and the per-distinct
+    /// TSV cannot either — its `/N` column is one sample. Without this, the
+    /// only honest sentence about the disagreements is "there are two", which
+    /// is not enough for the requester to look into them.
+    n_disagree_detail: Vec<(String, u8, i64)>,
     n_absent_embeddings: usize,
     n_present_embeddings: usize,
 }
@@ -724,6 +731,14 @@ impl Census {
                     self.n_present_embeddings += 1;
                     if pdf != i64::from(hdr) {
                         self.n_disagree_embeddings += 1;
+                        self.n_disagree_detail.push((
+                            profile
+                                .desc
+                                .clone()
+                                .unwrap_or_else(|| "(no desc)".to_owned()),
+                            hdr,
+                            pdf,
+                        ));
                     }
                 }
                 (Some(_), None) => self.n_present_embeddings += 1,
@@ -998,6 +1013,16 @@ PDF /N vs header channel count — MEASURED per embedding"
                 "  {:>7}         no /N declared by the PDF",
                 c.n_absent_embeddings
             );
+            // Each disagreement NAMED. A count alone cannot say which
+            // profiles disagree, and the per-distinct TSV cannot either —
+            // its `/N` column is one sample per fingerprint. Without this
+            // the only honest sentence about them is "there are two", which
+            // is not enough for the requester to go and look.
+            for (desc, hdr, pdf) in &c.n_disagree_detail {
+                println!(
+                    "          profile says {hdr} channel(s), the PDF says /N {pdf}  --  {desc}"
+                );
+            }
         } else {
             println!(
                 "
