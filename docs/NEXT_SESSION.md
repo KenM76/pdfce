@@ -31,7 +31,7 @@ running the print-conformance suite rather than by reading code:**
 | `origin/main` | ★ **8 commits BEHIND `main` — this work is NOT PUSHED** | `git rev-list --count origin/main..main` |
 | tag at `HEAD` | none; highest is `v0.14.0` | `git tag --points-at HEAD` |
 | working tree | **clean** | `git status --porcelain` |
-| newest backup bundle | `pdfce-20260827-0130-3b9a277-full.bundle`, `git bundle verify` says **okay** and *"records a complete history"*; **it covers every commit below** | `ls -lt D:\Dev\pdfce-backups\` |
+| newest backup bundle | `pdfce-20260827-0130-3b9a277-full.bundle`, `git bundle verify` says **okay** and *"records a complete history"*; **it covers both code Passes and every filing** — only later *docs* commits can post-date it, which is unavoidable since this file is one of them | `ls -lt D:\Dev\pdfce-backups\` |
 | gates on disk | **18**; 17 run with no arguments | `ls tools/check-*` |
 | CI at `HEAD` | **UNKNOWN AND UNKNOWABLE — `HEAD` HAS NEVER BEEN PUSHED.** There is no run to read | — |
 | `docs/core-api` verbs | **144** | `python tools/check-core-api-verbs.py` |
