@@ -24350,13 +24350,38 @@ free 072.**
   compliance.** `R206` (two-hundred-and-seventh filing) says: two
   defensible behaviours ⇒ ship both as options, pick a default from
   ordinary-operator expectation, don't return to the operator to ask.
-  Both *are* shipped — `Pass 119.0` (edit-in-place) and `Pass 119.1`
-  (`unshare_form`). But they are not two configurable behaviours of one
-  verb; they are two different verbs, one of which (edit) is not always
-  even expressible in the other's terms (unshare only applies to
-  top-level invocations, reason 2 above). Filing the option as its own
-  Pass rather than a flag on `edit_text` is the correct application of
-  `R206`'s mechanism to a case where the "two options" are not siblings.
+  ~~Both *are* shipped — `Pass 119.0` (edit-in-place) and `Pass 119.1`
+  (`unshare_form`).~~ **★ CORRECTED 2026-08-27 (277th filing) — this was
+  false the day it was written, and the falsity is what let this
+  paragraph read as `R206`-compliant when it was not.** `Pass 119.0`
+  shipped (`edit_text`'s target-resolution layer + `EditReport::
+  form_invocations`, both verified on disk this filing). `Pass 119.1`
+  (`unshare_form`) **did not** — it is filed in `ROADMAP.md`'s *Backlog*
+  (not *Shipped*), and a `crates/` grep for `unshare`/`copy_on_write`/
+  `privatise_form`/`privatize_form`/`duplicate_form`/`make_form_private`,
+  and for any `pub fn` on `EditSession` matching clone/copy/unshare/
+  private/duplicate applied to a form, returns **zero hits** as of this
+  filing. The sentence two clauses earlier already said so correctly —
+  *"filed as a **separate, explicit verb** (`Pass 119.1`, `unshare_form`)"*
+  — and then this paragraph restated the plan in the present tense as
+  if it were the outcome. **`R206`'s mechanism is "ship both, then
+  default"; only the default shipped. That is the exact state the rule
+  exists to prevent, not a compliant instance of it.** Corrected reading:
+  the *reasoning* below (reasons 1 and 2, the verbs-not-siblings
+  argument) is unaffected and still holds — a form invoked from inside
+  another form cannot always be unshared, so "ship both" was always
+  going to mean two verbs, not one flag — but the **compliance claim
+  itself is retracted**. `R206` is **outstanding on this decision, not
+  satisfied**, until `Pass 119.1` ships. Sourced by `pdfce-librarian`,
+  dispatched by the engineer after `pdfceGUI` asked whether decision 076
+  extends to vector objects and, in checking, found the copy-on-write
+  verb it would have cited does not exist. But they are not two
+  configurable behaviours of one verb; they are two different verbs,
+  one of which (edit) is not always even expressible in the other's
+  terms (unshare only applies to top-level invocations, reason 2 above).
+  Filing the option as its own Pass rather than a flag on `edit_text`
+  is the correct application of `R206`'s mechanism to a case where the
+  "two options" are not siblings — **once `Pass 119.1` actually ships.**
   **Acrobat's behaviour here is UNSOURCEABLE, and that absence is itself
   a sourced result, not a gap left unfilled.** `pdfce-acrobat-librarian`
   was dispatched specifically for this question — 50 tool calls across

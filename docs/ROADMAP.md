@@ -83881,6 +83881,20 @@ independently useful for disclosure) versus wiring a real consumer
 
 ### `Pass 119.1` — `unshare_form`: copy-on-write a shared form XObject onto one page
 
+**★ OUTSTANDING `R206` OBLIGATION, not an ordinary Backlog entry — flagged
+2026-08-27 (277th filing).** Decision 076 (`ARCHITECTURE.md` §12) argued
+its own `R206` compliance on the premise that "both are shipped." That
+premise was false — this Pass was filed, never built — and the
+compliance claim has been corrected in place at decision 076 itself
+(dated ★, same filing). Until this Pass ships, `R206`'s "ship both as
+options" is **unsatisfied** for the shared-form-XObject edit default:
+the operator has only the default (edit-in-place), not the option. A
+`crates/` grep for `unshare`/`copy_on_write`/`privatise_form`/
+`privatize_form`/`duplicate_form`/`make_form_private`, and for any
+`EditSession` method matching clone/copy/unshare/private/duplicate
+applied to a form, returns zero hits as of this filing — confirm the
+same before ever citing this verb as already available.
+
 **Filed 2026-08-20 (two-hundred-and-ninth filing), the "option" half of
 decision 076's default** (edit-in-place is the default verb behaviour;
 this is the explicit, separate act of breaking the sharing first).

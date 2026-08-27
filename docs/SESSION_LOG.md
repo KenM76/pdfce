@@ -66957,3 +66957,71 @@ spot-colorant compositing buffer remains the next natural target.
   verify` before treating either as settled.
 
 ---
+
+## 2026-08-27 (277th filing) — CORRECTION to decision 076: its own `R206`-compliance claim was false, "both are shipped" when one was only filed; `Pass 119.1` flagged as an outstanding obligation, not an ordinary Backlog entry
+
+**Shipped:** none — a records-only correction, no code, no Pass status
+change.
+
+**Decisions made this session:** none new; decision 076's reasoning
+(reasons 1 and 2, the verbs-not-siblings argument) stands untouched —
+only its compliance claim is corrected.
+
+**Findings + decisions:**
+- `ARCHITECTURE.md` §12 decision 076 argued `R206` compliance with
+  *"Both are shipped — `Pass 119.0` (edit-in-place) and `Pass 119.1`
+  (`unshare_form`)."* **`Pass 119.1` was never shipped** — it sits in
+  `ROADMAP.md`'s *Backlog*, filed the same day as the decision, and its
+  own text calls itself filed, not built. A `crates/` grep (this
+  filing's own tool call, not relayed) for `unshare`, `copy_on_write`,
+  `privatise_form`/`privatize_form`, `duplicate_form`,
+  `make_form_private`, and any `EditSession` method matching clone/
+  copy/unshare/private/duplicate applied to a form: **zero hits.**
+  `EditReport::form_invocations` (the disclosure half) **is** real,
+  confirmed at `crates/pdfce-core/src/text_edit/edit.rs:516` and
+  `format.rs:850` — only the copy-on-write *option* half is missing.
+- **The shape, worth carrying forward:** the sentence immediately
+  before the false claim already said, correctly, that the option "is
+  filed as a **separate, explicit verb**" — the decision's own text
+  knew the true state one clause before restating it as an accomplished
+  fact. Same failure mode as a wrong expectation reported back as a
+  measured result, at document scale rather than at a single number.
+  `R206`'s whole mechanism is *ship both, then default* — a decision
+  that ships only the default and calls that compliant is exactly the
+  state the rule exists to prevent, not an instance of satisfying it.
+- **Trigger:** `pdfceGUI` filed
+  `request_decompose_recurses_into_form_xobjects.md` (2026-08-26) asking
+  whether moving a vector object living inside a shared form XObject
+  should edit-in-place, clone-and-rebind, or refuse — explicitly asking
+  to be ruled on rather than deciding it themselves. Decision 076
+  already answers this by reasoning (Reason 2, the nested-invocation
+  argument, is representation-agnostic — it applies to a path or image
+  leaf exactly as it applies to text), so the reply routes them to it
+  by reference rather than re-deciding. **Reading 076 to write that
+  reply is what surfaced the false claim** — one more minute and a
+  copy-on-write verb that has never existed would have been cited to a
+  consuming project as available today.
+- Both corrections are made **in place, dated, struck through rather
+  than silently rewritten** (this project's append-only convention for
+  decision-log entries): `ARCHITECTURE.md` decision 076 carries a
+  `★ CORRECTED 2026-08-27 (277th filing)` block; `ROADMAP.md`'s
+  `Pass 119.1` Backlog entry now opens with an
+  `★ OUTSTANDING R206 OBLIGATION` flag so it reads as the missing half
+  of a shipped decision, not one Backlog entry among many.
+
+**Still in flight:** unchanged from the 276th filing — the n-channel
+spot-colorant compositing buffer remains the next natural engineering
+target; `Pass 119.1` now separately flagged as an open `R206` debt
+whenever form-XObject work is next picked up.
+
+**For next session:**
+- `R206` is **not satisfied** for the shared-form-XObject edit default
+  until `Pass 119.1` (`unshare_form`) actually ships. Treat any future
+  reference to a copy-on-write form verb as unverified until then —
+  grep `crates/` fresh rather than trusting this entry's own zero-hit
+  count to still hold.
+- No new Pass, no new decision number, no new standing rule minted this
+  filing — ledger unchanged: rules `R218` (next free `R219`), decisions
+  `089` (next free `090`), `SESSION_LOG` filings **277**.
+
+---
