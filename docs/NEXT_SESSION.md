@@ -94,23 +94,32 @@ requests from `pdfceGUI` are done, answered on their channel
   reads the session's current revision. Plus `pdfce-cli ocr --in-place`
   through the same verb.
 
-### ★★ What is OWED out of them, in priority order
+### ★★ What was owed out of them — TWO OF FOUR ARE NOW DONE
 
-1. **`unshare_form` (`Pass 119.1`) — an outstanding obligation from a SHIPPED
-   decision, not an ordinary Backlog item.** Decision 076 certified its own
-   `R206` compliance on the claim that both the default *and* the option had
-   shipped. The option never existed. Until it does, an operator who moves a
-   leaf inside a form used in four places moves it in all four **with no verb
-   that gives him one**, and the GUI has been told not to offer the button.
-2. **`--in-place` on the other editing subcommands.** Two subcommands' `--help`
-   promised the flag for who-knows-how-long while it existed nowhere. The
-   wording is corrected and `ocr` has it; the rest do not.
-3. **A CLI surface for leaves.** `object-list` still prints the flat list only,
-   so nothing on the command line can see inside a form. `R151` shape.
-4. **Retire `pdfce-render`'s `MAX_XOBJECT_DEPTH`.** The nesting bound now lives
-   once, in `content::MAX_FORM_DEPTH`, and `text_extract` and `vector` both
-   take it from there. Render still has its own `pub const`; retiring it is a
-   cross-crate breaking change, which is why it was not done in passing.
+1. ~~**`unshare_form` (`Pass 119.1`)**~~ — **SHIPPED** (`cd5e5cc`). The `R206`
+   obligation is **discharged**, and decision 076's compliance claim now reads
+   *satisfied* after a three-step correction (false → outstanding → satisfied,
+   all three readable in order in `ARCHITECTURE.md` §12). An operator can give
+   one page a private copy of a shared form; a nested invocation is refused by
+   name.
+2. ~~**A CLI surface for leaves**~~ — **SHIPPED** (`a2f7b48`). `object-list`
+   prints `leaf` rows with containment and `editable=false`, plus `leaves=`,
+   `form_cycles=` and `form_depth_overflows=` appended to the summary line.
+3. **`--in-place` on the other editing subcommands.** ★ Still owed. Two
+   subcommands' `--help` promised the flag while it existed nowhere; the
+   wording is corrected and `ocr` has it, the rest do not.
+4. **Retire `pdfce-render`'s `MAX_XOBJECT_DEPTH`.** ★ Still owed. The nesting
+   bound now lives once in `content::MAX_FORM_DEPTH` and `text_extract` and
+   `vector` both take it from there; render still has its own `pub const`, and
+   retiring it is a cross-crate breaking change.
+
+### ★ And a fourth, newly visible
+
+**`Pass 119.4`** — retarget `reflow_block` / `add_text` into form XObjects.
+Named in its own Backlog entry as needing **its own disclosure design before it
+can ship safely**: appending to a form's content stream changes *every*
+invocation site, which is a different disclosure shape from `edit_text`'s
+single-target report. Do not treat it as plumbing.
 
 ### ★★★ THE THING TO NOT UNDO
 

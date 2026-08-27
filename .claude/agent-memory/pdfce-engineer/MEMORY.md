@@ -54,3 +54,5 @@
 - [The banana scale demo is a showpiece AND an instrument](project_banana_scale_demo.md) — Ken's own artefact with a personal easter egg; it found a renderer defect and two silent geometry bugs in one session
 - [f32 and no threads in the engine](project_compositor_element_type_and_threading.md) — decided 2026-08-21; `rayon` and `std::thread` BOTH compile for wasm32, so the wasm gate cannot catch a threading regression
 - [Security defaults lean safe, plus a stricter mode](feedback_security_defaults_lean_safe_plus_stricter_mode.md) — he takes the safe default AND adds restrictions himself; offer the posture ladder, not a yes/no
+- [A claim about callers is a measurement](feedback_a_claim_about_callers_is_a_measurement.md) — one comment was wrong about its own callers THREE times; correcting one by inference makes a fresh stale claim
+- [A rising failure count can mean a false pass was removed](feedback_a_rising_failure_count_can_mean_a_false_pass_was_removed.md) — measure distance-to-oracle before reverting; and ablate candidates rather than arguing

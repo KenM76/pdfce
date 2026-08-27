@@ -67396,3 +67396,59 @@ by somebody re-running the check the claim itself quoted.
   decisions `089` (next free `090`), `SESSION_LOG` filings **281**.
 
 ---
+
+## 2026-08-27 (282nd filing) — `Pass 136.2` (`a2f7b48`) SHIPS: `object-list` can see inside form XObjects — a separate `leaf` line type, never an `object` row, because a leaf's tokens index the form's stream, not the page's
+
+**Shipped:**
+- `Pass 136.2` (`a2f7b48`) — `pdfce-cli object-list` gains a `leaf` line
+  type (kind/bbox/containment/paint_order/editable) plus three appended
+  summary keys (`leaves`, `form_cycles`, `form_depth_overflows`),
+  verified against all four `Pass 136.0` form fixtures. Discharges the
+  item `Pass 136.1`'s own Shipped entry filed as owed: a `pdfce-cli`
+  surface for `PageObjects::leaves`.
+
+**Decisions made this session:**
+- None new. No standing rule and no decision minted — the design choice
+  below (separate line type, not more `object` rows) is an application of
+  `Pass 136.0`'s already-decided two-list shape to the CLI surface, not a
+  new ruling.
+
+**Findings + decisions:**
+- **A leaf line is deliberately not an `object` row.** An `object` index
+  is what every editing subcommand takes, and all eleven resolve it
+  against the **page's** content stream; a leaf's token range indexes
+  the **form's** stream — a different buffer. Printing leaves as `object`
+  rows would hand a script an in-range index that corrupts the page
+  silently if fed to an edit subcommand. `editable=false` on every leaf
+  row names that rather than leaving it implied.
+- **A truncated leaf list looks identical to a page with fewer objects**
+  — that is the failure mode `form_cycles`/`form_depth_overflows` exist
+  to rule out. Both are on the stable summary line for a script, and the
+  human-readable output adds a sentence naming what was skipped and why
+  (cycle — legal under ISO 32000-1 §8.10.1, merely unbounded — vs. depth
+  overflow past `content::MAX_FORM_DEPTH = 64`).
+- **The append-never-reorder convention held**: `leaf` is a new line
+  type a `^object `-keyed parser never sees, and the three new summary
+  keys are appended after the existing ones, never inserted between them.
+- **A hazard already written down was not run at the moment it applied.**
+  This Pass's own first commit-message attempt was passed to `git commit
+  -m` from the shell and had every backticked term command-substituted
+  into an empty string — `` `object` ``, `` `editable=false` ``,
+  `` `form_cycles` `` and more silently vanished, leaving sentences with
+  holes. The commit succeeded; only re-reading the message caught it.
+  This exact hazard is already recorded in this role's own agent-memory
+  ("never put prose through the Bash tool"), and it recurred anyway —
+  worth carrying forward as its own shape: a written rule is not a
+  running gate.
+
+**Still in flight:**
+- No GUI surface for leaves yet (`FEATURES.md` row stays `[ ]` gui).
+- Retiring `pdfce-render`'s own `MAX_XOBJECT_DEPTH` in favour of
+  `content::MAX_FORM_DEPTH` remains filed as owed from `Pass 136.0`/
+  `136.1` — a cross-crate breaking change, still not done.
+
+**For next session:**
+- Ledger unchanged this filing: rules `R218` (next free `R219`),
+  decisions `089` (next free `090`), `SESSION_LOG` filings **282**.
+
+---

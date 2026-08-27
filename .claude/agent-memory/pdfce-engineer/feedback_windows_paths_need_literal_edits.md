@@ -193,3 +193,41 @@ only defence was checking with an instrument rather than with a glance. Also
 [[splice-end-marker-must-be-searched-from-start]], from the same session:
 another scripted patch, another silent corruption, found by a reader rather
 than a check.
+
+---
+
+## ★★ 2026-08-27 — A FOURTH RECURRENCE, AND IT WAS A COMMIT MESSAGE
+
+The same failure, in a place this note did not name: **`git commit -m` from the
+shell**, with a prose message containing backticked identifiers.
+
+Every backticked term was **command-substituted away**. `` `object` ``,
+`` `editable=false` ``, `` `form_cycles` ``, `` `^object ` `` all became empty
+strings. The commit succeeded. The message shipped with holes in the sentences:
+
+> *"A SEPARATE LINE TYPE, NOT MORE  ROWS"* … *"An  index is what the editing
+> subcommands take"* … *" is on every leaf row for the same reason."*
+
+`bash` also printed `object: command not found` six times, which I read as noise
+from an unrelated step rather than as the message being eaten.
+
+**Why this one is worth appending rather than filing separately:** the existing
+note is about **backslashes in file content**, and I had internalised it as a
+rule about *editing files*. A commit message is not a file edit, so the rule did
+not feel like it applied — the same shape as the harness note that read as a
+"code-writing pre-flight" and was skipped twice for not being code.
+
+**The generalisation, stated so it covers the next unnamed place:**
+
+> **Any prose that reaches a shell as an argument is a hazard, whatever it is
+> for.** Not just file content. Commit messages, `--message` flags, `echo`,
+> heredocs, `printf`. Backticks and `$(...)` are substituted; backslashes are
+> escapes.
+
+**How to apply:** write the message to a file with `Write`, then
+`git commit -F <file>`. This is already the habit for long messages and was
+skipped here because the message felt short enough. It was not.
+
+**And there is no gate for it** — a mangled commit message is a perfectly valid
+commit message. The only detection is re-reading `git log -1 --format=%B` after
+committing, which is cheap and is now the habit.

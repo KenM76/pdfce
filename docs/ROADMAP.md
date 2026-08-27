@@ -96,6 +96,114 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 136.2` (`a2f7b48`) — `object-list` CAN SEE INSIDE FORM XOBJECTS — ★★★ **A SEPARATE `leaf` LINE TYPE, NOT MORE `object` ROWS: A LEAF'S TOKEN RANGE INDEXES THE FORM'S CONTENT STREAM, NOT THE PAGE'S, AND HANDING IT OUT AS AN `object` INDEX WOULD LET A SCRIPT CORRUPT THE PAGE SILENTLY** — ★★ an incomplete leaf list now discloses itself: `form_cycles`/`form_depth_overflows` on the stable line, plus a named sentence for a human — ★ the commit message for this very Pass shipped mangled once, by the exact hazard already recorded in this role's own agent-memory — 2026-08-27 (282nd filing)
+
+**Shipped 2026-08-27.** Commit `a2f7b48`. The commit immediately before it
+is `acd65c0` (this role's own 281st filing, the docs commit that filed
+`Pass 119.1`, below). Hashes and date as supplied in the engineer's
+dispatch — this filing has no shell and could not run `git log` itself to
+confirm them independently; treat the commit identity as relayed, not
+verified (hard rule 8).
+
+#### This discharges the item filed as owed under `Pass 136.1`
+
+`Pass 136.1`'s own Shipped entry (further below) recorded, under "Filed as
+owed, not done": *"`pdfce-cli` surface for `PageObjects::leaves`."* That is
+what this Pass builds — `object-list` gains a `leaf` line per row a form's
+decomposition finds, plus three appended summary keys.
+
+#### What shipped
+
+A new `leaf` line type on `pdfce-cli object-list`, verified against all
+four form fixtures added under `Pass 136.0` (`fixtures/synthetic/forms-xobject/`):
+
+```
+object page=1 index=0 kind=form bbox=0,0,200,200 source=form pixels=none
+leaf page=1 index=0 kind=path bbox=10,10,50,50 containment=5 paint_order=0 editable=false ...
+leaf page=1 index=1 kind=path bbox=80,80,120,120 containment=5 ...
+leaf page=1 index=2 kind=path bbox=150,150,190,190 containment=5 ...
+... leaves=3 form_cycles=0 form_depth_overflows=0
+```
+
+#### ★★ A separate line type, not more `object` rows — and that is a safety decision, not a formatting one
+
+An `object` index is what the editing subcommands take, and every one of
+them writes to the **page's** content stream. A leaf's tokens index the
+**form's** stream — a different buffer entirely (the same distinction
+`Pass 136.0` drew for `PageObjects::leaves` itself, cited there as the
+reason the two lists are never merged into one). Printing leaves as
+`object` rows would hand a script indices that **corrupt the page when
+used, silently**, because they are in range on the page's own stream.
+`editable=false` appears on every leaf row for the same reason — it
+names, rather than merely implies, that nothing downstream should feed a
+leaf index to an edit subcommand.
+
+A parser keyed on `^object ` is unaffected by the new line type, and the
+three new summary keys (`leaves`, `form_cycles`, `form_depth_overflows`)
+are **appended, not inserted** — this subcommand's own append-never-reorder
+convention, unbroken.
+
+#### ★★★ The incomplete-list case discloses itself
+
+`form_cycles` and `form_depth_overflows` sit on the stable line for a
+script to key on, and a human reading the same output gets a sentence:
+
+> *the leaf list is INCOMPLETE. 1 form invocation(s) were skipped as
+> cycles (a form that invokes itself, directly or through a chain — legal
+> under ISO 32000-1 §8.10.1, merely unbounded) and 0 because the nesting
+> exceeded 64 levels. Objects inside those forms are not listed above.*
+
+A truncated leaf list is **invisible** in the rows above it — it reads
+exactly like a page that simply has fewer objects in it. That
+silent-truncation shape is what both counters exist to rule out.
+
+#### ★ One more finding, about the filing rather than the code
+
+The first attempt at this Pass's own commit message shipped **mangled**:
+passed to `git commit -m` from the shell, every backticked term in it was
+command-substituted away — `` `object` ``, `` `editable=false` ``,
+`` `form_cycles` `` and the rest silently became empty strings, leaving
+sentences with holes in them. The commit succeeded; only re-reading the
+message showed the words were gone. Amended from a file; the note is now
+in the commit message itself.
+
+This hazard is already recorded in this role's own agent-memory ("never
+put prose through the Bash tool — backslashes AND backticks") and it
+recurred anyway. The reusable shape, worth carrying forward rather than
+treating as a one-off: **a check that exists, is written down, and is not
+run at the moment it applies** is the same failure shape as several of
+this project's other findings — a written rule is not a running gate.
+
+#### Tests + gates
+
+- `cargo test --workspace` — **4,370 passing, zero failures**.
+- `cargo fmt --all --check` clean; `cargo clippy --workspace --all-targets
+  -- -D warnings` clean.
+- All 17 argument-free gates green, exit codes read individually.
+- `check-core-api-verbs` green and unaffected — this Pass is a
+  `pdfce-cli` subcommand change, documented by its own `--help`, not a new
+  `EditSession` verb; `docs/core-api/` needs nothing here.
+- `cargo tree -p pdfce-core` / `-p pdfce-render` — zero GUI, zero network
+  (per the standing invariant; not independently re-run by this role, no
+  shell this filing).
+
+#### `FEATURES.md` — updated in this same filing
+
+Row (Vector objects, *Planned*): "Click through a form XObject to select
+the object actually painted inside it" — **cli ticked**, `object-list`
+now reaches leaves (transcript above); **gui stays unticked**. Row stays
+in *Planned* — the gui gap is unchanged, and gui alone would not earn the
+tick.
+
+#### Ledger
+
+No new rule, no new decision. Ceiling unchanged: rules `R218` (next free
+`R219`), decisions `089` (next free `090`) — per the engineer, not
+independently re-run this filing (no shell); engineer should confirm with
+`python tools/check-ledger-numbers.py`.
+
+---
+
 ### `Pass 119.1` (`cd5e5cc`) — `unshare_form`: COPY-ON-WRITE A SHARED FORM XOBJECT ONTO ONE PAGE — ★★★ **THE OUTSTANDING `R206` OBLIGATION FLAGGED IN THE 277TH FILING IS DISCHARGED** — ★★ an inherited or shared `/Resources`/`/XObject` dict is privatised BEFORE the re-point, proven by a test authored to fail without it — ★ the nested-invocation refusal reuses `Pass 136.0`'s own containment paths rather than re-walking the form tree — 2026-08-27 (281st filing)
 
 **Shipped 2026-08-27.** Commit `cd5e5cc`, current `HEAD`. The commit
