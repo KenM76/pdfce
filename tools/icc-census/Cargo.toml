@@ -1,0 +1,64 @@
+# icc-census — what ICC profiles real PDFs actually contain.
+#
+# WHY THIS EXISTS: the sibling colour project `iccce` (which owns ALL colour
+# conversion for this ecosystem — ARCHITECTURE.md §12 decision 064) asked for
+# a population census of embedded ICC profiles, filed at
+# D:\Dev\FeatureRequests\iccce_FeatureRequests\open\request_profile_population_census.md
+# (2026-08-17). Their stated reason is that a load-bearing constant of theirs
+# — a 33-node CLUT grid recommendation — rests on ONE profile pair, ONE
+# direction and ONE tag type, and they have no way from inside their own
+# repository to find out whether that generalises. Every profile iccce has
+# been tested against is synthetic, OS-shipped or standards-body issued.
+#
+# pdfce has ~4,000 rights-cleared real-world PDFs on disk. That is a
+# population; twenty profiles from one publisher's test corpus is a sample.
+#
+# ★ WHY THIS IS NOT A BOUNDARY VIOLATION. Decision 064 gives iccce every
+# colour CONVERSION in this ecosystem, and pdfce must never grow a CMM. This
+# tool converts nothing. It reads the 128-byte ICC header (ICC.1:2010 §7.2)
+# and the tag TABLE (§7.3) — an inventory of what tags exist and how big they
+# are — and never evaluates a curve, a matrix or a CLUT. It is a librarian,
+# not a colour engine, and it lives in tools/ rather than in pdfce-core so
+# that "pdfce-core has never decoded an ICC profile" stays true.
+#
+# WHY OUT-OF-TREE (workspace-excluded via the root manifest's `exclude`, the
+# same pattern as tools/tw-census, tools/corpus-report and tools/difftest):
+#   (1) keeps `cargo test --workspace` fast and dependency-light;
+#   (2) keeps the GUI-core-separation `cargo tree` invariant checks
+#       unambiguous;
+#   (3) keeps cargo-about's generated THIRD_PARTY_LICENSES.md an accurate
+#       picture of the SHIPPING dependency graph only (docs/LEGAL.md §6.3).
+# This tool is never shipped.
+#
+# ZERO NEW DEPENDENCIES: `pdfce-core` by path, and std for everything else.
+# Deliberate — a measurement whose numbers are about to be written into
+# another project's NUMERIC_CLAIMS.md should not be able to blame a
+# third-party crate for them.
+#
+# FIXTURE RULE (docs/LEGAL.md §5): corpus files fed to this tool are
+# rights-cleared corpora only and are NEVER committed — fixtures/external/ is
+# gitignored scratch space. The requester explicitly said they do not want
+# the profiles themselves ("given the licensing on several of them I would
+# rather not have them"), so this tool emits COUNTS AND DISTRIBUTIONS ONLY.
+# No profile bytes are ever written out.
+
+[package]
+name = "icc-census"
+version = "0.0.0"
+edition = "2024"
+publish = false
+# license intentionally unset — internal tool, never shipped or published
+# (same posture as the workspace, docs/LEGAL.md §1).
+
+# Detach from the parent workspace explicitly (belt to the root manifest's
+# `exclude` braces): its own single-crate workspace with its own Cargo.lock,
+# so its dependency tree never mingles with the shipping one.
+[workspace]
+
+[dependencies]
+pdfce-core = { path = "../../crates/pdfce-core" }
+
+[profile.release]
+# Every stream in every one of ~4,000 files is decoded to test for an ICC
+# signature. A debug build turns minutes into an afternoon.
+opt-level = 3

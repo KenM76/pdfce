@@ -65,6 +65,11 @@ exclude = [
     # as its sibling census tools above — it is a corpus-analysis tool, not
     # shipping code, and must stay out of THIRD_PARTY_LICENSES.md.
     "tools/fontfile-census",
+    # Added 2026-08-27 with the crate: the ICC profile population census the
+    # sibling colour project `iccce` asked for. Excluded for the same reason
+    # as every sibling census tool -- corpus analysis, never shipped, and it
+    # must not appear in THIRD_PARTY_LICENSES.md.
+    "tools/icc-census",
     "tools/render-profile",
     "tools/unembed-sweep",
     "tools/embed-sweep",
