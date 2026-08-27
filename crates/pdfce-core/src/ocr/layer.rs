@@ -846,15 +846,33 @@ pub fn add_ocr_layer(
     // refusal is what makes this exemption honest, and it was MISSING when the
     // function shipped.
     //
-    // ★ CORRECTED AGAIN. This note used to end "There is NO OCR subcommand ...
-    // So this is an R151 instance: a capability with no shell caller." The
-    // R151 half is now only half true: `EditSession::add_ocr_layer` exists and
-    // a shell can reach OCR as an undoable edit. What still has no caller is
-    // THIS one-shot, and that is the honest scope of the claim. The
-    // exemption's warrant never depended on who calls it — a one-shot API is
-    // outside a session whether a shell reaches it or not — but a stale claim
-    // about callers is how a doc comment becomes the reason somebody believes
-    // a feature does or does not ship.
+    // ★★★ THIS NOTE HAS BEEN WRONG ABOUT ITS OWN CALLERS THREE TIMES. The
+    // wording is deliberately plain now, and the history is kept because the
+    // pattern is worth more than the fact.
+    //
+    //   1. It once said "called by the CLI", when nothing called it.
+    //   2. It was corrected to "There is NO OCR subcommand -- `grep -rn "ocr"
+    //      crates/pdfce-cli/src/main.rs` returns nothing. So this is an R151
+    //      instance: a capability with no shell caller."
+    //   3. That was corrected to "what still has no caller is THIS one-shot".
+    //
+    // **All three were false when written, and (3) was written while
+    // explicitly correcting (2).** Measured 2026-08-27: `pdfce-cli` has an
+    // `ocr` subcommand AND a `fetch-ocr-models` subcommand, "ocr" appears 71
+    // times in `main.rs`, and this very function is called from
+    // `main.rs:8673`. The grep quoted in (2) does not return nothing and
+    // presumably never did.
+    //
+    // ⇒ **A claim about callers is a MEASUREMENT, and it goes stale silently
+    // because nothing recompiles when it does.** Correcting such a claim by
+    // reasoning about what changed — rather than by re-running the grep — is
+    // how (3) happened: the author knew a new caller had appeared and inferred
+    // the rest of the sentence instead of checking it. If you are about to
+    // edit this paragraph, run the grep first. It takes a second.
+    //
+    // The exemption's warrant never depended on who calls it — a one-shot API
+    // is outside a session whether a shell reaches it or not — which is
+    // precisely why nobody ever had a reason to verify the sentence.
     //
     // Do not copy this marker to a new writer caller without first checking
     // the same two refusals are present.

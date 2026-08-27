@@ -1034,8 +1034,15 @@ enum Command {
         /// effective rotation rather than an absolute value.
         #[arg(long)]
         relative: bool,
-        /// Output path. Never the input path by default — see
-        /// `--in-place`.
+        /// Output path. The input is never modified.
+        ///
+        /// ★ This said "Never the input path by default — see `--in-place`"
+        /// until 2026-08-27, and **there was no `--in-place` flag on this
+        /// subcommand or on any other**. Operator-facing `--help` text
+        /// pointed at an option that had never existed. Corrected rather than
+        /// silently deleted, because the operator was right to want it: `ocr`
+        /// now has `--in-place`, and extending it to the other editing
+        /// subcommands is filed rather than done here.
         #[arg(short, long)]
         output: PathBuf,
         /// Which save path to use.
@@ -1083,8 +1090,15 @@ enum Command {
         /// Custom sheet height in points (1/72 inch). Requires `--width`.
         #[arg(long, requires = "width", value_name = "PT")]
         height: Option<f64>,
-        /// Output path. Never the input path by default — see
-        /// `--in-place`.
+        /// Output path. The input is never modified.
+        ///
+        /// ★ This said "Never the input path by default — see `--in-place`"
+        /// until 2026-08-27, and **there was no `--in-place` flag on this
+        /// subcommand or on any other**. Operator-facing `--help` text
+        /// pointed at an option that had never existed. Corrected rather than
+        /// silently deleted, because the operator was right to want it: `ocr`
+        /// now has `--in-place`, and extending it to the other editing
+        /// subcommands is filed rather than done here.
         #[arg(short, long)]
         output: PathBuf,
         /// Which save path to use.
@@ -2369,8 +2383,41 @@ enum Command {
         #[arg(long, default_value_t = 1)]
         page: u32,
         /// Where to write the result. The input is left untouched.
+        ///
+        /// Mutually exclusive with `--in-place`, and exactly one of the two
+        /// is required.
         #[arg(long, short = 'o')]
-        output: PathBuf,
+        output: Option<PathBuf>,
+        /// **Write the recognised layer back over the input file.**
+        ///
+        /// # Why this exists
+        ///
+        /// The operator's question, relayed from the GUI project: *"Why do I
+        /// have to save a copy instead of just go back into my pdf and save
+        /// over it?"* Six OCR tools were surveyed and **zero of six** force a
+        /// Save-As on the open-document path. Requiring `--output` made
+        /// recognition the one pdfce operation that could not touch the file
+        /// you pointed it at.
+        ///
+        /// # What is different about it, beyond the destination
+        ///
+        /// This routes through `EditSession::add_ocr_layer` — the layer is an
+        /// **undoable edit** planned against the session, not a one-shot
+        /// rewrite of an immutable document. On this one-shot CLI invocation
+        /// there is nothing to undo it with, so the visible difference is
+        /// only the destination; the reason to prefer it is that the *same*
+        /// verb is what a GUI holding an open document uses, so the two
+        /// shells cannot drift into producing different files from the same
+        /// input.
+        ///
+        /// ★ The write is **incremental** (`ARCHITECTURE.md` §5): every byte
+        /// of the original stays where it was and a new revision is appended,
+        /// so the scan itself is not re-encoded and the original content is
+        /// still in the file. That is round-trip fidelity, and it is **not**
+        /// redaction — if you needed the original page gone, this is not the
+        /// verb.
+        #[arg(long, conflicts_with = "output")]
+        in_place: bool,
         /// Rasterisation resolution, dots per inch.
         ///
         /// DPI rather than `render-page`'s `--scale`, deliberately: OCR is
@@ -6554,6 +6601,7 @@ fn run() -> ExitCode {
             input,
             page,
             output,
+            in_place,
             dpi,
             model_dir,
             words,
@@ -6561,7 +6609,8 @@ fn run() -> ExitCode {
         } => cmd_ocr(
             &input,
             page,
-            &output,
+            output.as_deref(),
+            in_place,
             dpi,
             model_dir.as_deref(),
             words,
@@ -8473,10 +8522,12 @@ fn report_unsearchable_redaction(input: &Path, d: &pdfce_core::text_extract::Tex
 /// the mapping a media box that differs from it scales every word by the ratio
 /// between the two — a uniform, plausible-looking error that no word count
 /// detects.
+#[allow(clippy::too_many_arguments)]
 fn cmd_ocr(
     input: &Path,
     page_number: u32,
-    output: &Path,
+    output: Option<&Path>,
+    in_place: bool,
     dpi: f32,
     model_dir: Option<&Path>,
     show_words: bool,
@@ -8484,6 +8535,31 @@ fn cmd_ocr(
 ) -> u8 {
     use pdfce_core::ocr::{
         OcrEngine, OcrPage, PagePlacement, layer, models, words_to_page_space_on,
+    };
+
+    // Exactly one destination. `conflicts_with` already refuses BOTH, so the
+    // only case left is NEITHER -- and that has to be a refusal rather than a
+    // default, because both plausible defaults are wrong: writing beside the
+    // input invents a path the operator did not choose, and writing over it
+    // silently is the one thing a tool must never do by accident.
+    let destination: &Path = match (output, in_place) {
+        (Some(o), false) => o,
+        (None, true) => input,
+        (None, false) => {
+            eprintln!(
+                "pdfce-cli: ocr: give either --output <PATH> or --in-place. \
+                 --in-place writes the recognised layer back over {}.",
+                input.display()
+            );
+            return exit::RUNTIME_ERROR;
+        }
+        // Unreachable while `conflicts_with = "output"` stands. Handled rather
+        // than unwrapped so that removing that attribute is a behaviour change
+        // somebody has to look at, not a panic in front of an operator.
+        (Some(_), true) => {
+            eprintln!("pdfce-cli: ocr: --output and --in-place are mutually exclusive.");
+            return exit::RUNTIME_ERROR;
+        }
     };
 
     let doc = match open_document(input) {
@@ -8670,21 +8746,55 @@ fn cmd_ocr(
         }
     }
 
-    let outcome = match layer::add_ocr_layer(&doc, index, &ocr_page, &layer::OcrLayerOptions::new())
-    {
-        Ok(o) => o,
-        Err(err) => {
-            eprintln!("pdfce-cli: ocr: {err}");
-            // Recognising nothing is not a crash and not a malformed file; it
-            // is an answer, and a common one on a blank or unreadable page.
-            // Giving it the same exit code as "the PDF is broken" would make a
-            // script unable to tell them apart.
+    // ★ TWO WRITERS, ONE PLAN. `--in-place` goes through
+    // `EditSession::add_ocr_layer` and `--output` through the one-shot, and
+    // both call the SAME `plan_ocr_layer` underneath -- so the font name, the
+    // §7.7.3.4 resources merge, the placeable-word pass and the emitted
+    // content stream are decided once. What differs is only where object
+    // numbers and staged bytes come from, and where the result lands.
+    //
+    // The session route is the one a GUI holding an open document uses. Using
+    // it here too is what stops the two shells drifting into producing
+    // different files from the same input.
+    let (bytes, report) = if in_place {
+        let mut session = pdfce_core::edit::EditSession::new(doc);
+        let layers = [pdfce_core::edit::OcrPageLayer {
+            page_index: index,
+            recognised: &ocr_page,
+        }];
+        let reports = match session.add_ocr_layer(&layers, &layer::OcrLayerOptions::new()) {
+            Ok(r) => r,
+            Err(err) => {
+                eprintln!("pdfce-cli: ocr: {err}");
+                return exit::EDIT_REFUSED;
+            }
+        };
+        let Some(report) = reports.into_iter().next() else {
+            eprintln!("pdfce-cli: ocr: nothing was written");
             return exit::EDIT_REFUSED;
+        };
+        match session.to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity()) {
+            Ok((bytes, _)) => (bytes, report),
+            Err(err) => {
+                eprintln!("pdfce-cli: save refused: {err}");
+                return exit::SAVE_REFUSED;
+            }
+        }
+    } else {
+        match layer::add_ocr_layer(&doc, index, &ocr_page, &layer::OcrLayerOptions::new()) {
+            Ok(o) => (o.bytes, o.report),
+            Err(err) => {
+                eprintln!("pdfce-cli: ocr: {err}");
+                // Recognising nothing is not a crash and not a malformed file;
+                // it is an answer, and a common one on a blank or unreadable
+                // page. Giving it the same exit code as "the PDF is broken"
+                // would make a script unable to tell them apart.
+                return exit::EDIT_REFUSED;
+            }
         }
     };
-
-    if let Err(err) = std::fs::write(output, &outcome.bytes) {
-        eprintln!("pdfce-cli: {}: {err}", output.display());
+    if let Err(err) = std::fs::write(destination, &bytes) {
+        eprintln!("pdfce-cli: {}: {err}", destination.display());
         return exit::IO_ERROR;
     }
 
@@ -8692,10 +8802,10 @@ fn cmd_ocr(
         "ocr {} page={page_number} -> {} dpi={dpi} image={iw}x{ih} rotate={} \
 recognised={} written={} confidence={}",
         input.display(),
-        output.display(),
+        destination.display(),
         page.rotate,
         raw.len(),
-        outcome.report.words_written,
+        report.words_written,
         if confidence_available {
             "reported"
         } else {
@@ -8707,7 +8817,7 @@ recognised={} written={} confidence={}",
     // IS the commit, so it is printed on the way past rather than offered for
     // review. `disclosures()` leads with the word count and adds a line for
     // every word substituted, skipped or scale-clamped.
-    for line in outcome.report.disclosures() {
+    for line in report.disclosures() {
         eprintln!("pdfce-cli: ocr: {line}");
     }
     eprintln!(
@@ -8728,7 +8838,7 @@ recognised={} written={} confidence={}",
     eprintln!(
         "pdfce-cli: ocr: the layer is INVISIBLE (mode 3) and the page is unchanged — check it \
          with `find-text {} --needle <a word on the page>`, not by looking at it",
-        output.display()
+        destination.display()
     );
 
     exit::SUCCESS
