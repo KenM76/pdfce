@@ -181,6 +181,55 @@ def shared_form_twice() -> bytes:
     ])
 
 
+def shared_across_two_pages() -> bytes:
+    """One form invoked by BOTH pages — the fixture `unshare_form` needs.
+
+    ★ The acceptance criterion for copy-on-write is "an unshare followed by an
+    edit changes exactly ONE page, and every other invocation site is
+    byte-identical". That is unstatable on a one-page document and unfalsifiable
+    on a document where the two pages happen to invoke different forms, so the
+    fixture has to be exactly this: two pages, one shared form object, nothing
+    else shared.
+
+    Both pages also carry their own `/Resources`, so the test isolates the
+    re-binding from the inheritance question. `inherited-resources-shared-form.pdf`
+    is the other half of that pair.
+    """
+    form = b"0 0 1 rg\n0 0 40 40 re f\n"
+    page = b"q 1 0 0 1 20 20 cm /Fm0 Do Q\n"
+    return assemble([
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+        b"/Resources << /XObject << /Fm0 6 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+        b"/Resources << /XObject << /Fm0 6 0 R >> >> /Contents 5 0 R >>",
+        stream(b"", page),
+        stream(b"/Type /XObject /Subtype /Form /BBox [0 0 40 40]", form),
+    ])
+
+
+def inherited_resources_shared_form() -> bytes:
+    """Two pages sharing a form through an INHERITED `/Resources` (§7.7.3.4).
+
+    Neither page carries `/Resources` of its own; the `Pages` node does. So
+    re-pointing the name in place would re-point it for BOTH pages, which is
+    exactly the leak `unshare_form` has to avoid by writing the page's
+    effective resources onto the page first.
+    """
+    form = b"0 1 0 rg\n0 0 40 40 re f\n"
+    page = b"q 1 0 0 1 20 20 cm /Fm0 Do Q\n"
+    return assemble([
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 "
+        b"/Resources << /XObject << /Fm0 6 0 R >> >> >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 5 0 R >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 5 0 R >>",
+        stream(b"", page),
+        stream(b"/Type /XObject /Subtype /Form /BBox [0 0 40 40]", form),
+    ])
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, data in {
@@ -188,6 +237,8 @@ def main() -> None:
         "nested-forms.pdf": nested_forms(),
         "self-referential-form.pdf": self_referential_form(),
         "shared-form-twice.pdf": shared_form_twice(),
+        "shared-across-two-pages.pdf": shared_across_two_pages(),
+        "inherited-resources-shared-form.pdf": inherited_resources_shared_form(),
     }.items():
         (OUT / name).write_bytes(data)
         print(f"wrote {OUT / name}  ({len(data)} bytes)")

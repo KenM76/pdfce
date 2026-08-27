@@ -5201,6 +5201,62 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Give one page its own private copy of a shared form XObject**
+    /// (`unshare_form`), so a later edit to it changes that page and no other.
+    ///
+    /// # Why you would want this
+    ///
+    /// A form XObject may legally be invoked from more than one page and more
+    /// than once from one page — ISO 32000-1 §8.10.1 names CAD output as its
+    /// own illustration, and a shared title block is the everyday case. So
+    /// editing content inside one **necessarily changes every sheet that
+    /// invokes it**: there is exactly one stream object to write, and pdfce
+    /// cannot prevent that structurally.
+    ///
+    /// That is the documented default (edit-in-place, disclosed). This is the
+    /// explicit, separate act of **breaking the sharing first**, so that the
+    /// edit which follows lands on one page only.
+    ///
+    /// # What changes in the file
+    ///
+    /// The form is cloned to a new object and this page's reference(s) are
+    /// re-pointed at the copy. Every other invocation site keeps naming the
+    /// original and is left byte-identical. If the page's `/Resources` or its
+    /// `/XObject` subdictionary was inherited or shared, it is privatised in
+    /// the same write — otherwise the re-point would leak onto every page that
+    /// shares the dictionary, producing a "private" copy that is still shared.
+    ///
+    /// # ★ Refused for a form invoked from INSIDE another form
+    ///
+    /// Re-binding a nested invocation means editing the parent form, which may
+    /// itself be shared, so the blast radius would depend on the document's
+    /// nesting structure. Unshare the outer form instead, or edit in place and
+    /// accept that every invocation changes.
+    ///
+    /// # Finding the object number
+    ///
+    /// `object-list --page N` prints `kind=form` rows. The form's object number
+    /// is what `--form` takes.
+    UnshareForm {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number to give the private copy to.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// The form XObject stream's **object number**.
+        #[arg(long)]
+        form: u32,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// **Delete** a vector object (Pass 9c-min, decision 011 §2.5): remove an
     /// object's construction + painting operators from the content stream via
     /// surgery (R46/§5.7). Works on any object kind (path/text/image). NOT
@@ -7517,6 +7573,14 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_object_delete(&input, page, object, &output, mode, verify_undo),
+        Command::UnshareForm {
+            input,
+            page,
+            form,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_unshare_form(&input, page, form, &output, mode, verify_undo),
         Command::SubpathMove {
             input,
             page,
@@ -26423,6 +26487,68 @@ undo_verified={} undo_identical={}",
 /// operators from the content stream via surgery (Pass 9c-min). NOT
 /// redaction (it removes a drawing object, not covered content for
 /// security).
+/// `unshare-form`: copy-on-write a shared form XObject onto one page.
+///
+/// The "option" half of the shared-form edit default — see the subcommand's
+/// own documentation for why breaking the sharing is a separate act rather
+/// than a mode of the edit verbs.
+fn cmd_unshare_form(
+    input: &Path,
+    page: u32,
+    form: u32,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let page_index = (page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let report = match session.unshare_form(page_index, pdfce_core::object::ObjId::new(form, 0)) {
+        Ok(report) => report,
+        Err(err) => return report_edit_error(input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "unshare-form {} page {page} form={form} copy={} refs_moved={} mode={} -> {}; \
+changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        report.copy.num,
+        report.references_moved,
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        outcome.undo_verified,
+        outcome.undo_identical,
+    );
+    // Rule 4: the operator asked for ONE page to stop sharing, and what he
+    // cannot see from the output is that the other invocation sites are still
+    // sharing the original. Said on the way past rather than left to be
+    // inferred from an object number.
+    eprintln!(
+        "pdfce-cli: unshare-form: page {page} now names object {} — a private copy. Every OTHER \
+page or invocation that used object {form} still names object {form} and is unchanged. An edit \
+to the copy from here on affects this page only; an edit to {form} still affects all of them.",
+        report.copy.num
+    );
+    finish_edit(input, &outcome)
+}
+
 fn cmd_object_delete(
     input: &Path,
     page: u32,

@@ -542,6 +542,15 @@ pub enum CommandKind {
     /// every created object and restores every page dictionary
     /// byte-identically.
     AddOcrLayer,
+    /// A shared form XObject was cloned and **this page's** reference(s)
+    /// re-pointed at the copy, by [`EditSession::unshare_form`] — the
+    /// "option" half of decision 076's edit-in-place default.
+    ///
+    /// Two objects change: the new copy, and the page dictionary (whose
+    /// `/Resources` and `/XObject` are privatised in the same write if either
+    /// was inherited or shared). Undo removes the copy and restores the page
+    /// dictionary byte-identically, so the page goes back to sharing.
+    UnshareForm,
     /// A dimension (Pass 12.M2) was authored onto a page: the `/Line`
     /// `/IT /LineDimension` annotation + its baked `/AP`, its group's `/OCG`
     /// (allocated on first use) registered in the catalog `/OCProperties`,
@@ -4038,6 +4047,35 @@ pub enum EditError {
         /// How many pages the document actually has.
         count: usize,
     },
+    /// The form XObject is reached on this page only from **inside another
+    /// form**, so it cannot be unshared for this page alone.
+    ///
+    /// Re-binding a nested invocation means editing the **parent** form, which
+    /// may itself be shared — so the operation's blast radius would depend on
+    /// the document's nesting structure. Decision 076's decisive reason,
+    /// applied to the option rather than the default: *"a default whose
+    /// semantics silently depend on the document's nesting structure is worse
+    /// than one that always means the same thing."*
+    ///
+    /// The honest alternatives are to unshare the outermost form instead (a
+    /// different, larger act the caller should choose deliberately) or to edit
+    /// in place and accept that every invocation changes.
+    #[error(
+        "form object {form} is invoked from inside another form on this page, \
+         so it cannot be given a private copy without editing that parent form"
+    )]
+    FormNestedInAnotherForm {
+        /// The form stream's object number.
+        form: u32,
+    },
+    /// No `/XObject` name in the page's resources resolves to that form.
+    #[error("form object {form} is not invoked by page {page_index}")]
+    FormNotOnPage {
+        /// The form stream's object number.
+        form: u32,
+        /// The 0-based page index that was asked about.
+        page_index: usize,
+    },
     /// The page tree could not be walked, so no page could be named.
     #[error("the page tree could not be resolved: {0}")]
     PageTree(#[from] PageTreeError),
@@ -5478,6 +5516,21 @@ pub struct InfoText {
     /// original bytes, so a front end must not write the field back
     /// unless the operator actually changed it.
     pub exact: bool,
+}
+
+/// What [`EditSession::unshare_form`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnshareFormReport {
+    /// The form that was shared, and still is by every other invocation site.
+    pub original: ObjId,
+    /// The private copy this page now names.
+    pub copy: ObjId,
+    /// How many `/XObject` names on this page were re-pointed.
+    ///
+    /// Usually 1. Greater than 1 when the page invoked the same form under
+    /// several names — all of them move, because the unit of this operation is
+    /// the PAGE (see the verb's docs for why splitting them is not offered).
+    pub references_moved: usize,
 }
 
 /// One page's recognised words, paired with the page they belong to — the
@@ -7308,6 +7361,238 @@ impl EditSession {
         let command = self.text_edit_command(kind, content_id, page, plan.new_content);
         self.commit(command);
         Ok(plan.report)
+    }
+
+    /// **Give this page its own private copy of a shared form XObject**, so a
+    /// later edit to it changes this page and no other.
+    ///
+    /// # ★★★ THIS IS THE "OPTION" HALF OF DECISION 076, AND IT WAS MISSING
+    ///
+    /// Decision 076 ruled that editing content inside a shared form XObject is
+    /// **edit-in-place, disclosed** — a form may legally be invoked from more
+    /// than one page and more than once from one page (§8.10.1 names CAD
+    /// output as its own illustration), so an edit inside one necessarily
+    /// changes every sheet that invokes it. pdfce cannot prevent that
+    /// structurally: there is exactly one stream object to write.
+    ///
+    /// `R206` says two defensible behaviours ship as **two options** with a
+    /// chosen default. Decision 076 argued its own compliance on the premise
+    /// that *"both are shipped"* — and that premise was **false**. This verb
+    /// was filed on the same day and never built, so for a week the operator
+    /// had the default and **no option at all**, which is the state `R206`
+    /// exists to prevent. The claim is corrected at decision 076 itself; this
+    /// is the correction.
+    ///
+    /// # What it does
+    ///
+    /// Clones the form stream to a new object and re-points **this page's**
+    /// reference(s) at the copy. Every other invocation site keeps naming the
+    /// original and is left byte-identical.
+    ///
+    /// Two things are privatised on the way, and skipping either would leak
+    /// the change onto pages that did not ask for it:
+    ///
+    /// 1. **`/Resources`, if inherited** (§7.7.3.4). A page with no
+    ///    `/Resources` of its own uses an ancestor's; re-pointing a name there
+    ///    would re-point it for every page under that ancestor. The page's
+    ///    **effective** resources are written onto the page dict, which is the
+    ///    same inheritance-safe recipe [`Self::add_text`] and
+    ///    [`Self::add_ocr_layer`] use.
+    /// 2. **The `/XObject` subdictionary, if shared.** It is commonly an
+    ///    indirect reference held by several pages. It is written back as a
+    ///    **direct** dictionary on this page's own `/Resources`, so the
+    ///    re-point lands on a dictionary nobody else reads.
+    ///
+    /// # ★★ Refusals, and why the nested one is not laziness
+    ///
+    /// - **[`EditError::FormNestedInAnotherForm`]** — the form is reached only
+    ///   from *inside another form*, not from this page's own resources.
+    ///   Re-binding there means editing the **parent** form, which may itself
+    ///   be shared, so the operation's blast radius would depend on the
+    ///   document's nesting structure. Decision 076's own decisive reason:
+    ///   *"a default whose semantics silently depend on the document's nesting
+    ///   structure is worse than one that always means the same thing."* The
+    ///   same argument forbids doing it quietly here.
+    /// - **[`EditError::FormNotOnPage`]** — nothing on this page names it.
+    /// - The usual encryption / certification / `/Size`-suppression guards,
+    ///   in the same order every structural verb uses.
+    ///
+    /// All refusals happen **before** anything is allocated or committed.
+    ///
+    /// # Granularity: one PAGE, not one invocation
+    ///
+    /// If this page invokes the form under several names, **all of them** are
+    /// re-pointed at the one copy. The unit decision 076 speaks of is the
+    /// page; splitting two invocations *on the same page* would need a
+    /// per-invocation identity the object model does not carry, and would
+    /// make "unshare" mean something different depending on how many times
+    /// the page happened to draw it.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError`] — see the refusals above, plus
+    /// [`EditError::ObjectNumbersExhausted`].
+    ///
+    /// # Returns
+    ///
+    /// [`UnshareFormReport`], naming the copy and how many references moved,
+    /// so a shell can say what happened rather than only that it worked.
+    pub fn unshare_form(
+        &mut self,
+        page_index: usize,
+        form: ObjId,
+    ) -> Result<UnshareFormReport, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+
+        // Everything below is decided against the SESSION overlay, so a page
+        // whose resources were already privatised earlier this session is seen
+        // as it now stands rather than as the file shipped.
+        let (page_id, mut resources, names) = {
+            let pages = self.pages()?;
+            let count = pages.len();
+            let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count,
+            })?;
+            let graph = self.graph();
+
+            // The page's EFFECTIVE resources -- own or inherited. Writing them
+            // back onto the page is what privatises an inherited dictionary.
+            let resources = page.resources.clone();
+            let xobjects = resources
+                .get(b"XObject")
+                .map(|o| graph.resolve(o))
+                .and_then(Object::as_dict)
+                .cloned()
+                .unwrap_or_default();
+
+            // Every name on THIS page that resolves to the target form.
+            // Matched on the reference, not on a resolved value: two names may
+            // point at one object, and a resolved comparison would also match
+            // a different object that happens to be equal.
+            let names: Vec<Vec<u8>> = xobjects
+                .iter()
+                .filter(|(_, v)| v.as_reference() == Some(form))
+                .map(|(k, _)| k.0.clone())
+                .collect();
+            (page.id, resources, names)
+        };
+
+        if names.is_empty() {
+            // Distinguish "nested inside another form" from "not here at all",
+            // because they lead a caller to different next actions and the
+            // first is a documented, principled refusal rather than a miss.
+            return Err(if self.form_is_nested_on_page(page_index, form) {
+                EditError::FormNestedInAnotherForm { form: form.num }
+            } else {
+                EditError::FormNotOnPage {
+                    form: form.num,
+                    page_index,
+                }
+            });
+        }
+
+        let Some(original) = self.value(form).cloned() else {
+            return Err(EditError::FormNotOnPage {
+                form: form.num,
+                page_index,
+            });
+        };
+
+        let copy_num = self.alloc_number()?;
+        let copy_id = ObjId::new(copy_num, 0);
+
+        // Re-point this page's names at the copy, in a DIRECT `/XObject`
+        // dictionary on this page's own `/Resources`.
+        let mut xobjects = {
+            let graph = self.graph();
+            resources
+                .get(b"XObject")
+                .map(|o| graph.resolve(o))
+                .and_then(Object::as_dict)
+                .cloned()
+                .unwrap_or_default()
+        };
+        for name in &names {
+            xobjects.insert(Name(name.clone()), Object::Reference(copy_id));
+        }
+        resources.insert(Name::from(b"XObject"), Object::Dict(xobjects));
+
+        let mut new_page = self
+            .value(page_id)
+            .and_then(Object::as_dict)
+            .cloned()
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count: page_index.saturating_add(1),
+            })?;
+        new_page.insert(Name::from(b"Resources"), Object::Dict(resources));
+
+        let page_before = self.value(page_id).cloned();
+        self.commit(Command {
+            kind: CommandKind::UnshareForm,
+            objects: vec![
+                // ★ The copy carries the ORIGINAL's value verbatim, span and
+                // all. Two objects naming one byte range is fine because the
+                // writer only READS it to emit, and it means unsharing costs
+                // no duplicated stream bytes until the copy is actually
+                // edited -- at which point the edit replaces the value and the
+                // two diverge, which is the entire point.
+                ObjectWrite {
+                    id: copy_id,
+                    before: None,
+                    after: Some(original),
+                },
+                ObjectWrite {
+                    id: page_id,
+                    before: page_before,
+                    after: Some(Object::Dict(new_page)),
+                },
+            ],
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(UnshareFormReport {
+            original: form,
+            copy: copy_id,
+            references_moved: names.len(),
+        })
+    }
+
+    /// Whether `form` is reachable on `page_index` only from **inside another
+    /// form**.
+    ///
+    /// Uses the decomposition's containment paths (`Pass 136.0`), which is the
+    /// one place that already walks nested forms with a cycle guard and a
+    /// depth bound. Re-deriving the walk here would be a second answer to
+    /// "what forms does this page reach", and the two would disagree on
+    /// exactly the pathological files the guards exist for.
+    fn form_is_nested_on_page(&self, page_index: usize, form: ObjId) -> bool {
+        let Ok(pages) = self.pages() else {
+            return false;
+        };
+        let Some(page) = pages.get(page_index) else {
+            return false;
+        };
+        let Ok(model) =
+            crate::vector::decompose_page(&self.view(), page, crate::vector::Matrix::IDENTITY)
+        else {
+            return false;
+        };
+        model.leaves.iter().any(|leaf| {
+            // Position 0 is a form invoked by the PAGE. Anything past it is a
+            // form invoked by another form, which is the case that cannot be
+            // re-bound without editing the parent.
+            leaf.containment.iter().skip(1).any(|id| *id == form)
+        })
     }
 
     /// **Add an invisible OCR text layer to one or more pages, as ONE

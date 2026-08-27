@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (31874 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 145 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (32159 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 146 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 145 public `EditSession` methods
+## 1. Verb index — all 146 public `EditSession` methods
 
-**Count: 145.** Established by brace-matched extraction of the four
+**Count: 146.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -340,6 +340,7 @@ need their own policy).
 | Re-wrap a recognised paragraph | `reflow_block(&mut self, page_index, block_index, &ReflowRequest) -> Result<ReflowApplyReport, ReflowApplyError>` | 4297 | One undo entry. **Planned against the BASE** — see trap T-14. |
 | Add a new text run at coordinates | `add_text(&mut self, &AddTextRequest) -> Result<AddTextReport, AddTextError>` | 4365 | Appends a new content stream; originals stay byte-verbatim. |
 | Add an invisible OCR text layer to one or more pages | `add_ocr_layer(&mut self, &[OcrPageLayer<'_>], &OcrLayerOptions) -> Result<Vec<OcrLayerReport>, OcrLayerError>` | 7313 | **ONE undo entry for the whole run**, however many pages. Reads the SESSION graph, not the base. |
+| Give ONE page a private copy of a shared form XObject | `unshare_form(&mut self, page_index, form: ObjId) -> Result<UnshareFormReport, EditError>` | 7367 | Copy-on-write. Refuses a **nested** invocation by name. |
 
 These five return `text_edit`'s own error types, **not** `EditError`;
 `add_ocr_layer` returns `ocr::layer::OcrLayerError`.
@@ -378,6 +379,53 @@ An empty slice is a **no-op that commits nothing** — no undo entry that would
 undo nothing. Every refusal happens before any object is allocated, so a
 rejected run leaves the session, its bytes and its undo stack exactly as they
 were.
+
+#### ★★ `unshare_form` — the "option" half of the shared-form edit default
+
+A form XObject may legally be invoked from **more than one page and more than
+once from one page** (§8.10.1 names CAD output as its own illustration). So
+editing content inside one **necessarily changes every sheet that invokes it**
+— there is exactly one stream object to write, and pdfce cannot prevent that
+structurally.
+
+That is the **default**: edit in place, disclosed, with
+`EditReport::form_invocations` reporting every site the edit will reach
+**before** the write. `unshare_form` is the separate, explicit act of
+**breaking the sharing first**, so the edit that follows lands on one page only.
+
+**★ Two things are privatised on the way, and skipping either produces a
+"private" copy that is still shared:**
+
+1. **`/Resources`, if inherited** (§7.7.3.4). A page with no `/Resources` of
+   its own uses an ancestor's; re-pointing a name there re-points it for
+   **every page under that ancestor**.
+2. **The `/XObject` subdictionary, if shared** — commonly one indirect
+   reference held by several pages. It is written back as a **direct**
+   dictionary on this page's own `/Resources`.
+
+**Refusals**, all before anything is allocated:
+
+| error | when | what to do instead |
+|---|---|---|
+| `FormNestedInAnotherForm` | the form is reached only from **inside another form** | unshare the outer form, or edit in place and accept the blast radius |
+| `FormNotOnPage` | nothing on that page names it | check the page or the object number |
+
+★ The nested refusal is principled, not lazy: re-binding there means editing the
+**parent** form, which may itself be shared, so the operation's reach would
+depend on the document's nesting structure — the same reason decision 076 gives
+for rejecting copy-on-write as the *default*.
+
+**Granularity is the PAGE, not the invocation.** If a page invokes the form
+under several names, all of them move to the one copy (`references_moved` says
+how many). Splitting two invocations on one page would need a per-invocation
+identity the object model does not carry.
+
+★★ **Historical note worth keeping**, because it is why this verb's absence
+went unnoticed: decision 076 argued its own `R206` compliance ("ship both
+options, pick a default") on the premise that **both had shipped**. This one had
+not — it was filed the same day and built a week later. A decision can certify
+its compliance with a standing rule using a fact that is not true, and nothing
+downstream checks it.
 
 ### 1.10 Vector geometry (19) — detail in part 3
 
