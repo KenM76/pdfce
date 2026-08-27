@@ -68081,3 +68081,81 @@ engineer's own next-session notes carry any other open items.
   `D:\Dev\pdfce-backups\pdfce-20260827-shutdown-4c32afe-full.bundle`.
 
 ---
+
+## 2026-08-27 (290th filing) — CI went red on `4c32afe` because two unfiled commits stacked, not one; `R217` corrected in place for the second confirmed occurrence of the same shape
+
+**Shipped:**
+- No Pass. One memory/docs-only commit, `cde21f5` (`memory: CI went red
+  because two unfiled commits stacked, not one`), sitting on top of this
+  role's own 289th filing (`e3b4536`), on top of `4c32afe`. Filed in
+  `ROADMAP.md` under a new no-Pass Shipped entry so
+  `tools/check-commits-filed.py` stays clean — that was the reason this
+  dispatch exists.
+
+**Decisions made this session:**
+- None. Decision `090` ("always push") is explicitly **unaffected and not
+  narrowed** — see Findings below; recording that plainly here because a
+  future reader could otherwise reach for narrowing `090` as the fix.
+
+**Findings + decisions:**
+- **The mechanism.** `check-commits-filed.py` failed CI on `4c32afe`,
+  naming `51c30d6` — the commit *behind* it — as unfiled. `51c30d6` had
+  been correctly deferred for its own single CI run; the moment `4c32afe`
+  landed on top of it, it stopped being the tip, lost its deferral, and
+  was checked in full. Nothing was wrong with either commit's content.
+  **One unfiled commit may sit at the tip of `main`. Never two.**
+- **Second confirmed occurrence of a shape this project already named.**
+  The 271st filing (`v0.14.0` release chain, `ffe9d4c`/`b135dec`) hit the
+  identical shape — a clean 17-gate sweep, then two more commits, then a
+  red `check-commits-filed.py` on the tag — and recorded it as a named
+  candidate under `R217` at `n = 1`, explicitly declining to mint a new
+  rule. This is `n = 2`, this project's usual promotion bar. `R217`'s own
+  closing sentence — *"there is nothing left to remember or get wrong by
+  ordering"* — is corrected in place in `ROADMAP.md`'s *Standing rules*
+  (struck through, dated 2026-08-27, 290th filing) rather than left a
+  second time as an unpromoted candidate, and rather than minting a new
+  rule number: the gap is in that sentence's over-claim, not in the
+  deferral mechanism itself, which was correct at minting and remains
+  correct.
+- **Why decision `090` is not the thing to narrow.** `090` grants
+  standing authority to *push*; it says nothing about pushing **twice**
+  before the librarian has run. This is a fact about a gate's deferral
+  width, not about whether pushing was permitted. Narrowing `090` to
+  compensate would repeat the mistake decision `061` exists to warn
+  against — narrow the rule that is actually wrong, not the nearest one
+  that happens to sit next to the failure.
+- **The self-correcting property is the trap, named on its own.** `HEAD`
+  goes green on the very next run — this filing's own commit cites both
+  `51c30d6` and `4c32afe` — the tree is clean, every local gate passes,
+  and the only surviving evidence is a **permanent red CI run on an
+  intermediate commit** on a public repository. Costs nothing now, which
+  is exactly how "CI is green" stops being a claim anyone actually checks.
+
+**Still in flight:**
+- `Pass 139.0` (`DeviceN`/`Separation` image ink-bridging) — unchanged
+  from the 289th filing, still diagnosed-not-started.
+- The gate-shaped-gap question from the 289th filing (stale claims in
+  operator-facing strings) — unchanged, not decided this filing.
+
+**For next session:**
+- Confirm `tools/check-commits-filed.py` reports clean at `HEAD` (`cde21f5`
+  or later) — expected clean per this filing's citations, not
+  independently re-derived here (no shell this dispatch).
+- `docs/NEXT_SESSION.md` is owned by the engineer, not edited by this
+  role. Recommended additions, for the engineer to add: (a) `HEAD` is
+  expected green as of `cde21f5`; (b) the red CI run recorded against
+  `4c32afe` is this filing's finding, not a live defect — do not
+  re-investigate it as one; (c) `cde21f5` was the session's last commit
+  and is filed as of this entry.
+- Confirm `tools/check-ledger-numbers.py` still reports rules at `R219`
+  (next free `R220`) and decisions at `090` (next free `091`) — this
+  filing amended `R217`'s text in place and minted nothing.
+- Shutdown state relayed by the engineer at dispatch time, not
+  independently verified by this role (no shell): `HEAD` `cde21f5`, not
+  yet pushed at dispatch (held so the filing and the push land together);
+  working tree clean apart from that commit; `check-commits-filed.py`
+  green locally (tip deferral); all other 17 argument-free gates green;
+  CI colour for `e3b4536` still in progress at dispatch time — **not
+  recorded here**, read it fresh from GitHub.
+
+---

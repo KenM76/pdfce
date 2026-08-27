@@ -43,7 +43,26 @@ looking at something on a screen; **none was found by a gate.**
 | wasm32 | `pdfce-core` + `pdfce-render` compile | `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` |
 | GUI-core invariant | no GUI dep in either engine crate | `cargo tree -p pdfce-core` |
 | print-conformance | **5 FAIL, 35 pass, 11 UNRESOLVED** | see `§C` |
-| **CI at `51c30d6`** | **NOT READ — read it from GitHub before believing anything about it** | `gh run list --branch main --limit 3` |
+| **CI at `HEAD`** | **READ IT FROM GITHUB. Do not believe this table about it.** | `gh run list --branch main --limit 3` |
+
+★★ **ONE RED RUN IN THE HISTORY IS EXPECTED AND IS NOT A DEFECT — `4c32afe`.**
+`check-commits-filed` named `51c30d6`, the commit *behind* it, which was
+unfiled when that run started. It is filed now, so `HEAD` passes; the red run
+stays in public history because CI history cannot be rewritten.
+
+**The mechanism, and the habit it should change.** That gate **defers the tip
+commit** — a commit cannot cite its own hash, so its filing is always a later
+commit. Pushing **one** unfiled commit is therefore safe. The moment a second
+lands on top, the first stops being the tip and is checked in full.
+
+⇒ **One unfiled commit may sit at the tip of `main`. Never two.** `R217` was
+amended in place for this on 2026-08-27; it is the second occurrence, the
+first being the `v0.14.0` re-tag on 2026-08-26.
+
+★ **Decision `090` is NOT the thing to narrow.** *"Always push"* authorises
+the push; it does not authorise pushing **twice** before a filing lands. That
+is a fact about a gate, and the ruling was never about gates. Narrowing an
+operator's ruling to compensate for an agent's habit is the wrong repair.
 
 ★★★ **PUSHING NO LONGER NEEDS TO BE ASKED — decision `090`, 2026-08-27.**
 Ken's ruling, verbatim and in full: ***"always push."*** An ordinary

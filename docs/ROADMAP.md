@@ -96,6 +96,72 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `cde21f5` — CI went red on `4c32afe` because two unfiled commits stacked, not one; `R217`'s closing sentence corrected for the second time by an actual occurrence — no Pass ID, memory/docs only — 2026-08-27 (290th filing)
+
+**What happened.** `tools/check-commits-filed.py` failed CI on `4c32afe`,
+naming **`51c30d6`** — the commit *behind* `4c32afe`, not `4c32afe`
+itself — as unfiled. Nothing was wrong with either commit's content.
+`51c30d6` was filed by this role's own 289th filing (`e3b4536`), which
+landed **after** `4c32afe` had already been pushed as the tip; between
+those two events, CI ran on `4c32afe` with `51c30d6` still owing a
+filing, and hard-failed.
+
+**The mechanism — a sharpening of `R217`, not a new fact about the gate.**
+`R217` defers exactly the **tip**, on every run, because a commit cannot
+cite its own hash and its filing is necessarily a later commit. That
+deferral is correct and was working as designed. **`51c30d6` was
+deferred, correctly, for exactly one CI run — the run on `51c30d6`
+itself.** The moment `4c32afe` landed on top of it, `51c30d6` stopped
+being the tip, lost its deferral, and was checked in full: unfiled, hard
+fail. ⇒ **One unfiled commit may sit at the tip. Never two.**
+
+**Second confirmed occurrence of a shape this project already named and
+declined to promote.** The 271st filing (`v0.14.0`, `ffe9d4c`/`b135dec`
+chain, `ROADMAP.md` lines ~3787–3835) hit the identical shape — a clean
+17-gate sweep followed by two more commits, `check-commits-filed.py` red
+on the tag — and recorded it as a **named candidate under `R217`, at
+`n = 1`, explicitly declined to mint** ("the mint is the operator's
+act"). This filing is `n = 2` of the same shape, which is this project's
+usual two-occurrence promotion bar. See `Standing rules` below for the
+amendment made in response — `R217` itself is corrected in place, not
+re-minted, because the gap is in that rule's own closing sentence, not a
+new mechanism.
+
+**★ Why decision `090` ("always push") is not the thing to narrow, stated
+plainly because a future reader could reach for exactly that repair.**
+Decision `090` grants standing authority to **push**. It says nothing
+about pushing **twice** before `pdfce-librarian` has run, and this
+failure is a fact about a **gate's deferral width**, not about whether
+pushing was permitted. Narrowing an operator's ruling to compensate for
+a habit `090` never asked about would be the same mistake decision `061`
+was written to warn against (narrow the rule that is actually wrong, not
+the nearest one that happens to be adjacent). The repair here is
+`R217`'s own text, and a re-affirmed habit — **file before a second code
+commit lands, or don't push a second one until the filing is in** — not
+anything about push authority itself.
+
+**★★ The self-correcting property is the trap, and is worth naming on its
+own.** `HEAD` goes green on the very next run (this filing cites
+`51c30d6` and `4c32afe`, both now joined), the tree is clean, every local
+gate passes, and the only surviving evidence is a **permanent red run on
+an intermediate commit** on a public repository — costing nothing now,
+which is exactly how "CI is green" stops being a claim anyone checks. A
+gate that always heals by the next commit is a gate whose failures are
+easy to stop reading.
+
+#### Ledger
+
+No new decision (`ARCHITECTURE.md` §12 unchanged at decision `090`, next
+free `091`; **decision `090` is unaffected** — see above). No new
+standing rule minted; `R217` **amended in place** (its closing sentence
+corrected, not re-minted — see *Standing rules*, below). Ceiling: rules
+`R219` (next free `R220`, unchanged), decisions `090` (next free `091`,
+unchanged). Not re-derived by shell this filing (hard rule 8; this
+role has no shell tool this dispatch) — figures relayed by the engineer
+and consistent with the prior filing's own.
+
+---
+
 ### `4c32afe` — three docs-only commits after `Pass 138.0`: a breaking-change correction that also carried the last filing, the sixth stale copy of a bridging claim (a `println!`, not a doc comment), and a cold-start handoff that opens the next defect — no Pass ID, docs-only correction chain — 2026-08-27 (289th filing)
 
 Chain: `6256c93` (`Pass 138.0`, already filed) → `79067fe` → `324b58f` →
@@ -103979,12 +104045,45 @@ same cause (hashes exist only at commit time), two different failure modes.
   recorded.** `a_release_tag_on_a_code_commit_cannot_satisfy_a_filing_gate_so_file_first_then_tag.md`'s
   remedy — file first, watch CI go green, then tag — is now **superseded**
   by this structural fix, marked so at that file's own top rather than
-  deleted. A tag on a code commit is green whenever the history *behind*
+  deleted. ~~A tag on a code commit is green whenever the history *behind*
   it is filed; there is nothing left to remember or get wrong by
-  ordering.
+  ordering.~~ **See the 2026-08-27 amendment below — that sentence is
+  true for one trailing code commit and false for two.**
 
   **Full derivation:**
   `D:/dev/rag/rust/a_gate_whose_evidence_only_a_later_commit_can_produce_should_defer_the_tip_not_fail_it.md`.
+
+  > **★ AMENDED 2026-08-27, 290th filing (`cde21f5`) — the closing
+  > sentence above is corrected by its SECOND confirmed occurrence, not
+  > its first.** The 271st filing (`v0.14.0` release chain) already found
+  > the gap once — a clean 17-gate sweep followed by two more commits,
+  > `check-commits-filed.py` red on the tag — and recorded it as a named
+  > candidate under this rule at `n = 1`, explicitly declining to mint a
+  > new number: *"a one-commit deferral tolerates one trailing code
+  > commit. The second one is not deferred — it is merely no longer the
+  > tip."* The 290th filing hit the identical shape again (`4c32afe`
+  > pushed as tip while `51c30d6`, behind it, still owed a filing; CI
+  > failed on `4c32afe`, naming `51c30d6`). `n = 2` is this project's
+  > usual promotion bar, so the correction is made **here, in `R217`
+  > itself**, rather than left a second time as an unpromoted candidate.
+  >
+  > **The corrected reading, replacing the struck sentence above:** *A tag
+  > — or any push — on a code commit is green only if the deferral window
+  > is exactly one commit wide at that moment. The deferral excuses
+  > exactly one trailing unfiled code commit; a second one shields the
+  > first out of the window and both are checked in full on the very next
+  > CI run, with nothing about either commit having changed.* **One
+  > unfiled commit may sit at the tip of `main`. Never two.** The working
+  > orders that hold the invariant, unchanged from the 271st filing's own
+  > finding: `code → file, then stop`, or `code → file → code → file →
+  > …` — never `code → code` without a filing landing between them.
+  >
+  > **Not a new mechanism, and no new rule number** — `R217`'s deferral
+  > logic (defer the tip by exactly one commit, never forgive real debt
+  > behind it) was correct at minting and remains correct; only this
+  > rule's own closing summary sentence over-claimed what the mechanism
+  > guaranteed. Ceiling unaffected by this amendment: rules `R219` (next
+  > free `R220`), decisions `090` (next free `091`).
 
   **Ceiling moves `R216` → `R217`; next free `R218`.**
 
