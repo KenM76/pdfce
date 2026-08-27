@@ -67982,3 +67982,102 @@ engineer's own next-session notes carry any other open items.
   `PickedLine` breaking change.
 
 ---
+
+## 2026-08-27 (289th filing) — session shutdown: three docs-only commits, none a Pass; the sixth stale copy of a bridging claim was a `println!`, not a doc comment; a `DeviceN` image gap opens the next session
+
+**Shipped:**
+- No Pass this filing. Three docs/memory-only commits since the 288th
+  filing's `6256c93`: `79067fe` (`docs/core-api` `PickedLine` correction
+  for `Pass 138.0`'s breaking field rename — and, unintentionally, this
+  role's own 288th filing, staged wholesale rather than named in the
+  commit message), `324b58f` (two `pdfce-engineer` memory lessons plus the
+  correction about what `79067fe` actually contained), `51c30d6` (the
+  sixth stale copy of the sRGB-bridging claim, this one a `render-page`
+  `println!` rather than a doc comment), `4c32afe` (`docs/NEXT_SESSION.md`
+  rewritten cold-start per `R216`, `HEAD`, pushed, `origin`-level, tree
+  clean). Full account, including the docs-only Shipped entry these four
+  commits earned, is in `ROADMAP.md`.
+
+**Decisions made this session:**
+- None. `R219` **amended, not re-minted** — its first confirmed catch
+  (the `DeviceN`/`Separation` image gap below) was found by applying the
+  rule's own checklist rather than by a bug report, which is worth
+  recording distinctly from the rule's original rationale. See
+  `ROADMAP.md`'s *Standing rules*, `R219`.
+
+**Findings + decisions:**
+- `79067fe`'s commit message names only the `docs/core-api` fix; its diff
+  also carries this role's 288th filing (`ROADMAP.md`/`FEATURES.md`/
+  `SESSION_LOG.md` for `Pass 138.0`, including the `R219` mint) because
+  `docs/` was staged wholesale. Recorded rather than repaired by amending
+  the pushed commit — amending is the exact failure
+  `tools/check-cited-commits-exist.py` exists to catch (a rewritten hash
+  breaks every citation of it; the sweep that followed, `0d9f4df`, found
+  fourteen pre-existing casualties of the same habit). A message that
+  under-describes its diff is a smaller problem than a hash that stops
+  existing.
+- **Sixth stale copy of one claim, and the first found by running the
+  tool rather than reading a doc.** The `render-page` metrics-line note
+  claimed images and shadings resolve to sRGB "before any canvas sees
+  them" — true until `Pass 130.1` (images), `137.0` (shadings), `137.1`
+  (mesh). Three copies were fixed in `36628bb`; two more were doc
+  comments this role reported and the engineer discharged in `Pass
+  138.0`'s own filing; this one survived every prior sweep because it is
+  a `println!` format string, not a doc comment, and nothing in this
+  project's gates reads operator-facing strings for implementation-state
+  claims. Recurrence count for the underlying stale-claim problem: **six**.
+  Recurrence count for the gate-shaped gap (a claim invisible because it
+  prints rather than documents): **one**, so far. Flagged as a possible
+  standing rule or `tools/check-*` gate; **not promoted this filing** —
+  the engineer's relayed counter-view is that no mechanical gate can
+  content-check a disclosure's truth, only its location, and the cheaper
+  fix is a habit: when a doc-comment claim is corrected, grep the format
+  strings for the same wording too. Left open rather than settled.
+- The corrected note now states what still bridges through sRGB as well
+  as what does not, including the `Separation`/`DeviceN`-image gap below.
+- **`Pass 139.0` opened, `ROADMAP.md` Backlog.** A five-colorant
+  `DeviceN` photograph renders visibly desaturated against Acrobat
+  (washed toward grey where the reference is saturated green);
+  `cmyk_bridged_pixels = 25870`, `cmyk_native_image_pixels = 0` on the
+  affected page. Cause: `crates/pdfce-render/src/image.rs`'s
+  `carries_ink` test recognises only `Space::Cmyk` and
+  `Space::Indexed { ink: Some(_), .. }` — a `Separation`/`DeviceN` image
+  converts through its tint transform to sRGB and never to its
+  `DeviceCMYK` alternate. **Fourth instance of `R219`'s shape in four
+  days**, and the **first found by deliberately applying `R219`'s
+  checklist rather than by a bug report.** Full diagnosis in
+  `ROADMAP.md`'s Backlog entry, including the "do not reuse the overprint
+  colorant planes" trap (they answer "what did the source specify," not
+  "what does the tint transform produce," and return `None` for a
+  spot-only `DeviceN` where a plain render needs `[0,0,0,0]` or white
+  paper) and a secondary finding that the trap detector which surfaced
+  this fired on a photographic highlight, not a trap cross, with a
+  weaker-than-it-looked resolution-mismatched control render. Cost of the
+  fix (a per-texel `space.to_cmyk()` beside the existing `to_rgb`) needs
+  measuring first.
+
+**Still in flight:**
+- `Pass 139.0` (`DeviceN`/`Separation` image ink-bridging outside
+  overprint) — diagnosed, not started. Scoped opener for next session.
+- The gate-shaped-gap question (standing rule vs. `tools/check-*` vs.
+  neither, for stale claims in operator-facing strings) — not decided
+  this filing; a fourth occurrence would argue harder for promotion.
+
+**For next session:**
+- Read `docs/NEXT_SESSION.md` (rewritten `4c32afe`) before anything
+  else. CI colour for `51c30d6`/`4c32afe` was in progress at shutdown and
+  is deliberately not recorded here — read it fresh from GitHub rather
+  than carrying forward an assumed colour.
+- Start from `Pass 139.0` if no higher-priority operator request arrives
+  first.
+- Confirm `tools/check-ledger-numbers.py` still reports rules at `R219`
+  (next free `R220`), decisions at `090` (next free `091`) — this filing
+  amended `R219`'s text but did not mint a new rule.
+- Shutdown state relayed by the engineer, not independently verified by
+  this role (no shell): `cargo test --workspace --release` 4,385 passing/
+  0 failing; `cargo fmt`/`cargo clippy -D warnings` clean; 18 argument-free
+  gates green except `check-commits-filed` (cleared by this filing); a
+  verified backup bundle written to
+  `D:\Dev\pdfce-backups\pdfce-20260827-shutdown-4c32afe-full.bundle`.
+
+---

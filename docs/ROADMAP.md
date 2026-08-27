@@ -96,6 +96,108 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `4c32afe` — three docs-only commits after `Pass 138.0`: a breaking-change correction that also carried the last filing, the sixth stale copy of a bridging claim (a `println!`, not a doc comment), and a cold-start handoff that opens the next defect — no Pass ID, docs-only correction chain — 2026-08-27 (289th filing)
+
+Chain: `6256c93` (`Pass 138.0`, already filed) → `79067fe` → `324b58f` →
+`51c30d6` → `4c32afe` (`HEAD`, pushed, `origin` level, tree clean).
+Hashes and adjacency as supplied in the engineer's dispatch; this filing
+has no shell of its own (hard rule 8) and did not re-derive them
+independently.
+
+#### `79067fe` — `docs/core-api`'s `PickedLine` correction, and what else rode in the same commit
+
+Corrects `docs/core-api/01-reading-and-model.md` §10.5 and
+`03-capabilities.md` for `Pass 138.0`'s breaking field rename
+(`PickedLine::object_index: usize` → `target: HitTarget`) — the two
+locations this role flagged, not edited, in the 288th filing. Adds a
+routing-table correction (the marquee row now points at
+`hit_test_rect_deep`, `hit_test_rect` marked shallow) and a new section
+on the marquee/line-picker paint-order-vs-reverse difference, the
+`FormMarquee` default, the `Include`-is-not-the-shallow-query trap, and
+the headless equivalents.
+
+**★ What the commit message does not say: its diff also carries this
+role's own 288th filing** — `ROADMAP.md`, `FEATURES.md`,
+`SESSION_LOG.md` for `Pass 138.0`, including the `R219` mint — because
+`docs/` was staged wholesale rather than the two files the message
+names. **Recorded here rather than repaired by amending the pushed
+commit.** `tools/check-cited-commits-exist.py` exists precisely because
+an amend minutes after a filing once broke every document citing the
+old hash, and the sweep that followed (`0d9f4df`) found fourteen further
+casualties of the same habit. A commit message that under-describes its
+own diff is a smaller defect than a hash that stops existing; the fix
+here is disclosure, not surgery.
+
+#### `324b58f` — two engineer-memory lessons, plus the correction above
+
+Two entries added under `.claude/agent-memory/pdfce-engineer/`:
+`fixing-one-route-makes-the-others-look-broken` (the operator-facing
+half of `R219`) and `a-crop-rectangle-is-a-measurement-instrument` (the
+`Pass 137.0` mis-measurement corrected in `36628bb`, with the method
+that would have prevented it). Also carries the `79067fe` bundling
+correction, above.
+
+#### `51c30d6` — the sixth stale copy of one claim, and the first found by running the program
+
+The `render-page` metrics-line note printed to the operator's terminal
+read: *"images and shadings resolve their colour to sRGB before any
+canvas sees them, so bridging them is the only information that reaches
+the compositor."* True of every image until `Pass 130.1`, every shading
+until `137.0`, every mesh until `137.1` — **stale since the first of
+those three, discovered on the fourth commit that should have caught
+it.**
+
+**★★ This is the sixth copy of the identical stale claim, and the shape
+of how it survived is the finding.** Three copies were fixed in
+`36628bb` (287th filing); two more were doc comments this role reported
+and the engineer discharged in `Pass 138.0`'s own filing; **this one
+survived every prior sweep because it is a `println!` format string, not
+a doc comment** — found by running the tool against a real file while
+investigating something unrelated, not by grepping or reading code.
+
+**Nothing in this repository checks operator-facing strings for claims
+about implementation state.** Every existing gate (`check-ui-strings.sh`,
+`check-disclosure-channel.sh`, `check-outcome-disclosed.py`, hard rule
+11's own sweeps) looks at code, documents, or commit metadata — none
+reads a `println!`/`eprintln!` literal for a claim that can go stale as
+the implementation changes under it. Recurrence count for the underlying
+stale-claim problem: **six**. Recurrence count for this specific
+gate-shaped gap (a claim invisible to review because it prints rather
+than documents): **one**, this filing. **Not promoted to a standing rule
+or a new gate this filing** — the engineer's counter-view, relayed: no
+mechanical gate can content-check a disclosure, because such a gate would
+need to know "current behaviour," which is the very fact the disclosure
+exists to report (the same reasoning `CLAUDE.md` rule 11's derivation
+already gives for declining a gate on doc-comment disclosures). The
+cheaper fix offered: when a doc-comment claim is corrected, grep the
+format strings for the same wording too. Left as a live question rather
+than settled either way — a fourth occurrence would argue harder for
+promotion.
+
+The corrected note now states what still bridges through sRGB as well as
+what does not, including the `Separation`/`DeviceN`-image gap `Pass
+139.0` opens below.
+
+#### `4c32afe` — `docs/NEXT_SESSION.md` rewritten cold-start (`R216`), and `Pass 139.0` opened
+
+`docs/NEXT_SESSION.md` rewritten wholesale, not amended, per `R216`'s
+handoff-not-record convention; cold-start facts re-read from a shell; CI
+colour deliberately marked NOT READ. Its §C diagnoses a defect fully and
+opens it as `Pass 139.0`, below (Backlog), rather than leaving it only in
+a file this project's own convention says will be overwritten next
+session.
+
+#### Ledger
+
+No new decision (`ARCHITECTURE.md` §12 unchanged at decision `090`, next
+free `091`). Standing rule `R219` **amended, not re-minted** — see
+*Standing rules*, below, for its first confirmed application. Ceiling:
+rules `R219` (next free `R220`), decisions `090` (next free `091`). Not
+re-derived by shell this filing (hard rule 8); consistent with the prior
+filing's own figure.
+
+---
+
 ### `Pass 138.0` (`6256c93`) — THE MARQUEE AND THE MEASURE TOOL STILL COULD NOT SEE INSIDE A FORM — ★★★ THE THIRD TIME IN THREE DAYS ONE FIXED ROUTE HAS MADE THE OTHERS LOOK BROKEN, STANDING RULE `R219` MINTED FOR THE SHAPE — ★★ `PickedLine::object_index: usize` COULD NOT NAME A LEAF, SO THE FIELD ITSELF WAS THE BUG, NOT MERELY A SYMPTOM OF ONE — ★ `pick_line_in_page` HAD NO HEADLESS CALLER AT ALL, THE THIRD INSTANCE OF `R151`'S SHAPE — 2026-08-27 (288th filing)
 
 **Shipped 2026-08-27.** Commit `6256c93`
@@ -84527,6 +84629,67 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+### `Pass 139.0` — A `DeviceN` PHOTOGRAPH RENDERS DESATURATED AGAINST ACROBAT: A `Separation`/`DeviceN` IMAGE BRIDGES THROUGH sRGB AND NEVER REACHES ITS `DeviceCMYK` ALTERNATE — FOURTH INSTANCE OF `R219`'S SHAPE, THE FIRST FOUND BY APPLYING THE RULE RATHER THAN BY REPORT — filed 2026-08-27 (289th filing), fully diagnosed, deliberately not started
+
+**Symptom.** A five-colorant `DeviceN` photograph renders visibly
+desaturated against Acrobat — washed toward grey where the reference is
+saturated green. Measured on the affected page: `cmyk_bridged_pixels =
+25870`, `cmyk_native_image_pixels = 0` — the image is bridged through
+sRGB on a page that composites in ink.
+
+**Cause**, `crates/pdfce-render/src/image.rs`:
+
+```rust
+let carries_ink =
+    matches!(space, Space::Cmyk) || matches!(space, Space::Indexed { ink: Some(_), .. });
+```
+
+A `Separation`/`DeviceN` image converts through its tint transform **to
+sRGB** and never to its `DeviceCMYK` alternate — `carries_ink` does not
+recognise it at all.
+
+**★★ Fourth instance of `R219`'s shape in four days**, and the first one
+this project found by deliberately applying the rule's own checklist
+rather than by a bug report:
+
+| # | Pass | gave native ink to | left unfixed |
+|---|---|---|---|
+| 1 | `130.1` | `DeviceCMYK` images | `Separation`/`DeviceN` images |
+| 2 | `130.2` | `Separation`/`DeviceN` images, **only under overprint** | the same images outside overprint |
+| 3 | `137.0` → `137.1` | analytic shadings, then mesh shadings | (closed) |
+| 4 | *(this entry)* | — | `Separation`/`DeviceN` images outside overprint — the gap nobody went back for |
+
+**★★★ The trap, which must survive into whoever scopes this
+verbatim-in-spirit: do not reuse the overprint colorant planes.** They
+exist, texel-for-texel, in the right layout, and reaching for them is
+the obvious move and the wrong one. They hold `authored_tints`, which
+answers Table 149's *"which components did the source SPECIFY"* — a
+different question from *"what does the tint transform PRODUCE in the
+alternate space."* They also return `None` for a **spot-only**
+`DeviceN`, where the existing plain-render code path writes `[0,0,0,0]`:
+correct for the overprint route (which preserves the backdrop, `Pass
+130.3`) and **bare white paper** on a plain one.
+
+**The right shape**, per the engineer's own diagnosis: a per-texel
+`space.to_cmyk()` captured **beside** the existing `to_rgb`, in the same
+loop, from the same operands — the same pattern `ColorRamp::new` and
+`mesh::read_shade` already use, because a tint transform may be
+arbitrary PostScript and nothing forces two evaluations of it to agree.
+**Cost needs measuring before committing to this shape** — an extra
+transform evaluation per texel, on images that can be large.
+
+**Secondary finding, same investigation: the trap detector fired on a
+photographic highlight, not a trap cross**, and the reference-render
+control was weaker than it looked — the two renders being compared are
+at different resolutions (`511×284` vs `786×439`) and `find_traps` uses
+fixed pixel-size thresholds. On a patch whose content is a photograph,
+**the trap count is not the evidence here; the pixels are.**
+
+**Not started.** Scope next session, or on the first idle slot if no
+higher-priority operator request has arrived.
+
+---
+
 ### `--in-place` owed on the other `pdfce-cli` editing subcommands (no Pass ID minted — filed 2026-08-27, 279th filing)
 
 `Pass 135.1` gave `pdfce-cli ocr` an `--in-place` flag and, in doing so,
@@ -103927,6 +104090,21 @@ same cause (hashes exist only at commit time), two different failure modes.
   than it appears to; this rule is about a **fix** quietly having less
   reach than it appears to, which is the same failure one step later in
   the lifecycle.
+
+  **★ AMENDED 2026-08-27 (289th filing) — the rule's first confirmed
+  catch, not just its rationale.** A fourth instance of the shape (`Pass
+  139.0`, Backlog: a `Separation`/`DeviceN` image bridges through sRGB
+  and never reaches its `DeviceCMYK` alternate — the gap `Pass 130.1`/
+  `130.2` left after giving native ink to `DeviceCMYK` images and then to
+  `Separation`/`DeviceN` images only under overprint) was found by
+  **deliberately applying this rule's own checklist** while writing up an
+  unrelated correction, not by a bug report or an operator complaint.
+  Worth recording because a standing rule with one demonstrated catch is
+  materially more likely to be followed than one justified only by the
+  incident that minted it — and this catch confirms exactly what "what
+  the rule asks for," above, predicted: the mental model built fixing one
+  route is the cheapest moment to ask whether a sibling route shares the
+  gap. No re-mint; ceiling stays `R219`, next free `R220`.
 
 ## Update protocol
 
