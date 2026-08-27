@@ -115,6 +115,7 @@ LOCAL = {
     "tools/check-suite-name-absent.py": "python tools/check-suite-name-absent.py",
     "tools/check-string-gaps.sh": "bash tools/check-string-gaps.sh",
     "tools/check-theme-colors.sh": "bash tools/check-theme-colors.sh",
+    "tools/check-cited-commits-exist.py": "python tools/check-cited-commits-exist.py",
     "tools/check-ci-parity.py": "python tools/check-ci-parity.py",
 }
 

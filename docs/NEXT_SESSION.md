@@ -102,7 +102,8 @@ requests from `pdfceGUI` are done, answered on their channel
    all three readable in order in `ARCHITECTURE.md` §12). An operator can give
    one page a private copy of a shared form; a nested invocation is refused by
    name.
-2. ~~**A CLI surface for leaves**~~ — **SHIPPED** (`a2f7b48`). `object-list`
+2. ~~**A CLI surface for leaves**~~ — **SHIPPED** (`5f6ac58`, amended from
+   `a2f7b48` after a mangled commit message was rewritten). `object-list`
    prints `leaf` rows with containment and `editable=false`, plus `leaves=`,
    `form_cycles=` and `form_depth_overflows=` appended to the summary line.
 3. **`--in-place` on the other editing subcommands.** ★ Still owed. Two

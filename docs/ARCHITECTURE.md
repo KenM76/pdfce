@@ -3737,6 +3737,12 @@ image whose provenance the operator may have to defend.
 
 ### (S) `d5431a4` — the ce-dimension STYLE CASCADE: `dimension::style`, two new `EditSession` verbs, and five new fields on `DimensionStyle` — 2026-08-13
 
+**★ Hash note, added 2026-08-27 (librarian sweep, verified via shell):
+`d5431a4` is a pre-rebase object — `git merge-base --is-ancestor d5431a4
+HEAD` is false. The live commit with this decision's diff is `7ebee12`.
+See `SESSION_LOG.md`'s hundred-and-thirty-eighth filing for the full
+old-hash → live-hash mapping this rebase produced.**
+
 **Terminology (project rule 15):** this surface resolves style for **ce
 dimensions** — the ones pdfce authors. **It does not touch pdf
 dimensions.** A CAD-exported dimension's line weight and arrowheads are
@@ -3869,6 +3875,12 @@ is complete without it**, which is the point of putting provenance in the
 data: the disclosure surface can be built later against a settled API.
 
 ### (T) `c057682` — the ce-dimension TOLERANCE: `dimension::tolerance`, the TENTH and ELEVENTH properties of (S)'s cascade, and a REFINEMENT of (R)'s bump rule — 2026-08-13
+
+**★ Hash note, added 2026-08-27 (librarian sweep, verified via shell):
+`c057682` is a pre-rebase object — `git merge-base --is-ancestor c057682
+HEAD` is false. The live commit with this decision's diff is `dbc4aa9`.
+See `SESSION_LOG.md`'s hundred-and-thirty-eighth filing for the full
+old-hash → live-hash mapping this rebase produced.**
 
 **Terminology (project rule 15):** this surface authors and resolves
 tolerance for **ce dimensions**. **It does not touch pdf dimensions** — a
@@ -21336,6 +21348,11 @@ hundred-and-twenty-sixth filing.
 
 ### 2026-08-13 (hundred-and-thirty-fourth filing, `d5431a4`) — decision 056: the ce-dimension STYLE cascade is THREE tiers with ONE `Option` per property, the exotic inherit-sources of the reference model are collapsed into that one chain, and the SCALE is deliberately not one of the properties
 
+**★ Hash note, added 2026-08-27 (librarian sweep, verified via shell):
+`d5431a4` is a pre-rebase object — `git merge-base --is-ancestor d5431a4
+HEAD` is false. The live commit is `7ebee12`. See `SESSION_LOG.md`'s
+hundred-and-thirty-eighth filing for the full mapping.**
+
 **Ceiling check, measured by `tools/check-ledger-numbers.py` this
 session:** *"rules ceiling R191, decisions 055, filings 133."* **This
 filing mints decision 056** — the next free number — **and no standing
@@ -21512,6 +21529,11 @@ hundred-and-thirty-fourth filing.
 >    refines (R) accordingly.
 
 ### 2026-08-13 (hundred-and-thirty-fifth filing, `c057682`) — decision 057: ce-dimension TOLERANCE is the TENTH and ELEVENTH properties of decision 056's cascade, seven of the reference's thirteen types ship with the six omissions STATED, tolerance values live in the DISPLAYED unit, and (R)'s sidecar-bump rule is refined rather than merely applied
+
+**★ Hash note, added 2026-08-27 (librarian sweep, verified via shell):
+`c057682` is a pre-rebase object — `git merge-base --is-ancestor c057682
+HEAD` is false. The live commit is `dbc4aa9`. See `SESSION_LOG.md`'s
+hundred-and-thirty-eighth filing for the full mapping.**
 
 **Ceiling check, measured by `tools/check-ledger-numbers.py` this
 session:** *"standing rules R191 → next free R192; decision records 056 →

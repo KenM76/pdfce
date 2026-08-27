@@ -48593,6 +48593,16 @@ Three adjacent figures in the same table are stale by the same mechanism:
 three line counts, and (recommended) the as-of anchor moved `e6609bc` →
 `e194b46`.
 
+**★ Hash note, added 2026-08-27 (librarian sweep, verified via shell) —
+a separate fact from the anchor-content refresh just above:** the raw
+object `e6609bc` is itself a pre-rebase orphan — `git merge-base
+--is-ancestor e6609bc HEAD` is false. The live commit with the same
+subject ("the hundred-and-thirty-seventh filing — the reason for the
+GUI pause, and the shell that may reach it") is `6c5124c`. `e194b46` is
+a later, unrelated re-derivation of the anchor's CONTENT and is not to
+be conflated with this. See this file's own hundred-and-thirty-eighth
+filing for the full old-hash → live-hash mapping this rebase produced.
+
 ### `docs/core-api/` OWNERSHIP — DRAFTED AS A PROPOSAL, DELIBERATELY NOT MINTED
 
 The engineer asked whether the directory should be named in the standing
@@ -49809,6 +49819,13 @@ pre-amend predecessors dangling in the object store. **A hash that
 resolves is not a hash that is reachable**, and a *Shipped* entry citing
 one is a citation that dies at the next `git gc`. Every entry cites the
 `main` hash, with the dispatch's beside it.
+
+**★ Hash note, added 2026-08-27 (librarian sweep, verified via shell) —
+the live hashes, for a reader who lands on this entry directly:**
+`67f7811` → **`6750182`** (`Pass 98.0`); `d544b3b` → **`0eec220`**
+(`Pass 102.0`). Both are already cited correctly at each Pass's own
+*Shipped* heading in `ROADMAP.md`; this note exists so this citation
+does not go stale on its own once `git gc` prunes the dangling objects.
 
 **★★★ THE RECORDED SUITE BASELINE WAS ALREADY STALE, AND THE ARITHMETIC
 IS THE FINDING.** `ROADMAP.md` carried **25 pass / 18 FAIL / 8
@@ -67397,10 +67414,10 @@ by somebody re-running the check the claim itself quoted.
 
 ---
 
-## 2026-08-27 (282nd filing) — `Pass 136.2` (`a2f7b48`) SHIPS: `object-list` can see inside form XObjects — a separate `leaf` line type, never an `object` row, because a leaf's tokens index the form's stream, not the page's
+## 2026-08-27 (282nd filing) — `Pass 136.2` (`5f6ac58`) SHIPS: `object-list` can see inside form XObjects — a separate `leaf` line type, never an `object` row, because a leaf's tokens index the form's stream, not the page's
 
 **Shipped:**
-- `Pass 136.2` (`a2f7b48`) — `pdfce-cli object-list` gains a `leaf` line
+- `Pass 136.2` (`5f6ac58`) — `pdfce-cli object-list` gains a `leaf` line
   type (kind/bbox/containment/paint_order/editable) plus three appended
   summary keys (`leaves`, `form_cycles`, `form_depth_overflows`),
   verified against all four `Pass 136.0` form fixtures. Discharges the
@@ -67450,5 +67467,127 @@ by somebody re-running the check the claim itself quoted.
 **For next session:**
 - Ledger unchanged this filing: rules `R218` (next free `R219`),
   decisions `089` (next free `090`), `SESSION_LOG` filings **282**.
+
+**★ CORRECTION, 2026-08-27 (repair to this same 282nd filing, no new
+filing number consumed; dated amendment footer, not a rewrite):**
+This entry named the shipped commit as `a2f7b48` throughout. The
+engineer amended that commit after this filing was dispatched — the
+message had shipped mangled (backticks eaten by the shell mid-`git
+commit -m`, the very hazard recorded two bullets above) and was
+rewritten via `git commit --amend`, which by construction changes the
+hash. `a2f7b48` is now a dangling object off `main`; the commit
+actually on the branch is `5f6ac58`
+(`5f6ac58e4d233fddebb1fccb9ab425f6b501d74b`), immediately after
+`acd65c0` and immediately before `5289654`. `tools/check-passes-filed.py`
+and `tools/check-commits-filed.py` both went red and correctly named
+`5f6ac58` as unfiled — they compare the roadmap against actual `main`
+history rather than against themselves, which is why this class of
+error is catchable at all. All four occurrences (this entry's header
+and `Shipped:` bullet, plus `docs/ROADMAP.md`'s matching two) are now
+`5f6ac58`; no other content, date, or ordering in this entry was wrong.
+Source of this correction: the engineer's relayed report of a shell
+check against `main` (this role still has no shell of its own — hard
+rule 8's corollary: a correction is itself a claim and must name its
+world-source, which this line does).
+- **The general shape, worth carrying forward:** a dispatch is a
+  snapshot the engineer can falsify *after* sending it, not only
+  *before* — a hash a filing records is only as stable as the commit
+  it names, and amending a commit after its filing invalidates the
+  hash even though nothing about the filing itself was wrong at the
+  time it was written.
+
+---
+
+## 2026-08-27 (283rd filing) — repair, not a Pass: fourteen PRE-EXISTING stale commit citations, found by a full-corpus sweep against `main` rather than by any single dispatch's own correction
+
+**Documentation-only filing. No Pass shipped, no code changed, no
+decision or standing rule minted.**
+
+**Ledger, carried forward (no shell this filing — see the note below):**
+standing rules ceiling **R218** (next free R219), decision records
+ceiling **089** (next free 090), `SESSION_LOG` filings **282** (next
+free **283**, consumed by this entry). Not re-verified against
+`tools/check-ledger-numbers.py` this filing.
+
+**What happened.** After the 282nd filing's own correction (`a2f7b48` →
+`5f6ac58`), the engineer swept **every** commit hash cited across
+`ROADMAP.md`, `SESSION_LOG.md` and `ARCHITECTURE.md` — **798 real
+hashes** — and checked each with `git merge-base --is-ancestor <h>
+HEAD`. **Fourteen were not ancestors of `HEAD`.** Every one has the same
+signature as `a2f7b48`: a commit with the identical subject exists on
+`main` under a different hash — amend-or-rebase casualties from earlier
+sessions, several from the same 2026-08-13 rebase the hundred-and-
+thirty-eighth filing already recorded a partial mapping for.
+
+**Findings + decisions:**
+- **The old object still resolves, so the citation looks perfectly
+  healthy.** `git show <old-hash>` works today; only `git gc` (default
+  ~2 weeks) makes it resolve to nothing, permanently, unrepairable from
+  anything but its subject line. This is a distinct failure mode from a
+  claim being *wrong*: it is a claim being *unverifiable later*, and only
+  a check reading a different source (`git`) than the document itself
+  could ever have found it.
+- **No existing gate could see this class.** `check-passes-filed.py`
+  and `check-commits-filed.py` both examine commits that **claim a
+  Pass** — an ordinary hash citation in prose claims nothing, so neither
+  gate has ever looked at it.
+- **The class is now gated:** `tools/check-cited-commits-exist.py`
+  (new, engineer's tool, not this role's to author) extracts every cited
+  hash from the three canonical docs, checks ancestry, and treats a
+  stale hash as **explained** — and stays silent — when its live
+  replacement appears within 8 lines of the citation. That is a
+  deliberate design choice: an earlier version flagged every occurrence,
+  which would have fired on correction notes that had just been written
+  correctly, and a gate that fires on the behaviour the project wants is
+  worse than no gate.
+- **Corrections filed, one per file actually containing the stale
+  citation** (a hash cited in two or three documents needed its own
+  nearby note in each): `ROADMAP.md` — `Pass 69.0`/`Pass 69.1` headings
+  (`d5431a4`→`7ebee12`, `c057682`→`dbc4aa9`), the `docs/core-api`
+  derivation-anchor discussion (`e6609bc`→`6c5124c`, `7031296`→
+  `5c37c7c`); `ARCHITECTURE.md` — decision-log headings (S)/(T) and the
+  hundred-and-thirty-fourth/-fifth filing headers (same two hash pairs);
+  `SESSION_LOG.md` — the 189th filing's `67f7811`→`6750182` /
+  `d544b3b`→`0eec220` passage (the live hashes were already correct at
+  each Pass's own `ROADMAP.md` heading but absent from this file's own
+  telling of the story) and the `e6609bc`→`6c5124c` passage. Ten of the
+  fourteen (`d5431a4`, `be41d75`, `c057682`, `6db55ae`, `f251f18`,
+  `d2e614d`, `88fde1e`, `46731fc`, `874197f`, `7031296`) were already
+  correctly mapped in `SESSION_LOG.md`'s own hundred-and-thirty-eighth-
+  filing table and needed no further edit there; `2ddbbbe`→`108d0e8` was
+  already self-contained at both its citations (ROADMAP.md and this
+  file). **No citation was deleted** — a stale hash is repairable from
+  its subject line, an absent one is not.
+
+**★ The documents can rot in a way that reads as perfectly healthy.**
+Every one of these fourteen resolved correctly, read correctly, and was
+quietly on a `git gc` timer. That is worth stating plainly because it is
+the same shape hard rule 8 exists for, pointed at a different kind of
+evidence: a citation that "looks fine" is not the same claim as a
+citation that "is fine," and only a check against the world — not
+against the document's own internal consistency — can tell the two
+apart.
+
+**No shell this filing.** Every hash-ancestry fact above (which hashes
+are stale, which are the live replacements) is **relayed from the
+engineer's dispatch**, which stated it ran the checks via a shell just
+now; this role verified only that the cited text locations exist and
+match the dispatch's description, per hard rule 8's discipline for when
+no shell is available. `python tools/check-cited-commits-exist.py` was
+not re-run by this role after the edits above; the engineer's own report
+said it should print `clean` and that confirmation is his to make.
+
+**Still in flight:**
+- Confirm `tools/check-cited-commits-exist.py` prints `clean` after
+  these edits (engineer's act, not re-verified here).
+- The `docs/core-api/` directory's own hash citations (`7031296`,
+  `e6609bc`, `e194b46`, etc.) were **out of scope** for this sweep — the
+  task named only `ROADMAP.md`/`SESSION_LOG.md`/`ARCHITECTURE.md` — and
+  were not checked for their own reachability here.
+
+**For next session:**
+- If `check-cited-commits-exist.py` is wired into CI, this class stops
+  needing a periodic manual sweep; currently it joins the run-when-
+  remembered set alongside the project's other `tools/check-*` gates.
 
 ---

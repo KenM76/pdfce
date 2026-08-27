@@ -28,7 +28,7 @@ index and ends with **Traps**.
 > the document a chat reply was the only description of it in existence.
 >
 > **What makes this worth a paragraph rather than a silent edit** is that the
-> figure was *sourced*: it said "verified against the source at `e6609bc`".
+> figure was *sourced*: it said "verified against the source at `6c5124c`".
 > A published number with its provenance attached reads as **maintained**,
 > and that is exactly what deters the check that would catch it. A vague
 > "many verbs" would have invited someone to count. `R197` was minted from

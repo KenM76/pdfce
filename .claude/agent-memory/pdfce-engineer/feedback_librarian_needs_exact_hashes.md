@@ -33,3 +33,38 @@ that it can be trusted without re-deriving it.
   file counts, timings. If you did not measure it, do not hand it over as fact,
   because it will be filed as fact. See [[feedback_engineer_does_the_observing]]
   for the same principle applied to behavior rather than metadata.
+
+---
+
+## ★★ 2026-08-27 — AND DO NOT AMEND A COMMIT AFTER DISPATCHING ITS FILING
+
+A new way to hand the librarian a wrong hash: **hand it a right one and then
+make it wrong.**
+
+I dispatched `Pass 136.2` at `a2f7b48`. The filing was correct. Then I noticed
+that commit's message had shipped mangled (backticks eaten by the shell) and
+fixed it with `git commit --amend` — which **rewrites the commit and changes the
+hash**. `a2f7b48` became a dangling object off `main`, the real commit was
+`5f6ac58`, and both `check-passes-filed` and `check-commits-filed` went red on a
+Pass that had just been filed perfectly.
+
+**How to apply:** once a commit has been dispatched for filing, treat its hash
+as published. If it must be amended anyway, **re-dispatch the correction in the
+same breath** — the librarian has no shell and cannot discover the change.
+
+★ Better still: re-read `git log -1 --format=%B` *before* dispatching, so the
+amend happens first. The mangling this fixed is itself covered by
+[[windows-paths-need-literal-edits]]; the two failures compounded, one creating
+the need to amend and the other making the amend expensive.
+
+★★ Note which gate caught it: `check-passes-filed` compares `ROADMAP.md`
+against **the actual git history** rather than against itself. Most of this
+project's gates read one document and check it for internal consistency; this
+one reads a different source than the document it validates, which is the only
+reason a stale-but-well-formed hash was detectable at all.
+
+**The session-scale shape**, third variant in one day: a dispatch is a
+*snapshot* (facts can be stale by the time they are written), a dispatch is a
+*write path* (its text lands in public documents), and now — a dispatch's facts
+can be **invalidated by what the engineer does afterwards**. All three are the
+engineer's to prevent; none is visible from the librarian's side.

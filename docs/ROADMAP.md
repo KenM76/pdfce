@@ -96,14 +96,29 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
-### `Pass 136.2` (`a2f7b48`) — `object-list` CAN SEE INSIDE FORM XOBJECTS — ★★★ **A SEPARATE `leaf` LINE TYPE, NOT MORE `object` ROWS: A LEAF'S TOKEN RANGE INDEXES THE FORM'S CONTENT STREAM, NOT THE PAGE'S, AND HANDING IT OUT AS AN `object` INDEX WOULD LET A SCRIPT CORRUPT THE PAGE SILENTLY** — ★★ an incomplete leaf list now discloses itself: `form_cycles`/`form_depth_overflows` on the stable line, plus a named sentence for a human — ★ the commit message for this very Pass shipped mangled once, by the exact hazard already recorded in this role's own agent-memory — 2026-08-27 (282nd filing)
+### `Pass 136.2` (`5f6ac58`) — `object-list` CAN SEE INSIDE FORM XOBJECTS — ★★★ **A SEPARATE `leaf` LINE TYPE, NOT MORE `object` ROWS: A LEAF'S TOKEN RANGE INDEXES THE FORM'S CONTENT STREAM, NOT THE PAGE'S, AND HANDING IT OUT AS AN `object` INDEX WOULD LET A SCRIPT CORRUPT THE PAGE SILENTLY** — ★★ an incomplete leaf list now discloses itself: `form_cycles`/`form_depth_overflows` on the stable line, plus a named sentence for a human — ★ the commit message for this very Pass shipped mangled once, by the exact hazard already recorded in this role's own agent-memory — 2026-08-27 (282nd filing)
 
-**Shipped 2026-08-27.** Commit `a2f7b48`. The commit immediately before it
+**Shipped 2026-08-27.** Commit `5f6ac58` (`5f6ac58e4d233fddebb1fccb9ab425f6b501d74b`). The commit immediately before it
 is `acd65c0` (this role's own 281st filing, the docs commit that filed
-`Pass 119.1`, below). Hashes and date as supplied in the engineer's
-dispatch — this filing has no shell and could not run `git log` itself to
-confirm them independently; treat the commit identity as relayed, not
-verified (hard rule 8).
+`Pass 119.1`, below); the commit after it is `5289654`. Hashes and date as
+supplied in the engineer's dispatch — this filing has no shell and could
+not run `git log` itself to confirm them independently; treat the commit
+identity as relayed, not verified (hard rule 8).
+
+**★ Correction, 2026-08-27 (repair to this same 282nd filing, no new
+filing number consumed).** This entry originally recorded the commit as
+`a2f7b48`. The engineer subsequently ran `git commit --amend` on that
+commit to fix a mangled message (backticks eaten by the shell), which
+rewrote it to `5f6ac58` — the hash a filing names is only stable if the
+commit is never amended after being filed. `check-passes-filed.py` and
+`check-commits-filed.py` both went red because they compare the roadmap
+against actual `main` history rather than against themselves, correctly
+flagging `5f6ac58` as unfiled — the surrounding text, date, and ordering
+were never wrong, only these seven characters. Source of this correction:
+the engineer's relayed report of a shell check against `main` (this role
+still has no shell of its own; the correction is sourced the same way the
+original entry was, per hard rule 10's corollary — a correction is a claim
+and must name its world-source too).
 
 #### This discharges the item filed as owed under `Pass 136.1`
 
@@ -23365,6 +23380,18 @@ being practised ten lines away from the bad one.
 three line counts, plus (recommended) an as-of anchor refresh from
 `e6609bc` to `e194b46`.
 
+**★ Hash note, added 2026-08-27 (librarian sweep, verified via shell) —
+a SEPARATE fact from the anchor refresh just above, and not to be
+conflated with it:** the raw object `e6609bc` is itself a pre-rebase
+orphan — `git merge-base --is-ancestor e6609bc HEAD` is false. The live
+commit with the same subject ("the hundred-and-thirty-seventh filing —
+the reason for the GUI pause, and the shell that may reach it") is
+`6c5124c`. The `e194b46` recommendation above is a later, unrelated
+re-derivation of the anchor's CONTENT (docs re-verified on 2026-08-18);
+this note is only about whether the OLD anchor hash still resolves on
+`main`. See `SESSION_LOG.md`'s hundred-and-thirty-eighth filing for the
+full old-hash → live-hash mapping this rebase produced.
+
 #### Gates and checks
 
 **Relayed from the engineer's report** (this filing did not re-run the
@@ -32122,6 +32149,12 @@ publishing still an operator act) are carried in full on the `Pass 71.0`
 
 ### Pass 69.1 — `c057682` — the **ce-dimension TOLERANCE**: the TENTH and ELEVENTH properties of `Pass 69.0`'s cascade, not a second system — **SHIPPED IN PART: core [x] · cli [x] · gui [ ]** — filed 2026-08-13 (hundred-and-thirty-fifth filing)
 
+**★ Hash note, added 2026-08-27 (librarian sweep, verified via shell):
+`c057682` is a pre-rebase object — `git merge-base --is-ancestor c057682
+HEAD` is false. The live commit with this Pass's diff is `dbc4aa9`. See
+`SESSION_LOG.md`'s hundred-and-thirty-eighth filing for the full
+old-hash → live-hash mapping this rebase produced.**
+
 **★ READ THE STATUS LINE BEFORE THE CONTENT.** Same shape as
 `Pass 69.0` directly below, and for the same reason: **core** and **CLI**
 shipped, the **GUI** half is **deferred at the operator's explicit
@@ -32492,6 +32525,12 @@ gains **(T)**.
 ---
 
 ### Pass 69.0 — `d5431a4` — the **ce-dimension STYLE cascade**: three tiers, nine properties, one independent `Option` per property — **SHIPPED IN PART: core [x] · cli [x] · gui [ ]** — filed 2026-08-13 (hundred-and-thirty-fourth filing)
+
+**★ Hash note, added 2026-08-27 (librarian sweep, verified via shell):
+`d5431a4` is a pre-rebase object — `git merge-base --is-ancestor d5431a4
+HEAD` is false. The live commit with this Pass's diff is `7ebee12`. See
+`SESSION_LOG.md`'s hundred-and-thirty-eighth filing for the full
+old-hash → live-hash mapping this rebase produced.**
 
 **★ READ THE STATUS LINE BEFORE THE CONTENT. This Pass is NOT complete
 and is deliberately not filed as complete.** Its **core** and **CLI**
@@ -74176,7 +74215,7 @@ and `crates/`, both outside this role's remit.
 
 | # | owed | where | found by | evidence |
 |---|---|---|---|---|
-| **1** | **★★ 1,046 `path:line` citations anchored at `7031296` (2026-08-13) and never re-derived** | `docs/core-api/01-`, `02-`, `03-` | 186th sweep | `grep -o "\.rs:[0-9]\+" \| wc -l` → 458 / 191 / 397. Spot-check: `dimension_model` cited `edit.rs:15361`, actual **17530** (+2,169); that line is unrelated form-field code today. |
+| **1** | **★★ 1,046 `path:line` citations anchored at `7031296` (2026-08-13) and never re-derived** | `docs/core-api/01-`, `02-`, `03-` | 186th sweep | `grep -o "\.rs:[0-9]\+" \| wc -l` → 458 / 191 / 397. Spot-check: `dimension_model` cited `edit.rs:15361`, actual **17530** (+2,169); that line is unrelated form-field code today. **★ Hash note, added 2026-08-27 (librarian sweep, verified via shell): the anchor `7031296` is itself a pre-rebase orphan — `git merge-base --is-ancestor 7031296 HEAD` is false. The live commit with the same subject is `5c37c7c`. This does not change the finding (the anchor is still just as stale by content); it corrects only the citation's reachability. See `SESSION_LOG.md`'s hundred-and-thirty-eighth filing for the full mapping.** |
 | **2** | ~~**★ `02-editing-and-saving.md:12` states `edit.rs` is 20,939 lines**~~ — **CLOSED by `bea3cb1`, 187th filing** | that line | 186th sweep | `wc -l crates/pdfce-core/src/edit.rs` → **24,826**. A **fifth** stale figure in the directory, **one line above the row `5d8eab5` corrected**, and the gate could not see it — it checked verb counts, not file sizes. **Fixed, and the gate re-scoped to `(N lines)` claims as well as verb counts.** Re-verified at `HEAD` this filing: the published figure and `wc -l` agree at **24,826**. |
 | **3** | **The three parts still say "Verified against `7031296`" while `index.md` now says `e194b46`** | `01-`/`02-`/`03-` front matter vs `index.md` | 186th sweep | Two files in one directory now disagree about which commit it was derived at. Part 2 was *materially edited* at `e194b46` (eight verbs added) and its own anchor was not moved. |
 | **4** | **`index.md`'s citation tallies do not reconcile with a naive count and state no method** | `index.md:16–17` | 186th sweep | Says *"382 verified citations"* / *"128 citations"*; `grep -o "\.rs:[0-9]\+" \| wc -l` gives **458** / **191**. **NOT asserted as wrong** — "verified citations" may count something narrower. Asserted only as **not re-derivable by a reader**, which is the `R197` failure in its milder form. |

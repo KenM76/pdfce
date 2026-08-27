@@ -457,6 +457,27 @@ jobs:
       - name: check every Pass-claiming commit is filed
         run: python tools/check-passes-filed.py
 
+      # The THIRD member of that family, and the one that catches a decay the
+      # other two structurally cannot: a commit hash the documents CITE which
+      # is no longer an ancestor of HEAD.
+      #
+      # `git commit --amend` and any rebase rewrite the commit. The old object
+      # survives as a dangling commit, so `git show` keeps working and the
+      # citation reads as healthy -- until `git gc` collects it, after which the
+      # citation points at nothing and is repairable only from its subject line.
+      # The two gates above only examine commits that CLAIM a Pass; an ordinary
+      # citation claims nothing and was invisible to both.
+      #
+      # Found by accident on 2026-08-27 (an amend minutes after the filing was
+      # dispatched), and a sweep then turned up FOURTEEN pre-existing ones from
+      # earlier sessions. This job exists so the next one is found on purpose.
+      #
+      # ★ Needs `fetch-depth: 0`, like its two siblings -- reachability cannot
+      # be decided on a shallow clone, and the script refuses to report clean
+      # there rather than passing vacuously.
+      - name: check every cited commit is still on main
+        run: python tools/check-cited-commits-exist.py
+
       # A setting parsed, validated, defaulted and read by NOTHING is a
       # preference the operator sets and pdfce ignores. The inbound twin of
       # the outcome gate above: that one catches values computed and never

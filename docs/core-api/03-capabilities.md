@@ -6,7 +6,7 @@ with no way to ask questions here. This is not rustdoc. It answers one
 question per capability: *I want to build the panel for feature X — what do
 I call, in what order, what must I SHOW the operator, and what will bite me?*
 
-**Date:** 2026-08-13 · **Verified against commit:** `7031296` (`main`).
+**Date:** 2026-08-13 · **Verified against commit:** `5c37c7c` (`main`).
 Every symbol below was read out of the tree at that commit and is cited
 `path:line`. Anything that could not be verified is marked
 `UNVERIFIED — <what to check>`; treat those as questions, not facts.

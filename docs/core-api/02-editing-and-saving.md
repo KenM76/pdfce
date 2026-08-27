@@ -8,13 +8,13 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | | |
 |---|---|
 | **Date** | 2026-08-13 |
-| **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
+| **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (32159 lines) |
 | **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 146 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
-Every `file:line` below was read at `7031296`. Where a fact could not be
+Every `file:line` below was read at `5c37c7c`. Where a fact could not be
 established it is marked `UNVERIFIED — <what to check>` rather than guessed.
 
 ---
@@ -2251,7 +2251,7 @@ Ranked by how likely a new GUI is to hit them. Each is verified at HEAD.
 ### T-00 ★ `set_group_style` returns REGENERATED, not MOVED
 
 **The worked example this document exists for.** Shipped 2026-08-13
-(`d5431a4`, `c057682`).
+(`7ebee12`, `dbc4aa9`).
 
 ```rust
 pub fn set_group_style(
@@ -2532,7 +2532,7 @@ breaking change and the project treats it as routine.
 | `to_incremental_bytes` / `to_full_bytes` / `SaveReport` | **Stable.** Two-method shape unchanged since Pass 3.x; `SaveReport` is `#[non_exhaustive]` and has gained fields additively (`objects_deleted`, `delinearized`). | `writer/save.rs:208` |
 | Guard model (encryption / certification / `/Size`) | **Stable in shape, still growing in coverage.** The three-gate certification split is argued as a permanent design (`edit.rs:12253-12266`). The encryption guard is explicitly a *forward-compatible seam* — `edit.rs:19338` records that no loadable file currently reaches it, so its behaviour when encrypted loading ships is **UNVERIFIED — re-check when `Pass 5` (Encryption) delivers a decrypting loader**. | `edit.rs:6970`, `:11449`, `:12289`, `:19338` |
 | Forms (authoring, structure, values) | **Recently active.** Four of the last fifteen `edit.rs` commits touch forms (`3fe8a19` border spec, `ce5642d` hybrid fail-open, `f83be5a` four authoring properties, `7d2b71b` reset-form). Expect additive changes to `New*Field` specs and to `FieldAuthorDisclosures`. | `git log -15 -- crates/pdfce-core/src/edit.rs` |
-| ce dimensions (14 verbs) | **★ Actively changing — the least stable area.** `set_group_style` / `set_dimension_style` and the whole `dimension::style` cascade shipped **today** (`d5431a4`, 2026-08-13), and `dimension::tolerance` shipped in the next commit (`c057682`, same day) adding the tenth and eleventh cascade properties. `SIDECAR_VERSION` is 2 and the project has an explicit, argued policy about when it bumps (`ARCHITECTURE.md` §12 entries (R), (S), (T)). Treat every ce-dimension signature as provisional. | `git log -3 -- crates/pdfce-core/src/dimension/style.rs` |
+| ce dimensions (14 verbs) | **★ Actively changing — the least stable area.** `set_group_style` / `set_dimension_style` and the whole `dimension::style` cascade shipped **today** (`7ebee12`, 2026-08-13), and `dimension::tolerance` shipped in the next commit (`dbc4aa9`, same day) adding the tenth and eleventh cascade properties. `SIDECAR_VERSION` is 2 and the project has an explicit, argued policy about when it bumps (`ARCHITECTURE.md` §12 entries (R), (S), (T)). Treat every ce-dimension signature as provisional. | `git log -3 -- crates/pdfce-core/src/dimension/style.rs` |
 | Attachments (`attach_file` / `detach_file`) | **New.** Shipped 2026-08-12 (`74582ca`, `95c3416`). Only two verbs; the refused name-tree shape (`AttachmentTreeUnsupported`) is a known boundary. | `ARCHITECTURE.md` §12 (Q) |
 | Fonts (`embed_*` / `unembed_*`) | **New.** Shipped 2026-08-12–13 (`f3acd24`, `d87fb58`). These are the only two verbs whose `*_refusal` accessor is load-bearing, which may or may not be a pattern the project generalises. **UNVERIFIED — whether the other four refusal accessors will be made load-bearing; nothing in the source states an intent either way.** | `edit.rs:16375`, `:16627` |
 | Vector geometry (11 verbs) | **Stable in shape, `Vec<String>` return is a weak contract.** Every verb returns an untyped disclosure list. `ARCHITECTURE.md` §4.1 (C) records decision 027 already changed five `EditSession` signatures in this family once and removed two error variants. **UNVERIFIED — whether `Vec<String>` will become a typed disclosure struct; decision 027 moved in that direction for `PlannedEdit` but stopped at the session boundary.** | `edit.rs:4483-5057`, `ARCHITECTURE.md` §4.1 (C) |

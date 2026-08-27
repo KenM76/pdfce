@@ -18,10 +18,10 @@
 > **`02-editing-and-saving.md`** and **`03-capabilities.md`**.
 >
 > **Date.** 2026-08-13.
-> **Verified against commit.** `e6609bc`. (Enumeration was performed at
-> `7031296`; `git diff --stat 7031296 e6609bc -- crates/` is empty — no
+> **Verified against commit.** `6c5124c`. (Enumeration was performed at
+> `5c37c7c`; `git diff --stat 5c37c7c 6c5124c -- crates/` is empty — no
 > source file changed between the two, only `docs/`. Every `file:line`
-> below is therefore valid at `e6609bc`.)
+> below is therefore valid at `6c5124c`.)
 >
 > **Audience.** An engineer or agent building a new GUI shell at
 > `D:\dev\pdfceGUI` against this crate, in a different session, with no
