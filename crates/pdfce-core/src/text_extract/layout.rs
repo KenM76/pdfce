@@ -41,20 +41,53 @@
 //! of it calls [`super::ExtractedText::sourced_text`] and gets exactly
 //! the characters the file provides.
 //!
-//! ## The three rules, in evaluation order
+//! ## The four rules, in evaluation order
 //!
 //! Between two consecutive glyphs with geometry:
 //!
-//! 1. **Baseline moved** by more than `line_gap_ratio` × effective font
-//!    size ⇒ derived line break.
-//! 2. **Backward jump** on the same baseline larger than
+//! 0. **Direction changed** by more than about two degrees ⇒ derived
+//!    line break. Text that runs a different way is a different line,
+//!    whatever the gap; and this is what guarantees that every glyph in
+//!    a run shares one direction, which is what makes
+//!    [`super::TextRun::direction`] answerable at all.
+//! 1. **Baseline moved** — the component of the step *perpendicular to
+//!    the writing direction* — by more than `line_gap_ratio` ×
+//!    effective font size ⇒ derived line break.
+//! 2. **Backward jump** along the writing direction larger than
 //!    `backward_jump_ratio` × size ⇒ derived line break. Without this a
 //!    two-column page whose columns share baselines runs the columns
 //!    together with no separator at all; §14.8.2.3.1 makes column
 //!    ordering derived in an untagged file, so this is a guess about
 //!    something the standard declines to define.
-//! 3. **Forward gap** larger than `word_gap_ratio` × size ⇒ derived word
-//!    space.
+//! 3. **Forward gap** along the writing direction larger than
+//!    `word_gap_ratio` × size ⇒ derived word space.
+//!
+//! ## ★ The frame those rules are measured in (`Pass 139.1`)
+//!
+//! Rules 1–3 are measured **in the line's own frame**, not in the
+//! page's. Until `Pass 139.1` they were stated in page axes — `|Δy|`
+//! for the baseline, `Δx` for the two gaps — and that assumption is
+//! true of virtually every word-processor page and **false of every CAD
+//! title block**, which stamps its source path with a rotated `Tm`.
+//!
+//! A rotated line failed *both* clauses, independently: at 90° the whole
+//! advance lands in `Δy` and trips the baseline test, and at 180° the
+//! step is in `−x` while [`super::ExtractedGlyph::advance`] is a
+//! positive magnitude, so the backward-jump test sees `≈ −2·advance`.
+//! Either way the verdict was a line break **between every letter** —
+//! measured at 71 breaks across one 82-glyph line, which pasted into an
+//! editor as one character per line.
+//!
+//! No ratio changed and no threshold was retuned. The step from the
+//! previous glyph's end is resolved into the frame as
+//! `along = d · dir`, `perp = d × dir`; for `dir = (1, 0)` those are the
+//! previous expressions term for term, so a horizontal page's output is
+//! **byte-identical**.
+//!
+//! The one thing that does *not* generalise is the `/ActualText`
+//! boundary test, which stays in page axes because a replacement
+//! publishes an axis-aligned box and no baseline at all — named at its
+//! call site rather than left to be discovered.
 //!
 //! Note what is *not* in that list: `Tw`. §9.3.3 applies word spacing
 //! only to the single-byte code 32, so it is **inert under
@@ -99,12 +132,17 @@ use super::{ArtifactKind, ExtractOptions, ExtractedGlyph, TextDiagnostics, TextO
 /// The geometry of the last emitted glyph, for gap analysis.
 #[derive(Debug, Clone, Copy)]
 struct Cursor {
-    /// x of the right edge of the previous glyph (origin + advance).
-    x_end: f32,
-    /// Baseline y of the previous glyph.
-    y: f32,
+    /// x of the **end** of the previous glyph — its origin advanced by
+    /// one `advance` **along [`Self::dir`]**, not along the page x axis.
+    end_x: f32,
+    /// y of the end of the previous glyph, likewise.
+    end_y: f32,
     /// Effective font size of the previous glyph.
     size: f32,
+    /// Writing direction of the previous glyph, as a unit vector in
+    /// default user space. The frame every threshold below is measured
+    /// in (`Pass 139.1`).
+    dir: (f32, f32),
 }
 
 /// What the gap between two items implies.
@@ -232,24 +270,31 @@ impl Builder<'_> {
             y: g.y,
             advance: g.advance,
             size: g.size,
+            direction: g.direction,
             invisible: g.invisible,
             // Carry the walk's provenance straight through; layout adds no
             // provenance of its own (it only segments). `None` when
             // capture was off.
             provenance: g.provenance,
         });
-        // The glyph box is approximated as one em tall from the
-        // baseline with a quarter-em descender — enough to locate a run
-        // on the page, which is all a run-level bbox is for.
-        run.llx = run.llx.min(g.x.min(g.x + g.advance));
-        run.urx = run.urx.max(g.x.max(g.x + g.advance));
-        run.lly = run.lly.min(g.y - g.size * 0.25);
-        run.ury = run.ury.max(g.y + g.size * 0.75);
+        // `Pass 139.1`: the cell is taken in the glyph's OWN frame by
+        // the one shared function, not restated here in page axes. For a
+        // 90° glyph at (100, 300) with advance 8.7 and size 12 the old
+        // expression gave x ∈ 100..108.7 while the ink is at
+        // x ∈ 91..103 — a box overlapping its glyph by about a third and
+        // hung off the wrong corner, which is what made a click on the
+        // middle of a rotated letter land outside every line box.
+        let cell = super::glyph_cell(g.x, g.y, g.advance, g.size, g.direction);
+        run.llx = run.llx.min(cell.llx as f32);
+        run.urx = run.urx.max(cell.urx as f32);
+        run.lly = run.lly.min(cell.lly as f32);
+        run.ury = run.ury.max(cell.ury as f32);
 
         self.cursor = Some(Cursor {
-            x_end: g.x + g.advance,
-            y: g.y,
+            end_x: g.x + g.advance * g.direction.0,
+            end_y: g.y + g.advance * g.direction.1,
             size: g.size,
+            dir: g.direction,
         });
     }
 
@@ -261,13 +306,26 @@ impl Builder<'_> {
     ) {
         // A baseline change across the replacement is still a real
         // baseline change; a word gap is not (module docs).
+        //
+        // ★ This comparison stays in **page axes** (`Pass 139.1`), and
+        // that is a limit rather than an oversight. An `/ActualText`
+        // replacement publishes an axis-aligned box and nothing else —
+        // §14.9.4 N4 forbids per-character correspondence, so there is
+        // no baseline, no origin and no direction to resolve into a
+        // frame. Recovering a baseline from `bbox.lly` is already an
+        // approximation that only holds for horizontal text; rotating it
+        // would be inventing a second one on top. A rotated
+        // `/ActualText` sequence is therefore segmented as it was before
+        // this Pass. None exists in the corpus, and the fix, if one is
+        // ever needed, is for `page::extend_covered` to carry the
+        // covered glyphs' direction out with the box.
         if let (Some(cursor), Some(bbox)) = (self.cursor, r.bbox) {
             let size = cursor.size.max(1e-6);
             // The replacement's own baseline is unknown; its box's
             // bottom plus the quarter-em descender assumption recovers
             // it closely enough for a threshold comparison.
             let y = bbox.lly as f32 + size * 0.25;
-            if (y - cursor.y).abs() > self.options.line_gap_ratio * size {
+            if (y - cursor.end_y).abs() > self.options.line_gap_ratio * size {
                 self.close_run();
                 self.emit_derived('\n', TextOrigin::DerivedLineBreak);
                 diagnostics.lines_derived += 1;
@@ -286,16 +344,64 @@ impl Builder<'_> {
         // covered, so the NEXT glyph's break test measures from there.
         if let Some(bbox) = r.bbox {
             let size = self.cursor.map_or(1.0, |c| c.size);
+            // The direction is CARRIED from the previous glyph rather
+            // than defaulted to `(1, 0)`: a replacement inside a rotated
+            // run must not make the glyph after it look like a change of
+            // direction and earn a spurious break. The end POINT is
+            // still read off the axis-aligned box, per the note above.
+            let dir = self.cursor.map_or((1.0, 0.0), |c| c.dir);
             self.cursor = Some(Cursor {
-                x_end: bbox.urx as f32,
-                y: bbox.lly as f32 + size * 0.25,
+                end_x: bbox.urx as f32,
+                end_y: bbox.lly as f32 + size * 0.25,
                 size,
+                dir,
             });
         }
         self.at_actual_text_boundary = true;
     }
 
     /// What the gap between the cursor and `g` implies.
+    ///
+    /// # `Pass 139.1`: measured in the line's own frame, not the page's
+    ///
+    /// Every threshold here used to be stated in page axes — `|Δy|`
+    /// against the line-gap ratio, `Δx` against the backward-jump and
+    /// word-gap ratios. That is right for the direction those axes
+    /// assume and **catastrophic for any other**, in two independent
+    /// ways:
+    ///
+    /// | text | what broke | which clause |
+    /// |---|---|---|
+    /// | 90° / 270° | one advance lands entirely in `Δy`, which exceeds `line_gap_ratio × size` for any glyph wider than a third of an em | the baseline clause |
+    /// | 180° | the step is in `−x` while `advance` is a positive magnitude, so `Δx − advance ≈ −2·advance` | the backward-jump clause |
+    ///
+    /// Both produce **one derived line break between every letter**. On
+    /// a SOLIDWORKS title block's vertically-stamped file path that was
+    /// 82 glyphs in 72 runs with 71 breaks, for one line of text, which
+    /// pasted into an editor as one character per line.
+    ///
+    /// The generalisation introduces **no new ratio**. `d` is taken from
+    /// the previous glyph's *end* (already advanced along its own
+    /// direction), and resolved into the frame:
+    ///
+    /// ```text
+    /// along = d · dir      (the gap, signed forward)
+    /// perp  = d × dir      (the baseline displacement)
+    /// ```
+    ///
+    /// For `dir = (1, 0)` that is `along = Δx − advance` and
+    /// `|perp| = |Δy|` — the previous expressions exactly, which is why
+    /// this changes nothing on a horizontal page.
+    ///
+    /// # The one rule that is genuinely new
+    ///
+    /// A **change of direction is itself a line break**, tested first.
+    /// Without it, a horizontal run ending where a vertical run begins
+    /// has `along = 0` and `perp = 0` and would be merged — and the
+    /// merged run would then publish one direction
+    /// ([`TextRun::direction`](super::TextRun::direction)) for glyphs
+    /// that do not share one. The guarantee that a run has a single
+    /// direction is worth more than the merge.
     fn classify(&self, g: &GlyphItem) -> Break {
         let Some(cursor) = self.cursor else {
             // The first glyph on the page: nothing to break from.
@@ -309,10 +415,24 @@ impl Builder<'_> {
             return Break::None;
         }
 
-        if (g.y - cursor.y).abs() > self.options.line_gap_ratio * size {
+        let dir = cursor.dir;
+        // Different direction ⇒ different line, whatever the gap.
+        if dir.0 * g.direction.0 + dir.1 * g.direction.1 < self.options.same_direction_cos {
             return Break::Line;
         }
-        let gap = g.x - cursor.x_end;
+
+        let (dx, dy) = (g.x - cursor.end_x, g.y - cursor.end_y);
+        // The z component of `d × dir`: for `dir = (1, 0)` this is `−Δy`,
+        // and only its magnitude is compared, so the historical
+        // `(g.y − cursor.y).abs()` is reproduced sign and all.
+        let perp = dx * dir.1 - dy * dir.0;
+        if perp.abs() > self.options.line_gap_ratio * size {
+            return Break::Line;
+        }
+        // The forward gap, signed along the writing direction. The
+        // subtraction of `advance` the page-axis version had to do
+        // explicitly is already folded into the cursor's end point.
+        let gap = dx * dir.0 + dy * dir.1;
         if gap < -self.options.backward_jump_ratio * size {
             return Break::Line;
         }
@@ -448,6 +568,7 @@ mod tests {
             y,
             advance,
             size: 10.0,
+            direction: (1.0, 0.0),
             invisible: false,
             artifact: None,
             mcid: None,
@@ -549,6 +670,7 @@ mod tests {
             y: 50.0,
             advance: 0.0,
             size: 10.0,
+            direction: (1.0, 0.0),
             invisible: false,
             artifact: None,
             mcid: None,
@@ -570,6 +692,7 @@ mod tests {
             y: 100.0,
             advance: 6.0,
             size: 10.0,
+            direction: (1.0, 0.0),
             invisible: false,
             artifact: Some(ArtifactKind::Pagination),
             mcid: None,

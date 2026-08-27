@@ -19969,15 +19969,34 @@ fn extraction_json(input: &Path, extracted: &pdfce_core::text_extract::Extracted
                 ));
             }
             if !run.glyphs.is_empty() {
+                // `Pass 139.0`: the run's writing direction, published once
+                // per run rather than only per glyph because every glyph in
+                // a run shares it by construction (`layout` closes a run on
+                // a direction change) and because a consumer orienting an
+                // I-beam or building `/QuadPoints` wants one answer per
+                // selectable unit. Omitted for a glyph-less run — derived
+                // whitespace and `/ActualText` have no baseline, and
+                // printing `[1, 0]` there would be inventing one.
+                out.push_str(&format!(
+                    ", \"direction\": [{:.4}, {:.4}]",
+                    run.direction().0,
+                    run.direction().1
+                ));
                 out.push_str(", \"glyphs\": [");
                 for (i, g) in run.glyphs.iter().enumerate() {
                     if i > 0 {
                         out.push_str(", ");
                     }
+                    // `direction` rides beside `advance` and `size` because
+                    // those two are the MAGNITUDES of the same two basis
+                    // vectors, and a consumer reading them without it has no
+                    // choice but to assume the text ran along +x. `[1, 0]`
+                    // for ordinary horizontal text, so an existing
+                    // consumer's parse and behaviour are both unchanged.
                     out.push_str(&format!(
                         "{{\"code\": {}, \"rung\": \"{}\", \"sourced\": {}, \
 \"start\": {}, \"len\": {}, \"x\": {:.2}, \"y\": {:.2}, \"advance\": {:.2}, \
-\"size\": {:.2}, \"invisible\": {}}}",
+\"size\": {:.2}, \"direction\": [{:.4}, {:.4}], \"invisible\": {}}}",
                         g.code,
                         g.rung.as_str(),
                         g.rung.is_sourced(),
@@ -19987,6 +20006,8 @@ fn extraction_json(input: &Path, extracted: &pdfce_core::text_extract::Extracted
                         g.y,
                         g.advance,
                         g.size,
+                        g.direction.0,
+                        g.direction.1,
                         g.invisible
                     ));
                 }

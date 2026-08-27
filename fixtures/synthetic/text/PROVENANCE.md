@@ -127,10 +127,48 @@ Two more, added with the deletion verb itself:
 | `runs-two-explicit.pdf` | The **baseline** for a successful per-run delete. Two runs, each placed by its own `Tm`, so nothing is refused — removing either must leave the other byte-verbatim *including its own positioning operator*. Distinct from `runs-inherited.pdf` precisely because a test can assert what success looks like without first navigating the §9.4.2 guard. |
 | `runs-single.pdf` | Deleting the **only** run removes the whole `BT`…`ET` (a text object that shows nothing is not an object), **and leaves the unrelated path verbatim**. The path is the load-bearing part: without something else on the page, "the text object was removed" and "the content stream was emptied" produce identical assertions. |
 
+## Rotated text (`Pass 139.0` / `139.1` / `139.2`)
+
+Written by `tools/gen-rotated-text-fixtures.py`. Same `LEGAL.md` §5
+category (a) as the rest of this directory: wholly synthetic,
+byte-authored, no PDF library involved, no attribution owed.
+Non-embedded Helvetica, capitals throughout.
+
+**Ordinary horizontal-mode text placed by a rotated `Tm`** — what every
+CAD exporter and every rotated word-processor text box emits. **Not**
+§9.7.4.3 vertical writing mode (`/WMode 1`), which is a different
+feature with different metrics and is not implemented.
+
+| File | Claim it makes falsifiable |
+|---|---|
+| `rotated-text.pdf` | Four `BT`…`ET` blocks at **0°, 90°, 180° and 270°**. Each is ONE line, not one line per letter. The 90° and 180° cases fail a page-axis reader through **different clauses** — the baseline test and the backward-jump test — so a fix for one need not fix the other, and both are present. The horizontal block is a **control**: a change that "fixed" rotation by loosening a threshold breaks it first. Measured before `Pass 139.1`: **22 derived line breaks for four lines of text**. |
+| `rotated-text-abutting.pdf` | **A direction change is a line break even when the geometry says "adjacent".** `AB` ends at exactly the point the vertical `CD` begins, so the perpendicular displacement and the forward gap are both **zero** and every geometric clause says the two runs are one. Only the direction rule separates them. |
+| `rotated-text-columns.pdf` | The **`perp`/`gap` resolution itself**. A 3.332 pt gap *along* a vertical baseline is a word space (a page-axis reader inserts nothing); a second column 30 pt *across* it, aligned so the y displacement is exactly zero, is a line break (a page-axis reader calls it a word space and joins two columns). Both wrong answers are **quiet** — neither fragments visibly. |
+
+**★ Why THREE files and not one, and how that was decided.** Not by
+judgement — by **sabotage**. `rotated-text.pdf` alone left the
+direction-change rule and the two dot products entirely uncovered:
+deleting either from the source left every one of its tests green,
+because its four blocks sit far apart on the page and the perpendicular
+clause separates them regardless. Each later fixture removes one more
+signal until only the rule under test can do the separating.
+
+**★ Capitals deliberately.** At 12 pt Helvetica every capital's advance
+exceeds `line_gap_ratio × size = 3.6 pt`, so under the page-axis rule
+**no run held two glyphs at all**. A fixture of narrow lowercase letters
+hides that: `i`, `n`, `c` and the space are narrow enough for
+consecutive pairs to survive, and the output then looks merely
+imperfect. The consuming shell found this the expensive way — it built a
+workaround that recovered the direction from the vector between a run's
+first and last glyph, which is sound reasoning and useless, because on
+the real file only **10 of 72 runs** held two glyphs.
+
 ## Regenerating
 
 ```
 python tools/gen-scattered-text-fixtures.py   # scattered-text-one-object.pdf
 python tools/gen-text-run-fixtures.py         # runs-inherited, runs-tj-array,
                                               # runs-two-explicit, runs-single
+python tools/gen-rotated-text-fixtures.py     # rotated-text, rotated-text-abutting,
+                                              # rotated-text-columns
 ```

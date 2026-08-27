@@ -1188,6 +1188,7 @@ mod tests {
                 y,
                 advance: 6.0,
                 size: 10.0,
+                direction: (1.0, 0.0),
                 invisible: false,
                 provenance: None,
             });

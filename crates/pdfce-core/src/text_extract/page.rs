@@ -103,10 +103,15 @@ pub(super) struct GlyphItem {
     pub x: f32,
     /// Origin y in default user space.
     pub y: f32,
-    /// Horizontal advance in default user space.
+    /// Advance in default user space, as a **length** along
+    /// [`Self::direction`] — not necessarily along the page's x axis.
     pub advance: f32,
     /// Effective font size in default user space.
     pub size: f32,
+    /// Unit vector of the writing direction in default user space (the
+    /// normalised x basis of the text rendering matrix). `(1.0, 0.0)`
+    /// for ordinary horizontal text and for a degenerate matrix.
+    pub direction: (f32, f32),
     /// Text rendering mode 3 or 7.
     pub invisible: bool,
     /// Enclosing `/Artifact` classification, if any.
@@ -190,6 +195,42 @@ impl Matrix {
     /// The magnitude of the transformed unit y vector.
     fn y_scale(self) -> f32 {
         self.c.hypot(self.d)
+    }
+
+    /// The **direction** of the transformed unit x vector, as a unit
+    /// vector — the half of the x basis that [`Self::x_scale`] throws
+    /// away.
+    ///
+    /// # Why this exists (`Pass 139.0`)
+    ///
+    /// [`Self::x_scale`] and [`Self::y_scale`] reduce the two basis
+    /// vectors of the text rendering matrix (§9.4.4) to their
+    /// **magnitudes**, and every consumer downstream then has no choice
+    /// but to assume the direction was `(1, 0)`. That assumption is true
+    /// of virtually every word-processor page and **false of every CAD
+    /// title block**, which stamps its source path with
+    /// `Tm = [0 1 -1 0 e f]` — ordinary horizontal-mode text placed by a
+    /// rotated matrix, not §9.7.4.3 vertical writing mode.
+    ///
+    /// Publishing the direction beside the magnitude is what lets
+    /// [`super::layout`] measure its gap thresholds along the line's own
+    /// axis instead of the page's. See
+    /// [`ExtractedGlyph::direction`](super::ExtractedGlyph::direction).
+    ///
+    /// # The degenerate case
+    ///
+    /// A zero-length x basis (`Tf 0`, or a singular CTM) has no
+    /// direction. `(1.0, 0.0)` is returned so that every ratio
+    /// comparison downstream stays finite and reduces to the historical
+    /// page-axis behaviour, rather than propagating a `NaN` into a
+    /// caller's hit test.
+    fn x_unit(self) -> (f32, f32) {
+        let len = self.a.hypot(self.b);
+        if len.is_finite() && len > 1e-9 {
+            (self.a / len, self.b / len)
+        } else {
+            (1.0, 0.0)
+        }
     }
 
     /// This matrix as PDF's 6-element `[a b c d e f]` row-vector array
@@ -971,6 +1012,22 @@ impl Walk<'_> {
         let y = trm.f;
         let size = trm.y_scale();
         let advance = tx * tm_ctm.x_scale() * if tx < 0.0 { -1.0 } else { 1.0 };
+        // `Pass 139.0`: the DIRECTION the two lines above discard.
+        //
+        // `size` and `advance` are the magnitudes of the two transformed
+        // basis vectors; `x`/`y` are exact and orientation-independent.
+        // Without the direction, nothing downstream can tell a title
+        // block's 90°-stamped file path from ordinary horizontal text,
+        // and the derived-layout thresholds — which were stated in page
+        // axes — then fire between every letter (see `layout::classify`).
+        //
+        // Taken from `trm` rather than `tm_ctm` because §9.4.4 makes
+        // `Trm` the matrix the glyph is actually placed by. The two
+        // agree in direction whenever `Tfs · Th > 0`, which is every
+        // real file; where they disagree (a negative `Tz`, a negative
+        // `Tf`) the glyph is genuinely drawn the other way round and
+        // `Trm` is the one that says so.
+        let direction = trm.x_unit();
 
         // `Tm` at the instant this glyph is shown — captured BEFORE the
         // advance below, because that is the matrix the glyph was placed
@@ -986,7 +1043,7 @@ impl Walk<'_> {
         // shown: accumulate their extent for the replacement run's bbox
         // and emit nothing (§14.9.4).
         if self.actual_text_active() {
-            self.extend_covered(x, y, advance, size);
+            self.extend_covered(x, y, advance, size, direction);
             return;
         }
 
@@ -1035,6 +1092,7 @@ impl Walk<'_> {
             y,
             advance,
             size,
+            direction,
             invisible,
             artifact,
             mcid: self.mcid(),
@@ -1245,23 +1303,26 @@ impl Walk<'_> {
 
     /// Grow the bounding box of the outermost active `/ActualText`
     /// level to include one suppressed glyph.
-    fn extend_covered(&mut self, x: f32, y: f32, advance: f32, size: f32) {
+    fn extend_covered(&mut self, x: f32, y: f32, advance: f32, size: f32, direction: (f32, f32)) {
         let Some(level) = self.marked.iter_mut().find(|l| l.actual_text.is_some()) else {
             return;
         };
-        let (x0, x1) = (f64::from(x), f64::from(x + advance));
         // The glyph box is approximated as one em tall from the
         // baseline, with a quarter-em descender — enough to locate a
         // replacement run on the page, which is all §14.9.4 N4 permits
-        // anyway.
-        let (y0, y1) = (f64::from(y - size * 0.25), f64::from(y + size * 0.75));
+        // anyway. `Pass 139.0`: the corners are taken in the glyph's own
+        // frame by the ONE copy of that arithmetic
+        // ([`super::glyph_cell`]) rather than restated here in page
+        // axes, which is how this box came to be hung off the wrong
+        // corner for rotated text.
+        let cell = super::glyph_cell(x, y, advance, size, direction);
         level.covered = Some(match level.covered {
-            None => Rect::from_corners(x0, y0, x1, y1),
+            None => cell,
             Some(r) => Rect {
-                llx: r.llx.min(x0.min(x1)),
-                lly: r.lly.min(y0),
-                urx: r.urx.max(x0.max(x1)),
-                ury: r.ury.max(y1),
+                llx: r.llx.min(cell.llx),
+                lly: r.lly.min(cell.lly),
+                urx: r.urx.max(cell.urx),
+                ury: r.ury.max(cell.ury),
             },
         });
     }

@@ -955,21 +955,68 @@ for page in &all.pages {                       // Vec<PageText>            mod.r
 }
 ```
 
-`TextRun` — `mod.rs:459`: `text`, `origin`, `glyphs`, `artifact`, `mcid`,
-`bbox: Option<Rect>`.
-`TextOrigin` — `mod.rs:157`: `Glyphs` | `ActualText` | `DerivedWordSpace` |
+`TextRun`: `text`, `origin`, `glyphs`, `artifact`, `mcid`,
+`bbox: Option<Rect>`; method `direction() -> (f32, f32)`.
+`TextOrigin`: `Glyphs` | `ActualText` | `DerivedWordSpace` |
 `DerivedLineBreak`. Only `Glyphs` runs have glyphs.
-`ExtractedGlyph` — `mod.rs:407`: `code`, `rung`, `text_start`, `text_len`,
-`x`, `y`, `advance`, `size`, `invisible`, `provenance`.
-`GlyphProvenance` — `mod.rs:325`: `operator_span`, `text_matrix`, `ctm`,
+`ExtractedGlyph`: `code`, `rung`, `text_start`, `text_len`,
+`x`, `y`, `advance`, `size`, **`direction: (f32, f32)`**, `invisible`,
+`provenance`; methods `up()`, `advance_end()`, `cell()`.
+`GlyphProvenance`: `operator_span`, `text_matrix`, `ctm`,
 `tf_size`, `composite`, … — `None` for every glyph unless
 `capture_provenance` was set.
+
+#### ★★★ 8.4.1 Text is not always horizontal — `direction` (`Pass 139.0`)
+
+**`advance` and `size` are MAGNITUDES.** They are the lengths of the two
+transformed basis vectors of §9.4.4's text rendering matrix. Until
+`Pass 139.0` the directions were discarded, and every consumer downstream
+had no choice but to assume the text ran along `+x`.
+
+That assumption holds for virtually every word-processor page and **fails on
+every CAD title block**, which stamps its source path with
+`Tm = [0 1 -1 0 e f]` — ordinary horizontal-mode text placed by a rotated
+matrix, **not** §9.7.4.3 vertical writing mode.
+
+| you want | use | not |
+|---|---|---|
+| the next glyph's origin | `g.advance_end() -> (f32, f32)` | `g.x + g.advance` |
+| a glyph's page-space box | `g.cell() -> Rect` | `min(x, x+advance)`, `y-0.25*size` … |
+| which way a run reads | `run.direction() -> (f32, f32)` | assuming `(1, 0)` |
+| "up" from the baseline, for a caret or `/QuadPoints` | `g.up()` | `(0, 1)` |
+| a caret's page-space point | `model.caret_point(pos) -> Option<(f32,f32)>` | `model.caret_x(pos)` |
+
+`(1.0, 0.0)` for ordinary horizontal text and for a degenerate matrix, so a
+consumer that ignores `direction` entirely behaves exactly as it did before
+the field existed.
+
+**Every glyph in one run shares that run's direction**, guaranteed:
+`text_extract::layout` closes a run on a direction change, and
+`EditableTextModel`'s Stage 1 splits a line on one. So `TextRun::direction()`
+answers from the first glyph without a scan, and `Line::direction` is a claim
+about the whole line rather than about its head.
+
+**What `direction` is not.** It is not `/WMode 1`. It is not a reading order
+(§14.8.2.3.1's *"may or may not coincide"* still stands — content order is
+unchanged). And `advance` is still **unsigned**: a glyph whose §9.4.4
+displacement came out negative (a negative `Tc` larger than the glyph, a
+negative `Tz`) steps *backward* along `direction` and that sign is not
+published. No such glyph exists in the corpus; the alternative would have
+flipped `direction` by 180° mid-run, which is worse for every consumer that
+wants to orient a caret.
+
+**The measurement**, so the size of this is not in doubt: on a SOLIDWORKS
+drawing set whose title block carries the source path stamped vertically,
+extraction returned that one line as **82 glyphs in 72 runs separated by 71
+derived line breaks**. It pasted into a text editor as one character per
+line. Acrobat returns one line.
 
 Coordinate summary for this section:
 
 | Value | Space | Units | Type |
 |---|---|---|---|
 | `ExtractedGlyph::{x,y,advance,size}` | default user space (y-UP) | points | `f32` |
+| `ExtractedGlyph::direction` | default user space, **unit vector** | — | `(f32, f32)` |
 | `TextRun::bbox` | default user space | points | `Option<Rect>` (`f64`) |
 | `GlyphProvenance::tf_size` | **text space** — the raw `Tf` operand | unscaled | `f32` |
 | `GlyphProvenance::{text_matrix, ctm}` | §8.3.3 row-vector `[a b c d e f]` | — | `[f32; 6]` |

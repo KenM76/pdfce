@@ -169,7 +169,35 @@ pub struct Line {
     pub glyphs: Vec<GlyphRef>,
     /// The line's baseline y in default user space (§9.4.4) — the shared
     /// y-origin of its glyphs, taken from the first.
+    ///
+    /// ★ **Meaningful as a *baseline* only when [`Self::direction`] is
+    /// horizontal** (`Pass 139.2`). For a line stamped at 90° every glyph
+    /// has a *different* `y` and this is merely the first one's — the line
+    /// does not have a shared y at all. The recognition thresholds that
+    /// consume it (indent, leading gap, column banding) are page-axis
+    /// heuristics for laid-out prose and are not claimed to be meaningful
+    /// on a rotated line; see [`Self::direction`].
     pub baseline_y: f32,
+    /// **The direction this line's text runs in**, as a unit vector in
+    /// default user space — the direction shared by every glyph in it
+    /// (`Pass 139.2`).
+    ///
+    /// `(1.0, 0.0)` for ordinary horizontal text. Taken from the line's
+    /// first glyph, which is safe because
+    /// [`text_extract::layout`](crate::text_extract) closes a run on a
+    /// direction change and this model clusters within runs.
+    ///
+    /// # What it does and does not fix
+    ///
+    /// [`Self::bbox`] and [`EditableTextModel::hit_test`] are computed in
+    /// this frame, so a click in the middle of a rotated letter lands on
+    /// that letter. **Block and column recognition are not** — those
+    /// stack lines by page-space `y` and band them by page-space `x`,
+    /// which is a model of laid-out prose, not of a title block. A
+    /// rotated line is recognised as a line and is hit-testable; it is
+    /// not meaningfully assigned to a paragraph. Stated here rather than
+    /// discovered.
+    pub direction: (f32, f32),
     /// A representative effective font size (the largest glyph's), used as
     /// the yardstick for the indent and baseline-jump thresholds.
     pub size: f32,
@@ -307,7 +335,27 @@ pub struct BlockRecognitionOptions {
     /// line, even if Pass 4 marked no break there. Default `0.30`, matching
     /// `ExtractOptions::line_gap_ratio` — this is the same rule 1, applied
     /// defensively so the model is correct on runs from any source.
+    ///
+    /// ★ **Measured PERPENDICULAR TO THE LINE, not along the page's y
+    /// axis** (`Pass 139.2`). "Baseline" here means the line's own
+    /// baseline, wherever it points. Written in page axes this clause
+    /// fired between every letter of a 90° line and shattered a
+    /// six-letter vertical label into six one-glyph lines.
     pub line_baseline_ratio: f32,
+    /// How nearly parallel two consecutive glyphs' writing directions
+    /// must be to stay on one line, as a **cosine**. Default
+    /// [`SAME_DIRECTION_COS`](crate::text_extract::SAME_DIRECTION_COS)
+    /// (about two degrees), matching
+    /// [`ExtractOptions::same_direction_cos`](crate::text_extract::ExtractOptions)
+    /// — the same rule 0, applied defensively for the same reason
+    /// `line_baseline_ratio` restates rule 1.
+    ///
+    /// Restating it here is what makes this stage correct on runs from
+    /// **any** source, including a caller that assembled a `PageText`
+    /// itself. Without it a line could hold glyphs running two different
+    /// ways, and [`Line::direction`] — taken from the first glyph — would
+    /// be a claim about the rest that nothing enforced.
+    pub same_direction_cos: f32,
 }
 
 impl Default for BlockRecognitionOptions {
@@ -317,6 +365,7 @@ impl Default for BlockRecognitionOptions {
             paragraph_leading_ratio: 0.5,
             indent_ratio: 1.0,
             line_baseline_ratio: 0.30,
+            same_direction_cos: crate::text_extract::SAME_DIRECTION_COS,
         }
     }
 }
@@ -346,6 +395,11 @@ struct RawLine {
     glyphs: Vec<GlyphRef>,
     baseline_y: f32,
     size: f32,
+    /// The line's writing direction, from its first glyph.
+    direction: (f32, f32),
+    /// The first glyph's origin — the point every in-frame projection in
+    /// [`EditableTextModel::hit_in_line`] is measured from.
+    origin: (f32, f32),
     llx: f32,
     lly: f32,
     urx: f32,
@@ -358,6 +412,8 @@ impl RawLine {
             glyphs: Vec::new(),
             baseline_y: g.y,
             size: g.size,
+            direction: g.direction,
+            origin: (g.x, g.y),
             llx: f32::MAX,
             lly: f32::MAX,
             urx: f32::MIN,
@@ -371,11 +427,17 @@ impl RawLine {
         self.glyphs.push(gref);
         self.size = self.size.max(g.size);
         // Glyph box, one em tall from the baseline with a quarter-em
-        // descender — the same approximation Pass 4's run box uses.
-        self.llx = self.llx.min(g.x.min(g.x + g.advance));
-        self.urx = self.urx.max(g.x.max(g.x + g.advance));
-        self.lly = self.lly.min(g.y - g.size * 0.25);
-        self.ury = self.ury.max(g.y + g.size * 0.75);
+        // descender — the same approximation Pass 4's run box uses, and
+        // `Pass 139.2` makes that literal: this calls the SAME function
+        // rather than restating the expression. It used to be a fourth
+        // hand-written copy of `min(x, x + advance)` etc., and was
+        // therefore wrong for rotated text in the same way the other
+        // three were, which is exactly `R92`'s failure mode.
+        let cell = crate::text_extract::glyph_cell(g.x, g.y, g.advance, g.size, g.direction);
+        self.llx = self.llx.min(cell.llx as f32);
+        self.urx = self.urx.max(cell.urx as f32);
+        self.lly = self.lly.min(cell.lly as f32);
+        self.ury = self.ury.max(cell.ury as f32);
     }
 
     fn bbox(&self) -> Rect {
@@ -495,9 +557,52 @@ impl<'a> EditableTextModel<'a> {
                     }
                     for (gi, g) in run.glyphs.iter().enumerate() {
                         let gref = GlyphRef::new(ri, gi);
+                        // `Pass 139.2`: the defensive split is measured
+                        // PERPENDICULAR TO THE LINE, not along the page's
+                        // y axis.
+                        //
+                        // Written in page axes this clause read
+                        // `(g.y - line.baseline_y).abs() > ratio * size`,
+                        // and on a 90° line every glyph advances one whole
+                        // advance in `y` — so it fired between EVERY
+                        // LETTER and shattered a six-letter vertical label
+                        // into six one-glyph lines. Measured on
+                        // `rotated-text.pdf` before this change: 16 lines
+                        // for four lines of text.
+                        //
+                        // ★ That is worth noticing on its own: `Pass
+                        // 139.1` had already stopped the EXTRACTION from
+                        // fragmenting rotated text, so `page.runs` held
+                        // one clean run per block — and this stage
+                        // re-fragmented it immediately. A second copy of
+                        // the same page-axis assumption, in a second
+                        // module, defeating the fix upstream of it. It was
+                        // found by SABOTAGE, not by a failing test: with
+                        // the runs already correct, the hit-test tests
+                        // passed for the wrong reason (each glyph had
+                        // become its own line, so each probe trivially
+                        // found "its" line).
+                        //
+                        // A direction change also splits, for the same
+                        // reason `layout::classify` breaks on one: a line
+                        // whose glyphs run two different ways has no
+                        // single direction to publish, and `Line::bbox`
+                        // and `hit_in_line` both need one.
                         let jumped = current.as_ref().is_some_and(|line| {
                             let size = line.size.max(g.size).max(1e-6);
-                            (g.y - line.baseline_y).abs() > options.line_baseline_ratio * size
+                            let (dx, dy) = line.direction;
+                            if dx * g.direction.0 + dy * g.direction.1 < options.same_direction_cos
+                            {
+                                return true;
+                            }
+                            // Perpendicular displacement from the line's
+                            // own origin: `d × dir`. For `dir = (1, 0)`
+                            // this is `−(g.y − baseline_y)`, and only its
+                            // magnitude is compared — the historical
+                            // expression, term for term.
+                            let (ox, oy) = line.origin;
+                            let perp = (g.x - ox) * dy - (g.y - oy) * dx;
+                            perp.abs() > options.line_baseline_ratio * size
                         });
                         if jumped {
                             if let Some(line) = current.take() {
@@ -591,6 +696,7 @@ impl<'a> EditableTextModel<'a> {
                     lines.push(Line {
                         glyphs: src.glyphs.clone(),
                         baseline_y: src.baseline_y,
+                        direction: src.direction,
                         size: src.size,
                         bbox: src.bbox(),
                         column,
@@ -831,7 +937,7 @@ impl<'a> EditableTextModel<'a> {
             let contains_y = y >= b.lly && y <= b.ury;
             let dy = (y - f64::from(line.baseline_y)).abs();
             if contains_y && x >= b.llx && x <= b.urx {
-                return self.hit_in_line(line, x);
+                return self.hit_in_line(line, x, y);
             }
             if contains_y && dy < best_dy {
                 best_dy = dy;
@@ -849,31 +955,71 @@ impl<'a> EditableTextModel<'a> {
                 }
             }
         }
-        chosen.and_then(|line| self.hit_in_line(line, x))
+        chosen.and_then(|line| self.hit_in_line(line, x, y))
     }
 
-    /// Resolve `x` to a caret within one line: the glyph whose x-extent
-    /// contains it (leading/trailing half), else clamp to the line ends.
-    fn hit_in_line(&self, line: &Line, x: f64) -> Option<TextPosition> {
-        let mut best: Option<(GlyphRef, &ExtractedGlyph, f64)> = None;
+    /// Resolve a page-space point to a caret within one line: the glyph
+    /// whose extent **along the line's own writing direction** contains it
+    /// (leading/trailing half), else clamp to the line ends.
+    ///
+    /// # `Pass 139.2`: projected onto the line, not onto the page x axis
+    ///
+    /// Every comparison here used to be against `x` alone — `g.x` versus
+    /// `g.x + g.advance` — which is right for a horizontal line and
+    /// meaningless for any other. On a line stamped at 90° all of its
+    /// glyphs share one `x`, so the first glyph "contained" every click
+    /// and the caret never moved; on a 180° line the extents ran the wrong
+    /// way and both ends collapsed onto one slot. Driven by the consuming
+    /// shell before the fix: a sweep down a six-letter 90° string selected
+    /// **five** of them, and a sweep along an eight-letter 180° string
+    /// selected **nothing at all**.
+    ///
+    /// The generalisation is one projection. `t` is the point's distance
+    /// along the line's direction from the line's own origin, and each
+    /// glyph's extent is `[t0, t0 + advance]` in the same coordinate. For
+    /// `direction = (1, 0)` and a line whose origin is its leftmost glyph,
+    /// `t` is `x − origin.x` and every comparison below reduces term for
+    /// term to the ones it replaced.
+    ///
+    /// The perpendicular component is deliberately **discarded**: the
+    /// caller has already chosen the line (by box containment or by
+    /// nearest baseline), so how far off the baseline the click was is no
+    /// longer a question this function answers.
+    fn hit_in_line(&self, line: &Line, x: f64, y: f64) -> Option<TextPosition> {
+        let (dx, dy) = (f64::from(line.direction.0), f64::from(line.direction.1));
+        // The point, projected onto the line's direction. The origin the
+        // projection is measured from cancels out of every comparison
+        // below, so any fixed point on the line would do; the first
+        // glyph's is used because it is what `RawLine` already records.
+        let origin = self
+            .glyph(*line.glyphs.first()?)
+            .map(|g| (f64::from(g.x), f64::from(g.y)))?;
+        let along = |px: f64, py: f64| (px - origin.0) * dx + (py - origin.1) * dy;
+        let t = along(x, y);
+
+        let mut best: Option<(GlyphRef, &ExtractedGlyph, f64, f64)> = None;
         for &gref in &line.glyphs {
             let g = self.glyph(gref)?;
-            let (x0, x1) = (f64::from(g.x), f64::from(g.x + g.advance));
-            let (lo, hi) = (x0.min(x1), x0.max(x1));
-            if x >= lo && x <= hi {
+            let t0 = along(f64::from(g.x), f64::from(g.y));
+            let t1 = t0 + f64::from(g.advance);
+            let (lo, hi) = (t0.min(t1), t0.max(t1));
+            if t >= lo && t <= hi {
                 let mid = (lo + hi) / 2.0;
-                return Some(self.boundary(gref, g, x > mid));
+                return Some(self.boundary(gref, g, t > mid));
             }
             // Track the nearest glyph for the clamp-to-end fallback.
-            let dist = if x < lo { lo - x } else { x - hi };
-            if best.is_none_or(|(_, _, d)| dist < d) {
-                best = Some((gref, g, dist));
+            let dist = if t < lo { lo - t } else { t - hi };
+            if best.is_none_or(|(_, _, d, _)| dist < d) {
+                best = Some((gref, g, dist, t0));
             }
         }
-        best.map(|(gref, g, _)| {
-            // Clamp: left of the nearest glyph ⇒ its leading edge; right
-            // ⇒ trailing.
-            let trailing = x > f64::from(g.x + g.advance / 2.0);
+        best.map(|(gref, g, _, t0)| {
+            // Clamp: before the nearest glyph's midpoint ALONG THE LINE ⇒
+            // its leading edge; after ⇒ trailing. "Before" and "after" are
+            // the line's own sense of the words, not the page's — which is
+            // the whole point of the projection, and is why a 180° line
+            // used to clamp both ends to the same slot.
+            let trailing = t > t0 + f64::from(g.advance) / 2.0;
             self.boundary(gref, g, trailing)
         })
     }
@@ -998,17 +1144,51 @@ impl<'a> EditableTextModel<'a> {
     /// exposed so vertical navigation can compute a "desired column" through
     /// the SAME glyph-boundary matching [`Self::hit_test`] / [`Self::line_range_at`]
     /// already encode, rather than the GUI re-deriving glyph x-positions.
+    /// ★ **A page-axis answer, and on a rotated line it is the wrong
+    /// question** (`Pass 139.2`). Every glyph of a 90° line shares one `x`,
+    /// so this returns the same number for every caret slot on it. The
+    /// signature is the limit — a scalar cannot name a point on a line
+    /// that is not horizontal — which is the same shape of defect
+    /// `PickedLine::object_index` had in `Pass 138.0`: an answer made
+    /// unrepresentable by its own return type.
+    ///
+    /// It is kept, un-deprecated, because for horizontal text it is
+    /// exactly right and is what "desired column" for Up/Down navigation
+    /// means. Use [`Self::caret_point`] when the line may be rotated.
     #[must_use]
     pub fn caret_x(&self, pos: TextPosition) -> Option<f32> {
+        self.caret_point(pos).map(|(x, _)| x)
+    }
+
+    /// **The page-space point of caret `pos`** — the origin of the glyph
+    /// that begins at `pos.byte_offset`, or the
+    /// [`advance_end`](crate::text_extract::ExtractedGlyph::advance_end) of
+    /// the glyph that ends there (`Pass 139.2`).
+    ///
+    /// `None` under exactly the same conditions as [`Self::caret_x`]: no
+    /// glyph in `pos.run` has a boundary at that offset, because the
+    /// position is stale or the run carries no clustered glyph (derived
+    /// whitespace, `/ActualText`).
+    ///
+    /// # Why this exists beside [`Self::caret_x`]
+    ///
+    /// A caret is a *point on a baseline*, and a baseline has a direction.
+    /// `caret_x` returns the x half of one, which is complete for
+    /// horizontal text and degenerate for anything else — on a 90° line
+    /// every slot has the same `x`. Pair this with the line's
+    /// [`Line::direction`] and a shell has everything it needs to draw the
+    /// caret *along* the text rather than always vertically.
+    #[must_use]
+    pub fn caret_point(&self, pos: TextPosition) -> Option<(f32, f32)> {
         let run = self.page.runs.get(pos.run)?;
         for g in &run.glyphs {
             let lo = g.text_start as usize;
             let hi = lo + g.text_len as usize;
             if pos.byte_offset == lo {
-                return Some(g.x);
+                return Some((g.x, g.y));
             }
             if pos.byte_offset == hi {
-                return Some(g.x + g.advance);
+                return Some(g.advance_end());
             }
         }
         None
@@ -1021,10 +1201,39 @@ impl<'a> EditableTextModel<'a> {
     /// slot of the adjacent line without a third re-implementation of
     /// nearest-glyph matching in the GUI (§3). `None` for an out-of-range
     /// `line_index` or a line whose glyphs are all stale.
+    ///
+    /// ★ **Page-axis, and it stays that way on purpose** (`Pass 139.2`).
+    /// `x` alone cannot name a slot on a line that is not horizontal, so
+    /// this delegates with the line's own `baseline_y` as the second
+    /// coordinate — which is exact for horizontal text and, for a rotated
+    /// line, resolves as though the caller had clicked on its baseline at
+    /// that `x`. Use [`Self::caret_on_line_nearest_point`] when the line
+    /// may be rotated. Not deprecated: this *is* the right shape for the
+    /// Up/Down "desired column" it was built for.
     #[must_use]
     pub fn caret_on_line_nearest_x(&self, line_index: usize, x: f64) -> Option<TextPosition> {
         let line = self.lines.get(line_index)?;
-        self.hit_in_line(line, x)
+        let y = f64::from(line.baseline_y);
+        self.hit_in_line(line, x, y)
+    }
+
+    /// The caret on line `line_index` nearest a page-space **point**,
+    /// resolved along that line's own writing direction (`Pass 139.2`).
+    ///
+    /// The two-coordinate twin of [`Self::caret_on_line_nearest_x`], and
+    /// the same body — [`Self::hit_test`] calls it too, so there is one
+    /// implementation of within-line resolution rather than three. `None`
+    /// for an out-of-range `line_index` or a line whose glyphs are all
+    /// stale.
+    #[must_use]
+    pub fn caret_on_line_nearest_point(
+        &self,
+        line_index: usize,
+        x: f64,
+        y: f64,
+    ) -> Option<TextPosition> {
+        let line = self.lines.get(line_index)?;
+        self.hit_in_line(line, x, y)
     }
 
     /// Move the caret one glyph boundary left (Pass 14.4, UI spec §4.5).
@@ -1274,6 +1483,7 @@ mod tests {
                 y,
                 advance: adv,
                 size,
+                direction: (1.0, 0.0),
                 invisible: false,
                 provenance: None,
             });

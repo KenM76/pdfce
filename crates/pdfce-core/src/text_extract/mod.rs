@@ -435,8 +435,42 @@ pub struct ExtractedGlyph {
     pub x: f32,
     /// Glyph origin y in default user space.
     pub y: f32,
-    /// Horizontal advance in default user space, including `Tc`, `Tw`,
-    /// `Tz` and any `TJ` adjustment attributed to this glyph.
+    /// Advance in default user space — the step from this glyph's origin
+    /// to the next one, **as a length along [`Self::direction`]**,
+    /// including `Tc`, `Tw` and `Tz`.
+    ///
+    /// # Two corrections to what this comment used to say (`Pass 139.0`)
+    ///
+    /// It read *"Horizontal advance in default user space, including
+    /// `Tc`, `Tw`, `Tz` and any `TJ` adjustment attributed to this
+    /// glyph."* Both halves of that were wrong, and each cost a
+    /// downstream reader an afternoon:
+    ///
+    /// 1. **It is not horizontal.** It is the step along whatever
+    ///    direction the text runs, which for a CAD title block's
+    ///    vertically-stamped file path is the page's *y* axis. Use
+    ///    [`Self::advance_end`] rather than `x + advance`.
+    /// 2. **`TJ` is not in it.** §9.4.4 folds the adjustment into the
+    ///    displacement formula as `(w0 − Tj/1000)`, which reads as
+    ///    though it belonged to the glyph being shown — but Table 109 is
+    ///    explicit that the number "shall be subtracted from the current
+    ///    horizontal coordinate", i.e. it moves the position and *then*
+    ///    the next glyph is shown there. `show_array` therefore applies
+    ///    it to the text matrix before this glyph is placed, so it is
+    ///    already visible in [`Self::x`]/[`Self::y`] and never in
+    ///    `advance`.
+    ///
+    /// # A limit that is named rather than hidden
+    ///
+    /// This is a **magnitude**: it is `|tx| × |Trm x-basis|`, so it is
+    /// never negative. A glyph whose §9.4.4 displacement `tx` came out
+    /// negative — a negative `Tc` larger than the glyph's own width, or
+    /// a negative `Tz` — steps **backward** along [`Self::direction`],
+    /// and that sign is not published. Such a glyph is pathological and
+    /// pdfce has never seen one in the corpus; the alternative (a signed
+    /// advance) would have flipped [`Self::direction`] by 180° in the
+    /// middle of a run, which is worse for every consumer that wants to
+    /// orient a caret.
     pub advance: f32,
     /// Effective font size in default user space (the y-scale of the
     /// text rendering matrix). Drives the derived line/word thresholds
@@ -444,6 +478,42 @@ pub struct ExtractedGlyph {
     /// a, b, c and d fields of the current text matrix" rather than from
     /// `Tfs` alone.
     pub size: f32,
+    /// **Unit vector of the writing direction in default user space** —
+    /// the normalised x basis of §9.4.4's text rendering matrix
+    /// (`Pass 139.0`).
+    ///
+    /// `(1.0, 0.0)` for ordinary horizontal text, so a consumer that
+    /// ignores this field behaves exactly as it did before the field
+    /// existed. `(0.0, 1.0)` for text stamped bottom-to-top,
+    /// `(-1.0, 0.0)` for upside-down, `(0.0, -1.0)` for top-to-bottom.
+    ///
+    /// # Why it is published, when [`GlyphProvenance`] could derive it
+    ///
+    /// [`GlyphProvenance`] carries `text_matrix` and `ctm`, from which
+    /// this is recoverable — but provenance is the **editing**
+    /// substrate: switching it on costs an owned font-resource name and
+    /// an `Arc` clone *per glyph*, and it is off by default. A reader
+    /// that only wants to know which way a line runs should not pay the
+    /// surgery's price. This is a property of the glyph's *placement*,
+    /// exactly like the four numbers above it.
+    ///
+    /// # What it is NOT
+    ///
+    /// **Not §9.7.4.3 vertical writing mode** (`/WMode 1`), which is a
+    /// different feature with different metrics and is not implemented.
+    /// This is ordinary horizontal-mode text placed by a rotated matrix
+    /// — what every CAD exporter and every rotated Word text box emits.
+    ///
+    /// # The file that made this necessary
+    ///
+    /// A SOLIDWORKS drawing set stamps its source path down the left
+    /// edge of the title block with `Tm = [0 1 -1 0 e f]`. Before this
+    /// field existed, extraction returned that one line of text as **82
+    /// glyphs in 72 runs separated by 71 derived line breaks**, because
+    /// [`layout`]'s baseline threshold is stated in page axes and one
+    /// advance of a capital letter exceeds it. Pasting it into a text
+    /// editor gave one character per line.
+    pub direction: (f32, f32),
     /// `true` when the glyph was shown in text rendering mode 3
     /// (invisible) or 7 (clip).
     ///
@@ -462,6 +532,135 @@ pub struct ExtractedGlyph {
     /// this keeps the default Pass 4 output byte-for-byte unchanged. When
     /// present it is SOURCED, never derived. See [`GlyphProvenance`].
     pub provenance: Option<GlyphProvenance>,
+}
+
+/// **How nearly parallel two glyphs' writing directions must be to count
+/// as the same line** — the default for
+/// [`ExtractOptions::same_direction_cos`] and
+/// [`BlockRecognitionOptions::same_direction_cos`](crate::text_edit::BlockRecognitionOptions),
+/// expressed as the cosine of the permitted angle. `0.99939` is about two
+/// degrees.
+///
+/// # Why any tolerance at all, and why this much
+///
+/// Exact equality would be defensible: for horizontal text every producer
+/// emits `Tm` entries of exactly `0.0`, so the normalised x basis comes out
+/// bit-identical `(1.0, 0.0)` glyph after glyph. But a page that applies its
+/// rotation through the CTM rather than through `Tm` accumulates float error
+/// in the matrix product, and a fitted or slightly-skewed baseline — a
+/// scanned page's OCR layer, a plotted drawing — genuinely wobbles by a
+/// fraction of a degree without changing lines.
+///
+/// Two degrees is loose enough for both and far tighter than any real
+/// direction change: the smallest one a document actually contains is a
+/// quarter turn. Over a 100 pt line, 2° is 3.5 pt of drift — under the
+/// line-gap threshold for any font above 12 pt, so the perpendicular clause
+/// would have caught it anyway.
+///
+/// It is a **knob rather than a hidden constant** for the reason this
+/// module's three ratios are: a constant with no spec basis is a constant
+/// that should be arguable (S1–S9). Nothing in ISO 32000 defines a line, so
+/// nothing in it defines when two glyphs are on the same one.
+pub const SAME_DIRECTION_COS: f32 = 0.999_39;
+
+/// The axis-aligned default-user-space bounds of one glyph's
+/// approximate cell — **the one copy of that arithmetic**.
+///
+/// # The approximation
+///
+/// One em tall from the baseline with a quarter-em descender, one
+/// `advance` wide, taken **in the glyph's own frame**: the four corners
+/// are `origin + t·advance·direction + s·size·up` for `t ∈ {0, 1}` and
+/// `s ∈ {−0.25, +0.75}`, where `up` is `direction` turned a quarter turn
+/// counter-clockwise. That is enough to locate a run on the page, which
+/// is all a run-level bbox is for; it is not a typographic bounding box
+/// and does not consult the font's own metrics.
+///
+/// # Why it is a function (`Pass 139.0`)
+///
+/// This expression was written out **four times** — in
+/// [`layout::Builder::push_glyph`](layout), in
+/// `page::Walk::extend_covered`, in
+/// [`crate::text_edit::model`]'s line accumulator and in the CLI — each
+/// time as `min(x, x + advance)` / `y − 0.25·size` .. `y + 0.75·size`,
+/// i.e. each time assuming the direction was `(1, 0)`. That is `R92`'s
+/// failure mode exactly: one question answered in four places, drifting
+/// into being wrong *together*. Four copies were wrong for rotated text
+/// and there was no single place to fix them.
+///
+/// # The result is still axis-aligned
+///
+/// [`Rect`] is an axis-aligned box (§7.9.5), so a rotated glyph's cell
+/// is reported as its *enclosing* page-axis rectangle rather than as an
+/// oriented quadrilateral. For a 90° glyph that box is correct and
+/// tight; it is only for a direction off the axes by some angle other
+/// than a multiple of 90° that it is loose. A caller needing the
+/// oriented quad has [`ExtractedGlyph::direction`] and can build it.
+#[must_use]
+pub fn glyph_cell(x: f32, y: f32, advance: f32, size: f32, direction: (f32, f32)) -> Rect {
+    let (dx, dy) = direction;
+    // A quarter turn counter-clockwise, which is "up" from the baseline
+    // in the glyph's own frame regardless of how that frame is rotated.
+    let (ux, uy) = (-dy, dx);
+    let (asc, desc) = (size * 0.75, size * -0.25);
+    let mut llx = f32::MAX;
+    let mut lly = f32::MAX;
+    let mut urx = f32::MIN;
+    let mut ury = f32::MIN;
+    for along in [0.0_f32, advance] {
+        for across in [desc, asc] {
+            let px = x + along * dx + across * ux;
+            let py = y + along * dy + across * uy;
+            llx = llx.min(px);
+            lly = lly.min(py);
+            urx = urx.max(px);
+            ury = ury.max(py);
+        }
+    }
+    Rect::from_corners(
+        f64::from(llx),
+        f64::from(lly),
+        f64::from(urx),
+        f64::from(ury),
+    )
+}
+
+impl ExtractedGlyph {
+    /// The unit vector one quarter-turn counter-clockwise from
+    /// [`Self::direction`] — "up" from the baseline, in the glyph's own
+    /// frame.
+    ///
+    /// `(0.0, 1.0)` for ordinary horizontal text. This is what a caller
+    /// drawing a caret, an I-beam or a `/QuadPoints` array needs
+    /// alongside the direction, and publishing it removes the one place
+    /// a consumer can get the handedness backwards.
+    #[must_use]
+    pub const fn up(&self) -> (f32, f32) {
+        (-self.direction.1, self.direction.0)
+    }
+
+    /// The origin of the **next** glyph on this baseline —
+    /// `origin + advance × direction`.
+    ///
+    /// Use this rather than `x + advance`, which is only correct when
+    /// the run happens to be horizontal. See [`Self::advance`] for the
+    /// one case where this is not exact (a negative §9.4.4 displacement,
+    /// whose sign is not published).
+    #[must_use]
+    pub fn advance_end(&self) -> (f32, f32) {
+        (
+            self.x + self.advance * self.direction.0,
+            self.y + self.advance * self.direction.1,
+        )
+    }
+
+    /// The axis-aligned default-user-space bounds of this glyph's
+    /// approximate cell — see [`glyph_cell`] for the approximation and
+    /// for why it is one function rather than four expressions.
+    #[must_use]
+    pub fn cell(&self) -> Rect {
+        glyph_cell(self.x, self.y, self.advance, self.size, self.direction)
+    }
 }
 
 /// One contiguous run of extracted text sharing an origin and a
@@ -502,6 +701,32 @@ impl TextRun {
     #[must_use]
     pub const fn is_sourced(&self) -> bool {
         self.origin.is_sourced()
+    }
+
+    /// **The direction this run's text runs in**, as a unit vector in
+    /// default user space (`Pass 139.0`).
+    ///
+    /// `(1.0, 0.0)` for ordinary horizontal text, and for any run that
+    /// carries no glyphs (every derived-whitespace run, and every
+    /// `/ActualText` run — §14.9.4 N4 makes per-character correspondence
+    /// impossible there, so the replacement has a box and no baseline).
+    ///
+    /// # Why a run-level answer is meaningful at all
+    ///
+    /// Because [`layout`] closes a run whenever the direction changes,
+    /// exactly as it does for a baseline change: **every glyph in one
+    /// run shares this direction by construction.** The first glyph's is
+    /// therefore the run's, and is returned without scanning the rest.
+    ///
+    /// That guarantee is the reason this is published as well as the
+    /// per-glyph field. A shell orienting an I-beam, drawing a caret
+    /// along a baseline, or building a markup annotation's
+    /// `/QuadPoints` wants one answer per selectable unit, not one per
+    /// glyph — and asking for it here means never having to decide what
+    /// to do when the glyphs disagree.
+    #[must_use]
+    pub fn direction(&self) -> (f32, f32) {
+        self.glyphs.first().map_or((1.0, 0.0), |g| g.direction)
     }
 
     /// **Whether pdfce's in-place text editing can reach this run, and if
@@ -958,6 +1183,22 @@ pub struct ExtractOptions {
     /// file, so this is a guess about a thing the standard declines to
     /// define.
     pub backward_jump_ratio: f32,
+    /// How nearly parallel two consecutive glyphs' writing directions
+    /// must be to stay on one line, as a **cosine**. Default
+    /// [`SAME_DIRECTION_COS`] (about two degrees).
+    ///
+    /// A direction change is tested **before** the three ratios above and
+    /// closes the line whatever the gap. That is what guarantees every
+    /// glyph in a [`TextRun`] shares one direction, which is what makes
+    /// [`TextRun::direction`] answerable from the first glyph rather than
+    /// by a scan-and-reconcile.
+    ///
+    /// Setting this to `-1.0` disables the rule entirely, restoring the
+    /// pre-`Pass 139.1` behaviour where a horizontal run and a vertical
+    /// run that happen to abut are merged into one. Nothing recommends
+    /// that; the knob exists because the number is arguable, not because
+    /// turning it off is.
+    pub same_direction_cos: f32,
     /// Maximum form-XObject nesting depth (§8.10.1).
     ///
     /// Defaults to [`crate::content::MAX_FORM_DEPTH`], which is where the
@@ -1011,6 +1252,7 @@ impl Default for ExtractOptions {
             word_gap_ratio: 0.20,
             line_gap_ratio: 0.30,
             backward_jump_ratio: 0.50,
+            same_direction_cos: SAME_DIRECTION_COS,
             max_form_depth: crate::content::MAX_FORM_DEPTH,
             capture_provenance: false,
             // Read off the enum rather than restated, so the settings
