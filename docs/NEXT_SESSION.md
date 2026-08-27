@@ -13,30 +13,37 @@ can falsify it.
 
 ## §A — COLD START
 
-**The previous session shipped SIX Passes: two print-colour, two OCR, two
-form-recursion. The print-colour pair were found by running the suite; the
-other four came from the operator's own reports on the GUI channel:**
+**The previous session shipped three Passes and closed four operator
+reports.** Every one of them came from Ken or from the `pdfceGUI` channel
+looking at something on a screen; **none was found by a gate.**
 
-- **`Pass 130.2`** (`fafc0c2`) — **an overprinting image ignored overprint
-  while a rectangle of the same colour did not.** §11.7.4.3 now runs for a
-  sampled image. Suite: 7 failures → 4.
-- **`Pass 130.3`** (`cd4de8d`) — **a spot colour painted nothing at all on a
-  print-bound page.** One function was answering two questions; see `§D`.
+- **`Pass 137.0`** (`523ca6d`) — **a gradient and a solid of the same ink
+  were different colours.** Analytic shadings now composite in authored ink
+  whether or not overprint is in force.
+- **`Pass 137.1`** (`d1ce4ac`) — **the mesh half, which `137.0` structurally
+  could not reach.** A mesh has no `ColorRamp`; `Shade::Ink` is the carrier
+  it needed. Overprint for meshes came along free.
+- **`Pass 138.0`** (`6256c93`) — **the marquee and the measure tool still
+  could not see inside a form XObject.** Three `pdfceGUI` requests, all
+  closed, plus one judgement call they explicitly asked the engine to make.
 
 ### ★ Verified from a shell at write time — re-run, do not copy forward
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `640d817` | `git rev-parse --short HEAD` |
-| `git describe --tags` | `v0.14.0-29-g640d817` | `git describe --tags` |
-| `origin/main` | **LEVEL — 0 ahead. Everything is PUSHED.** | `git rev-list --count origin/main..main` |
+| `HEAD` | `51c30d6` | `git rev-parse --short HEAD` |
+| `git describe --tags` | `v0.14.0-39-g51c30d6` | `git describe --tags` |
+| `origin/main` | **LEVEL — everything is PUSHED** | `git rev-list --count origin/main..main` |
 | tag at `HEAD` | none; highest is `v0.14.0` | `git tag --points-at HEAD` |
 | working tree | **clean** | `git status --porcelain` |
-| newest backup bundle | `pdfce-20260827-final-640d817-full.bundle`, `git bundle verify` **okay**, *"records a complete history"* | `ls -lt D:\Dev\pdfce-backups\` |
-| gates on disk | **19**; 18 run with no arguments | `ls tools/check-*` |
-| CI at `640d817` | ★ **GREEN — run `33065959004`, all 10 jobs success, READ from GitHub rather than assumed** | `gh run list --branch main --limit 3` |
-| `docs/core-api` verbs | **146** | `python tools/check-core-api-verbs.py` |
-| `crates/pdfce-core/src/edit.rs` | **32,159** lines | `grep -c "" …` |
+| tests | **4,385 passing, 0 failing** | `cargo test --workspace --release` |
+| gates | **19 on disk; 18 run with no arguments; all green** | `ls tools/check-*` |
+| `fmt` / `clippy` | clean | `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` |
+| fuzz | all targets compile | `cargo +nightly fuzz build` |
+| wasm32 | `pdfce-core` + `pdfce-render` compile | `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` |
+| GUI-core invariant | no GUI dep in either engine crate | `cargo tree -p pdfce-core` |
+| print-conformance | **5 FAIL, 35 pass, 11 UNRESOLVED** | see `§C` |
+| **CI at `51c30d6`** | **NOT READ — read it from GitHub before believing anything about it** | `gh run list --branch main --limit 3` |
 
 ★★★ **PUSHING NO LONGER NEEDS TO BE ASKED — decision `090`, 2026-08-27.**
 Ken's ruling, verbatim and in full: ***"always push."*** An ordinary
@@ -53,297 +60,207 @@ generously, with the reasoning in decision `090`:
   because rewriting commits broke fourteen document citations;
 - **any branch other than `main`**, or creating remote branches/tags.
 
-`CLAUDE.md` rule 8 and `LEGAL.md` §1 are both amended in place, old wording
-kept legible.
-
-★★ **AND THE HABIT THAT MATTERS MORE NOW, NOT LESS.** This handoff has carried
-for several sessions that **four releases went out on a tag whose CI run was
-red**, each time because a carried-forward sentence was mistaken for a query.
-When pushing stops requiring a decision, **nothing forces anyone to stop and
-look**. Read CI's colour from GitHub after every push; the row above says which
-run and how it was obtained, precisely so the next reader can tell a
-measurement from an inheritance.
+★ **Scrub the public-facing gate green before pushing regardless.** The
+repository is public, so a push publishes (`LEGAL.md` §1.1).
+`tools/check-suite-name-absent.py` scans **untracked** files too — which is
+why scratch renders belong in `D:\Dev\temp\`, never in the tree.
 
 ---
 
-## §B — ★★ THE FIRST THING, AND IT IS NOT CODE: THE DISK IS FULL
+## §B — THE DISK
 
-**`D:` is at 99–100%.** 954 GB total, **~7 GB free**, and it went under 3 GB
-mid-session.
+**35 GB free of 954 GB (97 % used).** `target/` is 9.7 GB and `fuzz/target/`
+is 1.1 GB; both are regenerable and both were left in place, because the next
+session will want them warm and a cold `cargo test --workspace --release` is
+several minutes.
 
-**It is not a theoretical problem — it corrupted a build.** A
-`cargo test --workspace` ran out of space part-way, left truncated artefacts,
-and the *next* run failed with `can't find crate for 'std'` and
-`could not exec the linker` — errors that read like a broken toolchain or
-broken code, and are neither. Half an hour went into it.
-
-What was done, all of it regenerable, none of it operator data:
-
-```
-rm -rf target/debug target/debug/incremental fuzz/target \
-       target/wasm32-unknown-unknown target/aarch64-apple-darwin \
-       target/x86_64-unknown-linux-gnu
-```
-
-and the test sweep was then run with **`CARGO_PROFILE_DEV_DEBUG=false`**, which
-is the trick worth carrying: debug info is most of the bulk, and the workspace's
-debug tree is ~23 GB with it and a fraction of that without. `cargo test`
-otherwise does not fit.
-
-**`D:\Dev\pdfce\target` is ~12 GB of the total.** The rest is not pdfce's and is
-not this role's to touch. **This is an operator item — surface it.**
+If you need space: `cargo clean` and `cargo clean --manifest-path
+fuzz/Cargo.toml` recover ~11 GB between them. Last session's scratch renders
+under `D:\Dev\temp\pdfce\` were **already deleted** at shutdown; put new ones
+there, never in the tree.
 
 ---
 
-## §C — BOTH OPERATOR REQUESTS ARE SHIPPED. WHAT IS LEFT OF THEM
+## §C — THE FIVE REMAINING CONFORMANCE FAILURES, AND THE ONE THAT IS SCOPED
 
-★ **Do not start either from scratch — read this first.** Both 2026-08-26
-requests from `pdfceGUI` are done, answered on their channel
-(`open/note_form_recursion_and_ocr_as_an_edit_both_shipped.md`) and filed.
+Run: `python tools/suite-check.py <corpus> --reference-dir <refs>` — the
+private map names both directories. Current standing:
 
-### Shipped
+★ **Patch stems are deliberately NOT listed here** — operator ruling
+2026-08-25, enforced by `tools/check-suite-name-absent.py`, which scans
+untracked files as well as tracked ones. The gate caught this table on its
+first draft. Get the stems from the harness's own output; they are stable and
+the private map names the corpus.
 
-- **Clicking objects works.** `PageObjects::leaves` (`FormLeaf`) +
-  `hit_test_point_deep` + `HitTarget`. A form is **excluded** from the
-  first-click candidate list outright, because a `/BBox` is a §8.10.1
-  clipping-**extent** declaration and not a statement about coverage.
-- **OCR is an edit.** `EditSession::add_ocr_layer`, one undo entry per run,
-  reads the session's current revision. Plus `pdfce-cli ocr --in-place`
-  through the same verb.
+| what it tests | traps | note |
+|---|---:|---|
+| spot-colour overprint | 6 | |
+| white overprint | 5 | |
+| **five-colorant `DeviceN` image** | 1 | ★ **diagnosed — see below** |
+| ICC source profile | 4 | colour management |
+| blend modes in an ICC RGB group | 12 | |
 
-### ★★ What was owed out of them — TWO OF FOUR ARE NOW DONE
+### ★★★ THE FIVE-COLORANT `DeviceN` ONE is diagnosed and NOT started — start here if you want a clean win
 
-1. ~~**`unshare_form` (`Pass 119.1`)**~~ — **SHIPPED** (`cd5e5cc`). The `R206`
-   obligation is **discharged**, and decision 076's compliance claim now reads
-   *satisfied* after a three-step correction (false → outstanding → satisfied,
-   all three readable in order in `ARCHITECTURE.md` §12). An operator can give
-   one page a private copy of a shared form; a nested invocation is refused by
-   name.
-2. ~~**A CLI surface for leaves**~~ — **SHIPPED** (`5f6ac58`, amended from
-   `a2f7b48` after a mangled commit message was rewritten). `object-list`
-   prints `leaf` rows with containment and `editable=false`, plus `leaves=`,
-   `form_cycles=` and `form_depth_overflows=` appended to the summary line.
-3. **`--in-place` on the other editing subcommands.** ★ Still owed. Two
-   subcommands' `--help` promised the flag while it existed nowhere; the
-   wording is corrected and `ocr` has it, the rest do not.
-4. **Retire `pdfce-render`'s `MAX_XOBJECT_DEPTH`.** ★ Still owed. The nesting
-   bound now lives once in `content::MAX_FORM_DEPTH` and `text_extract` and
-   `vector` both take it from there; render still has its own `pub const`, and
-   retiring it is a cross-crate breaking change.
+**The trap detector fires on a photograph, and that firing is a red herring.**
+The real defect is visible to the eye: a **five-colorant `DeviceN` photograph
+renders visibly desaturated** — washed toward grey where Acrobat's reference
+is saturated green.
 
-### ★ And a fourth, newly visible
+Measured on that page: `cmyk_bridged_pixels = 25870`,
+`cmyk_native_image_pixels = 0`. The image is bridged through sRGB on a page
+that composites in ink.
 
-**`Pass 119.4`** — retarget `reflow_block` / `add_text` into form XObjects.
-Named in its own Backlog entry as needing **its own disclosure design before it
-can ship safely**: appending to a form's content stream changes *every*
-invocation site, which is a different disclosure shape from `edit_text`'s
-single-target report. Do not treat it as plumbing.
+**Cause**, in `crates/pdfce-render/src/image.rs`:
 
-### ★★★ THE THING TO NOT UNDO
-
-**The recursion is not a read-only change**, and the design turns on it.
-Thirteen CLI verbs take a paint-order object index and **eleven sites in
-`edit.rs` resolve one** — every one writing to the **page's** content stream. A
-leaf's token range indexes the **form's** stream: a different buffer, and an
-*in-range* one, so the corruption would be silent.
-
-⇒ `PageObjects::leaves` is a **separate list** from `PageObjects::objects`, and
-`the_flat_object_list_is_unchanged_by_recursion` guards it. Merging them
-"for tidiness" re-points eleven write sites at the wrong buffer. If editing
-*through* the recursion is ever built, it needs a vector-side invocation census
-first and a verb that takes a containment path — not an object index.
-
-## §D — WHAT THE TWO PASSES DECIDED, IF YOU TOUCH THIS GROUND
-
-**No rule and no decision was minted.** Ceiling: rules **`R218`** (next free
-`R219`), decisions **`089`** (next free `090`). Confirm with
-`python tools/check-ledger-numbers.py`.
-
-1. **★★★ ONE FUNCTION WAS ANSWERING TWO QUESTIONS, AND BOTH ANSWERS WERE
-   RIGHT.** `overprint::authored_tints` answers *"which **process** tints did
-   this source state?"* — Table 149's question. A spot names none, so it
-   answers `[0,0,0,0]`, **correctly**. `authored_cmyk` handed that same answer
-   to the compositor as the paint's **colour**, where zero ink is blank paper.
-   Neither function was wrong. ⇒ *When two questions have the same type
-   signature, one function will eventually answer both, and the failure is
-   invisible at both ends.*
-
-2. **★★★ A FAILURE COUNT THAT RISES WHEN THE RENDERER IMPROVES IS THE
-   SIGNATURE OF A FALSE PASS BEING REMOVED.** `Pass 130.3` took the suite from
-   4 failures to **5** while moving the two patches concerned **closer** to
-   Acrobat (mean abs distance 24.8→19.9 and 41.4→28.5). They paint CMYK over a
-   spot backdrop; while the spot was invisible there was nothing to wrongly
-   knock out, and a white trap cross on white paper has no contrast to detect.
-   **They were passing because they were rendering nothing** — five of six
-   cells on one were blank.
-
-3. **★★ TWO "OBVIOUS FIXES" ARE REFUTED, NOT UNTRIED.** For a spot-only source
-   under `/OP true`, preserving the whole backdrop looks like a defect. It is
-   not:
-
-   | behaviour | suite failures |
-   |---|---|
-   | preserve the backdrop — shipped | **4** |
-   | ink union, `max(c_b, c_s)` | 6 |
-   | paint the flattened tint normally | 8 |
-
-   Three patches exist whose whole subject is that a white spot set to
-   overprint must not knock out what is under it. Recorded on
-   `overprint::erases_the_paint`; the refuted `ComponentRule::MoreInk` was
-   **removed** rather than left callable-and-uncalled. **Do not re-attempt
-   without a stronger oracle.**
-
-4. **★★ A SHADING-SITE REFUSAL WAS ALSO BUILT AND REVERTED.** It made a missing
-   451×29 spot gradient bar appear and **took the check marks drawn under it
-   away** — which is the criterion that patch actually states. The suite score
-   did not move either way, because that patch is `mark?` and the harness
-   cannot score it. ⇒ *A harness reporting "no change" can be blind rather than
-   reassuring.*
-
-5. **★ RECORDED GROUND TRUTH WAS WRONG AND IS CORRECTED** (`3e70cdb`).
-   `suite-check.py`'s docstring said pdfce drew none of two patches' check
-   marks; it draws **all** of them. What it misses is the *bar behind* them.
-   The error's shape is the lesson: the original measurement asked the right
-   question of a whole-page diff **dominated by the missing bar**, and "this
-   region differs and the marks are in it" was read as "the marks are missing".
-   **A large real difference swallowed a smaller question about the same
-   pixels.**
-
----
-
-## §E — THE PRINT SUITE, AND HOW TO RUN IT PROPERLY
-
-**Corpus:** `D:\Dev\temp\suite-patches` (51 PDFs). **Reference renders:**
-`D:\Dev\temp\acro-refs` (51 PNGs). The private map outside this repository holds
-the id↔filename mapping and the two environment variables.
-
-★ **Its `manifest.json` and `README.md` pointed at a pre-scrub directory name
-that no longer exists** — a session following the map got "corpus not found"
-and would reasonably have concluded the corpus was gone. **Repaired
-2026-08-26.**
-
-★★ **ALWAYS PASS `--reference-dir`.** It existed and was going unused. Measured
-on the same tree, same binary, only the flag differing:
-
-```
-without   5 FAIL, 30 pass, 16 UNRESOLVED
-with      5 FAIL, 35 pass, 11 UNRESOLVED
+```rust
+let carries_ink =
+    matches!(space, Space::Cmyk) || matches!(space, Space::Indexed { ink: Some(_), .. });
 ```
 
-It is also the only way to run **the control that separates a pdfce defect from
-an instrument artefact**: point the trap detector at the reference engine's own
-render of a failing patch. Of the four failures on 2026-08-26, three tripped
-**zero** traps there and one tripped **two** — so that patch's 12 is not 12
-pdfce defects, and nobody could have known without running it.
+A `Separation`/`DeviceN` image converts through its tint transform **to
+sRGB** and never to its `DeviceCMYK` alternate, so it round-trips.
 
-```
-python tools/suite-check.py D:\Dev\temp\suite-patches --reference-dir D:\Dev\temp\acro-refs
-```
+**★ This is the FOURTH instance of `R219`'s shape in four days, and it was
+found by applying `R219` rather than by a bug report:**
 
-**The 5 remaining failures, and who owns them:**
-
-| patch | cause | owner |
+| Pass | gave authored ink to | what it left |
 |---|---|---|
-| `PCS2_020`, `PCS2_040`, `PCS2_081` | the spot-plane gap | **pdfce** — the per-colorant buffer |
-| `PCS3_130`, `PCS3_161` | ICC transforms | ★ **`iccce`, decision 064.** Do **not** file these as pdfce work and do not build a CMM here |
+| `130.1` | `DeviceCMYK` images | `Separation`/`DeviceN` images |
+| `130.2` | `Separation`/`DeviceN` images **only under overprint** | the same images outside overprint |
+| `137.0` | analytic shadings, past their overprint gate | mesh shadings |
+| `137.1` | mesh shadings | ← **this row is the gap nobody went back for** |
 
-⇒ **Every remaining pdfce-owned failure in the suite is now the same one
-thing: there is no plane for a spot colorant.** That is the per-colorant buffer,
-and it is the whole of what is left. ★ The cheap page-sized spot-ink multiplier
-was built, ablated and reverted in an earlier session; §D item 3 refutes two
-more shortcuts. **The next attempt should be the real buffer or nothing.**
+**★★ DO NOT REUSE THE OVERPRINT PLANES.** They already exist, texel for
+texel, in the same `CmykTexels` layout, and reaching for them is the obvious
+move and the wrong one:
 
----
+- they hold `authored_tints`, which answers Table 149's *"which components did
+  the source SPECIFY"* — **a different question** from *"what does the tint
+  transform produce in the alternate space"*;
+- `authored_tints` returns `None` for a **spot-only** `DeviceN`, where the
+  existing code writes `[0,0,0,0]`. That is correct for the overprint route,
+  which preserves the backdrop (`Pass 130.3`), and would paint **bare white
+  paper** on a plain one.
 
-## §F — THE REST OF THE QUEUE
+**The right shape** is a per-texel `space.to_cmyk(comps, diag)` captured
+**beside** the existing `to_rgb`, in the same loop and from the same
+operands — exactly what `ColorRamp::new` and `mesh::read_shade` do, and for
+the same reason: a tint transform may be arbitrary PostScript and nothing
+forces two evaluations of it to agree.
 
-1. **`Pass 122.7`** — the undiagnosed blue-channel residual. Green matches
-   Acrobat to ~1 level, blue does not (55.7 vs 2.6, down from 209.2). A large
-   improvement, not a completed one, and nobody knows why.
-2. **`Pass 127.2`** — `redact-mark`'s stdout carries no diagnostics field;
-   `find-text` prints unreadable-font counts to stdout and `redact-mark` only to
-   stderr, so a batch caller parsing stdout cannot tell a clean run from an
-   unreadable one.
-3. **`Pass 122.3`** — band a large page render. Two of three acceptance clauses
-   were discharged by `Pass 132.0`; **banding is the third and untouched.**
-4. **CLI surface for the four ce-dimension group-management verbs** — rename,
-   delete, delete-with-policy, re-parent. Core ships all four, no subcommand
-   reaches any (`R151` shape).
-5. **The sibling-gate check.** Carried forward and **still owed**:
-   `check-string-gaps.sh` was widened after proving blind to a defect
-   `rustfmt` could not fold onto one line. Do `check-ui-strings.sh` and
-   `check-theme-colors.sh` carry the same post-formatting-shape assumption?
-   ★★ Those two are the line-scanners that **exist**; earlier handoffs named a
-   `check-strong-text.sh` that never has.
-6. **An absent-mark detector.** Four patches are scored by a check mark that
-   should be **present** and the harness has no detector for an absence, so it
-   reports `MARK?`. A first cut keyed on "reference has ink where pdfce has
-   paper" was prototyped and **fails**, because the marks sit *on images*, not
-   on paper. Whatever is built must key on the mark's own pixels relative to a
-   reference render.
+**Measure the cost first.** That is a second evaluation per texel unless the
+sRGB value is derived from the CMYK one. `tint_applied = 292` on the measured
+page suggests a cache is doing real work already; find out what it is keyed
+on before adding a second lookup.
 
-**Two `D:/dev/rag/` escalations remain OWED at n = 1, both with a named
-second-occurrence trigger** — *in-crate tests are privileged in ways a consumer
-is not*, and *an infallible allocation is a bound's silent partner*. Unchanged
-this session.
+### The instrument caveat, which cost time this session
+
+`find_traps` fired at `(324, 50)` on a **photographic highlight**, not on a
+trap X. The reference render tripped zero traps there — but the reference is
+`786 × 439` where pdfce's is `511 × 284`, so the detector ran at a different
+resolution and **that control is weaker than it looks**. The diagnosis above
+came from cropping both renders, scaling one to the other, and looking.
+
+⇒ On a patch whose content is a photograph, the trap count is not the
+evidence. The pixels are.
 
 ---
 
-## §G — PRE-FLIGHT, EVERY SESSION
+## §D — WHAT LAST SESSION DECIDED, IF YOU TOUCH THIS GROUND
 
-**1. `ls` BOTH FeatureRequests channels, ROOT and `open/`, as TWO commands.**
-They are outside this repository, so **no gate will ever contradict a stale
-sentence about them — including this one.** ★ And check again at the END: two
-requests landed mid-session this time.
+### Shading and mesh ink (`137.0`, `137.1`)
 
-```
-D:\Dev\FeatureRequests\pdfce_FeatureRequests\
-D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\
-D:\Dev\FeatureRequests\iccce_FeatureRequests\open\
-```
+- A shading with authored colorants composites natively **whether or not
+  overprint is in force**. The `DeviceCmykDirect`-under-`OPM 1` exclusion
+  still applies to the *overprint* route only, because Table 149's `OPM 1`
+  row is **value-dependent** and its rules cannot be computed once for a
+  whole ramp.
+- `Shade::Ink` carries **both** the converted sRGB value and the authored
+  colorants, and interpolates them **independently**. Consequence, stated so
+  it is not discovered: where the conversion is non-linear the two paths
+  differ in a triangle's *interior* while agreeing at every vertex. ISO
+  32000-1 §8.7.4.5.5 picks neither; both are defensible.
+- `MeshColorants` is decided **once, at parse, all-or-nothing**. A mesh with
+  ink at some vertices and not others would composite part of its area
+  natively and part bridged, and those do not agree — the boundary would be a
+  **seam no file asked for**.
 
-**2. Run the gates — `ls tools/check-*`, do not trust any list**, including
-`§A`'s count.
+### Form recursion, second wave (`138.0`)
 
-★★ **AND READ EACH GATE'S OWN EXIT CODE.** A sweep written this session as
-`r=$(python "$g" | tail -2); ec=$?` captured **`tail`'s** status, not the
-gate's, and printed `[0]` beside a gate that was **red**. It was caught only
-because that gate also prints its verdict in words. `R209` says the set somebody
-runs is not the set CI runs; this adds: **the exit code somebody reads is not
-always the exit code that was returned.**
-
-**3. ★★ RUN `cargo +nightly fuzz build` ON WINDOWS.** CI cannot do it for you
-and `cargo check --bins` is not a substitute — CI's fuzz job runs on Linux and
-was green through a window in which the harness was completely unbuildable
-here, and the documented local stand-in passes in both states because it never
-links.
-
-**4. Read `docs/ARCHITECTURE.md` §12** — cross-project boundaries live there and
-no gate can catch a violation. **Decision 064 is the one that bites right now:
-ICC colour conversion is `iccce`'s, not pdfce's.**
-
-**5. Read `docs/compositor-plan.md`** before scoping anything in `97.x` or the
-per-colorant buffer.
+- `hit_test_rect_deep` returns **paint order, front-most LAST** — the
+  *opposite* of `hit_test_point_deep`. Deliberate: one answers *"which
+  one?"*, the other *"which ones?"*.
+- `FormMarquee::Exclude` is the default. **The tie-breaker is not which
+  reading is better supported** — it is that a click can never yield a form,
+  so a marquee that can hands the operator, by one gesture and not the other,
+  a selection every edit verb refuses.
+- `FormMarquee::Include` returns the form **and** its leaves. It is **not** a
+  route back to the shallow `hit_test_rect`, which returns the container
+  alone.
+- `PickedLine::object_index: usize` → `target: HitTarget`. **The `usize` was
+  the bug**: it could only name an entry in one of two lists, so the
+  signature made an answer about form contents unrepresentable — which is why
+  the two-line measure tool was **inert**, not degraded, on any wrapped CAD
+  drawing. `page_object_index()` returns an `Option`, not a sentinel, because
+  a leaf ordinal handed to something expecting a page index is a number that
+  is *in range and wrong*.
+- `object-list --hit` is **deep by default**; `--hit-scope page` is the old
+  query. A leaf prints under `leaf=N`, **never** `index=N` — `index=` is what
+  the editing subcommands take, and they write to the *page's* stream.
 
 ---
 
-## §H — THE SUBMIT / SCRIPTING PLAN IS STILL PARKED
+## §E — TWO HABITS THIS SESSION PAID FOR
 
-Full detail: `docs/plan-scripting-submit-and-plugins.md`. Eight operator rulings
-quoted verbatim there; do not paraphrase them from this file. Nothing this
-session touched it.
+### `R219` is the highest-value thing on the board
 
-- A push button that does anything was blocked by **`R54`**, not by the
-  JavaScript rule; the operator ruled *"change the rule"* and decision `088`
-  amends it to a dispatch allow-list.
-- **The JavaScript half is deferred by the operator** (*"defer for now"*).
-  `R53` stands. Phases 1–3 must each work with **no scripting engine present at
-  all**.
-- The plugin boundary is a **versioned message format, not a binary**.
-- Submission is permitted, destination open by default, always disclosed.
+*When a Pass fixes one route to a shared behaviour, enumerate the other
+routes and say which are left.* Minted after **three** instances in
+seventy-two hours; `§C` above is the **fourth**, and it was found by applying
+the rule rather than by waiting for a report.
 
-**Still owed before any submit code:** a decision record for `R12`'s new
-destination class, the `R13` clause 5 ruling (an add-in is executed code and
-`R13`'s *"never executes anything it fetched"* was **not** narrowed by decision
-061 — **no add-in Pass can be scoped until the operator rules**), the transport
-question, and a `pdfce-ui-specialist` dispatch before any GUI surface.
+**The reason it keeps happening:** a system where every route is wrong in the
+*same* way looks consistent. The first fix is what makes the rest look
+broken. That is an argument **for** fixing halves — the disagreement is
+information a passing suite was not giving you — but the leftover half
+becomes urgent in a way it was not before, and it will reach the operator
+first if you do not name it.
+
+### A crop rectangle is a measurement instrument
+
+`Pass 137.0` shipped with a four-row table of live-vs-reference distances
+that **mixed two panels**, labelled a fixed type 3 radial as an unfixed mesh,
+and reported **edge antialiasing on a hard-edged circle as a colour error**.
+Corrected in place in `ROADMAP.md` with the wrong figures kept legible.
+
+Before quoting any number off a render: find the region by **scanning for
+non-white runs**, inset 6–8 px, and read **mean-abs, rms and the two mean
+colours together**. High mean-abs with matching mean colours and high rms is
+*misalignment*, not a colour error.
+
+### And a doc comment that enumerates a population decays silently
+
+`cmyk_bridged_pixels`'s description was wrong **three times in two days**,
+each correction written by somebody who had just read it and believed it.
+The **sixth** copy — the one `render-page` prints to the operator's terminal
+— was still wrong a day later and was found by running the tool on a real
+file, not by grepping. **Nothing in this repository checks operator-facing
+strings for claims about implementation state.** If that recurs, a gate is
+the fix.
+
+---
+
+## §F — OPEN, UNCHANGED
+
+- **`(bl)`** — may a **CC-BY-SA-4.0** OCR model ship inside pdfce's **MIT**
+  portable folder? Ken's call; default if unanswered is **ship neither model
+  set**. `docs/ocr-engine-survey.md`.
+- **`R13` vs "download addin capability"** — downloading is permitted;
+  **executing** what was downloaded is not, and that ruling is owed from the
+  operator. **No add-in Pass can be scoped until it lands.**
+- **`(p)`** — whether to narrow the XFA item to read/fill only, or retire it.
+- The `pdfceGUI` reply for `Pass 138.0` is filed at
+  `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\note_all_three_form_gaps_closed_and_one_judgement_made.md`.
+  **It contains a retraction owed to them**: they were told two type 7
+  shading pairs would still disagree, and after `137.1` they do not.
