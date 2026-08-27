@@ -531,6 +531,17 @@ pub enum CommandKind {
     /// provenance, tagged-untagged, inheritance-safe resources) is returned by
     /// that method, not carried on the command.
     AddText,
+    /// An invisible OCR text layer (ISO 32000-1 §9.3.6 Table 106 rendering
+    /// mode 3) was written onto one **or more** pages by
+    /// [`EditSession::add_ocr_layer`]: a content stream and a Standard-14 font
+    /// per page, plus each page's rewritten dictionary.
+    ///
+    /// ★ **One command for the whole run, however many pages.** Recognising
+    /// forty pages and then pressing undo forty times is not a feature, so the
+    /// verb accumulates every page's writes and commits once. Undo removes
+    /// every created object and restores every page dictionary
+    /// byte-identically.
+    AddOcrLayer,
     /// A dimension (Pass 12.M2) was authored onto a page: the `/Line`
     /// `/IT /LineDimension` annotation + its baked `/AP`, its group's `/OCG`
     /// (allocated on first use) registered in the catalog `/OCProperties`,
@@ -5469,6 +5480,25 @@ pub struct InfoText {
     pub exact: bool,
 }
 
+/// One page's recognised words, paired with the page they belong to — the
+/// unit [`EditSession::add_ocr_layer`] takes a slice of.
+///
+/// # Why a pair rather than two parallel slices
+///
+/// The obvious signature is `(pages: &[usize], recognised: &[OcrPage])`, and
+/// it has a failure mode this does not: the two can differ in length, or be
+/// ordered differently, and either mistake produces a **successful run that
+/// puts the wrong page's words on a page**. There is no diagnostic for that
+/// short of reading the output. Pairing them makes the mistake unspellable.
+#[derive(Debug, Clone, Copy)]
+pub struct OcrPageLayer<'a> {
+    /// Zero-based page index, in page-tree order.
+    pub page_index: usize,
+    /// The recognised words, already in **PDF default user space, y-up** —
+    /// see [`EditSession::add_ocr_layer`]. Nothing downstream flips them.
+    pub recognised: &'a crate::ocr::OcrPage,
+}
+
 /// An open document plus the operator's unsaved edits.
 ///
 /// See the module docs for the overlay design and the §11.1 rule it
@@ -7278,6 +7308,195 @@ impl EditSession {
         let command = self.text_edit_command(kind, content_id, page, plan.new_content);
         self.commit(command);
         Ok(plan.report)
+    }
+
+    /// **Add an invisible OCR text layer to one or more pages, as ONE
+    /// undoable edit** (ISO 32000-1 §9.3.6 Table 106 rendering mode 3).
+    ///
+    /// # ★★★ WHY THIS EXISTS BESIDE THE ONE-SHOT, WHICH IS THE WHOLE POINT
+    ///
+    /// [`crate::ocr::layer::add_ocr_layer`] takes an immutable [`Document`]
+    /// and returns **a whole new PDF**. That makes recognition the one
+    /// capability in pdfce that is not an edit, and the consequence reaches
+    /// the operator: a shell holding an open session can only offer him *"here
+    /// is a different file, somewhere else"*, because the bytes recognition
+    /// produced are **not the session**. Its own in-place save path — temp
+    /// file, atomic rename, over the original — cannot be used on a document
+    /// it does not have.
+    ///
+    /// The operator's words, relayed on the request channel: *"Why do I have
+    /// to save a copy instead of just go back into my pdf and save over it?"*
+    /// Six OCR tools were surveyed and **zero of six** force a Save-As on the
+    /// open-document path.
+    ///
+    /// # ★★ AND IT CLOSES A TRAP AT THE ROOT RATHER THAN AT THE GUARD
+    ///
+    /// The one-shot reads the document's **base** revision. A shell that ran
+    /// it after any edit would get a recognised copy that **silently omitted
+    /// that edit** — so the honest thing, and what the consuming shell did,
+    /// is refuse to run OCR once `edit_epoch != 0`. But `edit_epoch` never
+    /// returns to zero, not even after a successful save, so **OCR died for
+    /// the rest of the session the first time anything was edited and saved.**
+    ///
+    /// A session verb removes the divergence instead of policing it: this
+    /// plans against [`Self::graph`] — the session overlay — so a page edited
+    /// earlier in the session contributes **its edited** `/Contents` and
+    /// `/Resources` to the append. There is no base-revision divergence left
+    /// to protect against, and therefore no reason to refuse.
+    ///
+    /// # One command, however many pages
+    ///
+    /// Recognising forty pages and then pressing undo forty times is not a
+    /// feature. Every page's writes are accumulated and committed as a single
+    /// [`CommandKind::AddOcrLayer`], so one undo removes the whole run and
+    /// restores every page dictionary byte-identically. This is also why the
+    /// loop below allocates and plans but never commits — `commit` is called
+    /// once, after it (`R179`/`R49`, and `tools/check-one-commit-per-command.py`
+    /// is the gate that says so).
+    ///
+    /// # ★ Duplicate page indices are REFUSED, and the reason is not tidiness
+    ///
+    /// Every page is planned against the graph as it stands **before** the
+    /// command is committed. Two entries naming the same page would therefore
+    /// both append to that page's *original* `/Contents`, and the second
+    /// page-dictionary write would silently clobber the first — one layer
+    /// written, one layer paid for and lost, and a report claiming both.
+    /// Refusing is the only answer that is not a quiet wrong result.
+    ///
+    /// # Coordinates
+    ///
+    /// The words in each [`OcrPageLayer::recognised`] must already be in **PDF
+    /// default user space, y-up** — run
+    /// [`words_to_page_space`](crate::ocr::words_to_page_space) on raw engine
+    /// output first. Nothing here flips anything, deliberately: a second place
+    /// that could flip is a second place that could flip twice.
+    ///
+    /// # Errors
+    ///
+    /// [`OcrLayerError`] — an encrypted document, an enforced-certified one, a
+    /// `/Size`-hiding document, an out-of-range or duplicated page index, a
+    /// page whose words all proved unplaceable, a non-dictionary page object,
+    /// or exhausted object numbers. **Every refusal happens before any object
+    /// is allocated and before anything is committed**, so a rejected run
+    /// leaves the session exactly as it found it — including its undo stack.
+    ///
+    /// # Returns
+    ///
+    /// One [`OcrLayerReport`](crate::ocr::layer::OcrLayerReport) per requested
+    /// page, in request order, each carrying what was written and what was
+    /// inferred. An empty `pages` slice is a no-op: it returns an empty vector
+    /// and **commits nothing**, so it does not leave an undo entry that would
+    /// undo nothing.
+    pub fn add_ocr_layer(
+        &mut self,
+        pages: &[OcrPageLayer<'_>],
+        opts: &crate::ocr::layer::OcrLayerOptions,
+    ) -> Result<Vec<crate::ocr::layer::OcrLayerReport>, crate::ocr::layer::OcrLayerError> {
+        use crate::ocr::layer::{OcrLayerError as OlError, plan_ocr_layer};
+        use crate::text_edit::edit::make_raw_stream;
+
+        if pages.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Guards in the SAME order as `add_text` and the one-shot: encryption
+        // → certification → /Size-hides-objects. Each is a named refusal made
+        // before any work, and keeping the order identical across the three
+        // entry points is what stops one of them growing a different answer to
+        // the same document.
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(OlError::Encrypted);
+        }
+        let census = crate::signature::census(&self.base);
+        if census.forbids_structural_change() {
+            return Err(OlError::CertificationForbidsChange {
+                permission: census.certification_permission.unwrap_or(2),
+            });
+        }
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(OlError::HiddenObjects { count: suppressed });
+        }
+
+        // Duplicates, before anything is planned. See the doc comment: two
+        // entries for one page silently lose a layer.
+        let mut seen = std::collections::BTreeSet::new();
+        for layer in pages {
+            if !seen.insert(layer.page_index) {
+                return Err(OlError::DuplicatePage {
+                    page_index: layer.page_index,
+                });
+            }
+        }
+
+        // PLAN EVERY PAGE FIRST, allocating nothing. A run that refuses on its
+        // fourth page must not have already allocated three pages' object
+        // numbers and staged three pages' bytes -- the numbers would be burnt
+        // and the staging buffer would carry content no object references.
+        let preps = {
+            let page_list = self.pages().map_err(OlError::PageTree)?;
+            let graph = self.graph();
+            let mut preps = Vec::with_capacity(pages.len());
+            for layer in pages {
+                let page = page_list
+                    .get(layer.page_index)
+                    .ok_or(OlError::PageIndex(layer.page_index))?;
+                preps.push(plan_ocr_layer(page, layer.recognised, opts, &graph)?);
+            }
+            preps
+        };
+
+        // Now allocate and stage. Past this point nothing can fail except an
+        // exhausted object-number space, which is checked per allocation.
+        let mut objects = Vec::with_capacity(preps.len().saturating_mul(3));
+        let mut reports = Vec::with_capacity(preps.len());
+        for prep in &preps {
+            let content_num = self
+                .alloc_number()
+                .map_err(|_| OlError::ObjectNumbersExhausted)?;
+            let font_num = self
+                .alloc_number()
+                .map_err(|_| OlError::ObjectNumbersExhausted)?;
+            let content_id = ObjId::new(content_num, 0);
+            let font_id = ObjId::new(font_num, 0);
+
+            let new_page = prep.build_page_dict(&self.graph(), content_id, font_id);
+            let content_len = prep.content_data.len();
+            let span = self.stage_bytes(&prep.content_data);
+            let page_before = self.value(prep.page_id).cloned();
+
+            objects.push(ObjectWrite {
+                id: content_id,
+                before: None,
+                after: Some(make_raw_stream(span, content_len)),
+            });
+            objects.push(ObjectWrite {
+                id: font_id,
+                before: None,
+                after: Some(prep.font_dict.clone()),
+            });
+            objects.push(ObjectWrite {
+                id: prep.page_id,
+                before: page_before,
+                after: Some(Object::Dict(new_page)),
+            });
+
+            let mut report = prep.report.clone();
+            report.content_object = content_num;
+            report.font_object = font_num;
+            reports.push(report);
+        }
+
+        // THE ONE COMMIT. Outside the loop, deliberately -- see the doc
+        // comment, and `tools/check-one-commit-per-command.py`.
+        self.commit(Command {
+            kind: CommandKind::AddOcrLayer,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(reports)
     }
 
     /// Add a NEW single-line text run at operator coordinates as one undo-able

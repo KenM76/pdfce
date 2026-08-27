@@ -377,6 +377,37 @@ pub enum OcrLayerError {
     /// page where OCR in fact found nothing.
     #[error("no recognised words could be written for this page")]
     NothingToWrite,
+    /// Two entries in one session run named the same page.
+    ///
+    /// # ★ Why this is a refusal and not a silent merge
+    ///
+    /// [`crate::edit::EditSession::add_ocr_layer`] plans every page against
+    /// the graph as it stands **before** the command is committed — that is
+    /// what lets a multi-page run be one undo entry. Two entries for one page
+    /// would therefore both append to that page's *original* `/Contents`, and
+    /// the second page-dictionary write would clobber the first. One layer
+    /// written, one layer paid for and lost, and a report claiming both.
+    ///
+    /// Merging them instead would mean deciding what "both layers on one page"
+    /// means, which is a question the caller is better placed to answer by
+    /// merging the word lists before it calls.
+    #[error("page {page_index} appears more than once in one OCR run")]
+    DuplicatePage {
+        /// The page index that appeared twice.
+        page_index: usize,
+    },
+    /// The document's `/Size` is smaller than the highest object number in
+    /// use, so objects exist that a writer cannot see.
+    ///
+    /// The [`crate::text_edit::AddTextError::HiddenObjects`] sibling, refused
+    /// for the same reason and in the same position: allocating a new object
+    /// number in a document whose numbering already lies is how a write lands
+    /// on top of something.
+    #[error("the document hides {count} object(s) behind an undersized /Size")]
+    HiddenObjects {
+        /// How many objects are unreachable through `/Size`.
+        count: usize,
+    },
     /// The page object is not a dictionary.
     #[error("unsupported: {0}")]
     Unsupported(String),
@@ -579,6 +610,148 @@ pub fn build_layer_content(
     (out, report)
 }
 
+/// Everything one page's OCR layer needs, resolved against a graph, with
+/// **nothing allocated and nothing written**.
+///
+/// # ★★ WHY THE PLANNING IS SPLIT FROM THE WRITING
+///
+/// Because there are now two writers with genuinely different allocation
+/// models, and the *decisions* between them must not be made twice:
+///
+/// - [`add_ocr_layer`] is a one-shot on an immutable [`Document`]: it takes
+///   object numbers from `next_object_number()` and stages content bytes at
+///   `doc.bytes().len()`.
+/// - [`crate::edit::EditSession::add_ocr_layer`] is a session command: it
+///   takes numbers from the session's allocator and stages bytes through the
+///   session's own R45 buffer, and it does this for **several pages under one
+///   undo entry**.
+///
+/// Everything before that fork — which font name avoids a collision, which
+/// words could be placed, what the `/Resources` merge has to preserve, what
+/// the content stream says — is identical, and is exactly the part that is
+/// expensive to get right. This mirrors `text_edit::addtext::plan_add_text`
+/// and `AddTextPrep`, deliberately and structurally, because that pair solved
+/// the same problem for the same three-object append.
+///
+/// ★ The prep holds **no object numbers**. That is the whole point: a plan
+/// that had already allocated could not be reused by a caller with a different
+/// allocator, and a plan that allocated *per page* could not be collected into
+/// one command.
+pub(crate) struct OcrLayerPrep {
+    /// The page object being modified.
+    pub(crate) page_id: ObjId,
+    /// The page dict as it currently stands — base, or the session overlay.
+    page_dict: Dict,
+    /// The page's current `/Contents` value, the append's input.
+    contents_before: Option<Object>,
+    /// The page's **effective** `/Resources` minus `/Font`, references intact.
+    resources_base: Dict,
+    /// The existing `/Font` entries the new font merges into.
+    font_subdict_base: Dict,
+    /// The collision-free `/Font` name for the OCR font.
+    font_name: Vec<u8>,
+    /// The `BT … ET` content-stream bytes for the invisible layer.
+    pub(crate) content_data: Vec<u8>,
+    /// The Standard-14 font dictionary object.
+    pub(crate) font_dict: Object,
+    /// What was written and what was inferred, minus the two object numbers
+    /// the caller fills in once it has allocated them.
+    pub(crate) report: OcrLayerReport,
+}
+
+impl OcrLayerPrep {
+    /// The rewritten page dictionary, given the numbers the caller allocated.
+    ///
+    /// Takes the graph rather than re-deriving the append, for the reason
+    /// `AddTextPrep::build_page_dict` states at length: `/Contents` may be a
+    /// **reference to an array**, and a local helper that matched on the raw
+    /// value without resolving it produced an array nested inside an array —
+    /// on Qt output and on every CAD sheet. One answer, threaded in, not two
+    /// correct-looking ones.
+    pub(crate) fn build_page_dict<G: ObjectGraph + ?Sized>(
+        &self,
+        graph: &G,
+        content_id: ObjId,
+        font_id: ObjId,
+    ) -> Dict {
+        let mut new_page = self.page_dict.clone();
+        new_page.insert(
+            Name::from(b"Contents"),
+            crate::page_tree::append_content_stream(
+                graph,
+                self.contents_before.as_ref(),
+                content_id,
+            ),
+        );
+        let mut font_subdict = self.font_subdict_base.clone();
+        font_subdict.insert(Name(self.font_name.clone()), Object::Reference(font_id));
+        let mut resources = self.resources_base.clone();
+        resources.insert(Name::from(b"Font"), Object::Dict(font_subdict));
+        new_page.insert(Name::from(b"Resources"), Object::Dict(resources));
+        new_page
+    }
+}
+
+/// Plan one page's OCR layer against `graph`, allocating nothing.
+///
+/// `page` must come from the same graph the caller will write through — the
+/// session's overlay for a session command, the base for the one-shot — so
+/// that a page edited earlier in the session contributes **its edited**
+/// `/Contents` and `/Resources` to the append rather than the base revision's.
+/// That divergence is the exact trap the consuming shell reported working
+/// around with a refusal, and planning against the caller's own graph is what
+/// removes it at the root.
+///
+/// The words in `ocr_page` must already be in **PDF default user space, y-up**
+/// — see [`add_ocr_layer`]. Nothing here flips anything.
+///
+/// # Errors
+///
+/// [`OcrLayerError::Unsupported`] if the page object is not a dictionary, and
+/// [`OcrLayerError::NothingToWrite`] if every word proved unplaceable. Both
+/// happen before the caller allocates anything.
+pub(crate) fn plan_ocr_layer<G: ObjectGraph + ?Sized>(
+    page: &crate::page_tree::Page,
+    ocr_page: &OcrPage,
+    opts: &OcrLayerOptions,
+    graph: &G,
+) -> Result<OcrLayerPrep, OcrLayerError> {
+    let page_dict = graph.resolved(page.id).as_dict().cloned().ok_or_else(|| {
+        OcrLayerError::Unsupported("the page object is not a dictionary".to_owned())
+    })?;
+    let contents_before = page_dict.get(b"Contents").cloned();
+
+    // The §7.7.3.4 inheritance-safe recipe, identical to add-text's: take the
+    // page's EFFECTIVE resources (own-or-inherited, already resolved by the
+    // page-tree walk), strip /Font, and re-add it merged. Writing an own
+    // /Resources holding only the new font would shadow an inherited one and
+    // silently break every other resource the page uses.
+    let font_subdict_base: Dict = match page.resources.get(b"Font") {
+        Some(o) => graph.resolve(o).as_dict().cloned().unwrap_or_default(),
+        None => Dict::new(),
+    };
+    let font_name = pick_font_name(&font_subdict_base);
+    let mut resources_base = page.resources.clone();
+    resources_base.remove(b"Font");
+
+    let (content_data, report) = build_layer_content(ocr_page, &font_name, opts);
+    if report.words_written == 0 {
+        return Err(OcrLayerError::NothingToWrite);
+    }
+
+    Ok(OcrLayerPrep {
+        page_id: page.id,
+        page_dict,
+        contents_before,
+        resources_base,
+        font_subdict_base,
+        font_name,
+        content_data,
+        font_dict: Object::Dict(standard14_font_dict(opts.font)),
+        report,
+    })
+}
+
 /// Add an invisible OCR text layer to `page_index` of `doc` and return the
 /// incrementally-saved bytes plus the disclosure report.
 ///
@@ -647,28 +820,12 @@ pub fn add_ocr_layer(
         .get(page_index)
         .ok_or(OcrLayerError::PageIndex(page_index))?;
 
-    let page_dict = doc.resolved(page.id).as_dict().cloned().ok_or_else(|| {
-        OcrLayerError::Unsupported("the page object is not a dictionary".to_owned())
-    })?;
-    let contents_before = page_dict.get(b"Contents").cloned();
-
-    // The §7.7.3.4 inheritance-safe recipe, identical to add-text's: take the
-    // page's EFFECTIVE resources (own-or-inherited, already resolved by the
-    // page-tree walk), strip /Font, and re-add it merged. Writing an own
-    // /Resources holding only the new font would shadow an inherited one and
-    // silently break every other resource the page uses.
-    let font_subdict_base: Dict = match page.resources.get(b"Font") {
-        Some(o) => doc.resolve(o).as_dict().cloned().unwrap_or_default(),
-        None => Dict::new(),
-    };
-    let font_name = pick_font_name(&font_subdict_base);
-    let mut resources_base = page.resources.clone();
-    resources_base.remove(b"Font");
-
-    let (content_data, mut report) = build_layer_content(ocr_page, &font_name, opts);
-    if report.words_written == 0 {
-        return Err(OcrLayerError::NothingToWrite);
-    }
+    // ★ The plan is shared with `EditSession::add_ocr_layer` and allocates
+    // nothing -- see `plan_ocr_layer`. What differs between the two writers is
+    // only where object numbers and staged bytes come from, and that fork
+    // starts on the next line.
+    let prep = plan_ocr_layer(page, ocr_page, opts, doc)?;
+    let mut report = prep.report.clone();
 
     let content_num = doc
         .next_object_number()
@@ -679,44 +836,28 @@ pub fn add_ocr_layer(
     let content_id = ObjId::new(content_num, 0);
     let font_id = ObjId::new(font_num, 0);
 
-    let mut new_page = page_dict;
-    new_page.insert(
-        Name::from(b"Contents"),
-        // The ONE append (see `page_tree::append_content_stream`). This called
-        // `addtext::append_contents`, which did not resolve `/Contents` and so
-        // nested an array inside an array on any page whose `/Contents` was a
-        // reference to one -- the corruption `add_image` was reported for, in a
-        // third verb.
-        crate::page_tree::append_content_stream(doc, contents_before.as_ref(), content_id),
-    );
-    let mut font_subdict = font_subdict_base;
-    font_subdict.insert(Name(font_name.clone()), Object::Reference(font_id));
-    let mut resources = resources_base;
-    resources.insert(Name::from(b"Font"), Object::Dict(font_subdict));
-    new_page.insert(Name::from(b"Resources"), Object::Dict(resources));
+    let new_page = prep.build_page_dict(doc, content_id, font_id);
 
-    // A SANCTIONED WRITER BYPASS — a one-shot standalone API, exception 7's
-    // shape exactly (see `tools/check-bypass-paths.sh`):
-    // `add_ocr_layer(doc, ..) -> bytes`, operating on a `Document` that is
-    // not in an edit session, so there is no undo stack to join and nothing
-    // to disclose to a later command. It refuses an encrypted document and,
-    // as of this commit, an enforced-certified one; that second refusal is
-    // what makes this exemption honest, and it was MISSING when the function
-    // shipped.
+    // A SANCTIONED WRITER BYPASS — exception 7's shape exactly (see
+    // `tools/check-bypass-paths.sh`): `add_ocr_layer(doc, ..) -> bytes`,
+    // operating on a `Document` that is not in an edit session, so there is no
+    // undo stack to join and nothing to disclose to a later command. It
+    // refuses an encrypted document and an enforced-certified one; that second
+    // refusal is what makes this exemption honest, and it was MISSING when the
+    // function shipped.
     //
-    // CORRECTED: this comment said "called by the CLI", and it was written
-    // in the same commit that added the certification guard. There is NO
-    // OCR subcommand — `grep -rn "ocr" crates/pdfce-cli/src/main.rs` returns
-    // nothing. The only non-test caller is
-    // `pdfce-render/examples/ocr_smoke.rs`. So this is an R151 instance: a
-    // capability with no shell caller, and the FEATURES.md row is honestly
-    // unticked for both cli and gui. The exemption's warrant does not depend
-    // on who calls it — a one-shot API is outside a session whether a shell
-    // reaches it or not — but a false claim about callers is how a doc
-    // comment becomes the reason someone believes a feature ships.
+    // ★ CORRECTED AGAIN. This note used to end "There is NO OCR subcommand ...
+    // So this is an R151 instance: a capability with no shell caller." The
+    // R151 half is now only half true: `EditSession::add_ocr_layer` exists and
+    // a shell can reach OCR as an undoable edit. What still has no caller is
+    // THIS one-shot, and that is the honest scope of the claim. The
+    // exemption's warrant never depended on who calls it — a one-shot API is
+    // outside a session whether a shell reaches it or not — but a stale claim
+    // about callers is how a doc comment becomes the reason somebody believes
+    // a feature does or does not ship.
     //
-    // Do not copy this marker to a new
-    // writer caller without first checking the same two refusals are present.
+    // Do not copy this marker to a new writer caller without first checking
+    // the same two refusals are present.
     //
     // Stage the content bytes into the dirty set's buffer, with the new
     // stream's span in the `base.len() + local` combined coordinate system
@@ -724,15 +865,15 @@ pub fn add_ocr_layer(
     // set, so they are not re-emitted — round-trip, rule 3.
     let mut dirty = DirtySet::empty();
     let start = doc.bytes().len();
-    let span = ByteSpan::new(start, content_data.len());
-    dirty.replace(content_id, make_raw_stream(span, content_data.len()));
-    dirty.replace(font_id, Object::Dict(standard14_font_dict(opts.font)));
-    dirty.replace(page.id, Object::Dict(new_page));
+    let span = ByteSpan::new(start, prep.content_data.len());
+    dirty.replace(content_id, make_raw_stream(span, prep.content_data.len()));
+    dirty.replace(font_id, prep.font_dict.clone());
+    dirty.replace(prep.page_id, Object::Dict(new_page));
     // bypass-exempt: see the note above this block. The token sits HERE, in
     // the middle of the three writer calls, because the gate's window is
     // eight lines either side of each hit and the calls span eight lines —
     // above the block it covers the first two and misses `save_incremental`.
-    dirty.set_staging(content_data);
+    dirty.set_staging(prep.content_data.clone());
 
     let (bytes, _) = save_incremental(doc, &dirty, &SaveOptions::identity())?;
 

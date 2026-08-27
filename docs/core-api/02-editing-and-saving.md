@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `7031296` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (31655 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 144 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (31874 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 145 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 144 public `EditSession` methods
+## 1. Verb index — all 145 public `EditSession` methods
 
-**Count: 144.** Established by brace-matched extraction of the four
+**Count: 145.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -339,8 +339,45 @@ need their own policy).
 | Ask what synthetic bold/italic *would* do | `preview_style_resolution(&self, page_index, find, pinned_span, want) -> Result<StyleResolution, FormatError>` | 4242 | Pure query. |
 | Re-wrap a recognised paragraph | `reflow_block(&mut self, page_index, block_index, &ReflowRequest) -> Result<ReflowApplyReport, ReflowApplyError>` | 4297 | One undo entry. **Planned against the BASE** — see trap T-14. |
 | Add a new text run at coordinates | `add_text(&mut self, &AddTextRequest) -> Result<AddTextReport, AddTextError>` | 4365 | Appends a new content stream; originals stay byte-verbatim. |
+| Add an invisible OCR text layer to one or more pages | `add_ocr_layer(&mut self, &[OcrPageLayer<'_>], &OcrLayerOptions) -> Result<Vec<OcrLayerReport>, OcrLayerError>` | 7313 | **ONE undo entry for the whole run**, however many pages. Reads the SESSION graph, not the base. |
 
-These five return `text_edit`'s own error types, **not** `EditError`.
+These five return `text_edit`'s own error types, **not** `EditError`;
+`add_ocr_layer` returns `ocr::layer::OcrLayerError`.
+
+#### ★★ `add_ocr_layer` — the three things a caller must know
+
+1. **It is an EDIT, and that is the entire point.** `ocr::layer::add_ocr_layer`
+   (the free function) takes an immutable `&Document` and returns **a whole new
+   PDF**, which made recognition the one capability that was not an edit: a
+   shell holding an open session could only offer *"here is a different file,
+   somewhere else"*, because its in-place save path cannot be used on a document
+   it does not have. The session verb lands in the session and saves through the
+   caller's ordinary path.
+
+2. **★★★ It reads the SESSION graph, not the base — and this is not a
+   refinement, it is the reason the verb exists.** The free function reads the
+   **base** revision, so running it after any edit yields a recognised copy that
+   **silently omits that edit**. The correct defence against that is a refusal,
+   and a consuming shell duly refused to run OCR once the session was dirty —
+   but a session never becomes clean again, *not even after a successful save*,
+   so **OCR died for the rest of the session the first time anything was
+   edited.** Planning against the session graph removes the divergence instead
+   of policing it. Pinned by
+   `crates/pdfce-core/tests/ocr_session.rs::session_ocr_sees_an_edit_made_earlier_in_the_session`,
+   which was **verified to fail** against a base-reading build.
+
+3. **★ A duplicated page index is REFUSED (`OcrLayerError::DuplicatePage`), and
+   that is a correctness refusal.** Every page is planned against the graph as
+   it stands *before* the commit — that is what makes a multi-page run one undo
+   entry. Two entries for one page would both append to that page's *original*
+   `/Contents`, and the second page-dictionary write would clobber the first:
+   one layer written, one lost, and a report claiming both. Merge the word lists
+   before calling if you want two sets of words on one page.
+
+An empty slice is a **no-op that commits nothing** — no undo entry that would
+undo nothing. Every refusal happens before any object is allocated, so a
+rejected run leaves the session, its bytes and its undo stack exactly as they
+were.
 
 ### 1.10 Vector geometry (19) — detail in part 3
 
