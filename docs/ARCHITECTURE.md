@@ -22887,6 +22887,49 @@ agreeing. Filed as a **Backlog obligation** attached to the
 > completion status changes. Same-filing propagation duty: this is the
 > editable mirror correcting itself, per its own rule.]**
 
+> **[★★ AMENDED 2026-08-27, 292nd filing — `EditSession::add_markup_with`
+> AND `add_text_annotation_with` NOW EXIST (`Pass 81.1`, `4eaea20`), AND
+> THEY DO NOT VIOLATE §1. This note exists because a reader arriving here
+> cold will otherwise hit an apparent contradiction — and one document
+> already had.**
+>
+> `docs/core-api/02-editing-and-saving.md` carried, on the
+> `set_quad_point_order` row, the sentence *"decision 062 fixes markup
+> authoring at one entry point, so an `add_markup_with` would be a
+> second"* — **naming the verb that has now shipped.** That sentence was
+> corrected in place in `4eaea20`, with the old wording struck through and
+> a new **§1.15.1** reconciling the two.
+>
+> **The reconciliation, stated here so it survives independently of that
+> file.** §1 refused **`add_markup_appearance`** — a hatch letting a caller
+> hand the engine a **prebuilt annotation dictionary plus appearance
+> stream**, bypassing the four guards tabulated below, three of which are
+> document-safety properties whose failure is *silent in the saved file*.
+> **`add_markup_with` takes one more VALIDATED SCALAR alongside the same
+> `MarkupSpec`.** There is **one body** — `add_markup` →
+> `add_markup_with` → private `add_markup_inner`, which runs **all four
+> guards** and calls the same `annot_author::build_appearance`. Nothing is
+> bypassed, and the Pass in fact **adds a fifth validation**
+> (`MarkupOptions::validate`). §1's own test — *"a guard that a second
+> entry point can bypass is not a guard, it is a convention"* — is
+> **satisfied**, because this entry point bypasses no guard.
+>
+> **★ The distinction the sentence collapsed, and it is the reusable
+> half:** *"one entry point"* was never a claim about the **number of
+> function signatures**. It is a claim about the **number of paths that
+> reach object creation without passing the guards** — which remains
+> **one**. A rule stated in terms of a surface (`how many functions`) gets
+> read as forbidding a surface; the rule was about a **path**. A future
+> `add_markup_with` variant is fine on exactly this condition and no
+> other: **it delegates into the guarded body rather than beside it.**
+>
+> **§§2–3 are untouched.** `/M` is still engine-stamped and `/T` is still
+> optional with no invented placeholder; `MarkupOptions` is shaped to
+> carry `/T`, `/Contents`, `/NM` and `/M` **as `Pass 80.0` lands them**,
+> under those same rulings. Same-filing propagation duty discharged: the
+> `ROADMAP.md` *Shipped* entry for `Pass 81.1` carries the same
+> reconciliation.]**
+
 #### 1. The refusal, and it was arrived at from both sides independently
 
 A shell (`pdfceGUI`) needed markup subtypes `pdfce-core` does not author —
@@ -25834,3 +25877,117 @@ free 072.**
   **No new standing rule number.** `R219` is amended in place (its first
   filed enumeration), not re-minted; next free `R220`. **Ceiling moves
   090 → 091; next free 092.**
+
+- **2026-08-27 — Decision 092. AN OPERATION THAT *CORRECTS* AN EXISTING
+  VALUE MAY CLAMP; AN OPERATION THAT *CREATES* ONE MUST REFUSE BY NAME —
+  BECAUSE A CLAMP AT CREATION REPORTS SUCCESS FOR SOMETHING THE CALLER DID
+  NOT ASK FOR, AND LEAVES NO ARTEFACT THE OPERATOR CAN COMPARE AGAINST.**
+  Settled while shipping `Pass 81.1` (`4eaea20`), which put the two
+  behaviours **79 lines apart in one file** — `MarkupStyle` at
+  `crates/pdfce-core/src/edit.rs:3845`, `MarkupOptions` at `:3924`,
+  measured by `grep -n` this filing — where they would otherwise read as
+  an inconsistency somebody later "fixes". **Proximity is the hazard, not
+  the mitigation:** two structs a reader sees on one screen, enforcing the
+  same range with opposite dispositions and no stated reason, is precisely
+  the shape that invites a tidy-up.
+
+  **The instance that forced it.** `MarkupStyle::opacity` — the **restyle**
+  verb, `set_markup_style` — **clamps** an out-of-range `/CA` into
+  `0.0..=1.0`. `MarkupOptions::opacity` — the **author** verb,
+  `add_markup_with` — **refuses by name**
+  (`EditError::MarkupOpacityOutOfRange`), authors nothing, and leaves the
+  session byte-identical. Same key, same range, same document, opposite
+  dispositions.
+
+  **The discriminator is not read-vs-write and it is not trust.** It is
+  **whether a wrong result is COMPARABLE against something the operator
+  already has.**
+
+  - **Correcting.** The annotation exists and is on screen. A clamp keeps
+    it renderable, **visibly changes it**, and the operator watches `4.0`
+    become fully opaque with an undo entry sitting behind it. The clamp is
+    self-disclosing *by being applied to a thing already in view.*
+  - **Creating.** There is nothing there to compare against. A clamp
+    **puts a fully opaque annotation on the page while returning `Ok`** —
+    reporting success for a gesture **whose entire point was the
+    transparency.** The operator's only evidence would be an annotation
+    they have never seen before looking the way they did not ask for, which
+    is indistinguishable from the feature not existing.
+
+  > **The one-line test: after the operation, is there a PRIOR STATE the
+  > operator can hold the result against?** If yes, clamping is a visible
+  > correction. If no, clamping is a silent substitution, and the only
+  > honest answer is a refusal that names the value.
+
+  **★ This is `CLAUDE.md` rule 4 (*fuzzy, never sneaky*) at an input
+  boundary rather than at an inference.** A clamped creation is pdfce
+  deciding what the caller meant and then not saying so.
+
+  **★★ A CITATION CORRECTED IN PASSING, because propagating it would have
+  made this decision rest on a rule that does not say this.** The
+  `Pass 81.1` scoping entry (2026-08-14) wrote *"Refuse by name, do not
+  clamp … (**R27**: a clamp silently produces a document the caller did
+  not ask for)"*. **`R27` does not say that.** Read from *Standing rules*
+  this filing, its text is: *"Unsupported codec sub-features fail clean
+  and are counted BY NAME … Never a grey box, never a guessed pixel,
+  never a generic 'decode failed.'"* — a **decoder** rule about naming
+  what could not be handled. The shared kernel is real and is why the
+  citation felt right — **fail by name, never substitute a guessed
+  value** — but `R27` governs a codec's refusal to decode, not an
+  authoring verb's disposition on an out-of-range scalar. **That gap is
+  the reason this decision exists at all:** the principle had no home, so
+  it was being borrowed from the nearest rule that sounded like it.
+
+  **Second instance, already shipped, which is why this is a decision and
+  not a one-off note.** Revision clouds (`Pass 82.0`): a **file's**
+  out-of-range `/BE /I` is **clamped** to `0..2` rather than refused —
+  *"refusing to place the annotation to defend a range check would lose
+  content"* — while **an operator typing the same value is refused by
+  name.** Identical shape: repairing a value that already exists in a
+  document versus originating one. `Pass 81.0`'s read path is a third
+  (a foreign file's out-of-range `/CA` is clamped).
+
+  **★★ The corollary that makes this checkable rather than a slogan, and
+  it is the half a future session will drop.** *Lenient in what you
+  accept, strict in what you emit* is the familiar phrasing and it is
+  **not sufficient here**, because both of `Pass 81.1`'s verbs are
+  emitting. The axis that actually separates them is **origination**. So
+  the question to ask at any new validation site is not *"is this input or
+  output?"* but **"if I quietly repair this, is there anything on screen
+  or on disk that would contradict me?"**
+
+  **What this decision does NOT do.**
+
+  - It does **not** license clamping anywhere merely because a prior state
+    exists. A correction that would **lose content** still refuses —
+    `set_markup_style` regenerates an appearance and **discloses** what it
+    could not reproduce (`MarkupStyleChange`), which is a third disposition
+    and the right one when neither clamp nor refusal is honest.
+  - It does **not** make the two ranges different. Both verbs enforce
+    `0.0..=1.0` and both treat `NaN`/`±∞` as out of range; only the
+    **disposition** differs.
+  - It does **not** reach the *storage* question, which `Pass 81.0` already
+    settled: `Option<f64>`, so **absent** and **explicitly `1.0`** stay
+    distinguishable through a round trip. Normalising either into the other
+    would be a third kind of silent substitution and is refused
+    independently (round-trip rule 3, §5's *never normalize*).
+
+  **Body-section update, filed in this same edit:** none required beyond
+  §12. §4's API-contract narrative does not enumerate error dispositions
+  per verb; the verb-level contract lives in
+  `docs/core-api/02-editing-and-saving.md` §1.15 / §1.15.1 and in
+  `MarkupOptions::opacity`'s own rustdoc, both written by the engineer in
+  `4eaea20` and checked by `tools/check-core-api-verbs.py`.
+
+  **No new standing rule number, and the decline is argued rather than
+  assumed.** Three instances exist (`Pass 81.1`'s two verbs, `Pass 82.0`'s
+  `/I`, `Pass 81.0`'s read path), which meets this project's `n = 3` bar —
+  but they are **three sites of one design question**, not three
+  independent recurrences, and a decision record is the right carrier for
+  a *principle a reader is sent to* rather than a *habit a filing must
+  demonstrate*. Recorded as a named candidate: if a fourth instance
+  appears **outside the annotation family**, mint it and enumerate all
+  four here. `R27` is **not** amended — its text is correct for the
+  decoder case it was minted on, and the mis-citation above is corrected
+  where it was made, not by widening the rule. `R219` is unchanged; next
+  free `R220`. **Ceiling moves 091 → 092; next free 093.**

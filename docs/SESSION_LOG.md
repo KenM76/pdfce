@@ -68362,3 +68362,227 @@ engineer's own next-session notes carry any other open items.
   GitHub rather than carrying forward an assumed colour.
 
 ---
+
+## 2026-08-27 (292nd filing) — `Pass 81.1` (`4eaea20`) SHIPS: authoring a markup at an opacity took two verbs and left **two undo entries**, so one `Ctrl+Z` handed the operator an opaque highlight; it shipped in a **different shape** from the one filed on 2026-08-14, and the divergence is the filing; decision **092** mints the refuse-at-creation / clamp-at-correction asymmetry; decision **062** amended after a claim naming `add_markup_with` **by name** was falsified
+
+**Shipped:**
+- **`Pass 81.1`** (`4eaea20`) — `MarkupOptions { opacity: Option<f64> }`,
+  `MarkupOptions::validate()`, `EditSession::add_markup_with` and
+  `add_text_annotation_with`, `EditError::MarkupOpacityOutOfRange`, and
+  `pdfce-cli annotate --opacity ALPHA` (rule 11). §12.5.2 Table 164's
+  `/CA` is now writable **at authoring time, in one command and one undo
+  entry.**
+
+**Decisions made this session:**
+- **Decision 092 minted.** *An operation that **corrects** an existing
+  value may clamp; an operation that **creates** one must refuse by name.*
+  The discriminator is **not** read-vs-write and **not** trust — it is
+  **whether a wrong result is comparable against something the operator
+  already has.** A restyle clamp is self-disclosing because it is applied
+  to an annotation already on screen; an author-time clamp **puts a fully
+  opaque annotation on the page while returning `Ok`**, reporting success
+  for a gesture whose entire point was the transparency, with no prior
+  state to contradict it. Three instances (`Pass 81.1`'s two verbs,
+  `Pass 82.0`'s `/BE /I`, `Pass 81.0`'s read path), **standing-rule mint
+  DECLINED and argued**: three sites of one design question is not three
+  independent recurrences. Named candidate if a fourth appears outside the
+  annotation family.
+- **Decision 062 amended in place** (original kept legible). `Pass 81.1`
+  added a second markup authoring **signature** and 062 refused a second
+  markup **entry point** — those are not the same claim. 062 refused
+  `add_markup_appearance`, a hatch handing the engine a **prebuilt
+  annotation dictionary plus appearance stream** and bypassing four
+  guards, three of them document-safety properties whose failure is
+  **silent in the saved file**. `add_markup_with` takes one more
+  **validated scalar** and delegates into the same private
+  `add_markup_inner`, which runs all four guards and calls the same
+  `annot_author::build_appearance`. **Nothing is bypassed; the Pass adds a
+  fifth validation.** ★ The reusable half: *"one entry point"* was a claim
+  about the number of **paths that reach object creation unguarded**
+  (still one), never about the number of function signatures. A rule
+  phrased in terms of a surface gets read as forbidding a surface.
+
+**Findings + decisions:**
+- **★★★ IT SHIPPED IN A DIFFERENT SHAPE FROM THE FILED SCOPE, AND THAT IS
+  THE ENTRY.** The 2026-08-14 scoping entry is headed *"`opacity` on
+  `MarkupSpec`"*. `MarkupSpec` is an **enum of eight geometric variants**,
+  so that is eight copies of one field — but the decisive objection is
+  the other one: **`MarkupSpec` describes what the appearance DRAWS**
+  (`rect`, `border_width`, `endings`), and Table 164 makes `/CA` the alpha
+  with which **the annotation is composited onto the page.** It does not
+  affect what the appearance draws at all, and pdfce's generated
+  appearances deliberately hold their own graphics-state alpha at `1.0` so
+  the two cannot compound. Filing a compositing property under geometry
+  would have sent the next reader to the appearance stream — **exactly the
+  Highlight-`ExtGState` shortcut the scoping entry warned against.**
+- **The defect is an UNDO defect, not an ergonomic one.** `/CA` was
+  reachable only through `set_markup_style`, a **restyle** verb, which by
+  definition acts on an annotation that already exists — so a 40 %-opaque
+  highlight was author-opaque-then-restyle: **two verbs, two undo
+  entries.** One `Ctrl+Z` produced **an opaque highlight the operator
+  never asked for and could not have created any other way.**
+- **★★ The requesting shell could have coalesced the pair on its own side
+  and reported instead** (`request_authoring_a_markup_at_an_opacity_takes_two_verbs.md`,
+  2026-08-19, filed under decision 058 as *"a boundary observation, not
+  urgent, not blocking"*). **A shell-side coalesce would have worked and
+  left every other consumer with the same defect.** Decision 058 working
+  as designed — and the report was filed as ergonomics and turned out to
+  be correctness.
+- **★★ BOTH AUTHORING ROUTES, IN ONE PASS, because the requester asked a
+  NARROWER QUESTION THAN THE STANDARD ANSWERS.** They asked about
+  geometric markup. *"Which annotations does `/CA` apply to"* is a
+  different question, and **Table 164 is the MARKUP ANNOTATION entry
+  list** — `FreeText`, `Text` (sticky note) and `Stamp` are markup
+  annotations exactly as `Square` and `Highlight` are. Shipping one route
+  would have reproduced the failure this project hit three times in three
+  days: **fixing one route makes the others look broken**, and the shell
+  finds out by pressing a control that works on a rectangle and not on a
+  sticky note. **`/CA` goes on the parent only, never on its `/Popup`** —
+  §12.5.6.14 gives a popup no `/CA`; it is chrome the viewer draws.
+- **Three behaviours, each decided.** `None` **omits** the key (Table
+  164's default *is* 1.0, so writing it adds a key that changes nothing
+  and makes a pdfce-authored opaque annotation textually distinguishable
+  from every other producer's). `Some(1.0)` **is written** — renders
+  identically, **is not the same bytes**, and collapsing it would be pdfce
+  deciding what the caller meant. Out of range / `NaN` / `±∞` is
+  **refused by name with nothing authored**, session left byte-identical.
+- **★ ONE VALIDATOR, NOT TWO, and how it was found is the reusable half.**
+  `MarkupOptions::validate` is a function because **both** routes call it;
+  inline in each it would be **two expressions of one rule** — `R92`'s
+  failure mode, **and precisely the shape that let `/CA` be reachable from
+  the restyle verb and not the author verb in the first place.** It
+  surfaced because clippy's `collapsible_if` made the engineer look at
+  those lines: **the DUPLICATION was the real finding, and clippy cannot
+  see that.** A lint pointing at a line is sometimes only useful as a
+  reason to read it.
+- **★★ A CITATION WAS FALSIFIED IN PASSING, and the correction names its
+  source.** The `Pass 81.1` scoping entry twice attributed the no-clamp
+  ruling to **`R27`** — *"(R27: a clamp silently produces a document the
+  caller did not ask for)"*. Read from `ROADMAP.md`'s *Standing rules*
+  this filing, **`R27` says no such thing**: it is *"Unsupported codec
+  sub-features fail clean and are counted BY NAME … never a guessed
+  pixel"*, a **decoder** rule. The shared kernel is real (*fail by name,
+  never substitute a guessed value*), which is why it felt right — but the
+  ruling had **no home**, and was being borrowed from the nearest rule
+  that sounded like it. That absence is the reason decision 092 was
+  minted. Corrected in both places: a banner clause on the scoping entry,
+  and inside 092 itself.
+- **★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string.**
+  Four survivors of the *"`Pass 81.1` is unstarted / it is a field on
+  `MarkupSpec`"* claim, all found by reading rather than by grepping
+  `81.1`:
+  1. **`docs/core-api/02-editing-and-saving.md`**, `set_quad_point_order`
+     row — *"an `add_markup_with` would be a second [entry point]"*,
+     **naming the verb.** Already corrected by the engineer in `4eaea20`
+     itself, old wording struck through, new §1.15.1 added. Verified
+     present this filing, not assumed.
+  2. **`ROADMAP.md`, `Pass 81.0`'s Shipped entry** — *"STILL NOT DONE …
+     the `/CA` WRITE on `MarkupSpec` … still in Next up"*. **Wrong twice
+     over** (it shipped; it is not on `MarkupSpec`). Dated amendment
+     footer added; the ordering clause in the same paragraph still stands
+     and is said to.
+  3. **`FEATURES.md`'s restyle row** — *"Distinct from markup AUTHORED at
+     reduced opacity, below (Planned)"*. Now shipped, and the sentence was
+     **replaced** rather than annotated (this file's own rule), carrying
+     the clamp-vs-refuse distinction with it.
+  4. **`FEATURES.md`'s author-markup row** — *"Cannot set note text
+     (`/Contents`) **or opacity (`/CA`)**"*. Half of that is now false.
+     Replaced; the `/Contents` half is preserved because `Pass 80.0` is
+     still unstarted.
+  Also checked and **deliberately left**: two *"`80.0` … and `81.1`
+  (markup opacity write half) — untouched by this filing"* lines inside
+  earlier Shipped entries' ledgers. Those are append-only history and were
+  true when written; no present-tense claim survives in them.
+- **★ A GATE FOUND A REAL DEFECT IN THE NEW TEST — `n = 7`.**
+  `check-string-gaps.sh` caught a wrapped string literal in
+  `tests/markup_opacity.rs` that had lost its continuation backslashes
+  through a shell heredoc, and would have shipped an assertion message
+  with **13-space gaps**. **The new datum:** every prior occurrence was in
+  **shipped** code — a `println!`, a doc comment, an operator-facing
+  status line. **This one was in a TEST's assertion message, which
+  surfaces only when the test fails** — i.e. at exactly the moment someone
+  needs to read it, and a place no diff re-read would think to check. The
+  finding is amended (not duplicated) at
+  `D:/dev/rag/rust/a_python_heredoc_eats_the_backslash_continuation_in_a_rust_string_literal.md`.
+- **Verification, engineer's, relayed** — this role has a shell and used
+  it for the commit, the test count, the ledger and the `R27` text, **not**
+  for the build. **9 tests** in `crates/pdfce-core/tests/markup_opacity.rs`
+  (new file; count confirmed here by `grep -n "^fn "`, not copied from the
+  commit message). **4,410 passing / 0 failing workspace-wide (was 4,401,
+  so +9, all from the new file).** **Three sabotages failing 3 / 1 / 2
+  tests** — 6 failures over 3 mutations, **no two overlapping.** Driven
+  end to end **on real files through the CLI**: `square --opacity 0.4` →
+  `/CA 0.4` in the saved bytes, `changed=3 undo_verified=1
+  undo_identical=1`; `text --opacity 0.25` → `/CA 0.25`;
+  `square --opacity 4.0` → **refused by name, no output file written**;
+  `square` with no flag → **zero** `/CA` in the output. `cargo fmt --all
+  --check` and `cargo clippy --workspace --all-targets -- -D warnings`
+  clean; all gates green including `check-string-gaps` and
+  `check-core-api-verbs`; `cargo tree -p pdfce-core` / `-p pdfce-render`
+  show **no GUI dependency**; `wasm32-unknown-unknown` compiles both;
+  `cargo +nightly fuzz build` compiles all targets. `docs/core-api/`
+  counts moved **146 → 148 verbs**, **annotations 11 → 13**, `edit.rs`
+  **32,159 → 32,435** lines. Diff: **5 files, +727 / −11.**
+- **`4eaea20` confirmed on `main` by `git log --oneline`, run here.** It
+  is **not** the tip, which is why `check-commits-filed.py` named it in
+  full rather than deferring it under `--strict-tip`; filing it is what
+  turned that gate green (**re-run after this filing's edits: clean, 614
+  code commits checked, 5 carried in the baseline**).
+- **★ THE TIP MOVED WHILE THIS FILING WAS BEING WRITTEN, and it is
+  reported rather than assumed away.** The dispatch named `a344112` (the
+  291st filing) as tip; `git log --oneline origin/main..main` run here
+  shows **three** unpushed commits, tip **`3ffd86f`** — a **docs-only**
+  commit adding `docs/core-api/03-capabilities.md` §3.6 (restyling
+  existing text), landed at 13:58. It is **outside this dispatch's scope
+  and is NOT filed here.** `check-commits-filed.py` does not flag it
+  because it counts **code** commits, so **no gate will ever ask for it** —
+  which is exactly why it is written down. Whether it wants a `ROADMAP.md`
+  entry of its own is the engineer's call, but its own message states a
+  finding worth one — *a verb PRESENT, ACCURATE and green under
+  `check-core-api-verbs.py` was still unfindable by the question a reader
+  actually has*, and it cost `pdfceGUI` a filed request
+  (`request_restyle_an_existing_text_run.md`, 2026-08-25) whose table read
+  *"none available"* for a capability that had shipped on 2026-08-20. **A
+  gate that fires on ABSENCE cannot see MISFILING.** No count is asserted
+  for that shape; this role has not surveyed it.
+
+**Still in flight:**
+- **`Pass 80.0`** (note text — `/Contents` + `/T` + `/M`) — **unchanged
+  and still UNSTARTED**, and now the natural next claimant of
+  `MarkupOptions`' remaining fields. Decision 062 §§2–3 untouched: `/M`
+  stays engine-stamped, `/T` stays optional with **no invented
+  placeholder**.
+- **`Pass 140.0`** (`DeviceN`/`Separation` image ink-bridging outside
+  overprint) — unchanged from the 291st filing, diagnosed-not-started.
+- The gate-shaped-gap question from the 289th filing (stale claims in
+  operator-facing `println!` strings) — unchanged, not decided.
+- The Pass-ID allocation-race candidate from the 291st filing, at `n = 1`.
+
+**For next session:**
+- Confirm `python tools/check-ledger-numbers.py` reports Passes up to
+  **140**, rules **`R219`** (next free `R220`), decisions **`092`** (next
+  free `093`), filings **292** (next free **293**). This filing minted
+  decision `092`, amended decision `062` in place, and minted **no**
+  standing rule — the decline is argued in 092 itself.
+- **The `gui` box on the new `FEATURES.md` opacity row is deliberately
+  `[ ]`** (`R203`). The request originated in `D:\dev\pdfceGUI`, the API
+  now exists, and **consuming it is their work** — nothing here is
+  reachable in a real `pdfceGUI` build yet.
+- Close
+  `D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/request_authoring_a_markup_at_an_opacity_takes_two_verbs.md`
+  — shipped in `4eaea20`. **This role did not move the file; that is the
+  engineer's act.** Worth telling them in the closure note that it shipped
+  **wider than asked** (both authoring routes) and **in a different
+  carrier** (`MarkupOptions`, not a `MarkupSpec` field), so their own
+  integration is written against what exists rather than against the
+  request.
+- **Nothing was committed or staged by this filing** — the engineer
+  commits.
+- **Backup currency not checked this filing** — engineer should confirm
+  `D:/Dev/pdfce-backups/` holds a bundle at or after `4eaea20`.
+- **CI colour not recorded here**, and `main` is **not pushed** as of this
+  filing's `git log` — read both fresh rather than carrying forward an
+  assumed state. Pushing `main` is standing-authorized (decision 090);
+  scrub `check-suite-name-absent.py` green first.
+
+---
