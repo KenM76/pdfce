@@ -676,22 +676,27 @@ impl ColorSpace {
     /// c/d pair **includes** them at 0 %, and the patch's own ReadMe says
     /// the colorant LIST, not the tint values, decides the outcome.
     ///
-    /// ★ **`/Indexed` is PRESENT in four of the seven failing suite
-    /// overprint patches, and REACHABLE in none of them** — measured
-    /// 2026-08-21: every one of those spaces is an **image** colour space,
-    /// `overprint::composite` has no image call site, and pre- and
-    /// post-fix binaries report identical overprint counters on all four.
-    /// This method is correct, cited and currently **inert**; it stops
-    /// being inert when `overprint_images_unsupported` can fall.
+    /// ★ **`/Indexed` IS PRESENT IN FOUR OF THE SUITE'S OVERPRINT PATCHES
+    /// AND IS NO LONGER INERT.** This paragraph carried a measured
+    /// negative from 2026-08-21 — *"REACHABLE in none of them: every one of
+    /// those spaces is an image colour space, `overprint::composite` has no
+    /// image call site, and pre- and post-fix binaries report identical
+    /// overprint counters on all four"* — and every word of it was true when
+    /// written. `Pass 130.2` built the image call site
+    /// (`Canvas::fill_image_overprint`), and three of those four patches
+    /// went from FAIL to pass on the strength of this arm reading the
+    /// `/Indexed` base's colorant list. The claim is corrected rather than
+    /// deleted because the SHAPE of it recurs: *present in the file* and
+    /// *reachable by the renderer* are different claims, and the first reads
+    /// as the second unless it says so.
     ///
-    /// ★★ **This is the THIRD copy of that claim and the last one
-    /// corrected**, which is worth more than the correction. The other two
-    /// are in `crate::overprint` — the `classify` arm and its test — and
-    /// both were fixed in the commit that measured the result. This one
-    /// was missed because **the sweep's boundary was the file and the
-    /// claim's boundary was the feature**, and this is the definition site
-    /// of the function the whole fix hangs on: the one place a reader
-    /// arrives at without meaning to.
+    /// ★★ **It was the THIRD copy of that claim and the last one
+    /// corrected**, which is worth more than either correction. The other
+    /// two are in `crate::overprint` — the `classify` arm and its test. This
+    /// one was missed because **the sweep's boundary was the file and the
+    /// claim's boundary was the feature**, and this is the definition site of
+    /// the function the whole fix hangs on: the one place a reader arrives at
+    /// without meaning to.
     ///
     /// # Returns
     ///

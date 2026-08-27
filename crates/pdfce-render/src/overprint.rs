@@ -565,15 +565,17 @@ pub fn classify(space: &ColorSpace, in_image_sample: bool) -> Option<SourceKind>
         // survives from a colorant list it never read. `PCS1_190` is
         // authored on exactly that discriminator.
         //
-        // ★ `/Indexed` is PRESENT in four of the seven suite overprint
-        // patches — and, measured 2026-08-21, REACHABLE IN NONE OF THEM:
-        // every one of those spaces is an IMAGE colour space, and
-        // `composite` has no image call site, so pre- and post-fix
-        // binaries report identical overprint counters on all four. This
-        // arm is correct and currently inert; it stops being inert when
-        // `overprint_images_unsupported` can fall. **Present-in-the-file
-        // and reachable-by-the-renderer are different claims**, and the
-        // first reads as the second unless it says so.
+        // ★ THIS ARM WAS INERT FOR FIVE DAYS AND IS NOT ANY MORE.
+        // Measured 2026-08-21: `/Indexed` is PRESENT in four of the suite's
+        // overprint patches and was REACHABLE IN NONE OF THEM, because every
+        // one of those spaces is an IMAGE colour space and `composite` had
+        // no image call site — pre- and post-fix binaries reported identical
+        // overprint counters on all four. `Pass 130.2` built that call site
+        // (`Canvas::fill_image_overprint`) and three of the four patches
+        // went from FAIL to pass. The note is corrected rather than deleted
+        // because the shape of it recurs: **present-in-the-file and
+        // reachable-by-the-renderer are different claims**, and the first
+        // reads as the second unless it says so.
         //
         // ★★ AND THE CALLER OWES THE OTHER HALF. This arm fixes the ROW;
         // the TINTS handed to `cmyk_group_rules` must independently be the
@@ -865,6 +867,109 @@ pub fn composite(
     changed
 }
 
+/// [`composite`]'s twin for a paint whose source colour **differs per
+/// pixel** — an overprinting `Separation`/`DeviceN` *image*.
+///
+/// # Why a second function rather than a `[f32; 4]` that happens to vary
+///
+/// Because the varying part is the only part that varies. `rules` are still
+/// computed **once** by the caller, and that is a fact about Table 149 rather
+/// than an optimisation: row 3's selection depends on **which colorants the
+/// source space names**, never on their tints, and an image has one colour
+/// space for all its samples. (Row 1 — `DeviceCMYK` specified directly under
+/// `/OPM 1` — *is* tint-dependent, which is why that source kind must not be
+/// routed here; it also cannot arrive, because
+/// [`classify`] sends a sampled image to [`SourceKind::OtherProcess`] by
+/// Table 149's own scope note.)
+///
+/// This mirrors [`crate::cmyk_buffer::CmykBuffer::composite_overprint_varying`]
+/// exactly, for the same reason [`composite`] mirrors its solid sibling: a
+/// document can contain the same mark on a subtractive page and on an
+/// additive one, and the two must not disagree about what overprint did to
+/// it. What the sRGB path loses — and it is real and disclosed elsewhere —
+/// is that the backdrop's component split is *reconstructed* by
+/// [`rgb_to_cmyk`] rather than remembered.
+///
+/// # Contract
+///
+/// * `source_at(x, y)` returns the pixel's authored process tints and its
+///   **coverage** (the image's own per-texel alpha, already rasterised onto
+///   the device grid), or [`None`] where the image does not land.
+/// * `alpha` is the constant alpha (`ca`), multiplied into coverage exactly
+///   as [`composite`] multiplies it.
+/// * `region` is a device-space `(x0, y0, x1, y1)`, already clamped.
+///
+/// # Returns
+///
+/// The number of pixels whose value actually changed. Zero is meaningful and
+/// is not a failure — see [`composite`].
+pub fn composite_varying(
+    pixmap: &mut tiny_skia::Pixmap,
+    rules: [ComponentRule; 4],
+    alpha: f32,
+    region: (u32, u32, u32, u32),
+    mut source_at: impl FnMut(u32, u32) -> Option<([f32; 4], f32)>,
+) -> u32 {
+    let width = pixmap.width();
+    let (x0, y0, x1, y1) = region;
+    let mut changed = 0_u32;
+
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let Some((source, coverage)) = source_at(x, y) else {
+                continue;
+            };
+            let t = alpha.clamp(0.0, 1.0) * coverage.clamp(0.0, 1.0);
+            if t <= 0.0 {
+                continue;
+            }
+            let idx = (y * width + x) as usize;
+            let Some(&px) = pixmap.pixels().get(idx) else {
+                continue;
+            };
+            // The identical demultiply-and-white-paper convention
+            // `composite` uses, stated there and not repeated here.
+            let a = f32::from(px.alpha()) / 255.0;
+            let (br, bg, bb) = if a <= 0.0 {
+                (1.0, 1.0, 1.0)
+            } else {
+                (
+                    f32::from(px.red()) / 255.0 / a,
+                    f32::from(px.green()) / 255.0 / a,
+                    f32::from(px.blue()) / 255.0 / a,
+                )
+            };
+            let backdrop = rgb_to_cmyk(br, bg, bb);
+            let mut out = [0.0_f32; 4];
+            for i in 0..4 {
+                out[i] = rules[i].apply(backdrop[i], source[i]).clamp(0.0, 1.0);
+            }
+            let (nr, ng, nb) = cmyk_to_rgb(out);
+            let fr = br + (nr - br) * t;
+            let fg = bg + (ng - bg) * t;
+            let fb = bb + (nb - bb) * t;
+            let fa = a + (1.0 - a) * t;
+
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let enc = |v: f32| -> u8 { (v * fa * 255.0 + 0.5).clamp(0.0, 255.0) as u8 };
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let ea = (fa * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
+
+            if let Some(np) =
+                tiny_skia::PremultipliedColorU8::from_rgba(enc(fr), enc(fg), enc(fb), ea)
+            {
+                if np != px {
+                    changed += 1;
+                }
+                if let Some(slot) = pixmap.pixels_mut().get_mut(idx) {
+                    *slot = np;
+                }
+            }
+        }
+    }
+    changed
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -882,14 +987,15 @@ mod tests {
     /// discriminator: its a/b pair's `DeviceN` omits the backdrop's
     /// colorants and its c/d pair includes them at 0 %.
     ///
-    /// ★ **`/Indexed` is PRESENT in four of the seven failing suite
-    /// overprint patches, and REACHABLE in none of them** — measured
-    /// 2026-08-21: every one of those spaces is an *image* colour space,
-    /// `composite` has no image call site, and pre- and post-fix binaries
-    /// report identical overprint counters on all four. This test guards a
-    /// correct rule that no suite pixel currently exercises, which is a
-    /// reason to keep it rather than to discount it — but the four is not
-    /// a scoreboard.
+    /// ★ **This test guarded a correct rule that no suite pixel exercised,
+    /// for five days, and that was the reason to KEEP it rather than to
+    /// discount it.** Measured 2026-08-21: `/Indexed` is present in four of
+    /// the suite's overprint patches and was reachable in none of them,
+    /// because every one of those spaces is an *image* colour space and
+    /// `composite` had no image call site. `Pass 130.2` built one; three of
+    /// the four now pass. A green test over an unreachable rule is not a
+    /// wasted test — it is the half of the fix that was already done when
+    /// the other half arrived.
     #[test]
     fn indexed_classifies_as_its_base_space() {
         let base = ColorSpace::DeviceN {

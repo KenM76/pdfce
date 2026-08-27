@@ -721,6 +721,123 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// Paint an image through **§11.7.4.3's `CompatibleOverprint`** —
+    /// Table 149 applied per colour component, with the source tints
+    /// arriving per *sample* rather than per paint.
+    ///
+    /// # Why an image needs its own entry point at all
+    ///
+    /// [`Interpreter::paint_overprint`](crate::interpret) covers paths and
+    /// glyphs, and it composites **one** source colour through a coverage
+    /// mask. An image has a different colour at every texel, so the source
+    /// cannot be a `[f32; 4]`. What it *can* be — and this is the whole
+    /// reason the operation is affordable — is a second and third
+    /// rasterisation of the **same** shape through the **same** shader, one
+    /// carrying `C, M, Y` and one carrying `K`, exactly as
+    /// [`Canvas::fill_image`]'s ink path already does for a `DeviceCMYK`
+    /// image. Identical transform, identical filter quality, identical edge
+    /// coverage; only the values sampled differ. Reconstructing the mapping
+    /// by inverting the CTM and sampling per device pixel would be a second
+    /// implementation of the resampling and would disagree with the first at
+    /// every edge.
+    ///
+    /// `rules` are computed **once by the caller**, from the image's colour
+    /// space. That is Table 149's own shape, not a shortcut: its
+    /// `Separation`/`DeviceN` row selects on **which colorants the space
+    /// names**, never on their tints, and one image has one colour space.
+    ///
+    /// # Returns
+    ///
+    /// `Some(changed_pixels)` when the composite ran; **`None` when this
+    /// canvas cannot read its destination back**, which a recording canvas
+    /// never can. The caller's documented response to `None` is to paint the
+    /// image normally **and disclose the shortfall** — never to paint
+    /// nothing, and never to paint normally in silence (rule 4).
+    ///
+    /// A `Some(0)` is a success, not a fallback: it means the composite ran
+    /// and turned out to change nothing, which is a different fact from
+    /// "overprint was not applied" and is counted as such.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn fill_image_overprint(
+        &mut self,
+        path: &Path,
+        tints: &crate::image::CmykTexels,
+        rules: [crate::overprint::ComponentRule; 4],
+        quality: FilterQuality,
+        image_to_user: Transform,
+        anti_alias: bool,
+        ctm: Transform,
+        clip: ClipRef<'_>,
+        alpha: f32,
+    ) -> Option<u32> {
+        // A recording canvas has no destination to read; poison it by name
+        // rather than dropping the effect silently. Checked FIRST so the two
+        // scratch allocations below are not paid for a canvas that cannot
+        // use them.
+        if matches!(self, Self::Record(_)) {
+            self.refuse(PoisonReason::Overprint);
+            return None;
+        }
+        let (w, h) = (self.width(), self.height());
+        let (Some(mut cmy), Some(mut k)) = (Pixmap::new(w, h), Pixmap::new(w, h)) else {
+            return None;
+        };
+        // The identical shader/transform/quality/clip pair `fill_image`'s ink
+        // branch uses. `SourceOver` into a transparent scratch: the blend
+        // mode belongs to the composite below, and letting `tiny_skia` apply
+        // it here would blend against an empty scratch and silently reduce
+        // every mode to Normal.
+        {
+            let draw = |src: &Pixmap, dst: &mut Pixmap| {
+                let paint = Paint {
+                    shader: Pattern::new(
+                        src.as_ref(),
+                        SpreadMode::Pad,
+                        quality,
+                        1.0,
+                        image_to_user,
+                    ),
+                    blend_mode: BlendMode::SourceOver,
+                    anti_alias,
+                    force_hq_pipeline: false,
+                };
+                dst.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
+            };
+            draw(&tints.cmy, &mut cmy);
+            draw(&tints.k, &mut k);
+        }
+        let region = device_region(fill_bounds(path, ctm), 1.0, w, h)?;
+        // Un-premultiply by the alpha both planes were multiplied by — the
+        // same dance `composite_cmyk_image` performs, and the reason
+        // `write_ink` premultiplies in the first place. The alpha IS the
+        // sample's coverage: §11.6.4.2 makes an image's own alpha *shape*,
+        // and the constant `ca` is opacity, so the two multiply rather than
+        // one standing in for the other.
+        let source_at = |x: u32, y: u32| {
+            let idx = (y * w + x) as usize;
+            let (cm, kk) = (cmy.pixels().get(idx)?, k.pixels().get(idx)?);
+            let a = f32::from(cm.alpha()) / 255.0;
+            if a <= 0.0 {
+                return None;
+            }
+            let un = |v: u8| f32::from(v) / 255.0 / a;
+            Some((
+                [un(cm.red()), un(cm.green()), un(cm.blue()), un(kk.red())],
+                a,
+            ))
+        };
+        if let Some(b) = self.cmyk_mut() {
+            return Some(b.composite_overprint_varying(region, rules, alpha, source_at));
+        }
+        // Every other destination reads back as sRGB. `pixmap_mut` handles
+        // the knockout accumulator's disclosure itself and answers `None`
+        // for anything that cannot read back at all.
+        let dest = self.pixmap_mut()?;
+        Some(crate::overprint::composite_varying(
+            dest, rules, alpha, region, source_at,
+        ))
+    }
+
     /// The raw destination buffer, for the operations that **read pixels
     /// back** and therefore cannot be expressed as a recorded draw.
     ///

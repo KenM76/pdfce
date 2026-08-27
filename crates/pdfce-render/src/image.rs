@@ -462,8 +462,54 @@ pub struct DecodedImage {
     /// sampling per pixel would be a second implementation of the
     /// resampling, and it would disagree with the first at every edge.
     pub ink: Option<CmykTexels>,
+    /// Table 149's inputs for a `Separation`/`DeviceN` image — its colorant
+    /// names and its **authored process tints, texel for texel**.
+    ///
+    /// `None` for every other space, and that is not an omission: §11.7.4.3's
+    /// Table 149 gives a *process* colour space `c_s` in all three columns,
+    /// so painting a `DeviceGray`, `DeviceRGB` or `DeviceCMYK` image normally
+    /// under `/OP true` **is** the conforming result. Row 1's scope note
+    /// excludes a sampled image by name. Only row 3 — `Separation`/`DeviceN`
+    /// — asks for a component the source did not name to be taken from the
+    /// backdrop, and only row 3 therefore needs anything carried here.
+    ///
+    /// # ★ Why this is a SECOND set of planes rather than [`Self::ink`]
+    ///
+    /// The two answer different questions and disagree on exactly the case
+    /// that matters. [`Self::ink`] is *"what ink does this texel put on the
+    /// sheet"* — the value a normal paint lays down, which for a
+    /// `Separation` is its tint transform's output. This is *"which process
+    /// tints did the file's own operands state"*, read straight out of the
+    /// operands in `names` order per §8.6.6.5 and with a spot colorant
+    /// contributing **nothing** (it has no process channel to contribute
+    /// to). Reusing one for the other would make a `/Separation /PANTONE-185`
+    /// image paint nothing at all, because its authored process tints are
+    /// all zero while the ink it lays down plainly is not.
+    ///
+    /// See [`crate::overprint::authored_tints`], which is the single
+    /// implementation of the read and is shared with the path painter so the
+    /// two cannot come to disagree about the same space.
+    pub overprint: Option<OverprintSource>,
     /// Divergences that still produced pixels.
     pub notes: ImageNotes,
+}
+
+/// A `Separation`/`DeviceN` image's §11.7.4.3 inputs.
+///
+/// Produced by [`decode`] only for a space that classifies into Table 149's
+/// third row (directly or through an `/Indexed` base), and consumed only by
+/// the overprint path — an image painted with `/OP false` never reads it.
+#[derive(Debug)]
+pub struct OverprintSource {
+    /// The colorants the image's space names, as
+    /// [`crate::overprint::classify`] read them. This decides the four
+    /// [`crate::overprint::ComponentRule`]s **once for the whole image**:
+    /// row 3's selection depends on *which* colorants are named and never on
+    /// their tints, so there is no per-texel rule evaluation to do.
+    pub kind: crate::overprint::SourceKind,
+    /// The authored process tints, packed exactly as [`CmykTexels`] packs
+    /// ink so the same rasteriser can carry both.
+    pub tints: CmykTexels,
 }
 
 /// A `DeviceCMYK` image's colorants, packed for rasterisation.
@@ -951,9 +997,16 @@ fn decode_stencil(
     // is no authored ink to preserve. (`ink` in this scope is
     // that fill colour, not the CMYK planes -- a collision the
     // type checker caught and a rename would only paper over.)
+    // A stencil mask likewise states no colorants of its own for Table 149
+    // to read: §8.9.6.2 makes it "a region of the page to be painted with
+    // the current colour", so the SOURCE COLOUR is the graphics state's,
+    // not the image's, and the path painter's `paint_overprint` is what
+    // governs a fill of that colour. Overprinting a stencil is therefore
+    // not an image question at all, and `None` says so.
     Ok(DecodedImage {
         pixmap,
         ink: None,
+        overprint: None,
         notes,
     })
 }
@@ -1117,6 +1170,36 @@ fn decode_sampled(
         Space::Indexed { ink, .. } => ink.as_ref(),
         _ => None,
     };
+    // Table 149's row for this image, and — for an `/Indexed` image — the
+    // per-entry authored tints it selects over. Hoisted here for exactly the
+    // reason the two tables above are: the texel loop cannot re-match on
+    // `space` without moving out of it.
+    //
+    // Two shapes reach row 3: a DIRECT `Separation`/`DeviceN` image, whose
+    // tints are the texel's own components, and an `/Indexed` image over such
+    // a base, whose tints come from the palette. Both are common in print
+    // files — the suite's own overprint patches use the second exclusively.
+    //
+    // Every other row is deliberately dropped to `None` here rather than
+    // carried: a process source is `c_s` in all three of Table 149's columns,
+    // so an ordinary paint of it already IS the overprint result and there is
+    // nothing for the compositor to select between.
+    let op_kind: Option<crate::overprint::SourceKind> = match &space {
+        Space::Indexed {
+            overprint: Some(o), ..
+        } => Some(o.kind.clone()),
+        Space::Special(cs) => match crate::overprint::classify(cs, true) {
+            Some(k @ crate::overprint::SourceKind::SeparationOrDeviceN { .. }) => Some(k),
+            _ => None,
+        },
+        _ => None,
+    };
+    let palette_op_table: Option<&Vec<[f32; 4]>> = match &space {
+        Space::Indexed {
+            overprint: Some(o), ..
+        } => Some(&o.entries),
+        _ => None,
+    };
 
     // §8.9.6.4's ranges are counted against the IMAGE's colour space, so
     // the component count is the one resolved above — 1 for `Indexed`
@@ -1236,6 +1319,20 @@ fn decode_sampled(
     } else {
         None
     };
+    // The overprint planes, on the same terms as the ink planes above: two
+    // texel-sized pixmaps, allocated whenever the space is row 3, because
+    // whether the PAGE composites in ink is a decision made after the decode
+    // and an image is cached across pages. A failed allocation is not a
+    // failed image — the sRGB path still paints, and the overprint path then
+    // discloses that it could not run rather than painting silently wrongly.
+    let mut op_planes = if op_kind.is_some() {
+        match (Pixmap::new(width, height), Pixmap::new(width, height)) {
+            (Some(cmy), Some(k)) => Some(CmykTexels { cmy, k }),
+            _ => None,
+        }
+    } else {
+        None
+    };
     let mut out_of_range = false;
 
     for y in 0..height as usize {
@@ -1248,6 +1345,10 @@ fn decode_sampled(
             // Set by the palette arm below when the base is ink; `None` for
             // a direct image, whose colorants are `last_comps` instead.
             let mut palette_ink: Option<[f32; 4]> = None;
+            // The same, for Table 149's authored tints. Separate from
+            // `palette_ink` because the two tables answer different questions
+            // — see `Space::Indexed::overprint`.
+            let mut palette_op: Option<[f32; 4]> = None;
             // Read the plane BEFORE the colour work: §11.6.5.3's
             // un-premultiply divides by this very value, and it must be
             // applied before the colour-space conversion below.
@@ -1284,6 +1385,7 @@ fn decode_sampled(
                     // only point where the index still exists — one line
                     // later it has become a colour.
                     palette_ink = palette_ink_table.and_then(|t| t.get(index).copied());
+                    palette_op = palette_op_table.and_then(|t| t.get(index).copied());
                     match table.get(index) {
                         Some(&c) => c,
                         None => {
@@ -1379,11 +1481,36 @@ fn decode_sampled(
                 };
                 write_ink(planes, at, tint, a);
             }
+            // Table 149's source tints, written texel-for-texel beside both.
+            // Same packing, same premultiply, same rasteriser downstream —
+            // the whole reason `CmykTexels` is reused rather than a third
+            // layout invented.
+            if let (Some(planes), Some(kind)) = (op_planes.as_mut(), op_kind.as_ref()) {
+                let tint = match palette_op {
+                    Some(t) => t,
+                    // A DIRECT `Separation`/`DeviceN` image: the operands are
+                    // the texel's own components, still in the image's colour
+                    // space on this line and nowhere after it.
+                    None => crate::overprint::authored_tints(kind, &last_comps[..readable])
+                        .unwrap_or([0.0; 4]),
+                };
+                write_ink(planes, at, tint, a);
+            }
         }
     }
     notes.palette_out_of_range = out_of_range;
 
-    Ok(DecodedImage { pixmap, ink, notes })
+    Ok(DecodedImage {
+        pixmap,
+        ink,
+        // Both halves or neither: a row-3 classification with no planes
+        // behind it would let the caller compute rules and then read tints
+        // that do not exist.
+        overprint: op_kind
+            .zip(op_planes)
+            .map(|(kind, tints)| OverprintSource { kind, tints }),
+        notes,
+    })
 }
 
 /// Write one texel's authored `DeviceCMYK` tint into the ink planes.
@@ -1638,6 +1765,22 @@ impl TintCache {
     }
 }
 
+/// An `/Indexed` palette's §11.7.4.3 inputs, when its base is a
+/// `Separation`/`DeviceN`.
+///
+/// Held beside the palette rather than derived later because a palette entry
+/// is resolved to [`Rgb`] when the table is BUILT — by the time a texel looks
+/// one up, the operands the tints must be read from are gone. That is the
+/// same argument [`Space::Indexed::ink`] makes, applied to a different read
+/// of the same operands.
+#[derive(Debug, Clone)]
+pub(crate) struct IndexedOverprint {
+    /// The base's Table 149 row, classified once at palette-build time.
+    pub kind: crate::overprint::SourceKind,
+    /// Authored process tints, one per palette entry.
+    pub entries: Vec<[f32; 4]>,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum Space {
     /// `DeviceGray` / `CalGray` / `ICCBased` with `N 1`.
@@ -1668,6 +1811,17 @@ pub(crate) enum Space {
         table: Vec<Rgb>,
         /// The same entries' `DeviceCMYK` colorants, index for index.
         ink: Option<Vec<[f32; 4]>>,
+        /// The same entries' §11.7.4.3 **authored process tints**, index for
+        /// index, when the base is a `Separation`/`DeviceN`.
+        ///
+        /// A third parallel table rather than a reuse of `ink`, for the
+        /// reason [`DecodedImage::overprint`] states at length: "what ink
+        /// does this entry lay down" and "which process tints did the file's
+        /// operands name" are different questions with different answers for
+        /// a spot colorant, and collapsing them makes a spot image paint
+        /// nothing. Built in the same loop as the other two so all three
+        /// cannot come to disagree about which index means what.
+        overprint: Option<IndexedOverprint>,
     },
     /// Any space this rasterizer does not decode itself, delegated whole
     /// to [`crate::color::ColorSpace`]: `Separation`, `DeviceN`, `Lab`,
@@ -2095,6 +2249,20 @@ fn resolve_indexed(
     // same loop as the sRGB entries, so the two tables cannot come to
     // disagree about which index means what.
     let mut ink_table = matches!(base, Space::Cmyk).then(|| Vec::with_capacity(hival + 1));
+    // The base's Table 149 row, resolved ONCE here rather than per entry.
+    // Only row 3 is kept: every other row paints `c_s` in all three columns,
+    // so an overprinting image in it is already rendered correctly by an
+    // ordinary paint and has nothing to carry.
+    let op_kind = match &base {
+        Space::Special(cs) => match crate::overprint::classify(cs, true) {
+            Some(k @ crate::overprint::SourceKind::SeparationOrDeviceN { .. }) => Some(k),
+            _ => None,
+        },
+        _ => None,
+    };
+    let mut op_table = op_kind
+        .as_ref()
+        .map(|_| Vec::<[f32; 4]>::with_capacity(hival + 1));
     // ★ EXACTLY `m` COMPONENTS, AND THE BUFFER IS SIZED FROM `m`.
     //
     // This was a fixed `[0.0f32; 4]` passed whole to `to_rgb`, and it was
@@ -2137,11 +2305,22 @@ fn resolve_indexed(
                 comps.get(3).copied().unwrap_or(0.0),
             ]);
         }
+        // ★ `comps` is the entry in the BASE space — one operand per declared
+        // colorant, in `names` order — which is precisely what
+        // `authored_tints` is written to read. Read here, at the one point
+        // where the operands still exist; one line later the entry is an
+        // `Rgb` and §8.6.6.5's ordering has been erased.
+        if let (Some(op), Some(kind)) = (op_table.as_mut(), op_kind.as_ref()) {
+            op.push(crate::overprint::authored_tints(kind, &comps).unwrap_or([0.0; 4]));
+        }
         table.push(base.to_rgb(intent, &comps, &mut palette_diag));
     }
     Ok(Space::Indexed {
         table,
         ink: ink_table,
+        overprint: op_kind
+            .zip(op_table)
+            .map(|(kind, entries)| IndexedOverprint { kind, entries }),
     })
 }
 
@@ -2233,6 +2412,7 @@ mod tests {
         let space = Space::Indexed {
             table: vec![Rgb::BLACK],
             ink: None,
+            overprint: None,
         };
         assert_eq!(space.default_decode(255.0), vec![(0.0, 255.0)]);
         assert_eq!(space.components(), 1, "the sample is ONE index");

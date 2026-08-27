@@ -412,19 +412,27 @@ pub struct Diagnostics {
     /// **What is still missing**, and why this counter is not a success
     /// measure: the four PROCESS colorants survive, but a SPOT colorant has
     /// no plane of its own and is flattened through its tint transform, so
-    /// it cannot be left standing the way a press leaves it. Image
-    /// XObjects do not reach the overprint composite at all — they are
-    /// **counted** now, on [`Self::overprint_images_unsupported`], which
-    /// this sentence said they were not until `Pass 97.1b`. Both remain
-    /// `Pass 97.1`'s n-channel compositing buffer to FIX; only the
-    /// blind-counter half is closed.
+    /// it cannot be left standing the way a press leaves it. That is the
+    /// per-colorant buffer, filed and not built.
     ///
-    /// ★ Note how that stale half survived a sweep: it named
-    /// `overprint_refused` in order to say the situation did **not** reach
-    /// it, so a grep for the *new* counter could not find it and a grep
-    /// for the old one found a sentence that looked deliberate. A claim
-    /// phrased as an absence is invisible to a search for the thing that
-    /// now exists.
+    /// ★ **This paragraph has now been wrong about images TWICE, in
+    /// opposite directions, and the second is worth more than the first.**
+    /// It originally said image XObjects were not even *counted*; `Pass
+    /// 97.1b` counted them and corrected it to *"Image XObjects do not reach
+    /// the overprint composite at all — they are **counted** now"*. That
+    /// second sentence went stale at `Pass 130.2`, which built
+    /// `Canvas::fill_image_overprint`: an overprinting `Separation`/`DeviceN`
+    /// image now composites per sample, and a process image was never owed
+    /// anything (Table 149 row 1 excludes a sampled image by name).
+    ///
+    /// ★ Note how the FIRST stale half survived a sweep, because the
+    /// mechanism is general: it named `overprint_refused` in order to say
+    /// the situation did **not** reach it, so a grep for the *new* counter
+    /// could not find it and a grep for the old one found a sentence that
+    /// looked deliberate. **A claim phrased as an absence is invisible to a
+    /// search for the thing that now exists** — which is exactly why the
+    /// second correction was made by grepping for the CLAIM ("no image call
+    /// site", "does not reach it") rather than for the counter.
     pub overprint_requested: usize,
     /// Of those, the ones that also selected **overprint mode 1** (`/OPM 1`,
     /// the "nonzero overprint mode").
@@ -502,35 +510,30 @@ pub struct Diagnostics {
     /// the operator cannot see by looking is the kind that must be said out
     /// loud.
     pub overprint_refused: usize,
-    /// **Images painted while overprint was in force**, which
-    /// `CompatibleOverprint` was never offered.
+    /// **Images that were OWED §11.7.4.3's composite and did not get it.**
     ///
-    /// # Why this is a separate counter and not more `overprint_refused`
+    /// # ★★ THIS COUNTER CHANGED MEANING IN `Pass 130.2`
     ///
-    /// Because they are different failures and a reader acts on them
-    /// differently. `overprint_refused` means *"the composite was offered
-    /// this paint and could not run it"* — a recording canvas, a
-    /// degenerate region, a mask that would not allocate. This one means
-    /// *"the composite was never offered this object at all"*, because
-    /// `overprint::composite` has exactly one call site, in the path and
-    /// glyph painter, and an image XObject does not reach it.
+    /// It now counts a **strictly smaller set**, so a number from an older
+    /// release and a number from this one are answers to different
+    /// questions and must not be diffed against each other.
     ///
-    /// Widening `overprint_refused` to cover both would have made a
-    /// whole missing object class look like a run of ordinary failures,
-    /// and would have moved a number an operator may already be diffing
-    /// between runs.
+    /// Until `Pass 130.2` it answered *"was the composite offered this
+    /// object CLASS?"*, and the answer was **no for every image** —
+    /// `overprint::composite` had exactly one call site, in the path and
+    /// glyph painter, and an image XObject did not reach it. The counter was
+    /// therefore deliberately **over-inclusive**: it counted every image
+    /// painted under `/OP` whether or not anything was actually owed, and
+    /// its own documentation said so and defended the choice.
     ///
-    /// # ★★★ MOST OF WHAT THIS COUNTS IS NOT A SHORTFALL — Table 149 MAKES
-    /// OVERPRINT INERT FOR A PROCESS IMAGE
+    /// It now answers *"was the composite owed HERE, and did it fail to
+    /// run?"*. `Canvas::fill_image_overprint` exists, so the plumbing
+    /// question the old reading measured is closed and the only interesting
+    /// residue is the genuine shortfall.
     ///
-    /// Read this before trying to make the number go down. Corrected
-    /// 2026-08-26; the heading here used to read *"Why it cannot be fixed
-    /// where it is counted"* and the paragraph under it said *"per-sample
-    /// overprint needs per-sample colorants, and pdfce's buffer is device
-    /// sRGB — the image's own colorant identity is gone by the time its
-    /// texels are composited."* The second half stopped being true at
-    /// `Pass 130.1`. The first half was never the whole story.
+    /// # Why most of the OLD count was never a shortfall
     ///
+    /// This half is unchanged and is the part worth not re-deriving.
     /// **Table 149's first row is scoped `DeviceCMYK, specified directly,
     /// NOT IN A SAMPLED IMAGE`.** An image therefore falls to the second
     /// row — *"any process colour space (**including other cases of
@@ -538,45 +541,52 @@ pub struct Diagnostics {
     /// three columns: `OP false`, `OP true / OPM 0`, and `OP true / OPM 1`
     /// alike.
     ///
-    /// So for a `DeviceCMYK` image, **painting it normally IS the
-    /// conforming behaviour**, and applying row 1's value-dependent rule to
-    /// one would be a deviation rather than a repair. `PCS1_010`, which
-    /// contributes 4 to this counter, carries exactly that shape:
-    /// `[/Indexed /DeviceCMYK 0 …]`.
+    /// So for a `DeviceGray`, `DeviceRGB` or `DeviceCMYK` image, **painting
+    /// it normally IS the conforming behaviour**, and applying row 1's
+    /// value-dependent rule to one would be a deviation rather than a
+    /// repair. `PCS1_010` carries exactly that shape —
+    /// `[/Indexed /DeviceCMYK 0 …]` — and contributed 4 to this counter for
+    /// the counter's entire life while nothing was wrong with the render.
+    /// It contributes 0 now.
     ///
-    /// # What is genuinely missing, and it is two narrower things
+    /// # What still counts, and both are real
     ///
-    /// 1. **`Separation`/`DeviceN` images.** Table 149's third row is *not*
-    ///    inert: a process component takes `c_b` under `OP true`, so an
-    ///    overprinting `DeviceN` image must PRESERVE the backdrop. Its
-    ///    rules depend on colorant NAMES alone, so they resolve once per
-    ///    image exactly as the shading path's do — the hard part is that
-    ///    `Pass 130.1` captures colorants only for a `DeviceCMYK` base, and
-    ///    a `DeviceN` base's tint-transform output is not yet carried.
-    ///    Measurable on `PCS1_190`/`191`/`192`.
-    /// 2. **Spot colorants under any process source.** The row that is not
-    ///    inert for a `DeviceCMYK` image is the SPOT one (`c_b` under
-    ///    `OP true`), and pdfce's buffer has four process planes and no
-    ///    spot planes — so there is no spot backdrop to preserve. That is
-    ///    the n-channel buffer, already filed.
+    /// 1. **A `Separation`/`DeviceN` image naming ONLY spot colorants.**
+    ///    Table 149's third row gives every *unnamed* process component
+    ///    `c_b` under `OP true`, so a source that names no process colorant
+    ///    at all would preserve the whole backdrop — which is right for a
+    ///    press with that spot ink on a plate, and an **erased image** for a
+    ///    renderer with four process planes and no spot plane. pdfce paints
+    ///    the flattened tint transform instead and counts it here. The fix
+    ///    is the per-colorant buffer, already filed; it is not reachable
+    ///    from this call site.
+    /// 2. **A destination that cannot be read back** — a recording canvas,
+    ///    or a scratch allocation that failed. §11.7.4.3 composites against
+    ///    the destination's own colorants, and there is no formulation of
+    ///    "read what is already there" for a display list.
     ///
-    /// ★ The counter is therefore **over-inclusive** and is left that way
-    /// deliberately rather than narrowed: it answers "was the composite
-    /// offered this object class?", which is a fact about pdfce's plumbing
-    /// and stays worth knowing. What changed is the reading — a non-zero
-    /// value is no longer evidence of a wrong picture.
+    /// # Why it is still a separate counter and not just `overprint_refused`
     ///
-    /// Counting it first is deliberate:
+    /// Both cases now ALSO raise [`Self::overprint_refused`], so the
+    /// `composited = effective − refused` identity holds across paths,
+    /// shadings and images alike — which it could not while images were
+    /// counted in a bucket of their own outside that arithmetic. This
+    /// counter survives beside it because the two lead a reader to different
+    /// next actions: `overprint_refused` alone is a plumbing failure to
+    /// investigate, and *this* one is usually the spot-plane gap, which is a
+    /// known, filed, architectural absence rather than a bug.
+    ///
+    /// Counting it at all is deliberate:
     /// **a counter blind to a whole object class reports a smaller problem
     /// than exists**, which this project has already paid for once in the
     /// glyph painter (`bf75351`).
     ///
-    /// ★ It is also what makes the `/Indexed` classification fix
-    /// measurable. suite's `PCS1_190`, `PCS1_191`, `PCS1_192` and
-    /// `PCS2_020` all carry `/Indexed [/DeviceN …]` spaces and every one
-    /// of them uses that space **only** for an image — so
-    /// `ColorSpace::indexed_entry` is correct, cited, and **inert on the
-    /// whole corpus** until this number can go down.
+    /// ★ And it is what finally made the `/Indexed` classification fix
+    /// measurable. `PCS1_190`, `PCS1_191`, `PCS1_192` and `PCS2_020` all
+    /// carry `/Indexed [/DeviceN …]` spaces used **only** for an image, so
+    /// `ColorSpace::indexed_entry` and `overprint::classify`'s `Indexed` arm
+    /// were correct, cited and **inert on the whole corpus** until this
+    /// number could go down. Three of those four patches now pass.
     pub overprint_images_unsupported: usize,
     /// Shadings painted while overprint was in force that **could not
     /// honour it** — §8.6.7 / §11.7.4.3.
@@ -2265,6 +2275,28 @@ pub(crate) fn run_form_at_on(
 }
 
 /// Interpreter state for one content stream.
+/// The device-independent half of an image paint — everything
+/// [`Interpreter::paint_image`] and [`Interpreter::paint_image_overprint`]
+/// must agree on, bundled so they cannot come to disagree.
+///
+/// Deliberately does **not** carry the blend mode. §11.7.4.3's composite
+/// *replaces* the blend rather than running beside it — Table 149 is itself
+/// the blend function for an overprinting paint — so a blend mode in this
+/// struct would be a field one of its two consumers must remember to ignore,
+/// which is the shape of a future defect rather than a convenience.
+struct ImageGeometry {
+    /// §8.9.4's user-space unit square, the region the image is filled into.
+    path: Path,
+    /// Image space → user space: `[1/w 0 0 -1/h 0 1]`, including the y-flip.
+    image_to_user: Transform,
+    /// The sampling filter, after `/Interpolate` and the operator's
+    /// minification setting have both been consulted.
+    quality: FilterQuality,
+    /// Whether the image's outer edge is anti-aliased — a sampling
+    /// boundary, not a shape edge, so this is not unconditionally true.
+    anti_alias: bool,
+}
+
 struct Interpreter<'a> {
     /// The CTM this content stream STARTED with — pattern space's anchor
     /// (§8.7.2 PM3/PM5, NOTE 1). Never changed by `cm`, which is the whole
@@ -6209,16 +6241,25 @@ impl Interpreter<'_> {
                     dict.get(b"Interpolate").map(|o| doc.resolve(o)),
                     Some(Object::Boolean(true))
                 );
-                // §11.7.4.3 has no image path in this renderer — see
-                // `Diagnostics::overprint_images_unsupported`. Counted
-                // BEFORE the paint so a paint that panics or is clipped
-                // away still leaves the shortfall on the record.
-                if self.gs.current.overprint_fill {
-                    self.diag.overprint_images_unsupported += 1;
-                    self.diag.note(
-                        b"image painted under /OP true: CompatibleOverprint has no \
-                          per-sample path; painted normally",
-                    );
+                // §11.7.4.3 — `CompatibleOverprint` for a SAMPLED image.
+                //
+                // ★ NOT every image under `/OP true` is owed this, and
+                // reading it as if it were is what made the shortfall
+                // counter over-report for its whole life. Table 149 gives
+                // *any process colour space* `c_s` in all three columns, and
+                // its first row excludes a sampled image BY NAME — so
+                // painting a `DeviceGray`, `DeviceRGB` or `DeviceCMYK` image
+                // normally under overprint IS the conforming result, not a
+                // shortfall. Only the `Separation`/`DeviceN` row asks for a
+                // component the source did not name to be taken from the
+                // backdrop, and `DecodedImage::overprint` is `Some` for
+                // exactly that row and no other.
+                if self.gs.current.overprint_fill
+                    && decoded.overprint.is_some()
+                    && self.paint_image_overprint(&decoded, interpolate, canvas)
+                {
+                    self.diag.images_rendered += 1;
+                    return;
                 }
                 self.paint_image(&decoded.pixmap, decoded.ink.as_ref(), interpolate, canvas);
                 self.diag.images_rendered += 1;
@@ -6330,9 +6371,58 @@ impl Interpreter<'_> {
         interpolate: bool,
         canvas: &mut Canvas<'_>,
     ) {
-        let (w, h) = (texels.width(), texels.height());
-        if w == 0 || h == 0 {
+        let Some(geom) = self.image_geometry(texels.width(), texels.height(), interpolate) else {
             return;
+        };
+        // §11.3.5 applies to an IMAGE exactly as it does to a path
+        // fill — Table 58's `/BM` is a graphics-state parameter, not a
+        // path-painting one. This was hard-coded `SourceOver` when
+        // blend modes first landed, and the symptom was precise and
+        // misleading: the operator's suite page 2 reported 76 blend
+        // modes APPLIED while only 0.37% of its pixels changed, because
+        // the marks those modes govern are drawn by images, not paths.
+        // A counter said the feature worked; the pixels said otherwise.
+        //
+        // Read HERE and not in `image_geometry`, deliberately: the blend
+        // mode is not geometry, and the overprint path must NOT take it —
+        // §11.7.4.3's composite replaces the blend rather than running
+        // beside it (Table 149 is itself the blend function).
+        let blend = self.gs.current.blend_mode;
+        canvas.fill_image(
+            &geom.path,
+            texels,
+            ink,
+            geom.quality,
+            geom.image_to_user,
+            blend,
+            geom.anti_alias,
+            self.gs.current.ctm,
+            self.gs.current.clip_ref(),
+        );
+    }
+
+    /// Everything a `w × h` image's paint needs from the graphics state
+    /// *except its colour*: §8.9.4's unit-square path, the image-space →
+    /// user-space transform, the sampling filter and whether the edge is
+    /// anti-aliased.
+    ///
+    /// # ★ Why this is a function and not four lines repeated twice
+    ///
+    /// Because two paints of the same image must land on **exactly** the
+    /// same device pixels. [`Self::paint_image`] draws its sRGB texels;
+    /// [`Self::paint_image_overprint`] draws the same image's authored tints
+    /// through §11.7.4.3. If those two disagreed about the filter quality,
+    /// the anti-alias switch or the y-flip by even one decision, the
+    /// overprint result would be the right colours in the wrong places — a
+    /// fringe of backdrop along every edge, or a whole image offset by a
+    /// pixel — and nothing in the counters would say so.
+    ///
+    /// Returns [`None`] for a zero-extent image or a degenerate unit
+    /// rectangle. Both paint nothing, which is the correct outcome and not
+    /// a failure.
+    fn image_geometry(&self, w: u32, h: u32, interpolate: bool) -> Option<ImageGeometry> {
+        if w == 0 || h == 0 {
+            return None;
         }
         let image_to_user =
             Transform::from_row(1.0 / w as f32, 0.0, 0.0, -1.0 / h as f32, 0.0, 1.0);
@@ -6375,34 +6465,140 @@ impl Interpreter<'_> {
         } else {
             FilterQuality::Nearest
         };
-        // §11.3.5 applies to an IMAGE exactly as it does to a path
-        // fill — Table 58's `/BM` is a graphics-state parameter, not a
-        // path-painting one. This was hard-coded `SourceOver` when
-        // blend modes first landed, and the symptom was precise and
-        // misleading: the operator's suite page 2 reported 76 blend
-        // modes APPLIED while only 0.37% of its pixels changed, because
-        // the marks those modes govern are drawn by images, not paths.
-        // A counter said the feature worked; the pixels said otherwise.
-        let blend = self.gs.current.blend_mode;
         // ★ NOT unconditionally true — see `image_edge_needs_antialiasing`.
         // An image's edge is a SAMPLING boundary, not a shape edge, and
         // antialiasing it is what bands abutting tiles.
         let anti_alias = image_edge_needs_antialiasing(self.gs.current.ctm);
-        let Some(unit) = Rect::from_ltrb(0.0, 0.0, 1.0, 1.0) else {
-            return;
-        };
+        let unit = Rect::from_ltrb(0.0, 0.0, 1.0, 1.0)?;
         let path = PathBuilder::from_rect(unit);
-        canvas.fill_image(
-            &path,
-            texels,
-            ink,
-            quality,
+        Some(ImageGeometry {
+            path,
             image_to_user,
-            blend,
+            quality,
             anti_alias,
+        })
+    }
+
+    /// Paint an image through **§11.7.4.3's `CompatibleOverprint`**, and say
+    /// whether it ran.
+    ///
+    /// # What is composited, and what is left to the ordinary paint
+    ///
+    /// `decoded.overprint` is `Some` only for Table 149's
+    /// `Separation`/`DeviceN` row, so the source kind is already narrowed by
+    /// the time this is called. Within that row there are three outcomes,
+    /// and collapsing any two of them is how this area has produced wrong
+    /// numbers before:
+    ///
+    /// 1. **The space names every process colorant** (`/DeviceN
+    ///    [/Cyan /Magenta /Yellow /Black]`, or `/All`). Every rule is
+    ///    `Source`, overprint changes nothing, and the ordinary paint is
+    ///    already the correct answer. Returns `false` **without** counting a
+    ///    shortfall — there is none.
+    /// 2. **The space names no process colorant at all** (a pure spot
+    ///    `Separation`). Every rule is `Backdrop`, so compositing would erase
+    ///    the image entirely — which is Table 149's literal answer *for a
+    ///    renderer that has a plane for that spot ink*, and pdfce has none.
+    ///    The honest result is to paint the flattened tint transform and
+    ///    disclose the gap, so this returns `false` and the caller counts it.
+    /// 3. **A mix** — the case the print-conformance suite's overprint
+    ///    patches are built on (`/DeviceN [/Cyan]` over a black backdrop,
+    ///    `/DeviceN [/Black /None]` over red). The named channels take the
+    ///    image's authored tints, the unnamed ones keep the backdrop, and
+    ///    that is what makes the suite's trap cross vanish.
+    ///
+    /// # Returns
+    ///
+    /// `true` when the composite ran and the caller must **not** paint the
+    /// image again. `false` when the caller should paint normally — with the
+    /// counters already set to say which of the three cases it was.
+    fn paint_image_overprint(
+        &mut self,
+        decoded: &crate::image::DecodedImage,
+        interpolate: bool,
+        canvas: &mut Canvas<'_>,
+    ) -> bool {
+        let Some(op) = decoded.overprint.as_ref() else {
+            return false;
+        };
+        // Rules ONCE for the whole image, not per texel. Table 149's
+        // `Separation`/`DeviceN` row selects on the colorant NAMES alone, and
+        // one image has one colour space — the same argument
+        // `composite_overprint_varying` makes for a shading, and the reason
+        // a per-sample source is affordable at all.
+        //
+        // `op` is `true` unconditionally: this is only reached under
+        // `overprint_fill`. The source tints are `[0.0; 4]` because they are
+        // read only by the `DeviceCmykDirect` arm, which `classify` cannot
+        // return for a sampled image (Table 149's row 1 excludes one by
+        // name).
+        let rules = crate::overprint::cmyk_group_rules(
+            &op.kind,
+            [0.0; 4],
+            true,
+            u8::from(self.gs.current.overprint_mode == 1),
+        );
+        if !rules
+            .iter()
+            .any(|r| crate::overprint::ComponentRule::preserves_backdrop(*r))
+        {
+            // Case 1: inert. Not a shortfall, not counted, painted normally.
+            return false;
+        }
+        // Counted here rather than after the composite, so an image whose
+        // overprint genuinely would change the page is on the record even if
+        // the composite then cannot run — the same ordering `paint_path`
+        // uses, and for the same reason.
+        self.diag.overprint_effective += 1;
+        if rules
+            .iter()
+            .all(|r| crate::overprint::ComponentRule::preserves_backdrop(*r))
+        {
+            // Case 2: every colorant this image names is a SPOT, and pdfce
+            // has no plane for one. Compositing would leave the backdrop
+            // untouched — correct for a press, and a vanished image on
+            // screen. Painting the flattened tint transform instead is the
+            // better approximation AND the one the disclosure already
+            // describes; what must not happen is doing it silently.
+            self.diag.overprint_refused += 1;
+            self.diag.overprint_images_unsupported += 1;
+            self.diag.note(
+                b"image painted under /OP true in a spot-only Separation/DeviceN space: \
+                  pdfce has no plane for a spot colorant, so Table 149's preservation \
+                  cannot run; the tint transform was painted normally",
+            );
+            return false;
+        }
+        let Some(geom) =
+            self.image_geometry(op.tints.cmy.width(), op.tints.cmy.height(), interpolate)
+        else {
+            return false;
+        };
+        let Some(changed) = canvas.fill_image_overprint(
+            &geom.path,
+            &op.tints,
+            rules,
+            geom.quality,
+            geom.image_to_user,
+            geom.anti_alias,
             self.gs.current.ctm,
             self.gs.current.clip_ref(),
-        );
+            self.gs.current.fill_alpha.clamp(0.0, 1.0),
+        ) else {
+            // Case 3 owed, but this destination cannot be read back — a
+            // recording canvas, or a failed scratch allocation. Disclosed,
+            // never silent.
+            self.diag.overprint_refused += 1;
+            self.diag.overprint_images_unsupported += 1;
+            self.diag.note(
+                b"image painted under /OP true: this destination cannot be read back, \
+                  so CompatibleOverprint could not run; painted normally",
+            );
+            return false;
+        };
+        self.diag.overprint_composited += 1;
+        self.diag.overprint_pixels += u64::from(changed);
+        true
     }
 
     /// Whether a `w × h` image is being drawn smaller than its own pixel
