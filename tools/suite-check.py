@@ -121,25 +121,50 @@ detector; it is the removal of a false green, and it is the more urgent half:
 every "N of 51 pass" sentence this project has ever filed included four
 patches the instrument had never examined.
 
-Ground truth for whoever builds the detector, measured 2026-08-24 against
-Acrobat renders of the same patches:
+★★★ THE GROUND TRUTH BELOW WAS WRONG ABOUT pdfce ON THREE OF FOUR PATCHES,
+AND IT IS CORRECTED HERE RATHER THAN REPLACED, BECAUSE THE ERROR IS THE
+INSTRUCTIVE PART (re-measured 2026-08-27).
 
-  * `PCS 8.2` (PCS082): Acrobat draws two OLIVE check marks, ~46x56 px, in
-    the upper-right corner of each image, plus a smaller inline one in the
-    caption. pdfce draws only the caption glyph. FAIL.
-  * `PCS 8.01` (PCS080): Acrobat draws two DARK-GREEN check marks on the
+What this section said, recorded 2026-08-24:
+
+  * `PCS 8.2` (PCS082): "Acrobat draws two OLIVE check marks ... pdfce draws
+    only the caption glyph. FAIL."
+  * `PCS 8.01` (PCS080): "Acrobat draws two DARK-GREEN check marks on the
     images AND about fifteen more along the spot-colour gradient bar. pdfce
-    draws none of them. FAIL.
-  * `PCS 8.1` (PCS081): same family, same result. FAIL.
+    draws none of them. FAIL."
+  * `PCS 8.1` (PCS081): "same family, same result. FAIL."
   * `PCS 5.0` (PCS050): the mark is a BLACK glyph from an embedded modified
-    Symbol font, not a coloured shape. pdfce renders it correctly. PASS.
+    Symbol font. pdfce renders it correctly. PASS.
 
-★ Note the trap in that list, because it caught this session: the mark's
-COLOUR is not a constant of the criterion. A detector keyed on one hue passes
-`PCS 8.01` by matching the green end of its gradient bar while both real
-marks are missing -- a false green produced by the fix for a false green.
-Whatever adjudicates these must key on the mark's presence relative to a
-reference render, not on a colour.
+Re-measured against the reference renders, side by side, at this harness's own
+scale: **pdfce draws both image check marks on PCS082, and on PCS080 it draws
+both image marks AND all ~15 marks along the gradient bar**, in the right
+colour and the right places. By each patch's own printed criterion -- "if a
+check mark is visible then DeviceN is respected" -- pdfce SATISFIES it.
+
+What pdfce actually misses on PCS080 is the **gradient bar behind the marks**,
+which renders as bare white paper: 451 x 29 device pixels of missing
+background, with the marks floating correctly on top of nothing. That is a
+different defect, in a different subsystem (a `ShadingType 2` whose colour
+space names two SPOT colorants, so ISO 32000-1 Table 149 under `/OP true`
+preserves the whole backdrop and the bar paints nothing -- pdfce has no spot
+plane). The recorded sentence would have sent the next reader hunting for a
+missing-glyph bug that does not exist.
+
+⇒ **HOW THE ERROR HAPPENED IS WORTH MORE THAN THE CORRECTION.** The original
+measurement was of the RIGHT THING -- "are the marks there?" -- taken from a
+whole-page pixel diff against Acrobat. On PCS080 that diff is dominated by the
+missing bar, and the marks sit inside the region it covers. "This region
+differs enormously and the marks are in it" was read as "the marks are
+missing". A large, real, correctly-detected difference **swallowed** a smaller
+question asked about the same pixels.
+
+★ AND THE ORIGINAL WARNING BELOW IS STILL RIGHT, which is why it is kept: the
+mark's COLOUR is not a constant of the criterion. A detector keyed on one hue
+passes PCS080 by matching the green end of its gradient bar. Whatever
+adjudicates these must key on the mark's presence relative to a reference
+render, not on a colour -- and, as the correction above shows, must key on the
+MARK'S OWN PIXELS rather than on the region containing them.
 
 WHAT A VERDICT HERE DOES AND DOES NOT MEAN
 ==========================================
@@ -151,7 +176,33 @@ catch. This tool reports what the suite asks; it does not claim more.
 
 USAGE
 =====
-    python tools/suite-check.py <dir-of-patch-pdfs> [--scale 2.0] [--json]
+    python tools/suite-check.py <dir-of-patch-pdfs> \
+        --reference-dir <dir-of-reference-engine-renders> [--scale 2.0] [--json]
+
+★★ PASS `--reference-dir`. IT IS NOT OPTIONAL IN PRACTICE AND IT WAS GOING
+UNUSED. Without it, thirteen reference-strip patches are SCORED but not
+ADJUDICATED and land in the UNRESOLVED bucket -- the harness has no calibration
+for what "matching" scores on those layouts, so it honestly declines to
+guess. With a directory of a known-good engine's renders of the SAME patches
+(same file names, `.png`), that calibration exists: the reference engine sets
+the score, and pdfce is judged against it rather than against a number
+somebody chose.
+
+Measured 2026-08-27, same tree, same binary, only the flag differing:
+
+    without --reference-dir     5 FAIL, 30 pass, 16 UNRESOLVED
+    with    --reference-dir     5 FAIL, 35 pass, 11 UNRESOLVED
+
+Five patches move from "the instrument cannot say" to a verdict, and nothing
+else changes. The renders live beside the corpus -- the private map directory
+names the environment variable that points at them.
+
+★ It is also the only way to run the CONTROL that says whether a trap is
+pdfce's or the instrument's: point `find_traps` at the reference engine's own
+render of a failing patch. Measured on the four failures of 2026-08-26, three
+tripped ZERO traps in the reference render (so those are pdfce's) and one
+tripped two (so its count includes instrument noise and must not be read as
+that many pdfce defects).
 
 Out-of-tree tooling, exactly like `tools/render-parity`: never shipped,
 never in `cargo test`, never in the GUI-core `cargo tree` invariant.
