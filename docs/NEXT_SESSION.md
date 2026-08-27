@@ -15,8 +15,8 @@ can falsify it.
 
 **The previous session cleared the feature-request backlog on both channels.**
 Two Passes shipped, one request was answered by pointing at a verb that
-already existed, and two eighteen-month-stale asks from the sibling colour
-project were finally measured.
+already existed, and two ten-day-old asks from the sibling colour project
+(filed 2026-08-17, reply owed and never given) were finally measured.
 
 - **`Pass 139.0`/`139.1`/`139.2`** (`c362b6b`) — **text stamped sideways in a
   CAD title block came out one character per line.** Extraction now publishes
@@ -36,8 +36,8 @@ project were finally measured.
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `f56b13a` | `git rev-parse --short HEAD` |
-| `git describe --tags` | `v0.14.0-53-gf56b13a` | `git describe --tags` |
+| `HEAD` | `f56b13a` **plus this file's own commit** — a handoff cannot name the commit that contains it | `git rev-parse --short HEAD` |
+| `git describe --tags` | `v0.14.0-53-gf56b13a`, likewise +1 | `git describe --tags` |
 | `origin/main` | **LEVEL — everything is pushed and filed** | `git rev-list --count origin/main..main` |
 | tag at `HEAD` | none; highest is `v0.14.0` | `git tag --points-at HEAD` |
 | tests | **4,410 passing, 0 failing** | `cargo test --workspace` |
@@ -82,7 +82,7 @@ nothing complaining. If you write one, file it deliberately.
 
 ## §C — THE DISK, WHICH IS NOW THE NEAREST HARD LIMIT
 
-**16 GB free of 954 GB (99 % used)**, after deleting `target/debug/incremental`
+**14 GB free of 954 GB (99 % used)** at write time, after deleting `target/debug/incremental`
 (7.1 GB) at the end of the session. It was **9 GB** before that, having been
 35 GB the same morning — a full workspace test run, a fuzz build, a wasm
 check and a new tool crate between them ate 26 GB in a day.
@@ -142,6 +142,12 @@ by somebody who already knows its name.
 ---
 
 ## §E — WHAT IS OPEN AND ACTIONABLE
+
+**If you want one thing to pick up: `Pass 140.0`.** It is fully diagnosed
+below, has a named wrong line of code and a named wrong fix to avoid, needs
+no operator decision, and it is the only item here that is blocked on nothing
+but effort. Everything else in this section is waiting on somebody's answer.
+
 
 ### `Pass 142.0` / `142.1` — a REAL bold/italic face, and the missing pre-flight
 
@@ -295,8 +301,12 @@ Replies filed and awaiting the other side:
 |---|---|
 | `note_the_writing_direction_is_published_and_your_400_lines_can_go.md` | pdfceGUI deleting `canvas::textsel::writing` (~400 lines) |
 | `note_opacity_at_author_time_shipped_and_it_was_an_undo_bug.md` | pdfceGUI wiring `add_markup_with` |
-| `reply_restyle_already_exists_and_the_real_gap_is_narrower_than_your_table.md` | **a decision from them**: is bold/italic worth `FF-C`? |
+| `reply_restyle_already_exists_…` **+ `correction_bold_and_italic_DO_work_…`** | **a decision from them**, and it is *not* "is bold worth building" — bold already works. It is: **is a disclosed SYNTHETIC weight enough, or do their operators need a real face?** Read the correction, not the reply. |
 | `iccce/reply_the_profile_census_and_your_33_node_constant.md` | iccce re-examining their 33-node constant |
+
+★ **Do not re-send anything from the restyle reply without reading the
+correction beside it.** The reply carries a banner and struck-through rows,
+but the file is long and the wrong rows are in the middle of it.
 
 ★ **One disagreement in that last one needs resolving rather than
 averaging.** `iccce`'s evidence names `USWebCoatedSWOP.icc` as carrying a
