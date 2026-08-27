@@ -96,6 +96,265 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 138.0` (`6256c93`) — THE MARQUEE AND THE MEASURE TOOL STILL COULD NOT SEE INSIDE A FORM — ★★★ THE THIRD TIME IN THREE DAYS ONE FIXED ROUTE HAS MADE THE OTHERS LOOK BROKEN, STANDING RULE `R219` MINTED FOR THE SHAPE — ★★ `PickedLine::object_index: usize` COULD NOT NAME A LEAF, SO THE FIELD ITSELF WAS THE BUG, NOT MERELY A SYMPTOM OF ONE — ★ `pick_line_in_page` HAD NO HEADLESS CALLER AT ALL, THE THIRD INSTANCE OF `R151`'S SHAPE — 2026-08-27 (288th filing)
+
+**Shipped 2026-08-27.** Commit `6256c93`
+(`6256c9398c1485d3065219ef89c898b77bfd5857`), pushed to `main`, `HEAD` at
+filing time. **Hash verified directly by this role** by reading
+`.git/logs/HEAD` (no shell tool this filing, but git's own on-disk reflog
+is readable as a file) — the chain reads `d1ce4ac` (`Pass 137.1`) →
+`50181f1` (this role's own 287th filing) → `6256c93` (`Pass 138.0`,
+`HEAD`). Hard rule 8: checked, not relayed.
+
+#### Origin: three requests from `pdfceGUI`, filed within a day of it adopting `Pass 136.0`
+
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` gained three
+requests the same morning `pdfceGUI` wired `Pass 136.0`'s click-through-
+a-form fix:
+
+- `request_hit_test_rect_has_no_deep_form_so_we_wrote_one.md`
+- `request_linepick_cannot_see_inside_a_form_so_the_two_line_dimension_is_dead_on_wrapped_drawings.md`
+- `request_cli_hit_is_still_shallow_so_its_authoritative_claim_is_now_false.md`
+
+All three answered by this Pass. Reply:
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\note_all_three_form_gaps_closed_and_one_judgement_made.md`.
+No pre-existing Backlog bucket covered any of the three — requested and
+shipped in the same filing, same shape as several recent Passes.
+
+#### ★★★ The pattern — recorded first, because it outlasts the mechanics below
+
+**None of the three was a regression.** All three were blind from the day
+they shipped, and all three were invisible only because whatever
+exercised forms was equally blind — an operator meets a page-sized form
+long before meeting a marquee or a measure tool. **Fixing the click in
+`Pass 136.0` is what promoted the other three routes from "not reached
+yet" to "the next wall."**
+
+This is the **third** time in three days this project has hit that exact
+shape:
+
+1. images (`Pass 130.1`) then shadings (`Pass 137.0`)
+2. analytic shadings (`Pass 137.0`) then mesh (`Pass 137.1`)
+3. the click (`Pass 136.0`) then the marquee and the line-pick (this Pass)
+
+A system where every route to one behaviour is wrong the same way looks
+entirely consistent from any single route — nothing disagrees with
+anything else until one route is fixed. **The first fix is what makes the
+rest look broken; before it, nobody could tell they were.** Three
+independent instances in seventy-two hours clears this project's usual
+two-occurrence bar for a standing rule with room to spare. Minted:
+**`R219`**, Standing rules, below.
+
+#### What shipped
+
+**`hit_test_rect_deep(model, rect, mode, forms) -> Vec<HitTarget>`** — the
+rect twin of `hit_test_point_deep` (`Pass 136.1`), interleaved on
+`FormLeaf::paint_order`. `hit_test_rect` filtered `model.objects` only, so
+a marquee drawn across an object painted inside a form selected nothing
+while a click on the identical object (post-`136.1`) already selected it.
+
+**Ordering is the opposite of the point query's, on purpose**: paint
+order, front-most **last**. A point query answers "which one" and wants
+the winner at the head; a marquee answers "which ones," and a caller
+re-emitting or drawing handles wants paint order. Pinned by a dedicated
+test, because the two functions read as siblings and a future reader will
+assume they agree.
+
+The shell had already written this function and reported it rather than
+keeping it, under decision 058, with a diagnosis worth preserving
+verbatim: *"It is still a second statement of the enclosure rule, in
+another crate… it will drift the day `MarqueeMode` grows a third mode, or
+the day `Enclosed` stops meaning `contained_by` — and it will drift
+silently, because our copy will keep compiling and keep returning
+something plausible."*
+
+**The judgement `pdfceGUI` asked this project to make:**
+`FormMarquee::{Exclude, Include}`, **defaulting to `Exclude`** — both
+variants shipped, one default, no question relayed back to the operator
+(`R206` — a pure interaction-design choice with no PDF-standard clause
+bearing on it, so no new decision record is needed for it). The case for
+`Exclude` is weaker than for the point query — a `/BBox` is a clipping
+extent, so a point falling inside it is not evidence of intent, but fully
+enclosing a rectangle genuinely is a statement about it — and the
+tie-breaker sits elsewhere: **a click can never yield a form; if a
+marquee can, the operator acquires, by one gesture and not the other, a
+selection that every edit verb then refuses.** A capability reachable
+only by accident is a trap, not a feature. A trap inside the trap, worth
+recording: `Include` returns the form **and** its leaves, so it is not a
+route back to the old shallow `hit_test_rect`, which returned the
+container alone.
+
+**`pick_line_in_page` now searches leaves, and `PickedLine`'s field type
+changed as part of the fix, not incidentally to it.**
+`PickedLine::object_index: usize` could only name an entry in one of the
+two lists (page objects or form leaves), so **the type made the correct
+answer unrepresentable** — which is why the two-line measure tool was
+**inert, not degraded**, on a wrapped drawing. Measured on the operator's
+own CAD file: **129,758 page objects, one form, 10,256 leaves** — every
+leaf a candidate line, every one invisible to the old picker.
+
+`object_index: usize` → `target: HitTarget` — a **deliberate breaking
+change**: every caller must now state what it does about a line inside a
+form, and one that cannot handle it gets a compile error instead of a
+silent miss. `PickedLine::page_object_index() -> Option<usize>` is the
+migration path — an `Option`, not a sentinel, because a leaf ordinal
+handed to something expecting a page index is a number that is **in
+range and wrong**, the worst shape a failure can take.
+
+`hit_test_subpaths` and `pick_line` each split into a lookup half and a
+geometry half (`hit_test_subpaths_of`, `pick_line_of`, both over
+`&PathObject`) — the geometry never needed the index, only the lookup
+did.
+
+**`object-list --hit` is deep by default; its own help text had gone
+false.** The flag's help promised it was *"authoritative for the GUI's
+behaviour rather than a second implementation of it"* and named
+`hit_test_point` by name — true when written, false from the day
+`pdfceGUI` moved to the deep query. The shell's own measurement: `--hit`
+at a point returning two candidates, both forms, at a point where the
+deep behaviour selects the path actually painted there. **A diagnostic
+that disagrees with the thing it diagnoses is worse than no diagnostic**
+— it confirms defects that are not there and fails to confirm the ones
+that are.
+
+`--hit-scope page` restores the old shallow query; every `hit` line now
+carries `scope=`. A form-leaf hit prints `leaf=N containment=…
+paint_order=… editable=false` and `kind=leaf:…` in place of `index=N` —
+a deliberately different key, since `index=` is what the editing
+subcommands consume and they always write to the **page's** stream,
+never a leaf's.
+
+**`--line-pick X,Y`** — not requested by name, and the reason is the
+load-bearing part: `pick_line_in_page` had **no CLI caller at all**
+before this Pass. The only way to observe it was to run the GUI and place
+a dimension: unregression-testable by a script, undiagnosable on an
+operator's file without a screen, and callable-and-uncalled while
+everyone assumed somebody exercised it. **This is the third time this
+project has had to write that lesson down** — `R151` is the canonical
+instance. It reports and does not author: `dimension-add --kind
+two-lines` still takes explicit coordinates, the correct contract for a
+batch script.
+
+**The five stale doc comments flagged by the 287th filing are all
+discharged in this commit** — `mesh.rs`'s "no native-ink route"/"no
+overprint" bullets, the twin `cmyk_bridged_pixels` docs in
+`interpret.rs`/`main.rs`, the `overprint_shadings_unsupported` row, and
+`shading_ink.rs`'s "What this does NOT cover" section. No re-report
+needed.
+
+#### Measured
+
+| query | result |
+|---|---|
+| CAD drawing, `--line-pick 300,500 --tolerance 5` | a specific 150.83 pt segment, one of 129,758 objects |
+| conformance composite, pick at a leaf edge | `leaf=0 containment=1486 paint_order=1` — previously impossible |
+| conformance composite, `--hit 300,500` deep | `candidates=0` (blank paper inside a page-sized form — correct) |
+| same point, `--hit-scope page` | the two forms `pdfceGUI` originally reported, unchanged |
+
+#### Tests
+
+Five new integration tests, `crates/pdfce-core/tests/form_recursion.rs`,
+over the existing `fixtures/synthetic/forms-xobject/` — no new fixture
+needed. **Two are guards rather than demonstrations**, and that
+distinction is worth filing: one pins that the marquee returns paint
+order while the point query returns the reverse; one pins that the
+picker returns the **nearest** segment from either list — without it, a
+change that searched leaves first and short-circuited would pass every
+other assertion in the file while silently preferring form contents over
+the page's own geometry, a wrong answer that looks like a working
+feature.
+
+#### Gates (on the committed tree, per the engineer's dispatch)
+
+- `cargo test --workspace --release`: **4385 passing, 0 failing**
+- `cargo fmt --all --check` clean; `cargo clippy --workspace
+  --all-targets -- -D warnings` clean
+- All 18 argument-free `tools/check-*` gates green
+- `cargo +nightly fuzz build`: all targets compile
+- `cargo check -p pdfce-core -p pdfce-render --target
+  wasm32-unknown-unknown`: ok
+- `cargo tree -p pdfce-core` / `-p pdfce-render`: no GUI dependency — not
+  independently re-run this filing (no shell this filing for `cargo`,
+  only for `.git/logs/HEAD`).
+
+#### `FEATURES.md` — updated in this same filing
+
+- **ce dimensions → "Pick two lines to dimension them from the canvas"**
+  row (*Implemented*) — sentence replaced (not appended) to add that the
+  pick itself now reaches inside form XObjects
+  (`pick_line_in_page`/`PageObjects::leaves`, this Pass), previously
+  inert on a wrapped CAD drawing, and that
+  `pdfce-cli object-list --line-pick` is the new headless, report-only
+  surface for the same pick (`dimension-add --kind two-lines` still takes
+  explicit coordinates and is unaffected).
+- **Vector objects → "Click through a form XObject to select the object
+  actually painted inside it…"** row (*Planned*, core `[x]` cli `[x]` gui
+  `[ ]`) — sentence replaced wholesale to fold in this Pass: marquee now
+  reaches the same leaves the click already did
+  (`hit_test_rect_deep`/`FormMarquee::{Exclude,Include}`, default
+  `Exclude`), and `object-list --hit` is deep by default with
+  `--hit-scope page` restoring the old query. Boxes unchanged — `gui`
+  stays `[ ]`, no `pdfceGUI` build reaches any of this yet; not rounded
+  up.
+
+No row moved section (neither capability is fully delivered across all
+three shells).
+
+#### `docs/core-api/` — flagged for the engineer, not edited (that document is the engineer's own)
+
+Two exact locations where the `PickedLine` field rename is a **breaking**
+change to a surface a separate project (`pdfceGUI`) builds against:
+
+1. `docs/core-api/01-reading-and-model.md:1588` — documents `PickedLine`
+   as `{object_index, subpath, segment, start, end, pick}` verbatim; needs
+   `object_index` → `target` plus a mention of `page_object_index()`.
+2. `docs/core-api/03-capabilities.md:207-208` — documents
+   `linepick::pick_line_in_page(&PageObjects, Point, tolerance) ->
+   Option<PickedLine>` (`vector/linepick.rs:344`); the signature itself is
+   unchanged, but the worked example a few lines up
+   (`03-capabilities.md:264-289`, `two_line_preview`) destructures
+   `PickedLine` only through its methods, not the field directly, so that
+   example is not broken — only the struct-shape documentation at line
+   1588 is.
+
+Also checked and found unaffected by this Pass: `docs/core-api/
+01-reading-and-model.md:1420-1436`'s `hit_test_rect` worked example
+(still calls the shallow function correctly; `hit_test_rect_deep` is a
+new addition, not a rename, so nothing there is now false — only
+incomplete).
+
+#### Findings graduated this filing
+
+1. **(Rust, `D:\dev\rag\rust\`)** — a field whose type cannot express the
+   answer fails silently, not loudly. `object_index: usize` over a
+   two-list model returned confident wrong answers or nothing; the fix
+   changed the type and took the compile errors as a deliberate discovery
+   mechanism for callers that had been quietly getting it wrong. Includes
+   the `Option`-not-sentinel corollary: an in-range wrong index is the
+   worst available failure shape.
+2. **(PDF domain, `C:\personal_rag\pdf\`)** — a page-sized form XObject
+   makes several independent subsystems blind at once, and fixing one
+   exposes the rest. Concretely: hit-test, marquee, line-pick, and any
+   tool built on a flat object list alone. A renderer or editor adding
+   form recursion should enumerate every consumer of the flat object list
+   in the same change, not one per bug report. Real numbers to carry:
+   129,758 objects / 1 form / 10,256 leaves on a CAD export; 28 objects /
+   4 forms / 242 leaves on a print-conformance composite.
+
+Both written this filing — see the RAG-tier ledger note below.
+
+#### Ledger
+
+New Pass `Pass 138.0`. New standing rule **`R219`** (below) — the
+first-fix-reveals-the-rest pattern, three independent instances in
+seventy-two hours. No new decision — `R206` already covers the
+`FormMarquee` default judgment call; nothing here redraws a crate
+boundary or picks a library. Ceiling: rules `R218` → **`R219`** (next
+free `R220`), decisions unchanged at `090` (next free `091`). Confirm
+with `python tools/check-ledger-numbers.py`.
+
+---
+
 ### `Pass 137.1` (`d1ce4ac`) — THE MESH HALF OF YESTERDAY'S COLOUR FIX, WHICH YESTERDAY COULD NOT REACH — ★★ a mesh has no `ColorRamp` to carry colorants in, so `Pass 137.0`'s widening was structurally incapable of reaching it — a NEW carrier (`Shade::Ink`, `MeshColorants`) shipped instead — 2026-08-27 (287th filing)
 
 **Shipped 2026-08-27.** Commit `d1ce4ac` (`d1ce4ace5550eff794d215937ac8d0f89b29d27d`),
@@ -103605,6 +103864,69 @@ same cause (hashes exist only at commit time), two different failure modes.
   are now masked).
 
   **Ceiling moves `R217` → `R218`; next free `R219`.**
+
+- **R219 — WHEN A PASS FIXES ONE OF SEVERAL ROUTES TO THE SAME BEHAVIOUR,
+  ENUMERATE THE OTHER ROUTES IN THE SAME PASS AND SAY EXPLICITLY WHICH ARE
+  LEFT.** Minted 2026-08-27 (288th filing), from the `Pass 138.0` Shipped
+  entry above, on its third independent occurrence in seventy-two hours —
+  well past this project's usual two-occurrence bar.
+
+  **The shape.** A capability reachable by more than one gesture or code
+  path can be broken identically on every path while looking, from any
+  single path, like ordinary unimplemented scope — nothing disagrees with
+  anything else, because nothing that works exists yet to disagree with.
+  Fixing ONE path does not merely add a capability; it changes what the
+  OTHER paths' failure means, from "not reached yet" to "the next wall."
+  The fix that finds this is therefore never the first fix — it is
+  whichever fix happens to land first, and the operator or the next
+  session pays for each remaining path being discovered one bug report at
+  a time rather than once, by enumeration, at the moment the first path is
+  understood well enough to fix.
+
+  **Three instances, all within the same seventy-two hours:**
+
+  1. **Images, then shadings.** `Pass 130.1` gave images a native-ink
+     overprint/colorant path; the identical `DeviceCMYK`/`Separation`/
+     `DeviceN` compositing gap in shadings was found and fixed separately,
+     `Pass 137.0`.
+  2. **Analytic shadings, then mesh.** `Pass 137.0` widened the shading
+     colorant gate; a mesh shading has no `ColorRamp` to carry colorants
+     in at all, so the identical widening was structurally incapable of
+     reaching it — a second, opposite carrier (`Shade::Ink`,
+     `MeshColorants`) shipped separately, `Pass 137.1`.
+  3. **The click, then the marquee and the line-pick.** `Pass 136.0`/
+     `Pass 136.1` made a click reach inside a form XObject;
+     `hit_test_rect` (the marquee) and `pick_line_in_page` (the two-line
+     measure tool) shared the identical page-object-only blind spot and
+     were fixed one operator-filed request later, this Pass (`Pass
+     138.0`).
+
+  **What the rule asks for, concretely.** The Shipped entry for a Pass
+  that fixes route A of a shared behaviour should name routes B, C, … by
+  identifier (function, CLI flag, gesture) and say, in the same entry,
+  whether each is already fixed, known-broken-and-filed, or
+  not-yet-checked. This is cheap at the moment of the fix — the engineer
+  has just built the mental model of why route A was broken, which is
+  exactly the model needed to ask "does route B share this?" — and
+  expensive later, when a different session has to rediscover the model
+  from scratch for each subsequent bug report.
+
+  **What this rule does NOT ask for.** It is not a demand to pre-emptively
+  audit every conceivably-related code path on every Pass — that is
+  `R38`'s coverage-honesty caution in the other direction, and a Pass that
+  tried to enumerate all possible sibling routes to everything it touched
+  would never ship. The obligation is narrower and cheaper: **when a fix
+  is explicitly a fix for "route A of behaviour X," name the other known
+  routes to X in the same filing**, because the routes are usually already
+  known (the code that implements each one exists and is greppable) — the
+  gap this rule closes is failing to *say so*, not failing to *find out*.
+
+  **Sibling of `R114`** (every new selection/gesture surface ships a
+  headless oracle in the same Pass) and **`R151`** (a core capability with
+  no shell caller): both are about a feature quietly having less reach
+  than it appears to; this rule is about a **fix** quietly having less
+  reach than it appears to, which is the same failure one step later in
+  the lifecycle.
 
 ## Update protocol
 

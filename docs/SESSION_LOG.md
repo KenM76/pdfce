@@ -67910,3 +67910,75 @@ engineer's own next-session notes carry any other open items.
   `ROADMAP.md`); confirm on the next run with a shell.
 
 ---
+
+## 2026-08-27 (288th filing) — `Pass 138.0` (`6256c93`) SHIPS: the marquee and the measure tool still could not see inside a form; a `usize` field was the bug, not a symptom of one; `R219` minted for a pattern seen three times in three days
+
+**Shipped:**
+- Pass 138.0 — `hit_test_rect_deep` (the marquee's twin of `Pass 136.1`'s
+  deep click) plus `FormMarquee::{Exclude,Include}` (default `Exclude`,
+  `R206`); `pick_line_in_page` now searches form leaves too, which
+  required changing `PickedLine::object_index: usize` to
+  `target: HitTarget` because the old type could not name a leaf at all —
+  `page_object_index() -> Option<usize>` is the migration path.
+  `pdfce-cli object-list --hit` is deep by default now (`--hit-scope
+  page` restores the old query), and gains `--line-pick X,Y`, the first
+  headless caller `pick_line_in_page` has ever had. Full account:
+  `ROADMAP.md`'s `Pass 138.0` Shipped entry.
+- Discharged the five `crates/` doc-comment survivors the 287th filing
+  reported — no new survivors owed from this Pass beyond the two
+  `docs/core-api/` locations flagged below (the engineer's own document,
+  not edited by this role).
+
+**Decisions made this session:**
+- None new. `FormMarquee`'s default is a judgment call already covered
+  by the standing rule `R206` ("ship both, default to the best guess,
+  don't ask the operator to choose") — no new decision record needed for
+  it.
+
+**Findings + decisions:**
+- **★★★ The pattern, the most valuable thing in this filing.** Three
+  independent instances in seventy-two hours of the same shape: a
+  behaviour reachable by several routes is broken identically on every
+  route, which looks like ordinary unimplemented scope until ONE route is
+  fixed — the fix is what reveals the others were broken too, not merely
+  incomplete. Images-then-shadings (`Pass 130.1`→`137.0`), analytic-
+  shadings-then-mesh (`Pass 137.0`→`137.1`), and the click-then-marquee-
+  and-line-pick (`Pass 136.0`/`136.1`→`138.0`) are the three instances.
+  Standing rule **`R219`** minted: when a Pass fixes one route to a shared
+  behaviour, name the other known routes in the same filing and say
+  which are already fixed, known-broken, or unchecked.
+- **A field whose type cannot express the answer fails silently, not
+  loudly.** `PickedLine::object_index: usize` over a two-list model
+  (page objects, form leaves) returned confident wrong answers or
+  nothing at all — there was no way for the type to say "this index is
+  into the OTHER list." The fix changed the type and let the compiler
+  find every caller that had been quietly getting it wrong, rather than
+  patching the symptom. Graduated to `D:\dev\rag\rust\`.
+- **A core verb with no headless caller, third instance of `R151`'s
+  shape.** `pick_line_in_page` had shipped with zero CLI callers — the
+  only way to exercise it was to run the GUI and place a dimension by
+  hand. `object-list --line-pick` closes it. The two-line measure tool
+  was consequently **inert, not degraded**, on any drawing wrapped in a
+  form: 129,758 page objects, 1 form, 10,256 leaves on the operator's own
+  CAD file, every leaf invisible to the old picker.
+- Two findings graduated to `C:\personal_rag\pdf\` and `D:\dev\rag\rust\`
+  this filing (both cited above); see `ROADMAP.md`'s `Pass 138.0` entry
+  for the full write-up.
+- `docs/core-api/01-reading-and-model.md:1588` and
+  `docs/core-api/03-capabilities.md:207-208` document the pre-`Pass
+  138.0` shape of `PickedLine`/`pick_line_in_page` and need updating for
+  the breaking field rename — flagged to the engineer, not edited (that
+  document is the engineer's own).
+
+**Still in flight:**
+- None specific to this form-recursion arc — the three requests that
+  opened it are all answered, and no further Pass ID is queued in this
+  area as of this filing.
+
+**For next session:**
+- Confirm `python tools/check-ledger-numbers.py` reports rules at `R219`
+  (next free `R220`) and decisions unchanged at `090` (next free `091`).
+- Update the two `docs/core-api/` locations named above for the
+  `PickedLine` breaking change.
+
+---

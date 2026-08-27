@@ -205,7 +205,15 @@ Geometry the canvas needs comes from `pdfce_core::vector`:
 `snap_candidates(Point, &SnapConfig, &PageObjects) -> Vec<SnapCandidate>`
 (`vector/snap.rs:449`) and
 `linepick::pick_line_in_page(&PageObjects, Point, tolerance) -> Option<PickedLine>`
-(`vector/linepick.rs:344`).
+(`vector/linepick.rs`).
+
+**★ The signature is unchanged but `PickedLine` IS NOT**, as of `Pass 138.0`:
+its first field went from `object_index: usize` to `target: HitTarget`,
+because the picker now searches form-XObject contents as well as the page's
+own objects and a `usize` cannot name a leaf. Full account, including why the
+migration helper returns an `Option` rather than a sentinel, in
+`01-reading-and-model.md` §10.5. **This is the one breaking change in that
+Pass; everything else is additive.**
 
 ### 1.4 Minimal worked sequences
 

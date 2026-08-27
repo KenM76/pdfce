@@ -119,7 +119,7 @@ builds `--no-default-features`, so both configurations compile.
 | Find what the user clicked, **page stream only** | `vector::hit_test_point(&PageObjects, Point, tolerance)` — `vector/hit.rs:126` | §10.3 |
 | Cycle through overlapping objects under the cursor | `vector::hit_test_point_all` — `vector/hit.rs:174` | §10.3 |
 | Reach objects drawn **inside** a form XObject | `PageObjects::leaves` → `vector::decompose::FormLeaf` — `vector/decompose.rs:1011` | §10.3 |
-| Marquee-select a region | `vector::hit_test_rect(&PageObjects, Bounds, MarqueeMode)` — `vector/hit.rs:181` | §10.3 |
+| **Marquee-select a region** | **`vector::hit_test_rect_deep(&PageObjects, Bounds, MarqueeMode, FormMarquee)`** — `vector/hit.rs`. `hit_test_rect` still exists and is **shallow**: it cannot see inside a form, so a rubber band and a click disagree about what is selectable | §10.3 |
 | Drill into which text run / subpath was clicked | `vector::hit_test_text_runs` — `hit.rs:277`; `vector::hit_test_subpaths` — `hit.rs:340` | §10.3 |
 | Snap a point to geometry | `vector::snap_candidates(Point, &SnapConfig, &PageObjects)` — `vector/snap.rs:449` | §10.4 |
 | Pick a straight edge (CAD-style measuring) | `vector::linepick::pick_line_in_page` — `vector/linepick.rs:344` | §10.5 |
@@ -1468,6 +1468,103 @@ The form is still reachable: `FormLeaf::containment` names every enclosing
 form, so "select the container" is available as a **deliberate second act**,
 which is a different thing from winning by default.
 
+
+#### ★★ For a MARQUEE, use `hit_test_rect_deep`. `hit_test_rect` is shallow.
+
+```rust
+use pdfce_core::vector::{hit_test_rect_deep, FormMarquee, HitTarget, MarqueeMode};
+
+// Paint order, front-most LAST -- see the ordering note below.
+let picked: Vec<HitTarget> =
+    hit_test_rect_deep(&model, rect, MarqueeMode::Enclosed, FormMarquee::Exclude);
+```
+
+`hit_test_rect` filters `PageObjects::objects` only, so a rubber band across
+an object drawn inside a form selects **nothing** while a click on the
+identical object selects it. Two gestures that both mean *"select this"*,
+disagreeing about what is selectable, is an inconsistency an operator meets in
+the first minute — so if you have adopted `hit_test_point_deep`, adopt this in
+the same change.
+
+**★ THE ORDER IS THE OPPOSITE OF THE POINT QUERY'S, AND THAT IS DELIBERATE.**
+`hit_test_point_deep` returns **topmost first**, because it answers *"which
+one?"* and the winner belongs at the head. `hit_test_rect_deep` returns
+**paint order, front-most last**, because it answers *"which ones?"* and a
+caller iterating them to draw handles, group them or re-emit them wants paint
+order. Reversing at your call site is one line; guessing which order a `Vec`
+is in is a bug.
+
+##### `FormMarquee` — both readings ship, and the default is `Exclude`
+
+| variant | a form XObject is… |
+|---|---|
+| `Exclude` *(default)* | never selected; only what is drawn inside it |
+| `Include` | selected on its own terms, **alongside** its leaves |
+
+For a *point*, excluding forms needs no argument: a `/BBox` is a clipping
+extent, so a point inside it is not evidence the operator aimed at the form.
+For a *rect* the case is genuinely weaker — fully enclosing a rectangle **is**
+a deliberate statement about that rectangle, and a form is a legitimate
+operand.
+
+**The tie-breaker is not which reading is better supported.** It is that a
+click can *never* yield a form. If a marquee can, the operator acquires — by
+one gesture and not the other — a selection that every edit verb then refuses.
+**A capability reachable only by accident is a trap, not a feature.**
+
+**★ `Include` is NOT a route back to `hit_test_rect`.** It returns the form
+**and** its leaves; the shallow query returns the container alone. A caller
+migrating between them is changing two things, and the leaf half is the one
+that will surprise it.
+
+#### The line picker also reaches inside forms, and its result says which list
+
+```rust
+use pdfce_core::vector::HitTarget;
+use pdfce_core::vector::linepick::pick_line_in_page;
+
+if let Some(line) = pick_line_in_page(&model, at, tol) {
+    match line.target {
+        HitTarget::Object(i) => { /* model.objects[i] */ }
+        HitTarget::Leaf(i)   => { /* model.leaves[i]  */ }
+    }
+}
+```
+
+Both lists are searched and the nearest straight segment wins, regardless of
+which list it came from. A form is never a candidate — only a `PathObject`
+reaches the picker at all, so unlike the point and rect queries there is no
+`FormMarquee` analogue to choose: there is no defensible reading under which a
+`/BBox` edge is a line the operator drew.
+
+**Nothing here is gated on `FormLeaf::is_editable()`, and that is correct.** A
+ce dimension placed against a line inside a form is a **new annotation on the
+page**, not a change to the form. You still need `target` — to report which
+list the line came from, and to re-resolve it after an edit.
+
+Two lower-level entry points exist if you already hold the path:
+`hit_test_subpaths_of(&PathObject, Point, f64)` and
+`pick_line_of(&PathObject, HitTarget, Point, f64)`. Both take the object
+rather than an index, because **the geometry never needed the index; only the
+lookup did** — and an index-based API is structurally incapable of naming a
+leaf.
+
+##### Headless equivalents
+
+`pdfce-cli object-list` mirrors all three, so a script can reproduce what a
+click, a marquee or a measure pick would resolve to without a window:
+
+```
+object-list <pdf> --page N --hit X,Y [--all-hits] [--hit-scope deep|page]
+object-list <pdf> --page N --line-pick X,Y [--tolerance T]
+```
+
+`--hit` is **deep by default** since `Pass 138.0`; `--hit-scope page` restores
+the old shallow query. A form leaf is reported as `leaf=N containment=…
+paint_order=… editable=false` with `kind=leaf:…`, **never** as `index=N` — the
+editing subcommands take `index=` and write to the *page's* stream, so a leaf
+ordinal under that key would be in range and would corrupt the page.
+
 #### `PageObjects::leaves` — and why it is a second list
 
 `decompose_page` descends into every reachable form and returns the objects
@@ -1585,8 +1682,26 @@ Reach it as `pdfce_core::vector::linepick::…`. (`pub mod linepick;` is at
 (2026-08-12) and is the kind of thing that may change — do not assume the
 flat path will keep failing, and do not assume it works.
 
-`PickedLine` — `linepick.rs:48`: `{object_index, subpath, segment, start,
-end, pick}`; `direction()` `:73`, `length()` `:84`.
+`PickedLine` — `linepick.rs:48`: `{target, subpath, segment, start, end,
+pick}`; `page_object_index()`, `direction()`, `length()`.
+
+**★★★ BREAKING, `Pass 138.0` (2026-08-27): the first field was
+`object_index: usize` and is now `target: HitTarget`.** Code written against
+v0.14.0 will not compile, and that is deliberate rather than incidental.
+
+A `usize` can only name an entry in `PageObjects::objects`. It cannot name a
+`FormLeaf`, so **the old signature made an answer about form contents
+unrepresentable** — which is why `pick_line_in_page` returned `None` on every
+page whose drawing lives inside a form XObject, i.e. most CAD exports.
+Measured on one: **129,758 page objects, one form, 10,256 leaves**, every one
+of them a candidate line and every one invisible. The tool was not degraded
+there; it was inert.
+
+Migration: `page_object_index() -> Option<usize>` gives you the old value
+where one exists. **It is an `Option`, not a sentinel**, on purpose — a leaf
+ordinal handed to something expecting a page index is a number that is *in
+range and wrong*, which is the worst failure available. If you `unwrap()` it,
+you are stating in one visible place that you do not handle form contents.
 `ParallelPolicy` — `:111`: `{epsilon_degrees, force_parallel}`, with
 `default` `:153`, `from_setting` `:169`, `forcing_parallel` `:178`.
 `measured_angle_degrees` `:196` returns the raw angle folded to `[0, 90]`.
