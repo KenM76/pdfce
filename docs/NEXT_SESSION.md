@@ -26,21 +26,25 @@ running the print-conformance suite rather than by reading code:**
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `3e70cdb` | `git rev-parse --short HEAD` |
-| `git describe --tags` | `v0.14.0-9-g3e70cdb` | `git describe --tags` |
-| `origin/main` | ★ **4 commits BEHIND `main` — this work is NOT PUSHED** | `git rev-list --count origin/main..main` |
+| `HEAD` | `3b9a277` | `git rev-parse --short HEAD` |
+| `git describe --tags` | `v0.14.0-13-g3b9a277` | `git describe --tags` |
+| `origin/main` | ★ **8 commits BEHIND `main` — this work is NOT PUSHED** | `git rev-list --count origin/main..main` |
 | tag at `HEAD` | none; highest is `v0.14.0` | `git tag --points-at HEAD` |
 | working tree | **clean** | `git status --porcelain` |
-| newest backup bundle | `pdfce-20260827-0049-3e70cdb-full.bundle`, verified `okay`, **contains everything** | `ls -lt D:\Dev\pdfce-backups\` |
+| newest backup bundle | `pdfce-20260827-0130-3b9a277-full.bundle`, `git bundle verify` says **okay** and *"records a complete history"*; **it covers every commit below** | `ls -lt D:\Dev\pdfce-backups\` |
 | gates on disk | **18**; 17 run with no arguments | `ls tools/check-*` |
 | CI at `HEAD` | **UNKNOWN AND UNKNOWABLE — `HEAD` HAS NEVER BEEN PUSHED.** There is no run to read | — |
 | `docs/core-api` verbs | **144** | `python tools/check-core-api-verbs.py` |
 | `crates/pdfce-core/src/edit.rs` | **31,655** lines | `grep -c "" …` |
 
-★★ **`main` is 4 commits ahead of `origin` and was deliberately NOT pushed** —
+★★ **`main` is 8 commits ahead of `origin` and was deliberately NOT pushed** —
 `CLAUDE.md` rule 8 wants a current go-ahead and none was given. Everything is
-bundled, so nothing is at risk; the operator simply has not said "push". **Ask
-before you do.**
+bundled and the bundle verifies, so nothing is at risk; the operator simply has
+not said "push". **Ask before you do.**
+
+★ The eight are: two code Passes (`130.2`, `130.3`), one tool-docstring
+correction, four librarian filings (`273`–`277`), and this handoff. Only the
+first three are code; `check-commits-filed` is green.
 
 ---
 
