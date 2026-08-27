@@ -96,6 +96,160 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 135.0` (`8092e38`) — **OCR BECOMES AN EDIT TO THE OPEN SESSION, NOT A DIFFERENT FILE SOMEWHERE** — ★★★ **`EditSession::add_ocr_layer` replaces the free function's "hand back a whole new PDF" contract with ONE UNDOABLE COMMAND over any number of pages, planned through a shared, allocation-free plan the one-shot writer itself was rewritten to go through, so the two writers cannot come to disagree**; ★★ **A REFUSAL THAT WAS CORRECT AND STILL COULDN'T HELP — the free function reads the session's BASE revision, so a guard that (rightly) refused to run OCR once the session went dirty meant OCR died for the REST OF THE SESSION the moment the operator edited and saved anything, because a session never becomes clean again**; ★ **`OcrPageLayer` PAIRS pages with recognised text rather than parallel-slicing them, so a length or ordering mismatch that would silently put the wrong page's words on a page is unspellable** — 2026-08-27 (278th filing)
+
+**Shipped 2026-08-27.** Commit `8092e38`; the commit immediately before it is
+`2a87e57`. Both hashes and the date are as supplied in the engineer's
+dispatch — **this filing has no shell** and could not run `git log` itself
+to confirm them independently; treat the commit identity as relayed, not
+verified.
+
+#### The request this answers, in the operator's terms
+
+*"Why do I have to save a copy instead of just go back into my pdf and save
+over it?"* and *"How did we end up with the most useless and
+un-user-friendly of options for the OCR?"* —
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\request_ocr_as_an_edit_to_the_open_session.md`
+(2026-08-26, `pdfceGUI`), which surveyed six OCR tools and found **zero of
+six** force a Save-As on the open-document path.
+
+#### What was wrong, and it was structural
+
+`ocr::layer::add_ocr_layer` took an immutable `&Document` and returned a
+whole new PDF, which made recognition the one editing capability in pdfce
+that was **not** an edit. `grep -c ocr edit.rs` returned **0** against the
+file holding every other editing verb, measured in the request itself. A
+shell with an open session could only offer "here is a different file,
+somewhere else" — its in-place save path cannot be used on a document it
+does not have.
+
+#### What shipped
+
+`EditSession::add_ocr_layer(&[OcrPageLayer], &OcrLayerOptions) ->
+Result<Vec<OcrLayerReport>, OcrLayerError>`, plus a new
+`CommandKind::AddOcrLayer`, a new `OcrPageLayer<'a>` pairing type, and
+`plan_ocr_layer`/`OcrLayerPrep` — a shared, allocation-free plan the
+one-shot writer was rewritten to go through, so the two writers cannot come
+to disagree.
+
+- **One command for the whole run, however many pages.** Undo restores
+  every touched page dictionary byte-identically.
+- **`OcrPageLayer` is a PAIR, `(pages: &[usize], recognised: &[OcrPage])`,
+  not two parallel slices — deliberately.** Two parallel slices can differ
+  in length or order and would produce *a successful run that puts the
+  wrong page's words on a page*, with no diagnostic short of reading the
+  output. Pairing makes the mistake unspellable.
+
+#### ★★★ The part worth recording at length — a guard that was right and still couldn't help
+
+The free function reads the document's **base** revision. Run after any
+edit, it yields a recognised copy that **silently omits that edit**. Silent
+omission is worse than a refusal, so the consuming shell refused to run OCR
+once the session was dirty — **correctly**. But a session never becomes
+clean again, **not even after a successful save**, so **OCR died for the
+rest of the session the first time the operator edited and saved anything**,
+and told him something inaccurate on the way out.
+
+No guard could fix this, because the guard was right. Planning against the
+session graph — as `EditSession::add_ocr_layer` now does — removes the
+divergence instead of policing it. **A correct refusal protecting a wrong
+read is a signal to move the read, not to refine the refusal.**
+
+**Verified, not merely argued:** the new test was confirmed to FAIL against
+a deliberately base-reading build, which is the half that makes it evidence
+rather than a claim —
+
+```
+got "Original page text\nOCRSECOND"     <- EDITED-FIRST gone, silently
+```
+
+— with the other six tests in the file unaffected.
+
+#### Two refusals that are correctness, not tidiness
+
+- **`OcrLayerError::DuplicatePage`** — every page is planned against the
+  graph as it stands *before* the commit (that is what makes a multi-page
+  run one undo entry), so two entries for one page would both append to
+  that page's **original** `/Contents`, and the second page-dict write
+  would clobber the first: one layer written, one paid for and lost, and a
+  report claiming both.
+- **`OcrLayerError::HiddenObjects`**, matching `add_text`'s existing
+  guard — allocating in a document whose `/Size` already lies is how a
+  write lands on top of something.
+
+Every refusal happens **before any object is allocated**, so a rejected run
+leaves the session, its bytes and its undo stack exactly as it found them.
+An empty request is a no-op that commits nothing — no undo entry that would
+undo nothing.
+
+#### A stale claim corrected in passing
+
+The one-shot's bypass-exemption note (`ocr/layer.rs`, exception entry
+discussed at length in the `49af8fb` Shipped entry above) said *"there is NO
+OCR subcommand … this is an R151 instance: a capability with no shell
+caller."* Half of that is now false, and the new code says which half: a
+shell can now reach OCR as an undoable edit; what still has no caller is
+**the one-shot free function itself**.
+
+#### Tests + gates (all measured this session, per the engineer)
+
+- New: `crates/pdfce-core/tests/ocr_session.rs`, **7 tests**, all pass.
+- `cargo test --workspace` — **4,355 tests, zero failures.**
+- `cargo fmt --all --check` clean; `cargo clippy --workspace --all-targets
+  -- -D warnings` clean.
+- All 17 argument-free gates green, exit codes read individually.
+- **`check-core-api-verbs` green** — `docs/core-api/` documents the new
+  verb, and all four stated counts moved 144 → 145, plus the stated line
+  count of `edit.rs` (31,655 → 31,874).
+- `cargo +nightly fuzz build` green on Windows.
+- `cargo tree -p pdfce-core` / `-p pdfce-render` — zero GUI, zero network
+  dependencies.
+
+#### `FEATURES.md` — updated in this same filing
+
+New row under *Text*, immediately after the existing standalone OCR row:
+**OCR as an edit to the open document** — `EditSession::add_ocr_layer`.
+Boxes: **`[x]` core · `[ ]` cli · `[ ]` gui** — not rounded up either way.
+`cli` is **blocked, not skipped**: a `pdfce-cli` subcommand wiring this verb
+still needs a recognition engine bundled behind it, and which OCR model may
+ship inside an MIT portable folder is **open operator question `(bl)`**,
+unanswered as of this filing — a materially different state from "nobody
+got to it." `gui` is unticked because no shell yet calls the new session
+verb — `pdfce-cli`'s existing `ocr` subcommand and `pdfceGUI`'s `File >
+Recognise` both still route through the free-function one-shot, confirmed
+by grep of `crates/pdfce-cli/src/main.rs` (`layer::add_ocr_layer` at
+`main.rs:8673`, unchanged by this Pass).
+
+#### No new rule or decision minted
+
+Ceiling reported unchanged: rules `R218` (next free `R219`), decisions
+`089` (next free `090`) — per the engineer's dispatch. **Not independently
+re-run by this role** (no shell this filing); engineer should confirm with
+`python tools/check-ledger-numbers.py`.
+
+#### Also worth recording — outside the repo, operator disk-management item
+
+**31 GB of disk was reclaimed** at the operator's instruction by deleting
+regenerable Rust build output across five project trees (`pdfceGUI`,
+`open-pdf-studio` ×2, `iccce`, and pdfce's own `target` + `fuzz/target`). D:
+went from **7 GB free to 38 GB**. Third-party shipped binaries under
+`ScripTreeApps` (MeshLab, ffmpeg) and all `node_modules` were deliberately
+**left alone** — those are not compile output, and `node_modules` would
+need network to restore.
+
+#### A small self-inflicted hazard, worth carrying in the project record
+
+Splicing the new struct "before the anchor" **split `EditSession`'s own doc
+comment in half**, orphaning the closing fence of its runnable example and
+re-attributing the doctest to the new struct. It surfaced as `error: prefix
+'page' is unknown`, which is not an obvious symptom of a misplaced
+declaration — worth naming here because the *symptom* is the unguessable
+part; the mechanism (insert-before-anchor splitting a preceding doc
+comment's fenced example) is already recorded as a known hazard in this
+librarian's own agent memory.
+
+---
+
 ### `Pass 130.3` (`cd4de8d`) — **A SPOT COLOUR PAINTED NOTHING AT ALL ON A PRINT-BOUND PAGE** — ★★★ **`Interpreter::authored_cmyk` was answering Table 149's "which process tints did the source state" question and handing the answer to the colorant buffer as the paint's own COLOUR, where zero ink is blank paper — every spot colour on a page carrying a `/Group /CS` was invisible, and the defect NEEDS a page group to reproduce, which is exactly what a print-bound file carries and a hand fixture usually does not**; ★★★ **A FAILURE COUNT THAT ROSE BECAUSE THE RENDERER IMPROVED — 4 → 5 FAILs, because two patches were "passing" by painting nothing at all**; ★★ **TWO OBVIOUS REPAIRS BUILT, MEASURED AND REVERTED — both broke the exact "overprint must never erase" invariant three other suite patches exist to test**; ★ **recorded ground truth in `tools/suite-check.py`'s own docstring is WRONG about two patches — pdfce actually draws what the docstring says it doesn't** — 2026-08-27 (275th filing)
 
 **Shipped 2026-08-27.** Commit `cd4de8d`; the commit immediately before it is

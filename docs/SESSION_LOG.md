@@ -67025,3 +67025,96 @@ whenever form-XObject work is next picked up.
   `089` (next free `090`), `SESSION_LOG` filings **277**.
 
 ---
+
+## 2026-08-27 (278th filing) — `Pass 135.0` (`8092e38`) SHIPS: OCR becomes an edit to the open session, not a different file somewhere; a correct refusal that couldn't help because it was reading the wrong revision; 31 GB reclaimed
+
+**Shipped:**
+- `Pass 135.0` (`8092e38`) — `EditSession::add_ocr_layer`, a new
+  `CommandKind::AddOcrLayer`, a new `OcrPageLayer<'a>` pairing type, and
+  `plan_ocr_layer`/`OcrLayerPrep`, a shared allocation-free plan the
+  pre-existing free-function one-shot (`ocr::layer::add_ocr_layer`) was
+  rewritten to go through, so the two writers cannot come to disagree.
+  Answers `request_ocr_as_an_edit_to_the_open_session.md` (2026-08-26,
+  `pdfceGUI`): OCR was the one editing capability in pdfce that returned a
+  whole new PDF instead of touching the open document — `grep -c ocr
+  edit.rs` returned 0, measured in the request itself, against six
+  competing OCR tools of which zero force a Save-As.
+
+**Decisions made this session:** none new — no rule or decision minted;
+ledger stays `R218`/next free `R219`, decisions `089`/next free `090`
+(per the engineer, not independently re-run — no shell this filing).
+
+**Findings + decisions:**
+- **A refusal that was right and still couldn't help.** The free
+  function reads the session's **base** revision; run after any edit it
+  silently omits that edit from the recognised copy. The consuming shell
+  correctly refused to run OCR once the session went dirty — but a
+  session never becomes clean again, not even after a successful save, so
+  OCR died for the rest of the session the first time the operator edited
+  and saved anything, and the refusal's own message did not say why. No
+  guard could fix this; the fix was to plan against the session graph
+  instead of the base revision, which removes the divergence rather than
+  policing it. Worth carrying forward as a general shape: **a correct
+  refusal protecting a wrong read is a signal to move the read, not to
+  refine the refusal.**
+- Verified, not just argued: the new regression test was confirmed to
+  FAIL against a deliberately base-reading build (`"Original page
+  text\nOCRSECOND"` — the edited-first page's edit silently gone), with
+  the other six tests in the same file unaffected.
+- `OcrPageLayer` deliberately pairs `(pages, recognised)` as one tuple
+  rather than two parallel slices, because two parallel slices can differ
+  in length or order and would produce a successful run that puts the
+  wrong page's words on a page, undetectably short of reading the output.
+- Two refusals recorded as correctness rather than tidiness:
+  `OcrLayerError::DuplicatePage` (two entries for one page would both
+  append to the page's original `/Contents`, clobbering one) and
+  `OcrLayerError::HiddenObjects` (matching `add_text`'s existing guard
+  against allocating into a document whose `/Size` already lies). Both
+  fire before any object is allocated, so a rejected run leaves the
+  session, bytes and undo stack untouched.
+- A stale claim corrected in passing: the one-shot's bypass-exemption
+  note said *"there is NO OCR subcommand … R151 instance: a capability
+  with no shell caller."* Now half false — a shell can reach OCR as an
+  undoable edit; only the free function itself still has no caller.
+- Confirmed by grep, not relayed: `crates/pdfce-cli/src/main.rs:8673`
+  still calls the old free-function `layer::add_ocr_layer`, unchanged by
+  this Pass — the CLI's existing `ocr` subcommand and `pdfceGUI`'s `File
+  > Recognise` both still produce a separate `<stem>-recognised.pdf`,
+  never in place.
+- **31 GB of disk reclaimed**, operator-instructed: regenerable Rust
+  build output deleted across five project trees (`pdfceGUI`,
+  `open-pdf-studio` ×2, `iccce`, pdfce's own `target` + `fuzz/target`). D:
+  went from 7 GB free to 38 GB. Third-party shipped binaries
+  (`ScripTreeApps`'s MeshLab/ffmpeg) and all `node_modules` deliberately
+  left alone — not compile output, and `node_modules` needs network to
+  restore.
+- Self-inflicted hazard worth carrying: splicing the new struct "before
+  the anchor" split `EditSession`'s own doc comment in half, orphaning
+  its runnable example's closing fence and re-attributing the doctest to
+  the new struct — surfaced as `error: prefix 'page' is unknown`, not an
+  obvious symptom of a misplaced declaration. Already in this librarian's
+  own agent memory as a known hazard; recorded here too because the
+  *symptom* is the unguessable part.
+
+**`FEATURES.md`:** new row added under *Text*, immediately after the
+existing standalone OCR row — **OCR as an edit to the open document**,
+`[x]` core · `[ ]` cli · `[ ]` gui · `[x]` Acrobat. `cli` recorded as
+blocked (needs a bundled recognition engine; open operator question
+`(bl)`, OCR-model licensing for the MIT portable folder), not merely
+skipped. `gui` unticked — no shell yet calls the session verb.
+
+**Still in flight:** open operator question `(bl)` (OCR-model licensing
+inside the MIT portable folder) now gates both the new session verb's CLI
+wiring and the pre-existing one-shot CLI/GUI wiring's model-shipping
+question alike; `Pass 119.1` (`unshare_form`) remains the outstanding
+`R206` obligation flagged in the 277th filing.
+
+**For next session:**
+- If `pdfce-cli`/`pdfceGUI` are wired to call `EditSession::add_ocr_layer`
+  instead of the free function, tick `cli`/`gui` in the new FEATURES.md
+  row only once each shell's own caller is confirmed by grep, not by doc
+  comment.
+- Ledger unchanged this filing: rules `R218` (next free `R219`),
+  decisions `089` (next free `090`), `SESSION_LOG` filings **278**.
+
+---
