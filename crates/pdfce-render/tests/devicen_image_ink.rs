@@ -250,3 +250,88 @@ fn the_subtractive_page_lands_on_the_additive_page_s_colour() {
          before Pass 140.0"
     );
 }
+
+/// ★★★ `Pass 140.2` — AN IMAGE'S OWN COLOUR CONVERSIONS MUST BE REPORTED.
+///
+/// `image::decode` counted its shortfalls into two local `ColorDiagnostics`
+/// and **dropped both at the end of the function**. So an image whose
+/// `/tintTransform` was missing or malformed rendered as `separation_to_rgb`'s
+/// neutral stand-in — a colour the document never specified, whose own note
+/// says *"lightness preserved, hue is not the document's"* — and pdfce
+/// reported **nothing**. That is a **rule 4** violation: the rule forbids
+/// silence about an inference, and an image is exactly where the operator
+/// cannot see the substitution, because a plausible grey looks like a grey the
+/// file might have asked for.
+///
+/// ★★ THE FIXTURES ARE IMAGE-ONLY, AND THAT IS THE WHOLE MEASUREMENT. Every
+/// other page in this file carries a fill beside its image, and a fill's
+/// conversions ARE counted — so on those pages the counter reads a plausible
+/// non-zero number whether or not the image contributes. **A page with a
+/// second producer cannot detect a missing producer.** That is how this
+/// survived, and it is also how it was found: an engineer read `292` off a
+/// spot-colour page and attributed it to the image's cache, when the image had
+/// contributed nothing to it.
+///
+/// Measured before the fix — both pages, both counters, zero:
+///
+/// ```text
+///           tint_applied   tint_not_applied
+/// good           0                0
+/// broken         0                0
+/// ```
+///
+/// The `good` half is asserted too, and is not padding: a fix that routed only
+/// FAILURES to the caller would satisfy the shortfall half and leave the census
+/// half still lying by omission, and only the `good` page can tell those apart.
+#[test]
+fn an_image_s_own_tint_transform_is_reported_whether_it_worked_or_not() {
+    let good = render("image-only-good-tint.pdf");
+    assert_eq!(
+        good.diagnostics.color.tint_transforms_applied, 1,
+        "a page whose ONLY content is a spot-colour image ran its tint \
+         transform and reported {} — the image's conversions never reached \
+         the caller. Measured at 0 before Pass 140.2",
+        good.diagnostics.color.tint_transforms_applied
+    );
+    assert_eq!(
+        good.diagnostics.color.tint_transform_not_applied, 0,
+        "a WORKING transform must not be reported as a shortfall"
+    );
+
+    let broken = render("image-only-broken-tint.pdf");
+    assert_eq!(
+        broken.diagnostics.color.tint_transform_not_applied, 1,
+        "an image whose /tintTransform cannot run was painted as a neutral \
+         stand-in and disclosed nothing. Measured at 0 before Pass 140.2"
+    );
+    assert!(
+        broken
+            .diagnostics
+            .color
+            .notes
+            .iter()
+            .any(|n| n.contains("hue is not the document's")),
+        "the COUNTER is not the disclosure — rule 4 wants the operator told \
+         what was substituted, and the prose note is what says it. Notes were: \
+         {:?}",
+        broken.diagnostics.color.notes
+    );
+}
+
+/// ★ The count is per DISTINCT SAMPLE TUPLE, not per texel, and that is a
+/// contract rather than an implementation detail.
+///
+/// `TintCache` exists so that one broken transform on an eight-megapixel image
+/// reports once rather than eight million times — its own docs say so. The
+/// `good` fixture above is 8x8 = 64 texels of ONE constant value, so a
+/// per-texel count would read 64 and a per-tuple count reads 1. Asserting the
+/// exact value pins which of the two a future change kept.
+#[test]
+fn the_report_counts_distinct_colours_not_texels() {
+    let good = render("image-only-good-tint.pdf");
+    assert_eq!(
+        good.diagnostics.color.tint_transforms_applied, 1,
+        "the fixture's image is 64 texels of one constant tint; a count of 64 \
+         means the cache stopped bounding the report"
+    );
+}

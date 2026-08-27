@@ -227,6 +227,44 @@ def main() -> int:
     objs[5] = image_object(cs, bytes([1]) * 64, 1)
     write("duotone-image-vs-fill-cmyk.pdf", build(objs))
 
+    # 5 and 6. The DISCLOSURE pair for `Pass 140.2` — an image and NOTHING
+    #          else, so any colour-conversion count on the page is the
+    #          image's own. A page with a fill on it cannot make this
+    #          measurement, which is exactly why the defect survived: on
+    #          every other fixture here the fill's conversions masked the
+    #          image's absence with a plausible non-zero number.
+    #
+    # The broken transform is broken in TWO independent ways — declared for
+    # two inputs where the space has one component, and producing three
+    # outputs where `DeviceCMYK` needs four. Either alone would do; both is
+    # cheap insurance against a future evaluator that tolerates one of them
+    # and turns the fixture inert without failing.
+    for label, fn in [
+        (
+            "good",
+            b"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] "
+            b"/C1 [0.9 0.0 0.75 0.1] /N 1 >>",
+        ),
+        (
+            "broken",
+            b"<< /FunctionType 2 /Domain [0 1 0 1] /C0 [0 0 0] "
+            b"/C1 [0.9 0.0 0.75] /N 1 >>",
+        ),
+    ]:
+        objs = {}
+        objs[1] = b"<< /Type /Catalog /Pages 2 0 R >>"
+        objs[2] = b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+        objs[3] = (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+            b"/Group << /S /Transparency /CS /DeviceCMYK >> "
+            b"/Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>"
+        )
+        objs[4] = stream(b"<< >>", b"q 120 0 0 120 40 40 cm /Im0 Do Q")
+        objs[6] = b"[/Separation /SpotGreen /DeviceCMYK 7 0 R]"
+        objs[7] = fn
+        objs[5] = image_object(b"6 0 R", bytes([S1]) * 64, 1)
+        write(f"image-only-{label}-tint.pdf", build(objs))
+
     return 0
 
 

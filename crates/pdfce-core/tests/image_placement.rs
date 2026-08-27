@@ -1062,7 +1062,25 @@ fn every_fixture_either_imports_or_refuses_by_name() {
     let mut seen = 0usize;
     for entry in std::fs::read_dir(&dir).expect("the fixture directory exists") {
         let path = entry.expect("dir entry").path();
-        let bytes = std::fs::read(&path).expect("read fixture");
+        // ★ A SUBDIRECTORY IS NOT A FIXTURE, AND WITHOUT THIS LINE IT KILLS
+        // THIS TEST WITH A MESSAGE THAT NAMES THE WRONG PROBLEM.
+        //
+        // `std::fs::read` on a directory fails with `PermissionDenied` /
+        // "Access is denied." on Windows, so the panic reads as a filesystem
+        // rights problem and sends the reader after their antivirus rather
+        // than after the directory.
+        //
+        // Measured 2026-08-27: `tools/check-image-colorspace-truth.py` writes
+        // a `_truth/` subdirectory beside the images it scores, and pointing
+        // that gate at this corpus is the obvious thing to do — so RUNNING ONE
+        // OF THIS PROJECT'S OWN GATES BROKE ONE OF ITS OWN TESTS. Skipping
+        // directories is the fix; `.gitignore` would not have helped, because
+        // the failure is on disk and has nothing to do with what is tracked.
+        if path.is_dir() {
+            continue;
+        }
+        let bytes =
+            std::fs::read(&path).unwrap_or_else(|e| panic!("read fixture {}: {e}", path.display()));
         seen += 1;
         match image_import::import(&bytes) {
             Ok(img) => {

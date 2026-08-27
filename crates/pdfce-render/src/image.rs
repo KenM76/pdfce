@@ -269,7 +269,15 @@ impl MaskApplied {
 /// different: an error means "this image is missing from the page", a
 /// note means "this image is on the page but is not exactly what the
 /// document specifies."
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+// ★ `Copy` and `Eq` were DROPPED in `Pass 140.2`, when `color` was added.
+//
+// `ColorDiagnostics` carries a dedup-and-capped `Vec<String>` of notes, so it
+// is neither. Keeping the derives would have meant either leaving the field
+// off this struct — the arrangement that made an image's broken tint transform
+// silent in the first place — or parking it somewhere it does not belong. A
+// diagnostics bag that grows is the normal case; a `Copy` bound that decides
+// what may be diagnosed is the tail wagging the dog.
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct ImageNotes {
     /// The sample array was shorter than `stride × Height`; the missing
     /// samples were read as 0. (§8.9.3 gives an exact length; a short
@@ -414,6 +422,63 @@ pub struct ImageNotes {
     /// stream with no `ClearCode`, or one that ended with no
     /// `EndOfInformation`. Both recovered, both non-conformant.
     pub lzw_framing_anomalies: usize,
+    /// ★★★ THE COLOUR-CONVERSION DIAGNOSTICS OF THIS IMAGE'S OWN TEXELS,
+    /// AND THEY REACHED NOTHING AT ALL UNTIL `Pass 140.2`.
+    ///
+    /// [`decode`] converts every texel through [`crate::color`], which
+    /// counts its own shortfalls — a missing or malformed `/tintTransform`,
+    /// a `/Separation /All` approximation, an ICC alternate taken. Those
+    /// counts went into two local [`ColorDiagnostics`] values that were
+    /// **constructed, written to, and dropped at the end of the function**.
+    ///
+    /// So the visible consequence, measured on an image-only page whose
+    /// `/Separation` carries a deliberately malformed transform (wrong
+    /// arity, wrong output count):
+    ///
+    /// ```text
+    ///           tint_applied   tint_not_applied
+    /// good           0                0
+    /// broken         0                0
+    /// ```
+    ///
+    /// **Both zero, both times.** The broken one rendered as
+    /// `separation_to_rgb`'s neutral stand-in — whose own note says
+    /// *"lightness preserved, hue is not the document's"* — and pdfce said
+    /// **nothing**. That is a **rule 4** violation, not a missing
+    /// statistic: pdfce substituted a colour the document never specified
+    /// and the substitution was silent. Rule 4 forbids silence, and an
+    /// image is precisely the case where the operator cannot see the
+    /// difference, because a plausible grey looks like a grey the file
+    /// might have asked for.
+    ///
+    /// ★★ It also made a CENSUS counter lie by omission, which is how it
+    /// was caught. `tint_applied` reads as "how many tint transforms did
+    /// this page run", and it counted only paths and shadings — so a page
+    /// whose only spot content is an image reported `0` while running one
+    /// transform per distinct sample tuple. The engineer read `292` off a
+    /// five-colorant `DeviceN` page and attributed it to the image's own
+    /// cache; it was the page's path fills, and the image's contribution
+    /// was invisible. **A counter that omits one producer is not a smaller
+    /// number, it is a different question**, and nothing in the name says
+    /// which.
+    ///
+    /// ⇒ Merged into [`crate::interpret::Diagnostics::color`] by
+    /// `note_image_divergence`, on the same terms as every other field
+    /// here.
+    ///
+    /// ★ Why the counts are per DISTINCT SAMPLE TUPLE and not per texel:
+    /// [`TintCache`] owns one of the two sources precisely so that a single
+    /// broken transform reports once per distinct colour rather than eight
+    /// million times. That was always the design; only the delivery was
+    /// missing.
+    ///
+    /// ★ NOT included, and deliberately: an `/Indexed` palette's own
+    /// conversions ([`resolve_indexed`]'s `palette_diag`). A palette is
+    /// built once, bounded by `hival + 1`, and its shortfall is already
+    /// visible as a wrong entry count rather than a counter — that
+    /// function says so in its own body. Folding it in here would report a
+    /// 256-entry palette's single bad transform as 256 texel conversions.
+    pub color: ColorDiagnostics,
 }
 
 /// A decoded image: `Width × Height` RGBA texels, row 0 at the **top**
@@ -1569,6 +1634,37 @@ fn decode_sampled(
     // a partial plane is worse than none.
     if ink_incomplete {
         ink = None;
+    }
+    // ★ `Pass 140.2`: hand the colour work's own account to the caller.
+    //
+    // ★★ THE TWO SOURCES ARE NOT SYMMETRIC, AND THE FIRST DRAFT OF THIS
+    // COMMENT CLAIMED THEY WERE. It said merging only the cache "would leave
+    // every non-`Special` image silent". That is **false**, and a sabotage
+    // proved it: deleting the `scratch_diag` merge changes no test, because
+    //
+    //   * `tint_cache` is `Some` exactly when the space is `Space::Special`
+    //     (`tinting`), so the `None` arm of the texel loop's match is reached
+    //     only by `Gray`, `Rgb`, `Cmyk` and `Indexed` — and `Space::to_rgb`
+    //     for those four is closed-form arithmetic that records nothing at
+    //     all. There is no shortfall for a non-`Special` image to report.
+    //   * So `scratch_diag`'s ONLY possible contribution is the
+    //     `yields_cmyk` probe, and the probe records something only in one
+    //     narrow case: a `/tintTransform` that LOADS successfully and then
+    //     fails to EVALUATE at an all-zero operand. A transform that fails to
+    //     load leaves `tint: None`, and `tint_to_cmyk` returns early on that
+    //     without counting anything.
+    //
+    // ⇒ The merge is kept as belt-and-braces for that narrow case, and it is
+    // recorded here as **deliberately uncovered** rather than left to read as
+    // tested. The fixtures' broken transform fails at LOAD, which is the
+    // commoner malformation and the one worth pinning; a load-fine-eval-fail
+    // fixture would exercise this line and does not exist.
+    //
+    // The cache's own diagnostics are the half that carries every real
+    // count, and they are covered.
+    notes.color.merge(scratch_diag);
+    if let Some(cache) = tint_cache {
+        notes.color.merge(cache.diag);
     }
 
     Ok(DecodedImage {

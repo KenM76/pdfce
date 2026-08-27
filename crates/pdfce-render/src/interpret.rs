@@ -776,9 +776,31 @@ pub struct Diagnostics {
     ///   gave them the carrier they lacked, so a `DeviceCMYK` mesh now
     ///   composites natively too.
     ///
+    /// - **`Separation`/`DeviceN` images** stopped bridging in `Pass 140.0`,
+    ///   both directly and behind an `/Indexed` palette. They convert through
+    ///   their tint transform to the `DeviceCMYK` alternate now, rather than
+    ///   to sRGB.
+    ///
     /// **What is left**: images and meshes with **no ink to keep** — an
-    /// additive colour space, or a parametric mesh whose ramp carries no
-    /// colorants — and the results of transparency groups.
+    /// additive colour space, a `Separation`/`DeviceN` over a non-`DeviceCMYK`
+    /// alternate, or a parametric mesh whose ramp carries no colorants — and
+    /// the results of transparency groups.
+    ///
+    /// ★★★ AND THE FOURTH CORRECTION IS THE INTERESTING ONE, BECAUSE THE
+    /// SENTENCE ABOVE WENT WRONG AND THEN BACK TO BEING RIGHT WITHOUT ANYONE
+    /// TOUCHING IT.
+    ///
+    /// From `Pass 130.1` until `Pass 140.0` a `Separation`/`DeviceN` image
+    /// outside overprint DID bridge, and this "what is left" list did not
+    /// mention it — so the list was **false for ten Passes**. `Pass 140.0`
+    /// removed that population, which made the unchanged sentence true again.
+    ///
+    /// ⇒ **A stale claim can be repaired by a code change rather than by an
+    /// edit, and it leaves no trace of having been wrong.** Worse, the CLI's
+    /// runtime note DID list that population correctly over the same period,
+    /// so the two disagreed and the more-visible one was the accurate one.
+    /// When two copies of a population claim disagree, neither being newer is
+    /// evidence of either being right.
     ///
     /// ⇒ **A FALL IN THIS NUMBER IS THE INTENDED OUTCOME, NOT A COUNTER
     /// GOING QUIET.** It measures ink identity lost on the way to the
@@ -786,14 +808,23 @@ pub struct Diagnostics {
     /// it as "how much shading work happened" will misread every one of
     /// those changes as a regression.
     ///
-    /// ★ Note that this comment has now been wrong three times, each time by
+    /// ★ Note that this comment has now been wrong FOUR times, each time by
     /// staying still while the code moved — and each correction was written
     /// by someone who had just read it and believed it. A doc comment that
     /// enumerates a POPULATION is a claim that decays every time the
     /// population changes, and nothing compiles it.
     pub cmyk_bridged_pixels: u64,
-    /// Pixels a `DeviceCMYK` image contributed **as authored ink**, with no
-    /// conversion in either direction.
+    /// Pixels an image contributed **as authored ink**, with no conversion in
+    /// either direction.
+    ///
+    /// ★ This said "a `DeviceCMYK` image" until `Pass 140.0`, and had been
+    /// wrong for exactly as long as [`Self::cmyk_bridged_pixels`]' list above
+    /// — the same change moves both, in opposite directions, so a correction
+    /// to one that does not touch the other is incomplete by construction.
+    /// **Four shapes now reach this counter**: a `DeviceCMYK` image, an
+    /// `/Indexed` image over a `DeviceCMYK` base (both `Pass 130.1`), a
+    /// `Separation`/`DeviceN` image over a `DeviceCMYK` alternate, and an
+    /// `/Indexed` image over such a base (both `Pass 140.0`).
     ///
     /// The complement of [`Self::cmyk_bridged_pixels`]. Together they answer
     /// "how much of this ink page kept its ink?" — and the split matters
@@ -1542,6 +1573,27 @@ polarity unverifiable (decision 006 R30)",
             self.lzw_framing_anomalies += notes.lzw_framing_anomalies;
             self.note_image("LZW stream missing its ClearCode or EndOfInformation");
         }
+        // ★★★ `Pass 140.2` — THE IMAGE'S OWN COLOUR CONVERSIONS, WHICH
+        // REACHED NOTHING BEFORE THIS LINE.
+        //
+        // `image::decode` counted its shortfalls into locals and dropped
+        // them, so an image whose `/tintTransform` was missing or malformed
+        // rendered as a neutral stand-in and reported NOTHING — a rule 4
+        // violation, since the stand-in is a colour the document never
+        // specified. Measured on an image-only page with a deliberately
+        // broken transform: `tint_not_applied` read 0, exactly as it did for
+        // the same page with a good one.
+        //
+        // Merged rather than counted here, because `ColorDiagnostics` already
+        // knows how to add itself up (nested form XObjects fold in the same
+        // way) and a second summation site is a second place for the two to
+        // disagree about which counter means what.
+        //
+        // ★ No `note_image` beside it, deliberately. `ColorDiagnostics`
+        // carries its own dedup-and-capped notes list and the shell already
+        // prints it; adding a second sentence here would report one broken
+        // transform twice, in two different voices.
+        self.color.merge(notes.color);
     }
 
     /// Fold a nested form XObject's diagnostics into this one.
@@ -6534,7 +6586,13 @@ impl Interpreter<'_> {
         let fill = self.gs.current.fill_color;
         match image::decode(doc, dict, raw, resources, fill, origin, self.policy) {
             Ok(decoded) => {
-                self.diag.note_image_divergence(decoded.notes);
+                // Cloned rather than moved: `ImageNotes` stopped being `Copy`
+                // in `Pass 140.2` (it now carries the decode's colour
+                // diagnostics, which own a notes list), and `decoded` is
+                // borrowed again below for the overprint route. One clone of a
+                // small flag bag per painted image, against making the borrow
+                // checker decide what may be diagnosed.
+                self.diag.note_image_divergence(decoded.notes.clone());
                 // §8.9.5.3: `/Interpolate` asks for smoothing on
                 // scaling. Default false → nearest-neighbour, which is
                 // what the spec's "no interpolation" means and what
