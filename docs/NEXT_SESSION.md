@@ -13,233 +13,165 @@ can falsify it.
 
 ## §A — COLD START: everything you need, in one screen
 
-**The previous session shipped `Pass 132.0`** — the CMYK compositing ceiling
-became readable (four `pub` items in `pdfce-render`) and settable
-(`Settings::max_cmyk_buffer_bytes`, uncapped), because a sibling project could
-neither size a raster to stay inside it nor let the operator move it. It then
-**corrected nine operator-facing "A4" figures that had been computed on a page
-that is not A4**, repaired two string literals its own correction broke,
-widened the gate that could not see them, and **cut, released and verified
-`v0.14.0`**.
+**The previous session shipped TWO Passes**, both minted straight into
+*Shipped*, both requested and delivered the same session:
 
-**Nothing from that session is outstanding.** The release is green end to end
-and the backup is current. Start at `§C`.
+- **`Pass 133.0`** (`afd8da8`) — pdfce can now say **what a document would run
+  in Acrobat/Reader, and whether it reaches outside itself**. It previously
+  said `0` about a file Acrobat submits to a live endpoint, because the scan
+  walked `/AA` and a widget's primary action lives in `/A`. Fixed from the
+  **carrier set** — 17 sites, 10 container types — with `/Next` chains
+  followed.
+- **`Pass 134.0`** (`fd71e4f`) — **a field's properties are editable after it
+  is placed, including its size.** Two verbs, `edit_field` (field scope) and
+  `edit_widget` (widget scope), plus `edit-field` / `edit-widget` on the CLI.
+
+**Everything about both Passes is finished** — tests green, gates green,
+invariants verified, CLI verified live on real files. **What is NOT finished
+is the release plumbing:** neither commit is pushed, no tag covers them, and
+no backup bundle contains them. See `§B`. Start the *work* at `§C`.
 
 ### ★ Verified from a shell at write time — do not copy forward without re-running
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `4bea7fe` | `git rev-parse HEAD` |
-| `git describe --tags` | `v0.14.0` — exact, no `-dirty`, no distance | `git describe --tags` |
-| `origin/main` | `4bea7fe` — **level, 0 ahead** | `git rev-list --count origin/main..main` |
-| tag `v0.14.0` | annotated, at `HEAD`, **pushed (force-moved from `d3b4f5a`)** | `git rev-parse v0.14.0^{}` |
-| release | published, one asset, **24,708,897 B**, built FROM the tagged commit | `gh release view v0.14.0` |
-| CI at the tag | **GREEN — all 10 jobs** | `gh run view 33016470319` |
-| `verify-release.py v0.14.0` | **clean — all 7 checks** | `python tools/verify-release.py v0.14.0` |
-| working tree | clean | `git status --porcelain` |
-| newest backup bundle | `pdfce-20260826-1740-4bea7fe-full.bundle`, **at `HEAD`**, `git bundle verify` OK | `ls -lt D:\Dev\pdfce-backups\` |
+| `HEAD` | `fd71e4f` | `git rev-parse HEAD` |
+| `git describe --tags` | `v0.14.0-3-gfd71e4f` — **3 commits past the tag** | `git describe --tags` |
+| `origin/main` | **2 behind `main`** — `afd8da8` and `fd71e4f` are **LOCAL ONLY** | `git rev-list --count origin/main..main` |
+| tag at `HEAD` | **none.** Highest tag `v0.14.0`, at `4bea7fe` | `git tag --points-at HEAD`, `git describe --tags` |
+| working tree | clean at read time, **before this filing's own edits** | `git status --porcelain` |
+| newest backup bundle | `pdfce-20260826-1740-4bea7fe-full.bundle`, 44,030,408 B — at `4bea7fe`, **3 commits behind `HEAD`**; ★ **no bundle on disk contains either new Pass** | `ls -lt D:\Dev\pdfce-backups\`, then `git rev-list --count 4bea7fe..HEAD` |
 | gates on disk | **18**; **17 run with no arguments**, the 18th (`check-image-colorspace-truth.py`) needs a fixture dir | `ls tools/check-*`, then run them |
-| disk | **99 % used, ~15 GB free on `D:`** — `target/debug` was deleted to package; it will rebuild | `df -h /d` |
+| CI at `HEAD` | **NOT RUN — `HEAD` is unpushed.** The last green run was at `4bea7fe`/`v0.14.0` | (nothing to query; do not assert a colour) |
+| `docs/core-api` verbs | **144** (was 142) | `grep -n 144 docs/core-api/index.md` |
+| `crates/pdfce-core/src/edit.rs` | **31,655** lines | `grep -c "" crates/pdfce-core/src/edit.rs` |
+
+★ **The CI row is deliberately not a colour.** Two of the last three releases
+went out on a tag whose CI run was red, and both times the wrong belief came
+from a *carried-forward* sentence rather than a query. **`HEAD` has never been
+to CI.**
 
 ---
 
-## §B — THE RELEASE IS FINISHED. This section is history, kept for the ordering lesson only
+## §B — ★★ THE RELEASE PLUMBING IS THE FIRST THING, AND `check-commits-filed.py` IS ALREADY RED
 
-**Everything the previous version of this section listed as owed is done**, and
-the numbers above are the proof rather than the claim. `v0.14.0` was cut at
-`d3b4f5a`, CI came back **red on one job of ten**, the tag was moved onto the
-filing commit, the package was rebuilt so `BUILD-INFO.txt` and the binary's own
-`--version` name the tagged commit, the asset was replaced with `--clobber`,
-the smoke test was re-run on the **new** artefact, and CI is green at the tag.
+Two code commits (`afd8da8`, `fd71e4f`) are trailing. The filing that names
+them is the commit you are about to make. **`§J`'s rule applies exactly:**
 
-**Why it went red, because this is the reusable half.** The session ran all 17
-gates clean — and then made two more commits. **A clean sweep certifies the
-tree it ran on, not the tree that gets pushed.** `check-commits-filed.py` is
-*structurally* unable to be green on a code commit made after the filing that
-was meant to narrate it: a commit cannot cite its own hash, so its filing is
-always a later commit. Only two orders work:
+> The tip-deferral excuses **exactly one** trailing unfiled code commit. There
+> are **two**. The second shields the first out of the deferral window, so the
+> gate is red **now** and goes green the moment the filing lands — **and only
+> if nothing is committed after it.**
 
-> `code → file` **and then stop**, or `code → file → code → file`.
+**Order that works, in full:**
 
-There is no order in which *file, then commit more code, then push* is green.
-The **tip** is deferred and checked on the next run, which is what makes a
-trailing version-bump commit safe — but **the deferral is one commit wide**,
-and a second trailing commit shields the first out of it.
+1. Commit this filing (`ROADMAP.md`, `FEATURES.md`, `SESSION_LOG.md`,
+   `NEXT_SESSION.md`, plus the one-line `docs/core-api/03-capabilities.md`
+   correction it made).
+2. Run the 17 argument-free gates **on that tree** — ★ not on the tree you
+   swept earlier. *A gate sweep certifies the tree it ran on.*
+3. Push. Then decide about a version bump **separately** — see below.
+4. Take a backup bundle. **No bundle contains either Pass.**
 
-**The cost was real but bounded:** a re-tag, a rebuild, an asset replacement
-and a second smoke test. **The cost of not noticing** would have been a
-published release whose tag pointed at a commit CI had rejected.
-
-Filed as a candidate under `R217`, `n = 1`, nothing minted. Also in engineer
-memory at `.claude/agent-memory/pdfce-engineer/feedback_a_gate_sweep_certifies_the_tree_it_ran_on.md`
-— which is read by the agent about to do the thing, whereas this file is read
-at session start.
+**On a version bump: not obviously owed, and the call is the operator's.**
+`Pass 134.0` adds two public `pdfce-core` verbs (**142 → 144**) and two
+`EditError` variants; `Pass 133.0` adds nine public `FormJavaScript` fields and
+makes that struct `#[non_exhaustive]`. That is the **additive-public-items**
+case `768e934` settles as **minor** — but `v0.14.0` shipped hours ago, and
+whether two Passes justify `v0.15.0` on the same day is a product judgement, not
+a mechanical one. **Do not cut a tag without asking** (`CLAUDE.md` rule 8).
 
 ---
 
-## §C — ★★★ THE ONE CODE DEFECT, STILL UNFIXED, STILL THE RIGHT FIRST TASK
+## §C — ★★ THREE DOC SURVIVORS, OWED, ALL ONE-SENTENCE REPAIRS
 
-**pdfce cannot see that a push button submits to a website.** Unchanged from
-the previous handoff — nothing in `Pass 132.0` touched it.
+The 272nd filing's hard-rule-11 sweep found four; it fixed one and left three
+that are not a librarian's to make. **None blocks anything. All three are
+places where a stale sentence will be believed.**
 
-`scan_javascript` / `FormJavaScript` in `crates/pdfce-core/src/forms.rs` exist
-— in their own doc comment's words — *"to disclose what a document would run in
-Acrobat/Reader"*, and `network_action_count` is documented as flagging *"`/AA`
-actions referencing the network"*.
+**1–2. `docs/plan-scripting-submit-and-plugins.md`, two survivors.** This is the
+document a session re-opening the parked submit plan (`§G`) reads first, and
+**its description of pdfce's own read side is now wrong in two places**:
 
-**It scans `/AA` only. A widget's PRIMARY action lives in `/A`.** A submit, a
-URI, a launch on a push button all sit in `/A`; `/AA` carries only the
-*additional* triggers (`/E` `/X` `/D` `/U` `/Fo` `/Bl`).
+- **`:196`** — the three-row *"no action"* table, copied from the old `§C`.
+  `list-annotations` now prints `action=<Type|Type+next|none>`. The table is
+  **false**.
+- **`:119`** — *"`forms.rs` classifies **`/AA`** action subtypes and counts
+  hazards"*, sitting inside a section headed *"Action **reading**: partially
+  exists, **and is good**"*. It now classifies **17 carrier sites**. ⇢ *A
+  section that **grades** the read side is the worst place for a stale
+  **description** of it — the grade travels, the description is not
+  re-checked.*
 
-**Measured on a hand-built file whose button Acrobat then actually submitted to
-`http://127.0.0.1:8765/declared-http`:**
+★ **Why the librarian did not edit them:** that document quotes **eight
+operator rulings verbatim** and its value is its verbatimness. Re-wording
+tables inside it is the engineer's hand, not a filing agent's.
 
-| surface | output |
+**3. `docs/ARCHITECTURE.md:8798`** — decision 009's Pass record: *"`scan_javascript`
++ the `FormJavaScript` histogram COUNT all **field-level** JS actions … with a
+loud stderr flag on any network/launch **`/AA`** action."* **Both qualifiers are
+now wrong.** ⇢ *It was accurate when written, which is exactly what makes an
+append-only Pass record dangerous when read in the present tense.* The right
+repair is a **dated forward pointer** beside it, not a rewrite of history — and
+whether decision 009's own framing needs amending is a call the librarian
+declined to make alone.
+
+★ **Already fixed, do not redo:** `docs/core-api/03-capabilities.md:651` cited
+`scan_javascript` at `forms.rs:1653`; it is now at `forms.rs:1813` and the
+filing corrected it.
+
+---
+
+## §D — ★ A NAMING DIVERGENCE, REPORTED AS AN OBSERVATION, NOT A DEFECT
+
+`Pass 133.0`'s nine counters have **two** name sets, and **three of seven
+diverge**:
+
+| `FormJavaScript` field (`forms.rs`) | CLI stable-line key (`main.rs`) |
 |---|---|
-| `list-fields` | `aa=0 … js_network_actions=0 js_launch_actions=0` |
-| `inspect` | no action / submit / network / URI / launch line at all |
-| `list-annotations` | `subtype=Widget … author="Go"` — no action |
+| `annotation_actions` | **`annot_actions`** |
+| `javascript_actions` | **`js_actions_anywhere`** |
+| `scan_truncated` | **`action_scan_truncated`** |
 
-**Three surfaces, none of them disclosing it.** Ask pdfce whether a document
-phones home and it says no about a file that demonstrably does.
+Neither set is wrong — one is the API a consuming crate binds, the other the key
+a script parses. But **the mapping is written down nowhere outside the
+`println!` itself**, `check-metrics-line-contract.py` governs **`render-page`
+only**, and the commit message uses the CLI spelling while the dispatch used the
+Rust one. **Both sets are recorded in the `Pass 133.0` ROADMAP entry** so a
+future grep that finds one does not conclude the other is stale. Decide whether
+to document the mapping in `docs/core-api/` or to converge the names; either is
+fine, **drifting silently is not.**
 
-**Fix shape.** Walk widget `/A` alongside `/AA` — and because `/A` also appears
-on **link annotations, outline items and `/OpenAction`**, decide deliberately
-which carriers are in scope rather than patching the one that was noticed. This
-is **recognition only**: it fires no trigger, so it needs neither the `R54`
-amendment (decision `088`) nor any new rule. Owes fixture tests and a
-`FEATURES.md` touch (the disclosure rows currently over-claim).
-
-★ **Why it ranks above everything in §E:** it is the read half of the exact
-disclosure the whole submit plan rests on, it is shipped and wrong today, and it
-is the same *"a check that under-reports reads as a clean bill of health"* shape
-this project keeps meeting.
-
----
-
-## §D — ★★ THE "A4" REPAIR IS DONE — AND THE COMMIT THAT DID IT BROKE A STRING LITERAL IN THE PARAGRAPH IT WAS FIXING
-
-**All nine sites are repaired** by `daefceb`, on the *recompute-for-A4* branch,
-whole rather than by halves. On true A4 (595 × 842 pt = 500,990 pt², against
-`max_cmyk_composite_pixels(None)` = **13,421,772 px**): the default ceiling
-reaches **518 %**, 1 GiB reaches **1035 %**, the `MAX_PIXMAP_EDGE` tier ends at
-**1946 %**, the buffer wants **641 MB at 800 %** and **1.44 GB at 1200 %**, and
-a square 16,384² raster wants **5.4 GB**. US-Letter is **379 DPI**. Every one
-of those was re-derived independently in the 271st filing and all seven agree.
-
-`grep -rn "534 %\|about 530\|2071\|5\.33x" crates/ docs/core-api/` returns
-**one** hit, and it is the deliberate parenthetical at
-`docs/core-api/03-capabilities.md:2040` telling the consuming project which of
-*its own* request figures were on the wrong sheet. **Nothing stale survives.**
-
-The doctest was fixed by moving the **literals** — `3076 × 4353` inside,
-`3082 × 4362` past — which is the right half to move, because the compiler runs
-the literal and nothing runs the label. The documentation test's ±30-point band
-became **±5** (`513.0..523.0`), its bare `contains` moved to `"about 518%
-zoom"`, and **a second number is now checked beside it** (1 GiB / `1035`),
-because the wrong-page error moved both and a check on either alone would have
-caught it only by luck.
-
-### ★★★ WHAT THE REPAIR LEFT BEHIND: TWO REJOINED LINES IN THE GENERATED `settings.txt`, AND A GATE THAT CANNOT SEE THEM
-
-> **★★ EVERYTHING IN THIS SUBSECTION IS DONE — read it as HISTORY, not as a
-> work order.** It was written while the repairs were in flight and is left
-> standing because the analysis is the part worth keeping. Three commits closed
-> it: **`ffe9d4c`** repaired the two rejoined lines, **widened the gate** (with
-> a `dirty4` fixture pinning the defect and a `blank_line_inside_a_literal`
-> fixture pinning the legitimate shape), added a test asserting on **pdfce's own
-> output** rather than on a round trip, and closed the
-> `03-capabilities.md:2003` survivor; **`18b0438`** removed the header's two
-> dangling `check-strong-text.sh` citations. **`rg '^\s*\\n' --glob '*.rs'
-> crates/` now returns four, the four legitimate lines.**
->
-> ★ **Two corrections to what is written below, both earned:** the
-> discriminator recommended here — *"does not end in `\`"* — is **wrong**, and
-> let a second variant through (one line loses its continuation while the next
-> keeps its own); the shipped test is *"the line's first two characters are the
-> escape AND it carries anything besides the continuation."* And the "0 false
-> positives" measurement was sound, but ⇢ *a discriminator derived from one
-> observed instance is a hypothesis about the whole family; the second variant
-> is the test, and it costs one reproduction.*
->
-> **The one thing still owed from this subsection is the SIBLING check** —
-> queue item 2 above.
-
-`crates/pdfce-core/src/settings/mod.rs:1990–1992`. The two new peak-memory
-lines were appended to the settings-file prose literal **without their line
-continuations** — each `\n\` became a **raw newline** with the `\n` escape
-displaced to the start of the following line:
-
-```rust
-             # about 1035%, 4gib about the largest page pdfce will raster at all.
-\n             # A page with layered transparency can need up to about FOUR TIMES
-\n             # this at once, because each layer is given a buffer of its own.\n",
-```
-
-A bare newline inside a Rust string literal is legal and kept verbatim, so the
-generated `settings.txt` gets **two blank lines and 13 spaces of source
-indentation** in the middle of the paragraph. **Verified by compiling the
-literal with `rustc` and printing it**, not by reading it. Non-fatal — the
-parser trims before testing `starts_with('#')` (`settings/mod.rs:1663–1664`) —
-**cosmetic and still wrong**, in a file pdfce writes onto the operator's disk.
-
-★★★ **`check-string-gaps.sh` IS GREEN ON IT, and that is the transferable
-half.** `daefceb`'s own message credits that gate with catching this family,
-one file earlier. The gate matches **three or more spaces between two word-ish
-characters on ONE source line** — a model that assumes **`rustfmt` folded the
-two lines together**. `rustfmt` **cannot** fold these: the raw newline is part
-of the literal's value, so the gap stays as **leading indentation at the start
-of a line**, with no word-ish character in front of it. ⇢ ***A gate that
-detects a defect by its POST-FORMATTING shape misses every instance the
-formatter could not reshape.*** The gate's header claims *"there is no false
-NEGATIVE that ships anything inert"*; **this is one.**
-
-**The widening is measured, not speculative.** `rg '^\s*\\n' --glob '*.rs'
-crates/` returns **six lines tree-wide**: four in `crates/pdfce-gui/src/main.rs`
-(535, 537, 541, 545) that are **correct** — they carry their trailing
-continuation backslash — and the two defects, which do not. **2 true positives,
-0 false positives.** Pin **both** shapes in that gate's self-test, which it
-already has the discipline for.
-
-★ **Third occurrence of this family, second consecutive one inside a "correct
-the prose" commit** (`2c3210a` → `6a9511a` → `daefceb`). ⇢ *A commit that names
-a defect class in its own message is not thereby immune to it.*
-
-~~★ **One minor survivor, reported not fixed:**~~ — **CLOSED in `ffe9d4c`.**
-`docs/core-api/03-capabilities.md:2003` said **"a factor of four on A4"** flat,
-where the crate's own doc comment was softened in the same commit to **"very
-nearly a factor of four"** (1946 ÷ 518 = **3.757×**) — same quantity, two
-precisions, in the document a sibling project reads. It now reads *"the gap
-between them is very nearly a factor of four on A4 (3.76×)"*: the crate's own
-wording plus the figure. ⇢ *`R212` satisfied — the two copies of the contract
-agree.*
+Related, smaller: `list-fields` **appended** its new keys (per its own
+append-never-reorder note) while `list-annotations` **inserted** `action=`
+mid-line before `author=`. No published key-order contract exists for
+`list-annotations` and no gate covers it, so nothing is broken — but a
+**positional** parser would break, and one commit used two conventions.
 
 ---
 
-## §E — THE NON-JAVASCRIPT WORK QUEUE
+## §E — THE WORK QUEUE
 
 The operator's standing instruction: **continue the other, non-JavaScript
-work.** The submit/scripting plan is **parked by his own ruling** — see §G. Do
-not re-open it.
+work.** The submit/scripting plan is **parked by his own ruling** — see `§G`.
+Do not re-open it. `Pass 133.0` is **recognition only** and did not touch it.
 
 Ordered by engineering judgement, not by Pass number:
 
-0. **§B — finish the `v0.14.0` tag move.** Ahead of everything, because a
-   public tag on a red CI run is what a downloader sees.
-1. **§C — the `/A` disclosure defect.** Do it first among the code work.
-2. **§D — the sibling-gate check.** ★ **The widening itself is DONE** in
-   `ffe9d4c`, and the discriminator this role recommended was the wrong one —
-   see §D. **What is still owed is the SIBLING check:** do
-   `check-ui-strings.sh` and `check-theme-colors.sh` carry the same
-   post-formatting-shape assumption? A sibling carrying it is what would earn
-   the general form a `D:/dev/rag/rust/` file. ★★ **These are the two
-   line-scanners that EXIST.** This item named `check-strong-text.sh` until
-   `18b0438`; **there is no such gate and there never has been** — the name was
-   read out of `check-string-gaps.sh`'s own header, which cited it twice, and
-   repeated here as a work item. `18b0438` rewrote both sentences to argue on
-   their own account and left a note saying so. ⇢ *A dangling reference inside
-   a trusted document is indistinguishable from a real one until somebody runs
-   `ls`.*
+0. **`§B` — commit the filing, run the gates on THAT tree, push, back up.**
+   Ahead of everything: two trailing code commits already have the gate red,
+   and nothing on disk backs them up.
+1. **`§C` — the three doc survivors.** Cheap, and two of them sit in the
+   document the next submit-plan session reads first.
+2. **The sibling-gate check.** ★ Carried forward unchanged from the previous
+   handoff and **still owed**. `check-string-gaps.sh` was widened in `ffe9d4c`
+   after it proved blind to a defect whose shape `rustfmt` could not fold onto
+   one line. The question: **do `check-ui-strings.sh` and
+   `check-theme-colors.sh` carry the same post-formatting-shape assumption?**
+   ★★ **These are the two line-scanners that EXIST** — earlier handoffs named a
+   `check-strong-text.sh` that has never existed, a name read out of
+   `check-string-gaps.sh`'s own header. A sibling carrying the assumption is
+   what would earn the general form a `D:/dev/rag/rust/` file.
 3. **`Pass 130.2` — per-sample image overprint for `Separation`/`DeviceN`
    images.** Re-scoped 2026-08-26 and **smaller than it looks**: Table 149
    excludes a sampled image from row 1 by name, so painting a **process** image
@@ -260,47 +192,74 @@ Ordered by engineering judgement, not by Pass number:
    multiplier was built, ablated and reverted: it flipped no patch and regressed
    one. **Do not re-attempt it.**
 7. **`Pass 122.3` — band a large page render.** Two of its three acceptance
-   clauses were discharged by `Pass 132.0` (the refusal note now names the way
-   out with numbers; the ceiling's doc comment now carries the arithmetic
-   argument it demanded). **Banding is the third and it is untouched.**
-   ⇢ *An operator-set ceiling trades memory for correctness; banding removes the
-   trade* — peak usage is a multiple of nominal (parent + child + spare), so a
-   ceiling admitting one large page admits three.
+   clauses were discharged by `Pass 132.0`. **Banding is the third and it is
+   untouched.** ⇢ *An operator-set ceiling trades memory for correctness;
+   banding removes the trade* — peak usage is a multiple of nominal (parent +
+   child + spare), so a ceiling admitting one large page admits three.
 8. **CLI surface for the four ce-dimension group management verbs** — rename,
    delete, delete-with-policy, re-parent. Core ships all four; no subcommand
    reaches any of them, so from a script a group is still create-only (`R151`
    shape: callable-and-uncalled).
 
-**A `D:/dev/rag/rust/` escalation is OWED and was deliberately not written.**
-The general form — *an infallible allocation is a bound's silent partner; a
-ceiling removed without `try_reserve` converts a typo into an abort* — is a real
-ecosystem finding, but **no OOM was actually induced**, so it would be filed on
-reasoning rather than measurement. Induce one (a 64 GiB ceiling on a machine
-that cannot honour it, and check the process survives and discloses) and the
-finding is worth writing. The pdfce-visible half is already in
-`ARCHITECTURE.md` §10.1a and decision `089`.
+**Two `D:/dev/rag/` escalations are OWED and were deliberately not written**,
+both at n = 1, both with a named second-occurrence trigger:
+
+- ***In-crate tests are privileged in exactly the ways a consumer is not***
+  (`#[non_exhaustive]` construction, private items) — **so an API can be green
+  in CI and unusable from outside.** Found in `Pass 134.0` by writing the
+  out-of-crate integration test. **Trigger:** the next `pdfceGUI` construction-wall
+  report is the second occurrence.
+- ***An infallible allocation is a bound's silent partner; a ceiling removed
+  without `try_reserve` converts a typo into an abort.*** Carried forward from
+  `Pass 132.0`. **Trigger:** actually induce an OOM (a 64 GiB ceiling on a
+  machine that cannot honour it; check the process survives and discloses). No
+  OOM has been induced, so the finding would rest on reasoning rather than
+  measurement. The pdfce-visible half is already in `ARCHITECTURE.md` §10.1a
+  and decision `089`.
 
 ---
 
-## §F — WHAT `Pass 132.0` DECIDED, IN CASE YOU TOUCH THE SAME GROUND
+## §F — WHAT `Pass 133.0` AND `Pass 134.0` DECIDED, IN CASE YOU TOUCH THE SAME GROUND
 
-**Decision `089` has two halves and they are one decision.**
+**No architectural decision was minted and no standing rule was minted** — that
+is itself the finding, not an omission. Ceiling stays: decisions **089** (next
+free **090**), rules **`R219`** (next free **`R220`**).
 
-1. **`ARCHITECTURE.md` §10's allocation-ceiling rule is about UNTRUSTED
-   INPUT.** Every guard in §10.1 bounds a file-supplied quantity. A number the
-   operator typed is not that, so an operator-set ceiling is **uncapped** — no
-   guard, no warning, no preflight — on his own `max_zoom_percent` ruling:
-   *"it is up to the user to determine how much of a performance hit they want
-   to take."*
-2. **That is only safe because the allocation became fallible in the same
-   commit.** `vec![0.0; n]` aborts the process on allocation failure — no
-   unwind, no `Err`, no page, **no disclosure**. `CmykBuffer::try_planes` uses
-   `try_reserve_exact`.
+Four rulings that will bite a session working nearby:
 
-⇢ **Binding: a session that raises or removes an operator-settable allocation
-bound must check that the allocation behind it is fallible, in the same
-change.** Full reasoning, alternatives weighed and the scope limits are in
-`ARCHITECTURE.md` §12 decision `089` and the new §10.1a.
+1. **★★★ Recognise-and-report is a pdfce PRODUCT decision, not conformance.**
+   The standard has **no threat model** — `malicious`, `privacy`, `untrusted`
+   are **0 hits across both editions** (756 and 1023 pages) — and its posture is
+   ***"shall execute"***. `R12`/`R13`/`R53`/`R54` are where this lives. ⇢ *A
+   behaviour that exceeds the standard must be filed as a choice, or the next
+   reader files it as a requirement and cannot tell what would be permissible
+   to change.*
+2. **★★★ An edit verb validates the POST-IMAGE, not the request.** A creation
+   verb sees the whole field, so validating the request validates the file. An
+   edit verb sees a **delta**, and a producer gate is a property of the field
+   **after** it lands — which the request need never mention. Clearing
+   `/MaxLen` breaks Table 228's comb gate without the word *comb*; clearing
+   `combo` breaks Table 230's `Edit` gate without the word *editable*. **Both
+   are among the four producer gates the standard gives no reader recovery rule
+   for.** Recorded as a **named candidate at n = 1**, not minted.
+3. **★★ When an edit outdates stored data, pdfce neither refuses nor repairs —
+   it discloses.** Shortening a limit **is** a legitimate authoring act
+   (refusing just moves the loss); truncating the value or re-pointing a
+   selection is **inventing document state** (rules 3 and 4). The vehicle is
+   `FieldEditOutcome::value_no_longer_fits`, which carries **a ready-made
+   sentence**, not a boolean the caller must phrase.
+4. **★★ A guard keyed on IDENTITY is disarmed by anything that normalises the
+   identity away — and resolution is exactly such a normalisation.** The first
+   `/Next` walk resolved before recursing, so the cycle guard never engaged and
+   a `5 → 6 → 5` loop counted one `/URI` **sixteen times**. Every line was
+   individually correct; the defect was the **order**, and it produced a wrong
+   **number** rather than a crash.
+
+**Where to read the spec, not your memory:**
+`D:/Dev/Rag-Specialized/PDF_Spec/iso32000/iso32000__ref__action_carriers.md`
+is **the catalogue and the one to grep** — 17 carrier sites, 10 container
+types, 7 key names. `iso32000__s__12.6.md` beside it. Both written for
+`Pass 133.0`.
 
 ---
 
@@ -308,6 +267,7 @@ change.** Full reasoning, alternatives weighed and the scope limits are in
 
 Full detail: **`docs/plan-scripting-submit-and-plugins.md`**. Eight operator
 rulings are quoted verbatim there; do not paraphrase them from this file.
+★ **Two of its sentences about pdfce's read side are now stale — see `§C`.**
 
 - **A push button that does anything was blocked by `R54`** (*"no trigger event
   ever fires"*), **not** by the JavaScript rule. `R54`'s text outran its
@@ -321,6 +281,10 @@ rulings are quoted verbatim there; do not paraphrase them from this file.
   path and no host-language type.
 - **Submission is permitted, destination open by default, destination always
   disclosed, whitelist mode and payload disclosure available.**
+
+★ **`Pass 133.0` shipped the READ half and nothing else.** It fires no trigger,
+so it needed neither the `R54` amendment nor any new rule. **Do not read it as
+progress on the plan.**
 
 **Still owed before any submit code:** a decision record for `R12`'s new
 destination class (sending the operator's data where a *file's* author said is
@@ -358,24 +322,38 @@ run owes the same.
 one.**
 
 ```
+D:\Dev\FeatureRequests\pdfce_FeatureRequests\
 D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\
 D:\Dev\FeatureRequests\iccce_FeatureRequests\open\
 ```
 
-At write time the pdfce channel's two newest files are
-`reply_cmyk_buffer_ceiling.md` — **checked, and it is now correct in all three
-respects: the release it claims exists, its A4 table is the recomputed one, and
-it carries the peak-memory caveat** — and the
-`request_cmyk_buffer_ceiling_is_invisible_to_the_gui.md` it answers. **Four
-`request_*` notes remain unanswered:** `adopt_widget`
+★ **`ls` the channel ROOT as well as `open/`, and do it as its own command.**
+`request_extraction_drops_the_writing_direction.md` (2026-08-26 16:29) sits at
+the **root** and is **unanswered** — a session that lists only `open/` never
+sees it. (`note_the_cmyk_ceiling_is_consumed.md` is also at the root, and is a
+reply, not a request.)
+
+★★ **A caution earned inside the 272nd filing itself:** `ls dirA dirB` in one
+command prints two blocks with no obvious seam, and this role read an `open/`
+entry as a root entry and then *"confirmed"* it. **Two commands, not one.**
+
+**Both new Passes are already answered on the channel** — do not re-answer:
+`open/reply_field_property_edit.md` (20:52) and
+`open/note_the_action_scan_was_lying_and_now_is_not.md` (20:53).
+★ **One thing the `Pass 134.0` reply should be checked for**, if it does not
+already say it: **`move_widget` already existed**, public and CLI-wired since
+`fd6eadd`, and the request's survey of `EditSession` verbs missed it **while
+presenting itself as complete**.
+
+Under `open/`, **four `request_*` notes remain unanswered**: `adopt_widget`
 pre-flight, markup-opacity-in-two-verbs, `insert_pages` orphaned widgets, and
 restyle-an-existing-text-run. The iccce channel's newest is
 `note_your_name_gate_has_the_two_defects_mine_had.md` — **unanswered, and it is
 about a gate this project also owns.**
 
-**2. Run the gates — `ls tools/check-*`, do not trust any list**, including §A's
-count. `R209`: *"all gates green" names a set, and the set somebody runs is not
-the set CI runs.*
+**2. Run the gates — `ls tools/check-*`, do not trust any list**, including
+`§A`'s count. `R209`: *"all gates green" names a set, and the set somebody runs
+is not the set CI runs.*
 
 **3. ★★ RUN `cargo +nightly fuzz build` ON WINDOWS.** CI cannot do it for you
 and `cargo check --bins` is not a substitute. Two traps, each defeating the
@@ -387,37 +365,37 @@ because `cargo check` never links and the break was a link break. **A cheap
 proxy for a gate is a proxy for the part of the gate that is cheap.**
 
 **4. Read `docs/ARCHITECTURE.md` §12** — cross-project boundaries live there and
-no gate can catch a violation of them. **New since the last handoff: `089`, plus
-§10.1a.**
+no gate can catch a violation of them. Newest is **`089`**, plus **§10.1a**;
+nothing was added by `Pass 133.0` or `134.0`.
 
 **5. Read `docs/compositor-plan.md`** before scoping anything in `97.x`, and
-before items 3, 4, 6 or 7 of §E.
+before items 3, 4, 6 or 7 of `§E`.
 
 ---
 
 ## §I — ★★ A DISPATCH IS A SET OF CLAIMS, AND YOURS WILL BE WRONG
 
-Carried forward because it keeps earning its place. The 263rd filing's dispatch
-carried three factual premises and **all three were false** — a path the other
-project had already consumed and renamed, a `FEATURES.md` box asserted `[ ]`
-that had been wired six hours earlier, and a feature credited to the wrong
-commit. None was careless; each was a reasonable inference from what the
-engineer remembered doing. **Memory of one's own session is exactly the kind of
-source that feels like a fact.**
+Carried forward because it keeps earning its place, **and it earned it again in
+the 272nd filing.** The 263rd filing's dispatch carried three factual premises
+and **all three were false**. The `Pass 132.0` dispatch carried *"about 534 %
+zoom on A4"* as an established fact; it was arithmetic on a different sheet, and
+**it was caught by division, not by review.**
 
-★ **Fresh instance, 2026-08-26: the `Pass 132.0` dispatch carried "about 534 %
-zoom on A4" as an established fact.** It was arithmetic on a different sheet,
-repeated from the crate's own doc comments into the dispatch and then into a
-decision. **It was caught by division**, not by review — which is hard rule
-10's whole point. **All nine sites are now repaired** (`daefceb`); what the
-repair left behind is in §D.
+★★ **Fresh instance, and it is the smallest one yet, which is the point.** The
+`Pass 133.0` commit message says ***"Fourteen tests"***, the dispatch to the
+librarian repeated it, and **the real number is sixteen**:
 
-★★ **And the repair's own dispatch carried a false premise in turn:** it stated
-that the commit's one rejoined string literal had been *caught and fixed*. One
-was. **Two more, in a different file, were shipped in the same commit and no
-gate saw them** — found by the filing, not by the sweep. **A dispatch's claim
-about what a gate caught is a claim about the gate's coverage, and that is
-exactly the kind nobody re-checks.**
+```
+git show afd8da8:crates/pdfce-core/src/forms.rs  | grep -c '#[test]'   →  34
+git show afd8da8^:crates/pdfce-core/src/forms.rs | grep -c '#[test]'   →  18
+```
+
+The two uncounted tests are `an_action_on_a_nav_nodes_next_is_still_classified`
+and `a_nav_node_chain_still_walks_as_nodes` — **the `/Next` × navigation-node
+cross-product**, precisely the pair a round number omits. ⇢ ***The count was
+written before the last two tests were added, and nothing re-derived it.***
+Hard rule 10's whole point: **the correction required no new work, only
+`grep -c`.**
 
 **Write dispatches so a premise is checkable, and expect the agent to check.** A
 dispatch that says *"X is at path P"* invites verification; *"as we discussed"*
@@ -435,29 +413,31 @@ flips red without anything about that commit changing.
 > **Dispatch the librarian LAST, and commit its filing LAST.** Any code commit
 > made after the dispatch has, by construction, no filing that can name it.
 
-★★ **THIS JUST HAPPENED, AND IT SHOWS WHERE `R217`'s CLOSING CLAIM RUNS OUT.**
-The engineer ran the full 17-gate sweep, it was clean, and **then made two more
-commits** — so **the sweep certified a tree that no longer existed**, and CI
-was red at the tag. `R217` ends *"a tag on a code commit is green whenever the
-history behind it is filed; there is nothing left to remember or get wrong by
-ordering."* **The tip-deferral covers exactly ONE trailing unfiled code
-commit.** Make **two** and the second shields the first out of the deferral
-window — it is no longer the tip — and the gate is red on the very first CI
-run, with nothing about either commit having changed.
+★★ **This applies RIGHT NOW, not hypothetically.** `afd8da8` and `fd71e4f` are
+**two** trailing unfiled code commits. The deferral covers **one**. The second
+shields the first out of the window, so the gate is **red at this moment** and
+goes green when the 272nd filing's commit lands — **and only if nothing is
+committed after it.**
 
 ⇢ ***A one-commit deferral tolerates one trailing code commit. The second is
 not deferred — it is merely no longer the tip.*** Recorded as a **named
-candidate under `R217`** (n = 1, not minted; the mint is the operator's act) in
-the `Pass 132.0` entry's 271st-filing amendment. **The orders that work are
-(file → code → file) or (code → file, then stop).**
+candidate under `R217`**, **still n = 1**, not minted; the mint is the
+operator's act. ★ **The present state is NOT a second occurrence and must not
+be counted as one** — `R217`'s candidate is about a *filing landing and then
+more code being committed on top*, which is a **failure**; two code commits
+followed by their filing is the **normal, correct** order and goes green the
+moment the filing lands. ⇢ *Counting a routine state as an instance of a
+failure shape is how a candidate gets promoted on evidence it does not have.*
+The orders that work are **(file → code → file)** or **(code → file, then
+stop)**.
 
-★ **`c29f5bd`, `76eb04c`, `daefceb` and `d3b4f5a` are all named by filings on
-disk** — the 268th/269th name the first, the 270th the second, the 271st the
-last two — so the gate has nothing outstanding *provided the 271st's commit is
-the tip when you re-tag*.
+★ **`afd8da8` and `fd71e4f` are both named by the 272nd filing** — in
+`ROADMAP.md`'s two new *Shipped* entries and in `SESSION_LOG.md` — so the gate
+has nothing outstanding **provided that filing's commit is the tip**.
 
-Recovery if it goes wrong anyway (precedent: `v0.8.0`, `v0.10.0`, `v0.12.0`):
-file the orphan, re-tag at the filing commit, force-push the tag, **rebuild the
-package** so `BUILD-INFO.txt` names the tagged commit, replace the asset with
-`--clobber`, and **re-run the smoke test on the new artefact** — a re-cut
-release is a new artefact and does not inherit the old one's test.
+Recovery if a tag goes out on a red run anyway (precedent: `v0.8.0`, `v0.10.0`,
+`v0.12.0`, `v0.14.0` — **four times**): file the orphan, re-tag at the filing
+commit, force-push the tag, **rebuild the package** so `BUILD-INFO.txt` names
+the tagged commit, replace the asset with `--clobber`, and **re-run the smoke
+test on the new artefact** — a re-cut release is a new artefact and does not
+inherit the old one's test.

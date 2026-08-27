@@ -66090,3 +66090,353 @@ trees, which is exactly the distinction §J's sharpening is about.* **Re-run
 once more if anything is touched between here and the commit.**
 
 ---
+
+## 2026-08-26 (272nd filing) — TWO Passes, both minted straight into *Shipped*: ★★★ **`Pass 133.0` (`afd8da8`) — pdfce answered "does this document phone home?" with `0` about a file Acrobat submits to a live endpoint, because `scan_javascript` walked `/AA` and a widget's PRIMARY action lives in `/A` — and Table 194 says `/A` TAKES PRECEDENCE, so the scan was reading the LOSING entry**; ★★★ **fixed from the CARRIER SET rather than the symptom — 17 sites, 10 container types, `/A` + `/AA` reach ELEVEN — including a navigation node whose `/Dur` fires an action ON A TIMER with nothing clicked, and a link `/PA` that ISO 32000-2's OWN enumeration of action carriers does not list**; ★★★ **`/Next` chaining is what makes a per-carrier scan UNSAFE rather than incomplete: a benign `/GoTo` where the scanner looks, the `/SubmitForm` on its `/Next`**; ★★ **`Pass 134.0` (`fd71e4f`) — a field's properties are editable after placement, and the producer gates are checked against the RESULT, not the request: clearing `/MaxLen` breaks Table 228's comb gate without the request mentioning comb**; ★★★ **THREE places Acrobat silently corrupts and pdfce neither refuses nor repairs — it DISCLOSES**; ★★ **`move_widget` already existed and the request's "complete" survey of `EditSession` verbs missed it — what was missing was RESIZE, a different operation under §12.5.5**; ★★★ **THIS ROLE'S OWN CORRECTION: the commit message says "fourteen tests" and the dispatch repeated it — `grep -c` says SIXTEEN, and the two uncounted ones are the `/Next` × navigation-node cross-product**; ★★★ **HARD-RULE-11 SWEEP FOUND FOUR SURVIVORS THE DISPATCH NAMED NONE OF — two in the parked submit plan (including its own "Action reading … is good" section), one in `ARCHITECTURE.md`'s decision-009 record, one stale line number in the file a SIBLING PROJECT reads**
+
+**Shipped:**
+
+- **`Pass 133.0`** (`afd8da8`) — *pdfce said a document phones home when it
+  does not, and no when it does.* Six files, **+1,523 / −24**
+  (`crates/pdfce-core/src/forms.rs` **+1,140**, `crates/pdfce-cli/src/main.rs`
+  **+151**, `crates/pdfce-core/src/annot.rs` **+71**, plus three
+  `pdfce-spec-librarian` memory files). **16 tests** (measured, see below).
+- **`Pass 134.0`** (`fd71e4f`) — *a field's properties are editable after it is
+  placed, including its size.* Six files, **+2,663 / −23**
+  (`crates/pdfce-core/src/edit.rs` **+1,131**,
+  `crates/pdfce-core/tests/form_field_editing.rs` **+515**,
+  `crates/pdfce-cli/src/main.rs` **+486**,
+  `crates/pdfce-cli/tests/edit_field.rs` **+469**,
+  `docs/core-api/02-editing-and-saving.md` **+83**, `docs/core-api/index.md`
+  **+2/−2**). **26 tests** — 19 core + 7 through the real binary
+  (`grep -c '#[test]'` on each, run here; **19 + 7 = 26**, the parts sum).
+
+Full entries with the carrier table, the reach table, the trap list, the
+producer-gate reasoning and the shared ledger: `ROADMAP.md`, the **`Pass
+134.0`** and **`Pass 133.0`** *Shipped* entries. **Both were minted directly
+into *Shipped*** — requested and delivered in the same session, so neither ever
+existed under *Next up*. `133.0` **was** named as the right first task by the
+previous handoff's `§C`, but filed there as a **shipped defect**, not as a
+queued Pass.
+
+**Findings + decisions:**
+
+- **★★★ A check that under-reports reads as a clean bill of health.** The
+  whole warrant for ranking `133.0` first. Ask pdfce whether a document reaches
+  the network and it said **no** about a file whose button Acrobat submits to
+  `http://127.0.0.1:8765/declared-http`. ⇢ *Silence and safety are
+  indistinguishable to the reader*, which makes an **under-reporting**
+  disclosure a worse class than an **absent** one — the absent one prompts a
+  question. **Third occurrence of this family** in the project, after the 263rd
+  filing's *zero-hit search leaves you uncertain, zero-hit redaction leaves you
+  confident and wrong*.
+- **★★★ Table 194's `U` row settles it, and it settles it against the shipped
+  code:** *"the `A` entry in an annotation dictionary, if present, **takes
+  precedence over this entry**."* The `/AA`-only walk was not reading *some*
+  actions — on the primary trigger it was reading the entry **the standard says
+  loses**. A file carrying both would have had its **inert** action reported and
+  its **live** one skipped.
+- **★★★ Fixed from the carrier set, not the symptom.** Two spec-corpus files
+  written for this Pass by `pdfce-spec-librarian` and **verified on disk here**:
+  `D:/Dev/Rag-Specialized/PDF_Spec/iso32000/iso32000__ref__action_carriers.md`
+  (33,517 B — **the one to grep**) and `iso32000__s__12.6.md` (51,103 B).
+  **17 carrier sites / 10 container types / 7 key names; `/A` + `/AA` cover 11
+  of 17.**
+- **★★ A specification's enumeration of a category is not a proof of that
+  category's extent.** Link `/PA` holds *"a URI action **formerly** associated
+  with this annotation"* — a **live** URI action, under a key **ISO 32000-2's
+  own list of action carriers does not name**. The catalogue had to be built by
+  sweeping the tables, not by reading the list.
+- **★★ The only carrier in the standard that fires with no user input and no
+  page turn** is a navigation node reached via a page's `/PresSteps`: its
+  `/Dur` fires `/NA`/`/PA` **on a timer**.
+- **★★★ `/Next` chaining is what makes a per-carrier scan unsafe rather than
+  merely incomplete.** §12.6.2 NOTE 1 makes the chain a **tree**, recursive,
+  **bounded by nothing in the standard** (`nesting level` = 0 hits, both
+  editions). A document can put a benign `/S /GoTo` exactly where a scanner
+  looks and hang the `/SubmitForm` off its `/Next`. Every carrier now routes
+  through **one** function that cannot classify an action without walking its
+  chain — ⇢ *if following it were the caller's job, the caller that forgot
+  would report the document **clean***.
+- **★★ Reach is carried by the file-specification KEY TYPE (§7.11.5
+  `/FS /URL`), not by the action name.** `GoToR`, `GoToE`, `Thread`, `Movie`
+  and `Rendition` all reach a file or URL and all counted as nothing.
+  **`Thread` inverts the obvious reading:** its `/F` is optional and *"if
+  absent, the thread is in the current file"* — so `/F` being **present** is
+  what means it is not.
+- **★★ Two type traps, handled by name rather than by luck.** A `/Movie`
+  annotation's `/A` is *"a **boolean** or dictionary"* (`/A true` is legal, and
+  it is an activation dictionary, not an action). A `/Rendition` action carries
+  **`/JS`** — a script on an action whose `/S` is not `JavaScript`. ⇢ *Keying
+  script detection on the action's type name is the same mistake as keying the
+  carrier scan on `/AA`, one level down.* And a third, about **storage**:
+  `/JS` may be a **stream**, which Table 5 lets carry `/F` — **a script body
+  that is a URL, with zero bytes in the file.**
+- **★★ `scan_truncated` is the honesty bit, and it prints even when nothing was
+  found.** ⇢ *A count of zero from a truncated walk is not the same fact as one
+  from a complete walk.* The operator-facing sentence is **"pdfce stopped
+  looking"**, never "pdfce found none" — because for a security-shaped
+  disclosure those two silences must not be confusable.
+- **★ `reaches_outside()` beside `any()`.** `any()` is true of every form with a
+  button, and **a warning that always fires is one nobody reads**, so the loud
+  disclosure is gated on the narrower predicate and the quiet one on the rest.
+- **★★ NOT conformance, and recorded as a product decision so it does not
+  drift.** The standard has **no threat model** — `malicious`, `privacy`,
+  `untrusted` are **0 hits across both editions**, 756 and 1023 pages — and its
+  posture is *"shall execute"*. Recognise-and-report is pdfce's own choice
+  (`R12`/`R13`/`R53`/`R54`). ⇢ *A behaviour that exceeds the standard must be
+  filed as a choice, or the next reader files it as a requirement and cannot
+  tell what would be permissible to change.* It fires no trigger, so it needed
+  **neither** decision `088`'s `R54` amendment **nor** any new rule.
+- **★ A guard keyed on IDENTITY is disarmed by anything that normalises the
+  identity away — and resolution is exactly such a normalisation.** The first
+  `/Next` walk resolved the reference **before** recursing, turning
+  `Reference(5)` into `Dict(…)`, so the next frame's identity check found
+  nothing and the cycle guard never engaged: a `5 → 6 → 5` loop counted its one
+  `/URI` **sixteen times**. Caught by the tests. Worth carrying because **every
+  line was individually correct** — the defect is in the **order**, and it
+  produces a wrong **number** rather than a crash.
+- **★★★ `Pass 134.0`: an edit verb's validation input is the POST-IMAGE, not
+  the request.** A creation verb sees the whole field, so validating the
+  request validates the file. An edit verb sees a **delta**, and the gate is a
+  property of the field **after** it lands — which the request need never
+  mention. Clearing `/MaxLen` breaks Table 228's comb gate *without the request
+  containing the word comb*; clearing `combo` breaks Table 230's `Edit` gate
+  *without the word editable*. **Both are among the four producer gates for
+  which the standard states no reader recovery rule anywhere.**
+- **★ `FieldPropertyTypeMismatch` is named rather than folded into a generic
+  "invalid property", because `/Ff` bits mean different things per field
+  type** — bit 26 is `RadiosInUnison` on `/Btn` and `RichText` on `/Tx`. A
+  mis-typed edit does something **else**, not nothing.
+- **★★★ Three places Acrobat silently corrupts; pdfce neither refuses nor
+  repairs.** Shortening `/MaxLen` under the stored value; removing a selected
+  option; re-keying a check box's export value while checked (it then renders
+  unchecked). **Not refusal** — shortening a limit is a legitimate authoring
+  act, and refusing makes the operator delete the value first, which is the
+  same loss with an extra step and no record. **Not repair** — truncating data
+  or re-pointing a selection is **inventing document state**. **Disclosure**,
+  via `FieldEditOutcome::value_no_longer_fits`, which carries a **ready-made
+  sentence** rather than a boolean the caller must phrase. A fourth,
+  `sort_claim_unmet`: Table 230 makes `Sort` a claim about the **writer**
+  (readers *"shall display the options in the order in which they occur"*), so
+  an unsorted `/Opt` under a set `Sort` flag is **a false statement in the
+  file**, not a rendering bug.
+- **★★ The field/widget split is SOURCED, not invented** — Acrobat's own
+  scripting model separates properties that *"apply to all widgets that are
+  children of that field"* from ones *"specific to individual widgets"*.
+  ⇢ *Getting it backwards is **invisible on a one-widget field and wrong on
+  every radio group*** — which is the shape of a defect that ships, because a
+  single-widget text field cannot distinguish the two scopes by observation.
+- **★★ Resize is a different operation from move, and §12.5.5 is why.** A pure
+  translation is exact for free; a changed **extent** scales the appearance. So
+  `edit_widget` compares the extent, not the origin. **Measured:** resize → **2**
+  changed objects, `regenerated=1`; translation → **1**, `regenerated=0`.
+- **★ Cross-page move is filed as a possible improvement OVER the parity
+  reference, not as a parity shortfall** — Acrobat cannot do it either (there
+  it is copy-then-delete, not atomic). It is a gap against **nothing**.
+- **★ No `field_type` property exists, deliberately.** Acrobat has offered no
+  type conversion since Acrobat 6, and pdfce models the limit by making the
+  request **impossible to express** rather than by returning an error. ⇢ *A
+  limit in the type system is checked at compile time in every consuming shell;
+  a limit in an error variant is checked at run time in each one separately.*
+  Same family as decision 020's refusal of one-sided hybrid-XFA creation.
+- **★ One command per verb, and it is a CORRECTNESS choice.** Several of these
+  properties are gated **against each other**, so a per-property undo could step
+  **backwards through a state the file may not legally be in**. An undo stack
+  whose intermediate states are invalid can leave an invalid file on disk.
+- **★★ `#[non_exhaustive]` blocks struct literals from OUTSIDE the crate —
+  which is exactly where `pdfceGUI` stands — and it was found by writing the
+  INTEGRATION test.** In-crate `#[cfg(test)]` modules are privileged in the
+  ways a consumer is not, so an API can be green in CI and unusable from
+  outside. Both specs gained `new()` + chainable `with_*`, matching
+  `RenameOptions` and the five `New*` specs. ⇢ ***An out-of-crate test is the
+  only thing in a workspace that exercises a consumer's constraints.***
+  ★ Note the coincidence worth carrying: **`FormJavaScript` gained
+  `#[non_exhaustive]` the same day, in the other crate, for the same reason.**
+- **★ One `/Opt` writer, shared by creation and editing.** Two builders of the
+  same array is the arrangement in which a **created** field and an **edited**
+  one come to disagree about §12.7.4.4's short form — invisibly: both files
+  open, both drop-downs read correctly, and the **submitted data** is wrong.
+  `R212`'s shape, closed by construction rather than by a gate.
+
+**Corrections made by this filing:**
+
+- **★★★ SIXTEEN tests in `Pass 133.0`, not fourteen — and the correction is
+  this role's, against both the commit message and the dispatch.** Measured
+  here: `git show afd8da8:…/forms.rs | grep -c '#[test]'` → **34**;
+  `git show afd8da8^:…/forms.rs` → **18**; removed → **0**. **34 − 18 = 16.**
+  The two uncounted are `an_action_on_a_nav_nodes_next_is_still_classified` and
+  `a_nav_node_chain_still_walks_as_nodes` — the **`/Next` × navigation-node
+  cross-product**, precisely the pair a round number would omit. ⇢ *The count
+  was written before the last two tests and nothing re-derived it.* Hard rule
+  10's whole point: **the correction required no new work, only `grep -c`.**
+- **★★ The Rust field names and the CLI output keys are NOT the same strings,
+  and three of seven diverge.** `annotation_actions` prints as
+  `annot_actions`, `javascript_actions` as **`js_actions_anywhere`**,
+  `scan_truncated` as **`action_scan_truncated`**. The commit message uses the
+  **CLI** spelling throughout; the dispatch to this role used the **Rust** one.
+  Neither is wrong — one is the API a consuming crate binds, the other the
+  stable-line key a script parses — but the mapping is **written down nowhere
+  outside the `println!`**, and `check-metrics-line-contract.py` governs
+  **`render-page` only** (read here). **Both name sets are now recorded in the
+  `Pass 133.0` entry**, so a future grep that finds one does not conclude the
+  other is stale. Reported as an `R212`-shaped observation, **not a defect**;
+  not edited (`crates/` is outside this role's remit).
+- **★ `docs/core-api/03-capabilities.md:651` cited `scan_javascript` at
+  `forms.rs:1653`; it is now at `forms.rs:1813`** (`grep -n`, run here).
+  **Fixed in this filing** — a stale line number in the document a **sibling
+  project** reads is `R212`'s exact shape, the repair is not a judgement call,
+  and `docs/` is this role's remit.
+
+**★★ HARD-RULE-11 SWEEP — FOUR SURVIVORS, and the dispatch named none of
+them:**
+
+1. **`docs/plan-scripting-submit-and-plugins.md:196`** — carries the same
+   three-row *"no action"* table as the handoff's `§C`. **Now false**;
+   `list-annotations` prints `action=`.
+2. **`docs/plan-scripting-submit-and-plugins.md:119`** — *"`forms.rs`
+   classifies **`/AA`** action subtypes and counts hazards"*, inside a section
+   headed *"Action **reading**: partially exists, **and is good**"*. ⇢ *A
+   section that **grades** the read side is the worst possible place for a
+   stale **description** of it* — the grade travels and the description is not
+   re-checked. **Both reported, not edited:** that document quotes **eight
+   operator rulings verbatim** and its value is its verbatimness; a librarian
+   re-wording tables inside it is the wrong hand. **Owed to the engineer** —
+   both are one-sentence repairs.
+3. **`docs/ARCHITECTURE.md:8798`** — decision 009's Pass record: *"COUNT all
+   **field-level** JS actions … with a loud stderr flag on any network/launch
+   **`/AA`** action"*. **Both qualifiers now wrong.** ⇢ *It was accurate when
+   written, which is exactly what makes an append-only Pass record dangerous
+   read in the present tense.* **Not edited** — the right repair is a dated
+   forward pointer, and whether decision 009's own framing needs amending is
+   the engineer's call.
+4. **`docs/core-api/03-capabilities.md:651`** — the stale line number,
+   **fixed here** (above).
+
+**Near-miss, reported as a near-miss and NOT as a survivor:**
+`crates/pdfce-core/src/form_script/inventory.rs:5` — *"Posture A already counts
+scripts … how many fields calculate, how many format, how many custom"* is
+**still true**; it describes the per-field counters, unchanged. Calling it a
+survivor would manufacture an occurrence.
+
+**Not survivors, checked:** `crates/pdfce-cli/src/main.rs:97–106` (the module
+doc-block templates for both `list-fields` and `list-annotations` were updated
+**in the same commit**); `docs/ARCHITECTURE.md:2958`/`:2964` (they narrate the
+earlier `contents=`/`author=` widening and assert nothing about actions).
+**No survivor in `tools/` SOURCE** — the only matches there are compiled
+`.rlib`/`.rmeta` artefacts under `target/`. ★ Stated with the qualifier because
+*"no hits in `tools/`"* and *"no hits in `tools/` source"* are different claims
+and the grep returned the former as noise.
+
+★ **One minor observation, reported not edited:** `list-fields` **appended** its
+nine new keys (per the append-never-reorder note in its own comment) while
+`list-annotations` **inserted** `action=` mid-line, before `author=`. No
+published key-order contract for `list-annotations` exists in `docs/` (grepped
+here) and no gate covers it, so nothing is broken — but a **positional** parser
+would break, and the two lines were treated by different conventions inside one
+commit.
+
+**`docs/FEATURES.md` — five row changes, and which way each was filed:**
+
+| row | change | boxes |
+|---|---|---|
+| Forms — *"Move a widget"* | **WIDENED** to *"Move **and resize** a widget"*, with the `regenerated=0`/`1` distinction and the cross-page note | `[x] [x] [ ] [x]` — **unchanged**; `move_widget` shipped in `fd6eadd`, so filing resize as a new row would double-count the half that already existed |
+| Forms — *"Change a field's properties after placing it"* | **NEW** | **core `[x]` · cli `[x]` · gui `[ ]`** · Acrobat `[x]` |
+| Forms — script-recognition row | **CORRECTED** — it named no scope, so it over-claimed by silence; now points at the document-wide row | `[x] [x] [ ] [x]` — unchanged |
+| Redaction & security — *"Tell me what this document would run, and whether it reaches outside itself"* | **NEW**, filed under **security rather than Forms** because it is a **document** property — the same fact that makes `list-fields` print with no AcroForm | **core `[x]` · cli `[x]` · gui `[ ]`** · Acrobat `[x]` |
+| Planned — *"Move anything carrying a `/Rect`"* | **CORRECTED** — *"Resize and rotate are unbuilt for all five carriers"* was **half wrong**. Resize is now built **for widgets only**; rotate stays unbuilt for all five and `/MK /R` is still read and written nowhere | `◐ ◐ [ ] [x]` — **unchanged**, and deliberately: four of five carriers still cannot resize |
+
+★ **`gui` is `[ ]` on both new rows, not rounded up.** The external `pdfceGUI`
+has not consumed either verb, and the ticking bar adopted from that project's
+own file is *"an operator can reach it in a real build"*, not *"the code
+exists"*.
+
+**Ledger:** Pass IDs `133.0` and `134.0` **shipped**; next free `133.1` /
+`134.1`. Decisions **089** unchanged, next free **090** — **no architectural
+decision minted**, because the field/widget split is *sourced from Acrobat* and
+the post-image validation rule is a *consequence of Tables 228/230*, not a
+pdfce choice. Standing rules **`R219`** unchanged, next free **`R220`** — **no
+mint**, two candidates at n = 1 (*an edit verb validates the post-image*; *an
+out-of-crate test is the only test that stands where the consumer stands*).
+Open operator questions ceiling **`(bq)`**, unchanged. Filings **272**, next
+free **273**.
+
+**Git state, checked from a shell at filing time** (hard rule 8; every figure
+names its command):
+
+- `git rev-parse HEAD` → **`fd71e4f`**; `git describe --tags` →
+  **`v0.14.0-3-gfd71e4f`**.
+- `git rev-list --count origin/main..main` → **2**. **`afd8da8` and `fd71e4f`
+  are LOCAL ONLY.** `857bb11` is already on `origin`. **No push has happened,
+  and a push is the operator's act.**
+- `git tag --points-at HEAD` → **empty**; highest tag **`v0.14.0`**, at
+  **`4bea7fe`**, three commits back. **No release covers either Pass.**
+- `git status --porcelain` → **empty at read time**, before this filing's own
+  edits.
+- `ls -lt D:\Dev\pdfce-backups\` → newest bundle
+  **`pdfce-20260826-1740-4bea7fe-full.bundle`** (2026-08-26 17:53,
+  44,030,408 B) at **`4bea7fe`**; `git rev-list --count 4bea7fe..HEAD` → **3**.
+  ★ **No bundle on disk contains either commit filed here.**
+- `ls tools/check-*` → **18** gates on disk, **17** argument-free. Both numbers
+  stated per `R209`.
+
+**Verification (engineer's, relayed — not re-run by this role):**
+`cargo test --workspace` green; `cargo fmt --check` clean;
+`cargo clippy --workspace --all-targets -- -D warnings` clean; **all 17
+argument-free gates green**, including `check-core-api-verbs.py` after
+`docs/core-api` was updated. `cargo tree`: **neither `pdfce-core` nor
+`pdfce-render` gained a dependency; neither manifest was touched** — rule 2
+intact. Live CLI verification on real files for both Passes, including both
+edit scopes and a **rendered before/after confirming a resized text field is
+re-laid-out rather than stretched**.
+
+**Independently verified here** (dispatch premises, per `§I`): `docs/core-api`
+verb count **144** (`index.md:17`); **§1.12a** present
+(`02-editing-and-saving.md:709`); `edit.rs` **31,655** lines (`grep -c ""`);
+both spec-corpus files on disk with sizes and timestamps; the Acrobat RAG file
+on disk (36,095 B); `move_widget` predating this Pass (`git log -S`);
+`Command::EditField`/`EditWidget` present. **Every checked premise held except
+the test count.**
+
+**RAG escalations — two OWED, neither written, and the reason is stated in
+each case:**
+
+- **`D:/dev/rag/rust/`** — *in-crate tests are privileged in exactly the ways
+  a consumer is not (`#[non_exhaustive]` construction, private items), so an
+  API can be green in CI and unusable from outside*. Real, generalises past
+  pdfce immediately, **n = 1**. **Named next step:** the next `pdfceGUI`
+  construction-wall report is the second occurrence, and the file gets written
+  with both.
+- **`C:\personal_rag\pdf\`** — the carrier catalogue **is not written here**,
+  on hard rule 6's boundary: as stated it is *"what the standard says"*, which
+  is `pdfce-spec-librarian`'s territory and is **already written**
+  (`iso32000__ref__action_carriers.md`). What would belong in `personal_rag/pdf`
+  is the **empirical** half — how often real producers use the non-obvious
+  carriers — and **this Pass measured no corpus**. **Reported as a boundary
+  call so the absence is not read as an oversight.**
+- **Not escalated anywhere, deliberately:** the identity-guard finding (*a
+  cycle guard keyed on identity is disarmed by resolution*) is neither
+  PDF-domain nor Rust-ecosystem — it is a graph-traversal invariant. Recorded
+  in the `Pass 133.0` entry, where the next reader of that code will find it.
+  n = 1.
+
+**Still in flight:**
+
+- **Nothing from either Pass.** Both are complete, tested and green.
+- **Three doc survivors owed to the engineer** (two in
+  `docs/plan-scripting-submit-and-plugins.md`, one in `docs/ARCHITECTURE.md`) —
+  all one-sentence repairs, none blocking.
+- **`afd8da8` and `fd71e4f` are unpushed and no backup bundle contains them.**
+
+**For next session:**
+
+- `docs/NEXT_SESSION.md` **was overwritten by this filing.** Its `§C` — the
+  `/A` disclosure defect that had stood across two handoffs — is **done**, and
+  the new `§C` carries the survivors above. The queue picks up at the former
+  `§E` item 2 (the sibling-gate check) and item 3 (`Pass 130.2`).
+- ★ **Per `§J`, this filing's commit must be the LAST commit before anything is
+  tagged**, and the deferral in `check-commits-filed.py` is **exactly one
+  commit wide** — `afd8da8` and `fd71e4f` are **two** trailing unfiled code
+  commits, so the gate is red until this filing lands and **stays green only if
+  nothing else is committed after it**.
+
+---

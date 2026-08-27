@@ -24,6 +24,7 @@
 - [Keep the error catching](feedback_keep_the_error_catching.md) — Ken rejects changes that trade error-detection for speed; declined splitting into per-crate sessions for that reason
 - [A refusal can guard more than it says](feedback_refusals_guard_their_callers.md) — re-verify a refusal's stated reason (R143); removing one can un-gate a caller relying on it (R144/R147)
 - [NEVER put prose through the Bash tool](feedback_windows_paths_need_literal_edits.md) — backslashes AND backticks; `-m` command-substituted a file listing into a commit message. Use Write + `git commit -F`, or Edit
+- [Only an out-of-crate test feels a consumer's constraints](feedback_only_an_out_of_crate_test_feels_a_consumers_constraints.md) — `#[non_exhaustive]` blocks construction from outside; in-crate tests cannot see it
 - [Priority is a measurement](feedback_priority_is_a_measurement.md) — check the target file actually exercises the feature before spending a Pass; an uncounted gap can't compete
 - [Two modes, one pattern, is one measurement](feedback_two_modes_one_pattern_is_one_measurement.md) — R188; same-pattern agreement isn't verification, and don't override an independently-derived result with a more confident one
 - [Absence needs an unscoped query](feedback_absence_needs_an_unscoped_query.md) — `git log --all -- path` feels exhaustive but is path-scoped; a wrong path reads exactly like a true negative

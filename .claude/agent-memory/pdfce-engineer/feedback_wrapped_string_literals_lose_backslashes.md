@@ -67,6 +67,30 @@ same string. It shipped in that state and was caught hours later by the
 stable-line test failing for an unrelated reason. **Repairing this bug with
 the tool that causes it is the actual trap**, not the original mistake.
 
+## ★★ THE TRIGGER, NAMED — it is not "editing a literal", it is WRITING RUST THROUGH A HEREDOC
+
+Recorded 2026-08-26 after doing it **twice more in one day**, both times while
+believing the rule did not apply.
+
+**The Bash tool eats exactly one backslash level.** `python - <<'PY'` looks
+quoted and safe, and it is — for the *shell*. What arrives at Python is
+already one level down, so `"\\n\\"` in what I typed becomes `\n\` in the
+file only if I counted a level I did not know was there. Both misses:
+
+1. A `format!` string in `main.rs` — I appended a continuation line and the
+   trailing `\` vanished, splitting one stdout key across two lines.
+2. `settings/mod.rs` — the same thing inside the paragraph a *previous*
+   commit had just repaired.
+
+**The generative rule, which is stronger than "be careful with literals":**
+*if a heredoc's payload is Rust source, do not use a heredoc.* Write the
+script to a file with the Write tool and run it, or use Edit directly. The
+payload does not have to contain a literal for this to bite — it bites on any
+`\` anywhere, including in a doc comment, a path or a regex.
+
+The Write-a-script-file route works and is now the default for anything that
+generates code: the Write tool does no escaping pass at all.
+
 ## ★ 2026-08-26 — it happened AGAIN, in the repair commit again, and the gate that exists for it was GREEN
 
 Exactly the trap above, third occurrence, same session shape: a heredoc

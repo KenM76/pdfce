@@ -648,7 +648,7 @@ carrying `FieldAuthorDisclosures` (`edit.rs:1006`).
 `form_script::recompute::plan(&DocumentView, CommaPolicy) -> RecomputePlan`
 (`form_script/recompute.rs:263`).
 Document-wide counters come from `forms::scan_javascript(graph) -> FormJavaScript`
-(`forms.rs:1653`).
+(`forms.rs:1813`).
 
 ### 2.3 Minimal worked sequences
 
