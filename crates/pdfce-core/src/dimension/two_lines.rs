@@ -231,9 +231,10 @@ const MIN_ARC_RADIUS: f64 = 20.0;
 /// use pdfce_core::dimension::{author_from_two_lines, TwoLinePlacement};
 /// use pdfce_core::vector::Point;
 /// use pdfce_core::vector::linepick::{ParallelPolicy, PickedLine};
+/// use pdfce_core::vector::HitTarget;
 ///
 /// let mk = |sx, sy, ex, ey| PickedLine {
-///     object_index: 0,
+///     target: HitTarget::Object(0),
 ///     subpath: 0,
 ///     segment: 0,
 ///     start: Point::new(sx, sy),
@@ -332,7 +333,7 @@ mod tests {
     /// disambiguation.
     fn line(sx: f64, sy: f64, ex: f64, ey: f64) -> PickedLine {
         PickedLine {
-            object_index: 0,
+            target: crate::vector::HitTarget::Object(0),
             subpath: 0,
             segment: 0,
             start: Point::new(sx, sy),

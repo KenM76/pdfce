@@ -1716,7 +1716,7 @@ mod tests {
     /// A picked line with its pick point at the midpoint.
     fn picked(sx: f64, sy: f64, ex: f64, ey: f64) -> PickedLine {
         PickedLine {
-            object_index: 0,
+            target: pdfce_core::vector::HitTarget::Object(0),
             subpath: 0,
             segment: 0,
             start: p(sx, sy),

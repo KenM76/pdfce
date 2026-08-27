@@ -771,15 +771,26 @@ pub struct Diagnostics {
     ///   radial or function-based shading whose ramp carries colorants now
     ///   composites natively whether or not overprint is in force.
     ///
-    /// **What is left**: additive images, **mesh** shadings (types 4–7,
-    /// whose colour is resolved when the mesh is parsed and has no colorant
-    /// carrier to survive in), and the results of transparency groups.
+    /// - **Mesh shadings** stopped bridging in `Pass 137.1`, one commit after
+    ///   the doc above was written to say they were what remained. `Shade::Ink`
+    ///   gave them the carrier they lacked, so a `DeviceCMYK` mesh now
+    ///   composites natively too.
+    ///
+    /// **What is left**: images and meshes with **no ink to keep** — an
+    /// additive colour space, or a parametric mesh whose ramp carries no
+    /// colorants — and the results of transparency groups.
     ///
     /// ⇒ **A FALL IN THIS NUMBER IS THE INTENDED OUTCOME, NOT A COUNTER
     /// GOING QUIET.** It measures ink identity lost on the way to the
     /// compositor; when less is lost it reports less. A reader who treats
     /// it as "how much shading work happened" will misread every one of
-    /// those three changes as regression.
+    /// those changes as a regression.
+    ///
+    /// ★ Note that this comment has now been wrong three times, each time by
+    /// staying still while the code moved — and each correction was written
+    /// by someone who had just read it and believed it. A doc comment that
+    /// enumerates a POPULATION is a claim that decays every time the
+    /// population changes, and nothing compiles it.
     pub cmyk_bridged_pixels: u64,
     /// Pixels a `DeviceCMYK` image contributed **as authored ink**, with no
     /// conversion in either direction.

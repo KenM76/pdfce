@@ -39,15 +39,37 @@
 //!
 //! How near parallel is parallel. See [`ParallelPolicy`].
 
-use super::decompose::{PageObjects, Segment, VectorObject};
+use super::decompose::{PageObjects, PathObject, Segment, VectorObject};
 use super::geometry::Point;
-use super::hit::hit_test_subpaths;
+use super::hit::{HitTarget, hit_test_subpaths_of};
 
 /// A straight segment the operator picked, with the point they picked it at.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PickedLine {
-    /// Index into [`PageObjects::objects`] of the path this came from.
-    pub object_index: usize,
+    /// **Which list, and which entry in it**, the picked line came from.
+    ///
+    /// # ★★★ THIS WAS A BARE `object_index: usize` AND THAT WAS THE BUG
+    ///
+    /// A `usize` can only name an entry in [`PageObjects::objects`], so the
+    /// type itself made it impossible to answer a question about a line drawn
+    /// inside a **form XObject** — those live in [`PageObjects::leaves`], a
+    /// separate list, and there is no integer that distinguishes them.
+    ///
+    /// The consequence was not a degraded pick; it was **no pick at all**.
+    /// Measured on the operator's own CAD drawing: 129,758 page objects, one
+    /// form, and **10,256 leaves** — every one of them a candidate line, and
+    /// every one invisible. The two-line dimension tool was *inert* on that
+    /// document, and on any document whose drawing is wrapped in a form,
+    /// which is what SolidWorks and most CAD exporters produce.
+    ///
+    /// ⇒ **A field whose type cannot express the answer does not fail loudly
+    /// — it returns a confident wrong one, or nothing.** Changing it to
+    /// [`HitTarget`] is a breaking change on purpose: every caller now has to
+    /// state what it does about a line inside a form, and the ones that
+    /// cannot handle it get a compile error rather than a silent miss.
+    ///
+    /// Use [`Self::page_object_index`] where the old `usize` was wanted.
+    pub target: HitTarget,
     /// Which subpath within that path object.
     pub subpath: usize,
     /// Which segment within that subpath.
@@ -64,6 +86,22 @@ pub struct PickedLine {
 }
 
 impl PickedLine {
+    /// The index into [`PageObjects::objects`], or `None` if this line came
+    /// from **inside a form XObject**.
+    ///
+    /// The migration path from the old `object_index` field, and deliberately
+    /// an `Option` rather than a `usize` with a sentinel. A caller that
+    /// unwraps it is stating that it does not handle form contents, in one
+    /// visible place, instead of indexing the wrong list with a plausible
+    /// number.
+    #[must_use]
+    pub const fn page_object_index(&self) -> Option<usize> {
+        match self.target {
+            HitTarget::Object(i) => Some(i),
+            HitTarget::Leaf(_) => None,
+        }
+    }
+
     /// The segment's direction, normalised. `None` for a degenerate segment.
     ///
     /// Returns `None` rather than a zero vector so a caller cannot silently
@@ -263,10 +301,34 @@ pub fn pick_line(
     let Some(VectorObject::Path(path)) = model.objects.get(object_index) else {
         return None;
     };
+    pick_line_of(path, HitTarget::Object(object_index), point, tolerance)
+}
+
+/// [`pick_line`] against a path this caller already has in hand, told which
+/// list it came from.
+///
+/// # ★ Why the caller supplies `target` rather than this deriving it
+///
+/// Because it cannot be derived. A [`PathObject`] carries no record of which
+/// list holds it — a page object and a form leaf are the *same type*, and
+/// that is deliberate: it is what lets one geometry implementation serve
+/// both. The provenance is the caller's knowledge, so the caller states it,
+/// and a caller that passes the wrong one is making a claim it can be held
+/// to rather than tripping over an inference.
+///
+/// This is the same split [`hit_test_subpaths_of`] makes, for the same
+/// reason: the geometry never needed the index; only the lookup did.
+#[must_use]
+pub fn pick_line_of(
+    path: &PathObject,
+    target: HitTarget,
+    point: Point,
+    tolerance: f64,
+) -> Option<PickedLine> {
     let subpaths = path.page_subpaths();
     let mut best: Option<(f64, PickedLine)> = None;
 
-    for sp_index in hit_test_subpaths(model, object_index, point, tolerance) {
+    for sp_index in hit_test_subpaths_of(path, point, tolerance) {
         let Some(sp) = subpaths.get(sp_index) else {
             continue;
         };
@@ -280,7 +342,7 @@ pub fn pick_line(
                     best = Some((
                         dist,
                         PickedLine {
-                            object_index,
+                            target,
                             subpath: sp_index,
                             segment: seg_index,
                             start: from,
@@ -303,7 +365,7 @@ pub fn pick_line(
                 best = Some((
                     dist,
                     PickedLine {
-                        object_index,
+                        target,
                         subpath: sp_index,
                         segment: sp.segments.len(),
                         start: from,
@@ -340,20 +402,77 @@ pub fn pick_line(
 ///
 /// Returns `None` when nothing straight is within `tolerance`, including when
 /// the nearest thing is a curve ([`pick_line`] skips those deliberately).
+///
+/// # ★★★ FORM CONTENTS ARE SEARCHED, AND THEY DID NOT USED TO BE
+///
+/// Both [`PageObjects::objects`] and [`PageObjects::leaves`] are offered, so
+/// a line drawn inside a form XObject is pickable. The result's
+/// [`PickedLine::target`] says which list it came from.
+///
+/// Before `Pass 138.0` only the page's own list was searched, and a form is
+/// not a line, so **a page whose drawing lives inside a form had nothing
+/// pickable at all.** The tool was not degraded there; it was inert. That is
+/// what most CAD exports look like — measured on the operator's own files:
+///
+/// | file | page objects | forms | leaves |
+/// |---|---:|---:|---:|
+/// | a composite conformance page | 28 | 4 | **242** |
+/// | a CAD drawing | 129,758 | 1 | **10,256** |
+/// | a flat export | 5,903 | 0 | 0 |
+///
+/// ★ **This was never a regression** — it was true from the day the tool
+/// shipped, and it was *invisible* because selection was equally blind, so
+/// an operator met the page-sized form long before they met the measure
+/// tool. Fixing the click in `Pass 136.0` is what made this the next wall,
+/// which is the same "fixing one half exposes the other" shape this
+/// subsystem has now produced three times.
+///
+/// # Authoring against a leaf is allowed; editing one is not
+///
+/// A ce dimension placed against a line inside a form is a **new annotation
+/// on the page**, not a change to the form, so nothing here is gated on
+/// [`FormLeaf::is_editable`]. The distinction the target carries is needed
+/// for a different reason: a shell has to report which list the line came
+/// from and re-resolve it after an edit.
 #[must_use]
 pub fn pick_line_in_page(model: &PageObjects, point: Point, tolerance: f64) -> Option<PickedLine> {
     let mut best: Option<(f64, PickedLine)> = None;
-    for index in 0..model.objects.len() {
-        let Some(candidate) = pick_line(model, index, point, tolerance) else {
-            continue;
+    let mut consider = |candidate: Option<PickedLine>| {
+        let Some(candidate) = candidate else {
+            return;
         };
-        // Re-measure against the segment actually chosen, so objects are
-        // compared on the same quantity `pick_line` used internally.
+        // Re-measure against the segment actually chosen, so candidates are
+        // compared on the same quantity `pick_line_of` used internally.
         let (dist, _) = distance_to_segment(point, candidate.start, candidate.end);
         if best.as_ref().is_none_or(|(d, _)| dist < *d) {
             best = Some((dist, candidate));
         }
+    };
+
+    for (index, obj) in model.objects.iter().enumerate() {
+        // ★ A form is skipped here for free rather than by a rule: only a
+        // `Path` reaches `pick_line_of` at all, and a form is an `Image`. The
+        // exclusion `hit_test_point_deep` has to state explicitly is
+        // structural in this function, which is why there is no `FormMarquee`
+        // analogue to choose from — there is no defensible reading under
+        // which a `/BBox` edge is a line the operator drew.
+        let VectorObject::Path(path) = obj else {
+            continue;
+        };
+        consider(pick_line_of(
+            path,
+            HitTarget::Object(index),
+            point,
+            tolerance,
+        ));
     }
+    for (index, leaf) in model.leaves.iter().enumerate() {
+        let VectorObject::Path(path) = &leaf.object else {
+            continue;
+        };
+        consider(pick_line_of(path, HitTarget::Leaf(index), point, tolerance));
+    }
+
     best.map(|(_, line)| line)
 }
 
@@ -501,7 +620,7 @@ mod tests {
 
     fn line(sx: f64, sy: f64, ex: f64, ey: f64, px: f64, py: f64) -> PickedLine {
         PickedLine {
-            object_index: 0,
+            target: HitTarget::Object(0),
             subpath: 0,
             segment: 0,
             start: Point { x: sx, y: sy },
@@ -686,7 +805,11 @@ mod page_pick_tests {
         let m = model(b"10 100 m 200 100 l S 10 300 m 200 300 l S");
         let picked = pick_line_in_page(&m, Point { x: 100.0, y: 302.0 }, 5.0)
             .expect("a click 2 units from the upper line must pick it");
-        assert_eq!(picked.object_index, 1, "the SECOND path is the near one");
+        assert_eq!(
+            picked.target,
+            HitTarget::Object(1),
+            "the SECOND path is the near one"
+        );
         assert!((picked.start.y - 300.0).abs() < 1e-9);
         assert!(
             (picked.pick.x - 100.0).abs() < 1e-9,
@@ -705,7 +828,8 @@ mod page_pick_tests {
         let picked =
             pick_line_in_page(&m, Point { x: 50.0, y: 96.0 }, 10.0).expect("within tolerance");
         assert_eq!(
-            picked.object_index, 1,
+            picked.target,
+            HitTarget::Object(1),
             "the nearer line must win regardless of which was painted first"
         );
     }
@@ -788,7 +912,7 @@ mod override_tests {
 
     fn line(sx: f64, sy: f64, ex: f64, ey: f64, px: f64, py: f64) -> PickedLine {
         PickedLine {
-            object_index: 0,
+            target: HitTarget::Object(0),
             subpath: 0,
             segment: 0,
             start: Point { x: sx, y: sy },

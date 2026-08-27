@@ -84,20 +84,42 @@
 //!
 //! ## What is deliberately NOT done here, and where it is disclosed
 //!
-//! * **No native-ink (colorant) route.** A mesh resolves its colour to
-//!   sRGB at parse time (or through the ramp at paint time), so by the time
-//!   a pixel exists there are no authored colorants left to composite. On a
-//!   subtractive page the painted result is bridged into the colorant
-//!   buffer by the caller exactly as an axial shading's is, and counted in
-//!   `cmyk_bridged_pixels`. Making the mesh path native is the mesh half of
-//!   `Pass 97.1k`.
-//! * **No overprint.** Same cause as above and the same disclosure —
-//!   `overprint_shadings_unsupported`.
+//! ★★ THIS SECTION LISTED THREE THINGS AND `Pass 137.1` DELIVERED TWO OF
+//! THEM. The old text is kept legible rather than silently replaced, because
+//! *what it said* is part of why the defect survived as long as it did — a
+//! reader who checked this list came away believing the gap was known and
+//! tracked, when in fact nothing was tracking it and the operator found it by
+//! looking at a page.
+//!
+//! ~~"**No native-ink (colorant) route.** A mesh resolves its colour to sRGB
+//! at parse time (or through the ramp at paint time), so by the time a pixel
+//! exists there are no authored colorants left to composite… Making the mesh
+//! path native is the mesh half of `Pass 97.1k`."~~ — **DONE**, `Pass 137.1`.
+//! [`Shade::Ink`] carries the authored colorants alongside the converted
+//! value, [`MeshColorants`] says once and for all whether a mesh has any, and
+//! [`paint_cmyk`] composites them into the buffer directly. The premise of
+//! the old sentence was right; the implied conclusion — that there was
+//! nothing to be done short of a rework — was not. The answer was a
+//! **carrier**, not a wider gate.
+//!
+//! ~~"**No overprint.** Same cause as above and the same disclosure."~~ —
+//! **DONE, and it came for free**, which is the part worth noticing.
+//! [`paint_cmyk`] takes `rules` because every ink source in this crate does,
+//! so a `Separation`/`DeviceN` mesh under `/OP true` gets §11.7.4.3's
+//! composite by the same route a path does. Nothing in this module reasons
+//! about Table 149; it hands values to the buffer, which already did.
+//!
 //! * **No anti-aliasing of the mesh outline.** `/AntiAlias` is a hint
 //!   (Table 78) and defaults to false; pixel centres decide coverage.
 //!   Interior edges between adjacent triangles are seamless regardless
 //!   (see [`fill_triangle`]); it is only the *outer* silhouette that is
-//!   hard-edged.
+//!   hard-edged. **Still true.**
+//!
+//! ★ What still bridges, so this list stays honest: a mesh whose colour
+//! space is **additive** ([`MeshColorants::None`]), and a **parametric** mesh
+//! whose ramp carries no colorants. Neither has authored ink to preserve, so
+//! the conversion is the honest route rather than a shortfall — and both are
+//! still counted in `cmyk_bridged_pixels`.
 //!
 //! ## The ambiguities this module had to take a position on
 //!

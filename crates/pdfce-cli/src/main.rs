@@ -333,13 +333,13 @@
 //! | `groups_backdrop_reruns` | `transparency_groups_backdrop_reruns` | "why did this page take twice as long as its neighbour?" (§11.4.4 — a COST counter, not a shortfall, and the only one on this line that names something pdfce DID: a non-isolated group whose content stream was walked a SECOND time over a copy of its own backdrop, so the element formula and backdrop removal could be computed against it. It is the only place in the renderer where a page's content is interpreted more than once. Zero is the normal reading and does NOT mean non-isolated groups were mishandled — §11.4.4 NOTE 5 makes the single walk exact whenever the group's interior composites `Normal` throughout) |
 //! | `soft_masks_on_group_result` | `soft_masks_on_group_result` | "were group soft masks applied ONCE to the composite, or once per object inside it?" (§11.4.5 — read against `soft_masks_applied`, which counts masks BUILT while this counts the ones that reached where the clause puts them. The difference is not a shortfall on its own: a mask on an ELEMENTARY object belongs in the clip, because §11.6.4.1 makes the mask value that object's `q_m` and a `q_m` multiplies coverage exactly as a clip does. What to look for is a document WITH transparency groups where this stays at zero while `soft_masks_reset_stale` climbs — that page's group masks are multiplying once per object, visible wherever two of them overlap) |
 //! | `overprint_images_unsupported` | `overprint_images_unsupported` | "how many IMAGES were OWED §11.7.4.3's composite and did not get it?" (DIVERGENCE. ★★ THIS COUNTER CHANGED MEANING IN `Pass 130.2` AND IT NOW COUNTS A STRICTLY SMALLER SET — a script comparing a number from an older release against one from this one is comparing two different questions. It used to answer "was the composite offered this object CLASS?", and the answer was no for every image, so it counted every image painted under `/OP` whether or not anything was owed. It now answers "was the composite owed HERE, and did it fail to run?". ★ WHY THE OLD SET WAS TOO BIG, and this half is unchanged from what that row always said: Table 149's first row is scoped `DeviceCMYK, specified directly, NOT IN A SAMPLED IMAGE`, so an image falls to the second row — "any process colour space (including other cases of `DeviceCMYK`)" — which is `c_s` in all three columns. For a PROCESS image, painting it normally IS the conforming behaviour and nothing was ever missing. Those images no longer appear here. ★ WHAT REMAINS, and both are real: a `Separation`/`DeviceN` image naming ONLY spot colorants (Table 149 would preserve the whole backdrop, which for a renderer with no spot plane means erasing the image — pdfce paints the flattened tint transform instead and says so), and an image on a destination that cannot be read back (a recording canvas). Both also raise `overprint_refused`, so the `composited = effective - refused` identity holds across paths and images alike)  |
-//! | `overprint_shadings_unsupported` | `overprint_shadings_unsupported` | "how many shadings were painted while overprint was in force and could not honour it?" (DIVERGENCE. ★★ **THE PROBLEM STATEMENT THAT USED TO SIT HERE DESCRIBED THE WHOLE CLASS AND NOW DESCRIBES ONLY PART OF IT.** It read: "a shading fails one step earlier than an image does — its colour ramp resolves to three-channel sRGB when the ramp is BUILT, so nothing downstream has colorants left to overprint WITH". That was true of EVERY shading until `Pass 122.6` gave the analytic ones a colorant ramp, and it is now true only of **mesh** shadings (types 4–7), whose vertex colours are resolved during parsing with no carrier to keep them in. ★ WHAT STILL COUNTS HERE, so the number is readable rather than merely smaller: a **mesh** painted under `/OP` (no colorants survive parsing); and an analytic shading in `DeviceCMYK` specified DIRECTLY under `/OPM 1`, which is refused deliberately rather than for want of colorants — Table 149's `OPM 1` row is VALUE-DEPENDENT, so which components are "specified" differs per pixel and cannot be decided once for a whole ramp. ★ The two halves of the mesh case are COUPLED: §11.7.4.3 makes `B(c_b, c_s)` equal `c_s` for every component 'specified in the current colour space', and a bridged sRGB scratch has specified all three, so an overprint composite alone would change nothing and native colorants alone would change nothing either. Visible on suite `PCS 1.0` cells e/j, where a `/DeviceN [/Cyan /Magenta]` shading over an orange ground should let the yellow beneath survive and read GREEN, and instead reads BLUE) |
+//! | `overprint_shadings_unsupported` | `overprint_shadings_unsupported` | "how many shadings were painted while overprint was in force and could not honour it?" (DIVERGENCE. ★★ **THE PROBLEM STATEMENT THAT USED TO SIT HERE DESCRIBED THE WHOLE CLASS AND NOW DESCRIBES ONLY PART OF IT.** It read: "a shading fails one step earlier than an image does — its colour ramp resolves to three-channel sRGB when the ramp is BUILT, so nothing downstream has colorants left to overprint WITH". That was true of EVERY shading until `Pass 122.6` gave the analytic ones a colorant ramp, then true only of meshes — and `Pass 137.1` closed that too, because `Shading::paint_cmyk` was already generic over the overprint rules, so giving a mesh its colorants gave it overprint in the same change. ★ WHAT STILL COUNTS HERE, so the number is readable rather than merely smaller: a shading with **no authored ink at all** (an additive space, or a parametric one whose ramp yields no colorants) painted under `/OP`; and an analytic shading in `DeviceCMYK` specified DIRECTLY under `/OPM 1`, which is refused deliberately rather than for want of colorants — Table 149's `OPM 1` row is VALUE-DEPENDENT, so which components are "specified" differs per pixel and cannot be decided once for a whole ramp. ★ The two halves of the mesh case are COUPLED: §11.7.4.3 makes `B(c_b, c_s)` equal `c_s` for every component 'specified in the current colour space', and a bridged sRGB scratch has specified all three, so an overprint composite alone would change nothing and native colorants alone would change nothing either. Visible on suite `PCS 1.0` cells e/j, where a `/DeviceN [/Cyan /Magenta]` shading over an orange ground should let the yellow beneath survive and read GREEN, and instead reads BLUE) |
 //! | `blend_space_subtractive` | `blend_space_subtractive` | "is this page's compositing governed by §11.3.4 at all?" (the page itself and every transparency group whose blending colour space is `DeviceCMYK`, `Separation`, `DeviceN`, or a four-component `ICCBased` resolving to one. A CENSUS OF EXPOSURE, not a shortfall — a page can be entirely `DeviceCMYK` and entirely correct, because `Normal` is `c_s` on either side of the complement. Not a small class: every patch in the suite transparency panel declares `/Group /CS /DeviceCMYK` on the PAGE, including one whose own objects are `ICCBased` RGB, because a non-isolated group inherits its blending space (Table 147's `/CS` row). Whether §11.3.4 was HONOURED is `cmyk_buffer`; what it cost when it was not is `blends_in_wrong_space`. Three numbers, three questions, and reading any one alone gets a wrong answer) |
 //! | `blends_in_wrong_space` | `blends_in_wrong_space` | "how many blends were computed on the WRONG SIDE of §11.3.4's complement?" (DIVERGENCE, and the number that says a rendering is actually AFFECTED rather than merely exposed. The worked case is suite `PCS1_162`'s `Difference` cell: magenta under black gives `DeviceCMYK 1 0 1 0` — the green the patch is authored around — under §11.3.4, and `(237, 1, 140)` without it. ★ It now fires ONLY where the colorant buffer did not run, so a subtractive page that composited in ink reports zero here — read it with `cmyk_buffer`, never alone) |
 //! | `cmyk_buffer` | `cmyk_buffer_engaged` (a `bool`, printed `0`/`1`) | "did this page composite in INK, or in sRGB?" (THE KEY THAT CHANGES WHAT THE PREVIOUS ONE MEANS, and the only non-count on this half of the line — a parser treating every metrics key as a magnitude will misread it. At `1`, the blends `blends_in_wrong_space` counted were PERFORMED subtractively: that counter is fixed at `/BM`-selection time and measures exposure to §11.3.4, not failure. Read the pair, never the second alone) |
 //! | `blend_space_from_output_intent` | `blend_space_from_output_intent` | "did pdfce INFER this page's blending space from the output intent?" (DISCLOSURE, and the only key here that is a word rather than a number. `page_group` — the page declared `/Group /CS`, Table 147, nothing inferred. `device_native` — ISO 32000-1 §11.4.7/§11.6.3's answer for a page that declared none, which for pdfce is sRGB. `output_intent` — ★ **pdfce INFERRED it from the document's output intent**, which ISO 32000-2's Annex P permits *informatively and without ranking it against the device*, so this is a choice the `page_blend_space_source` setting controls and not a fact about the file. Read it beside `blend_space_subtractive`: that one says a page composited in ink, this one says whether the FILE asked for that or pdfce decided it. A blending space changes every colour on the page and draws nothing to say so, which is why it is disclosed here rather than left to be deduced) |
 //! | `cmyk_buffer_refused` | `cmyk_buffer_refused` | "did the page ask for ink and not get it?" (DIVERGENCE with a named cause — the colorant buffer would not fit under `MAX_CMYK_BUFFER_BYTES`, a page-size ceiling. Non-zero means this render is the pre-colorant-buffer approximation and SAYS SO rather than failing, and it is the reason `cmyk_buffer=0` on a page whose `blend_space_subtractive` is non-zero) |
-//! | `cmyk_bridged_pixels` | `cmyk_bridged_pixels` | "how much of this ink page was never authored as ink?" (pixels that entered the colorant buffer through the sRGB BRIDGE. ★★ **THE POPULATION THIS COUNTS HAS SHRUNK TWICE AND THE ROW HAS BEEN WRONG AFTER EACH — a script comparing this number across either Pass is comparing two different questions.** It used to say "shadings, the results of transparency groups, and any image NOT authored in `DeviceCMYK`". Images left in `Pass 130.1`: a `DeviceCMYK` image, including one behind an `/Indexed` palette, carries its colorants forward and is counted in `cmyk_native_image_pixels` instead, so what remains of that class is an image with **no ink to keep**. ANALYTIC SHADINGS left in `Pass 137.0`: an axial, radial or function-based shading whose ramp carries colorants now composites natively whether or not overprint is in force. ★ WHAT IS LEFT: additive images, **mesh** shadings (types 4–7 — their colour is resolved when the mesh is parsed and there is no colorant carrier for it to survive in), and the results of transparency groups. ⇒ **A FALL HERE IS THE INTENDED OUTCOME, NOT A COUNTER GOING QUIET.** It measures ink identity LOST on the way to the compositor; when less is lost it reports less, and reading it as "how much shading work happened" turns three fixes into three apparent regressions) |
+//! | `cmyk_bridged_pixels` | `cmyk_bridged_pixels` | "how much of this ink page was never authored as ink?" (pixels that entered the colorant buffer through the sRGB BRIDGE. ★★ **THE POPULATION THIS COUNTS HAS SHRUNK TWICE AND THE ROW HAS BEEN WRONG AFTER EACH — a script comparing this number across either Pass is comparing two different questions.** It used to say "shadings, the results of transparency groups, and any image NOT authored in `DeviceCMYK`". Images left in `Pass 130.1`: a `DeviceCMYK` image, including one behind an `/Indexed` palette, carries its colorants forward and is counted in `cmyk_native_image_pixels` instead, so what remains of that class is an image with **no ink to keep**. ANALYTIC SHADINGS left in `Pass 137.0`: an axial, radial or function-based shading whose ramp carries colorants now composites natively whether or not overprint is in force. MESH SHADINGS left in `Pass 137.1`, ONE COMMIT after this row was rewritten to say they were what remained — `Shade::Ink` gave them the carrier they lacked. ★ WHAT IS LEFT: images and meshes with **no ink to keep** (an additive colour space, or a parametric mesh whose ramp carries no colorants), and the results of transparency groups. ★★ THIS ROW HAS NOW BEEN WRONG THREE TIMES, each by standing still while the code moved, and each correction was written by somebody who had just read it and believed it — a description that enumerates a POPULATION is a claim that decays whenever the population changes, and nothing compiles it. ⇒ **A FALL HERE IS THE INTENDED OUTCOME, NOT A COUNTER GOING QUIET.** It measures ink identity LOST on the way to the compositor; when less is lost it reports less, and reading it as "how much shading work happened" turns three fixes into three apparent regressions) |
 //! | `cmyk_native_image_pixels` | `cmyk_native_image_pixels` | "how much of this ink page KEPT its ink?" (pixels a `DeviceCMYK` image contributed with no conversion in either direction. The complement of the row above, and not interchangeable with it: a bridged pixel has been through `CMYK → sRGB → CMYK`, and that first step is MANY-TO-ONE, so the ink that returns is not the ink that left) |
 //! | `cmyk_groups_approximated` | `cmyk_groups_approximated` | "how many groups on an ink page had their RESULT composited in ink and their INTERIOR not?" (DIVERGENCE. ★ **THIS KEY NARROWED IN `Pass 97.1g` and a reader comparing boards across that Pass must know it.** It used to count TWO populations: a KNOCKOUT group, whose §11.4.6 semantics are preserved but whose interior runs in sRGB — still counted — and EVERY NON-ISOLATED group, on the reasoning that all of them had §11.4.4's backdrop removal skipped. The second population is gone: a non-isolated group now gets its second content walk and its removal. What is left of it is the allocation-failure fallback alone, where the second buffer could not be had. ⇒ **A DROP IN THIS NUMBER ACROSS `97.1g` IS NOT ALL RENDERING IMPROVEMENT.** Measured on the print-conformance suite: 118 → 0, of which only 13 groups actually needed the walk; the other 105 were counted as approximations while rendering exactly right, because the old test asked "is this group non-isolated?" rather than §11.4.4 NOTE 2's "does its interior read the backdrop?". An ordinary isolated group is NOT counted — it gets a child colorant buffer and crosses no conversion at all) |
 //! | `cmyk_unbridged_images` | `cmyk_unbridged_images` | "did an image reach a subtractive paint with no bridge and therefore not get painted AT ALL?" (should always be zero: the only route is a replayed display list, and a subtractive page is refused for recording outright. Counted rather than asserted because a claim of unreachability decays as the code around it changes, and a counter that stays zero costs one `u64` and one line of output. Non-zero here is a bug report, not a document property) |
@@ -4923,22 +4923,46 @@ enum Command {
     /// and `dimension-add --points` use.
     ///
     /// `--hit X,Y` additionally answers "which object would a click here
-    /// select?" by calling the SAME `pdfce_core::vector::hit_test_point` the
-    /// GUI's object-edit tool calls, so the answer is authoritative for the
-    /// GUI's behaviour rather than a second implementation of it. One
-    /// difference, deliberately: the GUI receives a *canvas-space* pointer
-    /// (Y-down device coordinates, page rotation applied) and converts it to
-    /// PDF space before hit-testing, whereas `--hit` takes PDF space
-    /// directly — so on a rotated or non-zero-origin page the number you
-    /// would read off a screen ruler is NOT the number to pass here. Use the
-    /// `bbox=` values this subcommand prints.
+    /// select?" by calling the SAME `pdfce_core::vector::hit_test_point_deep`
+    /// the GUI's object-edit tool calls, so the answer is authoritative for
+    /// the GUI's behaviour rather than a second implementation of it.
     ///
-    /// `--all-hits` adds one `hit-candidate …` line per object under the
+    /// ★★ THAT SENTENCE NAMED A DIFFERENT FUNCTION UNTIL `Pass 138.0`, AND
+    /// WAS FALSE IN THE INTERVAL. It said `hit_test_point`, which was correct
+    /// when written and stopped being correct the day the shell moved to the
+    /// deep query. Measured on a composite conformance page: `--hit` returned
+    /// two candidates, BOTH form XObjects, at a point where the shell selects
+    /// the path actually painted there. A diagnostic that disagrees with the
+    /// thing it diagnoses is worse than no diagnostic — it confirms defects
+    /// that are not there and fails to confirm the ones that are.
+    ///
+    /// ★ WHAT CHANGED FOR A SCRIPT: forms no longer appear as candidates. A
+    /// form's `/BBox` is a clipping extent (ISO 32000-1 8.10.1), not ink, so
+    /// a page-sized form is not a page-sized hit target — what is drawn
+    /// INSIDE it is reported instead, on rows carrying `leaf=N
+    /// containment=… paint_order=N editable=false` and `kind=leaf:…` in place
+    /// of `index=N`. The key differs deliberately: `index=` is what the
+    /// editing subcommands take, and they write to the PAGE's stream, so a
+    /// leaf ordinal under that key would be a number that is in range and
+    /// corrupts the page.
+    ///
+    /// `--hit-scope page` restores the old shallow query if a script needs
+    /// it. It is not the GUI's behaviour and the `scope=` field on every
+    /// `hit` line says which one you asked for.
+    ///
+    /// One difference from the GUI, deliberately: the GUI receives a
+    /// *canvas-space* pointer (Y-down device coordinates, page rotation
+    /// applied) and converts it to PDF space before hit-testing, whereas
+    /// `--hit` takes PDF space directly — so on a rotated or non-zero-origin
+    /// page the number you would read off a screen ruler is NOT the number to
+    /// pass here. Use the `bbox=` values this subcommand prints.
+    ///
+    /// `--all-hits` adds one `hit-candidate …` line per target under the
     /// point, front-most first — the same list the GUI's Alt+click cycling
-    /// steps through, from the same
-    /// `pdfce_core::vector::hit_test_point_all`. Without it the `hit …`
-    /// line names only the winner, which cannot answer "why did my click
-    /// select THAT?" when two objects overlap.
+    /// steps through, interleaved on paint order so an object inside a form
+    /// is a first-class stop on that walk. Without it the `hit …` line names
+    /// only the winner, which cannot answer "why did my click select THAT?"
+    /// when two objects overlap.
     ///
     /// A `--hit` MISS is a valid answer, not an error: the exit code stays 0
     /// and the `hit …` line reports `index=none`. Scripts branch on that
@@ -4976,6 +5000,33 @@ enum Command {
         /// without `--hit`.
         #[arg(long)]
         all_hits: bool,
+        /// How deep `--hit` looks: `deep` descends into form XObjects and
+        /// never names a form itself (the GUI's behaviour, and the default);
+        /// `page` uses the old shallow query over the page's own object list
+        /// only.
+        ///
+        /// The default changed in `Pass 138.0`. Under `page` a page-sized
+        /// form wins every click at every point, which is what the operator
+        /// originally reported as "all I get is the page selected".
+        #[arg(long, value_enum, default_value_t = HitScope::Deep)]
+        hit_scope: HitScope,
+        /// Report which straight LINE a click at this page-space point would
+        /// resolve to, as `X,Y` in PDF user space — the headless twin of the
+        /// two-line measure gesture.
+        ///
+        /// Different from `--hit`, and the difference matters on a CAD sheet:
+        /// `--hit` names an OBJECT, and one measured export holds an entire
+        /// orthographic view as a single object with 1194 subpaths. "Which
+        /// object" does not answer "which line did I click".
+        ///
+        /// Searches page objects AND the contents of form XObjects, so it
+        /// works on a wrapped drawing. A curve is never reported: pdfce does
+        /// not chord a Bezier into a line, because dimensioning "the line" of
+        /// a curve would measure something the drawing does not contain.
+        ///
+        /// A miss prints `index=none` with a `reason=` and exits 0.
+        #[arg(long, value_name = "X,Y", allow_hyphen_values = true)]
+        line_pick: Option<String>,
         /// Descend INTO this object index and report which of its subpaths the
         /// `--hit` point lands on, nearest first, as `subpath-hit …` lines.
         ///
@@ -5791,6 +5842,29 @@ enum Command {
 /// is not a `ValueEnum`, and making it one would put a CLI-parsing concern
 /// into the GUI-free core crate. It also lets the CLI carry `--quality` as a
 /// separate flag while the core type carries it inside the variant.
+/// How deep `object-list --hit` looks.
+///
+/// # ★ Two answers exist and both are shipped, per standing rule `R206`
+///
+/// The consuming shell asked for either a changed `--hit` or a separate
+/// `--hit-deep` and said it had no preference it could justify. Making it a
+/// mode rather than a second flag keeps ONE query path with a switch on it,
+/// instead of two flags whose implementations can drift apart — which is the
+/// exact failure this whole area has produced twice.
+///
+/// The DEFAULT is the one the GUI does, because this flag's documented job is
+/// to be authoritative about the GUI's behaviour, and a default that is not
+/// that makes the documentation false again the moment anyone reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum HitScope {
+    /// Descend into form XObjects; never name a form itself. The GUI's
+    /// behaviour, and the default.
+    Deep,
+    /// The page's own object list only — the pre-`Pass 138.0` query, in which
+    /// a page-sized form wins every click.
+    Page,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum CompressionArg {
     /// Embed the source's own compressed bytes unchanged. The default.
@@ -7465,6 +7539,8 @@ fn run() -> ExitCode {
             page,
             hit,
             all_hits,
+            hit_scope,
+            line_pick,
             enter,
             tolerance,
         } => cmd_object_list(ObjectListArgs {
@@ -7472,6 +7548,8 @@ fn run() -> ExitCode {
             page_number: page,
             hit: hit.as_deref(),
             all_hits,
+            hit_scope,
+            line_pick: line_pick.as_deref(),
             enter,
             tolerance,
         }),
@@ -21404,7 +21482,7 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
             // clicking; there is no click here, so the choice is stated
             // rather than left implicit.
             let mk = |s: &pdfce_core::vector::Point, e: &pdfce_core::vector::Point| PickedLine {
-                object_index: 0,
+                target: pdfce_core::vector::HitTarget::Object(0),
                 subpath: 0,
                 segment: 0,
                 start: *s,
@@ -25592,6 +25670,8 @@ struct ObjectListArgs<'a> {
     page_number: u32,
     hit: Option<&'a str>,
     all_hits: bool,
+    hit_scope: HitScope,
+    line_pick: Option<&'a str>,
     enter: Option<usize>,
     tolerance: f64,
 }
@@ -25638,7 +25718,8 @@ struct ObjectListArgs<'a> {
 /// repeated Alt+clicks walk through.
 fn cmd_object_list(args: ObjectListArgs<'_>) -> u8 {
     use pdfce_core::vector::{
-        Matrix, decompose_page, hit_test_point_all, hit_test_subpaths, subpath_bounds,
+        HitTarget, Matrix, decompose_page, hit_test_point_all, hit_test_point_deep,
+        hit_test_subpaths, subpath_bounds,
     };
 
     let ObjectListArgs {
@@ -25646,6 +25727,8 @@ fn cmd_object_list(args: ObjectListArgs<'_>) -> u8 {
         page_number,
         hit,
         all_hits,
+        hit_scope,
+        line_pick,
         enter,
         tolerance,
     } = args;
@@ -25668,11 +25751,26 @@ e.g. `--hit 200,200`)",
             }
         },
     };
+    let line_pick_point = match line_pick {
+        None => None,
+        Some(raw) => match parse_hit_point(raw) {
+            Some(p) => Some(p),
+            None => {
+                eprintln!(
+                    "pdfce-cli: {}: malformed --line-pick `{raw}` (expected `X,Y` in PDF user space, e.g. `--line-pick 200,200`)",
+                    input.display()
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        },
+    };
     // `--tolerance` is parsed by clap as a bare f64, so `nan` and negatives
     // both arrive intact. Either would make EVERY query a miss, which reads
     // as "hit-testing is broken" rather than "you passed nonsense" — refuse
     // by name instead (rule 4: fuzzy, never sneaky).
-    if hit_point.is_some() && (!tolerance.is_finite() || tolerance < 0.0) {
+    if (hit_point.is_some() || line_pick_point.is_some())
+        && (!tolerance.is_finite() || tolerance < 0.0)
+    {
         eprintln!(
             "pdfce-cli: {}: --tolerance must be a finite, non-negative number of points \
 (got `{tolerance}`)",
@@ -25783,7 +25881,28 @@ paint_order={} editable=false {detail}",
         // scan that CAN disagree is exactly the divergence decision 011 §Z2
         // names. `candidates=` on the `hit` line is therefore always
         // consistent with the `hit-candidate` lines below it.
-        let candidates = hit_test_point_all(&model, point, tolerance);
+        // ★★★ DEEP BY DEFAULT SINCE `Pass 138.0`, AND THAT IS A BEHAVIOUR
+        // CHANGE THIS BLOCK OWES THE READER AN ACCOUNT OF.
+        //
+        // This flag's own help text promised the answer was "authoritative
+        // for the GUI's behaviour rather than a second implementation of
+        // it". That sentence was true when written and became FALSE the day
+        // `hit_test_point_deep` shipped and the shell consumed it -- measured
+        // by the consuming project on a composite conformance page, where
+        // `--hit` returned two candidates, BOTH forms, at a point where the
+        // shell selects the path actually painted there.
+        //
+        // A diagnostic that disagrees with the thing it diagnoses is worse
+        // than no diagnostic: it confirms defects that are not there and
+        // fails to confirm ones that are. So the default follows the shell,
+        // and `--hit-scope page` keeps the old query for whoever wants it.
+        //
+        // ★ The visible consequence, which a script will meet first: FORMS
+        // DISAPPEAR FROM THE CANDIDATE LIST. A `/BBox` is a clipping extent
+        // (ISO 32000-1 8.10.1), not ink, so a page-sized form is not a
+        // page-sized hit target. What is inside it appears instead, as
+        // `kind=leaf:*` rows carrying `leaf=` rather than `index=`.
+        let deep = matches!(hit_scope, HitScope::Deep);
         let kind_of = |i: usize| -> String {
             model
                 .objects
@@ -25791,33 +25910,168 @@ paint_order={} editable=false {detail}",
                 .map_or("none", |obj| object_detail(obj).0)
                 .to_owned()
         };
-        let (index, kind) = match candidates.first() {
-            Some(&i) => (i.to_string(), kind_of(i)),
-            None => ("none".to_owned(), "none".to_owned()),
+        // ONE list for both modes, so `candidates=` on the `hit` line and the
+        // `hit-candidate` rows below it cannot disagree -- the identity the
+        // shallow path already relied on, extended rather than forked.
+        let candidates: Vec<HitTarget> = if deep {
+            hit_test_point_deep(&model, point, tolerance)
+        } else {
+            hit_test_point_all(&model, point, tolerance)
+                .into_iter()
+                .map(HitTarget::Object)
+                .collect()
         };
-        println!(
-            "hit page={page_number} at={},{} tolerance={tolerance} index={index} kind={kind} \
-candidates={}",
-            point.x,
-            point.y,
-            candidates.len(),
-        );
-        if all_hits {
-            // Front-most first: `ordinal=0` is the object the `hit` line
-            // names and the object a plain click selects; each higher
-            // ordinal is one more Alt+click down the stack, wrapping back to
-            // 0 after the last.
-            for (ordinal, &i) in candidates.iter().enumerate() {
-                println!(
-                    "hit-candidate page={page_number} at={},{} ordinal={ordinal} index={i} \
-kind={} bbox={}",
-                    point.x,
-                    point.y,
+        // `index=` for a page object, `leaf=` for a form leaf. Deliberately a
+        // DIFFERENT KEY rather than one `index=` over two namespaces: an
+        // `index=` is what the editing subcommands take, and every one of
+        // them writes to the PAGE's content stream, so handing a script a
+        // leaf ordinal under that key would give it a number that is in range
+        // and corrupts the page. The `leaf` rows above make the same choice
+        // for the same reason.
+        let describe = |t: HitTarget| -> (String, String, String) {
+            match t {
+                HitTarget::Object(i) => (
+                    format!("index={i}"),
                     kind_of(i),
                     model
                         .objects
                         .get(i)
                         .map_or_else(|| "none".to_owned(), |o| bbox_token(o.page_bbox())),
+                ),
+                HitTarget::Leaf(i) => model.leaves.get(i).map_or_else(
+                    || (format!("leaf={i}"), "none".to_owned(), "none".to_owned()),
+                    |leaf| {
+                        let containment = leaf
+                            .containment
+                            .iter()
+                            .map(|id| id.num.to_string())
+                            .collect::<Vec<_>>()
+                            .join(">");
+                        (
+                            format!(
+                                "leaf={i} containment={containment} paint_order={} editable=false",
+                                leaf.paint_order
+                            ),
+                            format!("leaf:{}", object_detail(&leaf.object).0),
+                            bbox_token(leaf.object.page_bbox()),
+                        )
+                    },
+                ),
+            }
+        };
+        let (locator, kind) = candidates.first().map_or_else(
+            || ("index=none".to_owned(), "none".to_owned()),
+            |&t| {
+                let (l, k, _) = describe(t);
+                (l, k)
+            },
+        );
+        println!(
+            "hit page={page_number} at={},{} tolerance={tolerance} scope={} {locator} kind={kind} candidates={}",
+            point.x,
+            point.y,
+            if deep { "deep" } else { "page" },
+            candidates.len(),
+        );
+        if all_hits {
+            // Front-most first: `ordinal=0` is the target the `hit` line
+            // names and the one a plain click selects; each higher ordinal is
+            // one more Alt+click down the stack, wrapping back to 0 after the
+            // last.
+            for (ordinal, &t) in candidates.iter().enumerate() {
+                let (locator, kind, bbox) = describe(t);
+                println!(
+                    "hit-candidate page={page_number} at={},{} ordinal={ordinal} {locator} kind={kind} bbox={bbox}",
+                    point.x, point.y,
+                );
+            }
+        }
+    }
+
+    // ★★ WHICH STRAIGHT LINE A CLICK WOULD RESOLVE TO, `Pass 138.0`.
+    //
+    // The headless twin of the two-line measure gesture. It exists for two
+    // reasons and the second is the load-bearing one:
+    //
+    // 1. `--hit` answers "which OBJECT", and an object on a CAD sheet is
+    //    routinely a whole orthographic view -- one measured export holds
+    //    1194 subpaths in a single object. "Which object" is not an answer to
+    //    "which line did I click", and the measure tool needs the second.
+    //
+    // 2. ★ Until now `pdfce_core::vector::linepick::pick_line_in_page` had NO
+    //    CLI caller at all, so the only way to observe it was to run the GUI
+    //    and place a dimension. A core verb with no headless surface cannot
+    //    be regression-tested by a script, cannot be diagnosed on an operator's
+    //    file without a screen, and -- as this project has had to write down
+    //    twice -- tends to sit callable-and-uncalled while everyone assumes
+    //    somebody exercises it.
+    //
+    // Deliberately read-only and deliberately NOT wired into `dimension-add`:
+    // that subcommand takes explicit coordinates, which is the right contract
+    // for a script, and giving it a pick would make a batch run depend on the
+    // geometry it happens to find. This reports; it does not author.
+    if let Some(point) = line_pick_point {
+        match pdfce_core::vector::linepick::pick_line_in_page(&model, point, tolerance) {
+            Some(line) => {
+                // `target=` names WHICH LIST, in the same two-key vocabulary
+                // the `hit` rows use, because the answer genuinely can come
+                // from either and a bare index would be ambiguous.
+                let target = match line.target {
+                    HitTarget::Object(i) => format!("index={i}"),
+                    HitTarget::Leaf(i) => model.leaves.get(i).map_or_else(
+                        || format!("leaf={i}"),
+                        |leaf| {
+                            format!(
+                                "leaf={i} containment={} paint_order={}",
+                                leaf.containment
+                                    .iter()
+                                    .map(|id| id.num.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(">"),
+                                leaf.paint_order
+                            )
+                        },
+                    ),
+                };
+                println!(
+                    "line-pick page={page_number} at={},{} tolerance={tolerance} {target} \
+subpath={} segment={} start={},{} end={},{} pick={},{} length={}",
+                    point.x,
+                    point.y,
+                    line.subpath,
+                    line.segment,
+                    line.start.x,
+                    line.start.y,
+                    line.end.x,
+                    line.end.y,
+                    line.pick.x,
+                    line.pick.y,
+                    line.length(),
+                );
+            }
+            None => {
+                // A miss is an ANSWER. Exit stays 0 and the row still prints,
+                // so a script branches on `index=none` rather than on the exit
+                // code -- the same contract `--hit` states, kept identical on
+                // purpose so the two flags cannot need different handling.
+                //
+                // `reason=` distinguishes the two ways to miss, because they
+                // call for opposite responses: nothing near the point (move
+                // the click, or widen `--tolerance`) versus something near it
+                // that is a CURVE, which `pick_line` skips deliberately rather
+                // than chording -- dimensioning "the line" of a Bezier would
+                // measure something the drawing does not contain.
+                let near_curve = !hit_test_point_deep(&model, point, tolerance).is_empty();
+                println!(
+                    "line-pick page={page_number} at={},{} tolerance={tolerance} index=none \
+reason={}",
+                    point.x,
+                    point.y,
+                    if near_curve {
+                        "nothing-straight-within-tolerance"
+                    } else {
+                        "nothing-within-tolerance"
+                    },
                 );
             }
         }

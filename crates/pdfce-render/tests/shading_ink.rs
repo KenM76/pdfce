@@ -42,12 +42,22 @@
 //!
 //! # What this does NOT cover
 //!
-//! **Mesh shadings** (types 4–7). `Shading::paint_cmyk` refuses non-analytic
-//! geometry, so a mesh still bridges through sRGB and still disagrees with an
-//! image of the same colour. That is a known, filed residual, and on the sheet
-//! that exposed this the two remaining mismatched pairs are both *"shading type
-//! 7"*. Named here so a reader who fixes the mesh case knows this file is where
-//! its test belongs.
+//! **Mesh shadings** (types 4–7) — and the reader who fixes them should look
+//! next door rather than here.
+//!
+//! ★ This section said *"a mesh still bridges through sRGB and still disagrees
+//! with an image of the same colour… Named here so a reader who fixes the mesh
+//! case knows this file is where its test belongs."* The first half stopped
+//! being true in `Pass 137.1`, the very next Pass. The second half was a
+//! prediction and it turned out **wrong**: the mesh tests live in
+//! `mesh_ink.rs`, with their own fixtures, because a mesh needed an entirely
+//! different carrier (`Shade::Ink`, per-vertex) rather than the ramp this
+//! file's fixtures exercise. Two defects with one symptom had two fixes and
+//! want two test files.
+//!
+//! Kept rather than deleted because the *shape* is the lesson: a doc comment
+//! that says where a future change belongs is a guess about work nobody has
+//! done yet, and it ages worse than a description of what is.
 
 #![allow(
     clippy::unwrap_used,

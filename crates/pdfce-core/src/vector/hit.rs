@@ -307,6 +307,149 @@ pub fn hit_test_rect(model: &PageObjects, rect: Bounds, mode: MarqueeMode) -> Ve
         .collect()
 }
 
+/// Whether a deep marquee may select a **form XObject itself**.
+///
+/// # ★★★ WHY THIS IS A CHOICE FOR A RECT WHEN IT IS NOT ONE FOR A POINT
+///
+/// [`hit_test_point_deep`] excludes forms outright and needs no policy,
+/// because the argument against them is airtight: a `/BBox` is a *clipping
+/// extent* (§8.10.1), not ink, so a point inside it is not evidence the
+/// operator aimed at the form. There is nothing to weigh.
+///
+/// A marquee is genuinely different, and the consuming shell said so rather
+/// than assuming: *"a marquee that fully encloses a form's box has arguably
+/// named the form on purpose, and a form is a legitimate operand… We think
+/// that is right and we are not sure."* Enclosing a rectangle **is** a
+/// deliberate statement about that rectangle in a way that touching a point
+/// inside it is not.
+///
+/// # Both are shipped, and the default is [`Self::Exclude`]
+///
+/// Standing rule `R206`: two defensible answers means ship both and pick a
+/// default, not ask. The default is `Exclude` for one reason that outweighs
+/// the argument above — **two gestures that both mean "select this" must
+/// agree about what is selectable.** A click can never yield a form. If a
+/// marquee can, the operator acquires, by one gesture and not the other, a
+/// selection that every edit verb then refuses. That is a trap laid by the
+/// UI rather than a capability.
+///
+/// [`Self::Include`] exists for the caller who wants the form as an operand —
+/// a bounding-box report, a "what is in this region" census, a delete-the-
+/// container gesture — and it is a deliberate act at the call site rather
+/// than a surprise.
+///
+/// # ★ `Include` is not the same as the old shallow behaviour
+///
+/// Under `Include` the form **and** its leaves are both candidates, so a
+/// marquee enclosing a form returns the container and everything in it.
+/// [`hit_test_rect`]'s shallow answer returns the container **only**. A
+/// caller migrating from one to the other is changing two things, and the
+/// leaf half is the one that will surprise it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormMarquee {
+    /// A form is never itself selected; only what is drawn inside it.
+    /// Matches [`hit_test_point_deep`], and is the default.
+    #[default]
+    Exclude,
+    /// A form is selected on its own terms, alongside its leaves.
+    Include,
+}
+
+/// Every target a page-space marquee `rect` selects, in **paint order**,
+/// descending into form XObjects.
+///
+/// The rect twin of [`hit_test_point_deep`], and it exists because the two
+/// gestures disagreeing is a defect an operator meets in the first minute.
+///
+/// # ★★ Why this needed to exist rather than be composed at the call site
+///
+/// It was composed at a call site, once, and that is why it is here. The
+/// consuming shell shipped `hit_test_rect(…)` plus its own loop over
+/// `model.leaves` filtered by `Bounds::contained_by`, and reported the
+/// workaround under decision 058 rather than keeping it: *"It is still a
+/// second statement of the enclosure rule, in another crate… it will drift
+/// the day `MarqueeMode` grows a third mode, or the day `Enclosed` stops
+/// meaning `contained_by` — and it will drift **silently**, because our copy
+/// will keep compiling and keep returning something plausible."*
+///
+/// That is the whole argument. A duplicated predicate does not fail when it
+/// falls out of date; it keeps answering.
+///
+/// # Ordering
+///
+/// Interleaved on [`FormLeaf::paint_order`] exactly as
+/// [`hit_test_point_deep`] interleaves, so a marquee's result and a click's
+/// result order the same objects the same way. **Front-most LAST here**,
+/// which is the opposite of the point query and is deliberate: a point query
+/// answers "which one?" and wants the winner first, while a marquee answers
+/// "which ones?" and a caller iterating them to draw handles, group them or
+/// re-emit them wants paint order. Reversing at the call site is one line;
+/// guessing which order a `Vec` is in is a bug.
+///
+/// # Returns
+///
+/// Empty for an empty rect. Never `None`-vs-empty ambiguous.
+///
+/// # Examples
+///
+/// ```
+/// # use pdfce_core::document::Document;
+/// # use pdfce_core::page_tree;
+/// # use pdfce_core::vector::{decompose_page, hit_test_rect_deep, Bounds, FormMarquee, Matrix, MarqueeMode, Point};
+/// # fn demo(doc: &Document) -> Result<(), Box<dyn std::error::Error>> {
+/// let page = &page_tree::pages(doc)?[0];
+/// let model = decompose_page(&doc.view(), page, Matrix::IDENTITY)?;
+/// let region = Bounds { min: Point::new(0.0, 0.0), max: Point::new(200.0, 200.0) };
+///
+/// // Objects drawn inside a form are selected; the form itself is not.
+/// let picked = hit_test_rect_deep(&model, region, MarqueeMode::Enclosed, FormMarquee::Exclude);
+/// println!("{} target(s)", picked.len());
+/// # Ok(())
+/// # }
+/// ```
+#[must_use]
+pub fn hit_test_rect_deep(
+    model: &PageObjects,
+    rect: Bounds,
+    mode: MarqueeMode,
+    forms: FormMarquee,
+) -> Vec<HitTarget> {
+    if rect.is_empty() {
+        return Vec::new();
+    }
+    let selects = |bb: Bounds| match mode {
+        MarqueeMode::Enclosed => bb.contained_by(rect),
+        MarqueeMode::Touched => bb.intersects(rect),
+    };
+
+    // (paint position, tie-breaker, target) — the same triple, sorted the
+    // same way, as `hit_test_point_deep`. Written out rather than shared with
+    // it because the two differ in their per-candidate predicate and in
+    // nothing else, and a shared helper taking a closure would make the ONE
+    // line that differs the hardest one to find.
+    let mut hits: Vec<(usize, usize, HitTarget)> = Vec::new();
+
+    for (i, obj) in model.objects.iter().enumerate() {
+        let is_form = matches!(obj, VectorObject::Image(img) if img.source == ImageSource::Form);
+        if is_form && forms == FormMarquee::Exclude {
+            continue;
+        }
+        if selects(obj.page_bbox()) {
+            hits.push((i, 0, HitTarget::Object(i)));
+        }
+    }
+    for (i, leaf) in model.leaves.iter().enumerate() {
+        if selects(leaf.object.page_bbox()) {
+            // `i + 1` for the same reason `hit_test_point_deep` uses it: a
+            // leaf of the form at index `n` must sort after anything at `n`.
+            hits.push((leaf.paint_order, i + 1, HitTarget::Leaf(i)));
+        }
+    }
+
+    hits.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+    hits.into_iter().map(|(_, _, t)| t).collect()
+}
+
 /// Whether `point` hits `obj` within `tolerance` (module docs' per-kind
 /// rules).
 /// Whether `point` hits a text object.
@@ -456,6 +599,24 @@ pub fn hit_test_subpaths(
     let Some(VectorObject::Path(path)) = model.objects.get(object_index) else {
         return Vec::new();
     };
+    hit_test_subpaths_of(path, point, tolerance)
+}
+
+/// [`hit_test_subpaths`] against a path this caller already has in hand.
+///
+/// # ★ Why this exists, rather than every caller taking an index
+///
+/// An index into [`PageObjects::objects`] cannot name an object drawn inside
+/// a form XObject — those live in [`PageObjects::leaves`], a second list — so
+/// an index-only API is structurally incapable of answering a question about
+/// form contents. That is not a hypothetical limit: it is why the two-line
+/// measure tool was **inert**, not merely degraded, on a CAD drawing whose
+/// 10,256 pickable objects were all inside one form.
+///
+/// Splitting the lookup from the geometry is the whole fix. The geometry
+/// never needed the index; only the lookup did.
+#[must_use]
+pub fn hit_test_subpaths_of(path: &PathObject, point: Point, tolerance: f64) -> Vec<usize> {
     let half = stroke_half_width(path);
     if !path.page_bbox.inflate(half + tolerance).contains(point) {
         return Vec::new();

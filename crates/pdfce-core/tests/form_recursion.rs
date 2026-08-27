@@ -64,8 +64,10 @@ use pdfce_core::document::Document;
 use pdfce_core::page_tree;
 use pdfce_core::text_extract::ContentStreamRef;
 use pdfce_core::vector::decompose::{ImageSource, PageObjects};
+use pdfce_core::vector::linepick::pick_line_in_page;
 use pdfce_core::vector::{
-    HitTarget, Matrix, Point, VectorObject, decompose_page, hit_test_point, hit_test_point_deep,
+    Bounds, FormMarquee, HitTarget, MarqueeMode, Matrix, Point, VectorObject, decompose_page,
+    hit_test_point, hit_test_point_deep, hit_test_rect_deep,
 };
 
 fn model(name: &str) -> PageObjects {
@@ -365,4 +367,204 @@ fn a_leaf_is_found_under_its_own_invocation() {
             "the leaf under {point:?} must belong to the invocation drawn there"
         );
     }
+}
+
+// ===========================================================================
+// Pass 138.0 — the OTHER two gestures that could not see inside a form
+// ===========================================================================
+//
+// `hit_test_point_deep` fixed the CLICK. Two sibling queries were left behind,
+// and both were reported by the consuming shell within a day of it adopting
+// the click fix — which is why they are noted here rather than only in a
+// commit message.
+//
+// ★ Neither was a regression. Both were blind from the day they shipped, and
+// both were INVISIBLE while selection was equally blind, because an operator
+// meets the page-sized form long before they meet the marquee or the measure
+// tool. Fixing one gesture is what promoted the others from "not reached yet"
+// to "the next wall", and this project has now produced that shape three times
+// in three days (images/shadings, analytic/mesh, click/marquee+pick).
+
+/// ★★★ A MARQUEE MUST SELECT WHAT A CLICK SELECTS.
+///
+/// Two gestures that both mean "select this", disagreeing about what is
+/// selectable, is an inconsistency an operator meets in the first minute. The
+/// shell could not ship the click fix without this one and wrote its own
+/// version rather than wait — then reported the workaround instead of keeping
+/// it, because a duplicated enclosure predicate *"will drift silently: our
+/// copy will keep compiling and keep returning something plausible."*
+#[test]
+fn a_marquee_reaches_inside_a_form() {
+    let m = model("page-sized-form.pdf");
+    // The three squares are at (10,10), (80,80) and (150,150), 40 pt each, so
+    // this rectangle fully encloses the first two and misses the third.
+    let region = Bounds {
+        min: Point::new(0.0, 0.0),
+        max: Point::new(130.0, 130.0),
+    };
+
+    let picked = hit_test_rect_deep(&m, region, MarqueeMode::Enclosed, FormMarquee::Exclude);
+    assert_eq!(
+        picked,
+        vec![HitTarget::Leaf(0), HitTarget::Leaf(1)],
+        "★ two squares inside the form must be selected, and the form itself \
+         must not be. Before Pass 138.0 this was EMPTY — hit_test_rect filters \
+         model.objects only, and the only page object here is the wrapper"
+    );
+}
+
+/// The default excludes the form; `Include` is the other shipped answer.
+///
+/// `R206`: two defensible readings, so both ship and one is the default. The
+/// shell asked which and said it could not justify a preference — *"a marquee
+/// that fully encloses a form's box has arguably named the form on purpose…
+/// We think that is right and we are not sure."*
+///
+/// ★ The tie-breaker is not which reading is more principled. It is that a
+/// click can NEVER yield a form, so if a marquee can, the operator acquires by
+/// one gesture — and not the other — a selection every edit verb then refuses.
+/// A capability reachable only by accident is a trap, not a feature.
+#[test]
+fn including_forms_is_available_and_is_not_the_default() {
+    let m = model("page-sized-form.pdf");
+    // Encloses the whole page, so the wrapper form qualifies too.
+    let all = Bounds {
+        min: Point::new(-10.0, -10.0),
+        max: Point::new(210.0, 210.0),
+    };
+
+    let default = hit_test_rect_deep(&m, all, MarqueeMode::Enclosed, FormMarquee::Exclude);
+    assert_eq!(
+        default,
+        vec![HitTarget::Leaf(0), HitTarget::Leaf(1), HitTarget::Leaf(2)],
+        "the default answer is the three squares and NOT the wrapper"
+    );
+
+    let with_form = hit_test_rect_deep(&m, all, MarqueeMode::Enclosed, FormMarquee::Include);
+    assert!(
+        with_form.contains(&HitTarget::Object(0)),
+        "FormMarquee::Include must offer the wrapper as an operand"
+    );
+    assert_eq!(
+        with_form.len(),
+        4,
+        "★ Include adds the container TO the leaves — it does not return the \
+         container alone. That is the difference from the old shallow \
+         hit_test_rect, and it is the half a caller migrating will not expect"
+    );
+}
+
+/// The marquee's order is paint order, and the point query's is its reverse.
+///
+/// Asserted rather than left to the doc comment because the two functions look
+/// like siblings and a reader will assume they agree. They deliberately do
+/// not: a point query answers "which one?" and wants the winner first; a
+/// marquee answers "which ones?" and a caller drawing handles or re-emitting
+/// wants paint order. Guessing which order a `Vec` is in is a bug; reversing
+/// at a call site is one line.
+#[test]
+fn the_marquee_returns_paint_order_and_the_point_query_returns_its_reverse() {
+    let m = model("page-sized-form.pdf");
+    let all = Bounds {
+        min: Point::new(-10.0, -10.0),
+        max: Point::new(210.0, 210.0),
+    };
+    let marquee = hit_test_rect_deep(&m, all, MarqueeMode::Enclosed, FormMarquee::Exclude);
+    assert_eq!(marquee.first(), Some(&HitTarget::Leaf(0)));
+    assert_eq!(marquee.last(), Some(&HitTarget::Leaf(2)));
+
+    // The same objects under a point that hits only the last one; the point
+    // query's contract is topmost-first.
+    let deep = hit_test_point_deep(&m, Point::new(170.0, 170.0), 1.0);
+    assert_eq!(deep.first(), Some(&HitTarget::Leaf(2)));
+}
+
+/// ★★★ THE MEASURE TOOL WAS INERT, NOT DEGRADED, ON A WRAPPED DRAWING.
+///
+/// `pick_line_in_page` offered only `PageObjects::objects` to the picker, and
+/// a form is not a line, so a page whose drawing lives inside a form had
+/// **nothing pickable at all**. That is what most CAD exports look like —
+/// measured on the operator's own drawing: 129,758 page objects, one form, and
+/// 10,256 leaves, every one of them a candidate line and every one invisible.
+///
+/// A square's edges are straight, so each square here contributes four
+/// pickable segments.
+#[test]
+fn the_line_picker_reaches_inside_a_form() {
+    let m = model("page-sized-form.pdf");
+    // The bottom edge of the first square: y = 10, x from 10 to 50.
+    let picked = pick_line_in_page(&m, Point::new(30.0, 10.0), 1.0)
+        .expect("★ a straight edge inside the form must be pickable — this was None before");
+
+    assert_eq!(
+        picked.target,
+        HitTarget::Leaf(0),
+        "and the result must say WHICH LIST it came from"
+    );
+    assert_eq!(
+        picked.page_object_index(),
+        None,
+        "the migration helper must refuse to hand a leaf ordinal to a caller \
+         expecting a page index — those index different content streams, and a \
+         number that is in range and wrong is the failure mode this Option \
+         exists to prevent"
+    );
+    // Horizontal, 40 pt long.
+    assert!((picked.length() - 40.0).abs() < 1e-6, "{picked:?}");
+    assert!((picked.start.y - 10.0).abs() < 1e-6);
+    assert!((picked.end.y - 10.0).abs() < 1e-6);
+}
+
+/// Whatever is picked must be the NEAREST straight segment, from either list.
+///
+/// The fix appends a second list to the search; this pins that it appends
+/// rather than pre-empts. Without it, a change that searched leaves first and
+/// short-circuited would pass every other test in this file while making the
+/// pick prefer form contents over the page's own geometry — a wrong answer
+/// that looks like a working feature.
+#[test]
+fn the_pick_is_the_nearest_segment_from_either_list() {
+    let m = model("nested-forms.pdf");
+    // The single leaf is a 30 pt square at (70,70) — the placement matrices of
+    // the two enclosing forms move it there from the (20,20) written in the
+    // innermost stream, which is exactly why the point is read off the model
+    // rather than off the generator.
+    let point = Point::new(85.0, 71.0);
+    let Some(picked) = pick_line_in_page(&m, point, 6.0) else {
+        panic!("nested-forms.pdf holds a rectangle inside two forms; expected a pick");
+    };
+    let d = distance_to_segment_2d(point, picked.start, picked.end);
+
+    for leaf in &m.leaves {
+        if let VectorObject::Path(p) = &leaf.object {
+            for sp in p.page_subpaths() {
+                let mut from = sp.start;
+                for seg in &sp.segments {
+                    let to = seg.end();
+                    let other = distance_to_segment_2d(point, from, to);
+                    assert!(
+                        other >= d - 1e-9,
+                        "a nearer segment exists ({other}) than the one picked ({d})"
+                    );
+                    from = to;
+                }
+            }
+        }
+    }
+}
+
+/// Local copy of the distance the picker uses internally.
+///
+/// Deliberately re-derived rather than imported: the assertion above is that
+/// `pick_line_in_page` returns the nearest segment, and checking that with the
+/// same private function it used would only prove the function agrees with
+/// itself.
+fn distance_to_segment_2d(p: Point, a: Point, b: Point) -> f64 {
+    let (vx, vy) = (b.x - a.x, b.y - a.y);
+    let len_sq = vx.mul_add(vx, vy * vy);
+    if len_sq <= f64::EPSILON {
+        return (p.x - a.x).hypot(p.y - a.y);
+    }
+    let t = ((((p.x - a.x) * vx) + ((p.y - a.y) * vy)) / len_sq).clamp(0.0, 1.0);
+    (p.x - vx.mul_add(t, a.x)).hypot(p.y - vy.mul_add(t, a.y))
 }
