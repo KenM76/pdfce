@@ -4491,6 +4491,61 @@ impl Interpreter<'_> {
                     painted_natively = true;
                 }
             }
+            // ★★★ THE SECOND NATIVE ROUTE: AUTHORED INK WITH NO OVERPRINT
+            // INVOLVED, `Pass 137.0`.
+            //
+            // The block above takes the native route only when overprint is in
+            // force. That gate was right when it was written -- "one defect,
+            // one behaviour change" -- and a SECOND defect has since made the
+            // remaining case wrong.
+            //
+            // `Pass 130.1` gave a `DeviceCMYK` IMAGE its authored ink, so an
+            // image now reaches the colorant buffer without a `CMYK -> sRGB ->
+            // CMYK` round trip. A shading still bridged. So the same colour,
+            // drawn as a shading and as an image, came out DIFFERENT -- and
+            // fixing the image half is what made the two visibly disagree.
+            //
+            // Measured on the operator's own combined conformance sheet, whose
+            // shading boxes print a live shading beside a reference IMAGE of
+            // what it should look like and say "the shadings should look like
+            // the reference image": two of the four pairs visibly differed,
+            // the live shading washed out beside its own reference. That box
+            // carries NO trap cross, so nothing automated could see it; it was
+            // found by the operator looking at the page.
+            //
+            // ★ THE `DeviceCmykDirect` EXCLUSION ABOVE DOES NOT APPLY HERE,
+            // and that is the whole reason this can be a plain widening rather
+            // than a rework. That exclusion exists because Table 149's
+            // `OPM 1` row is VALUE-DEPENDENT and its rules therefore cannot be
+            // computed once for a whole ramp. With overprint not in force
+            // there is no Table 149 at all: every component is `Source`, which
+            // is exactly `Blend::Normal` painted in ink instead of in sRGB.
+            //
+            // ★★ `cmyk_bridged_pixels` FALLS as a result, and that is the
+            // point rather than a side effect -- it counts pixels that lost
+            // their ink identity on the way to the compositor, and these no
+            // longer do. The older comment worried that widening this route
+            // would "quietly empty a counter operators read". It empties it
+            // because the shortfall it measures is smaller, which is the
+            // outcome that counter exists to report.
+            if !painted_natively
+                && let Some(ramp) = shading.ramp.as_ref()
+                && ramp.has_colorants()
+                && shading
+                    .paint_cmyk(
+                        to_target,
+                        region,
+                        clip,
+                        alpha,
+                        [crate::overprint::ComponentRule::Source; 4],
+                        buf,
+                    )
+                    .is_some()
+            {
+                self.diag.shading.painted += 1;
+                painted_natively = true;
+            }
+
             if !painted_natively
                 && shading
                     .paint(to_target, region, clip, alpha, &mut scratch)
