@@ -67117,4 +67117,86 @@ question alike; `Pass 119.1` (`unshare_form`) remains the outstanding
 - Ledger unchanged this filing: rules `R218` (next free `R219`),
   decisions `089` (next free `090`), `SESSION_LOG` filings **278**.
 
+## 2026-08-27 (279th filing) — `Pass 135.1` (`b352656`) SHIPS: `pdfce-cli ocr --in-place` — the CLI half of `Pass 135.0` was never blocked, it was half-built and pointed at the wrong writer
+
+**Shipped:**
+- `Pass 135.1` (`b352656`) — `pdfce-cli ocr` gains `--in-place`, mutually
+  exclusive with `--output` and exactly one required. `--in-place` routes
+  through `EditSession::add_ocr_layer`; `--output` keeps the one-shot; both
+  call the shared `plan_ocr_layer` from `Pass 135.0`, so the font, the
+  §9.3.6 resources merge and the emitted content stream are decided once.
+  Verified end to end on a real scan: 49 words written in place, file grew
+  2,325,575 → 2,331,049 bytes, `find-text` located the recognised text, and
+  the round-trip invariant held (`ORIGINAL IS A BYTE PREFIX: True`).
+
+**Decisions made this session:** none new — no rule or decision minted;
+ledger stays `R218`/next free `R219`, decisions `089`/next free `090`
+(per the engineer, not independently re-run — no shell this filing).
+
+**Findings + decisions:**
+- **The correction this Pass exists because of, recorded plainly because
+  the engineer asked for it to be.** The `Pass 135.0` dispatch said the
+  CLI half was blocked on open operator question `(bl)`. This role
+  grepped instead of filing that claim, in the 278th filing, and found
+  `pdfce-cli` already had an `ocr` subcommand calling the old one-shot
+  writer at `main.rs:8673` — the CLI half was never blocked, it was
+  already half-built and wired to the wrong writer. The engineer confirms
+  the correction was right. This is the cross-document verification this
+  role's hard rules require, working as intended, on the record because
+  the standing worry runs the other way (a filing agent recording what it
+  is handed rather than checking it).
+- **Why the wrong claim happened, the transferable half.** It came from a
+  doc comment in `ocr/layer.rs` rather than from re-running the grep that
+  comment itself quotes. That comment has now been wrong about its own
+  callers three times across one session's churn — including a third
+  wrong claim written while correcting the second. A claim about callers
+  is a measurement and goes stale silently, because nothing recompiles
+  when it does; correcting one by reasoning about what changed, instead
+  of re-running the quoted command, is how the third wrong claim happened
+  directly alongside the second one's correction.
+- **Declined to promote to a standing rule**, at this role's own
+  discretion, per the engineer's invitation to judge it. All three wrong
+  readings are of one doc comment in one file inside one session — not a
+  defect shape recurring across independent subsystems (contrast `R174`'s
+  three-instance cross-subsystem corroboration). The existing
+  verify-before-recommending discipline already covers it, and a roadmap
+  rule would not have helped at the comment-editing site where the
+  failure actually recurred. Recorded as a named, un-promoted candidate,
+  same disposition this project already gives the `R212` candidate at
+  *n* = 1.
+- **A second false claim, operator-facing, also fixed.** `--output`'s
+  help text on two other `pdfce-cli` editing subcommands read *"Never the
+  input path by default — see `--in-place`"* while no `--in-place` flag
+  existed anywhere in the CLI. Corrected in place, not deleted — the
+  operator was right to want it. `ocr` has it now; extending it to the
+  other editing subcommands is filed as an owed Backlog item, not done.
+- `--output`/`--in-place` are `conflicts_with` and exactly one is
+  required; the unreachable `(Some(_), true)` arm is handled rather than
+  unwrapped, so a future removal of `conflicts_with` is a reviewed
+  behaviour change, not a panic in front of an operator.
+
+**`FEATURES.md`:** row 139 (*OCR as an edit to the open document*,
+`Pass 135.0`) — `cli` box **ticked**, on the live round-trip evidence
+above, not on the dispatch's say-so. The "`cli` blocked on question `(bl)`"
+note added by the 278th filing is **removed**: that was this role's own
+error, and `(bl)` governs which OCR model may be redistributed inside the
+MIT portable folder, not whether a CLI subcommand can exist. `gui` stays
+unticked.
+
+**Still in flight:** `--in-place` owed on the other `pdfce-cli` editing
+subcommands (new Backlog entry, no Pass ID minted); `pdfceGUI` still routes
+OCR through the free-function one-shot; open operator question `(bl)`
+(OCR-model licensing) still gates which models may ship in the portable
+folder, independent of this Pass; `Pass 119.1` (`unshare_form`) remains the
+outstanding `R206` obligation flagged in the 277th filing.
+
+**For next session:**
+- Scope the `--in-place` Backlog item: grep `main.rs` for
+  `Never the input path by default` and for every subcommand whose only
+  write mode is `--output <path>`.
+- If `pdfceGUI` is wired to call `EditSession::add_ocr_layer`, tick `gui`
+  in the FEATURES.md row only once confirmed by grep, not by doc comment.
+- Ledger unchanged this filing: rules `R218` (next free `R219`),
+  decisions `089` (next free `090`), `SESSION_LOG` filings **279**.
+
 ---

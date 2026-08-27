@@ -96,6 +96,136 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 135.1` (`b352656`) — **`pdfce-cli ocr --in-place`** — ★★★ **THE CLI HALF OF `Pass 135.0` WAS NEVER BLOCKED; IT WAS HALF-BUILT AND POINTED AT THE WRONG WRITER, AND THE LIBRARIAN'S OWN GREP IS WHAT FOUND THAT, NOT THE ENGINEER'S DISPATCH** — ★★ **ONE PLAN, TWO WRITERS — `--output` and `--in-place` both call `plan_ocr_layer`, so the font, the resources merge and the emitted content stream are decided once, not twice** — ★ **a `--in-place` help string had been promising a flag that did not exist, on two other subcommands, since before this Pass** — 2026-08-27 (279th filing)
+
+**Shipped 2026-08-27.** Commit `b352656`; the commit immediately before it is
+`69834cd` (this librarian's own 278th filing). Both hashes and the date are
+as supplied in the engineer's dispatch — **this filing has no shell** and
+could not run `git log` itself to confirm them independently; treat the
+commit identity as relayed, not verified.
+
+#### The correction this Pass exists because of — recorded plainly, per the engineer's own request
+
+The `Pass 135.0` dispatch told this role the CLI half was **blocked** on
+open operator question `(bl)` (OCR model licensing). **This role grepped
+instead of filing that claim** and found `pdfce-cli` already had both an
+`ocr` and a `fetch-ocr-models` subcommand, "ocr" appearing **71 times** in
+`main.rs`, a working engine, and the one-shot writer called from
+`main.rs:8673` — flagged back in the 278th filing rather than recorded as
+told. **The engineer confirms the correction was right and the claim was
+wrong**: the CLI half was never blocked, it was already half-built and
+wired to the wrong writer. This is the cross-document verification this
+role's own hard rules require, working as intended — the standing worry in
+this project runs the other way (a filing agent recording what it is
+handed), and this is the record of the check firing instead.
+
+**Why the original claim was wrong, and the transferable half.** It was
+asserted from a **doc comment** in `ocr/layer.rs` rather than from re-running
+the grep that comment itself quotes. That comment has now been wrong about
+its own callers **three times** — *"called by the CLI"* when nothing called
+it; *"There is NO OCR subcommand … an R151 instance"*; and *"what still has
+no caller is THIS one-shot"*, written **earlier the same session**, while
+correcting the second claim, in a commit whose own message criticises this
+exact behaviour. **A claim about callers is a measurement, and it goes
+stale silently because nothing recompiles when it does** — correcting one
+by reasoning about what changed, rather than re-running the command the
+claim itself quotes, is how the third wrong claim happened directly
+alongside the second one's correction.
+
+**On promotion to a standing rule: declined, at this role's own
+discretion, per the engineer's invitation to judge it.** All three wrong
+readings are of one doc comment, in one file, inside one session's churn —
+not the shape of a defect recurring across independent subsystems (contrast
+`R174`'s three-instance corroboration, `project_r174_rapid_corroboration`).
+The existing verify-before-recommending discipline (this role's own hard
+rule 8 and its general analogue for the engineer) already covers it, and a
+rule read at roadmap-filing time would not have helped at the
+comment-editing site where it actually recurred. Recorded here as a named,
+un-promoted candidate — same disposition this file already gives the
+`R212` candidate at *n* = 1 — rather than either silently dropped or
+minted into a rule nobody would consult at the point of failure.
+
+#### A second false claim, operator-facing, also fixed
+
+`--output`'s help text on two `pdfce-cli` editing subcommands read *"Never
+the input path by default — see `--in-place`"* while **no `--in-place` flag
+existed on those subcommands, or on any other, anywhere in the CLI** —
+`--help` was pointing the operator at an option that had never shipped.
+Corrected in place rather than deleted, because the operator was right to
+want the flag: `ocr` has it now. **Extending `--in-place` to the other
+editing subcommands is filed below as owed, not done** — a real
+operator-facing gap, and the two repaired help strings now promise nothing
+they cannot deliver.
+
+#### What shipped
+
+`pdfce-cli ocr` gains `--in-place`, mutually exclusive with `--output`
+(clap `conflicts_with`) with **exactly one of the two required** — neither
+default is acceptable: writing beside the input invents a path the
+operator did not choose, writing over it silently is the one thing a tool
+must never do by accident. The unreachable `(Some(_), true)` arm is
+**handled, not unwrapped**, so removing `conflicts_with` later is a
+behaviour change someone must look at, not a panic in front of an operator.
+
+**Two writers, one plan, unchanged from `Pass 135.0`'s own design:**
+`--in-place` goes through `EditSession::add_ocr_layer`; `--output` keeps
+using the one-shot, with its exact previous behaviour preserved so nothing
+scripted against it moves. Both call the same `plan_ocr_layer`, so the font
+name, the §9.3.6 resources merge, the placeable-word pass and the emitted
+content stream are decided **once** — only the allocator and the
+destination differ. That is what stops the two shells producing different
+files from the same input.
+
+#### Verified end to end on a real scan, not inferred
+
+```
+49 words written, in place
+file 2,325,575 -> 2,331,049 bytes
+find-text --needle quick -> match page=1 rect=98.88,699.19,126.24,713.07
+ORIGINAL IS A BYTE PREFIX: True
+```
+
+The last line is the round-trip invariant (`ARCHITECTURE.md` §5) holding on
+an **in-place** write: original bytes untouched, revision appended. This is
+not redaction, and the flag's own help text says so.
+
+#### Tests + gates (as supplied by the engineer)
+
+- `cargo test --workspace` — zero failures.
+- `cargo fmt --all --check` clean; `cargo clippy --workspace --all-targets
+  -- -D warnings` clean.
+- All 17 argument-free gates green, exit codes read individually.
+- `cargo tree -p pdfce-core` / `-p pdfce-render` — zero GUI, zero network
+  dependencies (per the standing invariant; not independently re-run by
+  this role, no shell this filing).
+
+#### `FEATURES.md` — updated in this same filing
+
+Row 139 (*OCR as an edit to the open document*, added by `Pass 135.0`):
+**`cli` box ticked** — `[x]` core · **`[x]` cli** · `[ ]` gui — earned on
+the live round-trip evidence above, not on the dispatch's say-so. The
+"`cli` is blocked on open operator question `(bl)`" note added by the
+278th filing is **removed**: that was this role's own error in the prior
+filing, and question `(bl)` governs which OCR model may be *redistributed*
+inside the MIT portable folder, not whether a CLI subcommand calling
+`EditSession::add_ocr_layer` can exist. `gui` stays unticked — no shell
+change reaches `pdfceGUI` in this Pass.
+
+#### Filed as owed, not done
+
+New Backlog entry (below, no Pass ID minted): extend `--in-place` to the
+other `pdfce-cli` editing subcommands whose `--output` help text was found,
+in this Pass, to reference a flag that did not exist.
+
+#### No new rule or decision minted
+
+Ceiling reported unchanged: rules `R218` (next free `R219`), decisions
+`089` (next free `090`) — per the engineer's dispatch. **Not independently
+re-run by this role** (no shell this filing); engineer should confirm with
+`python tools/check-ledger-numbers.py`.
+
+---
+
 ### `Pass 135.0` (`8092e38`) — **OCR BECOMES AN EDIT TO THE OPEN SESSION, NOT A DIFFERENT FILE SOMEWHERE** — ★★★ **`EditSession::add_ocr_layer` replaces the free function's "hand back a whole new PDF" contract with ONE UNDOABLE COMMAND over any number of pages, planned through a shared, allocation-free plan the one-shot writer itself was rewritten to go through, so the two writers cannot come to disagree**; ★★ **A REFUSAL THAT WAS CORRECT AND STILL COULDN'T HELP — the free function reads the session's BASE revision, so a guard that (rightly) refused to run OCR once the session went dirty meant OCR died for the REST OF THE SESSION the moment the operator edited and saved anything, because a session never becomes clean again**; ★ **`OcrPageLayer` PAIRS pages with recognised text rather than parallel-slicing them, so a length or ordering mismatch that would silently put the wrong page's words on a page is unspellable** — 2026-08-27 (278th filing)
 
 **Shipped 2026-08-27.** Commit `8092e38`; the commit immediately before it is
@@ -82996,6 +83126,22 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+### `--in-place` owed on the other `pdfce-cli` editing subcommands (no Pass ID minted — filed 2026-08-27, 279th filing)
+
+`Pass 135.1` gave `pdfce-cli ocr` an `--in-place` flag and, in doing so,
+found that **two other editing subcommands' `--output` help text already
+read** *"Never the input path by default — see `--in-place`"* **for a flag
+that did not exist anywhere in the CLI.** Both help strings were corrected
+in place rather than deleted (the operator was right to want the flag),
+which leaves a real gap: those two subcommands, and any other
+`pdfce-cli` editing subcommand that writes a whole output file rather than
+editing in an open session, still cannot write back over the input the
+operator pointed it at. Scope this Pass by grepping `main.rs` for
+`Never the input path by default` and for every subcommand whose only
+write mode is `--output <path>`; give each the same
+`--output`/`--in-place`-mutually-exclusive-and-required shape `ocr` now
+has, not a bespoke one.
 
 ### `Pass 131.0`–`Pass 131.4` — MAKING PUSH BUTTONS WORK: action authoring, in-app dispatch, and an out-of-tree scripting/network plugin model
 
