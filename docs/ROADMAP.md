@@ -96,6 +96,120 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 119.1` (`cd5e5cc`) — `unshare_form`: COPY-ON-WRITE A SHARED FORM XOBJECT ONTO ONE PAGE — ★★★ **THE OUTSTANDING `R206` OBLIGATION FLAGGED IN THE 277TH FILING IS DISCHARGED** — ★★ an inherited or shared `/Resources`/`/XObject` dict is privatised BEFORE the re-point, proven by a test authored to fail without it — ★ the nested-invocation refusal reuses `Pass 136.0`'s own containment paths rather than re-walking the form tree — 2026-08-27 (281st filing)
+
+**Shipped 2026-08-27.** Commit `cd5e5cc`, current `HEAD`. The commit
+immediately before it is `92666c0` (this role's own 280th filing, the
+docs commit that filed `Pass 136.0`/`Pass 136.1`). Hashes and date as
+supplied in the engineer's dispatch — this filing has no shell and could
+not run `git log` itself to confirm them independently; treat the commit
+identity as relayed, not verified (hard rule 8).
+
+#### This moves an existing Backlog entry — it is not a new mint
+
+The entry below was filed as **★ OUTSTANDING `R206` OBLIGATION, not an
+ordinary Backlog entry** in the 277th filing, after decision 076
+(`ARCHITECTURE.md` §12) was found to have argued its own `R206`
+compliance on a premise — "both are shipped" — that was false the day it
+was written: `Pass 119.0` (edit-in-place) had shipped; `Pass 119.1`
+(`unshare_form`) had only been filed. That flag is **resolved by this
+Pass shipping**, not merely deleted — see `ARCHITECTURE.md` §12's
+decision 076, amended again in this same filing, for the three-state
+record (stated compliant → corrected to outstanding → satisfied).
+
+#### What shipped
+
+`EditSession::unshare_form(page_index, form: ObjId) -> Result<UnshareFormReport, EditError>`,
+new `CommandKind::UnshareForm`, new `UnshareFormReport`, two new
+`EditError` variants (`FormNestedInAnotherForm`, distinct from the
+existing `FormNotOnPage` — the two lead to different next actions,
+"unshare the outer form" vs "wrong page or wrong object"), and
+`pdfce-cli unshare-form`.
+
+**Verified live, not inferred:**
+
+```
+unshare-form in.pdf --page 1 --form 6 -o out.pdf --verify-undo
+-> copy=7 refs_moved=1 changed=2 undo_identical=true
+   original is a byte prefix: True (792 -> 1167)
+```
+
+#### ★★ The privatisation, and the test that proves it matters
+
+Two things are privatised before the re-point, and skipping either
+produces a "private" copy that is still shared:
+
+1. **`/Resources`, if inherited** (§7.7.3.4) — a page with no
+   `/Resources` of its own uses an ancestor's; re-pointing there
+   re-points it for **every page under that ancestor**.
+2. **The `/XObject` subdictionary, if shared** — commonly one indirect
+   reference held by several pages.
+
+`an_inherited_resources_dict_is_privatised_before_re_pointing` **was
+verified to fail** against a build with the privatisation removed
+(three of five did). The transferable finding: the naive implementation
+looks correct on any fixture whose pages carry their own `/Resources`,
+which is most of them — the fixture had to be authored specifically to
+catch the omission. A test that only ever runs against convenient
+fixtures is not testing the inheritance rule.
+
+#### ★ The nested refusal is principled
+
+`FormNestedInAnotherForm` fires when the form is reached only from
+inside another form: re-binding would mean editing the **parent**,
+which may itself be shared, so the blast radius would depend on the
+document's own nesting structure — decision 076's decisive reason for
+rejecting copy-on-write as the *default*, applied here to the option.
+The nesting test **reuses `Pass 136.0`'s containment paths** rather than
+re-walking the form tree — a second walk would be a second answer to
+"what forms does this page reach," and the two would disagree on
+exactly the pathological files the cycle guard exists for.
+
+#### Other design points
+
+- **Granularity is the page, not the invocation.** All of a page's
+  names for that form move to the one copy (`references_moved` reports
+  how many); splitting two invocations on one page would need a
+  per-invocation identity the object model does not carry.
+- **The copy carries the original's value verbatim, span and all** — two
+  objects naming one byte range is fine, since the writer only reads it
+  to emit, so unsharing costs no duplicated stream bytes until the copy
+  is actually edited, which is the point.
+- The CLI **discloses on stderr** what the operator cannot see in the
+  output: which object the page now names, and that every other
+  invocation still names the original.
+
+#### Tests + gates
+
+- New `crates/pdfce-core/tests/unshare_form.rs` — **5 tests**, all pass.
+- `cargo test --workspace` — **4,370 passing, zero failures**.
+- `cargo fmt --all --check` clean; `cargo clippy --workspace --all-targets
+  -- -D warnings` clean.
+- All 17 argument-free gates green, exit codes read individually.
+- `check-core-api-verbs` green — the engineer documented the verb in
+  `docs/core-api/` and moved all stated counts (145 → 146) plus the
+  file's own line count, in this same Pass.
+- `cargo +nightly fuzz build` green on Windows.
+- `cargo tree -p pdfce-core` / `-p pdfce-render` — zero GUI, zero
+  network (per the standing invariant; not independently re-run by this
+  role, no shell this filing).
+
+#### `FEATURES.md` — updated in this same filing
+
+Row moved from *Planned* to *Implemented* (Text section): "Copy-on-write
+a shared form XObject onto one page before editing it" — `[x]` core,
+`[x]` cli (the subcommand transcript above), `[ ]` gui. Not rounded up.
+
+#### Ledger
+
+No new standing rule and no new decision — decision 076 is **amended**,
+not superseded, and no new number is consumed. Rules `R218` (next free
+`R219`), decisions `089` (next free `090`) — per the engineer, not
+independently re-run this filing (no shell); engineer should confirm
+with `python tools/check-ledger-numbers.py`.
+
+---
+
 ### `Pass 136.1` (`f62df4e`) — **A FORM NO LONGER WINS EVERY CLICK** — ★★★ **a form's `/BBox` is a §8.10.1 CLIPPING EXTENT, not a coverage claim — treating it as one was excluding the correct hit, not merely ranking it low** — ★★ **two separate lists, one shared paint order — a leaf is found under its OWN invocation, not concatenated before or after the flat list** — ★ **`hit_test_point` is unchanged on purpose: eleven `edit.rs` sites still get the wrapper, because that is the object they can actually edit** — 2026-08-27 (280th filing)
 
 **Shipped 2026-08-27.** Commit `f62df4e`, the current `HEAD`. The commit
@@ -84420,36 +84534,6 @@ independently useful for disclosure) versus wiring a real consumer
 (gated on `iccce`) when it is picked up.
 
 ---
-
-### `Pass 119.1` — `unshare_form`: copy-on-write a shared form XObject onto one page
-
-**★ OUTSTANDING `R206` OBLIGATION, not an ordinary Backlog entry — flagged
-2026-08-27 (277th filing).** Decision 076 (`ARCHITECTURE.md` §12) argued
-its own `R206` compliance on the premise that "both are shipped." That
-premise was false — this Pass was filed, never built — and the
-compliance claim has been corrected in place at decision 076 itself
-(dated ★, same filing). Until this Pass ships, `R206`'s "ship both as
-options" is **unsatisfied** for the shared-form-XObject edit default:
-the operator has only the default (edit-in-place), not the option. A
-`crates/` grep for `unshare`/`copy_on_write`/`privatise_form`/
-`privatize_form`/`duplicate_form`/`make_form_private`, and for any
-`EditSession` method matching clone/copy/unshare/private/duplicate
-applied to a form, returns zero hits as of this filing — confirm the
-same before ever citing this verb as already available.
-
-**Filed 2026-08-20 (two-hundred-and-ninth filing), the "option" half of
-decision 076's default** (edit-in-place is the default verb behaviour;
-this is the explicit, separate act of breaking the sharing first).
-Clone the invoked form to a new object; re-bind only the targeted page's
-`/XObject` name entry, privatising the page's `/Resources`/`/XObject`
-subdictionary first if either is inherited or shared — the same shape
-`Pass 111.0`/decision 075 used for a shared `/Contents` array. **Refuse
-by name when the invocation is nested inside another form** — re-binding
-there means editing the parent, which may itself be shared, and a default
-whose semantics depend on nesting depth is worse than one that always
-means the same thing (decision 076). Acceptance criterion: an unshare
-followed by an edit changes exactly one page (verified by render), every
-other invocation site byte-identical.
 
 ### `Pass 119.4` — retarget `reflow_block` / `add_text` into form XObjects
 

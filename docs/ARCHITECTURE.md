@@ -24406,6 +24406,31 @@ free 072.**
   covers the mechanism; this decision is an *application* of it, with a
   reasoned exception (reason 2) rather than a new case for the rule
   itself.
+  **★★★ RESOLVED 2026-08-27 (281st filing) — `R206` IS NOW SATISFIED FOR
+  THIS DECISION.** `Pass 119.1` (`unshare_form`) shipped, commit
+  `cd5e5cc` (`ROADMAP.md` *Shipped*, above) —
+  `EditSession::unshare_form(page_index, form: ObjId)`,
+  `CommandKind::UnshareForm`, `UnshareFormReport`, two new `EditError`
+  variants, and `pdfce-cli unshare-form`, verified live end to end
+  (`copy=7 refs_moved=1 changed=2 undo_identical=true`; the original
+  file is a byte prefix of the result, 792 → 1167 bytes). The claim
+  recorded in this decision has now passed
+  through all three states its own text carries, in order, and all
+  three are legible here: **stated compliant** (2026-08-20, false, struck
+  above) → **corrected to outstanding** (2026-08-27, 277th filing,
+  immediately above) → **satisfied** (2026-08-27, 281st filing, this
+  paragraph). Both `R206` options ship for the shared-form-XObject edit
+  default: edit-in-place (`Pass 119.0`, the default) and copy-on-write
+  (`Pass 119.1`, the explicit option) — as **two verbs**, not two
+  configurations of one, for the reason already given above (reason 2:
+  nesting makes the option not always expressible, so it could never
+  have been a flag on `edit_text`). `ROADMAP.md`'s `Pass 119.1` Backlog
+  entry — itself carrying the ★ OUTSTANDING `R206` OBLIGATION flag from
+  the 277th filing — is moved to *Shipped* in this same filing, with
+  that flag marked **resolved**, not deleted; see *Shipped*, above, for
+  the full record. No new standing rule or decision consumed — this is a
+  status change on an existing decision's own compliance claim, the same
+  class of act as the 277th filing's correction, not a new finding.
   ~~**Ceiling moves 075 → 076; next free 077.**~~ **Superseded by
   decision 077, below.**
 

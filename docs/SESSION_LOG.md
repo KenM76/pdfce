@@ -67308,3 +67308,91 @@ through a form to select the object inside it. `[x]` core, `[ ]` cli
   decisions `089` (next free `090`), `SESSION_LOG` filings **280**.
 
 ---
+
+## 2026-08-27 (281st filing) — `Pass 119.1` (`cd5e5cc`) SHIPS: `unshare_form` — the outstanding `R206` obligation flagged in the 277th filing is discharged, one week after decision 076 falsely claimed it was already met
+
+**Shipped:**
+- `Pass 119.1` (`cd5e5cc`) — `EditSession::unshare_form(page_index, form:
+  ObjId) -> Result<UnshareFormReport, EditError>`, new
+  `CommandKind::UnshareForm`, `UnshareFormReport`, two new `EditError`
+  variants (`FormNestedInAnotherForm`, kept distinct from
+  `FormNotOnPage`), and `pdfce-cli unshare-form`. Clones the invoked
+  form to a new object; re-binds only the targeted page's `/XObject`
+  name entry, privatising the page's `/Resources`/`/XObject`
+  subdictionary first if either is inherited or shared. Refuses by name
+  when the invocation is nested inside another form — re-binding there
+  would mean editing the parent, which may itself be shared.
+
+**This is not a new mint — it moves the Backlog entry the 277th filing
+flagged as an outstanding obligation, not an ordinary entry, to
+Shipped.** Decision 076 argued its own `R206` compliance on 2026-08-20
+by claiming "both are shipped." That was false the day it was written —
+`Pass 119.0` had shipped, `Pass 119.1` had only been filed — and the
+277th filing corrected the claim in place to "outstanding." This filing
+is the third and final state: **satisfied**. Decision 076 amended again,
+in the append-only style, at `ARCHITECTURE.md` §12 — all three states
+(compliant → outstanding → satisfied) now readable in order on the same
+decision.
+
+**Verified live, not inferred:**
+```
+unshare-form in.pdf --page 1 --form 6 -o out.pdf --verify-undo
+-> copy=7 refs_moved=1 changed=2 undo_identical=true
+   original is a byte prefix: True (792 -> 1167)
+```
+
+**Findings + decisions:**
+- **★★ The privatisation is the load-bearing half, and a test proves
+  it.** Two things must be privatised before the re-point, and skipping
+  either produces a "private" copy that is still shared: an inherited
+  `/Resources` dict (§7.7.3.4 — re-pointing an ancestor's copy re-points
+  it for every page under that ancestor), and a shared `/XObject`
+  subdictionary. `an_inherited_resources_dict_is_privatised_before_re_
+  pointing` was verified to **fail** against a build with the
+  privatisation removed (three of five did) — the naive implementation
+  looks correct on any fixture whose pages carry their own `/Resources`,
+  which is most of them, so the fixture had to be authored specifically
+  to catch it.
+- **★ The nested refusal reuses `Pass 136.0`'s containment paths**
+  rather than re-walking the form tree — a second walk would be a
+  second answer to "what forms does this page reach," and the two would
+  disagree on exactly the pathological files the cycle guard exists
+  for.
+- **Granularity is the page, not the invocation.** All of a page's
+  names for the form move to the one copy; splitting two invocations on
+  one page would need a per-invocation identity the object model does
+  not carry.
+- **The copy carries the original's value verbatim, span and all** — no
+  duplicated stream bytes until the copy is actually edited, which is
+  the point.
+
+**Tests + gates:** new `crates/pdfce-core/tests/unshare_form.rs`, 5
+tests, all pass; `cargo test --workspace` 4,370 passing, zero failures;
+fmt/clippy clean; 17 argument-free gates green; `check-core-api-verbs`
+green (verb documented in `docs/core-api/`, counts 145 → 146); `cargo
++nightly fuzz build` green on Windows; `cargo tree` invariant unaffected
+(not independently re-run this filing, no shell).
+
+**`FEATURES.md`:** row moved from *Planned* to *Implemented* (Text
+section) — `[x]` core, `[x]` cli (subcommand transcript above), `[ ]`
+gui. Not rounded up.
+
+**Ledger:** no new standing rule and no new decision — decision 076 is
+amended, not superseded, no new number consumed. Rules `R218` (next free
+`R219`), decisions `089` (next free `090`) — per the engineer, not
+independently re-run this filing.
+
+**Worth naming, because it is the session's actual pattern:** eight
+Passes shipped this session (`135.0`, `135.1`, `136.0`, `136.1`,
+`130.3`, and this one, among others). Three of them exist because **a
+claim in a document turned out to be false** — a stale doc comment
+about callers, a decision certifying its own rule-compliance on a Pass
+that had only been filed, and `--help` text promising a flag that never
+existed. None of the three was caught by a gate; all three were caught
+by somebody re-running the check the claim itself quoted.
+
+**For next session:**
+- Ledger unchanged this filing: rules `R218` (next free `R219`),
+  decisions `089` (next free `090`), `SESSION_LOG` filings **281**.
+
+---
