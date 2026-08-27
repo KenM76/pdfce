@@ -26,7 +26,9 @@ project were finally measured.
 - **`Pass 81.1`** (`4eaea20`) — **drawing a translucent highlight took two
   verbs, so one Ctrl+Z left an opaque one behind.** Now one verb and one undo
   entry, on both authoring routes.
-- **`3ffd86f`** — a docs repair with a finding in it. See `§D`.
+- **`3ffd86f`** — a docs repair with a finding in it (`§D`) — **and `8a8c9a8`,
+  which corrects a false claim `3ffd86f` itself introduced and shipped to a
+  consuming project. Read `§D` and `§E` together.**
 - **`51f94ca` + `96b6ded`** — `tools/icc-census`, the ICC profile population
   census the `iccce` project asked for on 2026-08-17 and never got.
 
@@ -34,9 +36,9 @@ project were finally measured.
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `96b6ded` | `git rev-parse --short HEAD` |
-| `git describe --tags` | `v0.14.0-50-g96b6ded` | `git describe --tags` |
-| `origin/main` | **2 behind — see `§B`, they are unfiled** | `git rev-list --count origin/main..main` |
+| `HEAD` | `f56b13a` | `git rev-parse --short HEAD` |
+| `git describe --tags` | `v0.14.0-53-gf56b13a` | `git describe --tags` |
+| `origin/main` | **LEVEL — everything is pushed and filed** | `git rev-list --count origin/main..main` |
 | tag at `HEAD` | none; highest is `v0.14.0` | `git tag --points-at HEAD` |
 | tests | **4,410 passing, 0 failing** | `cargo test --workspace` |
 | gates | **19 on disk; 18 run bare; all green** | `ls tools/check-*` |
@@ -62,25 +64,19 @@ repository is public, so a push publishes (`LEGAL.md` §1.1). That gate scans
 
 ---
 
-## §B — DO THIS FIRST: two commits are unfiled
+## §B — NOTHING IS UNFILED AND NOTHING IS UNPUSHED
 
-`check-commits-filed.py` is **red** at `HEAD`, naming `51f94ca`, with
-`96b6ded` deferred as the tip.
+`check-commits-filed.py` is **green** at `HEAD` (616 code commits, tip
+included) and `origin/main` is **level**. Verified after the last push.
 
-**A librarian dispatch covering `3ffd86f`, `51f94ca` and `96b6ded` was in
-flight when this file was written.** Check `git log` first — if a
-`librarian: 293rd filing` commit exists, this is done; if not, dispatch one
-with those three commits' full messages (`git show --format=%B <hash>`).
+★ **`R217` is why that matters and it was reached twice in two days:** the
+gate defers the tip — a commit cannot cite its own hash — so **one** unfiled
+commit on `main` is safe and the moment a **second** lands, the first is
+checked in full. *One unfiled commit may sit at the tip. Never two.*
 
-⇒ **`R217`: one unfiled commit may sit at the tip of `main`. Never two.**
-That gate defers the tip — a commit cannot cite its own hash — so pushing
-*one* unfiled commit is safe and the moment a second lands the first is
-checked in full. This is the second time in two days the two-unfiled state
-has been reached.
-
-★ **`3ffd86f` is docs-only, so `check-commits-filed.py` will never ask for
-it.** It counts *code* commits. It carries a real finding anyway (`§D`), and
-nothing but a human will notice if it goes unfiled.
+★ **A docs-only commit is invisible to that gate**, which counts *code*
+commits. `3ffd86f` carried a real finding and would have gone unfiled with
+nothing complaining. If you write one, file it deliberately.
 
 ---
 
@@ -121,6 +117,24 @@ make this bold*.
 gate that can be extended. The repair was structural:
 `docs/core-api/03-capabilities.md` **§3.6**, written capability-shaped.
 
+★★★ **AND THE REPAIR SHIPPED A FALSE CLAIM OF ITS OWN, TO THE SAME PROJECT.**
+§3.6 asserted bold and italic were unavailable on existing text. They are
+not — see `§E`. I had measured `set_font`'s refusal, confirmed it was real,
+and **inferred a capability gap from a single verb without asking whether a
+second verb reached the same operator goal.**
+
+> **An absence claim about pdfce is a claim about EVERY route, and I checked
+> one.**
+
+That is `R220`'s second clause, and it was minted at n=2 against this
+project's usual bar precisely because **the second instance occurred inside
+the repair for the first**. It was caught by the librarian during the filing
+sweep — not by me, and not before the reply was sent.
+
+★ **`docs/FEATURES.md` had been right the whole time.** When a
+capability-shaped document and a mechanism-shaped one disagree about what
+pdfce can do, **trust the capability-shaped one.**
+
 ⇒ **A verb ships in two documents, not one.** `02` answers *what does this
 call do*; `03` answers *how do I do X*. A verb only in `02` is reachable only
 by somebody who already knows its name.
@@ -129,37 +143,37 @@ by somebody who already knows its name.
 
 ## §E — WHAT IS OPEN AND ACTIONABLE
 
-### `FF-C` wired into `format_text` — the highest-value scoped-but-unstarted item
+### `Pass 142.0` / `142.1` — a REAL bold/italic face, and the missing pre-flight
 
-**Measured, not guessed:**
+★★ **Read this before believing anything about bold.** An earlier draft of
+this file, `03-capabilities.md` §3.6, and a reply already sent to `pdfceGUI`
+all said **bold and italic do not work on existing text**. That is **false**,
+and the correction is `8a8c9a8`.
 
-```
-$ pdfce-cli format-text runs-two-explicit.pdf --find ALPHA \
-      --set-font Helvetica-Bold --output bold.pdf
-pdfce-cli: format-text refused: the target font "Helvetica-Bold" is not an
-existing font resource on this page; adding a new font resource / embedding
-a new face is deferred (FF-C)
-```
+`FormatRequest::set_synthetic` — `--bold-synthetic` / `--italic-synthetic` —
+shipped in `Pass 19.2` (`ebe35d8`, 2026-08-03). `gate_synthesis`
+(`format.rs:2132`) refuses synthesis **exactly when a real face IS a page
+resource**, the precise complement of `set_font`'s predicate, so **between
+the two verbs every page is covered** and bold is reachable everywhere. The
+only real refusal is synthetic *italic* where a `Td`/`TD`/`T*` follows the
+run in the same text object (a `Tm` sets the text **line** matrix too,
+§9.4.2 Table 108, so the next line would land shifted).
 
-`set_font` **selects** a font; it does not **create** one. So of the five
-restyle buttons `pdfceGUI` described: size and colour always work, face works
-if the target is already resident, and **bold and italic do not**, on any page
-not already carrying such a resource — which is most pages.
+**What `FF-C` blocks is a *real* bold/italic FACE** — a typographic-quality
+gap, not a capability gap. `142.0` is that; `142.1` is the font-resource
+pre-flight, so a shell can ask *"is there a real Bold here?"* before pressing
+anything instead of driving the control from a refusal.
 
-★ For a UI this is worse than a run-level limit, and it is why it is worth a
-Pass: **the predicate is a property of the PAGE, not of the selection**, so
-the same button on identical-looking text behaves differently in two files.
+★ **The priority question is with `pdfceGUI`, and it is smaller than it
+looks:** do their operators need a real face, or is a disclosed synthetic
+weight enough for markup and title-block work? If synthetic suffices, `142.0`
+drops down the queue. Their answer decides it, not us.
 
-The machinery exists — `add_text` already creates Standard-14 resources and
-embeds donor faces. What does not exist is a `FormatPlan` that can carry new
-objects and a resource-dictionary patch; today it produces a content buffer
-and nothing else. `R107` applies: FF-C must only ever **add** font resources,
-never rewrite an existing one.
-
-**Not scoped as a Pass, deliberately** — it was put back to `pdfceGUI` as a
-question in
-`open/reply_restyle_already_exists_and_the_real_gap_is_narrower_than_your_table.md`.
-If they say bold matters, scope it.
+**The mechanism, for whoever builds it:** `add_text` already creates
+Standard-14 resources and embeds donor faces. What is missing is a
+`FormatPlan` that can carry new objects and a resource-dictionary patch —
+today it produces a content buffer and nothing else. `R107` applies: FF-C
+must only ever **add** font resources, never rewrite an existing one.
 
 ### `Pass 140.0` — the five-colorant `DeviceN` image
 
