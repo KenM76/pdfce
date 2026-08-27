@@ -1165,7 +1165,8 @@ That is a distinct failure and this section is the repair for it.
 | **size** | `set_size: Option<f64>` | ✅ always. Changes only the `Tf` operand; the line is relaid out and `advance_delta` is reported |
 | **colour** | `set_fill: Option<NewFill>` | ✅ always. **Stores the chosen device space** (`rgb:`→`rg`, `cmyk:`→`k`, `gray:`→`g`) — pdfce does *not* force-convert to DeviceRGB the way Acrobat does. A run originally painted in a non-device space is disclosed as a narrowing conversion |
 | **face** | `set_font: Option<FontSelector>` | ⚠️ **only to a font that is ALREADY a resource on the page** — see below |
-| **bold / italic** | `set_font` | ❌ in general, for that reason |
+| **bold** | `set_synthetic` (`StyleSynthesis`) | ✅ **on any page**, as a disclosed *synthetic* weight — see §3.6.1 |
+| **italic** | `set_synthetic` | ✅ as a disclosed *synthetic* slant, except where a `Td`/`TD`/`T*` follows the run in the same text object — refused by name, §3.6.1 |
 | character spacing | `set_char_spacing` (`Tc`, §9.3.2) | ✅ |
 | word spacing | `set_word_spacing` (`Tw`, §9.3.3) | ✅ simple fonts; **refused by name on a composite run** (`Tw` is spec-void for multi-byte codes, so emitting it would do nothing) |
 | horizontal scale | `set_h_scale` (`Tz`, §9.3.4) | ✅ |
@@ -1192,20 +1193,69 @@ a new face is deferred (FF-C)
 
 **`set_font` selects; it does not create.** The target must already be in
 `/Resources /Font`, located by resource key or by `/BaseFont` (subset tag
-stripped per §9.6.4).
+stripped per §9.6.4). `FF-C` is the tracked identifier for *add a font
+resource / embed a new face*; `add_text` already does it for Standard-14 and
+(via `--embed-font`) for donor faces, but it is not wired into `format_text`,
+whose plan currently produces a content buffer and no new objects. Filed as
+Backlog `Pass 142.0`, with the missing pre-flight as `142.1`.
+
+#### ★★ 3.6.1 But bold and italic ARE reachable — `set_synthetic`
+
+**This paragraph replaces a wrong one. The first draft of §3.6 said bold and
+italic were unavailable on existing text, and that claim was sent to a
+consuming project before it was checked.** It is corrected here rather than
+quietly deleted, because the *shape* of the error is worth more than the fact:
+**I measured `set_font`'s refusal, found it real, and inferred a capability
+gap from a single verb — without asking whether a second verb reached the
+same operator goal.** An absence claim about pdfce is a claim about *all*
+routes, and it was checked against one.
+
+`FormatRequest::set_synthetic` shipped in **`Pass 19.2`** (`ebe35d8`,
+2026-08-03, decision 019 §3.6, `R90`). CLI: `--bold-synthetic`,
+`--italic-synthetic`.
+
+Measured on §3.6's own worked example — the *same* Helvetica-only page whose
+`--set-font Helvetica-Bold` refusal is quoted above:
+
+```
+$ pdfce-cli format-text runs-two-explicit.pdf --find ALPHA       --bold-synthetic --output bold.pdf
+    - synthetic bold: the run is painted in text rendering mode 2 (fill,
+      THEN stroke — §9.3.6 Table 106) with a stroke width of 0.22 …
+```
+
+**★ `gate_synthesis` is the exact complement of `set_font`'s predicate.** It
+refuses synthesis **when a real face IS a page resource** — *"No font
+resources to search: nothing better exists, so the fallback is genuinely the
+only option. Proceed."* So between the two verbs, **every page is covered**:
+where a real Bold exists, `set_font` uses it and synthesis is refused; where
+none exists, synthesis applies and `set_font` refuses.
+
+`R90` is why it is never silent: synthesis is applied **only when asked for
+explicitly**, never as a preference, and the report says so in the operator's
+words — *"a FALLBACK, not an alternative to a real face […] the letterforms
+are the regular face's, thickened."*
+
+**The one real refusal, and it is narrow.** Synthetic *italic* premultiplies
+a shear into the run's text matrix, which is **not** text state and so is not
+covered by the restore ladder. It brackets the run with two absolute `Tm`
+operators — and a `Tm` sets the text **line** matrix too (§9.4.2 Table 108),
+so a following `Td`/`TD`/`T*` would derive its line from pdfce's matrix
+instead of the producer's origin and land shifted by this run's advance.
+Refused by name rather than mis-positioned. Bold has no equivalent limit: it
+is `Tr` + `w` + a stroking colour, all restored by value.
+
+⇒ **What FF-C actually blocks is a *real* bold or italic FACE — a
+typographic-quality gap, not a capability gap.** For a UI: **do not grey out
+a bold button.** Offer it, and surface the synthesis disclosure when it fires.
+
+#### The `set_font` limit, stated for what it is
 
 For a UI this is worse than a run-level limit would be: the predicate is a
 property of the **page**, not of the selection, so the same button on
 identical-looking text behaves differently in two files. It is a **named
 refusal** (`FormatError::TargetFontMissing`), never a silent no-op, so a
 shell can drive its control from the error — but a pre-flight enumerating a
-page's font resources would be better, and none exists yet.
-
-`FF-C` is the tracked identifier for *add a font resource / embed a new
-face*. `add_text` already does it, for Standard-14 and (via `--embed-font`)
-for donor faces; it is not wired into `format_text`, whose plan currently
-produces a new content buffer and no new objects. **Not scoped as a Pass —
-ask if bold/italic matters.**
+page's font resources would be better, and none exists yet (`Pass 142.1`).
 
 ### What is refused, and it is never a silent substitution
 
