@@ -748,14 +748,38 @@ pub struct Diagnostics {
     /// than failing.
     pub cmyk_buffer_refused: usize,
     /// Pixels that entered the colorant buffer through the **sRGB bridge**
-    /// rather than as authored ink — images, shadings, and the results of
-    /// transparency groups.
+    /// rather than as authored ink.
     ///
-    /// A disclosure, not a shortfall. An image's samples were flattened to
-    /// sRGB inside the decode loop long before any canvas saw them, so
-    /// bridging is the only information that reaches the compositor. The
-    /// count exists so that "this page composited in ink" cannot be read
-    /// as "every colour on this page was authored ink".
+    /// A disclosure, not a shortfall. The count exists so that "this page
+    /// composited in ink" cannot be read as "every colour on this page was
+    /// authored ink".
+    ///
+    /// ## ★ WHAT IS STILL COUNTED HERE HAS SHRUNK TWICE, AND A COMPARISON
+    /// ACROSS EITHER PASS IS A COMPARISON OF TWO DIFFERENT QUESTIONS
+    ///
+    /// This said "images, shadings, and the results of transparency groups",
+    /// and both of the first two are now wrong:
+    ///
+    /// - **Images** stopped bridging in `Pass 130.1`. A `DeviceCMYK` image,
+    ///   including one behind an `/Indexed` palette, carries its colorants
+    ///   forward and is counted in [`Self::cmyk_native_image_pixels`]
+    ///   instead. What remains here is an image with **no ink to keep** —
+    ///   one authored in an additive space, which has to be converted
+    ///   because there is nothing else to do with it.
+    /// - **Analytic shadings** stopped bridging in `Pass 137.0`, and this
+    ///   doc comment is the one that was left saying otherwise. An axial,
+    ///   radial or function-based shading whose ramp carries colorants now
+    ///   composites natively whether or not overprint is in force.
+    ///
+    /// **What is left**: additive images, **mesh** shadings (types 4–7,
+    /// whose colour is resolved when the mesh is parsed and has no colorant
+    /// carrier to survive in), and the results of transparency groups.
+    ///
+    /// ⇒ **A FALL IN THIS NUMBER IS THE INTENDED OUTCOME, NOT A COUNTER
+    /// GOING QUIET.** It measures ink identity lost on the way to the
+    /// compositor; when less is lost it reports less. A reader who treats
+    /// it as "how much shading work happened" will misread every one of
+    /// those three changes as regression.
     pub cmyk_bridged_pixels: u64,
     /// Pixels a `DeviceCMYK` image contributed **as authored ink**, with no
     /// conversion in either direction.
@@ -4528,6 +4552,45 @@ impl Interpreter<'_> {
             // would "quietly empty a counter operators read". It empties it
             // because the shortfall it measures is smaller, which is the
             // outcome that counter exists to report.
+            //
+            // ★★★ MEASURED AFTERWARDS, AND THE FIRST NUMBERS WERE MISLABELLED
+            // ------------------------------------------------------------
+            // The commit that shipped this carried a four-row table headed
+            // "the four shading pairs of the sheet". **The sheet has TWO
+            // shading panels of four pairs each**, and the table silently
+            // mixed them: it reported one pair as an unfixed MESH when that
+            // pair is a type 3 radial that had in fact been fixed, and its
+            // apparent 23.8 was edge antialiasing on a hard-edged circle
+            // rather than a colour error at all.
+            //
+            // Re-measured properly -- swatch bounds found by scanning for
+            // non-white runs instead of guessed, then inset 6-8 px so no
+            // border pixel enters the mean:
+            //
+            //   panel A   a  type 7 mesh   24.06   <- STILL WRONG
+            //             b  type 3         3.52
+            //             c  type 2         1.16
+            //             d  type 7 mesh   16.87   <- STILL WRONG
+            //   panel B   a  type 3         5.14
+            //             b  type 2         1.40
+            //             c  type 2         1.43
+            //             d  type 3         8.74   edge only; the two mean
+            //                                      colours agree to 0.7/255
+            //
+            // ⇒ Six of eight pairs correct; **the two that remain are
+            // exactly the two type 7 meshes**, which is what the commit
+            // concluded -- by luck rather than from these numbers. Both are
+            // `/ShadingType 7 /ColorSpace /DeviceCMYK` with NO `/Function`,
+            // so their colour is per-vertex ink resolved to sRGB inside
+            // `mesh::read_shade` during PARSING. `Shade::Rgb` has nowhere to
+            // put colorants, which is why the route above cannot reach them
+            // and why the fix for them is a carrier, not a wider gate.
+            //
+            // ★ The lesson is the one this project keeps relearning: a crop
+            // rectangle chosen by eye is a MEASUREMENT INSTRUMENT, and an
+            // unverified one reports edge misalignment as colour error in
+            // both directions -- it hid a real defect's identity and
+            // invented a false one in the same table.
             if !painted_natively
                 && let Some(ramp) = shading.ramp.as_ref()
                 && ramp.has_colorants()
