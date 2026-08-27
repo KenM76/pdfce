@@ -214,7 +214,7 @@ docs alone, the docs are incomplete.
 Fixture PDFs are synthetic or clearly rights-cleared only — never a
 downloaded real-world PDF of unknown provenance. See `LEGAL.md` §5.
 
-### 8. License is MIT; publishing still needs a go-ahead
+### 8. License is MIT; pushing `main` is standing-authorized, releasing still needs a go-ahead
 
 **Corrected 2026-08-05.** This rule said the license was undecided and
 that the project must not be described as "open source". That has been
@@ -224,11 +224,45 @@ wrong since 2026-08-01, when the operator chose **MIT** (`LEGAL.md` §1,
 permissive — zero copyleft, verified against the generated
 `THIRD_PARTY_LICENSES.md`.
 
-What still holds, and is the part that matters day to day:
+**★★ AMENDED 2026-08-27 (decision 090).** The bullet immediately below
+this note used to read, unqualified:
 
-- **Do not push or cut a release** without an explicit, current
-  go-ahead. The license does not block it; publishing is the operator's
-  act, not the agent's, and each one is its own decision.
+> ~~"**Do not push or cut a release** without an explicit, current
+> go-ahead. The license does not block it; publishing is the operator's
+> act, not the agent's, and each one is its own decision."~~
+
+**Ken's ruling, verbatim, given after being asked three times in one
+session whether to push while `main` sat 24 commits ahead of
+`origin`: "always push."** That grants the **push** half of the bullet
+above as a **standing** authority — no more asking, this session or any
+future one, before an ordinary fast-forward push of `main` to
+`origin/main`. It does **not** grant the **release** half; the operator
+answered about one act, and the rule named two. See decision 090 for the
+full reasoning and the precedent (decision 061) for narrowing a broad
+operator word rather than reading it generously.
+
+What holds now, replacing the struck bullet:
+
+- **Pushing `main` (ordinary fast-forward) no longer needs a go-ahead —
+  it is standing-authorized as of 2026-08-27 ("always push").** Still
+  gated, exactly as before, and still needing an **explicit, current**
+  go-ahead each time:
+  - **cutting a tag or a release** — a release is a claim that a state is
+    fit to use, a different act from making commits visible;
+  - **`git push --force`, or any push that rewrites published history** —
+    destructive and unrecoverable for anyone who already cloned, and this
+    project has direct evidence of the failure mode: rewriting a commit
+    breaks every document that cites its hash
+    (`tools/check-cited-commits-exist.py`, `0d9f4df`, found fourteen
+    pre-existing casualties from exactly this cause);
+  - **pushing any branch other than `main`, or creating remote branches or
+    tags** — the ruling was given about `main`, not about a different act
+    it was never asked about.
+  Scrub the public-facing gate (`check-suite-name-absent.py`) green
+  **before** pushing regardless — the repository is public, so a push
+  publishes (`LEGAL.md` §1.1) — and read CI's colour from GitHub itself
+  rather than carry forward a sentence that assumed one. That habit
+  matters *more*, not less, now that pushing no longer stops to ask.
 - **★ THE PROJECT IS ALREADY PUBLIC. This bullet said "there is still no
   git remote configured" and that was FALSE** —
   `github.com/KenM76/pdfce` is public, created 2026-08-09 04:56Z, `main`

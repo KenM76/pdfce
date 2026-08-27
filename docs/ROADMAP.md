@@ -96,6 +96,46 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Decision 090 — "ALWAYS PUSH" GRANTS STANDING AUTHORITY FOR THE PUSH HALF OF PROJECT RULE 8, NOT THE RELEASE HALF — no Pass ID, docs/decision-only filing — 2026-08-27 (285th filing)
+
+**Ruling, verbatim.** Ken, 2026-08-27, after being asked three times in one
+session whether to push while `main` sat 24 commits ahead of `origin`:
+**"always push."** `git push origin main` moved `origin/main` from
+`a3ad2a5` to `640d817` — 24 commits, `origin` level afterward. Scrub gate
+(`check-suite-name-absent.py`) green before pushing, per standing
+reasoning (this repo is public, a push publishes). CI run `33065959004`
+was in progress at push time; **its colour is not asserted by this
+filing** — hard rule 8.
+
+**What it grants:** an ordinary fast-forward push of `main` no longer
+needs a per-push go-ahead. **What it does not grant, narrowed
+deliberately** (precedent: decision 061): cutting a tag/release,
+force-pushing or rewriting published history, and pushing any branch
+other than `main` — all still need their own explicit, current
+go-ahead. Full reasoning: `ARCHITECTURE.md` §12 decision **090**.
+
+**Files corrected in this filing:** `CLAUDE.md` rule 8 (amended in
+place, old wording kept legible and struck); `docs/LEGAL.md` §1 and
+§1.1 (two dated correction notes, not a rewrite — six further
+occurrences of the same bundled phrase deeper in §7's OCR-licensing
+entries were left alone as correctly dated historical record, per that
+file's own "correct as of its date" convention; flagged as optional
+follow-up, not swept). `docs/NEXT_SESSION.md`'s now-false "never been
+pushed" cold-start facts are **left to the engineer**, who owns that
+file and said so in the dispatch.
+
+#### `FEATURES.md`
+
+No row touched — a push-authority ruling is process, not a capability.
+
+#### Ledger
+
+No new Pass, no new standing rule (`R218` unchanged, next free `R219`).
+**Decision ceiling moves 089 → 090; next free 091.** Confirm with
+`python tools/check-ledger-numbers.py`.
+
+---
+
 ### `0d9f4df` — A GATE FOR CITED COMMITS THAT NO LONGER EXIST, AND FOURTEEN THAT ALREADY DIDN'T — no Pass ID, tools/CI commit — 2026-08-27 (284th filing)
 
 **Sourcing.** Hash and adjacency **verified by this role directly**, by

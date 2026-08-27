@@ -67661,3 +67661,99 @@ file's own scope rule.
 next-session notes carry any open items from the rest of the session.
 
 ---
+
+## 2026-08-27 (285th filing) — Operator ruling "always push" grants standing push authority (decision 090); rule 8 amended in place; `main` pushed `a3ad2a5..640d817`, CI colour not yet asserted
+
+**Documentation-only filing. No Pass shipped, no code changed.** Files:
+`docs/ARCHITECTURE.md` (§12, decision 090), `CLAUDE.md` (rule 8, amended
+in place), `docs/LEGAL.md` (§1 and §1.1, two dated correction notes).
+
+**The ruling, verbatim.** Ken, 2026-08-27, given after being asked three
+times across the session whether to push while `main` sat 24 commits
+ahead of `origin`: **"always push."**
+
+**What it grants and what it does not, in one line each** (full reasoning
+in decision 090): the **push** half of project rule 8 is now standing —
+no per-push go-ahead needed for an ordinary fast-forward push of `main`.
+The **release** half is untouched — cutting a tag, force-pushing or
+rewriting published history, and pushing any branch other than `main` all
+still need their own explicit, current go-ahead. The narrowing follows the
+same shape as decision 061 (an operator's broad word narrowed rather than
+read generously, with the engineer declining to widen a neighbouring
+clause on its strength).
+
+**What was done with it, this session.** `git push origin main` moved
+`origin/main` from `a3ad2a5` to `640d817` — 24 commits, `origin` now
+level. The public-scrub gate (`check-suite-name-absent.py`) was run and
+green **before** the push, per the standing reasoning that this repository
+is public and a push publishes it (`LEGAL.md` §1.1). CI run `33065959004`
+was in progress at push time. **This filing does not record its colour** —
+per hard rule 8, a figure not read is not asserted, and this project has a
+four-times-repeated history of a red tag being missed because a
+carried-forward sentence was mistaken for a live check.
+
+**Why this earned a decision record rather than only a rule-8 line-edit.**
+Rule 8's own 2026-08-05 correction already names push and release as *"each
+one is its own decision"* — plural. A filing that folded today's ruling
+into both halves would repeat the exact collapse rule 4's own history
+warns against (a broad reading taken further than the operator's words
+actually went, twice, both already recorded). Decision 090 exists so a
+future session has the narrowing's reasons on hand rather than having to
+re-derive them from the bare rule text.
+
+**Files corrected, and how, given two of the three are append-only in
+spirit:**
+- `ARCHITECTURE.md` §12 — new dated entry, decision **090**. Ceiling moves
+  089 → 090; next free 091. No standing rule minted; `R218` unchanged,
+  next free `R219`.
+- `CLAUDE.md` rule 8 — amended **in place**, old wording kept legible and
+  struck, per this project's own append-only-in-substance convention for
+  standing rules (the file itself is a living document, not a decision
+  ledger, but the same "don't silently rewrite what changed" discipline
+  applies). Heading changed from *"publishing still needs a go-ahead"* to
+  *"pushing `main` is standing-authorized, releasing still needs a
+  go-ahead"* so the title itself no longer overclaims.
+- `docs/LEGAL.md` — **two** dated correction notes added, not a rewrite:
+  one beside the "a push still requires the operator's own act" sentence
+  in §1 (2026-08-09 material), one beside the 2026-08-10 operator-decision
+  box in §1.1 whose closing clause — *"§1's rule that a push is the
+  operator's act still holds"* — was the single most current-reading
+  assertion in the file and the one most likely to mislead if left
+  bare. **Not swept:** roughly six further occurrences of "publish gate …
+  project rule 8 … still-ungranted" deeper in §7 (the OCR-model licensing
+  decision entries, 2026-08-07 through 2026-08-12) were left alone —
+  they are dated entries correctly describing their own date, already
+  carry this file's own "correct as of its date, not edited" convention,
+  and the engineer's dispatch scoped the check to §1. Flagged here as
+  optional follow-up, not done speculatively.
+
+**Docs not touched, and why, both by instruction:**
+- `docs/NEXT_SESSION.md` — its cold-start table says *"22 commits BEHIND
+  main — none of this is PUSHED"* / *"CI at HEAD: UNKNOWABLE — HEAD HAS
+  NEVER BEEN PUSHED,"* both now false. **Left to the engineer**, who owns
+  the file and said so explicitly in the dispatch.
+- No `SESSION_LOG` entry was requested by name in the dispatch, but the
+  dispatch's closing section named the CI-colour discipline as *"worth the
+  session log"* — filed here as the connective tissue between the decision
+  record and the rule-8 edit, per this role's usual practice of pairing a
+  decision with a session note.
+
+**`FEATURES.md`:** no row touched — a push-authority ruling is process,
+not a capability, per this file's own scope rule.
+
+**One thing worth carrying forward, in the operator's and the engineer's
+own words, because it is the argument for why this still matters once
+asking is no longer required:** *when pushing stops requiring a decision,
+nobody is forced to stop and look at anything, and the only remaining
+check is habit.* Four releases in this project's history already went out
+on a tag whose CI was red for exactly that reason.
+
+**Still in flight:** CI run `33065959004`'s outcome — not yet read by this
+role, no shell this filing. Whoever next confirms it should record it as a
+new dated fact, not append it here after the fact under this filing's own
+timestamp.
+
+**For next session:** none named beyond the CI-colour check above; the
+engineer's own next-session notes carry any other open items.
+
+---

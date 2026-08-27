@@ -55,6 +55,13 @@ rather than trust this sentence too — `git remote -v` and
 A push still requires the operator's own act; what changed is that the
 act happened. See §1.1 for what came with it.
 
+**★ NARROWED 2026-08-27 (decision 090).** "A push still requires the
+operator's own act" no longer holds for an ordinary fast-forward push of
+`main` — Ken's ruling *"always push"* made that standing-authorized. It
+still holds, unchanged, for cutting a release, force-pushing, or pushing
+any branch other than `main`. See §1.1's own 2026-08-27 amendment and
+`CLAUDE.md` rule 8 for the full text.
+
 Historical note (context for why this took the shape it did):
 realistic candidates presented to the operator were **MIT or
 Apache-2.0** (permissive, easiest adoption/embedding) vs. **GPL-3.0 or
@@ -97,6 +104,21 @@ dependencies). The operator chose MIT.
 > over-read it: it settles the material already in history. It is **not**
 > a standing licence to publish anything else, and §1's rule that a push
 > is the operator's act still holds.
+
+> **★ AMENDED 2026-08-27 (decision 090).** The closing clause above —
+> *"§1's rule that a push is the operator's act still holds"* — is now
+> **half true**. Ken's ruling *"always push"* (given 2026-08-27, in answer
+> to being asked three times in one session) grants an ordinary
+> fast-forward push of `main` to `origin/main` **standing** authority: no
+> further per-push go-ahead is needed. **What survives unchanged**: this
+> section's own point — that the 2026-08-10 decision was not a standing
+> licence to publish *other* material — is untouched, because that was
+> never about the push mechanic. **What also survives, named explicitly so
+> this paragraph is not over-read the other way:** cutting a tag or
+> release, force-pushing or rewriting published history, and pushing any
+> branch other than `main` all still need their own explicit, current
+> go-ahead. See `CLAUDE.md` rule 8 and `ARCHITECTURE.md` §12 decision 090
+> for the full ruling and its narrowings.
 
 **The facts, measured rather than estimated.**
 

@@ -25631,3 +25631,85 @@ free 072.**
   `R219`.
 
   **Ceiling moves 088 → 089; next free 090.**
+
+- **2026-08-27 — Decision 090. "ALWAYS PUSH" GRANTS STANDING AUTHORITY FOR
+  THE PUSH HALF OF PROJECT RULE 8, NOT THE RELEASE HALF, AND NOT ANY PUSH
+  THAT REWRITES OR LEAVES `main`.** (librarian filing, 285th, no shell.)
+
+  **The ruling, verbatim.** Ken, 2026-08-27, in answer to being asked three
+  times across the session whether to push while `main` sat 24 commits
+  ahead of `origin`: **"always push."**
+
+  **What happened around it.** `git push origin main` moved `origin/main`
+  from `a3ad2a5` to `640d817` — 24 commits, 0 ahead afterward. The
+  scrub gate (`check-suite-name-absent.py`) was run and green **before**
+  the push, on the standing reasoning that this repository is public and
+  a push publishes (`LEGAL.md` §1.1). CI run `33065959004` was in progress
+  at push time; its colour is reported, if at all, by whichever filing
+  actually read it — this entry does not assert one.
+
+  **What it grants.** Project rule 8's push clause — *"do not push …
+  without an explicit, current go-ahead"* — is satisfied **standingly**
+  from this ruling forward. No future session needs to ask before an
+  ordinary fast-forward push of `main` to `origin/main`.
+
+  **★ What it does NOT grant, narrowed deliberately rather than read
+  generously, because the sentence named one act and the rule bundles
+  two:**
+
+  1. **Cutting a tag or a release.** A release is a claim that a
+     particular state is fit to use — a different act from making commits
+     visible. `v0.14.0` remains the highest tag; nothing this session was
+     tagged. Rule 8's release clause stands exactly as it did.
+  2. **`git push --force`, or any push that rewrites published history.**
+     "Push" in ordinary usage means fast-forward. A force-push *removes*
+     commits from a public repository — destructive, and unrecoverable for
+     anyone who already cloned. This is not a hypothetical risk invented
+     for symmetry: this same session shipped
+     `tools/check-cited-commits-exist.py` (`0d9f4df`, 284th filing)
+     precisely because rewriting a commit breaks every document that cites
+     its hash, and found fourteen pre-existing casualties from exactly that
+     mechanism. A standing force-push authority would industrialise the
+     failure the gate was just built to catch.
+  3. **Pushing any branch other than `main`, or creating remote branches or
+     tags.** The ruling was given about `main` sitting ahead of `origin`;
+     it does not reach a act it was never asked about.
+
+  **The precedent for narrowing rather than maximising a broad operator
+  word: decision 061.** There the operator narrowed a network rule and the
+  engineer explicitly declined to widen a neighbouring clause on the
+  strength of it. Same reasoning, opposite direction here — a broad grant
+  does not license the neighbouring act either. **If the operator wants
+  the release half too, that is one sentence and it is cheap to ask once;
+  guessing it is not.**
+
+  **Why this is a decision and not merely a rule-8 edit.** The distinction
+  matters because it is exactly the shape rule 8 already got wrong once:
+  the 2026-08-05 correction to rule 8 records that "the license does not
+  block [publishing]; publishing is the operator's act, not the agent's,
+  and each one is its own decision" — plural, deliberately. This ruling
+  answers one of those two decisions. Recording it as though it answered
+  both would be the same collapse rule 4's history already warns against
+  (two narrowings, both because a broad reading was taken further than the
+  operator's own words went).
+
+  **What stays true and is worth restating precisely because the gate is
+  now gone:** the habit of reading CI from GitHub before recording a
+  colour is the only remaining check once pushing no longer requires a
+  stop-and-ask. Four releases in this project's history went out on a tag
+  whose CI run was red, each time because a carried-forward sentence was
+  mistaken for a live query rather than re-verified. **A standing push
+  authority makes that habit more load-bearing, not less** — nobody is
+  forced to stop and look at anything now; only habit remains.
+
+  **Body-section update, filed in this same edit:** none required. §12 is
+  the decision log itself; no other `ARCHITECTURE.md` body section states
+  rule 8's push/release split, so there is nothing else to keep
+  internally consistent here. The editable mirror of this fact is
+  `CLAUDE.md` rule 8 (amended in the same filing) and `docs/LEGAL.md` §1
+  / §1.1 (checked the same filing; see the correction there if one was
+  needed).
+
+  **No new standing rule number.** Rule 8 is amended, not replaced;
+  `R218` is unchanged, next free `R219`. **Ceiling moves 089 → 090; next
+  free 091.**

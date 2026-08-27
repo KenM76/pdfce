@@ -27,27 +27,42 @@ other four came from the operator's own reports on the GUI channel:**
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `0d9f4df` | `git rev-parse --short HEAD` |
-| `git describe --tags` | `v0.14.0-27-g0d9f4df` | `git describe --tags` |
-| `origin/main` | ★ **22 commits BEHIND `main` — none of this is PUSHED** | `git rev-list --count origin/main..main` |
+| `HEAD` | `640d817` | `git rev-parse --short HEAD` |
+| `git describe --tags` | `v0.14.0-29-g640d817` | `git describe --tags` |
+| `origin/main` | **LEVEL — 0 ahead. Everything is PUSHED.** | `git rev-list --count origin/main..main` |
 | tag at `HEAD` | none; highest is `v0.14.0` | `git tag --points-at HEAD` |
 | working tree | **clean** | `git status --porcelain` |
-| newest backup bundle | `pdfce-20260827-end-0d9f4df-full.bundle`, `git bundle verify` **okay** — covers every commit including this handoff's predecessor | `ls -lt D:\Dev\pdfce-backups\` |
+| newest backup bundle | `pdfce-20260827-final-640d817-full.bundle`, `git bundle verify` **okay**, *"records a complete history"* | `ls -lt D:\Dev\pdfce-backups\` |
 | gates on disk | **19**; 18 run with no arguments | `ls tools/check-*` |
-| CI at `HEAD` | **UNKNOWABLE — `HEAD` HAS NEVER BEEN PUSHED.** No run exists to read | — |
+| CI at `640d817` | ★ **GREEN — run `33065959004`, all 10 jobs success, READ from GitHub rather than assumed** | `gh run list --branch main --limit 3` |
 | `docs/core-api` verbs | **146** | `python tools/check-core-api-verbs.py` |
 | `crates/pdfce-core/src/edit.rs` | **32,159** lines | `grep -c "" …` |
 
-★★ **`main` is 22 commits ahead of `origin` and deliberately NOT pushed.**
-`CLAUDE.md` rule 8 wants a current go-ahead and none was given; the operator was
-asked twice and the question is still open. Everything is bundled and the bundle
-verifies, so nothing is at risk. **Ask before you push.**
+★★★ **PUSHING NO LONGER NEEDS TO BE ASKED — decision `090`, 2026-08-27.**
+Ken's ruling, verbatim and in full: ***"always push."*** An ordinary
+fast-forward push of `main` is **standing-authorized**; do not ask again.
 
-★ **A NEW GATE EXISTS: `check-cited-commits-exist.py`.** Every commit hash cited
-anywhere under `docs/` must be an ancestor of `HEAD`. It found **fourteen**
-pre-existing stale citations, five of them in `docs/core-api/` — the document a
-separate project builds against. All repaired. **If you `git commit --amend` or
-rebase anything that a document already names, this is what will tell you.**
+★ **Three things it does NOT cover**, narrowed deliberately rather than read
+generously, with the reasoning in decision `090`:
+
+- **cutting a tag or a release** — a release claims a state is *fit to use*,
+  which is a different act from making commits visible;
+- **`git push --force`, or any push that rewrites published history** — that
+  *removes* commits from a public repository and is unrecoverable for anyone
+  who has cloned. ★ Not hypothetical: `check-cited-commits-exist.py` exists
+  because rewriting commits broke fourteen document citations;
+- **any branch other than `main`**, or creating remote branches/tags.
+
+`CLAUDE.md` rule 8 and `LEGAL.md` §1 are both amended in place, old wording
+kept legible.
+
+★★ **AND THE HABIT THAT MATTERS MORE NOW, NOT LESS.** This handoff has carried
+for several sessions that **four releases went out on a tag whose CI run was
+red**, each time because a carried-forward sentence was mistaken for a query.
+When pushing stops requiring a decision, **nothing forces anyone to stop and
+look**. Read CI's colour from GitHub after every push; the row above says which
+run and how it was obtained, precisely so the next reader can tell a
+measurement from an inheritance.
 
 ---
 
