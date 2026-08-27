@@ -96,6 +96,201 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 137.0` (`523ca6d`) — A GRADIENT AND A SOLID OF THE SAME INK WERE DIFFERENT COLOURS — ★★★ **A SECOND NATIVE INK ROUTE FOR SHADINGS, TAKEN WHEN OVERPRINT IS NOT IN FORCE** — the pre-existing route only engaged UNDER overprint, so every gradient on an ordinary (non-overprinting) subtractive page still took a `CMYK → sRGB → CMYK` round trip that a flat fill of the same colour never took — ★★ **FOUND BY THE OPERATOR LOOKING AT A SCREEN, NOT BY ANY GATE** — the print-conformance harness scores trap crosses, and the box that exposed this carries none — ★ **fixing one half of a two-halves-agree-wrongly defect is what made the other half visible**: every object on the page used to take the same round trip and be wrong together, until `Pass 130.1` gave images their authored ink and a shading started disagreeing with an image of the same colour — 2026-08-27 (286th filing)
+
+**Shipped 2026-08-27.** Commit `523ca6d` (`523ca6dda4cdb3501c3eb292f24330d37eaab7a4`),
+pushed to `main`. Hash and adjacency as supplied in the engineer's
+dispatch — this filing has no shell of its own and could not run `git
+log` to confirm them independently; treat the commit identity as
+relayed, not verified (hard rule 8).
+
+#### What shipped
+
+A second native ink route for shadings in
+`crates/pdfce-render/src/interpret.rs`, taken when a shading's colour
+ramp carries colorants and **overprint is NOT in force**. Before this,
+a shading's colour was resolved to three-channel sRGB when its colour
+ramp was **built**, so by the time anything composited the colorants
+were already gone — on any page that composites in ink (any page with
+a `DeviceCMYK` transparency group, i.e. every print-oriented page)
+that meant a `CMYK → sRGB → CMYK` round trip, and the return leg is a
+**different function** from the outbound one (a calibrated table out,
+a naive formula back). A flat fill of the same colour took no such
+trip; neither, since `Pass 130.1`, did an image. So one authored
+colour rendered as two different colours depending on whether it was
+drawn as a fill or a gradient. Measured on the committed fixture: fill
+`(151, 64, 133)`, shading `(160, 90, 113)` — **18 levels apart, one
+PDF, one colour, drawn twice.**
+
+#### ★★ How it was found, which is the part worth filing carefully
+
+**The operator found it by looking at a page.** He opened a combined
+conformance sheet in `pdfceGUI` and reported he could not get
+everything on the page to render correctly at once — the boxes at the
+top of the first page, or the references, would not show the right
+colour — and asked whether a settings preset could fix it. It could
+not: the settings he was cycling changed which *other* defect
+dominated, not this one.
+
+Two things about the discovery are recorded here rather than left to
+be re-derived:
+
+1. **It survived this long because everything on the page used to be
+   wrong together.** Every object took the same round trip, so
+   everything was consistently, silently wrong in the same direction
+   and nothing looked out of place. It became visible **only when the
+   other half was fixed** — `Pass 130.1` gave a `DeviceCMYK` image its
+   authored ink, images stopped round-tripping, and from that commit
+   on a shading and an image of the same colour disagreed. The sheet
+   that exposed it prints a live shading beside a reference **image**
+   of what it should look like, captioned *"the shadings should look
+   like the reference image"*; two of four pairs visibly differed.
+   ⇒ **Fixing one half of a two-halves-agree-wrongly situation converts
+   a silent shared error into a visible disagreement** — an argument
+   *for* fixing halves (the disagreement is information a passing
+   suite was not giving anyone), but it means the second half becomes
+   urgent in a way it was not before, and a reader who sees only
+   `Pass 130.1`'s entry would not know that without this cross-reference.
+2. **That box carries no trap cross, so no automated check in this
+   project could see it.** The print-conformance harness scores traps;
+   a shading-vs-reference comparison box has none. The gate coverage
+   was not weak here — the defect sat entirely outside what any gate
+   in the repo is shaped to measure.
+
+#### Why the widening is plain rather than a rework
+
+The pre-existing native route (`Pass 122.6`, `ColorRamp::at_cmyk`) was
+gated on overprint being active, correctly at the time — one defect,
+one behaviour change. The `DeviceCmykDirect` exclusion that guards
+*that* route does **not** apply here: it exists because ISO 32000-1
+§11.7.4.3 Table 149's `OPM 1` row is **value-dependent**, so its
+component rules cannot be computed once for a whole ramp. With
+overprint **not** in force there is no Table 149 row to consult at
+all — every component is `Source`, which is `Blend::Normal` painted in
+ink instead of in sRGB.
+
+`cmyk_bridged_pixels` **falls** as a direct result, and that is the
+point rather than a side effect: it counts pixels that lost their ink
+identity on the way to the compositor, and these no longer do.
+
+#### Measured
+
+Live-vs-reference mean colour distance on the four shading pairs of
+the sheet that exposed this:
+
+| pair | before | after |
+|---|---|---|
+| a | 24.2 | **1.7** |
+| c | 14.1 | **0.9** |
+| b | 0.1 | 0.1 (already correct) |
+| d | 21.3 | 23.8 (mesh — see residual below) |
+
+The type-2 gradient on the neighbouring sheet now matches its
+reference. Print-conformance corpus, 51 patches: **5 FAIL, 35 pass, 11
+UNRESOLVED — identical to before this Pass, no regression anywhere.**
+
+A/B against a build with the fix disabled, on the committed fixture:
+**without** it `|diff| = 18.33`; **with** it `|diff| = 0.00`.
+
+#### ★ Residual — must not read as done
+
+**Mesh shadings (types 4–7) are unchanged.** `Shading::paint_cmyk`
+refuses non-analytic geometry, so a mesh still bridges through sRGB
+and still disagrees with an image of the same ink. Both pairs still
+mismatched on the operator's sheet (row `d` above) are shading type 7.
+This is the **pre-existing residual filed under `Pass 97.1k`**, not
+something this Pass introduced or widened — see that entry's own
+Backlog history, and its **Planned → native colorant path for mesh
+shadings** row in `FEATURES.md`, updated in this same filing to say
+mesh is now the *only* population still bridging through sRGB on a
+subtractive page.
+
+#### Fixtures and tests
+
+- `fixtures/synthetic/shading/` — two **wholly synthetic** 200×100 pt
+  PDFs (`shading-vs-fill-cmyk.pdf`, `shading-vs-fill-rgb.pdf`) plus
+  `PROVENANCE.md`, generated by the new committed
+  `tools/gen-shading-ink-fixtures.py`. Each draws the **same
+  `DeviceCMYK` colour twice**: a flat fill, and an axial shading whose
+  function is **constant** — a constant shading is the same colour
+  everywhere, so any pixel of it is comparable to any pixel of the
+  fill and the assertion needs no geometry and no parametric position.
+  The colour `0.42 0.87 0.13 0.06` has all four colorants non-zero and
+  is nowhere near a `CMYK↔sRGB` fixed point — pure cyan or black
+  survives the round trip nearly intact and would have let the defect
+  pass unnoticed.
+- `crates/pdfce-render/tests/shading_ink.rs` — three tests. The
+  subtractive one is the one that matters; the **additive one is a
+  deliberate control** that passed before and after, existing so a
+  future change breaking the additive path cannot hide behind the
+  subtractive test staying green (they are different code); the third
+  asserts the two pages are **not** required to match each other, to
+  stop a future "tightening" into a cross-page equality that would be
+  false for a correct renderer.
+- **`LEGAL.md` §5 category (a).** Nothing derives from any third-party
+  file. No byte and no structure of the licensed print-conformance
+  suite is reproduced — different colour, different page size, no
+  reference image, no four-up layout, and a *constant* shading where
+  that suite uses gradients. `tools/check-suite-name-absent.py` green
+  over the new files.
+
+#### Gate results (all on the committed tree, per the engineer's dispatch)
+
+- `cargo test --workspace --release`: **4372 passing, 0 failing**
+- `cargo fmt --all --check` clean; `cargo clippy --workspace
+  --all-targets -- -D warnings` clean
+- All 18 argument-free `tools/check-*` gates green (the 19th,
+  `check-image-colorspace-truth.py`, takes a fixture-dir argument and
+  is deliberately not in the bare sweep or in CI)
+- `cargo +nightly fuzz build`: all targets compile
+- `cargo check -p pdfce-core -p pdfce-render --target
+  wasm32-unknown-unknown`: ok
+- `cargo tree -p pdfce-core` / `-p pdfce-render`: no GUI dependency —
+  this role has no shell this filing and did not re-run it
+  independently.
+
+#### `FEATURES.md` — updated in this same filing
+
+- **Subtractive (colorant) compositing buffer** row (Fonts &
+  rendering, *Implemented*) — added the second native shading route
+  and the operator-found 18-level defect, in place, without touching
+  the row's core/cli/gui boxes (unchanged: `[x]`/`[x]`/`[ ]`, since
+  there is no new CLI subcommand and no new GUI control — the
+  improvement reaches both shells automatically because both render
+  through `pdfce-render`, which is exactly why the row's existing
+  boxes already covered it).
+- **Planned → native colorant path for mesh shadings** row — corrected
+  to say the analytic-shading population now composites natively
+  **regardless of overprint state**, and that mesh is now the *only*
+  shading population still bridging through sRGB.
+- No row moved from *Planned* to *Implemented* and no new row minted —
+  this Pass widens an existing *Implemented* capability's own scope
+  rather than delivering a new one.
+
+#### Ledger
+
+No new Pass sub-ID beyond `137.0`, no new decision, no new standing
+rule. Ceiling unchanged: rules **`R218`** (next free `R219`), decisions
+**`090`** (next free `091`) — per the engineer, not independently
+re-run this filing (no shell); engineer should confirm with `python
+tools/check-ledger-numbers.py`.
+
+#### Findings flagged, not yet written
+
+Two candidates for `C:\personal_rag\pdf\`, assessed and accepted below
+(see this date's `pdf/` entries): (1) a `CMYK → sRGB → CMYK` round
+trip is not the identity and the asymmetry is measurable — large on a
+non-primary ink, near-zero on a primary, so a fixture built to catch a
+colour-transport defect must use a colour with all colorants non-zero
+or it cannot fail; (2) two objects wrong in the same direction look
+right to any reference-comparison gate — the general detection
+technique that worked here is drawing the same value two different
+ways and comparing them to *each other*, needing no oracle, as opposed
+to comparing either one against a reference (what the harness does,
+and what missed this).
+
+---
+
 ### Decision 090 — "ALWAYS PUSH" GRANTS STANDING AUTHORITY FOR THE PUSH HALF OF PROJECT RULE 8, NOT THE RELEASE HALF — no Pass ID, docs/decision-only filing — 2026-08-27 (285th filing)
 
 **Ruling, verbatim.** Ken, 2026-08-27, after being asked three times in one
@@ -84413,6 +84608,23 @@ previously bridged; 6 of those 17 reach zero bridged pixels.**
 **Residual acceptance, for the mesh half:** a mesh on a subtractive page
 composites its authored colorants and can honour Table 149; byte-identical
 output on additive pages; corpus A/B.
+
+**★★ AMENDMENT 2026-08-27 (286th filing) — the table row above,
+*"analytic (`Separation`/`DeviceN`) shadings | DELIVERED (`122.6`)"*, was
+narrower than it reads.** `Pass 122.6`'s native route only engaged when
+overprint was **in force** — the same colour ramp, on an ordinary
+(non-overprinting) paint, still resolved to sRGB and bridged back per
+pixel, exactly like an unfixed image before `Pass 130.1`. **`Pass 137.0`
+(`523ca6d`) closes that gap**: the identical native route now also
+engages when overprint is **not** in force, because with no overprint
+Table 149's value-dependent `DeviceCmykDirect` row does not apply at all
+and every component is `Source`. The table row above is now true
+**without qualification**, and **mesh shadings are the only population
+left in the "not done" row** — images with no ink to keep remain
+correctly, not defectively, bridged. Found by the operator comparing a
+live shading against a reference image on screen, not by any gate; see
+`Pass 137.0`'s own Shipped entry for the full account and the 18-level
+measured defect.
 
 ---
 

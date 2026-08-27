@@ -67757,3 +67757,74 @@ timestamp.
 engineer's own next-session notes carry any other open items.
 
 ---
+
+## 2026-08-27 (286th filing) — `Pass 137.0` (`523ca6d`) SHIPS: a gradient and a solid of the same ink were different colours; found by the operator on screen, not by any gate, because everything on the page used to be wrong together
+
+**Shipped:**
+- Pass 137.0 — a second native ink route for shadings, taken when a
+  shading's colour ramp carries colorants and overprint is **not** in
+  force. The existing native route (`Pass 122.6`) only engaged **under**
+  overprint; on an ordinary subtractive page a shading still round-tripped
+  `CMYK → sRGB → CMYK`, and the return leg is a different function from
+  the outbound one. A flat fill of the same authored colour never took
+  that trip, and neither has an image since `Pass 130.1` — so one colour
+  rendered as two, depending on whether it was drawn as a fill or a
+  gradient. Full account, measurements and residual: `ROADMAP.md`'s
+  `Pass 137.0` Shipped entry.
+
+**Decisions made this session:**
+- None new. This Pass widens an existing route's scope (Table 149's
+  value-dependent row simply does not apply with overprint off, so every
+  component resolves to `Source`); no new architectural decision was
+  required and none was minted.
+
+**Findings + decisions:**
+- **The defect was reported by the operator from a screen, not surfaced
+  by any gate.** He opened a combined conformance sheet in `pdfceGUI` and
+  said he could not get everything on the page to render correctly at
+  once, and asked whether a settings preset could fix it. It could not —
+  the settings he was cycling changed which *other* defect dominated, not
+  this one. The print-conformance harness scores trap crosses; the box
+  that exposed this carries none, so the gate coverage was not weak here,
+  it was simply never shaped to see this.
+- **Fixing one half of a two-halves-agree-wrongly defect is what made the
+  other half visible.** Every object on a subtractive page used to take
+  the same `CMYK → sRGB → CMYK` round trip and be consistently, silently
+  wrong together — nothing looked out of place. Only once `Pass 130.1`
+  gave a `DeviceCMYK` image its authored ink did images stop
+  round-tripping, and from that commit on, a shading and an image of the
+  same colour started to visibly disagree. That is an argument *for*
+  fixing halves as they're found (the disagreement is information a
+  passing suite was not giving anyone) — but it also means the remaining
+  half becomes urgent in a way it was not before, and that connection is
+  now recorded in both `Pass 137.0`'s own entry and, by cross-reference,
+  in `Pass 97.1k`'s.
+- Measured: fill `(151, 64, 133)` vs shading `(160, 90, 113)` on the
+  committed fixture before the fix — 18 levels apart, one PDF, one
+  authored colour, drawn twice. A/B against a build with the fix disabled:
+  `|diff| = 18.33` without it, `0.00` with it. Print-conformance corpus
+  unchanged at 5 FAIL / 35 pass / 11 UNRESOLVED — no regression.
+- **Two findings graduated to `C:\personal_rag\pdf\` this filing** (see
+  below): the `CMYK↔sRGB` round-trip asymmetry, and "compare the same
+  value drawn two ways" as a detection technique that needs no reference
+  render.
+
+**Still in flight:**
+- **Mesh shadings (types 4–7) are unchanged and still bridge through
+  sRGB.** `Shading::paint_cmyk` refuses non-analytic geometry. Both pairs
+  still mismatched on the operator's own sheet are shading type 7 — he
+  will still see two of four pairs disagree after this ships. This is the
+  **pre-existing residual filed under `Pass 97.1k`**, narrowed rather than
+  reopened: mesh is now the *only* population on a subtractive page still
+  bridging through sRGB (images with no ink to keep are correctly, not
+  defectively, bridged).
+
+**For next session:**
+- If the operator revisits that conformance sheet, the two remaining
+  mismatched pairs are expected and are the mesh residual, not a new
+  regression — worth saying so before he re-reports the same symptom.
+- `Pass 97.1k`'s residual acceptance criterion (mesh composites its
+  authored colorants, honouring Table 149) is the next natural unit of
+  work in this area; no Pass ID has been minted for it yet.
+
+---
