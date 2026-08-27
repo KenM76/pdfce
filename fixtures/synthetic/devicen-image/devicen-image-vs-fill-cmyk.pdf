@@ -1,0 +1,47 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Group << /S /Transparency /CS /DeviceCMYK >> /Resources << /ColorSpace << /Cs0 6 0 R >> /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<<  /Length 74 >>
+stream
+q /Cs0 cs 0.4 0.8 scn 20 40 60 120 re f Q
+q 60 0 0 120 120 40 cm /Im0 Do Q
+endstream
+endobj
+5 0 obj
+<< /Type /XObject /Subtype /Image /Width 8 /Height 8 /BitsPerComponent 8 /ColorSpace 6 0 R  /Length 128 >>
+stream
+fÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌfÌ
+endstream
+endobj
+6 0 obj
+[/DeviceN [/Cyan /Magenta] /DeviceCMYK 7 0 R]
+endobj
+7 0 obj
+<< /FunctionType 4 /Domain [0 1 0 1] /Range [0 1 0 1 0 1 0 1]  /Length 38 >>
+stream
+{ 0.8 mul exch 0.9 mul exch 0.1 0.05 }
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000320 00000 n 
+0000000445 00000 n 
+0000000713 00000 n 
+0000000774 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+922
+%%EOF

@@ -5080,6 +5080,55 @@ impl Interpreter<'_> {
         let (space, comps) = resolved
             .as_ref()
             .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
+        // ★★★ THE DOCUMENT'S OWN ANSWER FIRST, `Pass 140.1`. WITHOUT THIS A
+        // SPOT FILL AND A SPOT IMAGE OF THE SAME COLOUR RENDER DIFFERENTLY.
+        //
+        // `ColorSpace::to_cmyk` returns `Some` exactly when the space HAS a
+        // `DeviceCMYK` answer of its own: the components for `DeviceCMYK`, and
+        // the tint transform's own output — taken before anything converts it
+        // — for a `Separation`/`DeviceN` over a `DeviceCMYK` alternate. That
+        // is what the file says this colour IS, and it is therefore the right
+        // paint colour on a page that composites in ink.
+        //
+        // Everything below this line reconstructs the colorants instead, and
+        // for a spot-only source it reconstructs them from the ALREADY-RESOLVED
+        // sRGB via `rgb_to_cmyk`. The comment further down calls that recovery
+        // "exact", and it is exact **as an inverse of `cmyk_to_rgb`** — but the
+        // paint colour did not come from `cmyk_to_rgb`. It came from
+        // `Rgb::from_cmyk`, which is the CALIBRATED conversion and carries a
+        // rendering intent. So the pair is not an inverse pair at all, and the
+        // round trip lands somewhere else.
+        //
+        // Measured on `fixtures/synthetic/devicen-image/`, at scale 2, mean
+        // over a 40x100 pt patch of each half:
+        //
+        //   page                          fill            image
+        //   separation, additive          157,207,185     158,208,186
+        //   separation, subtractive       159,192,194     158,208,186   <- fill
+        //   devicen,    subtractive       160, 86,161     160,108,156   <- fill
+        //
+        // The image agrees with its own additive rendering; the subtractive
+        // FILL is the outlier, by 8.3 and 9.0 mean levels. Before `Pass 140.0`
+        // both halves took the same round trip and were wrong TOGETHER, which
+        // is why nothing had ever reported it — the exact history
+        // `tests/shading_ink.rs` records for the shading half, one object type
+        // over. Fixing one half converts a silent shared error into a visible
+        // disagreement, and the disagreement is the information.
+        //
+        // ★ The diagnostics are SCRATCH and discarded deliberately. Whatever
+        // this conversion has to report — a missing or malformed
+        // `/tintTransform` — was already counted when the same operands were
+        // resolved to the paint colour, and counting it twice would report one
+        // broken transform as two.
+        //
+        // ★★ `None` falls through to everything below UNCHANGED. A
+        // `Separation` over a `DeviceRGB` alternate, a `DeviceGray` fill, a
+        // `Lab` fill: none of them has a `DeviceCMYK` answer to give, so none
+        // of them reaches this early return and none of their behaviour moves.
+        let mut scratch = crate::color::ColorDiagnostics::default();
+        if let Some(cmyk) = space.to_cmyk(comps, &mut scratch) {
+            return Some(cmyk);
+        }
         let kind = crate::overprint::classify(space, false)?;
         // ★★ THE SPOT-ONLY FALL-THROUGH, AND WITHOUT IT A SPOT COLOUR PAINTS
         // NOTHING AT ALL ON A SUBTRACTIVE PAGE.

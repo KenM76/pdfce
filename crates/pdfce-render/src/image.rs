@@ -1302,12 +1302,27 @@ fn decode_sampled(
     // decoded, and an image is cached across pages. Two texel-sized pixmaps
     // is the price; the alternative is threading a page property into the
     // codec layer to save memory on a case that is already rare.
-    // Two shapes carry ink: a direct `DeviceCMYK` image, and an `/Indexed`
-    // image whose BASE is `DeviceCMYK` — the second is not a special case but
-    // the commoner one in print files, where a flat colour ships as a
-    // one-entry palette rather than as four planes of identical samples.
-    let carries_ink =
-        matches!(space, Space::Cmyk) || matches!(space, Space::Indexed { ink: Some(_), .. });
+    // FOUR shapes carry ink, and this list has been wrong by omission twice
+    // — `R219`'s shape, which is why `Pass 140.0` enumerated every route in
+    // one Pass rather than fixing the one that was reported:
+    //
+    //   1. a direct `DeviceCMYK` image                        (`Pass 130.1`)
+    //   2. an `/Indexed` image whose BASE is `DeviceCMYK`     (`Pass 130.1`)
+    //   3. a direct `Separation`/`DeviceN` image over a
+    //      `DeviceCMYK` alternate                             (`Pass 140.0`)
+    //   4. an `/Indexed` image over such a base               (`Pass 140.0`)
+    //
+    // (2) is not a special case but the commoner one in print files, where a
+    // flat colour ships as a one-entry palette rather than as four planes of
+    // identical samples. (4) is the same shape one level in — a duotone.
+    //
+    // Rows 1 and 3 are both asked THROUGH `Space::yields_cmyk`, so the direct
+    // route has one predicate rather than an enumeration that can fall
+    // behind the conversion it is supposed to describe. Rows 2 and 4 are
+    // resolved at palette-build time by `resolve_indexed`, through the very
+    // same `Space::to_cmyk` applied to the base.
+    let carries_ink = space.yields_cmyk(&mut scratch_diag)
+        || matches!(space, Space::Indexed { ink: Some(_), .. });
     let mut ink = if carries_ink {
         match (Pixmap::new(width, height), Pixmap::new(width, height)) {
             (Some(cmy), Some(k)) => Some(CmykTexels { cmy, k }),
@@ -1334,6 +1349,17 @@ fn decode_sampled(
         None
     };
     let mut out_of_range = false;
+    // ★ ALL-OR-NOTHING, and it is the safety net under `Space::yields_cmyk`'s
+    // probe. Set the moment a texel's `to_cmyk` answers `None` on an image
+    // whose space claimed it would not; the planes are then dropped for the
+    // WHOLE image after the loop and it bridges uniformly.
+    //
+    // A partial plane would be worse than no plane: half the image
+    // composited in ink and half through sRGB is a seam along a contour of
+    // the tint transform's domain — a boundary no file asked for, appearing
+    // in the middle of a photograph. `ColorRamp::new` refuses the same thing
+    // for the same reason, one line of its own.
+    let mut ink_incomplete = false;
 
     for y in 0..height as usize {
         let row_bit_base = y.saturating_mul(stride).saturating_mul(8);
@@ -1349,6 +1375,15 @@ fn decode_sampled(
             // `palette_ink` because the two tables answer different questions
             // — see `Space::Indexed::overprint`.
             let mut palette_op: Option<[f32; 4]> = None;
+            // This texel's own colorants, for a DIRECT `Separation`/`DeviceN`
+            // image (row 3 of `carries_ink`'s list). Produced by the same
+            // `TintCache` entry as the sRGB beside it, so the two cannot come
+            // from different evaluations of the same tint transform.
+            //
+            // `None` for every other space, including `DeviceCMYK`: that one
+            // reads its colorants straight out of `last_comps` below, because
+            // they ARE the components and no transform is involved.
+            let mut texel_cmyk: Option<[f32; 4]> = None;
             // Read the plane BEFORE the colour work: §11.6.5.3's
             // un-premultiply divides by this very value, and it must be
             // applied before the colour-space conversion below.
@@ -1442,12 +1477,19 @@ fn decode_sampled(
                     if let Some(m) = matte {
                         mask::undo_matte(comps, components.min(4), m, plane_alpha);
                     }
-                    match &mut tint_cache {
+                    let (rgb, cmyk) = match &mut tint_cache {
                         Some(cache) => {
                             cache.lookup(&space, intent, &raw_comps[..readable], &comps[..readable])
                         }
-                        None => space.to_rgb(intent, comps, &mut scratch_diag),
-                    }
+                        // No cache means the space is not `Special`, so
+                        // there is no tint transform to bound and no ink
+                        // answer this arm could give — a `DeviceCMYK`
+                        // image's colorants are its components, read from
+                        // `last_comps` at the write below.
+                        None => (space.to_rgb(intent, comps, &mut scratch_diag), None),
+                    };
+                    texel_cmyk = cmyk;
+                    rgb
                 }
             };
             // Alpha, in the order the precedence ladder resolved: a
@@ -1467,12 +1509,36 @@ fn decode_sampled(
             // `comps` is still in the image's own colour space here and
             // nowhere after this point.
             if let Some(planes) = ink.as_mut() {
-                // A palette entry's colorants when the space is indexed,
-                // otherwise the texel's own components. Exactly one of the
-                // two is meaningful for any given image.
-                let tint = match palette_ink {
-                    Some(t) => t,
-                    None => [
+                // Three sources, exactly one of which is meaningful for any
+                // given image — the three `carries_ink` rows that reach a
+                // texel:
+                //
+                //   * `/Indexed`: the palette entry's colorants, already
+                //     resolved through the base at table-build time.
+                //   * `Separation`/`DeviceN`: this texel's tint-transform
+                //     output, cached beside its sRGB.
+                //   * `DeviceCMYK`: the texel's own components, which ARE
+                //     the colorants.
+                //
+                // ★ `tinting` is what separates the last two, and it must:
+                // a `Separation`'s `last_comps` holds TINTS, not process
+                // components. Falling through to the third arm would write a
+                // five-colorant `DeviceN`'s first four tints as if they were
+                // C, M, Y and K — plausible-looking ink of entirely the
+                // wrong colour, which is worse than the bridge it replaced.
+                let tint = match (palette_ink, tinting) {
+                    (Some(t), _) => t,
+                    (None, true) => match texel_cmyk {
+                        Some(t) => t,
+                        // The probe said this space yields colorants and this
+                        // texel disagreed. Drop the whole plane after the
+                        // loop rather than leave a seam; see `ink_incomplete`.
+                        None => {
+                            ink_incomplete = true;
+                            [0.0; 4]
+                        }
+                    },
+                    (None, false) => [
                         last_comps.first().copied().unwrap_or(0.0),
                         last_comps.get(1).copied().unwrap_or(0.0),
                         last_comps.get(2).copied().unwrap_or(0.0),
@@ -1499,6 +1565,11 @@ fn decode_sampled(
         }
     }
     notes.palette_out_of_range = out_of_range;
+    // All-or-nothing, discharged. See `ink_incomplete`'s declaration for why
+    // a partial plane is worse than none.
+    if ink_incomplete {
+        ink = None;
+    }
 
     Ok(DecodedImage {
         pixmap,
@@ -1708,8 +1779,24 @@ pub(crate) const MAX_IMAGE_COMPONENTS: usize = 32;
 /// is the honest degradation: a cache that dropped precision to fit would
 /// change the picture.
 struct TintCache {
-    /// Distinct sample tuples seen, and the colour each produced.
-    seen: std::collections::HashMap<u64, Rgb>,
+    /// Distinct sample tuples seen, and **both** answers each produced:
+    /// the sRGB the screen path paints, and the `DeviceCMYK` colorants a
+    /// subtractive page composites in, when the space has any.
+    ///
+    /// ★ Both, from one entry, for the reason [`crate::shading::ColorRamp`]
+    /// and [`crate::mesh`]'s vertex reader both state: a `/tintTransform`
+    /// may be arbitrary PostScript, and **nothing forces two evaluations of
+    /// it to agree**. Caching them separately, or computing one here and
+    /// the other in a second pass, would let the same texel's screen colour
+    /// and its ink describe different points of the transform.
+    ///
+    /// It is also what bounds the cost of `Pass 140.0`. The ink answer is a
+    /// second §7.10 function evaluation, and on a photograph that would be
+    /// per-texel — but this cache already keys on the raw sample tuple, so
+    /// it is per **distinct tuple** exactly as the sRGB answer has always
+    /// been. Measured on the five-colorant `DeviceN` patch that opened the
+    /// Pass: 292 distinct tuples behind 25,870 texels.
+    seen: std::collections::HashMap<u64, (Rgb, Option<[f32; 4]>)>,
     /// Bits per component, for packing the key.
     bits: u32,
     /// How many components participate in the key.
@@ -1749,19 +1836,44 @@ impl TintCache {
         Some(k)
     }
 
-    /// The colour for one texel, computed once per distinct sample tuple.
-    fn lookup(&mut self, space: &Space, intent: CmykIntent, raw: &[u32], comps: &[f32]) -> Rgb {
+    /// Both of one texel's colours, computed once per distinct sample
+    /// tuple: the sRGB it paints, and the `DeviceCMYK` colorants it lays
+    /// down where the space has any (`None` otherwise — see
+    /// [`Space::to_cmyk`]).
+    fn lookup(
+        &mut self,
+        space: &Space,
+        intent: CmykIntent,
+        raw: &[u32],
+        comps: &[f32],
+    ) -> (Rgb, Option<[f32; 4]>) {
         match self.key(raw) {
             Some(k) => {
                 if let Some(hit) = self.seen.get(&k) {
                     return *hit;
                 }
-                let rgb = space.to_rgb(intent, comps, &mut self.diag);
-                self.seen.insert(k, rgb);
-                rgb
+                let both = Self::convert(space, intent, comps, &mut self.diag);
+                self.seen.insert(k, both);
+                both
             }
-            None => space.to_rgb(intent, comps, &mut self.diag),
+            None => Self::convert(space, intent, comps, &mut self.diag),
         }
+    }
+
+    /// The uncached conversion, in ONE place so the cache-hit path and the
+    /// unpackable-key path cannot come to compute different things.
+    ///
+    /// Both answers are taken from the **same `comps`**, in the same call
+    /// — see [`Self::seen`] for why that is a correctness requirement and
+    /// not tidiness.
+    fn convert(
+        space: &Space,
+        intent: CmykIntent,
+        comps: &[f32],
+        diag: &mut ColorDiagnostics,
+    ) -> (Rgb, Option<[f32; 4]>) {
+        let rgb = space.to_rgb(intent, comps, diag);
+        (rgb, space.to_cmyk(comps, diag))
     }
 }
 
@@ -1937,6 +2049,105 @@ impl Space {
             // than by two formulas being kept in step (gstate.rs docs).
             Self::Cmyk => Rgb::from_cmyk(intent, c(0), c(1), c(2), c(3)),
         }
+    }
+
+    /// The **`DeviceCMYK` colorants** these components lay down, when this
+    /// space has any — the ink answer that sits beside [`Self::to_rgb`]'s
+    /// screen answer.
+    ///
+    /// # Why this exists at all, and what it is NOT
+    ///
+    /// A subtractive page composites in a four-colorant buffer
+    /// ([`crate::cmyk_buffer`]). Anything that reaches that buffer as sRGB
+    /// has been through a **many-to-one** conversion and its colorants can
+    /// no longer be recovered — that is what `cmyk_bridged_pixels` counts,
+    /// and a bridged image comes out visibly desaturated against a reader
+    /// that kept the ink. `Pass 130.1` gave a `DeviceCMYK` image its
+    /// colorants; this method is what lets a `Separation`/`DeviceN` image
+    /// keep its own (`Pass 140.0`).
+    ///
+    /// ★★ It is **not** Table 149's question and must never be confused
+    /// with it. [`crate::overprint::authored_tints`] answers *"which
+    /// components did the source SPECIFY"* — a question about the operands
+    /// — and returns `None` for a spot-only `DeviceN`, because a spot
+    /// colorant specifies no process component at all. This method answers
+    /// *"what does the tint transform PRODUCE in the alternate space"*, and
+    /// for that same spot-only `DeviceN` it returns the flattened process
+    /// approximation, which is exactly what a plain (non-overprinting)
+    /// render must paint. Reusing the overprint planes here would paint
+    /// bare white paper; see this Pass's `ROADMAP.md` entry, where the trap
+    /// is written out at length.
+    ///
+    /// # The arms
+    ///
+    /// * [`Self::Cmyk`] — the components themselves.
+    /// * [`Self::Special`] — delegated whole to
+    ///   [`crate::color::ColorSpace::to_cmyk`], which returns `Some` only
+    ///   for a `Separation`/`DeviceN` whose alternate **is** `DeviceCMYK`,
+    ///   and takes the tint transform's own output before anything converts
+    ///   it. `Lab`, `CalGray` and `CalRGB` have no colorants and answer
+    ///   `None`.
+    /// * [`Self::Gray`] / [`Self::Rgb`] — `None`, and deliberately: a grey
+    ///   *could* be mapped to `K`, but the file did not say so, and
+    ///   claiming components a document never named is the exact error
+    ///   [`crate::color::ColorSpace::to_cmyk`] refuses to make.
+    /// * [`Self::Indexed`] — `None`. §8.6.6.3 puts the colour values in the
+    ///   BASE space, so asking the *index* for colorants is a category
+    ///   error. The palette carries its entries' ink in
+    ///   [`Self::Indexed::ink`], built by [`resolve_indexed`] **through
+    ///   this same method applied to the base**, so both routes have one
+    ///   answer rather than two.
+    ///
+    /// `None` is an honest answer, never a failure: the caller falls back
+    /// to the [`Self::to_rgb`] bridge and the shortfall is disclosed by
+    /// `cmyk_bridged_pixels`.
+    fn to_cmyk(&self, comps: &[f32], diag: &mut ColorDiagnostics) -> Option<[f32; 4]> {
+        let c = |i: usize| comps.get(i).copied().unwrap_or(0.0);
+        match self {
+            Self::Cmyk => Some([c(0), c(1), c(2), c(3)]),
+            Self::Special(cs) => cs.to_cmyk(comps, diag),
+            Self::Gray | Self::Rgb | Self::Indexed { .. } => None,
+        }
+    }
+
+    /// Whether this space can produce colorants **at all** — the
+    /// allocation gate for [`DecodedImage::ink`]'s two texel-sized planes.
+    ///
+    /// # ★ Why this is a PROBE and not a structural predicate
+    ///
+    /// The obvious implementation is a `matches!` over the space's shape:
+    /// *"`Cmyk`, or a `Separation`/`DeviceN` with a `DeviceCMYK`
+    /// alternate."* That would be a **second answer** to a question
+    /// [`Self::to_cmyk`] already answers, reached by a different caller,
+    /// and this module's whole colour design exists to avoid exactly that
+    /// (see [`Self::Special`]'s own docs: one answer to "what colour is
+    /// this tint?", or the same spot colour prints two ways on one page).
+    /// Two predicates that disagree would allocate planes nothing fills,
+    /// or skip planes a texel then wants.
+    ///
+    /// So it asks the real function, once, with an all-zero operand. The
+    /// question is **structural** — a `Separation` over `DeviceCMYK` has a
+    /// CMYK answer for every input or for none — so any operand serves,
+    /// and zeros need no knowledge of the space's component ranges.
+    ///
+    /// # What a wrong answer costs, in each direction
+    ///
+    /// * **False negative** (a transform that happens to fail at zero):
+    ///   the image bridges through sRGB exactly as it did before this
+    ///   Pass, and `cmyk_bridged_pixels` says so. Status quo, disclosed.
+    /// * **False positive**: the planes are allocated and the per-texel
+    ///   [`Self::to_cmyk`] returns `None` somewhere, which the decode loop
+    ///   treats as all-or-nothing — it drops the planes for the WHOLE
+    ///   image rather than leaving a seam where half of it kept its ink.
+    ///   That is [`crate::shading::ColorRamp`]'s rule, applied here for the
+    ///   same reason: a boundary no file asked for is worse than a uniform
+    ///   approximation.
+    ///
+    /// Neither direction can paint the wrong colour, which is what makes a
+    /// probe acceptable where a guess would not be.
+    fn yields_cmyk(&self, diag: &mut ColorDiagnostics) -> bool {
+        let probe = vec![0.0f32; self.components()];
+        self.to_cmyk(&probe, diag).is_some()
     }
 }
 
@@ -2245,10 +2456,28 @@ fn resolve_indexed(
     };
 
     let mut table = Vec::with_capacity(hival + 1);
-    // The base's colorants, kept only when the base IS ink. Built in the
+    // The base's colorants, kept whenever the base HAS any. Built in the
     // same loop as the sRGB entries, so the two tables cannot come to
     // disagree about which index means what.
-    let mut ink_table = matches!(base, Space::Cmyk).then(|| Vec::with_capacity(hival + 1));
+    //
+    // ★★ THIS READ `matches!(base, Space::Cmyk)` UNTIL `Pass 140.0`, and the
+    // omission was the fourth route of the same defect: a DUOTONE — an
+    // `/Indexed` over a `[/DeviceN [...] /DeviceCMYK <tint>]` — has
+    // colorants behind every palette entry and lost all of them on the way
+    // to a subtractive page. The suite ships exactly that shape (`PCS 8.2`,
+    // whose caption calls a grey rendering of it an error), so this is a
+    // measured population rather than a hypothetical one.
+    //
+    // Built OPTIMISTICALLY and dropped whole if any entry has no colorants,
+    // which costs nothing here: a palette is at most 256 entries, so unlike
+    // the per-texel route there is no allocation to gate. `Space::to_cmyk`
+    // is the single answer both routes use.
+    let mut ink_table = Some(Vec::with_capacity(hival + 1));
+    // Set when an entry's base yields no colorants. All-or-nothing for the
+    // same reason the texel loop is: an ink table that is right for some
+    // indices and absent for others would composite parts of one image two
+    // different ways.
+    let mut ink_incomplete = false;
     // The base's Table 149 row, resolved ONCE here rather than per entry.
     // Only row 3 is kept: every other row paints `c_s` in all three columns,
     // so an overprinting image in it is already rendered correctly by an
@@ -2297,13 +2526,16 @@ fn resolve_indexed(
             break;
         };
         let comps = palette_entry(entry, m);
+        // ★ `comps` is the entry in the BASE space, so the base is what is
+        // asked — a `DeviceCMYK` base returns the components themselves, a
+        // `Separation`/`DeviceN` base runs its tint transform, and an
+        // additive base answers `None` and takes the whole table with it.
+        // One function, both routes; see `Space::to_cmyk`.
         if let Some(ink) = ink_table.as_mut() {
-            ink.push([
-                comps.first().copied().unwrap_or(0.0),
-                comps.get(1).copied().unwrap_or(0.0),
-                comps.get(2).copied().unwrap_or(0.0),
-                comps.get(3).copied().unwrap_or(0.0),
-            ]);
+            match base.to_cmyk(&comps, &mut palette_diag) {
+                Some(t) => ink.push(t),
+                None => ink_incomplete = true,
+            }
         }
         // ★ `comps` is the entry in the BASE space — one operand per declared
         // colorant, in `names` order — which is precisely what
@@ -2314,6 +2546,13 @@ fn resolve_indexed(
             op.push(crate::overprint::authored_tints(kind, &comps).unwrap_or([0.0; 4]));
         }
         table.push(base.to_rgb(intent, &comps, &mut palette_diag));
+    }
+    // All-or-nothing, discharged. A short lookup table breaks the loop early
+    // and leaves FEWER ink entries than palette entries, which would
+    // mis-index every colour after the break — so the length is checked as
+    // well as the per-entry answer, and the two failures are one outcome.
+    if ink_incomplete || ink_table.as_ref().is_some_and(|t| t.len() != table.len()) {
+        ink_table = None;
     }
     Ok(Space::Indexed {
         table,
@@ -2434,5 +2673,89 @@ mod tests {
             Object::Array(vec![Object::Integer(1), Object::Integer(0)]),
         );
         assert_eq!(decode_pairs(&d), Some(vec![(1.0, 0.0)]));
+    }
+
+    /// ★ THE ARMS THE FIXTURES CANNOT REACH, AND WHY THEY ARE ASSERTED HERE.
+    ///
+    /// `tests/devicen_image_ink.rs` exercises the two spaces that DO carry ink
+    /// through whole rendered pages, which is the right level for those. It
+    /// cannot cheaply build a page for every space that must answer **`None`**
+    /// — and `None` is the load-bearing half: a space that wrongly claims
+    /// colorants would have four numbers written into the ink planes and
+    /// composited as authored ink, which paints a plausible colour that the
+    /// document never asked for.
+    ///
+    /// `DeviceGray` is the one to watch. Mapping a grey to `K` is arithmetically
+    /// obvious, reads as helpful, and is exactly the claim
+    /// [`crate::color::ColorSpace::to_cmyk`] refuses to make: the file did not
+    /// say `K`, it said grey, and a renderer that decides otherwise has
+    /// invented a colorant. (It is also, separately, what Acrobat does under
+    /// `/OPM 1` — see the `Pass 143.0` Backlog entry, where that divergence is
+    /// a deliberate open question rather than an oversight here.)
+    #[test]
+    fn only_a_space_with_real_colorants_answers_to_cmyk() {
+        let mut d = ColorDiagnostics::default();
+        // Carries ink: the components ARE the colorants.
+        assert_eq!(
+            Space::Cmyk.to_cmyk(&[0.1, 0.2, 0.3, 0.4], &mut d),
+            Some([0.1, 0.2, 0.3, 0.4])
+        );
+        assert!(Space::Cmyk.yields_cmyk(&mut d));
+
+        // Does not, and each for its own reason.
+        for (label, space) in [
+            (
+                "DeviceGray states no colorant, however tempting K is",
+                Space::Gray,
+            ),
+            ("DeviceRGB is additive", Space::Rgb),
+            (
+                "Lab is colorimetric, not a colorant space",
+                Space::Special(std::sync::Arc::new(crate::color::ColorSpace::Lab {
+                    white: [0.9642, 1.0, 0.8249],
+                    range: [-100.0, 100.0, -100.0, 100.0],
+                })),
+            ),
+            (
+                "CalRGB likewise",
+                Space::Special(std::sync::Arc::new(crate::color::ColorSpace::CalRgb {
+                    white: [0.9505, 1.0, 1.089],
+                    gamma: [1.0, 1.0, 1.0],
+                    matrix: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+                })),
+            ),
+        ] {
+            assert_eq!(
+                space.to_cmyk(&[0.5, 0.5, 0.5, 0.5], &mut d),
+                None,
+                "{label}"
+            );
+            assert!(!space.yields_cmyk(&mut d), "{label}");
+        }
+    }
+
+    /// §8.6.6.3: an `/Indexed` operand is an **index**, not a colour, so the
+    /// space itself must refuse the colorant question outright.
+    ///
+    /// ★ Answering it would be worse than merely wrong. `Space::to_cmyk` takes
+    /// raw components, so a permissive arm would read the index `3` as a cyan
+    /// value of 3.0, clamp it to full ink, and paint the whole image solid.
+    /// The palette's colorants live in `Space::Indexed::ink`, built by
+    /// [`resolve_indexed`] from the BASE, and the texel loop reads that table
+    /// instead — which is why this returning `None` is not a gap.
+    #[test]
+    fn an_indexed_space_refuses_the_colorant_question_and_carries_a_table_instead() {
+        let mut d = ColorDiagnostics::default();
+        let indexed = Space::Indexed {
+            table: vec![Rgb::BLACK; 2],
+            ink: Some(vec![[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]),
+            overprint: None,
+        };
+        assert_eq!(indexed.to_cmyk(&[1.0], &mut d), None);
+        assert!(!indexed.yields_cmyk(&mut d));
+        // ...and the decode loop's gate still recognises it, through the OTHER
+        // half of the `carries_ink` test. Both halves are needed; asserted
+        // together so a "simplification" that drops one is caught here.
+        assert!(matches!(indexed, Space::Indexed { ink: Some(_), .. }));
     }
 }
