@@ -377,7 +377,7 @@ placed"*. Swept `crates/`, `docs/` and `tools/` for that claim in any wording.
 |---|---|---|
 | Pass IDs | `132.0` highest shipped; `133`/`134` families unused | **`133.0` and `134.0` SHIPPED**, both minted by this filing directly into *Shipped*. Next free in each family: **`133.1`**, **`134.1`**. `130.2` and `131.0`–`131.4` remain Backlog. |
 | decisions (`ARCHITECTURE.md` §12) | **089** | **089** (unchanged — no architectural decision minted; the field/widget split is **sourced from Acrobat**, not decided, and the post-image validation rule is a consequence of Tables 228/230, not a pdfce choice). Next free **090**. |
-| standing rules | **`R219`** | **`R219`** (unchanged — **no mint**; two candidates recorded at n = 1 each, below). Next free **`R220`**. |
+| standing rules | **`R218`** | **`R218`** (unchanged — **no mint**; two candidates recorded at n = 1 each, below). Next free **`R219`**. ★ **Figure taken from `python tools/check-ledger-numbers.py`, run here** (*"standing rules : R218 -> next free is R219"*), not copied from a prior entry — the 265th–268th filings each recorded the ceiling as `R219`/next-free-`R220`, and the 270th and 271st corrected it to `R218`. **The gate agrees with the correction.** |
 | open operator questions | ceiling `(bq)` | **`(bq)`** (unchanged — no new question). |
 | `SESSION_LOG.md` filings | **271** | **272**. Next free **273**. |
 
@@ -409,6 +409,23 @@ command):
   at **`4bea7fe`** — `git rev-list --count 4bea7fe..HEAD` → **3 commits
   behind**. ★ **No bundle on disk contains either commit filed here.**
 - `ls tools/check-*` → **18** gates on disk; **17** argument-free.
+
+> ★★ **AMENDED THE SAME HOUR — THE GIT FIGURES ABOVE WERE TRUE WHEN MEASURED
+> AND ARE NOW STALE, AND THEY ARE LEFT STANDING RATHER THAN REWRITTEN.** While
+> this filing was still being corrected, **the engineer committed it as
+> `e0a432e` and pushed**. Re-measured here afterwards: `git rev-parse HEAD` →
+> **`e0a432e`**; `git rev-list --count origin/main..main` → **0** — so
+> **`afd8da8` and `fd71e4f` are NO LONGER local-only, they are on `origin`**;
+> `git describe --tags` → **`v0.14.0-4-ge0a432e`**; `git tag --points-at HEAD`
+> → still **empty**. The newest backup bundle is unchanged at **`4bea7fe`**,
+> now **4 commits behind** (`git rev-list --count 4bea7fe..HEAD`) — ★ **still
+> no bundle on disk contains either Pass.**
+>
+> ⇢ ***A filing's git block describes the instant it was written, and a filing
+> that is itself being committed is racing its own measurement.*** Both sets of
+> figures are recorded, each with its moment, per the 271st filing's own
+> *"say which moment a sentence describes"*. The bullets above are **not
+> corrections owed** — they were right.
 
 **RAG escalations from this entry:** ★ **one is OWED and is reported rather
 than written**, because writing it well needs a second occurrence this filing

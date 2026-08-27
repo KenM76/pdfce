@@ -27,53 +27,77 @@ can falsify it.
   `edit_widget` (widget scope), plus `edit-field` / `edit-widget` on the CLI.
 
 **Everything about both Passes is finished** — tests green, gates green,
-invariants verified, CLI verified live on real files. **What is NOT finished
-is the release plumbing:** neither commit is pushed, no tag covers them, and
-no backup bundle contains them. See `§B`. Start the *work* at `§C`.
+invariants verified, CLI verified live on real files — **and both are committed
+and pushed**, along with their filing (`e0a432e`). ★ **Two things remain
+before the tree is tidy:** the filing's own late corrections are still
+uncommitted in three `docs/` files, and **no backup bundle contains any of it**.
+See `§B`, then start the work at `§C`.
 
 ### ★ Verified from a shell at write time — do not copy forward without re-running
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `fd71e4f` | `git rev-parse HEAD` |
-| `git describe --tags` | `v0.14.0-3-gfd71e4f` — **3 commits past the tag** | `git describe --tags` |
-| `origin/main` | **2 behind `main`** — `afd8da8` and `fd71e4f` are **LOCAL ONLY** | `git rev-list --count origin/main..main` |
-| tag at `HEAD` | **none.** Highest tag `v0.14.0`, at `4bea7fe` | `git tag --points-at HEAD`, `git describe --tags` |
-| working tree | clean at read time, **before this filing's own edits** | `git status --porcelain` |
-| newest backup bundle | `pdfce-20260826-1740-4bea7fe-full.bundle`, 44,030,408 B — at `4bea7fe`, **3 commits behind `HEAD`**; ★ **no bundle on disk contains either new Pass** | `ls -lt D:\Dev\pdfce-backups\`, then `git rev-list --count 4bea7fe..HEAD` |
+| `HEAD` | `e0a432e` — the 272nd filing's commit | `git rev-parse HEAD` |
+| `git describe --tags` | `v0.14.0-4-ge0a432e` — **4 commits past the tag** | `git describe --tags` |
+| `origin/main` | **level, 0 ahead** — `afd8da8`, `fd71e4f` and `e0a432e` are all **PUSHED** | `git rev-list --count origin/main..main` |
+| tag at `HEAD` | **none.** Highest tag `v0.14.0`, at `4bea7fe` — **no release covers either new Pass** | `git tag --points-at HEAD`, `git describe --tags` |
+| working tree | **NOT clean** — three `docs/` files carry the filing's late corrections, uncommitted | `git status --porcelain` |
+| newest backup bundle | `pdfce-20260826-1740-4bea7fe-full.bundle`, 44,030,408 B — at `4bea7fe`, **4 commits behind `HEAD`**; ★★ **no bundle on disk contains either new Pass — the one release-plumbing item still genuinely owed** | `ls -lt D:\Dev\pdfce-backups\`, then `git rev-list --count 4bea7fe..HEAD` |
 | gates on disk | **18**; **17 run with no arguments**, the 18th (`check-image-colorspace-truth.py`) needs a fixture dir | `ls tools/check-*`, then run them |
-| CI at `HEAD` | **NOT RUN — `HEAD` is unpushed.** The last green run was at `4bea7fe`/`v0.14.0` | (nothing to query; do not assert a colour) |
+| CI at `HEAD` | **PUSHED, COLOUR UNKNOWN — not queried here.** The last colour anyone recorded is green at `4bea7fe`/`v0.14.0`. ★ **`e0a432e` is a different tree; ask GitHub, do not infer** | `gh run list --branch main --limit 3` |
 | `docs/core-api` verbs | **144** (was 142) | `grep -n 144 docs/core-api/index.md` |
 | `crates/pdfce-core/src/edit.rs` | **31,655** lines | `grep -c "" crates/pdfce-core/src/edit.rs` |
 
-★ **The CI row is deliberately not a colour.** Two of the last three releases
-went out on a tag whose CI run was red, and both times the wrong belief came
-from a *carried-forward* sentence rather than a query. **`HEAD` has never been
-to CI.**
+★ **The CI row is deliberately not a colour, and that is the point.** Four
+releases have gone out on a tag whose CI run was red (`§J`'s precedent list),
+and the wrong belief came each time from a **carried-forward sentence** rather
+than from a query. `HEAD` has been pushed, so a run exists — **run the command
+and read it.** Copying the `4bea7fe` green forward is exactly the move that has
+cost four re-cuts.
 
 ---
 
-## §B — ★★ THE RELEASE PLUMBING IS THE FIRST THING, AND `check-commits-filed.py` IS ALREADY RED
+## §B — ★★ THE RELEASE PLUMBING IS THE FIRST THING
 
-Two code commits (`afd8da8`, `fd71e4f`) are trailing. The filing that names
-them is the commit you are about to make. **`§J`'s rule applies exactly:**
+★★ **Most of this is already DONE — the engineer committed the 272nd filing as
+`e0a432e` and pushed it while the filing was still being corrected.** `afd8da8`,
+`fd71e4f` and `e0a432e` are all on `origin`, and `origin/main` is level. **What
+is left is small and is listed below.**
 
-> The tip-deferral excuses **exactly one** trailing unfiled code commit. There
-> are **two**. The second shields the first out of the deferral window, so the
-> gate is red **now** and goes green the moment the filing lands — **and only
-> if nothing is committed after it.**
+★ **`check-commits-filed.py` is GREEN — measured, not inferred:**
 
-**Order that works, in full:**
+```
+$ python tools/check-commits-filed.py
+commits-filed: clean — 597 code commit(s) checked (whole history);
+               5 known-unfiled carried in the baseline
+```
 
-1. Commit this filing (`ROADMAP.md`, `FEATURES.md`, `SESSION_LOG.md`,
-   `NEXT_SESSION.md`, plus the one-line `docs/core-api/03-capabilities.md`
-   correction it made).
-2. Run the 17 argument-free gates **on that tree** — ★ not on the tree you
-   swept earlier. *A gate sweep certifies the tree it ran on.*
-3. Push. Then decide about a version bump **separately** — see below.
-4. Take a backup bundle. **No bundle contains either Pass.**
+**It reads the WORKING TREE, not `HEAD`**, so it went green the moment the
+272nd filing's text landed on disk, before any commit. ⇢ *This role's own
+first draft asserted the gate was "already red" from `§J`'s reasoning and was
+wrong — the reasoning was sound and the gate reads a different tree than the
+reasoning assumed.* **`§J`'s rule still governs what happens next:** the
+tip-deferral excuses **exactly one** trailing unfiled code commit and there are
+**two**, so the green survives **only if the filing is committed and nothing is
+committed after it.**
 
-**On a version bump: not obviously owed, and the call is the operator's.**
+**What is actually left:**
+
+1. **Commit the three modified `docs/` files** — the filing's late corrections
+   (the `R218` ceiling, the `open/` path, this section). **A docs commit needs
+   no filing of its own**, so it is safe as the new tip; a *code* commit there
+   would not be.
+2. **Re-run the 17 argument-free gates on THAT tree** — ★ not on the one
+   already swept. *A gate sweep certifies the tree it ran on*, and this tree has
+   changed twice since the engineer's sweep.
+3. **★★ TAKE A BACKUP BUNDLE. This is the one release-plumbing item genuinely
+   outstanding.** The newest bundle is at `4bea7fe`, **four commits back**, and
+   **nothing on disk contains either new Pass.**
+4. **Read CI's colour at `main`** rather than assuming it (see `§A`).
+5. Then decide about a version bump **separately** — below.
+
+**On a version bump: not obviously owed, no tag has been cut, and the call is
+the operator's.**
 `Pass 134.0` adds two public `pdfce-core` verbs (**142 → 144**) and two
 `EditError` variants; `Pass 133.0` adds nine public `FormJavaScript` fields and
 makes that struct `#[non_exhaustive]`. That is the **additive-public-items**
@@ -223,7 +247,11 @@ both at n = 1, both with a named second-occurrence trigger:
 
 **No architectural decision was minted and no standing rule was minted** — that
 is itself the finding, not an omission. Ceiling stays: decisions **089** (next
-free **090**), rules **`R219`** (next free **`R220`**).
+free **090**), rules **`R218`** (next free **`R219`**). ★ Both figures are
+from `python tools/check-ledger-numbers.py`, run at filing time — **not** from a
+prior entry: several filings between the 265th and 268th recorded the rule
+ceiling as `R219`, which the gate and the last two filings both say is one too
+high.
 
 Four rulings that will bite a session working nearby:
 
@@ -413,11 +441,13 @@ flips red without anything about that commit changing.
 > **Dispatch the librarian LAST, and commit its filing LAST.** Any code commit
 > made after the dispatch has, by construction, no filing that can name it.
 
-★★ **This applies RIGHT NOW, not hypothetically.** `afd8da8` and `fd71e4f` are
-**two** trailing unfiled code commits. The deferral covers **one**. The second
-shields the first out of the window, so the gate is **red at this moment** and
-goes green when the 272nd filing's commit lands — **and only if nothing is
-committed after it.**
+★★ **This was live an hour ago and is now DISCHARGED, which is why the
+mechanism is worth keeping in view.** `afd8da8` and `fd71e4f` were **two**
+trailing unfiled code commits against a **one**-commit deferral; `e0a432e` names
+both, so the gate is green and `e0a432e` is the tip. ★ **The green is
+conditional from here:** the uncommitted `docs/` corrections will become the new
+tip, which is safe because **a docs commit needs no filing** — but **a code
+commit landing on top of `e0a432e` before a tag would not be.**
 
 ⇢ ***A one-commit deferral tolerates one trailing code commit. The second is
 not deferred — it is merely no longer the tip.*** Recorded as a **named
@@ -431,9 +461,9 @@ failure shape is how a candidate gets promoted on evidence it does not have.*
 The orders that work are **(file → code → file)** or **(code → file, then
 stop)**.
 
-★ **`afd8da8` and `fd71e4f` are both named by the 272nd filing** — in
-`ROADMAP.md`'s two new *Shipped* entries and in `SESSION_LOG.md` — so the gate
-has nothing outstanding **provided that filing's commit is the tip**.
+★ **`afd8da8` and `fd71e4f` are both named by the 272nd filing (`e0a432e`)** —
+in `ROADMAP.md`'s two new *Shipped* entries and in `SESSION_LOG.md` — **verified
+green here** (`python tools/check-commits-filed.py`). Nothing is outstanding.
 
 Recovery if a tag goes out on a red run anyway (precedent: `v0.8.0`, `v0.10.0`,
 `v0.12.0`, `v0.14.0` — **four times**): file the orphan, re-tag at the filing

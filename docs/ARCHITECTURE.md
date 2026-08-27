@@ -8795,10 +8795,75 @@ with a forward pointer.
     field → `ChoiceValueNotInOptions`; editable combo (`Combo|Edit`)
     accepts free text with no `/I`.
   - **(e) JS-disclosure histogram = posture A only (decision 009).**
-    `scan_javascript` + the `FormJavaScript` histogram COUNT all
-    field-level JS actions (recognition-only) with a loud stderr flag on
-    any network/launch `/AA` action; NO whitelist recompute — posture B
-    stays a demand-driven Pass 7.x follow-up.
+    `scan_javascript` + the `FormJavaScript` histogram COUNT
+    ~~all **field-level** JS actions~~ (recognition-only) with a loud
+    stderr flag on any network/launch ~~**`/AA`**~~ action; NO whitelist
+    recompute — posture B stays a demand-driven Pass 7.x follow-up.
+    - **★★ CORRECTED 2026-08-26 (272nd filing, amendment) — TWO
+      QUALIFIERS IN THE SENTENCE ABOVE ARE FALSE, AND BOTH ARE FALSE IN
+      THE UNDER-REPORTING DIRECTION. `Pass 133.0` (`afd8da8`) IS THE
+      REPAIR; DECISION 009'S POSTURE IS UNCHANGED.** Both qualifiers were
+      accurate when written — which is exactly what makes an append-only
+      Pass record dangerous read in the present tense, and why the prior
+      wording is struck through rather than silently replaced.
+      - **(i) NOT "field-level" — the scan is DOCUMENT-WIDE.** As of
+        `Pass 133.0` it walks **17 carrier sites across 10 container
+        types under 7 key names**. A page-open script, an outline item,
+        a link and a navigation node are all walked, and **none of them
+        is a field** — `scan_javascript` answers *"what would this
+        document run?"*, not *"what would this form run?"*, which is the
+        same fact that lets `list-fields` print for a file with no
+        `/AcroForm` at all. Full carrier table: `ROADMAP.md`'s
+        `Pass 133.0` Shipped entry; canonical sourcing:
+        `iso32000__ref__action_carriers.md` in the spec RAG.
+      - **(ii) NOT "`/AA`" — `/AA` is ONE key of seven, and it is the
+        one the standard says LOSES.** Table 194's `U` row: *"the `A`
+        entry in an annotation dictionary, if present, **takes
+        precedence over this entry**"*. The original `/AA`-only walk was
+        reading the losing entry, so a push button that submits to a live
+        endpoint reported `js_network_actions=0`. `/A` + `/AA` together
+        still reach only **11 of the 17** sites — page `/AA`, outline
+        `/A`, link `/PA` (a **live** URI action under a key ISO 32000-2's
+        own carrier enumeration does not name) and navigation-node
+        `/NA`/`/PA` (fired **on a timer** by `/Dur`, with nothing
+        clicked) make up the rest — and `/Next` chaining (§12.6.2 NOTE 1)
+        makes the whole thing a recursive tree, which is what makes a
+        per-carrier scan **unsafe** rather than merely incomplete.
+      - **★ WHAT DID NOT CHANGE, stated because a correction this size
+        reads like a reversal and this one is not: decision 009 stands.**
+        The posture is still **A — RECOGNITION ONLY, NEVER EXECUTION**,
+        and there is still **no whitelist recompute**; posture B remains
+        a demand-driven follow-up. **What widened is the SCOPE of what
+        recognition covers, not what pdfce does with what it recognises.**
+        pdfce still executes nothing, still only counts and discloses.
+      - **Surface changes carried by the same Pass, recorded here so a
+        grep landing on this record does not re-derive them:**
+        `FormJavaScript` is now `#[non_exhaustive]` (so out-of-crate
+        consumers — `pdfceGUI` — cannot use a struct literal), and it
+        gained **`reaches_outside()`** beside **`any()`**: *does this
+        document reach a network, a file or another document?* is a
+        different question from *does it script at all?*, and reach is
+        carried by the file-specification **key type**, not by the action
+        name (`GoToR`, `GoToE`, `Thread`, `Movie`, `Rendition` all reach).
+      - **★★ THE RUST FIELD NAMES AND THE CLI OUTPUT KEYS ARE DIFFERENT
+        STRINGS, AND THREE OF SEVEN DIVERGE. NOTHING CHECKS THIS.**
+        `annotation_actions` prints as **`annot_actions`**;
+        `javascript_actions` prints as **`js_actions_anywhere`**;
+        `scan_truncated` prints as **`action_scan_truncated`**. Neither
+        set is wrong — one is the API a consuming crate binds, the other
+        the stable-line key a script parses — but **the mapping is
+        written down nowhere outside the `println!`**, and
+        `check-metrics-line-contract.py` governs **`render-page` only**.
+        Recorded in both spellings here and in the `Pass 133.0` entry so
+        that a future grep finding one does not conclude the other is
+        stale. Filed as an `R212`-shaped observation, **not a defect**.
+      - ⇢ ***A check that under-reports reads as a clean bill of health,
+        because silence and safety are indistinguishable to the
+        reader.*** That is why this record's own narrowness mattered:
+        a document describing the scan as **narrower than it is** is the
+        same defect one level up, in prose instead of in code. Found by
+        the hard-rule-11 sweep in the 272nd filing (survivor 3 of 4);
+        corrected here.
   - **(f) Deviations/residuals (named):** flatten overlay-append is a
     POSITIVE deviation (more minimal-diff than scoped); list-box
     multi-select appearance is a simplified display-text newline-join, not

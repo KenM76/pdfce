@@ -66281,6 +66281,30 @@ queued Pass.
   `Pass 133.0` entry**, so a future grep that finds one does not conclude the
   other is stale. Reported as an `R212`-shaped observation, **not a defect**;
   not edited (`crates/` is outside this role's remit).
+- **★★ THIS ROLE'S OWN, TWICE MORE, AND BOTH WERE CAUGHT BY RUNNING THE THING
+  INSTEAD OF REASONING ABOUT IT.** (a) A draft asserted
+  `request_field_property_edit.md` was at the FeatureRequests channel **root**,
+  "checked with `ls`" — it is under **`open/`**. The mistake was reading a
+  combined `ls dirA dirB` as one listing; **two directories, two commands.**
+  ⇢ *A path is a claim, and `ls`-ing two things at once is not checking either.*
+  And the channel **already carries replies for both Passes**
+  (`open/reply_field_property_edit.md` 20:52,
+  `open/note_the_action_scan_was_lying_and_now_is_not.md` 20:53), which the
+  same draft said were owed. (b) A draft asserted
+  `check-commits-filed.py` was **"already red"**, reasoning correctly from
+  `§J` that two trailing unfiled code commits exceed a one-commit deferral.
+  **Running it returned `clean`** — the gate reads the **working tree**, so it
+  went green the instant this filing's text hit disk, before any commit.
+  ⇢ ***Sound reasoning about a gate is not a measurement of the gate, because
+  the reasoning does not know which tree it reads.*** Both corrections are
+  carried into `NEXT_SESSION.md` rather than hidden.
+- **★ The standing-rule ceiling is `R218`, next free `R219` — from
+  `python tools/check-ledger-numbers.py`, run here**, not from a prior entry.
+  Filings between the 265th and 268th each recorded `R219`/next-free-`R220`;
+  the 270th and 271st corrected it to `R218` and **the gate agrees with the
+  correction**. A first draft of this filing copied the higher figure.
+  ⇢ *A ledger figure has a command that produces it; copying the last entry is
+  how an off-by-one survives four filings.*
 - **★ `docs/core-api/03-capabilities.md:651` cited `scan_javascript` at
   `forms.rs:1653`; it is now at `forms.rs:1813`** (`grep -n`, run here).
   **Fixed in this filing** — a stale line number in the document a **sibling
@@ -66354,7 +66378,7 @@ exists"*.
 `134.1`. Decisions **089** unchanged, next free **090** — **no architectural
 decision minted**, because the field/widget split is *sourced from Acrobat* and
 the post-image validation rule is a *consequence of Tables 228/230*, not a
-pdfce choice. Standing rules **`R219`** unchanged, next free **`R220`** — **no
+pdfce choice. Standing rules **`R218`** unchanged, next free **`R219`** — **no
 mint**, two candidates at n = 1 (*an edit verb validates the post-image*; *an
 out-of-crate test is the only test that stands where the consumer stands*).
 Open operator questions ceiling **`(bq)`**, unchanged. Filings **272**, next
@@ -66388,6 +66412,18 @@ argument-free gates green**, including `check-core-api-verbs.py` after
 intact. Live CLI verification on real files for both Passes, including both
 edit scopes and a **rendered before/after confirming a resized text field is
 re-laid-out rather than stretched**.
+
+**Gates re-run by THIS role, on the tree carrying this filing** — because ⇢ *a
+gate sweep certifies the tree it ran on*, and the engineer's sweep predates
+every edit made here. **All 17 argument-free gates GREEN**, each invoked
+individually; `check-image-colorspace-truth.py` skipped (needs a fixture dir).
+★ Notable among them: `check-commits-filed.py` → `clean — 597 code commit(s)
+checked (whole history); 5 known-unfiled carried in the baseline`, and
+`check-core-api-verbs.py` → `PASS — every verb documented, count agrees`, **144
+public `EditSession` methods across four `impl` blocks**. ★★ **This is a
+different tree from the one the engineer certified and both runs are named**,
+per the ordering lesson `§B`/`§J` exist for. **Re-run once more if anything is
+touched between here and the commit.**
 
 **Independently verified here** (dispatch premises, per `§I`): `docs/core-api`
 verb count **144** (`index.md:17`); **§1.12a** present
@@ -66438,5 +66474,119 @@ each case:**
   commit wide** — `afd8da8` and `fd71e4f` are **two** trailing unfiled code
   commits, so the gate is red until this filing lands and **stays green only if
   nothing else is committed after it**.
+
+---
+
+### ★★ AMENDED IN PLACE, SAME HOUR — THE FILING WAS COMMITTED AND PUSHED WHILE IT WAS STILL BEING CORRECTED
+
+**`e0a432e`** — *librarian: 272nd filing — the action scan that under-reported,
+and fields that are editable after placing.* The engineer committed this entry
+and pushed it **while this role was still applying the corrections recorded
+above** (the `R218` ceiling, the `open/` path, the `check-commits-filed.py`
+colour). Everything after that point lives in the working tree as **a second,
+smaller docs commit**, which is fine — but it means **the "Git state" block
+above describes the instant before its own commit**, and it is **left standing
+rather than rewritten** because it was correct then.
+
+**Re-measured after `e0a432e`:**
+
+- `git rev-parse HEAD` → **`e0a432e`**; `git describe --tags` →
+  **`v0.14.0-4-ge0a432e`**.
+- `git rev-list --count origin/main..main` → **0**. ★ **`afd8da8` and
+  `fd71e4f` are NO LONGER local-only — both are on `origin`**, which the block
+  above says they are not. **That sentence was true when written and is not
+  now.**
+- `git tag --points-at HEAD` → **empty**, unchanged. **No release covers
+  either Pass.**
+- Newest backup bundle **unchanged** at `4bea7fe`, now **4 commits behind**
+  (`git rev-list --count 4bea7fe..HEAD` → 4). ★ **Still no bundle on disk
+  contains either Pass** — the one item from *Still in flight* that the push
+  did **not** discharge.
+
+⇢ ***A filing that is being committed is racing its own measurement.*** This is
+the mirror of `§J`'s lesson rather than a violation of it: there, a sweep
+certified a tree that stopped existing; here, a git block described a state its
+own commit ended. **The fix in both directions is the same — say which moment a
+sentence describes, and re-measure after anything commits.**
+
+★ **One consequence for whoever tags next:** `e0a432e` is the tip and the
+history behind it is filed, so `check-commits-filed.py` is green — **but the
+corrections in the working tree are a second docs commit, and once it lands it
+becomes the tip.** A docs commit needs no filing of its own, so that is safe;
+**a code commit there would not be.**
+
+---
+
+
+---
+
+### ★ AMENDED 2026-08-26, LATER THE SAME DAY — THE THREE DOC SURVIVORS ARE ALL CLOSED: THE ENGINEER TOOK TWO, THIS ROLE TOOK THE THIRD
+
+*Appended to this filing rather than opened as a 273rd — nothing shipped, no
+Pass moved, no ledger figure changed. Filings **272**, next free **273**,
+unchanged.*
+
+**The two in `docs/plan-scripting-submit-and-plugins.md` — CLOSED BY THE
+ENGINEER**, which is the right hand for that file: it quotes eight operator
+rulings verbatim and its value is its verbatimness, which is why this role
+reported them rather than editing them.
+
+- **`§2.3`** — the stale *"`forms.rs` classifies `/AA` action subtypes"* bullet
+  now carries a **dated amendment naming `Pass 133.0`**.
+- **`§2.7`** — now carries a marked **"FIXED, kept in the present tense because
+  its value is the diagnosis"** header. ⇢ *A repaired diagnosis is worth more
+  intact than deleted, provided the reader is told it is repaired* — the same
+  reason this project strikes prior wording through instead of overwriting it.
+
+**The third — `docs/ARCHITECTURE.md`, decision-009's `Pass 7.1` record, item
+`(e)` — CLOSED HERE**, in this role's own file. Both qualifiers struck through
+legibly and corrected in a nested dated block:
+
+- *"all **field-level** JS actions"* → **the scan is DOCUMENT-WIDE**: 17 carrier
+  sites, 10 container types, 7 key names, of which a page, an outline item, a
+  link and a navigation node are **none of them fields**.
+- *"any network/launch **`/AA`** action"* → **`/AA` is one key of seven and it
+  is the one Table 194 says LOSES to `/A`**; `/A` + `/AA` together still reach
+  only 11 of 17.
+
+**★★ WHAT THE CORRECTION DELIBERATELY DOES NOT SAY: that decision 009 was
+reversed. It was not.** Posture **A — recognition only, never execution** — is
+unchanged and still correct, and there is still no whitelist recompute. **What
+widened is the SCOPE OF WHAT RECOGNITION COVERS, not what pdfce does with what
+it recognises.** A correction of this size reads like a reversal unless it says
+otherwise in its own text, so it does.
+
+**Two facts from this filing's own body folded into that record while it was
+open**, so a future reader lands on them at the record rather than having to
+find this session log: **`FormJavaScript` is now `#[non_exhaustive]` and has
+gained `reaches_outside()` beside `any()`**; and **the Rust field names and the
+CLI output keys diverge in three of seven** (`annotation_actions`/`annot_actions`,
+`javascript_actions`/`js_actions_anywhere`, `scan_truncated`/`action_scan_truncated`),
+with **nothing checking the mapping** — `check-metrics-line-contract.py` governs
+`render-page` only. Both name sets are now written in **two** places
+(`ROADMAP.md`'s `Pass 133.0` entry and `ARCHITECTURE.md` item `(e)`), which is
+the point: **a grep that finds one spelling must not conclude the other is
+stale.** Still filed as an `R212`-shaped observation, **not a defect**; still
+not edited in `crates/`.
+
+⇢ ***The survivor and the bug were the same defect at two altitudes.***
+`Pass 133.0` exists because a check that under-reported read as a clean bill of
+health. The `ARCHITECTURE.md` survivor **described that check as narrower than
+it is** — silence about scope, one document up, with the same consequence: a
+reader who trusts it under-estimates what pdfce looks at. That is why this was
+worth a correction rather than a footnote.
+
+**Git state, checked from a shell by the engineer and relayed here** (hard rule
+8 — this is a relay, and is labelled as one, not a measurement by this role):
+`HEAD` = **`e0a432e`**, **pushed**, `origin/main` level; the three `docs/` files
+this role left uncommitted are **still uncommitted** and the engineer will
+commit them together with this amendment; **all 17 argument-free gates green**.
+★ Nothing here touches `crates/` or `tools/`, so no gate re-run is owed by this
+edit — but the tree has changed since the sweep above, and ⇢ *a gate sweep
+certifies the tree it ran on* still applies to whoever commits.
+
+**Nothing left in flight from the 272nd filing's survivor list.** The remaining
+open item from that filing is unchanged and unrelated: **no backup bundle on
+disk contains `afd8da8` or `fd71e4f`.**
 
 ---

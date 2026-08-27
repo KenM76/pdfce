@@ -115,9 +115,13 @@ silently surprised anyone.
 - `outline.rs` resolves `/GoTo` (Table 199) and `/GoToR` (Table 200)
   destinations, including the remote-file case and its
   page-index-in-another-document trap.
-- `forms.rs` classifies `/AA` action subtypes and counts hazards:
-  `/URI`, `/SubmitForm`, `/ImportData` increment `network_action_count`;
-  `/Launch` increments `launch_action_count`.
+- `forms.rs` classifies action subtypes and counts hazards. **★ AMENDED
+  2026-08-26 by `Pass 133.0` (`afd8da8`) — this bullet said `/AA` action
+  subtypes, and that WAS the defect**: the scan walked `/AA` only, so a
+  submit in a widget's `/A` counted as nothing. It now walks all 17 carrier
+  sites and follows `/Next` chains, and the hazard list is longer than the
+  four named here — `GoToR`, `GoToE`, `Thread`, `Movie` and `Rendition` all
+  reach a file or a URL. See `iso32000__ref__action_carriers.md`.
 - `pageops/references.rs` rewrites destinations correctly across page
   insert/delete/reorder, and knows that a `/GoToR` page index must **not**
   be resolved against this document.
@@ -167,6 +171,17 @@ project.** Submission should ride it rather than invent a second route.
 ---
 
 ### 2.7 ★★★ A SHIPPED DEFECT FOUND WHILE BUILDING THE PROBE — pdfce cannot see a submit button at all
+
+> **★ FIXED 2026-08-26, `Pass 133.0` (`afd8da8`), the same day this was
+> written.** Everything below is kept in the PRESENT TENSE as it was written,
+> because the section's value is now the diagnosis rather than the status —
+> and rewriting it to say "was" would erase the measurement that made the case.
+> What shipped went considerably further than this section proposes: the
+> repair was built from the whole carrier set (17 sites; `/A` + `/AA` cover
+> 11) rather than from the widget, and it follows `/Next` chains, which this
+> section does not mention and which is what makes a per-carrier scan unsafe
+> rather than merely incomplete. **The three surfaces in the table below all
+> disclose now.**
 
 Discovered 2026-08-26 by running pdfce over the probe PDFs. **This is a
 defect in shipped disclosure code, not a gap in the unbuilt feature**, and
