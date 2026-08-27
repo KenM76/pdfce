@@ -107,10 +107,76 @@ own truncating `.find()`) and explicitly takes those as theirs. It asks for
 `PageText` change, and it explicitly asks that the *editing-through-recursion*
 question be **answered as a decision before anything is built on it**.
 
-★ It also asks whether recursion should be the model or opt-in, and offers to
-take either. **That is a two-defensible-answers question and it is yours to
-settle, not to ask back** — the operator's standing objection to being asked
-twice applies to consuming projects as well.
+★★ **THE DESIGN IS ALREADY SETTLED AND ANSWERED ON THEIR CHANNEL** —
+`open/reply_decompose_form_recursion_the_editing_question_is_already_ruled.md`.
+Do not re-litigate it; build it. In short:
+
+1. **Recursion is the model, not a flag.** A flag means two walks over the same
+   content that can disagree.
+2. **★ Their object indices do NOT renumber.** One walk, **two projections**:
+   the existing flat list keeps its exact present meaning (page-stream objects,
+   same order, same indices), and the leaves are an *additional* view. They
+   listed renumbering first among what recursion costs them; they do not have
+   to pay it.
+3. **★★★ AND THAT IS A SAFETY PROPERTY, NOT A COURTESY — it is the finding
+   that decides the design.** Thirteen CLI verbs take a paint-order object
+   index and **eleven core sites resolve one**, and every one writes to the
+   **page's** stream. A leaf inside a form carries a token range into the
+   **form's** stream. Put leaves in the same list and those verbs will apply a
+   form-relative range to the page and corrupt it, silently. ⇒ **the recursion
+   is not a read-only change**, which is the one thing the request did not say.
+   Keeping leaves out of the list those eleven sites read makes them
+   unreachable rather than guarded — and "add a guard to eleven sites" is
+   exactly the shape that produced `Pass 130.3`.
+4. **The form container stays in the flat list**, so "select the container"
+   remains a distinct act; part 3 (the form's bbox not answering a first click)
+   lands in the **hit test**, which consumes the leaf view.
+5. **Read access only**, as they asked.
+
+★★★ **AND MOST OF THE HARD WORK ALREADY EXISTS IN `pdfce-core` — GREP BEFORE
+YOU BUILD.** `text_extract` has recursed into form XObjects since `Pass 1.1`
+(`text_extract/page.rs`, around the `Subtype /Form` arm) and already solves
+every difficult part: an **object-number-keyed** cycle guard (a name-keyed one
+misses the cycle, because one stream is reachable under two names), a depth
+bound with a diagnostic, resource inheritance with fallback to the invoker's,
+and the `view.slice(span)` subtlety for a form the **session** authored.
+
+It also already carries the two types the vector model needs and I was about to
+invent:
+
+- **`ContentStreamRef::{Page, Form { object }}`** — "which buffer does this
+  span index?"
+- **`TextRun::is_editable()`** — "can this be edited through the page-stream
+  path?", which the GUI **already binds for text**.
+
+⇒ a vector leaf must carry a `ContentStreamRef` and answer `is_editable()` the
+same way a `TextRun` does, so a form-interior path and a form-interior text run
+describe themselves **identically**. The GUI has to reconcile both in one
+selection; two vocabularies for one fact would be its problem and our fault.
+
+**Depth/cycle constants:** the renderer's `MAX_XOBJECT_DEPTH = 64` is
+corpus-corrected (veraPDF ships a *conformant* 32-deep chain) and
+`text_extract` hand-duplicates it as `max_form_depth`. That is already two
+copies; **do not make a third.** Consolidating them into one is a small,
+worthwhile part of this Pass.
+
+### ★ The editing question they asked to be ruled on — ALREADY ANSWERED, and a
+### correction came out of answering it
+
+They asked: a leaf inside a form invoked in several places — edit in place,
+clone the form, or refuse? **Decision 076 already ruled it for text
+(edit-in-place, disclosed), and its decisive reason is not text-specific**: a
+form invoked from *inside another form* cannot be re-bound without editing the
+parent, which may itself be shared. Extended to vector by reference; not
+re-decided.
+
+★★ **Answering it exposed a false claim in decision 076 itself**, now corrected
+(`6787e7b`): it certified `R206` compliance on the basis that *"Both are
+shipped — `Pass 119.0` and `Pass 119.1` (`unshare_form`)"*. **`unshare_form`
+has never existed** — grepped under six plausible names, zero hits — and
+`Pass 119.1` is still Backlog. So `R206`'s "ship both" is **outstanding**, and
+there is currently **no verb that lets an operator break a form's sharing**.
+The GUI has been told not to offer one.
 
 ### 2. `request_ocr_as_an_edit_to_the_open_session.md`
 
