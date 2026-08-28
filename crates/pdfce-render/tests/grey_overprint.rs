@@ -124,10 +124,29 @@ fn is_greenish(c: (u8, u8, u8)) -> bool {
     c.1 > c.0 && c.1 > c.2
 }
 
-/// Grey is neutral by construction, so this is the "knocked out" signature.
+/// The "knocked out" signature: the grey covered the spot, so what is left is
+/// *achromatic ink* — equal C, M and Y.
+///
+/// # ★ Why this is a tolerance and not an equality
+///
+/// It was `(r - g).abs() <= 1`, and that held until `Pass 153.0` moved the
+/// shipped `CmykIntent` from `NeutralBlack` to `Calibrated` on the operator's
+/// ruling. `NeutralBlack` forces an achromatic CMYK to an exactly neutral
+/// sRGB; `Calibrated` — which is what Acrobat and pdfium produce — renders it
+/// **slightly cool**, and that is its whole documented consequence.
+///
+/// So a correct knocked-out grey is now `(147, 148, 152)`, a spread of 5, and
+/// the three tests using this helper failed on the *colour default changing*
+/// rather than on anything about overprint.
+///
+/// The claim worth keeping is that the spot's **hue is gone**, not that the
+/// result is bit-neutral. A green backdrop surviving would show a spread in
+/// the tens with green dominant; 16 admits the calibrated coolness and
+/// nothing that could be mistaken for ink.
 fn is_neutral(c: (u8, u8, u8)) -> bool {
     let (r, g, b) = (i32::from(c.0), i32::from(c.1), i32::from(c.2));
-    (r - g).abs() <= 1 && (g - b).abs() <= 1
+    let spread = r.max(g).max(b) - r.min(g).min(b);
+    spread <= 16 && !is_greenish(c)
 }
 
 // ---------------------------------------------------------------------------

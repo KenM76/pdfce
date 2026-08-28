@@ -148,7 +148,11 @@
 //! ## 6. What was rejected, and why it is recorded here
 //!
 //! - **Naive additive `1 − min(1, x + k)`** — the previous behaviour. Not a
-//!   model; 97 % of samples off by more than 8/255.
+//!   model; 97 % of samples off by more than 8/255. It survived as a
+//!   selectable `CmykIntent` variant until 2026-08-28 so an operator could
+//!   reproduce a pre-calibration pdfce export, and was deleted by operator
+//!   ruling once that population had aged out (`Pass 153.0`). It stays in
+//!   this rejected list, which is what this section is for.
 //! - **Multiplicative `(1 − x)(1 − k)`** — the other data-free closed form,
 //!   and a genuine improvement (mean 32.5 → 14.9) for zero bytes. Still 91 %
 //!   of samples beyond 8/255, because it inherits the additive form's
@@ -325,10 +329,6 @@ pub fn cmyk_to_srgb(c: f32, m: f32, y: f32, k: f32) -> [f32; 3] {
 ///   pure-K axis; every mixed colour is untouched, so a drawing's black
 ///   lines go true black while any photographic content on the same page
 ///   keeps its calibrated rendering.
-/// - [`CmykIntent::Naive`] — the additive `1 − min(1, x + k)` formula pdfce
-///   used before calibration, kept solely so an operator can reproduce an
-///   older pdfce export. It misses the reference by up to 37/255 per
-///   channel.
 ///
 /// # Examples
 ///
@@ -369,17 +369,6 @@ pub fn cmyk_to_srgb_with(intent: CmykIntent, c: f32, m: f32, y: f32, k: f32) -> 
                 let v = 1.0 - k;
                 [v, v, v]
             }
-        }
-        CmykIntent::Naive => {
-            // The pre-calibration formula, reproduced exactly — including
-            // its NaN handling, so that "reproduce my old export" means
-            // what it says even on a malformed stream.
-            let channel = |x: f32| {
-                let x = if x.is_nan() { 0.0 } else { x };
-                let k = if k.is_nan() { 0.0 } else { k };
-                (1.0 - (x + k).clamp(0.0, 1.0)).clamp(0.0, 1.0)
-            };
-            [channel(c), channel(m), channel(y)]
         }
     }
 }

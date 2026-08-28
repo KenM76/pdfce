@@ -2682,25 +2682,6 @@ black, because that is what those viewers do. Choose this when you want to \
 see a document the way someone else will."
 }
 
-/// The legacy option's label.
-pub fn setting_cmyk_naive() -> &'static str {
-    "The old pdfce formula"
-}
-
-/// The legacy option's explanation.
-pub fn setting_cmyk_naive_note() -> &'static str {
-    "A rough calculation pdfce used before it was measured. Only useful for \
-comparing against something pdfce produced earlier."
-}
-
-/// The divergence disclosure — pdfce's default is not the consensus, and
-/// says so where the operator is choosing rather than in a footnote.
-pub fn setting_cmyk_divergence() -> &'static str {
-    "Note: pdfce's default deliberately differs from Acrobat here. \"Match \
-other PDF viewers\" is the option that agrees with them; black-ink-is-black \
-was chosen because line drawings are what this is mostly used for."
-}
-
 // --- Preseparated page sets -----------------------------------------------
 
 /// Heading for the separation-policy setting.

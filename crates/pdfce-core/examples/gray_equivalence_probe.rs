@@ -81,11 +81,7 @@ fn main() {
     // Every intent, since `cmyk_to_srgb_with` exposes the choice and the
     // answer may depend on it.
     println!("\n  DeviceCMYK 0/0/0/.75 under each intent:");
-    for intent in [
-        CmykIntent::NeutralBlack,
-        CmykIntent::Calibrated,
-        CmykIntent::Naive,
-    ] {
+    for intent in [CmykIntent::NeutralBlack, CmykIntent::Calibrated] {
         let c = cmyk_to_srgb_with(intent, 0.0, 0.0, 0.0, 0.75);
         let diff = to8(gray)[0] as i32 - to8(c)[0] as i32;
         println!(

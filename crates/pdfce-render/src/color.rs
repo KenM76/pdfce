@@ -2627,7 +2627,7 @@ mod tests {
     /// worth having.
     #[test]
     fn a_soft_mask_backdrop_converts_by_the_painted_content_route() {
-        for intent in [CmykIntent::Naive, CmykIntent::Calibrated] {
+        for intent in [CmykIntent::NeutralBlack, CmykIntent::Calibrated] {
             for (c, m, y, k) in [
                 (0.0, 0.0, 0.0, 1.0),
                 (1.0, 1.0, 1.0, 1.0),
@@ -2984,8 +2984,31 @@ mod tests {
             &[],
         );
         let (r, g, b) = pixel(&rendered, 50, 50);
-        assert_eq!(r, g, "the stand-in is neutral by construction");
-        assert_eq!(g, b);
+        // ★ NEUTRAL IN CMYK, NOT NEUTRAL IN sRGB — and the difference arrived
+        // with `Pass 153.0`.
+        //
+        // The stand-in is built achromatic: equal C, M and Y with the tint in
+        // K. What it RENDERS as depends on `CmykIntent`, and until 2026-08-28
+        // the default was `NeutralBlack`, which forces a pure-K colour to an
+        // exactly neutral grey — so `r == g == b` held on the nose and the
+        // test asserted it.
+        //
+        // The default is now `Calibrated`, whose whole documented consequence
+        // is that CMYK neutrals are *slightly cool* (solid K renders `#231F20`,
+        // not `#000000`). So exact equality is now false for a correct render,
+        // and this test failed on the intent change rather than on any change
+        // to the fallback it is about.
+        //
+        // Asserted as a measured spread rather than relaxed to nothing: the
+        // claim worth keeping is that pdfce invents no HUE for a missing tint
+        // transform, and a handful of levels of calibrated coolness is not a
+        // hue. The observed spread is 4 (35 vs 31); 12 leaves room for table
+        // revisions without admitting a green or a magenta.
+        let spread = i32::from(r.max(g).max(b)) - i32::from(r.min(g).min(b));
+        assert!(
+            spread <= 12,
+            "the stand-in must invent no hue: got r={r} g={g} b={b}, spread {spread}"
+        );
         assert!(r < 60, "and full tint is still the darkest value");
         assert!(
             rendered.diagnostics.color.tint_transform_not_applied >= 1,

@@ -40,8 +40,8 @@
 //! reader scan every one.
 //!
 //! The **Colour** group starts expanded because it holds the setting most
-//! likely to have brought someone here — and the only one whose default
-//! knowingly differs from other PDF viewers.
+//! likely to have brought someone here — *"my black lines look grey"* is the
+//! symptom that sends an operator to a settings window at all.
 //!
 //! # The three obligations this window carries beyond "show the value"
 //!
@@ -65,14 +65,25 @@
 //!    preview, and every setting says which it is — rule 3's round-trip
 //!    discipline is the operator's concern too, not only the engine's.
 //!
-//! # Divergence is labelled, not hidden
+//! # ★ A divergence label was DELETED here, and the deletion is the point
 //!
-//! One shipped default — [`CmykIntent::NeutralBlack`] — knowingly departs
-//! from what Acrobat and pdfium do, on the operator's own 2026-08-08
-//! ruling. The window says so *at that setting*, not in a footnote. A
-//! future operator (or a future session) must be able to see that pdfce
-//! chose differently **on purpose**, or the next render-parity difference
-//! gets investigated as a defect.
+//! Until 2026-08-28 one shipped default — [`CmykIntent::NeutralBlack`] —
+//! knowingly departed from Acrobat and pdfium on the operator's own
+//! 2026-08-08 ruling, and this window said so *at that setting* so a future
+//! render-parity difference would not be investigated as a defect.
+//!
+//! **He reversed the ruling** (`Pass 153.0`): the default is now
+//! [`CmykIntent::Calibrated`], which is what Acrobat and pdfium produce. The
+//! divergence note was **deleted rather than reworded**, because a note
+//! explaining a divergence that no longer exists is not redundant — it is
+//! backwards, and it would send the next reader looking for a difference
+//! that is not there.
+//!
+//! The obligation it served is unchanged and now has nothing to discharge:
+//! **if a shipped default ever again departs from the dominant reader, say
+//! so at the setting.** `NeutralBlack` remains available and remains the
+//! right answer for CAD line art — what changed is which of two good answers
+//! ships first, not which is defensible.
 //!
 //! # Cancel is real
 //!
@@ -521,17 +532,20 @@ fn cmyk_intent_setting(ui: &mut egui::Ui, draft: &mut Draft) {
         ui_text::setting_cmyk_calibrated(),
         Some(ui_text::setting_cmyk_calibrated_note()),
     );
-    option(
-        ui,
-        v,
-        CmykIntent::Naive,
-        ui_text::setting_cmyk_naive(),
-        Some(ui_text::setting_cmyk_naive_note()),
-    );
-    // The divergence disclosure, stated where the operator is choosing
-    // rather than in a footnote: this reader is exactly the person who
-    // needs to know pdfce departs from Acrobat here on purpose.
-    ui.label(egui::RichText::new(ui_text::setting_cmyk_divergence()).small());
+    // ★ THE DIVERGENCE DISCLOSURE WAS DELETED HERE, NOT REWORDED
+    // (`Pass 153.0`, operator ruling 2026-08-28).
+    //
+    // It read "pdfce's default deliberately differs from Acrobat here", and
+    // existed so an operator would not report a render-parity difference as a
+    // defect. With the default now matching Acrobat, that sentence is not
+    // redundant — it is BACKWARDS, and a note explaining a divergence left
+    // standing after the divergence ends actively misinforms.
+    //
+    // `pdfceGUI` reached the same conclusion independently and deleted theirs
+    // rather than rewording it. Recorded because the deletion is easy to
+    // mistake for an oversight by someone reading only the diff.
+    //
+    // `CmykIntent::Naive`'s option went with it: the variant no longer exists.
 }
 
 fn cmyk_jpeg_setting(ui: &mut egui::Ui, draft: &mut Draft) {
@@ -1030,8 +1044,23 @@ mod tests {
 
     #[test]
     fn changing_a_value_makes_the_draft_dirty() {
+        // ★ The value here must be a NON-DEFAULT one, and which variant that
+        // is has now changed once. This test set `Calibrated` from the day it
+        // was written until `Pass 153.0` moved `#[default]` onto it — at which
+        // point "change a value" became "assign the value it already had" and
+        // the test failed, correctly, on its own terms.
+        //
+        // Worth a comment rather than a silent swap: a test whose subject is
+        // *difference* has to name something that differs, so it is coupled to
+        // the default whether or not it says so. Saying so is what makes the
+        // next default move a one-line fix instead of a puzzle.
         let mut draft = Draft::new(&Settings::default());
-        draft.working.cmyk_intent = CmykIntent::Calibrated;
+        draft.working.cmyk_intent = CmykIntent::NeutralBlack;
+        assert_ne!(
+            CmykIntent::NeutralBlack,
+            Settings::default().cmyk_intent,
+            "this test is vacuous unless the value it assigns is not the default"
+        );
         assert!(draft.is_dirty());
         assert!(!draft.is_all_default());
     }
@@ -1043,7 +1072,7 @@ mod tests {
         // no edit, and a dirty flag that latched would tell them they had.
         let mut draft = Draft::new(&Settings::default());
         let was = draft.working.cmyk_intent;
-        draft.working.cmyk_intent = CmykIntent::Naive;
+        draft.working.cmyk_intent = CmykIntent::NeutralBlack;
         draft.working.cmyk_intent = was;
         assert!(!draft.is_dirty());
     }

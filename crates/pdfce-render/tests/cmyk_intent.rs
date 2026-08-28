@@ -135,6 +135,25 @@ fn the_shipped_default_renders_solid_black_ink_as_a_warm_near_black() {
     // Deliberately asserting that black is NOT #000000. The regression
     // this catches — a silent revert to the naive additive formula — would
     // sail past an assertion that merely said "dark".
+    //
+    // ★★ THIS TEST'S NAME WAS A LIE FOR TWENTY DAYS, AND NOTHING NOTICED.
+    //
+    // It says *the shipped default*, and from 2026-08-08 to 2026-08-28 the
+    // shipped default was `NeutralBlack`, which renders `#000000` — the exact
+    // opposite of what this asserts. It stayed green throughout because it
+    // names `CmykIntent::Calibrated` explicitly rather than
+    // `CmykIntent::default()`, so it was testing a variant while claiming to
+    // test the default. A second test, `the_shipped_default_renders_pure_k_
+    // _as_true_black`, was added beside it asserting the opposite under
+    // `default()`, and the two coexisted without contradiction.
+    //
+    // `Pass 153.0` reversed the ruling — the default is `Calibrated` again —
+    // so the name is true once more and the sibling test has been deleted
+    // rather than inverted. Recorded because the failure mode is worth more
+    // than the fix: **a test that hard-codes the value it calls "the default"
+    // cannot detect the default moving**, and reads as coverage of exactly
+    // the thing it has stopped covering. `the_default_render_options_carry_
+    // _the_default_intent` below is the one that actually pins `default()`.
     let (r, g, b) = centre(&render(page_filled_with("0 0 0 1"), CmykIntent::Calibrated));
     assert!(
         (r, g, b) != (0, 0, 0),
@@ -195,25 +214,6 @@ fn the_grey_ramp_is_neutral_under_neutral_black() {
 }
 
 #[test]
-fn the_naive_intent_reproduces_the_pre_calibration_render() {
-    // Its only reason to exist: an operator comparing against an export
-    // made before the conversion changed needs a way to reproduce it.
-    assert_eq!(
-        centre(&render(page_filled_with("0 0 0 1"), CmykIntent::Naive)),
-        (0, 0, 0),
-        "the naive additive formula made pure K exactly black"
-    );
-    assert_eq!(
-        centre(&render(page_filled_with("1 1 1 0"), CmykIntent::Naive)),
-        (0, 0, 0)
-    );
-    assert_eq!(
-        centre(&render(page_filled_with("0 0 0 0"), CmykIntent::Naive)),
-        (255, 255, 255)
-    );
-}
-
-#[test]
 fn an_image_sample_honours_the_same_intent_as_the_k_operator() {
     // The second, independently-wired path. `pdfce-core::color`'s module
     // docs require a filled rectangle and an image of the "same" CMYK to
@@ -250,11 +250,7 @@ fn an_image_sample_honours_the_same_intent_as_the_k_operator() {
         ),
     ]);
 
-    for intent in [
-        CmykIntent::Calibrated,
-        CmykIntent::NeutralBlack,
-        CmykIntent::Naive,
-    ] {
+    for intent in [CmykIntent::Calibrated, CmykIntent::NeutralBlack] {
         let image = centre(&render(bytes.clone(), intent));
         let fill = centre(&render(page_filled_with("0 0 0 1"), intent));
         // ±1, and the tolerance is a measured rasterizer artefact rather
@@ -293,22 +289,21 @@ fn the_default_render_options_carry_the_default_intent() {
     );
 }
 
+/// ★ WHICH variant ships, pinned as an operator ruling rather than left to
+/// a `#[default]` attribute nothing asserts.
+///
+/// The test directly above is deliberately variant-AGNOSTIC — it survives any
+/// default change, which is what makes it a good invariant and a useless
+/// record. This one is the opposite: it exists to FAIL if the default moves,
+/// because which variant ships is a decision Ken made twice and reversed once,
+/// not an implementation detail.
+///
+/// - 2026-08-08: `NeutralBlack`, over the better evidence, for CAD line art.
+/// - 2026-08-28: `Calibrated` — *"change our default to Match other PDF
+///   viewers"* (`Pass 153.0`).
+///
+/// If this fails, do not "fix" it. Find out whether he moved it again.
 #[test]
-fn the_shipped_default_renders_pure_k_as_true_black() {
-    // The operator's ruling of 2026-08-08, pinned as a fact about the
-    // shipped product rather than left implicit in a `#[default]`
-    // attribute.
-    //
-    // This DIVERGES from Acrobat and pdfium deliberately — both render
-    // solid black ink as a warm near-black, and that is still available as
-    // `CmykIntent::Calibrated`. The divergence is narrow by construction:
-    // only the pure-K axis moves, which
-    // `neutral_black_leaves_every_colour_that_is_not_pure_k_alone` pins
-    // from the other side. If this test ever fails, the question to ask is
-    // whether the default was changed on purpose.
-    assert_eq!(
-        centre(&render(page_filled_with("0 0 0 1"), CmykIntent::default())),
-        (0, 0, 0),
-        "out of the box, black ink is black"
-    );
+fn the_shipped_default_is_calibrated_by_operator_ruling() {
+    assert_eq!(CmykIntent::default(), CmykIntent::Calibrated);
 }

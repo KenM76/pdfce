@@ -1105,7 +1105,7 @@ mod render_policy_tests {
         // exactly the operator choice this gate exists to protect.
         let hidden = crate::LayerVisibility::hiding([pdfce_core::object::ObjId::new(10, 0)]);
         let options = RenderOptions::default()
-            .with_cmyk_intent(pdfce_core::settings::CmykIntent::Naive)
+            .with_cmyk_intent(pdfce_core::settings::CmykIntent::NeutralBlack)
             .with_page_blend_space_source(pdfce_core::settings::PageBlendSpaceSource::DeviceNative)
             .with_overprint_zero_tint_scope(
                 pdfce_core::settings::OverprintZeroTintScope::DeviceCmykOnly,
@@ -1121,7 +1121,7 @@ mod render_policy_tests {
         assert_eq!(
             options.policy(),
             RenderPolicy {
-                cmyk_intent: pdfce_core::settings::CmykIntent::Naive,
+                cmyk_intent: pdfce_core::settings::CmykIntent::NeutralBlack,
                 // NOT the default, and deliberately SMALLER than it — a
                 // ceiling test that only ever moves upward would pass on a
                 // projection that quietly substituted the constant.

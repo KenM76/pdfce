@@ -290,54 +290,64 @@ impl LoadReport {
 /// this the textbook case for R169: the standard is silent, so the choice
 /// is the operator's.
 ///
-/// # ★★ THE DEFAULT, AS DATA RATHER THAN AS A STORY ABOUT A DIVERGENCE
+/// # ★★ THE DEFAULT, AS DATA
 ///
 /// ```text
-///   shipped default : NeutralBlack     (operator ruling, 2026-08-08)
+///   shipped default : Calibrated       (operator ruling, 2026-08-28)
 ///   best-evidenced  : Calibrated       (Acrobat's shipped profile + pdfium)
-///   they differ     : DELIBERATELY, and in REASONING, not in value
+///   they differ     : NO. They agree.
 /// ```
 ///
-/// This block exists because a downstream project read the prose below and
-/// **mis-implemented it in the safe direction**. `pdfce-gui` restated
-/// `NeutralBlack` in its own PDF/X preset believing it was diverging from
-/// pdfce; it never was — `NeutralBlack` has been the shipped default since
-/// the operator's ruling was adopted. Its own test caught the duplication.
+/// # ★★★ THEY DID NOT ALWAYS AGREE, AND THE HISTORY IS LOAD-BEARING
 ///
-/// ★ The lesson, which its author passed back and which generalises past this
-/// type: **a doc comment that describes a default as a divergence invites
-/// being read as a divergence in VALUE.** What actually diverges here is the
-/// *reasoning* — pdfce ships a default it knows is not the best-evidenced
-/// answer, because the operator ruled for line art and the evidence favours
-/// conformance rendering. Both statements are true; only one of them is about
-/// a value.
+/// From 2026-08-08 to 2026-08-28 the shipped default was
+/// [`Self::NeutralBlack`], by Ken's explicit ruling ("flip it") once he saw
+/// what the calibrated answer does to pure-K line art. The evidence favoured
+/// `Calibrated` throughout — tier (a)/(c), the strongest in the ambiguity
+/// register — and lost to a deliberate judgement about CAD drawings.
 ///
-/// Stating both as data costs three lines and makes the misreading
-/// unavailable. Any setting whose shipped default is knowingly not its
-/// best-evidenced one should carry the same two-line pair.
+/// **He reversed it on 2026-08-28**, relayed through `pdfceGUI`, verbatim:
+/// *"under the colour setting we are going to change our default to Match
+/// other PDF viewers."*
 ///
-/// # The default is an OPERATOR RULING, and knowingly diverges
+/// ★ The reversal is recorded rather than erased for one specific reason:
+/// **`NeutralBlack`'s reasoning did not stop being true.** Pure-K line art
+/// still renders `#231F20` under the new default, and that is still not what
+/// a CAD operator expects. What changed is which of two good answers ships
+/// first. A future session finding a drawing's blacks "wrong" should reach
+/// for [`Self::NeutralBlack`], not treat it as a defect.
 ///
-/// R169 says a shipped default should be "the best guess of what is
-/// usually followed", and by that rule the default would be
-/// [`Self::Calibrated`] — it is what Acrobat's shipped profile and pdfium
-/// both produce, which is tier-(a)/(c) evidence, the strongest in the
-/// whole ambiguity register.
+/// # ★★ A NOTE THAT DIED WITH ITS DIVERGENCE, AND WHY THAT MATTERED
 ///
-/// **The default is [`Self::NeutralBlack`] anyway**, by Ken's explicit
-/// ruling of 2026-08-08 ("flip it") once he saw what the calibrated
-/// answer does to pure-K line art. This is recorded as a *divergence*
-/// rather than quietly relabelled as the consensus, because the two are
-/// different claims and a future session must not read this default as
-/// evidence of what other readers do. It is the reference-exceeding case
-/// from the other side: matching the reference is a floor, not an
-/// obligation, and here the operator judged the floor wrong for the
-/// documents he actually opens.
+/// This block previously carried a long argument that pdfce's default
+/// *knowingly diverged* from Acrobat, written after `pdfce-gui` misread the
+/// prose and restated `NeutralBlack` in its own PDF/X preset believing it was
+/// diverging from pdfce — it never was.
 ///
-/// The divergence is also **narrow by construction** — only the pure-K
-/// axis moves; every mixed colour still uses the calibrated table — so
-/// what is given up is agreement on black line art specifically, not
-/// colour fidelity generally.
+/// With the default now matching, that argument is not merely redundant, it
+/// is **backwards**: a note explaining a divergence, left standing after the
+/// divergence ends, actively misinforms. `pdfceGUI` made the same call on
+/// their side and deleted their divergence note rather than rewording it.
+///
+/// ★ The generalisable half survives the deletion and is kept here because
+/// it outlived its example: **a doc comment that describes a default as a
+/// divergence invites being read as a divergence in VALUE.** State the
+/// shipped default and the best-evidenced answer as two lines of data. When
+/// they agree, say so — an absent statement reads as an unexamined one.
+///
+/// # A variant was DELETED here, which is rarer than a default moving
+///
+/// `CmykIntent::Naive` — the additive `1 − min(1, x + k)` formula pdfce used
+/// before it was calibrated — was removed by the same ruling: *"you can also
+/// remove the old pdfce formula from that section, even the code for it."*
+///
+/// It existed so an operator could reproduce a pre-calibration pdfce export.
+/// That justification was true when written and **expired silently as those
+/// files aged out** — no test failed, no gate fired, and the copy describing
+/// it still read sensibly. A control whose only purpose is bug-compatibility
+/// with your own past is removable only by somebody deciding to, because
+/// nothing will ever tell you it has become dead weight.
+///
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum CmykIntent {
@@ -345,32 +355,26 @@ pub enum CmykIntent {
     /// SWOP-family rendering that Acrobat's default profile and pdfium
     /// both produce.
     ///
-    /// **Not the shipped default, despite being the best-evidenced
-    /// answer** — see the type docs. Its visible consequence is that
-    /// solid black ink (`0 0 0 1 k`) renders `#231F20` rather than
-    /// `#000000`, and mid greys are slightly cool. Choose this when the
-    /// question is *"what will this look like in Acrobat?"* — proofing a
-    /// document for someone else's screen, or checking a render-parity
-    /// difference.
+    /// **The shipped default** (`Pass 153.0`, operator ruling 2026-08-28),
+    /// and also the best-evidenced answer — the two agree now, and the type
+    /// docs record that they did not always.
+    ///
+    /// Its visible consequence is that solid black ink (`0 0 0 1 k`) renders
+    /// `#231F20` rather than `#000000`, and mid greys are slightly cool. That
+    /// is what Acrobat shows, which is the point: *"what will this look like
+    /// in Acrobat?"* and *"what does pdfce show?"* now have one answer.
+    #[default]
     Calibrated,
     /// As [`Self::Calibrated`], except that pure black — `C = M = Y = 0`
     /// with any `K` — is forced to a neutral grey of `1 − K`, so pure-K
     /// line art renders `#000000`.
     ///
-    /// **The shipped default, by operator ruling** (see the type docs).
-    /// For CAD and engineering drawings, where every line is stroked in
-    /// pure K and true black on white is the expectation — which is the
-    /// document population this project's operator actually works with.
-    #[default]
+    /// **Was the shipped default until 2026-08-28**, by an operator ruling
+    /// the same operator has since reversed. Still the right choice for CAD
+    /// and engineering drawings, where every line is stroked in pure K and
+    /// true black on white is the expectation — the reasoning did not stop
+    /// being true, it stopped being the default.
     NeutralBlack,
-    /// The naive additive formula pdfce used before the calibration —
-    /// `1 − min(1, x + k)` per channel.
-    ///
-    /// Kept because it is what every pdfce-rendered image before this
-    /// change looked like, so an operator comparing against an old export
-    /// has a way to reproduce it. Not recommended: it misses the reference
-    /// by up to 37/255 per channel.
-    Naive,
 }
 
 /// Where a page's blending colour space comes from when the page group
@@ -1637,7 +1641,6 @@ const fn cmyk_token(intent: CmykIntent) -> &'static str {
     match intent {
         CmykIntent::Calibrated => "calibrated",
         CmykIntent::NeutralBlack => "neutral_black",
-        CmykIntent::Naive => "naive",
     }
 }
 
@@ -1842,7 +1845,6 @@ impl Settings {
             "cmyk_intent" => match value {
                 "calibrated" => self.cmyk_intent = CmykIntent::Calibrated,
                 "neutral_black" => self.cmyk_intent = CmykIntent::NeutralBlack,
-                "naive" => self.cmyk_intent = CmykIntent::Naive,
                 _ => notes.push(SettingNote::BadValue {
                     key: key.to_owned(),
                     value: value.to_owned(),
@@ -2110,7 +2112,6 @@ impl Settings {
             match self.cmyk_intent {
                 CmykIntent::Calibrated => "calibrated",
                 CmykIntent::NeutralBlack => "neutral_black",
-                CmykIntent::Naive => "naive",
             }
         );
 
