@@ -1636,7 +1636,12 @@ pub(crate) fn plan_edit_target(
     let class = classify_font(doc, font_dict, &font)?;
 
     // --- map the find text to a contiguous code range in one element ---
-    let m = match_run(anchor, &req.find)?;
+    //
+    // `Pass 145.0`: an empty `find` on a PINNED request means the whole
+    // operator, so a caller that already located it need not describe it.
+    // Unpinned, an empty `find` is still refused by `match_run`.
+    let find = effective_find(anchor, &req.find, req.pinned_span);
+    let m = match_run(anchor, find)?;
 
     // --- encode the replacement (R-INV-1/5/6/7/8) ---
     //
@@ -1785,6 +1790,20 @@ pub(crate) fn plan_edit_target(
     //     write step, Pass 14.3 §0.2) ---
     let mut disclosures = Vec::new();
     disclosures.extend(encoded.disclosures);
+    if req.find.is_empty() {
+        // Reached only on a pinned request — `match_run` refuses an empty
+        // find without a pin — so this cannot fire for a caller who simply
+        // passed no text. See `format::disclosure_whole_operator` for why the
+        // multi-operator sentence is in it.
+        disclosures.push(format!(
+            "whole operator: no find text was given and a byte span was pinned, so the ENTIRE \
+             pinned show operator was replaced — {} character(s). One text run in pdfce's \
+             extraction model can carry glyphs from several show operators (13% of runs over \
+             pdfce's corpus do), so if the selection this pin came from spanned more than one \
+             operator, only the PINNED one changed.",
+            find.chars().count()
+        ));
+    }
     disclosures.push(trust_disclosure(class.embedded, &font.base_font));
     disclosures.push(
         "save: this edit was written INCREMENTALLY (R34/R70); the prior text survives in the \
@@ -2285,6 +2304,66 @@ struct EncodedReplacement {
     bytes: Vec<u8>,
     /// Encoder-level disclosures (the simple path's R-INV-5 substitutions).
     disclosures: Vec<String>,
+}
+
+/// The text a request is **actually** about, resolving *"the whole pinned
+/// operator"* (`Pass 145.0`).
+///
+/// # The problem it removes
+///
+/// A caller that has already **located** a show operator — by walking the
+/// text model and pinning `provenance(..).operator_span` — still had to
+/// **describe** it, by handing back a `find` string that pdfce would then
+/// search for inside the very operator the pin had already identified. That
+/// is not a formality; a consuming project got it wrong three times in a row,
+/// each attempt looking right and each failing differently:
+///
+/// | attempt | outcome |
+/// |---|---|
+/// | `find: ""` with a pin | refused — *"empty find text"* |
+/// | `find` = the run's `text` | `NoMatch` |
+/// | `find` = the glyph-covered bytes | `NoMatch` on some runs |
+///
+/// The middle row is the one worth understanding, because it is invisible in
+/// test data. A `TextRun`'s `text` is **not** in 1:1 correspondence with its
+/// glyphs: `/ToUnicode` may map one glyph to **several** characters (ISO
+/// 32000-1 §9.10.3) — an `ffl` ligature is one glyph and three characters, a
+/// surrogate pair is one glyph and two `char`s. So a `find` rebuilt from a
+/// run's text can fail to match the operator's own decoded text even though
+/// the pin names that exact operator. Unligatured synthetic fixtures never
+/// show it; real typeset copy does.
+///
+/// # The rule
+///
+/// An **empty** `find` means *"the whole pinned operator"* — **only** when a
+/// `pinned_span` is present. With no pin it stays
+/// [`EditError::Unsupported`]`("empty find text")`, because a caller who
+/// forgot to pin must get a refusal rather than silent whole-operator
+/// behaviour on an operator pdfce chose for them.
+///
+/// Returning `&anchor.text` rather than a distinct "whole operator" match
+/// path is deliberate: everything downstream — the code-range match, the
+/// font-coverage gate, the synthesis gate, the disclosure counts — then sees
+/// one string and cannot disagree about what was edited.
+///
+/// # Scope
+///
+/// It restyles **the pinned operator only**. A `TextRun` from the text model
+/// closes on *geometry* and a producer closes a show operator on whatever its
+/// writer felt like, so one run can correspond to more than one operator.
+/// Whether that actually occurs is measured by
+/// `crates/pdfce-core/tests/operator_span_invariant.rs`, and the answer is
+/// carried in that file rather than asserted here.
+pub(crate) fn effective_find<'a>(
+    anchor: &'a ShowData,
+    find: &'a str,
+    pinned_span: Option<ByteSpan>,
+) -> &'a str {
+    if find.is_empty() && pinned_span.is_some() {
+        &anchor.text
+    } else {
+        find
+    }
 }
 
 /// Map `find` (a substring of the operator's decoded text) to a contiguous

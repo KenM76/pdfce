@@ -957,6 +957,9 @@ for page in &all.pages {                       // Vec<PageText>            mod.r
 
 `TextRun`: `text`, `origin`, `glyphs`, `artifact`, `mcid`,
 `bbox: Option<Rect>`; method `direction() -> (f32, f32)`.
+★ `text` is **not** one `char` per glyph and the run is **not** one show
+operator — see §8.4.0 before building anything that locates an edit from a
+run.
 `TextOrigin`: `Glyphs` | `ActualText` | `DerivedWordSpace` |
 `DerivedLineBreak`. Only `Glyphs` runs have glyphs.
 `ExtractedGlyph`: `code`, `rung`, `text_start`, `text_len`,
@@ -965,6 +968,76 @@ for page in &all.pages {                       // Vec<PageText>            mod.r
 `GlyphProvenance`: `operator_span`, `text_matrix`, `ctm`,
 `tf_size`, `composite`, … — `None` for every glyph unless
 `capture_provenance` was set.
+
+#### ★★★ 8.4.0 A run's `text` is not one character per glyph, and a run is not one show operator (`Pass 145.0`)
+
+**Two facts a caller building an edit locator out of a run needs, both of
+which were true and neither of which was written down anywhere they would
+look.** A consuming project got each of them wrong in turn, on the same
+afternoon, and the operator-facing symptom was *"eleven pieces of text went
+bold and the twelfth refused"* on a page where nothing is unusual.
+
+##### `text.chars().count()` is not `glyphs.len()`
+
+`/ToUnicode` maps a character **code** to a **string**, not to a character
+(ISO 32000-1 §9.10.3). So **one glyph can carry several characters**: an
+`ffl` ligature is one glyph and three `char`s; a code mapping above the BMP
+is one glyph and two `char`s. `ExtractedGlyph::text_start` / `text_len`
+already say this — they are a **range**, not an index — but a caller reading
+"what text is in this run" lands on `TextRun::text` and sees a `String`.
+
+Measured over pdfce's fixture corpus: **1 of 191 synthetic runs** has
+`len(text) != len(glyphs)` (`text/identity-h-tounicode.pdf` — 8 characters
+over 6 glyphs). That ratio is the trap, not a reassurance: **it is near-zero
+on synthetic test text and routine on real typeset copy**, so a locator built
+on a 1:1 assumption passes every fixture a shell writes for itself and fails
+on the customer's document.
+
+⇒ **Do not rebuild a `find` string from a run and expect it to match the
+content stream.** Use `FormatRequest::whole_operator(page, span)` — see
+`02-editing-and-saving.md`.
+
+##### A `TextRun` is NOT a show operator
+
+`text_extract::layout` closes a run on **geometry** (a gap, a direction
+change, a style change). A producer closes a `Tj`/`TJ` wherever its writer
+felt like. The two agree often enough to look like a rule and **do not**:
+
+| measured over `fixtures/` — 4,289 files, 1,623 with text | |
+|---|---:|
+| runs | 18,559 |
+| glyphs | 669,436 |
+| distinct `operator_span` groups | 29,246 |
+| **runs carrying glyphs from MORE THAN ONE show operator** | **2,420 (13 %)** |
+
+`crates/pdfce-core/tests/operator_span_invariant.rs` is that measurement, and
+it re-runs on every `cargo test`.
+
+##### ★ The invariant you may rely on, now that it is measured
+
+> **The glyphs sharing one `GlyphProvenance::operator_span` slice a
+> contiguous, matchable range out of their run's `text`.**
+
+**0 exceptions in 29,246 operator groups.** Both halves are asserted by that
+test file: contiguity (no other operator's glyphs interleave inside the
+range) and clean indexing (the slice lands on `char` boundaries inside
+`run.text`). This was previously undocumented load-bearing behaviour that a
+downstream project had already shipped against without being able to check
+it; it is now a guarantee, and a `layout` refactor that breaks it turns that
+test red rather than a customer's document.
+
+**What is NOT guaranteed:** that a run has only one such group — see the 13 %
+above.
+
+##### Getting a span from outside the library
+
+`pdfce-cli extract-text --json --spans` emits `op_start`, `op_len` and
+`stream` per glyph. Without `--spans` those three fields are **absent**, not
+zero, because provenance capture is off by default and "not captured" must
+not read as "offset 0". `stream` is `"page"` or `"form:N"`, and it is not
+optional to read: a page's `/Contents` are concatenated into one decoded
+buffer and every form XObject is a separate one, so a form's span pinned
+against the page names a different operator or none.
 
 #### ★★★ 8.4.1 Text is not always horizontal — `direction` (`Pass 139.0`)
 

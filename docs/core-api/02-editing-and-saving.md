@@ -343,6 +343,56 @@ need their own policy).
 | Add an invisible OCR text layer to one or more pages | `add_ocr_layer(&mut self, &[OcrPageLayer<'_>], &OcrLayerOptions) -> Result<Vec<OcrLayerReport>, OcrLayerError>` | 7313 | **ONE undo entry for the whole run**, however many pages. Reads the SESSION graph, not the base. |
 | Give ONE page a private copy of a shared form XObject | `unshare_form(&mut self, page_index, form: ObjId) -> Result<UnshareFormReport, EditError>` | 7367 | Copy-on-write. Refuses a **nested** invocation by name. |
 
+#### `FormatRequest`'s `find` — and how to say "the whole operator" instead (`Pass 145.0`)
+
+`FormatRequest::new(page, find)` takes `find` as *"the text to locate within
+one show operator's decoded run"*. **It stayed required even when the
+operator was already located by `pinned_span`** — so a caller holding an
+operator had to hand back a string for pdfce to search for inside that very
+operator. That round trip is where three consecutive attempts failed:
+
+| attempt | outcome |
+|---|---|
+| `find: ""` with a pin | refused — *"empty find text"* |
+| `find` = the run's `text` | `NoMatch` |
+| `find` = the glyph-covered bytes | `NoMatch` on some runs |
+
+The middle row is the one that will catch you: a run's `text` is **not** in
+1:1 correspondence with its glyphs (`/ToUnicode` may map one glyph to several
+characters — `01-reading-and-model.md` §8.4.0), so a rebuilt `find` need not
+match the operator's own decoded text. It fails **invisibly on unligatured
+test text** and **routinely on real typeset copy**.
+
+**Use this instead:**
+
+```rust
+let span = model.provenance(gref)?.operator_span;
+let req  = FormatRequest::whole_operator(page_index, span).size(24.0);
+```
+
+`FormatRequest::whole_operator(page_index, span)` ≡
+`FormatRequest::new(page_index, "").pinned(span)`. Both spellings work and
+produce identical bytes (pinned by a test); the named one says what it means.
+`EditRequest` gets the same affordance by setting `pinned_span` with an empty
+`find`.
+
+**Three things about it:**
+
+1. **An empty `find` with NO pin is still refused**, by the same name it
+   always was. A caller who forgot to pin gets a refusal, not silent
+   whole-operator behaviour on an operator pdfce chose for them.
+2. **It targets the pinned OPERATOR, not the run.** 13 % of runs over pdfce's
+   corpus carry glyphs from more than one show operator. The report carries a
+   `whole operator:` disclosure stating the extent taken and naming that case
+   — the extent was pdfce's choice, so rule 4 applies.
+3. **The font-coverage gate sees the resolved text.** A whole-operator request
+   combined with `set_font` checks the target against the operator's actual
+   characters, not against the empty string — which every face would have
+   "covered".
+
+CLI: `format-text --pin-span START:LEN` with an empty (or omitted) `--find`.
+Get the numbers from `extract-text --json --spans`.
+
 #### `preview_font_resources` — read this before wiring a font or style control
 
 `Pass 142.1`. A `&self` query that answers, for **one located run**, which of

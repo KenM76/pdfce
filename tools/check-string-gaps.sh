@@ -97,6 +97,34 @@
 # aligned-column case is now pinned in the clean self-test so a future
 # widening cannot quietly re-break it.
 #
+# ★★★ A `pdfce-cli:` / `pdfce-gui:` DIAGNOSTIC IS PROSE TOO — widened
+# 2026-08-27, and this is the THIRD time this one gate has missed by admitting
+# only the spelling somebody had already seen. It reported PASS on a shipped
+# refusal reading
+#
+#     "pdfce-cli: format-text needs --find TEXT, or --pin-span START:LEN with
+#      an empty              --find to mean the whole pinned show operator"
+#
+# TWO holes at once, which is why it is worth its own note. The literal was not
+# recognised as prose (it is an `eprintln!`, not a `#[error(...)]`), and even in
+# prose mode the trailing class did not admit a HYPHEN — and the next word after
+# a gap in a CLI diagnostic is, more often than anything else, a `--flag`.
+#
+# The structural argument is the same one that scoped the `{}` widening: a
+# literal opening with the binary's own diagnostic prefix is a sentence an
+# operator reads, never an aligned report column. `/` was added with `-`, for a
+# path, before it cost a cycle to discover.
+#
+# ⇢ Measured before widening: a blanket trailing-class widening produced 24
+# findings, ~18 of them legitimate (DXF byte streams, aligned probe columns).
+# Scoped to prose it produced exactly 1 — the defect. The scoping is the whole
+# design, not a compromise.
+#
+# ⇢ And the transferable part, now that it is three for three: in prose mode
+# the trailing class should be read as "anything that starts a word", not as a
+# list of the characters that have failed so far. Each of the three repairs
+# enumerated from the instance in hand.
+#
 # WHAT THIS GATE CANNOT SEE, AND THE ONE ESCAPE HATCH
 # ===================================================
 #
@@ -185,7 +213,15 @@ scan() {
                 # the form the three 2026-08-20 misses were written in.
                 was_error = in_error
                 if (index(code, "#[error(")) in_error = 1
-                prose = (in_error || was_error)
+                # ★ A CLI DIAGNOSTIC IS PROSE TOO — widened 2026-08-27 after
+                # this gate reported PASS on a shipped `pdfce-cli` refusal
+                # carrying fourteen baked spaces. Same structural argument as
+                # `#[error(...)]`: a literal opening with the CLI
+                # diagnostic prefix is a sentence an operator reads, never an
+                # aligned report column. Measured tree-wide before widening:
+                # 1 finding, the defect.
+                cli = (index(code, "\"pdfce-cli: ") || index(code, "\"pdfce-gui: "))
+                prose = (in_error || was_error || cli)
                 if (in_error && index(code, ")]")) in_error = 0
 
                 # ★ THE DISPLACED ESCAPE — added 2026-08-26 after this gate
@@ -235,7 +271,28 @@ scan() {
                 if (code !~ /"/) next
                 hit = 0
                 if (code ~ /[A-Za-z,.:;)]   +[A-Za-z]/) hit = 1
-                if (prose && code ~ /[A-Za-z0-9,.:;)}]   +[A-Za-z0-9{]/) hit = 1
+                # ★ THE TRAILING CLASS ADMITS `-` AND `/` IN PROSE — widened
+                # 2026-08-27, and the reason is the third instance of one
+                # shape. The 2026-08-20 note above says the fix "widens BOTH
+                # ENDS of the class rather than only the end that failed"; it
+                # widened both ends to `{`/`}` and stopped there. The next
+                # miss was
+                #
+                #     "…with an empty              --find to mean…"
+                #
+                # where the character after the run is a HYPHEN, because the
+                # next word is a command-line flag — which is the single most
+                # likely next word in a CLI diagnostic. `/` joins it for a
+                # path, on the same reasoning and before it costs a cycle.
+                #
+                # ⇢ The transferable part is not the characters. It is that
+                # "the class only admitted the spelling somebody had already
+                # seen" has now happened three times to this one gate, and
+                # each repair enumerated from the instance in hand. Prose has
+                # no legitimate run of three spaces before ANY character, so
+                # in prose mode the trailing class should be read as
+                # "anything that starts a word", not as a list.
+                if (prose && code ~ /[A-Za-z0-9,.:;)}]   +[-A-Za-z0-9{\/"]/) hit = 1
                 if (hit) {
                     print "  " FILENAME ":" FNR ": a run of spaces baked into a string literal"
                     print "      " substr(body, 1, 100)
@@ -280,6 +337,15 @@ EOF
     cat > "$tmp/dirty3/placeholder_lhs.rs" <<'EOF'
 #[error("it has exactly {count}          picked points and cannot gain one")]
 struct B;
+EOF
+    # The 2026-08-27 widening: a CLI diagnostic whose gap is followed by a
+    # command-line FLAG. Both halves were holes — the literal was not
+    # recognised as prose, and the trailing class did not admit a hyphen.
+    mkdir -p "$tmp/dirty5"
+    cat > "$tmp/dirty5/cli_flag.rs" <<'EOF'
+fn refuse() {
+    eprintln!("pdfce-cli: format-text needs --find TEXT, or --pin-span with an empty          --find");
+}
 EOF
     # The 2026-08-26 widening: a `\n\` continuation that kept its escape and
     # lost its trailing backslash, stranding the `\n` at the start of the next
@@ -356,6 +422,10 @@ EOF
     fi
     if scan "$tmp/dirty4" > /dev/null; then
         echo "SELF-TEST FAILED: a displaced \\n (lost trailing backslash) was not detected"
+        fail=1
+    fi
+    if scan "$tmp/dirty5" > /dev/null; then
+        echo "SELF-TEST FAILED: a gap before a --flag in a CLI diagnostic was not detected"
         fail=1
     fi
     if ! scan "$tmp/clean"; then

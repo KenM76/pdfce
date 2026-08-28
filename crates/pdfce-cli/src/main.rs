@@ -2371,6 +2371,19 @@ enum Command {
         /// `--json` output either way, flagged.
         #[arg(long)]
         include_artifacts: bool,
+        /// Also emit each glyph's **show-operator byte span** (`--json`
+        /// only): `op_start`, `op_len`, and the `stream` those index.
+        ///
+        /// This is the pin `format-text --pin-span` takes, and without it
+        /// there is no way to obtain one from outside the library — which is
+        /// why a consuming project had to reconstruct a `find` string from a
+        /// run's text instead, and got it wrong three times (`Pass 145.0`).
+        ///
+        /// Off by default because it turns on provenance capture, which
+        /// costs memory per glyph and changes nothing else. An absent field
+        /// means "not captured", which a zero could not.
+        #[arg(long, requires = "json")]
+        spans: bool,
     },
 
     /// Render a page to a PNG image.
@@ -4132,8 +4145,40 @@ enum Command {
         #[arg(long, default_value_t = 1)]
         page: usize,
         /// Text to find within a single run on the page.
-        #[arg(long)]
+        ///
+        /// May be **empty** when `--pin-span` is given, which means *"the
+        /// whole pinned show operator"* — see that flag. Empty WITHOUT a pin
+        /// is refused, so forgetting the pin cannot silently restyle an
+        /// operator pdfce chose.
+        #[arg(long, default_value = "")]
         find: String,
+        /// Pin the target show operator by its **byte span**, as
+        /// `START:LEN`, instead of (or as well as) searching for text.
+        ///
+        /// Get the numbers from `extract-text --json --spans`, whose glyphs
+        /// carry `op_start` / `op_len` / `stream`. The span indexes the
+        /// **decoded** content buffer named by `stream` — a page's
+        /// `/Contents` are concatenated into one buffer and every form
+        /// XObject is a separate one, so a form's span pinned against the
+        /// page finds nothing.
+        ///
+        /// # Why pin at all
+        ///
+        /// Because `--find` describes a target that may already be known.
+        /// A caller holding an operator had to hand back a string for pdfce
+        /// to search for inside that very operator, and rebuilding that
+        /// string is where it goes wrong: `/ToUnicode` may map ONE glyph to
+        /// SEVERAL characters (§9.10.3 — an `ffl` ligature is one glyph and
+        /// three characters), so a string rebuilt from extracted text need
+        /// not match the operator's own decoded text. That failure is
+        /// invisible on unligatured test text and routine on real typeset
+        /// copy.
+        ///
+        /// With a pin and an empty `--find`, the whole operator is the
+        /// target and nothing has to be described. The report discloses the
+        /// extent it took.
+        #[arg(long = "pin-span", value_name = "START:LEN")]
+        pin_span: Option<String>,
         /// Replacement text (re-encoded into the run's font).
         #[arg(long)]
         replace: String,
@@ -4246,8 +4291,40 @@ enum Command {
         #[arg(long, default_value_t = 1)]
         page: usize,
         /// Text to find within a single run on the page.
-        #[arg(long)]
+        ///
+        /// May be **empty** when `--pin-span` is given, which means *"the
+        /// whole pinned show operator"* — see that flag. Empty WITHOUT a pin
+        /// is refused, so forgetting the pin cannot silently restyle an
+        /// operator pdfce chose.
+        #[arg(long, default_value = "")]
         find: String,
+        /// Pin the target show operator by its **byte span**, as
+        /// `START:LEN`, instead of (or as well as) searching for text.
+        ///
+        /// Get the numbers from `extract-text --json --spans`, whose glyphs
+        /// carry `op_start` / `op_len` / `stream`. The span indexes the
+        /// **decoded** content buffer named by `stream` — a page's
+        /// `/Contents` are concatenated into one buffer and every form
+        /// XObject is a separate one, so a form's span pinned against the
+        /// page finds nothing.
+        ///
+        /// # Why pin at all
+        ///
+        /// Because `--find` describes a target that may already be known.
+        /// A caller holding an operator had to hand back a string for pdfce
+        /// to search for inside that very operator, and rebuilding that
+        /// string is where it goes wrong: `/ToUnicode` may map ONE glyph to
+        /// SEVERAL characters (§9.10.3 — an `ffl` ligature is one glyph and
+        /// three characters), so a string rebuilt from extracted text need
+        /// not match the operator's own decoded text. That failure is
+        /// invisible on unligatured test text and routine on real typeset
+        /// copy.
+        ///
+        /// With a pin and an empty `--find`, the whole operator is the
+        /// target and nothing has to be described. The report discloses the
+        /// extent it took.
+        #[arg(long = "pin-span", value_name = "START:LEN")]
+        pin_span: Option<String>,
         /// New font size in points (changes only the `Tf` size operand).
         #[arg(long)]
         set_size: Option<f64>,
@@ -6804,7 +6881,15 @@ fn run() -> ExitCode {
             output,
             json,
             include_artifacts,
-        } => cmd_extract_text(&input, &pages, output.as_deref(), json, include_artifacts),
+            spans,
+        } => cmd_extract_text(
+            &input,
+            &pages,
+            output.as_deref(),
+            json,
+            include_artifacts,
+            spans,
+        ),
         Command::FetchOcrModels { dir } => cmd_fetch_ocr_models(dir.as_deref()),
         Command::ListStandards { standard } => cmd_list_standards(standard.as_deref()),
         Command::Ocr {
@@ -7296,6 +7381,7 @@ fn run() -> ExitCode {
             replace,
             output,
             pin,
+            pin_span,
             font_dirs,
             target,
         } => cmd_edit_text(&EditTextArgs {
@@ -7303,6 +7389,7 @@ fn run() -> ExitCode {
             output: &output,
             page,
             find: &find,
+            pin_span: pin_span.as_deref(),
             replace: &replace,
             pin,
             font_dirs: &font_dirs,
@@ -7326,6 +7413,7 @@ fn run() -> ExitCode {
             italic_synthetic,
             output,
             pin,
+            pin_span,
             font_dirs,
             target,
         } => cmd_format_text(&FormatTextArgs {
@@ -7333,6 +7421,7 @@ fn run() -> ExitCode {
             output: &output,
             page,
             find: &find,
+            pin_span: pin_span.as_deref(),
             set_size,
             set_color: set_color.as_deref(),
             set_font: set_font.as_deref(),
@@ -17455,6 +17544,9 @@ struct EditTextArgs<'a> {
     /// 1-based page number.
     page: usize,
     find: &'a str,
+    /// `--pin-span START:LEN`, unparsed. Parsed inside `cmd_edit_text` so a
+    /// malformed span fails before any file is opened.
+    pin_span: Option<&'a str>,
     replace: &'a str,
     pin: bool,
     font_dirs: &'a [PathBuf],
@@ -17488,6 +17580,27 @@ fn cmd_edit_text(args: &EditTextArgs<'_>) -> u8 {
         eprintln!("pdfce-cli: font-dir: {note}");
     }
 
+    // Parse the pin before any file I/O, and refuse an empty `--find` with no
+    // pin here rather than in core, so the message names the FLAG the
+    // operator would have to add — which core cannot know about.
+    let pin_span = match args.pin_span {
+        Some(spec) => match parse_pin_span(spec) {
+            Ok(span) => Some(span),
+            Err(msg) => {
+                eprintln!("pdfce-cli: {msg}");
+                return exit::EDIT_REFUSED;
+            }
+        },
+        None => None,
+    };
+    if args.find.is_empty() && pin_span.is_none() {
+        eprintln!(
+            "pdfce-cli: edit-text needs --find TEXT, or --pin-span START:LEN with an empty \
+             --find to mean the whole pinned show operator"
+        );
+        return exit::EDIT_REFUSED;
+    }
+
     let source = match std::fs::read(args.input) {
         Ok(b) => b,
         Err(err) => {
@@ -17514,7 +17627,11 @@ fn cmd_edit_text(args: &EditTextArgs<'_>) -> u8 {
             return exit::EDIT_REFUSED;
         }
     };
-    let req = EditRequest::find_replace(args.page - 1, args.find, args.replace).with_target(target);
+    let mut req =
+        EditRequest::find_replace(args.page - 1, args.find, args.replace).with_target(target);
+    if let Some(span) = pin_span {
+        req.pinned_span = Some(span);
+    }
     let opts = EditOptions::default().with_disposition(if args.pin {
         FollowerDisposition::Pin
     } else {
@@ -18156,6 +18273,9 @@ struct FormatTextArgs<'a> {
     /// 1-based page number.
     page: usize,
     find: &'a str,
+    /// `--pin-span START:LEN`, unparsed. Parsed inside `cmd_format_text` so
+    /// a malformed span fails before any file is opened.
+    pin_span: Option<&'a str>,
     set_size: Option<f64>,
     /// `MODEL:comps` as passed on the command line, e.g. `rgb:1,0,0`.
     set_color: Option<&'a str>,
@@ -18267,6 +18387,37 @@ fn parse_set_color(spec: &str) -> Result<pdfce_core::text_edit::NewFill, String>
 /// is a clean, named non-zero exit ([`exit::EDIT_REFUSED`]), never a crash.
 /// All disclosures (three-trust-level, incremental/prior-state, colour
 /// narrowing, tagged-stale, relayout overflow) are surfaced verbatim.
+/// Parse a `--pin-span START:LEN` argument (`Pass 145.0`).
+///
+/// `START:LEN`, not `START:END`, because that is the shape the value has
+/// everywhere else it exists: `ByteSpan` carries `start` + `len`, and
+/// `extract-text --json --spans` emits `op_start` / `op_len`. Asking an
+/// operator to convert between two spellings of the same number is a bug
+/// waiting to be reported as a wrong edit.
+///
+/// # Errors
+///
+/// A message naming what was wrong with the value. Both numbers must parse
+/// and `LEN` must be non-zero — a zero-length span names no operator and
+/// would fail later with a location error that did not explain itself.
+fn parse_pin_span(spec: &str) -> Result<pdfce_core::span::ByteSpan, String> {
+    let (a, b) = spec.split_once(':').ok_or_else(|| {
+        format!("--pin-span {spec:?} is not START:LEN (get the numbers from `extract-text --json --spans`)")
+    })?;
+    let start: usize = a
+        .trim()
+        .parse()
+        .map_err(|_| format!("--pin-span start {a:?} is not a byte offset"))?;
+    let len: usize = b
+        .trim()
+        .parse()
+        .map_err(|_| format!("--pin-span length {b:?} is not a byte count"))?;
+    if len == 0 {
+        return Err("--pin-span length is 0, which names no operator".to_owned());
+    }
+    Ok(pdfce_core::span::ByteSpan { start, len })
+}
+
 fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
     use pdfce_core::text_edit::{
         EditGlyphSource, FollowerDisposition, FontSelector, FormatError, FormatOptions,
@@ -18278,6 +18429,29 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
     let (font_env, supplied_registered, font_notes) = build_font_environment(args.font_dirs);
     for note in &font_notes {
         eprintln!("pdfce-cli: font-dir: {note}");
+    }
+
+    // Parse the pin up front, alongside the colour, so a malformed span
+    // fails before the input file is even opened.
+    let pin_span = match args.pin_span {
+        Some(spec) => match parse_pin_span(spec) {
+            Ok(span) => Some(span),
+            Err(msg) => {
+                eprintln!("pdfce-cli: {msg}");
+                return exit::EDIT_REFUSED;
+            }
+        },
+        None => None,
+    };
+    // An empty `--find` means "the whole pinned operator" and is meaningless
+    // without a pin. Refused here rather than in core so the message names
+    // the FLAG the operator would have to add, which core cannot know.
+    if args.find.is_empty() && pin_span.is_none() {
+        eprintln!(
+            "pdfce-cli: format-text needs --find TEXT, or --pin-span START:LEN with an empty \
+             --find to mean the whole pinned show operator"
+        );
+        return exit::EDIT_REFUSED;
     }
 
     // Parse the colour up front so a bad spec fails before any file I/O.
@@ -18350,6 +18524,9 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
         }
     };
     let mut req = FormatRequest::new(args.page - 1, args.find).target(target);
+    if let Some(span) = pin_span {
+        req = req.pinned(span);
+    }
     if let Some(size) = args.set_size {
         req = req.size(size);
     }
@@ -19751,6 +19928,7 @@ fn cmd_extract_text(
     output: Option<&Path>,
     json: bool,
     include_artifacts: bool,
+    spans: bool,
 ) -> u8 {
     use pdfce_core::text_extract::{self, ExtractOptions};
 
@@ -19791,7 +19969,12 @@ fn cmd_extract_text(
         // match (R35) — which is why they are honoured here rather than
         // left to a hard-coded constant nobody can see.
         .with_unmappable_code(settings.unmappable_code)
-        .with_actual_text(settings.actual_text);
+        .with_actual_text(settings.actual_text)
+        // `--spans` (Pass 145.0). Provenance capture is what produces the
+        // show-operator byte span, and it is off unless asked for: it costs
+        // memory per glyph, and every existing consumer's output must stay
+        // byte-for-byte what it was.
+        .with_provenance(spans);
     let extracted = match text_extract::extract_pages(&doc, &indices, &options) {
         Ok(extracted) => extracted,
         Err(err) => {
@@ -19930,10 +20113,21 @@ contents_unresolved={} type3_no_tounicode={}",
 ///             { "code": 72, "rung": "encoding_agl", "sourced": true,
 ///               "start": 0, "len": 1,
 ///               "x": 72.0, "y": 700.0, "advance": 17.3, "size": 24.0,
-///               "invisible": false }
+///               "invisible": false,
+///               // the next three ONLY with `--spans`:
+///               "op_start": 37, "op_len": 2, "stream": "page" }
 ///           ] } ] } ]
 /// }
 /// ```
+///
+/// `op_start`/`op_len`/`stream` are the **show operator** a glyph came from
+/// (`Pass 145.0`), and they are the pin `format-text --pin-span` takes. They
+/// appear only when `--spans` was given, because provenance capture is off by
+/// default and costs memory per glyph — and because *absent* and *zero* must
+/// not be the same answer. `stream` is `"page"` for the page's own
+/// concatenated `/Contents` buffer and `"form:N"` for a form XObject's own
+/// buffer; a span is meaningless without it, since the two are different byte
+/// spaces.
 ///
 /// The two `sourced` booleans are the schema's reason to exist. A
 /// consumer that filters runs on `sourced == true` gets exactly the
@@ -20092,7 +20286,7 @@ fn extraction_json(input: &Path, extracted: &pdfce_core::text_extract::Extracted
                     out.push_str(&format!(
                         "{{\"code\": {}, \"rung\": \"{}\", \"sourced\": {}, \
 \"start\": {}, \"len\": {}, \"x\": {:.2}, \"y\": {:.2}, \"advance\": {:.2}, \
-\"size\": {:.2}, \"direction\": [{:.4}, {:.4}], \"invisible\": {}}}",
+\"size\": {:.2}, \"direction\": [{:.4}, {:.4}], \"invisible\": {}",
                         g.code,
                         g.rung.as_str(),
                         g.rung.is_sourced(),
@@ -20106,6 +20300,31 @@ fn extraction_json(input: &Path, extracted: &pdfce_core::text_extract::Extracted
                         g.direction.1,
                         g.invisible
                     ));
+                    // `Pass 145.0`. Emitted only when provenance was
+                    // captured (`--spans`), so the default schema is
+                    // byte-for-byte what it was — and so a consumer can tell
+                    // "not captured" from "no span", which a zero could not.
+                    //
+                    // `stream` rides beside the span because a span is
+                    // MEANINGLESS without the buffer it indexes: a page's
+                    // /Contents are concatenated into one decoded buffer, and
+                    // every form XObject is a separate one with its own
+                    // offsets. A consumer that pinned a form's span against
+                    // the page's buffer would name a different operator, or
+                    // none.
+                    if let Some(prov) = g.provenance.as_ref() {
+                        let stream = match prov.content_stream {
+                            pdfce_core::text_extract::ContentStreamRef::Form { object } => {
+                                format!("\"form:{object}\"")
+                            }
+                            _ => "\"page\"".to_owned(),
+                        };
+                        out.push_str(&format!(
+                            ", \"op_start\": {}, \"op_len\": {}, \"stream\": {stream}",
+                            prov.operator_span.start, prov.operator_span.len
+                        ));
+                    }
+                    out.push('}');
                 }
                 out.push(']');
             }

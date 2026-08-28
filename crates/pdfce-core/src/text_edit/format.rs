@@ -240,9 +240,9 @@ use crate::text_edit::EditGlyphSource;
 use crate::text_edit::edit::{
     EditError, EditPlanTarget, EditRequest, EditTarget, FillState, FollowerDisposition, FontClass,
     MatchRun, OpRec, Rec, ShowData, ShowElem, ShowOp, Walk, carried_codes, classify_font,
-    compensating_tj, emit_show, emit_tm, find_anchor, glyph_advance_with, is_subset_tag, mat_mul,
-    match_run, refuse_unsuitable_form, resolve_font_dict, splice, trust_disclosure,
-    write_incremental,
+    compensating_tj, effective_find, emit_show, emit_tm, find_anchor, glyph_advance_with,
+    is_subset_tag, mat_mul, match_run, refuse_unsuitable_form, resolve_font_dict, splice,
+    trust_disclosure, write_incremental,
 };
 use crate::text_edit::encoding::{InverseEncoding, RInvTrigger, Refusal};
 use crate::text_edit::synth::{
@@ -698,6 +698,70 @@ impl FormatRequest {
             set_synthetic: None,
             target: EditTarget::Auto,
         }
+    }
+
+    /// A format request naming **the whole show operator at `span`**
+    /// (`Pass 145.0`).
+    ///
+    /// # Why this exists rather than only the field
+    ///
+    /// A caller that has already **located** an operator — by walking the
+    /// text model and taking
+    /// [`GlyphProvenance::operator_span`](crate::text_extract::GlyphProvenance::operator_span)
+    /// — should not have to **describe** it. Before this, it did: `find` was
+    /// required, so the caller rebuilt a string out of the run's extracted
+    /// text and handed it back for pdfce to search for inside the very
+    /// operator the pin had already identified.
+    ///
+    /// That round trip is not a formality. A run's `text` is **not** in 1:1
+    /// correspondence with its glyphs — `/ToUnicode` may map one glyph to
+    /// several characters (ISO 32000-1 §9.10.3; an `ffl` ligature is one
+    /// glyph and three characters, a surrogate pair one glyph and two
+    /// `char`s) — so a rebuilt `find` can fail to match the operator's own
+    /// decoded text. It fails **invisibly on unligatured test text** and
+    /// **routinely on real typeset copy**, which is the worst combination a
+    /// locator API can have.
+    ///
+    /// # What it targets
+    ///
+    /// The pinned operator, entire. **Not** the text run it belongs to: one
+    /// [`TextRun`](crate::text_extract::TextRun) can carry glyphs from
+    /// several show operators — measured at **2,420 of 18,559 runs (13 %)**
+    /// over pdfce's own corpus by
+    /// `crates/pdfce-core/tests/operator_span_invariant.rs` — because
+    /// extraction closes a run on *geometry* and a producer closes an
+    /// operator wherever its writer felt like. The report discloses the
+    /// extent taken, so this is never found out by looking at the result.
+    ///
+    /// # Equivalent to
+    ///
+    /// `FormatRequest::new(page_index, "").pinned(span)`. The empty-`find`
+    /// spelling is the mechanism and stays supported; this is the spelling
+    /// that says what it means. An empty `find` with **no** pin is still
+    /// refused — a caller who forgot to pin gets a refusal, not silent
+    /// whole-operator behaviour.
+    #[must_use]
+    pub fn whole_operator(page_index: usize, span: ByteSpan) -> Self {
+        Self::new(page_index, "").pinned(span)
+    }
+
+    /// Pin the target operator by byte span, returning `self`.
+    ///
+    /// The span may use **either** byte-span convention for "the show
+    /// operator" — the operator token alone (what
+    /// [`GlyphProvenance::operator_span`](crate::text_extract::GlyphProvenance::operator_span)
+    /// publishes) or the operand-inclusive extent (what the authoring walk
+    /// records). Both name the same operator and both are accepted; see
+    /// `text_edit::edit`'s `pin_names_operator` for why neither side was made
+    /// to adopt the other's spelling.
+    ///
+    /// With a non-empty `find`, the pin narrows *which operator* and the find
+    /// narrows *which characters within it*. With an empty `find`, the whole
+    /// operator is the target — see [`Self::whole_operator`].
+    #[must_use]
+    pub const fn pinned(mut self, span: ByteSpan) -> Self {
+        self.pinned_span = Some(span);
+        self
     }
 
     /// Select the content stream to format (`Pass 119.2`), returning `self`.
@@ -1441,10 +1505,17 @@ pub(crate) fn plan_format_target(
     }
 
     // --- map the find text to a contiguous code range in one element ---
-    let m = match_run(anchor, &req.find).map_err(FormatError::from_edit)?;
+    //
+    // `Pass 145.0`: an empty `find` on a PINNED request means the WHOLE
+    // pinned operator. It is resolved to a concrete string here, once, so
+    // that the code-range match, the font-coverage gate, the synthesis gate
+    // and every disclosure count are all talking about the same characters.
+    // Unpinned, an empty `find` is still refused.
+    let find = effective_find(anchor, &req.find, req.pinned_span);
+    let m = match_run(anchor, find).map_err(FormatError::from_edit)?;
 
     // --- resolve the family-change target, if any, and re-encode the run ---
-    let font_plan = plan_font(doc, page_resources_dict, &recs, req)?;
+    let font_plan = plan_font(doc, page_resources_dict, &recs, req, find)?;
 
     // --- the run's BASE size: what it would be shown at with no script
     //     reduction. Every R89 ratio (script rise, script size, relative
@@ -1706,7 +1777,7 @@ pub(crate) fn plan_format_target(
             page_resources_dict,
             &recs,
             effective_font,
-            &req.find,
+            find,
             synthesis,
             set_font_name,
         )?;
@@ -1879,6 +1950,12 @@ pub(crate) fn plan_format_target(
     let mut disclosures: Vec<String> = Vec::new();
     if let Some(plan) = &font_plan {
         disclosures.extend(plan.disclosures.iter().cloned());
+    }
+    if req.find.is_empty() {
+        // Reached only on a pinned request — `match_run` refuses an empty
+        // find without a pin — so this cannot fire for a caller who simply
+        // passed no text.
+        disclosures.push(disclosure_whole_operator(find.chars().count()));
     }
     disclosures.push(disclosure_save());
     disclosures.push(trust_disclosure(embedded, &report_font));
@@ -2178,11 +2255,17 @@ fn accept_font_target(
 /// The gate itself lives in [`accept_font_target`] so that the pre-flight and
 /// the synthesis gate can ask the *same* question this function asks, rather
 /// than restate it (`R221`).
+///
+/// `find` is the **resolved** text — [`effective_find`]'s output, not
+/// `req.find`. On a pinned whole-operator request (`Pass 145.0`) the two
+/// differ, and checking coverage against `req.find` there would test the
+/// empty string and pass every face.
 fn plan_font(
     doc: &Document,
     resources: &Dict,
     recs: &[OpRec],
     req: &FormatRequest,
+    find: &str,
 ) -> Result<Option<FontPlan>, FormatError> {
     let Some(sel) = &req.set_font else {
         return Ok(None);
@@ -2191,7 +2274,10 @@ fn plan_font(
     let (resource, target_dict) = resolve_target_resource(doc, resources, &sel.selector)
         .ok_or_else(|| FormatError::TargetFontMissing(sel.selector.clone()))?;
 
-    let accepted = accept_font_target(doc, recs, &resource, target_dict, &req.find)?;
+    // `find`, not `req.find`: on a pinned whole-operator request the two
+    // differ, and coverage must be checked against the characters actually
+    // being re-encoded (`Pass 145.0`).
+    let accepted = accept_font_target(doc, recs, &resource, target_dict, find)?;
 
     let mut disclosures = accepted.disclosures;
     disclosures.push(format!(
@@ -2199,7 +2285,7 @@ fn plan_font(
          into that face's /Encoding (minimal-diff; no new font resource added, no embedding — \
          subsetting is FF-C).",
         accepted.font.base_font,
-        req.find.chars().count()
+        find.chars().count()
     ));
 
     Ok(Some(FontPlan {
@@ -3694,6 +3780,38 @@ fn embed_and_subset(doc: &Document, font_dict: &Dict, font: &ExtractFont) -> (bo
                 || d.contains_key(b"FontFile3")
         });
     (embedded, is_subset_tag(&font.base_font))
+}
+
+/// The disclosure a **pinned whole-operator** request owes (`Pass 145.0`).
+///
+/// # Why this is disclosed at all
+///
+/// The extent was chosen by pdfce, not typed by the operator. A caller that
+/// pins a span and leaves `find` empty is saying *"whatever is in that
+/// operator"*, and what is in it is a fact about the file that the caller may
+/// not have looked at. `CLAUDE.md` rule 4 is about **non-silence**, not about
+/// asking permission: the edit applies normally, and the extent it chose is
+/// reported off-canvas.
+///
+/// # And why it names the multi-operator case specifically
+///
+/// Because a caller pinning from the text model has a `TextRun` in hand, and
+/// a `TextRun` is **not** a show operator. `text_extract::layout` closes a run
+/// on geometry; a producer closes a show operator wherever its writer felt
+/// like. Measured over pdfce's own corpus by
+/// `crates/pdfce-core/tests/operator_span_invariant.rs`: **2,420 of 18,559
+/// runs (13 %) carry glyphs from more than one show operator.** So a caller
+/// who selected a whole visual run and pinned one of its operators changed
+/// part of what it selected — that is correct behaviour, and it is exactly
+/// the kind of thing that must not be found out by looking at the result.
+fn disclosure_whole_operator(chars: usize) -> String {
+    format!(
+        "whole operator: no find text was given and a byte span was pinned, so the ENTIRE pinned \
+         show operator was the target — {chars} character(s). One text run in pdfce's extraction \
+         model can carry glyphs from several show operators (13% of runs over pdfce's corpus do), \
+         so if the selection this pin came from spanned more than one operator, only the PINNED \
+         one changed."
+    )
 }
 
 fn disclosure_save() -> String {
