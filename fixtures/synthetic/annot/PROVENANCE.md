@@ -52,6 +52,7 @@ substitute was chosen, not on glyph shapes.
 | `flags-noview.pdf` | `/F 32` (NoView): screen-suppressed on the screen render path, counted |
 | `popup-not-painted.pdf` | a `/Popup` with a (malformed) full-page `/AP`: never page content (risk X4) |
 | `no-ap-circle.pdf` | a `/Circle` with `/IC` and no `/AP`: R43 — pdfce synthesises nothing from `/IC` |
+| `rect-differences-square.pdf` | a `/Square` with `/RD [2 4 2 4]`, `/BS << /W 3 >>` and a **generator-written** `/AP`: the only fixture carrying `/RD`, and the resize suite's foreign-appearance case. The four `/RD` values are deliberately unequal so a bug that scales every slot by `sx` is visible (Table 175 orders them [left, top, right, bottom]); the `/AP` is foreign **by construction**, which is what makes `Pass 151.0`'s "pdfce will not redraw somebody else's artwork" gate measurable |
 
 ### Appearance-state selection (§12.5.5)
 

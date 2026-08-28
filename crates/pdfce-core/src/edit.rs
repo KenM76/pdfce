@@ -424,6 +424,10 @@ pub enum CommandKind {
     /// worth of state, and restoring half of them would leave the annotation
     /// describing two different positions at once.
     MoveAnnotation,
+    /// [`EditSession::resize_annotation`] scaled an annotation's `/Rect`,
+    /// its geometry keys, and — where the options asked and pdfce could
+    /// author the subtype — its `/BS` `/W`, `/RD` and appearance stream.
+    ResizeAnnotation,
     /// An existing field's **field-scope** properties were changed
     /// (`Pass 134.0`) — `/Ff` flags, `/MaxLen`, `/TU`, `/Opt`.
     ///
@@ -4341,6 +4345,46 @@ pub struct MarkupStyleChange {
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum EditError {
+    /// A resize factor was zero or non-finite (`Pass 151.0`).
+    ///
+    /// Zero collapses the `/Rect` to a degenerate box, which §12.5.5 treats
+    /// as a negative appearance result (`WF4`) and draws as nothing. Refused
+    /// by name rather than written and left invisible, because "my annotation
+    /// vanished" is a far worse diagnostic than this sentence.
+    #[error("resize factor {axis} = {value} is zero or non-finite")]
+    ResizeFactorInvalid {
+        /// Which factor — `"sx"` or `"sy"`.
+        axis: &'static str,
+        /// The value supplied.
+        value: f64,
+    },
+    /// A resize would have distorted an appearance pdfce cannot re-author
+    /// (`Pass 151.0`), and
+    /// [`ResizeOptions::allow_appearance_distortion`] was not set.
+    ///
+    /// §12.5.5's placement matrix scales the artwork *after* stroking, so the
+    /// drawn stroke scales whatever `/BS` `/W` says — and under a non-uniform
+    /// scale it is anisotropic, which no scalar stroke width can express.
+    /// pdfce rebuilds the appearance where it can author the subtype; where it
+    /// cannot, rebuilding would replace another producer's artwork with
+    /// pdfce's rendering of it, so the default is to refuse and say so.
+    #[error(
+        "cannot resize this {subtype} without distorting its appearance: pdfce did not draw it, \
+         so pdfce will not redraw it — {why}. Pass \
+         ResizeOptions::allow_appearance_distortion to proceed anyway"
+    )]
+    ResizeAppearanceNotRebuildable {
+        /// The `/Subtype` that could not be re-authored.
+        subtype: String,
+        /// Whether the requested scale was uniform. Named because the two
+        /// cases have genuinely different severity: a uniform carry is often
+        /// acceptable, an anisotropic one rarely is.
+        uniform: bool,
+        /// Which of the two unsatisfiable states this was, in the operator's
+        /// terms — and, for the uniform case, the option that makes the
+        /// resize exact rather than merely permitted.
+        why: &'static str,
+    },
     /// The page index is past the end of the document.
     #[error("page index {index} is out of range (the document has {count} page(s))")]
     PageOutOfRange {
@@ -10977,6 +11021,237 @@ pub enum AnnotationDeletionRoute {
     Dimension,
 }
 
+/// Which properties travel with the geometry when an annotation is **resized**
+/// (`Pass 151.0`) — pdfce's equivalent of Inkscape's selector-bar companion
+/// toggles.
+///
+/// # Why these are options rather than answers
+///
+/// Operator ruling, 2026-08-28, after a consuming project answered pdfce's own
+/// design question with *"stroke width does not scale"* and backed it with
+/// three sound arguments:
+///
+/// > *"default should be what it said, but there should be an option that they
+/// > do scale with resize. Inkscape has options for this and I want the same."*
+///
+/// ★ The general form, worth keeping: **convergence among reference
+/// implementations argues for a DEFAULT, not against an OPTION.** Inkscape puts
+/// four of these on the selector tool's control bar; Illustrator ships *Scale
+/// Strokes & Effects* **off** — which means Illustrator *has* the toggle. The
+/// existence of the control is the industry answer; its default is a separate
+/// question.
+///
+/// # The discriminator behind the two defaults, which look inconsistent
+///
+/// **Is the property a LENGTH IN THE SPACE BEING TRANSFORMED?**
+///
+/// - `/RD` is an inset — a length — so it scales **by default**.
+/// - A border width is a **convention**: on a CAD drawing a line weight is a
+///   drafting standard that means something to whoever reads the print. It does
+///   **not** scale by default.
+///
+/// The same test explains why [`EditSession::move_annotation`] scales neither:
+/// a translation changes no length at all.
+/// # ★ Why this carries builders as well as public fields
+///
+/// `#[non_exhaustive]` means a consumer **cannot** write
+/// `ResizeOptions { scale_stroke_width: true, ..Default::default() }` — the
+/// struct-expression form is refused outside the defining crate, `..` and all.
+/// Without [`Self::with_scale_stroke_width`] and its siblings the flags would
+/// be readable, documented, tested from inside this crate, and **unreachable
+/// by the shells they exist for**.
+///
+/// That was not spotted by review. It was spotted by an out-of-crate
+/// integration test failing to compile, because `#[non_exhaustive]` is inert
+/// within the crate that defines it — every in-crate use compiles happily
+/// while the consumer is locked out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct ResizeOptions {
+    /// Scale `/BS` `/W` (and `/Border`'s width element) by the same factor as
+    /// the geometry. **Default `false`.**
+    ///
+    /// Inkscape's *Scale stroke width*; Illustrator's *Scale Strokes &
+    /// Effects*. Both ship it off, and so does this.
+    pub scale_stroke_width: bool,
+    /// Leave `/RD` (rect differences) **unscaled**. Default `false`, i.e. `/RD`
+    /// **does** scale.
+    ///
+    /// Spelled as an opt-OUT rather than an opt-in so that
+    /// [`Self::default()`] is the correct behaviour for both fields — an inset
+    /// is a length in the space being scaled, so leaving it fixed while the
+    /// `/Rect` doubles changes the annotation's proportions.
+    pub keep_rect_differences: bool,
+    /// Proceed when the appearance cannot be rebuilt, accepting that the
+    /// artwork will be **distorted** by §12.5.5's placement matrix. Default
+    /// `false` — such a resize is **refused by name** instead.
+    ///
+    /// # ★ The trap this exists for, and why pdfce refuses where Inkscape does not
+    ///
+    /// An annotation's artwork is placed through §12.5.5's matrix **A**, which
+    /// a resize makes a scale. That is a matrix applied *after* stroking, so
+    /// the drawn stroke scales with it **whatever `/BS` `/W` says** — and under
+    /// a non-uniform scale it becomes anisotropic, which no scalar stroke width
+    /// can express. PDF has one `w`, not one per axis.
+    ///
+    /// This is not a pdfce limitation. Inkscape hit the identical thing in SVG
+    /// (Launchpad #1335376, closed **Invalid** — declared correct spec
+    /// behaviour), and its actual response is to **silently produce a distorted
+    /// stroke** (ux#339).
+    ///
+    /// pdfce's answer is to **rebuild the appearance** from the scaled geometry
+    /// wherever it drew that appearance itself, which makes both stroke-width
+    /// states exactly satisfiable. Where it did not — a foreign `/AP` —
+    /// rebuilding would replace somebody else's artwork with pdfce's rendering
+    /// of it, so it is not attempted.
+    ///
+    /// # ★ What this flag is NOT needed for
+    ///
+    /// A **uniform** scale with [`Self::scale_stroke_width`] **on** is
+    /// satisfied exactly by carrying the foreign appearance — the matrix
+    /// scales the drawn stroke by exactly the requested factor. That case
+    /// proceeds without this flag, because refusing it would refuse a resize
+    /// that comes out right. The flag is for the two cases that genuinely
+    /// cannot be satisfied: a uniform scale with stroke scaling **off**, and
+    /// any **non-uniform** scale.
+    ///
+    /// Whichever branch ran is reported in
+    /// [`AnnotationResize::appearance`].
+    pub allow_appearance_distortion: bool,
+}
+
+impl ResizeOptions {
+    /// The defaults: nothing that is not a length in the transformed space
+    /// travels with the geometry, and an appearance pdfce did not draw is not
+    /// distorted without being asked.
+    ///
+    /// Identical to [`Self::default()`]; provided because a consumer reaching
+    /// for `ResizeOptions::new().with_scale_stroke_width(true)` should not
+    /// have to know which of the two spellings this crate happens to prefer.
+    ///
+    /// ```
+    /// use pdfce_core::edit::ResizeOptions;
+    /// assert_eq!(ResizeOptions::new(), ResizeOptions::default());
+    /// ```
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Scale `/BS` `/W` by the same factor as the geometry (default `false`).
+    ///
+    /// Inkscape's *Scale stroke width*; Illustrator's *Scale Strokes &
+    /// Effects*. Both ship it off, and so does this.
+    ///
+    /// ```
+    /// use pdfce_core::edit::ResizeOptions;
+    /// let opts = ResizeOptions::new().with_scale_stroke_width(true);
+    /// assert!(opts.scale_stroke_width);
+    /// assert!(!opts.keep_rect_differences, "the other flags are untouched");
+    /// ```
+    #[must_use]
+    pub fn with_scale_stroke_width(mut self, yes: bool) -> Self {
+        self.scale_stroke_width = yes;
+        self
+    }
+
+    /// Leave `/RD` unscaled (default `false`, i.e. `/RD` **does** scale).
+    ///
+    /// ```
+    /// use pdfce_core::edit::ResizeOptions;
+    /// assert!(ResizeOptions::new().with_keep_rect_differences(true).keep_rect_differences);
+    /// ```
+    #[must_use]
+    pub fn with_keep_rect_differences(mut self, yes: bool) -> Self {
+        self.keep_rect_differences = yes;
+        self
+    }
+
+    /// Proceed when carrying a foreign appearance would contradict the other
+    /// options, accepting the distortion (default `false` — refused by name).
+    ///
+    /// ```
+    /// use pdfce_core::edit::ResizeOptions;
+    /// let opts = ResizeOptions::new().with_allow_appearance_distortion(true);
+    /// assert!(opts.allow_appearance_distortion);
+    /// ```
+    #[must_use]
+    pub fn with_allow_appearance_distortion(mut self, yes: bool) -> Self {
+        self.allow_appearance_distortion = yes;
+        self
+    }
+}
+
+/// What happened to an annotation's appearance during a resize
+/// (`Pass 151.0`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ResizedAppearance {
+    /// The annotation had no `/AP`, so there was nothing to rebuild or
+    /// distort. It paints from its geometry keys in any reader that
+    /// regenerates, and paints nothing in one that does not (`R43`).
+    None,
+    /// pdfce **re-authored** the appearance at the new size from the scaled
+    /// geometry. The stroke is drawn at whatever width the options selected,
+    /// exactly — no anisotropy, no residual.
+    Rebuilt,
+    /// The existing appearance was **carried** under a **uniform** scale, and
+    /// §12.5.5's placement matrix will scale it — artwork and drawn stroke
+    /// alike, by the same factor.
+    ///
+    /// # ★ This is not always a compromise
+    ///
+    /// Reached two ways, and they are not equally good:
+    ///
+    /// * With [`ResizeOptions::scale_stroke_width`] **on**, this outcome is
+    ///   **exact**. The matrix scales the stroke by precisely the factor the
+    ///   caller asked to scale it by, so carrying the appearance produces the
+    ///   requested result and no option had to be waived. `resize_annotation`
+    ///   takes this branch on its own — it does **not** require
+    ///   [`ResizeOptions::allow_appearance_distortion`].
+    /// * With it **off**, the stroke scales against the caller's wish, so the
+    ///   branch is only reached by setting
+    ///   [`ResizeOptions::allow_appearance_distortion`].
+    ///
+    /// A shell distinguishes the two by looking at the options it passed;
+    /// [`AnnotationResize::stroke_width`] is `Some` in the first case and
+    /// `None` in the second.
+    CarriedUniform,
+    /// The existing appearance was carried under a **non-uniform** scale, so
+    /// its stroke is now anisotropic and no scalar `/BS` `/W` describes it.
+    ///
+    /// A distinct variant rather than a boolean beside `CarriedUniform`
+    /// because a shell should be able to say *"the border is now oval"*
+    /// without recomputing which case it was in.
+    CarriedDistorted,
+}
+
+/// What a [`resize_annotation`](EditSession::resize_annotation) call did
+/// (`Pass 151.0`).
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AnnotationResize {
+    /// `/Subtype`, for the operator's message.
+    pub subtype: String,
+    /// The `/Rect` before.
+    pub from: page_tree::Rect,
+    /// The `/Rect` after.
+    pub to: page_tree::Rect,
+    /// Which geometry keys were found and scaled, in the order tried.
+    pub geometry_keys_scaled: Vec<String>,
+    /// What happened to the appearance.
+    pub appearance: ResizedAppearance,
+    /// `Some((before, after))` when `/BS` `/W` was scaled, `None` when it was
+    /// left alone — including when the annotation carries no border width.
+    ///
+    /// A shell should say *"border width left at 1.0 pt"* on `None`: an
+    /// operator who scaled a square 3× and expected a heavier border needs
+    /// telling it stayed.
+    pub stroke_width: Option<(f64, f64)>,
+    /// Whether `/RD` was present, and whether it was scaled.
+    pub rect_differences_scaled: Option<bool>,
+}
+
 /// What a [`move_annotation`](EditSession::move_annotation) call translated,
 /// and everything an operator could not otherwise see (`Pass 149.0`).
 ///
@@ -17225,6 +17500,388 @@ impl EditSession {
     /// [`EditError::DocumentEncrypted`], the certification gate, a target
     /// that is not an annotation, an annotation with no `/Rect` to move, and
     /// the two routing refusals above.
+    /// Scale an annotation about `anchor` by `(sx, sy)` (`Pass 151.0`) — the
+    /// resize half of [`Self::move_annotation`].
+    ///
+    /// `anchor` is in **default user space** and the factors are already
+    /// computed by the caller, matching `transform_objects`. That split is
+    /// deliberate and was asked for: the anchor is a decision the *shell* makes
+    /// from which grip was grabbed, and a verb taking a grip name would encode
+    /// one shell's affordance in this crate.
+    ///
+    /// # What scales, and the discriminator behind the defaults
+    ///
+    /// `/Rect` and every geometry key always. `/RD` by default; `/BS` `/W` not
+    /// by default. Both are flags on [`ResizeOptions`] — see that type for the
+    /// operator ruling behind offering them at all, and for the test that
+    /// explains why the two defaults differ: **is the property a length in the
+    /// space being transformed?** An inset is; a line weight is a drafting
+    /// convention.
+    ///
+    /// # ★★ The appearance, which is where a resize stops resembling a move
+    ///
+    /// [`Self::move_annotation`] carries the `/AP` untouched, and that is
+    /// exactly right: §12.5.5 makes the placement matrix a pure translation and
+    /// the artwork travels 1:1.
+    ///
+    /// **Under a resize that same mechanism works against you.** The matrix
+    /// becomes a scale applied *after* stroking, so the drawn stroke scales
+    /// with it **whatever `/BS` `/W` says** — and under a non-uniform scale it
+    /// is anisotropic, which no scalar stroke width can express. PDF has one
+    /// `w`, not one per axis. Inkscape hit the identical thing in SVG
+    /// (Launchpad #1335376, closed **Invalid**) and silently ships the
+    /// distorted stroke (ux#339).
+    ///
+    /// So pdfce **re-authors the appearance** wherever it drew that appearance
+    /// itself — established by rebuilding from the unmodified spec and
+    /// comparing BYTES, not by asking whether the dictionary parses — which
+    /// makes both stroke-width options exactly satisfiable.
+    ///
+    /// For a **foreign** `/AP` it does not redraw somebody else's artwork.
+    /// Instead it asks whether carrying the appearance would CONTRADICT the
+    /// options: a uniform scale with `scale_stroke_width` on is satisfied
+    /// exactly by the matrix and proceeds; anything else is **refused by
+    /// name** unless [`ResizeOptions::allow_appearance_distortion`] takes the
+    /// distortion knowingly. The outcome names which branch ran either way.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DocumentEncrypted`], the certification gate, a non-existent
+    /// or non-annotation target, an annotation with no `/Rect`, a widget or ce
+    /// dimension (both refused by name — they have verbs that do more), a
+    /// non-finite or zero factor, and the un-rebuildable appearance above.
+    pub fn resize_annotation(
+        &mut self,
+        annot_id: ObjId,
+        anchor: (f64, f64),
+        sx: f64,
+        sy: f64,
+        opts: &ResizeOptions,
+    ) -> Result<AnnotationResize, EditError> {
+        let (target, _all) = self.locate_annotation(annot_id)?;
+        let subtype = target.subtype_label();
+
+        // Same routing as `move_annotation`, and refusals for the same reason:
+        // both destinations do strictly more than this verb would.
+        if matches!(
+            self.delegated_route_for(annot_id, &target),
+            Some(AnnotationDeletionRoute::Dimension)
+        ) {
+            return Err(EditError::AnnotationMoveWrongVerb {
+                subtype: "ce dimension".to_owned(),
+                use_instead: "move_dimension_vertex",
+                why: "a ce dimension's extent IS its measurement, so changing it must \
+                      re-measure rather than scale a rectangle",
+            });
+        }
+        if target.subtype == b"Widget" {
+            return Err(EditError::AnnotationMoveWrongVerb {
+                subtype: "form widget".to_owned(),
+                use_instead: "edit_widget(fqn, index, &WidgetEdit::new().with_rect(..))",
+                why: "a widget belongs to a field, and that verb rebuilds its appearance \
+                      into the new box as part of the same command",
+            });
+        }
+
+        // Factors, before anything is read. A zero factor collapses the box to
+        // a degenerate `/Rect`, which §12.5.5 treats as a negative result
+        // (`WF4`) — refused by name rather than written and left invisible.
+        for (name, f) in [("sx", sx), ("sy", sy)] {
+            if !f.is_finite() || f == 0.0 {
+                return Err(EditError::ResizeFactorInvalid {
+                    axis: name,
+                    value: f,
+                });
+            }
+        }
+
+        self.check_certification_for_annotation()?;
+
+        let Some(rect) = target.rect else {
+            return Err(EditError::AnnotationRectMissing { subtype });
+        };
+        let Some(Object::Dict(dict)) = self.value(annot_id) else {
+            return Err(EditError::NotADictionary {
+                id: annot_id,
+                key: "Rect",
+            });
+        };
+        let mut updated = dict.clone();
+
+        // ★ ABSOLUTE values, and the difference is not cosmetic. A MIRROR
+        // — `sx = -1, sy = 1` — has a signed difference of 2 and would be
+        // classified non-uniform by the obvious test, which would then refuse
+        // a foreign appearance that the mirror does not distort at all. A
+        // reflection is an isometry: every length, including the drawn stroke
+        // width, is preserved exactly. What makes a stroke anisotropic is a
+        // difference in MAGNITUDE, not in sign.
+        //
+        // Found by a CLI test that mirrored about a negative anchor and was
+        // refused. The core suite never caught it because none of its cases
+        // paired a negative factor with a foreign appearance.
+        let uniform = (sx.abs() - sy.abs()).abs() < f64::EPSILON;
+
+        // ---- the appearance decision, made BEFORE anything is written so a
+        // refusal leaves the session byte-identical.
+        //
+        // ★ "Can pdfce re-author this?" is NOT `spec_from_dict(..).is_ok()`.
+        // That question is "can pdfce PARSE a spec out of this dictionary",
+        // which succeeds for an Acrobat-drawn `/Square` too — its `/Rect`,
+        // `/C`, `/IC` and `/BS` all read fine. Rebuilding on that answer would
+        // replace another producer's artwork with pdfce's rendering of it,
+        // which is the exact thing this verb's documentation promises not to
+        // do. The honest test is the one `set_markup_style` already ships:
+        // rebuild from the UNMODIFIED spec and compare BYTES. Only an
+        // appearance pdfce would have drawn, from these same properties, is
+        // pdfce's to redraw.
+        //
+        // The order is the whole trick. This is computed against `dict` (the
+        // original), never `updated` — comparing a rebuild of the SCALED spec
+        // against the OLD bytes would disagree every time and refuse every
+        // resize.
+        let has_ap = updated.contains_key(b"AP");
+        let ap_is_pdfces = has_ap
+            && annot_author::spec_from_dict(&self.graph(), dict).is_ok_and(|original| {
+                self.appearance_matches(
+                    dict,
+                    &annot_author::build_appearance_with(&original, self.quad_point_order)
+                        .ap_content,
+                )
+            });
+
+        // ★★ Carrying a foreign appearance is not automatically a distortion —
+        // it is a distortion only when the placement matrix would CONTRADICT
+        // what the caller asked for. Three cases, and the middle one is the
+        // reason this is not a two-branch `if`:
+        //
+        //   * uniform + `scale_stroke_width` — §12.5.5's matrix scales the
+        //     drawn stroke by exactly the factor requested. That IS the
+        //     requested behaviour. Refusing here would refuse a resize that
+        //     comes out exactly right.
+        //   * uniform without it — the matrix scales the stroke anyway, and
+        //     the caller asked for it to stay put. Unsatisfiable.
+        //   * non-uniform, either way — the drawn stroke is anisotropic and no
+        //     scalar `/BS` `/W` describes it. Unsatisfiable in both states.
+        let carrying_is_exact = uniform && opts.scale_stroke_width;
+        let appearance = if !has_ap {
+            ResizedAppearance::None
+        } else if ap_is_pdfces {
+            ResizedAppearance::Rebuilt
+        } else if carrying_is_exact {
+            ResizedAppearance::CarriedUniform
+        } else if opts.allow_appearance_distortion {
+            if uniform {
+                ResizedAppearance::CarriedUniform
+            } else {
+                ResizedAppearance::CarriedDistorted
+            }
+        } else {
+            return Err(EditError::ResizeAppearanceNotRebuildable {
+                subtype,
+                uniform,
+                why: if uniform {
+                    "the placement matrix will scale the drawn stroke, but scale_stroke_width \
+                     is off — set it (the resize is then exact) or accept the distortion"
+                } else {
+                    "the scale is non-uniform, so the drawn stroke becomes anisotropic and no \
+                     scalar /BS /W can describe it in either option state"
+                },
+            });
+        };
+
+        // ---- geometry. One affine map, applied to `/Rect` and to every
+        // geometry key, so a key cannot be scaled about a different anchor
+        // than the box it belongs to.
+        let map = |x: f64, y: f64| {
+            (
+                anchor.0 + (x - anchor.0) * sx,
+                anchor.1 + (y - anchor.1) * sy,
+            )
+        };
+        let (llx, lly) = map(rect.llx, rect.lly);
+        let (urx, ury) = map(rect.urx, rect.ury);
+        // `from_corners` NORMALISES, which is what makes a negative factor a
+        // mirror rather than an inverted rectangle §12.5.2 forbids.
+        let scaled = page_tree::Rect::from_corners(llx, lly, urx, ury);
+        updated.insert(
+            Name::from(b"Rect"),
+            Object::Array(vec![
+                Object::Real(scaled.llx),
+                Object::Real(scaled.lly),
+                Object::Real(scaled.urx),
+                Object::Real(scaled.ury),
+            ]),
+        );
+
+        let mut geometry_keys_scaled: Vec<String> = Vec::new();
+        for key in [
+            b"L".as_slice(),
+            b"Vertices".as_slice(),
+            b"QuadPoints".as_slice(),
+            b"CL".as_slice(),
+        ] {
+            let resolved = updated.get(key).map(|o| self.graph().resolve(o).clone());
+            if let Some(Object::Array(items)) = resolved
+                && !items.is_empty()
+            {
+                updated.insert(
+                    Name::from(key),
+                    Object::Array(scale_flat(&items, anchor, sx, sy)),
+                );
+                geometry_keys_scaled.push(String::from_utf8_lossy(key).into_owned());
+            }
+        }
+        let ink = updated
+            .get(b"InkList")
+            .map(|o| self.graph().resolve(o).clone());
+        if let Some(Object::Array(strokes)) = ink
+            && !strokes.is_empty()
+        {
+            let out: Vec<Object> = strokes
+                .iter()
+                .map(|stroke| match self.graph().resolve(stroke) {
+                    Object::Array(pts) => Object::Array(scale_flat(pts, anchor, sx, sy)),
+                    other => other.clone(),
+                })
+                .collect();
+            updated.insert(Name::from(b"InkList"), Object::Array(out));
+            geometry_keys_scaled.push("InkList".to_owned());
+        }
+
+        // ---- `/RD`. Table 175 orders it [left, top, right, bottom], so
+        // indices 0 and 2 are horizontal and 1 and 3 vertical — the same
+        // alternation the flat coordinate arrays use, for a different reason.
+        // These are DISTANCES, not points, so they scale by the factor alone
+        // and are NOT mapped about the anchor.
+        let rd = updated.get(b"RD").map(|o| self.graph().resolve(o).clone());
+        let rect_differences_scaled = match rd {
+            Some(Object::Array(items)) if !items.is_empty() => {
+                if opts.keep_rect_differences {
+                    Some(false)
+                } else {
+                    let out: Vec<Object> = items
+                        .iter()
+                        .enumerate()
+                        .map(|(i, o)| match o.as_number() {
+                            Some(v) => {
+                                Object::Real(v * if i % 2 == 0 { sx.abs() } else { sy.abs() })
+                            }
+                            None => o.clone(),
+                        })
+                        .collect();
+                    updated.insert(Name::from(b"RD"), Object::Array(out));
+                    Some(true)
+                }
+            }
+            _ => None,
+        };
+
+        // ---- `/BS` `/W`. A single scalar, so a non-uniform scale has no
+        // exact answer; the geometric mean is the area-preserving one and is
+        // DISCLOSED rather than picked silently.
+        let mut stroke_width = None;
+        if opts.scale_stroke_width {
+            let factor = if uniform {
+                sx.abs()
+            } else {
+                (sx.abs() * sy.abs()).sqrt()
+            };
+            // `read_border_width` is the SHIPPED reader — `/BS` `/W`, else
+            // `/Border`'s third element, else Table 164's default of 1.0.
+            // Reading it any other way here would make a file with only
+            // `/Border` (the ordinary older-producer shape, not a malformed
+            // one) silently keep its old weight while the box scaled.
+            let before = annot_author::read_border_width(&self.graph(), &updated);
+            let after = before * factor;
+            // The write always goes to `/BS` `/W`, even when the value was
+            // read from `/Border`: Table 164 says `/Border` is "ignored if a
+            // BS entry is present", so writing the modern key is what makes
+            // the change take effect, and the stale `/Border` is left alone
+            // rather than rewritten (rule 3 — pdfce does not normalise a
+            // structure as a side effect of an unrelated edit).
+            let mut bs = match updated.get(b"BS").map(|o| self.graph().resolve(o).clone()) {
+                Some(Object::Dict(d)) => d,
+                _ => Dict::new(),
+            };
+            bs.insert(Name::from(b"W"), Object::Real(after));
+            updated.insert(Name::from(b"BS"), Object::Dict(bs));
+            stroke_width = Some((before, after));
+        }
+
+        // ---- rebuild the appearance where pdfce can author it, so the stroke
+        // is DRAWN at the width the options selected rather than at whatever
+        // the placement matrix happens to produce.
+        let mut objects = Vec::new();
+        if matches!(appearance, ResizedAppearance::Rebuilt) {
+            let spec = annot_author::spec_from_dict(&self.graph(), &updated)?;
+            let authored = annot_author::build_appearance_with(&spec, self.quad_point_order);
+            // Where the rebuilt appearance may go. `appearance_slot` is the
+            // SHIPPED answer to this question — it refuses to rewrite a stream
+            // another annotation also references, which a resize would
+            // otherwise silently resize twice. Reusing it rather than reading
+            // `/AP` `/N` directly is the whole reason this branch is four
+            // lines longer than it looks like it needs to be.
+            let ap_slot = self.appearance_slot(annot_id, &updated)?;
+            let ap_id = match ap_slot {
+                AppearanceSlot::Reuse(id) => id,
+                AppearanceSlot::Allocate => {
+                    // Only this path creates an object, so only this path pays
+                    // the /Size guard `set_info_field` established.
+                    let suppressed = self.base.suppressed_object_count();
+                    if suppressed > 0 {
+                        return Err(EditError::ObjectCreationWouldExposeHiddenObjects {
+                            count: suppressed,
+                        });
+                    }
+                    ObjId::new(self.alloc_number()?, 0)
+                }
+            };
+            for (key, value) in authored.annot.0.iter() {
+                updated.insert(key.clone(), value.clone());
+            }
+            let mut ap = Dict::new();
+            ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+            updated.insert(Name::from(b"AP"), Object::Dict(ap));
+
+            let mut ap_dict = authored.ap_dict;
+            ap_dict.insert(
+                Name::from(b"Length"),
+                Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
+            );
+            let ap_span = self.stage_bytes(&authored.ap_content);
+            objects.push(ObjectWrite {
+                id: ap_id,
+                before: self.state.get(&ap_id).cloned(),
+                after: Some(Object::Stream(Stream {
+                    dict: ap_dict,
+                    data_span: ap_span,
+                })),
+            });
+        }
+
+        objects.push(ObjectWrite {
+            id: annot_id,
+            before: self.state.get(&annot_id).cloned(),
+            after: Some(Object::Dict(updated)),
+        });
+        self.commit(Command {
+            kind: CommandKind::ResizeAnnotation,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(AnnotationResize {
+            subtype: target.subtype_label(),
+            from: rect,
+            to: scaled,
+            geometry_keys_scaled,
+            appearance,
+            stroke_width,
+            rect_differences_scaled,
+        })
+    }
+
     pub fn move_annotation(
         &mut self,
         annot_id: ObjId,
@@ -33101,6 +33758,30 @@ mod text_edit_session_tests {
             assert_eq!(save(&session), src, "undo must be byte-identical");
         }
     }
+}
+
+/// Scale a flat `[x y x y …]` coordinate array about `anchor` by `(sx, sy)`.
+///
+/// The affine sibling of [`translate_flat`], shared by `/L`, `/Vertices`,
+/// `/QuadPoints`, `/CL` and each stroke of an `/InkList` for the same reason:
+/// five keys with one shape want one implementation, or one of them ends up
+/// scaled about a different anchor than the box it belongs to.
+///
+/// Odd-length and non-numeric elements are copied through unchanged — pdfce
+/// does not repair a producer's geometry as a side effect of resizing it.
+fn scale_flat(items: &[Object], anchor: (f64, f64), sx: f64, sy: f64) -> Vec<Object> {
+    items
+        .iter()
+        .enumerate()
+        .map(|(i, o)| match o.as_number() {
+            Some(v) => Object::Real(if i % 2 == 0 {
+                anchor.0 + (v - anchor.0) * sx
+            } else {
+                anchor.1 + (v - anchor.1) * sy
+            }),
+            None => o.clone(),
+        })
+        .collect()
 }
 
 /// Translate a flat `[x y x y …]` coordinate array by `(dx, dy)`.

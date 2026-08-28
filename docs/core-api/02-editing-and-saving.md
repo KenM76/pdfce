@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (33,128 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 150 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (33,809 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 151 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 150 public `EditSession` methods
+## 1. Verb index — all 151 public `EditSession` methods
 
-**Count: 150.** Established by brace-matched extraction of the four
+**Count: 151.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -1046,6 +1046,7 @@ always errors.
 | Un-mark a redaction | `delete_redaction_mark(&mut self, annot_id) -> Result<(), EditError>` | 10617 | Refuses any non-`/Redact` annotation. |
 | Delete any annotation | `delete_annotation(&mut self, annot_id) -> Result<AnnotationDeletion, EditError>` | 10847 | **Routes** to the two specialised verbs above for `/Redact` and ce dimensions. |
 | **Move** any annotation | `move_annotation(&mut self, annot_id, dx, dy) -> Result<AnnotationMove, EditError>` | 16978 | `Pass 149.0`. Translates `/Rect` **and every geometry key**. **Refuses** a widget and a ce dimension by name — see below. |
+| **Resize** any annotation | `resize_annotation(&mut self, annot_id, anchor: (f64, f64), sx, sy, opts: &ResizeOptions) -> Result<AnnotationResize, EditError>` | 17442 | `Pass 151.0`. Scales `/Rect` **and every geometry key** about `anchor`. `/RD` scales by default; `/BS /W` does not — both are flags. **Re-authors the `/AP` only where pdfce drew it**, refusing rather than distorting a foreign one. Same two refusals as `move_annotation`. |
 | Preview an annotation deletion | `annotation_deletion_preview(&self, annot_id) -> Result<AnnotationDeletion, EditError>` | 11316 | Pure `&self` query. |
 | Ask whether annotation deletion is refused document-wide | `annotation_deletion_refusal(&self) -> Option<EditError>` | 11492 | ⚠️ Takes no `annot_id`, so it cannot see the three per-annotation refusals. |
 
@@ -1158,6 +1159,124 @@ this name would hand you a second way to move the same thing that silently
 produces a worse result. Both come back as
 `EditError::AnnotationMoveWrongVerb { subtype, use_instead, why }`, naming the
 verb to call.
+
+#### ★★ `resize_annotation` — where a transform stops resembling a translation (`Pass 151.0`)
+
+The other half of the pair above, and **not** its mirror image. Read the
+`move_annotation` note first; this one is written against it.
+
+```rust
+use pdfce_core::edit::{ResizeOptions, ResizedAppearance};
+
+// Anchor = the point that does NOT move — typically the corner opposite the
+// grip being dragged. The SHELL computes it and the factors; the crate has no
+// grips and must not learn about any.
+let out = session.resize_annotation(
+    annot_id,
+    (100.0, 100.0),
+    2.0,
+    2.0,
+    &ResizeOptions::new().with_scale_stroke_width(true),
+)?;
+assert_eq!(out.appearance, ResizedAppearance::Rebuilt);
+```
+
+**Why anchor + factors and not a target `/Rect`.** One form, not both. It is
+the form `transform_objects` already takes, so the two transform verbs cannot
+disagree about what a caller supplies — and a negative factor is a **mirror**,
+a gesture no grip-name vocabulary would have had a word for.
+
+##### The two toggles, and the discriminator that makes their opposite defaults consistent
+
+| flag | default | scales |
+|---|---|---|
+| `scale_stroke_width` | **off** | `/BS` `/W` |
+| `keep_rect_differences` | off (so `/RD` **does** scale) | `/RD` |
+
+They point opposite ways and that looks like an inconsistency. It is not. The
+test is: **is the property a length in the space being transformed?** An inset
+is. A line weight is a *drafting convention* — on a CAD drawing it means
+something to whoever reads the print. The same test explains why
+`move_annotation` scales neither: a translation changes no length at all.
+
+★ **Why these are options rather than answers.** `pdfceGUI` answered pdfce's
+own design question with *"stroke width does not scale"* and backed it with
+three sound arguments — the drafting-standard one, the ill-defined-under-
+non-uniform-scale one, and *Acrobat and Illustrator both agree*. The operator
+narrowed the conclusion (2026-08-28): *"default should be what it said, but
+there should be an option that they do scale with resize. Inkscape has options
+for this and I want the same."*
+
+⇒ **Convergence among reference implementations argues for a DEFAULT, not
+against an OPTION.** Illustrator ships *Scale Strokes & Effects* **off** —
+which means Illustrator *has* the toggle. So does Inkscape, on the selector
+tool's control bar. Inkscape parity is a stated scope target, so matching the
+toggle set is parity work.
+
+##### ★★★ The appearance, which is the whole reason this verb is not `move_annotation` with different arithmetic
+
+§12.5.5 maps the appearance `BBox`×`Matrix` onto `/Rect`. Under a translation
+that matrix is a pure translation and carrying the `/AP` untouched is exactly
+right — free, and it preserves a foreign producer's artwork.
+
+**Under a scale the same mechanism works against you.** The matrix becomes a
+scale applied *after* stroking, so the drawn stroke scales **whatever `/BS`
+`/W` says**, and under a non-uniform scale it is **anisotropic** — which no
+scalar stroke width can express, because PDF has one `w` operand and not one
+per axis. Inkscape hit the identical thing in SVG (Launchpad #1335376, closed
+**Invalid** — declared correct spec behaviour) and ships the distorted stroke
+silently (ux#339).
+
+pdfce's answer, in three branches, reported as `AnnotationResize::appearance`:
+
+| condition | outcome | why |
+|---|---|---|
+| pdfce **drew** this `/AP` | `Rebuilt` | Re-authored from the scaled geometry. Both toggle states exact. |
+| foreign `/AP`, **uniform** scale, `scale_stroke_width` **on** | `CarriedUniform` | The matrix scales the stroke by exactly the requested factor. Carrying it **is** the requested result — no flag needed. |
+| foreign `/AP`, anything else | **refused** | `ResizeAppearanceNotRebuildable { subtype, uniform, why }`, unless `allow_appearance_distortion` → `CarriedUniform` / `CarriedDistorted`. |
+
+★ **"Did pdfce draw this?" is not `spec_from_dict(..).is_ok()`.** That question
+is *can pdfce parse a spec out of this dictionary*, which succeeds for an
+Acrobat-drawn `/Square` too — its `/Rect`, `/C`, `/IC` and `/BS` all read fine.
+Answering it that way would have made pdfce silently replace another producer's
+artwork with its own rendering, and made the refusal above **unreachable**. The
+implemented test is the one `set_markup_style` already ships: rebuild from the
+**unmodified** spec and compare **bytes**. The order matters — computed against
+the original dictionary, never the scaled one.
+
+##### A mirror is an isometry
+
+`sx = -1, sy = 1` is classified **uniform**, and must be: a reflection preserves
+every length including the drawn stroke, so it does not distort a foreign
+appearance and must not trip the refusal. Uniformity is therefore tested on
+`|sx|` vs `|sy|`, not on `sx` vs `sy`. The first cut used the signed form and
+read a mirror as a 2:1 distortion; a CLI test that mirrored about a negative
+anchor is what found it, because no core case had paired a negative factor with
+a foreign appearance.
+
+##### `ResizeOptions` carries builders, and that is not decoration
+
+`#[non_exhaustive]` means a consumer **cannot** write
+`ResizeOptions { scale_stroke_width: true, ..Default::default() }` — the
+struct-expression form is refused outside the defining crate, `..` and all. Use
+`ResizeOptions::new().with_scale_stroke_width(true)` and its two siblings.
+
+★ That constraint is **invisible from inside `pdfce-core`**, where
+`#[non_exhaustive]` is inert. It was found by an out-of-crate integration test
+failing to compile — the flags would otherwise have been documented, tested,
+and **unreachable by the shells they exist for**.
+
+##### Refusals
+
+`ResizeFactorInvalid { axis, value }` for a zero or non-finite factor — zero
+collapses `/Rect` to a degenerate box, which §12.5.5 treats as a negative
+result (`WF4`) and draws as **nothing**. *"My annotation vanished"* is a far
+worse diagnostic than a named refusal. Plus the same
+`AnnotationMoveWrongVerb` pair as `move_annotation`, for the same reason.
+
+**CLI:** `pdfce-cli resize-annotation --sx --sy --anchor-x --anchor-y
+[--scale-stroke-width] [--keep-rect-differences]
+[--allow-appearance-distortion]`.
 
 A zero delta is **accepted**, not refused: a shell that drags and returns to the
 start should not have to special-case its own arithmetic.

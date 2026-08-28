@@ -3610,6 +3610,81 @@ enum Command {
         #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
         mode: SaveMode,
     },
+    /// **Resize a markup, link, stamp or note annotation** by scaling it about
+    /// an anchor point (`Pass 151.0`).
+    ///
+    /// The other half of `move-annotation`. `/Rect` and every geometry key
+    /// scale together about `--anchor-x`/`--anchor-y`, so the annotation
+    /// cannot render at one size and be reconstructed at another by a tool
+    /// that regenerates from `/Vertices` or `/InkList`.
+    ///
+    /// # The two toggles, and why their defaults point opposite ways
+    ///
+    /// `--scale-stroke-width` is **off**: a border width is a drafting
+    /// convention, and on a CAD drawing a line weight means something to
+    /// whoever reads the print. `/RD` (rect differences) **does** scale, and
+    /// `--keep-rect-differences` opts out.
+    ///
+    /// That looks inconsistent and is not. The test is: **is the property a
+    /// length in the space being transformed?** An inset is; a line weight is
+    /// not. It is also why `move-annotation` scales neither — a translation
+    /// changes no length at all.
+    ///
+    /// # ★ The appearance, which is where a resize stops resembling a move
+    ///
+    /// §12.5.5 maps the appearance's `BBox` onto `/Rect`, which under a
+    /// translation is free and under a scale is a matrix applied AFTER
+    /// stroking — so the drawn stroke scales whatever `/BS /W` says, and under
+    /// a non-uniform scale it is anisotropic, which no single stroke width can
+    /// express.
+    ///
+    /// pdfce re-authors the appearance where it drew it (established by
+    /// comparing BYTES, not by asking whether the dictionary parses), so both
+    /// toggle states come out exact. A foreign appearance it will not redraw:
+    /// a uniform scale with `--scale-stroke-width` proceeds because the matrix
+    /// then does exactly what was asked, and anything else is REFUSED unless
+    /// `--allow-appearance-distortion` takes the distortion knowingly.
+    ResizeAnnotation {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page the annotation is on.
+        #[arg(long, default_value_t = 1)]
+        page: usize,
+        /// Which annotation, numbered from 0 in `list-annotations` order.
+        #[arg(long, default_value_t = 0)]
+        index: usize,
+        /// Horizontal scale factor. Negative mirrors; zero is refused.
+        #[arg(long, allow_negative_numbers = true)]
+        sx: f64,
+        /// Vertical scale factor. Negative mirrors; zero is refused.
+        #[arg(long, allow_negative_numbers = true)]
+        sy: f64,
+        /// Anchor x in points — the point that does NOT move. Typically the
+        /// corner opposite the grip being dragged.
+        #[arg(long, allow_negative_numbers = true)]
+        anchor_x: f64,
+        /// Anchor y in points. PDF user space has its origin at the
+        /// bottom-left corner (§8.3.2.3), not the top.
+        #[arg(long, allow_negative_numbers = true)]
+        anchor_y: f64,
+        /// Scale `/BS /W` with the geometry. Off by default — a line weight
+        /// is a drafting convention, not a length in the scaled space.
+        #[arg(long)]
+        scale_stroke_width: bool,
+        /// Leave `/RD` unscaled. By default rect differences DO scale.
+        #[arg(long)]
+        keep_rect_differences: bool,
+        /// Proceed when carrying a foreign appearance would contradict the
+        /// other options, accepting the distortion.
+        #[arg(long)]
+        allow_appearance_distortion: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
     /// **Move a form field's widget** — translate its `/Rect` (§12.5.2).
     ///
     /// MOVES ONE APPEARANCE, NOT THE FIELD. A field can own widgets on
@@ -7289,6 +7364,31 @@ fn run() -> ExitCode {
             output,
             mode,
         } => cmd_move_annotation(&input, page, index, dx, dy, &output, mode),
+        Command::ResizeAnnotation {
+            input,
+            page,
+            index,
+            sx,
+            sy,
+            anchor_x,
+            anchor_y,
+            scale_stroke_width,
+            keep_rect_differences,
+            allow_appearance_distortion,
+            output,
+            mode,
+        } => cmd_resize_annotation(
+            &input,
+            (page, index),
+            (sx, sy),
+            (anchor_x, anchor_y),
+            &pdfce_core::edit::ResizeOptions::new()
+                .with_scale_stroke_width(scale_stroke_width)
+                .with_keep_rect_differences(keep_rect_differences)
+                .with_allow_appearance_distortion(allow_appearance_distortion),
+            &output,
+            mode,
+        ),
         Command::EditField {
             input,
             name,
@@ -23967,6 +24067,199 @@ fn cmd_move_annotation(
         moved
             .popup_left_behind
             .map_or_else(|| "-".to_owned(), |p| p.num.to_string()),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// `resize-annotation` — scale one annotation and every geometry key it owns
+/// about a caller-supplied anchor (`Pass 151.0`).
+///
+/// # Why the anchor and the factors are both the caller's to supply
+///
+/// The same split `transform-objects` uses. Which corner is fixed is a
+/// decision a *shell* makes from which grip was grabbed; a flag that took a
+/// grip name would encode one shell's affordance in a batch tool that has no
+/// grips at all. Two flags and two factors compose into every gesture a GUI
+/// can produce, including the mirror (a negative factor) that no grip-name
+/// vocabulary would have had a word for.
+///
+/// # What it prints, and why the exceptions come first
+///
+/// Same discipline as `move-annotation`: the things that did NOT travel are
+/// reported before the things that did, because an operator predicts the
+/// resize and does not predict the exceptions. `--scale-stroke-width` being
+/// off is the one most likely to surprise — somebody who scaled a callout 3×
+/// and expected a heavier border needs telling it stayed at 1.0 pt (rule 4:
+/// the invocation IS the commit here, so the CLI prints on the way past).
+fn cmd_resize_annotation(
+    input: &Path,
+    at: (usize, usize),
+    factors: (f64, f64),
+    anchor: (f64, f64),
+    opts: &pdfce_core::edit::ResizeOptions,
+    output: &Path,
+    mode: SaveMode,
+) -> u8 {
+    let (page, index) = at;
+    let (sx, sy) = factors;
+    if page == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let annot_id = {
+        let slots = match session.page_slots() {
+            Ok(slots) => slots,
+            Err(err) => {
+                eprintln!("pdfce-cli: {}: {err}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let Some(slot) = slots.get(page - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                input.display(),
+                slots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let annots = pdfce_core::annot::page_annotations(&session.graph(), slot.id);
+        let Some(annot) = annots.get(index) else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} has no annotation at index {index} — it has {} (indices 0..{})",
+                input.display(),
+                annots.len(),
+                annots.len().saturating_sub(1)
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let Some(id) = annot.id else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} index {index} is a direct dictionary inside /Annots, not an indirect object — it has no identity to resize, and rewriting the array around it would be a repair this command does not perform",
+                input.display()
+            );
+            return exit::EDIT_REFUSED;
+        };
+        id
+    };
+
+    let out = match session.resize_annotation(annot_id, anchor, sx, sy, opts) {
+        Ok(r) => r,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // The exceptions, before the outcome.
+    if out.stroke_width.is_none() {
+        eprintln!(
+            "pdfce-cli: {}: its border width was NOT scaled — a line weight is a drafting convention rather than a length in the scaled space, which is why the default leaves it alone. Pass --scale-stroke-width if you wanted it to follow.",
+            input.display()
+        );
+    }
+    if out.rect_differences_scaled == Some(false) {
+        eprintln!(
+            "pdfce-cli: {}: its /RD (rect differences) were left UNSCALED at your request. They are inset distances measured in the space that just changed size, so the annotation's proportions have changed.",
+            input.display()
+        );
+    }
+    match out.appearance {
+        pdfce_core::edit::ResizedAppearance::None => {
+            eprintln!(
+                "pdfce-cli: {}: this annotation has no appearance stream, so nothing was redrawn. It paints from its geometry keys in a reader that regenerates and paints NOTHING in one that does not — unchanged by this resize, but worth knowing.",
+                input.display()
+            );
+        }
+        pdfce_core::edit::ResizedAppearance::CarriedDistorted => {
+            eprintln!(
+                "pdfce-cli: {}: its appearance was CARRIED under a non-uniform scale, as you allowed. ISO 32000-1 12.5.5's placement matrix now stretches the artwork unequally, so its stroke is anisotropic — the border is thicker on one axis than the other, and no /BS /W value describes that.",
+                input.display()
+            );
+        }
+        pdfce_core::edit::ResizedAppearance::CarriedUniform => {
+            eprintln!(
+                "pdfce-cli: {}: its appearance was CARRIED rather than redrawn — pdfce did not draw it, so pdfce did not replace it. ISO 32000-1 12.5.5's matrix scales it uniformly, which is exactly right.",
+                input.display()
+            );
+        }
+        pdfce_core::edit::ResizedAppearance::Rebuilt => {}
+        // `ResizedAppearance` is `#[non_exhaustive]`, so this arm is compulsory
+        // rather than defensive. It is written to SPEAK because the compulsory
+        // form of it — an empty `_ => {}` — is precisely how a future variant
+        // would ship as silence.
+        other => {
+            eprintln!(
+                "pdfce-cli: {}: this build of pdfce-core reported an appearance outcome this CLI does not recognise ({other:?}). The resize was performed; the description above may be incomplete.",
+                input.display()
+            );
+        }
+    }
+    if out.geometry_keys_scaled.is_empty() {
+        eprintln!(
+            "pdfce-cli: {}: this annotation carries no geometry key — its /Rect IS its geometry, which is normal for a Text note, a Stamp or a Link. Nothing was missed.",
+            input.display()
+        );
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+
+    println!(
+        "resize-annotation {} page={page} index={index} -> {}",
+        input.display(),
+        output.display()
+    );
+    println!(
+        "  subtype={} sx={sx:.4} sy={sy:.4} anchor=({:.2} {:.2}) rect=[{:.2} {:.2} {:.2} {:.2}]->[{:.2} {:.2} {:.2} {:.2}]",
+        out.subtype,
+        anchor.0,
+        anchor.1,
+        out.from.llx,
+        out.from.lly,
+        out.from.urx,
+        out.from.ury,
+        out.to.llx,
+        out.to.lly,
+        out.to.urx,
+        out.to.ury,
+    );
+    println!(
+        "  geometry_keys_scaled={} appearance={} stroke_width={} rect_differences={}",
+        if out.geometry_keys_scaled.is_empty() {
+            "none".to_owned()
+        } else {
+            out.geometry_keys_scaled.join(",")
+        },
+        match out.appearance {
+            pdfce_core::edit::ResizedAppearance::None => "none",
+            pdfce_core::edit::ResizedAppearance::Rebuilt => "rebuilt",
+            pdfce_core::edit::ResizedAppearance::CarriedUniform => "carried-uniform",
+            pdfce_core::edit::ResizedAppearance::CarriedDistorted => "carried-distorted",
+            _ => "unrecognised",
+        },
+        match out.stroke_width {
+            Some((before, after)) => format!("{before:.3}->{after:.3}"),
+            None => "unchanged".to_owned(),
+        },
+        match out.rect_differences_scaled {
+            Some(true) => "scaled",
+            Some(false) => "kept",
+            None => "absent",
+        }
     );
     finish_edit(input, &outcome)
 }

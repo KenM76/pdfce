@@ -229,6 +229,25 @@ def main() -> int:
         "Popup", "0 0 200 200", (0, 0, 200, 200)
     )
     # R43: a /Circle with /IC and no /AP synthesises nothing.
+    # -- /RD, which no other fixture carries (Pass 151.0) ---------------
+    # A `/Square` with rect differences AND a `/BS /W`, so one fixture
+    # exercises both halves of the resize asymmetry: an inset is a length in
+    # the space being scaled and travels with it; a border width is a drafting
+    # convention and does not. Table 175 orders /RD [left, top, right, bottom],
+    # so the four values are deliberately NOT all equal — a bug that scales
+    # every slot by sx is invisible against [2 2 2 2] and obvious against this.
+    files["rect-differences-square.pdf"] = one_page(
+        "/Annots [4 0 R]",
+        {
+            4: (
+                b"<< /Type /Annot /Subtype /Square /Rect [100 100 200 160] "
+                b"/RD [2 4 2 4] /BS << /W 3 /S /S >> /C [0 0 0] "
+                b"/AP << /N 5 0 R >> >>"
+            ),
+            5: fill_ap((0, 0, 100, 60)),
+        },
+    )
+
     files["no-ap-circle.pdf"] = one_page(
         "/Annots [4 0 R]",
         {4: b"<< /Type /Annot /Subtype /Circle /Rect [40 40 160 160] /IC [1 0 0] >>"},

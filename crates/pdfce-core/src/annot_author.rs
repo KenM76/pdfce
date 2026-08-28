@@ -643,7 +643,7 @@ fn read_color<G: ObjectGraph + ?Sized>(graph: &G, annot: &Dict, key: &[u8]) -> O
 /// The `/Border` fallback matters on real files: Table 164 says `/Border`
 /// is *"ignored if a `BS` entry is present"*, which means a file with only
 /// `/Border` is the normal older-producer shape, not a malformed one.
-fn read_border_width<G: ObjectGraph + ?Sized>(graph: &G, annot: &Dict) -> f64 {
+pub(crate) fn read_border_width<G: ObjectGraph + ?Sized>(graph: &G, annot: &Dict) -> f64 {
     if let Some(Object::Dict(bs)) = annot.get(b"BS").map(|o| graph.resolve(o))
         && let Some(w) = bs
             .get(b"W")
