@@ -69486,3 +69486,368 @@ include an image's own texel conversions**, which they never did before.
     argument across two.
 
 ---
+
+## 2026-08-27 (296th filing) — **AN OPERATOR PRIORITY RULING PUTS THE FEATURE-REQUEST CHANNEL AHEAD OF EVERYTHING**, and the three files it points at cost two new Pass IDs; ★★★★★ **the "every page is covered" claim this project sent a consuming project on 2026-08-27 is FALSE, reproduced on pdfce's own fixture — the THIRD retracted claim in three days, and each one was the REPAIR for the previous**; `R220` **widened in place (clause (d): a universal claim is an absence claim with the sign flipped)** rather than a fourth rule minted, and the decline is argued; `R221` gains a **third instance hours after its mint, in a different subsystem, which INVERTS its risk analysis**; ★★ **a doc comment falsified by HALF ITS OWN CALLERS, found by this filing's sweep and reported by nobody**
+
+**Shipped:**
+- **Nothing.** This is a request/priority filing, not a Pass completion. No
+  boxes moved in `FEATURES.md`; no `ROADMAP.md` entry moved to *Shipped*.
+
+**The operator ruling, verbatim, and it governs the ordering:**
+
+> *"check the feature requests and write these as the first thing to do
+> before continuing work on other things."*
+
+- **`Pass 143.0` stops being the pick-up item** and is otherwise
+  **untouched** — same *Backlog* position, same content. `docs/NEXT_SESSION.md`
+  §C still names it; **that file is engineer-owned and was NOT edited by this
+  role** (the engineer was rewriting it in parallel).
+- This is a **priority ruling**, not a scoping judgement. Recorded as the
+  operator's, quoted rather than paraphrased.
+
+**Pass IDs minted (both free — `python tools/check-ledger-numbers.py` run
+before assignment reported highest `143.0`, next free family `144`):**
+
+- **`Pass 144.0`** — `gate_synthesis` names a real face that then refuses, and
+  on that page bold is unreachable through either verb. *Next up*.
+- **`Pass 145.0`** — a pinned `FormatRequest` should be able to say "the whole
+  operator". *Next up*.
+- **No ID minted for item 3** — it re-prioritises the existing `142.0`/`142.1`.
+
+**Channels checked, both, and the second is recorded because no gate can
+contradict it:**
+
+- `D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/` — **three new files**,
+  17:18 and 18:21 on 2026-08-27, i.e. **during** the previous session and
+  **after** the engineer's session-start check found the channel clear.
+- `D:/Dev/FeatureRequests/iccce_FeatureRequests/open/` — **CHECKED and
+  CLEAR**, by `ls -laR` run by this role. 19 files; newest is **pdfce's own
+  reply**, `reply_the_profile_census_and_your_33_node_constant.md`,
+  2026-08-27 14:22. **An "it's empty" claim about a directory outside this
+  repository has no falsifier here**, which is why the command and the
+  newest-file timestamp are both written down (hard rule 8's discipline,
+  pointed at a channel instead of at git).
+
+**Decisions made this session:**
+
+- **★★ `R220` WIDENED IN PLACE — clause (d) — RATHER THAN `R223` MINTED, and
+  the decline is argued in the rule itself.** The engineer put the question:
+  the falsified claim is a **universal** (*"every page is covered"*), not an
+  **absence** claim, and asked whether that argues for widening `R220` or for
+  a new rule. **Widened.** Four reasons, all in `Standing rules`: (i) ¬∃ and
+  ∀ are duals and **the check is identical** — enumerate the cases or name a
+  witness — and a rule whose remedy duplicates an existing rule's is a
+  **clause**; (ii) **splitting hides the escalation**, which is the finding:
+  three instances in three days under one rule is *n = 3 and climbing*, split
+  it is *n = 2* and *n = 1* and the second reads as a novelty; (iii) the
+  project's own precedent is amendment (`R219`, twice); (iv) a fourth
+  claim-checking rule minted the day after `R221` and `R222` is how a rule
+  set stops being read. **Ceiling unchanged: `R222`, next free `R223`.**
+- **★★★ `R220` WIDENED A SECOND TIME IN THE SAME FILING — CLAUSE (e): A
+  RELAYED CLAIM ABOUT PDFCE'S OWN CODE IS STILL A CLAIM, AND A BUG REPORT'S
+  SYMPTOM IS EVIDENCE WHILE ITS MECHANISM IS A HYPOTHESIS.** The engineer put
+  the question — *(c)* and *(d)* govern **my own** absence and universal
+  claims; a mechanism relayed from a consuming project is **someone else's**
+  claim, arguably a gap the rule does not cover — and asked for widen / mint /
+  decline. **Widened, clause (e).** Reasons: (i) **the remedy is identical** —
+  *check it before it becomes a record* — and *"a rule whose remedy duplicates
+  an existing rule's is a clause"* is **(d)'s own stated test**, applied to
+  itself rather than re-argued; (ii) **splitting would destroy the count**,
+  which is the finding — (c), (d) and (e) are **one habit at three angles**
+  (absence, universality, provenance), now **four instances in three days**;
+  (iii) a fifth claim-checking rule minted the day after `R221` and `R222` is
+  how a rule set stops being read. **`R203` is the mirror, not a duplicate**:
+  it forbids *this* project writing a bare verdict about *another* project's
+  build; (e) covers *another* project's verdict about **this** one, which
+  `R203`'s own *"shared column"* scoping excludes. **The structural half, and
+  it is why (c)/(d) do not already catch it:** both are written for a claim
+  the writer **authors**, where it is obvious who must check it. A relayed
+  claim arrives **pre-asserted and attached to a real observation** — the
+  reporter genuinely reproduced the `NoMatch`; they guessed the cause from
+  outside the crate — and the observation's credibility transfers to the guess
+  because they sit one sentence apart. **Only the project that owns the code
+  can separate them.** **Ceiling unchanged: `R222`, next free `R223`** (no
+  mint; both amendments in place).
+- **★ `R221` gains a third instance IN PLACE, and the instance changes the
+  rule.** `gate_synthesis` decides *"is a real bold face available"* with two
+  **string tests on `/BaseFont`** — a parallel description of when `set_font`
+  would succeed. `R221`'s risk-analysis paragraph was written from an
+  instance where *"neither error direction can paint a wrong colour"*;
+  **here the false-positive direction removes the capability entirely.** The
+  rule now requires the analysis to say **which** direction is harmful, and
+  notes that a predicate gating a **capability** (rather than an
+  optimisation) is asymmetric by construction. **No re-mint.**
+- **NO decision-log entry (`ARCHITECTURE.md` §12).** Decisions stay at **093**,
+  next free **094**. Argued rather than skipped: an operator **priority**
+  ruling is not an architectural decision; a **bug fix** to a predicate is
+  not one either; and `Pass 145.0`'s API question (*does `find` stay
+  mandatory?*) is **unanswered**, so there is nothing yet to record. If the
+  `operator_span`-slice invariant turns out to be guaranteed and gets
+  written down as an invariant, **that** is a decision-log candidate — flagged
+  to the engineer, not pre-empted here.
+
+**Findings + decisions:**
+
+- **★★★★★ THE THIRD RETRACTED CLAIM IN THREE DAYS, AND EACH WAS THE REPAIR
+  FOR THE PREVIOUS.** (1) `insert_pages` reported to `pdfceGUI` as absent
+  when it had shipped; (2) §3.6's bold/italic absence claim — **the repair
+  for (1)** — which reproduced (1)'s defect; (3) §3.6's *"between the two
+  verbs every page is covered … there is no page on which bold is
+  unreachable"* — **the repair for (2)**. **The count is the finding**, and
+  it is why `R220` was widened rather than split.
+- **★★★★ IT WAS REPRODUCED BEFORE IT WAS BELIEVED.** The engineer ran all
+  three commands on `pdfce-cli` at **`703a38e`** against pdfce's own fixture
+  `fixtures/synthetic/textedit/format_family.pdf`. `--bold-synthetic` refuses
+  and names `Times-Bold` (`/F3`); `--set-font Times-Bold` — **the remedy the
+  refusal names** — refuses on `R-INV-7` (`/Differences` remaps code 111
+  `'o'`); `--set-font F2` **succeeds** (`Times-Roman->Calibri-Bold`) and is
+  **never mentioned by either refusal**. A consuming project's bug report is
+  a claim (`R203`); **this one was measured first.**
+- **★★★ THE DEFECT LIVES IN A JOIN OF TWO TRUE FACTS.** pdfce's own
+  `fixtures/synthetic/textedit/PROVENANCE.md` documents **both halves
+  separately and correctly** — `/F2` as *"a fully-covering target"*, `/F3` as
+  one that *"does NOT cover `o`, so `--set-font F3` is REFUSED by name"*.
+  **Nothing asked what happens when the synthesis gate picks between them.**
+  Same shape as `R220`'s *"documented, accurate, gate-green and
+  unfindable"*: tests written per-fact rather than per-interaction. **A
+  universal claim is exactly the shape assembled from true parts and false as
+  a whole** — now `R220`(d)'s structural half.
+- **★★★ A DOC COMMENT FALSIFIED BY HALF ITS OWN CALLERS — found by this
+  filing's hard-rule-11 sweep, reported by nobody.**
+  `crates/pdfce-core/src/text_edit/synth.rs:391`–`403`, `name_claims_bold`:
+  *"it is used only in the direction where being wrong is safe: `detect` uses
+  it to say 'this looks synthesized', **never to refuse an edit**."* There
+  are exactly **two** call sites — `synth.rs:483`/`:493` (the documented safe
+  one) and `format.rs:2165`/`:2166`, which **refuses an edit**
+  (`FormatError::RealFaceAvailable`, *"Nothing was applied"*). Almost
+  certainly true when written; falsified by a later caller. **No gate can
+  catch this** — `cargo doc` cannot know what a caller does with a return
+  value. Filed as criterion 5 of `Pass 144.0` so the comment and the
+  predicate move **together**.
+- **★★ `R90` IS NOT WEAKENED BY `Pass 144.0`**, and the entry says so
+  explicitly because a future session will read the fix as loosening a
+  refusal. `R90` makes synthesis a fallback for when no real face
+  **resolves**. The fix corrects the predicate for *"resolves"* — from
+  *"exists with a matching family name"* to *"would actually be accepted"* —
+  which is `R90` applied **more accurately**, not less.
+- **★★ ITEMS 1 AND 3 ARE THE SAME DEFECT AT TWO LEVELS**, so the entries
+  cross-reference and the ordering is filed as **`142.1` → `144.0` →
+  `145.0`** (the **engineer's** view, labelled as such; the operator ruled on
+  *when* the channel is read, not on the order within it). `144.0` is pdfce
+  choosing a face without checking it resolves; `142.1`'s refinement (2) is
+  pdfce being unable to *tell a shell* which faces resolve. Building `142.1`
+  first makes `144.0` a **caller** of it rather than a second implementation
+  of the same question — this project's named recurring failure (`R221`).
+- **★ `142.0` IS DE-PRIORITISED, NOT CLOSED**, and the requester scoped their
+  own answer: *"This is a report of our operator's use, not a decision about
+  yours… we are not asking you to close `142.0`, only saying it does not
+  block us."* Their reasoning is a **use report**: CAD exports; the restyled
+  text is a part number or revision letter; *"on a 1:50 site plan at 8 pt, a
+  stroked regular face and a real Bold are not distinguishable on paper"*;
+  *"the operator's standing complaint about this program is that basic things
+  do not work, not that they work imperfectly."* The `docs/NEXT_SESSION.md`
+  §C blocking question is **answered**: *"Synthetic is enough."*
+- **★ THE `fontinfo` / `set_font` KEY JOIN, which is why a naive `142.1`
+  would be wrong.** `fontinfo` is keyed on the font **dictionary**;
+  `set_font` matches on `/BaseFont` with the §9.6.4 subset tag stripped; and
+  **one page can carry two dictionaries with the same `/BaseFont`** —
+  measured by the requester's own survey at **87 % of embedding files**. A
+  list built from `fontinfo` is *a superset that is usually exactly right*,
+  and when it is wrong the operator finds out by pressing a button.
+- **★★★★ CORRECTED WITHIN THIS FILING — I FILED A CONSUMING PROJECT'S WRONG
+  DIAGNOSIS AS PDFCE'S OWN FACT, AND THE NEXT STEP WAS TO PUBLISH IT BACK TO
+  THEM IN `docs/core-api/`.** What the dispatch relayed and this filing first
+  recorded, kept legible: ~~"`TextRun::text` contains characters that are not
+  in the file — extraction synthesises a space wherever a `TJ` offset exceeds
+  the word-gap threshold, so a title-block cell reads `"FINISH         "`
+  while the buffer holds `FINISH` and kerning numbers."~~ **FALSE.** A
+  derived word space is **never inside a glyph run**:
+  `text_extract/layout.rs`'s `Break::Word` arm calls `close_run()` and *then*
+  `emit_derived(' ', TextOrigin::DerivedWordSpace)`, pushing a **separate
+  one-character `TextRun` with `glyphs: Vec::new()`**; `text_edit/model.rs:548`
+  keeps them apart on the edit side too. **World-source (hard rule 10's
+  corollary — a correction is a claim):** the engineer measured every run
+  from **256 fixture PDFs** via `pdfce-cli extract-text --json` —
+  `derived_word_space` runs **5**; glyph runs containing a synthesised space
+  **0** (the claimed cause); glyph runs where `len(text) != len(glyphs)`
+  **1**. Their `"FINISH         "` is almost certainly **their own
+  concatenation** of a glyph run + a `DerivedWordSpace` run + a glyph run.
+- **★★★ THE SINGLE OFFENDER IS THE REAL MECHANISM, AND NEITHER SIDE HAD IT.**
+  `fixtures/synthetic/text/identity-h-tounicode.pdf`: one run, **8 characters
+  over 6 glyphs**. **`/ToUnicode` maps one glyph to several characters**
+  (ISO 32000-1 §9.10.3) — an `ffl` ligature is one glyph and three
+  characters, a surrogate pair one glyph and two `char`s. **So their headline
+  claim was TRUE and their mechanism WRONG**, and the two differ in
+  consequence: synthesis would insert a character in **no** operator, while a
+  ligature maps a character **range** onto a glyph that **is** in the
+  operator — so a `find` built from `TextRun::text` fails on the **buffer
+  bytes**, not on locating the operator. **Invisible on unligatured test
+  text; routine on real typeset copy.** `Pass 145.0`'s docs half is
+  re-scoped accordingly: `TextRun::text`'s docs owe *"one glyph may map to
+  several characters, so `text.chars().count()` is not `glyphs.len()`"* —
+  **not** the *"may contain derived characters"* line originally asked for,
+  which would have shipped a false statement to the project that reported it.
+- **★★ `CLAUDE.md` RULE 4, RESTATED ON THE CORRECTED FACTS.** The original
+  note here argued the synthesised space was an undisclosed-where-you-look
+  inference. On the true facts: the `/ToUnicode` expansion is **not an
+  inference at all** (it is the file's own mapping), and the derived word
+  space **is** disclosed as an **entire separate run** tagged
+  `TextOrigin::DerivedWordSpace` — a stronger disclosure than credited. The
+  `R220` findability point survives only in weakened form, on the
+  glyph-count fact.
+- **★ A `TextRun` SPANNING SEVERAL SHOW OPERATORS — RECORDED AS UNVERIFIED,
+  NOT AS CONFIRMED.** The requester's third cause: `layout` closes a run on
+  geometry, a producer closes an operator wherever its writer felt like it;
+  their symptom, *"eleven pieces of text went bold and the twelfth refused"*
+  on a page where nothing is unusual. **Not measured here and not measurable
+  from outside:** `GlyphProvenance::operator_span` is **not exposed** by
+  `pdfce-cli extract-text --json` (glyph objects carry `code`/`rung`/
+  `sourced`/`start`/`len`/`x`/`y`/`advance`/`size`/`direction`/`invisible`
+  and no span). **The method that would settle it, written down because it is
+  owed either way:** an **in-crate probe over a corpus counting runs whose
+  glyphs carry more than one distinct `model.provenance(...).operator_span`.
+  **★ One probe, two answers** — it also settles the `operator_span`-slice
+  invariant of `Pass 145.0` criterion 3.
+- **★ AN INVARIANT QUESTION IS OWED WHICHEVER WAY `Pass 145.0` GOES.** The
+  requester's fallback ask is a documented invariant — *"the glyphs sharing
+  one `operator_span` always slice a contiguous, matchable range out of the
+  run's text"* — which they *"believe is true today"* and *"have no way to
+  know whether it is guaranteed."* **Only pdfce can answer it, and the two
+  outcomes are not symmetric:** if it holds it is undocumented load-bearing
+  behaviour needing a test; **if it does not, their shipped workaround is
+  resting on luck and they must be told promptly**, because it is in a build
+  their operator is using.
+- **★ A DOWNSTREAM TEST WILL BREAK ON PURPOSE AND THEY ASKED FOR THAT.**
+  `pdfceGUI`'s Bold button retries with the face the refusal names; they
+  wrote a **characterisation** test naming pdfce's revision whose docstring
+  says it will start failing on its *"nothing was applied"* assertion when
+  `Pass 144.0` ships. **Their words: *"That failure is the good news."***
+  Whoever ships it **must tell them on the channel** — an unannounced
+  downstream red build is indistinguishable from a regression.
+- **★ DECISION 058 WORKING FROM THE OTHER SIDE.** The requester declined to
+  build a shell-side search for a different bold resource: *"It would work,
+  it would take about twenty lines, and it would be this project
+  second-guessing your font selection… Told rather than built."* Recorded
+  because the cheap wrong answer is three shells each growing their own
+  font-selection heuristic and disagreeing about the same page.
+- **★ `R220` HAS BEEN ADOPTED BY A CONSUMING PROJECT**, and they caught
+  themselves with it: their reply's §4 held an absence claim about
+  `FormatReport` (*"has no `synthesis` field"* — it is `format.rs:913`),
+  **caught pre-send, left struck rather than deleted**, in *"a document whose
+  whole subject was you having done the same thing, within the hour."* Their
+  reading: *"the pull toward 'I looked and did not see it, therefore it is
+  not there' is strong enough to survive reading a note about itself."*
+  Fourth same-week instance of the pull, the only one caught in time.
+
+**★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for the string**
+
+| # | site | claim | disposition |
+|---|---|---|---|
+| 1 | `docs/core-api/03-capabilities.md:1229` | *"between the two verbs, **every page is covered**"* | **FALSE. REPORTED, NOT EDITED** — `docs/core-api/` is **engineer-owned** (2026-08-18 ruling). Criterion 6 of `Pass 144.0`. |
+| 2 | `docs/core-api/03-capabilities.md:1248` | *"do not grey out a bold button"* | **STILL TRUE — must NOT be corrected with #1.** The requester agrees the button should be offered everywhere. **Correcting the wrong sentence of the two is the available mistake here**, which is why the survivor list names it as a non-survivor. |
+| 3 | `docs/FEATURES.md`, Implemented Text-formatting row | *"permitted exactly when no real face is resident and refused when one is"* | Literally true of the implementation, **and it supports the false inference**. **FIXED HERE** — the row now states the non-exhaustiveness and cites `Pass 144.0`. |
+| 4 | `crates/pdfce-core/src/text_edit/synth.rs:391`–`403` | `name_claims_bold` *"never [used] to refuse an edit"* | **FALSE — half its callers refuse an edit.** New finding, nobody reported it. **REPORTED, not edited** (`crates/` is outside this role's remit, hard rule 11's own scope line). `Pass 144.0` criterion 5. |
+| 5 | `crates/pdfce-core/src/text_edit/format.rs:1017`–`1022` | the `RealFaceAvailable` **format string**: *"change the run's family to '{real_font}' instead"* | **A REMEDY CLAIM THAT CAN BE FALSE FOR THE RUN.** Not stale text — it becomes wrong at the same moment the predicate does. **`R222` prospectively**: it moves in the same change as the doc comment and the predicate. `Pass 144.0` criterion 5. |
+| 6 | `crates/pdfce-core/src/text_edit/format.rs:1013`–`1017` | the same claim as rustdoc on the `RealFaceAvailable` variant | Same disposition as #5. |
+| 7 | `docs/ROADMAP.md:86566` (now moved), `Pass 142.0` Backlog entry | *"`gate_synthesis` permits synthesis **precisely when** no real face is a page resource"* | Accurate about the **implementation**; it is the implementation that is wrong. Left standing — the entry above it now carries the amendment, and rewriting a Backlog entry's history is not this role's to do. |
+| 8 | `docs/ui_specs/pass-19.3-text-formatting-surface.md` (5 sites) | renders the `RealFaceAvailable` message **verbatim** | **No claim of its own** — it forwards whatever the message says, so it is correct by construction and needs no edit. Listed so a later sweep does not re-find it and wonder. |
+| — | the reply already **SENT** to `pdfceGUI` (`correction_bold_and_italic_DO_work_…`, 14:54) | carries #1 | **Cannot be unsent.** A correction is **owed on the channel** and is the engineer's to send. |
+
+**★★ SECOND SWEEP, SAME FILING — for the RELAYED MECHANISM found false after
+the first sweep ran** (determining a stated cause is false is a meaning-change
+event; hard rule 11's 2026-08-23 amendment). Searched for the **claim** —
+*"extraction puts a synthesised character inside a run's text"* — not for the
+string:
+
+| # | site | disposition |
+|---|---|---|
+| 1 | `docs/ROADMAP.md`, `Pass 145.0`, three-wrong-answers table row 2 | **FIXED HERE** — original claim struck and kept legible, correction block added naming the 256-fixture measurement. |
+| 2 | `docs/ROADMAP.md`, `Pass 145.0`, the `CLAUDE.md` rule-4 note | **FIXED HERE** — it argued *from* the false mechanism; restated on the corrected facts. |
+| 3 | `docs/ROADMAP.md`, `Pass 145.0`, docs half item 2 (*"does not say it may contain DERIVED characters"*) | **FIXED HERE, AND THIS IS THE ONE THAT MATTERED** — it was an instruction to write the false mechanism into `docs/core-api/`. Re-scoped to the true fact (`/ToUnicode` one-glyph-to-many-characters). |
+| 4 | `docs/ROADMAP.md`, `Pass 145.0`, table row 3 + acceptance criterion 3 | **FIXED HERE** — row 3 relabelled UNVERIFIED; the settling probe written into criterion 3, which now also requires the multi-operator claim be confirmed or retracted on the channel. |
+| 5 | `docs/SESSION_LOG.md`, this entry's `TextRun::text` and span bullets | **FIXED HERE** — both replaced, originals struck. |
+| 6 | `docs/FEATURES.md`, *Planned* row for `Pass 145.0` | **FIXED HERE** — restated on `/ToUnicode`; the span claim marked as the reporter's, unverified. **No box moved.** |
+| — | `open\confirmed_gate_synthesis_is_a_real_defect_and_my_every_page_claim_was_false.md` §6 | **ALREADY CARRIES THE CORRECTION** — outbound copy, written by the engineer; not edited by this role. |
+| — | `docs/core-api/` | **NOTHING TO FIX — the false statement was never written.** Recorded because it is the point: this was caught *between* the decision to document it and the documenting. |
+
+**Still in flight:**
+- **`Pass 142.1` → `144.0` → `145.0`**, in that order, at the **front of
+  *Next up*** by operator ruling. All three **NOT STARTED**.
+- **`Pass 142.0`** — *Backlog*, unstarted, **de-prioritised not closed**, no
+  longer blocked.
+- **`Pass 143.0`** — *Backlog*, unstarted, **unchanged**; no longer the
+  pick-up item.
+- Everything the 295th filing listed as in flight is otherwise **unchanged**,
+  including the gate-output-directory observation owed to the engineer.
+
+**For next session:**
+- **FOUR things are OWED TO `pdfceGUI` ON THE CHANNEL** and none of them is
+  code: the **§3.6 correction**; a **warning before `Pass 144.0` lands**
+  (their characterisation test is designed to go red); the
+  **`operator_span`-slice invariant answer**, which decides whether their
+  shipped workaround is sound; and — **new, this filing's correction** — that
+  **their `TextRun::text` diagnosis was wrong in its mechanism while right in
+  its headline**, because a fix aimed at word-gap synthesis would miss the
+  real cause (`/ToUnicode` one-glyph-to-many-characters). ⚠ **The fourth is
+  already drafted outbound** in
+  `open\confirmed_gate_synthesis_is_a_real_defect_and_my_every_page_claim_was_false.md`
+  §6 (engineer-written; not edited by this role) — it still has to be **sent**,
+  and the multi-operator claim should be **confirmed or retracted** in the
+  same message once the probe runs.
+- **★★ THE TRANSFERABLE LESSON OF THIS FILING'S SELF-CORRECTION, and it is
+  the part worth carrying past the Pass:** **a bug report's SYMPTOM is
+  evidence; its MECHANISM is a hypothesis** — and the two arrive in the same
+  file, in the same confident voice, from a reporter who really did reproduce
+  the symptom. I was one step from documenting a consuming project's wrong
+  diagnosis into `docs/core-api/` **as pdfce's own statement about pdfce's
+  own type**, and returning it to them as authority. It was caught only
+  because the engineer had spent the same hour writing an apology for relaying
+  a different unchecked claim. Now `R220` clause (e).
+- **★ ONE IN-CRATE PROBE IS OWED AND BUYS TWO ANSWERS** — runs whose glyphs
+  carry more than one distinct `model.provenance(...).operator_span`. It
+  settles (i) whether a `TextRun` can span several show operators at all and
+  (ii) the `operator_span`-slice invariant `pdfceGUI`'s shipped workaround
+  rests on. `pdfce-cli extract-text --json` **cannot** answer either — it does
+  not emit the span.
+- **`crates/` sites in the sweep above are FLAGGED, NOT VERIFIED AS UNFIXED**
+  — re-grep rather than trusting the list.
+- **`docs/NEXT_SESSION.md` was NOT touched by this role** — the engineer was
+  rewriting it in parallel. Its §C still names `Pass 143.0` as the pick-up
+  item, which the operator's ruling supersedes.
+- **Gates, run by this role AFTER these edits:**
+  - `python tools/check-ledger-numbers.py` → **exit 0**, *"ledger-numbers:
+    clean"*. Ceilings: **Passes up to `145.0`** (next free family **146**),
+    rules **`R222`** (next free **`R223`** — unchanged, both amendments were
+    in place), decisions **093** (next free **094**), filings **296** (next
+    free **297**).
+  - `python tools/check-suite-name-absent.py` → **exit 0**, *"clean"*.
+- **Git state, CHECKED not inferred** — `git status --porcelain` and
+  `git rev-parse HEAD origin/main`, both re-run by this role **after its last
+  edit**, not at dispatch:
+  - At dispatch: **clean tree**, `HEAD` = `703a38e`, **level** with
+    `origin/main`.
+  - After this filing's edits: see the closing bullet below — reported from a
+    re-run, because **a filing that reads the tree at dispatch and reports it
+    at save is reporting a MOMENT, not a state**, and that trap has now
+    caught the four preceding filings.
+  - **Nothing was committed or staged by this filing.**
+  - Pushing `main` is **standing-authorized** (decision **090**); this entry
+    asserts nothing about CI colour.
+- **Backups: NOT checked by this role.** The engineer should run `ls -lt
+  D:/Dev/pdfce-backups/` and `git rev-list --count <newest>..HEAD`. Any figure
+  carried forward from a prior filing is **stale by construction** and must
+  not be quoted.
+- **No RAG written this filing.** Argued rather than skipped: the three
+  substantive findings are **`R221`'s third instance** (folded into the rule
+  in place), **the doc comment falsified by its own caller** (already the
+  ninth-plus occurrence of the class in
+  `D:/dev/rag/rust/disclosure_text_must_be_tested_against_producing_branch.md`,
+  and this instance adds no new mechanism — a tenth tally line is owed once
+  `Pass 144.0` actually ships and the correction is measured, not now, when
+  nothing has been fixed), and **the universal-claim shape** (`R220`(d), a
+  project-discipline finding with no home in an ecosystem or PDF-domain RAG).
+  **Nothing here is a PDF-producer quirk** (`C:/personal_rag/pdf/`) or a
+  Rust/egui ecosystem quirk (`D:/dev/rag/rust`, `D:/dev/rag/egui`). Written
+  down so a later index check reads this as a decision, not an omission.
+
+---
