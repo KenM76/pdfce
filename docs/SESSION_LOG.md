@@ -71304,9 +71304,10 @@ for.
 shipped. No commit to cite.** The engineer wrote **no code** for either finding;
 both were produced by reading and grepping while scoping `Pass 143.0`, and the
 deliberate choice was to **file them before starting the work** rather than
-after. If a later filing needs a hash for this record, it is the commit that
-carries these edits and the engineer can supply it — **none is invented here**
-(hard rule 8).
+after. **No code commit is cited anywhere in this entry and none is invented**
+(hard rule 8). *This record's own docs commit is `0d20861`* — the engineer
+committed the filing while it was still being written, and the hash is recorded
+**after** `git log` confirmed it, not before.
 
 **Channel check ran FIRST** (`R203`(d)), `ls -lt` over both directories, and
 every file newer than the 300th filing's reading was opened.
@@ -71496,7 +71497,7 @@ and mis-scoped the fix as a representation change that had **already shipped**.
 | `ROADMAP.md` changes | — | **1 Backlog item ADDED (no Pass ID)**; **1 amendment** to `Pass 143.0`'s entry; **1 cross-pointer** into the `Pass 97.0 / 97.1 / 97.2` compositor entry |
 | `FEATURES.md` rows changed | — | **2 edited, 0 added, 0 boxes ticked** — the *Per-colorant (n-channel)* row gains the "rules exist, planes and caller do not" clause; the `Pass 143.0` row gains the confirmed-scoping and no-new-plane clause. **A latent unreachable rule is not a capability change in either direction**, which is why nothing moved |
 | `ARCHITECTURE.md` changes | — | **1 body-section amendment** (§3, survivor 1 above). **No decision-log entry** |
-| commits cited | — | **NONE, and none invented.** Nothing shipped |
+| commits cited | — | **NO CODE COMMIT, and none invented.** Nothing shipped. **This filing's own docs commit is `0d20861`** (`git log --oneline`, run here **after** the engineer committed it mid-filing) — recorded because a later filing may need to cite this record, **not** because anything was built |
 | `Component::Spot` constructions outside tests | — | **0 of 3 occurrences** (`grep -rn "Component::Spot" crates/`, run here) — 2 non-test `match` arms, 1 test constructor |
 | `cmyk_group_rules` call sites | — | **3, all in `interpret.rs`** (`4540`, `5327`, `6895`), each receiving **4 of a possible 4+N** `ComponentRule`s |
 | commits since newest bundle | **30** | **32** — newest bundle `pdfce-20260827-shutdown-a2b4e16-full.bundle`, 2026-08-27 12:04 (`ls -lt D:/Dev/pdfce-backups/`), `git rev-list --count a2b4e16..HEAD` = **32**. **A backup is now five filings overdue** |
@@ -71509,6 +71510,21 @@ clean."* `python tools/check-commits-filed.py` pre-edit: **clean**, 626 code
 commits checked, 5 known-unfiled carried in the baseline — **so unlike the
 previous two filings this one does not discharge a red gate; it is a
 before-the-work filing, not an after-the-work one.**
+
+**Post-edit, measured here, and the denominator is stated per `R209`(e).** The
+gates a docs-only change can move were run **individually and read one by one**:
+**18 of the 19 `check-*` scripts on disk, all exit 0** — including
+`check-ledger-numbers.py` (now *"headings up to 148 · standing rules R224 ·
+decision records 094 · SESSION_LOG filings 301"*), `check-commits-filed.py`,
+`check-passes-filed.py`, `check-cited-commits-exist.py` (**79 documents, every
+cited commit an ancestor of `HEAD`**), `check-core-api-verbs.py`,
+`check-suite-name-absent.py` (rule 8's public-facing gate) and the five `.sh`
+gates. The 19th, `check-image-colorspace-truth.py`, **takes a
+fixture-directory argument** and is invoked with one by CI, not bare. **★ 19 is
+the script count on disk and is NOT the denominator for a "gates green" claim**
+— that is `bash tools/run-gates.sh` at **25 commands**, which this filing did
+**not** run to completion; both figures are stated so neither stands in for the
+other.
 
 **RAG written this filing:**
 

@@ -11,6 +11,19 @@ can falsify it.
 
 ---
 
+## §0 — TWO THINGS OWED IMMEDIATELY
+
+1. **One unfiled commit sits at the tip** — `tools/check-history-not-rewritten.py`
+   plus its wiring into `run-gates.sh`. That is the *one* deferred commit the
+   filing gate permits, so CI is green, but **file it before committing any
+   more code** or the next commit turns it red. Its commit message carries
+   everything a filing needs.
+2. **A backup is five filings overdue.** The newest bundle is 32 commits
+   behind `HEAD`. Everything is on `origin`, so this is redundancy rather than
+   exposure — but it is the operator's act and it has been reported five times.
+
+---
+
 ## §A — RUN `bash tools/run-gates.sh`, NOT A HAND-TYPED GATE LOOP
 
 **New this session, and it exists because the old habit put a red run on the
@@ -20,10 +33,19 @@ the **filing gates last** by construction, names anything it skips, and does
 not stop at the first failure.
 
 ```
-bash tools/run-gates.sh          # 25 commands
+bash tools/run-gates.sh          # 26 commands
 bash tools/run-gates.sh --list   # what it would run, in order, incl. skips
 bash tools/run-gates.sh --full   # add --all-features testing
 ```
+
+★★ **It now runs one PRE-FLIGHT check CI structurally cannot provide.**
+`check-history-not-rewritten.py` asks whether `origin/main` is still an
+ancestor of `HEAD` — i.e. whether published history has been rewritten. Every
+other gate asks about the *tree*, which the server re-checks; by the time CI
+runs, the push has happened. **A subagent amended an already-pushed commit
+during this session** and nothing announced it; that instance was harmless
+(identical tree, metadata only) and was found by accident. **If it ever fires,
+the fix is `git reset --mixed origin/main`, never `--force`.**
 
 ★ **Do not go back to `for g in tools/check-*`.** A hand-typed sweep ran green
 thirteen times this session while omitting **five** of CI's commands —
