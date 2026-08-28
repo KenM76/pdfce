@@ -10,8 +10,9 @@ only detector is an independent forecast — which is the exact labour a gate
 exists to remove. So when a gate's output disagrees with what you expected,
 **suspect the gate before you suspect your expectation.**
 
-**Why:** four occurrences across two files, and every single one surfaced
-because somebody predicted the result, never because a gate reported anything.
+**Why:** FIVE occurrences across two files, and every single one surfaced
+because somebody predicted the result — or, once, because the shipped output
+was read in a terminal — never because a gate reported anything.
 
 - `check-ledger-numbers.py`'s Pass-heading anchor: `(?:★ )?` could not see a
   `★★`/`★★★` heading. Found twice, both times by disagreement.
@@ -25,6 +26,18 @@ because somebody predicted the result, never because a gate reported anything.
   neither was lying and only one could be right. This one was a live hazard —
   §12 duplicate detection is deliberately absent, so the printed ceiling was
   the only thing preventing a duplicate.
+
+- `check-string-gaps.sh` again (2026-08-27) — **THIRD miss on the same gate**,
+  and TWO holes at once. A shipped `pdfce-cli` refusal read
+  `"…with an empty              --find to mean…"`; the literal was not
+  recognised as prose (an `eprintln!`, not an `#[error(...)]`), and even in
+  prose mode the trailing class did not admit a **hyphen** — and the next word
+  after a gap in a CLI diagnostic is, more often than anything, a `--flag`.
+  Found by **running the binary and reading its own message**, not by the gate
+  and not by a forecast. The gate's own header, written after miss #2, says the
+  fix "widens both ends of the class rather than only the end that failed" — it
+  widened both ends to `{`/`}` and stopped there. **Three repairs, three
+  enumerations from the instance in hand.**
 
 **The half that keeps biting: fix the CLASS, not the spelling.**
 - The first star-anchor fix repaired `★` because that was the one seen; a
@@ -42,6 +55,14 @@ distinguishing property was not the characters: a `thiserror` message is
 **prose**, a `println!` in a sweep tool is a **table**. Scope the widening to
 where the property is structurally guaranteed, and pin the false-positive shape
 in the gate's CLEAN self-test so the next widening cannot re-break it.
+
+**★ The statement that finally generalises, after three tries on one gate:**
+in prose mode the trailing class should be read as *"anything that starts a
+word"*, **not as a list of the characters that have failed so far.** If you
+find yourself adding a character to a class because you just met it, you are
+about to make repair N+1 inevitable. (Measure before widening: a blanket
+widening here produced 24 findings, ~18 legitimate; scoped to structurally-
+guaranteed prose it produced exactly 1 — the defect.)
 
 **How to apply:** (1) before running a gate you have reason to have tripped,
 say out loud how many findings you expect; a mismatch in *either* direction is

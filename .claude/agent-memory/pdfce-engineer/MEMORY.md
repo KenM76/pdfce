@@ -65,3 +65,4 @@
 - [A rising failure count: the four-step method](feedback_a_rising_failure_count_measure_the_oracle.md) — ablate, segment by exact value, run the detector on the REFERENCE, measure changed pixels only
 - [The unreported route was the whole fix](feedback_the_unreported_route_was_the_whole_fix.md) — R219 proved by ablation: the route named in the bug report contributed 0%
 - [Sabotage catches false COMMENTS too](feedback_sabotage_catches_false_comments.md) — a surviving sabotage meant my code comment's claim about coverage was wrong, not that the test was weak
+- [A shell flag can be parsed and never used](feedback_a_shell_flag_can_be_parsed_and_never_used.md) — unit tests hit core directly, so a half-wired CLI flag passes them all; only running the binary finds it

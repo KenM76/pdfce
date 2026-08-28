@@ -69851,3 +69851,340 @@ string:
   down so a later index check reads this as a decision, not an omission.
 
 ---
+
+## 2026-08-27 (297th filing) — **ALL THREE OPERATOR-PRIORITISED CHANNEL ITEMS SHIPPED IN ONE SESSION, IN THE PRESCRIBED ORDER, AND THE ORDER IS WHY `144.0` IS A CALLER RATHER THAN A SECOND IMPLEMENTATION**; ★★★★★ **the `operator_span`-slice invariant is ANSWERED BY MEASUREMENT and is now a PUBLISHED GUARANTEE — 29,246 groups over 4,289 files, 0 exceptions — decision `094`**; ★★★★ **the reporter's multi-operator claim, filed as UNVERIFIED, is CONFIRMED: 2,420 of 18,559 runs (13.0 %)**; ★★★ **four doc claims falsified by `Pass 144.0`'s own code, none reported by any tool or any person**, including the *"every page is covered"* sentence pdfce had sent a consuming project; ★★ standing rule **`R223`** minted — **a doc comment's claim about its own CALLERS is a measurement nothing recompiles when it goes stale** — and it is minted on the exact falsifier a previous decline named; ★ **a fourth inbound request arrived at 21:54, after the previous filing's channel check, and is UNPARSED**
+
+**Shipped:**
+
+- **`Pass 142.1`** (`2e6235c`) — the font-resource pre-flight.
+  `EditSession::preview_font_resources`, `pdfce-cli font-preflight`, and the
+  acceptance test **extracted** into `accept_font_target` so `set_font` and the
+  query share one implementation (`R221`).
+- **`Pass 144.0`** (`cfa2c44`) — `gate_synthesis` names a face `set_font`
+  actually accepts. Calls `Pass 142.1`'s `find_styled_face`; three branches;
+  `FormatError::RealFaceAvailable` gains `selector` and `same_family`.
+- **`Pass 145.0`** (`0c48bbf`) — `FormatRequest::whole_operator` /
+  `pinned(span)`, `--pin-span START:LEN` on both CLI verbs,
+  `extract-text --json --spans`, and the invariant probe.
+
+All three **pushed**; `origin/main` is at `0c48bbf` (`git rev-parse HEAD
+origin/main`, run here — both resolve to
+`0c48bbf38b549d184ca95bfdbdc99f2c06f6df2e`). Prior tip was `2ceec26`.
+`git describe` = **`v0.14.0-65-g0c48bbf`**. Working tree **clean** at dispatch,
+breaking a run of four consecutive filings that found it growing underneath
+them.
+
+**Tests, filed per-commit as well as in total (hard rule 10a):** **4,419 →
+4,438 (+19: +10 core out-of-crate, +9 CLI) → 4,446 (+8 core out-of-crate) →
+4,463 (+17: +8 whole-operator, +3 invariant probe, +6 CLI)**. **Net +44 over
+three commits, 0 failing at each tip.** Read here from each commit's own
+message, not carried forward from the dispatch.
+
+**The operator ruling that governed this session is DISCHARGED, and the
+discharge is qualified.** The 296th filing's priority box put the
+feature-request channel ahead of `Pass 143.0`; its **ordering** is satisfied
+and no longer governs. **The ruling itself is not retired** — it governs how
+the channel is treated, which is exactly why the 21:54 inbound below gets a
+box rather than a footnote. **`Pass 143.0` is the pick-up item again**,
+unchanged in content and unchanged in its *Backlog* position throughout.
+**`Pass 142.0` remains de-prioritised-NOT-closed in *Backlog*, unchanged.**
+
+**Decisions made this session:**
+
+- **★★★ DECISION 094 MINTED — the `operator_span`-slice invariant is a
+  GUARANTEE pdfce publishes, not an implementation detail; and
+  `ARCHITECTURE.md` gains §4.2, *Published model guarantees*, as the place
+  such things live.** The 296th filing's `Pass 145.0` entry named this a
+  decision-log candidate **conditional on the invariant holding**. It held, so
+  the condition discharged and the record was owed.
+  **The decision is not "the invariant is true" — measurement established
+  that. The decision is to PROMISE it**, and the promise costs something:
+  `text_extract/layout.rs`'s run segmentation may no longer be refactored so
+  that one group's glyphs become non-contiguous within a run, **even if no
+  pdfce feature notices**. pdfce's own code could absorb such a change with
+  every test green; only a shell would break. §4.2's entry format is fixed at
+  four parts — the property, the measurement, the test that pins it, and **the
+  refactor it forbids** — because a guarantee without its measurement is a
+  claim, and one without its forbidden refactor does not tell a future
+  engineer what they may not do.
+  **Why a new §4.2 rather than a line in §4.1:** §4.1 is a *sync* section,
+  written to be **replaced** when it drifts; a guarantee is binding and
+  append-only, and burying one in a document whose contract is *"rewrite me
+  when I go stale"* would eventually delete it by routine maintenance.
+- **DECISION DECLINED, recorded so the absence is not read as an oversight:
+  `accept_font_target` as the single acceptance predicate is NOT a decision
+  record.** It is a correct **application of `R221`** to a new subsystem, not
+  a new boundary, crate split, library choice or invariant definition. Filing
+  every correct application of a standing rule as a decision would make the
+  log a duplicate of *Shipped*. Precedent: the 295th filing declined on
+  exactly this ground.
+- **★★ STANDING RULE `R223` MINTED — a doc comment's claim about its own
+  CALLERS is a measurement, and nothing recompiles when it goes stale;
+  re-derive it by running the grep it quotes, never by reasoning about what
+  changed.** Distinct from `R93` (a comment wrong about the code beside it)
+  and from `R222` (a claim duplicated into a format string): here the
+  **truth-maker lives outside the documented item entirely**, in the set of
+  its callers, so **the person who falsifies it never reads it**, `cargo doc`
+  cannot check it, and it is **almost always true when written** — the defect
+  is in the claim's *form*, not its author's diligence.
+  **★ The mint's warrant is better than a count.** Instance 1
+  (`crates/pdfce-core/src/ocr/layer.rs` — a doc comment wrong about its own
+  callers **three times in one session**, the third produced *while correcting
+  the second*) was **explicitly declined** promotion by this role, on the
+  argued warrant that all three readings were *"of one doc comment, in one
+  file, inside one session's churn — **not the shape of a defect recurring
+  across independent subsystems**."* **That decline named its own falsifier,
+  and instance 2 met it exactly**: `text_edit/synth.rs`, a different
+  subsystem, a different Pass family, a different reader, a different
+  discovery mechanism. Recording the decline is what made this mint checkable
+  rather than a reversal of taste.
+  Clause (c) is the one worth carrying: **prefer moving the claim somewhere a
+  compiler can hold it.** `Pass 144.0`'s own remedy is the worked example —
+  the fix was not to reword the comment but to make the refusing caller ask
+  the accepting code, after which the comment had nothing left to be wrong
+  about.
+- **`R220` clause (d) and `R221` both gained a live instance and were amended
+  in place, not re-minted.** `R220`(d)'s falsified universal — §3.6's *"every
+  page is covered"* — was corrected at source in `cfa2c44`. `R221`'s third
+  instance is **resolved by the rule's own remedy**: the predicate is now the
+  accepting code. **`R222` had its first live firing** — correcting
+  `name_claims_bold`'s doc comment surfaced the `RealFaceAvailable` **format
+  string** carrying the same unchecked claim, found at change time, which is
+  the window it was minted to close. **Ceilings move only for `R223`.**
+
+**Findings + decisions:**
+
+- **★★★ THE INVARIANT HOLDS, AND THE MEASUREMENT IS THE ENTRY.**
+  `crates/pdfce-core/tests/operator_span_invariant.rs` walks `fixtures/`:
+  **4,289 files · 1,623 with text (37.8 %) · 18,559 runs (11.4 per
+  text-bearing file) · 669,436 glyphs (36.1 per run) · 29,246 `operator_span`
+  groups (1.58 per run, 22.9 glyphs per group) → 0 non-contiguous, 0 failing
+  to index the run's text cleanly.** Sabotage-checked: excluding one glyph per
+  group from the coverage computation turns it red, so the zeroes are
+  measurements and not a probe that examines nothing. **`pdfceGUI`'s shipped
+  workaround is sound**, and the "they are resting on luck and need telling
+  urgently" branch did not fire.
+- **★★★ THE MULTI-OPERATOR CLAIM, CARRIED AS *UNVERIFIED*, IS CONFIRMED:
+  2,420 of 18,559 runs (13.0 %) carry glyphs from more than one show
+  operator.** Common, not exotic. Their third table row was right. **This is
+  what makes the whole-operator affordance load-bearing rather than a
+  convenience**, and it is why the report carries a `whole operator:`
+  disclosure naming the case — the **extent** was pdfce's choice, not the
+  operator's (`CLAUDE.md` rule 4). **One probe, two answers**, exactly as the
+  296th filing's method note predicted; built once.
+  The *Next up* entry's UNVERIFIED label is **left standing on purpose** under
+  its banner: it was the correct epistemic state at filing time, and striking
+  it would erase the record of a claim carried honestly until it could be
+  checked.
+- **★★★ FOUR DOC CLAIMS FALSIFIED BY `Pass 144.0`'s OWN CODE, NONE REPORTED
+  BY ANY TOOL OR ANY PERSON.** (a) `name_claims_bold`'s *"never to refuse an
+  edit"* — true when written, falsified by a later caller (**`R223`'s first
+  instance**; old wording kept **struck**, not replaced). (b)
+  `gate_synthesis`'s own doc claiming a `Times-Bold` request *"is refused with
+  that same face named"* when `!is_self` **skips** it, so it is never named
+  (`R93`'s shape). (c) the `RealFaceAvailable` **format string** naming a
+  remedy it had not checked (`R222`). (d) `docs/core-api/03-capabilities.md`
+  §3.6's *"between the two verbs, every page is covered"*, **which pdfce sent
+  to `pdfceGUI` in that form** (`R220`(d)).
+  **All four found by reading the documentation against the code while
+  changing the code** — the only moment both are in front of one reader. **The
+  neighbouring sentence, *"do not grey out a bold button"*, was and remains
+  TRUE and was deliberately not touched**; the 296th filing had named
+  correcting the wrong sentence of the two as *"the available mistake here"*,
+  and it was avoided by name.
+- **★★ TWO DEFECTS FOUND BY RUNNING THE BINARY, NOT BY A 4,463-TEST SUITE,
+  BOTH IN THIS SESSION'S OWN NEW CODE.** `cmd_edit_text` **parsed
+  `--pin-span` and never attached it** — the refusal read *"empty find text"*,
+  exactly what the feature removes, and **every unit test passed** because
+  they exercise the core API directly. And a shipped refusal string carried
+  **fourteen baked-in spaces** past a green `check-string-gaps.sh`.
+  **Generalisable half:** both live in the **shell layer between the flags and
+  the core API** — the one layer a core-API test cannot exercise by
+  construction. Driving the release binary is the only instrument that covers
+  it.
+- **★★★ `check-string-gaps.sh` UNDER-REPORTED FOR THE THIRD TIME AND IS FIXED
+  AS A CLASS, WITH THE WIDENING'S SCOPE CHOSEN BY MEASUREMENT.** Its own
+  header says the previous repair *"widens both ends of the class rather than
+  only the end that failed"* — and it widened both ends to `{`/`}` and
+  stopped. The next miss had **two holes at once**: the literal was an
+  `eprintln!` rather than an `#[error(...)]` so **prose mode never ran**, and
+  even in prose mode the trailing class **did not admit a hyphen** — when the
+  next word after a gap in a CLI diagnostic is, more than anything else, a
+  `--flag`. Fixed by a structural argument about the string's **role**: a
+  literal opening with the binary's own diagnostic prefix (`"pdfce-cli: "` /
+  `"pdfce-gui: "`) is a sentence an operator reads, never an aligned report
+  column. **Measured before widening: blanket → 24 findings, ~18 of them
+  legitimate (DXF byte streams, aligned probe columns); scoped to prose → 1,
+  the defect.** A self-test fixture for the shape was added.
+  **Transferable statement, now three for three: in prose mode the trailing
+  class is *"anything that starts a word"*, not a list of the characters that
+  have failed so far.** Same shape as `R220`'s three-deep escalation — **a
+  repair that generalises to the instance rather than to the class schedules
+  its own successor.**
+- **★ A NEW FIXTURE WAS REQUIRED AND NOBODY HAD PREDICTED IT.** Nothing in the
+  corpus carried **two resources with one `/BaseFont`** — the 87 % case the
+  requester's own survey reports had **no witness in pdfce's fixtures**.
+  `fixtures/synthetic/textedit/format_twins.pdf` is that witness (corpus **8 →
+  9**; `PROVENANCE.md` updated; **every pre-existing fixture regenerated
+  byte-identical**, which is what says the generator change added a file
+  rather than perturbing the corpus).
+- **★ AN O(n²) SCAN OVER AN ATTACKER-CONTROLLED `/Font` DICT, FIXED WHILE
+  THERE.** Fine at the ~20 resources a real page carries; **a hang at the
+  ~50,000 a crafted one can** — in a query the requester has since confirmed
+  they call **every frame** while a combo box is open. A quadratic in a
+  per-frame query on hostile input is a denial-of-service, not a performance
+  note.
+- **★ TWO IN-REPO `pdfce-gui` TESTS CHANGED EXPECTATION ON PURPOSE, AND THAT
+  IS A FINDING.** They asserted `Times-Bold`, now assert `Calibri-Bold` — and
+  **they passed throughout the defect**, because they asserted the **name** the
+  gate produced rather than **that the named face worked**. A test pinning an
+  output string pins the implementation; a test pinning the property pins the
+  behaviour. The property now lives in
+  `crates/pdfce-core/tests/synthesis_gate.rs`.
+- **★ `#[non_exhaustive]` IS INERT INSIDE ITS OWN CRATE, so the core tests for
+  both `Pass 142.1` and `144.0` are OUT OF CRATE on purpose** — an in-crate
+  test would write a `match` **no consumer can compile**. Escalated to
+  `D:/dev/rag/rust/` this filing.
+
+**Documents edited this filing:**
+
+- **`docs/ROADMAP.md`** — one combined *Shipped* entry at the head for all
+  three Passes (with the ordering argument, the measurements, the sabotage
+  results and the gate figures); the operator-priority box given a
+  **discharge banner** (ordering satisfied, ruling not retired); the three
+  *Next up* entries **struck with status banners and retained in place**
+  (append-only) as the record of what was asked for; **a new
+  ★★★★★ box for the 21:54 inbound**; `R223` minted in *Standing rules*;
+  `R220`(d) and `R221` given shipped-state amendments; `R222` given its
+  first-live-firing note.
+- **`docs/ARCHITECTURE.md`** — **new §4.2 *Published model guarantees*** with
+  §4.2.1 (the invariant, its measurement, its test, and the refactor it
+  forbids); **decision 094** in §12, with the `accept_font_target` decline
+  recorded beside it.
+- **`docs/FEATURES.md`** — **two rows moved *Planned* → *Implemented***, both
+  `[x]` core / `[x]` cli / **`[ ]` gui** (the pre-flight, and the
+  whole-operator pin); the text-formatting row rewritten to state the
+  **mechanism** of the `144.0` fix rather than a replacement universal
+  (deliberately **not** restating *"every page is covered"*, the sentence
+  `R220`(d) was minted over); the extraction row gains
+  `extract-text --json --spans`.
+- **`docs/SESSION_LOG.md`** — this entry.
+
+**★ The `gui` column was NOT rounded up on either new row, and that is a
+substantiated `[ ]` rather than a cautious one.** `pdfceGUI` wrote, in a
+channel file timestamped **2026-08-27 21:54**: *"`preview_font_resources` is
+exactly what we asked for and **we have not consumed it yet**; it is next
+after this."* The ticking bar is *"an operator can reach it in a real
+`pdfceGUI` build"*, and they say they cannot.
+
+**Still in flight / for next session:**
+
+- **★★★★★ A FOURTH `pdfceGUI` REQUEST IS UNPARSED AND HAS NO PASS ID.**
+  `open/request_a_widget_border_can_be_written_and_not_read_so_a_properties_control_would_lie.md`,
+  **2026-08-27 21:54** — arrived **after** the 296th filing's channel check
+  and **before** this session's three replies went out at 22:38–22:39.
+  **Third consecutive session in which the channel changed underneath a check
+  that had already run**; a channel check is a **timestamp, not a state**, and
+  that is now n = 3.
+  **The ask:** `WidgetEdit` can **write** four widget properties;
+  `forms::Widget` can **read** two. They shipped `rect` and `caption` and
+  **refused to ship `border` and `visibility`** rather than seed a properties
+  control from a default — *"the operator's first press would write the
+  invention into their document, silently replacing a border they never looked
+  at"* — citing pdfce's own `DeviceCMYK` swatch precedent, correctly. **It is a
+  write-without-read asymmetry in `pdfce-core`, not a wiring omission in their
+  shell.** Three shapes offered, no preference between them (a `border` field
+  on `forms::Widget`, a `visibility` field, or a `widget_properties(...)`
+  query in the pre-flight shape). **Not blocking, and they say so.**
+  **A Pass ID is NOT claimed here — the parse is the engineer's act.** Next
+  free family is **`146`**.
+  **★★ AND WORK IS ALREADY IN FLIGHT ON IT, uncommitted, as this filing was
+  written.** `git diff` run here shows `crates/pdfce-core/src/forms.rs` **+351
+  lines** adding exactly `border: Option<BorderSpec>`,
+  `visibility: Option<Visibility>` and `annot_flags: AnnotFlags` — their
+  options (1) and (2). **Uncommitted work has no commit, no Pass ID and no
+  acceptance criteria**, which is precisely how a capability ships with no
+  roadmap entry (`R217`'s shape). **The engineer should claim `Pass 146.0`
+  before committing**, or say why it belongs to an existing family. Reported
+  from `git diff`, not inferred; not a request to stop.
+- **They also report a cost this project caused, and it is `R220` from the
+  other side:** their panel told an operator to *delete the field and place a
+  new one* — a **destructive** instruction — for a capability pdfce had
+  already built, because a reply sat unread in `open/`. Their own lesson,
+  quoted because it generalises here verbatim: *"an absence claim about a
+  crate we do not build has a shelf life, and that one was true when written
+  and false within hours."* **Fourth instance in four days of a stale
+  absence/universality claim across the project boundary**, and the first in
+  which the stale claim **recommended a destructive action**.
+- **A performance report on `preview_font_resources` is inbound and is already
+  partly answered.** They will measure the per-frame cost on a
+  many-font page; **`Pass 144.0` removed the O(n²) sibling scan from exactly
+  that query**, so they should be told before they spend a session on it. The
+  linear-cost measurement is still wanted.
+- **`docs/NEXT_SESSION.md` is now stale by construction** — its §A/§B/§C name
+  all three shipped Passes as the things to do. **Engineer-owned; NOT edited
+  by this role.** Rewrite it before the next session reads it.
+- **`Pass 143.0`** (the `DeviceGray`-under-overprint spec ambiguity) is the
+  pick-up item again, unchanged in *Backlog*.
+- **`docs/core-api/03-capabilities.md` §3.6** — `cfa2c44` reports correcting
+  it; **not inspected line-by-line here** (`docs/core-api/` is engineer-owned).
+  The specific thing worth re-reading is whether the correction **states a
+  mechanism** or **substitutes a narrower universal**, since the latter is how
+  the 296th filing's three-deep escalation kept going.
+
+**Ledger** (`python tools/check-ledger-numbers.py`, run **before** any edit and
+**again after**):
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | highest `145.0`; all three in *Next up*, NOT STARTED | all three **SHIPPED**; highest still `145.0`; **next free family `146`** |
+| decisions | **093** | **094** (one candidate declined, reason recorded). Next free **095** |
+| standing rules | **`R222`** | **`R223`**. `R220`/`R221`/`R222` amended in place, not re-minted. Next free **`R224`** |
+| filings | **296** | **297**. Next free **298** |
+| `pdfce-core` public verbs | 148 | **149**; `edit.rs` 32,435 → **32,505** lines |
+| `fixtures/synthetic/textedit/` | 8 | **9** |
+
+Pre-edit run: *"Pass families with headings : up to 145 (highest ID 145.0) ·
+standing rules : R222 -> next free is R223 · decision records : 093 -> next
+free is 094 · SESSION_LOG filings : 296 -> next free is 297"*, and *"clean — no
+duplicate Pass, rule, or decision numbers."* Post-edit run quoted in this
+role's report.
+
+**Git and backups — checked, not inferred (hard rule 8):**
+
+- `git rev-parse HEAD origin/main` → both `0c48bbf38b549d184ca95bfdbdc99f2c06f6df2e`.
+  **All three Passes are pushed.** Pushing `main` is standing-authorized
+  (decision **090**). **CI colour is NOT asserted** — this role did not read it
+  from GitHub.
+- `git status --porcelain` → **empty at dispatch**, **NOT empty when re-run
+  after this role's last edit** — corrected in place rather than left standing,
+  because a dispatch-time reading is a timestamp and this filing's own draft
+  had already turned it into a claim. **Fifth consecutive filing to find the
+  engineer's tree growing underneath it**, not the one that broke the run.
+  Five files this role did not touch appeared: **`crates/pdfce-core/src/forms.rs`
+  (+351)**, `crates/pdfce-cli/src/main.rs` (+62/−2), the engineer's `MEMORY.md`
+  and two `feedback_*.md`, plus one untracked. **Nothing was committed or
+  staged by this filing.**
+- `git describe` → **`v0.14.0-65-g0c48bbf`**.
+- **Backups, MEASURED here:** newest bundle is
+  **`pdfce-20260827-shutdown-a2b4e16-full.bundle`, 2026-08-27 12:04** (`ls -lt
+  D:/Dev/pdfce-backups/`), and `git rev-list --count a2b4e16..HEAD` = **22**.
+  **The backup is 22 commits behind `HEAD`; none of the three Passes filed
+  here is in any bundle on disk.** They *are* on `origin/main`, so this is a
+  belt-vs-braces gap rather than a single point of failure — but the figure and
+  the command are both here rather than a confident number inferred from a
+  document.
+
+**RAG written this filing** (contrast the 295th and 296th filings, which
+argued the skip):
+
+- `C:/personal_rag/pdf/lesson_20260827_tounicode_maps_a_code_to_a_string_so_char_count_is_not_glyph_count.md`
+- `C:/personal_rag/pdf/lesson_20260827_a_text_run_closes_on_geometry_a_show_operator_wherever_the_writer_felt_like.md`
+- `D:/dev/rag/rust/non_exhaustive_is_inert_in_crate_so_only_an_out_of_crate_test_feels_a_consumers_constraint.md`
+
+The universal-claim and caller-claim shapes stay **project-discipline**
+findings and live in `R220`(d) / `R223` — neither is a PDF-producer quirk nor
+a Rust ecosystem quirk, so neither gets a RAG file. Written down so a later
+index check reads this as a decision, not an omission.
+
+---

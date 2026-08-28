@@ -96,6 +96,619 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 142.1` (`2e6235c`) + `Pass 144.0` (`cfa2c44`) + `Pass 145.0` (`0c48bbf`) — ★★★★★ **ALL THREE OPERATOR-PRIORITISED CHANNEL ITEMS SHIPPED IN ONE SESSION, IN THE PRESCRIBED ORDER, AND THE ORDERING IS WHAT MADE `144.0` A CALLER INSTEAD OF A SECOND IMPLEMENTATION** — ★★★★ **THE `operator_span`-SLICE INVARIANT IS ANSWERED BY MEASUREMENT AND IS NOW A PUBLISHED GUARANTEE: 29,246 groups over 4,289 files, 0 exceptions — decision `094`** — ★★★ **THE REPORTER'S MULTI-OPERATOR CLAIM, FILED AS *UNVERIFIED*, IS CONFIRMED: 2,420 of 18,559 runs (13.0 %) carry glyphs from more than one show operator** — ★★★ **FOUR DOC CLAIMS FALSIFIED BY `Pass 144.0`'s OWN CODE, NONE OF THEM REPORTED BY ANY TOOL OR ANY PERSON**, including `docs/core-api/03-capabilities.md` §3.6's *"every page is covered"* — the `R220` clause-(d) instance, now corrected at source — ★★ **TWO DEFECTS FOUND BY RUNNING THE BINARY AND NOT BY THE 4,463-TEST SUITE, BOTH IN THIS SESSION'S OWN NEW CODE** — ★★ standing rule **`R223`** minted: **a doc comment's claim about its own CALLERS is a measurement that nothing recompiles when it goes stale** — ★ **`check-string-gaps.sh` UNDER-REPORTED FOR THE THIRD TIME AND IS FIXED AS A CLASS, WITH THE WIDENING'S SCOPE CHOSEN BY MEASUREMENT (24 findings blanket → 1 scoped)** — 2026-08-27 (297th filing)
+
+**Sourcing.** Shell held and used (hard rule 8). `git show 2e6235c`,
+`git show cfa2c44`, `git show 0c48bbf` and `git show --stat` on all three are
+the primary sources; every engineering figure below is the **engineer's,
+relayed**, and labelled as such — this role ran no build, no test, no render
+and no gate. Every claim about the source tree, the git state, the fixture
+corpus or the request channel was produced **here** by
+`git`/`grep`/`ls`/`sed` on live files, and the command is named beside it.
+`python tools/check-ledger-numbers.py` was run **before** any edit and again
+after; both runs are quoted in the *Ledger* below.
+
+**Why one entry for three Passes, and it is not filing convenience.** The
+296th filing's priority box argued that `142.1` and `144.0` are *"the same
+question at two levels"* and prescribed `142.1 → 144.0 → 145.0` so that
+`144.0` would become a **caller** of `142.1`'s predicate rather than a second
+implementation of it. **That is what happened**, and it is checkable in the
+diff: `cfa2c44` adds no acceptance logic of its own — it calls
+`find_styled_face`, which `2e6235c` created. Splitting the record into three
+entries would file the outcome and lose the argument. Precedent:
+`Pass 139.0`+`139.1`+`139.2` (291st filing), `Pass 140.0`+`140.1` (294th).
+
+**The three commits, in build order, with their own test deltas** (hard rule
+10a — the total is filed beside its per-item form, with the denominator):
+
+| Pass | commit | suite after | delta | composition |
+|---|---|---:|---:|---|
+| — | `703a38e` (session start) | 4,419 | — | — |
+| `142.1` | **`2e6235c`** | 4,438 | **+19** | +10 out-of-crate core, +9 CLI |
+| `144.0` | **`cfa2c44`** | 4,446 | **+8** | +8 out-of-crate core |
+| `145.0` | **`0c48bbf`** | **4,463** | **+17** | +8 whole-operator, +3 invariant probe, +6 CLI |
+
+**Net +44 tests over three commits, 0 failing at each tip.** Figures read
+here from each commit's own message (`git log --format=%B`), not carried
+forward from the dispatch.
+
+---
+
+#### `Pass 142.1` (`2e6235c`) — THE FONT-RESOURCE PRE-FLIGHT
+
+**New public verb.**
+`EditSession::preview_font_resources(page_index, find, pinned_span) ->
+Result<FontPreflight, FormatError>` — `&self`, side-effect-free, answering
+about the **session's staged content**, which is the discipline it shares
+with `preview_style_resolution` and which the *Backlog* entry (293rd filing)
+specified. New public types in `pdfce-core::text_edit`: `FontPreflight`,
+`FontResourceEntry`, `FontAcceptance`, `FontSibling`.
+
+**Both refinements the requester named were delivered, and refinement (2) is
+the one they called the valuable half.**
+
+1. **Entries are keyed the way `set_font` matches.** Each carries a
+   `selector` **guaranteed to reach that resource**; where a page carries two
+   resources with the same `/BaseFont` — the 87 % case their own survey found
+   — the selector falls back to the **resource key** and `base_font_ambiguous`
+   is set. The collision is **reported**, never silently deduplicated to the
+   wrong one (acceptance criterion 1).
+2. **Per entry, whether a real Bold and a real Italic of that family WOULD BE
+   ACCEPTED** — `FontPreflight::real_bold()` / `real_italic()`. `Some` routes
+   the shell's button to `set_font`; `None` routes it to `set_synthetic`.
+   **`None` is not a reason to disable the control** — that sentence is in the
+   API docs because the whole point of the query is to route a button, not to
+   grey one out (and §3.6's *"do not grey out a bold button"* remains true;
+   see the correction below for the neighbouring sentence that did not).
+
+**★ An entry that IS the family's real bold reports ITSELF.** Reporting
+`None` about itself would tell a shell to synthesize bold **on top of a real
+bold face** — a stroke-widened Times-Bold. The self-case is the one a naive
+implementation gets wrong, and it is pinned by test.
+
+**★★ `R221` discipline, and this is the structural half of the Pass.** The
+acceptance test was **EXTRACTED** out of `plan_font` into a new
+`accept_font_target`, which is now **the single implementation** of *"would
+`set_font` take this face for this run?"*. `plan_font` calls it; the
+pre-flight calls it once per page font resource. **Four conditions**, all of
+them `set_font`'s own: the `Pass 14.1` refuse triggers (`classify_font`), an
+invertible encoding, encoding coverage of the run's characters, and the
+embedded-subset carried-code floor. A pre-flight that **re-derived** the key
+instead of asking `set_font`'s own matcher would have reproduced the very
+defect it exists to remove — which is what the *Next up* entry warned and what
+`Pass 144.0` then proved at the next level down.
+
+`find_styled_face` is the shared *"a real styled face that would be
+accepted"* search. **Its `exclude` is an `Option` on purpose**: the synthesis
+gate must exclude the run's own resource, the pre-flight must not. `Pass
+144.0` is its second caller, one commit later.
+
+**CLI (`CLAUDE.md` rule 11).** New read-only subcommand
+`pdfce-cli font-preflight FILE --find TEXT [--page N] [--json]`.
+**Exit OK whatever the verdicts were** — a page on which every font refuses is
+a successful **answer**, not a failed command; only a run that cannot be
+**located** is `EDIT_REFUSED`. That distinction is the difference between a
+query and a command, and getting it wrong would make a shell treat "no face
+works here" as a tool failure.
+
+**NEW FIXTURE — `fixtures/synthetic/textedit/format_twins.pdf`.** A
+Times-Roman run on a page carrying **two resources with the identical
+`/BaseFont /Times-Bold`**: `/FB1` remaps `o` and therefore refuses, `/FB2`
+covers the run. **Nothing in the corpus had that shape**, which is why the
+`base_font_ambiguous` path had no witness before. Generated by
+`tools/gen-textedit-fixtures.py` (extended);
+`fixtures/synthetic/textedit/PROVENANCE.md` updated — **nine files, not
+eight** — and **every existing fixture regenerated BYTE-IDENTICAL**, which is
+the check that says the generator change added a file rather than perturbing
+the corpus.
+
+**★ The core tests are OUT OF CRATE ON PURPOSE**
+(`crates/pdfce-core/tests/font_preflight.rs`, +10):
+`#[non_exhaustive]` is **inert inside `pdfce-core`**, so an in-crate test
+would write a `match` **no consumer can compile**. Only an out-of-crate test
+feels a consumer's constraints. Escalated to `D:/dev/rag/rust/` this filing
+(see *Findings escalated*).
+
+**SABOTAGE.** Deleting `&& c.accepted.is_ok()` from `find_styled_face` — **the
+exact `Pass 144.0` shape** — turns **3 of the 10** core tests red. The suite is
+not vacuous, and the sabotage was chosen to be the defect the next commit
+fixes rather than an arbitrary mutation.
+
+**`tools/check-core-api-verbs.py` CAUGHT the missing verb and the stale
+count** — the gate built for the `insert_pages` incident firing on the
+capability it was built for. `docs/core-api/02-editing-and-saving.md` and
+`docs/core-api/index.md` updated: **148 → 149 verbs**, `edit.rs` line count
+**32,435 → 32,505**, plus a new prose subsection *"preview_font_resources —
+read this before wiring a font or style control"*.
+
+---
+
+#### `Pass 144.0` (`cfa2c44`) — `gate_synthesis` NAMES A FACE `set_font` ACCEPTS
+
+`gate_synthesis` now treats a real face as *"available"* **only if `set_font`
+would actually ACCEPT it for the run's text**. It calls `Pass 142.1`'s
+`find_styled_face`, so **the predicate IS the accepting code** rather than a
+parallel description of it. **`R221`'s third instance**, and the fix is the
+rule's own remedy rather than a bespoke one.
+
+**Three branches, and the family preference is expressed by the ORDER of two
+searches rather than by a separate rule** — which is why the preference cannot
+drift from the acceptance test:
+
+1. a face of the run's **own family** is ACCEPTED ⇒ refuse synthesis, name it
+   *(unchanged behaviour)*;
+2. no family match accepted, **another resource is** ⇒ refuse synthesis,
+   **NAME THAT ONE**, disclosing that it is a different family;
+3. **nothing accepted ⇒ SYNTHESIS PROCEEDS** — pinned by a test **authored to
+   fail if a future change turns this into a refusal** (acceptance criterion
+   3, met as written).
+
+**★ `R90` IS NOT WEAKENED, and this paragraph is here because the diff reads
+as a loosened refusal.** `R90` says synthesis is a fallback for when no real
+face **resolves**. What changed is the **predicate for "resolves"** — from
+*"exists with a matching family name"* to *"would actually be accepted by
+`set_font` for this run"*. That is `R90` applied **more accurately**, not less.
+Acceptance criterion 4 (`R90`'s gate unchanged for every input that works
+today) is pinned by branch 1's tests.
+
+**Two public error/outcome types gain fields, and the first is the one
+`pdfceGUI` needs today.**
+
+- `FormatError::RealFaceAvailable` gains **`selector: String`** — **the string
+  to retry with**. It differs from `real_font` **exactly** when a page carries
+  two resources sharing one `/BaseFont`, where a name match reaches only one
+  twin and possibly the one that refuses. **`pdfceGUI`'s Bold button retries
+  with `real_font` today**, so this is a live consumer concern, not a
+  hypothetical — and it is the substance of the channel reply.
+- The same variant gains **`same_family: bool`** — `false` when branch 2
+  fired, and the message says so.
+- `StyleOutcome::RealFaceResolves` gains **`selector`** for the same reason.
+
+Both consumers match with `..`, so the change is **additive in practice** even
+though the variants are not `#[non_exhaustive]`-shielded from the in-crate
+side.
+
+**Measured on the release binary** (engineer's, relayed), against
+`fixtures/synthetic/textedit/format_family.pdf` — the same three commands the
+296th filing recorded as the reproduction:
+
+| command | before (`703a38e`) | after (`cfa2c44`) |
+|---|---|---|
+| `--bold-synthetic` | names `/F3 Times-Bold` (which then refuses) | **names `/F2 'Calibri-Bold'`** with the different-family note |
+| `--set-font Calibri-Bold` | *(never suggested)* | **`set_font=Times-Roman->Calibri-Bold` SUCCEEDS** |
+| `--bold-synthetic` on `format_twins.pdf` | — | **names `/FB2` by resource key**, and that succeeds |
+| `--bold-synthetic` on `format_color.pdf` | synthesis proceeds | **synthesis still proceeds** (branch 3 intact) |
+
+⇒ **The remedy the refusal names now works.** That is the whole Pass in one
+line, and it is the property the tests now assert rather than the string.
+
+##### ★★★ FOUR DOC CLAIMS FALSIFIED BY THIS CODE, NONE REPORTED BY ANYTHING, ALL CORRECTED IN THE SAME CHANGE — this is the part worth recording at length
+
+**(a) `synth.rs`'s `name_claims_bold` doc.** It said the heuristic is *"used
+only in the direction where being wrong is safe … **never to refuse an
+edit**"*. **True when written; falsified by a later caller** —
+`gate_synthesis` is the second of exactly two call sites and it refuses an
+edit. **`cargo doc` cannot check a claim about callers.** The old wording is
+kept **STRUCK, not replaced**, so a reader can see what the comment used to
+promise. This is `R223`'s first instance (minted below).
+
+**(b) `gate_synthesis`'s own doc.** It said that asking for synthetic bold on
+`Times-Bold` *"is refused with that same face named"*. **Read from source:
+`!is_self` SKIPS it, so it is never named.** Nobody had reported this either;
+it was found by reading the function against its own comment while changing
+the predicate. This one is **`R93`'s shape** — a comment that was simply wrong
+about the code beside it — not `R223`'s.
+
+**(c) `format.rs`'s `RealFaceAvailable` message named a remedy it had not
+checked.** **`R222`** — a message that names a remedy is **making a claim**,
+and the format string carried the same unchecked claim the doc comment did.
+The rule minted two filings ago fired on its first live change.
+
+**(d) ★★ `docs/core-api/03-capabilities.md` §3.6 carried *"So between the two
+verbs, EVERY PAGE IS COVERED"*, WHICH PDFCE SENT TO `pdfceGUI` IN THAT FORM,
+AND WHICH WAS FALSE.** Corrected with the old wording **struck** and **the
+shape named**: a **universal quantified over all cases and verified on the
+cases that came to mind** — `R220` clause (d), wearing the opposite sign to
+*"no such verb exists"*. **THE NEIGHBOURING SENTENCE, *"do not grey out a bold
+button"*, WAS AND REMAINS TRUE and was deliberately NOT touched** — the 296th
+filing's *Next up* entry named correcting the wrong sentence of the two as
+*"the available mistake here"*, and it was avoided by name. Acceptance
+criterion 6 met.
+
+**★ What (a)–(d) have in common, and it is the transferable half.** Not one of
+them was reported by a gate, a test, a compiler or a person. All four were
+found by **reading the documentation against the code while changing the
+code** — which is the only moment at which the two are both in front of the
+same reader. `check-ui-strings.sh` verifies a literal's *location*;
+`check-disclosure-channel.sh` verifies a note's *route*;
+`check-metrics-line-contract.py` verifies a metrics line's *shape*. **None can
+verify that a sentence is true**, which is the standing warrant for declining
+a gate here (`R222`, and it is not weakened by four more instances).
+
+##### ★ TWO IN-REPO `pdfce-gui` TESTS CHANGED EXPECTATION ON PURPOSE, AND WHY THAT IS A FINDING RATHER THAN A CHORE
+
+Two tests in `crates/pdfce-gui` asserted `Times-Bold` and now assert
+`Calibri-Bold`. **They PASSED THROUGHOUT THE DEFECT**, because they asserted
+**the NAME the gate produced** rather than **that the named face worked**. A
+test that pins an output string pins the implementation; a test that pins the
+property pins the behaviour. **The property — that the named face is one
+`set_font` accepts — now lives in
+`crates/pdfce-core/tests/synthesis_gate.rs`**, where it can be a property
+rather than a string, and where it is out of crate and therefore feels a
+consumer's constraints.
+
+**Tests: +8 out-of-crate** (`crates/pdfce-core/tests/synthesis_gate.rs`).
+**TWO SABOTAGES, both caught:**
+
+- dropping the acceptance filter (restoring the pre-`144.0` predicate) ⇒ **4
+  of 8 red**;
+- dropping the branch-2 fallback ⇒ **2 of 8 red**, and **the two that stay
+  green are exactly the branch-1 and branch-3 tests** — the right
+  discrimination, which is what makes the second sabotage evidence about
+  *coverage shape* rather than merely about coverage.
+
+**Also fixed while there, and it is a real hazard rather than tidying.** An
+**O(n²) per-entry sibling scan over an attacker-controlled `/Font` dict** in
+the pre-flight, replaced by **one pass into a family map**. Fine at the
+~20 resources a real page carries; **a hang at the ~50,000 a crafted one
+can** — in a query a shell may call **every frame** while a combo box is open,
+which is exactly what `pdfceGUI` says it will do (their own note, this
+session: *"the face list is drawn per frame while a combo is open"*). A
+quadratic in a per-frame query on hostile input is a denial-of-service, not a
+performance note.
+
+---
+
+#### `Pass 145.0` (`0c48bbf`) — THE WHOLE-OPERATOR PIN, AND THE INVARIANT ANSWER
+
+**New:** `FormatRequest::whole_operator(page_index, span)` and a
+`FormatRequest::pinned(span)` builder. `whole_operator(page, span)` is
+**equivalent to `FormatRequest::new(page, "").pinned(span)`** — both spellings
+work and **produce identical bytes, pinned by a test** rather than asserted.
+`EditRequest` gets the same affordance (empty `find` + `pinned_span`), because
+**the two verbs share one locator** and giving the affordance to only one of
+them would have been a new asymmetry.
+
+Implemented as **`effective_find` in `text_edit::edit`, resolved ONCE right
+after the anchor is located**, so the code-range match, the font-coverage
+gate, the synthesis gate and every disclosure count **read one string**. That
+is the structural choice: four consumers of the resolved text, one
+resolution.
+
+**AN EMPTY `find` WITH NO PIN IS STILL REFUSED, by the same name it always
+was** (acceptance criterion 1, met as written) — a caller that forgot to pin
+gets a refusal, not silent whole-operator behaviour. **Both CLI verbs refuse
+it with a message naming the FLAG that would fix it**, which core cannot know
+about; that split is the reason the refusal exists in two places rather than
+one.
+
+**★★ THE SUBTLE HALF, and it is the defect a shallower fix would have
+shipped.** `plan_font` used to check encoding coverage against **`req.find`**.
+On a whole-operator request that is `""` — and **every face covers the empty
+string** — so a family change to a face that **cannot show the run** would have
+been **ACCEPTED**. `plan_font` now takes the **resolved** text. Pinned by a
+named test. Note the shape: the new affordance did not break coverage
+checking, it **hollowed it out silently**, and the only symptom would have
+been a run changed to a face that renders nothing.
+
+##### ★★★ THE INVARIANT ANSWER — OWED EITHER WAY, AND NOW MEASURED
+
+`crates/pdfce-core/tests/operator_span_invariant.rs` walks `fixtures/`:
+
+| quantity | value | per-item form (hard rule 10a) |
+|---|---:|---|
+| files walked | **4,289** | — |
+| files with text | **1,623** | 37.8 % of 4,289 |
+| runs | **18,559** | 11.4 runs per text-bearing file |
+| glyphs | **669,436** | 36.1 glyphs per run |
+| `operator_span` groups | **29,246** | **1.58 groups per run**; 22.9 glyphs per group |
+| **non-contiguous groups** | **0** | 0 of 29,246 |
+| **groups not indexing text cleanly** | **0** | 0 of 29,246 |
+
+⇒ **THE INVARIANT HOLDS.** `pdfceGUI`'s shipped workaround — *"the glyphs
+sharing one `operator_span` always slice a contiguous, matchable range out of
+the run's text"* — **is sound**, and it is now **a documented guarantee plus a
+test that re-runs on every `cargo test`** rather than an undocumented
+behaviour they were relying on. **Sabotage-checked**: excluding one glyph per
+group from the coverage computation turns the probe **red**, so the zeroes are
+zeroes rather than a probe that measures nothing.
+
+**This is the branch the 296th filing said was NOT symmetric**, and the
+asymmetry resolved the good way: had it failed, a build their operator is
+using would have been resting on luck and they would have needed telling
+urgently. It held, so what is owed instead is a **guarantee**, which is
+`decision 094` below and the channel reply.
+
+##### ★★ THE MULTI-OPERATOR CLAIM — FILED AS THE REPORTER'S ACCOUNT, EXPLICITLY UNVERIFIED — IS CONFIRMED
+
+**2,420 of 18,559 runs (13.0 %) carry glyphs from more than one show
+operator.** **Common, not exotic.** Their third table row was right.
+
+Two consequences, and the second is the rule-4 one:
+
+- **It is what makes the whole-operator affordance load-bearing rather than a
+  convenience.** On 13 % of runs, a `find` string rebuilt from `TextRun::text`
+  names a range across several operators, which `match_run` cannot express —
+  the reporter's third failed attempt, now explained rather than relayed.
+- **The report carries a `whole operator:` disclosure naming the case**
+  (`CLAUDE.md` rule 4). **The EXTENT was pdfce's choice, not the operator's** —
+  the caller said *"this pin"*, pdfce decided how far that reaches — so the
+  choice is disclosed off-canvas, and printed by the CLI. Acceptance criterion
+  2 met.
+
+**One probe, two answers**, exactly as the 296th filing's method note asked.
+Built once.
+
+##### THE DOCS HALF
+
+`docs/core-api/01-reading-and-model.md` gains a new **§8.4.0** stating the two
+facts a caller building a locator needs, plus the guarantee:
+
+- **`text.chars().count()` is NOT `glyphs.len()`** — `/ToUnicode` maps a code
+  to a **STRING** (ISO 32000-1 §9.10.3), so one glyph can carry several
+  characters. **Measured 1 of 191 synthetic runs** — **and THAT RATIO IS THE
+  TRAP**: near-zero on synthetic text, **routine on real typeset copy**. A
+  `find`-based locator therefore looks correct in every synthetic fixture a
+  shell writes for itself. *(The 296th filing recorded the same single
+  offender against a different denominator — 1 across 256 fixture PDFs. Same
+  fact, two denominators; both are stated here because a bare "1" is not a
+  measurement.)*
+- **A `TextRun` is not a show operator** — the 13 % table above.
+- **The invariant, as a guarantee**, with the 29,246 / 0 numbers beside it, so
+  the guarantee carries its own evidence rather than pointing at a filing.
+
+`docs/core-api/02-editing-and-saving.md` gains the `FormatRequest` half.
+Acceptance criterion 4 (both doc gaps closed in the same change) met.
+
+##### CLI (rule 11), AND IT CLOSES A LOOP THAT COULD NOT PREVIOUSLY BE CLOSED
+
+- **`extract-text --json --spans`** emits **`op_start` / `op_len` / `stream`**
+  per glyph. **Without the flag those fields are ABSENT, not zero** —
+  provenance capture is off by default and *"not captured"* must not read as
+  *"offset 0"*. `stream` is `"page"` or `"form:N"` and **is not optional to
+  read**. This is the field whose absence made the 296th filing unable to
+  settle the multi-operator claim from outside; it can now be settled from
+  outside by anyone.
+- **`format-text --pin-span START:LEN`** and **`edit-text --pin-span
+  START:LEN`**. **`START:LEN`, not `START:END`**, because that is the shape the
+  value has everywhere else it exists — `ByteSpan` carries start+len, and the
+  JSON emits `op_start`/`op_len`. Two spellings of one value is how a caller
+  gets it wrong once and never notices.
+
+##### ★★ TWO DEFECTS FOUND BY RUNNING THE BINARY, NOT BY THE TESTS — BOTH IN THIS PASS'S OWN NEW CODE
+
+1. **`cmd_edit_text` PARSED `--pin-span` and never attached it.** The refusal
+   read *"empty find text"* — **exactly what the feature was supposed to
+   remove** — and **every unit test passed**, because they exercise the core
+   API directly. A CLI flag that is parsed and dropped is invisible to any
+   test that does not go through `main`.
+2. **A shipped `pdfce-cli` refusal carried FOURTEEN baked-in spaces**, and
+   **`check-string-gaps.sh` reported PASS on it.**
+
+**The generalisable half:** the suite is 4,463 tests and neither defect was in
+its reach, because both live in the **shell layer between the flags and the
+core API** — the one layer a core-API test cannot exercise by construction.
+Driving the release binary is not belt-and-braces here; it is the only
+instrument that covers that layer.
+
+##### ★★★ THE GATE THAT UNDER-REPORTED, FIXED AS A CLASS
+
+**This is the THIRD time `check-string-gaps.sh` has missed by admitting only
+the spelling somebody had already seen.** Its own header says the previous
+repair *"widens both ends of the class rather than only the end that
+failed"* — and it widened both ends to `{`/`}` **and stopped**.
+
+**The next miss was `"…with an empty              --find to mean…"` — TWO
+holes at once:**
+
+- the literal **was not recognised as prose** (an `eprintln!`, not an
+  `#[error(...)]`), so the prose rules never ran on it;
+- and **even in prose mode the trailing class did not admit a HYPHEN** — and
+  **the next word after a gap in a CLI diagnostic is, more often than
+  anything else, a `--flag`.**
+
+**Fixed by the same structural argument that scoped the `{}` widening:** a
+literal opening with **the binary's own diagnostic prefix** (`"pdfce-cli: "` /
+`"pdfce-gui: "`) is **a sentence an operator reads**, never an aligned report
+column. That is a property of the string's *role*, not of the characters that
+have failed so far.
+
+**MEASURED BEFORE WIDENING**, which is what makes the scoping a decision
+rather than a guess:
+
+| widening | findings | legitimate (aligned columns, DXF byte streams) | true defects |
+|---|---:|---:|---:|
+| blanket trailing-class widening | **24** | ~18 | 1 |
+| **scoped to prose** (diagnostic-prefix rule) | **1** | 0 | **1** |
+
+⇒ **The scoped rule found exactly the defect and nothing else.** A gate that
+reports 24 findings of which ~18 are legitimate is a gate that will be
+switched off (`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`).
+**A self-test fixture for the shape was added**, so the third miss cannot
+become a fourth silently.
+
+**★ THE TRANSFERABLE STATEMENT, NOW THREE FOR THREE:** *in prose mode the
+trailing class should be read as **"anything that starts a word"**, not as a
+list of the characters that have failed so far.* Three repairs, each one
+admitting only the spelling that had just been seen, is the same shape as
+`R220`'s three-deep escalation — **a repair that generalises to the instance
+rather than to the class is a repair that schedules its own successor.**
+
+---
+
+#### Decision minted — **094**
+
+**The `operator_span`-slice invariant is a GUARANTEE pdfce publishes to
+consumers, not an implementation detail.** `ARCHITECTURE.md` §12, filed this
+same edit, with the §5 body section given a pointer. The 296th filing's
+`Pass 145.0` entry named this a decision-log candidate **conditional on the
+invariant holding**; it held (29,246 groups, 0 exceptions), so the condition
+is discharged and the record is owed.
+
+**What the decision costs**, because a guarantee is a constraint on future
+work and that is the half worth writing down: `text_extract/layout.rs`'s run
+segmentation may no longer be refactored in a way that lets one
+`operator_span` group's glyphs become non-contiguous within a run, **even if
+no pdfce feature notices**. The test is the enforcement; the decision record
+is why the test may not be deleted when it looks redundant.
+
+#### Decision **DECLINED** — `accept_font_target` as the single acceptance predicate
+
+The dispatch offered this as a second decision-log candidate. **Declined, and
+the reason is recorded so a future session does not read the absence as an
+oversight.** It is an **application of `R221`** — an existing standing rule —
+to a new subsystem, not a new architectural boundary, a new crate split, a
+library choice or an invariant definition. Filing every correct application of
+a standing rule as a decision would make the decision log a duplicate of the
+Shipped section and would dilute the records that do constrain future work.
+**Precedent:** the 295th filing declined a mint on exactly this ground (*"a
+habit … is not an architectural decision this role may take"*). The `R221`
+instance itself **is** recorded — in the `Pass 144.0` section above and in
+`R221`'s own entry, which already carries this session's inversion of its risk
+analysis.
+
+#### Standing rule minted — **`R223`**
+
+**A DOC COMMENT'S CLAIM ABOUT ITS OWN CALLERS IS A MEASUREMENT WITH NO
+RECOMPILE BEHIND IT.** Full text in *Standing rules*. Minted at **n = 2 across
+two independent subsystems**, which is precisely the condition the **previous
+decline stated**: the earlier instance (`ocr/layer.rs`, whose doc comment was
+wrong about its own callers **three times in one session**) was declined
+promotion on the argued warrant that *"all three wrong readings are of one doc
+comment, in one file, inside one session's churn — **not the shape of a defect
+recurring across independent subsystems**."* `text_edit/synth.rs` is a second,
+independent subsystem, found by a different mechanism, months of Passes later.
+**The decline named its own falsifier and the falsifier arrived**, which is a
+better warrant for minting than a bare count.
+
+---
+
+#### Gates (engineer's, relayed — this role ran none of them)
+
+- **`cargo test --workspace` 4,463 passing / 0 failing** (was **4,419** at
+  `703a38e`; per-commit deltas in the table at the top of this entry).
+- **`cargo fmt --all --check` clean**; **`cargo clippy --workspace
+  --all-targets -- -D warnings` clean.**
+- **13 gates run bare, all green**: `check-suite-name-absent`,
+  `check-core-api-verbs`, `check-metrics-line-contract`,
+  `check-settings-consumed`, `check-shipped-assets`, `check-fmt-excluded`,
+  `check-one-commit-per-command`, `check-cited-commits-exist`,
+  `check-ui-strings`, `check-string-gaps` (**plus its `--self-test`**),
+  `check-disclosure-channel`, `check-theme-colors`, `check-bypass-paths`.
+  *(`2e6235c`'s own message reports **18** gates green at that commit and
+  `cfa2c44`/`0c48bbf` report **13** — the two figures are counts of different
+  bare-gate sets at different tips, not a contradiction, and both are quoted
+  from the commits rather than reconciled here.)*
+- **`cargo tree -p pdfce-core` / `-p pdfce-render`: no GUI dependency**
+  (`CLAUDE.md` rule 2) — asserted by all three commit messages.
+- **`cargo check -p pdfce-core --target wasm32-unknown-unknown` clean** at all
+  three tips.
+- **Pushed to `origin/main`** under the standing authorization (decision
+  **090**), with the public-facing scrub gate run green immediately before the
+  push. **CI's colour is NOT asserted here** — this role did not read it from
+  GitHub.
+
+#### Hard-rule-11 sweep — searched for the CLAIM, not for a string
+
+**Three claims changed meaning this session**, and each was swept
+independently by reading `docs/`, `crates/` and `tools/` for the **claim**:
+
+| claim that changed | site | verdict |
+|---|---|---|
+| *"the two verbs are not exhaustive; bold is unreachable on such a page"* (`FEATURES.md` row, Text section) | `docs/FEATURES.md` | **CORRECTED by this filing.** The `Pass 144.0` clause was written on 2026-08-27 as a live defect with a *Next up* pointer; it is now shipped. Rewritten to state the **mechanism** (the gate names only a face `set_font` accepts; where nothing is accepted, synthesis proceeds) rather than a replacement universal — deliberately **not** restating *"every page is covered"*, which is the sentence `R220` clause (d) was minted over. |
+| *"`preview_font_resources` does not exist"* / the pre-flight is *Planned* | `docs/FEATURES.md` *Planned* row | **MOVED to *Implemented*** this filing, `[x]` core / `[x]` cli / `[ ]` gui. |
+| *"a `TextRun` can span several show operators — the reporter's account, unverified here"* | `docs/FEATURES.md` *Planned* row for `Pass 145.0`; `ROADMAP.md` `Pass 145.0` *Next up* entry | **CORRECTED / SUPERSEDED.** The `FEATURES.md` row is rewritten and moved to *Implemented*; the `ROADMAP.md` *Next up* entry is left intact under a **struck heading with a status banner** (append-only discipline) that names the confirmation and its figure, because the entry is the record of what was asked for and its UNVERIFIED label is part of that record. |
+
+**Survivors reported, not edited — `crates/` and `docs/core-api/` are outside
+this role's remit:**
+
+- `docs/core-api/03-capabilities.md` §3.6 — the engineer's own commit
+  `cfa2c44` reports correcting it. **Not inspected line-by-line here**;
+  flagged rather than asserted either way, and the specific thing worth
+  re-reading is whether the correction **states a mechanism** or **substitutes
+  a narrower universal**, since the latter is how the 296th filing's
+  three-deep escalation kept going.
+- `crates/pdfce-cli/src/main.rs` — the `font-preflight`, `--pin-span` and
+  `--spans` help text and refusal strings are new this session and were not
+  read here. **`R222` applies to the engineer at change time**; this sweep runs
+  a commit later and cannot substitute for it.
+- **`docs/NEXT_SESSION.md` §A/§B/§C name all three of these Passes as the
+  things to do.** That file is **engineer-owned and was NOT edited by this
+  role**; it is now stale by construction and the engineer should rewrite it.
+  Reported, not touched.
+
+**★ One thing the sweep found that nobody filed — see the new inbound box in
+*Next up*.** A fourth `pdfceGUI` request arrived at **21:54 on 2026-08-27**,
+**after** the 296th filing's channel check and **before** this session's three
+replies went out at 22:38–22:39. It is in `open/`, it is unparsed, and it has
+**no Pass ID and no `ROADMAP.md` entry**. Found by `ls -lt` on the channel run
+here, not by anything in the repository — **no pdfce gate will ever notice a
+file outside this repository**, which is the standing reason those boxes
+exist.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | highest `145.0`; `142.1`/`144.0`/`145.0` in *Next up*, **NOT STARTED** | **All three MOVED *Next up* → SHIPPED.** Highest ID still **`145.0`**; **next free family `146`**. No ID minted for the new inbound request — **the parse is the engineer's act** (precedent: 184th filing's inbound box). |
+| decisions (`ARCHITECTURE.md` §12) | **093** | **094** (**MINTED** — the `operator_span`-slice invariant is a published guarantee). One candidate **DECLINED with the reason recorded** (`accept_font_target`, an `R221` application). Next free **095**. |
+| standing rules | **`R222`** | **`R223`** (**MINTED** — a doc comment's claim about its own callers is a measurement nothing recompiles). `R220` clause (d) and `R221`'s inversion **both gained a live instance and were amended in place, not re-minted**. Next free **`R224`**. |
+| `SESSION_LOG.md` filings | **296** | **297**. Next free **298**. |
+| `fixtures/synthetic/textedit/` | 8 files | **9** (`format_twins.pdf`); every pre-existing fixture regenerated **byte-identical**. |
+| `pdfce-core` public verbs (`docs/core-api/`) | **148** | **149** (`preview_font_resources`). `edit.rs` **32,435 → 32,505** lines. |
+
+Ceilings from `python tools/check-ledger-numbers.py`, **run here before any
+edit** — *"Pass families with headings : up to 145 (highest ID 145.0) ·
+standing rules : R222 -> next free is R223 · decision records : 093 -> next
+free is 094 · SESSION_LOG filings : 296 -> next free is 297"*, and *"clean —
+no duplicate Pass, rule, or decision numbers"* — **not copied from a prior
+entry**, and re-run after these edits with the result quoted in the session
+log.
+
+#### Git state, checked rather than inferred
+
+`git log --oneline`, `git rev-parse HEAD origin/main`, `git status
+--porcelain`, `git describe`, `git rev-list --count`, `ls -lt
+D:/Dev/pdfce-backups/` — all run **here**, at the time of writing:
+
+- **`HEAD` is `0c48bbf`** and **`main` is LEVEL with `origin/main`** — both
+  resolve to `0c48bbf38b549d184ca95bfdbdc99f2c06f6df2e` (`git rev-parse HEAD
+  origin/main`). All three Passes are **pushed**. Pushing `main` is
+  standing-authorized (decision **090**); **CI's colour is not asserted here**,
+  because this role did not read it from GitHub.
+- **`git describe` = `v0.14.0-65-g0c48bbf`.**
+- **★ THE WORKING TREE WAS CLEAN AT DISPATCH AND IS NOT CLEAN NOW — CORRECTED
+  IN PLACE, from `git status --porcelain` RE-RUN AFTER THIS ROLE'S LAST EDIT,
+  not from the run made at dispatch (which returned empty).** So this is the
+  **fifth consecutive filing** to hit that shape, not the one that broke the
+  run — an earlier draft of this bullet said the latter, on the dispatch-time
+  run, and it was already false when written. **A `git status` is a timestamp,
+  not a state**, which is the same finding this filing records about channel
+  checks (see the 21:54 inbound box, *Next up*).
+  Besides this filing's own four `docs/` files, **five files this role did not
+  touch have appeared**: `crates/pdfce-core/src/forms.rs` (**+351 lines**),
+  `crates/pdfce-cli/src/main.rs` (+62/−2),
+  `.claude/agent-memory/pdfce-engineer/MEMORY.md`, and two
+  `feedback_*.md` files, plus one untracked
+  (`feedback_a_shell_flag_can_be_parsed_and_never_used.md`). **All are the
+  engineer's.** `git diff` on `forms.rs` shows three new public fields —
+  **`border: Option<BorderSpec>`, `visibility: Option<Visibility>`,
+  `annot_flags: AnnotFlags`** — i.e. **the engineer is building options (1) and
+  (2) of the 21:54 inbound request while this filing is being written.**
+  **Nothing was committed or staged by this filing.**
+- **All three commits were unfiled at the tip (`R217`); this filing discharges
+  all three.**
+- **Backup currency, MEASURED here rather than inferred:** the newest bundle in
+  `D:/Dev/pdfce-backups/` is
+  **`pdfce-20260827-shutdown-a2b4e16-full.bundle`, 2026-08-27 12:04** (`ls
+  -lt`), and `git rev-list --count a2b4e16..HEAD` returns **22**. **The backup
+  is 22 commits behind `HEAD`**, and the three Passes filed here are **not in
+  any bundle on disk**. They *are* on `origin/main`, so this is a
+  belt-vs-braces gap rather than a single point of failure — but hard rule 8
+  asks for the figure and the command, and both are here.
+
+---
+
 ### `Pass 140.2` (`25d73d7`) — ★★★★★ **AN IMAGE'S OWN COLOUR CONVERSIONS REACHED NOTHING AT ALL: `image::decode` CONSTRUCTED TWO `ColorDiagnostics`, WROTE TO BOTH, AND DROPPED BOTH — SO A BROKEN `/tintTransform` PAINTED A NEUTRAL STAND-IN AND PDFCE SAID NOTHING, WHICH IS A RULE 4 *SILENCE* AND NOT A MISSING STATISTIC** — ★★★★ **TWO CORRECTIONS TO `70c5919`'s COMMIT MESSAGE, WHICH THE 294th FILING RELAYED AS ITS OWN:** the *"292 distinct tuples behind 25,870 texels"* cost figure is **WRONG** (that counter had **no image contribution at all**), and **ROUTE 4 ALONE ACCOUNTS FOR THE ENTIRE FIX ON THE REPORTED PATCH** — established by ablation, and **route 4 was not in the bug report** — ★★★ **THE 294th FILING'S HARD-RULE-11 SWEEP REPORTED FOUR SURVIVORS AND THERE WERE FIVE**; the fifth was a **format string**, and three findings come out of it, all new — ★★ standing rule **`R222`** minted: **when a doc-comment claim is corrected, grep the FORMAT STRINGS for the same claim in the same change** — ★ **A SABOTAGE SURVIVED AND IS RECORDED RATHER THAN PAPERED OVER: it falsified a claim in the CODE COMMENT, not a defect in the code** — 2026-08-27 (295th filing)
 
 **Sourcing.** Shell held and used (hard rule 8). `git show 25d73d7` is the
@@ -77065,7 +77678,191 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### ★★★★★ OPERATOR PRIORITY RULING 2026-08-27 — **THE FEATURE-REQUEST CHANNEL IS THE FIRST THING**, ahead of `Pass 143.0` and ahead of everything else in this section — three inbound items, two new Pass IDs, filed 2026-08-27 (296th filing)
+### ★★★★★ THE 21:54 INBOUND — **A FOURTH `pdfceGUI` REQUEST ARRIVED AFTER THE 296th FILING'S CHANNEL CHECK AND BEFORE THIS SESSION'S REPLIES WENT OUT. IT IS UNPARSED, IT HAS NO PASS ID, AND NO PDFCE GATE WILL EVER NOTICE IT** — opened 2026-08-27 (297th filing) — **UNPARSED · NO ID CLAIMED**
+
+**★ NO PASS ID IS CLAIMED HERE, DELIBERATELY.** Parsing an operator or
+consumer request into Pass entries is **the engineer's act** (`CLAUDE.md`
+rule 5, and the 184th filing's inbound-box precedent). This box exists so the
+request cannot be lost between sessions, not to scope it. **Next free family
+is `146`** (`python tools/check-ledger-numbers.py`, run this filing).
+
+**How it was found, because that is the whole reason this box exists.**
+`ls -lt D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/`, run by this role
+at filing time. **Nothing in this repository can report a file outside it** —
+the same standing reason the `pdfceGUI` and `iccce` inbox boxes exist, and the
+same reason the 296th filing recorded its channel check with a command rather
+than an assertion.
+
+| field | value |
+|---|---|
+| file | `open/request_a_widget_border_can_be_written_and_not_read_so_a_properties_control_would_lie.md` |
+| arrived | **2026-08-27 21:54** (`ls -lt`) |
+| against | `Pass 134.0` (`edit_widget`), **now consumed** |
+| their tip | `pdfceGUI` at `aa7109f`+ · **`pdfce-core` at `2e6235c`** — i.e. they wrote it **after `Pass 142.1` landed** and **before `144.0`/`145.0`** |
+| blocking? | **No, and they say so by name** |
+
+**Why it slipped the previous box.** The 296th filing checked the channel and
+found **three** files at 17:18 and 18:21. This one arrived **at 21:54, during
+the engineering session**, between that check and the three replies this
+session wrote at **22:38–22:39**. **Third consecutive session in which the
+channel changed underneath a check that had already run** — the 296th filing
+recorded the same shape about *its* predecessor. **A channel check is a
+timestamp, not a state**, and that is now n = 3.
+
+#### The ask, in one line
+
+**`WidgetEdit` can WRITE four widget properties; `forms::Widget` can READ
+two.** They shipped the two that can be read (`rect`, `caption`) and
+**refused to ship the other two** (`border`, `visibility`).
+
+| property | write | read | they shipped |
+|---|---|---|---|
+| `rect` | `WidgetEdit::with_rect` | `forms::Widget::rect` | ✅ |
+| `caption` | `with_caption` | `forms::Widget::caption` | ✅ |
+| **`border`** | `with_border(BorderSpec)` | **nothing public** | ❌ |
+| **`visibility`** | `with_visibility(Visibility)` | **only by a detour** | ❌ |
+
+**What they grepped, offered so pdfce can check the claim rather than take
+it** — their own framing, and it is `R203`/`R220`(c) discipline arriving from
+the other side of the boundary: `forms::Widget` has no border field of any
+kind; `annot_author::read_border_width` is **private**;
+`annot_author::border_style` is a **writer**; and **nothing anywhere reads
+`/BS` `/S`** (solid / dashed / beveled / inset / underline). **Not verified
+here** — this role reads documents, and the claim is about `crates/`.
+
+#### ★★★ WHY THEY DID NOT SHIP THEM WITH A DEFAULT, AND THIS IS THE PART WORTH THE ENGINEER'S ATTENTION
+
+> *"A properties control has to show the current value. That is what makes it
+> a properties control rather than a command. A border control seeded from a
+> default would show* Solid, 1 pt *over a widget whose file says* Dashed, 3 pt
+> *— and the operator's first press would write the invention into their
+> document, silently replacing a border they never looked at."*
+
+**They cite pdfce's own precedent for the refusal, correctly.** The text
+colour swatch shows **a sentence** rather than a nearest-RGB approximation for
+a run painted in `DeviceCMYK`, because *"a swatch showing DeviceCMYK ink as
+its nearest RGB would write that RGB back on the next press"*. **Same failure,
+same refusal** — and it is `CLAUDE.md` rule 4 read correctly from the outside:
+a control seeded from a guess is an **inference presented as document state**,
+which is the one thing rule 4 has never permitted through any of its two
+narrowings.
+
+**⇒ The gap is a WRITE-WITHOUT-READ ASYMMETRY in `pdfce-core`, not a wiring
+omission in their shell**, and that makes it this project's finding under
+decision 058 — the same shape as `Pass 142.1`'s pre-flight and the
+`insert_pages` disclosure fields.
+
+**★★ WORK IS ALREADY IN FLIGHT ON THIS, IN THE ENGINEER'S UNCOMMITTED TREE, AS
+THIS BOX IS BEING WRITTEN — and the box stands anyway.** `git diff` run here
+after this filing's last edit shows `crates/pdfce-core/src/forms.rs` **+351
+lines**, adding exactly three public fields: **`border: Option<BorderSpec>`,
+`visibility: Option<Visibility>`, `annot_flags: AnnotFlags`** — options (1) and
+(2) below, plus the raw flags. **That is uncommitted work, so it has no commit,
+no Pass ID and no acceptance criteria**, and this box is what stops it becoming
+a shipped capability with no roadmap entry (`R217`'s shape). **The engineer
+should claim `Pass 146.0` for it before committing**, or say why it is a
+sub-Pass of something existing. Reported from `git diff`, not inferred.
+**Nothing here is a request to stop.**
+
+#### Three shapes they offer, with no preference between them
+
+1. **`forms::Widget::border: Option<BorderSpec>`**, populated by
+   `parse_acroform` — symmetric with `caption`, which pdfce's own doc says is
+   modelled *"because modelling it is what lets a caption be listed, copied
+   and compared"*. **A border is the same kind of fact.**
+2. **`forms::Widget::visibility: Visibility`**, same place, *"so we are not
+   deriving your enum from flag bits"* — they note `annot::page_annotations`
+   plus `Annotation::flags` would work but would be **a second implementation
+   of a mapping pdfce owns**, which is `R221`'s shape arriving unprompted from
+   a consumer.
+3. Or **`widget_properties(fqn, index) -> WidgetProperties`** — *"the
+   pre-flight shape you used for `preview_font_resources`, which we like."*
+
+#### ★ THEY ALSO REPORT A COST THIS PROJECT CAUSED, AND IT IS THE SECOND HALF OF `R220`
+
+> *"It shipped a day late and that is ours. The reply sat unread in `open/`
+> while our own panel told the operator that these properties* can only be set
+> when a field is placed. To change one, delete this field and place a new
+> one. *— which is a **destructive** instruction (it loses the name, the value
+> and the tab position) for a capability you had already built."*
+
+**Their own lesson, quoted because it generalises to this project verbatim:**
+*"an absence claim about a crate we do not build has a shelf life, and that
+one was true when written and false within hours."* **That is `R220` clause
+(c) and `R203` stated from the consumer's side**, and it is the **fourth**
+recorded instance in four days of an absence-or-universality claim about a
+neighbouring project's capability going stale. **The claim did not merely
+mislead — it recommended a destructive action.**
+
+#### ★ AND ONE THING BACK ON `Pass 142.1`, WHICH IS A LIVE ENGINEERING FACT
+
+They have **not yet consumed `preview_font_resources`** (`gui` stays `[ ]` in
+`FEATURES.md`, correctly) and it is next for them. Two uses named, and the
+second carries a consequence **pdfce did not draw**:
+
+- the **face chooser's list**, replacing today's `fontinfo` name-join superset;
+- **`real_bold()` / `real_italic()` for routing Bold** — and *"note the
+  consequence you may not have drawn: routing from `real_bold()` makes the
+  Bold button **independent of `gate_synthesis`**, so it will do the right
+  thing on `format_family.pdf` whether or not `Pass 144.0` has landed."*
+  **`Pass 144.0` has since landed**, so they get both.
+
+**★★ A PERFORMANCE REPORT IS INBOUND AND IS ALREADY PARTLY ANSWERED.** They
+say they *"will report what the pre-flight costs on a page with many fonts,
+since the face list is drawn per frame while a combo is open and yours is a
+per-resource acceptance test."* **`Pass 144.0` removed an O(n²) sibling scan
+from exactly that query** — fine at ~20 resources, a hang at the ~50,000 a
+crafted `/Font` dict can carry. They should be told it is fixed **before**
+they spend a session measuring it, and their measurement is still wanted on
+the linear cost.
+
+#### The `iccce` channel — CHECKED and CLEAR
+
+`ls -lt D:/Dev/FeatureRequests/iccce_FeatureRequests/open/`, run by this role
+at filing time. **19 files (`ls -1 | wc -l`); the newest is pdfce's own
+reply**, `reply_the_profile_census_and_your_33_node_constant.md`, **2026-08-27
+14:22** — **unchanged since the 296th filing's check**, which reported the same
+count and the same newest file. Nothing inbound is unread.
+Recorded explicitly for the same reason as above: **an "it's empty" claim
+about a directory outside this repository has no falsifier here.**
+
+---
+
+### ~~★★★★★ OPERATOR PRIORITY RULING 2026-08-27~~ — **DISCHARGED 2026-08-27 (297th filing). ALL THREE CHANNEL ITEMS SHIPPED, IN THE ORDER THIS BOX PRESCRIBED.** The ruling itself is not retired — see the standing consequence below — filed 2026-08-27 (296th filing)
+
+> **★★★ DISCHARGE BANNER — READ BEFORE ACTING ON ANYTHING BELOW.**
+>
+> **The ORDERING this box imposed is satisfied and no longer governs.** All
+> three items shipped in one session on 2026-08-27, in the prescribed
+> sequence: **`Pass 142.1` (`2e6235c`) → `Pass 144.0` (`cfa2c44`) →
+> `Pass 145.0` (`0c48bbf`)**. See the single combined *Shipped* entry at the
+> head of that section for the delivery record, the measurements and the
+> `R220`/`R221`/`R223` dispositions.
+>
+> **★ THE ORDERING ARGUMENT PAID OFF AND THAT IS CHECKABLE IN THE DIFF, not
+> merely asserted.** This box predicted that building `142.1` first would make
+> `144.0` a **caller** of its predicate rather than a **second
+> implementation** of the same question. `cfa2c44` adds **no acceptance logic
+> of its own** — it calls `find_styled_face`, which `2e6235c` created. The
+> `R221` trap the box named was avoided by construction rather than by care.
+>
+> **★★ WHAT IS *NOT* DISCHARGED: the ruling itself.** The operator said
+> *"check the feature requests and write these as the first thing to do before
+> continuing work on other things."* That governs **how the channel is
+> treated**, not those three files, and it is **still in force** — which is why
+> the **fourth inbound request that arrived at 21:54 on 2026-08-27**, after
+> this box's own channel check, gets its own box in this section rather than a
+> footnote. See **★★★★★ THE 21:54 INBOUND**, below.
+>
+> **`Pass 143.0` is the pick-up item again** — the `DeviceGray`-under-overprint
+> spec ambiguity, **unchanged in content and unchanged in its *Backlog*
+> position** throughout, exactly as this box promised. It stopped being first;
+> it never stopped being next after these.
+>
+> **`Pass 142.0` remains de-prioritised-NOT-closed in *Backlog*, unchanged.**
+> `142.1` shipping does not retire it, and the requester's own scoping —
+> *"we are not asking you to close `142.0`, only saying it does not block
+> us"* — is the record of why.
 
 **The ruling, verbatim, and it is the operator's not the engineer's:**
 
@@ -77216,7 +78013,35 @@ comment true again by accident rather than by design.
 
 ---
 
-### `Pass 142.1` — **THE FONT-RESOURCE PRE-FLIGHT — PROMOTED FROM *Backlog* TO HERE 2026-08-27 (296th filing), BECAUSE THE REQUESTER ASKED FOR IT BY NAME AND IT IS THE PREREQUISITE FOR `Pass 144.0`** — ★★ two refinements added, and **refinement (2) is the valuable one** — NOT STARTED
+### ~~`Pass 142.1`~~ — **SHIPPED 2026-08-27, commit `2e6235c`. See the combined `Pass 142.1` + `144.0` + `145.0` entry at the top of *Shipped*.** Retained below as the scoping record (append-only discipline) — **THE FONT-RESOURCE PRE-FLIGHT — PROMOTED FROM *Backlog* TO HERE 2026-08-27 (296th filing), BECAUSE THE REQUESTER ASKED FOR IT BY NAME AND IT IS THE PREREQUISITE FOR `Pass 144.0`** — ★★ two refinements added, and **refinement (2) is the valuable one** — ~~NOT STARTED~~
+
+> **★★ STATUS BANNER — READ BEFORE ACTING ON ANYTHING BELOW.**
+> **All five provisional acceptance criteria were MET as written**, and both
+> named refinements landed:
+> **(1)** entries are keyed as `set_font` matches, produced by the **same code
+> path** — the test was **extracted** into `accept_font_target`, which
+> `plan_font` now calls too, so there is one implementation rather than two
+> (`R221`); a `/BaseFont` collision is **reported** via `base_font_ambiguous`
+> and a resource-key `selector`, never silently deduplicated.
+> **(2)** each entry states whether a real Bold and a real Italic **would be
+> ACCEPTED** — `FontPreflight::real_bold()` / `real_italic()` — with the
+> self-case handled (an entry that *is* the family's real bold reports
+> **itself**, since reporting `None` would tell a shell to synthesize bold on
+> top of a real bold face).
+>
+> **★ One thing this entry did NOT anticipate and the Pass shipped anyway:**
+> a new fixture was required. **Nothing in the corpus carried two resources
+> with one `/BaseFont`** — the 87 % case this entry cites from the requester's
+> survey had **no witness in pdfce's own fixtures**.
+> `fixtures/synthetic/textedit/format_twins.pdf` is that witness (corpus **8 →
+> 9** files, every pre-existing fixture regenerated byte-identical).
+>
+> **★★ And the requester has since reported, unprompted, that
+> `real_bold()`/`real_italic()` routing makes their Bold button INDEPENDENT of
+> `gate_synthesis`** — so it does the right thing on `format_family.pdf`
+> whether or not `Pass 144.0` has landed. That consequence was not drawn by
+> this entry and is worth carrying: the pre-flight is not merely a
+> pre-check for the gate, it is an **alternative route around it**.
 
 **The scoping record stays in *Backlog*** (filed 293rd filing) — the shape of
 the query, the `&self`/side-effect-free discipline it shares with
@@ -77317,7 +78142,45 @@ absence-claim pull, this one caught in time.
 
 ---
 
-### `Pass 144.0` — **`gate_synthesis` NAMES A REAL FACE THAT THEN REFUSES, AND ON THAT PAGE BOLD IS UNREACHABLE THROUGH EITHER VERB** — ★★★ **REPRODUCED BY THE ENGINEER BEFORE FILING, ON PDFCE'S OWN FIXTURE — CONFIRMED, NOT CLAIMED** — ★★ `R221`'s THIRD INSTANCE, hours after the mint, in a different subsystem — ★ **`R90` IS NOT WEAKENED BY THIS** — filed 2026-08-27 (296th filing), NOT STARTED
+### ~~`Pass 144.0`~~ — **SHIPPED 2026-08-27, commit `cfa2c44`. See the combined `Pass 142.1` + `144.0` + `145.0` entry at the top of *Shipped*.** Retained below as the scoping record (append-only discipline) — **`gate_synthesis` NAMES A REAL FACE THAT THEN REFUSES, AND ON THAT PAGE BOLD IS UNREACHABLE THROUGH EITHER VERB** — ★★★ **REPRODUCED BY THE ENGINEER BEFORE FILING, ON PDFCE'S OWN FIXTURE — CONFIRMED, NOT CLAIMED** — ★★ `R221`'s THIRD INSTANCE, hours after the mint, in a different subsystem — ★ **`R90` IS NOT WEAKENED BY THIS** — filed 2026-08-27 (296th filing), ~~NOT STARTED~~
+
+> **★★★ STATUS BANNER — READ BEFORE ACTING ON ANYTHING BELOW.**
+> **All seven provisional acceptance criteria were MET**, including the two
+> non-code items in this entry's own *"TWO THINGS OWED THAT ARE NOT CODE"*
+> section: §3.6 was corrected, and `pdfceGUI` was told on the channel
+> (`reply_gate_synthesis_fixed_your_test_goes_red_on_purpose.md`, 2026-08-27
+> 22:39) that **their characterisation test goes red on purpose** and that
+> **their retry must switch from `real_font` to the new `selector` field.**
+>
+> **Three branches shipped exactly as scoped**, and the family preference is
+> expressed by **the ORDER of two searches** rather than by a separate rule —
+> so the preference cannot drift from the acceptance test. Branch 3 (synthesis
+> proceeds when nothing is accepted) is pinned by a test **authored to fail if
+> a future change turns it into a refusal**, as criterion 3 required.
+>
+> **★ WHAT THIS ENTRY GOT RIGHT AND UNDERSTATED.** Criterion 5 named **one**
+> stale doc claim (`name_claims_bold`'s *"never to refuse an edit"*). The
+> change found **four**, and only that one had been reported by anybody:
+> **(b)** `gate_synthesis`'s own doc claimed a `Times-Bold` request *"is
+> refused with that same face named"* when `!is_self` **skips** it, so it is
+> never named; **(c)** the `RealFaceAvailable` **format string** named a remedy
+> it had not checked (`R222`, firing on its first live change); **(d)** §3.6's
+> *"every page is covered"* (`R220` clause (d)). **Four claims, one function
+> pair, zero reported by any tool.** Claim (a) is `R223`'s first instance — see
+> *Standing rules*.
+>
+> **★★ A DEFECT THIS ENTRY DID NOT NAME, FIXED IN THE SAME CHANGE:** an
+> **O(n²) per-entry sibling scan over an attacker-controlled `/Font` dict** in
+> the pre-flight. Fine at the ~20 resources a real page carries; **a hang at
+> the ~50,000 a crafted one can** — in a query the requester has since
+> confirmed they call **every frame** while a combo box is open.
+>
+> **★ TWO IN-REPO `pdfce-gui` TESTS CHANGED EXPECTATION ON PURPOSE.** They
+> asserted `Times-Bold` and now assert `Calibri-Bold` — and **they passed
+> throughout the defect**, because they asserted the **name** the gate produced
+> rather than **that the named face worked**. The property now lives in
+> `crates/pdfce-core/tests/synthesis_gate.rs` where it can be a property
+> instead of a string.
 
 **Provenance.** `pdfceGUI`,
 `request_gate_synthesis_names_a_face_that_cannot_cover_the_run.md`,
@@ -77492,7 +78355,55 @@ disagree about which face is "available" on the same page.
 
 ---
 
-### `Pass 145.0` — **A PINNED `FormatRequest` SHOULD BE ABLE TO SAY "THE WHOLE OPERATOR"** — ★★ **THE THREE WRONG ANSWERS ARE THE ENTRY, because each one LOOKED right and each failed for a DIFFERENT reason** — ★ **AN INVARIANT QUESTION IS OWED EITHER WAY, and only pdfce can answer it** — ★★★ **CORRECTED WITHIN THIS SAME FILING: THE SECOND WRONG ANSWER'S CAUSE WAS RELAYED FROM THE REPORTER AND IS FALSE (0 of 256 fixtures); THE REAL MECHANISM IS `/ToUnicode` MULTI-CHARACTER MAPPING, AND IT CHANGES THE DOCS HALF FROM A FALSE STATEMENT TO A TRUE ONE** — filed 2026-08-27 (296th filing), NOT STARTED
+### ~~`Pass 145.0`~~ — **SHIPPED 2026-08-27, commit `0c48bbf`. See the combined `Pass 142.1` + `144.0` + `145.0` entry at the top of *Shipped*.** Retained below as the scoping record (append-only discipline), **and its UNVERIFIED label is part of that record — see the banner** — **A PINNED `FormatRequest` SHOULD BE ABLE TO SAY "THE WHOLE OPERATOR"** — ★★ **THE THREE WRONG ANSWERS ARE THE ENTRY, because each one LOOKED right and each failed for a DIFFERENT reason** — ★ **AN INVARIANT QUESTION IS OWED EITHER WAY, and only pdfce can answer it** — ★★★ **CORRECTED WITHIN THIS SAME FILING: THE SECOND WRONG ANSWER'S CAUSE WAS RELAYED FROM THE REPORTER AND IS FALSE (0 of 256 fixtures); THE REAL MECHANISM IS `/ToUnicode` MULTI-CHARACTER MAPPING, AND IT CHANGES THE DOCS HALF FROM A FALSE STATEMENT TO A TRUE ONE** — filed 2026-08-27 (296th filing), ~~NOT STARTED~~
+
+> **★★★★ STATUS BANNER — READ BEFORE ACTING ON ANYTHING BELOW. TWO CLAIMS THIS
+> ENTRY RECORDS AS OPEN ARE NOW ANSWERED BY MEASUREMENT.**
+>
+> **(1) THE `operator_span`-SLICE INVARIANT HOLDS.**
+> `crates/pdfce-core/tests/operator_span_invariant.rs` walks `fixtures/`:
+> **4,289 files · 1,623 with text · 18,559 runs · 669,436 glyphs · 29,246
+> `operator_span` groups → 0 non-contiguous groups, 0 groups that fail to
+> index the run's text cleanly.** Sabotage-checked (excluding one glyph per
+> group from the coverage computation turns the probe red). **This entry's
+> "if it does not hold, their shipped workaround is resting on luck" branch
+> did NOT fire** — the workaround is sound, and the invariant is now a
+> **published guarantee** (`ARCHITECTURE.md` §12, **decision 094**) plus a test
+> that re-runs on every `cargo test`.
+>
+> **(2) THE MULTI-OPERATOR CLAIM — recorded below as the reporter's account
+> and explicitly UNVERIFIED — IS CONFIRMED. `2,420 of 18,559 runs (13.0 %)`
+> carry glyphs from more than one show operator.** **Common, not exotic.**
+> Their third table row was right, and **this is what makes the affordance
+> load-bearing rather than a convenience**: on 13 % of runs a `find` rebuilt
+> from `TextRun::text` names a range across several operators, which
+> `match_run` cannot express. The UNVERIFIED label below is **left standing on
+> purpose** — it was the correct epistemic state at filing time, and striking
+> it would erase the record of a claim being carried honestly until it could be
+> checked. **The probe settled both questions, as this entry's *"ONE PROBE, TWO
+> ANSWERS"* note predicted; it was built once.**
+>
+> **All five provisional acceptance criteria MET.** Criterion 1's guard held —
+> **an empty `find` with NO pin is still refused by the same name**, and both
+> CLI verbs refuse it with a message naming the **flag** that would fix it,
+> which core cannot know about. Criterion 3 was **not** discharged by shipping
+> the affordance, exactly as this entry insisted it must not be.
+>
+> **★★ THE SUBTLE DEFECT A SHALLOWER FIX WOULD HAVE SHIPPED, not named
+> below:** `plan_font` checked encoding coverage against `req.find`. On a
+> whole-operator request that is `""` — and **every face covers the empty
+> string** — so a family change to a face that **cannot show the run** would
+> have been **ACCEPTED**. The affordance would not have broken coverage
+> checking; it would have **hollowed it out silently**. `plan_font` now takes
+> the resolved text, pinned by a named test.
+>
+> **★ AND TWO DEFECTS IN THE PASS'S OWN NEW CODE WERE FOUND BY RUNNING THE
+> BINARY, NOT BY THE 4,463-TEST SUITE** — `cmd_edit_text` parsed `--pin-span`
+> and never attached it (the refusal read *"empty find text"*, the very thing
+> the feature removes), and a shipped refusal string carried fourteen baked-in
+> spaces past a green `check-string-gaps.sh`. Both live in the **shell layer
+> between the flags and the core API**, which a core-API test cannot reach by
+> construction.
 
 **Provenance.** `pdfceGUI`,
 `request_a_pinned_format_request_should_be_able_to_say_the_whole_operator.md`,
@@ -107113,7 +108024,9 @@ same cause (hashes exist only at commit time), two different failure modes.
   > — `docs/core-api/03-capabilities.md` §3.6, and the reply that quoted it
 
   **False as stated**, falsified by measurement on **pdfce's own fixture**
-  the same evening (`Pass 144.0`, *Next up*). True only for an operator who
+  the same evening (`Pass 144.0`, *Next up* when this clause was written;
+  **SHIPPED 2026-08-27 as `cfa2c44`**, and §3.6 corrected in the same commit —
+  see the combined `Pass 142.1`/`144.0`/`145.0` *Shipped* entry). True only for an operator who
   already knows to try a face pdfce never names.
 
   **★★ THE ARGUMENT FOR WIDENING RATHER THAN MINTING `R223`, because the
@@ -107338,6 +108251,17 @@ same cause (hashes exist only at commit time), two different failure modes.
   is hard-rule-11 / `R222` territory: it was found by *reading for the
   claim*, not by any check. It is criterion 5 of `Pass 144.0`.
 
+  **★ RESOLVED 2026-08-27 (297th filing): `Pass 144.0` SHIPPED as `cfa2c44`,
+  and the remedy was `R221`'s own — `gate_synthesis` now calls
+  `find_styled_face`, the acceptance search `Pass 142.1` (`2e6235c`) created,
+  so the predicate IS the accepting code.** Measured: `--bold-synthetic` on
+  `format_family.pdf` now names `/F2 'Calibri-Bold'`, and `--set-font
+  Calibri-Bold` succeeds — **the remedy the refusal names now works**, which
+  is the property the tests assert instead of the string. Criterion 5's doc
+  comment moved with the predicate, and it is **`R223`'s first instance**
+  (minted this filing, below). **Ceiling still does not move for this
+  amendment.**
+
   **Ceiling does NOT move for this amendment** — an instance added to an
   existing rule, not a mint. Rules stay at **`R222`**, next free **`R223`**.
 
@@ -107439,6 +108363,105 @@ same cause (hashes exist only at commit time), two different failure modes.
   is sent anywhere). Full derivation:
   `D:/dev/rag/rust/disclosure_text_must_be_tested_against_producing_branch.md`.
   **Ceiling moves `R221` → `R222`; next free `R223`.**
+
+  **★ FIRST LIVE FIRING, 2026-08-27 (297th filing), `Pass 144.0` /
+  `cfa2c44`.** Correcting `name_claims_bold`'s doc comment surfaced the
+  **`RealFaceAvailable` format string** carrying the same unchecked claim —
+  *a message that names a remedy is making a claim about that remedy*. The
+  rule found it **at change time**, which is the window it was minted to
+  close. **Instance count now 3; ceiling unchanged, no re-mint.**
+
+- **R223 — A DOC COMMENT'S CLAIM ABOUT ITS OWN *CALLERS* IS A MEASUREMENT,
+  AND NOTHING RECOMPILES WHEN IT GOES STALE. RE-DERIVE IT BY RUNNING THE GREP
+  IT QUOTES — AT WRITE TIME, AND AGAIN AT EVERY CORRECTION — NEVER BY
+  REASONING ABOUT WHAT CHANGED.** Minted 2026-08-27 (297th filing), from the
+  combined `Pass 142.1` / `144.0` / `145.0` *Shipped* entry above, at **n = 2
+  across two independent subsystems**.
+
+  **The shape, and why it is not covered by `R93` or `R222`.** `R93` governs a
+  comment that is wrong **about the code beside it**; `R222` governs a claim
+  duplicated into a **format string**. This rule governs a claim whose
+  **truth-maker lives somewhere else entirely — the set of the item's
+  callers** — with three properties that together make it uniquely
+  undetectable:
+
+  - **The person who falsifies it never reads it.** Adding a second call site
+    in another module falsifies a comment in the callee. Nothing in that
+    change surfaces the comment, and nothing in the callee changes.
+  - **`cargo doc` cannot know what a caller does with a return value**, and
+    neither can any gate this project owns. There is nothing to extend.
+  - **It is almost always TRUE WHEN WRITTEN**, so `git blame` on a now-false
+    sentence shows a careful author, not a careless one. **The defect is in
+    the claim's FORM, not in its author's diligence** — it is a dated
+    measurement written in the present tense.
+
+  **Two instances, in two independent subsystems, many Passes apart.**
+
+  1. **`crates/pdfce-core/src/ocr/layer.rs`** — a doc comment about its own
+     callers, **wrong three times in one session**: *"called by the CLI"* when
+     nothing called it; *"There is NO OCR subcommand … an `R151` instance"*;
+     and *"what still has no caller is THIS one-shot"*, **written while
+     correcting the second claim**, in a commit whose own message criticises
+     this exact behaviour. The third wrong claim was produced by **reasoning
+     about what had changed instead of re-running the grep the claim itself
+     quotes** — which is why this rule's remedy is a command, not a
+     disposition to be careful.
+  2. **`crates/pdfce-core/src/text_edit/synth.rs:391`–`403`** —
+     `name_claims_bold` states a **usage invariant**: *"it is used only in the
+     direction where being wrong is safe: `detect` uses it to say 'this looks
+     synthesized', **never to refuse an edit**."* There are exactly **two**
+     call sites, and `gate_synthesis` is the second — **it refuses an edit**,
+     with *"Nothing was applied."* **Falsified by half its own callers**, true
+     when written, reported by nobody, and found only by reading the comment
+     against the code while changing the code (`Pass 144.0`, 2026-08-27).
+
+  **★★ THE PROMOTION WARRANT IS BETTER THAN A COUNT, AND IT IS WHY THIS IS
+  MINTED NOW HAVING BEEN DECLINED BEFORE.** Instance 1 was **explicitly
+  declined** promotion by this role, at the engineer's invitation, on an
+  argued warrant: *"all three wrong readings are of one doc comment, in one
+  file, inside one session's churn — **not the shape of a defect recurring
+  across independent subsystems**."* **That decline named its own falsifier.**
+  `text_edit/synth.rs` is a second, independent subsystem, reached by a
+  different mechanism, in a different Pass family, found by a different
+  reader. **A decline that states the condition under which it would be
+  wrong, and is then met on that exact condition, is a stronger warrant than
+  two coincident occurrences** — and having written the decline down is what
+  made this mint checkable rather than a reversal of taste.
+
+  **What the rule asks for, concretely.**
+
+  (a) **Write a caller claim in the form of a dated measurement, or not at
+  all.** *"As of `<commit>`, the two call sites are X and Y"* is checkable and
+  visibly perishable. *"never used to refuse an edit"* is neither — it reads
+  as a design promise while being a snapshot.
+
+  (b) **When correcting one, RE-RUN THE GREP the claim quotes.** Do not reason
+  forward from what the current change touched; instance 1's third wrong claim
+  was produced by exactly that, alongside the second one's correction.
+
+  (c) **Prefer moving the claim somewhere a compiler can hold it.** A usage
+  invariant that matters is better expressed as a private function, a narrowed
+  return type, a newtype, or a `debug_assert!` at the call site than as a
+  sentence. **`Pass 144.0`'s own remedy is the worked example**: the fix was
+  not to reword the comment but to make the refusing caller ask the accepting
+  code (`R221`), after which the comment had nothing left to be wrong about.
+  A caller claim you cannot delete is a design smell before it is a
+  documentation defect.
+
+  (d) **When a caller claim is corrected, `R222` applies in the same change** —
+  grep the format strings, because a comment about *who calls this* is
+  routinely paraphrased into an operator-facing message about *what to do
+  instead*. `Pass 144.0` is the instance: `name_claims_bold`'s comment and
+  `RealFaceAvailable`'s message carried the same unchecked claim.
+
+  **What this rule does NOT ask for: a gate, and the decline is permanent.**
+  Consistent with `R220` and `R222`: a gate would have to know what every
+  caller *does with* a value, which is the fact the comment exists to record.
+  Do not re-propose one; extend the habit instead.
+
+  **Sibling of `R151`** (a capability has no caller — the same fact discovered
+  from the other end) and of **`R93`**. **Ceiling moves `R222` → `R223`; next
+  free `R224`.**
 
 ## Update protocol
 

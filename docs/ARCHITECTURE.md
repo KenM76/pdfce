@@ -5180,6 +5180,86 @@ for the CLI; (2) decide the **`CompositeEncoding` re-export** question in
 (F); (3) enumerate **`EditSession`** — the single largest undocumented
 `pub` surface in the crate.
 
+## 4.2 Published model guarantees — properties consumers may rely on
+
+*(Added 2026-08-27, 297th filing, `Pass 145.0` / `0c48bbf`. Created by
+**decision 094**, §12.)*
+
+A **published model guarantee** is a property of `pdfce-core`'s data model
+that this project states to consumers as **stable**, backed by a test, and
+that a future refactor may therefore **not** break silently. It is a
+deliberately small list, and the bar for adding to it is high — every entry
+is a constraint on work nobody has done yet.
+
+**Why the list exists at all.** `D:\dev\pdfceGUI` (and any future shell)
+builds against `pdfce-core` without building it. A property they *observe* to
+be true is not a property they may *rely* on, and decision 058 puts the burden
+of saying which is which on **this** project, not on them. Without a list, the
+only options are (a) they re-derive the property defensively and get a second
+implementation of something pdfce owns (`R221`), or (b) they rely on it
+silently and a refactor breaks their build with no failing test on our side.
+
+**The entry format is fixed: the property, the measurement that established
+it, the test that pins it, and the refactor it forbids.** A guarantee without
+its measurement is a claim; a guarantee without its forbidden refactor does
+not tell a future engineer what they may not do, which is the only reason to
+write it down.
+
+### 4.2.1 The `operator_span`-slice invariant
+
+**The guarantee.** *The glyphs of a `TextRun` that share one
+`GlyphProvenance::operator_span` are **contiguous within the run**, and the
+range they occupy **slices cleanly out of the run's text**.*
+
+**A caller may therefore** locate a show operator's glyphs inside a run, take
+their span, and use it as a locator — which is exactly what
+`FormatRequest::whole_operator` / `pinned` now do inside `pdfce-core`, and
+what `pdfceGUI` had already shipped from outside before this guarantee
+existed.
+
+**The measurement that established it** (`Pass 145.0`, 2026-08-27), over
+`fixtures/`:
+
+| quantity | value | per-item form |
+|---|---:|---|
+| files walked | 4,289 | — |
+| files with text | 1,623 | 37.8 % of 4,289 |
+| runs | 18,559 | 11.4 per text-bearing file |
+| glyphs | 669,436 | 36.1 per run |
+| `operator_span` groups | 29,246 | 1.58 per run · 22.9 glyphs per group |
+| **non-contiguous groups** | **0** | 0 of 29,246 |
+| **groups not indexing text cleanly** | **0** | 0 of 29,246 |
+
+**The test that pins it.** `crates/pdfce-core/tests/operator_span_invariant.rs`
+— it re-runs on every `cargo test`, and it is **sabotage-checked**: excluding
+one glyph per group from the coverage computation turns it red, so the two
+zeroes are measurements rather than a probe that examines nothing.
+
+**The refactor it forbids.** `text_extract/layout.rs`'s run segmentation may
+**not** be changed in a way that lets one `operator_span` group's glyphs
+become non-contiguous inside a run — **even if no pdfce feature notices**.
+That last clause is the whole point: pdfce's own code could absorb such a
+change without a failing test, and a shell's locator would break. **The test
+is the enforcement; this entry is why it may not be deleted when it looks
+redundant.**
+
+**A neighbouring fact that is NOT a guarantee, stated so the two are not
+conflated.** A `TextRun` is **not** a show operator, and **2,420 of 18,559
+runs (13.0 %) carry glyphs from more than one**. That is a *measurement of
+real files*, not a promise about the model — a different corpus could move the
+percentage, and a producer could emit one operator per run throughout. What is
+guaranteed is the slice property above; what is measured is that the
+multi-operator case is **common enough that any locator must handle it**.
+
+**Related, and also not a guarantee:** `text.chars().count()` is **not**
+`glyphs.len()` — `/ToUnicode` maps a code to a **string** (ISO 32000-1
+§9.10.3), so one glyph may carry several characters. Documented in
+`docs/core-api/01-reading-and-model.md` §8.4.0. Measured at **1 of 191
+synthetic fixture runs**, and **that ratio is the trap**: near-zero on
+synthetic text, routine on real typeset copy, so a `find`-based locator looks
+correct in every fixture a shell writes for itself.
+
+
 ## 5. Round-trip / non-destructive-editing invariant
 
 Analogous to the tail-bytes / lazy-round-trip discipline the user's
@@ -26170,3 +26250,91 @@ free 072.**
   **No standing rule minted for this half.** It is a project-boundary
   refinement, exactly as 064 was, and 064's own *"no standing rule minted"*
   reasoning applies unchanged. **Ceiling moves 092 → 093; next free 094.**
+- **2026-08-27 — Decision 094. THE `operator_span`-SLICE INVARIANT IS A
+  GUARANTEE PDFCE PUBLISHES TO CONSUMERS, NOT AN IMPLEMENTATION DETAIL — AND
+  `ARCHITECTURE.md` GAINS §4.2 AS THE PLACE SUCH GUARANTEES LIVE.** Settled
+  while shipping `Pass 145.0` (`0c48bbf`). Body-section update filed in this
+  same edit: **new §4.2, *Published model guarantees***, with the invariant as
+  its first entry (§4.2.1).
+
+  **The question, and it was owed either way.** `D:\dev\pdfceGUI` asked, in
+  `request_a_pinned_format_request_should_be_able_to_say_the_whole_operator.md`
+  (2026-08-27), for either an affordance **or** a documented invariant:
+  *"the glyphs sharing one `operator_span` always slice a contiguous,
+  matchable range out of the run's text. We believe that is true today and we
+  have no way to know whether it is guaranteed."* **They had already shipped a
+  workaround resting on it.**
+
+  **The two outcomes were not symmetric**, which is why the 296th filing
+  refused to let the Pass close by shipping the affordance alone: if the
+  property did **not** hold, a build their operator was using was resting on
+  luck and they needed telling urgently; if it **did**, it was undocumented
+  load-bearing behaviour that the next `layout` refactor could break silently.
+  **Only pdfce could answer it** — `GlyphProvenance::operator_span` was not
+  exposed by any CLI surface at the time the question was asked.
+
+  **It holds. Measured, not argued:** 4,289 files walked · 1,623 with text ·
+  18,559 runs · 669,436 glyphs · **29,246 `operator_span` groups → 0
+  non-contiguous, 0 failing to index the run's text cleanly**
+  (`crates/pdfce-core/tests/operator_span_invariant.rs`, sabotage-checked).
+  Full table in §4.2.1.
+
+  **★ THE DECISION IS NOT "THE INVARIANT IS TRUE" — MEASUREMENT ESTABLISHED
+  THAT. THE DECISION IS TO *PROMISE* IT, and a promise costs something.**
+  Publishing it converts a property pdfce happens to have into a property
+  pdfce may not lose: `text_extract/layout.rs`'s run segmentation may no
+  longer be refactored so that one group's glyphs become non-contiguous within
+  a run, **even if no pdfce feature notices**. That clause is the whole cost —
+  pdfce's own code could absorb such a change with every test green, and only
+  a shell would break.
+
+  **Why promise it rather than only ship the affordance.**
+  `FormatRequest::whole_operator` removes the *need* for a shell to build its
+  own locator **going forward**; it says nothing about the one already
+  shipped, and nothing about the next shell. Decision **058** puts the burden
+  of distinguishing *observed* from *relied upon* on this project. Leaving the
+  property true-but-unpromised is the state that produced the question, and
+  re-entering it would guarantee the question returns.
+
+  **Why a new §4.2 rather than a line in §4.1.** §4.1 is a **sync** section —
+  a periodic read-out of the actual crate surface, written to be **replaced**
+  when it drifts. A guarantee is the opposite kind of text: it is **binding
+  and append-only**, and burying one in a document whose contract is *"rewrite
+  me when I go stale"* would eventually delete it by routine maintenance.
+  §4.2's entry format is fixed at four parts — **the property, the measurement
+  that established it, the test that pins it, and the refactor it forbids** —
+  because a guarantee without its measurement is a claim, and one without its
+  forbidden refactor does not tell a future engineer what they may not do,
+  which is the only reason to write it down.
+
+  **What this decision does NOT do.**
+
+  - It does **not** guarantee that a `TextRun` corresponds to one show
+    operator. **It does not** — measured at **2,420 of 18,559 runs (13.0 %)**
+    carrying glyphs from more than one. That figure is a **measurement of real
+    files**, not a promise about the model, and §4.2.1 says so explicitly so
+    the two are not conflated by a later reader.
+  - It does **not** guarantee `text.chars().count() == glyphs.len()`. It does
+    not hold (`/ToUnicode` maps a code to a **string**, ISO 32000-1 §9.10.3);
+    the **absence** of that guarantee is what §4.2.1 and
+    `docs/core-api/01-reading-and-model.md` §8.4.0 exist to state.
+  - It does **not** open §4.2 as a general dumping ground. Every entry is a
+    constraint on work nobody has done yet; the bar is a consumer that would
+    otherwise re-implement the property (`R221`) or rely on it silently.
+
+  **No standing rule minted for this half** — it is a boundary/contract
+  decision, the same species as 058, and 058's reasoning applies unchanged.
+  The session's rule mint (`R223`) comes from a different finding entirely.
+  **Ceiling moves 093 → 094; next free 095.**
+
+  **★ DECLINED IN THE SAME BREATH, recorded so the absence is not read as an
+  oversight: `accept_font_target` as the single acceptance predicate
+  (`Pass 142.1`/`144.0`) is NOT a decision record.** It is a correct
+  **application of `R221`**, an existing standing rule, to a new subsystem —
+  not a new boundary, crate split, library choice or invariant definition.
+  Filing every correct application of a standing rule as a decision would make
+  this log a duplicate of `ROADMAP.md`'s *Shipped* section and dilute the
+  entries that genuinely constrain future work. Precedent: the 295th filing
+  declined a mint on exactly this ground. The instance itself is recorded — in
+  the combined `Pass 142.1`/`144.0`/`145.0` *Shipped* entry and in `R221`'s
+  own amendment.

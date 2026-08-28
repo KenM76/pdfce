@@ -33,6 +33,29 @@ BLOCKED rather than skipped"* — a claim to the operator, sourced from a commen
 rather than from the tree. **The librarian caught it by grepping** when it was
 dispatched to file the Pass.
 
+**★ A SECOND AND THIRD INSTANCE, 2026-08-27, `Pass 144.0` — and this pair
+shows the OTHER way the claim goes stale: a LATER CALLER falsifies it.**
+
+- `synth.rs`'s `name_claims_bold` said the heuristic *"is used only in the
+  direction where being wrong is safe: `detect` uses it to say 'this looks
+  synthesized', **never to refuse an edit**."* **True when written.**
+  `format::gate_synthesis` was then written as a second caller and it refuses
+  edits. Nothing reported it; `cargo doc` cannot check a claim about callers.
+  It was found only because the Pass fixing the refusal read the function it
+  was calling.
+- `gate_synthesis`'s own doc said asking for synthetic bold on `Times-Bold`
+  *"is refused with that same face named"*. Reading the source: `!is_self`
+  **skips** the run's own resource, so it is never named. Nobody had reported
+  this one either, and it had been wrong since the function was written.
+
+⇒ So the class has two halves: a claim goes stale when a caller is **added**,
+and it can be **wrong on the day it is written** if the author described the
+intent rather than the code. Both are invisible to every tool.
+
+**When you correct one, keep the old wording STRUCK rather than replacing it.**
+The failure mode is worth more than the correction, and a silent replacement
+erases the evidence that the class exists.
+
 **The mechanism, which is the transferable part:** I knew a new caller had
 appeared, so I *reasoned* about what the sentence should now say instead of
 re-running the check. Correcting a stale measurement by inference produces a
