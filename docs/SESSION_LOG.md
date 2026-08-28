@@ -70975,3 +70975,325 @@ reading it.**
   as a decision, not an omission.**
 
 ---
+
+## 2026-08-28 (300th filing) — `Pass 148.0` (`f1a88e6`) SHIPS **A DEFECT THIS ROLE FOUND IN A SWEEP NOBODY DISPATCHED, AND IT WAS THE WORST OF THE THREE INSTANCES**: `preview_style_resolution` — the query that decides where a Bold button routes — answered `RealFaceResolves { "Times-Bold", "F3" }` for an empty `find` and `{ "Calibri-Bold", "F2" }` for the explicit one, **same page, same operator**, with `/F3` the face that provably cannot show the run; ★★★★★ **a list's wrong entry is a row an operator can look past — a ROUTING DECISION's is `set_font("Times-Bold")`, which refuses, so there is NO BOLD BY EITHER ROUTE**, which is `Pass 144.0`'s defect reached through a different door four hours after `144.0` closed the first one; ★★★★ **three consecutive Passes each fixed one route and left another (`145.0` → `147.0` → `148.0`) and NEITHER OF THE LAST TWO WAS FOUND BY THE ENGINEER RE-READING HIS OWN WORK** — one by a consuming project, one by this role ⇒ ***enumerating routes from the FUNCTION being fixed enumerates the instance, not the class***; ★★★ **standing rule `R224` MINTED on the 299th filing's own revisit trigger, argued on REACH — and on one fact the decline could not have had: the agent-memory carrier it deferred to was amended the same night and `grep` shows it DOES NOT CARRY THIS INSTANCE**; ★★ **the new test's load-bearing half is a SOURCE SCAN, the only assertion that can fail on a fifth route added next month; its first cut used a 30-line window and reported ALL FOUR KNOWN-GOOD SITES as violations — the bad heuristic failed LOUDLY, which is the only reason it was replaced**; ★ **two self-corrections to the 299th filing: the `2 of 3` ratio was measured by a `grep` scoped to one FILE and the true figure was `3 of 4`, and an `R221` amendment the log said had landed HAD NOT**
+
+**Dispatch:** *"roadmap update — pass shipped"*, from `pdfce-engineer`, with the
+exact hashes supplied (`f1a88e6` the Pass, `9d1f543` the docs/memory commit) and
+an instruction to run the channel check first per `R203`(d). **CI was RED when
+this filing was dispatched**: `f1a88e6` is a code commit in no filing, and
+`9d1f543` sits above it and is not a filing subject (`CODE_PREFIXES` are
+`crates/ tools/ fixtures/ .github/ fuzz/`; it touches only `docs/` and
+`.claude/`). **This filing is what turns it green**, and the engineer holds the
+push until it commits.
+
+**Shipped:**
+
+- **`Pass 148.0`** (`f1a88e6`) — `preview_style_resolution` passed the caller's
+  raw `find` to `gate_synthesis`, so an empty one surveyed **zero characters**,
+  every face passed, and the query returned a **routing decision** naming a face
+  that `set_font` would refuse. Fixed by calling `effective_find` and refusing
+  an unpinned empty `find` in `match_run`'s existing words. **2 files, +351/−0 —
+  86 % of it the instrument** (`crates/pdfce-core/tests/route_enumeration.rs`,
+  +302).
+
+**★★★★★ PROVENANCE IS THE HEADLINE: THIS ROLE'S 299th-FILING SWEEP FOUND A LIVE
+DEFECT NOBODY DISPATCHED IT TO LOOK FOR, AND IT WAS THE WORST OF THE THREE.**
+
+Every prior hard-rule-11 sweep in this file turned up **wording** that had gone
+false — a doc comment, a `println!`, a `FEATURES.md` row, a table header. The
+299th's turned up **executable code carrying the same bug the Pass it was filing
+had just closed**, and `Pass 148.0` is that finding shipped, four hours later.
+
+- **The engineer reproduced it before believing it** — three probe calls on
+  `fixtures/synthetic/textedit/format_family.pdf`, tabulated in the Shipped
+  entry. **Every particular of the analysis held, including the "worse than the
+  pre-flight" judgement**, which was the part most open to being read as
+  rhetoric. ⇒ Recorded against `R203`: **the reproduce-before-believing
+  obligation attaches to the CLAIM, not to who filed it**, and a report from
+  inside the project is if anything *more* likely to be waved through.
+- **A `grep` for `preview_font_resources` returns `preview_style_resolution`
+  zero times.** Nothing textual connected them. What connected them was the
+  question *"what else decides something from the caller's string?"* — the
+  strongest evidence yet for hard rule 11's **search-for-the-claim** clause.
+- **Filed as a boundary, not a boast:** the sweep is a *reading*, and it worked
+  here because the meaning-change was fresh in the same filing. **The instrument
+  is the half that will still be working next month**, which is why `R224`'s
+  second clause is about the instrument and not about the reading.
+
+**Findings + decisions:**
+
+- **★★ WHY THIS INSTANCE WAS WORSE, AND IT IS WHY IT IS ITS OWN PASS.**
+  `preview_font_resources` returns a **LIST** — a wrong entry is one row an
+  operator can look past, and pressing it yields a named refusal.
+  `preview_style_resolution` returns a **ROUTING DECISION** — `WouldSynthesize`
+  vs `RealFaceResolves` — so a wrong `RealFaceResolves` sends the Bold button to
+  `set_font` on a refusing face **and suppresses the synthesis fallback**. ⇒
+  **No bold by either route**, i.e. `R221`'s *third*-instance cost profile (a
+  capability removed), not its fourth's (a richer-looking list).
+- **★★ THE JUDGEMENT THIS ROLE FLAGGED AS THE ENGINEER'S WAS MADE, AND ITS
+  SECOND ARGUMENT IS THE TRANSFERABLE ONE.** Refusing an unpinned empty `find`
+  is a **behaviour change for an existing caller**. The engineer shipped it on
+  two arguments: an error beats a wrong answer about an operator nobody named
+  (*about this call*), and *"a third behaviour across five entry points would be
+  a third thing to remember"* (*about the set*). ⇒ ***When a change would give
+  one member of a uniform set a third behaviour, count the cost against the SET,
+  not against the member*** — the member-local reading always makes the third
+  behaviour look like the smaller change.
+- **★★ THE INSTRUMENT, AND ITS FAILED FIRST CUT IS THE FINDING.** Test 2 of
+  `route_enumeration.rs` asserts **every function calling `find_anchor` also
+  calls `effective_find`** — a source scan, and *the only assertion in the file
+  that can fail on a route added after the test was written*; test 1's behaviour
+  sweep over four entry points is **bounded by the list somebody remembered**.
+  The scan's first cut used a **30-line window** and **reported all four
+  known-good sites as violations** (the resolution legitimately sits 70+ lines
+  later). ⇒ ***A gate with a tuning parameter has exactly one direction of
+  travel under pressure — looser*** — so the unit became the **function body**,
+  which the language already defines. **★ And the bad heuristic failed LOUDLY,
+  which is the only reason it was replaced: a lenient one passes forever and is
+  indistinguishable from a working gate.** Write the strict version first.
+- **★ THREE DETAILS THAT KEEP A SOURCE SCAN HONEST**, read here in the test
+  source rather than taken from the commit message: a **floor**
+  (`callers.len() >= 4`), because a scan goes **vacuous rather than red** when
+  its anchor is renamed; a **named exemption list, empty at birth**, whose
+  entries are claims reviewable in a diff (*"widen it by name, with a reason —
+  do not delete the test"*); and **exclusion of the definition and of `///`
+  mentions**, whose false positives are what push a later reader to loosen.
+- **★ A `ResolvedFind` NEWTYPE WAS DECLINED ON THE RECORD, IN THE TEST'S OWN
+  MODULE DOC** — *"it changes four signatures to prevent a class that has now
+  been closed, and the cheap detector comes first."* ⇒ *Reach for the type on
+  the second firing.* Recorded so a later session reads the absence as a
+  decision.
+- **★ SABOTAGE THAT REDDENS THE STRUCTURAL ASSERTION IS BETTER EVIDENCE THAN
+  `Pass 147.0`'s.** Removing the `effective_find` call turns **3 of the 4** new
+  tests red **including the source scan** — which proves the scan is *coupled to
+  the property*, not merely present. The one staying green is the
+  unpinned-refusal test, the correct discrimination since it exercises the other
+  half. **A source scan that stays green under a mutation of the thing it scans
+  for is a scan whose anchor has drifted** — the failure the floor exists for.
+
+**★★★ TWO SELF-CORRECTIONS TO THE 299th FILING, BOTH FOUND BY MEASURING RATHER
+THAN RE-READING:**
+
+- **THE RATIO.** That filing's ledger recorded *"`effective_find` call sites —
+  **2 of the 3** entry points"*. **Both numbers were wrong; the true figure was
+  `3 of 4`.** `plan_edit` calls `effective_find` at `edit.rs:1643` and
+  **predates this whole sequence** (`git show 0c24cad:…/edit.rs`, run here). The
+  cause: the measurement was `grep -n "effective_find" …/format.rs` — **a search
+  scoped to the FILE the defect was in.** ⇒ ***A ratio measured with a search
+  scoped to one file has a denominator set by the file, not by the class*** —
+  **the same error `R224` is minted about, committed in the measurement instead
+  of in the code, by the role reporting the error.** At `f1a88e6` the figure is
+  **`4 of 4`** (`grep -rn` over `crates/pdfce-core/src/`, run here). A smaller
+  sibling in the same section: *"four call sites (`2681`, `2688`, `2699`)"* — a
+  count of four beside a list of three, hard rule 10(a)'s shape three words from
+  its own per-item form. Both left in place under an **amendment footer** (hard
+  rule 1), not edited.
+- **★★ AN AMENDMENT THE LOG SAID HAD LANDED HAD NOT.** The 299th entry states
+  *"[Amended again in the same filing: instance 5, the `preview_style_resolution`
+  survivor above.]"* about `R221`. **It is not in `R221`'s text** — `grep` over
+  the *Standing rules* section, run this filing, returns no hit. The intent was
+  recorded in the log; the edit did not land in the rule. **Written in now, as
+  instances 5 and 6.** ⇒ ***A filing's summary of what it edited is a claim
+  about a file, and it is checkable against that file*** — hard rule 8's
+  discipline pointed at this role's own output rather than at git or the
+  backups.
+
+**Standing-rule dispositions — ONE MINT, and every other disposition argued:**
+
+- **★★★★ `R224` MINTED — *the unit of a route enumeration is the OPERAND, never
+  the function being fixed; and the only test that covers a route nobody has
+  written yet is a source scan with no tuning parameter.*** Minted on the
+  **explicit revisit trigger the 299th filing set for itself** when it declined
+  this same mint: *"if it recurs once more in the project record, mint it, and
+  the argument will be REACH, not count."* `Pass 148.0` is the third route in
+  one defect and the second miss in eight hours, **filed as a Pass** — the
+  project record, which is what the trigger named. **All three of the decline's
+  reasons are re-argued individually in the rule**, not re-derived: reason 1 is
+  **falsified by measurement** (the agent-memory carrier was amended the same
+  night at `9d1f543` and `grep -c "preview_style_resolution\|148.0"` over it
+  returns **0** — it carries `147.0`'s pinned/unpinned split and stops, so the
+  route that motivated the instrument is *not in the carrier the decline
+  deferred to*); reason 2 is **true of `147.0`'s finding and not of this one**
+  (`R219` says enumerate, clause (e) says measure — **neither states the
+  enumeration's UNIT nor prescribes an instrument covering routes not yet
+  written**); reason 3 **survives as a caution and is answered on the merits**
+  (`R221` is about two *computations* that drift; a standing rule and an
+  agent-memory file are two *audiences*, and nothing computes from either).
+  **⇒ The argument is reach:** agent memory is read by one agent; `ROADMAP.md`
+  by every agent and the operator — and **the two roles that found the last two
+  instances, a consuming project and this librarian, can read neither the
+  engineer's memory nor his intentions.**
+- **`R219` clause (e) — NOT amended, and the dispatch's suggestion of a second
+  instance is DECLINED with a reason.** Clause (e) is about a **negative answer
+  recalled instead of measured**. In `Pass 148.0` nobody recalled anything: the
+  engineer **ran the probe before believing the report** and **wrote the test he
+  expected to pass**. ⇒ **This is clause (e)'s first live COMPLIANCE**, recorded
+  as such in the rule, one filing after its mint, at a cost of one test.
+  *Filing a compliance as a violation would make the instance count a measure of
+  how often a rule is discussed rather than how often it is broken.* The
+  instrument half — a scan whose window would be widened until it cannot fail —
+  is a **different obligation** and goes to `R224`; putting it in both would be
+  two descriptions of one rule, **the very objection the 299th filing declined a
+  mint over, honoured here even though its conclusion is reversed.**
+- **`R221` — instances 5 and 6, amended in place (instance 5 filed for the first
+  time; see the self-correction above).** The new information is the **remedy,
+  not the count**: instances 4 and 5 were closed by making the second
+  description *call* the first; `148.0` did that **and then asserted in the
+  source that no future description can avoid calling it.** ⇒ ***`R221`'s remedy
+  has two tiers: collapse the parallel descriptions, then make the collapse
+  ENFORCEABLE.*** This defect took three consecutive Passes to close with tier
+  one alone.
+- **`R203` — instance count unchanged at 4; a note added** recording that the
+  reproduce-before-believing obligation held for a report **this project filed
+  against itself**. Second consecutive clean clause-(d) channel check, with the
+  same caution both times: *a clean result from a check that previously kept
+  failing is evidence about the CHECK, not about the hazard.*
+- **No decision record.** A test file is not an architectural decision, and the
+  shared `effective_find` is an **application** of `R221` — the same disposition
+  the 297th, 298th and 299th filings gave the same species of candidate.
+  **Decisions stay at `094`; next free `095`.**
+
+**★★ CHANNEL CHECK — RUN FIRST, `ls -lt` PLUS EVERY FILE NEWER THAN THE LAST
+READING** (`R203`(d)):
+
+- Newest file `done_2026-08-28-preflight-resolves-the-pin-CONSUMED.md`,
+  **2026-08-28 00:07** — **pdfce's own outbound reply** for `Pass 147.0`,
+  renamed to the `…-CONSUMED` form since the 299th filing read it. **Opened in
+  full**, not inferred from the name.
+- **Nothing inbound since the 299th filing's 00:39 reading.** The 22:50 note and
+  the 22:57 request were re-opened here; both discharged.
+- `iccce_FeatureRequests/open/` unchanged, newest 2026-08-27 14:22.
+- **Nothing in this filing is refuted by the channel.**
+
+**★ ONE THING THE CHANNEL SAID ABOUT THIS ROLE, RECORDED RATHER THAN QUIETLY
+ABSORBED.** `Pass 147.0`'s outbound reply tells the consuming project that
+*"pdfce's own librarian, filing at 23:5x, quoted your 21:54 request … while your
+22:50 note saying you **had** consumed them sat one line above it in the same
+directory listing. **A directory listing is not a reading.**"* That is the 298th
+filing's error, already recorded there and already why `R203`(d) exists — but it
+has now been **sent to a consuming project**, i.e. it is an external claim about
+this role's method. The record should show that **the claim is accurate** and
+that the fix (open every newer file) has now held for **two** filings.
+
+**Documents edited this filing:**
+
+- **`docs/ROADMAP.md`** — a new *Shipped* entry at the head for `Pass 148.0`
+  (the reproduced probe table, the list-vs-routing-decision comparison, the
+  cause, the fix and the set-level argument for the behaviour change, the
+  three-Pass route table, the instrument and its failed first cut, what the
+  provenance means, verification, the ratio correction, the `R224` argument, the
+  hard-rule-11 sweep, the channel check, backup/remote, the ledger); an
+  **amendment footer** on `Pass 147.0`'s sweep table (the `NO` row is now `YES`;
+  *"there is no third"* had a file-scoped denominator; *"four call sites"* lists
+  three); the ★★★★★ *Next up* box **struck with a discharge banner**, contents
+  left legible; **`R224` minted** in *Standing rules*; **`R221`** amended with
+  instances 5 and 6; **`R219`** given a compliance note and a forward pointer
+  from its declined mint; **`R203`** given the internal-report note.
+- **`docs/FEATURES.md`** — **row 134 edited, no row added, no box changed.** The
+  *"a trap is reported and unfixed"* sentence — **false at `f1a88e6`** — is
+  replaced by the closed contract (all four entry points agree; unpinned empty
+  is refused; a source scan guards a fifth) plus what it meant before. **No box
+  was owed**: a correctness fix adds no capability, and core/cli/gui were
+  already `[x]`. Row 253 checked and left alone — `Pass 147.0`'s contract is
+  unchanged by this Pass.
+- **`docs/SESSION_LOG.md`** — this entry.
+- **`docs/ARCHITECTURE.md`** — **NOT edited.** §12 unchanged at `094`; the
+  `preview_style_resolution` mention at line 6186 is a `Pass 19.3` historical
+  record about call structure, **checked and still true**.
+- **`docs/NEXT_SESSION.md`** — **NOT edited and nothing owed.** The engineer
+  rewrote it at `9d1f543`; it carries the `147.0`/`148.0` route table and the
+  sabotage figures. It is the engineer's file.
+- **`crates/`** — not this role's remit. Reported, not edited.
+
+**Still in flight / for next session:**
+
+- **★★ ACCEPTANCE CRITERION 4 OF THE DISCHARGED BOX IS THE OWED WORK, AND IT IS
+  NOW A REAL GAP RATHER THAN A NEAR-MISS.** `f1a88e6` touches **no documentation
+  file at all** (`git show --stat`, run here: two files, both under `crates/`).
+  - **`docs/core-api/02-editing-and-saving.md:339`** — the
+    `preview_style_resolution` row still reads only *"Pure query."* The function
+    **now refuses** an unpinned empty `find`, so the row understates a
+    behaviour a caller will meet. The 299th filing predicted this exactly
+    (*"becomes owed doc work the moment the survivor is fixed"*); **that moment
+    has arrived.**
+  - **`docs/core-api/03-capabilities.md`** (style-routing prose, ~line 1344) —
+    still silent on what an empty `find` means for either query. **Fifth
+    consecutive filing to report an item in this file.** `R220`'s home: the
+    capability-shaped file a reader arrives at with the *question*.
+  - ⇒ **The CODE contract is now uniform across four entry points and the
+    DOCUMENTATION describes two of them** — `R221`'s subject aimed at prose.
+    Engineer-owned.
+- **`Pass 143.0`** (the `DeviceGray`-under-overprint spec ambiguity) remains in
+  *Backlog* and is the pick-up item now that the survivor is closed. **It must
+  be scoped as a spec ambiguity with a setting, not as a bug** (`NEXT_SESSION.md`
+  §B carries the reason).
+- **★★ A BACKUP IS FOUR FILINGS OVERDUE AND THE EXPOSURE IS NOW TWO PASSES
+  DEEP.** Newest bundle `pdfce-20260827-shutdown-a2b4e16-full.bundle`,
+  2026-08-27 12:04 (`ls -lt D:/Dev/pdfce-backups/`);
+  `git rev-list --count a2b4e16..HEAD` = **30** (was 27);
+  `git rev-parse origin/main` = **`54a3e01`**, **unchanged since the 298th
+  filing**. So `8aa9cea`, `0c24cad`, `f1a88e6` and `9d1f543` — **two Passes, a
+  filing and the handoff** — exist only in this working tree's `.git`. The
+  engineer holds the push until this filing commits (`R217`), so the window is
+  deliberate and short; **it is nonetheless the largest single-point-of-failure
+  window recorded in this file.** ★ **Pushing `main` is standing-authorized**
+  (rule 8, decision **090**, *"always push"*) — a **bundle** is not, and remains
+  the engineer's act.
+
+**Ledger** (`python tools/check-ledger-numbers.py`, run **before** any edit and
+**again after**):
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | highest **`147.0`**, headed | **`Pass 148.0` SHIPPED and headed**; highest **`148.0`**; **next free family `149`** |
+| decisions | **094** | **094 — unchanged.** One candidate declined, reason recorded. Next free **095** |
+| standing rules | **`R223`** | **`R224` — MINTED** (the enumeration's unit is the operand; the instrument is a source scan with no tuning parameter). `R221` amended (instances 5 **and** 6 — 5 filed for the first time); `R219` given a **compliance note**, **no new clause**; `R203` a note. Next free **`R225`** |
+| filings | **299** | **300**. Next free **301** |
+| test suite (engineer's, relayed) | **4,489 passing / 0 failing** | **4,493 / 0** — **+4, all out-of-crate core** |
+| `effective_find` : `find_anchor` call sites | **`2 of 3`** *(WRONG — file-scoped `grep`; the true figure was `3 of 4`)* | **`4 of 4`** — resolutions at `edit.rs:1643`, `format.rs:1514`, `2715`, `3246`; `find_anchor` calls at `edit.rs:1586`, `format.rs:1439`, `2672`, `3208` (`grep -rn` over `crates/pdfce-core/src/`, run here) |
+| `Pass 148.0` diff shape | — | **2 files, +351/−0 = 49 source (32 of them doc comment) + 302 test — 86 % instrument** (`git show --stat f1a88e6`, run here) |
+| `check-*` scripts on disk | **19** | **19 — unchanged.** ★ The denominator for a "gates green" claim remains `bash tools/run-gates.sh` at **25 commands**, not the script count |
+| commits since newest bundle | **27** | **30**; `origin/main` still **`54a3e01`** |
+| `FEATURES.md` rows changed | — | **1 edited, 0 added, 0 boxes ticked** — row 134's trap note replaced |
+
+Pre-edit run: *"Pass families with headings : up to 147 (highest ID 147.0) ·
+standing rules : R223 -> next free is R224 · decision records : 094 -> next free
+is 095 · SESSION_LOG filings : 299 -> next free is 300"*, and *"ledger-numbers:
+clean."* `python tools/check-commits-filed.py` pre-edit: **`f1a88e6` in no
+filing — CI red**, which is what this filing discharges.
+
+**Post-edit, and both denominators are reported per `R209`(e).**
+`bash tools/run-gates.sh` → **PASS, 25 commands, including 2 filing gates**
+(run to completion in the background; its two deliberate skips are
+`cargo about generate` and the `--full` workspace test, named by the runner).
+Separately, the gates a docs-only change can actually move were run
+**individually and read one by one**: **18 of the 19 `check-*` scripts on disk,
+all exit 0** — `check-ledger-numbers.py` (*"headings up to 148 · rules R224 ·
+filings 300"*), **`check-commits-filed.py` CLEAN, no longer reporting `f1a88e6`
+unfiled, which is this filing's discharge measured rather than assumed**,
+`check-cited-commits-exist.py` (79 documents, every cited commit an ancestor of
+`HEAD`), `check-suite-name-absent.py` (rule 8's public-facing gate) and the five
+`.sh` gates. The 19th takes a fixture-directory argument and is invoked with one
+by CI. **★ 25 and 18 measure different sets and both are stated**, because a
+"gates green" claim quoting the wrong denominator is what the 298th filing paid
+for.
+
+**RAG written this filing:**
+
+- `D:/dev/rag/rust/a_behaviour_test_over_an_enumerated_list_cannot_fail_on_a_route_added_later_but_a_source_scan_can.md`
+  — **new**, with a matching bullet appended to `D:/dev/rag/rust/index.md`
+  (hard rule 4: `ls | grep -iE "source_scan|scan|grep|window|tuning|enumerat"`
+  first — the two near neighbours cover *a scan matching its own search literal*
+  and *a grep missing a callback reference*, **neither covers this**). Carries
+  the two-tests-are-not-substitutes argument, the three-Pass evidence table, the
+  30-line-window failure and the *one direction of travel under pressure*
+  formulation, the three honesty details (floor / named exemptions / exclude the
+  definition), the declined newtype and when to reach for it, and the syntactic
+  limits of any such scan.
+- **Nothing written to `C:/personal_rag/pdf/`**, deliberately: the finding is a
+  **testing-methodology** quirk, not a PDF-producer quirk — no real-world file
+  behaves any particular way here. **Recorded so a later index check reads this
+  as a decision, not an omission.**
+
+---
