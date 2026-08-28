@@ -282,3 +282,49 @@ skipped here because the message felt short enough. It was not.
 **And there is no gate for it** — a mangled commit message is a perfectly valid
 commit message. The only detection is re-reading `git log -1 --format=%B` after
 committing, which is cheap and is now the habit.
+
+---
+
+## ★★★ 2026-08-28 — THE INVERSE, AND THIS FILE'S OWN MITIGATION CAUSED IT
+
+Every instance above is *a backslash being eaten*. This one is **a backslash
+being preserved when it needed to be interpreted**, and it arrived through the
+exact fix this file recommends.
+
+I `Write`-ed a patch script to a file (correct — that is the rule) and used a
+Python **raw** triple-quoted string `r'''...'''` for the Rust payload (also
+recommended above, verbatim: *"use a raw string (`r'''...'''`)"*). The payload
+contained `\u2014` for an em dash. Raw means **no interpretation**, so all 17
+of them reached the Rust source as the literal six characters `\u2014`.
+
+Two outcomes, and the second is the dangerous one:
+
+- Inside a **Rust string literal** → hard compile error. Rust wants
+  `\u{2014}` with braces. Loud, cheap, fixed in one pass.
+- Inside a **`///` doc comment** → *compiles perfectly*. It would have shipped
+  as operator-facing `--help` text reading `resize this Square \u2014 the
+  placement matrix…`. No gate sees it: not clippy, not `check-string-gaps.sh`
+  (which looks for runs of spaces), not the UI-strings gate (clap help is not
+  a `ui_text.rs` literal).
+
+⇒ **The two failure modes are opposite and the mitigations are opposite.** A
+NON-raw string eats backslashes you meant to keep; a RAW string keeps
+backslashes you meant to interpret. "Use a raw string" is not a fix, it is a
+*different* bug.
+
+**The rule that covers both without a judgement call: put the actual character
+in the payload, never an escape for it.** Type `—`, `§`, `★`, `×` literally.
+`Write` and `Edit` are UTF-8 end to end and never needed the escape; the escape
+was a habit carried over from environments that did.
+
+**Detection, since no gate exists:** a bare `\uXXXX` **not followed by `{`** is
+never valid Rust. `grep -nP '\\u[0-9a-fA-F]{4}(?!\{)' <file>` — the negative
+lookahead is what keeps genuine `\u{FFFD}` escapes out of the results.
+
+★ Note the meta-shape, which is the reason this is appended rather than filed
+apart: **this file has now recommended a mitigation that became the next
+defect.** A remedy written against one direction of a hazard is not neutral
+about the other direction, and a long rules document accumulates exactly that
+kind of stale advice. The two paragraphs above recommending raw strings and
+doubled backslashes were both later shown insufficient; they are kept visible
+rather than deleted, but they are **not** current guidance.

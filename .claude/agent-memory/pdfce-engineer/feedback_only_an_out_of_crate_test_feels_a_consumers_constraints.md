@@ -37,5 +37,25 @@ one file and it is the only mechanism that makes the consumer's constraints
 compile-checked rather than reported back weeks later through
 `D:\Dev\FeatureRequests\`.
 
+**★ SECOND INSTANCE, 2026-08-28, `Pass 151.0` — and I made it again knowing
+the first one.** `ResizeOptions` shipped `#[non_exhaustive]` with three `pub`
+flags and no builders. Fourteen in-crate tests exercised every combination and
+passed. The out-of-crate integration test refused to compile on the first line
+that tried to construct it.
+
+Two things the repeat teaches that the first instance did not:
+
+- **Knowing the rule did not prevent it.** `#[non_exhaustive]` is *correct* on
+  an options struct, so the attribute goes on by reflex and the builders do
+  not, because nothing in the crate ever asks for them. The trigger is not
+  "remember the rule", it is **write the out-of-crate test first, or at least
+  before you believe the API is done.**
+- **A second-order version bites the OTHER way.** `#[non_exhaustive]` on the
+  *outcome* enum forces every consumer to write a `_` arm — and the
+  compulsory, obvious form of that arm, `_ => {}`, is precisely how a future
+  variant ships as **silence**. Write those arms to speak: report an
+  unrecognised variant *as* unrecognised. The attribute that protects the
+  consumer's build creates a disclosure hole in the same stroke.
+
 Related: [[project_gui_request_channel]] — the channel is where this failure
 arrives if the test does not catch it first.
