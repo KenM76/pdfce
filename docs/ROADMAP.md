@@ -96,6 +96,221 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `c087d47` — ★★★★★ **THE AMEND HAPPENED TWICE, NOT ONCE — AND THE SECOND ONE WAS ON THIS ROLE'S OWN FILING COMMIT, 37 SECONDS AFTER IT WAS PUSHED, 43 SECONDS AFTER THE FIRST ONE HAD BEEN RECOVERED FROM.** A pre-push gate for the one failure CI structurally cannot catch — ★★★★★ **THE COMMIT BEING FILED HERE NARRATES ITS OWN CAUSE AS A SINGLE NEAR-MISS; `git reflog --date=iso`, RUN HERE, SAYS `n=2`** — ★★★★ **BOTH INSTANCES AMENDED AN ALREADY-PUSHED COMMIT, BOTH LEFT THE TREE BYTE-IDENTICAL, BOTH WERE CAUGHT BY HAND, AND THE GATE FIRED ON NEITHER — IT WAS WRITTEN 11 MINUTES AFTER THE SECOND** — ★★★ **THE SECOND RECOVERY WAS `reset: moving to origin/main`, WHICH IS THE GATE'S OWN PRINTED REMEDY, EXECUTED 71 MINUTES BEFORE THE GATE EXISTED** — ★★ **CI CANNOT CATCH THE CLASS STRUCTURALLY: EVERY OTHER GATE ASKS ABOUT THE *TREE*, WHICH THE SERVER RE-CHECKS; THIS ONE ASKS ABOUT THE BRANCH-TO-REMOTE RELATIONSHIP, AND BY THE TIME CI RUNS THE PUSH HAS HAPPENED** — ★ **NOTHING MINTED, AND BOTH CANDIDATES ARE ARGUED RATHER THAN DEFAULTED** — no Pass ID, no decision minted; commit `c087d47` touches `tools/` and is cited here to satisfy `check-commits-filed.py` — filed 2026-08-28 (302nd filing)
+
+**Commit:** `c087d47`, 2 files, **+175 / −2** — `tools/check-history-not-rewritten.py`
+(**+152**, new, of which **68 of 152 are module docstring** — `git show
+--numstat` and a line count of the docstring, both run here) and
+`tools/run-gates.sh` (**+23 / −2**). **Not a Pass**, and no Pass ID is claimed: precedent is
+`e11b4f8` and `5ef5498` (the 169th/170th filings' `tools/`-and-docs commits),
+and `1e62715` eleven commits below this one.
+
+**Filed BLOCKING.** `check-commits-filed.py` defers exactly one commit at the
+tip — a commit cannot cite its own hash — and `c087d47` was that one. The
+engineer's next code commit would have shielded it out of the deferral window
+and turned CI red, which is precisely the `R217` sequence that went wrong twice
+on 2026-08-27. **This filing is what prevents the third time.**
+
+---
+
+#### ★★★★★ THE INCIDENT IS `n=2`, NOT `n=1` — AND THE SECOND INSTANCE IS THE ONE THAT MATTERS MOST TO THIS ROLE
+
+`c087d47`'s commit message, `check-history-not-rewritten.py`'s module
+docstring, and `docs/NEXT_SESSION.md` §A all describe **one** amend of an
+already-pushed commit. **`git reflog --date=iso`, run here at filing time,
+records two**, 43 seconds apart:
+
+| # | pushed commit | pushed at (CI `createdAt`) | amended to | amended at | gap | recovered at | recovery gap |
+|---|---|---|---|---|---|---|---|
+| 1 | `36e7b66` *(Pass 148.0's doc commit)* | **05:33:21Z** (run `33145114863`, `headSha 36e7b660…`) | **`eab7da4`** | 05:45:54Z | **12 m 33 s after the push** | 05:49:03Z | 3 m 09 s |
+| 2 | **`0d20861`** *(the 301st filing — this role's own commit)* | **05:50:10Z** (run `33145965217`, `headSha 0d20861f…`) | **`fa16819`** | 05:50:47Z | **37 s after the push** | 05:50:52Z | **5 s** |
+
+*(Push times are read from GitHub — `gh run list --json headSha,createdAt`, run
+here — not inferred. Reflog times are `-0400`; the table is normalised to `Z`
+to sit beside them. Instance 2's 37 s is `05:50:47 − 05:50:10`; its 43 s
+separation from instance 1's recovery is `05:50:47 − 05:49:03` = 1 m 44 s to
+the amend, 43 s from the 301st filing's own commit at `05:50:04`.)*
+
+**Both amends left the tree byte-identical.** `git diff --stat 36e7b66 eab7da4`
+and `git diff --stat 0d20861 fa16819` both return **empty** — metadata only, in
+both cases, so both were recoverable with nothing lost. **Both orphans are
+confirmed orphans today:** `git merge-base --is-ancestor` says `eab7da4` and
+`fa16819` are **NOT** ancestors of `HEAD`; they exist in the object store and
+in no branch.
+
+**★★★ AND THIS FILING HAS A DATED SELF-DESTRUCT THAT `check-cited-commits-exist.py`
+CANNOT SEE, WHICH IS ITSELF A FINDING ABOUT THAT GATE.** The two hashes above
+are cited here as evidence, and they are **unreachable objects** — no branch,
+no tag, reflog-only. `tools/check-cited-commits-exist.py` resolves a citation
+with **`git cat-file -t`** (line 215, read here), which answers *"does this
+object exist?"* and **not** *"is it reachable?"* — so this entry passes the gate
+**today** (verified: exit 0 with `eab7da4` and `fa16819` in the file) and will
+**fail it** whenever `git gc` prunes them, which unreachable objects invite by
+default once the reflog expiry window passes.
+
+⇢ ***A gate written to protect cited hashes cannot tell "exists" from
+"reachable", and this is the first filing to cite hashes that are the first but
+not the second.*** Two honest dispositions, and the choice is the engineer's:
+teach the gate the distinction (report an unreachable citation as a **warning
+with its reason**, not a pass and not a failure), or exempt these two tokens by
+name. **What must not happen is a future session meeting a red
+`check-cited-commits-exist.py` on this entry and concluding the record is
+corrupt** — it is not; the objects were always unreachable and the **reflog
+table above is the evidence**, not the objects. Reported as owed work.
+
+**⇢ The correction strengthens the commit rather than undermining it.** A
+single harmless near-miss found by luck is a thin warrant for a new gate. **A
+behaviour that recurred within the same minute, after the first occurrence had
+already been noticed and hand-recovered, is not a near-miss — it is a
+repeating action nobody is announcing**, and the second occurrence landed on
+**the commit type whose entire content is hash citations.**
+
+**★ AND THE SECOND RECOVERY IS THE GATE'S OWN ADVICE, EXECUTED BEFORE THE GATE
+EXISTED.** The reflog line is literally `reset: moving to origin/main`, at
+05:50:52Z. `check-history-not-rewritten.py` was committed at **06:02:03Z**,
+**11 minutes later**, and the remedy it prints is `git reset --mixed
+origin/main`. ⇢ *The right move was already known and was already being made by
+hand; what was missing was not the knowledge but the **announcement**. That is
+the correct reading of what this gate buys — it does not teach the fix, it
+removes the dependence on somebody happening to look.*
+
+**★★ Two earlier `commit (amend)` reflog entries are NOT instances, and are
+recorded so the count is not inflated.** `5f6ac58` (2026-08-27 05:50:26 −0400,
+`Pass 136.2`) and `0f09780` (2026-08-25 16:44:26 −0400, `Pass 126.1`) are both
+**ancestors of `HEAD`** — they are the surviving commits, i.e. ordinary amends
+of not-yet-pushed work, which is the harmless and intended use. **The class is
+"amend of a *published* commit", not "amend".** `0f09780` is in fact cited by
+`docs/FEATURES.md` as `Pass 126.1`'s hash, which is the citation dependency
+this whole gate protects.
+
+---
+
+#### ★★ WHY CI CANNOT CATCH IT — THE STRUCTURAL ARGUMENT, WHICH IS THE PART WORTH KEEPING
+
+Every other command in the local sweep asks a question **about the tree**, and
+the server re-checks it. This one asks about **the relationship between the
+local branch and the remote** — and by the time any CI job starts, the push has
+already happened. If the push was a `--force`, the damage is public before the
+first job is scheduled.
+
+**A pre-push check is therefore the only place it can live.** That is why it is
+**deliberately absent** from `check-ci-parity.py`'s derived list — that script's
+premise is *every CI command has a local runner*, a CI→local direction; this is
+the **converse**, a local command with no CI counterpart, and it is outside that
+script's remit by construction rather than by omission.
+
+**Why the class is expensive here specifically, and not in general:** every
+filing in this project cites the hash of the commit it narrates.
+`tools/check-cited-commits-exist.py` exists **because** a rewrite once orphaned
+**fourteen** cited hashes at once (`0d9f4df`). A force-push of either of
+tonight's amends would have done the same to a **public** repository, which
+project rule 8 classes as unrecoverable for anyone who has already cloned.
+
+---
+
+#### WHAT SHIPPED
+
+**`tools/check-history-not-rewritten.py`** (152 lines, new) asks **one
+question — is `origin/main` an ancestor of `HEAD`?**
+
+- **yes** → the branch is published history plus zero or more commits: the only
+  shape an ordinary fast-forward push can produce, and the only shape decision
+  **090**'s standing *"always push"* authorisation covers. It prints how many
+  commits ahead.
+- **no** → published history has been rewritten. It **names the orphaned
+  commits** — those are exactly the hashes documents may still cite — and prints
+  the remedy: **`git reset --mixed origin/main`, never `--force`**, plus a
+  pointer to check the reflog for `(amend)`/`rebase`/`reset` to find what did it.
+
+Three deliberate non-behaviours, all argued in the source and verified here by
+reading it:
+
+- **It does not fetch.** A gate that reaches the network fails on a train, and a
+  stale `origin/main` can only make the check **lenient**, never wrong in the
+  direction that matters — if the remote has moved on, the server rejects the
+  push anyway.
+- **It does not object to being BEHIND.** Behind is normal and recoverable;
+  rewritten is neither.
+- **No remote, or no remote branch, is a clean pass that SAYS SO** rather than
+  passing silently — *"clean"* and *"nothing to compare"* are different answers
+  and only one of them is reassuring. This project genuinely had no remote until
+  2026-08-09.
+
+Exit codes: `0` clean (or nothing to compare), `1` rewritten, `2` could not run.
+
+**Wired into `tools/run-gates.sh` FIRST**, ahead of everything else, because its
+failure invalidates the meaning of the rest: **a sweep that certifies a tree
+whose history has been rewritten is certifying something nobody else can see.**
+`--list` labels it visibly as *"pre-flight, first; CI cannot check this one"*.
+
+**Figures, each filed beside its per-item form and with its denominator**
+(hard rule 10):
+
+| figure | before | now | how measured, here |
+|---|---|---|---|
+| `run-gates.sh` sweep | **25 commands** | **26 commands** = **1** pre-flight + **23** main + **2** filing gates | `bash tools/run-gates.sh --list`, run here and counted |
+| `tools/check-*` scripts on disk | **19** *(298th filing)* | **20** | `ls tools/check-*.py tools/check-*.sh \| wc -l`, run here |
+| `check-ci-parity.py` classification | — | **22 local / 11 named stand-in / 3 CI-only** = 36 CI commands | `python tools/check-ci-parity.py`, run here — **clean** |
+
+**Verified by reproducing the actual incident** (engineer's, relayed, and
+consistent with the reflog evidence above): clean tree → exit `0`;
+`git commit --amend --no-edit` → exit `1`, naming the orphaned commit;
+`git reset --mixed origin/main` → exit `0`. ⇢ *The sabotage was the real defect
+and the recovery was the gate's own printed advice executed verbatim* — which
+the reflog now shows had **already happened for real**, twice, before the test
+was written.
+
+**Re-run here at filing time:** `python tools/check-history-not-rewritten.py` →
+*"clean — HEAD is a descendant of origin/main (0 commit(s) ahead)"*, exit `0`.
+
+---
+
+#### ★ MINTING — NOTHING MINTED, AND BOTH CANDIDATES ARE ARGUED
+
+**(a) *"a subagent can rewrite published history without announcing it"* —
+DECLINED.** The engineer's own objection is the correct one and it is `R221`'s
+subject: **a standing rule here would be a second description of a mechanical
+gate, and two descriptions of one thing drift.** Three further reasons, and the
+decline rests on the shape rather than on the count:
+
+1. **The prohibition already exists and is not the gap.** Project rule 8 forbids
+   `git push --force` and any push that rewrites published history **by name**,
+   with this repository's own fourteen-orphan precedent attached. A new rule
+   would be the **third** description of one prohibition.
+2. **A rule cannot bind the failure mode.** Neither amend was a decision to
+   rewrite published history — both were an `--amend` reflex by an agent that
+   did not know the commit was published. **A rule asks an actor to not do
+   something it does not know it is doing; the gate asks the tree a question
+   that has exactly one answer.**
+3. **★ The evidence says knowledge was never the missing input.** The correct
+   remedy was executed by hand **twice**, the second time in five seconds, and
+   the second time was **71 minutes before the gate was written**. What failed
+   was announcement, and announcement is machinery.
+
+**(b) *"a check CI structurally cannot perform belongs in the pre-push sweep,
+and its absence from `check-ci-parity.py` is deliberate rather than an
+omission"* — DECLINED AS A RULE, because it is already recorded in the two
+places a future reader actually arrives from**, and both were read here:
+
+- `check-history-not-rewritten.py`'s docstring — *"which is why it is not in
+  `check-ci-parity.py`'s list and is run explicitly by `tools/run-gates.sh`"*;
+- `run-gates.sh`'s comment **at the invocation site** (lines 170–186) — *"THE ONE
+  CHECK CI STRUCTURALLY CANNOT PROVIDE, so it is named here rather than derived
+  from the workflow … which is also why `check-ci-parity.py` does not know about
+  it"*;
+- and `--list`'s printed header, *"pre-flight, first; CI cannot check this one"*,
+  which puts it in front of anyone who runs the sweep.
+
+A standing rule would be a **fourth** description. ⇢ ***The real gap this
+candidate points at is not a missing rule — it is a stale sentence in
+`run-gates.sh`'s own header***, reported as owed work below.
+
+**Ledger effects.** No Pass ID claimed. **No decision minted; `095` stays next
+free.** **No standing rule minted; ceiling stays `R224`, next free `R225`.**
+Next free filing ordinal: **303**.
+
+---
+
 ### `Pass 148.0` (`f1a88e6`) — ★★★★★ **A DEFECT THIS ROLE FOUND IN A SWEEP NOBODY DISPATCHED IS SHIPPED FOUR HOURS LATER, AND IT WAS THE WORST OF THE THREE INSTANCES: `preview_style_resolution` — THE QUERY THAT DECIDES WHERE A BOLD BUTTON ROUTES — ANSWERED `RealFaceResolves { "Times-Bold", "F3" }` FOR AN EMPTY `find` AND `RealFaceResolves { "Calibri-Bold", "F2" }` FOR THE EXPLICIT ONE, SAME PAGE, SAME OPERATOR** — ★★★★★ **A LIST'S WRONG ENTRY IS A ROW AN OPERATOR CAN LOOK PAST; A ROUTING DECISION'S IS `set_font("Times-Bold")`, WHICH REFUSES — *NO BOLD BY EITHER ROUTE*, WHICH IS `Pass 144.0`'s DEFECT EXACTLY, REACHED THROUGH A DIFFERENT DOOR FOUR HOURS AFTER `144.0` CLOSED THE FIRST ONE** — ★★★★ **THREE CONSECUTIVE PASSES EACH FIXED ONE ROUTE AND LEFT ANOTHER (`145.0` → `147.0` → `148.0`), AND *NEITHER OF THE LAST TWO WAS FOUND BY THE ENGINEER RE-READING HIS OWN WORK* — ONE BY A CONSUMING PROJECT, ONE BY THIS ROLE'S SWEEP** ⇒ **ENUMERATING ROUTES FROM THE *FUNCTION* BEING FIXED ENUMERATES THE INSTANCE, NOT THE CLASS** — ★★★ **STANDING RULE `R224` MINTED ON THAT SHAPE, ON THE REVISIT TRIGGER THE 299th FILING'S OWN DECLINE SET, AND THE ARGUMENT IS *REACH*, NOT COUNT — PLUS ONE FACT THE DECLINE COULD NOT HAVE HAD: THE AGENT-MEMORY CARRIER IT DEFERRED TO WAS AMENDED THE SAME NIGHT AND **DOES NOT CARRY THIS INSTANCE** (`grep`, run here: 0 hits)** — ★★ **THE NEW TEST'S LOAD-BEARING HALF IS A *SOURCE SCAN*, THE ONLY ASSERTION IN THE FILE THAT CAN FAIL ON A FIFTH ROUTE ADDED NEXT MONTH; ITS FIRST CUT USED A 30-LINE WINDOW AND REPORTED ALL FOUR KNOWN-GOOD SITES AS VIOLATIONS — *THE BAD HEURISTIC FAILED LOUDLY, WHICH IS THE ONLY REASON IT WAS REPLACED*** — ★ **THIS FILING CORRECTS ITS OWN PREDECESSOR'S RATIO: `2 of 3` WAS MEASURED BY A `grep` SCOPED TO ONE FILE, AND THE TRUE FIGURE WAS `3 of 4` — THE DENOMINATOR ERROR IS THE *SAME* ERROR `R224` IS BEING MINTED ABOUT, COMMITTED IN THE MEASUREMENT INSTEAD OF IN THE CODE** — 2026-08-28 (300th filing)
 
 **Commit:** `f1a88e6`, 2 files, **+351 / −0** — `crates/pdfce-core/src/text_edit/format.rs`
