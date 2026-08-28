@@ -55,6 +55,29 @@ Instance 4 is the one to remember: **the instrument inherited the bug it was
 built to catch**, because its scope was set by whatever was in front of me
 while I wrote it.
 
+**★★ RECURRED 2026-08-27, AND THE INSTANCE I SKIPPED WAS THE MORE REACHABLE
+ONE.** A consuming project reported that `preview_font_resources(page, "",
+Some(pin))` surveyed zero characters and reported every font as accepted. I
+fixed the **pinned** case — and *reasoned* that the **unpinned** case already
+errored, because `match_run` refuses an empty `find` on the commit path.
+
+It does not. `find_anchor` with no pin runs `s.text.contains(find)`, and
+**every string contains the empty string**, so an unpinned empty `find`
+silently matched the first show operator on the page and surveyed against
+nothing. Same defect, no pin required — i.e. reachable *by accident* rather
+than by following documentation, which makes it the **more** likely one to be
+hit.
+
+The reporter had actually offered that half as their alternative remedy
+("refuse an empty `find` by name") and I read it as an either/or. **Both were
+needed and I had one.**
+
+A test I wrote expecting it to pass is what caught it. That is the pattern
+worth keeping: when you catch yourself writing *"unchanged, and it must stay
+unchanged"* in a test comment, you are asserting a belief you have not
+measured. Write the test anyway — it costs nothing and it is the only thing
+that distinguishes a true assumption from a false one.
+
 **How to apply:**
 - Ask *"how many of these did I just create?"* before declaring an oracle
   discharged. Two is enough for this to bite.

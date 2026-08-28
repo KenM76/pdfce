@@ -64,6 +64,46 @@ evidence is a red run on an intermediate commit that nobody will look at
 again. It costs nothing *now* and it is exactly the kind of thing that makes
 "CI is green" stop meaning anything.
 
+---
+
+## ★★★ RECURRED AGAIN 2026-08-27 — THREE unfiled commits, and the real cause was the SWEEP, not the ordering
+
+CI went red on `0c48bbf`. Three code commits (`2e6235c`, `cfa2c44`,
+`0c48bbf`) had been pushed with no filing anywhere behind them, so the two
+below the tip were checked in full and both failed. The rule above says "never
+two" and I pushed three.
+
+**But the diagnosis "I forgot the ordering" is wrong, and the true one is
+worth more.** I ran a THIRTEEN-GATE SWEEP green before every push that
+session — and `check-commits-filed.py` and `check-passes-filed.py`, the two
+gates whose entire job is this ordering, **were not in it.** The sweep was
+hand-typed from memory into a `for g in ...` loop.
+
+`python tools/check-ci-parity.py --list` had been printing the authoritative
+list the whole time. Running it showed the hand-typed sweep omitted **five**
+commands, not two: both filing gates, `check-outcome-disclosed.py`,
+`check-ci-parity.py` itself, `cargo test -p pdfce-core
+--no-default-features`, and `cd fuzz && cargo check --bins`.
+
+⇒ **A SWEEP THAT OMITS A GATE IS BYTE-INDISTINGUISHABLE FROM A GREEN ONE.**
+Same shape as [[a-gate-that-underreports-looks-green]], one level up: at the
+SET rather than at the member. Every mitigation I had was aimed at remembering
+the ordering; none was aimed at the sweep being complete, and the sweep was
+the thing that failed.
+
+**The fix is on disk: `bash tools/run-gates.sh`.** It derives its list from
+`check-ci-parity.py --list` (which derives it from the workflow), runs the
+filing gates LAST by construction, names anything it skips, and does not stop
+at the first failure. **Use it. Do not hand-type a gate loop again** — that is
+the habit, not the ordering.
+
+★ And running the real list found a defect in the list on its first run: the
+`cargo tree` denylist command had an **inverted exit sense** (`grep` exits 1
+when it finds nothing, which is the passing condition), so it reported failure
+on a healthy tree and success on a violated one. It survived because nothing
+had ever *run* the list — it was read and retyped. Giving a documented list a
+consumer is what turns its errors into red lines.
+
 Related: [[feedback_never_bundle_code_into_a_filing_commit]] (the same gate,
 the opposite mistake), [[feedback_gates_i_owe_myself]],
 [[feedback_run_the_projects_own_gates]].

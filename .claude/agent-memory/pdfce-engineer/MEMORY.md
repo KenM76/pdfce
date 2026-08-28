@@ -30,7 +30,7 @@
 - [Absence needs an unscoped query](feedback_absence_needs_an_unscoped_query.md) — `git log --all -- path` feels exhaustive but is path-scoped; a wrong path reads exactly like a true negative
 - [A wrong expectation returns as a result](feedback_a_wrong_expectation_returns_as_a_result.md) — I restated an impossible acceptance criterion as a measured outcome hours after having it named; record the correction, not the corrected value
 - [Gates I owe myself](feedback_gates_i_owe_myself.md) — the cargo-fuzz gate is the one I skip; BOTH halves recurred 2026-08-21, and the local sweep is one of CI's nine jobs (R209)
-- [A gate sweep certifies the tree it ran on](feedback_a_gate_sweep_certifies_the_tree_it_ran_on.md) — filing gates go LAST; ONE unfiled commit may sit at the tip, never two (recurred 2026-08-27)
+- [A gate sweep certifies the tree it ran on](feedback_a_gate_sweep_certifies_the_tree_it_ran_on.md) — run `tools/run-gates.sh`; a HAND-TYPED sweep omitted the two filing gates and CI went red (3rd recurrence)
 - [Rungs: click-out commits, and the three-rung ladder](project_rung_ladder_state.md) — 2026-08-05: Passes 34.0/36.0/36.1/36.2 shipped; what commits implicitly and what still doesn't
 - [Screenshot when the question is visual](feedback_screenshot_when_the_question_is_visual.md) — `drawn=true` in a trace hid a 680px coordinate-space bug; use gui-shot.ps1 for "I can't see X"
 - [Design system + the Acrobat-GUI rule conflict](project_design_system_and_rule12_conflict.md) — UI_PREFERENCES.md is at the REPO ROOT not docs/ (twice misread as missing); chrome theme-aware vs overlay theme-INVARIANT; handoff vs rule 12
