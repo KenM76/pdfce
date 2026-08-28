@@ -213,10 +213,78 @@ def derive_error_variants(lines: list[str]) -> int:
     return count
 
 
+def rewrite_self_sizes() -> int:
+    """Re-derive `index.md`'s own "N lines · N clauses cited" figures.
+
+    # Why the checker can also FIX this one
+
+    Because these figures are **derived, not decided**. Every other thing this
+    gate checks is a claim somebody wrote on purpose — a verb count, an
+    `EditError` total, a line count for a Rust file — and a tool that silently
+    rewrote those would be editing an assertion out from under its author.
+
+    The routing table's own size figures are different in kind: nothing chooses
+    them, they are a function of the file. A human retyping them is pure
+    transcription, and transcription is where the wrong number comes from.
+
+    # Why it is a flag rather than automatic
+
+    A gate that repairs the tree it is auditing cannot be trusted to report on
+    it — CI must see the red. `--fix` is for the person who has just edited a
+    document and does not want to hand-count its lines. On 2026-08-28 this was
+    hand-run three times in one session, which is what prompted it.
+
+    Returns the number of rows rewritten.
+    """
+    # ★ `index.md`, NOT `VERB_INDEX` — which is `02-editing-and-saving.md`.
+    #
+    # The routing table lives in `index.md`; `VERB_INDEX` is one of the
+    # documents that table POINTS AT. The first cut of this function read
+    # `VERB_INDEX`, matched nothing, reported "0 rows rewritten", and looked
+    # like a regex problem for three debugging rounds — and had it matched,
+    # it would have written the sizes into the wrong file.
+    routing = DOC_DIR / "index.md"
+    if not routing.exists():
+        return 0
+    doc = routing.read_text(encoding="utf-8")
+    lines = doc.split("\n")
+    # The separator is a literal U+00B7, NOT `\u00b7` in a raw string.
+    #
+    # \u2605 In an r"" pattern the escape is passed to `re`, and whether that
+    # matches depends on the engine rather than on Python's string parser \u2014
+    # which is exactly the ambiguity that made this function silently rewrite
+    # 0 rows on its first run while every filter around it passed. Writing the
+    # character removes the question.
+    size = re.compile("[\\d,]+ lines \u00b7 \\d+ clauses cited")
+    fixed = 0
+    for i, line in enumerate(lines):
+        named = re.search(r"\]\((\d\d-[\w-]+\.md)\)", line)
+        if not named or "|" not in line:
+            continue
+        target = DOC_DIR / named.group(1)
+        if not target.exists():
+            continue
+        body = target.read_text(encoding="utf-8")
+        n = len(body.split("\n")) - 1
+        clauses = len(re.findall("\u00a7[0-9]+(?:\\.[0-9]+)*", body))
+        new, count = size.subn(f"{n:,} lines \u00b7 {clauses} clauses cited", line)
+        if count and new != line:
+            lines[i] = new
+            fixed += 1
+            print(f"  rewrote {named.group(1)}: {n:,} lines, {clauses} clauses cited")
+    if fixed:
+        routing.write_text("\n".join(lines), encoding="utf-8")
+    return fixed
+
+
 def main() -> int:
     if not EDIT_RS.exists() or not VERB_INDEX.exists():
         print("check-core-api-verbs: SKIP — edit.rs or the verb index is missing")
         return 0
+
+    if "--fix" in sys.argv:
+        n = rewrite_self_sizes()
+        print(f"check-core-api-verbs --fix: {n} row(s) rewritten; re-running the check")
 
     lines = EDIT_RS.read_text(encoding="utf-8").split("\n")
     names, blocks = derive_methods(lines)

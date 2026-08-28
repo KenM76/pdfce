@@ -2657,24 +2657,30 @@ pub fn setting_cmyk_radius() -> &'static str {
     "Affects what you see. Does not change the file."
 }
 
-/// The shipped default's label.
+/// The CAD option's label.
+///
+/// It said "(pdfce's default)" until `Pass 153.0` moved the default to
+/// `Calibrated`, at which point the window SELECTED one button and labelled
+/// the OTHER one "pdfce's default" -- false on screen, in the operator's own
+/// words, in a file that Pass had open.
 pub fn setting_cmyk_neutral_black() -> &'static str {
-    "Black ink is black (pdfce's default)"
+    "Black ink is black"
 }
 
-/// The shipped default's explanation.
+/// The CAD option's explanation.
 pub fn setting_cmyk_neutral_black_note() -> &'static str {
     "Pure black ink shows as true black. Right for CAD and engineering \
 drawings, where every line is drawn in black ink alone. Only pure black \
 changes; every mixed colour is still the measured one."
 }
 
-/// The reference-matching option's label.
+/// The shipped default's label (`Pass 153.0`, operator ruling 2026-08-28 --
+/// his words are the label: "change our default to Match other PDF viewers").
 pub fn setting_cmyk_calibrated() -> &'static str {
-    "Match other PDF viewers"
+    "Match other PDF viewers (pdfce's default)"
 }
 
-/// The reference-matching option's explanation.
+/// The shipped default's explanation.
 pub fn setting_cmyk_calibrated_note() -> &'static str {
     "Colours are measured to match what Acrobat and most other viewers \
 show. Solid black ink appears as a very dark warm grey rather than true \

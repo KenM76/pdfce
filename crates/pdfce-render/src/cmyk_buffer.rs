@@ -1803,7 +1803,7 @@ impl CmykBuffer {
     /// against a reference renderer rather than a naive formula.
     ///
     /// ★ **Do not read `CmykIntent` as an ICC rendering intent.** It names a
-    /// fitted lookup table (`calibrated` / `neutral_black` / `naive`), not a
+    /// fitted lookup table (`calibrated` / `neutral_black`), not a
     /// colorimetric mapping, and pdfce carries **no** PDF rendering intent at
     /// all — `/RI` in an `/ExtGState` is never read and the `ri` operator is
     /// an explicit no-op. That gap is `docs/ROADMAP.md`'s own backlog item,

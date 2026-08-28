@@ -2245,12 +2245,12 @@ gives `RenderError::BadRasterSize { width, height }` (`lib.rs:137`).
 builders**, `:684-690`): `fonts: FontEnvironment` `:432`, `annotations: bool`
 `:470`, `annotation_scope: AnnotationScope` `:484`, `cancel: Option<RenderCancel>`
 `:494`, `layers: Option<LayerVisibility>` `:507`, `view_magnification: Option<f32>`
-`:532`, `cmyk_intent` `:546`, `mask_resample` `:555`, `image_minify` `:563`,
-`cmyk_jpeg_polarity` `:570`, `missing_as` `:579`. Builders:
-`with_annotations` `:691`, `with_annotation_scope` `:707`, `with_cmyk_intent`
-`:764`, `with_cancel` `:775`, `with_mask_resample` `:784`, `with_image_minify`
-`:792`, `with_cmyk_jpeg_polarity` `:800`, `with_layers` `:816`,
-`with_view_magnification` `:826`, `with_missing_as` `:831`, and
+`:532`, `cmyk_intent` `:597`, `mask_resample` `:640`, `image_minify` `:648`,
+`cmyk_jpeg_polarity` `:655`, `missing_as` `:664`. Builders:
+`with_annotations` `:805`, `with_annotation_scope` `:821`, `with_cmyk_intent`
+`:878`, `with_cancel` `:972`, `with_mask_resample` `:996`, `with_image_minify`
+`:1004`, `with_cmyk_jpeg_polarity` `:1012`, `with_layers` `:1028`,
+`with_view_magnification` `:1038`, `with_missing_as` `:1043`, and
 `with_max_cmyk_buffer_bytes` (`Pass 132.0` — see **§7.3a**, which is the one
 knob whose value you should COMPUTE rather than pick).
 
@@ -2410,7 +2410,12 @@ use pdfce_render::{RenderOptions, RenderedPage, render_page_with};
 
 let doc = Document::from_bytes(bytes)?;
 let page = page_tree::pages(&doc)?.remove(0);
-let options = RenderOptions::default().with_cmyk_intent(CmykIntent::Calibrated);
+let options = RenderOptions::default().with_cmyk_intent(CmykIntent::NeutralBlack);
+// NeutralBlack, not Calibrated: `Calibrated` IS the shipped default as of
+// Pass 153.0, so passing it would make this example a no-op that reads like
+// a demonstration. An example that sets a value the default already returns
+// cannot show a reader that the builder does anything.
+
 let rendered: RenderedPage = render_page_with(&doc, &page, 1.0, &options)?;
 ```
 

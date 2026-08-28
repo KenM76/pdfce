@@ -507,10 +507,23 @@ pub struct DecodedImage {
     /// Measured on a print-conformance patch built to catch exactly this: a
     /// red square drawn as a path and the same red drawn as a `DeviceCMYK`
     /// image land on `(238, 29, 35)` and `(225, 63, 50)`. The patch's own
-    /// instruction is that no difference should be visible. Set the
-    /// conversion to `naive` — where the two legs happen to be exact
-    /// inverses — and the difference vanishes, which is what identifies the
-    /// round trip as the cause rather than the decode.
+    /// instruction is that no difference should be visible.
+    ///
+    /// **The confirming experiment was**: set the conversion to `naive` —
+    /// where the two legs happen to be exact inverses — and watch the
+    /// difference vanish, which is what identified the round trip as the
+    /// cause rather than the decode.
+    ///
+    /// ★ **That recipe is no longer runnable.** `CmykIntent::Naive` was
+    /// deleted by operator ruling in `Pass 153.0`, so the conversion has no
+    /// exactly-invertible setting left. The **finding stands** — it was
+    /// measured, and decision 087 rests on it — but anyone re-deriving it
+    /// today needs a different lever, and would have spent a while looking
+    /// for a setting that no longer exists.
+    ///
+    /// Kept rather than deleted because a doc comment recording *how a
+    /// conclusion was reached* is worth more than one asserting it, even
+    /// when the method has expired. What it owes is to say that it has.
     ///
     /// So the ink is carried forward instead of being reconstructed.
     ///

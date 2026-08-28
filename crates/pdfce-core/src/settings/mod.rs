@@ -2095,16 +2095,13 @@ impl Settings {
         out.push_str(
             "# How CMYK colour is converted for display. The PDF standard defines no\n\
              # conversion at all (section 8.6.4.4), so this is a choice, not a fact.\n\
-             #   neutral_black = pure black ink renders true black (default). Right for\n\
-             #                   CAD and line drawings, where every line is stroked in\n\
-             #                   pure K. Only pure black differs; every mixed colour is\n\
-             #                   still the calibrated one.\n\
-             #   calibrated    = match how Acrobat and most viewers render it. Solid\n\
-             #                   black ink shows as a very dark warm grey, not pure\n\
-             #                   black, because that is what those viewers do. Use it to\n\
-             #                   check how a document will look to someone else.\n\
-             #   naive         = the simple formula pdfce used before calibration. Only\n\
-             #                   for reproducing an older pdfce export.\n",
+             #   calibrated    = match how Acrobat and most viewers render it (default).\n\
+             #                   Solid black ink shows as a very dark warm grey, not\n\
+             #                   pure black, because that is what those viewers do.\n\
+             #   neutral_black = pure black ink renders true black. Right for CAD and\n\
+             #                   line drawings, where every line is stroked in pure K.\n\
+             #                   Only pure black differs; every mixed colour is still\n\
+             #                   the calibrated one.\n",
         );
         let _ = writeln!(
             out,
@@ -3257,7 +3254,6 @@ mod tests {
             "refuse",
             "calibrated",
             "neutral_black",
-            "naive",
             "nearest",
             "box_average",
             "bilinear",
