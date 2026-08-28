@@ -9,7 +9,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (32,826 lines) |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (33,128 lines) |
 | **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 150 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
@@ -1039,7 +1039,7 @@ always errors.
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
 | Author a geometric markup | `add_markup(&mut self, page_index, spec: &MarkupSpec) -> Result<ObjId, EditError>` | 9986 | New annotation id. Exactly `add_markup_with(.., &MarkupOptions::default())`. |
-| Author a geometric markup **at an opacity** | `add_markup_with(&mut self, page_index, spec: &MarkupSpec, options: &MarkupOptions) -> Result<ObjId, EditError>` | — | `Pass 81.1`. `MarkupOptions { opacity: Option<f64> }` writes §12.5.2 Table 164 `/CA` onto the annotation dictionary. **One verb, one undo entry** — see the note below. |
+| Author a geometric markup **with options** | `add_markup_with(&mut self, page_index, spec: &MarkupSpec, options: &MarkupOptions) -> Result<ObjId, EditError>` | — | `Pass 81.1` + `Pass 150.0`. `MarkupOptions` now carries `opacity: Option<f64>` (§12.5.2 Table 164 `/CA`) **and `note: Option<MarkupNote>`** (`/Contents` + `/T` + `/M`). **One verb, one undo entry** — see the two notes below. |
 | Author a text-bearing annotation | `add_text_annotation(&mut self, page_index, spec: &TextAnnotSpec) -> Result<ObjId, EditError>` | 12034 | FreeText / Text+`/Popup` / Stamp. Exactly `add_text_annotation_with(.., &MarkupOptions::default())`. |
 | Author a text-bearing annotation **at an opacity** | `add_text_annotation_with(&mut self, page_index, spec: &TextAnnotSpec, options: &MarkupOptions) -> Result<ObjId, EditError>` | — | `Pass 81.1`. The twin of the above, shipped in the same Pass because Table 164 is the **markup-annotation** entry list and a sticky note is a markup annotation. `/CA` goes on the parent, never on its `/Popup`. |
 | Author a `/Redact` mark (non-destructive) | `add_redaction(&mut self, page_index, spec: &RedactSpec) -> Result<ObjId, EditError>` | 10480 | A **mark**. Nothing is removed yet. |
@@ -1052,6 +1052,69 @@ always errors.
 | Restyle an existing markup annotation | `set_markup_style(&mut self, annot_id: ObjId, style: &MarkupStyle) -> Result<MarkupStyleChange, EditError>` | 12372 | Rebuilds the baked `/AP`. |
 | Set the `/QuadPoints` corner order | `set_quad_point_order(&mut self, order: QuadPointOrder)` | 5476 | ⚠️ **Session state, not a per-call argument.** Governs what is AUTHORED from now on; does **not** sweep the document. ~~*"decision 062 fixes markup authoring at one entry point, so an `add_markup_with` would be a second"*~~ — **corrected 2026-08-27**: `add_markup_with` now exists and is **not** a second entry point (see §1.15.1). The ruling stands on its own ground: quad order is a **document-wide convention**, so a per-call argument would let two annotations in one file disagree about what UL/UR/LL/LR means, which is the divergence `Pass 62.x` exists to prevent. |
 | Read it back | `quad_point_order(&self) -> QuadPointOrder` | 5482 | Defaults to `ReadingOrder` — what Acrobat, PDFBox and pdf.js emit and expect. |
+
+#### ★★ `MarkupNote` — note text on markup, and pdfce does NOT read a clock (`Pass 150.0`)
+
+Geometric markup could be authored with a shape and a colour and **no words**.
+`MarkupOptions::note` closes that:
+
+```rust
+let opts = MarkupOptions {
+    note: Some(MarkupNote::new("Check this dimension")
+                   .by("Ken")
+                   .at("D:20260828073200Z")),
+    ..Default::default()
+};
+session.add_markup_with(0, &spec, &opts)?;
+```
+
+Writes `/Contents`, `/T` and `/M` (§12.5.2 Table 164; §12.5.6.4 Table 170 for
+`/T`). **The three travel together** because a comment panel lists them
+together — an annotation with text and no author renders in every reviewer UI
+as a note from nobody, and pdfce's own `list-annotations` prints `author=none`
+beside it.
+
+**An author with no text is allowed.** *"Attribute this shape to me, I have
+nothing to say about it"* is a real request. An **empty** `text` is written,
+not omitted: a deliberate blank is distinct from never having had a note.
+
+##### ★ `/M` is YOUR string. pdfce will not invent one.
+
+`MarkupNote::at()` takes a **PDF date string** (§7.9.4) and writes it verbatim.
+pdfce never reads a wall clock here, for two reasons:
+
+- **Determinism.** Byte-identical output for identical input is an acceptance
+  criterion across this project. A wall-clock `/M` makes every authored
+  annotation unreproducible and every byte-comparison test unwritable. The
+  `/PieceInfo` sidecar already took this position with a fixed date constant.
+- **Rule 4.** A timestamp pdfce chose is a value pdfce *inferred* and wrote
+  silently into the operator's document. You know what "now" is; pass it. Same
+  shape as `R61`'s shell-owns-font-discovery.
+
+A malformed date is **refused by name** (`EditError::MarkupDateMalformed
+{ value, why }`), not written — the read side hands `/M` straight back as an
+opaque string, so a garbage date there looks authoritative and nothing
+downstream would report it. The check is a **shape** test, not a calendar one:
+every trailing component is optional, so `D:2026` is conforming, and
+`D:20260231` (February 31st) is accepted because §7.9.4 has no clause against
+it and rejecting it would be pdfce inventing conformance.
+
+##### Two API changes you will feel
+
+1. **`MarkupOptions` lost `Copy`.** It carried a `String` now. Both author
+   routes take `&MarkupOptions`, so in practice this bites only code doing
+   `let a = opts; let b = opts;` on an owned value.
+2. **`MarkupOptions` gained a field**, which is a breaking change for struct
+   literals — its own doc chose constructability over `#[non_exhaustive]`, and
+   this is the price it named. Use `..Default::default()`.
+
+**`MarkupNote` itself IS `#[non_exhaustive]`** — build it with
+`new()`/`by()`/`at()`. That is the opposite choice on purpose: a field added
+to it later breaks nobody.
+
+CLI: `pdfce-cli annotate … --note TEXT --note-author NAME --note-date D:…`.
+Any one of the three is enough; `--note-author` alone writes a `/T`.
+
 
 #### ★★ `move_annotation` — the half that is invisible, and why a widget is refused (`Pass 149.0`)
 
@@ -2403,7 +2466,7 @@ borrow it (`tests/image_placement.rs:238-247`).
 ### 6.7 The `EditError` taxonomy
 
 `edit.rs:2300`, `#[derive(Debug, Clone, thiserror::Error)]`, `#[non_exhaustive]`.
-**57 variants** (`edit.rs:2300-3136`, counted at depth 1). No inherent
+**88 variants** (counted at depth 1 inside `pub enum EditError`). No inherent
 `impl EditError` block and **no `is_*` classification helpers**
 (`NOT FOUND — searched `impl EditError` in `edit.rs`); callers discriminate with
 `matches!`. The five groups below partition all 57. `edit.rs:2295-2296`: *"Every variant names a

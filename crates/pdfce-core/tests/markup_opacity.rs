@@ -90,7 +90,14 @@ fn authoring_at_an_opacity_is_one_command() {
     let mut s = session("annot/no-ap-circle.pdf");
     let before = s.undo_depth();
     let id = s
-        .add_markup_with(0, &square(), &MarkupOptions { opacity: Some(0.4) })
+        .add_markup_with(
+            0,
+            &square(),
+            &MarkupOptions {
+                opacity: Some(0.4),
+                ..Default::default()
+            },
+        )
         .expect("authoring a translucent square");
 
     assert_eq!(constant_alpha(&s, id), Some(0.4));
@@ -141,7 +148,14 @@ fn the_plain_verb_is_the_options_verb_with_defaults() {
 fn an_absent_opacity_writes_no_key_at_all() {
     let mut s = session("annot/no-ap-circle.pdf");
     let id = s
-        .add_markup_with(0, &square(), &MarkupOptions { opacity: None })
+        .add_markup_with(
+            0,
+            &square(),
+            &MarkupOptions {
+                opacity: None,
+                ..Default::default()
+            },
+        )
         .expect("authoring without an opacity");
     let graph = s.graph();
     let Some(Object::Dict(d)) = graph.value(id) else {
@@ -164,7 +178,14 @@ fn an_absent_opacity_writes_no_key_at_all() {
 fn an_explicit_one_is_written_and_is_not_the_same_as_absent() {
     let mut s = session("annot/no-ap-circle.pdf");
     let id = s
-        .add_markup_with(0, &square(), &MarkupOptions { opacity: Some(1.0) })
+        .add_markup_with(
+            0,
+            &square(),
+            &MarkupOptions {
+                opacity: Some(1.0),
+                ..Default::default()
+            },
+        )
         .expect("authoring fully opaque, explicitly");
     assert_eq!(constant_alpha(&s, id), Some(1.0));
 }
@@ -180,6 +201,7 @@ fn zero_and_one_are_both_in_range() {
                 &square(),
                 &MarkupOptions {
                     opacity: Some(alpha),
+                    ..Default::default()
                 },
             )
             .unwrap_or_else(|e| panic!("alpha {alpha} must be accepted: {e}"));
@@ -207,7 +229,14 @@ fn an_out_of_range_opacity_is_refused_with_nothing_authored() {
         let mut s = session("annot/no-ap-circle.pdf");
         let depth = s.undo_depth();
         let err = s
-            .add_markup_with(0, &square(), &MarkupOptions { opacity: Some(bad) })
+            .add_markup_with(
+                0,
+                &square(),
+                &MarkupOptions {
+                    opacity: Some(bad),
+                    ..Default::default()
+                },
+            )
             .expect_err("out of range must refuse");
         assert!(
             matches!(err, EditError::MarkupOpacityOutOfRange { .. }),
@@ -251,6 +280,7 @@ fn a_sticky_note_is_a_markup_annotation_and_takes_an_opacity() {
             &spec,
             &MarkupOptions {
                 opacity: Some(0.25),
+                ..Default::default()
             },
         )
         .expect("a sticky note at 25%");
@@ -291,6 +321,7 @@ fn the_text_route_refuses_out_of_range_identically() {
             &spec,
             &MarkupOptions {
                 opacity: Some(-1.0),
+                ..Default::default()
             },
         )
         .expect_err("out of range must refuse on this route too");
@@ -320,7 +351,14 @@ fn the_text_route_refuses_out_of_range_identically() {
 fn the_appearance_stream_can_carry_no_alpha_of_its_own() {
     let mut s = session("annot/no-ap-circle.pdf");
     let id = s
-        .add_markup_with(0, &square(), &MarkupOptions { opacity: Some(0.4) })
+        .add_markup_with(
+            0,
+            &square(),
+            &MarkupOptions {
+                opacity: Some(0.4),
+                ..Default::default()
+            },
+        )
         .expect("authoring");
 
     let graph = s.graph();

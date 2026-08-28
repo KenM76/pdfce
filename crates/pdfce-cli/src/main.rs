@@ -1261,6 +1261,43 @@ enum Command {
         /// operator asked for.
         #[arg(long, value_name = "ALPHA")]
         opacity: Option<f64>,
+        /// The note text this annotation carries (`/Contents`, §12.5.2
+        /// Table 164) — what a reviewer's comment panel shows as the comment
+        /// (`Pass 150.0`).
+        ///
+        /// Geometric markup could be authored with a shape and a colour but
+        /// no words. Every reviewer UI lists such an annotation with an empty
+        /// body, which is a comment nobody can read.
+        ///
+        /// An empty string is accepted and is not the same as omitting this:
+        /// it authors an annotation whose author and date are set and whose
+        /// text is deliberately blank.
+        #[arg(long, value_name = "TEXT")]
+        note: Option<String>,
+        /// The note's author (`/T`) — §12.5.6.4 Table 170 defines it as
+        /// *"the name of the person who created the annotation"*.
+        ///
+        /// Worth setting whenever `--note` is: an annotation with text and no
+        /// author renders in every reviewer UI as a note from nobody, which
+        /// reads as a broken panel rather than as an anonymous comment.
+        /// `list-annotations` prints `author=none` beside it.
+        #[arg(long, value_name = "NAME")]
+        note_author: Option<String>,
+        /// The note's modification date (`/M`), as a **PDF date string**
+        /// (§7.9.4): `D:YYYYMMDDHHmmSS` with an optional `Z`/`+`/`-` offset.
+        ///
+        /// ★ **pdfce does not read a clock for you, and that is deliberate.**
+        /// A wall-clock timestamp would make every authored annotation
+        /// unreproducible — byte-identical output for identical input is an
+        /// acceptance criterion across this project — and it would be a value
+        /// pdfce invented and wrote silently into your document. You know what
+        /// "now" is; pass it.
+        ///
+        /// Malformed is REFUSED by name rather than written: the read side
+        /// hands `/M` straight back as an opaque string, so a garbage date
+        /// there looks authoritative and nothing downstream would report it.
+        #[arg(long, value_name = "D:YYYYMMDDHHMMSS")]
+        note_date: Option<String>,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -8133,6 +8170,9 @@ fn run() -> ExitCode {
             width,
             cloud,
             opacity,
+            note,
+            note_author,
+            note_date,
             text,
             font,
             size,
@@ -8157,6 +8197,9 @@ fn run() -> ExitCode {
             width,
             cloud,
             opacity,
+            note,
+            note_author,
+            note_date,
             text: text.as_deref(),
             font: &font,
             size,
@@ -17367,6 +17410,12 @@ to hold the metadata you asked for, and the trailer now references it.",
 /// so [`cmd_annotate`] stays under clippy's argument-count limit.
 struct AnnotateArgs<'a> {
     input: &'a Path,
+    /// `--note` / `--note-author` / `--note-date` (`Pass 150.0`). Owned
+    /// rather than borrowed because they are assembled into a `MarkupNote`
+    /// the session keeps.
+    note: Option<String>,
+    note_author: Option<String>,
+    note_date: Option<String>,
     kind: AnnotKindArg,
     page: u32,
     rect: Option<&'a str>,
@@ -17442,8 +17491,35 @@ fn cmd_annotate(args: &AnnotateArgs<'_>) -> u8 {
     // drift into disagreeing about what `--opacity` means -- which is R92's
     // failure mode, and is exactly how `/CA` came to be reachable from the
     // restyle verb and not the author verb in the first place.
+    // `Pass 150.0`: the note rides in the same options value for the same
+    // reason `--opacity` does — one build point, so the two author routes
+    // cannot drift into disagreeing about what `--note` means.
+    //
+    // A note is built when ANY of the three flags is given, so
+    // `--note-author` alone still writes a `/T`. Requiring `--note` first
+    // would refuse a legitimate "attribute this shape to me" with nothing to
+    // say about it.
+    //
+    // Built through the BUILDER, not a struct literal: `MarkupNote` is
+    // `#[non_exhaustive]`, so a struct expression does not compile outside
+    // `pdfce-core` at all. That is the type doing its job -- a field added to
+    // it later cannot break this crate, which is the opposite of
+    // `MarkupOptions`, deliberately constructible and therefore breaking.
+    let note = if args.note.is_some() || args.note_author.is_some() || args.note_date.is_some() {
+        let mut n = pdfce_core::edit::MarkupNote::new(args.note.clone().unwrap_or_default());
+        if let Some(a) = args.note_author.clone() {
+            n = n.by(a);
+        }
+        if let Some(d) = args.note_date.clone() {
+            n = n.at(d);
+        }
+        Some(n)
+    } else {
+        None
+    };
     let markup_options = pdfce_core::edit::MarkupOptions {
         opacity: args.opacity,
+        note,
     };
     let add_result = if is_text_bearing(args.kind) {
         match build_text_annot_spec(args) {

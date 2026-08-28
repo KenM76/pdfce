@@ -47,6 +47,35 @@ Two things this instance adds:
 ⇒ The durable form of this rule is not "remember"; it is **do not use a
 heredoc for a path at all.** There is no case where `Edit` is worse.
 
+**★★★ FOUR TIMES IN ONE SESSION (2026-08-27/28), and the fourth cost a
+SABOTAGE CHECK.** Instances: a `\t` in a Windows path (a literal TAB into a
+handoff); a `\n` in `.join()` (a raw newline inside a Rust string literal);
+a `\u{FFFD}` in a test rewrite (Python rejected the file outright — the
+loud, harmless case); and a `\u{FFFD}` in a sabotage patch, where the
+heredoc died, **the sabotage was never applied, and the tests printed `ok`.**
+
+★ That fourth one is the dangerous shape and it is why this note is being
+rewritten rather than merely incremented. A sabotage that silently does not
+happen looks EXACTLY like a sabotage the tests survived — a green run that
+reads as "the suite is robust" when it means "nothing was tested". I only
+caught it because the Python traceback was in the same output block as the
+`ok` lines.
+
+⇒ **If a sabotage reports the suite still green, check that the sabotage
+actually landed before believing anything.** `grep` for the mutated token.
+
+**THE RULE IS NOT WORKING AS A RULE.** I have read this file, I know its
+content, and I violated it four times in eight hours — every time while
+thinking about *what* to write rather than *how it travels*. So state it as a
+mechanical default with no judgement in it:
+
+> **Never pass a `\` through the Bash tool. Not in a heredoc, not in `sed`,
+> not in an inline Python string. Use `Edit`/`Write`, which take literals.**
+
+There is no case where `Edit` is worse. When a patch genuinely needs logic,
+`Write` the script to a file first and run it — the file is not re-interpreted
+by a shell.
+
 **How to apply:**
 - Paths → `Edit`/`Write`, always. They take literals; nothing is interpreted.
 - If a heredoc is genuinely necessary, use a **raw** string (`r'''...'''`) or

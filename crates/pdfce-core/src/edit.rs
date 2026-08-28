@@ -3894,6 +3894,165 @@ impl MarkupStyle {
     }
 }
 
+/// The note an annotation carries: its text, who wrote it, and when
+/// (`Pass 150.0`) — `/Contents`, `/T` and `/M` (§12.5.2 Table 164, §12.5.6.4
+/// Table 170).
+///
+/// # Why the three travel together
+///
+/// Because a comment panel lists them together. An annotation with
+/// `/Contents` and no `/T` renders in every reviewer UI as a note from
+/// nobody, which reads as a broken panel rather than as an anonymous
+/// comment — and pdfce's own `list-annotations` prints `author=none` beside
+/// it. Offering the text without the other two would ship exactly that.
+///
+/// # ★ pdfce does NOT invent the timestamp, and that is a decision
+///
+/// [`Self::modified`] is the PDF date string **the caller supplies**, written
+/// verbatim. pdfce never reads a wall clock here. Two reasons, and the second
+/// is the load-bearing one:
+///
+/// - **Determinism.** Byte-identical output for identical input is an
+///   acceptance criterion across this project; a wall-clock `/M` would make
+///   every authored annotation unreproducible and every byte-comparison test
+///   impossible to write. The `/PieceInfo` sidecar already took this position
+///   with a fixed `SIDECAR_DATE` constant rather than a clock.
+/// - **Rule 4.** A timestamp pdfce chose is a value pdfce *inferred* and then
+///   wrote silently into the operator's document. A shell that wants "now"
+///   knows what "now" is and passes it; the same shape as `R61`'s
+///   shell-owns-font-discovery.
+///
+/// `None` omits the key. Table 164 makes `/M` optional, and an absent `/M` is
+/// honest where a fabricated one is not.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct MarkupNote {
+    /// `/Contents` — the note text (§12.5.2 Table 164).
+    ///
+    /// Empty is permitted and is not the same as no note: an annotation whose
+    /// author cleared the text still carries the author and the date, and
+    /// refusing empty would make "delete what I wrote" impossible without
+    /// deleting the annotation.
+    pub text: String,
+    /// `/T` — the text label, which for a markup annotation §12.5.6.4 Table
+    /// 170 defines as *"the name of the person who created the annotation"*.
+    ///
+    /// `None` omits the key, which is legal and which every reviewer UI shows
+    /// as an anonymous note.
+    pub author: Option<String>,
+    /// `/M` — the modification date, as a **PDF date string** (§7.9.4,
+    /// `D:YYYYMMDDHHmmSSOHH'mm`), supplied by the caller.
+    ///
+    /// Validated for shape and **refused by name** if malformed — see
+    /// [`MarkupNote::validate`]. pdfce will not write a date it cannot parse
+    /// back, because the read side hands this string straight to a caller and
+    /// a garbage `/M` is a value that looks authoritative and is not.
+    pub modified: Option<String>,
+}
+
+impl MarkupNote {
+    /// A note with just text, no author and no date.
+    #[must_use]
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            author: None,
+            modified: None,
+        }
+    }
+
+    /// Set `/T`, the author name, returning `self`.
+    #[must_use]
+    pub fn by(mut self, author: impl Into<String>) -> Self {
+        self.author = Some(author.into());
+        self
+    }
+
+    /// Set `/M`, the modification date, as a PDF date string.
+    ///
+    /// See the type's own note on why pdfce does not supply one for you.
+    #[must_use]
+    pub fn at(mut self, pdf_date: impl Into<String>) -> Self {
+        self.modified = Some(pdf_date.into());
+        self
+    }
+
+    /// Check the `/M` date string's shape (§7.9.4).
+    ///
+    /// # What is checked, and what deliberately is not
+    ///
+    /// The **prefix and the digits**: `D:` followed by at least a four-digit
+    /// year, then optional pairs, then an optional offset (`Z`, `+`, `-`)
+    /// which §7.9.4 spells with apostrophes. Every trailing part of a PDF
+    /// date is optional — `D:2026` is a conforming date — so the check is a
+    /// shape test, not a calendar test.
+    ///
+    /// It does **not** validate that the date exists. `D:20260231` is
+    /// February 31st and is refused by no clause of §7.9.4; rejecting it here
+    /// would be pdfce inventing a conformance rule, and accepting a caller's
+    /// nonsense date is their claim about their own document, not pdfce's.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::MarkupDateMalformed`] with the offending string, so the
+    /// refusal names what was wrong rather than saying "invalid date".
+    pub fn validate(&self) -> Result<(), EditError> {
+        let Some(d) = self.modified.as_deref() else {
+            return Ok(());
+        };
+        let bad = |why: &'static str| {
+            Err(EditError::MarkupDateMalformed {
+                value: d.to_owned(),
+                why,
+            })
+        };
+        let Some(rest) = d.strip_prefix("D:") else {
+            return bad("a PDF date string starts with `D:` (§7.9.4)");
+        };
+        // Year is the only mandatory component, and it is four digits.
+        //
+        // `.get(..4)` rather than `[..4]`: this string is operator input, and
+        // a panicking slice on a short one would turn a malformed date into a
+        // crash — which is the opposite of refusing by name.
+        let Some(year) = rest.as_bytes().get(..4) else {
+            return bad("the year must be four digits immediately after `D:`");
+        };
+        if !year.iter().all(u8::is_ascii_digit) {
+            return bad("the year must be four digits immediately after `D:`");
+        }
+        // After the year, digits in pairs up to the seconds, then an
+        // optional offset. Anything else is malformed.
+        let Some(tail) = rest.get(4..) else {
+            return bad("the year must be four digits immediately after `D:`");
+        };
+        let digits = tail
+            .as_bytes()
+            .iter()
+            .take_while(|b| b.is_ascii_digit())
+            .count();
+        if digits % 2 != 0 || digits > 10 {
+            return bad(
+                "after the year, the month/day/hour/minute/second components come in \
+                 two-digit pairs (§7.9.4)",
+            );
+        }
+        // Same reasoning as the year slice above: never index operator input
+        // with a range the input might not have. `digits` is derived from
+        // `tail` so this cannot fail today, and that is exactly the kind of
+        // "cannot fail today" that a later edit turns into a panic.
+        let offset = tail.get(digits..).unwrap_or("");
+        if !offset.is_empty()
+            && !(offset == "Z"
+                || offset.starts_with('Z')
+                || offset.starts_with('+')
+                || offset.starts_with('-'))
+        {
+            return bad("the UT offset must begin with `Z`, `+` or `-` (§7.9.4)");
+        }
+        Ok(())
+    }
+}
+
 /// Whole-annotation properties applied **at author time** by
 /// [`EditSession::add_markup_with`] (`Pass 81.1`).
 ///
@@ -3936,7 +4095,20 @@ impl MarkupStyle {
 /// change; that is the honest price of a struct callers build, and it is
 /// paid here rather than pushed onto every consumer as an
 /// unconstructable type.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+/// ★ **`Copy` WAS DROPPED BY `Pass 150.0`, and that is a breaking change.**
+///
+/// This type carried `Copy` while every field was a scalar. `note` holds a
+/// `String`, so it cannot. The alternative was to keep `Copy` by putting the
+/// note somewhere else — a second parameter, or its own verb — and that would
+/// split one concept ("the options this annotation is authored with") across
+/// two places purely to preserve a marker trait. The type's own note above
+/// already accepts that adding a field here is breaking; this is the same
+/// price, one notch louder.
+///
+/// Callers pass `&MarkupOptions` on both author routes, so in practice the
+/// break is limited to code that relied on an implicit copy of an owned
+/// value — `let a = opts; let b = opts;`.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct MarkupOptions {
     /// `/CA` — the annotation's constant opacity, `0.0`–`1.0` (§12.5.2,
     /// Table 164). `None` omits the key entirely.
@@ -3955,6 +4127,16 @@ pub struct MarkupOptions {
     /// call with alpha 4.0 is a caller bug, and quietly authoring 1.0
     /// would put an opaque annotation on the page while reporting success.
     pub opacity: Option<f64>,
+    /// `/Contents` + `/T` + `/M` — the note this annotation carries
+    /// (`Pass 150.0`).
+    ///
+    /// `None` omits all three, which is what every geometric markup pdfce
+    /// authored before this field existed did, so a caller that does not set
+    /// it gets byte-identical output.
+    ///
+    /// See [`MarkupNote`] for why the three travel together and why pdfce
+    /// does not supply the timestamp.
+    pub note: Option<MarkupNote>,
 }
 
 impl MarkupOptions {
@@ -3986,6 +4168,13 @@ impl MarkupOptions {
             && (!alpha.is_finite() || !(0.0..=1.0).contains(&alpha))
         {
             return Err(EditError::MarkupOpacityOutOfRange { value: alpha });
+        }
+        // `Pass 150.0`. Landing here rather than at either call site is the
+        // property this function's own doc promised: a field added to
+        // `MarkupOptions` is validated on BOTH author routes by construction,
+        // not by whoever remembers.
+        if let Some(note) = &self.note {
+            note.validate()?;
         }
         Ok(())
     }
@@ -4939,6 +5128,21 @@ pub enum EditError {
          the file's per-object string encryption"
     )]
     DocumentEncrypted,
+    /// A [`MarkupNote::modified`] date string is not a PDF date (§7.9.4)
+    /// (`Pass 150.0`).
+    ///
+    /// Refused rather than written, because the read side hands `/M` straight
+    /// back to a caller as an opaque string: a malformed date there is a value
+    /// that looks authoritative and is not, and nothing downstream would ever
+    /// report it. Refusing costs one message; writing it costs a wrong date in
+    /// somebody's comment panel forever.
+    #[error("the /M date {value:?} is not a PDF date string: {why}. Nothing was written.")]
+    MarkupDateMalformed {
+        /// The string as supplied, so the refusal shows what was rejected.
+        value: String,
+        /// Which part of §7.9.4's grammar it failed.
+        why: &'static str,
+    },
     /// [`EditSession::move_annotation`] was called on an annotation that has
     /// a **better** verb (`Pass 149.0`).
     ///
@@ -10223,17 +10427,29 @@ const fn normalize_rotation(degrees: i64) -> u16 {
 ///   order mark**, which §7.9.2 defines as the escape hatch for text
 ///   outside PDFDocEncoding and which every reader implements.
 ///
-/// ## Why not PDFDocEncoding for the middle ground
+/// ## ★ PDFDocEncoding IS used for the middle ground now, and this heading
+/// ## used to say the opposite
 ///
-/// A Latin-1-ish title (`Café`) is representable in PDFDocEncoding, and
-/// encoding it that way would be two bytes shorter. pdfce does not,
-/// because **the PDFDocEncoding table is a recorded gap in the spec
-/// RAG** — Annex D.3 is listed as not yet ingested, and §7.9.2 itself is
-/// not ingested at all (only §7.3.4's byte *syntax* is). Guessing the
-/// table from memory is exactly the failure mode the spec-fidelity rule
-/// exists to prevent, and the cost of not guessing is a handful of bytes
-/// on a metadata string. The ASCII subset used above is the part that is
-/// certain.
+/// The previous text, kept legible because the shape matters more than the
+/// correction:
+///
+/// > ~~"**Why not PDFDocEncoding for the middle ground.** A Latin-1-ish title
+/// > (`Café`) is representable in PDFDocEncoding, and encoding it that way
+/// > would be two bytes shorter. pdfce does not, because **the PDFDocEncoding
+/// > table is a recorded gap in the spec RAG** — Annex D.3 is listed as not
+/// > yet ingested … Guessing the table from memory is exactly the failure mode
+/// > the spec-fidelity rule exists to prevent."~~
+///
+/// **That was right, and its blocker expired.** `crate::textstring` carries
+/// Annex D.3 in both directions, so nothing is being guessed from memory —
+/// which was the entire objection. The rule it invoked (do not guess a table)
+/// is honoured by *using the table*, not by continuing to avoid it after it
+/// arrived.
+///
+/// `Pass 150.0` made both functions delegate to `crate::textstring`, so there
+/// is **one** implementation of §7.9.2 rather than two that disagree — and
+/// they already had: this module answered U+FFFD to bytes the other decoded
+/// exactly, which is what made every PDFDocEncoded annotation note unreadable.
 ///
 /// # Examples
 ///
@@ -10242,21 +10458,22 @@ const fn normalize_rotation(degrees: i64) -> u16 {
 ///
 /// assert_eq!(encode_text_string("Report"), b"Report".to_vec());
 ///
-/// // Non-ASCII takes the UTF-16BE + BOM form (§7.9.2).
-/// let cafe = encode_text_string("Café");
-/// assert_eq!(cafe.get(..2), Some(&[0xFE, 0xFF][..]));
-/// assert_eq!(cafe.len(), 2 + 4 * 2);
+/// // `Café` IS in the Annex D.3 table, so it is four bytes — not the ten
+/// // this example asserted until `Pass 150.0`, when the table arrived.
+/// assert_eq!(encode_text_string("Café"), vec![b'C', b'a', b'f', 0xE9]);
+///
+/// // Something genuinely outside the table takes UTF-16BE + BOM (§7.9.2).
+/// let kanji = encode_text_string("日");
+/// assert_eq!(kanji.get(..2), Some(&[0xFE, 0xFF][..]));
 /// ```
 #[must_use]
 pub fn encode_text_string(text: &str) -> Vec<u8> {
-    if text.bytes().all(|b| (0x20..=0x7E).contains(&b)) {
-        return text.as_bytes().to_vec();
-    }
-    let mut out = vec![0xFE, 0xFF];
-    for unit in text.encode_utf16() {
-        out.extend_from_slice(&unit.to_be_bytes());
-    }
-    out
+    // Same delegation as `decode_text_string`, and for the same reason. The
+    // ASCII-only fast path this used to carry produced a UTF-16BE string for
+    // anything else — legal, and twice the bytes for Latin text that
+    // PDFDocEncoding holds in one byte per character. `"mesure — Ø 12,5 mm"`
+    // is 18 bytes through the table and 38 through UTF-16BE.
+    crate::textstring::encode_text_string(text)
 }
 
 /// Decode a PDF text string (§7.9.2) for display, reporting whether the
@@ -10264,17 +10481,35 @@ pub fn encode_text_string(text: &str) -> Vec<u8> {
 ///
 /// - A leading U+FEFF BOM selects UTF-16BE; unpaired surrogates become
 ///   U+FFFD and mark the result inexact.
-/// - Otherwise bytes 0x20–0x7E (plus tab, LF and CR) decode as
-///   themselves. **Any other byte becomes U+FFFD and marks the result
-///   inexact**, because decoding it correctly needs the PDFDocEncoding
-///   table from Annex D.3, which the spec RAG does not yet carry (see
-///   [`encode_text_string`]).
+/// - Otherwise the bytes are **PDFDocEncoding** (Annex D.3), decoded through
+///   [`crate::textstring::decode_text_string`].
 ///
-/// Guessing Latin-1 for those bytes would look right most of the time
-/// and be silently wrong for the 0x80–0x9F range, where PDFDocEncoding
-/// and Latin-1 disagree — and "silently wrong most of the time" is worse
-/// than a visible U+FFFD, because a front end can *see* the `exact` flag
-/// and decline to write the field back.
+/// # ★ THIS USED TO BE ASCII-ONLY, AND THE REASON IT GAVE HAD EXPIRED
+///
+/// The previous wording, kept legible because the shape matters more than the
+/// correction:
+///
+/// > ~~"bytes 0x20–0x7E (plus tab, LF and CR) decode as themselves. **Any
+/// > other byte becomes U+FFFD and marks the result inexact**, because
+/// > decoding it correctly needs the PDFDocEncoding table from Annex D.3,
+/// > **which the spec RAG does not yet carry**."~~
+///
+/// That deferral was correct when written. `crate::textstring` has since
+/// implemented the table **in both directions** — it round-trips
+/// `"mesure — Ø 12,5 mm"` in 18 bytes, `exact: true`, `form: PdfDocEncoding`.
+/// The blocker the comment named was gone and nobody came back to the
+/// decision, because a refusal with a stated reason reads as settled.
+///
+/// **What it cost, measured:** `annot.rs` reads `/Contents`, `/T` and `/M`
+/// through this function. Every annotation whose text a conforming producer
+/// wrote in PDFDocEncoding — the compact, ordinary choice for Latin text, and
+/// what Acrobat emits — came back as **mojibake**, flagged inexact. A comment
+/// you cannot read is a comment you cannot edit.
+///
+/// The old rationale's *argument* was sound and is preserved by the fix
+/// rather than discarded: guessing **Latin-1** would be silently wrong in
+/// 0x80–0x9F where the two encodings disagree. The answer was never to guess
+/// Latin-1; it was to use the real table, which now exists.
 ///
 /// # Examples
 ///
@@ -10289,37 +10524,33 @@ pub fn encode_text_string(text: &str) -> Vec<u8> {
 /// assert_eq!(utf16.text, "Hi");
 /// assert!(utf16.exact);
 ///
-/// // A byte with no certain mapping is shown, and flagged.
-/// let unknown = decode_text_string(&[0x91]);
-/// assert!(!unknown.exact);
+/// // 0x91 is where PDFDocEncoding and Latin-1 disagree: SINGLE LOW-9
+/// // QUOTATION MARK (U+201A) in Annex D.3, a control character in
+/// // Latin-1. That disagreement is why the old code refused to guess.
+/// //
+/// // ★ The first draft of this example asserted U+2018 — guessed from
+/// // memory, in a comment celebrating the arrival of the table, which is
+/// // the exact failure the text it replaced warned about. The doctest
+/// // caught it. 0x8F is U+2018; 0x91 is U+201A.
+/// let quote = decode_text_string(&[0x91]);
+/// assert_eq!(quote.text, "\u{201A}");
+/// assert!(quote.exact);
 /// ```
 #[must_use]
 pub fn decode_text_string(bytes: &[u8]) -> InfoText {
-    if let (Some(0xFE), Some(0xFF)) = (bytes.first(), bytes.get(1)) {
-        let body = bytes.get(2..).unwrap_or(&[]);
-        let units: Vec<u16> = body
-            .chunks_exact(2)
-            .map(|pair| {
-                u16::from_be_bytes([*pair.first().unwrap_or(&0), *pair.get(1).unwrap_or(&0)])
-            })
-            .collect();
-        let text = String::from_utf16_lossy(&units);
-        // An odd trailing byte, or a lone surrogate, means the value was
-        // not a well-formed UTF-16BE string.
-        let exact = body.len() % 2 == 0 && !text.contains('\u{FFFD}');
-        return InfoText { text, exact };
+    // ONE implementation of §7.9.2, not two. `crate::textstring` owns the
+    // Annex D.3 table in both directions; this is the `InfoText`-shaped view
+    // of it, kept because `InfoText` is a published type with two fields and
+    // `DecodedText` carries five that most callers here do not use.
+    //
+    // Delegating rather than re-deriving is `R221`: a second decoder would
+    // drift from the first, and it already had — this one answered U+FFFD to
+    // bytes the other decoded exactly.
+    let decoded = crate::textstring::decode_text_string(bytes);
+    InfoText {
+        text: decoded.text,
+        exact: decoded.exact,
     }
-    let mut text = String::with_capacity(bytes.len());
-    let mut exact = true;
-    for &b in bytes {
-        if (0x20..=0x7E).contains(&b) || matches!(b, b'\t' | b'\n' | b'\r') {
-            text.push(b as char);
-        } else {
-            text.push('\u{FFFD}');
-            exact = false;
-        }
-    }
-    InfoText { text, exact }
 }
 
 // ---------------------------------------------------------------------------
@@ -16134,6 +16365,25 @@ impl EditSession {
         if let Some(alpha) = options.opacity {
             annot.insert(Name::from(b"CA"), Object::Real(alpha));
         }
+        // `Pass 150.0` — the note, written as three keys or none. Placed
+        // beside `/CA` because both are `MarkupOptions` fields applied to the
+        // annotation dictionary after its geometry is settled.
+        //
+        // `/M` is written VERBATIM from the caller. pdfce does not read a
+        // clock: see `MarkupNote`'s own note for why that is a decision about
+        // determinism and rule 4 rather than an omission.
+        if let Some(note) = &options.note {
+            annot.insert(
+                Name::from(b"Contents"),
+                Object::String(encode_text_string(&note.text)),
+            );
+            if let Some(author) = &note.author {
+                annot.insert(Name::from(b"T"), Object::String(encode_text_string(author)));
+            }
+            if let Some(m) = &note.modified {
+                annot.insert(Name::from(b"M"), Object::String(m.as_bytes().to_vec()));
+            }
+        }
 
         // Patch the page's /Annots (X7: create / append / copy-on-write a
         // shared array). May allocate one more object number.
@@ -19101,6 +19351,26 @@ impl EditSession {
         if let Some(alpha) = options.opacity {
             annot.insert(Name::from(b"CA"), Object::Real(alpha));
         }
+        // `Pass 150.0` — the note, written as three keys or none. Placed
+        // beside `/CA` because both are `MarkupOptions` fields applied to the
+        // annotation dictionary after its geometry is settled.
+        //
+        // `/M` is written VERBATIM from the caller. pdfce does not read a
+        // clock: see `MarkupNote`'s own note for why that is a decision about
+        // determinism and rule 4 rather than an omission.
+        if let Some(note) = &options.note {
+            annot.insert(
+                Name::from(b"Contents"),
+                Object::String(encode_text_string(&note.text)),
+            );
+            if let Some(author) = &note.author {
+                annot.insert(Name::from(b"T"), Object::String(encode_text_string(author)));
+            }
+            if let Some(m) = &note.modified {
+                annot.insert(Name::from(b"M"), Object::String(m.as_bytes().to_vec()));
+            }
+        }
+
         if let Some(pid) = popup_id {
             annot.insert(Name::from(b"Popup"), Object::Reference(pid));
         }
@@ -29288,20 +29558,52 @@ mod tests {
     }
 
     #[test]
-    fn ascii_stays_readable_and_non_ascii_takes_the_bom_form() {
+    fn latin_text_uses_the_pdfdoc_table_and_only_the_untabled_takes_the_bom() {
+        // ★ THIS TEST ASSERTED THE OPPOSITE UNTIL `Pass 150.0`, and it was
+        // right to: it characterised a DEFERRAL, not a design. Its previous
+        // body was
+        //
+        //     assert_eq!(encode_text_string("é").first(), Some(&0xFE));
+        //
+        // i.e. "anything non-ASCII takes the UTF-16BE BOM form", which was
+        // true while this module had no PDFDocEncoding table. `textstring`
+        // has had one in both directions for some time; the deferral expired
+        // and nobody came back to it, because a comment naming a reason reads
+        // as settled.
         assert_eq!(encode_text_string("Report 2026"), b"Report 2026".to_vec());
-        assert_eq!(encode_text_string("é").first(), Some(&0xFE));
+        // `é` IS in the Annex D.3 table, so it is one byte, not a BOM string.
+        assert_eq!(encode_text_string("é"), vec![0xE9]);
+        // Something genuinely outside the table still takes UTF-16BE.
+        assert_eq!(encode_text_string("日").first(), Some(&0xFE));
     }
 
     #[test]
-    fn undecodable_bytes_are_flagged_rather_than_guessed() {
-        // 0x91 is where PDFDocEncoding and Latin-1 disagree, and the
-        // PDFDocEncoding table is a recorded spec-RAG gap. Guessing
-        // would be silently wrong; U+FFFD plus `exact: false` is
-        // visibly incomplete, which a front end can act on.
+    fn the_byte_where_pdfdoc_and_latin1_disagree_now_decodes_from_the_table() {
+        // ★ REWRITTEN BY `Pass 150.0`. It read:
+        //
+        //   "0x91 is where PDFDocEncoding and Latin-1 disagree, and the
+        //    PDFDocEncoding table is a recorded spec-RAG gap. Guessing would
+        //    be silently wrong; U+FFFD plus `exact: false` is visibly
+        //    incomplete, which a front end can act on."
+        //
+        // The ARGUMENT was sound and is preserved by the fix rather than
+        // discarded: guessing Latin-1 for 0x91 would be silently wrong. The
+        // answer was never to guess — it was to use the real table, which
+        // `textstring` now has, and which decodes this byte exactly.
+        // ★ The VALUE is asserted, not just "no replacement character". The
+        // doctest on `decode_text_string` first claimed 0x91 was U+2018 —
+        // guessed from memory while writing about the table's arrival, which
+        // is precisely the failure the old text warned against. It is U+201A
+        // (SINGLE LOW-9); U+2018 is 0x8F. Read from
+        // `textstring::PDF_DOC_ENCODING`, not recalled.
         let decoded = decode_text_string(&[b'A', 0x91, b'B']);
-        assert!(!decoded.exact);
-        assert!(decoded.text.contains('\u{FFFD}'));
+        assert!(decoded.exact, "the table decodes it exactly now");
+        assert_eq!(decoded.text, "A\u{201A}B");
+        assert!(
+            !decoded.text.contains('\u{FFFD}'),
+            "and no replacement character is produced: {:?}",
+            decoded.text
+        );
 
         // An odd-length UTF-16BE body is malformed, and says so.
         assert!(!decode_text_string(&[0xFE, 0xFF, 0x00]).exact);

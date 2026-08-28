@@ -1017,15 +1017,38 @@ in those words (existing copy: `crates/pdfce-gui/src/ui_text.rs:9577-9584`).
 `FEATURES.md:111` records this. **Opportunity:** note-text authoring for
 geometric markup is `FEATURES.md:220`, unbuilt in every shell.
 
-**Limit 2 — a placed markup cannot be selected, moved or resized.** There is
-no `move_annotation` / `resize_annotation` / `set_annot_rect` anywhere in
-`pdfce-core` (verified absent). Geometry is fixed at gesture end;
-repositioning is *"Discard-and-replace"*
-(`crates/pdfce-gui/src/main.rs:2606`, `:2725-2726`). Only deletion is
-available afterwards. `FEATURES.md:219` lists select/move/resize as planned,
-and `FEATURES.md:211` lists the general "move and resize anything carrying a
-`/Rect`" as unbuilt in core. **Do not design a shell around dragging a placed
-markup; the verb does not exist.**
+**Limit 2 — a placed markup can be MOVED but not resized or rotated.**
+
+★★ **THIS PARAGRAPH SAID THE OPPOSITE, AND ITS LAST SENTENCE TOLD A SHELL NOT
+TO BUILD SOMETHING THAT NOW EXISTS.** It read, in full:
+
+> ~~"There is no `move_annotation` / `resize_annotation` / `set_annot_rect`
+> anywhere in `pdfce-core` (verified absent). Geometry is fixed at gesture
+> end; repositioning is *"Discard-and-replace"*. Only deletion is available
+> afterwards. **Do not design a shell around dragging a placed markup; the
+> verb does not exist.**"~~
+
+Every clause was true when written and the last one is now actively harmful:
+it is an instruction, in the document a consuming project builds against, not
+to design the feature that shipped as `Pass 149.0`.
+
+⇒ Worth noting *why no gate caught it*: `check-core-api-verbs.py` detects a
+verb **missing** from these documents. **A claim of NON-coverage is invisible
+to a coverage check** — nothing can tell "there is no such verb" from prose.
+That class needs a reader, and it got one.
+
+**What is true now.** `EditSession::move_annotation(annot_id, dx, dy)`
+(`Pass 149.0`) translates `/Rect` **and every geometry key** — see
+`02-editing-and-saving.md`. CLI: `pdfce-cli move-annotation`.
+
+**Still unbuilt, and these are real:** *resize* and *rotate*, for markup,
+redaction marks and links alike. Resize is not a `/Rect` patch — §12.5.5 would
+scale the existing artwork anisotropically — so it needs a decision per
+subtype (does an Ink's stroke width scale? do vertices scale about the centre
+or the grabbed corner?), which is why it was deliberately left out of
+`Pass 149.0` rather than guessed at. `move_dimension` and `move_widget` remain
+the verbs for ce dimensions and widgets respectively, and `move_annotation`
+refuses both by name.
 
 ### 3.2 Entry points
 
