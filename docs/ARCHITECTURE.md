@@ -16900,6 +16900,25 @@ started).
     `calibrated` remains the tier-(a)/(c)-evidenced answer; the operator
     overrode it for the pure-K CAD line art pdfce actually opens. See
     `docs/ROADMAP.md`'s `Pass 51.2` Shipped entry for the full ruling.
+    **★★★ REVERSED 2026-08-28 (`1c292bc`, `Pass 153.0`) — decision 095,
+    below. THE ★★ FOOTER DIRECTLY ABOVE IS NOW HISTORY, NOT CURRENT
+    STATE, and it is the paragraph a reader looking for "what is the
+    default" lands on, which is why this footer exists rather than a
+    quiet edit.** The operator reversed his own 2026-08-08 ruling:
+    **`#[default]` is `CmykIntent::Calibrated`**, so solid `0 0 0 1 k`
+    renders `#231F20` again by default and `neutral_black` is the
+    explicit, non-default choice — the two footers' positions exactly
+    swapped. **The "KNOWING DIVERGENCE" framing above is retired with
+    it**: the shipped default and the best-evidenced answer now AGREE,
+    and every doc comment and UI string arguing the divergence was
+    deleted rather than reworded, because a note explaining a divergence
+    that no longer exists sends the next reader hunting one.
+    **`CmykIntent::Naive` no longer exists at all** — removed by the same
+    ruling — so any text in this log naming three values (including
+    decision 087's parenthetical) enumerates a set that is now two.
+    **`neutral_black`'s reasoning did not stop being true**: pure K still
+    renders as a warm near-black under the default, which is still not
+    what a CAD operator expects, and the setting remains the answer.
 - **2026-08-08 (`Pass 51.3`, `6d63d81`) — `pdfce_render::font::
   RenderPolicy` is a new type, not merely a new field: the register's
   settings henceforth reach the interpreter as ONE bundled, `Copy`
@@ -26420,3 +26439,79 @@ free 072.**
   declined a mint on exactly this ground. The instance itself is recorded — in
   the combined `Pass 142.1`/`144.0`/`145.0` *Shipped* entry and in `R221`'s
   own amendment.
+
+- **2026-08-28 — Decision 095. THE SHIPPED `CmykIntent` DEFAULT MOVES
+  `NeutralBlack` → `Calibrated`, AND THE `Naive` VARIANT IS REMOVED FROM
+  `pdfce-core`'s PUBLIC ENUM — AN OPERATOR RULING REVERSING HIS OWN, AND A
+  BREAKING API CHANGE.** Shipped as `Pass 153.0` (`1c292bc`); full delivery
+  record in `docs/ROADMAP.md`'s *Shipped* entry of that name.
+
+  **The ruling.** Ken, 2026-08-28, relayed through `pdfceGUI`, verbatim:
+
+  > *"under the colour setting we are going to change our default to Match
+  > other PDF viewers. you can also remove the The old pdfce formula from that
+  > section, even the code for it."*
+
+  **Why this is a decision record and not merely a settings change.** Two
+  reasons, and the second is the one that binds future work:
+
+  - **It removes a `pub` variant from `pdfce_core::settings::CmykIntent`.**
+    Any consumer matching on it exhaustively fails to compile; any stored
+    `cmyk_intent = naive` now takes the bad-value path and is **reported**
+    (verified by running it: *"line 1: \"naive\" is not a value
+    \"cmyk_intent\" accepts, so \"calibrated\" is being used instead; every
+    other setting in the file still applies."*). Deleting the parse arm rather
+    than silently accepting the dead token is the rule-4 choice and was
+    deliberate. `D:\dev\pdfceGUI` matched the arm **by name rather than by
+    wildcard, on purpose**, so their build breaks as their own reminder.
+  - **It reverses the 2026-08-08 ruling recorded in this log** — the `★★
+    CORRECTED AGAIN 2026-08-08 (780b2fb, Pass 51.2)` footer on the `Pass 51.0`
+    first-consumer clause above, which is where a reader looking for "what is
+    the default" lands. That footer now carries a third, forward-pointing
+    correction.
+
+  **★ `NeutralBlack`'s REASONING DID NOT STOP BEING TRUE, and this is the half
+  that must survive.** Pure `0 0 0 1 k` still renders `#231F20` under the new
+  default and that is still not what a CAD operator expects. `NeutralBlack`
+  remains available and remains the right answer for drawings. What changed is
+  **which of two defensible `R169`/`R206` answers ships first**, not the
+  evidence — which always favoured `Calibrated` (tier (a)/(c), Acrobat's
+  shipped profile **and** pdfium). **A future session finding a drawing's
+  blacks "wrong" should reach for the setting, not file a defect.**
+
+  **★★ RELATION TO DECISION 087, WHICH A READER WILL MEET AND MISREAD.**
+  Decision 087 states, of the same enum: *"This does not change today; it is
+  named so a future session does not 'fix' the disagreement between the two
+  tables by picking a different default."* **This decision picks a different
+  default and does not violate that warning**, because 087's subject is the
+  two tables' **opposite-direction gamut-boundary errors** — a structural
+  property of any fitted lattice (ICC.1:2022 Annex F.8–F.16's clamp is a
+  discontinuity; an interpolated table smooths across it) — and nothing here
+  claims the move reduces that residual. It does not. `Pass 122.7`'s
+  re-scoping to *"adopt a conformant transform"* via `iccce` is unaffected,
+  and its acceptance criterion (blue ≈ 0 **and** green ≈ 156 together on
+  `PCS 1.0`'s shading cells) stands unchanged.
+
+  **★ 087's `naive` MEASUREMENT IS HISTORY NOW, NOT A REPRODUCIBLE RECIPE.**
+  That entry cites *"`naive`: blue exact, green 13 low"* as the signature
+  evidence for the structural-clamp finding, and `Pass 130.1` used
+  `cmyk_intent = naive` as its **confirming** measurement — the one intent
+  whose two legs are exact inverses, under which the round-trip failure
+  vanishes. **The findings stand; the knob that reproduces them is gone.**
+  Recorded here so a future session does not read those entries as
+  instructions it can follow, and so the finding is not doubted when the
+  instruction fails. `crates/pdfce-render/src/image.rs:511` still prints the
+  dead recipe as live text — reported as owed work in the 308th filing.
+
+  **Body-section updates.** None to §3, §4, §4.1 or §4.2 — no crate boundary,
+  data-model contract or published guarantee moved. §12's own `Pass 51.0`
+  clause is corrected in place (third footer), which is this log's established
+  discipline for a superseded fact rather than a rewrite.
+
+  **No standing rule minted.** This is an operator ruling applying the
+  existing `R169`/`R206` ambiguity-setting mechanism, which is what that
+  mechanism is for. The session's rule work is an **amendment to `R93`**
+  (`ROADMAP.md`, *Standing rules*) from a different finding entirely — a test
+  that hard-codes the value its own name calls "the default". Standing-rule
+  ceiling unmoved at `R224`. **Decision ceiling moves 094 → 095; next free
+  096.**

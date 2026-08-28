@@ -96,6 +96,388 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 153.0` (`1c292bc`) — the CMYK default moves `NeutralBlack` → `Calibrated` and `CmykIntent::Naive` is DELETED, on an operator ruling reversing his own — ★★★★★ **THE PASS DIAGNOSED A CLASS AND SHIPPED FRESH INSTANCES OF IT IN THE SAME COMMIT, ALL FOUND BY THIS FILING'S SWEEP AND NONE BY ANY OF 26 GREEN GATES: `crates/pdfce-gui/src/ui_text.rs:2662` STILL LABELS THE *OTHER* RADIO BUTTON "Black ink is black (pdfce's default)" — ON SCREEN, FALSE SINCE THIS COMMIT — AND `settings/mod.rs`'s `write_to_string` STILL TELLS THE OPERATOR `neutral_black` IS "(default)" AND OFFERS `naive`, IN A COMMENT BLOCK THE SAME FUNCTION PRINTS `cmyk_intent = calibrated` EIGHT LINES BENEATH** — ★★★★★ **AND THE TEST THAT EXISTS TO KEEP THAT FILE HONEST IS *ENFORCING* THE STALENESS: `the_written_file_names_every_legal_value_of_every_key` HARD-CODES THE STRING `"naive"` IN A LITERAL ARRAY, SO DELETING THE VARIANT COULD NOT FAIL IT AND THE ONLY WAY TO GO RED IS TO *FIX* THE COMMENT** ⇒ **EXACTLY THE PASS'S OWN HEADLINE FINDING AT A SECOND INSTRUMENT, IN THE SAME FILE, 1,150 LINES APART** — ★★★★ **THE HEADLINE ITSELF: `the_shipped_default_renders_solid_black_ink_as_a_warm_near_black` ASSERTED `#231F20` WHILE THE SHIPPED DEFAULT RENDERED `#000000`, AND STAYED GREEN FOR TWENTY DAYS BECAUSE IT NAMES `CmykIntent::Calibrated` RATHER THAN `CmykIntent::default()` — A TEST THAT HARD-CODES THE VALUE IT CALLS "THE DEFAULT" CANNOT DETECT THE DEFAULT MOVING, AND READS AS COVERAGE OF EXACTLY THE THING IT HAS STOPPED COVERING** — ★★★ **`R222`'s FOURTH INSTANCE, AND THE FIRST WHERE IT FAILED TO FIRE: THE ENGINEER OPENED `ui_text.rs` IN THIS COMMIT, DELETED 19 LINES FROM IT, AND LEFT THE SURVIVOR TWENTY LINES AWAY — BECAUSE THE CLAIM BEING CORRECTED WAS *"deliberately differs from Acrobat"* AND THE SURVIVOR SAYS *"(pdfce's default)"*, WHICH IS THE SAME CLAIM IN WORDS THAT SHARE NO TOKEN** — ★★ **`R93` AMENDED IN PLACE, NOT MINTED: ITS STATED REMEDY IS *"prefer a round-trip test over a prose promise"* AND HERE THE PROSE WAS **INSIDE** THE TEST; ceiling unmoved at `R224`** — ★ **AND THE 307th FILING'S OWED CHANNEL ITEM IS DISCHARGED — THE 09:16 INBOUND WAS THIS RULING, SCOPED AND SHIPPED THREE AND A HALF HOURS LATER; ITS `ROADMAP.md` HEADING CALLING THAT INBOUND *"NAMED IN NO DOCUMENT"* WAS REFUTED BY ITS OWN `SESSION_LOG.md` ENTRY, WHICH NAMED THE FILE, IN THE SAME COMMIT** — 2026-08-28 (308th filing)
+
+**One commit.** `1c292bc`, **9 files, +209 / −176** (`git show --numstat`, run
+here):
+
+| file | +/− | what |
+|---|---:|---|
+| `crates/pdfce-core/src/settings/mod.rs` | **+67 / −66** | `#[default]` moves; the `Naive` variant, its parse arm and its writer arm deleted; `CmykIntent`'s type docs rewritten |
+| `crates/pdfce-gui/src/settings_panel.rs` | **+51 / −22** | third radio removed; two module-doc passages of "knowingly diverges" deleted |
+| `crates/pdfce-render/tests/cmyk_intent.rs` | **+36 / −41** | both default tests corrected, the duplicate deleted, `the_shipped_default_is_calibrated_by_operator_ruling` added |
+| `crates/pdfce-render/src/color.rs` | **+26 / −3** | the `Naive` arm removed from the conversion |
+| `crates/pdfce-render/tests/grey_overprint.rs` | **+21 / −2** | two `is_neutral` assertions restated as a measured spread |
+| `crates/pdfce-gui/src/ui_text.rs` | **+0 / −19** | the three `Naive` strings and the divergence note, deleted not reworded |
+| `crates/pdfce-core/src/color/mod.rs` | **+5 / −16** | `Naive` moves into the *"what was rejected, and why it is recorded here"* list |
+| `crates/pdfce-render/src/font/mod.rs` | **+2 / −2** | a `RenderPolicy` test's non-default value re-picked |
+| `crates/pdfce-core/examples/gray_equivalence_probe.rs` | **+1 / −5** | the third intent dropped from the probe |
+
+**Test-FILE share: 57 of 209 added lines = 27.3 %** — deliberately labelled
+*test-file*, not *test-and-documentation*, and therefore **NOT comparable to
+the 307th filing's 80.4 %**, which counted a dedicated `docs/` file. This
+Pass's documentation lives **inside** source files (`settings/mod.rs` is
+majority doc comment), so no clean split exists and inventing one would
+manufacture a trend. Denominator filed beside the ratio, qualifier in the
+label, per hard rule 10.
+
+**This Pass REMOVES a public variant from `pdfce-core` — a breaking change for
+any consumer**, and `crates/pdfce-gui/src/ui_text.rs` at **+0 / −19** is pure
+deletion. That is rare enough here to be worth naming.
+
+---
+
+#### THE RULING
+
+Ken, 2026-08-28, relayed through `pdfceGUI`, verbatim:
+
+> *"under the colour setting we are going to change our default to Match other
+> PDF viewers. you can also remove the The old pdfce formula from that
+> section, even the code for it."*
+
+Two changes in `pdfce-core`:
+
+1. **`#[default]` moves from `CmykIntent::NeutralBlack` to
+   `CmykIntent::Calibrated`** (`settings/mod.rs:366-367`, read here).
+2. **`CmykIntent::Naive` is deleted** with its colour maths, its settings
+   token, its parse arm, its GUI option and its three `ui_text` strings.
+
+**It reverses his own ruling of 2026-08-08** (*"flip it"*, `Pass 51.2`,
+`780b2fb`), which had put `NeutralBlack` in place **over** the better
+evidence — tier (a)/(c), Acrobat's shipped profile **and** pdfium, the
+strongest pairing in the ambiguity register — because of what the calibrated
+answer does to pure-K CAD line art.
+
+#### ★★ `NeutralBlack`'s REASONING DID NOT STOP BEING TRUE, AND THAT IS THE HALF A FUTURE SESSION WILL DROP
+
+Pure `0 0 0 1 k` still renders `#231F20` under the new default, and that is
+still not what a CAD operator expects. **`NeutralBlack` remains available and
+remains the right answer for drawings.** What changed is *which of two
+defensible answers ships first* — an `R169`/`R206` default move, not a
+correction to the evidence.
+
+⇒ **A future session finding a drawing's blacks "wrong" should reach for the
+setting, not file a defect.** The type docs now say that in those words.
+
+#### ★★★ A NOTE THAT DIED WITH ITS DIVERGENCE
+
+`pdfce-gui` carried a disclosure at that setting reading *"pdfce's default
+deliberately differs from Acrobat here"*, placed so that a render-parity
+difference would not be investigated as a defect.
+
+**With the default now matching, that sentence is not redundant — it is
+BACKWARDS**, and would send the next reader hunting a difference that is not
+there. **Deleted, not reworded.** Same for the long *"knowingly diverges"*
+argument in `CmykIntent`'s type docs and two passages of `settings_panel`'s
+module docs. `pdfceGUI` reached the identical conclusion independently and
+deleted theirs.
+
+**The generalisable half survives the deletion because it outlived its
+example**, and is kept in the type docs:
+
+> **A doc comment that describes a default as a DIVERGENCE invites being read
+> as a divergence in VALUE.** State the shipped default and the best-evidenced
+> answer as two lines of data — and **when they agree, SAY SO**, because an
+> absent statement reads as an unexamined one.
+
+That is `a3185ba`'s finding (265th filing), restated by the event that removed
+its example. **Note that its second clause is exactly what this Pass then
+failed to do** — see the sweep below, where the option that *acquired* the
+default says nothing and the option that *lost* it still claims it.
+
+#### `Naive` — A CONTROL WHOSE JUSTIFICATION EXPIRED IN SILENCE
+
+It existed so an operator could reproduce a pre-calibration pdfce export. True
+when written, and it stopped being true as those files aged out — **with no
+test failing, no gate firing, and the copy still reading sensibly.**
+
+⇒ **A control whose only purpose is bug-compatibility with your own past is
+removable only by somebody deciding to.** It has no failure mode, so nothing
+will ever raise it. `pdfceGUI` filed the same shape as *"an option justified by
+a transitional need needs a review date."*
+
+It survives in `crates/pdfce-core/src/color/mod.rs`'s *"what was rejected, and
+why it is recorded here"* list, which is what that section is for.
+
+**A stored `cmyk_intent = naive` now hits the bad-value path and is
+REPORTED** — verified by the engineer by running it:
+
+> *"line 1: "naive" is not a value "cmyk_intent" accepts, so "calibrated" is
+> being used instead; every other setting in the file still applies."*
+
+Deleting the parse arm rather than silently accepting the token is the rule-4
+choice, and was deliberate.
+
+#### ★★★★ THE HEADLINE: A TEST NAMED FOR THE DEFAULT HAD BEEN LYING FOR TWENTY DAYS
+
+`the_shipped_default_renders_solid_black_ink_as_a_warm_near_black` asserted
+`#231F20`. **From 2026-08-08 the shipped default rendered `#000000` — the
+exact opposite — and the test stayed GREEN throughout**, because it names
+`CmykIntent::Calibrated` explicitly rather than `CmykIntent::default()`. A
+second test asserting the opposite under `default()` was added beside it, and
+**the two coexisted for twenty days without contradiction**, each true of the
+value it named and neither true of the name it carried.
+
+⇒ **A TEST THAT HARD-CODES THE VALUE IT CALLS "THE DEFAULT" CANNOT DETECT THE
+DEFAULT MOVING, and reads as coverage of exactly the thing it has stopped
+covering.**
+
+Both are now correct, the duplicate is deleted, and a new variant-naming test
+exists whose only job is to fail if the default moves again —
+`the_shipped_default_is_calibrated_by_operator_ruling`
+(`crates/pdfce-render/tests/cmyk_intent.rs:307`, read here). It carries both
+rulings with their dates and an instruction **not** to "fix" it but to find
+out whether he moved it again.
+
+#### FOUR TESTS FAILED ON THIS CHANGE, EVERY ONE CORRECTLY
+
+Recorded as a set, because together they are the blast radius of a default
+move:
+
+- **`changing_a_value_makes_the_draft_dirty`** assigned `Calibrated` to dirty
+  a draft; that became a **no-op**. Now assigns a non-default value **and
+  asserts that it is non-default**, so the coupling is visible rather than
+  implicit.
+- **`a_separation_with_no_tint_transform_falls_back_and_is_counted`** asserted
+  the fallback stand-in renders **exactly** neutral. It is neutral in *CMYK*;
+  `Calibrated` renders CMYK neutrals slightly **cool by design**. Now a
+  measured spread (**observed 4, bound 12**) with the claim restated as what
+  actually matters: **pdfce invents no HUE.**
+- **Two `grey_overprint` tests** through the same `is_neutral` helper
+  (**observed spread 5 on `(147, 148, 152)`, bound 16**), same fix and same
+  reasoning.
+
+The engineer also **nearly shipped two tests duplicating two that already
+existed** — caught by listing the file's test names before committing, **not
+by any gate.**
+
+---
+
+#### ★★★★★ THE SWEEP (librarian hard rule 11) — FOUR LIVE FALSEHOODS THIS COMMIT CREATED, AND ALL 26 GATES ARE GREEN
+
+**The Pass names a class and then instantiates it.** Every item below was
+verified against live source during this filing. `crates/` is outside this
+role's remit to edit, so all of it is reported as **owed work**.
+
+**(1) ★★★★★ ON SCREEN, AND WRONG.** `crates/pdfce-gui/src/ui_text.rs:2660-2667`:
+
+```rust
+/// The shipped default's label.                       // :2660  — FALSE
+pub fn setting_cmyk_neutral_black() -> &'static str {
+    "Black ink is black (pdfce's default)"             // :2662  — FALSE, ON SCREEN
+}
+/// The shipped default's explanation.                 // :2665  — FALSE
+```
+
+`crates/pdfce-gui`'s settings window now renders two radio buttons, **selects
+`Calibrated`, and labels the other one "pdfce's default."** This commit
+**opened this file and deleted 19 lines from it** — the three `Naive` strings
+and the divergence note — and left this twenty lines below.
+
+**And a fourth site here is an ABSENCE**, which is why it is easy to walk
+past: `setting_cmyk_calibrated`'s rustdoc still reads *"The reference-matching
+option's label"* (`:2672`). It is no longer merely the reference-matching
+option; **it is the default, and nothing anywhere says so** — the exact
+failure the Pass's own kept generalisation warns about (*"when they agree,
+say so, because an absent statement reads as an unexamined one"*). Minor and
+cosmetic beside it: the radio group still lists `NeutralBlack` first
+(`settings_panel.rs:524`) and the default second.
+
+**(2) ★★★★★ THE SETTINGS FILE CONTRADICTS ITSELF IN ADJACENT LINES.**
+`crates/pdfce-core/src/settings/mod.rs`, inside `write_to_string` — the
+function that produces the file the operator **hand-edits**:
+
+```
+:2098   #   neutral_black = pure black ink renders true black (default). ...
+:2106   #   naive         = the simple formula pdfce used before calibration. ...
+:2110-14        match self.cmyk_intent { Calibrated => "calibrated", NeutralBlack => "neutral_black" }
+```
+
+So a fresh `userdata/settings.txt` written today says `neutral_black` is the
+default, advertises a third value **that the parser now rejects**, and then
+emits `cmyk_intent = calibrated` **eight lines below its own comment block**.
+Two of the three lines in the operator's own reference are false, and the file
+refutes itself without being read twice.
+
+**(3) ★★★★★ THE TEST THAT KEEPS THAT BLOCK HONEST IS ENFORCING THE
+STALENESS.** `settings/mod.rs:3251`,
+`the_written_file_names_every_legal_value_of_every_key`, whose own docstring
+states the point:
+
+> *"The file is meant to be hand-edited, so a key whose alternatives are
+> undiscoverable from the file itself is a key the operator can only change by
+> reading source."*
+
+It walks a **literal array** that still contains `"naive"` (`:3260`).
+Consequences, both bad:
+
+- **Deleting the variant could not fail it**, because the string is still
+  written. That is one reason five sweeps and 26 gates came back green.
+- **The only way to turn it red is to CORRECT the comment.** A test whose
+  stated purpose is discoverability of *legal* values now guarantees
+  discoverability of an **illegal** one, and actively resists its own fix.
+
+⇒ **This is the Pass's own headline finding at a second instrument, in the
+same file, 1,150 lines apart, shipped in the same commit that diagnosed it.**
+`the_shipped_default_renders_…` hard-coded the **variant**; this one
+hard-codes the **token list**. The new
+`the_shipped_default_is_calibrated_by_operator_ruling` guards the **default**;
+**nothing guards the token list**, and the obvious repair is to derive the
+array from the enum rather than restate it beside it.
+
+**(4) ★★ TWO `pdfce-render` DOC COMMENTS NAME THE DELETED VARIANT.**
+
+- `crates/pdfce-render/src/cmyk_buffer.rs:1806` — *"It names a fitted lookup
+  table (`calibrated` / `neutral_black` / `naive`)"*. A reader following this
+  writes a settings token that is now refused.
+- `crates/pdfce-render/src/image.rs:511` — *"Set the conversion to `naive` —
+  where the two legs happen to be exact inverses — and the difference
+  vanishes, which is what identifies the round trip as the cause"*. **This is
+  `Pass 130.1`'s and decision 087's confirming measurement, and the FINDING
+  stands; the RECIPE is now unexecutable.** A distinct shape worth naming:
+  **a doc comment that records a diagnostic recipe outlives the knob the
+  recipe turns**, and unlike a stale claim it does not read as false — it
+  reads as an instruction, and only fails when someone tries it.
+  (`image.rs:504`'s *"a calibrated table out, a naive formula back"* is the
+  **English word**, describing `overprint::rgb_to_cmyk`, and is correct —
+  checked, not assumed.)
+
+#### ★★ TWO `docs/core-api/` SURVIVORS, ONE PRE-EXISTING AND ONE MADE STALE HERE
+
+`docs/core-api/` is engineer-owned (**RULED 2026-08-18**), so both are
+reported, not edited.
+
+**Pre-existing, not caused by this Pass.** `03-capabilities.md` §7.2 cites
+`RenderOptions`' fields by line number and **every field anchor is +51 stale**,
+uniformly: `layers` `:507` (real `:558`), `view_magnification` `:532` (real
+`:583`), `cmyk_intent` `:546` (real `:597`), and `with_cmyk_intent` `:764`
+(real **`:878`**, +114). The struct anchor `:428` is correct, so the drift is
+doc-comment growth inside the type. This Pass's only `font/mod.rs` change is
+at `:1105`, below every anchor. Same family as the 305th filing's finding that
+`docs/core-api/index.md`'s routing table carries four stale figures because
+the verb count is the only one with a gate.
+
+**Made stale by this Pass.** `03-capabilities.md:2413`'s worked example is
+
+```rust
+let options = RenderOptions::default().with_cmyk_intent(CmykIntent::Calibrated);
+```
+
+which is now a **no-op** — it sets the value `default()` already returns. It
+still compiles and still reads as demonstrating how to select an intent, while
+demonstrating nothing. **Same class as the headline finding, at a third
+instrument.** The block also cites `tests/cmyk_intent.rs:102-107` as its
+source, and that file moved by +36/−41 in this commit.
+
+#### ★★★ `R222`'s FOURTH INSTANCE, AND THE FIRST WHERE THE RULE FAILED TO FIRE
+
+`R222` asks: *when a change corrects a claim in a doc comment, grep the format
+strings for the same claim in the same change.* It fired correctly at its
+first live use (297th filing). **Here it did not**, and the reason is the one
+`R222` itself predicts:
+
+- the claim being **corrected** was *"pdfce's default deliberately differs
+  from Acrobat"*;
+- the claim that **survived** is *"(pdfce's default)"*;
+- **the two share no searchable token.** A grep for the wording just edited
+  returns the divergence note and nothing else.
+
+**The engineer greps for the string; the sweep reads for the claim** — and
+librarian hard rule 11's clause requiring exactly that (*search for the CLAIM,
+not for a string*) is what found it, one commit later, which is precisely the
+window `R222` was minted to close and did not. **No re-mint and no amendment
+to `R222`** — its text already anticipates this and explicitly declines a
+gate. What this instance adds is that **the FILE being edited is not a safe
+proxy for the CLAIM being edited**: the survivor was in a file the same commit
+had open and had already deleted from. Recorded against `R222` as instance 4.
+
+#### ★★ `R93` AMENDED IN PLACE — NOT MINTED, AND THE DISPATCH DID NOT ASK FOR A MINT
+
+The candidate was *"a test whose NAME is a claim its BODY does not check."*
+Declined as a new rule and carried by **`R93`** instead, with a dated clause
+(see *Standing rules*). The argument:
+
+- **`R93` is already the rule that a label asserting a behaviour is not
+  evidence of it.** A test **name** is the highest-trust label in the tree,
+  precisely because it *looks* verified.
+- **The twist belongs to `R93`'s REMEDY, not to a new subject.** `R93` closes
+  with *"prefer encoding the contract in the type system or a round-trip test
+  over a prose promise."* **Here the prose promise was INSIDE the test** — the
+  remedy carrying the defect it was prescribed against. That is a gap in
+  `R93`, and it belongs in `R93`.
+- **`R220`** is a capability's *findability*; **`R197`** is a figure's *shelf
+  life*; **`R221`** is *two computed copies of one predicate*. None is this.
+- Minting per occurrence is forbidden by the 2026-08-05 ruling, and this
+  filing has **n = 2 in a single commit** — which argues for the amendment's
+  urgency, not for a new number.
+
+**Ceiling unmoved at `R224`.**
+
+#### DECISION LOG
+
+**Decision 095** added to `ARCHITECTURE.md` §12 — the ruling, the public-API
+removal, and a forward pointer from **decision 087**, which had explicitly
+warned a future session *not* to reconcile the two tables' opposite-direction
+gamut-boundary errors **by picking a different default**. This Pass does not
+violate that warning (it moves the default for an unrelated reason, on the
+operator's instruction), but a reader meets the warning without the
+disclaimer, so the disclaimer is now written down. The `Pass 51.0`
+first-consumer clause gains its **third** dated correction footer, per that
+entry's own established discipline.
+
+#### VERIFICATION, AND THE CHANNEL
+
+- **`tools/run-gates.sh`: PASS — 26 commands**, both filing gates, reported by
+  the engineer. **Five sweeps were needed; every red one was a genuine
+  assertion about the old default**, which is the outcome a default move
+  should produce.
+- **Re-run here at filing time:** `python tools/check-passes-filed.py` →
+  *"clean — every Pass-claiming commit is filed"*, with `1c292bc` **DEFERRED**
+  as the tip (a commit cannot cite its own hash);
+  `python tools/check-commits-filed.py` → *"clean — 635 code commit(s)
+  checked (whole history); 5 known-unfiled carried in the baseline"*. This
+  filing's own commit discharges the deferral.
+- **`git rev-parse`, run here:** `HEAD` = `1c292bc`, `origin/main` =
+  `64224d4` — **one Pass commit unpushed** at filing time. Pushing `main` is
+  standing-authorized (decision 090); this is a state report, not a request.
+- **★ THE 307th FILING'S OPEN CHANNEL ITEM IS DISCHARGED.** Its owed-work item
+  3 read *"the 09:16 inbound —
+  `request_cmyk_default_flips_and_the_naive_formula_goes.md`, unanswered and
+  untracked. Needs a Next up box or a reply; scoping is the engineer's act."*
+  It got the stronger of the two: **scoped and shipped**, three and a half
+  hours later. `ls`, run here: the file is now
+  `open/done_2026-08-28-cmyk-default-CONSUMED.md`, and the reply went out at
+  **12:44** as `open/reply_the_cmyk_default_has_moved_delete_your_seed.md`,
+  one minute after the commit.
+
+  **★ A SMALL SELF-CORRECTION TO THAT FILING, worth the two lines because it
+  is the shape this project keeps meeting.** Its `ROADMAP.md` ★ heading said
+  the 09:16 inbound *"is named in NO document in this repository"*. **Its own
+  `SESSION_LOG.md` entry then named it, by filename, as owed-work item 3.**
+  The heading was true when written and false by the end of the same filing —
+  **a claim of absence made in one document and refuted in the next one the
+  same author wrote**, with no contradiction visible from either side.
+  Nothing was damaged; the discharge happened. It is recorded because a
+  *"named in no document"* claim is exactly the kind that ages within a
+  single commit, and the heading is the half that travels.
+- **Channel check at filing time** (`ls -la --time-style`, run here): the
+  newest item in `open/` other than that reply is
+  `note_grey_no_longer_knocks_spot_ink_out_and_a_new_setting_you_may_want_to_surface.md`
+  at **09:08**, which is pdfce's own outbound, not a request. **No unparsed
+  inbound request as of this filing.**
+
+#### FEATURES.md
+
+Row updated (*Implemented*, colour). It had said only *"Calibrated
+`DeviceCMYK`→sRGB, one conversion site document-wide"* — **no default stated,
+no variant set, and no "differs from Acrobat" phrasing to remove.** The
+dispatch predicted a stale divergence clause there; **there was none**, which
+is worth recording because the prediction was reasonable and wrong: **the
+divergence lived entirely in `crates/`, never in `FEATURES.md`.** No row
+mentioned three intents. The row now names the shipped default and the
+two-value set.
+
+
 ### `Pass 152.0` (`06e4c27`) — `EditRequest::whole_operator` + `EditRequest::pinned` — ★★★★★ **THIS PASS ADDS NO BEHAVIOUR, AND THAT IS THE ENTIRE FINDING: EVERY CAPABILITY THE CONSUMING PROJECT ASKED FOR ALREADY WORKED, WAS ALREADY TESTED, ALREADY EMITTED ITS RULE-4 DISCLOSURE, ALREADY HAD A CLI FLAG, AND WAS ALREADY DOCUMENTED — TRUE, ACCURATELY, IN THE RIGHT FILE, IN THE RIGHT SECTION. THE ONLY THING MISSING WAS A NAME** — ★★★★★ **`pdfceGUI`'s REPORT CITES `Pass 145.0` AND `FormatRequest::whole_operator` BY NAME, SO THEY HAD READ THE EXACT SECTION THAT DOCUMENTS THIS. THE EDIT HALF WAS ONE TRAILING SENTENCE UNDER A HEADING NAMING THE *OTHER* TYPE, WITH NO EXAMPLE AND NO SYMBOL TO GREP. THEY READ IT, CONCLUDED THE VERB COULD ONLY BE ADDRESSED BY `find`, AND WENT ON TO LIST THREE WAYS THEY HAD TRIED TO *RECONSTRUCT* A `find` FOR AN OPERATOR THEY HAD ALREADY *LOCATED*** ⇒ **A CAPABILITY NOBODY CAN FIND IS NOT SHIPPED, AND NO GATE IN THIS PROJECT CAN DETECT THAT STATE — THE CODE WAS CORRECT, THE TESTS GREEN, THE SENTENCE TRUE, ALL 26 GATES PASSING. THE ONLY SYMPTOM IS A CONSUMER ASKING FOR WHAT THEY ALREADY HAVE** — ★★★★ **THE *Next up* BOX THIS PASS DISCHARGES WAS WRONG, AND THIS ROLE WROTE IT: ITS HEADING SAID *"`format_text` WAS MADE ADDRESSABLE BY PIN ALONE AND ITS SIBLING `edit_text` WAS NOT"* AND CALLED IT `R219`'s SHAPE. BOTH ROUTES WERE ALREADY FIXED. THE REQUESTER'S TRUE **SYMPTOM** CARRIED A FALSE **MECHANISM**, ONE PARAGRAPH APART, AND IT WAS RELAYED INTO THIS DOCUMENT AS PDFCE SPEAKING ABOUT PDFCE — `R220`(e) AT ITS SECOND INSTANCE, ONE FILING AFTER (e) WAS WRITTEN** — ★★★ **`R220` AMENDED IN PLACE WITH CLAUSE (f), NOT MINTED, AND THE DISPATCH'S SUGGESTED CARRIER (`R197`) IS DECLINED WITH REASONS: `R197` GOVERNS A FIGURE'S SHELF LIFE; THIS IS A CAPABILITY'S FINDABILITY, WHICH IS `R220`'s STATED SUBJECT. CEILING UNMOVED AT `R224`** — ★★ **A DOCTEST CAUGHT A REAL API-PATH ERROR ON ITS FIRST RUN (`ByteSpan` IS `pdfce_core::span`, NOT `::object`) — THE EXACT ERROR A CONSUMER HITS COPYING AN EXAMPLE, AND THE DOCTEST IS THE ONLY INSTRUMENT THAT WOULD EVER HAVE CAUGHT IT. THE NEW EQUIVALENCE TEST COMPARES **SAVED BYTES**, NOT REPORT FIELDS, SO TWO SPELLINGS OF ONE REQUEST CANNOT DRIFT WHERE A CALLER CANNOT SEE** — ★ **THE CHANNEL CHECK IS NOT CLEAN, AND IT IS THE SAME DEFECT THE 304th FILING RECORDED, ONE FILING LATER: AN INBOUND REQUEST WITH mtime **09:16** IS NAMED IN NO DOCUMENT IN THIS REPOSITORY, AND THE 306th FILING WAS COMMITTED AT **10:14**** — 2026-08-28 (307th filing)
 
 **One commit.** `06e4c27`, **4 files, +184 / −3** (`git show --numstat`, run
@@ -103295,6 +103677,57 @@ not a judgment call:**
   encoding the contract in the type system (see R92's same-shaped
   precedent) or a round-trip test over a prose promise on either side of
   a producer/consumer boundary.
+
+  **★★ AMENDED 2026-08-28 (308th filing), from `Pass 153.0` (`1c292bc`):
+  THE REMEDY THIS RULE PRESCRIBES CAN ITSELF CARRY THE DEFECT. A TEST'S
+  NAME IS A LABEL, AND A TEST THAT HARD-CODES THE VALUE ITS NAME CALLS
+  "THE DEFAULT" (OR "THE LEGAL SET", OR "THE CURRENT LIMIT") CANNOT
+  DETECT THAT VALUE MOVING — IT GOES ON PASSING, AND IT READS AS
+  COVERAGE OF EXACTLY THE THING IT HAS STOPPED COVERING.**
+
+  R93's closing sentence recommends *"a round-trip test over a prose
+  promise."* That is still right, and it is **not sufficient**, because a
+  test name is prose — and it is the **highest-trust** prose in the tree,
+  precisely because it sits on something that *looks* verified. A stale doc
+  comment invites suspicion; a green test does not.
+
+  **Two instances, both in `Pass 153.0`, both in code the same commit was
+  editing:**
+
+  1. **`crates/pdfce-render/tests/cmyk_intent.rs` —
+     `the_shipped_default_renders_solid_black_ink_as_a_warm_near_black`**
+     asserted `#231F20` while the shipped default rendered `#000000`, and
+     stayed **green for twenty days**, because it names
+     `CmykIntent::Calibrated` rather than `CmykIntent::default()`. A second
+     test asserting the opposite under `default()` sat beside it for the
+     whole twenty days **without contradiction** — each true of the value it
+     named, neither true of the name it carried.
+  2. **`crates/pdfce-core/src/settings/mod.rs:3251` —
+     `the_written_file_names_every_legal_value_of_every_key`** walks a
+     **literal array** of settings tokens. Deleting the `Naive` variant
+     could not fail it, because the *string* is still written into the
+     settings file; the only way to turn it red is to **correct** the
+     comment it was written to protect. **It now enforces the staleness it
+     exists to prevent**, and it was still live at filing time.
+
+  **What the amendment asks for, concretely.** A test whose *name* makes a
+  claim about a **current value** must **derive** that value rather than
+  restate it — `T::default()`, an enum iteration, the constant itself —
+  and where derivation genuinely is not available, a **separate,
+  single-purpose test that names the variant and exists only to fail when
+  it moves** carries the claim instead. `Pass 153.0` shipped that second
+  form (`the_shipped_default_is_calibrated_by_operator_ruling`) for the
+  default; the token list still needs the first form.
+
+  **Why no new rule number, argued rather than assumed.** The candidate
+  offered was *"a test whose NAME is a claim its BODY does not check."*
+  That is **R93's own subject** — a label asserting a behaviour is not
+  evidence of it — displaced from a doc comment onto a test name, and its
+  novelty is entirely in **R93's remedy clause**, which is where it is now
+  written. `R220` governs a capability's *findability*; `R197` a figure's
+  *shelf life*; `R221` two *computed* copies of one predicate; `R222` a
+  claim's copies in *format strings*. None is this. Minting per occurrence
+  is forbidden by the 2026-08-05 ruling. **Ceiling unmoved at `R224`.**
 - **R94 — A repair that mutates a value must invalidate any
   "these-bytes-are-verbatim" provenance attached to it (methodology;
   no decision number; librarian-assigned; 2026-08-03, `/Contents`-
