@@ -96,6 +96,124 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 153.1` (`180f19f`) — the five stale claims `Pass 153.0` shipped, all fixed, plus `tools/check-core-api-verbs.py --fix` — ★★★★★ **THE NEW WRITER'S FIRST CUT SILENTLY REWROTE ZERO ROWS BECAUSE IT ANCHORED ON `VERB_INDEX` — `02-editing-and-saving.md`, THE DOCUMENT THE ROUTING TABLE *POINTS AT*, NOT THE ONE THAT *CONTAINS* IT. EVERY SURROUNDING FILTER PASSED AND THE REGEX WAS CORRECT, SO IT READ AS A REGEX PROBLEM FOR THREE DEBUGGING ROUNDS; HAD IT MATCHED, IT WOULD HAVE WRITTEN THE SIZES INTO THE WRONG FILE** ⇒ **`R224`'s VACUOUS-SCAN CLAUSE AT ITS SECOND `tools/` INSTANCE IN THREE DAYS, ON THE SAME SCRIPT AND THE SAME DOCUMENT — AND THE FIRST IN A *WRITER*, WHERE "MATCHED NOTHING" IS NOT MERELY UNINFORMATIVE BUT A NEAR-MISS ON CORRUPTION** — ★★★★ **ALL FIVE OF THE 308th FILING'S SWEEP SURVIVORS ARE DISCHARGED, INCLUDING THE ONLY ONE AN OPERATOR COULD SEE: `ui_text.rs` NO LONGER LABELS `NeutralBlack` "(pdfce's default)", AND `Calibrated` NOW SAYS IT IS** — ★★★ **THE PREDICTION WAS EXACT: `the_written_file_names_every_legal_value_of_every_key` WENT RED ON THE *FIX*, NOT ON THE DEFECT — A TEST ENFORCING A STALE COMMENT IS RED-ON-THE-CORRECTION BY CONSTRUCTION, WHICH IS THE ORDER TO EXPECT RATHER THAN A SURPRISE** — ★★ **`image.rs`'s DEAD DIAGNOSTIC RECIPE IS *KEPT AND LABELLED EXPIRED*, NOT DELETED — decision 087 RESTS ON IT, AND A COMMENT RECORDING HOW A CONCLUSION WAS REACHED OUTLIVES THE METHOD; WHAT IT OWES IS TO SAY THE METHOD NO LONGER RUNS. THE FIFTEEN `RenderOptions` ANCHORS WERE RE-DERIVED FROM SOURCE, NOT HAND-CORRECTED** — ★ **AND THIS COMMIT EXISTS SEPARATELY AT ALL BECAUSE A FILING COMMIT CANNOT FILE ITSELF: CODE AND FILING WERE FIRST COMMITTED TOGETHER, WHICH SENT `check-commits-filed` TO DEFERRED ON THE VERY COMMIT MEANT TO MAKE IT GREEN** — 2026-08-28 (309th filing)
+
+**Proportionate by design.** The *substance* of these five defects — how each
+was found, why the grep could not reach them, and what class they belong to —
+is already filed in the `Pass 153.0` entry immediately below and in the 308th
+filing's `SESSION_LOG.md` section. **This entry files the FIX**, and adds only
+what `180f19f` itself contributes.
+
+**One commit.** `180f19f`, **7 files, +118 / −30** (`git show --numstat`, run
+here):
+
+| file | +/− | what |
+|---|---:|---|
+| `tools/check-core-api-verbs.py` | **+68 / −0** | the `--fix` writer, `rewrite_self_sizes()`, and its rationale doc |
+| `crates/pdfce-render/src/image.rs` | **+17 / −4** | the dead recipe kept and labelled expired |
+| `crates/pdfce-gui/src/ui_text.rs` | **+12 / −6** | the false on-screen label moved to the right radio button |
+| `docs/core-api/03-capabilities.md` | **+12 / −7** | 15 re-derived `RenderOptions` anchors; the worked example now sets `NeutralBlack` |
+| `crates/pdfce-core/src/settings/mod.rs` | **+7 / −11** | `write_to_string`'s two options reordered and `naive` removed; the token-list test's literal array corrected |
+| `crates/pdfce-render/src/cmyk_buffer.rs` | **+1 / −1** | three tokens → two |
+| `docs/core-api/index.md` | **+1 / −1** | `03-capabilities.md` 2,536 → **2,541 lines**, written by `--fix` |
+
+**No test FILE changed, and that figure is recorded rather than computed.** A
+test-file share would read **0 of 118 added lines = 0 %** and mean nothing:
+the one test edit is a `#[cfg(test)]` literal array *inside*
+`settings/mod.rs`, which the file-level split cannot see. Filed this way per
+hard rule 10(a) — the denominator is stated so the division is possible, and
+the qualifier is in the label so a quoted *"0 %"* cannot travel alone. **Not
+comparable to the 308th filing's 27.3 % test-FILE share** for the same reason.
+
+#### ★★★★★ THE `--fix` WRITER READ THE WRONG FILE, AND EVERY CHECK AROUND IT PASSED
+
+`docs/core-api/index.md`'s routing table carries three *"N lines · N clauses
+cited"* figures. Those figures are **derived, not decided** — nothing chooses
+them, they are a function of the file — so `check-core-api-verbs.py`, which
+already derives them to check them, can now also **write** them under `--fix`.
+The prompt was mechanical: the engineer hand-re-derived those figures **three
+times in one session**, and hand transcription is where the wrong number comes
+from.
+
+**The finding is not the feature; it is how the first cut failed.** It
+anchored on the script's `VERB_INDEX` constant — which names
+`02-editing-and-saving.md`, **the document the routing table points at** — and
+the table lives in `index.md`, **the document that contains it**. The two are
+one hyperlink apart and read as interchangeable at a glance.
+
+- **The failure was SILENT.** Zero rows matched; zero rows rewritten; exit
+  clean. *"Nothing needed fixing"* and *"I was looking at the wrong file"*
+  produce byte-identical output.
+- **Every surrounding filter passed and the regex was correct**, so the
+  symptom pointed at the one component that was not at fault — three
+  debugging rounds spent on the regex.
+- **★ THE NEAR-MISS IS THE POINT. Had the regex matched, it would have
+  written `index.md`'s size figures into `02-editing-and-saving.md`.** A
+  vacuous *reader* prints a false PASS; a vacuous *writer* is one successful
+  match away from corrupting the file it was pointed at by mistake.
+
+**Verified by sabotage**, which is the discipline a `--fix` owes: a figure
+corrupted to `9,999` is repaired to the derived value, the file returns
+**byte-identical** to its pre-sabotage state (`git diff` empty), and a second
+run rewrites **0**.
+
+**★ A FLAG, NOT AUTOMATIC — and the reason is the same one that makes the
+near-miss serious.** *A gate that repairs the tree it audits cannot be trusted
+to report on it.* CI must still go red. `--fix` is for the person who has just
+edited a document and does not want to hand-count its lines.
+
+#### `R224` — DATED INSTANCE NOTE ADDED, MINT DECLINED
+
+This is `R224`'s ★★ vacuous-scan clause — *"a scan goes **vacuous rather than
+red** when its anchor is renamed and every assertion over an empty set
+passes"* — at its **second `tools/` instance in three days, on the same script
+and the same document** (the first was `3dc9eb0`, already noted under `R224`
+by the 306th filing). Two things are new and are what the note records: the
+anchor was **not renamed but simply wrong from birth**, and the vacuous
+component was a **writer**. Both are the existing clause's subject —
+*any assertion whose subject set can be empty* — reached by a different route,
+so the disposition follows the 306th filing's precedent exactly: **a dated
+note on `R224`, no mint.**
+
+**Ceiling unmoved at `R224`; next free `R225`. No decision-log entry** —
+`180f19f` changes no architecture, defines no invariant and moves no crate
+boundary; it corrects claims about a decision (**095**) that already stands,
+and adds a maintenance flag to an existing gate.
+
+#### `FEATURES.md` — NO ROW CHANGED, AND THAT IS THE CORRECT OUTCOME
+
+Row 250 (*Implemented*, colour) was brought current by the 308th filing and
+**already names the shipped default and the two-value set**. `Pass 153.1`
+delivers no capability — it makes five descriptions of an existing one true.
+**Never tick a box you cannot substantiate**; there is nothing here to tick.
+Recorded explicitly so a reader does not read the absence as the maintenance
+contract being skipped.
+
+#### VERIFICATION
+
+- **`tools/run-gates.sh`: PASS — 26 commands**, both filing gates, reported by
+  the engineer, **run before the commit split**.
+- **Re-run here at filing time**, on `HEAD` = `2dd1ad6`:
+  `python tools/check-commits-filed.py` → *"1 code commit(s) are in no
+  filing: `180f19f`"* — **the gate correctly names the one commit this entry
+  files**, which is exactly the state the split was performed to produce;
+  `python tools/check-passes-filed.py` → `180f19f` **UNFILED**, discharged by
+  this filing's own commit.
+- **The split itself** was `git reset --soft` — explicitly not
+  `checkout`/`restore`/`stash`, per the standing rule about those three with
+  uncommitted work in the tree.
+- **`git rev-parse`, run here:** `HEAD` = `2dd1ad6`, `origin/main` = `64224d4`
+  — **`git rev-list --count origin/main..HEAD` = 3** unpushed (`1c292bc`,
+  `180f19f`, and the 308th filing). Pushing `main` is standing-authorized
+  (decision 090); this is a state report, not a request, and **pushing is not
+  this role's act**.
+- **Backup, `ls -lt D:/Dev/pdfce-backups/` run here:** newest is
+  **`pdfce-20260828-1416-56d849b-full.bundle`**, 2026-08-28 **10:16**, at
+  `56d849b`. **`git rev-list --count 56d849b..HEAD` = 5** — the bundle is
+  **five commits behind `HEAD`**, against **three** at the 308th filing and
+  **one** at the 307th. Still in the good regime; drifting three filings
+  running.
+
 ### `Pass 153.0` (`1c292bc`) — the CMYK default moves `NeutralBlack` → `Calibrated` and `CmykIntent::Naive` is DELETED, on an operator ruling reversing his own — ★★★★★ **THE PASS DIAGNOSED A CLASS AND SHIPPED FRESH INSTANCES OF IT IN THE SAME COMMIT, ALL FOUND BY THIS FILING'S SWEEP AND NONE BY ANY OF 26 GREEN GATES: `crates/pdfce-gui/src/ui_text.rs:2662` STILL LABELS THE *OTHER* RADIO BUTTON "Black ink is black (pdfce's default)" — ON SCREEN, FALSE SINCE THIS COMMIT — AND `settings/mod.rs`'s `write_to_string` STILL TELLS THE OPERATOR `neutral_black` IS "(default)" AND OFFERS `naive`, IN A COMMENT BLOCK THE SAME FUNCTION PRINTS `cmyk_intent = calibrated` EIGHT LINES BENEATH** — ★★★★★ **AND THE TEST THAT EXISTS TO KEEP THAT FILE HONEST IS *ENFORCING* THE STALENESS: `the_written_file_names_every_legal_value_of_every_key` HARD-CODES THE STRING `"naive"` IN A LITERAL ARRAY, SO DELETING THE VARIANT COULD NOT FAIL IT AND THE ONLY WAY TO GO RED IS TO *FIX* THE COMMENT** ⇒ **EXACTLY THE PASS'S OWN HEADLINE FINDING AT A SECOND INSTRUMENT, IN THE SAME FILE, 1,150 LINES APART** — ★★★★ **THE HEADLINE ITSELF: `the_shipped_default_renders_solid_black_ink_as_a_warm_near_black` ASSERTED `#231F20` WHILE THE SHIPPED DEFAULT RENDERED `#000000`, AND STAYED GREEN FOR TWENTY DAYS BECAUSE IT NAMES `CmykIntent::Calibrated` RATHER THAN `CmykIntent::default()` — A TEST THAT HARD-CODES THE VALUE IT CALLS "THE DEFAULT" CANNOT DETECT THE DEFAULT MOVING, AND READS AS COVERAGE OF EXACTLY THE THING IT HAS STOPPED COVERING** — ★★★ **`R222`'s FOURTH INSTANCE, AND THE FIRST WHERE IT FAILED TO FIRE: THE ENGINEER OPENED `ui_text.rs` IN THIS COMMIT, DELETED 19 LINES FROM IT, AND LEFT THE SURVIVOR TWENTY LINES AWAY — BECAUSE THE CLAIM BEING CORRECTED WAS *"deliberately differs from Acrobat"* AND THE SURVIVOR SAYS *"(pdfce's default)"*, WHICH IS THE SAME CLAIM IN WORDS THAT SHARE NO TOKEN** — ★★ **`R93` AMENDED IN PLACE, NOT MINTED: ITS STATED REMEDY IS *"prefer a round-trip test over a prose promise"* AND HERE THE PROSE WAS **INSIDE** THE TEST; ceiling unmoved at `R224`** — ★ **AND THE 307th FILING'S OWED CHANNEL ITEM IS DISCHARGED — THE 09:16 INBOUND WAS THIS RULING, SCOPED AND SHIPPED THREE AND A HALF HOURS LATER; ITS `ROADMAP.md` HEADING CALLING THAT INBOUND *"NAMED IN NO DOCUMENT"* WAS REFUTED BY ITS OWN `SESSION_LOG.md` ENTRY, WHICH NAMED THE FILE, IN THE SAME COMMIT** — 2026-08-28 (308th filing)
 
 **One commit.** `1c292bc`, **9 files, +209 / −176** (`git show --numstat`, run
@@ -115106,6 +115224,45 @@ same cause (hashes exist only at commit time), two different failure modes.
     which is hard rule 8's discipline applied to machinery.
 
   No re-mint; **ceiling stays `R224`, next free `R225`.**
+
+  **★★★ SECOND DATED NOTE, 2026-08-28 (309th filing) — THE SAME CLAUSE, THE
+  SAME SCRIPT AND THE SAME DOCUMENT, THREE DAYS LATER, AND THIS TIME IN A
+  *WRITER*.** From `Pass 153.1` (`180f19f`).
+
+  `check-core-api-verbs.py` gained a `--fix` flag that **writes**
+  `docs/core-api/index.md`'s own *"N lines · N clauses cited"* figures, on the
+  ground that those figures are **derived, not decided**. **Its first cut
+  silently rewrote ZERO rows.** It anchored on the script's `VERB_INDEX`
+  constant — which names `02-editing-and-saving.md`, **the document the
+  routing table POINTS AT** — while the table lives in `index.md`, **the
+  document that CONTAINS it**. Every surrounding filter passed and the regex
+  was correct, so it read as a regex problem for three debugging rounds.
+
+  **Two things here that the ★★ clause and the 306th filing's note did not
+  state**, and they are why this is a second note rather than a repetition:
+
+  - **THE ANCHOR WAS NOT RENAMED — IT WAS WRONG FROM BIRTH.** The clause is
+    written around *"its anchor is renamed"*, which describes decay. This
+    instance never worked, and looked identical to working on every run.
+    ⇒ *The vacuous state is not only what a scan DECAYS into; it is also what
+    a scan can be BORN in, and the two are indistinguishable from the output.*
+  - **★ A VACUOUS *WRITER* IS A NEAR-MISS, NOT MERELY AN UNINFORMATIVE
+    REPORT.** A vacuous reader prints a false PASS. **Had this regex matched,
+    it would have written `index.md`'s size figures into
+    `02-editing-and-saving.md`** — a tool given write access, pointed at the
+    wrong file, one successful match from corrupting it. ⇒ *Every `--fix`
+    owes a positive-control test that its subject set is NON-EMPTY, and it
+    owes it more than a read-only gate does.* `180f19f` supplies one by
+    **sabotage**: corrupt a figure to `9,999`, run `--fix`, confirm the file
+    returns **byte-identical** to its pre-sabotage state and a second run
+    rewrites **0**. That test fails on an empty subject set, which is exactly
+    what the first cut needed and did not have.
+
+  **The disposition follows the 306th filing's precedent unchanged: a dated
+  note, no mint.** The subject is the clause's own stated one — *any
+  assertion whose subject set can be empty* — and n = 2 in one tree does not
+  buy a number when the rule already covers it. **Ceiling stays `R224`, next
+  free `R225`.**
 
 ## Update protocol
 
