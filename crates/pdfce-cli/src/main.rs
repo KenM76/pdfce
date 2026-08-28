@@ -5178,6 +5178,49 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Rotate a ce dimension** about a point (`Pass 159.0`).
+    ///
+    /// # The measured value does NOT change
+    ///
+    /// A rotation preserves every distance, so the number is identical either
+    /// side of it — not because pdfce holds it, but because there is nothing
+    /// to change. That is what makes rotating a ce dimension a legitimate
+    /// drafting operation.
+    ///
+    /// # Scaling one is deliberately not offered
+    ///
+    /// It has no honest reading: either the value stays fixed while the
+    /// geometry grows, so the dimension lies about the drawing, or both
+    /// change, so nothing was measured. Use `group-scale` to change the
+    /// measurement RATIO — which is the operation actually wanted.
+    ///
+    /// # What it may relax, and reports
+    ///
+    /// A `Linear` dimension locked to horizontal or vertical cannot stay
+    /// locked through a rotation. pdfce relaxes it to *aligned* — which is
+    /// what a line following its own picked points actually is — and says so.
+    DimensionRotate {
+        /// Input PDF.
+        input: PathBuf,
+        /// The ce dimension id, as printed by `dimension-list`.
+        #[arg(long)]
+        dimension: u32,
+        /// Rotation in degrees, ANTICLOCKWISE.
+        #[arg(long, allow_negative_numbers = true)]
+        degrees: f64,
+        /// Pivot x in points — the point that does not move.
+        #[arg(long, allow_negative_numbers = true)]
+        pivot_x: f64,
+        /// Pivot y in points.
+        #[arg(long, allow_negative_numbers = true)]
+        pivot_y: f64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
     /// **Edit one vertex of a ce dimension** (`Pass 107.0`) — move it, insert
     /// a new one after it, or remove it.
     ///
@@ -8063,6 +8106,22 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         }),
+        Command::DimensionRotate {
+            input,
+            dimension,
+            degrees,
+            pivot_x,
+            pivot_y,
+            output,
+            mode,
+        } => cmd_dimension_rotate(
+            &input,
+            dimension,
+            degrees,
+            (pivot_x, pivot_y),
+            &output,
+            mode,
+        ),
         Command::DimensionVertex {
             input,
             dimension,
@@ -23102,6 +23161,82 @@ fn cmd_dimension_vertex(args: &DimensionVertexArgs<'_>) -> u8 {
         u32::from(outcome.undo_identical),
     );
     finish_edit(args.input, &outcome)
+}
+
+/// `dimension-rotate` — turn one ce dimension about a point (`Pass 159.0`).
+///
+/// Prints the constraint relaxation when it happens, because a dimension that
+/// silently stopped being locked to horizontal is a drafting surprise the
+/// operator would find later and blame on something else.
+fn cmd_dimension_rotate(
+    input: &Path,
+    dimension: u32,
+    degrees: f64,
+    pivot: (f64, f64),
+    output: &Path,
+    mode: SaveMode,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let id = pdfce_core::dimension::DimensionId(dimension);
+
+    let before = session
+        .dimension_model()
+        .display(id)
+        .map(|d| d.text)
+        .unwrap_or_default();
+
+    let out = match session.rotate_dimension(id, pivot, degrees) {
+        Ok(o) => o,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    if out.constraint_relaxed {
+        eprintln!(
+            "pdfce-cli: {}: this ce dimension was locked to an axis, and the rotation RELAXED that lock to \"aligned\". A horizontal or vertical constraint cannot describe a line that has been turned, and keeping it would leave the drawn line disagreeing with its own stated constraint.",
+            input.display()
+        );
+    }
+
+    let after = session
+        .dimension_model()
+        .display(id)
+        .map(|d| d.text)
+        .unwrap_or_default();
+    if after != before {
+        eprintln!(
+            "pdfce-cli: {}: the measured value CHANGED, {before:?} -> {after:?}, and it should not have. A rotation preserves every distance, so this is a defect rather than an expected outcome -- please report it.",
+            input.display()
+        );
+    }
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(o) => o,
+        Err(code) => return code,
+    };
+
+    println!(
+        "dimension-rotate {} dimension={dimension} degrees={:.4} pivot=({:.2} {:.2}) -> {}",
+        input.display(),
+        out.degrees,
+        pivot.0,
+        pivot.1,
+        output.display()
+    );
+    println!(
+        "  value={after:?} (unchanged, by construction) constraint_relaxed={}",
+        out.constraint_relaxed
+    );
+    finish_edit(input, &saved)
 }
 
 /// `dimension-offset` — set a ce dimension's placement (Pass 27.1).

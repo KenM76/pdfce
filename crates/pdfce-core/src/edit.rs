@@ -453,6 +453,11 @@ pub enum CommandKind {
     /// its geometry keys, its appearance `/Matrix`, and the `/Rect` that
     /// bounds the result.
     RotateAnnotation,
+    /// [`EditSession::rotate_dimension`] turned a ce dimension about a point.
+    ///
+    /// Distinct from [`Self::MoveDimension`] because a rotation can relax an
+    /// axis constraint and a translation never can.
+    RotateDimension,
     /// An existing field's **field-scope** properties were changed
     /// (`Pass 134.0`) — `/Ff` flags, `/MaxLen`, `/TU`, `/Opt`.
     ///
@@ -11311,6 +11316,30 @@ pub struct AnnotationResize {
     pub stroke_width: Option<(f64, f64)>,
     /// Whether `/RD` was present, and whether it was scaled.
     pub rect_differences_scaled: Option<bool>,
+}
+
+/// What a [`rotate_dimension`](EditSession::rotate_dimension) call did
+/// (`Pass 159.0`).
+///
+/// Deliberately carries **no before/after value pair**, unlike
+/// [`VertexOutcome`]. A rotation is an isometry, so the measured number is
+/// identical either side of it — reporting "5.000 m → 5.000 m" would invite
+/// a reader to look for a change that cannot exist. What CAN change is the
+/// axis constraint, and that is the field.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct DimensionRotate {
+    /// The ce dimension that turned.
+    pub dimension: DimensionId,
+    /// Degrees anticlockwise, echoed back.
+    pub degrees: f64,
+    /// `true` if a `Linear` dimension's `Horizontal`/`Vertical` constraint was
+    /// relaxed to `Aligned` because the rotation invalidated it.
+    ///
+    /// Not a failure and not a silent repair — see
+    /// [`EditSession::rotate_dimension`] for the three options and why this is
+    /// the honest one.
+    pub constraint_relaxed: bool,
 }
 
 /// What a [`rotate_annotation`](EditSession::rotate_annotation) call did
@@ -28093,6 +28122,111 @@ impl EditSession {
             trailer: None,
         });
         Ok(())
+    }
+
+    /// Rotate a whole ce dimension about `pivot` by `degrees` anticlockwise
+    /// (`Pass 159.0`).
+    ///
+    /// # ★★★ The measured value is UNCHANGED, by construction
+    ///
+    /// A rotation preserves every distance and angle, so the number stays
+    /// identical — not because pdfce decided to hold it, but because there is
+    /// nothing to change. That is what makes this a legitimate drafting
+    /// operation, and it is why the outcome reports the label rather than a
+    /// before/after pair: there is no "after".
+    ///
+    /// ★ **Scaling a ce dimension is deliberately NOT offered**, and this is
+    /// the decision worth reading before someone adds it. It has no honest
+    /// reading: either the value stays fixed while the geometry grows, so the
+    /// dimension lies about the drawing, or both change, so nothing was
+    /// measured and the operator has drawn a number instead of taking one.
+    /// The operation actually wanted is [`Self::set_group_scale`], which
+    /// changes the measurement RATIO and already ships. Project rule 15's
+    /// distinction is exactly this — a ce dimension's text IS its measurement.
+    ///
+    /// # The `AxisConstraint` decision, which is the only judgement here
+    ///
+    /// A `Linear` dimension may be constrained to `Horizontal` or `Vertical`.
+    /// Rotate it 30° and that constraint can no longer describe what is drawn.
+    /// Three options existed and two are wrong:
+    ///
+    /// * **Refuse** — makes rotation impossible for the most common
+    ///   constrained dimensions, which is most of a CAD drawing.
+    /// * **Keep the constraint** — the drawn line and its own stated
+    ///   constraint then disagree, which is worse than either alone and
+    ///   invisible until something regenerates from the constraint.
+    /// * **Relax to [`AxisConstraint::Aligned`] and SAY SO** — preserves
+    ///   exactly what is on the page, and `Aligned` is precisely the honest
+    ///   description of a line that follows its own picked points.
+    ///
+    /// The third ships. [`DimensionRotate::constraint_relaxed`] reports it,
+    /// and a rotation by a multiple of 360° leaves the constraint alone
+    /// because nothing moved.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DocumentEncrypted`], the certification gate, the
+    /// dimension-sidecar check, and a non-finite angle.
+    pub fn rotate_dimension(
+        &mut self,
+        dimension: DimensionId,
+        pivot: (f64, f64),
+        degrees: f64,
+    ) -> Result<DimensionRotate, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        if !degrees.is_finite() {
+            return Err(EditError::ResizeFactorInvalid {
+                axis: "degrees",
+                value: degrees,
+            });
+        }
+        self.check_dimension_sidecar()?;
+        let mut model = self.read_dimension_model();
+
+        let radians = degrees.to_radians();
+        let pivot_pt = crate::vector::geometry::Point::new(pivot.0, pivot.1);
+
+        // A whole number of turns changes nothing, so it must not relax a
+        // constraint either -- the relaxation exists to keep the constraint
+        // honest about the geometry, and here the geometry is where it was.
+        let is_full_turn = (degrees % 360.0).abs() < 1e-9;
+
+        // `.clone()` for the same reason `move_dimension` gives: `rotated`
+        // consumes its receiver and `record` is a borrow of the model.
+        let record = model
+            .dimension(dimension)
+            .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
+        let mut rotated = record.kind.clone().rotated(pivot_pt, radians);
+
+        let mut constraint_relaxed = false;
+        if !is_full_turn
+            && let crate::dimension::DimensionKind::Linear { constraint, .. } = &mut rotated
+            && !matches!(constraint, crate::vector::snap::AxisConstraint::Aligned)
+        {
+            *constraint = crate::vector::snap::AxisConstraint::Aligned;
+            constraint_relaxed = true;
+        }
+        if let Some(d) = model.dimension_mut(dimension) {
+            d.kind = rotated;
+        }
+
+        let mut objects = self.regenerate_dimension_writes(&model, &[dimension])?;
+        objects.push(self.catalog_dimension_write(&model)?);
+        self.commit(Command {
+            kind: CommandKind::RotateDimension,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(DimensionRotate {
+            dimension,
+            degrees,
+            constraint_relaxed,
+        })
     }
 
     /// **Move one vertex** of a ce dimension by a page-space `(dx, dy)`, as

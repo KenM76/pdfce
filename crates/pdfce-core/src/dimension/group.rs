@@ -554,6 +554,110 @@ impl DimensionKind {
         Some((dim_a, dim_b, a, b))
     }
 
+    /// Rotate every stored point about `pivot` by `radians` anticlockwise
+    /// (`Pass 159.0`) — the isometry sibling of [`Self::translated`].
+    ///
+    /// # ★★★ The measured value does NOT change, and that is the whole point
+    ///
+    /// A rotation preserves every distance and every angle. So the number a ce
+    /// dimension displays is **identical before and after**, by construction
+    /// rather than by pdfce choosing to keep it — and that is what makes
+    /// rotating one a legitimate drafting operation while *scaling* one is not.
+    ///
+    /// ★ **Scaling a ce dimension is deliberately not offered.** It has no
+    /// honest reading. Either the value stays fixed while the geometry grows,
+    /// so the dimension lies about the drawing; or both change, so nothing was
+    /// measured and the operator has drawn a number rather than taken one. The
+    /// operation an operator actually wants is
+    /// [`EditSession::set_group_scale`](crate::edit::EditSession::set_group_scale),
+    /// which changes the measurement RATIO — points per unit — and already
+    /// ships. Rule 15's distinction is exactly this: a ce dimension's text IS
+    /// its measurement.
+    ///
+    /// # ★★ `dir_a` / `dir_b` are the one place this differs from a translate
+    ///
+    /// [`Self::translated`] leaves an `Angular`'s arm directions alone,
+    /// because they are **unit vectors rather than points** and translating
+    /// them would rotate the dimension — its own comment says so.
+    ///
+    /// A rotation is the mirror case: the arms **must** turn, and they must
+    /// turn WITHOUT the pivot's translation component, or a dimension away
+    /// from the origin would have its arms flung across the page while its
+    /// apex moved correctly. So the apex is mapped through the full
+    /// pivot-rotation and the directions through the bare rotation.
+    ///
+    /// # What is left alone, and why it is correct rather than lazy
+    ///
+    /// `offset`, `text_along` and `radius` are all measured **relative to the
+    /// dimension's own geometry** — a standoff along the normal, a fraction
+    /// along the line, a distance from the apex. Rotating the geometry carries
+    /// its own frame with it, so every one of them still means what it meant.
+    /// This is the same reasoning `translated` gives for leaving them.
+    ///
+    /// `constraint` is **not** handled here; it is a caller-level decision
+    /// because it can be invalidated by the rotation. See
+    /// [`EditSession::rotate_dimension`](crate::edit::EditSession::rotate_dimension).
+    #[must_use]
+    pub fn rotated(self, pivot: Point, radians: f64) -> Self {
+        let (sin, cos) = radians.sin_cos();
+        // About the pivot: translate to origin, rotate, translate back.
+        let map = |p: Point| {
+            let (x, y) = (p.x - pivot.x, p.y - pivot.y);
+            Point::new(pivot.x + x * cos - y * sin, pivot.y + x * sin + y * cos)
+        };
+        // Bare rotation, for direction vectors -- no translation component.
+        let spin = |p: Point| Point::new(p.x * cos - p.y * sin, p.x * sin + p.y * cos);
+
+        match self {
+            Self::Linear {
+                a,
+                b,
+                constraint,
+                offset,
+                text_along,
+            } => Self::Linear {
+                a: map(a),
+                b: map(b),
+                constraint,
+                offset,
+                text_along,
+            },
+            Self::Circular { fit, show_diameter } => Self::Circular {
+                fit: FitCircle {
+                    center: map(fit.center),
+                    ..fit
+                },
+                show_diameter,
+            },
+            Self::Angular {
+                apex,
+                dir_a,
+                dir_b,
+                radius,
+                text_along,
+            } => Self::Angular {
+                apex: map(apex),
+                // The arms turn, and they turn about the ORIGIN, not the
+                // pivot -- see this method's docs.
+                dir_a: spin(dir_a),
+                dir_b: spin(dir_b),
+                radius,
+                text_along,
+            },
+            Self::Perimeter {
+                points,
+                closed,
+                offset,
+                text_along,
+            } => Self::Perimeter {
+                points: points.into_iter().map(map).collect(),
+                closed,
+                offset,
+                text_along,
+            },
+        }
+    }
+
     /// This geometry translated by a page-space `(dx, dy)`.
     ///
     /// # Why the measured value is untouched, on purpose
