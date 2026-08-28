@@ -71783,3 +71783,219 @@ rule minted, ceiling stays `R224`, next free `R225`**; next free filing ordinal
    by name — but do not let a future session read that red as a corrupt record.
 
 ---
+
+## 2026-08-28 (303rd filing) — `Pass 149.0` (`e91dfad`) ships `EditSession::move_annotation`, the move verb markup / links / redaction marks never had — ★★★★★ **and the mechanism the Pass spent itself disproving was already disproved in this project's own PDF RAG on 2026-08-07, while the `FEATURES.md` clause carrying the wrong mechanism was written BY THIS ROLE on 2026-08-20, thirteen days AFTER its own refutation was on disk** — ★★★★★ **the refutation was also seventeen lines below it in the same commit: `Pass 115.0`'s Backlog entry and `Pass 115.1`'s state contradictory mechanisms for the same operation, one author, one hour** — ★★★★ **a correction going further than any of the three documents: for a TRANSLATION the `/BBox` coordinate system and the `/Matrix` do not matter at all, so `move_annotation` is correct on FOREIGN annotations and its own doc comment under-claims it** — ★★★ **the hard-rule-11 sweep found six live survivors of a phrase the operator rejected by name on 2026-08-13, one in `docs/core-api/index.md`'s "read these four things before writing any code against this crate"** — ★★ **and a flat falsehood in `docs/core-api/03-capabilities.md` instructing a shell NOT to build the verb this Pass shipped** — ★ **nothing minted; both candidates argued and declined, one agent-file amendment recommended instead**
+
+**Shipped:**
+
+- **`Pass 149.0`** (`e91dfad`, 2026-08-28 03:31) — `EditSession::move_annotation(annot_id, dx, dy) -> Result<AnnotationMove, EditError>`,
+  **verb 150 of 150**. Translates `/Rect` **and every geometry key** (`/L`,
+  `/Vertices`, `/QuadPoints`, `/CL`, `/InkList`), leaves `/RD` and `/Popup`
+  alone and **discloses both**. Refuses a widget and a ce dimension **by name**
+  (`EditError::AnnotationMoveWrongVerb`), refuses a missing `/Rect`
+  (`EditError::AnnotationRectMissing`), and **accepts a zero delta**.
+  Subtype-agnostic — verified by reading the body, there is no allow-list.
+  CLI: `pdfce-cli move-annotation FILE --page N --index I --dx X --dy Y
+  --output OUT`, addressed exactly as `delete-annotation`, with four stderr
+  disclosures ordered **worst-first**.
+- **Commit:** 9 files, **+1,328 / −29** (`git show --numstat`, run here).
+  **658 of 1,328 lines are the two new test files** — 49.5%, for a verb whose
+  executable half is a `/Rect` patch and a loop.
+
+**Findings + decisions:**
+
+- **★★★★★ THE ANSWER WAS ON DISK BEFORE THE QUESTION WAS FILED, AND THIS ROLE
+  FILED THE QUESTION.** Three measurements, each with its command:
+  `stat` says
+  `C:\personal_rag\pdf\lesson_20260807_translating_rect_needs_no_ap_regeneration_resizing_does.md`
+  reached disk **2026-08-07 20:35**; `git log -S` on the clause text says it was
+  **authored 2026-08-20 14:53** in **`57b67c5`** (*"librarian: Pass 111.0 filed
+  … the whole transform capability scoped as Backlog 113-117"*);
+  `git rev-list --count --since=2026-08-07T00:00:00 e91dfad` says **845 commits**
+  separate them. The 2026-08-07 lesson already contained **both halves** of
+  `Pass 149.0`'s design — the §12.5.5 free-carry derivation *and* the
+  `/L`-goes-stale corollary, verbatim as *"a `/Rect`-only patch would therefore
+  produce a file that LOOKS right and IS wrong."*
+- **★★★★★ AND THE REFUTATION WAS SEVENTEEN LINES BELOW IT IN THE SAME COMMIT.**
+  `Pass 115.0`'s Backlog entry: a markup move *"means moving FOUR things in step:
+  `/Rect`, the subtype geometry key …, `/BBox`, and the baked `/AP` itself."*
+  `Pass 115.1`'s, the next bullet: *"§12.5.5's placement matrix already carries
+  the artwork and a `/Rect` translate suffices."* **Same author, same commit,
+  same hour, same spec clause, opposite conclusions.** `Pass 149.0` measured that
+  two of `115.0`'s four are unnecessary, and that running its proposed pipeline
+  for a move would have **rewritten a foreign tool's artwork**.
+- **★★★★ A CORRECTION THAT GOES FURTHER THAN ANY OF THE THREE DOCUMENTS.** All
+  three — `115.0`, `115.1`, and the lesson's own *Limits* — split on *"is the
+  `/AP` `/BBox` local or absolute?"*. **For a translation that distinction does
+  not exist.** §12.5.5 step (b) gives `A(p) = s·(p − box.LL) + Rect.LL`; a
+  translation leaves `/BBox` and `/Matrix` untouched, so `s` is **unchanged
+  whatever it was**, and `A'(p) = A(p) + (dx, dy)` exactly. The factors need not
+  be **1**; they need to be **unchanged**. ⇒ **The local-vs-absolute split is a
+  RESIZE distinction that was applied to a move**, and `move_annotation` is
+  correct on **foreign** annotations — a stronger claim than its own doc comment
+  (`edit.rs:16927`) makes, since that derives the result from pdfce's authoring
+  convention. *Amend the reason, not the conclusion* — **the same sentence the
+  2026-08-07 lesson used about the doc comment IT caught.** Second time in one
+  lineage.
+- **★★★ HARD-RULE-11 SWEEP — six live survivors, two unrelated families, none
+  gate-visible.** (a) `docs/core-api/03-capabilities.md:1020` *"Limit 2"* — every
+  sentence false, closing with ***"Do not design a shell around dragging a placed
+  markup; the verb does not exist"***, in the document the outbound note names as
+  its durable record; its `FEATURES.md:219`/`:211` line citations are `R214`'s
+  failure mode and were already stale. **The gate could not catch it: a coverage
+  check is blind to a claim of NON-coverage** — *"there is no `move_annotation`"*
+  contains the verb's name. (b) The rule-4 wording Ken **rejected by name on
+  2026-08-13** (decision 059) is live in **five** places:
+  `docs/core-api/index.md:55` (item 3 of the consuming shell's onboarding list —
+  the worst), `docs/ocr-engine-survey.md:1567` (labelled ***"The current text"***,
+  superseded for fifteen days), `docs/ARCHITECTURE.md:16135`,
+  `crates/pdfce-cli/src/main.rs:3972`, `crates/pdfce-core/src/ocr/mod.rs:45`.
+  Correctly historical and left alone: `ARCHITECTURE.md:22296`, `decisions/024`,
+  `ROADMAP.md:39256`, this log's 2026-08-13 entry (`R216`).
+- **★★ A stale figure inside the footnote about stale figures.**
+  `docs/core-api/index.md:17` says *"`EditError`'s **57 variants**"*; measured
+  **87** here (a `grep -c` of the `#[error]` attributes over the enum's own
+  bounds, `edit.rs:4154`–`5537`, located by `awk`). The footnote three lines
+  below reads *"★ Every figure above was stale, and the verb count caused an
+  incident."* The verb count is gated and was corrected in this very commit; the
+  variant count sits in the same table cell, ungated, 30 short. ⇒ **A gate built
+  for one figure in a row makes the ungated figures beside it look maintained.**
+- **`R224` applied, and one question left open honestly.** The route operands
+  here are **annotation keys holding absolute page coordinates**; the shipped
+  enumeration is **five**, `/InkList` handled separately because it is nested one
+  level deeper (the sabotage that skipped it went red). Whether five is complete
+  for ISO 32000-1/-2 **cannot be closed here**: the spec RAG holds **4 of the ~26
+  `§12.5.6.N` subtype files** (`ls`, run here). **Dispatch `pdfce-spec-librarian`
+  before the resize/rotate Pass**, which needs the same enumeration **plus**
+  `/RD` and `/BBox`.
+- **Minting — both candidates DECLINED, argued.** (1) The engineer's — *"a move
+  that updates only the rendered representation renders correctly and
+  reconstructs wrongly"* — **is already written**, by this role, on 2026-08-07;
+  a rule would be a **third** description. (2) This role's — *"a `FEATURES.md`
+  row's or Backlog entry's mechanism clause is a claim with no falsifier"* — has
+  measured reach (**22 of 215** `FEATURES.md` rows carry a reason clause) but
+  **no rule is missing**: `FEATURES.md`'s own header already says *"If a row
+  needs an argument, the argument goes in `ROADMAP.md`"*, and the general form is
+  **hard rule 10's shape in a different medium** (two forms of one figure 217
+  lines apart; here two forms of one mechanism seventeen lines apart).
+  ⇒ **Recommended instead, not taken:** an amendment to `pdfce-librarian.md`
+  hard rule 10 — ***file a MECHANISM in a form that can disagree with something:
+  name the spec clause it rests on, and name the sibling case it must agree
+  with.*** This role does not amend its own agent file (precedent: hard rule 11,
+  *"the amendment is the engineer's act"*).
+  **★ SELF-APPLIED, and the first draft of this filing failed it:** the new
+  *Implemented* row's first cut carried its own mechanism clause, and so did the
+  rewritten *Planned* row. **Both tightened before the filing closed** — measured
+  after, **22 reason clauses over 215 rows**, the two new rows adding **none**.
+  ⇒ *Arguing that a document's own header forbids something is not the same act
+  as obeying it, and the gap between them is one grep.*
+  **Nothing minted. Ceiling stays `R224`, next free `R225`. Decisions stay at
+  094, next free 095.**
+
+**Verification (each figure with the command that produced it):**
+
+| claim | measured how | value |
+|---|---|---|
+| test suite | engineer's `cargo test --workspace`, relayed; the **delta verified here** by counting `#[test]` attributes in both new files | **4,508 / 0**, from **4,493** — **+15 = +8 core + 7 CLI**, both counted on disk |
+| sabotage 1 (stop translating flat geometry keys) | engineer | **2 of 8 red** |
+| sabotage 2 (negate `dy` in the geometry translator only) | engineer | **3 of 8 red**, incl. the there-and-back round trip |
+| gates | `bash tools/run-gates.sh` | **PASS, 26 commands** |
+| `edit.rs` lines | `git show e91dfad:… | wc -l`, run here | **32,826 AT `e91dfad`** — matches the corrected doc (was 32,505). ⚠ working tree already **33,067** (engineer mid-Pass on markup note text), so `check-core-api-verbs.py` is red on **his in-flight state**, not on this commit |
+| `EditSession` verbs | this commit's `docs/core-api/index.md` diff | **149 → 150** |
+| GUI-core separation | no `Cargo.toml` in `git show --numstat` | not at risk; no re-check owed |
+| portable build | `du -sb`, run here | `D:\builds\pdfce-20260828-0332-e91dfad\`, **46,611,359 bytes** |
+| packaging smoke test | engineer | **run, not skipped** — fresh path, **new verb driven end to end** (`move-annotation`, then `list-annotations` reading the moved rect back); both disclosures printed |
+| disk after cleanup | `df -h /d` + `du -sh target` + `ls -d`, run here | **186 GB free** (from 173) and **`target` 26 GB** (from 38); `target/debug/incremental` and `target/tmp` **absent** |
+
+**★ The cleanup's most useful line is what it did NOT delete.** The debug `deps`
+tree was **kept deliberately** — working state the next iteration needs, whose
+deletion buys disk at the cost of a ten-minute rebuild **every** loop. Cleaned:
+`cargo clean --release` on four crates (1.5 GiB), twelve `tools/*/target` dirs,
+`target/debug/incremental` (11 GiB), `target/tmp`. ⇒ *"Clean up temp files" is
+not "empty `target`."*
+
+**`R203`(d) — channel check, with reading times:**
+
+- **`pdfce_FeatureRequests/open/`** — `ls -lt` at filing time. **One file newer
+  than the 302nd filing's recorded reading, read here**:
+  `done_2026-08-28-gate-synthesis-selector-CONSUMED.md` (**03:15**). `Pass 144.0`'s
+  second ask went unconsumed for a day — the retry built its `FontSelector` from
+  `real_font` instead of `selector`; **now fixed and driven** on a real site plan
+  (`text-style-applied page=0 change=weight applied=19 runs=14`). Their
+  generalisation, about **our** outbound notes: ⇢ ***"A reply read is not a reply
+  consumed … an ask with no failing artifact behind it has no forcing
+  function."*** Remedy they name: **ship the fixture and say "drive it."** They
+  also record, unprompted, that **`Pass 148.0` reaches no call site there**.
+  Ours, sent 03:38:
+  `note_annotations_can_be_moved_now_and_the_half_you_cannot_see.md`.
+- **`iccce_FeatureRequests/open/`** — `ls -lt`, **unchanged**; newest still
+  `reply_the_profile_census_and_your_33_node_constant.md`, **2026-08-27 14:22**.
+- **No `gui` box moves this filing.** The verb went out at 03:38 and `pdfceGUI`
+  has not replied; the row's `gui` box is a **bare `[ ]` with no quotation
+  attached** — clause (iii). **Third consecutive clean check**, with the caution
+  repeated rather than dropped: *a clean result from a check that previously kept
+  failing is evidence about the CHECK, not about the hazard.* **Instance count
+  stays at 4.**
+
+**The 302nd filing's five owed items — four DISCHARGED by `e91dfad`, verified here:**
+
+1. `tools/run-gates.sh`'s false header (*"there is ONE list and it is not stored
+   here"*) — **fixed**, with the correction's reason written beside it.
+2. `NEXT_SESSION.md` §0's *"one unfiled commit sits at the tip"* — **fixed**
+   (now *"One unfiled commit **may** sit at the tip. Never two."*).
+3. The 25-vs-26 command contradiction — **fixed**; both `NEXT_SESSION.md:60` and
+   `:219` now read **26**.
+4. The `n=2` correction in the gate docstring — **fixed**, with a reflog-sourced
+   table (`36e7b66`→`eab7da4`, 12 m 33 s after push; `0d20861`→`fa16819`,
+   **37 s** after push).
+5. `check-cited-commits-exist.py` cannot tell *exists* from *reachable* —
+   **addressed by documentation, not by code**: `NEXT_SESSION.md:44` now names
+   the replacements, which is what the gate's existing rule requires. **The
+   `git gc` exposure is unchanged** and stays owed.
+
+**Documents edited:** `docs/ROADMAP.md` (this Pass to *Shipped*; `Pass 115.x`
+gains an amendment note, entries left standing), `docs/FEATURES.md` (**row
+split** — a new *Implemented* move row at `[x]` core / **`◐`** cli, the `◐` being
+`move_dimension`'s missing subcommand, **`R151`**, not rounded up; the *Planned*
+row becomes resize-and-rotate with its mechanism clause **replaced, not
+deleted**; the canvas row names the new verb), `docs/SESSION_LOG.md` (this
+entry), and `C:\personal_rag\pdf\` (dated amendment + index line).
+
+**Still in flight / owed back to the engineer:**
+
+1. **`docs/core-api/03-capabilities.md:1020` "Limit 2" — false in every
+   sentence**, and its closing line tells a shell not to build the shipped verb.
+   Highest priority.
+2. **`docs/core-api/index.md:55`** — the rejected rule-4 wording in the
+   *"read these four things"* list; replace with 059's text.
+3. **`docs/core-api/index.md:17`** — *"57 variants"*; measured **87**.
+4. **`docs/ocr-engine-survey.md:1567`** — superseded 024 text labelled *"The
+   current text."*
+5. **`docs/ARCHITECTURE.md:16135`** — live rule-4 prescription in the struck
+   wording (left with its family so all four read consistently after one pass).
+6. **`crates/pdfce-cli/src/main.rs:3972`** and
+   **`crates/pdfce-core/src/ocr/mod.rs:45`** — same wording; `crates/`, reported
+   only.
+7. **`edit.rs:16927` under-claims `move_annotation`** — the conclusion is right
+   and more general than the reason given.
+8. **Dispatch `pdfce-spec-librarian` for `§12.5.6`'s subtype family** (4 of ~26
+   files on disk) before resize/rotate.
+9. **Audit the other 21 `FEATURES.md` reason clauses** against the header rule
+   that forbids them.
+10. **Recommended agent-file amendment** to `pdfce-librarian.md` hard rule 10 —
+    the mechanism clause, above. Engineer's act.
+
+**For next session:**
+
+- **`Pass 150`** is the next free ID. The operator's loop continues —
+  *"continue work on making everything editable … get back to grey over spot if
+  you finish adding the edit verbs."*
+- **Resize is the named next ask from `pdfceGUI`**, and the outbound note asks
+  them the right question rather than guessing: *does the stroke width scale? do
+  vertices scale about the centre or the grabbed corner?* **Wait for their
+  answer** — and note that resize is where the local-vs-absolute `/BBox` split
+  finally becomes load-bearing, which is the one thing `Pass 115.0`'s entry got
+  right.
+- **No answer is owed to `pdfceGUI`** on `144.0`; their 03:15 file closes it.
+
+---
