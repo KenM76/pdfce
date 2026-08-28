@@ -146,6 +146,8 @@ done
 
 if [ "$LIST_ONLY" = "1" ]; then
     printf 'run-gates would run, in order:\n\n'
+    printf '  --- pre-flight, first; CI cannot check this one ---\n'
+    printf '  python tools/check-history-not-rewritten.py\n\n'
     for c in "${main[@]}"; do printf '  %s\n' "$c"; done
     printf '\n  --- filing gates, last ---\n'
     for c in "${filing[@]}"; do printf '  %s\n' "$c"; done
@@ -165,6 +167,25 @@ run_one() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# THE ONE CHECK CI STRUCTURALLY CANNOT PROVIDE, so it is named here rather
+# than derived from the workflow.
+#
+# Every other command in this sweep asks a question about the TREE, which the
+# server re-checks. `check-history-not-rewritten.py` asks about the
+# relationship between this branch and the remote -- and by the time CI runs,
+# the push has already happened. A pre-push check is the only place it can
+# live, which is also why `check-ci-parity.py` does not know about it.
+#
+# It runs FIRST because its failure invalidates everything after it: a sweep
+# that certifies a tree whose history has been rewritten is certifying
+# something nobody else can see.
+#
+# Added 2026-08-28, after a SUBAGENT amended an already-pushed commit without
+# announcing it. That instance was harmless -- identical tree, metadata only --
+# and was found by accident, which is the part that made it worth a gate.
+run_one "python tools/check-history-not-rewritten.py"
+
 for cmd in "${main[@]}"; do run_one "$cmd"; done
 
 printf '\n=== filing gates (last, because their answer depends on commits that\n'
@@ -180,12 +201,12 @@ fi
 
 if [ "${#failed[@]}" -eq 0 ]; then
     printf 'run-gates: PASS — %d command(s), including %d filing gate(s).\n' \
-        "$(( ${#main[@]} + ${#filing[@]} ))" "${#filing[@]}"
+        "$(( ${#main[@]} + ${#filing[@]} + 1 ))" "${#filing[@]}"
     exit 0
 fi
 
 printf 'run-gates: FAILED — %d of %d command(s):\n\n' \
-    "${#failed[@]}" "$(( ${#main[@]} + ${#filing[@]} ))"
+    "${#failed[@]}" "$(( ${#main[@]} + ${#filing[@]} + 1 ))"
 i=1
 for c in "${failed[@]}"; do
     printf '  %d. %s\n' "$i" "$c"
