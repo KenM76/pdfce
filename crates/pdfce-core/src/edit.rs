@@ -244,6 +244,13 @@ pub enum CommandKind {
     /// and the title is a `String`, which `CommandKind`'s `Copy + Eq`
     /// bound does not allow.
     AddOutlineItem,
+    /// [`EditSession::set_outline_title`], [`EditSession::delete_outline_item`]
+    /// or [`EditSession::move_outline_item`] changed an existing bookmark.
+    ///
+    /// Distinct from adding one: undoing an add removes the item, undoing an
+    /// edit restores the previous title or the previous position of an item
+    /// that stays.
+    EditOutlineItem,
     /// A named destination was defined in the `/Names` `/Dests` name tree
     /// (§12.3.2.3).
     AddNamedDestination,
@@ -950,18 +957,40 @@ struct ObjectWrite {
 /// `is_item` flag; sabotaging that flag left the whole suite green, which is
 /// the measurement that removed it.
 fn bump_outline_count(d: &mut Dict) -> bool {
+    adjust_outline_count(d, 1)
+}
+
+/// Adjust an outline node's `/Count` by `delta` **visible items**, preserving
+/// the sign convention, and report whether the node is OPEN (`Pass 156.0`).
+///
+/// # ★ `/Count` is two different quantities, and this handles the item one
+///
+/// §12.3.3 Table 153: on an ITEM, `/Count` counts visible **descendants**,
+/// excluding the item itself, and its **sign carries the open/closed state** —
+/// positive is open, negative is closed with the magnitude being what *would*
+/// be visible. Table 152's root `/Count` is a different quantity (it INCLUDES
+/// the top-level items) and *"cannot be negative"*. The spec corpus calls
+/// confusing the two the single most common error against this clause.
+///
+/// So a delta is applied to the MAGNITUDE and the sign is preserved: adding
+/// two visible items under a closed node takes `-3` to `-5`, not to `-1`.
+///
+/// A node whose magnitude reaches zero loses `/Count` entirely, because
+/// Table 153 makes it *"required if the item has any descendants"* — a leaf
+/// carrying `/Count 0` is a leaf claiming to be a collapsed subtree.
+fn adjust_outline_count(d: &mut Dict, delta: i64) -> bool {
     let current = match d.get(b"Count") {
         Some(Object::Integer(n)) => *n,
         _ => 0,
     };
-    let (next, open) = if current < 0 {
-        // Closed: magnitude grows, sign preserved. The subtree stays
-        // collapsed and contributes exactly 1 to the level above.
-        (current.saturating_sub(1), false)
+    let open = current >= 0;
+    let magnitude = current.saturating_abs().saturating_add(delta).max(0);
+    if magnitude == 0 {
+        d.remove(b"Count");
     } else {
-        (current.saturating_add(1), true)
-    };
-    d.insert(Name::from(b"Count"), Object::Integer(next));
+        let signed = if open { magnitude } else { -magnitude };
+        d.insert(Name::from(b"Count"), Object::Integer(signed));
+    }
     open
 }
 
@@ -4363,6 +4392,20 @@ pub struct MarkupStyleChange {
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum EditError {
+    /// [`EditSession::delete_outline_item`] was given the outline ROOT
+    /// rather than an item (`Pass 156.0`).
+    ///
+    /// The root (§12.3.3 Table 152) has no `/Parent` and is not an outline
+    /// item: it carries no `/Title`, and its `/Count` counts a different
+    /// quantity from an item’s. Deleting it means deleting the whole
+    /// outline, a different operation that gets its own verb when wanted.
+    #[error(
+        "object {id} is the outline ROOT, not an outline item -- it has no /Parent and no /Title. Deleting the whole outline is a separate operation"
+    )]
+    OutlineRootIsNotAnItem {
+        /// The object that was passed.
+        id: ObjId,
+    },
     /// A resize factor was zero or non-finite (`Pass 151.0`).
     ///
     /// Zero collapses the `/Rect` to a degenerate box, which §12.5.5 treats
@@ -25832,6 +25875,298 @@ impl EditSession {
             trailer: None,
         });
         Ok(())
+    }
+
+    /// Rename an existing outline item — its `/Title` (`Pass 156.0`).
+    ///
+    /// The commonest bookmark edit and the one with no structural risk: a
+    /// title is a text string (§7.9.2) on one dictionary, and nothing in the
+    /// `/First`/`/Last`/`/Next`/`/Prev`/`/Count` machinery depends on it.
+    ///
+    /// Encoded through the same `crate::textstring` path every other text
+    /// string uses, so a title with an em dash or an accented name survives —
+    /// `Pass 150.0` shipped a defect from two paths disagreeing about
+    /// PDFDocEncoding and this deliberately does not add a third.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DocumentEncrypted`], the certification gate, and
+    /// [`EditError::NotADictionary`] if the id is not an outline item.
+    pub fn set_outline_title(&mut self, item_id: ObjId, title: &str) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        let Some(Object::Dict(dict)) = self.value(item_id) else {
+            return Err(EditError::NotADictionary {
+                id: item_id,
+                key: "Title",
+            });
+        };
+        let mut updated = dict.clone();
+        updated.insert(
+            Name::from(b"Title"),
+            Object::String(encode_text_string(title)),
+        );
+        self.commit(Command {
+            kind: CommandKind::EditOutlineItem,
+            objects: vec![ObjectWrite {
+                id: item_id,
+                before: self.state.get(&item_id).cloned(),
+                after: Some(Object::Dict(updated)),
+            }],
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
+    }
+
+    /// Delete an outline item **and everything under it** (`Pass 156.0`).
+    ///
+    /// # ★★ Why the subtree goes too, rather than being promoted
+    ///
+    /// Acrobat deletes the subtree, and the alternative is worse than it
+    /// sounds: promoting orphaned children to the deleted item's parent
+    /// silently *reorganises* a document's navigation, and an operator who
+    /// deleted one chapter heading would find its ten sections spliced into
+    /// the top level. Deleting what was asked for is the predictable act.
+    ///
+    /// # What has to stay consistent, and why this is not a `remove` call
+    ///
+    /// An outline is a doubly-linked sibling chain inside a tree
+    /// (§12.3.3 Tables 152–153). Removing one node touches **five** other
+    /// dictionaries at least:
+    ///
+    /// * the previous sibling's `/Next` (or the parent's `/First` if none),
+    /// * the next sibling's `/Prev` (or the parent's `/Last` if none),
+    /// * every OPEN ancestor's `/Count`, by the number of visible items lost,
+    /// * the root's `/Count`, which counts a different quantity.
+    ///
+    /// Leave any one and the tree is still parseable but wrong — a reader
+    /// walks `/First` then `/Next` and either stops early or revisits.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::set_outline_title`], plus a refusal if `item_id` is the
+    /// outline ROOT: the root is not an item, has no `/Parent`, and deleting
+    /// it means deleting the outline — a different act with a different verb.
+    pub fn delete_outline_item(&mut self, item_id: ObjId) -> Result<usize, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let Some(Object::Dict(item)) = self.value(item_id).cloned() else {
+            return Err(EditError::NotADictionary {
+                id: item_id,
+                key: "Title",
+            });
+        };
+        let parent_id = match item.get(b"Parent") {
+            Some(Object::Reference(r)) => *r,
+            // No `/Parent` means this IS the outline root (Table 152), not an
+            // item: the root carries no `/Title` and its `/Count` counts a
+            // different quantity. Deleting it deletes the whole outline, a
+            // different act that gets its own verb when it is wanted.
+            _ => return Err(EditError::OutlineRootIsNotAnItem { id: item_id }),
+        };
+
+        // Everything under the item, plus the item. Collected BEFORE anything
+        // is unlinked, because the walk uses the links being removed.
+        let subtree = self.outline_subtree(item_id);
+        let visible_lost = self.visible_outline_count(item_id);
+
+        let prev = match item.get(b"Prev") {
+            Some(Object::Reference(r)) => Some(*r),
+            _ => None,
+        };
+        let next = match item.get(b"Next") {
+            Some(Object::Reference(r)) => Some(*r),
+            _ => None,
+        };
+
+        let mut writes: Vec<ObjectWrite> = Vec::new();
+        let patch = |me: &Self, id: ObjId, f: &dyn Fn(&mut Dict)| -> Option<ObjectWrite> {
+            let Some(Object::Dict(d)) = me.value(id) else {
+                return None;
+            };
+            let mut d = d.clone();
+            f(&mut d);
+            Some(ObjectWrite {
+                id,
+                before: me.state.get(&id).cloned(),
+                after: Some(Object::Dict(d)),
+            })
+        };
+
+        // Relink the siblings around the hole.
+        if let Some(p) = prev
+            && let Some(w) = patch(self, p, &|d: &mut Dict| match next {
+                Some(n) => {
+                    d.insert(Name::from(b"Next"), Object::Reference(n));
+                }
+                None => {
+                    d.remove(b"Next");
+                }
+            })
+        {
+            writes.push(w);
+        }
+        if let Some(nx) = next
+            && let Some(w) = patch(self, nx, &|d: &mut Dict| match prev {
+                Some(p) => {
+                    d.insert(Name::from(b"Prev"), Object::Reference(p));
+                }
+                None => {
+                    d.remove(b"Prev");
+                }
+            })
+        {
+            writes.push(w);
+        }
+
+        // The parent's own ends, and its /Count.
+        if let Some(w) = patch(self, parent_id, &|d: &mut Dict| {
+            if prev.is_none() {
+                match next {
+                    Some(n) => {
+                        d.insert(Name::from(b"First"), Object::Reference(n));
+                    }
+                    None => {
+                        d.remove(b"First");
+                    }
+                }
+            }
+            if next.is_none() {
+                match prev {
+                    Some(p) => {
+                        d.insert(Name::from(b"Last"), Object::Reference(p));
+                    }
+                    None => {
+                        d.remove(b"Last");
+                    }
+                }
+            }
+            adjust_outline_count(d, -(visible_lost as i64));
+        }) {
+            writes.push(w);
+        }
+
+        // Then every ancestor above it, stopping at the first closed one --
+        // above that nothing visible changed and rewriting would break
+        // minimal-diff. Same cycle guard as `add_outline_item`.
+        let mut cursor = match self.value(parent_id) {
+            Some(Object::Dict(d)) => match d.get(b"Parent") {
+                Some(Object::Reference(r)) => Some(*r),
+                _ => None,
+            },
+            _ => None,
+        };
+        let mut open = matches!(
+            self.value(parent_id),
+            Some(Object::Dict(d)) if !matches!(d.get(b"Count"), Some(Object::Integer(n)) if *n < 0)
+        );
+        let mut guard = 0usize;
+        while open {
+            let Some(id) = cursor else { break };
+            guard += 1;
+            if guard > crate::outline::MAX_OUTLINE_DEPTH {
+                break;
+            }
+            let Some(Object::Dict(d)) = self.value(id).cloned() else {
+                break;
+            };
+            let mut d = d;
+            open = adjust_outline_count(&mut d, -(visible_lost as i64));
+            cursor = match d.get(b"Parent") {
+                Some(Object::Reference(r)) => Some(*r),
+                _ => None,
+            };
+            writes.push(ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(Object::Dict(d)),
+            });
+        }
+
+        let removed = subtree.len();
+        self.commit(Command {
+            kind: CommandKind::EditOutlineItem,
+            objects: writes,
+            removals: subtree
+                .iter()
+                .map(|id| Removal {
+                    id: *id,
+                    was_deleted: self.deleted.contains(id),
+                    is_deleted: true,
+                })
+                .collect(),
+            trailer: None,
+        });
+        Ok(removed)
+    }
+
+    /// Every object id in the subtree rooted at `item_id`, including it.
+    ///
+    /// Depth- and cycle-guarded per `ARCHITECTURE.md` §10: a `/First`/`/Next`
+    /// chain in a damaged or hostile file can loop, and this walk follows both
+    /// unconditionally.
+    fn outline_subtree(&self, item_id: ObjId) -> Vec<ObjId> {
+        let mut out = Vec::new();
+        let mut stack = vec![(item_id, 0usize)];
+        let mut guard = 0usize;
+        while let Some((id, depth)) = stack.pop() {
+            guard += 1;
+            if guard > crate::pageops::references::MAX_OUTLINE_ITEMS
+                || depth > crate::outline::MAX_OUTLINE_DEPTH
+            {
+                break;
+            }
+            if out.contains(&id) {
+                continue;
+            }
+            out.push(id);
+            let Some(Object::Dict(d)) = self.value(id) else {
+                continue;
+            };
+            let mut child = match d.get(b"First") {
+                Some(Object::Reference(r)) => Some(*r),
+                _ => None,
+            };
+            let mut sibs = 0usize;
+            while let Some(c) = child {
+                sibs += 1;
+                if sibs > crate::pageops::references::MAX_OUTLINE_ITEMS {
+                    break;
+                }
+                stack.push((c, depth + 1));
+                child = match self.value(c) {
+                    Some(Object::Dict(cd)) => match cd.get(b"Next") {
+                        Some(Object::Reference(r)) => Some(*r),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+            }
+        }
+        out
+    }
+
+    /// How many items the subtree at `item_id` contributes to an ancestor's
+    /// `/Count` — the item itself plus its VISIBLE descendants.
+    ///
+    /// ★ Not the same as the subtree size. A closed item contributes exactly
+    /// **1**: its descendants are not visible, which is what the negative
+    /// `/Count` means. Counting the whole subtree here would subtract items
+    /// from an ancestor that were never in its total.
+    fn visible_outline_count(&self, item_id: ObjId) -> usize {
+        let Some(Object::Dict(d)) = self.value(item_id) else {
+            return 0;
+        };
+        match d.get(b"Count") {
+            Some(Object::Integer(n)) if *n > 0 => 1 + usize::try_from(*n).unwrap_or(0),
+            _ => 1,
+        }
     }
 
     /// Append a bookmark to the document outline (§12.3.3), creating the

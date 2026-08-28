@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (34,418 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 154 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (34753) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 156 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 154 public `EditSession` methods
+## 1. Verb index — all 156 public `EditSession` methods
 
-**Count: 154.** Established by brace-matched extraction of the four
+**Count: 156.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -1421,6 +1421,8 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 | I want to… | Call | Returns |
 |---|---|---|
 | Add a bookmark | `add_outline_item(&mut self, parent: Option<ObjId>, title: &str, destination: Option<Destination>) -> Result<ObjId, EditError>` | The new item's id. Creates `/Outlines` if absent. ONE undo entry. |
+| **Rename a bookmark** | `set_outline_title(&mut self, item_id: ObjId, title: &str) -> Result<(), EditError>` | `Pass 156.0`. The commonest bookmark edit, and the one with no structural risk. Encoded through the same text-string path as every other title. |
+| **Delete a bookmark and its subtree** | `delete_outline_item(&mut self, item_id: ObjId) -> Result<usize, EditError>` | `Pass 156.0`. Relinks the sibling chain (`/First`, `/Last`, `/Next`, `/Prev`) and fixes `/Count` on every OPEN ancestor and the root. Returns how many objects went. Refuses the outline ROOT by name — that is a different act. |
 
 `parent: None` means top level; otherwise the id of an existing item, which
 you get from `read_outline`. The item is appended **last** among its
