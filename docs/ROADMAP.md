@@ -96,7 +96,308 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 157.0` (`66100db`) — `pdfce-cli rename-bookmark` / `delete-bookmark`: one handler, two verbs, and the rule-11 gap `Pass 156.0` opened is shut the same session — ★★★★★ **THE THIRD DOC-COMMENT ORPHANING OF THE DAY DEFEATED THE MITIGATION BUILT FROM THE FIRST TWO — BUT THE ENGINEER'S STATED CAUSE IS NOT WHAT THE SOURCE SHOWS, AND THE REAL ONE WAS ALREADY WRITTEN DOWN. `cmd_add_bookmark`'s `///` RUN *IS* CONTIGUOUS (29 UNBROKEN LINES, `git show 988b22a:…` VERIFIED HERE); THE ONLY NON-`///` LINE BETWEEN THE RUN AND THE SIGNATURE IS `#[allow(clippy::too_many_arguments)]` — SO THE UPWARD WALK TERMINATED AT ZERO STEPS AND SPLICED *BETWEEN THE ATTRIBUTE AND THE `fn`*, WHICH IS WHY BOTH THE DOCS AND THE ATTRIBUTE WENT TO THE NEW FUNCTION. THE RAG CARRIER'S OWN 2026-08-28 FOOTER PREDICTED THIS SENTENCE FOR SENTENCE — *"A `#[doc]`, `#[derive]`, `#[inline]` or `#[cfg]` attribute on the target moves the boundary further still"* ⇒ *THE MITIGATION WAS BUILT FROM A DOCUMENT THAT HAD ALREADY NAMED ITS FAILURE MODE, AND IMPLEMENTED THE HALF THAT WAS EASY TO CODE*** — ★★★★★ **AND THERE IS A FOURTH INSTANCE, LIVE AT `HEAD`, NINE DAYS OLD, SITTING AT THE EXACT LINE THE THIRD ONE WAS SPLICED INTO: `cmd_list_fields`'s DOC BLOCK IS GLUED TO THE TOP OF `cmd_add_bookmark`'s (`main.rs:11239–11243`), AND `cmd_list_fields` ITSELF (`main.rs:15501`) CARRIES **NO DOC COMMENT AT ALL**. INTRODUCED BY `Pass 103.0` (`d32872a`, 2026-08-19) — CORRECT AT THE INITIAL IMPORT `d8b3903`, WHERE THE BLOCK SAT ABOVE ITS OWN `fn` AT LINE 2773 ⇒ *THE THIRD INSTANCE HAPPENED AT THE SITE OF AN OLDER, STILL-LIVE INSTANCE OF THE SAME CLASS, AND THREE DAYS OF HUNTING THIS EXACT HAZARD WALKED PAST IT WHILE LOOKING DIRECTLY AT IT*** — ★★★★ **DETECTION WAS LUCK FOR THE SECOND TIME, AND BY A DIFFERENT ACCIDENT EACH TIME: `Pass 154.0`'s SPLICE WAS CAUGHT BECAUSE THE BLOCK ABOVE ENDED IN A `- ` BULLET (A LAZY-CONTINUATION LINT); THIS ONE BECAUSE THE TARGET HAPPENED TO CARRY AN `#[allow]` CLIPPY THEN MISSED (9/7 ARGUMENTS). NEITHER DETECTOR IS AIMED AT THE DEFECT ⇒ THE CLASS'S TRUE DETECTION RATE IS UNKNOWN AND THE FOURTH INSTANCE ABOVE IS THE EVIDENCE: WHERE NEITHER ACCIDENT HELD, IT SURVIVED NINE DAYS** — ★★★ **THE ENGINEER'S REMEDY IS RIGHT EVEN THOUGH HIS DIAGNOSIS WAS NOT: SPLICE **AFTER A FUNCTION'S CLOSING BRACE**. A DOC COMMENT BINDS TO WHAT *FOLLOWS* IT, SO THE POST-BRACE POSITION IS THE ONLY ONE WITH NO PRECEDING DOC RUN *AND* NO PRECEDING ATTRIBUTE TO LAND INSIDE — IT IS IMMUNE TO BOTH CAUSES, WHERE EVERY UPWARD WALK IS IMMUNE TO ONE** — ★★ **`--n` IDENTIFIES THE BOOKMARK BECAUSE `list-outline` PRINTS `n=`.** AN IDENTIFIER THAT DOES NOT APPEAR IN THE OUTPUT OF THE COMMAND THAT *LISTS* THINGS CANNOT BE SCRIPTED WITHOUT A PDF PARSER; THE OBJECT ID IS AN IMPLEMENTATION DETAIL OF THE FILE, `n` IS A FACT ABOUT WHAT PDFCE SHOWED THE OPERATOR — ★ **ZERO TEST LINES (0 of 160 = 0.0 %), AGAINST `Pass 156.0`'s 52.6 % DIRECTLY BELOW, AND `crates/pdfce-cli/tests/` HOLDS 29 FILES INCLUDING `move_annotation.rs` AND `resize_annotation.rs` — THE TWO SIBLING TRANSFORM VERBS. THE CONVENTION EXISTS AND THE LAST TWO CLI-SHIPPING PASSES DID NOT FOLLOW IT (`rotate-annotation` HAS NO CLI TEST EITHER). FILED AS OWED** — 2026-08-28 (312th filing)
+
+**★ THE RULE-11 GAP IS DISCHARGED.** `Pass 156.0` shipped `set_outline_title`
+and `delete_outline_item` in core with no `pdfce-cli` route, breaking the
+`0 of 147` record the 310th filing had measured five hours earlier; the 311th
+filing recorded it as **owed work, not as shipped**, and explicitly left the
+`FEATURES.md` tick *"for the next filing"* rather than pre-writing it. This is
+that filing. **`FEATURES.md:271`'s `cli` box goes `[ ]` → `[x]`**, and the
+census is **re-counted from the file, not inferred from the prior figure**:
+
+| Implemented rows | `core` unbuilt | `cli` unbuilt | `gui` unbuilt | `gui` partial |
+|---:|---:|---:|---:|---:|
+| **149** | **0** | **0** (was 1) | **62** | **6** |
+
+**68 of 149 = 45.6 % not fully usable from `pdfceGUI`** — unchanged by this
+Pass, which wires no shell. **Row count stays 149**: `Pass 157.0` adds the CLI
+half of an existing capability, not a new one, so it ticks a box rather than
+adding a row. Counted here with `awk` over the *Implemented* section's rows
+(lines 105–311), the same method the 311th filing used, **because that filing's
+own first draft said `1 of 148` by adding one to `147` and two rows had been
+added** — *a total carried forward and incremented is not a count.*
+
+**One commit.** `66100db`, **1 file, +160 / −0** (`git show --numstat`, run
+here):
+
+| file | +/− | what |
+|---|---:|---|
+| `crates/pdfce-cli/src/main.rs` | **+160 / −0** | two `Command` variants, two dispatch arms, `cmd_edit_bookmark` |
+
+**Test-FILE share of added lines: 0 of 160 = 0.0 %** (hard rule 10(a) — the
+denominator is stated and the qualifier is in the label). Against **52.6 %**
+(`Pass 156.0`), **36.9 %** (`155.0`), **37.9 %** (310th) and **27.3 %** (308th).
+**This is the lowest of the last five filings and the only zero.** See the
+owed item below — the figure is not a criticism of the shape (a CLI handler
+over a tested core verb is thin by construction) but of the **absence of the
+crate's own established CLI test**, which is a different fact and is checkable
+by `ls`.
+
+**One handler, two subcommands.** `cmd_edit_bookmark(input, n, title, output,
+mode)` — `title: Option<&str>`, `Some` to rename and `None` to delete. **One
+function because the two share every step except the verb they call**, and
+resolving `--n` to an object id is the whole of the work. The engineer
+confirmed the shape explicitly against this role's prior wording; the 311th
+filing's `FEATURES.md` text was shape-agnostic, so **nothing of the librarian's
+went stale on it** — recorded because a filing that guesses at a shape it has
+not seen is how a features row starts describing an implementation that does
+not exist.
+
+**The disclosure, and it is rule 4 in the CLI's own vehicle.** Deleting takes
+the subtree and the operator named **one** bookmark. The invocation *is* the
+commit, so the removed-object count **prints when it exceeds 1, with the reason
+attached** — *"2 objects removed"* on its own reads as a bug; *"deleting takes
+everything beneath it, as Acrobat does"* is what makes the same number an
+answer. Verified by the engineer through the real binary: a rename round-trips
+an em dash, and deleting the **closed** `Chapter 2` reports `removed=2` and
+leaves three bookmarks.
+
+**★★★★★ THE DOC-COMMENT ORPHANING — THE ENGINEER'S CAUSE IS WRONG AND THE
+CORRECTION IS THE ACTIONABLE PART.**
+
+The commit message states the cause as *"`cmd_add_bookmark`'s doc block is NOT
+contiguous by that test, so the walk stopped inside it."* **Checked against the
+pre-Pass tree here rather than accepted** — `git show
+988b22a:crates/pdfce-cli/src/main.rs | sed -n '11184,11213p'`:
+
+- lines **11184–11212** are **29 consecutive `///` lines**, unbroken. The block
+  *is* contiguous.
+- line **11213** is `#[allow(clippy::too_many_arguments)]`.
+- line **11214** is `fn cmd_add_bookmark(`.
+
+⇒ **The walk did not stop *inside* the doc run. It never entered it.** Walking
+back from the signature, the immediately preceding line is an **attribute**,
+not a `///` — so a "walk back over a contiguous run of `///`" terminates after
+**zero** steps and splices **between the attribute and the `fn`**. That single
+position is below the entire doc block *and* below the attribute, which is
+exactly why the new function inherited **both** and `cmd_add_bookmark` was left
+with **neither**.
+
+**This distinction is not pedantry, because the two diagnoses have different
+remedies.** *"The doc run was not contiguous"* implies a smarter run-detector.
+*"An attribute sits between the run and the signature"* implies the detector
+can never be made sufficient by looking upward at all — and the second is what
+the source says.
+
+**★ AND THE RAG CARRIER HAD ALREADY SAID SO, IN THE FOOTER WRITTEN THE SAME
+DAY.** `D:/dev/rag/rust/doc_comment_splice_attaches_to_the_next_declaration_invisibly_to_every_gate.md`'s
+2026-08-28 footer, clause (1), reads: *"A `#[doc = "..."]`, `#[derive]`,
+`#[inline]` or `#[cfg]` attribute on the target moves the boundary further
+still."* The mitigation was built **from that document**, on the same day, and
+implemented its **prescription about doc runs** while skipping the **attribute
+sentence sitting two lines beneath it**. ⇒ ***The failure is not that the
+finding was unwritten; it is that a remedy was derived from part of a finding
+and shipped as though it covered the whole.*** That is a materially different
+lesson from *"write it down"*, which the project has already learned twice on
+this hazard.
+
+**★★★★★ THE FOURTH INSTANCE — LIVE AT `HEAD`, AND THE THIRD ONE WAS SPLICED
+INTO ITS ANCHOR.**
+
+Found while verifying the paragraph above, by reading the block rather than
+searching for a string. At `HEAD`, `crates/pdfce-cli/src/main.rs`:
+
+```
+11239  /// `list-fields`: inventory a document's AcroForm fields (Pass 7).
+11240  ///
+11241  /// Read-only. One `field …` line per terminal field, then a `list-fields …`
+11242  /// summary line carrying the document-level form disclosures. The value is
+11243  /// emitted as a sanitised token so the line stays field-splittable.
+11244  /// `add-bookmark` — append one item to the document outline (§12.3.3).
+```
+
+There is **no blank line between 11243 and 11244**, so the two blocks are one
+`///` run and Rust binds all of it to what follows. `cmd_list_fields`'s
+documentation is the
+first five lines of `cmd_add_bookmark`'s doc comment, and **`cmd_list_fields`
+itself, at `main.rs:15501`, has no doc comment at all** — line 15499 is `}`,
+15500 is blank, 15501 is the bare `fn`.
+
+**Provenance, established from git rather than inferred:**
+
+- `git show d8b3903:crates/pdfce-cli/src/main.rs` — at the **initial import**,
+  2026-08-01, the block sat at line **2768** directly above
+  `fn cmd_list_fields` at line **2773**. **Correct.**
+- `git log -S'`add-bookmark` — append one item to the document outline'` →
+  **`d32872a`, `Pass 103.0`, 2026-08-19** — *"pdfce could read outlines and
+  never write one"*. That is the commit that inserted `cmd_add_bookmark`, and
+  it inserted it **between `cmd_list_fields`'s doc block and `cmd_list_fields`'s
+  signature** — the textbook insertion-anchor error, nine days before the
+  hazard was first written down.
+
+⇒ ***The third instance of the day was spliced into a line that was already the
+second half of an undetected first instance.*** Three separate splices at this
+site, none of the three found by a gate. **`Pass 103.0` was itself filed,
+reviewed and swept**, and no filing since has looked at those five lines.
+
+**★★★★ DETECTION HAS BEEN LUCK TWICE, BY A DIFFERENT ACCIDENT EACH TIME.**
+
+| instance | date | caught by | the accident that made it catchable |
+|---|---|---|---|
+| `Pass 103.0` (`d32872a`) | 2026-08-19 | **nothing — live at `HEAD`** | — |
+| `Pass 38.5` (`0a727bb`) | 2026-08-09 | a human reading | — |
+| `Pass 154.0` (`e0652e0`) | 2026-08-28 | clippy | the preceding block ended in a `- ` bullet ⇒ lazy-continuation lint |
+| `Pass 157.0` (`66100db`) | 2026-08-28 | clippy | the target happened to carry `#[allow(clippy::too_many_arguments)]`, which the splice stranded ⇒ 9/7 arguments reported |
+
+**Neither detector is aimed at this defect.** Both fire on a *formatting or
+attribute accident adjacent to it*. The carrier already argued this for the
+first accident — *"a detector that fires on a formatting accident, not on the
+defect, is worse than no detector for planning purposes"* — and the second
+accident is a fresh, independent confirmation. **The row that matters is the
+first one: where neither accident held, the splice survived nine days across
+every gate, every filing and a dedicated three-instance hunt.**
+
+**★★★ THE REMEDY IS RIGHT, AND IT IS RIGHT FOR A REASON THE DIAGNOSIS DID NOT
+GIVE.** Splice **after a function's closing brace**. A doc comment binds to
+what **follows** it, so the post-brace position has **no preceding doc run
+*and* no preceding attribute** — it is immune to **both** causes, where every
+upward-walk heuristic is immune to at most one. The engineer's conclusion
+survives the correction to his premise intact, and is the form worth carrying.
+
+**Verification (run here at filing time, not carried forward):**
+
+- **`git show --numstat 66100db`** → 1 file, +160 / −0. **Tip commit.**
+- **`grep -cE '^    [A-Z][A-Za-z0-9]*( \{|,)$'` over the `Command` enum
+  (`main.rs:770–6348`)** → **108** top-level variants at `HEAD`, **106** at
+  `988b22a`. **+2**, consistent with two new subcommands. **The method is
+  stated because the figure contradicts a published one** — see the survivor
+  table below.
+- **`awk` census over `FEATURES.md`'s *Implemented* section** → 149 rows;
+  `core` 0, `cli` **0**, `gui` 62 unbuilt + 6 partial.
+- **`ls crates/pdfce-cli/tests/`** → **29 files**, including
+  `move_annotation.rs` and `resize_annotation.rs`. **No outline/bookmark CLI
+  test exists**, and `grep -rl "outline\|bookmark"` over that directory returns
+  only `object_list.rs`. **No `rotate_annotation.rs` either** — so `Pass 155.0`
+  has the same gap.
+- **`git rev-list --count origin/main..main`** → **2** (`66100db`, `eace74c`).
+  The engineer pushed at `988b22a`; the count is **down from 8** at the 311th
+  filing, which is the first fall in five filings.
+- **`ls -lt D:/Dev/pdfce-backups/`** → newest is
+  **`pdfce-20260828-2010-988b22a-full.bundle`**, 2026-08-28 **16:10**, at
+  `988b22a`. **`git rev-list --count 988b22a..HEAD` = 2.** **Down from 10** at
+  the 311th filing — **the five-filing backup drift is broken.** Both figures
+  are the engineer's own actions since that filing, not a change in practice
+  this role can claim credit for.
+
+**★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string.**
+
+Two claims changed meaning: ***bookmark rename and delete have no CLI route***,
+and ***`pdfce-cli` has N subcommands***. **Four live survivors.**
+
+| # | site | the claim | disposition |
+|---|---|---|---|
+| 1 | `FEATURES.md:271` | *"**`cli` is a GAP, not a `—`** — the first shipped capability in this file with no `pdfce-cli` subcommand; owed, not declined"* | **rewritten** this filing — box ticked, gap recorded as *held for one Pass and discharged*, and the `--n` and one-handler design points folded in |
+| 2 | **`README.md:19`** | *"a first-class scriptable command line with **60 subcommands**"* | **REPORTED, NOT EDITED — engineer's, and it is PUBLIC.** The `Command` enum carries **108** variants at `HEAD` by the method stated above. **This is the most-read claim-bearing number in the repository and it understates by ~48.** It moved again today (+2). Whether 108 is exactly the operator-visible subcommand count needs the engineer's confirmation; that it is not 60 does not |
+| 3 | `ROADMAP.md`, `Pass 156.0` Shipped entry | *"RULE-11 EXCEPTION … FILED AS **OWED WORK**, NOT AS SHIPPED"* | **dated amendment appended** — true when written, discharged by this Pass. The Shipped section is append-only, so the clause stands and gains a forward pointer |
+| 4 | `docs/ARCHITECTURE.md:12825` | *"`crates/pdfce-cli/src/main.rs`'s `Command` enum (**lines 381–2414**) carries **52 subcommands**"* | **REPORTED, NOT EDITED.** A **2026-08-03 measurement inside decision 020's justification**, correct as of then and load-bearing for that decision's reasoning — but it carries **no as-of date in the sentence**, and its line range (`381–2414`) is now wrong by thousands of lines. A dated qualifier in the clause, not a new number |
+
+**Checked and CLEAN, reported because a clean result is a finding here:**
+
+- **`docs/core-api/02-editing-and-saving.md:1424–1425`** — the two verb rows for
+  `set_outline_title` / `delete_outline_item` make **no CLI claim at all**, so
+  there is no consuming-shell survivor of the kind the 310th and 311th filings
+  both found in that tree.
+- **`crates/pdfce-core/src/edit.rs:24469`** — the only *"no CLI subcommand"*
+  string in `crates/` is `insert_pages`'s **rule-11 `—` ruling**, about a
+  different verb, and it remains correct.
+- **No `FEATURES.md` *Planned* row was orphaned by the tick.** The 311th
+  filing's sweep table said it had split the old bookmark-editing row into
+  *"reorder/re-parent only, plus a new row for the two owed CLI subcommands"*,
+  while that same filing's owed item 1 said the gap is carried by the `cli`
+  `[ ]` **and explicitly NOT by a second Planned row**. **`grep -n -i bookmark
+  docs/FEATURES.md` returns eight lines and none is such a row** — the owed item
+  describes what was done; the sweep table's row 5 does not. **A filing's own
+  account of its own edit disagreed with the edit**, in the same document, four
+  screens apart. Nothing is wrong in the file; the *record of it* was.
+  ⇒ **hard rule 10's corollary at a new target: a filing's description of its
+  own change is a claim, and the cheapest check is `grep` on the file you just
+  wrote.**
+
+**Ledger.** **Pass ceiling `156.0` → `157.0`; next free `158.0`.** Rules
+ceiling stays **`R225`**, next free **`R226`** — see the disposition below.
+Decisions ceiling stays **`095`**, next free **`096`**: this Pass moves no
+crate boundary, defines no invariant and picks no library; *"one handler for
+two verbs"* is a code-shape choice and *"`--n`, not an object id"* is an
+application of the CLI's existing scriptability discipline, not a new ruling.
+
+**★ STANDING-RULE DISPOSITION — MINT DECLINED, and the decline is argued.**
+
+A rule of the shape *"splice only after a closing brace"* is tempting at n=4
+and is **refused on the 2026-08-05 ruling** that occurrence count is not a
+warrant on its own. Three reasons it fails the bar even so:
+
+1. **The carrier already prescribes the correct remedy** and gains a third
+   dated footer this filing. `R222`'s reach argument does not apply — the
+   engineer *read* this document, on this day, and the prescription failed to
+   transfer for a reason a standing rule would not fix.
+2. **A standing rule is read by agents; the failure was in code an agent wrote
+   from a document it had read.** `R224`'s minting argument runs the other way
+   here: the artefact that needed to change is the **RAG file's prescription**,
+   which is where an engineer looks when splicing, not `ROADMAP.md`'s rule list.
+3. **The one genuinely new fact is a correction to an existing finding's
+   premise**, not a new obligation — and a correction belongs in the record it
+   corrects.
+
+**What is minted instead:** the RAG carrier's **third dated footer**, which
+(a) replaces the upward-walk prescription with the post-brace one, (b) records
+the attribute cause with the source lines, (c) adds the second luck-detector
+row, and (d) records the fourth instance and its nine-day survival as the
+evidence for the class's unknown detection rate.
+
+**★★ THE CHANNEL CHECK (`R203`(d)) — AND THE `iccce` HALF CARRIES A TRAP.**
+
+`ls -lt` on both channels, run here at filing time.
+
+- **`pdfce_FeatureRequests/open/` — CLEAR.** Newest file is pdfce's own
+  outbound, `note_rotation_ships_and_bookmarks_can_be_renamed.md`, **15:47**.
+  The 306th filing's front-of-queue box is **closed on both sides**: the 08:31
+  inbound now sits as `done_2026-08-28-pinned-edit-CONSUMED.md`, and this
+  file's *Next up* box carries the 307th filing's struck heading and discharge
+  banner (**shipped as `Pass 152.0`, `06e4c27`**). **Checked, not assumed** —
+  that box's *body* still reads *"No reply answers it"*, true when written, and
+  a grep landing mid-box would re-open a closed item.
+- **`iccce_FeatureRequests/open/` — TWO NEW INBOUNDS**, both 2026-08-28, both
+  *informational, no reply owed*, neither named in any pdfce document before
+  this entry: `note_your_invisible_x_is_visible_and_it_is_134_to_192_counts_of_red_wide.md`
+  (**15:04**) and `note_the_blue_floor_has_a_second_instance_in_saturated_green.md`
+  (**15:03**).
+- **★★★ THE FIRST IS NOT ABOUT THE X THIS PROJECT HAS OPEN.** pdfce's owed list
+  carries *"the **trap X** on the grey/K-black **overprint** patch, cause
+  unknown."* `iccce`'s note is about **`PCS3_130`'s "invisible X"**, a
+  **CMM / ICC-source-profile** patch, and says so outright: *"This is not a
+  defect report … you have no CMM; the X is the announced absence rendering
+  itself visible. Filed under decision **064** as mine, not yours."* **Two X's,
+  two patches, two causes, one word.** Conflating them closes pdfce's open item
+  on evidence about a different one.
+- **★★★ ITS ΔE00 FIGURES ARE WITHDRAWN BY ITS OWN AUTHOR** under `iccce`'s
+  standing decision `DL-070` (no ΔE against a screen capture) — *"49–58 ΔE00"*
+  and the companion note's cross-renderer figures alike. **Only the 8-bit
+  counts may be quoted**: field → X within a single render, **Δred +134 / +134
+  / +188 / +192** over four cells, against Acrobat's control of **1–4** counts
+  and iccce's byte-derived **0–2**. Recorded here in the replaced unit so no
+  pdfce document ever carries the retracted one. ⇒ **hard rule 10 arriving from
+  outside the project: a correction is a claim, and the UNIT can be the thing
+  that is wrong.**
+
+**Still owed after this Pass** — see the 312th `SESSION_LOG.md` entry for the
+consolidated list.
+
+---
+
 ### `Pass 156.0` (`3ca6774`) — `EditSession::set_outline_title` / `delete_outline_item` (+ `adjust_outline_count`): a bookmark can finally be changed, not only created — ★★★★★ **ALL THREE SABOTAGES SURVIVED THE FIRST TEST SUITE AND EVERY TEST PASSED *FOR THE WRONG REASON*: THE DELETE TEST ASSERTED THE TITLE LIST WAS *"shorter than before"*, AND A STALE `/First`, AN UNDECREMENTED `/Count` AND A CLOSED-ITEM MISCOUNT ALL LEAVE A SHORTER LIST — ONE LEAVES IT **EMPTY**, WHICH IS ALSO SHORTER** ⇒ ***A WEAKENED ASSERTION IS NOT A WEAKER TEST, IT IS A DIFFERENT TEST — AND IT IS THE ONE EVERY PLAUSIBLE DEFECT PASSES*** — ★★★★ **AND SABOTAGE `C` IS THE THIRD TIME TODAY A TEST COULD NOT SEE A DIFFERENCE BECAUSE ITS FIXTURE MADE THE TWO CANDIDATE ANSWERS EQUAL — AFTER `Pass 143.0`'s SCOPE DISCRIMINATOR AND `Pass 155.0`'s IDENTITY `/Matrix` DIRECTLY BELOW. THREE INSTANCES, THREE SUBSYSTEMS, ONE SESSION ⇒ `R225` MINTED, AND IT NAMES THE **SECOND CAUSE OF SABOTAGE-SURVIVAL** THAT `R221`'s PRACTICAL TELL CANNOT DISTINGUISH FROM THE FIRST** — ★★★ **`/Count` IS TWO QUANTITIES AND ONE KEY: ON AN *ITEM* IT COUNTS VISIBLE **DESCENDANTS EXCLUDING ITSELF** WITH THE **SIGN CARRYING OPEN/CLOSED**; ON THE *ROOT* IT COUNTS EVERY VISIBLE ITEM **INCLUDING THE TOP LEVEL** AND **CANNOT BE NEGATIVE** (§12.3.3 Tables 152–153). THE SPEC CORPUS CALLS CONFUSING THE TWO THE SINGLE COMMONEST ERROR AGAINST THIS CLAUSE, SO A **CLOSED** ITEM CONTRIBUTES EXACTLY **1** TO ITS ANCESTOR HOWEVER LARGE ITS SUBTREE** — ★★ **`read_outline` REBUILDS THE TREE FROM `/First`/`/Next` AND **NEVER CONSULTS `/Count` AT ALL**, SO **NO TITLE-WALKING TEST CAN EVER SEE SABOTAGE `B`** — BUT A BOOKMARKS PANEL SIZING A SCROLLBAR CAN. THE FIX IS TO ASSERT `/Count` AS A **NUMBER**, NOT TO WALK HARDER** — ★ **RULE-11 EXCEPTION, FLAGGED BY THE ENGINEER RATHER THAN FOUND BY THIS ROLE: THIS PASS SHIPS **NO CLI SUBCOMMAND**, BREAKING THE `0 of 147` RECORD THE 310th FILING MEASURED THIS AFTERNOON. FILED AS **OWED WORK**, NOT AS SHIPPED** — 2026-08-28 (311th filing)
+
+> **★ DATED AMENDMENT, 2026-08-28 (312th filing) — THE ★ RULE-11 EXCEPTION IN
+> THE HEADING ABOVE IS DISCHARGED.** *"THIS PASS SHIPS **NO CLI SUBCOMMAND** …
+> FILED AS **OWED WORK**, NOT AS SHIPPED"* was true when written and stopped
+> being true **the same session**: `Pass 157.0` (`66100db`) ships
+> `pdfce-cli rename-bookmark` and `delete-bookmark` over these two verbs, and
+> `FEATURES.md:271`'s `cli` box is ticked. **The rule-11 census is back to
+> `0 of 149`** (re-counted from the file, not incremented). The clause stands
+> unedited — the Shipped section is append-only — but a reader arriving here
+> and not at the entry above it would otherwise carry an owed item that is
+> closed. **The exception lasted one Pass and roughly two hours.** See
+> `Pass 157.0`, directly above.
 
 **One commit.** `3ca6774`, **4 files, +736 / −12** (`git show --numstat`, run
 here):
