@@ -384,8 +384,22 @@ was written eighteen days ago by a different filing about a different subject.**
 
 #### VERIFICATION
 
-- **`tools/run-gates.sh`: PASS**, reported by the engineer in the commit
-  message.
+- **★ `tools/run-gates.sh` RE-RUN HERE, ON THE POST-FILING TREE — PASS, exit 0,
+  26 commands including both filing gates.** The engineer reported PASS from
+  the commit message; **this is a second, independent run over the tree as this
+  filing leaves it**, which is the state the next session actually inherits.
+  **Two deliberate skips, named because *"PASS — 26 commands"* over-claims
+  without them** (hard rule 10(b) — the qualifier belongs in the label, not
+  only in the prose beside it):
+  - `cargo about generate about.hbs -o THIRD_PARTY_LICENSES.md` — skipped;
+    **the dependency set did not change in either Pass** (`git show --numstat`
+    shows no `Cargo.toml`/`Cargo.lock` touched), so rule 13's regeneration
+    trigger did not fire.
+  - `cargo test --workspace --all-features` — **skipped; plain
+    `cargo test --workspace` ran instead** (`--full` is the opt-in). ⇒ **the
+    green above is a DEFAULT-FEATURES green.** Both Passes are feature-agnostic
+    — no `#[cfg(feature = …)]` in either diff — so the gap does not touch this
+    work, **but the figure should not be quoted as if `--all-features` passed.**
 - **9 core tests**, all green, **and all three sabotages now fail** — which is
   the figure that matters here, because the first suite was also 9-of-9 green
   with all three sabotages surviving. **A green count is not a verification
@@ -621,7 +635,11 @@ precisely the over-optimism the maintenance contract forbids.
 #### VERIFICATION
 
 - **`tools/run-gates.sh`: PASS — 26 commands**, reported by the engineer in
-  the commit message.
+  the commit message, **and re-run here on the post-filing tree — see the
+  `Pass 156.0` entry above for that run and for the two deliberate skips it
+  names.** Not restated, for the same reason the `git` figures are not: two
+  copies of one figure in one filing is the shape hard rule 10 exists to
+  prevent.
 - **9 core tests**, the strongest of them **oracle-free** (four quarter turns
   are the identity), and **all three sabotages now fail** — the third only
   after the fixture change above.
