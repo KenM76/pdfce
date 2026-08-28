@@ -147,6 +147,64 @@ fn edit_text_gets_the_same_affordance() {
     );
 }
 
+/// ★★ The named spelling on the EDIT verb (`Pass 152.0`), and the reason it
+/// was added when the behaviour above already worked.
+///
+/// The test directly above proves the affordance. This one proves the
+/// *spelling*, and the difference between them is the entire content of a
+/// defect `pdfceGUI` filed on 2026-08-28.
+///
+/// Their report cites `Pass 145.0` and `FormatRequest::whole_operator` **by
+/// name** — so they had read the section documenting this — and still
+/// concluded the edit verb could only be addressed by `find`. The edit half
+/// was one trailing sentence at the end of the format section, with no
+/// example and no symbol to grep for. They then described three ways they had
+/// tried to reconstruct a `find` for an operator they had already located.
+///
+/// ★ No gate in this project can catch that. The code was correct, this
+/// file's tests were green, and the sentence was true. **The only symptom of
+/// an undiscoverable capability is somebody asking for what they already
+/// have** — which is why the remedy is a symbol, not a longer sentence.
+#[test]
+fn the_named_edit_constructor_and_the_empty_find_spelling_agree() {
+    let d = doc("format_family.pdf");
+    let span = first_operator_span(&d);
+
+    let a = pdfce_core::text_edit::edit_text(
+        &d,
+        &EditRequest::whole_operator(0, span, "goodbye"),
+        &EditOptions::default(),
+    )
+    .expect("named constructor");
+
+    let mut mech = EditRequest::find_replace(0, "", "goodbye");
+    mech.pinned_span = Some(span);
+    let b = pdfce_core::text_edit::edit_text(&d, &mech, &EditOptions::default())
+        .expect("empty-find mechanism");
+
+    // BYTES, not report fields. Two spellings of one request must produce one
+    // document; comparing anything less would let them drift in exactly the
+    // place a caller cannot see.
+    assert_eq!(
+        a.bytes, b.bytes,
+        "the discoverable spelling and the mechanism must be the same request"
+    );
+}
+
+/// The `pinned` builder, which `EditRequest` lacked while `FormatRequest` had
+/// it — so the two siblings read differently for the same idea and a caller
+/// reaching for symmetry found a bare public field instead.
+#[test]
+fn the_edit_pinned_builder_matches_direct_field_assignment() {
+    let span = ByteSpan { start: 10, len: 4 };
+    let built = EditRequest::find_replace(0, "x", "y").pinned(span);
+    let mut assigned = EditRequest::find_replace(0, "x", "y");
+    assigned.pinned_span = Some(span);
+    assert_eq!(built.pinned_span, assigned.pinned_span);
+    assert_eq!(built.find, assigned.find);
+    assert_eq!(built.replace, assigned.replace);
+}
+
 // ---------------------------------------------------------------------------
 // 2. The footgun that must stay closed
 // ---------------------------------------------------------------------------

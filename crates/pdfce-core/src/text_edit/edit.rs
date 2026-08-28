@@ -374,6 +374,96 @@ impl EditRequest {
         }
     }
 
+    /// An edit request replacing **the whole show operator at `span`**
+    /// (`Pass 152.0`) — the twin of
+    /// [`FormatRequest::whole_operator`](crate::text_edit::FormatRequest::whole_operator).
+    ///
+    /// # ★★ Why this exists when the behaviour already did
+    ///
+    /// It is a **discoverability** fix, and the cost of not having it is
+    /// measured rather than assumed. The mechanism — an empty `find` with a
+    /// pin — has worked on this verb since `Pass 145.0`, is tested
+    /// (`whole_operator_pin.rs::edit_text_gets_the_same_affordance`),
+    /// disclosed, and documented. It was documented in **one trailing
+    /// sentence at the end of the `FormatRequest` section**, with no example
+    /// and no symbol to grep for.
+    ///
+    /// On 2026-08-28 `pdfceGUI` filed a defect against this exact gap. Their
+    /// report cites `Pass 145.0` and `FormatRequest::whole_operator` **by
+    /// name** — they had read the very section that contains the sentence —
+    /// and still concluded the edit verb could only be addressed by `find`.
+    /// They then listed three ways they had tried to *describe* an operator
+    /// they had already *located*.
+    ///
+    /// ★ A capability nobody can find is not shipped, and no gate in this
+    /// project can detect that: the code is correct, the test is green, the
+    /// sentence is true. The only symptom is somebody asking for what they
+    /// already have.
+    ///
+    /// # What it targets
+    ///
+    /// The pinned operator, entire. **Not** the text run it belongs to — one
+    /// [`TextRun`](crate::text_extract::TextRun) can carry glyphs from several
+    /// show operators (**2,420 of 18,559 runs, 13 %**, over pdfce's corpus;
+    /// `crates/pdfce-core/tests/operator_span_invariant.rs`), because
+    /// extraction closes a run on *geometry* and a producer closes an operator
+    /// wherever its writer felt like. The report discloses the extent taken.
+    ///
+    /// # Why a caller must not rebuild `find` instead
+    ///
+    /// A run's `text` is **not** in 1:1 correspondence with its glyphs, and on
+    /// a CAD drawing it is not even close: `text_extract` synthesises
+    /// inter-glyph spacing so a line broken across several show operators
+    /// reads as one string. Those spaces are **not in the content stream**, so
+    /// a `find` rebuilt from extracted text cannot match. It fails invisibly
+    /// on simple test text and routinely on the drawings this project exists
+    /// for — which is the worst combination a locator API can have.
+    ///
+    /// # Equivalent to
+    ///
+    /// `EditRequest::find_replace(page_index, "", replace).pinned(span)`. Both
+    /// spellings work and are pinned equal by a test; this one says what it
+    /// means. An empty `find` with **no** pin is still refused, so a caller
+    /// who forgot to pin gets a refusal rather than silent whole-operator
+    /// behaviour on an operator pdfce chose for them.
+    ///
+    /// ```no_run
+    /// # use pdfce_core::text_edit::EditRequest;
+    /// # fn f(span: pdfce_core::span::ByteSpan) {
+    /// let req = EditRequest::whole_operator(0, span, "Rev B");
+    /// assert!(req.find.is_empty());
+    /// assert_eq!(req.pinned_span, Some(span));
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn whole_operator(page_index: usize, span: ByteSpan, replace: &str) -> Self {
+        Self::find_replace(page_index, "", replace).pinned(span)
+    }
+
+    /// Pin the target show operator by byte span, returning `self`.
+    ///
+    /// The twin of
+    /// [`FormatRequest::pinned`](crate::text_edit::FormatRequest::pinned), and
+    /// added with it in mind: the field was public and settable, but only the
+    /// format verb had a builder, so the two siblings read differently for the
+    /// same idea.
+    ///
+    /// Either byte-span convention for "the show operator" is accepted — the
+    /// operator token alone (what
+    /// [`GlyphProvenance::operator_span`](crate::text_extract::GlyphProvenance::operator_span)
+    /// publishes) or the operand-inclusive extent (what the authoring walk
+    /// records). See `pin_names_operator` for why neither side was made to
+    /// adopt the other's spelling.
+    ///
+    /// With a non-empty `find` the pin narrows *which operator* and the find
+    /// narrows *which characters within it*. With an empty `find` the whole
+    /// operator is the target — see [`Self::whole_operator`].
+    #[must_use]
+    pub const fn pinned(mut self, span: ByteSpan) -> Self {
+        self.pinned_span = Some(span);
+        self
+    }
+
     /// Set the [`EditTarget`], returning `self`.
     #[must_use]
     pub const fn with_target(mut self, target: EditTarget) -> Self {

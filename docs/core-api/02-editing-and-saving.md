@@ -413,8 +413,41 @@ let req  = FormatRequest::whole_operator(page_index, span).size(24.0);
 `FormatRequest::whole_operator(page_index, span)` ≡
 `FormatRequest::new(page_index, "").pinned(span)`. Both spellings work and
 produce identical bytes (pinned by a test); the named one says what it means.
-`EditRequest` gets the same affordance by setting `pinned_span` with an empty
-`find`.
+
+**And the same for replacing the text, not just restyling it:**
+
+```rust
+let span = model.provenance(gref)?.operator_span;
+let req  = EditRequest::whole_operator(page_index, span, "Rev B");
+session.edit_text(&req, &EditOptions::default())?;
+```
+
+`EditRequest::whole_operator(page_index, span, replace)` ≡
+`EditRequest::find_replace(page_index, "", replace).pinned(span)`, and
+`EditRequest::pinned(span)` is the builder — both added in `Pass 152.0`.
+
+> ### ★★ Why the edit half has its own example instead of a sentence
+>
+> Because it used to be a sentence, and the sentence did not work. This
+> paragraph read: *"`EditRequest` gets the same affordance by setting
+> `pinned_span` with an empty `find`."* True, accurate, and at the end of a
+> section headed `FormatRequest`.
+>
+> On 2026-08-28 `pdfceGUI` filed a defect saying a pinned `edit_text` can only
+> be addressed by `find`. **Their report cites `Pass 145.0` and
+> `FormatRequest::whole_operator` by name** — they had read this section — and
+> they went on to list three ways they had tried to *reconstruct* a `find` for
+> an operator they had already *located*, on the operator's own CAD drawing,
+> where `text_extract`'s synthesised inter-glyph spacing means a rebuilt
+> `find` can never match.
+>
+> ★ **No gate in this project can catch this.** The code was right, the tests
+> were green, the sentence was true. The only symptom of an undiscoverable
+> capability is a consumer asking for what they already have — so the remedy
+> is a **symbol they can grep for and an example they can copy**, not more
+> prose. `R197`'s shape, one level up: there, a verb missing from these
+> documents had only a chat reply describing it; here, a verb present in them
+> had only a subordinate clause.
 
 **Three things about it:**
 
