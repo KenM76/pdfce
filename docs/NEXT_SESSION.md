@@ -11,248 +11,296 @@ can falsify it.
 
 ---
 
-## §A — COLD START
+## §A — DO THIS FIRST, BY OPERATOR INSTRUCTION
 
-**The previous session took `Pass 140.0` — the one item the last handoff said
-was blocked on nothing but effort — and it grew into three Passes and opened a
-fourth.** A five-colorant `DeviceN` photograph was rendering visibly
-desaturated; it now matches Acrobat closely.
+**Ken, 2026-08-27, verbatim: *"check the feature requests and write these as
+the first thing to do before continuing work on other things."***
 
-- **`Pass 140.0` + `Pass 140.1`** (`70c5919`) — a `Separation`/`DeviceN`
-  **image**, and then a `Separation`/`DeviceN` **path fill**, keep their ink
-  on a subtractive page instead of round-tripping through sRGB.
-- **`Pass 140.2`** (`25d73d7`) — an image's own colour-conversion diagnostics
-  reached **nothing at all**, so a broken `/tintTransform` painted a neutral
-  stand-in in silence. A **rule 4** violation, found because a claim in
-  `70c5919`'s own commit message was wrong. Read `§D`.
-- **`Pass 143.0`** filed to *Backlog*, fully diagnosed — the `DeviceGray`
-  overprint spec reading. Read `§E`; it is the reason the suite reads 6.
-- **`R221`** minted (probe, not structural predicate).
+Three items arrived on `pdfce_FeatureRequests` **during** the last session and
+are now at the front of *Next up*, ahead of everything else. Work them in this
+order — the ordering is the engineer's, the priority is Ken's:
+
+| # | Pass | what |
+|---|---|---|
+| 1 | **`142.1`** | the font-resource **pre-flight** — which faces actually resolve on a page |
+| 2 | **`144.0`** | `gate_synthesis` names a face that then refuses, so **bold is unreachable** on that page |
+| 3 | **`145.0`** | a pinned `FormatRequest` cannot say *"the whole operator"* |
+
+★ **`142.1` goes first even though `144.0` is the defect**, and the reason is
+this project's own recurring failure: `144.0` needs a predicate for *"would
+`set_font` accept this face for this run?"*, and that is exactly what `142.1`
+computes. Build `142.1`, then make `144.0` a **caller** of it. Doing `144.0`
+first means writing that predicate twice, which is how `144.0` was created in
+the first place (see below).
+
+**`Pass 143.0` is no longer first.** Unchanged in content, still in *Backlog*,
+still fully diagnosed — it just stopped being the pick-up item.
+
+---
+
+## §B — `Pass 144.0`, THE DEFECT, AND IT FALSIFIES SOMETHING I TOLD THEM
+
+**Reproduced before it was believed** — all three commands, on `pdfce-cli` at
+`703a38e`, against pdfce's own fixture
+`fixtures/synthetic/textedit/format_family.pdf`:
+
+```
+--find "hello world" --bold-synthetic
+  refused: a REAL bold face is available as 'Times-Bold' (resource /F3)
+           … change the run's family to 'Times-Bold' instead.
+
+--find "hello world" --set-font Times-Bold        <- the remedy it just named
+  refused: R-INV-7: 'o' has no code in 'Times-Bold's encoding; code 111
+           is already assigned by /Differences
+
+--find "hello world" --set-font F2                <- never mentioned
+  set_font=Times-Roman->Calibri-Bold              <- SUCCEEDS
+```
+
+**So this claim, which I sent to `pdfceGUI` and put in
+`docs/core-api/03-capabilities.md` §3.6, is false:**
+
+> ~~"Between the two verbs every page is covered. … There is no page on which
+> bold is unreachable."~~
+
+True only for an operator who already knows to try a face pdfce never names.
+
+**Cause.** Family matching (`Times-Roman` → `Times-Bold`) is a sensible
+preference and is right in general. The defect is that the preference is
+applied **without asking whether the preferred face can show this text** — and
+that answer is already computable, because `set_font` computes it moments later
+and refuses on it.
+
+**Fix.** `gate_synthesis` treats a real face as *available* only if `set_font`
+would actually accept it **for this run**. Where the family match fails
+coverage and another resource passes, name that one; where none passes,
+synthesis is genuinely the only option and must proceed.
+
+★ **`R90` is NOT being weakened, and the entry must keep saying so**, because
+the diff will read as a loosened refusal. `R90` says synthesis is a fallback
+for when no real face *resolves*. That stands. What changes is the predicate
+for **"resolves"** — from *"exists with a matching family name"* to *"would
+actually be accepted"*. `R90` applied more accurately, not less.
+
+★★ **Fixing this turns a `pdfceGUI` test RED on purpose and they asked for
+that.** Their Bold button retries with the face the refusal names; their
+characterisation test asserts "nothing was applied" and its docstring says the
+failure is the good news. **Tell them on the channel when it ships**, with the
+revision.
+
+★★★ **`144.0` is `R221`'s third instance, minted hours earlier, in a different
+subsystem** — and it **inverts `R221`'s risk analysis**. `gate_synthesis`
+decides "is a real bold face available" with two *string tests on `/BaseFont`*
+(`family_stem`, and `name_claims_bold` = `contains("bold")||"black"||"heavy"||
+"semib"`) — a **parallel description** of when `set_font` succeeds. `R221`'s
+mint could say "neither error direction can paint a wrong colour"; here a false
+positive **removes the capability entirely**.
+
+★ **And a doc comment nobody reported is falsified by half its own callers:**
+`synth.rs:391–403` says `name_claims_bold` is *"used only in the direction
+where being wrong is safe… never to refuse an edit."* There are exactly two
+call sites and `format.rs:2165` **refuses an edit**. True when written,
+falsified by a later caller, invisible to `cargo doc`. It is `144.0`'s
+criterion 5 so the comment, the predicate and the format string move together.
+
+---
+
+## §C — `Pass 145.0`, AND A MECHANISM BOTH SIDES HAD WRONG
+
+The ask: **`find: ""` on a request carrying `pinned_span` means the whole
+pinned operator.** A caller that has already *located* an operator should not
+have to *describe* it. Their guess is two lines in `match_run`.
+
+Their three failed attempts are in the ROADMAP entry. **One of the causes they
+gave is wrong, and I nearly documented it as pdfce's own statement about
+pdfce's own type.**
+
+> ~~"`TextRun::text` contains characters that are not in the file — extraction
+> synthesises a space wherever a `TJ` offset exceeds the word-gap threshold"~~
+
+**A derived word space is never inside a glyph run.** `layout.rs`'s
+`Break::Word` arm calls `close_run()` and *then* `emit_derived(' ',
+DerivedWordSpace)`, pushing a **separate one-character run with no glyphs**;
+`model.rs:548` keeps it separate. Measured over **256 fixture PDFs**:
+
+```
+derived_word_space runs (always separate)        5
+glyph runs containing a synthesised space        0    <- their stated cause
+glyph runs where len(text) != len(glyphs)        1
+```
+
+★★ **The single offender is the real mechanism, and neither side had it.**
+`identity-h-tounicode.pdf` — 8 characters over **6** glyphs, because
+**`/ToUnicode` maps one glyph to several characters** (§9.10.3): an `ffl`
+ligature is one glyph and three characters; a surrogate pair is one glyph and
+two `char`s.
+
+**Their headline claim is true and their mechanism was wrong**, and the
+difference decides the scope: word-gap synthesis would insert a character
+present in *no* operator, whereas a ligature maps a character **range** onto a
+glyph that **is** in the operator. So a `find` built from `TextRun::text` fails
+on the **buffer bytes**, not on locating the operator — invisible on
+unligatured test text, **routine on real typeset copy**.
+
+⇒ The docs half of `145.0` is therefore **not** "text may contain derived
+characters" (false). It is: **one glyph may map to several characters, so
+`text.chars().count()` is not `glyphs.len()`**, and a caller building a `find`
+string from a run cannot assume a 1:1 correspondence with the buffer.
+
+### ★ STILL UNVERIFIED, AND OWED TO THEM EITHER WAY
+
+Their third cause — **"a `TextRun` can span several show operators"** — I could
+not measure: `GlyphProvenance::operator_span` is **not** exposed by
+`pdfce-cli extract-text --json` (glyphs carry `code`/`rung`/`sourced`/`start`/
+`len`/`x`/`y`/`advance`/`size`/`direction`/`invisible`, no span).
+
+They also asked whether this invariant holds: *"the glyphs sharing one
+`operator_span` always slice a contiguous, matchable range out of the run's
+text."* **They have already shipped a workaround that depends on it** and have
+no way to know whether it is guaranteed.
+
+**One probe answers both**: an in-crate test over a corpus counting runs whose
+glyphs carry more than one distinct `model.provenance(...).operator_span`. If
+the invariant holds it should be documented and they can rely on it; if it does
+not, **what they shipped is resting on luck and they need that more urgently
+than the API change.** If it holds it is a decision-log candidate.
+
+---
+
+## §D — `142.1`, AND WHY IT IS FIRST
+
+Their reply **answers the question the last handoff called blocking**.
+Verbatim: **"Synthetic is enough. Drop `142.0` down the queue."** Their
+reasoning is a *use report*, not a preference: CAD exports, part numbers and
+revision letters, a fabricator reading a print; at 8 pt on a 1:50 site plan a
+stroked regular and a real Bold are indistinguishable on paper. And *"the
+operator's standing complaint about this program is that basic things do not
+work, not that they work imperfectly."*
+
+★ **`142.0` is de-prioritised, NOT closed** — they scoped it themselves: *"a
+report of our operator's use, not a decision about yours."*
+
+**`142.1` wants two things**, and (2) is the one they call more valuable:
+
+1. the list keyed **the way `set_font` matches** — the strings that *will*
+   resolve, not the dictionaries that exist;
+2. per entry, whether a real **Bold** and a real **Italic** of that family also
+   resolve on the page — the fact that decides whether a Bold button routes to
+   `set_font` or to `set_synthetic`.
+
+★ **The join problem that makes a naive version wrong:** `fontinfo` is keyed on
+the font **dictionary**; `set_font` matches on `/BaseFont` with the §9.6.4
+subset tag stripped; and one page can carry **two dictionaries with the same
+`/BaseFont`** — two independent subsets of one face, which their survey found
+in **87 %** of embedding files. A list built from `fontinfo` is a superset that
+is *usually* exactly right, and when it is wrong the operator finds out by
+pressing a button.
+
+---
+
+## §E — WHAT SHIPPED LAST SESSION
+
+`Pass 140.0` + `140.1` (`70c5919`), `140.2` (`25d73d7`), filings `785b299`,
+`0c983f2`, and `703a38e`. A five-colorant `DeviceN` photograph was rendering
+visibly desaturated; it now matches Acrobat closely (mean error over the
+photograph **33.06 → 16.85**; over an inset patch **29.57 → 7.13**).
+
+★ **Route 4 — the route that was NOT in the bug report — accounts for 100 % of
+that fix**, proved by ablation. Had only the reported route been implemented,
+the reported defect would not have been fixed at all. That is the strongest
+datum this project has for `R219`.
+
+★★ **The print-conformance suite reads 6 FAIL, up from 5, and that is
+correct** — a false pass was removed. Full method in `SESSION_LOG.md`; the
+remaining half is `Pass 143.0`.
 
 ### ★ Verified from a shell at write time — re-run, do not copy forward
 
 | fact | value | command |
 |---|---|---|
-| `HEAD` | `25d73d7` **plus this file's own commit, and the 295th filing** | `git rev-parse --short HEAD` |
-| `origin/main` | **level at `25d73d7`** — everything through `140.2` is pushed | `git rev-list --count origin/main..main` |
+| `HEAD` | `703a38e` **plus the 296th filing and this file's own commit** | `git rev-parse --short HEAD` |
+| `origin/main` | level at `703a38e` at write time | `git rev-list --count origin/main..main` |
 | tests | **4,419 passing, 0 failing** | `cargo test --workspace` |
-| gates | 18 run bare, all green; `check-image-colorspace-truth.py` needs a fixture-dir argument and is green with one | `ls tools/check-*` |
-| `fmt` / `clippy` | clean | `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` |
-| fuzz | all targets build; `image_import` 53,595 runs and `load_document` 165,969 runs, no artifacts | `cargo +nightly fuzz build` |
-| wasm32 | `pdfce-core` + `pdfce-render` compile | `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` |
-| GUI-core invariant | no GUI dep in either engine crate | `cargo tree -p pdfce-core` |
-| print-conformance suite | **6 FAIL / 51** — up from 5, and `§E` explains why that is correct | see `§E` |
-| **CI at `HEAD`** | **READ IT FROM GITHUB.** `25d73d7`'s run was still in progress at write time and is deliberately not recorded here. | `gh run list --branch main --limit 3` |
+| gates | 18 run bare, all green; `check-image-colorspace-truth.py` needs a fixture-dir argument | `ls tools/check-*` |
+| `fmt` / `clippy` | clean | `cargo fmt --all --check` |
+| fuzz | targets build; `image_import` 53,595 runs, `load_document` 165,969 runs, no artifacts | `cargo +nightly fuzz build` |
+| wasm32 / GUI-core | both clean | `cargo tree -p pdfce-core` |
+| **CI** | `25d73d7` was **green on all ten jobs**. `703a38e` and later: **read it from GitHub.** | `gh run list --branch main --limit 3` |
+| disk | 202 GB free of 954 GB — no longer the binding constraint | `df -h /d` |
 
-★★★ **PUSHING NEEDS NO ASKING — decision `090`.** *"always push."* Ordinary
-fast-forward pushes of `main` are standing-authorized. **Not** covered: cutting
-a tag or release, `git push --force` or anything rewriting published history,
-and any branch other than `main`.
+★★★ **PUSHING NEEDS NO ASKING — decision `090`.** *"always push."* **Not**
+covered: cutting a tag or release, `git push --force` or anything rewriting
+published history, and any branch other than `main`. **Scrub
+`tools/check-suite-name-absent.py` green before every push** — the repo is
+public and that gate scans untracked files too, which is why scratch renders
+belong in `D:\Dev\temp\pdfce\`.
 
-★ **Scrub `tools/check-suite-name-absent.py` green before every push.** The
-repository is public, so a push publishes. That gate scans **untracked** files
-too — scratch renders belong in `D:\Dev\temp\pdfce\`, never in the tree.
-
-★ **Fuzzing needs the MSVC ASan DLL on `PATH`** or every target dies at launch
-with `0xc0000135`. Locate it with
+★ **Fuzzing needs the MSVC ASan DLL on `PATH`**, else `0xc0000135`. Find it:
 `find "/c/Program Files (x86)/Microsoft Visual Studio" -iname "clang_rt.asan_dynamic-x86_64.dll"`.
 
 ---
 
-## §B — THE DISK, WHICH IS NO LONGER THE NEAREST LIMIT
+## §F — THREE THINGS OWED TO `pdfceGUI`, NONE OF THEM CODE
 
-**202 GB free of 954 GB (79 % used)** at write time. The last handoff recorded
-14 GB and treated it as the binding constraint; it is not any more. A session
-with six release builds of `pdfce-cli` and a full fuzz build stayed
-comfortable. `cargo clean` still recovers ~21 GB if needed.
+1. **The §3.6 correction** — `docs/core-api/03-capabilities.md:1229` still
+   carries the false "every page is covered" universal. Engineer-owned; fix it.
+   ★ **Do not touch `:1248`** (*"do not grey out a bold button"*) — that one is
+   still true, and correcting the wrong sentence is the available mistake.
+2. **A warning before `144.0` lands**, so their red test is expected.
+3. **The `operator_span`-slice invariant answer** (§C).
 
----
-
-## §C — WHAT IS OPEN AND ACTIONABLE
-
-**If you want one thing to pick up: `Pass 143.0`.** It is fully diagnosed, has
-a named wrong line, needs no operator decision, and closing it should take the
-print-conformance suite from 6 FAIL back to 5 or better.
-
-### `Pass 143.0` — `DeviceGray` under overprint knocks out the backdrop
-
-A 50 % `DeviceGray` fill overprinting a spot backdrop erases it; Acrobat
-preserves it. `overprint::classify` maps `ColorSpace::DeviceGray` to
-`SourceKind::OtherProcess`, which `cmyk_group_rules` gives
-`[ComponentRule::Source; 4]` — the source in all four components.
-
-★ **This is a SPEC READING, not a bug, and that is why it is its own Pass.**
-ISO 32000-1 §8.6.7 scopes `OPM 1` to *"a tint value of 0.0 for a colour
-component **in a `DeviceCMYK` colour space**"*, and `DeviceGray` is not one, so
-pdfce's literal reading is defensible. Acrobat converts grey to K-only CMYK
-**first** and then applies `OPM 1`. Sourced:
-`PDF_Spec\iso32000\iso32000__s__8.6.7.md`, whose `OPM-2` row already records
-the neighbouring case (a CIE-based space *implicitly converted* to
-`DeviceCMYK` **does** get `OPM 1`) — which is the strongest argument that the
-grey case was an omission rather than an exclusion.
-
-**Shape of the fix**, per the standing *"two defensible answers? ship both,
-pick the default"* rule: an ambiguity setting, defaulting to Acrobat's
-behaviour, because this is a print-conformance axis and the suite is authored
-to press behaviour. **Do not ask the operator** — he has refused to be asked
-twice about exactly this class.
-
-### `Pass 142.0` / `142.1` — a REAL bold/italic face, and the missing pre-flight
-
-Unchanged and still waiting on `pdfceGUI`. **Bold and italic already work on
-existing text** via `FormatRequest::set_synthetic`; what `142.0` adds is a
-*real* typographic face. The question with them is *"is a disclosed synthetic
-weight enough, or do your operators need a real face?"* — if synthetic
-suffices, `142.0` drops down the queue. **Read
-`correction_bold_and_italic_DO_work_…` on their channel, not the longer reply
-beside it.**
-
-### The other four print-conformance failures
-
-Spot-colour overprint (6 traps), white overprint (3, down from 5), ICC source
-profile (4), blend modes in an ICC RGB group (12). Run:
-`python tools/suite-check.py <corpus> --reference-dir <refs>` — the private map
-at `D:\Dev\pdfce-private\suite\` names both directories, and set
-`PYTHONIOENCODING=utf-8` or its `--help` dies on a star character. **Patch
-stems are deliberately not listed here.**
-
-### Owed, small, unstarted
-
-`--in-place` on the other `pdfce-cli` editing subcommands. Grep `main.rs` for
-`Never the input path by default`.
+A confirmation note is already on their channel:
+`confirmed_gate_synthesis_is_a_real_defect_and_my_every_page_claim_was_false.md`.
+`iccce` was checked and is clear (19 files, newest is pdfce's own reply).
 
 ---
 
-## §D — THE FINDING, AND IT IS ABOUT HOW I MEASURE, NOT ABOUT COLOUR
+## §G — HABITS THAT PAID, AND ONE THAT NEARLY DID NOT
 
-`70c5919`'s commit message contained a number I had not measured: *"292
-distinct tuples behind 25,870 texels"*, attributing `tint_applied=292` to that
-image's `TintCache`. **The counter had no image contribution at all** — it was
-the page's path fills, because the decode's diagnostics reached nothing. I
-attributed a counter to a producer that could not have reached it, and the
-reason I could not tell is the same defect `140.2` then fixed.
+### A bug report's SYMPTOM is evidence; its MECHANISM is a hypothesis
 
-> **A census counter that omits one producer is not a smaller number. It is a
-> different question, and nothing in the name says which.**
+They arrive in the same file, in the same confident voice. I relayed
+`pdfceGUI`'s mechanism into a librarian dispatch **as fact**, and it was on its
+way into `docs/core-api/` as pdfce's own statement about pdfce's own type when
+I measured it and found it false. Caught only because I had spent the same hour
+writing an apology for failing to check a claim before relaying it.
 
-★★ **And the fixture had to be image-ONLY to see it.** Every other page in the
-new fixture set carries a fill beside its image, and a fill's conversions *are*
-counted — so on those pages the counter reads a plausible non-zero number
-whether or not the image contributes. **A page with a second producer cannot
-detect a missing producer.**
+### A universal claim is an absence claim wearing the opposite sign
 
-★★★ **The other correction is the one to carry forward.** Ablated on a debug
-build: the `/Indexed`-over-`DeviceN` route — the one that was **not in the bug
-report**, added only because `R219` says enumerate every route — accounts for
-**the entire fix on the reported patch** (25,870 bridged → 0 with it reverted;
-0 → 25,870 native with it restored). **Had I implemented only the route the
-report named, the reported defect would not have been fixed at all.**
+*"Every page is covered"* and *"no such verb exists"* fail identically: a claim
+quantified over all cases, verified on the cases that came to mind. Three
+instances in three days, **each one the repair for the previous**. `R220` now
+carries this as clause (d).
 
----
+★ And note where `144.0` actually lived: the fixture's own `PROVENANCE.md`
+documents **both halves correctly and separately** — `/F2` as "a fully-covering
+target", `/F3` as one that "does NOT cover `o`". Nothing ever asked what
+happens when the **synthesis gate picks between them**. Two correct documented
+facts with the defect in the join.
 
-## §E — WHY THE SUITE READS 6 AND SHIPPING WAS STILL RIGHT
+### Verify a claim about your own code from outside, before believing OR dismissing it
 
-The print-conformance suite went **5 FAIL → 6 FAIL** and the rise is a **false
-pass being removed**. Established by measurement, not argument, and the method
-is the transferable part:
-
-1. **Ablate.** `140.0` alone scores identically to the baseline. Every
-   movement is `140.1`'s.
-2. **Segment the trap box by exact grey level**, rather than comparing means:
-
-   | object | Acrobat | before | after |
-   |---|---|---|---|
-   | surround | `84,120,34` | `127,127,127` | `127,127,127` |
-   | the trap X | `84,120,34` | `128,128,128` | `76,117,31` |
-
-   Acrobat paints both the same colour, so its X is invisible. pdfce painted
-   both the same **wrong** colour, so its X was invisible too and the patch
-   scored clean. `140.1` made the X correct and left the surround.
-3. **Run the detector on the reference itself.** Zero traps on Acrobat's
-   render, three real 49×49 marks at diagonality 1.00 on pdfce's — so the
-   marks are adjudicated, not detector noise.
-4. **Measure distance to the oracle.** On the 20,790 pixels that changed:
-   **108.6 → 25.0**. The other two affected patches also improved.
-
-> **A rising failure count can mean a false pass was removed. Measure
-> distance-to-oracle before reverting.**
-
-Reverting `140.1` would have restored a matched pair of errors, re-opened an
-8–9 level fill-vs-image disagreement that `140.0` itself creates, and made two
-patches worse. The surround is `Pass 143.0`.
-
----
-
-## §F — HABITS THIS SESSION PAID FOR
-
-### Sabotage caught a false claim in a COMMENT, not a defect in the code
-
-Three sabotages of `140.2`; two failed tests, one **failed nothing**. Deleting
-the `scratch_diag` merge changes no test — and the code comment beside it
-claimed that merge kept "every non-`Special` image" from being silent. That was
-**false**. The comment now records the line as *deliberately uncovered* and
-says exactly why. Sabotage is not only a test-quality instrument.
-
-### Run the gate, then check what the gate wrote
-
-`tools/check-image-colorspace-truth.py` writes a `_truth/` subdirectory beside
-the images it scores. Pointing it at `fixtures/synthetic/images` — the obvious
-thing — made a `pdfce-core` test die on `std::fs::read` of a **directory**,
-which on Windows is `PermissionDenied` / "Access is denied.", so the panic
-sends the reader after their antivirus. **One of this project's own gates broke
-one of its own tests.** Fixed in `25d73d7`; `.gitignore` would not have helped,
-because the failure is on disk and has nothing to do with what is tracked.
-
-### Grep the format strings in the same change as the doc comment
-
-The stale-claim sweep found **five** sites, not the four the librarian's sweep
-reported. The fifth was a `println!` format string, which no gate reads for
-implementation-state claims. It was stale in the **opposite** direction from
-the doc comments: the runtime note had been *correct* for ten Passes while the
-doc comment was wrong, and `140.0` made the note false and the doc comment
-accidentally true again — **repairing a stale claim by a code change rather
-than an edit, leaving no trace of it ever having been wrong.**
-
-> **When two copies of a population claim disagree, neither being newer nor
-> better-placed is evidence of either being right.**
+All three of their commands were reproduced before the report was accepted.
+That is what made it a *confirmed* defect rather than a triage item — and it is
+the same discipline that then falsified their mechanism.
 
 ### `cp x /tmp/x.bak` before every sabotage
 
-Used eight times this session with no loss. `git checkout --` is not an undo —
-it reverts the whole file.
+Used eight times, no loss. `git checkout --` is not an undo.
 
 ---
 
-## §G — OPEN, UNCHANGED
+## §H — OPEN, UNCHANGED
 
 - **`(bl)`** — may a **CC-BY-SA-4.0** OCR model ship inside pdfce's **MIT**
   portable folder? Ken's call; default if unanswered is **ship neither model
-  set**. `docs/ocr-engine-survey.md`.
+  set**.
 - **`R13` vs "download addin capability"** — downloading is permitted;
   **executing** what was downloaded is not, and that ruling is owed from the
   operator. **No add-in Pass can be scoped until it lands.**
 - **`(p)`** — whether to narrow the XFA item to read/fill only, or retire it.
-
-## §H — THE CHANNELS, AND CHECK THEM ANYWAY
-
-Both `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` and
-`iccce_FeatureRequests\open\` were clear at session start and nothing new
-arrived. **They live outside the repository, so no gate can contradict a stale
-"it's empty" claim** — list them yourself.
-
-Replies still awaiting the other side:
-
-| file | awaiting |
-|---|---|
-| `note_the_writing_direction_is_published_and_your_400_lines_can_go.md` | pdfceGUI deleting `canvas::textsel::writing` |
-| `note_opacity_at_author_time_shipped_and_it_was_an_undo_bug.md` | pdfceGUI wiring `add_markup_with` |
-| `reply_restyle_…` **+ `correction_bold_and_italic_DO_work_…`** | **a decision from them**: is a disclosed SYNTHETIC weight enough, or do their operators need a real face? |
-| `iccce/reply_the_profile_census_and_your_33_node_constant.md` | iccce re-examining their 33-node constant |
-
-★ **One disagreement there still needs resolving rather than averaging.**
-`iccce` names `USWebCoatedSWOP.icc` as carrying a 33-node `lut8`; the
-`U.S. Web Coated (SWOP) v2` in this corpus reports **9**. Either they are
-different files or one of us reads the grid byte from a different offset.
-pdfce's is byte 10 of the tag per ICC.1:2010 §10.10/§10.11 and is
-sabotage-tested — but a disagreement about a specific named file is the kind of
-thing to settle, not split.
+- **An observation, not a decision:** `tools/check-image-colorspace-truth.py`
+  writes a `_truth/` subdirectory beside the images it scores, and pointing it
+  at `fixtures/synthetic/images` broke a `pdfce-core` test last session.
+  Whether that gate should write into a fixture directory at all is an open
+  engineer question.
