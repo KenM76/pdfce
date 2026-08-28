@@ -96,6 +96,582 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 151.0` (`c4425f0`) — `EditSession::resize_annotation` + `pdfce-cli resize-annotation` — ★★★★★ **THE OPERATOR OVERTURNED AN ANSWER PDFCE HAD ALREADY ACCEPTED FROM ITS OWN CONSUMER, AND THE CORRECTION IS A REASONING RULE, NOT A PREFERENCE: *"CONVERGENCE AMONG REFERENCE IMPLEMENTATIONS ARGUES FOR A DEFAULT, NOT AGAINST AN OPTION."* `pdfceGUI` ARGUED FROM CAD PRACTICE THAT STROKE WIDTH MUST NOT SCALE, PDFCE FILED THAT AS SETTLED IN `FEATURES.md` — AND ITS OWN THIRD ARGUMENT CONTAINED THE REFUTATION: *ILLUSTRATOR SHIPS "SCALE STROKES & EFFECTS" **OFF**, WHICH MEANS ILLUSTRATOR **HAS** THE TOGGLE*** — ★★★★★ **A BUG THE ENGINEER WROTE AND CAUGHT IN THE SAME SESSION, AND ITS FIRST FORM WOULD HAVE SILENTLY REPLACED ANOTHER PRODUCER'S ARTWORK WITH PDFCE'S RENDERING OF IT: THE APPEARANCE GATE WAS `spec_from_dict(..).is_ok()`, WHICH ASKS *CAN PDFCE PARSE A SPEC OUT OF THIS DICTIONARY* — TRUE OF AN ACROBAT-DRAWN `/Square` TOO. IT WOULD ALSO HAVE MADE THE REFUSAL **UNREACHABLE**, AND THE ENGINEER'S OWN DOC COMMENT THREE LINES ABOVE FORBADE EXACTLY WHAT IT DID** — ★★★★ **`ResizeOptions` WAS UNCONSTRUCTIBLE BY ANY CONSUMER AND EVERY IN-CRATE TEST WAS GREEN: `#[non_exhaustive]` REFUSES THE STRUCT-EXPRESSION FORM OUTSIDE THE DEFINING CRATE, `..Default::default()` INCLUDED. THE THREE FLAGS THIS PASS EXISTS FOR WOULD HAVE SHIPPED `pub`, DOCUMENTED, TESTED — AND UNREACHABLE BY THE SHELLS THEY WERE BUILT FOR. **THE RAG FILE THAT PREDICTS THIS WAS WRITTEN ONE DAY EARLIER**, `2026-08-27`, BY THIS ROLE** — ★★★ **A MIRROR IS AN ISOMETRY AND ONLY THE CLI SUITE FOUND IT: `sx = -1, sy = 1` WAS CLASSIFIED NON-UNIFORM BY `(sx - sy).abs()`, SO MIRRORING A FOREIGN APPEARANCE WAS REFUSED. **THE 14 CORE TESTS WERE GREEN WHILE THIS WAS BROKEN** — NO CORE CASE HAD PAIRED A NEGATIVE FACTOR WITH A FOREIGN `/AP`** — ★★ **A NEW VARIANT OF THE BACKSLASH-THROUGH-TOOLING HAZARD, AND THE ASYMMETRY IS THE FINDING: A RAW `r'''…'''` PYTHON STRING PASSED `\u2014` THROUGH VERBATIM; IN A RUST **STRING LITERAL** THAT IS A HARD COMPILE ERROR, IN A **`///` DOC COMMENT** IT COMPILES SILENTLY AND SHIPS AS WRONG `--help` TEXT. 17 INSTANCES** — ★ **HARD-RULE-11 SWEEP: `docs/core-api/index.md`'s ROUTING TABLE — THE CONSUMING SHELL'S FIRST PAGE — HAS **FOUR** STALE FIGURES, AND THE PARAGRAPH DIRECTLY BENEATH IT IS HEADED *"Every figure above was stale, and the verb count caused an incident."* THE VERB COUNT IS THE ONLY ONE ANYONE MAINTAINS. MINT DECLINED — `R206` ALREADY IS THE RULE, AND THE DISPATCH NAMED ITS SIBLING** — 2026-08-28 (305th filing)
+
+**Commit:** `c4425f0`, 10 files, **+2,063 / −6** (`git show --numstat`, run here) —
+`crates/pdfce-core/src/edit.rs` (**+681**),
+`crates/pdfce-core/tests/annot_resize.rs` (**+512, new**),
+`crates/pdfce-cli/tests/resize_annotation.rs` (**+432, new**),
+`crates/pdfce-cli/src/main.rs` (**+293**),
+`docs/core-api/02-editing-and-saving.md` (**+123 / −4**),
+`tools/gen-annot-fixtures.py` (**+19**),
+`fixtures/synthetic/annot/PROVENANCE.md` (**+1**),
+`fixtures/synthetic/annot/rect-differences-square.pdf` (**new, 688 bytes**, `ls -l`),
+`crates/pdfce-core/src/annot_author.rs` (**+1 / −1** — `read_border_width`
+private → `pub(crate)`),
+`docs/core-api/index.md` (**+1 / −1**).
+**944 of 2,063 changed lines are the two test files — 45.8%**, which is
+the same ratio `Pass 150.0` filed (486 of 1,062) to two decimal places, on a
+feature four times the size.
+
+**Third Pass of the operator's standing loop** (*"continue work on making
+everything editable and release and notify pdfceGUI when done something…"*), and
+the resize half of the transform pair whose move half shipped as `Pass 149.0`
+(`e91dfad`) four hours earlier.
+
+---
+
+#### THE OPERATOR RULING THIS PASS EXISTS TO HONOUR
+
+`Pass 150.0`'s filing recorded, as though settled, an answer pdfce had received
+from the consuming project `pdfceGUI` at 03:57: *"stroke width does not scale"*,
+argued from its own shipped eight-grip content resize and from CAD practice.
+**Ken overturned it**, 2026-08-28, verbatim:
+
+> *"if that was the resize question about scaling line weight, etc with resize
+> it got the answer wrong. default should be what it said, but there should be
+> an option that they do scale with resize. Inkscape has options for this and I
+> want the same."*
+
+Then, on the sequencing: *"build resize with toggle then release."*
+
+**★ THE GENERALISABLE FORM, and it is a reasoning rule rather than a taste:**
+
+> **CONVERGENCE AMONG REFERENCE IMPLEMENTATIONS ARGUES FOR A DEFAULT, NOT
+> AGAINST AN OPTION.** *"Everyone does X"* and *"nobody should be able to do Y"*
+> are different claims, and the first does not establish the second.
+
+**The refutation was inside `pdfceGUI`'s own third argument.** It cited
+Illustrator's *Scale Strokes & Effects* shipping **off** — which means
+**Illustrator HAS the toggle.** The convergence it observed was a convergence of
+*defaults*, and it was read as a convergence of *capabilities*. Inkscape puts
+four such toggles on the selector tool's control bar; the operator asked for the
+same by name. **The existence of the control is the industry answer; its default
+is a separate question**, and the two got collapsed.
+
+**Note who made the error and who caught it.** The consuming shell reasoned from
+its domain and reasoned well — all three of its arguments were sound, and its
+*default* was adopted unchanged. pdfce then filed the conclusion as settled
+without noticing that the evidence supported a narrower claim. **The operator
+caught it by reading a `FEATURES.md` row.**
+
+---
+
+#### THE VERB
+
+```rust
+pub fn resize_annotation(
+    &mut self,
+    annot_id: AnnotId,
+    anchor: (f64, f64),
+    sx: f64,
+    sy: f64,
+    opts: &ResizeOptions,
+) -> Result<AnnotationResize, EditError>
+```
+
+plus `pdfce-cli resize-annotation`. **Anchor + factors, never a target `/Rect`** —
+the form `transform_objects` already takes, so **the two transform verbs cannot
+disagree about what a caller supplies.** `pdfceGUI` asked for this shape
+explicitly: *"a verb that took a grip name would be encoding our affordance in
+your crate."* The grip→anchor mapping stays in the shell, where the affordance
+lives.
+
+| behaviour | what it does |
+|---|---|
+| `/Rect` **and every geometry key** | `/L`, `/Vertices`, `/InkList`, `/QuadPoints`, `/CL` all scale together about the caller's anchor |
+| `/RD` (`ResizeOptions::keep_rect_differences`) | **scales BY DEFAULT** |
+| `/BS /W` (`ResizeOptions::scale_stroke_width`) | **does NOT scale by default** |
+| non-uniform + `scale_stroke_width` | geometric mean `sqrt(\|sx\| * \|sy\|)` — the area-preserving choice, **DISCLOSED in `AnnotationResize` rather than picked silently** |
+| foreign `/AP` | **refused** unless `allow_appearance_distortion` — see the gate below |
+| a widget | refused → `edit_widget` |
+| a ce dimension | refused → `move_dimension_vertex` |
+| `sx` or `sy` zero / non-finite | `EditError::ResizeFactorInvalid { axis, value }` |
+
+**★ THE TWO DEFAULTS POINT OPPOSITE WAYS AND THAT IS DELIBERATE.** The
+discriminator, stated once so a future transform verb inherits it rather than
+re-litigating it:
+
+> **Is the property a LENGTH IN THE SPACE BEING TRANSFORMED?**
+
+An inset (`/RD`) is — it is measured in the same `/Rect` whose extent just
+changed, so leaving it fixed would make a 3× annotation's border-inset a
+different *fraction* of the box. A line weight is not — it is a **drafting
+convention**, a statement about how thick a line should look on paper,
+independent of how big the thing it outlines is. **The same test explains why
+`move_annotation` scales neither: a translation changes no length at all.**
+
+**Both refusals use `AnnotationMoveWrongVerb`, deliberately the SAME error type
+as the move verb**, so one `match` arm in a shell covers both transform verbs.
+That is an API-shape choice worth naming: a second, parallel
+`AnnotationResizeWrongVerb` would have been more "precise" and would have forced
+every consumer to write the arm twice.
+
+---
+
+#### FINDING 1 — ★★★★★ THE APPEARANCE GATE, AND A BUG WRITTEN AND CAUGHT IN ONE SESSION
+
+**Why a resize is not a move, in one sentence of spec.** ISO 32000-1 §12.5.5
+maps the appearance's `BBox`×`Matrix` onto `/Rect`. Under a **translation** that
+mapping is a pure translation, so carrying the baked `/AP` unchanged is free —
+which is exactly why `Pass 149.0` carries it, and why that Pass's ★★★★ correction
+went *further* than three documents had. **Under a SCALE the same mechanism works
+against you:** the matrix is applied **after** stroking, so the drawn stroke
+scales by whatever the mapping says regardless of `/BS /W` — and
+**anisotropically under a non-uniform scale, which no scalar stroke width can
+express.**
+
+**The bug.** The first implementation gated rebuilding on
+`annot_author::spec_from_dict(..).is_ok()`. That predicate asks **"can pdfce
+PARSE a spec out of this dictionary"** — and it succeeds for an **Acrobat-drawn
+`/Square`** too, whose `/Rect`, `/C`, `/IC` and `/BS` all read perfectly well.
+Two consequences, and the second is the one that makes this worth a ★★★★★:
+
+1. It would have **silently replaced another producer's artwork with pdfce's
+   rendering of it** — a round-trip rule 3 violation on content pdfce did not
+   author.
+2. It would have made `ResizeAppearanceNotRebuildable` **unreachable**. A
+   refusal that cannot fire is not a conservative branch; it is dead code that
+   reads as a safety net.
+
+**The engineer's own doc comment three lines above the gate said pdfce must not
+do that.** The predicate and its stated purpose were in the same screenful and
+disagreed.
+
+**The gate that shipped is the one `set_markup_style` already uses:** rebuild
+the appearance from the **UNMODIFIED** spec and **compare BYTES**. If pdfce's
+regeneration reproduces what is on disk, the artwork is pdfce's and may be
+re-authored at the new size; if it does not, the `/AP` is foreign and the resize
+is refused by name unless the caller opts into distortion. **Reusing the existing
+predicate rather than inventing a second one is `R92`'s discipline applied to a
+gate rather than to a generator.**
+
+---
+
+#### FINDING 2 — ★★★ A MIRROR IS AN ISOMETRY, AND ONLY THE CLI SUITE FOUND IT
+
+Uniformity was tested as `(sx - sy).abs() < EPS`. For `sx = -1, sy = 1` that is
+`2.0` — **classified non-uniform**, so a **mirror of a foreign appearance was
+REFUSED**. A reflection is an isometry: it preserves every length, **including
+the drawn stroke width**, so it is precisely the case the refusal should not
+catch. Uniformity is now tested on `|sx|` vs `|sy|`.
+
+**★ THE 14 CORE TESTS WERE GREEN WHILE THIS WAS BROKEN.** No core case had
+paired a **negative factor** with a **foreign appearance** — each attribute was
+covered, the *combination* was not. This is the project's recurring
+*"verify each instance, not the class"* shape (`R203`, and `Pass 148.0`'s
+per-form audit), arriving here as **per-attribute coverage mistaken for
+per-combination coverage**. A suite can have 100% of the axes and 0% of the
+corner.
+
+**What found it:** the CLI integration suite, written later and from the outside,
+which drove a mirror through the command surface because that is a thing an
+operator does.
+
+---
+
+#### FINDING 3 — ★★★★ `ResizeOptions` WAS UNCONSTRUCTIBLE BY ANY CONSUMER
+
+`#[non_exhaustive]` **refuses the struct-expression form outside the defining
+crate** — `ResizeOptions { scale_stroke_width: true, ..Default::default() }`
+included; the functional-update syntax does not exempt it. Inside
+`pdfce-core` the attribute is **inert**, so:
+
+- the three flags compiled,
+- were `pub`,
+- were documented,
+- had passing tests,
+- and **could not be set by `pdfce-cli` or by `pdfceGUI`** — the two shells the
+  Pass exists to serve.
+
+**Found only because an out-of-crate integration test refused to compile.**
+Fixed with `ResizeOptions::new()` plus `with_scale_stroke_width`,
+`with_keep_rect_differences` and `with_allow_appearance_distortion`, each
+carrying a doctest — a doctest being, structurally, an out-of-crate compile.
+
+**★ THE RAG FILE THAT PREDICTS THIS WAS WRITTEN ONE DAY EARLIER, BY THIS ROLE.**
+`D:/dev/rag/rust/non_exhaustive_is_inert_in_crate_so_only_an_out_of_crate_test_feels_a_consumers_constraint.md`,
+`last_verified: 2026-08-27`, from `Pass 142.1`. Its prescription —
+*"every `#[non_exhaustive]` public type gets at least one test in `tests/`"* —
+is **exactly what caught this**, one day later, on a different type. **The
+finding worked; nobody had to remember it, because the habit it prescribes was
+already in place.** That is the best outcome a RAG entry can have, and it is
+worth recording as such rather than as a near-miss.
+
+**The half that file did NOT cover, and now does** (dated second-instance
+section added this filing): the constraint is not only about **tests**, it is
+about the **constructor surface**. A `#[non_exhaustive]` struct whose only
+construction route is `Default` + field assignment is, from outside,
+**a struct whose fields are read-only**. It needs builders, and the need is
+invisible from inside the crate that defines it.
+
+**A second-order note worth keeping**, because it is where the *next* silence
+would come from: `#[non_exhaustive]` on the **outcome** enum (`ResizedAppearance`)
+then **forces** a `_` arm on the CLI's `match`, and the compulsory empty form of
+that arm — `_ => {}` — is precisely how a future variant ships as silence.
+**Both `_` arms in the CLI are written to SPEAK:** an unrecognised outcome is
+reported *as unrecognised*. The attribute that protects the crate's evolution
+creates, at every consumer, a hole shaped exactly like a disclosure gap
+(rule 4 / `R27`).
+
+---
+
+#### FINDING 4 — ★★ A RAW PYTHON STRING SHIPS `\u2014` INTO RUST, AND A DOC COMMENT TAKES IT SILENTLY
+
+A patch script used a **raw** triple-quoted string, `r'''…'''`, so Python did
+**not** interpret `\u2014` and passed the six characters through verbatim into
+the Rust source. Rust's own escape syntax requires braces (`\u{2014}`), so:
+
+| where the bare `\uXXXX` lands | what happens |
+|---|---|
+| a Rust **string literal** | **hard compile error** — *"incorrect unicode escape sequence"* |
+| a **`///` doc comment** | **compiles silently**, and ships as wrong `--help` text |
+
+**17 instances**, all in doc comments — because the ones in literals stopped the
+build immediately and were fixed without anyone noticing there was a class.
+**The loud half of the defect concealed the silent half.**
+
+**Verified here rather than accepted:** a two-file crate was built in the
+scratchpad with `/// A dash \u2014 in a doc comment.` — `cargo build` **Finished**;
+adding the same escape to a string literal in the same file produced
+`error: incorrect unicode escape sequence / help: format of unicode escape
+sequences uses braces`.
+
+**Repair script:** `D:/Dev/temp/pdfce/fixesc.py`. **The detection regex that
+matters** is a bare `\uXXXX` **NOT followed by `{`** —
+`re.compile(r"\\u([0-9a-fA-F]{4})(?!\})")` — so genuine Rust escapes like
+`\u{FFFD}` are untouched.
+
+**Residual scan run here across `crates/`: 2 hits, both benign and both in
+`crates/pdfce-core/src/form_script/shape.rs`** — `:617` documents
+**JavaScript's** `\uD800` escape syntax and `:774` is a raw byte-string test of
+a **JS** escape. Both are correct as written; recorded so the next person
+running the regex does not "fix" them. **The detection is a text pattern and
+cannot know which language a comment is talking about** — that limitation is
+filed with the finding.
+
+**Related but distinct from the existing family.**
+`D:/dev/rag/rust/a_python_heredoc_eats_the_backslash_continuation_in_a_rust_string_literal.md`
+(n = 7) is about a backslash being **consumed** by the tooling; this is a
+backslash being **preserved** by the tooling. Opposite mechanism, and the
+new payload is the **loud-in-a-literal / silent-in-a-doc-comment asymmetry**,
+which that file does not carry. New RAG file written this filing (below).
+
+---
+
+#### THE FIXTURE
+
+`fixtures/synthetic/annot/rect-differences-square.pdf` — **688 bytes**
+(`ls -l`, run here), generated by `tools/gen-annot-fixtures.py` (**+19** in this
+commit) and recorded in `fixtures/synthetic/annot/PROVENANCE.md` (**+1**), so
+rule 7 and `check-shipped-assets` are satisfied in the same commit that adds it.
+
+Two properties, both load-bearing:
+
+1. **It is the ONLY fixture in the corpus carrying `/RD`**, so the `/RD`
+   default has a subject at all.
+2. **Its `/AP` is foreign to pdfce BY CONSTRUCTION**, which is what makes
+   *"pdfce will not redraw somebody else's artwork"* a **measurable** claim
+   rather than an asserted one. A gate whose refusal branch has no fixture that
+   trips it is Finding 1 wearing a passing test.
+
+**Its four `/RD` values are deliberately unequal**, so a bug scaling every slot
+by `sx` is visible. Table 175 orders them **[left, top, right, bottom]** — left
+and right take `sx`, top and bottom take `sy`, and an implementation that reads
+the array as `[x, y, x, y]` produces a plausible-looking result on any fixture
+whose four values are equal.
+
+---
+
+#### VERIFICATION
+
+| check | result | how |
+|---|---|---|
+| new tests | **23, all green** — 14 in `crates/pdfce-core/tests/annot_resize.rs`, 9 in `crates/pdfce-cli/tests/resize_annotation.rs` | counted here: `grep -c '^#\[test\]'` on each file returns 14 and 9 |
+| `EditSession` public verb count | **150 → 151** | `tools/check-core-api-verbs.py`, **run here**: *"151 public EditSession method(s) in edit.rs … PASS — every verb documented, count agrees"* |
+| `EditError` variant count | **88 → 90** | counted here on both sides: `#[error(` attributes between `pub enum EditError` and its closing brace — `943d482` → **88**, `c4425f0` → **90** |
+| sabotage runs | **4, each caught** | appearance gate reduced to `is_ok()` → **3 failures**; `/RD` axis alternation flipped → **1**; `scale_flat` scaling about the origin not the anchor → **1**; exact-carry branch removed → **1** |
+| CLI flag wiring | each flag proved wired | **the SAME resize run twice, with and without the flag, requiring the SAVED BYTES to differ in the key that flag owns** |
+| `tools/run-gates.sh` | **PASS — 26 commands**, including both filing gates | engineer; two deliberate skips as always (`cargo about`, `--all-features` tests) |
+| `cargo fmt` / `cargo clippy --workspace --all-targets --all-features -- -D warnings` | applied / clean | engineer |
+| wasm32 gate | green | `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` — the GUI-core separation invariant (rule 2) holds |
+
+**★ WHY THE FLAG-WIRING CHECK IS ITS OWN ROW, and it generalises past this
+Pass.** Unit tests call `resize_annotation` directly with a `ResizeOptions` they
+built themselves. **A flag that is parsed by `clap` and then dropped on the floor
+before the call passes every single one of them** — the core is correct, the
+option is correct, and the operator's `--scale-stroke-width` does nothing.
+Requiring the *saved bytes* to differ tests the one span no core test can reach:
+the wiring between the argument and the argument's use. Finding 3 is the same
+hole seen from the API side; this row is the guard for it seen from the CLI side.
+
+**★★ THE FLAG-WIRING CHECK AND FINDING 3 ARE THE SAME DEFECT AT TWO SCALES.**
+Finding 3: an option exists and no consumer can set it. This row: an option
+exists, a consumer sets it, and nothing reads it. **Both are invisible to a
+green suite, and both were caught by leaving the crate** — one by an out-of-crate
+compile, one by an end-to-end byte comparison. The common prescription is not
+*"write more tests"*; it is **at least one test per option that starts outside
+the crate and ends at the saved file.**
+
+---
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string
+
+**Meaning-change events in this Pass:** (i) *"resize is unbuilt for markup"*
+became false for core and cli; (ii) *"stroke width does not scale"* went from a
+**settled behaviour** to a **default with a toggle**; (iii) the verb count moved
+150 → 151 and `EditError` 88 → 90.
+
+**Found and fixed in this filing (mine to edit):**
+
+| where | the claim | disposition |
+|---|---|---|
+| `docs/FEATURES.md:180` | *"…but not moved or resized yet — the move verb shipped core-and-CLI 2026-08-28 …; **resize is unbuilt everywhere**"* | **NOT NAMED IN THE DISPATCH.** *"Unbuilt everywhere"* is now false in two of three columns. Sentence replaced. |
+| `docs/FEATURES.md:339` | *"Resize is built for widgets only … unbuilt for the other four"*, and *"stroke width does not scale"* recorded as the consuming shell's settled answer | rewritten; the rotate half kept honest and separated from the resize half |
+| `docs/FEATURES.md:349` | *"resize is built nowhere for markup"* | replaced; **gui box stays `[ ]`** |
+| `docs/ARCHITECTURE.md:16135` | *"a width pdfce chose is inferred state and must be visible before it becomes document state"* — **owed item 2 from the 304th filing, re-verified live here** | dated 059 amendment note added in place (append-only respected) |
+| `docs/FEATURES.md:206` | **a RENDERING defect, not a stale claim, and pre-existing:** the widget-visibility row contains `` `Print | NoZoom` `` — **an unescaped pipe inside a code span, which GFM does NOT protect inside a table**, so that row rendered with a spurious sixth column and everything after *"Print"* fell out of the Feature cell | escaped to `\|`; found by a whole-file unescaped-pipe count run as part of this filing's checks, **not by reading** — nobody reads a 400-character table cell to its end |
+
+**★ NEW STANDING CHECK, adopted rather than proposed, because it cost one
+command:** every `FEATURES.md` filing now counts **unescaped** pipes per table
+row and requires **exactly 6**. A pipe inside backticks is the one case that
+looks safe and is not. Run: a 15-line script comparing
+`re.compile(r"(?<!\\)\|")` hits per row against 6; **1 defect found on first
+run**, the row above.
+
+**Reported, NOT edited — `docs/core-api/` is engineer-owned (2026-08-18 ruling),
+`crates/` is outside this role's remit:**
+
+**★★★ `docs/core-api/index.md`'s ROUTING TABLE HAS FOUR STALE FIGURES, AND THE
+PARAGRAPH DIRECTLY BENEATH IT IS THE WARNING ABOUT EXACTLY THAT.** This is the
+consuming shell's **first page** — the table that tells a reader which of the
+three parts to open. Measured here with `wc -l` and the variant count above:
+
+| figure in the table | claimed | actual | note |
+|---|---|---|---|
+| `02-editing-and-saving.md` verbs | **151** | **151** | ✅ **updated in `c4425f0`** — the only figure anybody maintains |
+| `02-editing-and-saving.md` `EditError` variants | **88** | **90** | ❌ **wrong as of this very commit**, which added the two |
+| `02-editing-and-saving.md` lines | **1,550** | **2,999** | ❌ off by **1,449** — the claimed figure is **52%** of the real one |
+| `01-reading-and-model.md` lines | **2,223** | **2,649** | ❌ off by 426 |
+| `03-capabilities.md` lines | **2,079** | **2,533** | ❌ off by 454 |
+
+**The shape, and it is the `R215` shape exactly.** The block immediately below
+this table is headed *"★ Every figure above was stale, and the verb count caused
+an incident."* **The remedy that incident produced was a gate for ONE figure** —
+`tools/check-core-api-verbs.py`, which passes — **and the four figures beside it
+in the same row, with no gate, went back to rotting under the warning that
+names them.** A gate on one column of a table is read by everyone, including
+its author, as a gate on the table.
+
+**Worth stating plainly because it decides what to do about it:** the two
+variant counts are **in the same cell of the same row**, one hand-edited
+correctly and one not, **in the same commit**. This is not inattention — it is
+that `check-core-api-verbs.py` told the engineer which number to change, and
+nothing told him about the other four. **The fix is to extend the gate to the
+figures that sit beside the one it already checks**, not to ask for more care.
+
+**Other survivors carried forward, each RE-VERIFIED against live source this
+filing rather than copied from the 304th filing's list** (a correction is a
+claim — hard rule 10's corollary):
+
+1. **`docs/core-api/index.md:54–56`**, phrase *"must be visible **before** it
+   becomes document state, and rejectable without undoing anything else"* —
+   **STILL LIVE**, in the *"read these four things before writing any code
+   against this crate"* onboarding list. The 304th filing's grep for this
+   returned nothing on my first pass here because the phrase **wraps across a
+   line inside markdown bold**; found by reading the section. **That is hard
+   rule 11's whole thesis, demonstrated on this role's own previous filing.**
+   Replace with decision 059's text.
+2. **`docs/ocr-engine-survey.md:1562`** — presents the superseded 024 text as
+   *"The current text:"*. **STILL LIVE.**
+3. **`crates/pdfce-cli/src/main.rs:4084`** (was `:4009`, before that `:3972` —
+   **moved +75 by this Pass's `+293` to that file**), phrase *"so it is visible
+   before it becomes document state (rule 4)"*; and
+   **`crates/pdfce-core/src/ocr/mod.rs:45`**, *"…is visible before it becomes
+   document state…"*. **Both STILL LIVE.** `crates/` — reported, not edited.
+   **★ This is the third consecutive filing in which this one line number has
+   moved.** It is now quoted by phrase in preference to line number; the line
+   number is given only to save a grep.
+4. **`crates/pdfce-core/src/text_edit/format.rs:5003`** — *"until free-form `Ts`
+   ships (19.2)"*; `Pass 19.2` shipped 2026-08-03 and `format.rs:830` is the
+   function. **STILL LIVE**, now false for **26 days**.
+5. **`crates/pdfce-core/src/edit.rs:21260`** (was `:20603` — **moved +657 by
+   this Pass's `+681`**) — *"(Derived below, once the AcroForm-level `/DA`
+   fallback exists.)"*. Candidate only; the engineer's reading.
+6. **`docs/core-api/02-editing-and-saving.md:1105`** — *"It carried a `String`
+   now"*; should be *"carries"*. **STILL LIVE.** Trivial, listed so it is not
+   lost.
+7. **`edit.rs`'s `move_annotation` doc comment still under-claims the verb**
+   (carried from the 303rd filing). Amend the reason, not the conclusion.
+8. **Dispatch `pdfce-spec-librarian` for §12.5.6's subtype family** (4 of ~26
+   files present) — **and the second half of that request is now DISCHARGED
+   without them:** `/RD` under a non-uniform scale was answered by this Pass
+   from §12.5.5 plus Table 175's `[left, top, right, bottom]` ordering, and
+   shipped as a flag. The subtype-family gap stands.
+9. **A future filing should audit the other 21 `FEATURES.md` reason clauses**
+   against the header rule that forbids them. **Two were removed this filing**
+   (rows 339 and 349 both carried one); **19 remain**.
+
+**Checked and found CLEAN, recorded so the absence is evidence rather than an
+omission:** `grep -rn 'resize_annotation|set_annot_rect'` across `docs/`,
+`crates/` and `tools/` returns no live *"the verb does not exist"* claim —
+`docs/core-api/03-capabilities.md:1025` now carries that sentence
+**struck through** (`~~…~~`), which is the 303rd filing's ★★ survivor properly
+discharged by the engineer — **in `943d482`, one commit earlier, not in this
+one** (`git show --numstat c4425f0` does not touch that file). Recorded with its
+commit because *"already fixed"* is a claim like any other.
+
+---
+
+#### ★ STANDING-RULE DISPOSITION — **MINT DECLINED**, and the dispatch named the SIBLING of the rule that already covers it
+
+**The candidate**, from the dispatch: *"convergence among reference
+implementations argues for a default, not against an option."* The dispatch
+flagged, correctly and unprompted, that *"a near-identical shape may already be
+covered by an existing rule about spec ambiguity becoming a setting (`R169`)"*,
+and asked for a decline in preference to a duplicate.
+
+**It is covered — but by `R206`, not by `R169`, and the difference is the whole
+reason `R206` exists.**
+
+**`R169` does NOT cover this.** Its own minting text scopes it deliberately to
+*"bucket-1 SETTING findings only… from the spec-ambiguity settings register"*.
+**Stroke-scaling-on-resize is not a spec question at any point** — ISO 32000-1
+has nothing to say about whether a user-initiated resize should carry `/BS /W`
+along, because it is not a question about a file format at all. Citing `R169`
+here would repeat the misattribution the 197th filing already corrected once
+(`R169` → `R171`, `ROADMAP.md:45130`).
+
+**`R206` covers it exactly**, and was minted 2026-08-20 for precisely the case
+`R169` excludes:
+
+> *"When a design question has two defensible behaviours and neither is dictated
+> by the PDF standard, ship BOTH as configurable options and PICK THE DEFAULT
+> from what a normal operator would expect; do not return to the operator to
+> choose."*
+
+Founding operator ruling, 2026-08-20: *"make things work both ways as options.
+default it to your best guess as to what would be normally expected."*
+**Compare 2026-08-28: *"default should be what it said, but there should be an
+option that they do scale with resize."*** Same operator, same instruction,
+eight days apart, on an unrelated subsystem. `R206`'s entry states the point the
+candidate makes, already: *"the operator does not want to be asked to pick
+between two reasonable behaviours, **and does not want either behaviour
+discarded**."*
+
+**What the candidate adds is an EVIDENCE claim, not a behaviour claim**, and
+that is the honest reason to look twice at it before declining. `R206` says
+*ship both, default from ordinary expectation*; the candidate says *here is a
+kind of evidence that is systematically misread as settling the question*. **But
+that is an argument about how to APPLY `R206`, not a rule `R206` lacks** — and
+`R206`'s own text already anticipates it: *"the default is not a free pass to
+guess casually … a default chosen this way is a claim about ordinary-operator
+expectation."* A convergence survey is exactly such a claim, and `R206` already
+requires it to be labelled as one.
+
+**★ THE DECIDING ARGUMENT, and it is not the occurrence count.** A second rule
+saying *"and remember convergence only argues for the default"* would be read as
+narrowing `R206` to convergence evidence, when `R206` is general over **all**
+evidence for a default. **Minting the special case beside the general rule makes
+the general rule look like it has a carve-out.** This project has the receipt
+for that failure mode: `R169` and `R206` are *already* a general/special pair,
+and it took a full filing (the 207th) to argue that the second one was not a
+duplicate — an argument that had to be made *because* the pair invites exactly
+this confusion.
+
+**What is filed instead:** `R206` gains a **dated second-instance note** in
+*Standing rules* — not a mint. Precedent: `Pass 150.0`'s filing gave `R143` a
+dated third-instance note on the same reasoning, one day ago.
+
+**★★ AND A SEPARATE DISPOSITION THE DISPATCH DID NOT ASK FOR — no decision
+record either.** The transform-side-effect ruling is a **correct application of
+an existing standing rule to a new subsystem**, which is the exact thing decision
+094's own closing paragraph declines to file: *"Filing every correct application
+of a standing rule as a decision would make this log a duplicate of
+`ROADMAP.md`'s Shipped section and dilute the entries that genuinely constrain
+future work."* **Decisions stay at 094; next free 095.**
+
+**The one thing that WOULD have earned a decision, and did not happen:** if the
+`/RD`-vs-`/BS /W` discriminator had been settled as a *published guarantee* to
+consumers — the §4.2 shape decision 094 created — that is a promise, not an
+application. It is currently a doc comment and an outbound note. **Flagged to
+the engineer as a candidate for §4.2, not filed as one**, because promising it
+costs something (`/RD` may then never stop scaling by default) and that cost is
+the engineer's to accept.
+
+---
+
+#### DOCUMENTS EDITED, AND WHAT IS OWED
+
+| document | change |
+|---|---|
+| `docs/ROADMAP.md` | this entry; `Pass 151.0` to *Shipped*; `R206` gains a dated second-instance note in *Standing rules*; four live Backlog/Next-up rows claiming resize is unbuilt gain dated amendment notes |
+| `docs/FEATURES.md` | **six changes** — line 180 (*"resize is unbuilt everywhere"*, **not named in the dispatch**), 187 (move row, cross-referenced), **a NEW *Implemented* row for resize at 188**, the old *Resize and rotate* row **rewritten as rotate-only** so rotation cannot be misread as shipped, the canvas row (core/cli moved `[ ]` → **`—`**, because a pointer gesture has no headless form and both verbs it drives now ship), and the **unescaped-pipe fix at 206**. New capability ticks: **`[x]` core · `[x]` cli · `[ ]` gui** |
+| `docs/ARCHITECTURE.md` | dated amendment note on §12's 2026-08-07 (thirtieth-filing) resize analysis — the *"two jobs of very different size"* prediction is confirmed and the branch it did not anticipate is named; **plus the 059 correction at `:16135`**, discharging owed item 2 |
+| `docs/SESSION_LOG.md` | 305th-filing entry |
+| `D:/dev/rag/rust/` | **two dated amendments, NO new file** — `a_python_heredoc_eats_the_backslash_continuation_in_a_rust_string_literal.md` (n = 7 for the raw-string branch; the loud/silent asymmetry) and `non_exhaustive_is_inert_in_crate_so_only_an_out_of_crate_test_feels_a_consumers_constraint.md` (the builder corollary), each with its `index.md` bullet extended and `last_verified` bumped. **A new file was considered and refused under hard rule 4**: the raw-string mechanism is already the ★★★ 2026-08-26 amendment of the first file, so a new one would have been a duplicate |
+| `C:\personal_rag\pdf\` | dated ★★★★ amendment to `lesson_20260807_translating_rect_needs_no_ap_regeneration_resizing_does.md` — **the lesson that predicted this Pass on 2026-08-07** — correcting its central table (provenance is per-document, not per-family), plus subject-index and master-index entries and a keyword/frontmatter update |
+| `C:\personal_rag\index.md` | the amendment entry above, **and one missing master-index line restored** — see the index check |
+
+**★ INDEX CHECK (hard rule 7), run in full this filing.** `D:/dev/rag/rust/` —
+**246 findings, 0 missing from `index.md`.** `D:/dev/rag/egui/` — **136
+findings, 1 "missing"**, and it is a **false positive worth recording so the
+next check does not re-report it**:
+`epaint_has_glyph_is_resolved_face_vs_replacement_face_not_a_coverage_oracle.md`
+is a **deliberate duplicate stub** whose own body says *"This stub is
+intentionally NOT listed in `index.md`, so it does not surface as a second
+search hit."* `C:\personal_rag\pdf\` — **175 lessons; ONE was missing from the
+master index** (`lesson_20260818_solidworks_shaded_views_are_dozens_of_abutting_masked_image_tiles.md`
+— subject index had it, master did not), **added this filing with a note saying
+so**. **ONE dangling `related_lessons` path**, reported and **deliberately not
+repaired**:
+`lesson_20260807_dangling_reference_is_null_so_a_survivorship_reload_check_reads_clean.md`
+points at `…\lesson_20260807_lenient_parser_hides_broken_file_from_its_own_tests.md`,
+**which exists nowhere on disk**. The nearest live file by subject is
+`lesson_20260730_silent_filter_fallback_antipattern.md`, but *"a lenient parser
+hides a broken file from its own TESTS"* and *"a silent filter fallback returns
+raw bytes"* are **different findings**, so the reference most likely names a
+lesson that was planned and never written. **Guessing the target would put a
+false cross-reference into a file whose whole subject is checks that read
+clean when they should not.** Engineer's call.
+
+**Backup currency, checked rather than inferred (hard rule 8).** Newest bundle in
+`D:\Dev\pdfce-backups\` is **`pdfce-20260827-shutdown-a2b4e16-full.bundle`**,
+2026-08-27 12:04 (`ls -t`, run here). `git merge-base --is-ancestor a2b4e16
+c4425f0` → **yes**; `git rev-list --count a2b4e16..HEAD` → **42** at 07:29.
+**The backup is 42 commits behind the tip** — 39 at the 304th filing.
+Reported as a figure with its command; the engineer decides whether it matters.
+
+**★★ TWO COMMITS ARE UNPUSHED, AND THE SECOND ONE LANDED WHILE THIS FILING WAS
+BEING WRITTEN — WHICH IS WHY THE FIGURE IS RE-TAKEN HERE RATHER THAN CARRIED.**
+At 07:20 `git status --porcelain` showed `M
+.claude/agent-memory/pdfce-engineer/MEMORY.md` plus one untracked feedback file,
+and `git rev-list --left-right --count origin/main...main` → **`0 1`**. At 07:29
+the same two commands return a **clean** tree (apart from this filing's own four
+documents) and **`0 2`**: the engineer committed that agent memory as
+**`8e234c9`** — *"memory: three lessons from `Pass 151.0`"* — in the interval.
+**`HEAD` is `8e234c9`, not `c4425f0`.** Under rule 8 as amended 2026-08-27
+(*"always push"*) an ordinary fast-forward of `main` is standing-authorized and
+needs no go-ahead; flagged because pushing is not this role's act.
+
+**★ Recorded as an instance, not as an apology.** A first draft of this section
+stated the 07:20 reading as the filing's fact. **A working-tree figure is not a
+property of a filing; it is a property of an instant**, and a filing that takes
+minutes can outlive one. This is the same shape as the 304th filing's channel
+check being taken at *dispatch* time rather than *filing* time, arriving on a
+different measurement. **Both figures are given above with their clock times**,
+which is the only form in which the pair can be checked.
+
+**Ledger effects.** Pass ceiling **150.0 → 151.0**; **next free Pass ID 152**.
+Standing rules **unchanged at `R224`**, next free **`R225`** — `R206` gains a
+dated second-instance note, which is not a mint. Decisions **unchanged at 094**,
+next free **095** — declined on decision 094's own stated ground. `R203`
+instance count **5 → 5** (unchanged; Finding 2 is the *verify-the-combination*
+sibling, not a new `R203` instance — recorded here so a later filing does not
+increment it twice). Next free filing ordinal: **306**.
+
+---
+
 ### `Pass 150.0` (`943d482`) — `MarkupNote` on `MarkupOptions` — ★★★★★ **THE FEATURE IS NOT THE FINDING: A TEST WRITTEN FOR THE NEW WRITE PATH FAILED, THE ENGINEER SWITCHED WHICH ENCODER HE CALLED, IT WENT GREEN — AND THAT WAS A WORKAROUND FOR SOMEBODY ELSE'S BUG, HIDDEN BY A PASSING TEST. MEASURED PROPERLY: BOTH ENCODERS WERE CORRECT, THE *DECODER* WAS AT FAULT, AND `annot.rs` READS `/Contents`, `/T` AND `/M` THROUGH IT — SO EVERY ANNOTATION NOTE A CONFORMING PRODUCER WROTE IN PDFDocEncoding CAME BACK AS MOJIBAKE, ON FILES THE OPERATOR ALREADY HAS** — ★★★★★ **AND THE REFUSAL'S STATED REASON HAD EXPIRED: THE COMMENT SAID THE ASCII-ONLY FALLBACK EXISTED *"BECAUSE … THE SPEC RAG DOES NOT YET CARRY"* ANNEX D.3, WHILE `crate::textstring` HAD CARRIED THAT TABLE IN BOTH DIRECTIONS ALL ALONG** — ★★★★ **MINT DECLINED, AND THE DECLINE IS THE STRONGEST ONE THIS ROLE HAS FILED: THE CANDIDATE — *"A DEFERRAL PHRASED AS 'BLOCKED ON X' OUTLIVES X"* — IS **VERBATIM `R143`'s OWN WRITTEN COROLLARY**, ON DISK SINCE 2026-08-05, AND A 2026-08-05 RULING ALREADY ON RECORD FORBIDS ELEVATING THIS PATTERN PER OCCURRENCE. THE 242nd FILING MADE THIS EXACT MISTAKE AND WAS CAUGHT THE SAME WAY. **THE CANDIDATE IS ITSELF AN INSTANCE OF THE SHAPE IT DESCRIBES** — *"no rule covers deferrals"* read as settled by someone who did not re-check** — ★★★ **A LIVE STALE DEFERRAL FOUND IN THE TREE BY THIS FILING'S OWN SWEEP, AND IT IS IN THE SAME FILE AS ITS OWN REFUTATION: `text_edit/format.rs:5003` SAYS A WORKAROUND IS *"THE ONLY WAY TO UNDO A PRODUCER'S RISE **UNTIL FREE-FORM `Ts` SHIPS (19.2)**"*, WHILE `format.rs:830` IS `pub fn rise(…)` LABELLED *"(Pass 19.2)"*. `Pass 19.2` SHIPPED 2026-08-03 — THE COMMENT HAS BEEN FALSE FOR 25 DAYS, 4,173 LINES BELOW THE FUNCTION THAT FALSIFIES IT** — ★★ **THE ENGINEER THEN COMMITTED THE VERY ERROR THE TEXT HE WAS DELETING WARNED ABOUT: HIS FIRST DOCTEST ASSERTED `0x91` → U+2018, GUESSED FROM MEMORY, IN A COMMENT CELEBRATING THE TABLE'S ARRIVAL. IT IS U+201A; U+2018 IS `0x8F`. **VERIFIED HERE AGAINST `textstring::PDF_DOC_ENCODING` ITSELF, NOT AGAINST HIS CORRECTION** — a correction is a claim** — ★ **AND THIS ROLE'S OWN OWED-WORK LIST DECAYED IN THE SAME COMMIT: IT ADDRESSES SURVIVORS BY LINE NUMBER, AND `crates/pdfce-cli/src/main.rs:3972` IS NOW `:4009` — MOVED +37 BY THIS PASS'S OWN `+76` TO THAT FILE** — 2026-08-28 (304th filing)
 
 **Commit:** `943d482`, 9 files, **+1,062 / −88** (`git show --numstat`, run here) —
@@ -85971,6 +86547,21 @@ and are not touched by any of the five items below.
    covers page content objects only (`object_provider.rs:470-508`).
    Filed as `Pass 47.6` under *Backlog*, below.
 
+   > **★ AMENDED 2026-08-28 (305th filing) — PREREQUISITE 1 IS
+   > DISCHARGED, AND HAS BEEN SINCE `Pass 134.0`. THIS IS AN `R199` STALE
+   > BLOCKER, FOUND BY `Pass 151.0`'s HARD-RULE-11 SWEEP.** *"`Pass
+   > 46.0`'s own core resize verb (unbuilt)"* is false: `edit_widget`
+   > (`Pass 134.0`, CLI-wired) writes `/Rect` as a **move AND a resize**,
+   > per placement, and `docs/core-api/02-editing-and-saving.md:931` says
+   > so in those words. **Only prerequisite 2 — `Pass 47.6`, widgets
+   > becoming canvas-selectable — still stands.** The conclusion (GUI
+   > form-field resize is not reachable) survives; its stated reason had
+   > half expired, which is precisely the shape `R199` exists to catch:
+   > *the record suppresses the check that would refute it.* Separately,
+   > **annotation resize now ships too** — `resize_annotation`,
+   > `Pass 151.0` (`c4425f0`) — so no *"resize verb"* of any kind is
+   > unbuilt in `pdfce-core`.
+
 **What P0 does NOT include, named so it is not silently expected:**
 right-click menus, canvas-selectable widgets, the contextual ribbon
 tab, ~~R124's planned-treatment styling~~ (**RETIRED 2026-08-08 —
@@ -94529,6 +95120,12 @@ added. See that section below.
     hit-tester covers page content objects only,
     `object_provider.rs:470-508`). The second prerequisite had no name
     anywhere in this file before decision 033.
+    **[★ AMENDED 2026-08-28 (305th filing): prerequisite 1 is DISCHARGED
+    and has been since `Pass 134.0` — `edit_widget` writes `/Rect` as a
+    move AND a resize, per placement. `R199` stale blocker; only `Pass
+    47.6` still stands. Full note at the identical bullet under `Pass
+    47.0–47.4`'s Shipped entry. Annotation resize also ships now
+    (`resize_annotation`, `Pass 151.0`, `c4425f0`).]**
   - **`Pass 47.5` must not ship before `Pass 47.0`** (filed under *Next
     up*) — a right-click menu built against today's `.iter().next()`-
     reading verbs would expose *"Delete selected (N)"* over a control
@@ -95984,7 +96581,15 @@ added. See that section below.
   `247b8fa`) and **F6 IS CLOSED**. Of the three unscoped items, **move is
   partly built** (`move-widget`, `fd6eadd`, `Pass 46.0` PARTIAL — **form-field
   widgets only**), **resize is scoped but built for nothing**, and **re-flag
-  is still UNSCOPED**] — which
+  is still UNSCOPED**] [**★★★ AND AMENDED A THIRD TIME 2026-08-28, 305th
+  filing: *"resize is scoped but built for nothing"* is now doubly false.
+  `edit_widget` (`Pass 134.0`) resizes **widgets**, and
+  `resize_annotation` (`Pass 151.0`, `c4425f0`) resizes **everything else
+  carrying a `/Rect`** — markup, the four text markups, FreeText, Text
+  notes, Stamp, Link and unapplied redaction marks, core and CLI both.
+  **Move is likewise no longer widgets-only** — `move_annotation`
+  (`Pass 149.0`, `e91dfad`) is subtype-agnostic. Of the three items in
+  this bracket only **re-flag** is still UNSCOPED**] — which
   the operator's own instruction names (*"creation/**editing**"*) and
   which decision 020 filed only as the non-gating fast-follow **F6**.
   **That last point is a scope gap worth the engineer's attention:** the
@@ -96085,7 +96690,14 @@ added. See that section below.
   thirty-first filing: `rename-field` `3d345aa` + `--defaults-from` `247b8fa`.
   It is no longer on this owed list. **But *"field property editing"* is
   broader than F6** — resize is built for nothing, move is built for
-  form-field widgets only (`Pass 46.0` PARTIAL), and re-flag is UNSCOPED]**.
+  form-field widgets only (`Pass 46.0` PARTIAL), and re-flag is UNSCOPED]**
+  **[★★★ AMENDED 2026-08-28 (305th filing): the clause immediately above is
+  now false in two of its three items. **Resize** ships for widgets
+  (`edit_widget`, `Pass 134.0`) and for every other `/Rect`-carrying
+  annotation (`resize_annotation`, `Pass 151.0`, `c4425f0`); **move** ships
+  subtype-agnostically (`move_annotation`, `Pass 149.0`, `e91dfad`), not
+  widgets-only. **Re-flag remains UNSCOPED** — the one item that is still
+  accurate as written.]**.
   **Comb layout** (not driven from
   `/MaxLen`) and **inherited-`/V` writes** (still terminal-only) remain
   named limits.
@@ -109371,6 +109983,44 @@ proposal), **`R194` claimed by this proposal**; next genuinely free is
   behaviours question with no spec clause bearing on it — but the
   specific instance this entry was minted against is no longer
   hypothetical.
+
+  **★★ SECOND INSTANCE, 2026-08-28 (305th filing, `Pass 151.0`,
+  `c4425f0`) — SAME OPERATOR, SAME INSTRUCTION, EIGHT DAYS APART, ON AN
+  UNRELATED SUBSYSTEM. THIS IS AN INSTANCE NOTE, NOT A MINT.** The
+  consuming project `pdfceGUI` answered pdfce's own resize design
+  question with *"stroke width does not scale"*, argued it from CAD
+  practice and from three reference implementations, and pdfce recorded
+  the answer as **settled** in `FEATURES.md`. Ken overturned that,
+  verbatim: *"default should be what it said, but there should be an
+  option that they do scale with resize. Inkscape has options for this
+  and I want the same."* Compare this rule's founding ruling of
+  2026-08-20: *"make things work both ways as options. default it to your
+  best guess as to what would be normally expected."*
+
+  **★ THE READING ERROR THIS INSTANCE ADDS, worth carrying because the
+  rule's text already forbids the outcome but not the reasoning that
+  reaches it: CONVERGENCE AMONG REFERENCE IMPLEMENTATIONS ARGUES FOR A
+  DEFAULT, NOT AGAINST AN OPTION.** *"Everyone does X"* and *"nobody
+  should be able to do Y"* are different claims, and the first does not
+  establish the second. **The refutation was inside the argument that
+  made the error:** its third supporting point was that Illustrator ships
+  *Scale Strokes & Effects* **off** — which means **Illustrator HAS the
+  toggle.** A survey of *defaults* had been read as a survey of
+  *capabilities*. This rule already says the operator *"does not want
+  either behaviour discarded"*; what the instance shows is the specific
+  evidence shape that gets mistaken for a warrant to discard one.
+
+  **A mint for that clause was CONSIDERED AND DECLINED this filing** —
+  the dispatch offered it and asked for scepticism. It is an argument
+  about how to APPLY this rule, not a rule this one lacks, and minting
+  the special case beside the general rule would make the general rule
+  read as though it had a carve-out. `R169`/`R206` are already a
+  general/special pair whose non-duplication took a full filing (the
+  207th) to argue; a third would compound that. **Note also that the
+  dispatch cited `R169`, not `R206`** — `R169` is deliberately scoped to
+  the spec-ambiguity settings register, and stroke-scaling-on-resize is
+  not a spec question at any point. Full argument in `Pass 151.0`'s
+  *Shipped* entry.
 - **R199 — A RECORDED BLOCKER IS A DATED READING, NOT A STANDING FACT. A
   sentence saying work is gated, needs, requires or awaits something
   carries the date it was reasoned and the condition it turns on — and is

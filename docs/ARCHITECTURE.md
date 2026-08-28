@@ -16132,7 +16132,20 @@ adjusting stroke-width alone"*), and **Inkscape 1.4 distorts without warning
 or refusal** (UX #339) **in the very mode where the operator asked for
 constant line weight.** **Under rule 4 this is a place to be BETTER than the
 parity reference, not equal to it** — a width pdfce *chose* is inferred state
-and must be visible before it becomes document state. Three honest answers:
+and must be visible before it becomes document state.
+**[★ CORRECTED 2026-08-28 (305th filing) — THE STRUCK RULE-4 WORDING, LEFT
+LEGIBLE RATHER THAN REWRITTEN, PER THIS FILE'S OWN APPEND-ONLY DISCIPLINE.**
+The phrase *"must be visible before it becomes document state"* was **rejected
+by the operator by name on 2026-08-13** and replaced by **decision 059**
+(§12, and project rule 4's second narrowing). Under 059 the chosen width
+**renders exactly as saved content will render**, with no provisional marking
+on the page, and the disclosure of *what pdfce chose* lives **off-canvas** — a
+status line, a results panel, a post-command report. The conclusion of this
+paragraph is unaffected: an inferred width still owes its disclosure, and
+being better than the parity reference here still means saying what was
+chosen. **Only the vehicle changed, and only the sentence naming the vehicle
+was wrong.** Carried as owed work from the 303rd and 304th filings and
+discharged here.**]** Three honest answers:
 refuse (decision 027's named-refusal branch, already on the table), disclose
 the residual anisotropy, or offer stroke-to-outline. **Silently fudging a
 factor is not among them.**
@@ -16334,6 +16347,47 @@ second generator so the shared one is the target, and §12.5.5's own table calls
 the anisotropic result *"stretched to fill Rect exactly … normative, not a
 bug"* — meaning **a half-built resize does not fail loudly, it silently ships
 distorted ticks and stretched glyphs.**
+
+> **★★ AMENDED 2026-08-28 (305th filing) — BOTH JOBS NOW SHIP, THE 2026-08-07
+> PREDICTION WAS CORRECT, AND THE ONE BRANCH IT DID NOT ANTICIPATE IS THE ONE
+> THAT MATTERED MOST.**
+>
+> **Job 1 (widgets)** shipped as `Pass 134.0` — `edit_widget` writes `/Rect`
+> as a move **and** a resize, per placement, exactly via the
+> size-parameterised generators this table names. *(A consequence worth
+> flagging separately: two `ROADMAP.md` bullets went on calling* **"`Pass
+> 46.0`'s own core resize verb (unbuilt)"** *a prerequisite for form-field
+> resize for weeks after it was built — an `R199` stale blocker, corrected in
+> the same filing as this note.)*
+>
+> **Job 2 (markup annotations)** shipped as **`Pass 151.0`** (`c4425f0`,
+> 2026-08-28) — `resize_annotation`, subtype-agnostic, core and CLI. **The
+> mechanism is the one predicted here:** the `MarkupSpec` is rescaled and the
+> appearance re-authored, rather than `/Rect` being written and §12.5.5 left
+> to stretch the artwork. `R92` held — the shared generator was the target and
+> no second one was written.
+>
+> **★ WHAT THIS ANALYSIS DID NOT HAVE, and it is an architectural fact rather
+> than a detail:** re-authoring is only legitimate **where pdfce drew the
+> appearance in the first place.** The table above reasons about *"can the
+> generator be re-run at a new size"* and answers per **family**; the real
+> question is per **document** — *is this particular `/AP` ours?* An
+> Acrobat-drawn `/Square` parses into a perfectly good `MarkupSpec`, so any
+> gate asking *"can pdfce parse a spec out of this?"* says yes and then
+> **replaces another producer's artwork with pdfce's rendering of it** — a
+> round-trip (§5 / rule 3) violation on content pdfce never authored. The
+> shipped gate is a **byte comparison**: rebuild from the *unmodified* spec,
+> compare to what is on disk, and refuse by name
+> (`EditError::ResizeAppearanceNotRebuildable`) when they differ. **The
+> provenance test is empirical, not structural**, and no per-family table can
+> stand in for it.
+>
+> **Also settled, and it belongs beside the `/BBox` split because it is the
+> same kind of question:** which *non-geometric* properties a scale carries.
+> `/RD` scales by default, `/BS /W` does not, and both are flags (operator
+> ruling 2026-08-28, `R206`). The discriminator — **is the property a length
+> in the space being transformed?** — also explains why `move_annotation`
+> (`Pass 149.0`) scales neither: a translation changes no length at all.
 
 **Rule 4 in the verb's return type:** a field may own widgets on several pages
 (§12.7.3.2), so `move_widget` moves **one** and returns
