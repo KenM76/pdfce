@@ -229,7 +229,7 @@
 //! design, and this is disclosed. No resource/font dict is re-emitted in
 //! this cut, because the family-change target is an existing resource.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::content::{ContentError, ContentStream};
 use crate::document::Document;
@@ -2008,47 +2008,103 @@ struct FontPlan {
     disclosures: Vec<String>,
 }
 
-/// Plan the family/style change, or `None` when the request does not change
-/// the font. Applies the coverage gate: the target's resolved `/Encoding`
-/// must show every character in the run, and (for an embedded subset) every
-/// resulting code must already be carried on the page — else
-/// [`FormatError::CoverageFailure`], with nothing applied.
-fn plan_font(
+/// What `set_font`'s acceptance test decided about **one** candidate face,
+/// for **one** run's text — the successful half.
+///
+/// Returned by [`accept_font_target`], which is the single implementation of
+/// the question *"would `set_font` take this face for this run?"*. Both the
+/// planner ([`plan_font`]) and the read-only pre-flight
+/// ([`preview_font_resources`]) obtain their answer from it, so the answer a
+/// shell previews and the answer the commit path enforces cannot drift
+/// (`R221`).
+struct AcceptedFont {
+    /// The resolved target face.
+    font: ExtractFont,
+    /// The run's characters re-encoded into that face's `/Encoding`.
+    codes: Vec<u8>,
+    /// Whether the target carries an embedded font program.
+    embedded: bool,
+    /// Whether the target's `/BaseFont` carries a §9.6.4 subset tag.
+    subset: bool,
+    /// Disclosures the re-encoding produced (ambiguous inverses, etc.).
+    disclosures: Vec<String>,
+}
+
+/// **The** acceptance test for a family/style change: would `set_font` accept
+/// `target_dict` (reached under resource key `resource`) for the characters
+/// in `text`?
+///
+/// # Why this is its own function (`R221`, and `Pass 144.0` is what it cost)
+///
+/// This test used to be inline in [`plan_font`] and nowhere else, which meant
+/// every *other* place that needed to know whether a face was usable had to
+/// **restate its conditions**. [`gate_synthesis`] restated them as two string
+/// tests on `/BaseFont` (`family_stem` plus `name_claims_bold`), and the
+/// restatement drifted from the real thing exactly as `R221` predicts: on
+/// `fixtures/synthetic/textedit/format_family.pdf` the gate refused synthetic
+/// bold and named `/F3` (`Times-Bold`), which then refused the very edit the
+/// refusal recommended, while `/F2` — a bold face on the same page that
+/// **does** cover the run — was never mentioned. Bold was unreachable through
+/// either verb.
+///
+/// So the rule this function exists to enforce is: **ask the accepting code,
+/// never pattern-match a parallel description of when it would succeed.**
+///
+/// # The four conditions, in the order `set_font` applies them
+///
+/// 1. **Font-level refuse triggers** — composite (Type 0 / CIDFont),
+///    symbolic-with-no-`/Encoding`, or `/ToUnicode`-only — via Pass 14.1's
+///    `classify_font`, reused verbatim rather than re-derived.
+/// 2. **An invertible encoding.** Without glyph names there is no map from
+///    the run's characters back to codes in the target, so nothing can be
+///    re-encoded.
+/// 3. **Encoding coverage.** Every character in `text` must have a code in
+///    the target's resolved `/Encoding`. This is the condition `Times-Bold`
+///    fails on `format_family.pdf`: its `/Differences` reassigns code 111 to
+///    `/bullet`, so `'o'` has nowhere to go (`R-INV-7`).
+/// 4. **The embedded-subset floor.** When the target is an embedded
+///    **subset**, every resulting code must already be carried on this page
+///    by that resource — pdfce cannot add a glyph to a subset without the
+///    deferred FF-C embedding work, so a code the subset does not carry is a
+///    coverage failure rather than a silent `.notdef`.
+///
+/// # Errors
+///
+/// [`FormatError::CoverageFailure`] for (3) and (4),
+/// [`FormatError::Unsupported`] for (2), and whatever `classify_font`
+/// reports for (1). **Every one of them is a refusal `set_font` itself would
+/// produce, verbatim** — that is the whole point of routing through here.
+fn accept_font_target(
     doc: &Document,
-    resources: &Dict,
     recs: &[OpRec],
-    req: &FormatRequest,
-) -> Result<Option<FontPlan>, FormatError> {
-    let Some(sel) = &req.set_font else {
-        return Ok(None);
-    };
-    // Locate an existing font resource by key, then by /BaseFont.
-    let (resource, target_dict) = resolve_target_resource(doc, resources, &sel.selector)
-        .ok_or_else(|| FormatError::TargetFontMissing(sel.selector.clone()))?;
+    resource: &[u8],
+    target_dict: &Dict,
+    text: &str,
+) -> Result<AcceptedFont, FormatError> {
     let target = ExtractFont::resolve(&doc.view(), target_dict);
 
-    // Font-level refuse triggers (composite / symbolic-no-encoding /
+    // (1) Font-level refuse triggers (composite / symbolic-no-encoding /
     // /ToUnicode-only) — reuse 14.1's classifier verbatim.
     let FontClass { embedded, subset } =
         classify_font(doc, target_dict, &target).map_err(FormatError::from_edit)?;
 
-    // Build the inverse map and re-encode the SAME characters (the matched
-    // text) into the target face.
+    // (2)+(3) Build the inverse map and re-encode the SAME characters (the
+    // matched text) into the target face.
     let glyph_names = target.glyph_names().ok_or_else(|| {
         FormatError::Unsupported("the target font has no invertible encoding".to_owned())
     })?;
     let inverse = InverseEncoding::build(&target.base_font, glyph_names);
     let prefer: BTreeSet<u8> = BTreeSet::new();
     let encoded = inverse
-        .encode_str(&req.find, &prefer)
+        .encode_str(text, &prefer)
         .map_err(FormatError::CoverageFailure)?;
 
-    // Embedded-subset floor on the TARGET: a resulting code the subset does
-    // not already carry on the page is a coverage failure (can't add glyphs
-    // without FF-C).
+    // (4) Embedded-subset floor on the TARGET: a resulting code the subset
+    // does not already carry on the page is a coverage failure (can't add
+    // glyphs without FF-C).
     if embedded && subset {
-        let carried = carried_codes(recs, &resource);
-        for (u, &code) in req.find.chars().zip(encoded.codes.iter()) {
+        let carried = carried_codes(recs, resource);
+        for (u, &code) in text.chars().zip(encoded.codes.iter()) {
             if !carried.contains(&u32::from(code)) {
                 return Err(FormatError::CoverageFailure(Refusal {
                     trigger: RInvTrigger::TargetAbsent,
@@ -2065,21 +2121,54 @@ fn plan_font(
         }
     }
 
-    let mut disclosures = encoded.disclosures;
+    Ok(AcceptedFont {
+        font: target,
+        codes: encoded.codes,
+        embedded,
+        subset,
+        disclosures: encoded.disclosures,
+    })
+}
+
+/// Plan the family/style change, or `None` when the request does not change
+/// the font. Applies the coverage gate: the target's resolved `/Encoding`
+/// must show every character in the run, and (for an embedded subset) every
+/// resulting code must already be carried on the page — else
+/// [`FormatError::CoverageFailure`], with nothing applied.
+///
+/// The gate itself lives in [`accept_font_target`] so that the pre-flight and
+/// the synthesis gate can ask the *same* question this function asks, rather
+/// than restate it (`R221`).
+fn plan_font(
+    doc: &Document,
+    resources: &Dict,
+    recs: &[OpRec],
+    req: &FormatRequest,
+) -> Result<Option<FontPlan>, FormatError> {
+    let Some(sel) = &req.set_font else {
+        return Ok(None);
+    };
+    // Locate an existing font resource by key, then by /BaseFont.
+    let (resource, target_dict) = resolve_target_resource(doc, resources, &sel.selector)
+        .ok_or_else(|| FormatError::TargetFontMissing(sel.selector.clone()))?;
+
+    let accepted = accept_font_target(doc, recs, &resource, target_dict, &req.find)?;
+
+    let mut disclosures = accepted.disclosures;
     disclosures.push(format!(
         "font: the run's family/style was changed to '{}' and its {} character(s) were re-encoded \
          into that face's /Encoding (minimal-diff; no new font resource added, no embedding — \
          subsetting is FF-C).",
-        target.base_font,
+        accepted.font.base_font,
         req.find.chars().count()
     ));
 
     Ok(Some(FontPlan {
         resource,
-        font: target,
-        new_codes: encoded.codes,
-        embedded,
-        subset,
+        font: accepted.font,
+        new_codes: accepted.codes,
+        embedded: accepted.embedded,
+        subset: accepted.subset,
         disclosures,
     }))
 }
@@ -2440,6 +2529,449 @@ pub(crate) fn preview_style_resolution(
         combined,
         bold_axis,
         italic_axis,
+    })
+}
+
+// ===================================================================
+// Pass 142.1 — the font-resource PRE-FLIGHT
+// ===================================================================
+
+/// One page `/Font` resource, surveyed once against one run's text.
+///
+/// Internal working record behind both the public pre-flight
+/// ([`preview_font_resources`]) and the synthesis gate ([`gate_synthesis`]).
+/// It exists so the expensive half — [`accept_font_target`], which builds an
+/// inverse encoding and re-encodes the run per candidate — runs **once per
+/// resource**, not once per question asked about it.
+struct FontCandidate {
+    /// The `/Font` resource key on this page (no leading slash).
+    resource: Vec<u8>,
+    /// The raw `/BaseFont`, §9.6.4 subset tag included if it has one.
+    base_font: String,
+    /// The family stem, per [`family_stem`].
+    family: String,
+    /// Whether the `/BaseFont` name claims Bold (`name_claims_bold`).
+    claims_bold: bool,
+    /// Whether the `/BaseFont` name claims Italic (`name_claims_italic`).
+    claims_italic: bool,
+    /// The string a caller should hand to `set_font` to reach **this**
+    /// resource — see [`FontResourceEntry::selector`] for why it is not
+    /// always the `/BaseFont`.
+    selector: String,
+    /// True when the `/BaseFont` is carried by more than one resource on this
+    /// page, so [`Self::selector`] fell back to the resource key.
+    base_font_ambiguous: bool,
+    /// `Ok(())` when `set_font` would accept this face for the run's text;
+    /// the refusal it would produce otherwise.
+    accepted: Result<(), FormatError>,
+}
+
+/// Survey **every** `/Font` resource on the page, asking
+/// [`accept_font_target`] about each one for `text`.
+///
+/// # Why the whole page rather than the interesting entries
+///
+/// Because "interesting" is the judgement that produced `Pass 144.0`. The
+/// synthesis gate decided which resources were worth considering using two
+/// string tests on `/BaseFont`, skipped the only face that could actually
+/// show the run, and then recommended one that could not. Surveying
+/// everything and *filtering on the real answer* removes the class: a page
+/// carries a handful of font resources, and the cost of testing all of them
+/// is a few inverse-encoding builds.
+///
+/// Resources whose value does not resolve to a dictionary are skipped
+/// silently — a malformed `/Font` entry is not a face, and a parse-level
+/// refusal here would take out an unrelated edit.
+fn survey_page_fonts(
+    doc: &Document,
+    resources: &Dict,
+    recs: &[OpRec],
+    text: &str,
+) -> Vec<FontCandidate> {
+    let Some(fonts) = resources
+        .get(b"Font")
+        .map(|o| doc.resolve(o))
+        .and_then(Object::as_dict)
+    else {
+        return Vec::new();
+    };
+
+    // How many resources carry each subset-stripped /BaseFont, so a selector
+    // that would land on the wrong twin can be reported rather than shipped.
+    let mut stem_counts: BTreeMap<String, usize> = BTreeMap::new();
+    for (_, val) in fonts.iter() {
+        let Some(dict) = doc.resolve(val).as_dict() else {
+            continue;
+        };
+        if let Some(base) = base_font_of(doc, dict) {
+            *stem_counts
+                .entry(subset_stem(&base).to_owned())
+                .or_insert(0) += 1;
+        }
+    }
+
+    let mut out = Vec::new();
+    for (key, val) in fonts.iter() {
+        let Some(dict) = doc.resolve(val).as_dict() else {
+            continue;
+        };
+        let resource = key.as_bytes().to_vec();
+        let base_font = base_font_of(doc, dict).unwrap_or_default();
+        let stem = subset_stem(&base_font).to_owned();
+        // `resolve_target_resource` tries the resource KEY first, so a
+        // resource key always reaches itself; a /BaseFont only does when it
+        // is the page's sole carrier of that name.
+        let ambiguous = base_font.is_empty() || stem_counts.get(&stem).copied().unwrap_or(0) > 1;
+        let selector = if ambiguous {
+            String::from_utf8_lossy(&resource).into_owned()
+        } else {
+            stem.clone()
+        };
+        out.push(FontCandidate {
+            family: family_stem(&base_font),
+            claims_bold: name_claims_bold(&base_font),
+            claims_italic: name_claims_italic(&base_font),
+            accepted: accept_font_target(doc, recs, &resource, dict, text).map(|_| ()),
+            resource,
+            base_font,
+            selector,
+            base_font_ambiguous: ambiguous,
+        });
+    }
+    out
+}
+
+/// A font dictionary's `/BaseFont` as a `String`, or `None` when it has none.
+fn base_font_of(doc: &Document, dict: &Dict) -> Option<String> {
+    dict.get(b"BaseFont")
+        .map(|o| doc.resolve(o))
+        .and_then(Object::as_name)
+        .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+}
+
+/// The first surveyed face that carries **every** style in `synthesis` and
+/// that `set_font` would **accept** for the run's text.
+///
+/// `family` restricts the search to one family stem (`Some`) or opens it to
+/// the whole page (`None`).
+///
+/// `exclude` is a resource key the caller does not want back. It is
+/// `Option`al rather than an empty slice because the two callers want
+/// genuinely different things, and collapsing them would make one of them
+/// lie:
+///
+/// - [`gate_synthesis`] passes `Some(run_resource)`, so a face cannot
+///   recommend *itself* as the cure for a synthesis request made against it.
+/// - [`preview_font_resources`] passes `None`, because there the question is
+///   the literal one — *"is a real accepted Bold of this family on this
+///   page?"* — and a resource that **is** that Bold answering `None` about
+///   itself would tell a shell to synthesize bold on top of a real bold face.
+///
+/// # The three conditions, and why "accepted" is one of them
+///
+/// A candidate must (a) be in the requested family, (b) claim every style
+/// asked for, and (c) **pass [`accept_font_target`] for this run's text**.
+/// (c) is `Pass 144.0`: without it the search happily returns a face whose
+/// `/Encoding` cannot show the run, which the caller then recommends and
+/// `set_font` then refuses. `R90` is unchanged by adding it — synthesis is
+/// still a fallback for when no real face *resolves*; this is what
+/// "resolves" has to mean for the recommendation to be usable.
+///
+/// Candidates whose `/BaseFont` is ambiguous on the page are still eligible:
+/// [`FontCandidate::selector`] already carries the string that reaches them.
+fn find_styled_face<'a>(
+    candidates: &'a [FontCandidate],
+    family: Option<&str>,
+    synthesis: StyleSynthesis,
+    exclude: Option<&[u8]>,
+) -> Option<&'a FontCandidate> {
+    candidates.iter().find(|c| {
+        exclude.is_none_or(|x| c.resource != x)
+            && family.is_none_or(|f| c.family == f)
+            && (!synthesis.bold() || c.claims_bold)
+            && (!synthesis.italic() || c.claims_italic)
+            && c.accepted.is_ok()
+    })
+}
+
+/// Whether `set_font` would accept a face for a run, and the refusal it would
+/// give if not.
+///
+/// The refusal is carried as its rendered **message**, not as a
+/// [`FormatError`], because a pre-flight answer is a value a shell stores,
+/// compares and re-renders per frame, and `FormatError` is deliberately
+/// neither `Clone` nor `PartialEq` (it is an error to be reported once, not a
+/// datum). The message is produced by the accepting code itself, so it is the
+/// same sentence a real attempt would print.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FontAcceptance {
+    /// `set_font` would accept this face for this run.
+    Accepted,
+    /// `set_font` would refuse.
+    Refused {
+        /// The refusal `set_font` itself would produce, verbatim.
+        message: String,
+        /// The character that could not be encoded, when the refusal named
+        /// one. `None` for refusals that are not about a single character
+        /// (a composite font, an un-invertible encoding).
+        character: Option<char>,
+    },
+}
+
+impl FontAcceptance {
+    /// Whether `set_font` would accept this face — a yes/no that does not
+    /// require pattern-matching a `#[non_exhaustive]` enum.
+    #[must_use]
+    pub const fn is_accepted(&self) -> bool {
+        matches!(self, Self::Accepted)
+    }
+}
+
+/// A real styled sibling that would be **accepted** for the run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FontSibling {
+    /// Its `/Font` resource key on this page (no leading slash).
+    pub resource: String,
+    /// Its raw `/BaseFont`.
+    pub base_font: String,
+    /// The string to hand to `set_font` to reach it — see
+    /// [`FontResourceEntry::selector`].
+    pub selector: String,
+}
+
+/// One `/Font` resource on a page, answered the way `set_font` answers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FontResourceEntry {
+    /// The `/Font` resource key on this page (no leading slash).
+    pub resource: String,
+    /// The raw `/BaseFont`, §9.6.4 subset tag included if it has one. Empty
+    /// when the dictionary carries none.
+    pub base_font: String,
+    /// **The string to hand to `set_font` to reach THIS resource.**
+    ///
+    /// Normally the `/BaseFont` with its subset tag stripped, because that is
+    /// what a person reads off a font menu. It falls back to the resource key
+    /// when the page carries **two or more resources with the same
+    /// `/BaseFont`** — two independent subsets of one face, which is the
+    /// common case rather than the exotic one — because `set_font`'s name
+    /// match returns whichever of them it reaches first, and that may not be
+    /// this one. [`Self::base_font_ambiguous`] says which of the two happened.
+    pub selector: String,
+    /// True when [`Self::selector`] is the resource key because the
+    /// `/BaseFont` is carried by more than one resource on this page.
+    ///
+    /// A shell showing a font menu should still *display* the `/BaseFont`;
+    /// this flag only says the display string is not a safe selector.
+    pub base_font_ambiguous: bool,
+    /// The family stem used for style matching (`Times-BoldItalic` →
+    /// `times`), lowercased.
+    pub family: String,
+    /// Whether the `/BaseFont` name claims a Bold face. A **name** claim, not
+    /// a measurement of the program — see [`Self::real_bold`] for the
+    /// question that actually decides a Bold button.
+    pub claims_bold: bool,
+    /// Whether the `/BaseFont` name claims an Italic/Oblique face. Same
+    /// caveat as [`Self::claims_bold`].
+    pub claims_italic: bool,
+    /// Whether `set_font` would accept this face for the run's text.
+    pub acceptance: FontAcceptance,
+    /// A real **Bold** face of this entry's family, on this page, that
+    /// `set_font` would accept for the run — or `None`, meaning bold on this
+    /// family is reachable only by synthesis.
+    ///
+    /// **This entry itself is eligible.** A resource whose `/BaseFont` claims
+    /// Bold and which the run's text can be re-encoded into *is* the answer to
+    /// "is a real bold available here", and reporting `None` about itself
+    /// would tell a shell to fake a weight on top of a genuine one.
+    pub real_bold: Option<FontSibling>,
+    /// A real **Italic** face of this entry's family, on this page, that
+    /// `set_font` would accept for the run. Same reading as
+    /// [`Self::real_bold`].
+    pub real_italic: Option<FontSibling>,
+}
+
+/// What a page's font resources would do for one run, asked **without**
+/// attempting anything (`Pass 142.1`).
+///
+/// # Why this exists
+///
+/// A shell offering a font control had exactly one way to learn whether a
+/// face would work: submit the edit and read the refusal. That is the wrong
+/// side of a control — the button must be offered, pressed, and then
+/// apologised for. Worse, `set_font`'s predicate is a property of the **page**
+/// rather than of the selection, so the same button on identical-looking text
+/// behaves differently in two files, for reasons nothing on screen explains.
+///
+/// # What it is NOT
+///
+/// It is not `list-fonts`. That answers *"what font dictionaries does this
+/// document contain"*, keyed on the dictionary. This answers *"which strings
+/// will `set_font` accept for this run, on this page"*, keyed the way
+/// `set_font` matches — and those two keys disagree whenever a page carries
+/// two subsets of one face, which is most pages that embed anything.
+///
+/// # Freshness
+///
+/// Every field is derived by calling [`accept_font_target`], the same
+/// function `set_font` calls. Nothing here restates its conditions (`R221`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FontPreflight {
+    /// The run's characters — the text every acceptance answer was computed
+    /// against. Acceptance is **per run**, not per page: a face that covers
+    /// `"Hello"` may not cover `"Hellö"`.
+    pub text: String,
+    /// The run's own `/Font` resource key.
+    pub run_resource: String,
+    /// The run's own `/BaseFont`.
+    pub run_font: String,
+    /// Every `/Font` resource on the page, in dictionary order.
+    pub entries: Vec<FontResourceEntry>,
+}
+
+impl FontPreflight {
+    /// The entry for the run's own font resource, when the run's resource is
+    /// among the page's `/Font` entries (it normally is).
+    #[must_use]
+    pub fn run_entry(&self) -> Option<&FontResourceEntry> {
+        self.entries
+            .iter()
+            .find(|e| e.resource == self.run_resource)
+    }
+
+    /// A real Bold face of the **run's own family** that `set_font` would
+    /// accept — the fact that decides whether a Bold button routes to
+    /// `set_font` or to `set_synthetic`.
+    ///
+    /// `None` does **not** mean "grey the button out": synthesis is the other
+    /// route and it is a real one. It means the button should route to
+    /// `set_synthetic`.
+    #[must_use]
+    pub fn real_bold(&self) -> Option<&FontSibling> {
+        self.run_entry().and_then(|e| e.real_bold.as_ref())
+    }
+
+    /// A real Italic face of the run's own family that `set_font` would
+    /// accept. Same reading as [`Self::real_bold`].
+    #[must_use]
+    pub fn real_italic(&self) -> Option<&FontSibling> {
+        self.run_entry().and_then(|e| e.real_italic.as_ref())
+    }
+
+    /// Every entry `set_font` would accept for this run, in page order.
+    pub fn accepted(&self) -> impl Iterator<Item = &FontResourceEntry> {
+        self.entries.iter().filter(|e| e.acceptance.is_accepted())
+    }
+}
+
+/// Turn one surveyed candidate into a [`FontSibling`].
+fn sibling_of(c: &FontCandidate) -> FontSibling {
+    FontSibling {
+        resource: String::from_utf8_lossy(&c.resource).into_owned(),
+        base_font: c.base_font.clone(),
+        selector: c.selector.clone(),
+    }
+}
+
+/// Pre-flight the page's font resources against the run located by `find` /
+/// `pinned_span`, **without mutating anything** (`Pass 142.1`).
+///
+/// Side-effect-free by construction, exactly as [`preview_style_resolution`]
+/// is: it walks the already-decoded content stream, locates the anchor the
+/// way [`plan_format`] does, then asks [`accept_font_target`] once per page
+/// font resource. It writes nothing and stages nothing.
+///
+/// # Errors
+///
+/// The same location failures [`plan_format`] reports — no match, an
+/// unsupported anchor, an unresolvable font resource, a content-parse
+/// failure. A font resource that would **refuse** is never an error here;
+/// that is the answer, carried as [`FontAcceptance::Refused`].
+pub(crate) fn preview_font_resources(
+    doc: &Document,
+    page: &crate::page_tree::Page,
+    stream: &ContentStream,
+    find: &str,
+    pinned_span: Option<ByteSpan>,
+) -> Result<FontPreflight, FormatError> {
+    let mut walk = Walk::new(doc, &page.resources);
+    for op in stream.operations() {
+        walk.operation(&op, &stream.buf);
+    }
+    let recs = walk.recs;
+
+    // Same spelling as `preview_style_resolution`: `find_anchor` matches
+    // within THESE recs, which are already this page's, so the page index is
+    // never read.
+    let locate = EditRequest {
+        page_index: 0,
+        find: find.to_owned(),
+        replace: String::new(),
+        pinned_span,
+        target: EditTarget::Auto,
+    };
+    let anchor_index = find_anchor(&recs, &locate).map_err(FormatError::from_edit)?;
+    let anchor = match recs.get(anchor_index) {
+        Some(OpRec {
+            rec: Rec::Show(s), ..
+        }) => s,
+        _ => return Err(FormatError::NoMatch(find.to_owned())),
+    };
+
+    let orig_dict =
+        resolve_font_dict(doc, &page.resources, &anchor.font_name).ok_or_else(|| {
+            FormatError::Unsupported(
+            "the run's font resource is unresolvable (outlined/vector art has no font to format)"
+                .to_owned(),
+        )
+        })?;
+    let run_font = ExtractFont::resolve(&doc.view(), orig_dict).base_font;
+    let resources = page_resources(page);
+
+    let candidates = survey_page_fonts(doc, resources, &recs, find);
+    let entries = candidates
+        .iter()
+        .map(|c| FontResourceEntry {
+            resource: String::from_utf8_lossy(&c.resource).into_owned(),
+            base_font: c.base_font.clone(),
+            selector: c.selector.clone(),
+            base_font_ambiguous: c.base_font_ambiguous,
+            family: c.family.clone(),
+            claims_bold: c.claims_bold,
+            claims_italic: c.claims_italic,
+            acceptance: match &c.accepted {
+                Ok(()) => FontAcceptance::Accepted,
+                Err(e) => FontAcceptance::Refused {
+                    message: e.to_string(),
+                    character: match e {
+                        FormatError::CoverageFailure(r) => r.character,
+                        _ => None,
+                    },
+                },
+            },
+            // `None` for `exclude`: an entry that IS the family's real bold
+            // must report itself, or a shell reading it would synthesize
+            // bold on top of a real bold face. See `find_styled_face`.
+            real_bold: find_styled_face(&candidates, Some(&c.family), StyleSynthesis::Bold, None)
+                .map(sibling_of),
+            real_italic: find_styled_face(
+                &candidates,
+                Some(&c.family),
+                StyleSynthesis::Italic,
+                None,
+            )
+            .map(sibling_of),
+        })
+        .collect();
+
+    Ok(FontPreflight {
+        text: find.to_owned(),
+        run_resource: String::from_utf8_lossy(&anchor.font_name).into_owned(),
+        run_font,
+        entries,
     })
 }
 

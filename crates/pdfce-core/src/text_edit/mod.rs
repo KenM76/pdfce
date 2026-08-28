@@ -90,9 +90,10 @@ pub use encoding::{
     RInvTrigger, Refusal,
 };
 pub use format::{
-    FillModel, FontSelector, FormatError, FormatOptions, FormatOutcome, FormatReport,
-    FormatRequest, MetricSpec, NewFill, SUBSCRIPT, SUPERSCRIPT, ScriptMetrics, ScriptPosition,
-    StyleOutcome, StyleResolution, set_format,
+    FillModel, FontAcceptance, FontPreflight, FontResourceEntry, FontSelector, FontSibling,
+    FormatError, FormatOptions, FormatOutcome, FormatReport, FormatRequest, MetricSpec, NewFill,
+    SUBSCRIPT, SUPERSCRIPT, ScriptMetrics, ScriptPosition, StyleOutcome, StyleResolution,
+    set_format,
 };
 pub use forms::{
     FormRef, FormScan, InvocationSet, InvocationSite, MAX_FORM_DEPTH, ResourceTier,

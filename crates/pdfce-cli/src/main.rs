@@ -1874,6 +1874,54 @@ enum Command {
         by_size: bool,
     },
 
+    /// **Which fonts would `format-text --set-font` ACCEPT for one run?**
+    /// A read-only pre-flight (Pass 142.1). Writes nothing.
+    ///
+    /// `list-fonts` answers *"what font dictionaries does this document
+    /// contain"*, keyed on the dictionary. This answers a different question
+    /// that a shell offering a font control actually needs: **which strings
+    /// will `--set-font` accept, for THIS run, on THIS page** — keyed the way
+    /// `--set-font` matches. The two keys disagree whenever a page carries
+    /// two `/Font` resources with the same `/BaseFont` (two independent
+    /// subsets of one face), which is most pages that embed anything.
+    ///
+    /// Three things it reports that could not be computed from `list-fonts`:
+    ///
+    /// - **The selector that reaches each resource.** Normally the
+    ///   `/BaseFont` with its §9.6.4 subset tag stripped; the resource key
+    ///   instead when the `/BaseFont` is ambiguous on the page, because
+    ///   `--set-font`'s name match reaches only one of the twins. The
+    ///   `ambiguous` marker says which case it is.
+    /// - **Whether the face can show THIS RUN's characters.** Acceptance is
+    ///   per run, never per page: an `/Encoding /Differences` array that
+    ///   reassigns one code makes a face unusable for text containing that
+    ///   character and perfectly usable for text that does not. The refusal
+    ///   printed is the one `--set-font` itself would print, verbatim.
+    /// - **Whether a real Bold or Italic of the family would be ACCEPTED** —
+    ///   accepted, not merely named `Bold`. That is the fact deciding whether
+    ///   a style control should route to `--set-font` or to
+    ///   `--bold-synthetic`; a `real_bold=-` does NOT mean the control should
+    ///   be disabled, it means synthesis is the route.
+    ///
+    /// Read-only: it opens the file, answers, and writes nothing.
+    FontPreflight {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number the run is on.
+        #[arg(long, default_value_t = 1)]
+        page: usize,
+        /// Text to find within a single run on the page.
+        ///
+        /// Acceptance is computed against exactly these characters, because
+        /// that is what `--set-font` re-encodes. Asking about a different
+        /// substring can give a different answer, and legitimately so.
+        #[arg(long)]
+        find: String,
+        /// Emit machine-readable JSON instead of the aligned listing.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// **List a document's embedded files** (§7.11.4, §12.5.6.15).
     ///
     /// Reports BOTH kinds — document-level `/Names /EmbeddedFiles` and
@@ -6635,6 +6683,12 @@ fn run() -> ExitCode {
             reasons,
             by_size,
         } => cmd_list_fonts(&input, reasons, by_size),
+        Command::FontPreflight {
+            input,
+            page,
+            find,
+            json,
+        } => cmd_font_preflight(&input, page, &find, json),
         Command::ListSignatures { input } => cmd_list_signatures(&input),
         Command::ListPrinters => cmd_list_printers(),
         Command::Print {
@@ -20061,6 +20115,192 @@ fn extraction_json(input: &Path, extracted: &pdfce_core::text_extract::Extracted
     });
     out.push_str("}\n");
     out
+}
+
+/// `font-preflight` — which of a page's font resources `--set-font` would
+/// accept for one run (Pass 142.1).
+///
+/// # Why this is a subcommand and not a flag on `format-text`
+///
+/// Because it never formats anything. Folding a read-only query into a
+/// mutating subcommand means every caller of the query inherits that
+/// subcommand's `--output` contract and its refusal exit codes, and a script
+/// asking a question would have to explain why it passed no output path.
+///
+/// # Exit codes
+///
+/// `OK` when the run was located, **whatever the answers were** — a page on
+/// which every font refuses is a successful answer to the question asked, not
+/// a failed command. `EDIT_REFUSED` only when the run itself could not be
+/// located (no match, unsupported anchor, unresolvable font resource), which
+/// is the same contract `format-text` uses for the same failures.
+fn cmd_font_preflight(input: &Path, page: usize, find: &str, json: bool) -> u8 {
+    use pdfce_core::text_edit::FontAcceptance;
+
+    if page == 0 {
+        eprintln!("pdfce-cli: --page is 1-based; 0 is not a valid page number");
+        return exit::EDIT_REFUSED;
+    }
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let pre = match session.preview_font_resources(page - 1, find, None) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("pdfce-cli: font-preflight refused: {err}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    if json {
+        let mut out = String::from("{\n");
+        out.push_str(&format!("  \"text\": \"{}\",\n", json_escape(&pre.text)));
+        out.push_str(&format!(
+            "  \"run_resource\": \"{}\",\n",
+            json_escape(&pre.run_resource)
+        ));
+        out.push_str(&format!(
+            "  \"run_font\": \"{}\",\n",
+            json_escape(&pre.run_font)
+        ));
+        out.push_str("  \"entries\": [\n");
+        let rows: Vec<String> = pre
+            .entries
+            .iter()
+            .map(|e| {
+                // `FontAcceptance` is `#[non_exhaustive]`, so a downstream
+                // crate cannot match it exhaustively — the accessor plus one
+                // `if let` is the shape the type is designed for, and it is
+                // what any other consumer will have to write too.
+                let accepted = e.acceptance.is_accepted();
+                let mut refusal = String::new();
+                let mut character = None;
+                if let FontAcceptance::Refused {
+                    message,
+                    character: c,
+                } = &e.acceptance
+                {
+                    refusal = message.clone();
+                    character = *c;
+                }
+                let sib = |s: &Option<pdfce_core::text_edit::FontSibling>| match s {
+                    Some(s) => format!(
+                        "{{ \"resource\": \"{}\", \"base_font\": \"{}\", \"selector\": \"{}\" }}",
+                        json_escape(&s.resource),
+                        json_escape(&s.base_font),
+                        json_escape(&s.selector)
+                    ),
+                    None => "null".to_owned(),
+                };
+                format!(
+                    "    {{ \"resource\": \"{}\", \"base_font\": \"{}\", \"selector\": \"{}\", \
+                     \"base_font_ambiguous\": {}, \"family\": \"{}\", \"claims_bold\": {}, \
+                     \"claims_italic\": {}, \"accepted\": {}, \"refusal\": \"{}\", \
+                     \"refused_character\": {}, \"real_bold\": {}, \"real_italic\": {} }}",
+                    json_escape(&e.resource),
+                    json_escape(&e.base_font),
+                    json_escape(&e.selector),
+                    e.base_font_ambiguous,
+                    json_escape(&e.family),
+                    e.claims_bold,
+                    e.claims_italic,
+                    accepted,
+                    json_escape(&refusal),
+                    match character {
+                        Some(c) => format!("\"U+{:04X}\"", c as u32),
+                        None => "null".to_owned(),
+                    },
+                    sib(&e.real_bold),
+                    sib(&e.real_italic)
+                )
+            })
+            .collect();
+        out.push_str(&rows.join(",\n"));
+        out.push_str("\n  ]\n}\n");
+        print!("{out}");
+        return exit::SUCCESS;
+    }
+
+    println!(
+        "run: /{} {:?} text={:?}",
+        pre.run_resource, pre.run_font, pre.text
+    );
+    for e in &pre.entries {
+        let verdict = if e.acceptance.is_accepted() {
+            "ACCEPT"
+        } else {
+            "REFUSE"
+        };
+        let style = match (e.claims_bold, e.claims_italic) {
+            (true, true) => " claims=bold,italic",
+            (true, false) => " claims=bold",
+            (false, true) => " claims=italic",
+            (false, false) => "",
+        };
+        // The ambiguity marker rides on the selector, not on a separate
+        // column, because the whole point of the field is "hand THIS to
+        // --set-font" and a caller reading only the selector must still be
+        // told when it is a resource key standing in for a shared /BaseFont.
+        let amb = if e.base_font_ambiguous {
+            " (ambiguous /BaseFont — selector is the resource key)"
+        } else {
+            ""
+        };
+        println!(
+            "  /{}  {}  base_font={:?} selector={:?}{}{} family={} real_bold={} real_italic={}",
+            e.resource,
+            verdict,
+            e.base_font,
+            e.selector,
+            amb,
+            style,
+            e.family,
+            e.real_bold
+                .as_ref()
+                .map_or_else(|| "-".to_owned(), |s| format!("/{}", s.resource)),
+            e.real_italic
+                .as_ref()
+                .map_or_else(|| "-".to_owned(), |s| format!("/{}", s.resource)),
+        );
+        if let FontAcceptance::Refused { message, .. } = &e.acceptance {
+            println!("      refusal: {message}");
+        }
+    }
+    let n_ok = pre.accepted().count();
+    println!(
+        "{} font resource(s) on page {}; {} would be accepted for this run",
+        pre.entries.len(),
+        page,
+        n_ok
+    );
+    // Rule 4: the fact that decides a style control is stated outright rather
+    // than left for the reader to derive from the per-entry columns.
+    match pre.real_bold() {
+        Some(s) => println!(
+            "bold: a REAL bold face of this run's family is accepted — --set-font {:?}",
+            s.selector
+        ),
+        None => println!(
+            "bold: no real bold face of this run's family is accepted here — \
+             --bold-synthetic is the route"
+        ),
+    }
+    match pre.real_italic() {
+        Some(s) => println!(
+            "italic: a REAL italic face of this run's family is accepted — --set-font {:?}",
+            s.selector
+        ),
+        None => println!(
+            "italic: no real italic face of this run's family is accepted here — \
+             --italic-synthetic is the route"
+        ),
+    }
+    exit::SUCCESS
 }
 
 /// Escape a string for a JSON string literal (RFC 8259 §7).

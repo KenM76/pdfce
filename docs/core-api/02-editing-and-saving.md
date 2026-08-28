@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (32435 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 148 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (32505 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 149 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 148 public `EditSession` methods
+## 1. Verb index — all 149 public `EditSession` methods
 
-**Count: 148.** Established by brace-matched extraction of the four
+**Count: 149.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -337,10 +337,50 @@ need their own policy).
 | Replace text in place | `edit_text(&mut self, &EditRequest, &EditOptions) -> Result<EditReport, text_edit::EditError>` | 4126 | Report, **not** saved bytes. One undo entry. |
 | Change size / colour / family in place | `format_text(&mut self, &FormatRequest, &FormatOptions) -> Result<FormatReport, text_edit::FormatError>` | 4171 | One undo entry. |
 | Ask what synthetic bold/italic *would* do | `preview_style_resolution(&self, page_index, find, pinned_span, want) -> Result<StyleResolution, FormatError>` | 4242 | Pure query. |
+| Ask which fonts `set_font` would ACCEPT for a run | `preview_font_resources(&self, page_index, find, pinned_span) -> Result<FontPreflight, FormatError>` | 7459 | Pure query. **Per RUN, not per page** — see below. |
 | Re-wrap a recognised paragraph | `reflow_block(&mut self, page_index, block_index, &ReflowRequest) -> Result<ReflowApplyReport, ReflowApplyError>` | 4297 | One undo entry. **Planned against the BASE** — see trap T-14. |
 | Add a new text run at coordinates | `add_text(&mut self, &AddTextRequest) -> Result<AddTextReport, AddTextError>` | 4365 | Appends a new content stream; originals stay byte-verbatim. |
 | Add an invisible OCR text layer to one or more pages | `add_ocr_layer(&mut self, &[OcrPageLayer<'_>], &OcrLayerOptions) -> Result<Vec<OcrLayerReport>, OcrLayerError>` | 7313 | **ONE undo entry for the whole run**, however many pages. Reads the SESSION graph, not the base. |
 | Give ONE page a private copy of a shared form XObject | `unshare_form(&mut self, page_index, form: ObjId) -> Result<UnshareFormReport, EditError>` | 7367 | Copy-on-write. Refuses a **nested** invocation by name. |
+
+#### `preview_font_resources` — read this before wiring a font or style control
+
+`Pass 142.1`. A `&self` query that answers, for **one located run**, which of
+the page's `/Font` resources `format_text`'s `set_font` would actually accept
+— by calling the accepting code, not by describing it.
+
+Three things it tells you that nothing else can, and each one has bitten
+somebody:
+
+1. **`selector` is the string to pass to `FontSelector::new`, and it is not
+   always the `/BaseFont`.** A page routinely carries two `/Font` resources
+   with the *same* `/BaseFont` — two independent subsets of one face, present
+   in 87 % of embedding files by `pdfceGUI`'s own survey — and `set_font`'s
+   name match reaches exactly one of them. When that happens `selector` falls
+   back to the **resource key** and `base_font_ambiguous` is `true`. Display
+   the `/BaseFont`; *select* with `selector`.
+
+2. **Acceptance is per RUN.** The same face, on the same page, accepts
+   `"hell"` and refuses `"hello world"` when its `/Encoding /Differences`
+   reassigns the code for `o`. Any answer cached against a page rather than a
+   selection is wrong for half the selections on it.
+
+3. **`real_bold()` / `real_italic()` decide where a style button routes.**
+   `Some(sibling)` → call `format_text` with `set_font(sibling.selector)`.
+   `None` → call it with `set_synthetic`. **`None` is not a reason to disable
+   the control** — synthesis is a real route, and `03-capabilities.md` §3.6's
+   *"do not grey out a bold button"* still stands. An entry that **is** the
+   family's real bold reports **itself**, so a run already in a real bold face
+   is never told to synthesize on top of one.
+
+`FontAcceptance` is `#[non_exhaustive]`: use `is_accepted()` for the yes/no
+and an `if let FontAcceptance::Refused { message, character }` when you want
+the reason. `message` is the sentence `set_font` itself would produce,
+verbatim — if it ever disagrees with the real attempt, that is a defect in
+pdfce, not something for a shell to paper over.
+
+**Errors are location failures only.** A font that would refuse is an
+*answer*, never an `Err`.
 
 These five return `text_edit`'s own error types, **not** `EditError`;
 `add_ocr_layer` returns `ocr::layer::OcrLayerError`.

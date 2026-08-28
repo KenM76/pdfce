@@ -7412,6 +7412,76 @@ impl EditSession {
         preview_style_resolution(&self.base, page, &stream, find, pinned_span, want)
     }
 
+    /// Ask which of the page's font resources `set_font` would **accept**
+    /// for one run, without attempting anything (`Pass 142.1`).
+    ///
+    /// `&self`, and side-effect-free: it reads the session-current content
+    /// for the page, locates the same anchor [`Self::format_text`] would, and
+    /// runs `set_font`'s own acceptance test once per page font resource.
+    /// Nothing is planned, staged, committed or cached.
+    ///
+    /// # What a shell gets that it could not compute
+    ///
+    /// Three things, and the third is the one that decides a Bold button:
+    ///
+    /// 1. **The strings that will resolve**, not the dictionaries that exist.
+    ///    A page routinely carries two `/Font` resources with the *same*
+    ///    `/BaseFont` — two independent subsets of one face — and `set_font`'s
+    ///    name match reaches only one of them. Each entry therefore carries a
+    ///    [`selector`](crate::text_edit::FontResourceEntry::selector) that is
+    ///    guaranteed to reach *that* resource, plus a flag saying when the
+    ///    `/BaseFont` was ambiguous.
+    /// 2. **Whether the face can show THIS RUN.** Acceptance is per run, not
+    ///    per page: a `/Differences` array that reassigns one code makes a
+    ///    face unusable for text containing that character and perfectly
+    ///    usable for text that does not.
+    /// 3. **Whether a real Bold or Italic of the run's family would be
+    ///    accepted** —
+    ///    [`FontPreflight::real_bold`](crate::text_edit::FontPreflight::real_bold)
+    ///    and its italic twin. `Some` means route the button to `set_font`
+    ///    with that selector; `None` means route it to `set_synthetic`. It
+    ///    does **not** mean grey the button out — synthesis is a real route.
+    ///
+    /// # Why a session method and not a free function over `Document`
+    ///
+    /// Same reason as [`Self::preview_style_resolution`]: the answer must be
+    /// about the page **as the operator is looking at it**, which after any
+    /// accepted edit is the session's staged content, not the base document's.
+    ///
+    /// # Errors
+    ///
+    /// [`FormatError::Encrypted`](crate::text_edit::FormatError::Encrypted),
+    /// a bad page index, a page with no `/Contents`, a content-parse failure,
+    /// or the location failures the planner reports (no match, unsupported
+    /// anchor, unresolvable font resource). A font resource that would
+    /// **refuse** is never an error here — that is the answer, carried as
+    /// [`FontAcceptance::Refused`](crate::text_edit::FontAcceptance::Refused).
+    pub fn preview_font_resources(
+        &self,
+        page_index: usize,
+        find: &str,
+        pinned_span: Option<crate::span::ByteSpan>,
+    ) -> Result<crate::text_edit::FontPreflight, crate::text_edit::FormatError> {
+        use crate::text_edit::FormatError as FmtError;
+        use crate::text_edit::format::preview_font_resources;
+
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(FmtError::Encrypted);
+        }
+        let pages = page_tree::pages(&self.base)?;
+        let page = pages
+            .get(page_index)
+            .ok_or(FmtError::PageIndex(page_index))?;
+        let content_id = *page
+            .contents
+            .first()
+            .ok_or_else(|| FmtError::Unsupported("the page has no /Contents to edit".to_owned()))?;
+        let stream = self
+            .current_page_content(content_id, page)
+            .map_err(FmtError::Content)?;
+        preview_font_resources(&self.base, page, &stream, find, pinned_span)
+    }
+
     /// Apply one within-block reflow (Pass 15.1) as a single undo-able
     /// command — the session-integrated sibling of the free-function
     /// [`apply_reflow`](crate::text_edit::apply_reflow), reusing the shared

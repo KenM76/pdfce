@@ -309,6 +309,35 @@ def format_family() -> bytes:
     return custom_page(content, resources, {5: f1, 6: f2, 7: f3})
 
 
+def format_twins() -> bytes:
+    """A /Times-Roman run "hello world" on a page carrying TWO resources with
+    the SAME /BaseFont /Times-Bold — the shape a real embedding producer emits
+    routinely (two independent subsets of one face) and the shape that breaks
+    a font list keyed on the name instead of on the resource.
+
+    /FB1 remaps code 111 'o' to /bullet, so it does NOT cover the run.
+    /FB2 is the same /BaseFont with a plain WinAnsi encoding and DOES cover it.
+
+    Proves three things nothing else in this directory can:
+      * a /BaseFont is not a usable `--set-font` selector when the page
+        carries two of them, so the pre-flight reports the resource key
+        instead and flags the ambiguity;
+      * acceptance is a property of the RESOURCE, not of the name: two
+        resources with identical /BaseFont give opposite answers;
+      * the synthesis gate must name /FB2, because /FB1 refuses.
+    """
+    content = b"BT /F1 12 Tf 72 700 Td (hello world) Tj ET\n"
+    f1 = simple_font("Times-Roman")
+    fb1 = simple_font(
+        "Times-Bold",
+        encoding="<< /Type /Encoding /BaseEncoding /WinAnsiEncoding "
+        "/Differences [111 /bullet] >>",
+    )
+    fb2 = simple_font("Times-Bold")
+    resources = "<< /Font << /F1 5 0 R /FB1 6 0 R /FB2 7 0 R >> >>"
+    return custom_page(content, resources, {5: f1, 6: fb1, 7: fb2})
+
+
 def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     cff = CFF_PATH.read_bytes()
@@ -321,6 +350,7 @@ def main() -> int:
         "format_color.pdf": format_color(),
         "format_other.pdf": format_other(),
         "format_family.pdf": format_family(),
+        "format_twins.pdf": format_twins(),
     }
     for name, data in fixtures.items():
         path = OUT_DIR / name
