@@ -603,7 +603,58 @@ pdfce_core::forms::parse_acroform<G: ObjectGraph + ?Sized>(graph: &G) -> Option<
 `radios_in_unison()` `:651`, `has_appearance()` `:661`.
 
 `Widget` (`forms.rs:388`) → `id`, `rect`, `appearance_state`, `on_states`,
-`page`, `caption` (`/MK /CA`), `has_normal_appearance`, `merged`.
+`has_off_appearance`, `page`, `caption` (`/MK /CA`), **`border`**,
+**`visibility`**, **`annot_flags`**, `has_normal_appearance`, `merged`.
+
+#### ★★ `border` and `visibility` — read this before wiring a properties control (`Pass 146.0`)
+
+**`border: Option<BorderSpec>`. `None` means THE FILE STATES NO BORDER. It is
+not `BorderSpec::default()`, and substituting one is the defect this field was
+added to prevent.**
+
+`BorderSpec::default()` is *solid, one point* — Table 166's own defaults,
+chosen so that **authoring** a widget without specifying a border reproduces
+the bytes pdfce has always written. That is correct for a writer and a lie
+from a reader. A properties control seeded from it would display *Solid, 1 pt*
+over a widget whose file says nothing, and **the operator's first press would
+write that invention into their document**, silently replacing a border they
+never looked at.
+
+`pdfceGUI` refused to ship the control rather than do that, and cited pdfce's
+own precedent: the text-colour swatch shows *a sentence* rather than a
+nearest-RGB approximation for a run painted in DeviceCMYK, because a swatch
+showing ink as RGB would write that RGB back on the next press. Same failure,
+same refusal. ⇒ **`None` is a fact to display, not a value to substitute.**
+
+Both spellings are read. `/BS` (Table 166) wins when present, per §12.5.4;
+otherwise `/Border` (Table 164) yields the width, and the style is `Dashed`
+when a **non-empty** dash array is present and `Solid` otherwise — a faithful
+reading of an array that has no style key, not an inference. A `/BS` present
+but missing `/W` takes Table 166's default of **1**: the file has committed to
+having a border, so filling in the width the standard specifies is reading.
+A width of **0** is a value ("no border", Table 166), never an absence.
+
+**`visibility: Option<Visibility>` is exact-or-`None`, and `annot_flags`
+carries the raw `/F` beside it.** `Visibility` is deliberately the four
+combinations pdfce can *set*, out of a flag word that admits dozens. That
+makes it a good authoring type and an incomplete reading one: a file may
+legitimately carry `Print | NoZoom`. Collapsing such a widget onto the nearest
+of the four would be the border defect wearing a different hat, so the mapping
+refuses and `annot_flags` lets a control say *"these flags are not something
+pdfce can set"* instead of showing nothing or showing a lie.
+
+`/F` absent is `0` per Table 164, which **is** one of the four (`ScreenOnly`) —
+so `None` always means *present and unmappable*, never *absent*.
+
+**Why this is on the parsed model rather than a separate query.** `caption` is
+already modelled here for the same reason, in its own words: modelling it is
+what lets a caption be listed, copied and compared. A border is the same kind
+of fact, and a second locator would be a second way to reach it.
+
+CLI: `pdfce-cli list-fields --widgets` prints one line per widget with rect,
+border, visibility, raw flags and appearance state. Per **widget**, not per
+field, because a field may own several widgets with different ones — a single
+field-level column would be a lie the moment a field has two.
 
 Guards: `MAX_FORM_FIELDS = 500_000` `forms.rs:77`,
 `MAX_FIELD_TREE_DEPTH = 64` `forms.rs:84`.

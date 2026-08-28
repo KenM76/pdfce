@@ -57,6 +57,8 @@
 
 use std::collections::HashSet;
 
+use crate::annot::AnnotFlags;
+use crate::edit::{BorderSpec, BorderStyle, Visibility};
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, ObjId, Object};
 use crate::page_tree::Rect;
@@ -445,6 +447,74 @@ pub struct Widget {
     /// any widget annotation, and a type-gated reader would mean the model
     /// silently disagreeing with the file for the non-button case.
     pub caption: Option<Vec<u8>>,
+    /// `/BS` (Table 166) or the older `/Border` array (Table 164) — the
+    /// widget's border **as the file states it**, or `None` when the file
+    /// states none (`Pass 146.0`).
+    ///
+    /// # ★ `None` means the FILE IS SILENT, and it is not `BorderSpec::default()`
+    ///
+    /// This is the whole reason the field is an `Option` and the single most
+    /// important thing about it. `BorderSpec::default()` is *solid, one point*
+    /// — Table 166's own defaults, chosen so that **authoring** a widget
+    /// without specifying a border produces the same bytes it always did. That
+    /// is correct for a writer and a lie for a reader.
+    ///
+    /// A properties control seeded from a default would show *Solid, 1 pt* over
+    /// a widget whose file says nothing, and the operator's first press would
+    /// write that invention into their document. `pdfceGUI` refused to ship the
+    /// control rather than do that, and cited the precedent: pdfce's own text
+    /// colour swatch shows *a sentence* rather than a nearest-RGB approximation
+    /// for a run painted in DeviceCMYK, because a swatch showing ink as RGB
+    /// would write that RGB back on the next press. Same failure, same refusal.
+    ///
+    /// ⇒ **`None` is a fact to display, not a value to substitute.**
+    ///
+    /// # Both spellings are read, and the older one is not guessed at
+    ///
+    /// `/BS` is preferred when present (§12.5.4 says a `/BS` supersedes
+    /// `/Border`). Failing that, `/Border` `[hRadius vRadius width]` — or its
+    /// four-element form with a dash array — yields the width, and the style is
+    /// [`BorderStyle::Dashed`](crate::edit::BorderStyle::Dashed) when a
+    /// **non-empty** dash array is present and
+    /// [`Solid`](crate::edit::BorderStyle::Solid) otherwise. That is a faithful
+    /// reading of Table 164, not an inference: the array form has no style key,
+    /// and the dash array is the only thing in it that distinguishes the two.
+    ///
+    /// A `/BS` `/S` naming a style pdfce does not model degrades to
+    /// `BorderStyle::Solid` — Table 166 makes `/S` default to solid and names
+    /// exactly the five pdfce models, so an unrecognised name is a malformed
+    /// file rather than a sixth style.
+    pub border: Option<BorderSpec>,
+    /// `/F` (Table 165) mapped onto the four combinations pdfce **writes** —
+    /// or `None` when the file's flags are not one of them (`Pass 146.0`).
+    ///
+    /// # Why `Option`, and why [`Self::annot_flags`] sits beside it
+    ///
+    /// [`Visibility`](crate::edit::Visibility) is deliberately the small,
+    /// decidable surface: four combinations out of a flag word that admits
+    /// dozens. That makes it a good **authoring** type and an incomplete
+    /// **reading** one — a file may legitimately carry `Print | Hidden`, or
+    /// `NoZoom`, or nothing at all, and none of those is one of the four.
+    ///
+    /// Collapsing such a widget onto the nearest of the four would be the same
+    /// invention [`Self::border`] refuses. So the mapping is exact-or-`None`,
+    /// and the raw flags are published beside it so a control can say *"this
+    /// widget's flags are not one of the four pdfce can set"* rather than show
+    /// nothing or show a lie.
+    ///
+    /// Note `/F` absent is `0` per Table 164, which **is** one of the four
+    /// ([`Visibility::ScreenOnly`](crate::edit::Visibility::ScreenOnly)) — so
+    /// `None` here means *"present and unmappable"*, never *"absent"*.
+    pub visibility: Option<Visibility>,
+    /// The widget annotation's raw `/F` flag word (§12.5.3, Table 165),
+    /// defaulting to `0` when absent (Table 164).
+    ///
+    /// The unabridged truth behind [`Self::visibility`], so a caller never has
+    /// to choose between an approximation and no answer. Reading it does **not**
+    /// mean re-deriving [`Visibility`](crate::edit::Visibility) by hand — that
+    /// mapping is pdfce's and stays pdfce's; this is for the case the mapping
+    /// says it cannot express.
+    pub annot_flags: AnnotFlags,
     /// Whether the widget carries a usable normal appearance (`/AP` `/N`
     /// resolving to a stream, or a state subdictionary). The measured demand
     /// signal for regeneration.
@@ -1411,6 +1481,14 @@ fn model_widget<G: ObjectGraph + ?Sized>(
         .and_then(|mk| mk.get(b"CA").map(|o| graph.resolve(o)))
         .and_then(string_bytes);
     let (has_normal_appearance, on_states, has_off_appearance) = appearance_of(graph, dict);
+    let border = read_widget_border(graph, dict);
+    let annot_flags = AnnotFlags(
+        dict.get(b"F")
+            .map(|o| graph.resolve(o))
+            .and_then(Object::as_int)
+            .and_then(|i| u32::try_from(i).ok())
+            .unwrap_or(0),
+    );
     Widget {
         id,
         rect,
@@ -1419,9 +1497,105 @@ fn model_widget<G: ObjectGraph + ?Sized>(
         has_off_appearance,
         page,
         caption,
+        border,
+        visibility: visibility_of(annot_flags),
+        annot_flags,
         has_normal_appearance,
         merged,
     }
+}
+
+/// Read a widget's border **as the file states it**, or `None` when it states
+/// none (`Pass 146.0`).
+///
+/// # The one rule
+///
+/// **Never substitute a default.** `BorderSpec::default()` exists so that
+/// *authoring* a widget without a stated border reproduces the bytes pdfce has
+/// always written; returning it from a *reader* would make a properties control
+/// display a border the file does not contain, which the operator's next press
+/// would then write in. See [`Widget::border`].
+///
+/// # Order, per §12.5.4
+///
+/// A `/BS` dictionary supersedes the older `/Border` array, so `/BS` is tried
+/// first and `/Border` only if it is absent or not a dictionary.
+///
+/// `/W` in `/BS` defaults to **1** when the key is absent (Table 166) — that
+/// default is *the standard's*, applied only once the file has committed to
+/// having a `/BS` at all, which is a different thing from inventing a border
+/// for a widget that has neither key.
+fn read_widget_border<G: ObjectGraph + ?Sized>(graph: &G, dict: &Dict) -> Option<BorderSpec> {
+    if let Some(Object::Dict(bs)) = dict.get(b"BS").map(|o| graph.resolve(o)) {
+        let style = match bs
+            .get(b"S")
+            .map(|o| graph.resolve(o))
+            .and_then(Object::as_name)
+            .map(|n| n.as_bytes().to_vec())
+            .as_deref()
+        {
+            Some(b"D") => BorderStyle::Dashed,
+            Some(b"B") => BorderStyle::Beveled,
+            Some(b"I") => BorderStyle::Inset,
+            Some(b"U") => BorderStyle::Underline,
+            // Table 166 makes /S default to solid and names exactly these
+            // five, so an absent key and an unrecognised name are the same
+            // answer: solid. An unrecognised name is a malformed file, not a
+            // sixth style, and degrading it is what keeps a control usable.
+            _ => BorderStyle::Solid,
+        };
+        let width = bs
+            .get(b"W")
+            .map(|o| graph.resolve(o))
+            .and_then(Object::as_number)
+            .unwrap_or(1.0);
+        return Some(BorderSpec { style, width });
+    }
+
+    // Table 164's `/Border [hRadius vRadius width [dash]]`. The style is not a
+    // key here — a non-empty dash array is the only thing in the array that
+    // distinguishes dashed from solid, so reading it that way is faithful
+    // rather than inferred.
+    let Some(Object::Array(items)) = dict.get(b"Border").map(|o| graph.resolve(o)) else {
+        return None;
+    };
+    let width = items
+        .get(2)
+        .map(|o| graph.resolve(o))
+        .and_then(Object::as_number)?;
+    let dashed = matches!(
+        items.get(3).map(|o| graph.resolve(o)),
+        Some(Object::Array(dash)) if !dash.is_empty()
+    );
+    Some(BorderSpec {
+        style: if dashed {
+            BorderStyle::Dashed
+        } else {
+            BorderStyle::Solid
+        },
+        width,
+    })
+}
+
+/// Map a raw `/F` flag word onto the four combinations pdfce writes, or `None`
+/// when it is not one of them (`Pass 146.0`).
+///
+/// **Exact match, never nearest.** The four values are `Visibility`'s own
+/// [`flags()`](crate::edit::Visibility::flags) outputs, read off the enum
+/// rather than restated here, so the reader and the writer cannot drift
+/// (`R221`). A file carrying `Print | NoZoom` is *not* `VisibleAndPrints` with
+/// a detail dropped — it is a widget whose flags pdfce cannot set, and saying
+/// so is the honest answer. [`Widget::annot_flags`] carries the raw value for
+/// exactly that case.
+fn visibility_of(flags: AnnotFlags) -> Option<Visibility> {
+    [
+        Visibility::VisibleAndPrints,
+        Visibility::ScreenOnly,
+        Visibility::PrintOnly,
+        Visibility::Hidden,
+    ]
+    .into_iter()
+    .find(|v| u32::try_from(v.flags()).is_ok_and(|f| f == flags.0))
 }
 
 /// Read a widget's `/AP` `/N`: whether it is usable, (for a state
@@ -2517,6 +2691,183 @@ mod tests {
         ];
         objects.extend_from_slice(extra);
         build_pdf(&objects)
+    }
+
+    // -----------------------------------------------------------------
+    // `Pass 146.0` — the widget border and visibility READERS
+    //
+    // Every test here exists because a properties control must show the
+    // CURRENT value, and the only thing worse than no control is one seeded
+    // from a default: it would display a border the file does not contain,
+    // and the operator's first press would write that invention in.
+    // -----------------------------------------------------------------
+
+    /// One widget carrying `raw` as its dictionary body, parsed.
+    fn widget_with(raw: &str) -> Widget {
+        let doc = doc_with_acroform(
+            "<< /Fields [4 0 R] >>",
+            &[(
+                4,
+                format!("<< /FT /Tx /T (f) /Subtype /Widget /Rect [0 0 10 10] {raw} >>")
+                    .into_bytes(),
+            )],
+        );
+        let form = parse_acroform(&doc).expect("the fixture has an AcroForm");
+        form.fields[0].widgets[0].clone()
+    }
+
+    #[test]
+    fn a_widget_with_no_border_key_reads_none_not_a_default() {
+        // ★ THE LOAD-BEARING ONE. `BorderSpec::default()` is solid/1pt, which
+        // is correct for the WRITER (it reproduces the bytes pdfce has always
+        // authored) and a lie from a READER. `None` here is a fact to display,
+        // never a value to substitute.
+        let w = widget_with("");
+        assert_eq!(w.border, None);
+    }
+
+    #[test]
+    fn a_bs_dictionary_is_read_style_and_width() {
+        let w = widget_with("/BS << /S /D /W 3 >>");
+        assert_eq!(
+            w.border,
+            Some(BorderSpec {
+                style: BorderStyle::Dashed,
+                width: 3.0
+            })
+        );
+    }
+
+    #[test]
+    fn every_table_166_style_name_maps_and_an_unknown_one_degrades_to_solid() {
+        for (name, want) in [
+            ("/S", BorderStyle::Solid),
+            ("/D", BorderStyle::Dashed),
+            ("/B", BorderStyle::Beveled),
+            ("/I", BorderStyle::Inset),
+            ("/U", BorderStyle::Underline),
+        ] {
+            let w = widget_with(&format!("/BS << /S {name} /W 2 >>"));
+            assert_eq!(w.border.unwrap().style, want, "for {name}");
+        }
+        // Table 166 names exactly those five and defaults /S to solid, so an
+        // unrecognised name is a malformed file rather than a sixth style.
+        // Degrading keeps the control usable; refusing would blank it.
+        let w = widget_with("/BS << /S /Zigzag /W 2 >>");
+        assert_eq!(w.border.unwrap().style, BorderStyle::Solid);
+    }
+
+    #[test]
+    fn a_bs_with_no_width_takes_table_166s_default_of_one() {
+        // This default IS applied, and the distinction from the test above is
+        // the whole design: the file has COMMITTED to having a border by
+        // carrying a `/BS`, so filling in the width the standard specifies is
+        // reading, not inventing. Inventing is producing a border for a widget
+        // that has neither key.
+        let w = widget_with("/BS << /S /B >>");
+        assert_eq!(w.border.unwrap().width, 1.0);
+    }
+
+    #[test]
+    fn a_zero_width_border_is_a_value_not_an_absence() {
+        // Table 166 states zero explicitly: "no border". A reader that
+        // collapsed it to `None` would tell a control the file is silent when
+        // the file has said something definite.
+        let w = widget_with("/BS << /S /S /W 0 >>");
+        assert_eq!(w.border.unwrap().width, 0.0);
+    }
+
+    #[test]
+    fn the_older_border_array_is_read_and_its_dash_array_is_the_style() {
+        // Table 164's `/Border [hRadius vRadius width [dash]]` has no style
+        // key; a non-empty dash array is the only thing in it that separates
+        // dashed from solid, so reading it that way is faithful.
+        let w = widget_with("/Border [0 0 2]");
+        assert_eq!(
+            w.border,
+            Some(BorderSpec {
+                style: BorderStyle::Solid,
+                width: 2.0
+            })
+        );
+        let w = widget_with("/Border [0 0 2 [3 2]]");
+        assert_eq!(w.border.unwrap().style, BorderStyle::Dashed);
+        // An EMPTY dash array is not a dash pattern.
+        let w = widget_with("/Border [0 0 2 []]");
+        assert_eq!(w.border.unwrap().style, BorderStyle::Solid);
+    }
+
+    #[test]
+    fn a_bs_supersedes_a_border_array() {
+        // §12.5.4. A file carrying both is not ambiguous, and picking the
+        // wrong one would show a width the viewer does not use.
+        let w = widget_with("/Border [0 0 9] /BS << /S /I /W 4 >>");
+        assert_eq!(
+            w.border,
+            Some(BorderSpec {
+                style: BorderStyle::Inset,
+                width: 4.0
+            })
+        );
+    }
+
+    #[test]
+    fn a_malformed_border_array_reads_none_rather_than_guessing() {
+        // Too short to carry a width. Nothing legitimate can be recovered, and
+        // substituting one would be the same invention the whole Pass avoids.
+        assert_eq!(widget_with("/Border [0 0]").border, None);
+        assert_eq!(widget_with("/Border /NotAnArray").border, None);
+        assert_eq!(widget_with("/BS /NotADict").border, None);
+    }
+
+    #[test]
+    fn every_visibility_pdfce_can_write_reads_back_as_itself() {
+        // Read against the WRITER's own `flags()`, not against restated
+        // integers — the reader and the writer must not be able to drift
+        // (`R221`). If a `Visibility` variant is ever added, this fails until
+        // the round trip is proved for it too.
+        for v in [
+            Visibility::VisibleAndPrints,
+            Visibility::ScreenOnly,
+            Visibility::PrintOnly,
+            Visibility::Hidden,
+        ] {
+            let w = widget_with(&format!("/F {}", v.flags()));
+            assert_eq!(w.visibility, Some(v), "for {v:?}");
+            assert_eq!(i64::from(w.annot_flags.0), v.flags());
+        }
+    }
+
+    #[test]
+    fn an_absent_f_is_zero_which_is_screen_only_not_unknown() {
+        // Table 164: `/F` absent means 0, and 0 IS one of the four. So `None`
+        // from `visibility` always means "present and unmappable" and never
+        // "absent" — a distinction a control has to be able to make.
+        let w = widget_with("");
+        assert_eq!(w.visibility, Some(Visibility::ScreenOnly));
+        assert_eq!(w.annot_flags.0, 0);
+    }
+
+    #[test]
+    fn flags_outside_the_four_read_none_and_the_raw_word_is_still_published() {
+        // `Print | NoZoom` is legal and is not one of the four pdfce writes.
+        // Collapsing it onto the nearest would be the border defect wearing a
+        // different hat; `None` plus the raw word lets a control say "these
+        // flags are not something pdfce can set" instead of showing a lie.
+        let w = widget_with("/F 12");
+        assert_eq!(w.visibility, None);
+        assert_eq!(w.annot_flags.0, 12);
+        assert!(w.annot_flags.print() && w.annot_flags.no_zoom());
+    }
+
+    #[test]
+    fn a_negative_or_oversized_f_does_not_panic_and_reads_as_no_flags() {
+        // `/F` is attacker-controlled. A negative or out-of-range integer is
+        // malformed, and the honest degradation is the Table 164 default.
+        let w = widget_with("/F -1");
+        assert_eq!(w.annot_flags.0, 0);
+        let w = widget_with("/F 99999999999999");
+        assert_eq!(w.annot_flags.0, 0);
     }
 
     #[test]

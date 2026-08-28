@@ -2874,6 +2874,25 @@ enum Command {
         /// of this command exists to give.
         #[arg(long)]
         rich_text: bool,
+        /// Print one line per WIDGET under each field: its rectangle, border,
+        /// visibility, raw annotation flags and appearance state.
+        ///
+        /// Separate from the field row because these are properties of the
+        /// **box**, not of the field, and a field may carry several widgets
+        /// with different ones. A single field-level `border=` column would be
+        /// a lie the moment a field has two widgets — which is the normal case
+        /// for a radio group and common for a field repeated across pages.
+        ///
+        /// `border=-` means **the file states no border**, not "solid 1 pt".
+        /// The distinction is the whole point: a control seeded from a default
+        /// would show a border the document does not contain, and the
+        /// operator's first press would write that invention in.
+        ///
+        /// `visibility=other` means the widget's `/F` flags are legal but are
+        /// not one of the four combinations pdfce can set. `flags=` carries the
+        /// raw word either way, so nothing is hidden by the mapping.
+        #[arg(long)]
+        widgets: bool,
     },
 
     /// **Create a new text form field** (§12.7.2 + §12.5.6.19).
@@ -6945,7 +6964,8 @@ fn run() -> ExitCode {
             input,
             fillable_only,
             rich_text,
-        } => cmd_list_fields(&input, fillable_only, rich_text),
+            widgets,
+        } => cmd_list_fields(&input, fillable_only, rich_text, widgets),
         Command::AddTextField {
             input,
             name,
@@ -14897,7 +14917,7 @@ fn describe_style(s: &pdfce_core::richtext::Style) -> String {
     }
 }
 
-fn cmd_list_fields(input: &Path, fillable_only: bool, rich_text: bool) -> u8 {
+fn cmd_list_fields(input: &Path, fillable_only: bool, rich_text: bool, widgets: bool) -> u8 {
     let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
@@ -15065,6 +15085,44 @@ widgets={} ap={} fillable={} readonly={} aa={} caption={caption} rich={rich}",
             u32::from(field.flags.read_only()),
             u32::from(field.has_additional_actions),
         );
+
+        // `Pass 146.0`. Per WIDGET, because the border and the visibility
+        // belong to the annotation box rather than to the field.
+        if widgets {
+            for (i, w) in field.widgets.iter().enumerate() {
+                let rect = w.rect.map_or_else(
+                    || "-".to_owned(),
+                    |r| format!("[{:.1} {:.1} {:.1} {:.1}]", r.llx, r.lly, r.urx, r.ury),
+                );
+                // `-` is "THE FILE STATES NONE", never "solid 1 pt". See the
+                // flag's own help, and `forms::Widget::border`.
+                let border = w.border.as_ref().map_or_else(
+                    || "-".to_owned(),
+                    |b| format!("{}/{:.2}", String::from_utf8_lossy(b.style.name()), b.width),
+                );
+                // `other` rather than a nearest match: the four are what pdfce
+                // can SET, and a widget outside them is not one of the four
+                // with a detail dropped.
+                let visibility = match w.visibility {
+                    Some(pdfce_core::edit::Visibility::VisibleAndPrints) => "visible+print",
+                    Some(pdfce_core::edit::Visibility::ScreenOnly) => "screen-only",
+                    Some(pdfce_core::edit::Visibility::PrintOnly) => "print-only",
+                    Some(pdfce_core::edit::Visibility::Hidden) => "hidden",
+                    _ => "other",
+                };
+                let state = w.appearance_state.as_deref().map_or_else(
+                    || "-".to_owned(),
+                    |n| String::from_utf8_lossy(n).into_owned(),
+                );
+                println!(
+                    "  widget {i} obj={} rect={rect} border={border} visibility={visibility} \
+flags=0x{:X} state={state} merged={}",
+                    w.id.num,
+                    w.annot_flags.0,
+                    u32::from(w.merged),
+                );
+            }
+        }
 
         if rich_text {
             match &runs {
