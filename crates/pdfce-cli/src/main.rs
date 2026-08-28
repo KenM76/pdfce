@@ -3686,6 +3686,52 @@ enum Command {
         #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
         mode: SaveMode,
     },
+    /// **Rotate an annotation** about a point (`Pass 155.0`) — the third
+    /// transform, after `move-annotation` and `resize-annotation`.
+    ///
+    /// # Why this one cannot distort anything
+    ///
+    /// A rotation is an isometry: every length is preserved, including the
+    /// drawn stroke width. So unlike `resize-annotation` there are no options
+    /// and no refusal for foreign artwork — the rotation is written into the
+    /// appearance's own `/Matrix` (§12.5.5 step a), composed with whatever
+    /// the producer already had, so nothing is redrawn.
+    ///
+    /// # `/Rect` gets BIGGER, and that is correct
+    ///
+    /// §12.5.2 requires `/Rect` to be upright, and the upright box bounding a
+    /// rotated shape is larger unless the angle is a multiple of 90°. The
+    /// artwork does not grow; only the rectangle around it does.
+    ///
+    /// `/RD` is left alone and reported: at an angle that is not a quarter
+    /// turn, no axis-aligned inset expresses the rotated result.
+    RotateAnnotation {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page the annotation is on.
+        #[arg(long, default_value_t = 1)]
+        page: usize,
+        /// Which annotation, numbered from 0 in `list-annotations` order.
+        #[arg(long, default_value_t = 0)]
+        index: usize,
+        /// Rotation in degrees, ANTICLOCKWISE — PDF user space has its origin
+        /// at the bottom-left (§8.3.2.3), so positive turns the way a
+        /// mathematician expects and not the way a screen does.
+        #[arg(long, allow_negative_numbers = true)]
+        degrees: f64,
+        /// Pivot x in points — the point that does NOT move.
+        #[arg(long, allow_negative_numbers = true)]
+        anchor_x: f64,
+        /// Pivot y in points.
+        #[arg(long, allow_negative_numbers = true)]
+        anchor_y: f64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
     /// **Resize a markup, link, stamp or note annotation** by scaling it about
     /// an anchor point (`Pass 151.0`).
     ///
@@ -7464,6 +7510,23 @@ fn run() -> ExitCode {
             output,
             mode,
         } => cmd_move_annotation(&input, page, index, dx, dy, &output, mode),
+        Command::RotateAnnotation {
+            input,
+            page,
+            index,
+            degrees,
+            anchor_x,
+            anchor_y,
+            output,
+            mode,
+        } => cmd_rotate_annotation(
+            &input,
+            (page, index),
+            degrees,
+            (anchor_x, anchor_y),
+            &output,
+            mode,
+        ),
         Command::ResizeAnnotation {
             input,
             page,
@@ -24355,6 +24418,142 @@ fn cmd_move_annotation(
             .map_or_else(|| "-".to_owned(), |p| p.num.to_string()),
     );
     finish_edit(input, &outcome)
+}
+
+/// `rotate-annotation` — turn one annotation about a point (`Pass 155.0`).
+///
+/// Prints the `/Rect` growth explicitly, because an operator who rotates a
+/// note 30° and sees its rectangle get larger will otherwise report it as a
+/// defect. It is §12.5.2 requiring an upright rectangle, not pdfce scaling
+/// anything.
+fn cmd_rotate_annotation(
+    input: &Path,
+    at: (usize, usize),
+    degrees: f64,
+    anchor: (f64, f64),
+    output: &Path,
+    mode: SaveMode,
+) -> u8 {
+    let (page, index) = at;
+    if page == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let annot_id = {
+        let slots = match session.page_slots() {
+            Ok(s) => s,
+            Err(err) => {
+                eprintln!("pdfce-cli: {}: {err}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let Some(slot) = slots.get(page - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                input.display(),
+                slots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let annots = pdfce_core::annot::page_annotations(&session.graph(), slot.id);
+        let Some(annot) = annots.get(index) else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} has no annotation at index {index} — it has {}",
+                input.display(),
+                annots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let Some(id) = annot.id else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} index {index} is a direct dictionary inside /Annots, not an indirect object — it has no identity to rotate",
+                input.display()
+            );
+            return exit::EDIT_REFUSED;
+        };
+        id
+    };
+
+    let out = match session.rotate_annotation(annot_id, anchor, degrees) {
+        Ok(o) => o,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    let grew = (out.to.urx - out.to.llx) * (out.to.ury - out.to.lly)
+        > (out.from.urx - out.from.llx) * (out.from.ury - out.from.lly) + 1e-6;
+    if grew {
+        eprintln!(
+            "pdfce-cli: {}: its /Rect is now LARGER, and that is correct — ISO 32000-1 12.5.2 requires an upright rectangle, and the upright box bounding a rotated shape is bigger unless the angle is a multiple of 90 degrees. The artwork did not grow; the rectangle around it did.",
+            input.display()
+        );
+    }
+    if out.rect_differences_untouched {
+        eprintln!(
+            "pdfce-cli: {}: this annotation carries /RD (rect differences), which were LEFT ALONE. They are four insets measured along the /Rect's own axes (Table 175), and at an angle that is not a quarter turn no axis-aligned inset expresses the rotated result — so pdfce did not invent one.",
+            input.display()
+        );
+    }
+    if !out.appearance_matrix_updated {
+        eprintln!(
+            "pdfce-cli: {}: this annotation has no appearance stream, so only its geometry keys turned. A reader that regenerates the appearance will draw the rotated shape; one that does not will draw nothing, exactly as before.",
+            input.display()
+        );
+    }
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(o) => o,
+        Err(code) => return code,
+    };
+
+    println!(
+        "rotate-annotation {} page={page} index={index} -> {}",
+        input.display(),
+        output.display()
+    );
+    println!(
+        "  subtype={} degrees={:.4} anchor=({:.2} {:.2}) rect=[{:.2} {:.2} {:.2} {:.2}]->[{:.2} {:.2} {:.2} {:.2}]",
+        out.subtype,
+        out.degrees,
+        anchor.0,
+        anchor.1,
+        out.from.llx,
+        out.from.lly,
+        out.from.urx,
+        out.from.ury,
+        out.to.llx,
+        out.to.lly,
+        out.to.urx,
+        out.to.ury,
+    );
+    println!(
+        "  geometry_keys_rotated={} appearance_matrix={}",
+        if out.geometry_keys_rotated.is_empty() {
+            "none".to_owned()
+        } else {
+            out.geometry_keys_rotated.join(",")
+        },
+        if out.appearance_matrix_updated {
+            "composed"
+        } else {
+            "absent"
+        }
+    );
+    finish_edit(input, &saved)
 }
 
 /// `resize-annotation` — scale one annotation and every geometry key it owns

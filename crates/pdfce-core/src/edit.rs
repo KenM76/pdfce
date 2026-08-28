@@ -442,6 +442,10 @@ pub enum CommandKind {
     /// already records: undoing an add removes the annotation; undoing a note
     /// change restores the previous words on an annotation that stays.
     SetMarkupNote,
+    /// [`EditSession::rotate_annotation`] turned an annotation about a point:
+    /// its geometry keys, its appearance `/Matrix`, and the `/Rect` that
+    /// bounds the result.
+    RotateAnnotation,
     /// An existing field's **field-scope** properties were changed
     /// (`Pass 134.0`) — `/Ff` flags, `/MaxLen`, `/TU`, `/Opt`.
     ///
@@ -11266,6 +11270,36 @@ pub struct AnnotationResize {
     pub rect_differences_scaled: Option<bool>,
 }
 
+/// What a [`rotate_annotation`](EditSession::rotate_annotation) call did
+/// (`Pass 155.0`).
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AnnotationRotate {
+    /// `/Subtype`, for the operator's message.
+    pub subtype: String,
+    /// The rotation applied, in degrees anticlockwise — echoed back because
+    /// the caller may have supplied any real number and this is what was used.
+    pub degrees: f64,
+    /// The `/Rect` before.
+    pub from: page_tree::Rect,
+    /// The `/Rect` after. **Usually LARGER**, and that is not a defect: a
+    /// rotated rectangle's upright bounding box grows, and §12.5.2 requires
+    /// `/Rect` to be upright. The artwork does not grow.
+    pub to: page_tree::Rect,
+    /// Which geometry keys were rotated, in the order tried.
+    pub geometry_keys_rotated: Vec<String>,
+    /// `true` if the appearance stream's `/Matrix` was updated — which is how
+    /// a rotation is expressed, per §12.5.5.
+    pub appearance_matrix_updated: bool,
+    /// `true` if `/RD` is present and was **left alone**.
+    ///
+    /// Rect differences are four insets measured along the `/Rect`'s own axes
+    /// (Table 175: left, top, right, bottom). Under a rotation that is not a
+    /// multiple of 90° there is no axis-aligned inset that expresses the
+    /// rotated result, so pdfce does not invent one.
+    pub rect_differences_untouched: bool,
+}
+
 /// What a [`set_markup_note`](EditSession::set_markup_note) or
 /// [`clear_markup_note`](EditSession::clear_markup_note) call did
 /// (`Pass 154.0`).
@@ -17352,6 +17386,234 @@ impl EditSession {
         Ok(())
     }
 
+    /// Rotate an annotation about `anchor` by `degrees` anticlockwise
+    /// (`Pass 155.0`) — the third of the transform trio, after
+    /// [`Self::move_annotation`] and [`Self::resize_annotation`].
+    ///
+    /// # ★★★ Why this one does NOT have resize's appearance problem
+    ///
+    /// §12.5.5's placement matrix **A** *"scales and translates"* — it cannot
+    /// rotate, and `/Rect` is required to be upright (§12.5.2). So a rotation
+    /// cannot be expressed by moving the rectangle, the way a translation and
+    /// a scale can.
+    ///
+    /// It does not need to be. Step (a) transforms the appearance `BBox`
+    /// **through its own `/Matrix`** to *"produce a quadrilateral with
+    /// arbitrary orientation"*, and step (c) concatenates that `/Matrix` with
+    /// **A**. **The rotation belongs in `/Matrix`**, which the standard
+    /// provides for explicitly.
+    ///
+    /// ★ That makes rotation strictly better behaved than resize:
+    ///
+    /// * **A foreign appearance rotates correctly** — pdfce composes a
+    ///   rotation into the existing `/Matrix` rather than redrawing, so no
+    ///   producer's artwork is replaced. `resize_annotation` refuses in that
+    ///   position; this verb does not have to.
+    /// * **Nothing distorts.** A rotation is an isometry: every length is
+    ///   preserved, including the drawn stroke width. There is no
+    ///   `scale_stroke_width` question here and no options type at all.
+    ///
+    /// # `/Rect` grows, and that is correct
+    ///
+    /// A rotated rectangle's upright bounding box is larger than the original
+    /// unless the angle is a multiple of 90°. `/Rect` must be upright, so it
+    /// becomes that larger box — [`AnnotationRotate::to`] reports it. **The
+    /// artwork does not grow**; only the rectangle that bounds it does.
+    ///
+    /// # What is left alone, and reported
+    ///
+    /// `/RD` — four insets measured along `/Rect`'s own axes (Table 175). At
+    /// an angle that is not a multiple of 90° no axis-aligned inset expresses
+    /// the rotated result, so pdfce does not invent one and says it did not.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DocumentEncrypted`], the certification gate, a
+    /// non-existent or non-annotation target, an annotation with no `/Rect`,
+    /// a widget or ce dimension (refused by name), and a non-finite angle.
+    pub fn rotate_annotation(
+        &mut self,
+        annot_id: ObjId,
+        anchor: (f64, f64),
+        degrees: f64,
+    ) -> Result<AnnotationRotate, EditError> {
+        use crate::vector::geometry::{Matrix, Point};
+
+        let (target, _all) = self.locate_annotation(annot_id)?;
+        let subtype = target.subtype_label();
+
+        if matches!(
+            self.delegated_route_for(annot_id, &target),
+            Some(AnnotationDeletionRoute::Dimension)
+        ) {
+            return Err(EditError::AnnotationMoveWrongVerb {
+                subtype: "ce dimension".to_owned(),
+                use_instead: "rotate_dimension",
+                why: "a ce dimension's orientation is part of its measurement, so turning it must re-measure rather than spin a rectangle",
+            });
+        }
+        if target.subtype == b"Widget" {
+            return Err(EditError::AnnotationMoveWrongVerb {
+                subtype: "form widget".to_owned(),
+                use_instead: "rotate_widget",
+                why: "a widget's rotation is /MK /R (§12.5.6.19 Table 189), a quantised 0/90/180/270 declaration the field's appearance generator reads — not a free-angle transform",
+            });
+        }
+
+        if !degrees.is_finite() {
+            return Err(EditError::ResizeFactorInvalid {
+                axis: "degrees",
+                value: degrees,
+            });
+        }
+
+        self.check_certification_for_annotation()?;
+
+        let Some(rect) = target.rect else {
+            return Err(EditError::AnnotationRectMissing { subtype });
+        };
+        let Some(Object::Dict(dict)) = self.value(annot_id) else {
+            return Err(EditError::NotADictionary {
+                id: annot_id,
+                key: "Rect",
+            });
+        };
+        let mut updated = dict.clone();
+
+        let radians = degrees.to_radians();
+        let pivot = Point {
+            x: anchor.0,
+            y: anchor.1,
+        };
+        // Rotation about a point, not about the origin. `Matrix::about`
+        // exists for exactly this and is used rather than hand-composing
+        // translate/rotate/translate -- one implementation of the idea.
+        let rot = Matrix::rotate(radians).about(pivot);
+
+        // ---- geometry keys. Rotating these is unconditional and exact.
+        let mut geometry_keys_rotated = Vec::new();
+        for key in [
+            b"L".as_slice(),
+            b"Vertices".as_slice(),
+            b"QuadPoints".as_slice(),
+            b"CL".as_slice(),
+        ] {
+            let resolved = updated.get(key).map(|o| self.graph().resolve(o).clone());
+            if let Some(Object::Array(items)) = resolved
+                && !items.is_empty()
+            {
+                updated.insert(Name::from(key), Object::Array(map_flat(&items, rot)));
+                geometry_keys_rotated.push(String::from_utf8_lossy(key).into_owned());
+            }
+        }
+        let ink = updated
+            .get(b"InkList")
+            .map(|o| self.graph().resolve(o).clone());
+        if let Some(Object::Array(strokes)) = ink
+            && !strokes.is_empty()
+        {
+            let out: Vec<Object> = strokes
+                .iter()
+                .map(|st| match self.graph().resolve(st) {
+                    Object::Array(pts) => Object::Array(map_flat(pts, rot)),
+                    other => other.clone(),
+                })
+                .collect();
+            updated.insert(Name::from(b"InkList"), Object::Array(out));
+            geometry_keys_rotated.push("InkList".to_owned());
+        }
+
+        // ---- /Rect: the upright box bounding the rotated old rectangle.
+        //
+        // §12.5.2 requires /Rect upright, so the four rotated corners are
+        // bounded rather than stored. This is where the rectangle grows.
+        let corners = [
+            (rect.llx, rect.lly),
+            (rect.urx, rect.lly),
+            (rect.urx, rect.ury),
+            (rect.llx, rect.ury),
+        ];
+        let mapped: Vec<Point> = corners
+            .iter()
+            .map(|&(x, y)| rot.map_point(Point { x, y }))
+            .collect();
+        let (mut lo_x, mut lo_y) = (f64::INFINITY, f64::INFINITY);
+        let (mut hi_x, mut hi_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for p in &mapped {
+            lo_x = lo_x.min(p.x);
+            lo_y = lo_y.min(p.y);
+            hi_x = hi_x.max(p.x);
+            hi_y = hi_y.max(p.y);
+        }
+        let rotated = page_tree::Rect::from_corners(lo_x, lo_y, hi_x, hi_y);
+        updated.insert(
+            Name::from(b"Rect"),
+            Object::Array(vec![
+                Object::Real(rotated.llx),
+                Object::Real(rotated.lly),
+                Object::Real(rotated.urx),
+                Object::Real(rotated.ury),
+            ]),
+        );
+
+        let rd = updated.get(b"RD").map(|o| self.graph().resolve(o).clone());
+        let rect_differences_untouched = matches!(rd, Some(Object::Array(ref a)) if !a.is_empty());
+
+        // ---- the appearance: compose the rotation into its own /Matrix.
+        //
+        // About the appearance's OWN origin, not the page anchor: step (b)
+        // re-derives the translation from the new /Rect, so a page-space
+        // pivot composed in here would be applied twice.
+        let mut objects = Vec::new();
+        let mut appearance_matrix_updated = false;
+        if let Some(ap_id) = Self::existing_appearance_id(&updated)
+            && let Some(Object::Stream(stream)) = self.value(ap_id)
+        {
+            let mut stream = stream.clone();
+            let existing = read_matrix(&self.graph(), &stream.dict);
+            let composed = existing.post_concat(Matrix::rotate(radians));
+            stream.dict.insert(
+                Name::from(b"Matrix"),
+                Object::Array(
+                    [
+                        composed.a, composed.b, composed.c, composed.d, composed.e, composed.f,
+                    ]
+                    .iter()
+                    .map(|v| Object::Real(*v))
+                    .collect(),
+                ),
+            );
+            objects.push(ObjectWrite {
+                id: ap_id,
+                before: self.state.get(&ap_id).cloned(),
+                after: Some(Object::Stream(stream)),
+            });
+            appearance_matrix_updated = true;
+        }
+
+        objects.push(ObjectWrite {
+            id: annot_id,
+            before: self.state.get(&annot_id).cloned(),
+            after: Some(Object::Dict(updated)),
+        });
+        self.commit(Command {
+            kind: CommandKind::RotateAnnotation,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(AnnotationRotate {
+            subtype: target.subtype_label(),
+            degrees,
+            from: rect,
+            to: rotated,
+            geometry_keys_rotated,
+            appearance_matrix_updated,
+            rect_differences_untouched,
+        })
+    }
+
     /// **Delete any annotation**, with every dependent object and reference
     /// it leaves behind handled in the same undoable command (`Pass 38.5`).
     ///
@@ -17625,16 +17887,14 @@ impl EditSession {
             return Err(EditError::AnnotationMoveWrongVerb {
                 subtype: "ce dimension".to_owned(),
                 use_instead: "move_dimension_vertex",
-                why: "a ce dimension's extent IS its measurement, so changing it must \
-                      re-measure rather than scale a rectangle",
+                why: "a ce dimension's extent IS its measurement, so changing it must re-measure rather than scale a rectangle",
             });
         }
         if target.subtype == b"Widget" {
             return Err(EditError::AnnotationMoveWrongVerb {
                 subtype: "form widget".to_owned(),
                 use_instead: "edit_widget(fqn, index, &WidgetEdit::new().with_rect(..))",
-                why: "a widget belongs to a field, and that verb rebuilds its appearance \
-                      into the new box as part of the same command",
+                why: "a widget belongs to a field, and that verb rebuilds its appearance into the new box as part of the same command",
             });
         }
 
@@ -17975,8 +18235,7 @@ impl EditSession {
             return Err(EditError::AnnotationMoveWrongVerb {
                 subtype: "form widget".to_owned(),
                 use_instead: "move_widget(fqn, index, dx, dy)",
-                why: "a widget belongs to a field, and moving it by object id would leave the \
-                      field's other widgets unreported",
+                why: "a widget belongs to a field, and moving it by object id would leave the field's other widgets unreported",
             });
         }
 
@@ -34023,6 +34282,90 @@ fn read_text_string_entry<G: crate::graph::ObjectGraph + ?Sized>(
     match graph.resolve(dict.get(key)?) {
         Object::String(bytes) => Some(decode_text_string(bytes).text),
         _ => None,
+    }
+}
+
+/// Map a flat `[x y x y ...]` coordinate array through an arbitrary matrix
+/// (`Pass 155.0`).
+///
+/// The third of the family beside [`scale_flat`] and [`translate_flat`], and
+/// the general one -- both of those are special cases of it. They are kept
+/// separate rather than collapsed because a translate and a scale have exact
+/// closed forms that a general matrix multiply would replace with four
+/// multiplies and two adds per point, and because their signatures say what
+/// they do at the call site.
+///
+/// Odd-length and non-numeric elements are copied through unchanged: pdfce
+/// does not repair a producer's geometry as a side effect of rotating it.
+fn map_flat(items: &[Object], m: crate::vector::geometry::Matrix) -> Vec<Object> {
+    use crate::vector::geometry::Point;
+    let mut out = Vec::with_capacity(items.len());
+    let mut i = 0;
+    while i + 1 < items.len() {
+        match (
+            items.get(i).and_then(Object::as_number),
+            items.get(i + 1).and_then(Object::as_number),
+        ) {
+            (Some(x), Some(y)) => {
+                let p = m.map_point(Point { x, y });
+                out.push(Object::Real(p.x));
+                out.push(Object::Real(p.y));
+            }
+            _ => {
+                out.extend(items.get(i).into_iter().cloned());
+                out.extend(items.get(i + 1).into_iter().cloned());
+            }
+        }
+        i += 2;
+    }
+    // A trailing odd element, if the producer wrote one.
+    if i < items.len() {
+        out.extend(items.get(i).into_iter().cloned());
+    }
+    out
+}
+
+/// Read a form XObject's `/Matrix` (Table 97), defaulting to identity.
+///
+/// Table 97 makes `/Matrix` optional with an identity default, so an absent
+/// key is the ordinary case and not a defect. A malformed one -- wrong arity
+/// or a non-numeric element -- also yields identity rather than a refusal:
+/// this is read on the way to composing a rotation, and refusing to rotate
+/// because a producer wrote a five-element matrix would lose the operation to
+/// defend a value pdfce is about to overwrite anyway.
+fn read_matrix<G: crate::graph::ObjectGraph + ?Sized>(
+    graph: &G,
+    dict: &Dict,
+) -> crate::vector::geometry::Matrix {
+    use crate::vector::geometry::Matrix;
+    let identity = Matrix {
+        a: 1.0,
+        b: 0.0,
+        c: 0.0,
+        d: 1.0,
+        e: 0.0,
+        f: 0.0,
+    };
+    let Some(Object::Array(items)) = dict.get(b"Matrix").map(|o| graph.resolve(o)) else {
+        return identity;
+    };
+    if items.len() != 6 {
+        return identity;
+    }
+    let mut v = [0.0f64; 6];
+    for (slot, item) in v.iter_mut().zip(items.iter()) {
+        match graph.resolve(item).as_number() {
+            Some(n) => *slot = n,
+            None => return identity,
+        }
+    }
+    Matrix {
+        a: v[0],
+        b: v[1],
+        c: v[2],
+        d: v[3],
+        e: v[4],
+        f: v[5],
     }
 }
 

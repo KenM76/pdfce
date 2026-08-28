@@ -1005,19 +1005,32 @@ markups (**Highlight, Underline, StrikeOut, Squiggly**), and the text-bearing
 author (`/T`) and modification date (`/M`). Delete, with a preview. Honour
 the annotation-flag set and annotation `/OC`.
 
-**Limit 1 — geometric markup cannot carry note text.** `MarkupSpec`
-(`annot_author.rs:215-293`) has **no** contents field on any variant, and
-that is deliberate: *"Deliberately no text-bearing variant — FreeText / Text
-/ Stamp are Pass 6.2, kept out of 6.1 so the authoring infrastructure is
-exercised without variable-text confounding it"* (`annot_author.rs:210-212`).
-Only `build_text_annotation` writes `/Contents` (`annot_author.rs:1831`,
-`:1910`). A Comments panel will therefore show "no note text" on every shape
-pdfce itself drew — **expected, not missing data**, and the shell must say so
-in those words (existing copy: `crates/pdfce-gui/src/ui_text.rs:9577-9584`).
-`FEATURES.md:111` records this. **Opportunity:** note-text authoring for
-geometric markup is `FEATURES.md:220`, unbuilt in every shell.
+**Limit 1 — RETIRED 2026-08-28. Geometric markup CAN carry note text, by
+two routes.** `MarkupOptions::note` at author time (`Pass 150.0`) and
+`EditSession::set_markup_note` / `clear_markup_note` afterwards
+(`Pass 154.0`). Both are CLI-wired.
 
-**Limit 2 — a placed markup can be MOVED but not resized or rotated.**
+> ### ★★★ What this paragraph used to say, and why it is struck rather than deleted
+>
+> It read: *"geometric markup cannot carry note text … a Comments panel will
+> therefore show 'no note text' on every shape pdfce itself drew — **expected,
+> not missing data**, and the shell must say so in those words."*
+>
+> ★ Those last words are the problem. This was not merely a stale statement of
+> fact — **it was an instruction to a consuming project to tell its operator
+> something untrue**, and it kept that instruction for the nine hours between
+> `Pass 150.0` shipping and this correction. It also called note authoring
+> *"unbuilt in every shell"* on a day it shipped twice.
+>
+> **And the commit that falsified it edited this very file**, at a hunk whose
+> first context line is this paragraph's own closing sentence — correcting
+> *Limit 2* while reading past *Limit 1* one paragraph up.
+>
+> ⇒ **A reported-survivor list is a worklist, not a scope.** Fixing the
+> survivors somebody handed you is not the same as sweeping for the claim, and
+> the two feel identical while you are doing them.
+
+**Limit 2 — RETIRED 2026-08-28: a placed markup can be moved, resized AND rotated.**
 
 ★★ **THIS PARAGRAPH SAID THE OPPOSITE, AND ITS LAST SENTENCE TOLD A SHELL NOT
 TO BUILD SOMETHING THAT NOW EXISTS.** It read, in full:
@@ -1041,14 +1054,28 @@ That class needs a reader, and it got one.
 (`Pass 149.0`) translates `/Rect` **and every geometry key** — see
 `02-editing-and-saving.md`. CLI: `pdfce-cli move-annotation`.
 
-**Still unbuilt, and these are real:** *resize* and *rotate*, for markup,
-redaction marks and links alike. Resize is not a `/Rect` patch — §12.5.5 would
-scale the existing artwork anisotropically — so it needs a decision per
-subtype (does an Ink's stroke width scale? do vertices scale about the centre
-or the grabbed corner?), which is why it was deliberately left out of
-`Pass 149.0` rather than guessed at. `move_dimension` and `move_widget` remain
-the verbs for ce dimensions and widgets respectively, and `move_annotation`
-refuses both by name.
+**Both are now built.** `resize_annotation` (`Pass 151.0`) and
+`rotate_annotation` (`Pass 155.0`), for markup, redaction marks and links
+alike, both CLI-wired. `move_dimension` and `move_widget` remain the verbs
+for ce dimensions and widgets respectively, and all three transform verbs
+refuse both by name.
+
+> ### ★★ This paragraph read *"still unbuilt, and these are real"* until 2026-08-28
+>
+> It named the reason resize was left out of `Pass 149.0` — §12.5.5 scales the
+> existing artwork anisotropically, so a per-subtype decision was owed rather
+> than guessed at. That reasoning was **correct and was acted on**:
+> `ResizeOptions` is the decision, taken as an operator ruling.
+>
+> ★ Rotation turned out to be the *easy* one, which is the opposite of what
+> this paragraph's ordering implies. §12.5.5 step (a) transforms the appearance
+> `BBox` through its **own `/Matrix`**, so a rotation is composed into that
+> matrix and **nothing is redrawn** — a foreign producer's artwork rotates
+> correctly, and being an isometry it cannot distort a stroke. Resize needed
+> an options type and a refusal; rotate needed neither.
+>
+> Worth keeping because the pairing was intuitive and wrong: *resize* sounds
+> tamer than *rotate*, and the spec makes it the other way round.
 
 ### 3.2 Entry points
 
