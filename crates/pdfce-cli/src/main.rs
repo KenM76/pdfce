@@ -1653,6 +1653,48 @@ enum Command {
         flat: bool,
     },
 
+    /// **Rename a bookmark** — its `/Title` (`Pass 157.0`).
+    ///
+    /// The commonest bookmark edit. Identify the item by its `n=` number from
+    /// `list-outline`, which numbers every item in reading order.
+    RenameBookmark {
+        /// Input PDF.
+        input: PathBuf,
+        /// Which bookmark — the `n=` value `list-outline` prints, 1-based.
+        #[arg(long)]
+        n: usize,
+        /// The new title.
+        #[arg(long)]
+        title: String,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+    /// **Delete a bookmark and everything under it** (`Pass 157.0`).
+    ///
+    /// The subtree goes too, as Acrobat does — promoting orphaned children
+    /// would silently reorganise a document's navigation, splicing a deleted
+    /// chapter's sections into the top level.
+    ///
+    /// Relinks the sibling chain and fixes `/Count` on every open ancestor and
+    /// on the root, which counts a different quantity (§12.3.3 Tables
+    /// 152–153). The outline ROOT itself is refused by name.
+    DeleteBookmark {
+        /// Input PDF.
+        input: PathBuf,
+        /// Which bookmark — the `n=` value `list-outline` prints, 1-based.
+        #[arg(long)]
+        n: usize,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
     /// **Add a bookmark to the document outline** (ISO 32000-1 §12.3.3).
     ///
     /// Appends one item as the LAST child of its parent — the top level by
@@ -7032,6 +7074,19 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         ),
+        Command::RenameBookmark {
+            input,
+            n,
+            title,
+            output,
+            mode,
+        } => cmd_edit_bookmark(&input, n, Some(&title), &output, mode),
+        Command::DeleteBookmark {
+            input,
+            n,
+            output,
+            mode,
+        } => cmd_edit_bookmark(&input, n, None, &output, mode),
         Command::AddBookmark {
             input,
             title,
@@ -11332,6 +11387,111 @@ undo_identical={} delinearized={}",
         u32::from(r.delinearized),
     );
     finish_edit(input, &outcome)
+}
+
+/// `rename-bookmark` and `delete-bookmark` — one body, two subcommands
+/// (`Pass 157.0`).
+///
+/// `title` is `Some` to rename and `None` to delete. One function because the
+/// two share every step except the verb they call: resolving `n` to an object
+/// id is the whole of the work, and duplicating that is duplicating the only
+/// part that can be wrong.
+///
+/// # Why `n` rather than an object number
+///
+/// Because `list-outline` prints `n=`, and a CLI whose identifier does not
+/// appear in the output of the command that lists things is a CLI you cannot
+/// script without a PDF parser. The object id is an implementation detail of
+/// the file; `n` is a fact about what pdfce showed you.
+fn cmd_edit_bookmark(
+    input: &Path,
+    n: usize,
+    title: Option<&str>,
+    output: &Path,
+    mode: SaveMode,
+) -> u8 {
+    if n == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --n is 1-based, matching `list-outline`'s own numbering",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // Resolve `n` the same way `list-outline` numbers: document order, every
+    // level, which is exactly what `Outline::flatten` yields.
+    let (item_id, item_title) = {
+        let outline = pdfce_core::outline::read_outline(&session.graph());
+        let flat = outline.flatten();
+        let Some(item) = flat.get(n - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no bookmark {n} — the document has {}",
+                input.display(),
+                flat.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        (item.id, item.title.clone())
+    };
+
+    let removed = match title {
+        Some(t) => {
+            if let Err(err) = session.set_outline_title(item_id, t) {
+                return report_edit_error(input, &err);
+            }
+            None
+        }
+        None => match session.delete_outline_item(item_id) {
+            Ok(count) => Some(count),
+            Err(err) => return report_edit_error(input, &err),
+        },
+    };
+
+    // The disclosure: a deleted bookmark takes its children, and the operator
+    // named ONE. The invocation is the commit here, so this is the only
+    // chance to say how much went.
+    if let Some(count) = removed
+        && count > 1
+    {
+        eprintln!(
+            "pdfce-cli: {}: {count} outline objects were removed, not 1 — deleting a bookmark takes everything beneath it, as Acrobat does. Promoting its children would have spliced them into the level above.",
+            input.display()
+        );
+    }
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(o) => o,
+        Err(code) => return code,
+    };
+
+    match title {
+        Some(t) => println!(
+            "rename-bookmark {} n={n} {:?} -> {:?} -> {}",
+            input.display(),
+            item_title,
+            t,
+            output.display()
+        ),
+        None => println!(
+            "delete-bookmark {} n={n} {:?} removed={} -> {}",
+            input.display(),
+            item_title,
+            removed.unwrap_or(0),
+            output.display()
+        ),
+    }
+    finish_edit(input, &saved)
 }
 
 /// The `n`th item (1-based) in depth-first document order — the order
