@@ -2615,6 +2615,19 @@ fn probe_synthesis(
 /// run's own font, then asks [`gate_synthesis`] up to three times. It writes
 /// nothing, plans nothing, and touches no session state.
 ///
+/// # An empty `find` with a `pinned_span` means the whole operator
+///
+/// Resolved by the same [`effective_find`] call [`plan_format`] and
+/// [`preview_font_resources`] use — all three, plus `plan_edit`, are the
+/// complete set of entry points that take a `find` and an optional pin, and
+/// they must not be able to disagree. An empty `find` with **no** pin is
+/// refused by name.
+///
+/// Before `Pass 148.0` this one guessed: an empty `find` made the gate survey
+/// **zero characters**, every face passed, and the query answered
+/// `RealFaceResolves` naming a face that `set_font` would then refuse — a
+/// wrong **routing decision**, not merely a wrong list entry.
+///
 /// # What it deliberately does NOT model
 ///
 /// A *pending* family change. The preview answers for the run **as it is
@@ -2674,6 +2687,42 @@ pub(crate) fn preview_style_resolution(
     let run_font = ExtractFont::resolve(&doc.view(), orig_dict).base_font;
     let resources = page_resources(page);
     let current = anchor.font_name.as_slice();
+
+    // `Pass 148.0`. THE THIRD ENTRY POINT THAT HAS TO RESOLVE, and it was the
+    // last one left guessing.
+    //
+    // `gate_synthesis` surveys the page against `text` and refuses synthesis
+    // when a real face "resolves". With an empty `find` that survey checked
+    // ZERO characters, so every face passed — and this query does not return a
+    // list, it returns a ROUTING DECISION. On
+    // `fixtures/synthetic/textedit/format_family.pdf` it answered
+    // `RealFaceResolves { real_font: "Times-Bold", resource: "F3" }` — naming
+    // the one face that cannot show the run, which is precisely the defect
+    // `Pass 144.0` was filed for, reached through a different door.
+    //
+    // ★ A shell routing its Bold button from that answer calls
+    // `set_font("Times-Bold")`, which refuses. No bold by either route. That
+    // is strictly worse than the pre-flight's version of the same bug, where a
+    // wrong entry is one row in a list the operator can look past.
+    //
+    // ★★ Found by the librarian's rule-11 sweep asking "what ELSE decides from
+    // the caller's string?" — not by fixing `preview_font_resources`, four
+    // hours earlier, in the same file. Enumerating routes from the FUNCTION
+    // being fixed enumerates the instance, not the class. `find_anchor` has
+    // exactly four call sites and each one owes an `effective_find`
+    // immediately after; `route_enumeration.rs` asserts that so the next one
+    // cannot be added without it.
+    let find = effective_find(anchor, find, pinned_span);
+    if find.is_empty() {
+        // Same refusal as `preview_font_resources` and `match_run`, for the
+        // same reason and in the same words: every string contains the empty
+        // string, so an unpinned empty `find` names the page's FIRST show
+        // operator rather than nothing. A routing decision about an operator
+        // the caller never named is worse than an error.
+        return Err(FormatError::from_edit(EditError::Unsupported(
+            "empty find text".to_owned(),
+        )));
+    }
 
     let combined = if want.is_none() {
         None
