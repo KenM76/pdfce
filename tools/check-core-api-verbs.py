@@ -183,6 +183,36 @@ def derive_methods(lines: list[str]) -> tuple[list[str], list[tuple[int, int, in
     return names, blocks
 
 
+def derive_error_variants(lines: list[str]) -> int:
+    """Count `EditError`'s variants by walking its brace depth.
+
+    Deliberately the same shape as `derive_methods`: find the declaration,
+    track depth, and count the lines that look like a variant at exactly one
+    level of indentation. A regex over the whole file would also match
+    `EditError::Foo` construction sites and the doc comments that name them.
+
+    Returns 0 if the enum cannot be found, which the caller treats as "no
+    claim can be checked" rather than as "the count is zero" -- a gate that
+    reports a confident wrong number is worse than one that reports nothing.
+    """
+    try:
+        start = next(i for i, l in enumerate(lines) if l.startswith("pub enum EditError {"))
+    except StopIteration:
+        return 0
+    depth = 0
+    count = 0
+    for i in range(start, len(lines)):
+        depth += lines[i].count("{") - lines[i].count("}")
+        # A variant is at exactly four spaces of indent and starts with an
+        # uppercase letter, followed by `{` (struct), `(` (tuple) or `,`
+        # (unit). Attributes, doc comments and field lines all fail this.
+        if re.match(r"    [A-Z]\w*( \{|,|\()", lines[i]):
+            count += 1
+        if depth == 0 and i > start:
+            break
+    return count
+
+
 def main() -> int:
     if not EDIT_RS.exists() or not VERB_INDEX.exists():
         print("check-core-api-verbs: SKIP — edit.rs or the verb index is missing")
@@ -190,6 +220,7 @@ def main() -> int:
 
     lines = EDIT_RS.read_text(encoding="utf-8").split("\n")
     names, blocks = derive_methods(lines)
+    error_variants = derive_error_variants(lines)
     doc = VERB_INDEX.read_text(encoding="utf-8")
     others = sorted(f for f in DOC_DIR.glob("*.md") if f != VERB_INDEX)
 
@@ -229,6 +260,21 @@ def main() -> int:
     # Every re-derivable published figure, not only verb counts -- see item 3
     # of WHAT IT CHECKS for why the narrower scope was itself the same bug.
     sized = re.compile(r"`([\w./-]+\.rs)`\s*\((\d[\d,]*) lines\)")
+    # `EditError`'s variant count, stated in index.md's routing table. Added
+    # 2026-08-28 after the librarian found it claiming 88 against a real 90 --
+    # it had been 52% of the truth on one of the three line counts beside it,
+    # in a table whose OWN heading says "Every figure above was stale". One
+    # figure in that cell had a gate and the rest did not, which is the entire
+    # explanation for why only that one stayed current.
+    errvars = re.compile(r"`EditError`'s (\d+) variants")
+    # The routing table's own self-description: "N,NNN lines - N clauses
+    # cited". Both halves are DERIVED here rather than maintained, because a
+    # figure nobody can re-derive is a figure nobody can check. The count this
+    # replaced was "N citations" with no recoverable definition -- no counting
+    # of clause references, distinct clause references or `file.rs:line`
+    # citations reproduced it -- so it could not be verified even in principle,
+    # which is how it drifted and stayed drifted.
+    selfsize = re.compile(r"(\d[\d,]*) lines \u00b7 (\d+) clauses cited")
     for f in [VERB_INDEX, *others]:
         for n, line in enumerate(f.read_text(encoding="utf-8").split("\n"), 1):
             for found in stale.finditer(line):
@@ -252,6 +298,39 @@ def main() -> int:
                     print()
                     print(f"  {f.relative_to(ROOT)}:{n} says {found.group(1)} is")
                     print(f"  {claimed:,} lines; it is {actual:,}")
+            for found in errvars.finditer(line):
+                if int(found.group(1)) != error_variants:
+                    failed = True
+                    print()
+                    print(f"  {f.relative_to(ROOT)}:{n} says `EditError` has")
+                    print(f"  {found.group(1)} variants; it has {error_variants}")
+            for found in selfsize.finditer(line):
+                # Which document is this row about? The row names it in a
+                # markdown link, and that link is the only thing on the line
+                # that can identify it -- the figures themselves cannot.
+                named = re.search(r"\]\((\d\d-[\w-]+\.md)\)", line)
+                if not named:
+                    continue
+                doc = VERB_INDEX.parent / named.group(1)
+                if not doc.exists():
+                    failed = True
+                    print()
+                    print(f"  {f.relative_to(ROOT)}:{n} routes to {named.group(1)},")
+                    print("  which does not exist")
+                    continue
+                body = doc.read_text(encoding="utf-8", errors="replace")
+                real_lines = len(body.split("\n")) - 1
+                real_clauses = len(re.findall(r"\u00a7[0-9]+(?:\.[0-9]+)*", body))
+                if int(found.group(1).replace(",", "")) != real_lines:
+                    failed = True
+                    print()
+                    print(f"  {f.relative_to(ROOT)}:{n} says {named.group(1)} is")
+                    print(f"  {found.group(1)} lines; it is {real_lines:,}")
+                if int(found.group(2)) != real_clauses:
+                    failed = True
+                    print()
+                    print(f"  {f.relative_to(ROOT)}:{n} says {named.group(1)} cites")
+                    print(f"  {found.group(2)} clauses; it cites {real_clauses}")
 
     if failed:
         print()
