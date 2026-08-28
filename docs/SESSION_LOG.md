@@ -71999,3 +71999,217 @@ entry), and `C:\personal_rag\pdf\` (dated amendment + index line).
 - **No answer is owed to `pdfceGUI`** on `144.0`; their 03:15 file closes it.
 
 ---
+
+## 2026-08-28 (304th filing) — `Pass 150.0` (`943d482`) ships note text on markup — ★★★★★ **but the feature is not the finding: a test written for the new WRITE path failed, the engineer switched which encoder he called, it went GREEN — and that was a workaround for somebody else's bug hidden by a passing test. Measured properly, both encoders were correct and the DECODER was at fault, and `annot.rs` reads `/Contents`, `/T` and `/M` through it, so every annotation note a conforming producer wrote in PDFDocEncoding came back as MOJIBAKE — on files the operator already has** — ★★★★★ **and the refusal's stated reason had EXPIRED: the comment blamed the spec RAG for not carrying Annex D.3 while `crate::textstring` had carried it in both directions all along** — ★★★★ **mint DECLINED on the strongest grounds this role has filed: the candidate is `R143`'s own written COROLLARY, verbatim in substance, on disk since 2026-08-05; a 2026-08-05 ruling forbids elevating this pattern per occurrence; and the 242nd filing already drafted `R218` for it and caught itself the same way — ★ the candidate's own premise ("no rule covers deferrals") was a stated reason nobody re-checked, making it an instance of the shape it described** — ★★★ **a LIVE stale deferral found by this filing's own sweep, in the same file as its refutation: `format.rs:5003` says "until free-form `Ts` ships (19.2)" while `format.rs:830` IS that function, labelled "(Pass 19.2)" — shipped 2026-08-03, false for 25 days, 4,173 lines apart** — ★★ **the channel check is NOT clean: a new inbound request landed at 03:57, NINETEEN MINUTES BEFORE the 303rd filing's own check, and that filing did not list it because its `ls` was taken at DISPATCH time rather than FILING time** — ★ **and this role's owed-work list decayed in the same commit: it addresses survivors by LINE NUMBER, and `main.rs:3972` is now `:4009`, moved +37 by this Pass's own +76 to that file**
+
+**Shipped:**
+- **`Pass 150.0`** (`943d482`) — `MarkupOptions::note: Option<MarkupNote>`,
+  writing `/Contents`, `/T` and `/M` (§12.5.2 Table 164; §12.5.6.4 Table 170).
+  Lands in `MarkupOptions` so its validation reaches **both** author routes
+  through `MarkupOptions::validate` **by construction rather than by whoever
+  remembers** — a test asserts the sticky-note route refuses the same malformed
+  date the markup route does. An author with no text is allowed; an **empty**
+  text is **written rather than omitted**, because a deliberate blank and
+  never-having-had-a-note are different document states.
+  CLI: `annotate --note TEXT --note-author NAME --note-date D:…`, any one
+  sufficing. The long help **states** the no-clock decision and a test asserts
+  that by reading `help annotate` — because a caller who does not know pdfce
+  refuses to guess will assume it guessed.
+- 9 files, **+1,062 / −88** (`git show --numstat`, run here). **486 of 1,062
+  changed lines are the three test files — 45.8%**, for a feature whose
+  executable half writes three dictionary keys.
+
+**Findings + decisions:**
+
+- **★★★★★ THE READ-SIDE DEFECT, WHICH IS THE HEADLINE.**
+  `edit::decode_text_string` did not implement PDFDocEncoding — every non-ASCII
+  byte became U+FFFD — and `annot.rs` reads all three note keys through it.
+  **PDFDocEncoding is the compact, ordinary choice for Latin text and is what
+  Acrobat emits**, so any note carrying an accent, em dash, curly quote, degree
+  sign or `Ø` came back corrupt and flagged `exact: false`. **A comment you
+  cannot read is a comment you cannot edit.** Fixed by delegating **both**
+  `decode_text_string` and `encode_text_string` to `crate::textstring` — one
+  implementation of §7.9.2 instead of two that **had already drifted** (one
+  answered U+FFFD to bytes the other decoded exactly). `R221`.
+- **Why no fixture caught it:** a synthetic fixture carries the bytes its author
+  wrote, and every fixture author here wrote ASCII. The defect is invisible to
+  the whole fixture corpus and visible on the first real file — the same shape
+  as *0 of 11* AcroForm fixtures carrying `/BS` or `/Border` (2026-08-27).
+- **The old rationale's ARGUMENT is preserved rather than discarded.** Guessing
+  Latin-1 for `0x80`–`0x9F` **would** be silently wrong — that is exactly the
+  range where the two encodings disagree. **The answer was never to guess; it
+  was to use the table.** *Amend the reason, not the conclusion.*
+- **★★ The engineer then made the very mistake the deleted text warned about.**
+  His first doctest asserted `0x91` → U+2018, **guessed from memory, in a
+  comment celebrating the table's arrival.** The doctest caught it. **Verified
+  here against `textstring.rs`'s `HIGH_BLOCK` rather than against his
+  correction** — a correction is a claim: `0x8F` is U+2018, `0x91` is U+201A.
+  His correction is right. Recorded for *when* it happened: **the warning was
+  being deleted as obsolete at the moment it applied.**
+- **pdfce does not read a clock, on two independent grounds** — determinism
+  (byte-identical output for identical input is a project-wide acceptance
+  criterion) and rule 4 (a timestamp pdfce chose is an inferred value written
+  silently into the operator's document). Neither depends on the other, which is
+  what makes it settled. The `/PieceInfo` sidecar already took this position, so
+  this is the **second instance of one policy**, not a new one. Malformed dates
+  are **refused by name**; the check is a **shape** test, not a calendar —
+  `D:2026` and `D:20260231` both pass, because §7.9.4 has no clause against
+  February 31st and refusing would be pdfce inventing conformance.
+- **Two API breaks, both stated rather than discovered.** `MarkupOptions` lost
+  `Copy` (it carries a `String`) and gained a field (breaking struct literals);
+  its own doc chose **constructability over `#[non_exhaustive]`** and named that
+  as the price. **`MarkupNote` IS `#[non_exhaustive]`** — the opposite call on
+  purpose, so a field added later breaks nobody. `pdfce-cli` therefore had to use
+  the builder, **which is how the builder got exercised.**
+- **Four tests that pinned the old behaviour were rewritten, not deleted**, old
+  bodies quoted. **★ The two DOCTESTS were missed on the first pass** — the
+  engineer rewrote the two `#[test]`s and left the examples **in the same doc
+  comment he was editing.** *"Verify each instance, not the class"*, at the
+  shortest possible range.
+- **★★★ THIS FILING'S SWEEP FOUND A LIVE STALE DEFERRAL.**
+  `crates/pdfce-core/src/text_edit/format.rs:5003` — *"the only way to undo a
+  producer's rise **until free-form `Ts` ships (19.2)**"*. `Pass 19.2` shipped
+  `ebe35d8` on **2026-08-03**; free-form `Ts` is `FormatRequest::rise` at
+  **`format.rs:830`**, doc-commented *"(Pass 19.2)"*. **False for 25 days,
+  4,173 lines below the function that falsifies it, in the same file.** Two
+  weaker candidates reported without a conclusion (`edit.rs:20603`'s `/DA`
+  fallback — engineer's reading; `image_codec/mod.rs:419` — **not** stale, its
+  sibling at `:1152` already says the variant is retained deliberately).
+- **★★★★ MINTING DECLINED, three independent grounds.** The candidate — *"a
+  deferral phrased as 'blocked on X' outlives X"* — **is `R143`'s own written
+  corollary** (*"the same re-survey is owed to a deferral"*), on disk since
+  2026-08-05; a **standing 2026-08-05 ruling** keeps this pattern a
+  cross-project RAG finding rather than a new rule number per occurrence; and
+  the **242nd filing drafted `R218` for this exact shape and caught itself the
+  same way.** The honest counter-argument is stated and rejected in `ROADMAP.md`:
+  the corollary has a real **discoverability** defect, but the remedy for that is
+  not a second rule with the same content — it is to make the existing clause
+  findable, which `R143`'s new dated third-instance note does for free.
+  **★ The candidate is an instance of the shape it describes:** its premise
+  *"no standing rule covers deferrals"* was a stated reason that read as settled
+  and had been false for 23 days.
+- **★ The judgment the dispatch left to this role — no new `FEATURES.md` row
+  for the PDFDocEncoding fix.** It is a **correctness fix to already-shipped
+  reading**, and that file's only question is *what can pdfce do*; a new row
+  would imply a new capability. **But leaving the row untouched would have been
+  worse** — it was ticked `[x][x][x][x]` while being wrong for a large class of
+  ordinary files, which is the over-optimistic tick the maintenance contract
+  forbids. **The row's sentence is replaced instead.** *Correctness belongs in
+  the sentence; capability belongs in the checkbox.*
+
+**Verification (relayed, with what was re-checked here):**
+- **4,524 tests passing, 0 failing** (was 4,508). **The +16 was re-derived
+  here**: `grep -c '#\[test\]'` gives `markup_note.rs` **10** and
+  `annotate_note.rs` **6**; `markup_opacity.rs` and `edit.rs` added **0**.
+  `4,508 + 16 = 4,524` — **the arithmetic closes.**
+- **`EditError` variants: 88**, counted here by `awk` over the enum body,
+  independently of the engineer's figure. Both prior measurements were right —
+  87 at `e91dfad`, 88 with this Pass's `MarkupDateMalformed`.
+- **All 26 gates green**, run in **foreground chunks** because three consecutive
+  background `run-gates.sh` invocations were killed by the harness. **The full
+  list came from `--list`; nothing hand-selected** — `Pass 146.0`'s lesson
+  applied rather than restated.
+- **★★ A SABOTAGE SILENTLY FAILED TO APPLY AND THE SUITE PRINTED `ok`.** A
+  heredoc ate a backslash, the edit never landed, the tests passed. **A sabotage
+  that does not apply is indistinguishable from one the tests survived** — same
+  observable, inverted conclusion. Caught only because a Python traceback shared
+  an output block with the `ok` lines. **A sabotage check is evidence only if
+  the mutation is confirmed present before the suite runs.** *(Noted: the same
+  heredoc-quoting hazard bit this filing's own first attempt to append this
+  entry, which failed loudly rather than silently — the good outcome.)*
+- The sabotage that *did* land turns exactly `non_ascii_text_round_trips` red —
+  the one test written for it.
+- **clippy caught a PANICKING SLICE** in the new date validator: `rest[..4]` on
+  **operator input**, so a malformed date would have **crashed instead of being
+  refused by name** — defeating the point of `MarkupDateMalformed`. Both slices
+  now use `.get()`. Found by the linter, not by a test and not by review.
+
+**Release + cleanup (the operator's standing loop):**
+- `D:\builds\pdfce-20260828-0455-943d482\`, **46,620,446 bytes** — `du -sb` run
+  here, **matches the engineer's figure exactly**.
+- **Smoke test from a fresh folder**: authored a noted square
+  (`with_note=1 with_author=1` read back), then **moved it** with `Pass 149.0`'s
+  verb — both new verbs driven from the copied build, not from `target/`.
+- Cleanup: release artefacts, `target/debug/incremental`, `target/tmp`, all
+  `tools/*/target`. **178 GB → 185 GB free**; `target` now **27 GB** — both
+  confirmed here by `df -h /d` and `du -sh target`.
+- **★ Backup currency, checked not inferred (hard rule 8):** newest bundle is
+  `pdfce-20260827-shutdown-a2b4e16-full.bundle` (2026-08-27 12:04);
+  `git merge-base --is-ancestor a2b4e16 943d482` → yes;
+  `git rev-list --count a2b4e16..943d482` → **39 commits behind the tip.**
+- **★★ `943d482` IS UNPUSHED.** `git rev-list --left-right --count
+  origin/main...main` → **`0 1`**. Working tree clean. Standing-authorized under
+  rule 8 as amended 2026-08-27 (*"always push"*), but pushing is not this role's
+  act — flagged so it is not left unpushed by accident.
+
+**★★ Channel check (`R203`(d)) — NOT clean, and the streak ending vindicates the
+caution rather than the streak:**
+- **A new inbound request was found**, unread by the 303rd filing:
+  `request_annotation_resize_semantics_answered_from_our_own_shipped_grips.md`,
+  **03:57**. It answers `Pass 149.0`'s open question **from a shipped
+  implementation rather than a design opinion** — `pdfceGUI`'s own eight-grip
+  content resize (`canvas/resizing.rs`, 2026-08-20). **Anchor = the corner
+  opposite the grip, always**, never the centre. **Stroke width does NOT scale**
+  — a line weight is a drafting standard, a non-uniform scale makes a single
+  `/BS /W` ill-defined, and Acrobat and Illustrator both agree. Verb requested as
+  `resize_annotation(annot_id, anchor, sx, sy)` **or** a target-`/Rect` form —
+  they ask that **one** exist, not both. **Rotation and aspect lock explicitly
+  out of scope.** ★ **They ask a question BACK that is owed a real answer:**
+  should `/RD` scale? Their reading is yes (an inset *is* a length in the space
+  being scaled, unlike the translate case where insets are distances not
+  coordinates) — but they decline to require it and want the engineer's reading
+  plus an outcome field either way. **`/Popup` they will not chase**, recorded so
+  it is not read as an oversight.
+- **★★ It landed at 03:57 — nineteen minutes BEFORE the 303rd filing's own
+  `ls -lt`** — and that filing did not list it, because its listing was taken at
+  **dispatch** time rather than **filing** time. **Clause (d) prescribes
+  `ls -lt` at FILING time for exactly this reason.** The three-filing clean
+  streak was three filings of the check working, **not** three filings of
+  nothing arriving. **`R203` instance count 4 → 5; the clause is unamended** —
+  what failed was execution timing, not the clause.
+- **`iccce` channel unchanged**, newest still
+  `reply_the_profile_census_and_your_33_node_constant.md` at 2026-08-27 14:22,
+  exactly as the 293rd–303rd filings recorded. Nothing inbound, nothing owed.
+
+**★ The owed list's own decay, filed as a finding:**
+The 303rd filing addressed survivors **by line number**. This Pass's `+76` to
+`crates/pdfce-cli/src/main.rs` moved one from **`:3972` to `:4009`** (+37),
+confirmed here by `git show 943d482^:…` against `grep`. **Nothing was fixed and
+nothing was broken — the address rotted**, and it rots **silently**, because a
+wrong line number looks exactly like a right one until someone opens it. Owed
+items are now restated with a **quoted phrase** beside the number. **Survivor
+count unchanged at six**, re-checked by grep rather than carried forward.
+
+**Also in `943d482` — two of the 303rd filing's owed items, discharged on
+receipt** (both verified here in the diff):
+- `docs/core-api/03-capabilities.md` *"Limit 2"* rewritten. It had ended *"Do not
+  design a shell around dragging a placed markup; the verb does not exist"* — an
+  instruction **not** to build `Pass 149.0`, in the document the outbound note
+  calls its durable record. The correction records **why no gate could catch
+  it**: `check-core-api-verbs.py` detects a verb *missing* from the docs, and **a
+  claim of NON-coverage is invisible to a coverage check.** That class needs a
+  reader, and it got one.
+- `EditError`'s variant count **57 → 88** in `docs/core-api/index.md`.
+
+**Still in flight:**
+- **The 03:57 resize request has no Pass ID.** It is scoped,
+  acceptance-criteria-complete and answered on both open questions. **This role
+  does not mint Pass IDs — next free is 151** and the assignment is the
+  engineer's act.
+- **`/RD` under a non-uniform scale** is a spec reading and should go to
+  `pdfce-spec-librarian` together with `§12.5.6`'s subtype family (4 of ~26
+  files present) **before** the resize Pass.
+- Six rule-4 wording survivors, the new `format.rs:5003` deferral, and the
+  `edit.rs:20603` candidate — full list in `ROADMAP.md`'s *Owed*.
+- `Pass 143.0` (grey over spot) still the operator's named next target once the
+  edit verbs are in.
+
+**For next session:**
+- Assign the resize Pass an ID and answer the `/RD` question explicitly rather
+  than by default — the consuming shell asked for a reading, not a behaviour.
+- Push `943d482` (standing-authorized) and consider a fresh backup bundle; the
+  newest is 39 commits behind.
+- The `format.rs:5003` deferral is a one-line fix and is the cheapest
+  demonstration available that `R143`'s corollary is now findable.
+
+---
