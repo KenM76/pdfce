@@ -336,12 +336,52 @@ need their own policy).
 |---|---|---|---|
 | Replace text in place | `edit_text(&mut self, &EditRequest, &EditOptions) -> Result<EditReport, text_edit::EditError>` | 4126 | Report, **not** saved bytes. One undo entry. |
 | Change size / colour / family in place | `format_text(&mut self, &FormatRequest, &FormatOptions) -> Result<FormatReport, text_edit::FormatError>` | 4171 | One undo entry. |
-| Ask what synthetic bold/italic *would* do | `preview_style_resolution(&self, page_index, find, pinned_span, want) -> Result<StyleResolution, FormatError>` | 4242 | Pure query. |
+| Ask what synthetic bold/italic *would* do | `preview_style_resolution(&self, page_index, find, pinned_span, want) -> Result<StyleResolution, FormatError>` | 7388 | Pure query. **Decides where a style button routes** — see below; an empty `find` is not a wildcard here. |
 | Ask which fonts `set_font` would ACCEPT for a run | `preview_font_resources(&self, page_index, find, pinned_span) -> Result<FontPreflight, FormatError>` | 7459 | Pure query. **Per RUN, not per page** — see below. |
 | Re-wrap a recognised paragraph | `reflow_block(&mut self, page_index, block_index, &ReflowRequest) -> Result<ReflowApplyReport, ReflowApplyError>` | 4297 | One undo entry. **Planned against the BASE** — see trap T-14. |
 | Add a new text run at coordinates | `add_text(&mut self, &AddTextRequest) -> Result<AddTextReport, AddTextError>` | 4365 | Appends a new content stream; originals stay byte-verbatim. |
 | Add an invisible OCR text layer to one or more pages | `add_ocr_layer(&mut self, &[OcrPageLayer<'_>], &OcrLayerOptions) -> Result<Vec<OcrLayerReport>, OcrLayerError>` | 7313 | **ONE undo entry for the whole run**, however many pages. Reads the SESSION graph, not the base. |
 | Give ONE page a private copy of a shared form XObject | `unshare_form(&mut self, page_index, form: ObjId) -> Result<UnshareFormReport, EditError>` | 7367 | Copy-on-write. Refuses a **nested** invocation by name. |
+
+#### ★ The FOUR entry points that take a `find` and a pin all resolve it the same way (`Pass 148.0`)
+
+There are exactly four, and after three Passes they finally agree. Listed
+together because the whole class of defect below was *"one of them didn't"*:
+
+| entry point | kind |
+|---|---|
+| `format_text` / `set_format` (`FormatRequest`) | commit |
+| `edit_text` (`EditRequest`) | commit |
+| `preview_font_resources` | query |
+| `preview_style_resolution` | query |
+
+**The rule, on all four:**
+
+- **empty `find` + `pinned_span` ⇒ the whole pinned operator.** Resolved by
+  one shared function, so a preview and the commit it previews cannot describe
+  different characters.
+- **empty `find`, no pin ⇒ refused**, `Unsupported("empty find text")`. It is
+  *not* a wildcard and *not* a no-op: every string contains the empty string,
+  so an unpinned empty `find` would otherwise silently name the page's **first
+  show operator** — an answer about something the caller never asked about.
+
+★★ **`preview_style_resolution`'s unpinned refusal is a behaviour change**
+(`Pass 148.0`). It previously answered about that first operator. If you have a
+call site passing an empty `find` with no pin, it now returns an error — which
+is the point: that call was returning a **routing decision** (does Bold go to
+`set_font` or `set_synthetic`?) about an arbitrary operator. On
+`fixtures/synthetic/textedit/format_family.pdf` it named `Times-Bold`, the one
+face on the page that cannot show the run, so a Bold button following it got a
+refusal and there was **no bold by either route**.
+
+★ **Why this is worth a section rather than a footnote.** One defect took three
+Passes to close because each fix enumerated routes from the *function being
+fixed*: `145.0` fixed the two commit paths, `147.0` fixed one query (reported
+by a consuming project), `148.0` fixed the other (found by an unrelated sweep).
+`crates/pdfce-core/tests/route_enumeration.rs` now asserts, as a **source
+scan**, that every function calling `find_anchor` also calls the resolver — the
+only assertion in this area that can fail on a **fifth** entry point added
+later. If pdfce grows one, that test goes red before you see it.
 
 #### `FormatRequest`'s `find` — and how to say "the whole operator" instead (`Pass 145.0`)
 

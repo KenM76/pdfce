@@ -1331,6 +1331,32 @@ is `Tr` + `w` + a stroking colour, all restored by value.
 typographic-quality gap, not a capability gap.** For a UI: **do not grey out
 a bold button.** Offer it, and surface the synthesis disclosure when it fires.
 
+#### ★★ Deciding where the Bold button routes, and the one way to ask wrong (`Pass 148.0`)
+
+Two queries answer *"real face or synthesis?"* before the click, and **both
+refuse an empty `find` that carries no pin**:
+
+- `EditSession::preview_style_resolution(page, find, pinned_span, want)` —
+  what `set_synthetic` **would do**: `RealFaceResolves { real_font, resource,
+  selector }` ⇒ route to `set_font(selector)`; `WouldSynthesize` ⇒ route to
+  `set_synthetic`.
+- `EditSession::preview_font_resources(page, find, pinned_span)` —
+  `real_bold()` / `real_italic()`, the same decision from the font side.
+
+★ **An empty `find` is not a wildcard.** With a `pinned_span` it means *the
+whole pinned operator*; without one it is **refused**. That refusal is a
+`Pass 148.0` behaviour change and it replaced something worse: the query used
+to answer about the page's **first** show operator, and on
+`fixtures/synthetic/textedit/format_family.pdf` it named `Times-Bold` — the
+one face there that cannot show the run. A Bold button routed from that answer
+called `set_font("Times-Bold")` and got a refusal, so there was **no bold by
+either route**. That is the `§3.6` defect corrected above, reached through a
+different door.
+
+⇒ The guidance is unchanged and now has an instrument behind it: **offer the
+button, ask one of these two which way it goes, and never pass an empty
+`find` without a pin.**
+
 #### The `set_font` limit, stated for what it is
 
 For a UI this is worse than a run-level limit would be: the predicate is a
