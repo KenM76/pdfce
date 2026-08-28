@@ -140,10 +140,32 @@ LOCAL_VIA = {
     # `cargo about` is installed on this machine (0.9.1). Regenerating and
     # diffing is what the audit does.
     "cargo about generate": "cargo about generate about.hbs -o THIRD_PARTY_LICENSES.md",
-    # The GUI-dependency and network denylists are `cargo tree` greps and
-    # run anywhere.
+    # The GUI-dependency and network denylists are `cargo tree` greps and run
+    # anywhere.
+    #
+    # ★ THE EXIT SENSE IS INVERTED FROM THE GREP, AND THAT IS NOT A DETAIL.
+    # Corrected 2026-08-27, when `tools/run-gates.sh` ran this list for the
+    # first time and reported it as the one FAILING command on a tree whose
+    # dependency graph was clean.
+    #
+    # In CI the step reads `if cargo tree | grep …; then error; exit 1; fi` —
+    # a MATCH is the failure. Flattened to a bare pipeline for local use, the
+    # exit code flips: `grep` exits 1 when it finds nothing, which is exactly
+    # the passing condition. So the command this file printed reported
+    # **failure on a healthy tree and success on a violated one** — the worse
+    # direction of the two, since anybody who ran it and saw nothing would
+    # take the silence for a pass.
+    #
+    # It went unnoticed because nothing ran the list; it was read by humans and
+    # retyped. `--list` is now consumed by a script, which is what turned a
+    # documentation defect into a red line on the first run.
+    #
+    # `!` inverts it, and both crates are checked because CI checks both — a
+    # local stand-in that covers half of a two-crate invariant is a stand-in
+    # that can be green while CI is red.
     "cargo tree": (
-        "cargo tree -p pdfce-core | grep -Ei 'egui|eframe|winit|wgpu|reqwest|hyper'"
+        "! cargo tree -p pdfce-core -p pdfce-render 2>/dev/null "
+        "| grep -Ei '(^|[[:space:]])(egui|eframe|winit|wgpu|reqwest|hyper)([[:space:]]|$)'"
     ),
 }
 

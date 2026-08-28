@@ -184,9 +184,17 @@ EXEMPT='string-gap-exempt'
 # The first cut of this gate ran `sed` and `grep` as subprocesses per LINE. On
 # Windows that is tens of thousands of process spawns and it did not finish in
 # two minutes. **A gate slow enough to skip is a gate that gets skipped**,
-# which is the failure mode `run-all.sh` exists to prevent — so the shape of
+# which is the failure mode `run-gates.sh` exists to prevent — so the shape of
 # the implementation is part of the gate working, not an optimisation. `awk`
 # reads every file in one process and the whole scan is well under a second.
+#
+# ★ THAT SENTENCE NAMED `run-all.sh`, WHICH DID NOT EXIST — the THIRD dangling
+# gate reference from this one header (the `check-strong-text.sh` note below
+# records the first two). It was MADE TRUE rather than struck:
+# `tools/run-gates.sh` was written 2026-08-27, after a hand-typed
+# thirteen-gate sweep omitted FIVE of CI's commands — including BOTH filing
+# gates — and CI went red on one of them. It derives its list from
+# `check-ci-parity.py --list`, so a sweep cannot be retyped short again.
 #
 # Comments are stripped BEFORE the match rather than the line being skipped
 # when it has a comment on it, because a shipped literal routinely carries a
