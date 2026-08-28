@@ -26515,3 +26515,76 @@ free 072.**
   that hard-codes the value its own name calls "the default". Standing-rule
   ceiling unmoved at `R224`. **Decision ceiling moves 094 → 095; next free
   096.**
+
+- **2026-08-28 — Decision 096. SCALING A ce DIMENSION IS DECLINED BY NAME AND
+  WILL STAY DECLINED; ROTATION SHIPS. THE DECIDE-AND-DISCLOSE POSTURE HAS A
+  **THIRD** OUTCOME — *decline the operation entirely* — AND THE OPERATOR
+  CONFIRMED IT.** Shipped as `Pass 159.0` (`7d5388c`); full delivery record in
+  `docs/ROADMAP.md`'s *Shipped* entry of that name.
+
+  **The two halves, and they are decided on different grounds.**
+
+  - **Rotation is offered.** A rotation is an isometry, so it preserves every
+    distance; the value a ce dimension displays is therefore **identical either
+    side of the operation by construction, not because pdfce holds it fixed.**
+    That is precisely what makes it a legitimate drafting operation under
+    `CLAUDE.md` rule 15 — the text *is* the measurement, and nothing measured
+    changed. `rotate_dimension(id, pivot, degrees)` +
+    `pdfce-cli dimension-rotate`.
+  - **Scaling is declined.** It has **no honest reading.** Either the displayed
+    value stays fixed while the geometry grows — so the ce dimension **lies
+    about the drawing** — or both change, in which case **nothing was
+    measured** and the operator has *drawn* a number rather than *taken* one.
+    The operation actually wanted is `set_group_scale` (the measurement ratio,
+    points per unit), which has shipped since the ce-dimension group work.
+
+  **★★ THE PART THAT GENERALISES, AND THE REASON THIS IS A DECISION RECORD
+  RATHER THAN A LINE IN A COMMIT MESSAGE.** The engineer's standing
+  decide-and-disclose posture (`.claude/agent-memory/pdfce-engineer/`
+  `feedback_spec_ambiguity_defaults_are_mine.md`, from Ken 2026-08-19 and
+  widened 2026-08-20) had **two** outcomes: *ship both readings as options*, or
+  *pick the default yourself*. Both presume the readings are each correct for
+  somebody. **This adds a third: when NEITHER reading is coherent, decline the
+  operation and say why.**
+
+  **★ The distinguishing test is mechanical and costs one paragraph:** *try to
+  write the doc comment for the losing option.* If it can only be written as
+  *"choose this to get a wrong answer in a different way"*, it is not an
+  option. **An option is a claim that both settings are correct for somebody;
+  shipping both here would manufacture a false choice and dress an incoherent
+  operation as a preference.** That framing is the one sent to `pdfceGUI` in
+  the 2026-08-28 17:45 outbound note, so both projects hold it.
+
+  **The operator confirmed it, which is what makes this a record rather than a
+  reading.** Ken, 2026-08-28, verbatim: ***"good call. don't need scaling on
+  dimensions."*** The engineer had been told by this role that the semantics
+  question needed Ken's ruling; he decided and disclosed instead, per the
+  standing instruction, and the confirmation arrived afterwards. **Note the
+  order** — the posture is vindicated by the decision having been *made*, not
+  by the confirmation; a session that waits for the confirmation has not
+  followed the instruction.
+
+  **The one judgement inside the shipped verb, recorded because it is a
+  behaviour change a consumer will see.** A `Linear` ce dimension locked
+  `Horizontal` or `Vertical` cannot stay locked through a rotation. Three
+  options, two wrong: **refusing** makes rotation impossible for most of a CAD
+  drawing; **keeping** the constraint leaves the drawn line disagreeing with
+  its own stated constraint, invisibly, until something regenerates from it.
+  So it **relaxes to `Aligned`** — which is what a line following its own
+  picked points *is* — and reports `constraint_relaxed`. **A whole number of
+  turns relaxes nothing**, because nothing moved.
+
+  **Body-section updates.** None to §3, §4, §4.1 or §4.2 — no crate boundary or
+  published guarantee moved; `rotate_dimension` extends the existing
+  `EditSession` verb surface and `DimensionKind::rotated` the existing
+  dimension model. **§12's decision 026** (*"the offset that makes extension
+  lines possible"*) is **cited, not amended** — it was already correct, and the
+  filing's other half is that a `FEATURES.md` row asserted the absence of the
+  capability that decision's own title names.
+
+  **No standing rule minted.** `R225` gains a dated instance note (three
+  instances inside this one verb); the third decide-and-disclose outcome is
+  recorded here and in the engineer's own memory rather than as a rule, because
+  it governs how a *decision* is reached, not how a Pass is scoped — the
+  2026-08-05 ruling's own criterion. **Standing-rule ceiling unmoved at `R225`;
+  next free `R226`. Decision ceiling moves 095 → 096; next free 097.**

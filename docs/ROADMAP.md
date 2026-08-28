@@ -96,6 +96,356 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 159.0` (`7d5388c`) — `EditSession::rotate_dimension` + `DimensionKind::rotated` + `pdfce-cli dimension-rotate`: a ce dimension turns, and scaling is DECLINED BY NAME — ★★★★★ **THE HEADLINE IS A CORRECTION, NOT A FEATURE. THE ENGINEER TOLD THE OPERATOR ce DIMENSIONS HAD THREE GAPS; TWO OF THEM DID NOT EXIST, AND HE FOUND THAT BY RUNNING THE PROGRAM INSTEAD OF READING `FEATURES.md`. `dimension-vertex --op move` RE-DERIVES THE VALUE AND DISCLOSES IT (`5.000 m` → `6.250 m` ON A 50 pt DRAG AT 0.025 m/pt); `dimension-offset` SETS THE STANDOFF AND THE ALONG-LINE TEXT POSITION (offset `0` → `12`, text_along `0` → `0.25`). BOTH CORE **AND** CLI, BOTH SHIPPED FOR SOME TIME** ⇒ ***A CAPABILITY CENSUS READ OFF A DOCUMENT IS A CLAIM ABOUT THE DOCUMENT. THE CHECK WAS TWO CLI INVOCATIONS*** — ★★★★★ **AND `FEATURES.md` CONTRADICTED ITSELF IN BOTH CASES, IN THE SAME FILE, WITH NO READER NOTICING FOR MONTHS: the re-measure *Planned* row was refuted by the vertex-editing *Implemented* row (`Pass 107.0`/`107.1`) 178 lines above it, and the extension-lines *Planned* row by the *"Reposition by drag, or numerically"* row 184 lines above it — **AND `docs/decisions/026-linear-ce-dimension-geometry-offset-and-drafting-standards.md` IS TITLED *"the offset that makes extension lines possible"*.** A whole decision document is NAMED AFTER the capability a row said was unbuilt** ⇒ ***a `[ ]` box is a NEGATIVE EXISTENTIAL about code the suite compiles every day, and nothing in a build system can go red when one becomes false — it decays in ONE DIRECTION ONLY*** — ★★★★ **`R225` THREE TIMES IN ONE VERB, and the three coincidences are three DIFFERENT kinds: a SYMMETRY AXIS, a SCALAR WITNESS, and a VARIANT NOBODY HAD AUTHORED. The `cos`→`sin` sabotage survived the value tests because for a HORIZONTAL line the corrupted map still preserves length (`√(cos² + sin²) = 1`) — ***a scalar derived from two points cannot pin a two-dimensional map*** — then survived the GEOMETRY test written to catch it, because the points were placed at `y = 0`, ON THE PIVOT'S OWN AXIS, where the corrupted term is identically zero. Caught on the THIRD attempt, off-axis. The angular-arms sabotage survived every file-based test because **no fixture has an angular dimension**, which is `R224`'s empty-subject-set shape arriving inside a fixture corpus** — ★★★ **DECISION 096: SCALING IS DECLINED, NOT UNBUILT, AND THE OPERATOR CONFIRMED IT — *"good call. don't need scaling on dimensions."* This establishes a **THIRD OUTCOME** for the decide-and-disclose posture, which had only two (ship both, pick a default). The distinguishing test is mechanical: TRY TO WRITE THE DOC COMMENT FOR THE LOSING OPTION — if it can only be written as *"choose this to get a wrong answer in a different way"*, it is not an option** — ★★ **THE ONE JUDGEMENT INSIDE THE VERB: a `Linear` ce dimension locked `Horizontal`/`Vertical` RELAXES TO `Aligned` and reports it. Refusing would make rotation impossible for most of a CAD drawing; keeping the constraint would leave the drawn line disagreeing with its own stated constraint, invisibly. A full turn relaxes nothing, because nothing moved** — ★ **TEST-FILE SHARE 277 of 655 = 42.3 %, against `Pass 157.0`'s 0.0 % directly below — the convention is back, and the tests are the only reason two of the three sabotages were ever caught** — 2026-08-28 (313th filing)
+
+**★★★ FIRST, A CORRECTION TO THE DISPATCH THAT ORDERED THIS FILING, BECAUSE IT
+CHANGES WHAT THIS ENTRY CONTAINS.** The dispatch said, parenthetically:
+*"(`Pass 158.0` was `8326d33`, already filed as part of the run you saw.)"*
+**It was not.** `grep -n "Pass 158\.0\|8326d33" docs/ROADMAP.md docs/FEATURES.md
+docs/SESSION_LOG.md`, run here before writing anything, returned **nothing**;
+`git log` puts `8326d33` **after** the 312th filing's commit `0b670d9`, so no
+filing could have covered it. **`Pass 158.0` is filed below, for the first
+time.** Recorded rather than silently corrected because hard rule 8's
+discipline applies to a *filing* state exactly as it applies to a *git* state:
+**a claim about what a document contains is checkable in one command, and the
+cost of believing it is a Pass that never enters the record.**
+
+**★★★★★ THE HEADLINE, AND IT IS THE ENGINEER'S OWN CORRECTION.** He reported
+three ce-dimension gaps to the operator, sourced from `FEATURES.md`. Measured
+against the shipped binary:
+
+| what was reported | measured | verb |
+|---|---|---|
+| can't change what a dimension measures | **FALSE** | `move_dimension_vertex` / `dimension-vertex --op move` — re-derives and discloses, `5.000 m` → `6.250 m` on a 50 pt drag at 0.025 m/pt |
+| can't drag its extension lines | **FALSE** | `place_dimension` / `dimension-offset` — standoff `0` → `12`, `text_along` `0` → `0.25` |
+| can't rotate one | **TRUE** | this Pass |
+
+**Confirmed independently here at filing time**, from source rather than from
+the commit message: `crates/pdfce-core/src/edit.rs:28303` (`move_dimension_vertex`),
+`:27099` (`place_dimension`), `crates/pdfce-cli/src/main.rs:5247` / `:5299`
+(both subcommands, with their `clap` help), and
+`crates/pdfce-core/src/dimension/author.rs:716` / `group.rs:461` for the
+extension lines being real drawn geometry rather than a figure of speech.
+
+**★★★★★ AND THE DOCUMENT CONTRADICTED ITSELF, TWICE, WHICH IS THE MORE
+USEFUL HALF.** Neither false row needed the binary to refute it — each was
+refuted by an *Implemented* row in the same file:
+
+| the false *Planned* row | the *Implemented* row that already refuted it | distance |
+|---|---|---|
+| *"Re-measure a placed ce dimension — change what it measures without losing its id, group and placement"* | *"Move, insert or remove a vertex … **re-measuring live**"* (`Pass 107.0`/`107.1`) | **178 lines** |
+| *"Drag a ce dimension's extension lines"* | *"Reposition by drag, or numerically"* (`place_dimension`, core **and** cli **and** gui ticked) | **184 lines** |
+
+**And `docs/decisions/026` is titled *"Linear ce-dimension geometry: the
+axis-aligned dimension line, THE OFFSET THAT MAKES EXTENSION LINES POSSIBLE,
+and ANSI-vs-ISO drafting standards"*.** The project holds a decision document
+**named after** the capability the row declared unbuilt. Its §2.4 is headed
+*"Extension lines, drawn"*; its closing text reads *"the offset changes; the
+extension lines grow to span the new gap."*
+
+⇒ ***A `[ ]` BOX IS A NEGATIVE EXISTENTIAL ABOUT YOUR OWN CODE, AND NO
+INSTRUMENT THIS PROJECT OWNS CAN FALSIFY ONE.*** A test asserts that something
+works; nothing asserts that something is still missing. So a features list
+**decays in one direction only** — rows go from true to false as capability
+lands, never the reverse — and the decay is invisible to `cargo test`, to
+clippy, to all 26 gates, and to a reader scanning one section at a time.
+`R203` already established this for a claim naming *another repository*; this
+is the sharper case, **inside one file, about this project's own crates**.
+General half filed to `D:/dev/rag/rust/` (see *Ledger*).
+
+**The `FEATURES.md` repair, and it is a REWRITE of three rows plus two
+deletions**, not a tick:
+
+| row | before | after |
+|---|---|---|
+| `166` (*Implemented*) | *"Reposition by drag, or numerically."* — seven words, no verb named | names `place_dimension` / `dimension-offset`, states that **the standoff is what the extension lines express**, cites decision 026, and records the circular-ce-dimension refusal |
+| `173` (*Implemented*) | *"…re-measuring live"* — true, but not phrased as the answer to *"can it re-measure?"* | *"**This IS re-measurement**"*, with the measured `5.000 m` → `6.250 m` and the explicit *"id, group and placement untouched"* |
+| `174` (*Implemented*, **NEW**) | — | `rotate_dimension` / `dimension-rotate`, the by-construction value invariance, the `Aligned` relaxation, and **scaling declined by name** with decision 096 cited |
+| *Planned* *"Drag a ce dimension's extension lines"* | a gap | **DELETED** — the capability is row 166 |
+| *Planned* *"Re-measure a placed ce dimension"* | a gap | **DELETED** — the capability is row 173 |
+| *Planned* *"Rotate/scale a placed ce dimension"* | a gap in five parts | **DELETED** — rotation is row 174, scaling is declined (decision 096) |
+
+**Three further rows had clauses pointing at the deleted ones and were swept
+under hard rule 11 rather than left to dangle** — the widget-rotation *Planned*
+row (*"the last unbuilt carrier of the transform trio **besides ce
+dimensions***"*), `rotate_annotation`'s row (*"both remain unbuilt (own
+*Planned* rows)"* — now a routing decision for the ce-dimension half), and
+`resize_annotation`'s row (the ce-dimension refusal is now **permanent by
+ruling**, not pending a verb).
+
+**Census re-counted from the file, by `awk` over the *Implemented* section
+(lines 105–311), not incremented:**
+
+| Implemented rows | `core` unbuilt | `cli` unbuilt | `cli` partial | `gui` unbuilt | `gui` partial |
+|---:|---:|---:|---:|---:|---:|
+| **150** (was 149) | **0** | **0** | **3** | **63** | **6** |
+
+**69 of 150 = 46.0 % not fully usable from `pdfceGUI`**, against **68 of 149 =
+45.6 %** at the 312th filing. **Row count moves by exactly one** — the rotation
+row is new; the other two corrections **fold into existing rows rather than
+adding any**, because a second row for a capability that already has one is how
+this file grew the contradiction in the first place.
+
+**One commit.** `7d5388c`, **6 files, +655 / −4** (`git show --numstat`, run
+here):
+
+| file | +/− | what |
+|---|---:|---|
+| `crates/pdfce-core/tests/dimension_rotate.rs` | **+277 / −0** | the suite, including the two sabotage-catching fixtures |
+| `crates/pdfce-cli/src/main.rs` | **+135 / −0** | `Command::DimensionRotate`, dispatch arm, `cmd_dimension_rotate` |
+| `crates/pdfce-core/src/edit.rs` | **+134 / −0** | `EditSession::rotate_dimension` |
+| `crates/pdfce-core/src/dimension/group.rs` | **+104 / −0** | `DimensionKind::rotated` |
+| `docs/core-api/02-editing-and-saving.md` | +4 / −3 | the verb's entry |
+| `docs/core-api/index.md` | +1 / −1 | routing-table size figure |
+
+**Test-FILE share of added lines: 277 of 655 = 42.3 %** (hard rule 10(a) — the
+denominator is stated and the qualifier is in the label). Against **0.0 %**
+(`Pass 157.0`), **52.6 %** (`156.0`), **36.9 %** (`155.0`). **The 312th
+filing's owed item 2 named the missing-CLI-test convention as a lapse; this
+Pass restores the shape at the core level.** It still ships **no
+`crates/pdfce-cli/tests/` file** for `dimension-rotate`, so owed item 2 is
+**narrowed, not discharged** — see the *Ledger*.
+
+**★★★★ `R225` THREE TIMES IN ONE VERB — and the value is not the count, it is
+that the three coincidences are of three DIFFERENT kinds.** `R225` was minted
+this morning (311th filing) on three instances from three *different*
+subsystems. This is the same rule recurring **three times inside one function**,
+which is a different and worse shape: an engineer who has just fixed the first
+instance is in exactly the frame of mind to miss the second.
+
+| # | the sabotage | why the suite stayed green | the fixture change that caught it |
+|---|---|---|---|
+| **4** | `cos` → `sin` in the y term | the tests asserted the **measured value**, and for a **horizontal** line the corrupted map still preserves length: x separation scales by `cos`, y separation becomes `Δx·sin`, and `√(cos² + sin²) = 1` ⇒ ***a scalar derived from two points cannot pin a two-dimensional map*** | assert the **coordinates**, not the length |
+| **4b** | the same sabotage, second attempt | the *geometry* test written to catch it placed the points at **`y = 0`** — **on the pivot's own axis**, where the corrupted term is identically zero | move the points **off** the axis |
+| **5** | angular arms mapped **through the pivot** instead of the bare rotation | **no fixture has an angular dimension**, so every file-based test's subject set for this sabotage was **EMPTY** | exercise `DimensionKind::rotated` **directly**, below the file layer |
+
+**★★ Instance 4b is the one worth carrying**, and it is genuinely new material
+for `R225`: **the discriminating test's own fixture was non-discriminating.**
+The engineer diagnosed the class correctly, wrote the geometry test the rule
+prescribes, and chose coordinates lying on the transform's symmetry axis — so
+the second attempt failed for the *same* reason as the first, one abstraction
+level up. `R225`'s degenerate-value table lists *"zero, or a symmetric input"*
+for a signed/directional claim; **the geometric form of that row is *a fixture
+placed on the axis of the transform under test*, and it did not read as
+"zero" to the person choosing it.**
+
+**★★ Instance 5 is `R224`'s shape inside a fixture corpus.** The sabotage was
+applied, the code ran, every assertion was evaluated — over a population of
+**zero angular ce dimensions**. That is a vacuous scan, not a
+non-discriminating input, and it sits on the `R224`/`R225` boundary. Recorded
+under `R225` because the remedy is `R225`'s (**change the input**), with the
+adjacency noted on the rule.
+
+**★★★ DECISION 096 — SCALING IS DECLINED, AND THE POSTURE GAINS A THIRD
+OUTCOME.** This role's `Pass 156.0`/`157.0` assessment said the ce-dimension
+gap *"needs Ken's ruling, because a ce dimension's text **is** its measurement
+(rule 15)"*. **That assessment was wrong on the process, and the engineer was
+right to overrule it**: Ken's standing instruction
+(`.claude/agent-memory/pdfce-engineer/feedback_spec_ambiguity_defaults_are_mine.md`,
+2026-08-19, widened 2026-08-20) is *"do not ask me for the default"*, and a
+two-defensible-answers question **is never an open operator question**. He
+decided and disclosed. **Ken then confirmed: *"good call. don't need scaling on
+dimensions."***
+
+The posture had **two** outcomes — *ship both readings*, *pick the default*.
+**Both presume each reading is correct for somebody.** The third: **when
+neither reading is coherent, decline the operation and say why.**
+
+> **The mechanical test, which is what makes this a rule-shaped thing rather
+> than a mood:** *try to write the doc comment for the losing option.* If it can
+> only be written as *"choose this to get a wrong answer in a different way"*,
+> **it is not an option.** An option is a claim that **both** settings are
+> correct for somebody; shipping both here would manufacture a false choice and
+> dress an incoherent operation as a preference.
+
+Filed as **decision 096** (`ARCHITECTURE.md` §12) and carried in the engineer's
+own memory. **Not minted as a standing rule** — the 2026-08-05 ruling's
+criterion is that a project rule governs *how pdfce is scoped*, and this governs
+*how a decision is reached*. **Ceiling unmoved at `R225`.**
+
+**★★ THE ONE JUDGEMENT INSIDE THE VERB, recorded because a consumer will see
+it.** A `Linear` ce dimension locked `Horizontal` or `Vertical` cannot stay
+locked through a rotation. Three options, two wrong:
+
+- **refuse** — makes rotation impossible for most of a CAD drawing;
+- **keep the constraint** — leaves the drawn line disagreeing with its own
+  stated constraint, **invisibly**, until something regenerates from it;
+- **relax to `Aligned`** and report `constraint_relaxed` — which is what a line
+  following its own picked points *is*.
+
+**A whole number of turns relaxes nothing**, because nothing moved. The
+relaxation is reported, not silent — rule 4's off-canvas disclosure, in both
+shells.
+
+**★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string.** The
+meaning-change event is *"two capabilities reported absent are present"*, which
+under the 2026-08-23 amendment triggers a sweep of `docs/`, `tools/` and
+`crates/` alike.
+
+| # | site | the claim | disposition |
+|---|---|---|---|
+| 1 | `FEATURES.md`, *Planned* | *"Drag a ce dimension's extension lines"* | **DELETED**, capability folded into row 166 with the verb named |
+| 2 | `FEATURES.md`, *Planned* | *"Re-measure a placed ce dimension — change what it measures without losing its id, group and placement"* | **DELETED**, capability folded into row 173 with the measured figures |
+| 3 | `FEATURES.md`, *Planned* | *"Rotate/scale a placed ce dimension"*, five sub-problems | **DELETED** — rotation is now row 174; scaling is decision 096 |
+| 4 | `FEATURES.md`, widget-rotation *Planned* row | *"the last unbuilt carrier of the transform trio **besides ce dimensions** (own row below)"* — a pointer to a row this filing deletes | **REWRITTEN**: widgets are now *the* last unbuilt carrier |
+| 5 | `FEATURES.md`, `rotate_annotation` row | *"widgets … and ce dimensions … **both remain unbuilt** (own *Planned* rows)"* | **REWRITTEN** — the ce-dimension refusal is a **routing** decision (`rotate_dimension` is the verb), not a gap |
+| 6 | `FEATURES.md`, `resize_annotation` row | *"ce dimensions are refused by name"*, readable as pending | **REWRITTEN** — permanent **by ruling** (decision 096), with `set_group_scale` named |
+| 7 | `D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/note_ce_dimensions_rotate_and_two_things_you_may_already_have.md` | the outbound note to `pdfceGUI`, 17:45 | **CHECKED, CLEAN** — the engineer put the correction in it himself, under a heading reading *"two capabilities you may already have"*, and told them to run the verb before reporting a gap. **A clean result is a finding here: the correction reached the consuming project before it reached this record.** |
+
+**Checked and CLEAN, reported because a clean result is a finding:** `README.md`
+makes no ce-dimension capability claim; `docs/core-api/02-editing-and-saving.md`
+was updated by the Pass itself; no `crates/` doc comment or `println!` asserts
+that a ce dimension cannot rotate, re-measure or be offset (`grep` for the
+claims, not the strings, run here).
+
+**★★ THE CHANNEL CHECK (`R203`(d)) — BOTH CHANNELS CLEAR OF ANYTHING OWED.**
+`ls -lt`, run here at filing time.
+
+- **`D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/` — CLEAR.** Newest is
+  pdfce's own outbound, `note_ce_dimensions_rotate_and_two_things_you_may_already_have.md`,
+  2026-08-28 **17:45**, superseding the 15:47 note. **Nothing inbound is
+  unanswered.** The note carries a real ask back to them — *"if you have an
+  opinion on whether an operator picking an absent Standard-14 face is the
+  common case, now is a useful time to send it"* — so a reply may arrive and is
+  not owed by us.
+- **`D:/Dev/FeatureRequests/iccce_FeatureRequests/open/` — UNCHANGED since the
+  312th filing.** Same two informational notes, 2026-08-28 15:03 / 15:04, no
+  reply owed. **The warning stands and is repeated here rather than
+  cross-referenced**, because it is the kind that gets lost: *their* *"invisible
+  X"* is `PCS3_130`, a **CMM / ICC-source-profile** patch, and it is **NOT**
+  pdfce's open trap-X on the grey/K-black **overprint** patch. Two X's, two
+  patches, two causes, one word. **Their ΔE00 figures are withdrawn by their own
+  author under `DL-070`; only the 8-bit channel counts may be quoted.**
+
+**Verification (run here at filing time, not carried forward):**
+
+- **`git show --numstat 7d5388c`** → 6 files, **+655 / −4**; `8326d33` → 3
+  files, **+53 / −19**.
+- **`git rev-list --count origin/main..main`** → **2** (`7d5388c`, `66efc9a`).
+  `git rev-parse --short origin/main` → **`8326d33`**, so the engineer pushed at
+  `8326d33`. **Held at 2, the same figure as the 312th filing but a different
+  two commits** — recorded that way deliberately, because *"still 2"* would read
+  as *"nothing happened"*.
+- **`ls -lt D:/Dev/pdfce-backups/`** → newest **`pdfce-20260828-2104-8326d33-full.bundle`**,
+  2026-08-28 **17:04**, at `8326d33`. **`git rev-list --count 8326d33..HEAD` =
+  2**, against 2 / 10 / 7 / 5 / 3 at the 312th / 311th / 310th / 309th / 308th
+  filings. **Two filings current, after five drifting.**
+- **`git status -sb`** → clean tree at dispatch time, `## main...origin/main [ahead 2]`.
+- **`awk` census over `FEATURES.md`** → 150 / 0 / 0 / 3 / 63 / 6, as tabled
+  above. **The first count I ran was wrong and is recorded as such**: it applied
+  `gsub(/[ *]/,"",…)` to strip bold markers and then compared against `"[ ]"`,
+  which the same `gsub` had turned into `"[]"` — so it reported **`gui`
+  unbuilt = 0** against the 312th filing's 62. Caught because the figure was
+  implausible, not because anything failed. ⇒ ***a census script that
+  normalises its input must compare against the NORMALISED form, and the
+  failure mode is a zero, which reads as good news.***
+- **Source-level confirmation of the two false gaps** — `edit.rs:27099`/`:28303`,
+  `main.rs:5247`/`:5299`, `author.rs:716`, `group.rs:461`, plus
+  `docs/decisions/026-*.md` §2.4 in the **main tree** (the first `grep` hit was
+  in a stale `.claude/worktrees/` copy and was **not** trusted for it).
+- **Gates NOT re-run here.** The engineer reports `tools/run-gates.sh` **PASS,
+  26 commands** on `7d5388c`; the `eace74c` addendum already narrowed what that
+  phrase covers (`cargo about` skipped, `--all-features` not exercised). **This
+  filing edits only `docs/`**, so the filing gates
+  (`check-commits-filed.py`, `check-passes-filed.py`,
+  `check-cited-commits-exist.py`) are the ones whose result changes —
+  **`8326d33`, `7d5388c` and `66efc9a` were all unfiled at dispatch time** and
+  the engineer should re-run them over the post-filing tree.
+
+**Ledger.**
+
+- **`R225` gains a dated instance note** — instances **4, 4b and 5**, all inside
+  one verb, with the symmetry-axis and empty-variant sub-shapes named. **No
+  re-mint** (the 2026-08-05 ruling forbids elevating per occurrence, and no new
+  *cause* appears — 4b and 5 are new *kinds of coincidence* under the existing
+  cause). **Ceiling stays `R225`; next free `R226`.**
+- **Decision 096 filed** (`ARCHITECTURE.md` §12). **Decision ceiling moves
+  095 → 096; next free 097.**
+- **Two RAG findings written** (see `SESSION_LOG.md`).
+- **`FEATURES.md`: three rows rewritten, one added, three deleted, three swept.**
+- **Pass ceiling `157.0` → `159.0`** — a **two**-step move, because `Pass 158.0`
+  was never filed (see its entry below); **next free Pass ID 160**.
+
+---
+
+### `Pass 158.0` (`8326d33`) — the fourth doc-comment orphaning fixed, `README.md`'s subcommand count corrected 60 → 108, and `docs/NEXT_SESSION.md` overwritten — ★★★★★ **FILED HERE FOR THE FIRST TIME, ONE FILING LATE. The dispatch that ordered the 313th filing said this Pass was *"already filed as part of the run you saw"*; `grep` over `ROADMAP.md`, `FEATURES.md` and `SESSION_LOG.md` returned NOTHING for either `Pass 158.0` or `8326d33`, and `git log` puts the commit AFTER the 312th filing's own commit `0b670d9` — so no filing could have covered it** ⇒ ***a claim about what a document CONTAINS is checkable in one command, and hard rule 8's discipline does not stop at git state*** — ★★★★ **EVERY ONE OF THIS PASS'S THREE FIXES WAS FOUND BY THE LIBRARIAN AND NONE BY ANY GATE**, which is the 312th filing's survivor list being discharged in code rather than argued with — ★★★ **THE ENGINEER'S OWN DIAGNOSIS OF THE THIRD ORPHANING WAS WRONG AND HE SAYS SO IN THE COMMIT MESSAGE: `Pass 157.0` recorded *"the doc block is NOT contiguous"*; the source shows **29 unbroken `///` lines** and an `#[allow(clippy::too_many_arguments)]` ATTRIBUTE between the run and the `fn`. The two diagnoses have OPPOSITE remedies — *"not contiguous"* implies a better run-detector, *"an attribute intervenes"* implies **no upward look can ever be sufficient*** — ★★ **`README.md:19` GOES 60 → 108, AND THE ENGINEER COUNTED IT FROM THE SHIPPED BINARY RATHER THAN THE ENUM — `pdfce-cli --help`, Commands section, minus `clap`'s auto-generated `help`: 109 − 1 = 108, agreeing with the librarian's independent count of the `Command` enum by a different method. **Two methods, one number** is the strongest form this project's figures come in** — ★ **`docs/NEXT_SESSION.md` OVERWRITTEN, not amended (`R216`) — the copy on disk was six filings stale in four independent ways, including a backup figure of *"45 commits behind"* against a measured 2** — 2026-08-28 (313th filing)
+
+**Three corrections, each discharging a survivor the 312th filing reported and
+none of which any of the 26 gates can see.**
+
+**1 — THE FOURTH DOC-COMMENT ORPHANING, LIVE AT `HEAD` FOR NINE DAYS.**
+`cmd_list_fields`'s documentation had been glued to the top of
+`cmd_add_bookmark`'s block since `d32872a` (`Pass 103.0`, 2026-08-19), leaving
+`cmd_list_fields` with **no doc comment at all**. Correct at the initial import
+`d8b3903`, where the block sat above its own `fn`. Fixed by moving the block
+down to its own signature.
+
+**★★ NEITHER ACCIDENT THAT CAUGHT THE OTHER THREE APPLIED HERE** — no trailing
+`- ` bullet to trip clippy's lazy-continuation lint, no stranded `#[allow]` to
+make clippy report a wrong argument count on an unrelated function. ⇒ ***that
+is what the class looks like when detection luck runs out, and it is why the two
+catches on 2026-08-28 are not evidence of coverage.*** The class's true
+detection rate remains **unknown**; nine days is the only lower bound this
+project has measured.
+
+**2 — `README.md` UNDERSTATED `pdfce-cli` BY 48 SUBCOMMANDS.** *"60
+subcommands"* → **108**. Claim-bearing copy in the most-read file of a **public**
+repository, and it had been moving without anyone re-deriving it.
+
+**★ The counting method is the part worth keeping.** The engineer counted from
+the **shipped binary** — `pdfce-cli --help`, Commands section, minus `clap`'s
+own auto-generated `help` entry: **109 − 1 = 108** — deliberately *not* from the
+`Command` enum, which is what the 312th filing had counted
+(`grep -cE '^    [A-Z][A-Za-z0-9]*( \{|,)$'` over `main.rs`, → 108 at `HEAD`).
+**Two independent methods over two different artefacts agreeing on one number**
+is a stronger fact than either alone, and it is what settles the 312th filing's
+open qualifier (*"whether 108 is exactly the operator-visible subcommand count
+needs the engineer's confirmation"*). **It is 108, and it is confirmed.**
+Survivor 3 of the 312th filing's sweep is **DISCHARGED**; survivor 4
+(`ARCHITECTURE.md:12825`'s *"52 subcommands (lines 381–2414)"*) is **not**, and
+remains owed — it needs a **dated qualifier**, not a new number, because it is a
+2026-08-03 measurement load-bearing inside decision 020's justification.
+
+**3 — `docs/NEXT_SESSION.md` OVERWRITTEN.** `R216` says overwrite, never amend.
+The copy on disk was six filings stale in four independent ways, each
+misleading on its own: §C stopped six Passes short; §D said the backup bundle
+was *"45 commits behind"* when the measured figure was **2**; §B item 3 asked
+for a Pass ID that had already become `Pass 152.0` and shipped; §B item 1's
+trap-X lead was live but conflatable with `iccce`'s different X. **A partial
+update would have produced a document half true with nothing marking which
+half.**
+
+**One commit.** `8326d33`, **3 files, +53 / −19** (`git show --numstat`, run
+here):
+
+| file | +/− | what |
+|---|---:|---|
+| `docs/NEXT_SESSION.md` | +47 / −13 | full overwrite per `R216` |
+| `crates/pdfce-cli/src/main.rs` | +5 / −5 | the orphaned doc block moved to its own `fn` |
+| `README.md` | +1 / −1 | `60` → `108` |
+
+**Test-FILE share of added lines: 0 of 53 = 0.0 %** (hard rule 10(a)). **Not a
+criticism here and the reason is structural, unlike `Pass 157.0`'s zero**: this
+Pass ships **no behaviour** — a doc comment moved, a number corrected, a
+handoff rewritten. There is nothing for a test to assert. Recorded so the
+figure is not read as a second consecutive lapse.
+
+**A follow-on commit, `66efc9a`, is NOT a Pass and is not filed as one** —
+`docs/NEXT_SESSION.md` rewritten again with §0a (gap 4 scoped by measurement)
+plus a new engineer-memory file. Its one finding worth carrying: **`add-text`
+already creates a new `/Font` resource** (verified, font count 3 → 4), so gap 4a
+is *wire an existing capability into a second caller*, not *learn to add a font
+resource*. **`embed-font` does NOT do it** — it fills programs for fonts already
+named, **though its help text reads otherwise**, which is its own small
+claim-bearing defect and is carried to the *Ledger* as owed.
+
+**Ledger.** Nothing minted. Decision ceiling unmoved by this entry (096 is
+`Pass 159.0`'s). Standing rules unchanged at **`R225`**, next free **`R226`**.
+**`FEATURES.md` unchanged by this Pass** — it wires no capability; the
+`README.md` figure is not a features row.
+
+---
+
 ### `Pass 157.0` (`66100db`) — `pdfce-cli rename-bookmark` / `delete-bookmark`: one handler, two verbs, and the rule-11 gap `Pass 156.0` opened is shut the same session — ★★★★★ **THE THIRD DOC-COMMENT ORPHANING OF THE DAY DEFEATED THE MITIGATION BUILT FROM THE FIRST TWO — BUT THE ENGINEER'S STATED CAUSE IS NOT WHAT THE SOURCE SHOWS, AND THE REAL ONE WAS ALREADY WRITTEN DOWN. `cmd_add_bookmark`'s `///` RUN *IS* CONTIGUOUS (29 UNBROKEN LINES, `git show 988b22a:…` VERIFIED HERE); THE ONLY NON-`///` LINE BETWEEN THE RUN AND THE SIGNATURE IS `#[allow(clippy::too_many_arguments)]` — SO THE UPWARD WALK TERMINATED AT ZERO STEPS AND SPLICED *BETWEEN THE ATTRIBUTE AND THE `fn`*, WHICH IS WHY BOTH THE DOCS AND THE ATTRIBUTE WENT TO THE NEW FUNCTION. THE RAG CARRIER'S OWN 2026-08-28 FOOTER PREDICTED THIS SENTENCE FOR SENTENCE — *"A `#[doc]`, `#[derive]`, `#[inline]` or `#[cfg]` attribute on the target moves the boundary further still"* ⇒ *THE MITIGATION WAS BUILT FROM A DOCUMENT THAT HAD ALREADY NAMED ITS FAILURE MODE, AND IMPLEMENTED THE HALF THAT WAS EASY TO CODE*** — ★★★★★ **AND THERE IS A FOURTH INSTANCE, LIVE AT `HEAD`, NINE DAYS OLD, SITTING AT THE EXACT LINE THE THIRD ONE WAS SPLICED INTO: `cmd_list_fields`'s DOC BLOCK IS GLUED TO THE TOP OF `cmd_add_bookmark`'s (`main.rs:11239–11243`), AND `cmd_list_fields` ITSELF (`main.rs:15501`) CARRIES **NO DOC COMMENT AT ALL**. INTRODUCED BY `Pass 103.0` (`d32872a`, 2026-08-19) — CORRECT AT THE INITIAL IMPORT `d8b3903`, WHERE THE BLOCK SAT ABOVE ITS OWN `fn` AT LINE 2773 ⇒ *THE THIRD INSTANCE HAPPENED AT THE SITE OF AN OLDER, STILL-LIVE INSTANCE OF THE SAME CLASS, AND THREE DAYS OF HUNTING THIS EXACT HAZARD WALKED PAST IT WHILE LOOKING DIRECTLY AT IT*** — ★★★★ **DETECTION WAS LUCK FOR THE SECOND TIME, AND BY A DIFFERENT ACCIDENT EACH TIME: `Pass 154.0`'s SPLICE WAS CAUGHT BECAUSE THE BLOCK ABOVE ENDED IN A `- ` BULLET (A LAZY-CONTINUATION LINT); THIS ONE BECAUSE THE TARGET HAPPENED TO CARRY AN `#[allow]` CLIPPY THEN MISSED (9/7 ARGUMENTS). NEITHER DETECTOR IS AIMED AT THE DEFECT ⇒ THE CLASS'S TRUE DETECTION RATE IS UNKNOWN AND THE FOURTH INSTANCE ABOVE IS THE EVIDENCE: WHERE NEITHER ACCIDENT HELD, IT SURVIVED NINE DAYS** — ★★★ **THE ENGINEER'S REMEDY IS RIGHT EVEN THOUGH HIS DIAGNOSIS WAS NOT: SPLICE **AFTER A FUNCTION'S CLOSING BRACE**. A DOC COMMENT BINDS TO WHAT *FOLLOWS* IT, SO THE POST-BRACE POSITION IS THE ONLY ONE WITH NO PRECEDING DOC RUN *AND* NO PRECEDING ATTRIBUTE TO LAND INSIDE — IT IS IMMUNE TO BOTH CAUSES, WHERE EVERY UPWARD WALK IS IMMUNE TO ONE** — ★★ **`--n` IDENTIFIES THE BOOKMARK BECAUSE `list-outline` PRINTS `n=`.** AN IDENTIFIER THAT DOES NOT APPEAR IN THE OUTPUT OF THE COMMAND THAT *LISTS* THINGS CANNOT BE SCRIPTED WITHOUT A PDF PARSER; THE OBJECT ID IS AN IMPLEMENTATION DETAIL OF THE FILE, `n` IS A FACT ABOUT WHAT PDFCE SHOWED THE OPERATOR — ★ **ZERO TEST LINES (0 of 160 = 0.0 %), AGAINST `Pass 156.0`'s 52.6 % DIRECTLY BELOW, AND `crates/pdfce-cli/tests/` HOLDS 29 FILES INCLUDING `move_annotation.rs` AND `resize_annotation.rs` — THE TWO SIBLING TRANSFORM VERBS. THE CONVENTION EXISTS AND THE LAST TWO CLI-SHIPPING PASSES DID NOT FOLLOW IT (`rotate-annotation` HAS NO CLI TEST EITHER). FILED AS OWED** — 2026-08-28 (312th filing)
 
 **★ THE RULE-11 GAP IS DISCHARGED.** `Pass 156.0` shipped `set_outline_title`
@@ -116601,6 +116951,61 @@ same cause (hashes exist only at commit time), two different failure modes.
   able to fail"*; `R224` is the **empty** subject set, `R225` is the
   **non-discriminating** one, `R221` is the **masked** one. **Ceiling moves
   `R224` → `R225`; next free `R226`.**
+
+  **★★ DATED INSTANCE NOTE — 2026-08-28 (313th filing), `Pass 159.0`
+  (`7d5388c`): INSTANCES 4, 4b AND 5, ALL INSIDE ONE VERB, AND THE THREE
+  COINCIDENCES ARE OF THREE DIFFERENT KINDS. NO RE-MINT; NO NEW CAUSE;
+  CEILING STAYS `R225`, NEXT FREE `R226`.**
+
+  The mint above rests on three instances from three *different* subsystems.
+  This is the same rule recurring **three times inside one function**
+  (`EditSession::rotate_dimension`), which is a worse shape than the founding
+  set: **an engineer who has just fixed the first instance is in exactly the
+  frame of mind to miss the second.**
+
+  | # | sabotage | why nothing went red | the fixture/observable change that caught it |
+  |---|---|---|---|
+  | **4** | `cos` → `sin` in the y term of the rotation | the tests asserted the **measured value**, and on a **horizontal** line the corrupted map still preserves length — x separation scales by `cos`, y separation becomes `Δx·sin`, `√(cos² + sin²) = 1` | assert the **coordinates**, not the length |
+  | **4b** | the same sabotage, **second attempt** | the *geometry* test written to catch instance 4 placed its points at **`y = 0`** — on the **pivot's own axis**, where the corrupted term is identically zero | move the points **off** the axis |
+  | **5** | angular arms mapped **through the pivot** rather than by the bare rotation | **no fixture in the corpus has an angular ce dimension**, so the sabotage's subject set was **empty** for every file-based test | exercise `DimensionKind::rotated` **directly**, below the file layer |
+
+  **★★★ INSTANCE 4 ADDS A ROW TO THE DEGENERATE-VALUE TABLE THAT IS NOT ABOUT
+  THE FIXTURE AT ALL — IT IS ABOUT THE *OBSERVABLE*.** The fixture was fine; the
+  **assertion looked at a scalar**. ***A scalar derived from an n-dimensional
+  object cannot pin an n-dimensional map.*** A length is invariant under the
+  whole rotation group *and* under the corrupted map, so no choice of two points
+  could have discriminated while length was the thing asserted. **Ask not only
+  *"could this input show the difference?"* but *"could this MEASUREMENT show
+  it?"*** — a rank-deficient observable defeats every fixture at once.
+
+  **★★★ INSTANCE 4b IS THE ONE TO CARRY: THE DISCRIMINATING TEST'S OWN FIXTURE
+  WAS NON-DISCRIMINATING.** The class was diagnosed correctly and the prescribed
+  remedy applied — and the remedy failed **for the same reason, one abstraction
+  level up**. The table above lists *"zero, or a symmetric input"* for a
+  signed/directional claim; **the geometric form of that row is *a fixture lying
+  on the symmetry axis of the transform under test*, and it does not read as
+  "zero" to the person choosing it.** `y = 0` looks like a tidy coordinate, not
+  like a degenerate one. **Added to the table's intent explicitly, because the
+  founding wording would not have caught it.**
+
+  **★★ INSTANCE 5 SITS ON THE `R224`/`R225` BOUNDARY AND IS FILED HERE FOR ITS
+  REMEDY, NOT ITS MECHANISM.** The sabotage was applied, the code ran, every
+  assertion was evaluated — over a population of **zero angular ce dimensions**.
+  That is `R224`'s **empty subject set** (a vacuous scan), arriving inside a
+  **fixture corpus** rather than a source scan or a `tools/` script. It is filed
+  under `R225` because the remedy is `R225`'s — **change the input** — and
+  because `R225`'s own project-specific clause (*read
+  `fixtures/synthetic/*/PROVENANCE.md` first*) is what would have surfaced it: a
+  provenance file enumerates the **variants** a corpus covers as well as the
+  traps, and *"no fixture has an angular dimension"* is a fact that file can
+  state and a test cannot.
+
+  **Instance count now 6 (3 + 3). Ceiling unchanged; no re-mint** — the
+  2026-08-05 ruling forbids elevating per occurrence, and none of 4/4b/5
+  introduces a new *cause*; they introduce new *kinds of coincidence* under the
+  cause already named. **The general half is appended to
+  `D:/dev/rag/rust/a_sabotage_can_only_be_as_discriminating_as_the_fixture_it_runs_on.md`
+  as a dated footer**, per hard rule 4 (edit, do not duplicate).
 
 ## Update protocol
 
