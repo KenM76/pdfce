@@ -39,8 +39,22 @@
 # Exactly what `python tools/check-ci-parity.py --list` prints, which that
 # script derives by classifying every `run:` command in
 # `.github/workflows/*.yml`. Add a gate to CI and it appears here with no edit
-# to this file. That is the whole design: **there is one list and it is not
-# stored here.**
+# to this file. That is the whole design: **the CI-derived list is not stored
+# here.**
+#
+# ★ THAT SENTENCE READ "there is ONE list and it is not stored here" AND IS
+# NOW FALSE — corrected 2026-08-28, the day it went stale, by the librarian's
+# sweep rather than by anyone reading it.
+#
+# One command IS named in this file: `check-history-not-rewritten.py`, the
+# pre-flight below. It is here *because* it cannot be derived — CI cannot run
+# it at all (see its own comment at the invocation site).
+#
+# ⇢ The correction matters more than the wording. **The header stated an
+# invariant a future refactor would enforce, and obeying it deletes the
+# gate.** A right-sounding rule resting on a fact that has changed is worse
+# than a wrong one: it survives review, because the sentence reads true.
+# Same shape as the `ARCHITECTURE.md` §3 survivor found the same night.
 #
 # Two commands from that list are skipped by default and both are named when
 # skipped, never silently dropped:

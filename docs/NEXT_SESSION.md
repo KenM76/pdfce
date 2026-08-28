@@ -13,14 +13,38 @@ can falsify it.
 
 ## §0 — TWO THINGS OWED IMMEDIATELY
 
-1. **One unfiled commit sits at the tip** — `tools/check-history-not-rewritten.py`
-   plus its wiring into `run-gates.sh`. That is the *one* deferred commit the
-   filing gate permits, so CI is green, but **file it before committing any
-   more code** or the next commit turns it red. Its commit message carries
-   everything a filing needs.
-2. **A backup is five filings overdue.** The newest bundle is 32 commits
+1. **A backup is six filings overdue.** The newest bundle is ~35 commits
    behind `HEAD`. Everything is on `origin`, so this is redundancy rather than
-   exposure — but it is the operator's act and it has been reported five times.
+   exposure — but it is the operator's act and it has now been reported six
+   times.
+2. **`check-cited-commits-exist.py` degrades to silence at exactly the wrong
+   moment**, and the direction matters — this corrects the version in the
+   302nd filing, which predicted the opposite. Read from source: an
+   unreachable-but-still-present commit is detected (`cat-file -t` says
+   `commit`, so it reaches the staleness report). After a `git gc` prunes it,
+   `cat-file -t` fails and the token falls through the *"not a hash: a colour,
+   a length, an offset"* branch — **silently skipped.**
+
+   So an *explained* orphan citation stays green either way (fine), and an
+   **unexplained** one goes from **RED to GREEN the moment the damage becomes
+   permanent.** The gate stops reporting precisely when the citation can no
+   longer be repaired from anything but its subject line.
+
+   ⇒ The fix is not a warning; it is that a 7+ hex token which is *not* an
+   ancestor and *not* a known object cannot be told apart from a colour code,
+   so the gate needs a named list of deliberately-cited orphans and should
+   treat any *other* unresolvable hash-shaped token as suspicious rather than
+   as prose.
+
+   ★ **This paragraph demonstrated the problem while describing it.** Naming
+   the two orphans here turned the gate **red** — correctly, because a bare
+   orphan hash is indistinguishable from a citation somebody forgot to
+   repair. The gate already has the right rule: an orphan is *explained*, and
+   accepted, when the document also names the commit that replaced it. So:
+   **`eab7da4` was replaced by `36e7b66`**, and **`fa16819` by `0d20861`**.
+   That is not appeasing the gate — it is the sentence a future reader needs,
+   and writing it is what makes the citation repairable after a `git gc`
+   removes the objects.
 
 ---
 
@@ -33,7 +57,7 @@ the **filing gates last** by construction, names anything it skips, and does
 not stop at the first failure.
 
 ```
-bash tools/run-gates.sh          # 26 commands
+bash tools/run-gates.sh          # 26 commands (1 pre-flight + 23 + 2 filing)
 bash tools/run-gates.sh --list   # what it would run, in order, incl. skips
 bash tools/run-gates.sh --full   # add --all-features testing
 ```
@@ -43,8 +67,12 @@ bash tools/run-gates.sh --full   # add --all-features testing
 ancestor of `HEAD` — i.e. whether published history has been rewritten. Every
 other gate asks about the *tree*, which the server re-checks; by the time CI
 runs, the push has happened. **A subagent amended an already-pushed commit
-during this session** and nothing announced it; that instance was harmless
-(identical tree, metadata only) and was found by accident. **If it ever fires,
+during this session — TWICE**, and nothing announced either. Both were
+harmless (identical trees, metadata only). The first was found by accident;
+**the second landed on the librarian's own filing commit 37 seconds after it
+was pushed**, and its recovery was this gate's printed remedy executed 71
+minutes before the gate existed. The knowledge was never missing. Only the
+announcement. **If it ever fires,
 the fix is `git reset --mixed origin/main`, never `--force`.**
 
 ★ **Do not go back to `for g in tools/check-*`.** A hand-typed sweep ran green
@@ -188,7 +216,7 @@ observations, and both live in `ARCHITECTURE.md` §4.2 / `docs/core-api/`:
 |---|---|---|
 | `HEAD` | `f1a88e6` **plus the 300th filing and this file's own commit** | `git rev-parse --short HEAD` |
 | tests | **4,493 passing, 0 failing** | `cargo test --workspace` |
-| gates | **25 commands green** | `bash tools/run-gates.sh` |
+| gates | **26 commands green** | `bash tools/run-gates.sh` |
 | fuzz | all targets build; `text_extract` 44,918 runs, `load_document` 100,363 runs, **0 artifacts** | `cargo +nightly fuzz build` |
 | wasm32 / GUI-core | both clean | in the sweep |
 | **CI** | `0c48bbf` and `0c254f8` were **RED** (filing order, both repaired); `54a3e01` is **green**, read from GitHub. Everything after: **read it from GitHub too.** | `gh run list --branch main --limit 3` |

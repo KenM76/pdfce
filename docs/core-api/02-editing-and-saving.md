@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (32505 lines) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 149 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (32,826 lines) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 150 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 149 public `EditSession` methods
+## 1. Verb index — all 150 public `EditSession` methods
 
-**Count: 149.** Established by brace-matched extraction of the four
+**Count: 150.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -1045,12 +1045,61 @@ always errors.
 | Author a `/Redact` mark (non-destructive) | `add_redaction(&mut self, page_index, spec: &RedactSpec) -> Result<ObjId, EditError>` | 10480 | A **mark**. Nothing is removed yet. |
 | Un-mark a redaction | `delete_redaction_mark(&mut self, annot_id) -> Result<(), EditError>` | 10617 | Refuses any non-`/Redact` annotation. |
 | Delete any annotation | `delete_annotation(&mut self, annot_id) -> Result<AnnotationDeletion, EditError>` | 10847 | **Routes** to the two specialised verbs above for `/Redact` and ce dimensions. |
+| **Move** any annotation | `move_annotation(&mut self, annot_id, dx, dy) -> Result<AnnotationMove, EditError>` | 16978 | `Pass 149.0`. Translates `/Rect` **and every geometry key**. **Refuses** a widget and a ce dimension by name — see below. |
 | Preview an annotation deletion | `annotation_deletion_preview(&self, annot_id) -> Result<AnnotationDeletion, EditError>` | 11316 | Pure `&self` query. |
 | Ask whether annotation deletion is refused document-wide | `annotation_deletion_refusal(&self) -> Option<EditError>` | 11492 | ⚠️ Takes no `annot_id`, so it cannot see the three per-annotation refusals. |
 
 | Restyle an existing markup annotation | `set_markup_style(&mut self, annot_id: ObjId, style: &MarkupStyle) -> Result<MarkupStyleChange, EditError>` | 12372 | Rebuilds the baked `/AP`. |
 | Set the `/QuadPoints` corner order | `set_quad_point_order(&mut self, order: QuadPointOrder)` | 5476 | ⚠️ **Session state, not a per-call argument.** Governs what is AUTHORED from now on; does **not** sweep the document. ~~*"decision 062 fixes markup authoring at one entry point, so an `add_markup_with` would be a second"*~~ — **corrected 2026-08-27**: `add_markup_with` now exists and is **not** a second entry point (see §1.15.1). The ruling stands on its own ground: quad order is a **document-wide convention**, so a per-call argument would let two annotations in one file disagree about what UL/UR/LL/LR means, which is the divergence `Pass 62.x` exists to prevent. |
 | Read it back | `quad_point_order(&self) -> QuadPointOrder` | 5482 | Defaults to `ReadingOrder` — what Acrobat, PDFBox and pdf.js emit and expect. |
+
+#### ★★ `move_annotation` — the half that is invisible, and why a widget is refused (`Pass 149.0`)
+
+Markup, links, redaction marks, stamps and notes could be **created and
+deleted but not moved**. This is that verb.
+
+**A move has two halves and only one of them is visible.**
+
+1. **`/Rect`** moves the *painted* result, for free. §12.5.5 recomputes the
+   placement matrix from the appearance `BBox` and the new `/Rect`, so a pure
+   translation makes that matrix a pure translation: the artwork travels 1:1,
+   nothing is stretched, and **the appearance stream is not rewritten** — so an
+   `/AP` pdfce did not author survives intact. A move is not a restyle.
+2. **The geometry keys** — `/L`, `/Vertices`, `/InkList`, `/QuadPoints`, `/CL`
+   — hold *absolute page coordinates*, and they are what **any other tool**
+   regenerates an appearance from.
+
+★ Move only (1) and the annotation renders in the new place here and is
+reconstructed in the **old** one by the next viewer that rebuilds it. That
+failure is invisible in pdfce, invisible in a screenshot, and shows up in
+somebody else's product. `AnnotationMove::geometry_keys_moved` names which keys
+were found — and **empty is a correct answer**, not a failure: a `/Text` note,
+a `/Stamp` or a `/Link` has no geometry key, because its `/Rect` *is* its
+geometry.
+
+**Two things are deliberately not moved, and both are reported** rather than
+left for you to notice:
+
+- **`/RD`** — rect *differences* are four inset **distances**, not coordinates.
+  Translating them would deform the annotation while claiming to move it.
+  `rect_differences_untouched`.
+- **`/Popup`** — a separate annotation with its own placement, which §12.5.6.14
+  leaves to the reader. `popup_left_behind` gives you its object number so you
+  can issue a second move if you want it to follow.
+
+**Refusals, and why they are refusals rather than delegation.** A **widget**
+(`move_widget`) and a **ce dimension** (`move_dimension`) already have move
+verbs that do strictly *more* — a ce dimension **re-measures**, a widget belongs
+to a field and reports the siblings it left behind. Quietly doing less under
+this name would hand you a second way to move the same thing that silently
+produces a worse result. Both come back as
+`EditError::AnnotationMoveWrongVerb { subtype, use_instead, why }`, naming the
+verb to call.
+
+A zero delta is **accepted**, not refused: a shell that drags and returns to the
+start should not have to special-case its own arithmetic.
+
+CLI: `pdfce-cli move-annotation FILE --page N --index I --dx X --dy Y --output OUT`.
 
 #### 1.15.1 ★ `add_markup_with` is not a second entry point, and decision 062 is intact
 

@@ -3520,6 +3520,59 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Move a markup, link, redaction-mark, stamp or note annotation** by a
+    /// delta in points (`Pass 149.0`).
+    ///
+    /// The move verb the annotation family did not have. `move-widget` covers
+    /// form widgets and `dimension-*` covers ce dimensions; everything else —
+    /// Ink, Square, Circle, Line, Polygon, PolyLine, the four text markups,
+    /// FreeText, Text notes, Stamp, Link and unapplied Redact marks — had no
+    /// way to move at all.
+    ///
+    /// # What moves, and the half that is easy to get wrong
+    ///
+    /// `/Rect`, and **every geometry key the annotation carries** — `/L`,
+    /// `/Vertices`, `/InkList`, `/QuadPoints`, `/CL`. Those hold absolute
+    /// page coordinates and are what any OTHER tool regenerates an appearance
+    /// from, so moving `/Rect` alone would render in the new place and be
+    /// reconstructed in the old one by the next viewer that rebuilt it.
+    ///
+    /// The appearance stream is **not rewritten**. ISO 32000-1 §12.5.5
+    /// recomputes the placement matrix from the appearance `BBox` and the new
+    /// `/Rect`, so a pure translation moves the artwork 1:1 for free — and an
+    /// appearance pdfce did not author survives the move intact. A move is
+    /// not a restyle.
+    ///
+    /// # What is deliberately left, and reported
+    ///
+    /// `/RD` (rect differences) are inset DISTANCES, not coordinates;
+    /// translating them would deform the annotation while claiming to move
+    /// it. A `/Popup` is a separate annotation with its own placement
+    /// (§12.5.6.14 leaves it to the reader) and is named in the report so you
+    /// can move it too if you want it to follow.
+    MoveAnnotation {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page the annotation is on.
+        #[arg(long, default_value_t = 1)]
+        page: usize,
+        /// Which annotation, numbered from 0 in `list-annotations` order.
+        #[arg(long, default_value_t = 0)]
+        index: usize,
+        /// Horizontal shift in points, positive to the right.
+        #[arg(long, allow_negative_numbers = true)]
+        dx: f64,
+        /// Vertical shift in points, positive UP — PDF user space has its
+        /// origin at the bottom-left corner (§8.3.2.3), not the top.
+        #[arg(long, allow_negative_numbers = true)]
+        dy: f64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
     /// **Move a form field's widget** — translate its `/Rect` (§12.5.2).
     ///
     /// MOVES ONE APPEARANCE, NOT THE FIELD. A field can own widgets on
@@ -7190,6 +7243,15 @@ fn run() -> ExitCode {
             output,
             mode,
         } => cmd_move_widget(&input, &name, index, dx, dy, &output, mode),
+        Command::MoveAnnotation {
+            input,
+            page,
+            index,
+            dx,
+            dy,
+            output,
+            mode,
+        } => cmd_move_annotation(&input, page, index, dx, dy, &output, mode),
         Command::EditField {
             input,
             name,
@@ -23683,6 +23745,152 @@ fn cmd_delete_annotation(
         r.bytes_written,
         u32::from(outcome.undo_verified),
         u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// `move-annotation` — translate one annotation and every geometry key it
+/// carries (`Pass 149.0`).
+///
+/// The locate-then-move shape mirrors `cmd_delete_annotation` exactly,
+/// including the direct-dictionary refusal, because an operator who can name
+/// an annotation for one verb must be able to name it the same way for the
+/// other. Diverging on the addressing scheme is how a shell ends up with two
+/// annotation identities.
+fn cmd_move_annotation(
+    input: &Path,
+    page: usize,
+    index: usize,
+    dx: f64,
+    dy: f64,
+    output: &Path,
+    mode: SaveMode,
+) -> u8 {
+    if page == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // Resolved inside a block so the session borrow ends before the mutable
+    // call below.
+    let annot_id = {
+        let slots = match session.page_slots() {
+            Ok(slots) => slots,
+            Err(err) => {
+                eprintln!("pdfce-cli: {}: {err}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let Some(slot) = slots.get(page - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                input.display(),
+                slots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let annots = pdfce_core::annot::page_annotations(&session.graph(), slot.id);
+        let Some(annot) = annots.get(index) else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} has no annotation at index {index} — it has {} (indices 0..{})",
+                input.display(),
+                annots.len(),
+                annots.len().saturating_sub(1)
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let Some(id) = annot.id else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} index {index} is a direct dictionary inside /Annots, not an indirect object — it has no identity to move, and rewriting the array around it would be a repair this command does not perform",
+                input.display()
+            );
+            return exit::EDIT_REFUSED;
+        };
+        id
+    };
+
+    let moved = match session.move_annotation(annot_id, dx, dy) {
+        Ok(m) => m,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // The disclosures, worst-first: the two things NOT moved come before the
+    // two that were, because an operator predicts the move and does not
+    // predict the exceptions.
+    if moved.rect_differences_untouched {
+        eprintln!(
+            "pdfce-cli: {}: this annotation carries /RD (rect differences), which were NOT translated and must not be — they are four inset DISTANCES from /Rect, not coordinates, so shifting them would have deformed the annotation while claiming to move it.",
+            input.display()
+        );
+    }
+    if let Some(popup) = moved.popup_left_behind {
+        eprintln!(
+            "pdfce-cli: {}: its /Popup window (object {}) was LEFT WHERE IT WAS. A pop-up is a separate annotation with its own placement, which ISO 32000-1 12.5.6.14 leaves to the reader; move it separately if you want it to follow.",
+            input.display(),
+            popup.num
+        );
+    }
+    if moved.geometry_keys_moved.is_empty() {
+        eprintln!(
+            "pdfce-cli: {}: this annotation carries no geometry key — its /Rect IS its geometry, which is normal for a Text note, a Stamp or a Link. Nothing was missed.",
+            input.display()
+        );
+    }
+    if moved.appearance_carried {
+        eprintln!(
+            "pdfce-cli: {}: its appearance stream was carried UNCHANGED. ISO 32000-1 12.5.5 recomputes the placement matrix from the appearance BBox and the new /Rect, so a pure translation moves the artwork 1:1 with no re-authoring — which also means an appearance pdfce did not draw survives this move intact.",
+            input.display()
+        );
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+
+    println!(
+        "move-annotation {} page={page} index={index} -> {}",
+        input.display(),
+        output.display()
+    );
+    println!(
+        "  subtype={} dx={dx:.3} dy={dy:.3} rect=[{:.2} {:.2} {:.2} {:.2}]->[{:.2} {:.2} {:.2} {:.2}]",
+        moved.subtype,
+        moved.from.llx,
+        moved.from.lly,
+        moved.from.urx,
+        moved.from.ury,
+        moved.to.llx,
+        moved.to.lly,
+        moved.to.urx,
+        moved.to.ury,
+    );
+    println!(
+        "  geometry_keys_moved={} appearance_carried={} rect_differences_untouched={} popup_left_behind={}",
+        if moved.geometry_keys_moved.is_empty() {
+            "-".to_owned()
+        } else {
+            moved.geometry_keys_moved.join(",")
+        },
+        u32::from(moved.appearance_carried),
+        u32::from(moved.rect_differences_untouched),
+        moved
+            .popup_left_behind
+            .map_or_else(|| "-".to_owned(), |p| p.num.to_string()),
     );
     finish_edit(input, &outcome)
 }

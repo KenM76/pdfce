@@ -4,14 +4,34 @@
 WHY THIS EXISTS
 ===============
 
-On 2026-08-28 a **subagent amended a commit that had already been pushed.**
-`36e7b66` was on ``origin/main``; the local branch silently became ``eab7da4``
-— same subject, same tree, different hash. Nothing announced it. It was found
-only because ``git log --oneline -1`` was run for an unrelated reason and the
-hash did not match what had been pushed twenty minutes earlier.
+On 2026-08-28 a **subagent amended a commit that had already been pushed** —
+**twice**, and the count is the warrant. Measured from ``git reflog --date=iso``
+against push times read from GitHub:
 
-That instance was harmless: ``git diff 36e7b66 eab7da4`` was **empty**, so the
-amend changed metadata only and ``git reset --mixed`` restored it with nothing
+===========  ===========  ===========  ==================  =========
+orphaned     pushed at    amended      gap after push      recovery
+===========  ===========  ===========  ==================  =========
+``36e7b66``  05:33:21Z    ``eab7da4``  12 m 33 s           3 m 09 s
+``0d20861``  05:50:10Z    ``fa16819``  **37 s**            **5 s**
+===========  ===========  ===========  ==================  =========
+
+The first was found only because ``git log --oneline -1`` was run for an
+unrelated reason and the hash did not match what had been pushed twenty
+minutes earlier. **The second landed on a librarian filing commit** — the
+commit type whose entire content is hash citations — thirty-seven seconds
+after that commit was pushed, and *after* the first had already been noticed
+and hand-recovered.
+
+★ **That is what makes this a gate rather than a note.** One lucky near-miss
+is thin warrant. A behaviour that recurs inside the same minute, after being
+caught once, is a reflex nobody announces.
+
+★★ And the second recovery was ``reset: moving to origin/main`` — **this
+gate's own printed remedy, executed 71 minutes before the gate existed.** What
+was missing was never the knowledge. Only the announcement.
+
+Both instances were harmless: each ``git diff`` was **empty**, so the amends
+changed metadata only and ``git reset --mixed`` restored them with nothing
 lost. The *class* is not harmless, and this repository has already paid for it
 once: ``tools/check-cited-commits-exist.py`` was written after a rewrite
 orphaned **fourteen** commit hashes cited across the documentation, because
@@ -123,7 +143,7 @@ def main() -> int:
 
     # Rewritten. Name the orphans: those are the hashes documents may cite.
     _, orphans = git("log", "--oneline", f"HEAD..{REMOTE_REF}")
-    print(f"history-not-rewritten: PUBLISHED HISTORY HAS BEEN REWRITTEN.")
+    print("history-not-rewritten: PUBLISHED HISTORY HAS BEEN REWRITTEN.")
     print()
     print(f"  {REMOTE_REF} is NOT an ancestor of HEAD. These commits are on")
     print("  the remote and no longer on this branch:")
@@ -142,8 +162,9 @@ def main() -> int:
     print(f"    git reset --mixed {REMOTE_REF}     # keeps the working tree")
     print("    # then re-commit whatever the rewrite was carrying")
     print()
-    print("  A subagent can do this without announcing it — that is how the")
-    print("  2026-08-28 instance happened. Check the reflog for `(amend)`,")
+    print("  A subagent can do this without announcing it — that is how BOTH")
+    print("  2026-08-28 instances happened, the second 37 seconds after the")
+    print("  commit it rewrote was pushed. Check the reflog for `(amend)`,")
     print("  `rebase` or `reset` to find out what did it.")
     return 1
 

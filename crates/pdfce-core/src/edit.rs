@@ -408,6 +408,22 @@ pub enum CommandKind {
     /// unscaled. A regeneration here would rewrite a stream to produce
     /// bytes the placement algorithm already produces for free.
     MoveWidget,
+    /// A markup, link, redaction-mark, stamp or note annotation was
+    /// TRANSLATED (`Pass 149.0`) — [`EditSession::move_annotation`].
+    ///
+    /// Distinct from [`Self::MoveWidget`] although the `/Rect` arithmetic is
+    /// identical, because this one also translates the annotation's
+    /// **geometry keys** (`/L`, `/Vertices`, `/InkList`, `/QuadPoints`,
+    /// `/CL`). Those hold absolute page coordinates and are what any OTHER
+    /// tool regenerates an appearance from — so a move that touched only
+    /// `/Rect` would render in the new place and be reconstructed in the old
+    /// one. A widget has no such keys, which is why its variant does less and
+    /// is correct in doing so.
+    ///
+    /// One undo entry: the `/Rect` and every geometry key are one object's
+    /// worth of state, and restoring half of them would leave the annotation
+    /// describing two different positions at once.
+    MoveAnnotation,
     /// An existing field's **field-scope** properties were changed
     /// (`Pass 134.0`) — `/Ff` flags, `/MaxLen`, `/TU`, `/Opt`.
     ///
@@ -4923,6 +4939,41 @@ pub enum EditError {
          the file's per-object string encryption"
     )]
     DocumentEncrypted,
+    /// [`EditSession::move_annotation`] was called on an annotation that has
+    /// a **better** verb (`Pass 149.0`).
+    ///
+    /// Refused rather than delegated, and that is deliberate: the other verb
+    /// does strictly more — a ce dimension **re-measures** when it moves, a
+    /// widget belongs to a field and reports the siblings it left behind.
+    /// Quietly doing less under this name would give the operator a second
+    /// way to move the thing that silently produces a worse result.
+    #[error(
+        "this annotation is a {subtype}; use `{use_instead}` instead — {why}. Nothing was moved."
+    )]
+    AnnotationMoveWrongVerb {
+        /// The `/Subtype` (or `ce dimension`) that was refused.
+        subtype: String,
+        /// The verb to call instead, spelled as a caller would type it.
+        use_instead: &'static str,
+        /// Why that verb exists — what it does that this one does not.
+        why: &'static str,
+    },
+    /// [`EditSession::move_annotation`] found no usable `/Rect` to translate
+    /// (`Pass 149.0`).
+    ///
+    /// `/Rect` is required by §12.5.2 Table 164, so its absence is a
+    /// malformed annotation rather than a shape pdfce chose not to support —
+    /// and moving one by translating its geometry keys alone would leave the
+    /// painted appearance behind, since §12.5.5 places the appearance from
+    /// `/Rect`.
+    #[error(
+        "the {subtype} annotation has no usable /Rect, so there is nothing to translate \
+         (/Rect is required by §12.5.2 Table 164). Nothing was moved."
+    )]
+    AnnotationRectMissing {
+        /// The `/Subtype`, so the refusal names what was pointed at.
+        subtype: String,
+    },
     /// A markup annotation was authored with geometry that names no point
     /// (an empty `/InkList`, an empty vertex list, or no quads). Refused
     /// rather than emit an empty appearance for a non-empty subtype, which
@@ -10693,6 +10744,57 @@ pub enum AnnotationDeletionRoute {
     /// dimension, and its `/PieceInfo` sidecar record must go with it or
     /// the document keeps a dimension the annotation no longer backs.
     Dimension,
+}
+
+/// What a [`move_annotation`](EditSession::move_annotation) call translated,
+/// and everything an operator could not otherwise see (`Pass 149.0`).
+///
+/// Every field is a **disclosure**, not a statistic. A move that silently
+/// left half an annotation's geometry behind renders correctly today and
+/// wrong in the next tool that regenerates the appearance from the keys —
+/// which is the whole reason this type enumerates what it touched rather
+/// than returning `()`.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct AnnotationMove {
+    /// `/Subtype`, for the operator's message.
+    pub subtype: String,
+    /// The `/Rect` before and after.
+    pub from: page_tree::Rect,
+    /// The `/Rect` after the translation.
+    pub to: page_tree::Rect,
+    /// Which geometry keys were found and translated, in the order tried.
+    ///
+    /// **Empty is a real and correct answer** — a `/Text` sticky note or a
+    /// `/Stamp` carries no geometry key at all, and its `/Rect` *is* its
+    /// geometry. A caller must not read empty as failure.
+    pub geometry_keys_moved: Vec<String>,
+    /// `true` when the annotation carries an `/AP` that was deliberately
+    /// **left untouched**.
+    ///
+    /// This is the load-bearing disclosure of the whole verb. See
+    /// [`EditSession::move_annotation`] for why not rewriting it is correct
+    /// rather than lazy: §12.5.5 recomputes matrix **A** from the appearance
+    /// `BBox` and the new `/Rect`, so a pure translation of `/Rect`
+    /// translates the painted artwork by exactly the same vector, with no
+    /// stretch and no re-authoring. Rewriting the stream would instead risk
+    /// destroying an appearance pdfce did not author.
+    pub appearance_carried: bool,
+    /// `true` when the annotation carries `/RD` (rect differences), which
+    /// were **not** translated.
+    ///
+    /// Correct, and worth saying out loud because it looks like an omission:
+    /// §12.5.6.x `/RD` is a set of four **inset distances**, not coordinates.
+    /// Translating them would move the inner box relative to `/Rect` — i.e.
+    /// deform the annotation while claiming to have moved it.
+    pub rect_differences_untouched: bool,
+    /// The `/Popup` this annotation owns, if any — **not moved**.
+    ///
+    /// A popup is a separate annotation with its own `/Rect` and its own
+    /// position, which §12.5.6.14 leaves to the reader. Moving the parent
+    /// does not drag it, and a shell that wants them to travel together
+    /// issues a second move.
+    pub popup_left_behind: Option<ObjId>,
 }
 
 /// What a [`delete_annotation`](EditSession::delete_annotation) call
@@ -16816,6 +16918,201 @@ impl EditSession {
     /// }
     /// # Ok(()) }
     /// ```
+    /// Translate an annotation by `(dx, dy)` in default user space
+    /// (`Pass 149.0`) — the move verb that markup, links, redaction marks and
+    /// stamps did not have.
+    ///
+    /// # Why a `/Rect` translation is the whole mechanism, and is not a shortcut
+    ///
+    /// pdfce authors every appearance with `/Matrix` identity, `BBox` equal to
+    /// the annotation's `/Rect`, and the artwork drawn in **absolute page
+    /// coordinates** (see `annot_author`'s "Placement discipline"). §12.5.5
+    /// then computes matrix **A** by mapping the `Matrix`-transformed `BBox`
+    /// onto `/Rect`. Move `/Rect` by `(dx, dy)` and **A** becomes a pure
+    /// translation by exactly `(dx, dy)`:
+    ///
+    /// - the painted artwork moves with it, 1:1;
+    /// - no aspect ratio changes, so §12.5.5's anisotropic-stretch trap is
+    ///   not merely avoided but unreachable;
+    /// - the appearance stream is **not rewritten**, so an `/AP` pdfce did
+    ///   not author survives a move intact.
+    ///
+    /// That last point is why this verb does not regenerate: rebuilding the
+    /// appearance from pdfce's own model would silently replace a foreign
+    /// tool's artwork with pdfce's rendering of the same annotation. A move
+    /// is not a restyle.
+    ///
+    /// # What it therefore MUST also do, and what the row said was hard
+    ///
+    /// The painted result would be right and the **document** would be wrong.
+    /// An annotation's geometry keys — `/L`, `/Vertices`, `/InkList`,
+    /// `/QuadPoints`, `/CL` — hold absolute page coordinates too, and any
+    /// tool that regenerates an appearance reads *those*, not the `/AP`. Move
+    /// `/Rect` alone and the annotation renders in the new place until
+    /// somebody else's viewer regenerates it back into the old one.
+    ///
+    /// So every geometry key present is translated by the same vector, and
+    /// [`AnnotationMove::geometry_keys_moved`] names which were found.
+    ///
+    /// # Two things deliberately NOT translated, both disclosed
+    ///
+    /// - **`/RD`** — rect *differences* are four inset distances, not
+    ///   coordinates. Translating them would deform the annotation while
+    ///   claiming to have moved it.
+    /// - **`/Popup`** — a separate annotation with its own placement, which
+    ///   §12.5.6.14 leaves to the reader. Reported so a shell can choose to
+    ///   move it too.
+    ///
+    /// # Routing
+    ///
+    /// A ce dimension and a form widget already have move verbs with more to
+    /// do than this one — a ce dimension must re-measure, a widget belongs to
+    /// a field. Both are **refused by name** here rather than half-handled,
+    /// so there is never a second way to move them that does less.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DocumentEncrypted`], the certification gate, a target
+    /// that is not an annotation, an annotation with no `/Rect` to move, and
+    /// the two routing refusals above.
+    pub fn move_annotation(
+        &mut self,
+        annot_id: ObjId,
+        dx: f64,
+        dy: f64,
+    ) -> Result<AnnotationMove, EditError> {
+        // LOCATE first, so "that is not an annotation" is reported as such
+        // rather than masked by a certification refusal the caller would then
+        // chase on the wrong object — the ordering `delete_annotation`
+        // established and for the same reason.
+        let (target, _all) = self.locate_annotation(annot_id)?;
+        let subtype = target.subtype_label();
+
+        // Route the two that already have richer verbs. Refused, not
+        // delegated: `move_dimension` re-measures and `move_widget` reports
+        // its siblings, and silently doing less under this name would be a
+        // second, worse way to move them.
+        if let Some(route) = self.delegated_route_for(annot_id, &target) {
+            let (verb, why) = match route {
+                AnnotationDeletionRoute::Dimension => (
+                    "move_dimension",
+                    "a ce dimension must RE-MEASURE when it moves, which this verb does not do",
+                ),
+                AnnotationDeletionRoute::RedactionMark => ("", ""),
+                AnnotationDeletionRoute::General => ("", ""),
+            };
+            if !verb.is_empty() {
+                return Err(EditError::AnnotationMoveWrongVerb {
+                    subtype: "ce dimension".to_owned(),
+                    use_instead: verb,
+                    why,
+                });
+            }
+        }
+        if target.subtype == b"Widget" {
+            return Err(EditError::AnnotationMoveWrongVerb {
+                subtype: "form widget".to_owned(),
+                use_instead: "move_widget(fqn, index, dx, dy)",
+                why: "a widget belongs to a field, and moving it by object id would leave the \
+                      field's other widgets unreported",
+            });
+        }
+
+        self.check_certification()?;
+
+        let Some(rect) = target.rect else {
+            return Err(EditError::AnnotationRectMissing { subtype });
+        };
+        let Some(Object::Dict(dict)) = self.value(annot_id) else {
+            return Err(EditError::NotADictionary {
+                id: annot_id,
+                key: "Rect",
+            });
+        };
+        let mut updated = dict.clone();
+
+        let moved = page_tree::Rect::from_corners(
+            rect.llx + dx,
+            rect.lly + dy,
+            rect.urx + dx,
+            rect.ury + dy,
+        );
+        updated.insert(
+            Name::from(b"Rect"),
+            Object::Array(vec![
+                Object::Real(moved.llx),
+                Object::Real(moved.lly),
+                Object::Real(moved.urx),
+                Object::Real(moved.ury),
+            ]),
+        );
+
+        // Every geometry key pdfce or any other producer may have written, in
+        // a fixed order so the disclosure is stable across runs. `/InkList`
+        // is nested one level deeper than the rest — an array OF stroke
+        // arrays — which is why it is handled separately rather than folded
+        // into the flat loop.
+        let mut geometry_keys_moved: Vec<String> = Vec::new();
+        for key in [
+            b"L".as_slice(),
+            b"Vertices".as_slice(),
+            b"QuadPoints".as_slice(),
+            b"CL".as_slice(),
+        ] {
+            let resolved = updated.get(key).map(|o| self.graph().resolve(o).clone());
+            if let Some(Object::Array(items)) = resolved
+                && !items.is_empty()
+            {
+                updated.insert(
+                    Name::from(key),
+                    Object::Array(translate_flat(&items, dx, dy)),
+                );
+                geometry_keys_moved.push(String::from_utf8_lossy(key).into_owned());
+            }
+        }
+        let ink = updated
+            .get(b"InkList")
+            .map(|o| self.graph().resolve(o).clone());
+        if let Some(Object::Array(strokes)) = ink
+            && !strokes.is_empty()
+        {
+            let out: Vec<Object> = strokes
+                .iter()
+                .map(|stroke| match self.graph().resolve(stroke) {
+                    Object::Array(pts) => Object::Array(translate_flat(pts, dx, dy)),
+                    other => other.clone(),
+                })
+                .collect();
+            updated.insert(Name::from(b"InkList"), Object::Array(out));
+            geometry_keys_moved.push("InkList".to_owned());
+        }
+
+        let appearance_carried = updated.contains_key(b"AP");
+        let rect_differences_untouched = updated.contains_key(b"RD");
+        let popup_left_behind = updated.get(b"Popup").and_then(Object::as_reference);
+
+        self.commit(Command {
+            kind: CommandKind::MoveAnnotation,
+            objects: vec![ObjectWrite {
+                id: annot_id,
+                before: self.state.get(&annot_id).cloned(),
+                after: Some(Object::Dict(updated)),
+            }],
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(AnnotationMove {
+            subtype,
+            from: rect,
+            to: moved,
+            geometry_keys_moved,
+            appearance_carried,
+            rect_differences_untouched,
+            popup_left_behind,
+        })
+    }
+
     pub fn delete_annotation(&mut self, annot_id: ObjId) -> Result<AnnotationDeletion, EditError> {
         // ---- LOCATE first, so "not an annotation" is reported as such
         // rather than masked by a certification refusal the caller would
@@ -32502,4 +32799,28 @@ mod text_edit_session_tests {
             assert_eq!(save(&session), src, "undo must be byte-identical");
         }
     }
+}
+
+/// Translate a flat `[x y x y …]` coordinate array by `(dx, dy)`.
+///
+/// Shared by `/L`, `/Vertices`, `/QuadPoints`, `/CL` and each stroke of an
+/// `/InkList`, because all five are the same shape and a per-key
+/// reimplementation is how one of them ends up translating only its `x`s.
+///
+/// An **odd-length** array is malformed (§12.5.6.x all specify pairs). The
+/// trailing lone value is copied through unchanged rather than dropped or
+/// paired with a zero: pdfce does not repair a producer's geometry as a side
+/// effect of moving it, and silently discarding a number would change the
+/// array's length under a caller that counts.
+///
+/// A non-numeric element is copied through for the same reason.
+fn translate_flat(items: &[Object], dx: f64, dy: f64) -> Vec<Object> {
+    items
+        .iter()
+        .enumerate()
+        .map(|(i, o)| match o.as_number() {
+            Some(v) => Object::Real(v + if i % 2 == 0 { dx } else { dy }),
+            None => o.clone(),
+        })
+        .collect()
 }
