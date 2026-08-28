@@ -96,6 +96,540 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 156.0` (`3ca6774`) — `EditSession::set_outline_title` / `delete_outline_item` (+ `adjust_outline_count`): a bookmark can finally be changed, not only created — ★★★★★ **ALL THREE SABOTAGES SURVIVED THE FIRST TEST SUITE AND EVERY TEST PASSED *FOR THE WRONG REASON*: THE DELETE TEST ASSERTED THE TITLE LIST WAS *"shorter than before"*, AND A STALE `/First`, AN UNDECREMENTED `/Count` AND A CLOSED-ITEM MISCOUNT ALL LEAVE A SHORTER LIST — ONE LEAVES IT **EMPTY**, WHICH IS ALSO SHORTER** ⇒ ***A WEAKENED ASSERTION IS NOT A WEAKER TEST, IT IS A DIFFERENT TEST — AND IT IS THE ONE EVERY PLAUSIBLE DEFECT PASSES*** — ★★★★ **AND SABOTAGE `C` IS THE THIRD TIME TODAY A TEST COULD NOT SEE A DIFFERENCE BECAUSE ITS FIXTURE MADE THE TWO CANDIDATE ANSWERS EQUAL — AFTER `Pass 143.0`'s SCOPE DISCRIMINATOR AND `Pass 155.0`'s IDENTITY `/Matrix` DIRECTLY BELOW. THREE INSTANCES, THREE SUBSYSTEMS, ONE SESSION ⇒ `R225` MINTED, AND IT NAMES THE **SECOND CAUSE OF SABOTAGE-SURVIVAL** THAT `R221`'s PRACTICAL TELL CANNOT DISTINGUISH FROM THE FIRST** — ★★★ **`/Count` IS TWO QUANTITIES AND ONE KEY: ON AN *ITEM* IT COUNTS VISIBLE **DESCENDANTS EXCLUDING ITSELF** WITH THE **SIGN CARRYING OPEN/CLOSED**; ON THE *ROOT* IT COUNTS EVERY VISIBLE ITEM **INCLUDING THE TOP LEVEL** AND **CANNOT BE NEGATIVE** (§12.3.3 Tables 152–153). THE SPEC CORPUS CALLS CONFUSING THE TWO THE SINGLE COMMONEST ERROR AGAINST THIS CLAUSE, SO A **CLOSED** ITEM CONTRIBUTES EXACTLY **1** TO ITS ANCESTOR HOWEVER LARGE ITS SUBTREE** — ★★ **`read_outline` REBUILDS THE TREE FROM `/First`/`/Next` AND **NEVER CONSULTS `/Count` AT ALL**, SO **NO TITLE-WALKING TEST CAN EVER SEE SABOTAGE `B`** — BUT A BOOKMARKS PANEL SIZING A SCROLLBAR CAN. THE FIX IS TO ASSERT `/Count` AS A **NUMBER**, NOT TO WALK HARDER** — ★ **RULE-11 EXCEPTION, FLAGGED BY THE ENGINEER RATHER THAN FOUND BY THIS ROLE: THIS PASS SHIPS **NO CLI SUBCOMMAND**, BREAKING THE `0 of 147` RECORD THE 310th FILING MEASURED THIS AFTERNOON. FILED AS **OWED WORK**, NOT AS SHIPPED** — 2026-08-28 (311th filing)
+
+**One commit.** `3ca6774`, **4 files, +736 / −12** (`git show --numstat`, run
+here):
+
+| file | +/− | what |
+|---|---:|---|
+| `crates/pdfce-core/tests/outline_edit.rs` | **+387 / −0** | the 9 new core tests, including the three re-aimed sabotage discriminators |
+| `crates/pdfce-core/src/edit.rs` | **+342 / −7** | `set_outline_title`, `delete_outline_item`, `adjust_outline_count` |
+| `docs/core-api/02-editing-and-saving.md` | **+6 / −4** | two verb-index rows; verb count bumped |
+| `docs/core-api/index.md` | **+1 / −1** | routing-table verb count |
+
+**Test-FILE share of added lines: 387 of 736 = 52.6 %** (hard rule 10(a) — the
+denominator is stated so the division is possible, and the qualifier is in the
+label). **The highest of the last four filings** — 37.9 % (310th), 27.3 %
+(308th), `0 of 118` (309th, a Pass whose only test edit was a literal array
+inside a source file). The excess over `Pass 155.0`'s 36.9 % directly below is
+**the three re-aimed sabotage discriminators**, not extra coverage.
+
+**★ `crates/` deletions are 7 lines, all of them `bump_outline_count`'s body.**
+`adjust_outline_count(d, delta: i64)` is a **signed-delta generalisation**, and
+`bump_outline_count` survives as its one-line caller —
+`edit.rs:959`–`960`, verified here:
+
+```rust
+fn bump_outline_count(d: &mut Dict) -> bool {
+    adjust_outline_count(d, 1)
+}
+```
+
+**Three existing call sites are therefore untouched** (`edit.rs:26373`,
+`:26408`, `:26415`, `grep` run here), so **no pre-existing outline behaviour
+moved in this Pass** — the new verb's two call sites (`:26050`, `:26080`) are
+the only consumers of the negative branch. Recorded because "generalise the
+helper" is the shape that usually *does* move existing behaviour, and here
+demonstrably did not.
+
+#### THE CAPABILITY, AND WHY ITS ABSENCE WAS ODD RATHER THAN MERELY INCOMPLETE
+
+Bookmarks could be **created and not changed**. `add_outline_item` shipped
+2026-08-19 (`Pass 103.0`, verb 121 of 121) and `add_named_destination` four
+Passes later; nothing since. **Renaming is the commonest bookmark edit there
+is** — a title is a text string on one dictionary and nothing in the linkage
+depends on it — and it had **no route at all**.
+
+`set_outline_title` encodes through **`crate::textstring`**, the same path as
+every other text string in the crate. This is deliberate and it is a defect
+this project has already paid for once: `Pass 150.0` shipped a defect from
+**two paths disagreeing about PDFDocEncoding**, and this Pass declines to add a
+third. Pinned by a round-trip test carrying an em dash and curly quotes.
+
+#### DELETING IS NOT A `remove` CALL — FIVE OTHER DICTIONARIES MOVE
+
+An outline is a **doubly-linked sibling chain inside a tree** (§12.3.3
+Tables 152–153). Unlinking one node touches, at minimum:
+
+| what | why |
+|---|---|
+| the previous sibling's `/Next` — **or** the parent's `/First` | the forward walk must skip the deleted node |
+| the next sibling's `/Prev` — **or** the parent's `/Last` | the backward walk must too |
+| **every OPEN ancestor's** `/Count` | a visible item vanished from each of their visible-descendant totals |
+| the **root's** `/Count` | the root's quantity is different (below) and is maintained separately |
+
+**Leave any one and the tree is still parseable but WRONG** — a reader walking
+`/First` then `/Next` either stops early or revisits a node. This is the class
+`Pass 103.0` already met from the other direction: its `/Prev`-blind writer
+left a chain that `read_outline` could not see was broken, **because
+`read_outline` never dereferences `/Prev`.**
+
+**The subtree goes with the item**, as Acrobat does. Promoting orphaned
+children silently reorganises a document's navigation: delete one chapter
+heading and find its ten sections spliced into the top level. **A destructive
+act that announces itself beats a partially-destructive one that reorganises.**
+
+#### ★★★ `/Count` IS TWO QUANTITIES AND ONE KEY
+
+| carrier | counts | sign | floor |
+|---|---|---|---|
+| an outline **item** | visible **descendants**, **excluding itself** | **negative when the item is CLOSED** | none — it is signed |
+| the outline **root** | every visible item, **including the top level** | always non-negative | **cannot be negative** (Table 152) |
+
+The spec corpus calls confusing these two **the single most common error
+against §12.3.3**. The consequence that drove the implementation: **a CLOSED
+item contributes exactly `1` to its ancestor's count however large its
+subtree** — its descendants were never visible, so they were never in the
+total. Subtracting the subtree size on delete would drive a root **negative**,
+which Table 152 forbids outright.
+
+#### ★★★★★ ALL THREE SABOTAGES SURVIVED THE FIRST SUITE
+
+| # | sabotage | first suite | why it passed |
+|---|---|---|---|
+| **A** | parent's `/First` not updated when the first child goes | **SURVIVED** | the title list came back **empty**, and empty is *"shorter than before"* |
+| **B** | parent's `/Count` not decremented | **SURVIVED** | `read_outline` never reads `/Count`, so **no title-walking assertion can observe it** |
+| **C** | a **closed** item counted as its whole subtree | **SURVIVED** | the test deleted the **open** chapter, where visible-count **equals** subtree-size |
+
+**The single assertion that let all three through**: the delete test asserted
+the surviving title list was *"shorter than before"*. **Every plausible defect
+in this verb leaves a shorter list.**
+
+⇒ ***A weakened assertion is not a weaker test — it is a DIFFERENT test, and
+it is the one every plausible defect passes.*** *"Shorter"* is not a degraded
+form of *"exactly these three titles"*; it is a predicate satisfied by the
+correct answer and by the entire failure space around it. **The suite was
+green, complete, and measuring the wrong proposition.**
+
+**Three fixes, each aimed at one specific blindness** — and note that they are
+**three different remedies**, because the three blindnesses are not the same
+defect seen three times:
+
+1. **`A` — assert the EXACT surviving list**, not its length. A stale `/First`
+   now shows as an **empty** list rather than as a short one.
+2. **`B` — assert `/Count` as a NUMBER.** No amount of walking reaches it;
+   the reader normalises the field away. **This is `Pass 103.0`'s `/Prev`
+   finding at a second key** — a writer's output checked by a reader that does
+   not consult the field being written.
+3. **`C` — delete the CLOSED chapter, not the open one.** On the open chapter
+   the two readings of `/Count` **coincide**, so the fixture cannot
+   discriminate between them at all.
+
+**All three now fail on their sabotage. 9 tests green.**
+
+#### ★★★★ THE THIRD INSTANCE TODAY, AND WHY IT EARNS A RULE RATHER THAN A TALLY MARK
+
+Sabotage `C`'s cause is not *"the wrong chapter was chosen"*. It is:
+
+> **A fixture whose two candidate answers coincide cannot discriminate between
+> them, and the test reads as passing coverage.**
+
+**Three instances, three subsystems, one session:**
+
+| # | Pass | the two answers that coincided |
+|---|---|---|
+| 1 | `Pass 143.0` (`4094e49`) | `GreyAsKOnly` vs `AllProcessSpaces` — the scope discriminator was absent, so both settings produced identical pixels on the fixtures at hand |
+| 2 | `Pass 155.0` (`0ce65dc`, directly below) | **composing** into `/Matrix` vs **replacing** it — identical six numbers when the existing `/Matrix` is the identity |
+| 3 | `Pass 156.0` (this entry) | subtree-size vs visible-count — identical on an **open** item |
+
+**The warrant for minting is NOT the count**, which the 2026-08-05 ruling
+forbids as a ground on its own. It is that **`R221` already established
+sabotage-survival as the diagnostic signature of a masking defect, and named
+one cause** — two agreeing implementations of one predicate. **This is a
+second, unrelated cause of the same signature**, and `R221`'s own ★ practical
+tell (*"if I broke this predicate on purpose, would anything go red?"*) returns
+*"no"* for both, **without saying which**. A tell that fires on two causes and
+names one is a tell that mis-attributes half the time. `R225` names the other
+branch. See *Standing rules*, below.
+
+**The pdfce-specific half, and it is the actionable one:** in instance 2 the
+discriminating fixture **already existed** —
+`fixtures/synthetic/annot/placement-matrix-scale.pdf`, tracked since the
+initial import `d8b3903` (`git log --follow`, run here), generated by
+`tools/gen-annot-fixtures.py`, and its `PROVENANCE.md` row **already names the
+trap**: *"`/Matrix` applied ONCE (fit absorbs it) — the double-apply trap."*
+**The remedy was not to author a fixture. It was to read the provenance file
+of the corpus that was built for exactly this.**
+
+#### THE REFUSAL
+
+The outline **ROOT** is refused **by name**: it has no `/Parent`, carries no
+`/Title`, and its `/Count` counts a different quantity from every item's.
+Deleting it means deleting the whole outline — **a different act, which gets
+its own verb when someone wants it.** Consistent with `move_annotation`'s and
+`resize_annotation`'s named refusals rather than a silent no-op.
+
+#### ★ DELIBERATELY NOT IN IT — REORDER AND RE-PARENT
+
+**The unlink half is written and is exercised by every delete test.** The
+relink half is the same machinery pointed the other way. This is **a
+deliberate stop, recorded as one**: the operator asked for four gaps in one
+instruction and this is the third of them. **Filed as owed work below, not as
+a limitation of the verb.**
+
+#### ★ RULE-11 EXCEPTION — NO CLI SUBCOMMAND, FLAGGED BY THE ENGINEER
+
+**This Pass ships no `pdfce-cli` subcommand**, which breaks the **`0 of 147`
+implemented rows with an unbuilt CLI** that the 310th filing measured this
+afternoon — the figure that entry used to answer the operator's own question
+about editability, five hours ago. **The engineer flagged it in the dispatch
+rather than letting this role find it**, with the reason stated: the operator
+asked for four gaps in one instruction and breadth was prioritised over depth.
+
+**Filed as owed, not as shipped.** `FEATURES.md`'s new row carries **`[ ]` in
+the `cli` column**, and the census figure is now `1 of 149`, not `0 of 147`.
+**A rule with a perfect record is worth more than the one session that broke
+it**, so the break is written where the record is kept rather than smoothed
+over.
+
+**★★ THE CENSUS RE-COUNTED FROM THE FILE AT FILING TIME, BECAUSE THIS FILING'S
+OWN TWO NEW ROWS MOVE EVERY FIGURE IN IT** (script over the tables, after the
+six row changes, not before — the same discipline the 310th filing stated and
+for the same reason):
+
+| section | rows | `core` unbuilt | `cli` unbuilt | `gui` unbuilt `[ ]` | `gui` partial `◐` |
+|---|---:|---:|---:|---:|---:|
+| **Implemented** | **149** | **0** | **1** | **62** | **6** |
+| **Planned** | 57 | 48 | 37 | 50 | 1 |
+
+- **Rule 11: `1 of 149` implemented rows now has an unbuilt CLI**, against
+  `0 of 147` five hours ago. **The single exception is this Pass.**
+- **GUI reach: 62 unreachable + 6 partial = 68 of 149 = 45.6 %** not fully
+  usable from `pdfceGUI`, against **66 of 147 = 44.9 %** at the 310th filing.
+  **The ratio moved the wrong way because both of this filing's new
+  capabilities are unwired** — which is the honest reading, not a regression:
+  pdfce shipped two capabilities and that shell has not consumed either.
+
+**★ THE FIGURE IN THIS FILING'S OWN FIRST DRAFT WAS WRONG, AND CORRECTING IT IS
+WORTH ONE LINE.** The draft said **`1 of 148`**, reached by taking the 310th
+filing's `147` and adding the one row this Pass contributes. **Two rows were
+added this filing** (rotate, from `Pass 155.0`, is the other), so the
+denominator is `149`. ⇒ ***a total carried forward and incremented is not a
+count*** — hard rule 10's corollary (*a correction is a claim, and must name its
+world-source*) applied to this role's own draft: the figures above come from a
+script over `docs/FEATURES.md` at filing time, and the error was caught by
+running it rather than by reviewing the arithmetic.
+
+#### ★★ HARD-RULE-11 SWEEP — SEARCHED FOR THE CLAIM, NOT FOR A STRING
+
+The claim that changed meaning: ***a bookmark can be created and not
+otherwise changed.***
+
+**THREE LIVE SURVIVORS. Two are in `FEATURES.md` and are fixed in this filing;
+the third is in `ROADMAP.md` and gets a dated amendment.**
+
+| # | site | the claim | falsified by |
+|---|---|---|---|
+| 1 | `docs/FEATURES.md:269` | *"**No rename, reorder, delete or re-parent** of an existing item yet."* | this Pass (rename + delete); reorder/re-parent still true |
+| 2 | `docs/FEATURES.md:357` | Planned row *"Bookmark editing — rename, reorder, delete, re-parent … Create shipped as `Pass 103.0`"* | this Pass, for two of the four |
+| 3 | **`docs/ROADMAP.md:97430`** — the Acrobat-triage item (5) | *"(5) named **'links & bookmarks authoring… as a first-class surface'** — **authoring remains entirely unbuilt**; what shipped is READING an existing outline."* | **`Pass 103.0` (`d32872a`), 2026-08-19 — NINE DAYS AND FOUR BOOKMARK PASSES AGO** |
+
+**★★ SURVIVOR 3 IS THE FINDING AND IT IS NOT THIS PASS'S FAULT.** The sentence
+was **true when written** (2026-08-10, `Pass 55.3`/`55.4`) and went false nine
+days later. What makes it worth the entry is its **shape**: it is itself a
+**correction** — the *"★ ITEMS (5) AND (7) PARTIALLY DISCHARGED"* amendment,
+written to stop the triage list being read as wholly unbuilt — and the
+correction is the half that rotted. It even states its own scope carefully
+(*"the READ half of each, not the item as a whole"*), which is exactly the care
+that makes a reader trust it. ⇒ ***the 310th filing's `A correction is a claim
+with the same shelf life as the one it replaced`, at a nine-day horizon instead
+of a one-Pass one*** — and this instance shows the horizon is not the variable
+that matters. **`R222`'s reach argument applies verbatim: the engineer's grep
+for "bookmark" would find this; a grep for "outline" would find it; a grep for
+the phrase anybody remembers writing would not, because nobody wrote it — it
+was written eighteen days ago by a different filing about a different subject.**
+
+**Checked and CLEAN, reported because a clean result is a finding here:**
+
+- **`crates/` is clean of this claim.** `grep` over `edit.rs`, `main.rs` and
+  `ui_text.rs` for a bookmark limitation returns two hits, both correct:
+  `ui_text.rs:10420` (*"pdfce stopped reading this outline early"* — a
+  traversal-ceiling disclosure, unrelated) and `edit.rs:3215` (a
+  `merge_document` note about bookmarks pdfce **cannot** rewrite, still true).
+- **`docs/core-api/03-capabilities.md` carries no outline limits section**, so
+  there is no consuming-shell survivor of the kind the last two filings found
+  there — the engineer's `02-editing-and-saving.md` rows are already correct
+  and were written in this commit.
+- **`docs/NEXT_SESSION.md:67`** still states `add_outline_item`'s *"no verb
+  exists"*, already dispositioned as owed item 35 in the 240th filing:
+  engineer-owned by explicit rule and overwritten each session regardless.
+  **Not re-raised; noted so the count is honest.**
+
+#### DISPOSITIONS
+
+- **`R225` MINTED** — see *Standing rules*. **Ceiling moves `R224` → `R225`;
+  next free `R226`.** The **general** epistemic half is filed to
+  `D:/dev/rag/rust/`, per the 2026-08-05 ruling's own division of labour
+  (*a project rule governs how pdfce is scoped; the general failure belongs in
+  the cross-project RAG*) — the rule keeps the pdfce-specific remedy that names
+  this project's own fixture corpus, the RAG file carries the testing
+  epistemics that any project shares.
+- **`R222` — DATED INSTANCE NOTE, NO RE-MINT.** Survivor 3 is `R222`'s reach
+  argument at a longer horizon; the rule already reaches it. **Ceiling
+  unaffected.**
+- **NO DECISION-LOG ENTRY.** `3ca6774` moves no crate boundary, defines no
+  invariant, and changes no architecture. `adjust_outline_count` generalising
+  `bump_outline_count` is a **refactor with a proven-empty behavioural delta**
+  (three untouched call sites, above), not a boundary. **Ceiling stays at
+  decision 095; next free 096.**
+
+#### `FEATURES.md` — THREE ROWS CHANGED (one new, two corrected)
+
+| row | change |
+|---|---|
+| **NEW**, *Implemented → Reading, navigation & printing* | *"Rename a bookmark, or delete one and its subtree"* — `[x]` core · **`[ ]` cli** · `[ ]` gui · `[x]` Acrobat. **The `cli` box is the rule-11 exception above and is deliberately unticked.** |
+| *"Add a bookmark"* (`:269`) | *"No rename, reorder, delete or re-parent of an existing item yet"* → **rename and delete now ship** (pointing at the new row); reorder and re-parent named as what is left |
+| Planned *"Bookmark editing"* (`:357`) | **split** — the row now covers **reorder and re-parent only**, plus the two CLI subcommands owed |
+
+#### VERIFICATION
+
+- **`tools/run-gates.sh`: PASS**, reported by the engineer in the commit
+  message.
+- **9 core tests**, all green, **and all three sabotages now fail** — which is
+  the figure that matters here, because the first suite was also 9-of-9 green
+  with all three sabotages surviving. **A green count is not a verification
+  result for this Pass; the sabotage matrix is.**
+- **Re-run here at filing time**, `HEAD` = `3ca6774`:
+  `python tools/check-commits-filed.py` → *"1 code commit(s) are in no filing:
+  `0ce65dc`"*, and it **does not name `3ca6774`** because that commit is the
+  tip and the gate defers the tip by design (`--strict-tip` demands it
+  anyway). **Both commits are filed by this entry and the one below it.**
+  `python tools/check-passes-filed.py` → the same commit, plus its eight
+  standing multi-commit `note` lines, none new.
+- **★ RE-RUN AFTER WRITING THIS FILING, WHICH IS THE FIGURE THAT MATTERS AND
+  IS NOT THE ONE ABOVE:** `check-passes-filed` → ***"clean — every
+  Pass-claiming commit is filed"***; `check-commits-filed` → ***"clean — 639
+  code commit(s) checked (whole history); 5 known-unfiled carried in the
+  baseline"***. **Both gates go green on this filing**, including the tip the
+  pre-filing run had deferred — so the deferral note above describes a state
+  that no longer exists by the time anyone reads it. **Recorded as both
+  readings rather than one**, because a verification block quoting only the
+  pre-filing figure would leave a reader believing a commit is unfiled when
+  the document in their hands is what files it.
+- **`git rev-parse` / `git rev-list --oneline origin/main..HEAD`, run here:**
+  `HEAD` = `3ca6774`, `origin/main` = `64224d4`, **8 unpushed** — `1c292bc`,
+  `180f19f`, `2dd1ad6`, `e0652e0`, `2380881`, `0ce65dc`, `4f1cb3e`, `3ca6774`.
+  Decision 090's standing authority covers an ordinary fast-forward;
+  **pushing is not this role's act** — flagged, not performed. **This is the
+  fourth consecutive filing reporting a growing unpushed count** (5 → 8).
+- **Backup, `ls -lt D:/Dev/pdfce-backups/` run here:** newest is
+  `pdfce-20260828-1416-56d849b-full.bundle`, 2026-08-28 **10:16**, at
+  `56d849b`. **`git rev-list --count 56d849b..HEAD` = 10** — the bundle is
+  **ten commits behind `HEAD`**, against **7** at the 310th filing, **5** at
+  the 309th, **3** at the 308th and **1** at the 307th. ***Drifting for a
+  fifth filing running, and the increments are still growing (1, 2, 2, 3).***
+  **This is now the longest-running unaddressed item in the verification
+  block.**
+- **Fixture provenance checked, not assumed:**
+  `git ls-files` confirms `fixtures/synthetic/annot/placement-matrix-scale.pdf`
+  is **tracked**, `git log` puts it at the initial import `d8b3903`, and
+  `tools/gen-annot-fixtures.py:200` generates it. **The `★★★★` claim above —
+  that the fixture pre-existed rather than being authored for `Pass 155.0` —
+  is checked against the tree, not inferred from the commit message**, which
+  says *"Added a test against `placement-matrix-scale.pdf`"* and is ambiguous
+  between the two readings.
+
+### `Pass 155.0` (`0ce65dc`) — `EditSession::rotate_annotation` + `pdfce-cli rotate-annotation`: the third transform, and the spec makes it the EASY one — ★★★★★ **THE ROADMAP PREDICTED THIS PAIRING BACKWARDS AND THE STANDARD SAYS SO: §12.5.5's PLACEMENT MATRIX **A** *"scales and translates"* — IT CANNOT ROTATE — AND §12.5.2 REQUIRES `/Rect` UPRIGHT, SO A ROTATION CANNOT BE EXPRESSED BY MOVING THE RECTANGLE. **IT DOES NOT NEED TO BE**: STEP (a) TRANSFORMS THE APPEARANCE `BBox` **THROUGH ITS OWN `/Matrix`** TO *"produce a quadrilateral with arbitrary orientation"* AND STEP (c) CONCATENATES THAT `/Matrix` WITH **A**. THE ROTATION BELONGS IN `/Matrix`, WHICH THE STANDARD PROVIDES FOR EXPLICITLY** ⇒ ***RESIZE NEEDED AN OPTIONS TYPE AND A NAMED REFUSAL; ROTATE NEEDED NEITHER — AND `docs/core-api` HAD LISTED RESIZE'S DIFFICULTIES FIRST*** — ★★★★ **TWO CONSEQUENCES, BOTH STRICT IMPROVEMENTS ON RESIZE: A **FOREIGN APPEARANCE ROTATES CORRECTLY**, BECAUSE PDFCE COMPOSES INTO THE EXISTING `/Matrix` RATHER THAN REDRAWING, SO NO PRODUCER'S ARTWORK IS REPLACED AND THE REFUSAL `resize_annotation` MUST MAKE IN THAT POSITION IS UNNECESSARY HERE; AND **NOTHING DISTORTS**, BECAUSE A ROTATION IS AN ISOMETRY — NO STROKE-WIDTH QUESTION, NO `allow_distortion` FLAG, **NO OPTIONS TYPE AT ALL*** — ★★★ **A SABOTAGE SURVIVED ON AN IDENTITY: *"appearance matrix REPLACED instead of composed"* PASSED THE FIRST SUITE BECAUSE THE AUTHORED FIXTURE'S `/Matrix` IS THE IDENTITY, WHERE COMPOSING AND REPLACING PRODUCE **THE SAME SIX NUMBERS**. AND THE DISCRIMINATING FIXTURE **ALREADY EXISTED** — `placement-matrix-scale.pdf`, TRACKED SINCE THE INITIAL IMPORT, WHOSE `PROVENANCE.md` ROW ALREADY NAMES THE TRAP** ⇒ **`R225`'s SECOND INSTANCE, MINTED IN THE ENTRY DIRECTLY ABOVE** — ★★ **THE STRONGEST TEST IN THE SUITE NEEDS NO ORACLE: **FOUR QUARTER TURNS ARE THE IDENTITY.** A SIGN ERROR, A TRANSPOSED MATRIX ELEMENT AND A PIVOT APPLIED TWICE EACH PRODUCE A PLAUSIBLE *single* ROTATION AND A WRONG *fourth* ONE** — ★ **CLIPPY CAUGHT **PANICKING INDEXING ON OPERATOR-SUPPLIED ARRAYS** IN THIS PASS'S OWN NEW HELPER — A CRASH ON A MALFORMED PDF, NOW `.get()` — AND THE DOC-COMMENT SPLICE HAZARD RECURRED IN THE SAME FILE FOR THE SECOND TIME IN ONE DAY** — 2026-08-28 (311th filing)
+
+**One commit.** `0ce65dc`, **6 files, +956 / −33** (`git show --numstat`, run
+here):
+
+| file | +/− | what |
+|---|---:|---|
+| `crates/pdfce-core/tests/annot_rotate.rs` | **+353 / −0** | the 9 new core tests |
+| `crates/pdfce-core/src/edit.rs` | **+349 / −6** | `rotate_annotation`, `AnnotationRotate`, `map_flat` |
+| `crates/pdfce-cli/src/main.rs` | **+199 / −0** | `rotate-annotation` and its disclosure output |
+| `docs/core-api/03-capabilities.md` | **+48 / −21** | **the three survivors the 310th filing reported** (below) |
+| `docs/core-api/02-editing-and-saving.md` | **+5 / −4** | the verb-index row; verb count |
+| `docs/core-api/index.md` | **+2 / −2** | routing-table verb count |
+
+**Test-FILE share of added lines: 353 of 956 = 36.9 %** (hard rule 10(a) — the
+denominator is stated so the division is possible, and the qualifier is in the
+label). **Almost exactly the 310th filing's 37.9 %**; below `Pass 156.0`'s
+52.6 % directly above, and that gap is accounted for — `156.0` carries three
+re-aimed sabotage discriminators, this Pass carries one.
+
+#### ★★★★★ WHY ROTATION IS BETTER BEHAVED THAN RESIZE, WHICH IS THE OPPOSITE OF WHAT THIS DOCUMENT PREDICTED
+
+**The apparent obstacle.** §12.5.5's placement matrix **A** *"scales and
+translates"* — by construction it cannot rotate — and §12.5.2 requires `/Rect`
+to be **upright** (an axis-aligned rectangle in default user space). So unlike
+a translation and unlike a scale, **a rotation cannot be expressed by moving
+the rectangle.**
+
+**The obstacle is not one.** The algorithm's own step (a) transforms the
+appearance stream's `/BBox` **through the appearance's own `/Matrix`**,
+explicitly to *"produce a quadrilateral with arbitrary orientation"*; step (c)
+concatenates that `/Matrix` with **A**. ⇒ **The rotation belongs in `/Matrix`,
+and the standard provides for it in the same clause that appears to forbid it.**
+
+**Two consequences, both strict improvements on `resize_annotation`, which
+shipped five hours earlier:**
+
+| | `resize_annotation` (`Pass 151.0`) | `rotate_annotation` (this Pass) |
+|---|---|---|
+| **a FOREIGN appearance** | must be **refused** unless the caller opts into distortion — pdfce would have to redraw artwork it did not author | **rotates correctly.** pdfce **composes** into the existing `/Matrix`; no producer's artwork is read, replaced or re-authored |
+| **distortion** | a real question — `/RD` scales, `/BS /W` does not, a non-uniform scale needs `sqrt(abs(sx)*abs(sy))` and must **say so** | **cannot arise.** A rotation is an **isometry**: every length is preserved, the drawn stroke included |
+| **options type** | `ResizeOptions`, three flags — and it shipped **unconstructible** by any consumer for one afternoon (`#[non_exhaustive]`) | **none.** There is no choice to expose |
+
+**`docs/core-api/03-capabilities.md` had predicted the pairing the other way
+round** — *"**Still unbuilt, and these are real:** resize **and** rotate"*,
+listing resize's difficulties first and at length. **Resize needed an options
+type, a byte-comparison appearance gate and a named refusal. Rotate needed
+none of the three.** ⇒ ***resize SOUNDS tamer than rotate, and the spec makes
+it the other way*** — worth filing as the finding rather than as the feature,
+because the intuition is the durable part and it was wrong.
+
+#### `/Rect` GROWS, AND THE CLI SAYS SO BEFORE THE OPERATOR ASKS
+
+The **upright box bounding a rotated shape is larger** than the original unless
+the angle is a multiple of 90°. **The artwork does not grow; the rectangle
+around it does**, and §12.5.2 leaves no alternative — `/Rect` must stay
+axis-aligned.
+
+**This is the behaviour most likely to be reported as a defect**, so the CLI
+prints the reason **with the clause number**, unasked. Rule 4 in its plain
+form: the inference renders exactly as saved content will render, and what
+pdfce did is disclosed **off-canvas**, in the invocation's own output.
+
+`/RD` is **left alone and disclosed**: at any angle that is not a quarter turn,
+**no axis-aligned inset expresses the rotated result**, so pdfce does not
+invent one. Consistent with `move_annotation`'s ruling that *insets are
+distances, not coordinates*.
+
+#### ★★ VERIFICATION — THE STRONGEST TEST NEEDS NO ORACLE
+
+**9 tests, all green.** The load-bearing one: ***four quarter turns are the
+identity.*** It needs no reference implementation, no golden bytes and no
+hand-computed matrix — and it is **strictly stronger than a single-rotation
+check**, because a sign error, a transposed matrix element and a pivot applied
+twice **each produce a plausible single rotation and a wrong fourth one.**
+
+**Three sabotages:**
+
+| # | sabotage | result |
+|---|---|---|
+| 1 | pivot dropped (rotation about the origin) | **CAUGHT** |
+| 2 | rotation direction flipped | **CAUGHT** |
+| 3 | **appearance `/Matrix` REPLACED instead of composed** | **SURVIVED** |
+
+#### ★★★ SABOTAGE 3 SURVIVED ON AN IDENTITY, AND THE FIXTURE THAT CATCHES IT WAS ALREADY IN THE TREE
+
+The authored fixture's `/AP` carries the **identity** `/Matrix`. Composing a
+rotation into the identity and replacing the identity with that rotation
+**produce the same six numbers.** The sabotage was applied, the suite ran, and
+**nothing could have gone red.**
+
+Fixed with a test against **`fixtures/synthetic/annot/placement-matrix-scale.pdf`**,
+whose `/AP` carries `/Matrix [2 0 0 2 0 0]`: a replacement now reads
+`[0 1 -1 0 …]` where a composition reads `[0 2 -2 0 …]`, and the failure
+message states the consequence in the operator's terms — **a replacement would
+HALVE the producer's artwork.**
+
+**★★★ The part that generalises, and it is not "add a fixture".** That fixture
+was **not authored for this Pass**. `git ls-files` and `git log`, run here,
+put it at the **initial import `d8b3903`**; `tools/gen-annot-fixtures.py:200`
+generates it; and its `PROVENANCE.md` row already reads:
+
+> `placement-matrix-scale.pdf` — `/BBox [0 0 10 10]`, `/Matrix [2 0 0 2 0 0]`,
+> `/Rect [0 0 40 40]` — ***`/Matrix` applied ONCE (fit absorbs it) — the
+> double-apply trap.***
+
+**Somebody enumerated the degenerate `/Matrix` cases, built a fixture per case,
+and wrote down which trap each one catches** — and the sibling row directly
+beneath it, `placement-matrix-rotate.pdf`, is a **90° `/Matrix`**. ⇒ ***the
+remedy was to read the corpus's own provenance file before writing the test,
+not to author anything.*** This is the pdfce-specific half of **`R225`**,
+minted in the entry above.
+
+#### ★ TWO DEFECTS CLIPPY CAUGHT IN THIS PASS'S OWN NEW CODE
+
+- **PANICKING INDEXING on operator-supplied arrays** in the new `map_flat`
+  helper — i.e. **a crash on a malformed PDF** where the contract is a graceful
+  copy-through. Now `.get()`. Worth recording because the input is *a number
+  array read out of a file pdfce did not write*, which is the single most
+  attacker-reachable surface in the crate, and the defect was in **new code
+  written this session** rather than inherited.
+- **DOC-COMMENT ORPHANING, SECOND TIME TODAY IN THE SAME FILE.** The verb was
+  first spliced by anchoring on `pub fn resize_annotation(`, which sits
+  **below** its `///` block. Re-anchored above the doc run. **This is the exact
+  prescription the 310th filing wrote into
+  `D:/dev/rag/rust/doc_comment_splice_attaches_to_the_next_declaration_invisibly_to_every_gate.md`
+  four hours earlier** — *"anchor on the blank line above the doc block, never
+  on the signature"* — recurring **before** the ink was dry. **The RAG file
+  needs no new content; the instance is evidence its prescription is aimed
+  correctly and that writing it down did not, on its own, change the
+  behaviour.**
+
+#### THE THREE `docs/core-api` SURVIVORS THE 310th FILING REPORTED — ALL DISCHARGED HERE
+
+The 310th filing reported three live survivors in `03-capabilities.md` §3.1 and
+**recommended survivor 2 be discharged by this Pass rather than separately**,
+on the ground that *"rotate is hours from being false too"* and fixing the
+sentence once in the commit that falsifies its second half is cheaper than
+fixing it twice. **That recommendation was taken**, and the file's `+48 / −21`
+is the discharge.
+
+**Survivor 1 is the one worth restating**, because its last two sentences were
+**not stale documentation but an instruction to a consuming project to state a
+falsehood**: *"A Comments panel will therefore show 'no note text' on every
+shape pdfce itself drew — expected, not missing data, and **the shell must say
+so in those words**"*, together with *"note-text authoring for geometric markup
+is unbuilt in **every** shell"* — on a day it shipped **twice**. The engineer's
+own commit message records the framing this role filed it under, verbatim:
+
+> ***A REPORTED-SURVIVOR LIST IS A WORKLIST, NOT A SCOPE.***
+
+**Recorded as a closed loop rather than as a new finding**: the 310th filing
+predicted the instance, named the file, named the sentence, and named the
+commit that should fix it; the next commit did. **This is the sweep mechanism
+working end to end for the first time in the seven filings since hard rule 11
+was amended** — every prior instance was found *after* the falsifying commit,
+not before it.
+
+#### DISPOSITIONS
+
+- **`R225` — SECOND INSTANCE**, minted in the `Pass 156.0` entry above where
+  the third instance sits. Recorded here rather than re-argued.
+- **NO NEW STANDING RULE for the clippy findings.** Panicking indexing is
+  covered by rule 10's clippy gate, which caught it; the doc-comment splice has
+  a cross-project RAG carrier since 2026-08-09 and gained its prescription four
+  hours before this instance. **Neither is a discipline this project can be
+  found to have violated** — both were caught by instruments already running.
+- **NO DECISION-LOG ENTRY.** `0ce65dc` moves no crate boundary and defines no
+  invariant. The *"compose, never replace, a foreign `/Matrix`"* choice is an
+  **application** of `Pass 149.0`'s already-recorded ruling that pdfce never
+  rewrites artwork it did not author. **Ceiling stays at decision 095; next
+  free 096.**
+
+#### `FEATURES.md` — THREE ROWS CHANGED (one new, two corrected)
+
+| row | change |
+|---|---|
+| **NEW**, *Implemented → Annotations & markup* | *"Rotate anything carrying a `/Rect`"* — `[x]` core · `[x]` cli · `[ ]` gui · `[x]` Acrobat, completing the transform trio |
+| Planned *"**Rotate** anything carrying a `/Rect`"* (`:341`) | *"unbuilt for all five kinds, in every column"* → **the annotation family ships**; the row is now **widgets (`/MK /R`) and ce dimensions only**, both of which `rotate_annotation` refuses **by name** |
+| *"Author geometric markup"* (`:180`) | *"not moved or resized yet"* → *"not moved, resized or rotated yet"* — **all three verbs now ship core-and-CLI and all three are unwired** |
+
+**★ The Planned rotate row is corrected, NOT ticked**, exactly as the dispatch
+asked. Widget `/MK /R` rotation is *"read and written nowhere in the codebase
+and the mechanism is unsourced"*, and ce-dimension rotation has its own Planned
+row with per-variant obstacles. **Ticking the row wholesale would claim two
+capabilities that do not exist and that this Pass refuses by name** — which is
+precisely the over-optimism the maintenance contract forbids.
+
+#### VERIFICATION
+
+- **`tools/run-gates.sh`: PASS — 26 commands**, reported by the engineer in
+  the commit message.
+- **9 core tests**, the strongest of them **oracle-free** (four quarter turns
+  are the identity), and **all three sabotages now fail** — the third only
+  after the fixture change above.
+- **`git`-sourced figures**, backup currency and channel state: **see the
+  `Pass 156.0` entry directly above**, which is the later commit and carries
+  the current numbers. Not restated here, because two copies of one figure in
+  one filing is exactly the shape hard rule 10 exists to prevent.
+
 ### `Pass 154.0` (`e0652e0`) — `EditSession::set_markup_note` / `clear_markup_note` + `pdfce-cli set-markup-note`: a comment can be written onto a shape that already exists — ★★★★★ **THE CAPABILITY HAD NO WORKAROUND BECAUSE THE GAP WAS IN THE *SHAPE* OF THE API, NOT IN ITS COVERAGE: `MarkupOptions` IS AN AUTHOR-TIME STRUCTURE, AND A GEOMETRIC MARKUP HAS NO TEXT-ENTRY MOMENT — A CLOUD, A RECTANGLE, A HIGHLIGHT AND AN ARROW ARE ALL AUTHORED ON MOUSE-RELEASE FROM GEOMETRY ALONE, SO EVERY NOTE-BEARING ROUTE PDFCE OWNED WAS UNREACHABLE FROM THE GESTURE THAT PRODUCES THE THING TO BE COMMENTED** ⇒ **`pdfceGUI`'s COMMENTS PANEL SHIPPED READ-ONLY AND FOUR ORDINARY REVIEW ACTS WERE ABSENT — COMMENTING A SHAPE YOU JUST DREW, COMMENTING A HIGHLIGHT YOU JUST SWEPT, FIXING YOUR OWN TYPO, AND ANSWERING SOMEBODY ELSE** — ★★★★ **THE FILING'S OWN SWEEP FOUND `docs/core-api/03-capabilities.md` §3.1 STILL HEADED *"Limit 1 — geometric markup cannot carry note text"*, FALSE SINCE `Pass 150.0` NINE AND A HALF HOURS EARLIER — AND `943d482`, THE COMMIT THAT FALSIFIED IT, EDITED THAT FILE AT A HUNK STARTING ON LIMIT 1'S OWN LAST LINE AND CORRECTED *Limit 2* INSTEAD. THE PARAGRAPH ALSO **INSTRUCTS A CONSUMING SHELL TO TELL THE OPERATOR, IN THOSE WORDS**, THAT A BLANK NOTE IS *"expected, not missing data"* ON EVERY SHAPE PDFCE DREW** — ★★★ **AND *Limit 2* — THE 303rd FILING'S OWN CORRECTION — WENT STALE ONE PASS LATER: IT STILL READS *"a placed markup can be MOVED but not resized"* AND *"**Still unbuilt, and these are real:** resize and rotate"*, FALSIFIED BY `Pass 151.0` THE SAME DAY** ⇒ ***A CORRECTION IS NOT A TERMINAL STATE; IT IS A CLAIM WITH THE SAME SHELF LIFE AS THE ONE IT REPLACED*** — ★★ **A SABOTAGE SILENTLY DID NOT APPLY AND THE SUITE REPORTED GREEN — A MULTI-LINE PATTERN WRITTEN WITH `\n` AGAINST A **CRLF** FILE — WHICH IS `R224`'s VACUOUS-SCAN CLAUSE IN ITS THIRD MEDIUM AND ITS SECOND INSTANCE *TODAY*, AND `Pass 150.0`'s OWN COMMIT MESSAGE ALREADY PRESCRIBED THE REMEDY NINE AND A HALF HOURS EARLIER** — ★ **THE THREE NEW VERBS WERE FIRST SPLICED *INSIDE* `set_markup_style`'s DOC COMMENT BY ANCHORING ON `pub fn set_markup_style(`, WHICH SITS *BELOW* ITS `///` BLOCK; CLIPPY CAUGHT IT ONLY BECAUSE THE BLOCK ABOVE HAPPENS TO END IN A LIST — **THE DETECTION WAS LUCK**, AND WITHOUT IT `pdfce-core` WOULD HAVE SHIPPED THREE UNDOCUMENTED VERBS AND ONE FUNCTION DOCUMENTED AS ANOTHER** — 2026-08-28 (310th filing)
 
 **One commit.** `e0652e0`, **5 files, +803 / −5** (`git show --numstat`, run
@@ -95605,9 +96139,25 @@ rather than deleted, per this project's in-place-correction convention.
   already carries the artwork and a `/Rect` translate suffices, same
   mechanism as a widget move. `Sticky` additionally has a `/Popup`
   companion with its own `/Rect` that must move with it — named
-  explicitly so it isn't found the hard way. No rotate in this Pass;
+  explicitly so it isn't found the hard way. ~~No rotate in this Pass;
   resize/rotate for this family is unscoped, deliberately, pending
-  operator interest. Depends on `Pass 112.0`.
+  operator interest.~~ Depends on `Pass 112.0`.
+
+  > **★ AMENDMENT 2026-08-28 (311th filing) — THE STRUCK CLAUSE IS FALSE FOR
+  > BOTH VERBS, AND FOR THE SAME REASON THE 303rd FILING GAVE ABOUT MOVE:
+  > `115.x`'s PER-FAMILY SPLIT IS NOT THE SHAPE THE VERBS SHIPPED IN.**
+  > `resize_annotation` (`Pass 151.0`, `c4425f0`) and `rotate_annotation`
+  > (`Pass 155.0`, `0ce65dc`) are both **subtype-agnostic**, exactly as
+  > `move_annotation` is — so `FreeText`, `Sticky` and `Stamp` resize and
+  > rotate **today**, and the *"pending operator interest"* condition was
+  > discharged without anyone re-reading this bullet. **Rotation is in fact
+  > BETTER behaved on this family than resize is**: it composes into the
+  > appearance's own `/Matrix` (§12.5.5 step a) rather than redrawing, so a
+  > foreign `/AP` needs no refusal at all. Left standing, not rewritten —
+  > the entry's own **reasoning** about `/BBox [0 0 W H]` locality remains
+  > the correct account of why this family is easy; only its **scope
+  > prediction** was wrong, and in the same direction as `115.0`'s. Full
+  > record: `Pass 155.0`'s *Shipped* entry.
 - **`Pass 115.2` — foreign/undecodable annotations: general fallback.**
   `/Link` and anything `spec_from_dict` refuses to decode — the only safe
   transform for content pdfce cannot interpret is an `/AP` `/Matrix`
@@ -97437,6 +97987,34 @@ added. See that section below.
   (`extract_attachment` exists in `pdfce-core` with zero callers,
   R151-flagged — see the new Backlog entry immediately below). Neither
   item is struck; both stay open for their unbuilt halves.
+
+  > **★★ AMENDMENT 2026-08-28 (311th filing) — ITEM (5)'s BOOKMARK HALF IS
+  > NO LONGER *"entirely unbuilt"*, AND HAS NOT BEEN SINCE 2026-08-19.**
+  > The struck-worthy phrase is *"authoring remains entirely unbuilt"*.
+  > **Bookmark AUTHORING shipped nine days after this sentence was
+  > written** — `add_outline_item` (`Pass 103.0`, `d32872a`, verb 121 of
+  > 121), then `add_named_destination` + `Destination::Named`
+  > (`Pass 103.3`, `6dd37e8`), and now **rename and delete**
+  > (`set_outline_title` / `delete_outline_item`, `Pass 156.0`,
+  > `3ca6774`). **What is genuinely left of the bookmark half is REORDER
+  > and RE-PARENT**, plus the two CLI subcommands `Pass 156.0` owes; the
+  > **links** half of *"links & bookmarks"* is a separate capability and
+  > this amendment says nothing about it.
+  >
+  > **★★ THE SHAPE IS THE REASON THIS AMENDMENT EXISTS, AND IT IS NOT
+  > CARELESSNESS.** The sentence was **TRUE WHEN WRITTEN** (2026-08-10)
+  > and went false nine days later. It is **itself a correction** — the
+  > *"partially discharged"* note, written precisely so the triage list
+  > would not be read as wholly unbuilt — and it even scopes itself
+  > carefully (*"the READ half of each, not the item as a whole"*), which
+  > is exactly the care that makes a reader trust it. ⇒ ***a correction is
+  > a claim with the same shelf life as the one it replaced*** (310th
+  > filing), here at a **nine-day** horizon rather than a one-Pass one —
+  > which shows the horizon is not the variable that matters. **`R222`'s
+  > reach argument applies verbatim:** nobody greps for a phrase they did
+  > not write, and this one was written eighteen days ago, by a different
+  > filing, about a different subject. Found by reading for the **claim**
+  > (hard rule 11), not by any string search an engineer would have run.
 - **Attachment EXTRACTION-to-file — the core verb exists, no shell
   calls it (R151, filed 2026-08-10 with `Pass 55.4`).**
   `pdfce_core::attachments::extract_attachment`/`attachment_bytes` ship
@@ -115223,6 +115801,39 @@ same cause (hashes exist only at commit time), two different failure modes.
   rule found it **at change time**, which is the window it was minted to
   close. **Instance count now 3; ceiling unchanged, no re-mint.**
 
+  **★★ FIFTH INSTANCE, 2026-08-28 (311th filing) — AND IT IS THE LONGEST
+  HORIZON YET, WHICH TURNS OUT NOT TO BE THE VARIABLE THAT MATTERS.**
+  `Pass 156.0`'s hard-rule-11 sweep found the Acrobat-triage item (5) in
+  *Backlog* still reading *"links & bookmarks **authoring remains entirely
+  unbuilt**"* — **written 2026-08-10, falsified 2026-08-19 by `Pass 103.0`
+  (`d32872a`), and unread for nine days across four bookmark Passes.**
+
+  **Three properties this instance adds to the rule's evidence:**
+
+  - **THE STALE SENTENCE WAS ITSELF A CORRECTION.** It is the *"★ ITEMS (5)
+    AND (7) PARTIALLY DISCHARGED"* note, written precisely so the triage list
+    would not be misread as wholly unbuilt — and it **scopes itself
+    carefully** (*"the READ half of each, not the item as a whole"*), which is
+    exactly the care that makes a reader trust it. ⇒ the 310th filing's
+    ***a correction is a claim with the same shelf life as the one it
+    replaced***, at a nine-day horizon instead of a one-Pass one. **Neither
+    horizon protected anything, so horizon is not the variable.**
+  - **THE MEDIUM IS NEITHER A DOC COMMENT NOR A FORMAT STRING** — it is a
+    *Backlog* bullet in this file. The rule's title names the two media it
+    was minted from; its **reach argument** (*grep for the claim, not the
+    remembered wording*) is medium-independent and is what fired.
+  - **★ THE REACH ARGUMENT IN ITS PUREST FORM: NOBODY GREPS FOR A PHRASE
+    THEY DID NOT WRITE.** This sentence was written eighteen days ago, by a
+    different filing, about a **different subject** (a Reader-parity sweep,
+    not bookmarks). No engineer discharging a bookmark Pass would search for
+    it, and no string an engineer *would* have searched for appears in it.
+    **Found by reading for the claim; unreachable by any grep anyone had
+    reason to run.**
+
+  **Disposition: dated instance note, NO re-mint.** The rule already reaches
+  this; what is new is evidence about *which* of its clauses does the work.
+  **Instance count now 5; ceiling unchanged.**
+
 - **R223 — A DOC COMMENT'S CLAIM ABOUT ITS OWN *CALLERS* IS A MEASUREMENT,
   AND NOTHING RECOMPILES WHEN IT GOES STALE. RE-DERIVE IT BY RUNNING THE GREP
   IT QUOTES — AT WRITE TIME, AND AGAIN AT EVERY CORRECTION — NEVER BY
@@ -115595,6 +116206,82 @@ same cause (hashes exist only at commit time), two different failure modes.
   can be empty"* — reaches this without stretching, and per-occurrence
   elevation is forbidden by the 2026-08-05 ruling. **Ceiling stays `R224`,
   next free `R225`.**
+
+- **R225 — BEFORE TRUSTING A GREEN SABOTAGE RUN, ASK WHAT THE *FIXTURE* WOULD
+  HAVE SHOWN. A FIXTURE ON WHICH THE CORRECT ANSWER AND THE PLAUSIBLE WRONG
+  ANSWER COINCIDE CANNOT DISCRIMINATE BETWEEN THEM, AND THE TEST READS AS
+  PASSING COVERAGE. IN THIS PROJECT THE DISCRIMINATING FIXTURE USUALLY ALREADY
+  EXISTS — READ THE CORPUS'S `PROVENANCE.md` BEFORE AUTHORING ONE.** Minted
+  2026-08-28 (311th filing), from the `Pass 156.0` (`3ca6774`) and
+  `Pass 155.0` (`0ce65dc`) *Shipped* entries above.
+
+  **The rule in one question**, meant to be asked at fixture-selection time and
+  costing one thought: ***on THIS fixture, what six numbers / what list / what
+  integer would the wrong implementation produce?*** If the answer is *"the
+  same ones"*, the test is decorative and its sabotage is unrunnable, **however
+  correct the assertion is and however green the suite goes.**
+
+  **Three instances, three subsystems, one session-day — corroboration, NOT the
+  warrant:**
+
+  | # | Pass | the two answers that coincided | on what |
+  |---|---|---|---|
+  | 1 | `Pass 143.0` (`4094e49`) | `GreyAsKOnly` vs `AllProcessSpaces` | fixtures where both settings paint identical pixels |
+  | 2 | `Pass 155.0` (`0ce65dc`) | **composing** into `/AP` `/Matrix` vs **replacing** it | an appearance whose `/Matrix` is the **identity** |
+  | 3 | `Pass 156.0` (`3ca6774`) | an item's subtree size vs its **visible** `/Count` | an **open** outline item, where the two are equal |
+
+  **★★ THE WARRANT, WHICH IS NOT THE COUNT — the 2026-08-05 ruling forbids
+  elevating per occurrence, and this is not that.** `R221` already established
+  **sabotage-survival as the diagnostic signature of a masking defect**, and
+  named **one** cause: two agreeing implementations of one predicate, mutually
+  masking. **This is a second, unrelated cause producing the identical
+  signature** — one implementation and a degenerate input. `R221`'s own ★
+  practical tell —
+
+  > *"if I broke this predicate on purpose, would anything go red?"*
+
+  — returns ***"no"*** for both causes **and does not say which**. A tell that
+  fires on two causes while naming one **mis-attributes half the time**, and
+  the two remedies are opposites: `R221` says **delete the second
+  implementation**; `R225` says **change the input, the implementation is
+  fine.** An engineer following `R221` from a survived sabotage will go looking
+  for a duplicate predicate that is not there. **The mint exists to make the
+  fork in that diagnosis visible at the moment it is reached.**
+
+  **★★ WHY THIS IS A PROJECT RULE AND NOT ONLY A RAG FINDING** — the
+  2026-08-05 ruling's own criterion is *"a project rule governs how pdfce is
+  scoped; the general epistemic failure belongs in the cross-project RAG"*, and
+  **this mint splits along exactly that line rather than against it.** The
+  general half — *sabotage-survival has two causes; a non-discriminating
+  fixture masks a mutation as completely as a redundant predicate does* — is
+  filed to
+  `D:/dev/rag/rust/a_sabotage_can_only_be_as_discriminating_as_the_fixture_it_runs_on.md`,
+  where any project can find it. **What stays here is pdfce-specific and is the
+  actionable half:**
+
+  - **`fixtures/synthetic/*/PROVENANCE.md` is a table of traps, not a manifest.**
+    Somebody enumerated the degenerate cases, built one fixture per case, and
+    **wrote down which trap each one catches.** `placement-matrix-scale.pdf`'s
+    row already read *"`/Matrix` applied ONCE (fit absorbs it) — **the
+    double-apply trap**"*, and the row beneath it is a 90° `/Matrix`.
+  - **In instance 2 the discriminating fixture had been tracked since the
+    initial import `d8b3903`** (`git ls-files` / `git log`, run at filing time),
+    generated by `tools/gen-annot-fixtures.py:200`. **The remedy was not to
+    author a fixture. It was to read the provenance file of the corpus built
+    for exactly this** — which costs one `Read` and is the step the rule
+    prescribes.
+  - **Corollary for authored fixtures:** when a test asserts something about
+    **composition, accumulation or scope**, an **identity / empty / open /
+    default** fixture is the one value that cannot test it. Project rule 7
+    (synthetic fixtures only) means pdfce **chooses** every fixture value it
+    uses, so this is always a choice and never a constraint of the corpus.
+
+  **Sibling of `R221`** (a redundant predicate suppresses the instrument that
+  would detect its own drift) and of **`R224`** (a scan goes *vacuous* rather
+  than red). The family is *"an instrument reported success without having been
+  able to fail"*; `R224` is the **empty** subject set, `R225` is the
+  **non-discriminating** one, `R221` is the **masked** one. **Ceiling moves
+  `R224` → `R225`; next free `R226`.**
 
 ## Update protocol
 
