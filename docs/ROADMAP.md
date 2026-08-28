@@ -96,6 +96,802 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 143.0` (`4094e49`) + the gate extension (`3dc9eb0`) — `pdfce_core::settings::OverprintZeroTintScope` — ★★★★★ **THE BACKLOG ENTRY'S OWN *"Cause"* SECTION WAS WRONG, AND NOTHING SHORT OF AN A/B OF THE RENDERED PIXELS COULD HAVE SAID SO. THE FILED CAUSE WAS IMPLEMENTED EXACTLY AS WRITTEN; IT COMPILED, IT WAS INSTRUMENTED AND DEMONSTRABLY *REACHED* (`converts=true` ON 10 PAINTS), AND IT MOVED **ZERO PIXELS** ON THE FIXTURES AND ON ALL 51 CONFORMANCE PATCHES. THE REAL GATE WAS `Interpreter::overprint_would_change`, WHOSE `_ => false` ARM CARRIED A COMMENT CALLING IT *"a known under-count rather than a claim of zero"* — **TRUE OF THE DISCLOSURE, AND THE SENTENCE DID NOT SAY THE SAME ARM ALSO GATED THE BEHAVIOUR*** — ★★★★★ **THE CONFORMANCE CORPUS IS A POOR ORACLE FOR THIS DEFECT — AND THIS FILING'S FIRST VERSION OF THIS SENTENCE SAID *BLIND*, ON A SCAN RUN BETWEEN THE TWO HALVES OF THE FIX. ~~INSTRUMENTED ACROSS ALL 51 PATCHES, ZERO PAINT A `DeviceGray` SOURCE THROUGH TABLE 149~~ — **CORRECTED THE SAME DAY BY THE ENGINEER, RE-MEASURED ON `4094e49` BY RENDERING EVERY PATCH TWICE WITH THE SHIPPED BINARY: 3 OF 51 CHANGE PIXELS (8,491 / 1,827 / 804) AND 0 OF 3 CHANGE VERDICT.** THE CONCLUSION SURVIVES AND THE REASON DOES NOT: **THE ENTRY'S *"Expected result: back to 5 FAIL or better"* WAS STILL UNREACHABLE BY THIS FIX, AND NOT BECAUSE THE FIX IS WRONG.** SUITE UNCHANGED AT 6 FAIL / 29 PASS / 16 UNRESOLVED — NO REGRESSION, AND ~~NO IMPROVEMENT WAS EVER AVAILABLE~~ NO IMPROVEMENT THE CORPUS COULD SCORE** — ★★★★ **THE STRONGEST ASSERTION IN THE PASS NEEDS NO ORACLE: TWO FIXTURES DIFFER IN EXACTLY ONE WAY — `0.5 g` VERSUS `0 0 0 0.5 k`, THE SAME INK STATED TWICE — SO THE SETTING'S WHOLE MEANING IS *"THESE MUST LAND ON IDENTICAL PIXELS"*, CHECKABLE BY COMPARING PDFCE AGAINST ITSELF (`R215`)** — ★★★ **TWO COPIES OF ONE PREDICATE CANCELLED EACH OTHER UNDER SABOTAGE: THE FIRST CUT GAVE `overprint_would_change` ITS OWN `overprint_scope_covers` HELPER, AND A DELIBERATE SABOTAGE **SURVIVED BECAUSE `classify`'S COPY STILL REFUSED**. `R221`'s FOURTH INSTANCE, AND THE FIRST WHERE DUPLICATION DEFEATED THE *INSTRUMENT* RATHER THAN PRODUCING A WRONG ANSWER** — ★★ **A TEST'S DOC COMMENT CLAIMED IT PINNED THE `!in_image_sample` GUARD; THREE SABOTAGES PROVED THAT FALSE. THE TEST IS GOOD AND THE **COMMENT** WAS WRONG — A SURVIVING SABOTAGE DOES NOT ALWAYS MEAN THE TEST IS WEAK** — ★ **FOUR GATES CAUGHT REAL OMISSIONS ON THE FIRST SWEEP, ONE OF WHICH (`check-settings-consumed.py`) WOULD HAVE LET *SAVING SETTINGS SILENTLY DROP THE NEW ONE*, AND THE ENGINEER DID NOT KNOW THAT GATE EXISTED** — ★★★★★ **AND THIS FILING'S OWN SWEEP FOUND SOMETHING NEITHER COMMIT TOUCHED: THE 2026-08-25 OPERATOR RULING THAT THE LICENSED SUITE'S NAME STAYS OUT OF THIS PUBLIC REPOSITORY IS SATISFIED IN FILE CONTENTS AND FILE NAMES AND **VIOLATED IN 83 COMMIT MESSAGES, 82 OF THEM ALREADY PUSHED**. THE GATE CANNOT SEE COMMIT MESSAGES AND NEVER COULD** — ★★★★★ **AND THE SAME SHAPE BIT THIS FILING TWICE MORE: ITS OWN HEADLINE CORPUS FIGURE WAS A MEASUREMENT TAKEN WHILE THE THING IT MEASURED WAS BEING CHANGED, AND AMENDING `885cf3a` → `4094e49` INVALIDATED 23 HASH CITATIONS IN THESE THREE DOCUMENTS — ALL 23 CAUGHT AND REPOINTED BY `tools/check-cited-commits-exist.py`, AND 10 MORE IN THE TWO RAG TREES THE GATE CANNOT SEE** — 2026-08-28 (306th filing, **AMENDED IN PLACE THE SAME DAY — see *THE CORRECTION TO THIS FILING'S OWN MEASUREMENT*, below**)
+
+**Two commits, filed together because the second discharges an owed item the
+first has nothing to do with.**
+
+| commit | what | size |
+|---|---|---|
+| `4094e49` | `Pass 143.0` — the `DeviceGray`-under-`OPM 1` ambiguity setting | **16 files, +1,153 / −18** (`git show --numstat`, run here) |
+| `3dc9eb0` | `tools/check-core-api-verbs.py` extended to gate the four figures that had none | **2 files, +82 / −3** |
+
+`4094e49`'s largest files: `crates/pdfce-render/tests/grey_overprint.rs`
+(**+316, new**), `tools/gen-grey-overprint-fixtures.py` (**+222, new**),
+`crates/pdfce-core/src/settings/mod.rs` (**+170**),
+`crates/pdfce-render/src/interpret.rs` (**+87 / −8**),
+`crates/pdfce-render/src/overprint.rs` (**+69 / −6**),
+`crates/pdfce-cli/src/main.rs` (**+60**),
+`crates/pdfce-render/src/font/mod.rs` (**+52**),
+`crates/pdfce-gui/src/ui_text.rs` (**+52**),
+`fixtures/synthetic/overprint/PROVENANCE.md` (**+51**),
+`crates/pdfce-render/src/image.rs` (**+40 / −2**),
+`crates/pdfce-gui/src/settings_panel.rs` (**+34 / −2**), plus **five new
+fixture PDFs, 1,189–1,197 bytes each** (`ls -l`, run here).
+**538 of 1,153 changed lines are the test file and the generator — 46.7 %**,
+which is the third consecutive Pass to land within one percentage point of
+that ratio (`Pass 150.0` 45.8 %, `Pass 151.0` 45.8 %).
+
+---
+
+#### WHAT SHIPPED
+
+`pub enum OverprintZeroTintScope` in `pdfce_core::settings`, three values with
+`parse`/`as_str` and doctests:
+
+| value | reading | who holds it |
+|---|---|---|
+| `device_cmyk_only` | ISO 32000-1 §8.6.7 **to the letter** — a `DeviceGray` source gets no zero-tint rule and knocks the spot backdrop out | pdfce before this Pass |
+| **`grey_as_k_only`** — **DEFAULT** | grey is converted to the K-only `DeviceCMYK` it *means*, **then** `OPM 1` applies, so its zero C/M/Y preserve the backdrop | **Acrobat** |
+| `all_process_spaces` | the same conversion for `DeviceRGB`/`CalRGB` as well | principled; **unmeasured against any oracle — see *Open items*** |
+
+Threaded through `Settings` (**parse *and* `write_to_string`** — see the gate
+findings), `RenderOptions::with_overprint_zero_tint_scope`, `RenderPolicy`,
+`pdfce-cli render-page --overprint-zero-tint-scope`, and a control in
+`crates/pdfce-gui`'s settings panel in operator language.
+
+**The behaviour, in one line:** a `DeviceGray` fill overprinting a spot
+backdrop now **preserves** it by default instead of knocking it out.
+
+**Why this is a setting and not a fix** (unchanged from the Backlog entry, and
+the one part of it that was right): §8.6.7 scopes `OPM 1` to *"a tint value of
+0.0 for a colour component **in a `DeviceCMYK` colour space**"*; its one escape
+hatch — *"or is implicitly converted to `DeviceCMYK`; see 8.6.5.7"* — points at
+a clause titled **"Implicit Conversion of CIE-Based Colour Spaces"**, which
+reaches CIE-based spaces and nothing else. `DeviceGray` is a **device** space.
+Both readings are defensible ⇒ `R169`/`R206`: ship both, default to the one the
+measurement instrument is authored for.
+
+---
+
+#### ★★★★★ THE CORRECTION — THE BACKLOG ENTRY'S *"Cause"* WAS WRONG
+
+The entry filed by the 294th filing said, and this text is preserved here
+because the Backlog entry it lived in has been retired by this filing:
+
+> ~~**Cause.** `overprint::classify` maps `ColorSpace::DeviceGray` to
+> `SourceKind::OtherProcess`, which `cmyk_group_rules` gives
+> `[ComponentRule::Source; 4]` — **the source in all four components** — so the
+> paint replaces the backdrop everywhere instead of preserving the components
+> it did not specify.~~
+
+**The engineer implemented exactly that.** It compiled. It was **reached** — he
+instrumented `classify` and measured `converts=true` on **10 paints**. The
+classification demonstrably changed.
+
+**It moved ZERO pixels**, on the five new fixtures and on all 51 conformance
+patches.
+
+**The real gate is `Interpreter::overprint_would_change`**, whose `_ => false`
+arm returned `false` for `DeviceGray`, so the paint **never entered
+`paint_overprint`, never reached `classify`, and never reached the rules.**
+That arm carried a comment calling it *"a known under-count rather than a claim
+of zero"* — **true of the DISCLOSURE, and the sentence did not say the same arm
+also gated the BEHAVIOUR.**
+
+**★★ THE GENERALISABLE HALF, and it is the part worth carrying past this
+subsystem.** A change that is **correct-looking, compiling, and demonstrably
+REACHED** but moves no pixels is **indistinguishable from a right fix waiting
+on something else** — a missing plane, an unbuilt caller, a corpus that does
+not exercise it. Both states present identically: green suite, changed
+intermediate values, unchanged output. **Reaching the code is not the same as
+changing the result**, and only rendering both binaries and diffing the pixels
+separates them.
+
+**★ Filed as `R219`'s ninth instance, not as a new rule.** The 295th filing's
+amendment to `R219` already records *"the route the bug report named accounts
+for NONE of the fix"*, established there by ablation. This is the second
+consecutive occurrence of that exact shape and the **first where the named
+thing was a CAUSE rather than a ROUTE** — see *Standing-rule disposition*,
+below, for why the mint was declined and what the dated note adds.
+
+---
+
+#### ★★★★★ THE CONFORMANCE CORPUS IS A **POOR ORACLE** FOR THIS DEFECT — AND THIS SECTION'S FIRST VERSION SAID ***BLIND***, ON A NUMBER MEASURED BEFORE THE FIX EXISTED
+
+> **★★★★★ CORRECTION, 2026-08-28, SAME FILING, SUPPLIED BY THE
+> ENGINEER AND ATTRIBUTED TO HIM — THE STRUCK TEXT BELOW IS THIS SECTION'S
+> FIRST VERSION AND IS **FALSE FOR THE SHIPPED CODE**.** It is kept legible
+> rather than rewritten away, because **how** it was false is the transferable
+> part, and because the sentence replacing it is **weaker**.
+>
+> ~~**Measured, not assumed:** the engineer instrumented `cmyk_group_rules`
+> across all 51 patches. **Zero of 51 paint a `DeviceGray` source through
+> Table 149.**~~
+>
+> **★★ THE MECHANISM, and it is the whole lesson.** That scan was run
+> **after the `classify` change and BEFORE the `overprint_would_change`
+> fix.** At that moment it was *exactly true*: no grey paint reached
+> Table 149, because the predicate one function upstream still refused every
+> one of them. **Then the predicate was fixed — which is precisely the change
+> that makes greys reach Table 149 — and the scan was never re-run.** The
+> figure was carried forward **across the very commit that invalidated it**,
+> and then quoted in the *Shipped* entry **for that commit**.
+>
+> ⇒ **THE MEASUREMENT WAS OF THE DEFECT, NOT OF THE FIX.** A number gathered
+> to diagnose a problem does not survive the problem being fixed — see the
+> dated note at `R219` and the *Standing-rule disposition* table below for why
+> this is filed as an instance rather than minted.
+
+**THE CORRECTED MEASUREMENT**, taken on `4094e49`. **Method**, stated because
+it is the reason this figure needs no oracle: render every corpus patch
+**twice with the shipped binary** — once with
+`--overprint-zero-tint-scope device_cmyk_only`, which reproduces the pre-Pass
+behaviour **exactly**, and once with the default — then count differing
+pixels. **An A/B of one binary against itself needs no reference render and no
+adjudication**, which is why it can be trusted where the suite's own triple
+(below) still cannot be reconciled.
+
+| patch | pixels changed | verdict, under **both** settings |
+|---|---:|---|
+| a font-support patch | **8,491** | **passes under both** — probed for traps under each setting, none found either way |
+| the grey/K-black overprint patch | **1,827** | **FAILs under both** |
+| the white-overprint patch | **804** | **FAILs under both** |
+| the other 48 | **0** | unchanged by construction |
+
+**3 of 51 patches change, not 0.** Suite totals **unchanged at 6 FAIL / 29 pass
+/ 16 unresolved of 51** ⇒ ***"no regression" stands; "the fix reaches nothing"
+does not.***
+
+**★ THE ACCURATE STATEMENT, and it is the one to quote:** *the corpus is
+**touched** by this fix and cannot **score** it.* Three patches move and none
+of them changes verdict. That makes the corpus a **poor oracle**, not a
+**blind** one — and the stronger word was doing no work the weaker one does
+not do, while being false.
+
+**★★ A CLAIM THE CORRECTED MEASUREMENT CONTRADICTS, FLAGGED TO THE ENGINEER
+RATHER THAN SILENTLY DROPPED.** The struck text continued: *"the one patch
+whose **name promises exactly this case** — a grey/K-black overprint patch —
+**authors its greys as `DeviceCMYK [0 0 0 k]`**, which already took the
+direct-CMYK row and always did."* **That patch is row 2 of the corrected
+table, and 1,827 of its pixels move when the setting changes.** Pixels move
+only if a **non-`DeviceCMYK`** source reached the zero-tint rule, so the
+sentence **cannot be a complete account of that patch**. This role did not
+re-read the patch's content stream and is **not asserting the opposite**; the
+claim is marked **unestablished pending the engineer's re-check**, per hard
+rule 10's corollary that *a correction is itself a claim*. **Recorded as an
+open item, below.**
+
+**Three consequences, restated against the corrected figure:**
+
+1. **The Backlog entry's *"Expected result: closing this should take the suite
+   back to 5 FAIL or better"* was UNREACHABLE by this fix** — and **not
+   because the fix is wrong.** This conclusion is **unchanged by the
+   correction**; only its reason moved, from *"the corpus never reaches the
+   code"* to *"the corpus reaches it and cannot score it."* Adjudicated suite
+   state (`--reference-dir` mode), engineer's figure: **51 patches — 6 FAIL /
+   29 pass / 16 unresolved**, *unchanged* across the Pass. **No regression, and
+   no improvement THE CORPUS COULD SCORE.**
+2. **The grey/K-black patch's remaining 3 traps have a DIFFERENT, still-unknown
+   cause.** They were believed to be this Pass. **They are not** — the patch
+   FAILs under **both** settings. **This survives the correction and is
+   sharpened by it**; see the next section. Open item, below.
+3. **`R219`'s enumeration in the `Pass 140.0`/`140.1` *Shipped* entry lists
+   this as "the seventh and only open route".** Route 7 is **closed as a
+   defect** — but **the patch it was supposed to fix still fails**, so the
+   enumeration's *accounting* needed amending rather than ticking. A dated note
+   is added at that table, in place.
+
+---
+
+#### ★★★★ AND THE FILED **SYMPTOM** HAD ALREADY BEEN FIXED — A SECOND, SEPARATE CORRECTION, AND A DIFFERENT SHAPE FROM THE FIRST
+
+**This is an `R199` instance about the DEFECT REPORT ITSELF, not about a
+blocker**, and that is why it is filed apart from the cause error above rather
+than folded into it.
+
+The retired Backlog entry's symptom table said the surround of the grey/K-black
+patch read **`127,127,127`** against Acrobat's **`84,120,34`**. That
+measurement was taken at **`70c5919`** (`Pass 140.1`), and **several Passes
+have shipped since.**
+
+**Re-measured now with `tools/suite-cell-probe.py`** (engineer, on `4094e49`):
+
+| object | Acrobat | pdfce, `device_cmyk_only` | pdfce, default |
+|---|---|---|---|
+| ~~the surround~~ — the one the entry named | 84,120,34 | **81,119,40** | **81,119,40** |
+| the trap **X** — the one actually wrong | 84,120,34 | **127,127,127** | **127,127,127** |
+
+⇒ **The surround was already within a few levels of Acrobat BEFORE this Pass,
+under the literal reading**, and it is the **trap X** — not the surround —
+that still reads `127,127,127` against a green surround.
+
+**So the entry carried a stale SYMPTOM as well as a wrong CAUSE**, and the two
+are different failures with different remedies: **a wrong cause is corrected by
+measuring the FIX'S EFFECT; a stale symptom is corrected by RE-MEASURING THE
+DEFECT.** Nothing in this project re-measures a filed symptom before the Pass
+that closes it, which is exactly how a symptom measured several Passes
+earlier reached a *Shipped* entry as though it were current. **The exact
+number of intervening Passes is not asserted here — `70c5919` and `4094e49`
+are the two commits, and the gap is checkable from them.**
+
+**What still fails on that patch is the trap X. Cause unknown, and it is NOT
+this Pass.** The open item recorded in consequence 2 above — and in *Open
+items*, below — stays open; this measurement **sharpens** it, by naming which
+of the two objects is wrong and by removing the surround from suspicion.
+
+---
+
+#### ★ THE SUITE TRIPLE THIS ROLE COULD NOT RECONCILE — carried unchanged by the correction, and immune to it
+
+**★ A FIGURE THIS ROLE COULD NOT RECONCILE AND IS THEREFORE FILING AS A
+QUESTION RATHER THAN A FACT (hard rule 10).** The last adjudicated triple on
+record for the same `--reference-dir` mode is **5 FAIL / 35 pass / 11
+UNRESOLVED of 51** (`Pass 130.3`, `cd4de8d`, and `tools/suite-check.py`'s own
+dated docstring). Today's is **6 FAIL / 29 pass / 16 unresolved of 51**. The
+FAIL delta is explained on the record (`Pass 140.1` removed a false pass); the
+**6 patches that moved *pass → unresolved* are not.** This role **did not run
+the harness** — the triple above is the engineer's, reported as supplied.
+Either the adjudication set narrowed or a reference render went missing;
+**engineer's call, and it is an instrument question, not a rendering one.**
+
+**★ The same-day correction does not touch this, and the reason is worth
+stating:** the corrected pixel-A/B compares **one binary against itself** under
+two flag values, so whatever this triple turns out to be — a narrowed
+adjudication set, a missing reference render — **the 3-of-51 figure is
+unaffected by it.** Repeated in *Open items* as item 4.
+
+---
+
+#### THE FIXTURES — BUILT BECAUSE THE CORPUS COULD NOT SCORE THIS
+
+`tools/gen-grey-overprint-fixtures.py` (**+222, new**) generates five files
+into `fixtures/synthetic/overprint/`, recorded in that directory's
+`PROVENANCE.md` (**+51** in the same commit):
+
+| fixture | what it isolates |
+|---|---|
+| `grey_op_over_spot.pdf` | the defect itself — `0.5 g` under `/OP true` over a `/Separation` backdrop |
+| `cmyk_k_op_over_spot.pdf` | **the oracle-free control** — `0 0 0 0.5 k`, the same ink stated the other way |
+| `grey_noop_over_spot.pdf` | the setting must not touch a paint with overprint OFF |
+| `rgb_op_over_spot.pdf` | a **non-grey** process source over a spot — the only fixture that can tell `grey_as_k_only` from `all_process_spaces` |
+| `grey_image_op_over_spot.pdf` | a grey source **inside a sampled image**, which Table 149 row 1 excludes by name |
+
+**★★ THE STRONGEST ASSERTION NEEDS NO ORACLE, AND THAT IS THE DESIGN.**
+`grey_op_over_spot.pdf` and `cmyk_k_op_over_spot.pdf` differ in **exactly one
+way**: `0.5 g` versus `0 0 0 0.5 k` — **the same ink stated twice.** So *"treat
+grey as the K-only CMYK it converts to"* **means** they must land on identical
+pixels. The setting's whole semantics is checkable by **comparing pdfce against
+itself**: no remembered colour, no reference engine, no threshold, nothing that
+can be tuned until it passes. **`R215`'s own shape** — an acceptance criterion
+that is a *property of the specification* rather than a number somebody wrote
+down while looking at broken output.
+
+**Measured:** grey goes **(127,127,127) → (13,90,47)**, *exactly equal* to the
+CMYK reference. Both controls hold.
+
+---
+
+#### FOUR THINGS SABOTAGE FOUND THAT REVIEW DID NOT
+
+**1. The measurement was of nothing.** The first fixture painted its
+`/Separation` backdrop **under the same `/OP true` state**, so the backdrop
+itself took Table 149 row 3 over blank paper and **laid down no ink at all.**
+Every fixture then came out identical under both settings — reading **exactly
+like *"the setting does nothing"***. A fixture that produces the null result
+for the wrong reason is worse than no fixture: it is a null result **with
+evidence attached**.
+
+**2. Two of three enum values were indistinguishable by any test in the
+repository.** Widening `grey_as_k_only` to cover every process space left the
+**whole suite green**, because **no fixture put a non-grey process source over
+a spot backdrop.** `rgb_op_over_spot.pdf` exists because of this sabotage and
+for no other reason. ⇒ **An enum with N values owes N−1 discriminating tests,
+and a green suite is silent about which values it can actually tell apart.**
+
+**3. ★★ TWO COPIES OF ONE PREDICATE, AND THEY CANCELLED EACH OTHER OUT.** The
+first cut gave `overprint_would_change` its own `overprint_scope_covers`
+helper — a **second application of the scope rule**, written at a different
+call site. The sabotage in (2) **survived** *because* `classify`'s copy still
+refused. The duplication was removed; the predicate now **asks `classify`**.
+
+**★ This is `R221`'s fourth instance and it adds something the first three do
+not have.** Instances 1–3 are about two descriptions of one rule **drifting
+into different answers**. This one is about two descriptions **agreeing** — and
+the agreement is what defeated the instrument: **sabotaging one copy is
+silently corrected by the other, so the test suite reports the duplication as
+safe.** ⇒ ***A redundant predicate does not merely risk drift; it suppresses
+the sabotage that would have found the drift.*** Dated note added to `R221`;
+**mint declined** — see below.
+
+**4. ★ A TEST'S DOC COMMENT CLAIMED COVERAGE IT DID NOT HAVE, AND THE TEST IS
+FINE.** One test's doc comment said it pinned the `!in_image_sample` guard.
+**Three separate sabotages proved that false** — a grey source inside a sampled
+image never enters the overprint machinery at all, protected **redundantly
+three ways**. The test verifies a true end-to-end property and pins **none** of
+the mechanisms it named.
+
+**The engineer corrected the comment rather than deleting the test**, and wrote
+the distinction into it. **The generalisable half:** *a surviving sabotage
+sometimes means the COMMENT's claim about coverage is wrong, not that the TEST
+is weak* — and the two have opposite remedies (**rewrite the sentence** vs.
+**write another test**). Reaching for the second when the first was owed is how
+a suite grows tests nobody needs while the false claim stays on disk.
+
+---
+
+#### VERIFICATION
+
+| check | result | how |
+|---|---|---|
+| new tests | **7, all green**, `crates/pdfce-render/tests/grey_overprint.rs` | counted here: `grep -c '^#\[test\]'` returns **7** |
+| full workspace | **102 suites green** | engineer, after the four gate fixes below |
+| sabotage runs | **4 designed, 3 caught, 1 SURVIVES and is documented as surviving** | gate-always-`false` → **3 failures**; `grey_as_k_only` widened to every space → **caught, but only after the deduplication in finding 3**; `all_process_spaces` neutered → caught; `!in_image_sample` removed → **SURVIVES**, and finding 4 is why |
+| the oracle-free pair | grey **(127,127,127) → (13,90,47)**, *exactly equal* to the `0 0 0 0.5 k` reference | engineer; the assertion is `grey == cmyk`, not `grey == <a remembered triple>` |
+| conformance suite | **51 patches — 6 FAIL / 29 pass / 16 unresolved, UNCHANGED** | engineer, `--reference-dir` mode. **No regression; no improvement the corpus could score** — see the corrected corpus section |
+| ~~`DeviceGray` sources in the corpus~~ — **ROW WITHDRAWN** | ~~**0 of 51 patches** paint one through Table 149~~ | **Withdrawn 2026-08-28, same filing.** The scan ran after the `classify` change and **before** the `overprint_would_change` fix, so it measured the **defect**, not the fix. Superseded by the row below |
+| **corpus patches whose PIXELS this setting moves** (the corrected figure) | **3 of 51** — **8,491** px (a font-support patch, passes under both), **1,827** px (the grey/K-black overprint patch, FAILs under both), **804** px (the white-overprint patch, FAILs under both); **0 of 3 change verdict** | engineer, on `4094e49`: every patch rendered **twice with the shipped binary** — `--overprint-zero-tint-scope device_cmyk_only` (exactly the pre-Pass behaviour) vs. the default — differing pixels counted. **No reference render and no adjudication involved** |
+| the grey/K-black patch's two objects, re-probed | surround **81,119,40** under BOTH settings (Acrobat **84,120,34**); trap **X** **127,127,127** under both | engineer, `tools/suite-cell-probe.py` on `4094e49`. **The filed symptom named the surround; the surround is not what is wrong** |
+| `tools/run-gates.sh` | **PASS — 26 commands**, both filing gates included | engineer; two deliberate skips as always (`cargo about`, `--all-features` tests) |
+| `cargo fmt` / `cargo clippy --workspace --all-targets --all-features -- -D warnings` | applied / clean | engineer |
+| wasm32 gate | green | `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` — GUI-core separation (rule 2) holds |
+| `tools/check-suite-name-absent.py` | **clean**, run by this role after these edits | *"nothing in the work tree, staged or not, names it or mentions it"* — **and see the commit-message finding below, which this gate structurally cannot reach** |
+
+**★★ FOUR GATES CAUGHT REAL OMISSIONS ON THE FIRST SWEEP, AND THAT IS AN
+ARGUMENT FOR RUNNING THE WHOLE SET RATHER THAN THE ONES YOU EXPECT TO MATTER.**
+Recorded individually because each names a different hole:
+
+| gate | what it caught | why it would not have been caught otherwise |
+|---|---|---|
+| `check-settings-consumed.py` | `write_to_string` was **not** updated — **saving settings would have silently dropped the new one** | round-trip loss is invisible to every test that constructs a `Settings` in memory. **The engineer did not know this gate existed** |
+| `check-string-gaps.sh` | **two eaten Rust line-continuations** in the new test file | the exact hazard the gate was written for, in the exact file shape that produces it |
+| the GUI settings-panel reachability test | a setting with **no control** | `R151`'s shape, caught by machinery instead of by a filing |
+| the `RenderPolicy` projection test | the projection **and its builder call**, both missing | ★ **it would have passed while the builder did nothing** — the projection was absent, so nothing asserted the builder had an effect |
+
+The last row is the same defect as `Pass 151.0`'s flag-wiring finding, one
+layer down: **an option that exists, that a caller sets, and that nothing
+reads.**
+
+---
+
+#### ALSO SHIPPED: `3dc9eb0` — THE GATE EXTENSION THE 305th FILING ASKED FOR
+
+The 305th filing's hard-rule-11 sweep found **four stale figures** in
+`docs/core-api/index.md`'s routing table — the consuming shell's first page —
+under a paragraph headed *"Every figure above was stale, and the verb count
+caused an incident."* The filing's disposition was explicit: ***"the fix is to
+extend the gate, not to ask for more care."*** Done.
+
+| figure | was | is |
+|---|---|---|
+| `EditError` variants | 88 | **90** (stale since `c4425f0`, the same morning) |
+| `01-reading-and-model.md` | 2,223 lines | **2,649** |
+| `02-editing-and-saving.md` | 1,550 lines | **2,999** — **the stale figure was 51.7 % of the truth** |
+| `03-capabilities.md` | 2,079 lines | **2,533** |
+
+**★★ THE "N CITATIONS" FIGURE COULD NOT BE VERIFIED EVEN IN PRINCIPLE, AND
+THAT IS THE MECHANISM RATHER THAN A FOOTNOTE TO IT.** The claim was *"128
+citations"* for part 2. **No counting reproduces it:** clause references
+(S-marks) **73**; *distinct* clause references **47**; `file.rs:line` source
+citations **186**. ⇒ **The figure had no recoverable definition.** *A number
+nobody can re-derive is a number nobody can check* — which is not a side note
+about how it drifted, **it is why it could drift.** Replaced with **"N clauses
+cited"**, derived by the gate from the document itself.
+
+**★★ THREE ROWS, THREE DIFFERENT FORMATS, WHICH IS WHY NO CHECK EVER COVERED
+THEM.** Row 1 read *"N lines · N verified citations"*, row 2 *"N lines · N
+citations"*, row 3 **bare "N lines"** with no second figure at all. **A gate
+can only be written against a shape present in every row.** All three now read
+**"N lines · N clauses cited"**, both halves derived. ⇒ ***Normalising the
+FORMAT was a prerequisite for gating the CONTENT*** — the heterogeneity was not
+untidiness, it was the thing blocking enforcement.
+
+**Verified by sabotage, and the first cut is the finding.** Three runs, each
+caught: a document's own line count made wrong → **FAILED**; a clause count
+made wrong → **FAILED**; `EditError` reverted to 88 → **FAILED**. **★ The first
+cut of the check went GREEN while matching no rows at all**, because the
+normalised pattern did not yet exist in the file. ***A gate that checks nothing
+also prints PASS.*** `derive_error_variants` returns **0 rather than guessing**
+when it cannot find the enum, and the caller reads that as *"no claim can be
+checked"* rather than *"the count is zero"* — **a gate reporting a confident
+wrong number is worse than one reporting nothing.**
+
+**★ This is `R224`'s vacuous-scan clause recurring in a new tree the day it was
+minted** — `R224` states it of a *test* over a source corpus (*"a scan goes
+vacuous rather than red when its anchor is renamed"*, remedied by a floor on
+the corpus size); here it is a **`tools/` gate over a document**, same failure,
+same day. Dated note added to `R224`; **mint declined** (it is the rule).
+
+---
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string
+
+**Meaning-change events in this filing:** (i) *"`Pass 143.0` is filed, not
+started"* became false; (ii) *"closing `143.0` returns the suite to 5 FAIL or
+better"* became **false and unreachable**; (iii) the filed **cause** of the
+defect became **wrong**; (iv) *"the grey/K-black patch's remaining traps are
+`143.0`"* became **false, cause unknown**; (v) `R219` route 7 went **OPEN →
+closed-as-defect while its patch still fails**; (vi) **`overprint_effective`'s
+population grew** — the counter and the behaviour now share one predicate arm,
+so a `DeviceGray` source under `/OPM 1` is counted where it previously was not.
+
+**Found and fixed in this filing (mine to edit):**
+
+| where | the claim | disposition |
+|---|---|---|
+| `docs/FEATURES.md:328` (*Planned*) | the whole row — *"filed 2026-08-27, not started"*, the wrong cause, and *"closing it should take the suite from 6 FAIL back to 5 or better"* | **moved to *Implemented*** as a new capability row, rewritten; the wrong cause replaced by the measured one |
+| `docs/FEATURES.md:245` (*Implemented*, Overprint SIMULATION) | *"The surround is a `DeviceGray` overprint spec-reading divergence, filed as `Pass 143.0`; closing it should return the count to 5 or better."* | **NOT NAMED IN THE DISPATCH.** Both halves now false — it is no longer *filed*, and the count did not move. Sentence replaced with the measured outcome |
+| `docs/FEATURES.md:246` (*Implemented*, overprint disclosure) | *"a further `overprint_effective` predicate … counts where honouring it would actually change the painted result"* | **NOT NAMED IN THE DISPATCH, and it is a COUNTER MEANING-CHANGE — the trigger hard rule 11 exists for.** `overprint_would_change` is **the same predicate arm** that now gates the behaviour, so its population grew to include a `DeviceGray` source (and a `DeviceRGB` one under `all_process_spaces`) whose converted tints leave a zero component under `/OPM 1`. Row extended; the surviving under-count for every other non-CMYK space is restated so it is not read as zero |
+| `docs/ROADMAP.md` *Backlog* | the `Pass 143.0` entry, incl. its wrong **Cause** and unreachable **Expected result** | **retired**; its wrong Cause is preserved struck-through in this entry, where the correction is, rather than left where a reader would take it as current |
+| `docs/ROADMAP.md` *Backlog*, the paragraph above it | *"The remaining open route from this entry's own subsystem is `Pass 143.0` … below."* | dated pointer added — the route is closed and the entry has moved |
+| `docs/ROADMAP.md` `Pass 140.0`/`140.1` *Shipped*, the `R219` route table | route 7 **"OPEN — filed to *Backlog*"** | dated amendment note **below the table** (append-only respected): closed as a defect, **and the patch it was for still fails** |
+| `docs/ROADMAP.md` *Next up*, discharge banner | *"`Pass 143.0` is the pick-up item again"* | dated note: shipped `4094e49` |
+
+**★ THREE PRE-EXISTING RENDERING DEFECTS IN `ROADMAP.md`'s OWN TABLES, FOUND
+BY RUNNING THE 305th FILING'S NEW CHECK AGAINST A SECOND FILE.** That filing
+adopted a per-row unescaped-pipe count for `FEATURES.md` and found one defect
+on first run. **Pointing the same idea at `ROADMAP.md` — an unescaped `|`
+inside a code span in a table cell, which GFM does **not** protect — found
+three, all pre-existing, all fixed here (escaping only; no claim altered):**
+
+| line | the defect | note |
+|---|---|---|
+| `:959` | `` `Print \| NoZoom` `` — **the 305th filing's own description of that exact defect reproduced it**, inside its own table, so the paragraph explaining the bug rendered with the bug | the ironic one, and the reason a check beats a reading |
+| `:1982` | a shell command containing a pipe (`… edit.rs \| wc -l`) in a verification-table cell | `Pass 149.0`'s entry; the command was unreadable in rendered form |
+| `:14461` | a **stray unmatched backtick** — one backtick had been typed before `(bt)` and none after it, leaving **17 backticks on the row**, so everything past that point rendered as code | not a pipe; found by the same scan's balance check. **★ AND THIS ROW REPRODUCED THE DEFECT IT DESCRIBES** — its first version quoted the broken form literally and was itself unbalanced, the *second* time in two filings that a row describing a markdown defect committed it (the `:959` row above is the first). Fixed 2026-08-28 in the same-day amendment, by describing the defect instead of quoting it |
+
+⇒ **A check written for one document was worth one command against another**,
+and neither the pipe defects nor the backtick would ever have been reported by
+reading — nobody reads a 400-character table cell to its end. **Adopted as
+standing practice for `ROADMAP.md` filings too**, at the same cost.
+
+**Checked and found NOT a survivor, recorded so a later sweep does not
+re-report it:** `tools/suite-check.py:193–194` quotes **5 FAIL, 30 pass, 16
+UNRESOLVED** / **5 FAIL, 35 pass, 11 UNRESOLVED**, which no longer match
+today's levels — but the block is explicitly headed ***"Measured 2026-08-27,
+same tree, same binary, only the flag differing"***, and its claim is the
+**flag delta** (five patches move from unresolved to a verdict), not the
+levels. **This is `R223`(a)'s prescribed form working exactly as intended: a
+dated measurement is not stale, it is dated.** Left alone deliberately.
+
+**Reported, not edited — outside this role's remit:**
+
+- **`docs/NEXT_SESSION.md`** (engineer-owned handoff) — **four live stale
+  claims**: `:108` and `:110` name `143.0` as *"the pick-up item"* in
+  *Backlog*; `:119` says *"read the `Pass 143.0` Backlog entry"* (retired);
+  `:128` states the **5 FAIL or better** expected result. The handoff's
+  entire §C is now discharged.
+- **★★★★ A SECOND HARD-RULE-11 SWEEP, RUN FOR THE SAME-DAY CORRECTION, AND
+  IT FOUND THREE SURVIVORS OUTSIDE `docs/` — EXACTLY WHERE `R215`'s AMENDMENT
+  SAYS TO LOOK.** Withdrawing *"0 of 51"* is a **meaning-change event**, so the
+  claim (not the string) was searched across the whole repository. Survivors,
+  each phrased differently from the `docs/` copies:
+  - **`fixtures/synthetic/overprint/PROVENANCE.md`** — a section headed *"Why
+    these exist at all"* asserting *"the corpus **does not contain the
+    case**"*. **Corrected here**, with the struck original kept and the
+    conclusion (*the fixtures are still necessary*) preserved.
+  - **`tools/gen-grey-overprint-fixtures.py`** — the generator's own module
+    docstring, same claim in capitals. **Corrected here**; the file still
+    parses (`ast.parse`, run after the edit).
+  - **`crates/pdfce-render/tests/grey_overprint.rs:23–:33`** — the test module's
+    `//!` header, under *"Why these tests exist rather than a conformance-suite
+    run"*. **REPORTED, NOT EDITED** — `crates/` is outside this role's remit.
+  ★ **Note the shape, because it is `R215`'s amendment word for word:** the
+  `docs/` copies were corrected first and the three outside `docs/` were found
+  only by a second, deliberate sweep. **A correction protects the document it
+  was written in.** Two of the three are in trees a grep for the `docs/`
+  wording would not have matched, because each states the claim in its own
+  words.
+- **`crates/`** — the doc comments and disclosure strings `4094e49` itself
+  wrote (`interpret.rs:4804`, `overprint.rs:576`/`:588`, `image.rs:2827`,
+  `settings/mod.rs:437`/`:484`/`:1350`, `font/mod.rs:617`/`:928`,
+  `cli/main.rs:2680`) were read against the shipped behaviour by this role and
+  **none carries a stale claim** — they were written after the correction, not
+  before it. **Recorded because a null result from this sweep is a fact, not a
+  skipped step.**
+
+---
+
+#### ★★★★★ WHAT THE SWEEP FOUND THAT NEITHER COMMIT TOUCHED — AND IT IS THE MOST IMPORTANT PARAGRAPH IN THIS FILING
+
+**The 2026-08-25 operator ruling** (open question `(bt)`,
+`tools/check-suite-name-absent.py`) is that the licensed print-conformance
+suite's name is **kept out of this public repository entirely — file contents
+AND file names.**
+
+**It is satisfied in file contents and file names. It is violated in COMMIT
+MESSAGES.** Measured by this role, decoding the gate's own base64 needles and
+scanning `git log --format=%B --all`:
+
+| measurement | result | command |
+|---|---|---|
+| commits whose **message** contains a forbidden needle | **83** | `git log --format=%H%x01%B%x02 --all`, counted in-process; **the term itself was never printed or written to disk** |
+| of those, **already pushed** (ancestors of `origin/main`) | **82** | `origin/main` = `25004cd` |
+| **unpushed** | **1** — `4094e49`, this Pass, **1 occurrence** | `git rev-list --left-right --count origin/main...main` → `0 2` |
+| work-tree contents and file names | **clean** | `python tools/check-suite-name-absent.py` → exit 0 |
+
+**★ THE GATE CANNOT SEE COMMIT MESSAGES AND NEVER COULD.** Its own docstring
+scopes it to *"file CONTENTS … and file NAMES"* over tracked and untracked
+files. A commit message is neither. **So this is not a gate that failed — it is
+a rule enforced over half its own surface**, and the unenforced half was
+already breached, at scale, **before the gate was written** (the ruling is
+2026-08-25; the occurrences run back through the whole overprint family).
+
+**★★ WHY THIS IS FILED AND NOT FIXED, and the reasoning is rule 8's, not this
+role's discretion.** Removing 82 published commit messages is a **rewrite of
+published history**, which rule 8 gates behind an explicit, current operator
+go-ahead and which this project has **direct, costed evidence** against:
+rewriting a commit breaks every document that cites its hash
+(`tools/check-cited-commits-exist.py`, `0d9f4df`, **fourteen pre-existing
+casualties from exactly this cause**), and a history rewrite has already
+happened twice unannounced in this repository (302nd filing, `c087d47`).
+**The single unpushed occurrence could be amended cheaply** — but amending one
+of 83 changes the exposure by nothing while changing a hash this filing cites.
+**Both facts are stated; neither is acted on. This is the operator's call.**
+
+**★ Note the shape, because it is this project's recurring one.** The gate was
+built carefully — base64 needles so it would not be its own first violation,
+masked output so a CI log would not publish the term, untracked files included
+so it could see the commit about to be made. **Every one of those refinements
+is about the two surfaces it already covered.** The surface it does not cover
+was never named, and *"the gate is green"* has therefore been read as *"the
+ruling is satisfied"* for three days. **A gate's silence is only as wide as its
+input set, and its input set is the one thing its output never states.**
+
+---
+
+#### ★ THE CHANNEL CHECK (`R203`(d)) — AND IT IS NOT CLEAR
+
+`ls -la` on both channels, run by this role at filing time:
+
+- **`D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/`** — **one inbound
+  arrived at 2026-08-28 08:31**, *after* the 305th filing (07:29) and *before*
+  `4094e49` (09:06): **`request_a_pinned_edit_still_matches_on_find_and_the_find_is_extractor_prose.md`**,
+  from `pdfceGUI`. **No reply file answers it; the newest outbound is
+  `reply_stroke_scaling_is_an_OPTION…` at 05:20.** ⇒ **Unanswered, and under
+  the operator's standing ruling (*"check the feature requests and write these
+  as the first thing to do before continuing work on other things"*, still in
+  force per the 296th filing's discharge banner) it takes the front of the
+  queue.** **No Pass ID minted here — that is the engineer's act** (see *Next
+  up*, where it is filed without one).
+- **`D:/Dev/FeatureRequests/iccce_FeatureRequests/open/`** — **clear.** Eight
+  files; newest is **pdfce's own reply**,
+  `reply_the_profile_census_and_your_33_node_constant.md`, 2026-08-27 14:22.
+  Nothing inbound is unread.
+
+**The substance of the inbound, in one line, because it is `R219`'s shape
+again:** `edit_text` refuses a **pinned** request by string-comparing `find`
+against `text_extract`'s **synthesised inter-glyph spacing** — twenty-one
+spaces that are not in the content stream — while its sibling `format_text`
+was given `FormatRequest::whole_operator(page, span)` by `Pass 145.0` and
+needs no find string at all. **Two verbs over the same surgery; one is
+addressable by pin and the other is not.**
+
+---
+
+#### OPEN ITEMS — four, none of them closed by this Pass
+
+**This section exists because the entry twice pointed at it before it did.**
+The first version of this filing wrote *"see **Open items**"* in the value
+table and *"Open item, below"* in the corpus section, and **there was no such
+section** — a dangling forward reference in an entry whose whole subject is a
+claim that outlived its evidence. Found while amending, and fixed here.
+
+1. **`all_process_spaces` is UNMEASURED against any oracle.** pdfce's
+   RGB→CMYK is naive, so under that value a pure red leaves a zero cyan
+   component and therefore **preserves** a cyan backdrop. **Whether Acrobat
+   agrees is not known.** The value is principled and off by default; it is
+   discriminated from `grey_as_k_only` by exactly one fixture
+   (`rgb_op_over_spot.pdf`) and by no oracle at all.
+2. **★★ The grey/K-black patch's remaining traps — CAUSE UNKNOWN, AND NOT
+   THIS PASS.** The patch FAILs under **both** settings. Re-probed on
+   `4094e49`: the **surround** reads **81,119,40** against Acrobat's
+   **84,120,34** — already close, under both settings — and the **trap X**
+   reads **127,127,127** against a green surround. **The filed symptom named
+   the surround; the surround is not what is wrong.** Previously misattributed
+   to this Pass; that attribution is withdrawn.
+3. **★ A CLAIM CONTRADICTED BY THE CORRECTED MEASUREMENT, for the engineer to
+   re-check.** The withdrawn text asserted that the grey/K-black patch
+   *"authors its greys as `DeviceCMYK [0 0 0 k]`"*. **1,827 of that patch's
+   pixels move when the setting changes**, which requires a **non-`DeviceCMYK`**
+   source reaching the zero-tint rule. The sentence cannot be a complete
+   account of the patch. **Not asserted either way here** — this role did not
+   read the content stream. Re-reading it would probably also answer item 2.
+4. **The suite triple that could not be reconciled** — **5 FAIL / 35 pass / 11
+   unresolved** on record at `Pass 130.3` (`cd4de8d`) versus **6 FAIL / 29 pass
+   / 16 unresolved** today. The FAIL delta is explained on the record; the
+   **six patches that moved *pass → unresolved* are not.** Carried unchanged
+   from the first version of this entry; **an instrument question, not a
+   rendering one.** Note that the corrected pixel-A/B above is **immune** to
+   whatever this turns out to be, since it compares one binary against itself.
+
+---
+
+#### ★ STANDING-RULE DISPOSITION — **FOUR DATED INSTANCE NOTES, NO MINT**
+
+The dispatch named two candidates and, correctly, suspected both were already
+covered. **They are.** A third was found by this role, and **a fourth arrived
+with the same-day correction to this entry.** **Ceiling unmoved: rules stay at
+`R224`, next free `R225`.**
+
+| candidate | disposition | why |
+|---|---|---|
+| *"reaching the code is not the same as changing the result — A/B the pixels"* | **dated note on `R219`** | `R219`'s 295th-filing amendment already carries *"the route the bug report named accounts for NONE of the fix"*, established by ablation. This is the **second consecutive occurrence** and the **first where the named thing is a CAUSE rather than a ROUTE**, with a **new detection prescription** (compare rendered output, because *reached* and *effective* are different facts). That is an addition **to** the rule, not a rule |
+| *"two agreeing implementations of one rule cancel each other under sabotage"* | **dated note on `R221`** | `R221`'s subject **is** two computations of one predicate. What is new is the **direction of harm**: instances 1–3 are drift producing wrong answers; this is **agreement suppressing the instrument that would have found the drift.** A property of `R221`'s own remedy, argued where `R221` is read |
+| **★★★ *"a measurement taken to DIAGNOSE a defect does not survive the defect being FIXED"*** — raised by the engineer with the correction to this entry, and explicitly **not** proposed as a mint | **dated note on `R219`, beside clause (f)** | It is clause (f) **one level up**: (f) says *reaching the code is not the same as changing the result*; this says *the number that told you the code was unreachable was taken while the code was being made reachable.* Both are about **a fix's own evidence being measured at the wrong moment**, and this one was found **by correcting clause (f)'s own supporting figure**, which is the strongest possible argument for co-location. Sharpest form, the engineer's: ***the numbers most at risk of going stale are the ones gathered while the thing they measure is being changed*** — and the place they are most likely to be re-quoted is **the entry documenting the fix** |
+| *"a gate that checks nothing also prints PASS"* (`3dc9eb0`) | **dated note on `R224`** | `R224`'s ★★ clause already states it — *"a scan goes vacuous rather than red when its anchor is renamed and every assertion over an empty set passes"* — remedied by a corpus-size floor. This is that clause **in `tools/` rather than in a test, on the day it was minted** |
+
+**★ A FOURTH CANDIDATE, CONSIDERED AND DECLINED WITH ITS REVISIT TRIGGER
+STATED**, per the practice `R223`'s own mint established: *"a surviving
+sabotage can mean the COMMENT's coverage claim is wrong, not that the test is
+weak."* This is **n = 1** in that exact form. It is adjacent to `R223` (a
+claim whose truth-maker lives elsewhere and which nothing recompiles when it
+goes stale) but `R223` is scoped to a claim about an item's **callers**, and
+this is a claim about a test's **coverage** — a different truth-maker.
+**A short dated note is added at `R223` recording the adjacency and this
+trigger: if a second independent instance appears — a test or a gate whose
+doc comment names a mechanism it does not pin — mint it, and the argument
+will be that the two failures have OPPOSITE remedies** (rewrite the sentence
+vs. write another test), which is the kind of thing a rule is for and a
+memory file is not.
+
+---
+
+#### ★★★ `885cf3a` → `4094e49` — THE COMMIT WAS AMENDED, AND `check-cited-commits-exist.py` EARNED ITS KEEP ON EXACTLY THE FAILURE IT WAS WRITTEN FOR
+
+**Why it was amended.** `885cf3a`'s **commit message named the licensed
+suite** — the one violation this filing flagged as the pre-push blocker (see
+the commit-message section above). **The commit was unpushed**, so amending it
+is **not a rewrite of published history** and rule 8 permits it; the amended
+commit is **`4094e49`**. **This is the narrow case rule 8 leaves open, and it
+is worth naming as such**: the 82 already-published occurrences are untouched
+and remain the operator's call.
+
+**What it cost, and this is the part that matters.** The amend **invalidated 23
+hash citations across these three documents.**
+**`tools/check-cited-commits-exist.py` caught every one** and **named the
+replacement by matching commit subjects**, so the repair was mechanical rather
+than archaeological. All 23 repointed; the gate is clean — verified by this
+role after the amendment edits: *"clean — every cited commit in 79
+document(s) is an ancestor of HEAD."*
+
+⇒ **This is the gate's founding failure mode, occurring.** It was written
+after `0d9f4df` found **fourteen pre-existing casualties** of exactly this
+cause. The difference between fourteen silent ones and twenty-three caught ones
+**is the gate**, and the cost of running it is one command.
+
+**★★ AND THE SAME BLAST RADIUS REACHED TWO TREES THE GATE CANNOT SEE —
+n = 2 IN THIS FILING FOR *"a gate's silence is only as wide as its input
+set"*.** The gate scans **documents in this repository**. `885cf3a` was also
+cited **10 times outside it**, in the two RAG trees this role owns:
+**`C:\personal_rag\pdf\`** (2 lessons + 2 `index.md` bullets) and
+**`D:\dev\rag\rust\`** (2 findings + 3 `index.md` bullets, plus one in a
+third file). **All 10 found and repointed by this role**, by grepping the trees
+directly. **No gate reports them and none is proposed** — those trees are
+cross-project and hold citations into repositories a pdfce gate has no business
+resolving. **The obligation is on the writer: an amend in this repository owes
+a grep of both RAG trees.** Recorded beside the commit-message finding above,
+which is the same sentence about a different surface: *the gate cannot see
+commit messages*; *the gate cannot see the RAG trees*. **Both surfaces were
+breached the same day.**
+
+---
+
+#### DOCUMENTS EDITED, AND WHAT IS OWED
+
+**★ THIS ENTRY WAS AMENDED IN PLACE THE SAME DAY IT WAS FILED**, on a
+corrected measurement supplied by the engineer. **The filing ordinal did not
+advance** — this is the 306th filing corrected, not a 307th — and the wrong
+text is **struck and kept legible** in each of the five places it stood, per
+this project's usual discipline. **The struck claims, in one list, so a reader
+who greps for any of them lands on this line:** *"0 of 51 patches paint a
+`DeviceGray` source through Table 149"*; *"the conformance corpus cannot see
+this defect at all"*; *"no improvement was ever available"*; *"the one patch
+whose name promises exactly this case authors its greys as `DeviceCMYK
+[0 0 0 k]`"*; and the symptom *"the surround reads `127,127,127`"*. **What is
+NOT retracted**, stated because a correction of this size invites over-reading:
+the **cause** error is confirmed and untouched (`R219` clause (f) stands); the
+five synthetic fixtures were and remain necessary, since they are the only
+place the three enum values are discriminated; **every sabotage finding
+stands**; and the corpus being a **poor** oracle for this behaviour stands —
+only *"blind"* was too strong.
+
+| document | change |
+|---|---|
+| `docs/ROADMAP.md` | this entry; `Pass 143.0` **Backlog → Shipped**; the *Backlog* entry retired and its neighbour's pointer dated; a dated note under the `R219` route table in the `Pass 140.0`/`140.1` entry; a dated note in *Next up*'s discharge banner; the 08:31 inbound filed in *Next up* **without an ID**; dated instance notes on `R219`, `R221`, `R224` and an adjacency note on `R223`. **Same-day correction adds:** the corrected corpus section (struck original kept), a new *★★★★ the filed SYMPTOM had already been fixed* section, a new *OPEN ITEMS* section (the entry twice pointed at one that did not exist), a new *`885cf3a` → `4094e49`* section, two corrected verification rows plus two new ones, a second dated note at `R219`, a fourth row in the disposition table, and a fourth markdown-rendering defect fixed — **the row describing the `:14461` backtick bug had reproduced it**. **★ And a FIFTH, in a third file:** pointing the same check at `docs/SESSION_LOG.md` found an unescaped pipe inside a code span in a table cell (the 305th filing's `edit.rs` line-count row). **The check has now been run against three documents and found a defect in every one** — `FEATURES.md` (305th), `ROADMAP.md` (306th, three), `SESSION_LOG.md` (this amendment). Adopted for all three |
+| `docs/FEATURES.md` | **three changes** — a **new *Implemented* row** for the overprint zero-tint scope setting (**`[x]` core · `[x]` cli · `[ ]` gui · `?` Acrobat**), with the *Planned* row at `:328` retired into it; the correction at `:245` (**not named in the dispatch**); and a **counter-population note at `:246`** (also not named — see the sweep). Whole-file unescaped-pipe check re-run after every edit: **0 rows off 6** |
+| `docs/SESSION_LOG.md` | 306th-filing entry |
+| `docs/ARCHITECTURE.md` | **no change, argued rather than skipped.** §12 records *architectural* decisions; this Pass applies `R169`/`R206`'s **existing** ambiguity-setting mechanism to a new axis, which is what that mechanism is for. §1413's existing note (*"`Pass 143.0` is NOT blocked on any of it, because the spot ink is already in the four planes by paint time"*) was **re-read against the shipped code and is confirmed correct** — no colorant plane was added |
+| `D:/dev/rag/rust/` | **AMENDED after the correction**: **6 `885cf3a` citations repointed** to `4094e49` across three findings and `index.md`. The new file's own measurement table (*"pixels changed across 51 corpus files: 0"*) is **correct as written and left alone** — it describes the `classify`-only change in isolation, which is a different measurement from the withdrawn corpus scan. Originally: **one NEW file and two dated amendments.** New: `a_change_that_is_reached_but_gated_upstream_moves_no_output_and_is_indistinguishable_from_a_correct_fix_waiting_on_something_else.md` — the headline finding, which no existing file covered (the nearest, `a_fixture_that_avoids_a_feature_precondition…`, is the same null result caused by the **fixture** rather than by the **change**). Amended, each with its `index.md` bullet extended and `last_verified` bumped: `a_fixture_that_avoids_a_feature_precondition_cannot_tell_a_fix_from_a_no_op.md` (**third instance, and the OPPOSITE mistake** — the fixture did not *avoid* the precondition, it **cancelled** it) and `the_cheapest_moment_to_delete_a_duplicated_formula_is_while_it_still_agrees.md` (**the mutual-masking mechanism**, which is a stronger argument than that file's own drift argument). **A fourth new file was considered and refused under hard rule 4** — the duplication finding's remedy is already `two_paths_that_must_agree_share_the_predicate_that_decides_when_they_can.md`, one layer over |
+| `C:\personal_rag\pdf\` | **AMENDED after the correction**: the `0 of 51` lesson is **rewritten around the corrected figure and gains a second, stronger finding** (the count was taken between the two halves of the fix), its title and its index bullet changed, and **4 `885cf3a` citations repointed** across the two lessons and the subject index. Originally: **two NEW lessons** — `lesson_20260828_opm1_zero_tint_rule_does_not_reach_devicegray_but_acrobat_converts_grey_to_k_only_first.md` (format-spec: the §8.6.5.7 title closing §8.6.7's escape hatch, Acrobat's convert-first reading, and the oracle-free two-page check) and `lesson_20260828_a_conformance_patch_can_author_the_case_its_name_promises_a_different_way.md` (methodology: 0 of 51). Subject index and master index both updated |
+
+**★ THE `gui` COLUMN IS `[ ]`, AND THE DISPATCH ASKED WHICH READING WAS
+APPLIED, SO IT IS STATED.** The engineer offered `[x]` on the grounds that a
+control shipped in the in-repo settings panel. **Reading applied: the header's
+own, added 2026-08-19 (decision 073) — `gui` = `D:\dev\pdfceGUI`, *not*
+`crates/pdfce-gui`, and the ticking bar is *"an operator can reach it in a real
+`pdfceGUI` build."*** `crates/pdfce-gui` is paused and explicitly excluded by
+that sentence. **`[ ]` is therefore the honest box, for the column's own reason
+and not for want of a control** — the same disposition the CMYK-buffer-ceiling
+row already carries two rows above it, and the row says so in those words.
+
+**Owed, reported to the engineer, not actionable by this role:**
+
+1. **★★★ The commit-message occurrences of the licensed suite's name** — 83
+   commits, 82 published. **Operator decision, gated by rule 8.** See the
+   section above.
+2. **`docs/NEXT_SESSION.md`** — four stale claims; its entire §C is discharged.
+3. **A spec-ambiguity-register entry is OWED for this setting.** The register
+   (`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__ambiguity_settings_register.md`)
+   is `pdfce-spec-librarian`'s exclusive territory (hard rule 6) — **flagged,
+   not written.** Read here at filing time: the neighbouring row **`REND-A1`**
+   (*colour-managed `DeviceGray`→CMYK: device rule or ICC?*) exists; **there is
+   no row for *does `OPM 1`'s zero-tint rule reach a `DeviceGray` source?***
+   Proposed identifier shape and the three enum values are in this entry.
+   This is the **second** register entry this project owes — the sub-pixel
+   stroke-width clamp (`render.hairline_clamp_policy`) has been owed since
+   2026-08-09.
+4. **The 08:31 inbound needs a Pass ID** (engineer's act) and, per the standing
+   channel ruling, takes the front of the queue.
+5. **★★ RE-READ THE GREY/K-BLACK PATCH'S CONTENT STREAM.** Two open items
+   above turn on it: the withdrawn claim that it *"authors its greys as
+   `DeviceCMYK [0 0 0 k]`"* is contradicted by 1,827 of its pixels moving with
+   the setting, and its trap **X** still reads `127,127,127` against a green
+   surround with **no known cause**. **One read probably answers both.**
+6. **`docs/NEXT_SESSION.md` carries the stale SYMPTOM too** — `:184`–`:185`
+   name the patch *"the one the entry measured at 84,120,34 against pdfce's
+   127,127,127"*. That is the **surround**, and the surround now reads
+   **81,119,40**. Engineer-owned; reported, not edited.
+
+**★ INDEX CHECK (hard rule 7), run in full this filing, by enumerating each
+directory and testing every filename against its index rather than by reading.**
+`D:/dev/rag/rust/` — **247 findings, 0 missing from `index.md`.**
+`D:/dev/rag/egui/` — **136 findings, 1 "missing"**, and it is the **same known
+false positive the 305th filing recorded**:
+`epaint_has_glyph_is_resolved_face_vs_replacement_face_not_a_coverage_oracle.md`
+is a deliberate duplicate stub whose own body says it is intentionally
+unlisted. **Re-reported here only to confirm it has not changed** — a false
+positive that is silently dropped becomes indistinguishable from one that was
+fixed. `C:\personal_rag\pdf\` — **177 lessons, 0 missing from the subject index
+and 0 missing from the master index** — **175 + this filing's 2 = 177**, and
+the master index is clean for the first time since the 305th filing restored
+the one line that was missing from it.
+
+**Backup currency, checked rather than inferred (hard rule 8).** Newest bundle
+in `D:\Dev\pdfce-backups\` is **`pdfce-20260827-shutdown-a2b4e16-full.bundle`**,
+**2026-08-27 12:04** (`ls -t` + `ls -l --time-style=long-iso`, run here).
+`git merge-base --is-ancestor a2b4e16 HEAD` → **yes**;
+`git rev-list --count a2b4e16..HEAD` → **45**. **The backup is 45 commits
+behind the tip** — 42 at the 305th filing, 39 at the 304th. Reported as a
+figure with its command; the engineer decides whether it matters.
+
+**Push state, measured at filing time.** `git rev-parse --short origin/main` →
+**`25004cd`**; `git rev-list --left-right --count origin/main...main` → **`0
+2`**. **The two unpushed commits are exactly the two filed here** (`3dc9eb0`,
+`4094e49`). Under rule 8 as amended 2026-08-27 (*"always push"*) an ordinary
+fast-forward of `main` is standing-authorized — **but read owed item 1 first**,
+because pushing `4094e49` publishes its commit message, and **a published
+message cannot be withdrawn without the history rewrite rule 8 gates.** The
+82 already-published occurrences mean the exposure is not new; **whether that
+makes the 83rd acceptable is the operator's judgement, not this role's.**
+Flagged because pushing is not this role's act.
+
+**Ledger effects.** Pass ceiling **unchanged at `151.0`** — `143.0` is a
+**back-fill**, an ID reserved by the 294th filing and used by the work it was
+reserved for; **next free Pass ID 152**. Standing rules **unchanged at `R224`**,
+next free **`R225`** — **four** dated instance notes and one adjacency note,
+none of which is a mint (the fourth arrived with the same-day correction and
+sits at `R219` beside clause (f)). Decisions **unchanged at 094**, next free **095**.
+**`R221` goes from three numbered instances to FOUR** — that rule is the only
+one of the three whose own text carries a numbered list, so it is the only
+count this filing can move without inventing one. **`R219` and `R224` keep no
+running instance total in their text and none is asserted here**; what was
+added to each is a dated note, and the note is the checkable artefact.
+Next free filing ordinal: **307** — **unchanged by the same-day amendment**,
+which corrects this filing rather than adding one.
+
+---
+
 ### `Pass 151.0` (`c4425f0`) — `EditSession::resize_annotation` + `pdfce-cli resize-annotation` — ★★★★★ **THE OPERATOR OVERTURNED AN ANSWER PDFCE HAD ALREADY ACCEPTED FROM ITS OWN CONSUMER, AND THE CORRECTION IS A REASONING RULE, NOT A PREFERENCE: *"CONVERGENCE AMONG REFERENCE IMPLEMENTATIONS ARGUES FOR A DEFAULT, NOT AGAINST AN OPTION."* `pdfceGUI` ARGUED FROM CAD PRACTICE THAT STROKE WIDTH MUST NOT SCALE, PDFCE FILED THAT AS SETTLED IN `FEATURES.md` — AND ITS OWN THIRD ARGUMENT CONTAINED THE REFUTATION: *ILLUSTRATOR SHIPS "SCALE STROKES & EFFECTS" **OFF**, WHICH MEANS ILLUSTRATOR **HAS** THE TOGGLE*** — ★★★★★ **A BUG THE ENGINEER WROTE AND CAUGHT IN THE SAME SESSION, AND ITS FIRST FORM WOULD HAVE SILENTLY REPLACED ANOTHER PRODUCER'S ARTWORK WITH PDFCE'S RENDERING OF IT: THE APPEARANCE GATE WAS `spec_from_dict(..).is_ok()`, WHICH ASKS *CAN PDFCE PARSE A SPEC OUT OF THIS DICTIONARY* — TRUE OF AN ACROBAT-DRAWN `/Square` TOO. IT WOULD ALSO HAVE MADE THE REFUSAL **UNREACHABLE**, AND THE ENGINEER'S OWN DOC COMMENT THREE LINES ABOVE FORBADE EXACTLY WHAT IT DID** — ★★★★ **`ResizeOptions` WAS UNCONSTRUCTIBLE BY ANY CONSUMER AND EVERY IN-CRATE TEST WAS GREEN: `#[non_exhaustive]` REFUSES THE STRUCT-EXPRESSION FORM OUTSIDE THE DEFINING CRATE, `..Default::default()` INCLUDED. THE THREE FLAGS THIS PASS EXISTS FOR WOULD HAVE SHIPPED `pub`, DOCUMENTED, TESTED — AND UNREACHABLE BY THE SHELLS THEY WERE BUILT FOR. **THE RAG FILE THAT PREDICTS THIS WAS WRITTEN ONE DAY EARLIER**, `2026-08-27`, BY THIS ROLE** — ★★★ **A MIRROR IS AN ISOMETRY AND ONLY THE CLI SUITE FOUND IT: `sx = -1, sy = 1` WAS CLASSIFIED NON-UNIFORM BY `(sx - sy).abs()`, SO MIRRORING A FOREIGN APPEARANCE WAS REFUSED. **THE 14 CORE TESTS WERE GREEN WHILE THIS WAS BROKEN** — NO CORE CASE HAD PAIRED A NEGATIVE FACTOR WITH A FOREIGN `/AP`** — ★★ **A NEW VARIANT OF THE BACKSLASH-THROUGH-TOOLING HAZARD, AND THE ASYMMETRY IS THE FINDING: A RAW `r'''…'''` PYTHON STRING PASSED `\u2014` THROUGH VERBATIM; IN A RUST **STRING LITERAL** THAT IS A HARD COMPILE ERROR, IN A **`///` DOC COMMENT** IT COMPILES SILENTLY AND SHIPS AS WRONG `--help` TEXT. 17 INSTANCES** — ★ **HARD-RULE-11 SWEEP: `docs/core-api/index.md`'s ROUTING TABLE — THE CONSUMING SHELL'S FIRST PAGE — HAS **FOUR** STALE FIGURES, AND THE PARAGRAPH DIRECTLY BENEATH IT IS HEADED *"Every figure above was stale, and the verb count caused an incident."* THE VERB COUNT IS THE ONLY ONE ANYONE MAINTAINS. MINT DECLINED — `R206` ALREADY IS THE RULE, AND THE DISPATCH NAMED ITS SIBLING** — 2026-08-28 (305th filing)
 
 **Commit:** `c4425f0`, 10 files, **+2,063 / −6** (`git show --numstat`, run here) —
@@ -430,7 +1226,7 @@ became false for core and cli; (ii) *"stroke width does not scale"* went from a
 | `docs/FEATURES.md:339` | *"Resize is built for widgets only … unbuilt for the other four"*, and *"stroke width does not scale"* recorded as the consuming shell's settled answer | rewritten; the rotate half kept honest and separated from the resize half |
 | `docs/FEATURES.md:349` | *"resize is built nowhere for markup"* | replaced; **gui box stays `[ ]`** |
 | `docs/ARCHITECTURE.md:16135` | *"a width pdfce chose is inferred state and must be visible before it becomes document state"* — **owed item 2 from the 304th filing, re-verified live here** | dated 059 amendment note added in place (append-only respected) |
-| `docs/FEATURES.md:206` | **a RENDERING defect, not a stale claim, and pre-existing:** the widget-visibility row contains `` `Print | NoZoom` `` — **an unescaped pipe inside a code span, which GFM does NOT protect inside a table**, so that row rendered with a spurious sixth column and everything after *"Print"* fell out of the Feature cell | escaped to `\|`; found by a whole-file unescaped-pipe count run as part of this filing's checks, **not by reading** — nobody reads a 400-character table cell to its end |
+| `docs/FEATURES.md:206` | **a RENDERING defect, not a stale claim, and pre-existing:** the widget-visibility row contains `` `Print \| NoZoom` `` — **an unescaped pipe inside a code span, which GFM does NOT protect inside a table**, so that row rendered with a spurious sixth column and everything after *"Print"* fell out of the Feature cell | escaped to `\|`; found by a whole-file unescaped-pipe count run as part of this filing's checks, **not by reading** — nobody reads a 400-character table cell to its end |
 
 **★ NEW STANDING CHECK, adopted rather than proposed, because it cost one
 command:** every `FEATURES.md` filing now counts **unescaped** pipes per table
@@ -1453,7 +2249,7 @@ beside it look maintained.* Owed work; `docs/core-api/` is the engineer's.
 | sabotage 1 — stop translating the flat geometry keys | engineer | **2 of 8 red** — the renders-right/reconstructs-wrong bug |
 | sabotage 2 — negate `dy` in the geometry translator **only** | engineer | **3 of 8 red**, including the there-and-back round trip written for exactly a partial sign error |
 | gates | `bash tools/run-gates.sh` | **PASS, 26 commands** |
-| `edit.rs` line count in `docs/core-api/` | `git show e91dfad:crates/pdfce-core/src/edit.rs | wc -l`, run here | **32,826 AT `e91dfad`** — matches the corrected doc (was 32,505). ⚠ **The working tree already reads 33,067**: the engineer is mid-Pass on note text for geometric markup (`crates/pdfce-core/tests/markup_note.rs`, untracked), so `check-core-api-verbs.py` is **red on his in-flight state, not on this commit or this filing**. |
+| `edit.rs` line count in `docs/core-api/` | `git show e91dfad:crates/pdfce-core/src/edit.rs \| wc -l`, run here | **32,826 AT `e91dfad`** — matches the corrected doc (was 32,505). ⚠ **The working tree already reads 33,067**: the engineer is mid-Pass on note text for geometric markup (`crates/pdfce-core/tests/markup_note.rs`, untracked), so `check-core-api-verbs.py` is **red on his in-flight state, not on this commit or this filing**. |
 | `EditSession` verb count | `docs/core-api/index.md` diff in this commit | **149 → 150** |
 | GUI-core separation | `Cargo.toml` untouched by this commit (`git show --numstat`) | invariant not at risk; no re-check owed |
 
@@ -4727,6 +5523,52 @@ route 6 revealed*. The enumeration is not only a courtesy to the next
 session — as the 291st filing already recorded, **it is the step that finds
 the sibling inside the same Pass, before the operator files it as a fresh
 bug.** This is now the second consecutive Pass where that held.
+
+> **★★★★ DATED AMENDMENT 2026-08-28 (306th filing) — ROUTE 7 IS CLOSED AS A
+> DEFECT (`Pass 143.0`, `4094e49`), AND THE TABLE'S ACCOUNTING NEEDS AMENDING
+> RATHER THAN TICKING, BECAUSE THE PATCH IT WAS FILED TO FIX STILL FAILS.**
+>
+> Three things this table could not have known, all measured in `4094e49`:
+>
+> 1. **The CAUSE filed for route 7 was wrong.** It named `overprint::classify`
+>    mapping `DeviceGray` to `SourceKind::OtherProcess`. That was implemented
+>    exactly as filed, compiled, and was **instrumented and demonstrably
+>    reached** — and **moved zero pixels.** The real gate was
+>    `Interpreter::overprint_would_change`'s `_ => false` arm, which the paint
+>    never got past. **Only an A/B of the rendered pixels could say so**;
+>    *reached* and *effective* are different facts, and a wrong fix that is
+>    reached looks exactly like a right fix waiting on something else.
+> 2. **The conformance corpus is a POOR ORACLE for route 7 — corrected the
+>    same day, and the first version of this point said *cannot see it at
+>    all*.** ~~Measured by instrumenting `cmyk_group_rules` across all 51
+>    patches: **zero** paint a `DeviceGray` source through Table 149. The patch
+>    whose *name* promises this case authors its greys as `DeviceCMYK
+>    [0 0 0 k]`, which always took the direct-CMYK row.~~ **That scan ran
+>    between the two halves of the fix — after the `classify` change, before
+>    the `overprint_would_change` fix — so it measured the DEFECT, not the
+>    FIX.** Re-measured on `4094e49` by rendering every patch twice with the
+>    shipped binary (`--overprint-zero-tint-scope device_cmyk_only` vs. the
+>    default): **3 of 51 patches change pixels — 8,491 / 1,827 / 804 — and 0
+>    of 3 change verdict.** ⇒ **the *"back to 5 FAIL or better"* expectation
+>    was still unreachable by this fix**, for the weaker and accurate reason
+>    that the corpus is **touched** by it and cannot **score** it; the suite is
+>    unchanged at **6 FAIL / 29 pass / 16 unresolved of 51** — no regression,
+>    and no improvement the corpus could score. Five synthetic fixtures were
+>    built instead (`tools/gen-grey-overprint-fixtures.py`).
+> 3. **⇒ The failing patch's remaining 3 traps have a DIFFERENT, still-unknown
+>    cause.** They were attributed to route 7. **That attribution is
+>    withdrawn**, and the cause is now an open item at the head of *Shipped*.
+>    **The filed SYMPTOM was also stale**: the surround this table's own
+>    `Pass 140.1` segmentation measured at `127,127,127` now reads
+>    **81,119,40** under both settings, against Acrobat's `84,120,34`. **It is
+>    the trap X, not the surround, that is still wrong.**
+>
+> **★ What this adds to `R219` itself**, filed as a dated note at the rule:
+> every prior instance argues from *routes*. This one is the first where the
+> named thing was a **CAUSE**, and it is the second consecutive Pass in which
+> **the thing the report named contributed 0 % of the outcome** — the 295th
+> filing established the first by ablation, this one by pixel A/B. **The
+> enumeration's answers, and the fix's own effect, are both measurements.**
 
 `R219` **amended in place** with this instance, not re-minted — see *Standing
 rules*.
@@ -13898,7 +14740,7 @@ which covers the `Pass 122.7` re-scope this same census informs.
 | Pass family ceiling | **123** | **124** — new family; next free **125** |
 | decisions (`ARCHITECTURE.md` §12) | **086** | **087** — the `Pass 122.7` re-scope and the clamp-finding acceptance (below). Next free **088**. |
 | standing rules | **R217** | unchanged, next free **R218** — no new pattern, a scope call and a measurement |
-| operator questions | ceiling **(bs)** (retired/withdrawn), next free **(bt)`** — ★ corrected this filing, see the footnote on the `Pass 123.0` entry above and on the 250th `SESSION_LOG.md` entry; both said "next free `(bs)`," which the *Open operator questions* section itself (lines confirming `(bt)` twice) contradicts | **`(bt)` FILED** (the suite-identifier-mention licence question, below). New ceiling **(bt)**, next free **(bu)** — ★ **`(bt)` ANSWERED and `(bu)` FILED this same filing (2026-08-25, `Pass 124.2`, below)**; see the *Open operator questions* section for both. |
+| operator questions | ceiling **(bs)** (retired/withdrawn), next free **(bt)** — ★ corrected this filing, see the footnote on the `Pass 123.0` entry above and on the 250th `SESSION_LOG.md` entry; both said "next free `(bs)`," which the *Open operator questions* section itself (lines confirming `(bt)` twice) contradicts | **`(bt)` FILED** (the suite-identifier-mention licence question, below). New ceiling **(bt)**, next free **(bu)** — ★ **`(bt)` ANSWERED and `(bu)` FILED this same filing (2026-08-25, `Pass 124.2`, below)**; see the *Open operator questions* section for both. |
 | `render-page` metrics line | **92 keys** | unchanged — no new counter |
 | `FEATURES.md` | — | one new *Planned* row (`Pass 124.1`'s capability); no *Implemented* changes |
 | `PRIOR_ART.md` | — | unchanged — no new dependency |
@@ -81067,6 +81909,68 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### ★★★★★ THE 08:31 INBOUND — A `pdfceGUI` REQUEST ARRIVED BETWEEN THE 305th FILING'S CHANNEL CHECK AND `Pass 143.0`'s COMMIT. **UNPARSED · NO PASS ID CLAIMED** — and it is `R219`'s shape again: `format_text` was made addressable by PIN ALONE and its sibling `edit_text` was not — filed 2026-08-28 (306th filing)
+
+**★ NO ID IS MINTED HERE, DELIBERATELY.** Assigning a Pass ID is the
+engineer's act (`CLAUDE.md` rule 5, and this role's own dispatch protocol).
+This box exists so the item cannot be lost between filings, **not** to scope
+it.
+
+**Provenance and why it is at the front.** `ls -la
+D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/`, run by this role at
+filing time:
+**`request_a_pinned_edit_still_matches_on_find_and_the_find_is_extractor_prose.md`**,
+from `pdfceGUI`, **2026-08-28 08:31** — *after* the 305th filing (07:29) and
+*before* `4094e49` (09:06). **No reply answers it**; the newest outbound is
+`reply_stroke_scaling_is_an_OPTION_operator_ruling_and_you_get_the_toggle.md`
+at **05:20**. The operator's standing ruling — *"check the feature requests
+and write these as the first thing to do before continuing work on other
+things"* — is **still in force** (296th filing's discharge banner explicitly
+kept the ruling while discharging its ordering), so this takes the front of
+this section.
+
+**The report, in the requester's own terms.** Driven on the operator's own
+`SW41177.pdf`, page 1, at `(1140, 62)`, with the pin **set**:
+
+```
+pdfce-diag text-edit-caret  kind=Edit page=0 run=426 len=30
+pdfce-diag edit-text-refused page=0 n=1
+    detail=text to edit ("0.00                     0.030") was not found in an editable run
+```
+
+**Twenty-one spaces that are not in the content stream.** They are
+`text_extract`'s inter-glyph gap filling — the machinery that turns two show
+operators separated by a `Td` into one readable line — and **on a CAD drawing
+that is most of the text there is.** The shell captured the run's text exactly
+as the extractor reported it and handed it back as `EditRequest::find`. **It
+cannot match, because nothing in the file spells it.**
+
+**★★ AND THE REQUEST CARRIED A PIN THE WHOLE TIME.** `canvas::textedit::plan`
+sets `pinned_span` from `pin::of_run` with the `EditTarget` from the same
+provenance record — so the request named **an unambiguous byte span naming one
+show operator**, and was refused on a string comparison against text the
+**extractor synthesised**. ⇒ ***`find` and `pinned_span` are two answers to one
+question, and when both are present the pin is the one with evidence behind
+it.***
+
+**★★★ THIS IS `R219`'s SHAPE, AND THE SIBLING ROUTE WAS ALREADY FIXED.** The
+requester says so themselves: **`Pass 145.0` gave them
+`FormatRequest::whole_operator(page, span)` — no find string at all — and they
+consumed it the same night.** `format_text` and `edit_text` are **two verbs
+over the same surgery**; one is addressable by pin alone and the other is not.
+**A fix that reached one entry point and not its sibling taking the same
+operands** is precisely what `R224`(a) says to scope by the **operand**, not by
+the function being edited — and this is the **fourth** consecutive item in that
+family (`145.0` → `147.0` → `148.0` → this).
+
+**Owed at scoping time, not decided here:** whether `edit_text` gains a
+pin-only form mirroring `FormatRequest::whole_operator`, or whether a present
+`pinned_span` simply **outranks** `find` on the existing verb; and whether the
+extractor's synthesised spacing should be recoverable at all, which is a
+separate and larger question about what `text_extract` promises its consumers.
+
+---
+
 ### ~~★★★★★ `preview_style_resolution` STILL PASSES THE CALLER'S `find` STRAIGHT THROUGH — **`Pass 147.0` FIXED ONE OF THE TWO PURE QUERIES AND THE SIBLING TAKING THE SAME TWO OPERANDS WAS NEVER ASKED ABOUT** — found by the 299th filing's hard-rule-11 sweep, **UNPARSED · NO ID CLAIMED**~~ — **DISCHARGED 2026-08-28 (300th filing): SCOPED AND SHIPPED AS `Pass 148.0` (`f1a88e6`), FOUR HOURS AFTER THIS BOX WAS OPENED** — opened 2026-08-28 (299th filing)
 
 > **★★★ DISCHARGE BANNER — READ BEFORE ACTING ON ANYTHING BELOW.**
@@ -81647,6 +82551,11 @@ about a directory outside this repository has no falsifier here.**
 > spec ambiguity, **unchanged in content and unchanged in its *Backlog*
 > position** throughout, exactly as this box promised. It stopped being first;
 > it never stopped being next after these.
+>
+> > **★ DATED 2026-08-28 (306th filing): DISCHARGED — `Pass 143.0` SHIPPED as
+> > `4094e49`.** It was picked up next after these, exactly as this box said,
+> > and its *Backlog* entry is retired. **The entry's own filed *Cause* turned
+> > out to be wrong** and the correction is at the head of *Shipped*.
 >
 > **`Pass 142.0` remains de-prioritised-NOT-closed in *Backlog*, unchanged.**
 > `142.1` shipping does not retire it, and the requester's own scoping —
@@ -92110,97 +93019,18 @@ render.
 **The remaining open route from this entry's own subsystem is `Pass 143.0`**
 (a `DeviceGray` fill overprinting a spot backdrop), below.
 
----
-
-### `Pass 143.0` — A `DeviceGray` FILL OVERPRINTING A SPOT BACKDROP KNOCKS IT OUT; ACROBAT PRESERVES IT — ★ **THIS IS A SPEC READING, NOT A BUG, AND THE FIX IS AN AMBIGUITY SETTING** — filed 2026-08-27 (294th filing), fully diagnosed, **deliberately not started**
-
-**Provenance.** Found by `Pass 140.1` (`70c5919`), not reported by anyone.
-Closing routes 4–6 of `R219`'s enumeration made this one visible: it is the
-**surround** in the segmentation table in that Pass's *Shipped* entry, the
-half that stayed `127,127,127` while the trap X became correct. **It is the
-seventh and only open route in that enumeration** — see the `R219` table there
-before scoping this.
-
-**Symptom.** A **50 % `DeviceGray` fill overprinting a spot backdrop knocks
-the backdrop out.** Acrobat preserves it. Measured on a grey/K-black overprint
-patch (stem deliberately unnamed — operator ruling 2026-08-25, open question
-`(bt)`, gate `tools/check-suite-name-absent.py`):
-
-| object | Acrobat | pdfce at `70c5919` |
-|---|---|---|
-| the surround (this defect) | 84,120,34 | 127,127,127 |
-
-**Cause.** `overprint::classify` maps `ColorSpace::DeviceGray` to
-`SourceKind::OtherProcess`, which `cmyk_group_rules` gives
-`[ComponentRule::Source; 4]` — **the source in all four components** — so the
-paint replaces the backdrop everywhere instead of preserving the components it
-did not specify.
-
-**★ THIS IS A SPEC READING, NOT A BUG, AND SCOPING IT AS A BUG IS THE MISTAKE
-TO AVOID.** ISO 32000-1 **§8.6.7** scopes `OPM 1` to *"a tint value of 0.0 for
-a colour component **in a `DeviceCMYK` colour space**"* — and `DeviceGray` is
-not one. **pdfce's literal reading is defensible.** Acrobat converts grey to
-K-only CMYK **first** and *then* applies `OPM 1`, which is the other
-defensible reading.
-
-**Sourcing:** `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.7.md`,
-whose **`OPM-2` row already records the neighbouring case** — a CIE-based space
-that is *implicitly converted* to `DeviceCMYK` **does** get `OPM 1`. So the
-standard already contemplates conversion-then-`OPM` for one space and is silent
-about it for `DeviceGray`; that silence is the ambiguity, and it is exactly the
-shape the project's standing practice covers.
-
-**Shape of the fix**, per the standing *"two defensible answers? ship both,
-pick the default"* rule (`R169`; global memory *"make spec ambiguity a
-setting"*, Ken 2026-08-08): **an ambiguity setting, defaulting to Acrobat's
-behaviour**, because this is a **print-conformance axis** and the suite is
-authored to press behaviour. **Not an operator question** — the default is
-determined by what the measurement instrument is for, and the literal reading
-stays reachable by setting.
-
-**Expected result:** closing this should take the suite **back to 5 FAIL or
-better** of 51, undoing the `6 FAIL` that `Pass 140.1` correctly produced by
-removing a false pass. **Do not read that as `140.1` being reverted** — the
-trap X stays correct either way; this fixes the surround it was hiding behind.
-
-**Acceptance criteria owed at scoping time**, not decided here: the setting's
-name and enum values; whether the conversion applies to `DeviceGray` only or
-to every non-`DeviceCMYK` process space `classify` currently calls
-`OtherProcess`; and whether `pdfce-cli` gets a flag or only the settings file
-(rule 11 says a subcommand surface ships with the feature).
-
-#### ★★ AMENDMENT 2026-08-28 (301st filing) — **THE SCOPING ABOVE IS CONFIRMED CORRECT AGAINST THE SPEC RAG, AND `Pass 143.0` NEEDS NO NEW COLORANT PLANE**
-
-**Filed BEFORE the work rather than after it, deliberately.** The engineer
-checked this entry against the spec corpus while scoping the Pass and **wrote
-no code**; nothing shipped, so there is no commit to cite. Recorded here so the
-next session does not re-derive it.
-
-**(1) The escape hatch in §8.6.7 covers CIE-BASED spaces only — CONFIRMED.**
-`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.5.7.md` is titled
-**"Implicit Conversion of CIE-Based Colour Spaces"** (frontmatter `clause:`
-line, read here). §8.6.7's *"or is implicitly converted to `DeviceCMYK`; see
-8.6.5.7"* therefore reaches **CIE-based spaces and nothing else**.
-`DeviceGray` is a **device** space, so it is genuinely outside `OPM 1`'s
-literal scope ⇒ **pdfce's current reading is defensible, exactly as filed**,
-and Acrobat's grey→K-only-then-`OPM 1` reading is the other defensible one.
-**The filed shape — an ambiguity setting defaulting to Acrobat's behaviour
-(`R169`) — stands unchanged.** This amendment adds no scope and removes none.
-
-**(2) ★ WHY THE FIX WORKS AT ALL, which the entry did not state and which a
-future reader will need before reading the item immediately below.** The spot
-backdrop's ink is **already in the four CMYK planes by paint time** — a
-`Separation` paint goes through its tint transform into those planes — so
-*"preserve the spot backdrop"* is **expressible with the four-component rules
-alone**. ⇒ **`Pass 143.0` requires NO new colorant plane and is NOT blocked on
-the n-channel compositor.**
-
-**★ That sentence is load-bearing because of what was measured in the same
-sitting.** The Backlog item directly below reports that Table 149's *named
-spot component* row family is unreachable, and it would be easy — and wrong —
-to read that as *"the real problem is that there is no spot plane"* and rescope
-`143.0` as blocked. It is not. **Two true findings, one of which explains why
-the other is not a blocker on the first.**
+> **★★ DATED AMENDMENT 2026-08-28 (306th filing) — SHIPPED, AND THE *Backlog*
+> ENTRY THAT STOOD HERE IS RETIRED.** `Pass 143.0` shipped as **`4094e49`**;
+> its record, including the correction to its own filed **Cause**, is the
+> entry at the head of *Shipped*. **Route 7 is closed as a defect — and the
+> patch it was filed to fix STILL FAILS**, because the conformance corpus is a
+> **poor oracle** for this defect: measured on `4094e49` by rendering every
+> patch twice with the shipped binary, **3 of 51 change pixels (8,491 / 1,827 /
+> 804) and 0 of 3 change verdict.** ~~the conformance corpus cannot see this
+> defect at all (0 of 51 patches paint a `DeviceGray` source through
+> Table 149)~~ — **that figure was withdrawn the same day; it was measured
+> between the two halves of the fix and described the defect rather than the
+> fix.** See the dated note under this entry's own `R219` route table, above.
 
 ---
 
@@ -112360,6 +113190,119 @@ same cause (hashes exist only at commit time), two different failure modes.
   rule — the very objection the 299th filing declined a mint over, honoured
   here even though its conclusion is reversed at `R224`.
 
+  **★★★★★ NOTE ADDED 2026-08-28 (306th filing) — THE FIRST INSTANCE WHERE THE
+  THING THE REPORT NAMED WAS A *CAUSE* RATHER THAN A *ROUTE*, AND THE ONLY
+  INSTRUMENT THAT COULD SEE IT WAS AN A/B OF THE RENDERED PIXELS. CLAUSE (e) IS
+  EXTENDED FROM THE ENUMERATION'S ANSWERS TO THE FIX'S OWN EFFECT.**
+
+  Every instance above concerns a **route**: the enumeration missed one (1–3),
+  found one (routes 5–7), or mis-answered one from memory (clause (e)). The
+  295th filing's ★★★★★ amendment supplied the strongest datum — *"on the
+  reported patch, the route the bug report named accounts for **none** of the
+  fix"*, established by **ablation**. **`Pass 143.0` (`4094e49`, 2026-08-28) is
+  the second consecutive Pass with that outcome and the first where the named
+  thing is a diagnosis rather than a code path.**
+
+  The Backlog entry filed the cause as *"`overprint::classify` maps
+  `DeviceGray` to `SourceKind::OtherProcess`, which `cmyk_group_rules` gives
+  `[ComponentRule::Source; 4]`"*. The engineer implemented **exactly that**:
+
+  - it **compiled**;
+  - it was **instrumented and demonstrably REACHED** — `converts=true` on
+    **10 paints**;
+  - the classification **demonstrably changed**;
+  - and it **moved ZERO PIXELS**, on the five new fixtures and on all 51
+    conformance patches.
+
+  The real gate was `Interpreter::overprint_would_change`, whose `_ => false`
+  arm meant the paint **never entered `paint_overprint`, never reached
+  `classify`, never reached the rules.** That arm's comment called it *"a known
+  under-count rather than a claim of zero"* — **true of the DISCLOSURE, and the
+  sentence did not say the same arm also gated the BEHAVIOUR.**
+
+  **⇒ CLAUSE (f), and it is the cheap half of an expensive lesson.**
+  **REACHING THE CODE IS NOT THE SAME AS CHANGING THE RESULT.** A change that
+  is correct-looking, compiling, and **demonstrably reached** but produces no
+  change in the rendered output is **indistinguishable from a right fix waiting
+  on something else** — a missing plane, an unbuilt caller, a corpus that does
+  not exercise it. **Both states present identically**: green suite, changed
+  intermediate values, unchanged output. Nothing separates them but **rendering
+  both binaries and diffing the pixels**. So the disposition *"this fix works"*
+  is a **measurement of the OUTPUT**, never of the code path, and an
+  instrumented `converts=true` is evidence of **reach**, not of **effect**.
+
+  **★★ WHY THIS BELONGS AT `R219` RATHER THAN AT A NEW NUMBER, argued rather
+  than assumed.** The failure is the same one this rule already owns —
+  *the named thing contributed 0 %; something unreported contributed all of
+  it* — seen at the level of the **diagnosis** instead of the **route**, and
+  it was surfaced by exactly the discipline clause (e) prescribes, applied one
+  step later. **The mint was offered by the engineer and declined by this
+  role**; the argument for a fresh number would have to be reach, and `R219`
+  is already the rule every session reads when a fix looks narrower than it is.
+
+  **★ THE ACCOUNTING CONSEQUENCE, which is the part a later filing will need.**
+  Route 7 of the enumeration in the `Pass 140.0`/`140.1` *Shipped* entry is
+  **closed as a defect — and the patch it was filed to fix STILL FAILS**,
+  because the conformance corpus is a **poor oracle** for this defect: on
+  `4094e49`, **3 of 51 patches change pixels and 0 of 3 change verdict.**
+  ~~because the conformance corpus **cannot see this defect at all** (0 of 51
+  patches paint a `DeviceGray` source through Table 149)~~ — **withdrawn the
+  same day, see the note immediately below.** **A closed route and a fixed
+  symptom are different facts**, and an enumeration that ticks the row would
+  record the second while having established only the first. The table carries
+  a dated note saying so, and the failing patch's remaining traps are filed as
+  an **open item with an unknown cause**.
+
+  **★★★★★ DATED NOTE, 2026-08-28, SAME DAY, SAME FILING — AND IT IS A
+  CORRECTION TO CLAUSE (f)'s OWN SUPPORTING FIGURE, WHICH IS WHY IT LIVES
+  HERE.** Clause (f) was minted above on two measurements. **The second one was
+  wrong**, and the way it was wrong is a near-twin of clause (f) one level up.
+
+  The figure was *"instrumented across all 51 conformance patches: **zero**
+  paint a `DeviceGray` source through Table 149."* **It was taken after the
+  `classify` change and BEFORE the `overprint_would_change` fix.** At that
+  moment it was exactly true — and `overprint_would_change` **is the predicate
+  whose fix makes greys reach Table 149.** The scan was never re-run, and the
+  number was carried across the very commit that invalidated it, into the
+  *Shipped* entry **for that commit**. Corrected by the engineer on `4094e49`,
+  by rendering every patch twice with the shipped binary
+  (`--overprint-zero-tint-scope device_cmyk_only` vs. the default):
+  **3 of 51 change pixels — 8,491 / 1,827 / 804 — and 0 of 3 change verdict.**
+
+  ⇒ ***A MEASUREMENT TAKEN TO DIAGNOSE A DEFECT DOES NOT SURVIVE THE DEFECT
+  BEING FIXED*** — and the sharpest form, the engineer's own: **the numbers
+  most at risk of going stale are the ones gathered while the thing they
+  measure is being changed.** The place such a number is most likely to be
+  re-quoted is **the entry documenting the fix**, because that is the one
+  document whose author already has the number to hand.
+
+  **★★ WHY THIS IS A NOTE AND NOT A MINT, argued rather than assumed.** The
+  engineer raised it and explicitly declined to propose a mint. It is clause
+  (f) **one level up**: (f) says *reaching the code is not the same as changing
+  the result*; this says *the number that told you the code was unreachable was
+  gathered while the code was being made reachable.* Both are the same species
+  — **a fix's own evidence measured at the wrong moment** — and this instance
+  was found **by correcting clause (f)'s own supporting figure**, which is the
+  strongest available argument for co-location rather than a new number. **The
+  revisit trigger, stated so a later session does not have to re-derive it:**
+  if a second instance appears **in a different subsystem**, mint it, and the
+  argument will be that the two have different remedies — (f) is fixed by
+  *diffing the output*, this is fixed by *re-running the diagnostic after the
+  fix lands*.
+
+  **★ A SECOND, CHEAPER INSTANCE FROM THE SAME CORRECTION, recorded because it
+  is the same shape at a different scale.** The entry's filed **symptom** was
+  also stale: it quoted the failing patch's surround at `127,127,127` against
+  Acrobat's `84,120,34`, **measured at `70c5919`, several Passes earlier.**
+  Re-probed on `4094e49` the surround reads **81,119,40 under both settings**
+  — already correct before this Pass — and the object still wrong is the
+  **trap X**. That one is `R199`'s shape (a stale defect report) rather than
+  this rule's, and is filed at the *Shipped* entry as such; it is named here
+  only because **the same filing carried a stale cause AND a stale symptom, and
+  neither was re-measured before being quoted.**
+
+  No re-mint; **ceiling stays `R224`, next free `R225`.**
+
 - **R220 — A CAPABILITY IS DOCUMENTED WHERE THE READER'S *QUESTION* LIVES,
   NOT ONLY WHERE ITS *MECHANISM* LIVES; AND A CLAIM THAT PDFCE HAS NO VERB
   FOR SOMETHING IS CHECKED AGAINST **SOURCE** BEFORE IT IS SENT ANYWHERE.**
@@ -112799,6 +113742,49 @@ same cause (hashes exist only at commit time), two different failure modes.
   less reach than it appears to, which is the same failure one layer down.
   **Ceiling moves `R220` → `R221`; next free `R222`.**
 
+  **★★★★ FOURTH INSTANCE, ADDED IN PLACE 2026-08-28 (306th filing) — AND IT
+  IS THE FIRST WHERE THE TWO COPIES *AGREED*, WHICH IS WORSE THAN DRIFTING
+  BECAUSE IT DEFEATED THE SABOTAGE THAT WOULD HAVE FOUND THE DRIFT.**
+
+  4. **`Pass 143.0` (`4094e49`) — `overprint_scope_covers`, written and then
+     deleted inside one session.** The engineer's first cut gave
+     `Interpreter::overprint_would_change` **its own helper** applying the new
+     `OverprintZeroTintScope` rule — a **second application of the scope
+     question**, at a different call site, in a different module from the code
+     that performs the work (`overprint::classify`). Removed before shipping:
+     the predicate now **asks `classify`**, per this rule's own remedy.
+
+  **★★ WHAT IS NEW, AND IT IS A PROPERTY OF THIS RULE'S REMEDY RATHER THAN A
+  FOURTH TALLY MARK.** Instances 1–3 are all **drift** — two descriptions of
+  one rule producing **different** answers, with the wrong one silently
+  returning an ordinary `false`. This instance is two descriptions producing
+  the **same** answer, and the harm is at a different layer entirely:
+
+  > **A DELIBERATE SABOTAGE SURVIVED *BECAUSE* THE SECOND COPY STILL REFUSED.**
+  > The engineer widened `grey_as_k_only` to cover every process space — a
+  > sabotage that should have turned tests red — and **the whole suite stayed
+  > green**, because `classify`'s copy of the scope rule declined the widened
+  > case anyway. **The sabotage was caught only after the deduplication**, and
+  > it is recorded that way in the Pass's verification table rather than as a
+  > clean catch.
+
+  ⇒ ***A redundant predicate does not merely RISK drift; it SUPPRESSES the
+  instrument that would have detected the drift.*** Two agreeing
+  implementations of one rule are **mutually masking**: breaking either one
+  alone produces no observable change, so **neither is covered by any test**,
+  and a green sabotage run reports the duplication as safe. **This is the
+  strongest available argument for the rule's remedy** — stronger than the
+  drift argument, because drift is at least *eventually* visible in a wrong
+  answer, and mutual masking is visible **never**, by construction.
+
+  **★ The practical tell**, offered because it costs one thought: *if I broke
+  this predicate on purpose, would anything go red?* If the answer is *"no,
+  because the other one would still refuse"*, there are two implementations of
+  one rule and this rule applies — **regardless of whether they currently
+  agree.**
+
+  No re-mint; **ceiling stays `R224`, next free `R225`.**
+
 - **R222 — WHEN A DOC-COMMENT CLAIM IS CORRECTED, GREP THE FORMAT STRINGS
   FOR THE SAME CLAIM IN THE SAME CHANGE.** Minted 2026-08-27 (295th filing),
   from the `Pass 140.2` / `25d73d7` *Shipped* entry above, at **n = 2** for
@@ -112992,6 +113978,42 @@ same cause (hashes exist only at commit time), two different failure modes.
   from the other end) and of **`R93`**. **Ceiling moves `R222` → `R223`; next
   free `R224`.**
 
+  **★★ ADJACENCY NOTE ADDED 2026-08-28 (306th filing) — A *COVERAGE* CLAIM IS
+  THE SAME SPECIES AS A *CALLER* CLAIM, AND A CANDIDATE MINT IS DECLINED HERE
+  WITH ITS REVISIT TRIGGER STATED.**
+
+  `Pass 143.0` (`4094e49`) found a **test's** doc comment claiming it pinned
+  the `!in_image_sample` guard. **Three separate sabotages proved that false**:
+  a grey source inside a sampled image never enters the overprint machinery at
+  all, protected **redundantly three ways**. The test verifies a true
+  end-to-end property and pins **none** of the mechanisms it names. The
+  engineer **corrected the comment rather than deleting the test.**
+
+  **This is `R223`'s species — a claim whose truth-maker lives somewhere else,
+  which nothing recompiles when it goes stale, and which was true-looking when
+  written — but it is NOT `R223`'s scope**, which is deliberately narrowed to a
+  claim about an item's **callers**. A claim about what a **test covers** has a
+  different truth-maker (the sabotage matrix, not the call graph) and a
+  different remedy.
+
+  **⇒ THE FINDING, recorded here because this is where a reader looking for
+  "claims that rot with nothing recompiling" will arrive.** *A surviving
+  sabotage sometimes means the COMMENT's claim about coverage is wrong, not
+  that the TEST is weak* — and **the two diagnoses have opposite remedies**:
+  **rewrite the sentence** versus **write another test**. Reaching for the
+  second when the first was owed is how a suite grows tests nobody needs while
+  the false claim stays on disk, unfalsified, reading as diligence.
+
+  **MINT DECLINED at n = 1**, per this project's standing bar and per this
+  rule's own precedent — `R223` was itself declined once and minted only when
+  its decline's stated falsifier was met. **The revisit trigger, stated so it
+  is checkable:** *if a second independent instance appears — any test or gate
+  whose doc comment names a mechanism it does not pin — mint it, and the
+  argument will be the opposite-remedies asymmetry, which is the kind of thing
+  a standing rule carries and an incident note does not.*
+
+  **Ceiling unmoved: rules stay at `R224`, next free `R225`.**
+
 - **R224 — THE UNIT OF A ROUTE ENUMERATION IS THE *OPERAND*, NEVER THE
   FUNCTION BEING FIXED; AND THE ONLY TEST THAT COVERS A ROUTE NOBODY HAS
   WRITTEN YET IS A SOURCE SCAN WITH NO TUNING PARAMETER.** Minted 2026-08-28
@@ -113106,6 +114128,48 @@ same cause (hashes exist only at commit time), two different failure modes.
   two descriptions into one; this rule makes that collapse enforceable). Full derivation:
   `D:/dev/rag/rust/a_behaviour_test_over_an_enumerated_list_cannot_fail_on_a_route_added_later_but_a_source_scan_can.md`.
   **Ceiling moves `R223` → `R224`; next free `R225`.**
+
+  **★★★ NOTE ADDED 2026-08-28 (306th filing) — THE VACUOUS-SCAN CLAUSE
+  RECURRED THE DAY IT WAS MINTED, IN `tools/` RATHER THAN IN A TEST, AND THE
+  ENGINEER CAUGHT IT HIMSELF.**
+
+  `3dc9eb0` extends `tools/check-core-api-verbs.py` to gate the four figures in
+  `docs/core-api/index.md`'s routing table that had no gate. **The first cut of
+  that check went GREEN while matching no rows at all** — the normalised
+  `"N lines · N clauses cited"` shape did not yet exist in the file it was
+  written against. ⇒ ***A gate that checks nothing also prints PASS.***
+
+  **This is `R224`'s ★★ clause exactly** — *"a scan goes **vacuous rather than
+  red** when its anchor is renamed and every assertion over an empty set
+  passes"*, remedied there by a **floor on the corpus size** (`callers.len()
+  >= 4`). Recorded because the clause was minted about a **test over a source
+  corpus** and this is a **`tools/` gate over a document**: same failure, same
+  day, different tree. **The clause is not about tests; it is about any
+  assertion whose subject set can be empty.**
+
+  **★ TWO THINGS `3dc9eb0` ADDS THAT THE CLAUSE DID NOT STATE**, both cheap
+  and both worth carrying:
+
+  - **NORMALISING THE FORMAT WAS A PREREQUISITE FOR GATING THE CONTENT.** The
+    table's three rows carried **three different shapes** — *"N lines · N
+    verified citations"*, *"N lines · N citations"*, and **bare "N lines"** with
+    no second figure at all. **A gate can only be written against a shape
+    present in every row**, so the heterogeneity was not untidiness — it was
+    *the thing blocking enforcement*, and it is why those figures went ungated
+    for as long as they did.
+  - **A FIGURE WITH NO RECOVERABLE DEFINITION CANNOT BE GATED AND SHOULD BE
+    REPLACED, NOT RE-COUNTED.** The claim *"128 citations"* was reproduced by
+    **no** counting (clause references **73**, distinct **47**, `file.rs:line`
+    citations **186**). ⇒ *A number nobody can re-derive is a number nobody can
+    check* — which is **the mechanism of the drift**, not a footnote to it. It
+    was replaced by a figure the gate derives, rather than corrected to a new
+    hand count. Relatedly, `derive_error_variants` **returns 0 rather than
+    guessing** when it cannot find the enum, and the caller reads that as *"no
+    claim can be checked"* rather than *"the count is zero"* — **a gate
+    reporting a confident wrong number is worse than one reporting nothing**,
+    which is hard rule 8's discipline applied to machinery.
+
+  No re-mint; **ceiling stays `R224`, next free `R225`.**
 
 ## Update protocol
 

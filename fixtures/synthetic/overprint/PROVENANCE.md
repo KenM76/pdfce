@@ -148,12 +148,24 @@ could imitate.
 
 ### Why these exist at all
 
-The licensed print-conformance corpus **does not contain the case**. Measured
-2026-08-28 by instrumenting `cmyk_group_rules` across all 51 of its patches:
-zero paint a `DeviceGray` source through Table 149. The patch whose name
-promises exactly that authors its greys as `DeviceCMYK [0 0 0 k]`, which
-already takes the direct-CMYK row. The oracle that scored every other overprint
-Pass is silent here.
+The licensed print-conformance corpus **cannot SCORE the case**. Measured
+2026-08-28 on `4094e49` by rendering every one of its 51 patches twice with the
+shipped binary — `--overprint-zero-tint-scope device_cmyk_only`, which
+reproduces the pre-Pass behaviour exactly, versus the default — and counting
+differing pixels: **3 of 51 change (8,491 / 1,827 / 804 px) and 0 of 3 change
+verdict.** The oracle that scored every other overprint Pass is **touched** by
+this behaviour and cannot **score** it, so the fixtures below are the
+acceptance evidence.
+
+> **★ CORRECTED 2026-08-28, same day.** This paragraph first read *"the corpus
+> **does not contain the case** … zero paint a `DeviceGray` source through
+> Table 149. The patch whose name promises exactly that authors its greys as
+> `DeviceCMYK [0 0 0 k]`."* **That scan was taken between the two halves of the
+> fix** — after the `classify` change, before the `overprint_would_change`
+> repair that is *what lets grey sources reach Table 149* — so it measured the
+> **defect**, not the fix. Withdrawn. **The fixtures are still necessary**: they
+> remain the only place the three enum values are discriminated, and the
+> strongest of them needs no oracle at all.
 
 ### Two things the fixtures caught that review did not
 

@@ -22,15 +22,38 @@
 //!
 //! ## ★★★ Why these tests exist rather than a conformance-suite run
 //!
-//! Because the licensed corpus **does not contain the case**. Measured
-//! 2026-08-28 by instrumenting `cmyk_group_rules` across all 51 of its
-//! patches: **zero** paint a `DeviceGray` source through Table 149. The patch
-//! whose name promises exactly that authors its greys as `DeviceCMYK
-//! [0 0 0 k]`, which already takes the direct-CMYK row and always did.
+//! Because the licensed corpus **cannot score the case**, though it is
+//! touched by it. Measured 2026-08-28 on `4094e49` by rendering all 51 of its
+//! patches twice with the shipped binary — `--overprint-zero-tint-scope
+//! device_cmyk_only`, which reproduces the pre-Pass behaviour exactly, against
+//! the default — and counting differing pixels: **3 of 51 change (8,491 /
+//! 1,827 / 804 px), and 0 of those 3 change verdict.**
 //!
-//! So the oracle that scored every other overprint Pass is **silent here**,
-//! and without these fixtures the setting would be correct, wired, documented
-//! and unexercised (`R151`).
+//! So without these fixtures the setting would be correct, wired, documented
+//! and **unexercised by any test in the repository** (`R151`) — the corpus
+//! would move under it and report nothing.
+//!
+//! ### ★★ This paragraph first said the corpus was BLIND, and that was wrong
+//!
+//! It read: *"zero paint a `DeviceGray` source through Table 149; the patch
+//! whose name promises that authors its greys as `DeviceCMYK [0 0 0 k]`."*
+//!
+//! **That scan ran between the two halves of the fix** — after the `classify`
+//! change, before the `overprint_would_change` repair that is *what lets grey
+//! sources reach Table 149 at all*. So it measured the **defect**, not the
+//! fix, and was quoted in the file documenting the fix.
+//!
+//! ⇒ **The numbers most at risk of going stale are the ones gathered while
+//! the thing they measure is being changed.** Prefer the differential form
+//! (render twice, diff) for any figure that will outlive the work: it
+//! re-measures itself on whatever tree it is run against.
+//!
+//! And the second clause was simply false. Reading that patch's content
+//! streams shows it paints the same 50 % grey **both ways** — `0.5 g` *and*
+//! `0 0 0 0.5 k` — deliberately, so an engine that treats them differently is
+//! caught. That is the identical comparison
+//! `grey_matches_the_cmyk_k_only_reference_exactly` makes below; the suite
+//! made it first, and pdfce could not see it.
 //!
 //! ## ★★ And the route the filed diagnosis named contributed 0 %
 //!

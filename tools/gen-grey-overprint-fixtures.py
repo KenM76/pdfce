@@ -9,15 +9,25 @@ what survives. This one is about the interaction between §8.6.7's `OPM 1` and
 a source space that is **not** `DeviceCMYK` at all, which is a question row 3
 never asks.
 
-★ AND IT EXISTS BECAUSE THE LICENSED CONFORMANCE CORPUS DOES NOT CONTAIN THE
-CASE. Measured 2026-08-28 across all 51 of its patches, by instrumenting
-`cmyk_group_rules`: **zero** of them paint a `DeviceGray` source through
+★ AND IT EXISTS BECAUSE THE LICENSED CONFORMANCE CORPUS CANNOT SCORE THE
+CASE. Measured 2026-08-28 on `4094e49` by rendering every one of its 51
+patches twice with the shipped binary — `--overprint-zero-tint-scope
+device_cmyk_only`, which reproduces the pre-Pass behaviour exactly, versus
+the default — and counting differing pixels: **3 of 51 change (8,491 /
+1,827 / 804 px) and 0 of 3 change verdict.** So the corpus — the oracle for
+every other overprint Pass — is *touched* by this behaviour and cannot
+*score* it, and without these fixtures the `overprint_zero_tint_scope`
+setting would be correct, wired, documented and **unexercised by any test in
+the repository** (`R151`).
+
+★ CORRECTED 2026-08-28, same day. This paragraph first read "the corpus DOES
+NOT CONTAIN THE CASE … zero of them paint a `DeviceGray` source through
 Table 149. The patch whose name promises exactly that authors its greys as
-`DeviceCMYK [0 0 0 k]`, which already takes the direct-CMYK row. So the
-corpus — the oracle for every other overprint Pass — is *silent* here, and
-without these fixtures the `overprint_zero_tint_scope` setting would be
-correct, wired, documented and **unexercised by any test in the repository**
-(`R151`).
+`DeviceCMYK [0 0 0 k]`." That scan was taken BETWEEN THE TWO HALVES OF THE
+FIX — after the `classify` change, before the `overprint_would_change` repair
+that is what lets grey sources reach Table 149 — so it measured the DEFECT,
+not the fix. Withdrawn. The fixtures are still necessary and the conclusion
+above is unchanged; only its reason moved.
 
 THE AMBIGUITY BEING PINNED
 --------------------------
