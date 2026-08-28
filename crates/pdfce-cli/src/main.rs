@@ -1915,8 +1915,21 @@ enum Command {
         /// Acceptance is computed against exactly these characters, because
         /// that is what `--set-font` re-encodes. Asking about a different
         /// substring can give a different answer, and legitimately so.
-        #[arg(long)]
+        ///
+        /// May be **empty** when `--pin-span` is given, which means *"the
+        /// whole pinned show operator"* — the same meaning `format-text` gives
+        /// it, and by the same code, so a preview and a commit cannot describe
+        /// different characters. Empty WITHOUT a pin is refused.
+        #[arg(long, default_value = "")]
         find: String,
+        /// Pin the operator by its **byte span**, as `START:LEN`, from
+        /// `extract-text --json --spans`.
+        ///
+        /// With an empty `--find` this asks the question a shell actually has:
+        /// *"for the operator I already located, which faces would
+        /// `--set-font` accept?"* — without having to describe it.
+        #[arg(long = "pin-span", value_name = "START:LEN")]
+        pin_span: Option<String>,
         /// Emit machine-readable JSON instead of the aligned listing.
         #[arg(long)]
         json: bool,
@@ -6793,8 +6806,9 @@ fn run() -> ExitCode {
             input,
             page,
             find,
+            pin_span,
             json,
-        } => cmd_font_preflight(&input, page, &find, json),
+        } => cmd_font_preflight(&input, page, &find, pin_span.as_deref(), json),
         Command::ListSignatures { input } => cmd_list_signatures(&input),
         Command::ListPrinters => cmd_list_printers(),
         Command::Print {
@@ -20421,11 +20435,37 @@ fn extraction_json(input: &Path, extracted: &pdfce_core::text_extract::Extracted
 /// a failed command. `EDIT_REFUSED` only when the run itself could not be
 /// located (no match, unsupported anchor, unresolvable font resource), which
 /// is the same contract `format-text` uses for the same failures.
-fn cmd_font_preflight(input: &Path, page: usize, find: &str, json: bool) -> u8 {
+fn cmd_font_preflight(
+    input: &Path,
+    page: usize,
+    find: &str,
+    pin_span: Option<&str>,
+    json: bool,
+) -> u8 {
     use pdfce_core::text_edit::FontAcceptance;
 
     if page == 0 {
         eprintln!("pdfce-cli: --page is 1-based; 0 is not a valid page number");
+        return exit::EDIT_REFUSED;
+    }
+    // Parsed before any file I/O, same as the editing verbs.
+    let pin = match pin_span {
+        Some(spec) => match parse_pin_span(spec) {
+            Ok(span) => Some(span),
+            Err(msg) => {
+                eprintln!("pdfce-cli: {msg}");
+                return exit::EDIT_REFUSED;
+            }
+        },
+        None => None,
+    };
+    // Core refuses an unpinned empty find by name; this names the FLAG that
+    // would fix it, which core cannot know about.
+    if find.is_empty() && pin.is_none() {
+        eprintln!(
+            "pdfce-cli: font-preflight needs --find TEXT, or --pin-span START:LEN with an \
+             empty --find to mean the whole pinned show operator"
+        );
         return exit::EDIT_REFUSED;
     }
     let doc = match open_document(input) {
@@ -20436,7 +20476,7 @@ fn cmd_font_preflight(input: &Path, page: usize, find: &str, json: bool) -> u8 {
         }
     };
     let session = pdfce_core::edit::EditSession::new(doc);
-    let pre = match session.preview_font_resources(page - 1, find, None) {
+    let pre = match session.preview_font_resources(page - 1, find, pin) {
         Ok(p) => p,
         Err(err) => {
             eprintln!("pdfce-cli: font-preflight refused: {err}");
@@ -20513,6 +20553,9 @@ fn cmd_font_preflight(input: &Path, page: usize, find: &str, json: bool) -> u8 {
         return exit::SUCCESS;
     }
 
+    // `pre.text` is the RESOLVED text, which on a pinned whole-operator query
+    // is the operator's own characters rather than the empty string that was
+    // passed in. Printing it is how a caller sees what was actually tested.
     println!(
         "run: /{} {:?} text={:?}",
         pre.run_resource, pre.run_font, pre.text

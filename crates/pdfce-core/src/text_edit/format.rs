@@ -3006,9 +3006,16 @@ pub struct FontResourceEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct FontPreflight {
-    /// The run's characters — the text every acceptance answer was computed
-    /// against. Acceptance is **per run**, not per page: a face that covers
-    /// `"Hello"` may not cover `"Hellö"`.
+    /// The characters every acceptance answer was computed against —
+    /// **resolved**, not the caller's string.
+    ///
+    /// Normally the `find` that was passed in. On a pinned request with an
+    /// empty `find` it is the whole pinned operator's text (`Pass 145.0`/
+    /// `147.0`), so a caller can read back exactly what was tested rather
+    /// than assume.
+    ///
+    /// Acceptance is **per run**, not per page: a face that covers `"Hello"`
+    /// may not cover `"Hellö"`.
     pub text: String,
     /// The run's own `/Font` resource key.
     pub run_resource: String,
@@ -3103,6 +3110,23 @@ fn sibling_of(c: &FontCandidate) -> FontSibling {
 /// way [`plan_format`] does, then asks [`accept_font_target`] once per page
 /// font resource. It writes nothing and stages nothing.
 ///
+/// # An empty `find` with a `pinned_span` means the whole operator
+///
+/// Exactly as it does for [`FormatRequest`] (`Pass 145.0`), and by the same
+/// call to [`effective_find`] — the two must not be able to disagree about
+/// what an empty `find` means. Before `Pass 147.0` this query passed the
+/// caller's string straight through, so an empty one tested coverage against
+/// **zero characters** and reported every face on the page as accepted: the
+/// list looked richer rather than broken, and a query written to stop a shell
+/// offering unusable faces became an unconditional yes.
+///
+/// An empty `find` with **no** pin is **refused**, with the same sentence
+/// `match_run` gives on the commit path. It is not a location failure — every
+/// string contains the empty string, so `find_anchor` happily matched the
+/// first show operator on the page — which is exactly why it has to be
+/// refused explicitly: the alternative is a survey of an operator the caller
+/// never named, reported as a page-wide yes.
+///
 /// # Errors
 ///
 /// The same location failures [`plan_format`] reports — no match, an
@@ -3150,6 +3174,49 @@ pub(crate) fn preview_font_resources(
     let run_font = ExtractFont::resolve(&doc.view(), orig_dict).base_font;
     let resources = page_resources(page);
 
+    // `Pass 147.0`. THE SAME RESOLUTION `plan_format` APPLIES, and it has to
+    // be the same or the two disagree about what an empty `find` means.
+    //
+    // `Pass 145.0` made an empty `find` on a PINNED request mean "the whole
+    // pinned operator", and told callers so. This query kept passing the
+    // caller's string straight through — so `preview_font_resources(page, "",
+    // Some(pin))` located the right operator (`find_anchor` never reads `find`
+    // when a pin is set) and then tested coverage against ZERO characters.
+    // `"".chars()` yields nothing, no character can fail to encode, and EVERY
+    // face on the page came back `Accepted`.
+    //
+    // ★ That failure is silent and inverted: the list looks RICHER, not
+    // broken, and the query written to stop a shell offering unusable faces
+    // becomes an unconditional yes. Reported by `pdfceGUI` after they consumed
+    // `145.0` and took the obvious next step.
+    //
+    // ★★ It is also `R221` from the other side. `142.1`'s whole fix was to
+    // stop `gate_synthesis` DESCRIBING when `set_font` succeeds and make it
+    // CALL the accepting code; the same shape was left in this parameter list,
+    // asking the caller to supply text the resolution step can produce itself.
+    let find = effective_find(anchor, find, pinned_span);
+
+    // ★★ AND THE UNPINNED HALF, which the first cut of this fix assumed was
+    // already an error and which a test proved was not.
+    //
+    // `find_anchor` with no pin runs `s.text.contains(find)`, and **every
+    // string contains the empty string** — so an unpinned empty `find`
+    // silently matched the FIRST show operator on the page and then surveyed
+    // against zero characters, reporting every face as accepted. Same silent,
+    // inverted failure as the pinned half, about an operator the caller never
+    // named.
+    //
+    // `match_run` has refused this on the commit path since Pass 14.1, and
+    // `Pass 145.0` kept that refusal deliberately: a caller who forgot to pin
+    // must get a refusal, not whole-operator behaviour on an operator pdfce
+    // chose. The same reasoning applies to a query, so it refuses with the
+    // same sentence rather than a second spelling of it.
+    if find.is_empty() {
+        return Err(FormatError::from_edit(EditError::Unsupported(
+            "empty find text".to_owned(),
+        )));
+    }
+
     let candidates = survey_page_fonts(doc, resources, &recs, find);
     let styled = styled_by_family(&candidates);
     let entries = candidates
@@ -3191,6 +3258,9 @@ pub(crate) fn preview_font_resources(
         .collect();
 
     Ok(FontPreflight {
+        // The RESOLVED text, so `text` and the verdicts describe the same
+        // characters. Reporting the caller's empty string here while having
+        // tested the operator's would be a smaller version of the same lie.
         text: find.to_owned(),
         run_resource: String::from_utf8_lossy(&anchor.font_name).into_owned(),
         run_font,

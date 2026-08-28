@@ -42,7 +42,9 @@ use std::path::{Path, PathBuf};
 
 use pdfce_core::document::Document;
 use pdfce_core::edit::EditSession;
+use pdfce_core::span::ByteSpan;
 use pdfce_core::text_edit::{FontAcceptance, FontPreflight};
+use pdfce_core::text_extract::{ExtractOptions, extract_page};
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -305,5 +307,114 @@ fn text_that_is_not_on_the_page_is_an_error_but_a_refusing_font_is_not() {
         session
             .preview_font_resources(0, "hello world", None)
             .is_ok()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 7. `Pass 147.0` — an empty `find` with a pin means the WHOLE OPERATOR here
+//    too, and the failure it replaces was silent and INVERTED
+// ---------------------------------------------------------------------------
+
+/// The first show operator's byte span, the way a shell obtains one.
+fn first_operator_span(doc: &Document) -> ByteSpan {
+    let pages = pdfce_core::page_tree::pages(doc).expect("pages");
+    let opts = ExtractOptions::default().with_provenance(true);
+    let page = extract_page(doc, &pages[0], 0, &opts).expect("extract");
+    page.runs
+        .iter()
+        .flat_map(|r| r.glyphs.iter())
+        .find_map(|g| g.provenance.as_ref().map(|p| p.operator_span))
+        .expect("the fixture has a glyph with provenance")
+}
+
+#[test]
+fn an_empty_find_with_a_pin_surveys_the_whole_operator_not_zero_characters() {
+    // THE DEFECT, reported by `pdfceGUI` after they consumed `Pass 145.0` and
+    // took the obvious next step. `find_anchor` never reads `find` when a pin
+    // is set, so an empty one located the right operator and then tested
+    // coverage against `"".chars()` — which yields nothing, so no character
+    // could fail to encode and EVERY face came back accepted.
+    //
+    // ★ The failure was SILENT and INVERTED: the list looked richer, not
+    // broken. A query written to stop a shell offering unusable faces became
+    // an unconditional yes — strictly worse than the `fontinfo` name-join
+    // superset it exists to replace.
+    let bytes = std::fs::read(fixture("format_family.pdf")).unwrap();
+    let doc = Document::from_bytes(bytes).unwrap();
+    let span = first_operator_span(&doc);
+    let session = EditSession::new(doc);
+
+    let p = session
+        .preview_font_resources(0, "", Some(span))
+        .expect("a pinned empty find locates the operator");
+
+    assert_eq!(
+        p.text, "hello world",
+        "`text` reports the RESOLVED characters, so a caller can read back \
+         what was actually tested"
+    );
+    assert!(
+        refusal_of(&p, "F3").is_some(),
+        "/F3 cannot show this operator's text and must say so"
+    );
+    assert_eq!(p.accepted().count(), 2);
+}
+
+#[test]
+fn the_preflight_and_format_text_agree_about_an_empty_find() {
+    // The point of the fix is not that one function got better — it is that
+    // the two stopped disagreeing about what the same two operands mean.
+    // `FormatRequest::whole_operator` and this query take a page, a pin and no
+    // text; if they ever resolve that differently again, a shell's preview
+    // and its commit describe different characters.
+    let bytes = std::fs::read(fixture("format_family.pdf")).unwrap();
+    let doc = Document::from_bytes(bytes).unwrap();
+    let span = first_operator_span(&doc);
+
+    let pre = EditSession::new(
+        Document::from_bytes(std::fs::read(fixture("format_family.pdf")).unwrap()).unwrap(),
+    )
+    .preview_font_resources(0, "", Some(span))
+    .unwrap();
+
+    // What the pre-flight says /F3 would do…
+    assert!(refusal_of(&pre, "F3").is_some());
+    // …and what `set_font` actually does, through the same pinned request.
+    let err = pdfce_core::text_edit::set_format(
+        &doc,
+        &pdfce_core::text_edit::FormatRequest::whole_operator(0, span)
+            .font(pdfce_core::text_edit::FontSelector::new("F3")),
+        &pdfce_core::text_edit::FormatOptions::default(),
+    )
+    .expect_err("the commit path refuses too");
+    assert!(
+        err.to_string().contains("U+006F"),
+        "and for the same reason: {err}"
+    );
+}
+
+#[test]
+fn an_empty_find_with_no_pin_is_refused_by_the_same_name_the_commit_path_uses() {
+    // ★ THIS TEST CAUGHT A WRONG ASSUMPTION IN THE FIX ABOVE, and that is why
+    // it is written as its own case rather than folded in.
+    //
+    // The first cut of `Pass 147.0` fixed the PINNED half and assumed the
+    // unpinned one already errored. It did not: `find_anchor` with no pin runs
+    // `s.text.contains(find)`, and EVERY STRING CONTAINS THE EMPTY STRING — so
+    // an unpinned empty `find` silently matched the first show operator on the
+    // page and surveyed against zero characters. Same silent, inverted
+    // failure, about an operator the caller never named.
+    //
+    // It is refused with the sentence `match_run` has used since Pass 14.1,
+    // not a second spelling of it.
+    let bytes = std::fs::read(fixture("format_family.pdf")).unwrap();
+    let doc = Document::from_bytes(bytes).unwrap();
+    let session = EditSession::new(doc);
+    let err = session
+        .preview_font_resources(0, "", None)
+        .expect_err("an unpinned empty find must be refused");
+    assert!(
+        err.to_string().contains("empty find text"),
+        "and by the same name the commit path uses: {err}"
     );
 }

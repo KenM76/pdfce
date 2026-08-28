@@ -256,3 +256,79 @@ fn the_subcommand_writes_nothing() {
         "and no sidecar appears beside it"
     );
 }
+
+// ---------------------------------------------------------------------------
+// `Pass 147.0` — the pin, and the empty `--find` that used to say yes to
+// everything
+// ---------------------------------------------------------------------------
+
+/// The first `op_start`/`op_len` from `extract-text --json --spans`.
+fn first_span(path: &Path) -> (usize, usize) {
+    let json = String::from_utf8_lossy(
+        &Command::new(BIN)
+            .args(["extract-text", path.to_str().unwrap(), "--json", "--spans"])
+            .output()
+            .expect("the binary runs")
+            .stdout,
+    )
+    .into_owned();
+    let i = json.find("\"op_start\": ").expect("--spans emits op_start");
+    let rest = &json[i + "\"op_start\": ".len()..];
+    let start: usize = rest[..rest.find(',').unwrap()].trim().parse().unwrap();
+    let j = json.find("\"op_len\": ").expect("--spans emits op_len");
+    let rest = &json[j + "\"op_len\": ".len()..];
+    let len: usize = rest[..rest.find(',').unwrap()].trim().parse().unwrap();
+    (start, len)
+}
+
+#[test]
+fn a_pinned_empty_find_surveys_the_operator_and_does_not_say_yes_to_everything() {
+    // The reported defect, end to end. Before `Pass 147.0` this printed every
+    // face as ACCEPT — including /F3, which cannot show the run — because zero
+    // characters were tested. The failure looked like a RICHER list.
+    let path = fixture("format_family.pdf");
+    let (start, len) = first_span(&path);
+    let out = run(&[
+        path.to_str().unwrap(),
+        "--pin-span",
+        &format!("{start}:{len}"),
+    ]);
+    assert_eq!(out.status.code(), Some(0), "{}", stdout(&out));
+    let text = stdout(&out);
+
+    assert!(
+        text.contains(r#"text="hello world""#),
+        "the RESOLVED text is printed, so a caller sees what was tested: {text}"
+    );
+    assert!(row(&text, "F3").contains("REFUSE"), "{text}");
+    assert!(text.contains("2 would be accepted for this run"), "{text}");
+}
+
+#[test]
+fn a_pinned_empty_find_agrees_with_an_explicit_find_for_the_same_operator() {
+    // The two spellings must describe the same characters, or a shell's
+    // preview and its commit disagree.
+    let path = fixture("format_family.pdf");
+    let (start, len) = first_span(&path);
+    let pinned = stdout(&run(&[
+        path.to_str().unwrap(),
+        "--pin-span",
+        &format!("{start}:{len}"),
+        "--json",
+    ]));
+    let explicit = stdout(&run(&[
+        path.to_str().unwrap(),
+        "--find",
+        "hello world",
+        "--json",
+    ]));
+    assert_eq!(pinned, explicit);
+}
+
+#[test]
+fn an_empty_find_with_no_pin_is_refused_and_names_the_flag() {
+    let out = run(&[fixture("format_family.pdf").to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(EDIT_REFUSED));
+    let err = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(err.contains("--pin-span START:LEN"), "{err}");
+}

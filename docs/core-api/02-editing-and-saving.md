@@ -415,6 +415,15 @@ somebody:
    reassigns the code for `o`. Any answer cached against a page rather than a
    selection is wrong for half the selections on it.
 
+   ★ **An empty `find` with a `pinned_span` means the whole pinned operator**,
+   exactly as it does for `FormatRequest` (`Pass 145.0`) and by the same call —
+   the two cannot disagree about what an empty `find` means. `FontPreflight::text`
+   reports the **resolved** characters, so you can read back what was tested.
+   An empty `find` with **no** pin is **refused** by name. Before `Pass 147.0`
+   neither held: the query tested coverage against zero characters and reported
+   **every face on the page as accepted**, which looks like a richer list rather
+   than a broken one.
+
 3. **`real_bold()` / `real_italic()` decide where a style button routes.**
    `Some(sibling)` → call `format_text` with `set_font(sibling.selector)`.
    `None` → call it with `set_synthetic`. **`None` is not a reason to disable
@@ -879,7 +888,7 @@ only creation verb whose successful result is a control that does not work"*
 | Move one widget's `/Rect` | `move_widget(&mut self, fqn, index, dx, dy) -> Result<WidgetMove, EditError>` | 9032 | **No appearance regeneration** — §12.5.5 step b makes matrix **A** a pure translation. |
 | Read an existing field's copyable properties | `field_defaults(&self, source: &str) -> Result<FieldDefaults, EditError>` | 9211 | For `--defaults-from` / "copy style from". |
 | **Change a field's field-scope properties** | `edit_field(&mut self, fqn, edit: &FieldEdit) -> Result<FieldEditOutcome, EditError>` | — | `Pass 134.0`. Flags, `/MaxLen`, `/TU`, `/Opt`. **Shared by every widget the field owns.** |
-| **Change ONE widget's properties** | `edit_widget(&mut self, fqn, index, edit: &WidgetEdit) -> Result<WidgetEditOutcome, EditError>` | — | `Pass 134.0`. `/Rect` (move **and resize**), `/BS`, `/F`, `/MK` `/CA`. **Per placement.** |
+| **Change ONE widget's properties** | `edit_widget(&mut self, fqn, index, edit: &WidgetEdit) -> Result<WidgetEditOutcome, EditError>` | — | `Pass 134.0`. `/Rect` (move **and resize**), `/BS`, `/F`, `/MK` `/CA`. **Per placement.** ★ All four are **readable** too since `Pass 146.0` — `forms::Widget::rect` / `border` / `visibility` + `annot_flags` / `caption`. This row listed four writable properties for months while only two could be read, which is how a consuming shell ended up with two controls it could not honestly populate. See `03-capabilities.md`'s `Widget` block. |
 
 #### ★ 1.12a Editing a field after it exists (`Pass 134.0`) — read this before wiring a properties pane
 
