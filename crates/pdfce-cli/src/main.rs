@@ -3415,6 +3415,63 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Write a note onto an annotation that already exists** —
+    /// `/Contents`, and optionally `/T` (author) and `/M` (date).
+    ///
+    /// The counterpart of `set-markup-style`, which does this shape for
+    /// colour, width and opacity.
+    ///
+    /// # Why this exists
+    ///
+    /// A note could previously only be written at the moment an annotation
+    /// was CREATED (`annotate --note`), and a geometric markup has no
+    /// text-entry moment: a cloud or a highlight is authored from geometry
+    /// alone. Commenting a shape you already drew, or fixing a typo in a
+    /// comment, had no route at all.
+    ///
+    /// # What it leaves alone
+    ///
+    /// Omitting `--note-author` or `--note-date` leaves any existing author
+    /// and date UNTOUCHED. Correcting a typo does not un-sign a comment.
+    /// Use `--clear` to remove all three.
+    ///
+    /// The previous note text is PRINTED when this replaces one — those
+    /// words leave no trace on the page, unlike a restyle where the shape
+    /// still shows.
+    SetMarkupNote {
+        /// Input PDF.
+        input: PathBuf,
+        /// Page, 1-BASED — the `page=` value `list-annotations` prints.
+        #[arg(long)]
+        page: usize,
+        /// Index within that page's `/Annots`, 0-BASED — the `index=`
+        /// value `list-annotations` prints.
+        #[arg(long)]
+        index: usize,
+        /// The note text (`/Contents`). Required unless `--clear`.
+        #[arg(long, value_name = "TEXT")]
+        note: Option<String>,
+        /// Author (`/T`). Omit to leave any existing author alone.
+        #[arg(long, value_name = "NAME")]
+        note_author: Option<String>,
+        /// Modification date (`/M`) as a §7.9.4 string, e.g.
+        /// `D:20260828120000Z`. Omit to leave any existing date alone —
+        /// pdfce does not read a clock, deliberately.
+        #[arg(long, value_name = "D:YYYYMMDDHHmmSSZ")]
+        note_date: Option<String>,
+        /// Remove the note entirely — `/Contents`, `/T` and `/M`.
+        ///
+        /// A distinct act from an empty `--note ""`: an empty comment is a
+        /// comment, and the saved bytes tell the two apart.
+        #[arg(long, conflicts_with_all = ["note", "note_author", "note_date"])]
+        clear: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
     /// Restyle an EXISTING markup annotation in place (ISO 32000-1
     /// §12.5.6), keeping its object identity.
     ///
@@ -7334,6 +7391,28 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_delete_form_field(&input, &name, Some(index), &output, mode, verify_undo),
+        Command::SetMarkupNote {
+            input,
+            page,
+            index,
+            note,
+            note_author,
+            note_date,
+            clear,
+            output,
+            mode,
+        } => cmd_set_markup_note(
+            &input,
+            (page, index),
+            (
+                note.as_deref(),
+                note_author.as_deref(),
+                note_date.as_deref(),
+            ),
+            clear,
+            &output,
+            mode,
+        ),
         Command::SetMarkupStyle {
             input,
             page,
@@ -23567,6 +23646,153 @@ fn parse_color_edit(
             .map(|c| Some(StyleEdit::Set(c)))
             .map_err(|e| format!("--{flag}: {e}")),
     }
+}
+
+/// Implement `pdfce-cli set-markup-note` (`Pass 154.0`).
+///
+/// # Why the previous note is PRINTED and not merely discarded
+///
+/// The invocation IS the commit here — no session, no undo — so rule 4's
+/// disclosure has to happen on the way past. And a note is content the
+/// operator cannot recover by looking: a restyled shape still shows its
+/// geometry, overwritten words leave nothing on the page. Printing them is
+/// the only chance to keep them.
+fn cmd_set_markup_note(
+    input: &Path,
+    at: (usize, usize),
+    // The note being written: text, author, date. Bundled because they are
+    // one thing — the note — and splitting them across three positional
+    // parameters is what makes a call site transposable.
+    note: (Option<&str>, Option<&str>, Option<&str>),
+    clear: bool,
+    output: &Path,
+    mode: SaveMode,
+) -> u8 {
+    use pdfce_core::edit::MarkupNote;
+
+    let (page, index) = at;
+    let (note, author, date) = note;
+    if page == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    if !clear && note.is_none() {
+        eprintln!(
+            "pdfce-cli: {}: set-markup-note needs --note TEXT, or --clear to remove the note",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let annot_id = {
+        let slots = match session.page_slots() {
+            Ok(slots) => slots,
+            Err(err) => {
+                eprintln!("pdfce-cli: {}: {err}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let Some(slot) = slots.get(page - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                input.display(),
+                slots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let annots = pdfce_core::annot::page_annotations(&session.graph(), slot.id);
+        let Some(annot) = annots.get(index) else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} has no annotation at index {index} — it has {}",
+                input.display(),
+                annots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let Some(id) = annot.id else {
+            eprintln!(
+                "pdfce-cli: {}: page {page} index {index} is a direct dictionary inside /Annots, not an indirect object — it has no identity to write a note onto",
+                input.display()
+            );
+            return exit::EDIT_REFUSED;
+        };
+        id
+    };
+
+    let outcome = if clear {
+        session.clear_markup_note(annot_id)
+    } else {
+        let mut n = MarkupNote::new(note.unwrap_or_default());
+        if let Some(a) = author {
+            n = n.by(a);
+        }
+        if let Some(d) = date {
+            n = n.at(d);
+        }
+        session.set_markup_note(annot_id, &n)
+    };
+    let change = match outcome {
+        Ok(c) => c,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // The disclosure, before the outcome, because destroyed words are the
+    // thing the operator cannot get back by looking at the page.
+    if let Some(previous) = &change.replaced {
+        eprintln!(
+            "pdfce-cli: {}: this REPLACED an existing note, whose text was: {previous:?}. Those words are not on the page and nothing in the saved file shows they were ever there — keep them if you may want them.",
+            input.display()
+        );
+        if let Some(who) = &change.replaced_author {
+            eprintln!("pdfce-cli: {}: its author was {who:?}.", input.display());
+        }
+    }
+    if !clear && author.is_none() && change.replaced_author.is_some() {
+        eprintln!(
+            "pdfce-cli: {}: no --note-author was given, so the existing author was LEFT AS IT WAS rather than cleared. Correcting a comment does not un-sign it.",
+            input.display()
+        );
+    }
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(o) => o,
+        Err(code) => return code,
+    };
+
+    println!(
+        "set-markup-note {} page {page} index {index} -> {}",
+        input.display(),
+        output.display()
+    );
+    println!(
+        "  subtype={} keys_written={} replaced={}",
+        change.subtype,
+        if change.keys_written.is_empty() {
+            "none".to_owned()
+        } else {
+            change.keys_written.join(",")
+        },
+        match &change.replaced {
+            Some(t) => format!("{} character(s)", t.chars().count()),
+            None => "nothing".to_owned(),
+        }
+    );
+    finish_edit(input, &saved)
 }
 
 /// Implement `pdfce-cli set-markup-style`.

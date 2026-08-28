@@ -428,6 +428,20 @@ pub enum CommandKind {
     /// its geometry keys, and — where the options asked and pdfce could
     /// author the subtype — its `/BS` `/W`, `/RD` and appearance stream.
     ResizeAnnotation,
+    /// [`EditSession::set_markup_note`] or
+    /// [`EditSession::clear_markup_note`] changed an annotation's
+    /// `/Contents`, `/T` or `/M`.
+    ///
+    /// Distinct from [`Self::SetMarkupStyle`] because the two are different
+    /// operator acts and bundling them would make one undo entry out of two.
+    /// `pdfceGUI` argued this and declined to have `note` added to
+    /// `MarkupStyle`: that type is about how a thing LOOKS and its fields are
+    /// `StyleEdit<T>`, while `/Contents` is content.
+    ///
+    /// Distinct from [`Self::AddAnnotation`] for the reason that variant
+    /// already records: undoing an add removes the annotation; undoing a note
+    /// change restores the previous words on an annotation that stays.
+    SetMarkupNote,
     /// An existing field's **field-scope** properties were changed
     /// (`Pass 134.0`) — `/Ff` flags, `/MaxLen`, `/TU`, `/Opt`.
     ///
@@ -11252,6 +11266,47 @@ pub struct AnnotationResize {
     pub rect_differences_scaled: Option<bool>,
 }
 
+/// What a [`set_markup_note`](EditSession::set_markup_note) or
+/// [`clear_markup_note`](EditSession::clear_markup_note) call did
+/// (`Pass 154.0`).
+///
+/// # Why the REPLACED text is measured rather than merely overwritten
+///
+/// A note is **content the operator cannot recover from the canvas**. A shape
+/// still shows its geometry after a restyle, so `set_markup_style` can be
+/// undone by eye; a comment that has been overwritten leaves no trace on the
+/// page at all. Rule 4's disclosure obligation therefore bites here in a way
+/// it does not there.
+///
+/// `pdfceGUI` asked for exactly this and framed it well: *"if a rule-4
+/// disclosure is owed anywhere here, it is on the case where the annotation
+/// HAD a note and it was replaced."* [`Self::replaced`] is that case, and it
+/// carries the previous text rather than a count, so a shell can offer it
+/// back rather than only mention its size.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct MarkupNoteChange {
+    /// The annotation that was edited.
+    pub annot_id: ObjId,
+    /// `/Subtype`, for the operator's message.
+    pub subtype: String,
+    /// The note text this call REPLACED, if the annotation already had one.
+    ///
+    /// `None` means the annotation had no `/Contents` and this call added the
+    /// first note. `Some` is the disclosure case: those words are gone from
+    /// the document and nothing on the page shows that they were ever there.
+    pub replaced: Option<String>,
+    /// The author (`/T`) this call replaced, if any — same reasoning.
+    pub replaced_author: Option<String>,
+    /// Which keys the call wrote, in the order written: `Contents`, `T`, `M`.
+    ///
+    /// Shorter than you might expect on purpose: [`MarkupNote::author`] and
+    /// [`MarkupNote::modified`] are optional, and a call that omits them
+    /// leaves any existing `/T` and `/M` **untouched** rather than clearing
+    /// them. This names what actually moved.
+    pub keys_written: Vec<String>,
+}
+
 /// What a [`move_annotation`](EditSession::move_annotation) call translated,
 /// and everything an operator could not otherwise see (`Pass 149.0`).
 ///
@@ -18232,6 +18287,197 @@ impl EditSession {
             replies_orphaned,
             group_members_promoted,
             appearance_streams_removed: ap_ids.len(),
+        })
+    }
+
+    /// Write a note (`/Contents`, and optionally `/T` and `/M`) onto an
+    /// annotation that **already exists** (`Pass 154.0`).
+    ///
+    /// The counterpart of [`Self::set_markup_style`], which does this shape
+    /// for `/C`, `/IC`, `/BS` and `/CA`.
+    ///
+    /// # ★★★ Why this exists, and why it is not a convenience
+    ///
+    /// [`MarkupOptions`] is an **author-time** structure: it reaches
+    /// [`Self::add_markup_with`] and [`Self::add_text_annotation_with`] and
+    /// nothing else. So before this verb, a note could only be written at the
+    /// moment the annotation was created — and **a geometric markup has no
+    /// text-entry moment.**
+    ///
+    /// A cloud, a rectangle, a highlight and an arrow are authored on
+    /// mouse-release, from geometry alone. There is no dialog in that gesture
+    /// and there must not be one; interrupting every shape a reviewer draws
+    /// with a text box is the interaction nobody ships. The model every
+    /// reviewer UI converges on is:
+    ///
+    /// > draw the shape → **it is selected** → type the comment in the panel
+    /// > beside the page.
+    ///
+    /// That second arrow needs a verb acting on an **existing** annotation.
+    /// Without one a shell's options are all bad, and `pdfceGUI` enumerated
+    /// them: ask before drawing (nobody would find it), ask after drawing
+    /// every time (a modal on every shape), or delete and re-author — which
+    /// yields a new object id, a second undo entry, and breaks any reply
+    /// threading pointing at the old one.
+    ///
+    /// ★ What they actually shipped was the fourth option: **their Comments
+    /// panel is read-only.** It lists comments and cannot write one, which is
+    /// a reviewer's main surface reduced to a viewer. *"Draw a cloud round a
+    /// mistake and say what is wrong with it"*, *"add a comment to a highlight
+    /// you just swept"*, *"correct a typo in a comment you wrote a minute
+    /// ago"* and *"answer a comment somebody else left"* were all absent — and
+    /// those four are not edge cases, they are what a review IS.
+    ///
+    /// # What it writes, and what it leaves alone
+    ///
+    /// `/Contents` always. `/T` and `/M` **only if the note carries them** —
+    /// a call that omits them leaves any existing author and date untouched
+    /// rather than clearing them, so correcting a typo does not un-sign a
+    /// comment. [`MarkupNoteChange::keys_written`] names what moved.
+    ///
+    /// `/M` is written **verbatim** from the caller. pdfce does not read a
+    /// clock; see [`MarkupNote`] for why that is a determinism decision
+    /// rather than an omission, and note that the consuming shell has already
+    /// implemented the caller side and asserts `MarkupNote::validate` accepts
+    /// what it writes.
+    ///
+    /// # ★ The disclosure this owes
+    ///
+    /// A note is content the operator **cannot recover from the canvas**. A
+    /// restyled shape still shows its geometry; overwritten words leave no
+    /// trace on the page. [`MarkupNoteChange::replaced`] carries the previous
+    /// text — the text, not a count — so a shell can offer it back.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DocumentEncrypted`], the certification gate, a
+    /// non-existent or non-annotation target, a ce dimension or widget
+    /// (refused by name — both have verbs that own their text), and
+    /// [`EditError::MarkupDateMalformed`] if `/M` is not a §7.9.4 date.
+    pub fn set_markup_note(
+        &mut self,
+        annot_id: ObjId,
+        note: &MarkupNote,
+    ) -> Result<MarkupNoteChange, EditError> {
+        note.validate()?;
+        self.write_markup_note(annot_id, Some(note))
+    }
+
+    /// Remove an annotation's note entirely — `/Contents`, `/T` and `/M`
+    /// (`Pass 154.0`).
+    ///
+    /// A separate verb rather than `set_markup_note(id, &MarkupNote::new(""))`
+    /// because those are different acts: an empty comment is a comment, and a
+    /// reviewer deleting their remark is not the same as leaving a blank one.
+    /// [`MarkupNoteChange::replaced`] carries what was removed, which matters
+    /// more here than anywhere else.
+    ///
+    /// Deleting the note does **not** delete the annotation — the shape stays
+    /// and undo restores the words. Use [`Self::delete_annotation`] for the
+    /// other thing.
+    ///
+    /// # Errors
+    ///
+    /// The same set as [`Self::set_markup_note`], minus the date check.
+    pub fn clear_markup_note(&mut self, annot_id: ObjId) -> Result<MarkupNoteChange, EditError> {
+        self.write_markup_note(annot_id, None)
+    }
+
+    /// The shared implementation of [`Self::set_markup_note`] and
+    /// [`Self::clear_markup_note`].
+    ///
+    /// One body, because the two differ only in what they write and both owe
+    /// the identical guards, the identical refusals and the identical
+    /// disclosure. Two bodies would be two places for the ce-dimension
+    /// refusal to be forgotten.
+    fn write_markup_note(
+        &mut self,
+        annot_id: ObjId,
+        note: Option<&MarkupNote>,
+    ) -> Result<MarkupNoteChange, EditError> {
+        let (target, _all) = self.locate_annotation(annot_id)?;
+        let subtype = target.subtype_label();
+
+        // Same two refusals as the transform verbs, and for the same reason:
+        // both destinations own their own text and doing less under this name
+        // would be a second, worse route to the same edit.
+        if matches!(
+            self.delegated_route_for(annot_id, &target),
+            Some(AnnotationDeletionRoute::Dimension)
+        ) {
+            return Err(EditError::AnnotationMoveWrongVerb {
+                subtype: "ce dimension".to_owned(),
+                use_instead: "set_dimension_label",
+                why: "a ce dimension's text IS its measurement, so writing it must go through the verb that keeps the two agreeing",
+            });
+        }
+        if target.subtype == b"Widget" {
+            return Err(EditError::AnnotationMoveWrongVerb {
+                subtype: "form widget".to_owned(),
+                use_instead: "edit_field(fqn, &FieldEdit::new().with_tooltip(..))",
+                why: "a widget's /Contents is its field's tooltip (§12.5.6.19), which belongs to the FIELD and may be shared by several widgets",
+            });
+        }
+
+        self.check_certification_for_annotation()?;
+
+        let Some(Object::Dict(dict)) = self.value(annot_id) else {
+            return Err(EditError::NotADictionary {
+                id: annot_id,
+                key: "Contents",
+            });
+        };
+        let mut updated = dict.clone();
+
+        // What is being overwritten, read BEFORE anything is written. These
+        // are the disclosure, and reading them afterwards would report the
+        // new values as the old ones.
+        let replaced = read_text_string_entry(&self.graph(), &updated, b"Contents");
+        let replaced_author = read_text_string_entry(&self.graph(), &updated, b"T");
+
+        let mut keys_written = Vec::new();
+        match note {
+            Some(n) => {
+                updated.insert(
+                    Name::from(b"Contents"),
+                    Object::String(encode_text_string(&n.text)),
+                );
+                keys_written.push("Contents".to_owned());
+                if let Some(author) = &n.author {
+                    updated.insert(Name::from(b"T"), Object::String(encode_text_string(author)));
+                    keys_written.push("T".to_owned());
+                }
+                if let Some(m) = &n.modified {
+                    updated.insert(Name::from(b"M"), Object::String(m.as_bytes().to_vec()));
+                    keys_written.push("M".to_owned());
+                }
+            }
+            None => {
+                for key in [&b"Contents"[..], &b"T"[..], &b"M"[..]] {
+                    if updated.remove(key).is_some() {
+                        keys_written.push(String::from_utf8_lossy(key).into_owned());
+                    }
+                }
+            }
+        }
+
+        self.commit(Command {
+            kind: CommandKind::SetMarkupNote,
+            objects: vec![ObjectWrite {
+                id: annot_id,
+                before: self.state.get(&annot_id).cloned(),
+                after: Some(Object::Dict(updated)),
+            }],
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(MarkupNoteChange {
+            annot_id,
+            subtype,
+            replaced,
+            replaced_author,
+            keys_written,
         })
     }
 
@@ -33757,6 +34003,26 @@ mod text_edit_session_tests {
             assert!(!session.is_modified());
             assert_eq!(save(&session), src, "undo must be byte-identical");
         }
+    }
+}
+
+/// Read a text-string dictionary entry as a `String`, or `None` if absent or
+/// not a string (`Pass 154.0`).
+///
+/// Deliberately the same three lines `annot.rs`'s own `text_of` closure uses,
+/// and calling the same `decode_text_string` -- so a note read back through
+/// `page_annotations` and a note reported by `set_markup_note` cannot decode
+/// differently. That decoder is where PDFDocEncoding lives (Annex D.3), and
+/// `Pass 150.0` shipped a defect precisely because two paths disagreed about
+/// it.
+fn read_text_string_entry<G: crate::graph::ObjectGraph + ?Sized>(
+    graph: &G,
+    dict: &Dict,
+    key: &[u8],
+) -> Option<String> {
+    match graph.resolve(dict.get(key)?) {
+        Object::String(bytes) => Some(decode_text_string(bytes).text),
+        _ => None,
     }
 }
 
