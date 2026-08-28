@@ -1249,7 +1249,10 @@ That is a distinct failure and this section is the repair for it.
 | **alignment, leading** | — | ❌ not a run-level property; those live on `reflow_block` |
 
 Targeting is by `find` text or by `pinned_span` — the same
-`GlyphProvenance::operator_span` pin `edit_text` takes — with the same
+`GlyphProvenance::operator_span` pin `edit_text` takes. **With a pin and no
+find, the whole pinned show operator is the target**, spelled
+`FormatRequest::whole_operator(page, span)` and
+`EditRequest::whole_operator(page, span, replacement)` respectively. Same
 `EditTarget` selector, so a shell that has decided which stream a caret is in
 does not translate that decision between the two verbs. Form XObject content
 is reachable (`Pass 119.2`).

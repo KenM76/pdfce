@@ -994,8 +994,15 @@ on a 1:1 assumption passes every fixture a shell writes for itself and fails
 on the customer's document.
 
 ⇒ **Do not rebuild a `find` string from a run and expect it to match the
-content stream.** Use `FormatRequest::whole_operator(page, span)` — see
-`02-editing-and-saving.md`.
+content stream.** Use `FormatRequest::whole_operator(page, span)` to
+restyle it, or `EditRequest::whole_operator(page, span, replacement)` to
+replace its text — see `02-editing-and-saving.md`.
+
+Both halves are named here deliberately. This paragraph previously named only
+the restyle verb, and it is the paragraph a consuming project was acting on
+when it filed a defect saying the edit verb could only be addressed by `find`
+(2026-08-28, `Pass 152.0`). A locator-facing sentence that names one of two
+sibling verbs reads as a statement that the other has no such route.
 
 ##### A `TextRun` is NOT a show operator
 

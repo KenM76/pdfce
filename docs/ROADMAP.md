@@ -96,6 +96,377 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 152.0` (`06e4c27`) — `EditRequest::whole_operator` + `EditRequest::pinned` — ★★★★★ **THIS PASS ADDS NO BEHAVIOUR, AND THAT IS THE ENTIRE FINDING: EVERY CAPABILITY THE CONSUMING PROJECT ASKED FOR ALREADY WORKED, WAS ALREADY TESTED, ALREADY EMITTED ITS RULE-4 DISCLOSURE, ALREADY HAD A CLI FLAG, AND WAS ALREADY DOCUMENTED — TRUE, ACCURATELY, IN THE RIGHT FILE, IN THE RIGHT SECTION. THE ONLY THING MISSING WAS A NAME** — ★★★★★ **`pdfceGUI`'s REPORT CITES `Pass 145.0` AND `FormatRequest::whole_operator` BY NAME, SO THEY HAD READ THE EXACT SECTION THAT DOCUMENTS THIS. THE EDIT HALF WAS ONE TRAILING SENTENCE UNDER A HEADING NAMING THE *OTHER* TYPE, WITH NO EXAMPLE AND NO SYMBOL TO GREP. THEY READ IT, CONCLUDED THE VERB COULD ONLY BE ADDRESSED BY `find`, AND WENT ON TO LIST THREE WAYS THEY HAD TRIED TO *RECONSTRUCT* A `find` FOR AN OPERATOR THEY HAD ALREADY *LOCATED*** ⇒ **A CAPABILITY NOBODY CAN FIND IS NOT SHIPPED, AND NO GATE IN THIS PROJECT CAN DETECT THAT STATE — THE CODE WAS CORRECT, THE TESTS GREEN, THE SENTENCE TRUE, ALL 26 GATES PASSING. THE ONLY SYMPTOM IS A CONSUMER ASKING FOR WHAT THEY ALREADY HAVE** — ★★★★ **THE *Next up* BOX THIS PASS DISCHARGES WAS WRONG, AND THIS ROLE WROTE IT: ITS HEADING SAID *"`format_text` WAS MADE ADDRESSABLE BY PIN ALONE AND ITS SIBLING `edit_text` WAS NOT"* AND CALLED IT `R219`'s SHAPE. BOTH ROUTES WERE ALREADY FIXED. THE REQUESTER'S TRUE **SYMPTOM** CARRIED A FALSE **MECHANISM**, ONE PARAGRAPH APART, AND IT WAS RELAYED INTO THIS DOCUMENT AS PDFCE SPEAKING ABOUT PDFCE — `R220`(e) AT ITS SECOND INSTANCE, ONE FILING AFTER (e) WAS WRITTEN** — ★★★ **`R220` AMENDED IN PLACE WITH CLAUSE (f), NOT MINTED, AND THE DISPATCH'S SUGGESTED CARRIER (`R197`) IS DECLINED WITH REASONS: `R197` GOVERNS A FIGURE'S SHELF LIFE; THIS IS A CAPABILITY'S FINDABILITY, WHICH IS `R220`'s STATED SUBJECT. CEILING UNMOVED AT `R224`** — ★★ **A DOCTEST CAUGHT A REAL API-PATH ERROR ON ITS FIRST RUN (`ByteSpan` IS `pdfce_core::span`, NOT `::object`) — THE EXACT ERROR A CONSUMER HITS COPYING AN EXAMPLE, AND THE DOCTEST IS THE ONLY INSTRUMENT THAT WOULD EVER HAVE CAUGHT IT. THE NEW EQUIVALENCE TEST COMPARES **SAVED BYTES**, NOT REPORT FIELDS, SO TWO SPELLINGS OF ONE REQUEST CANNOT DRIFT WHERE A CALLER CANNOT SEE** — ★ **THE CHANNEL CHECK IS NOT CLEAN, AND IT IS THE SAME DEFECT THE 304th FILING RECORDED, ONE FILING LATER: AN INBOUND REQUEST WITH mtime **09:16** IS NAMED IN NO DOCUMENT IN THIS REPOSITORY, AND THE 306th FILING WAS COMMITTED AT **10:14**** — 2026-08-28 (307th filing)
+
+**One commit.** `06e4c27`, **4 files, +184 / −3** (`git show --numstat`, run
+here):
+
+| file | lines | what |
+|---|---:|---|
+| `crates/pdfce-core/src/text_edit/edit.rs` | **+90** | the two constructors and their doc comments, including the doctest |
+| `crates/pdfce-core/tests/whole_operator_pin.rs` | **+58** | two new tests |
+| `docs/core-api/02-editing-and-saving.md` | **+35 / −2** | the worked example that replaces the trailing sentence |
+| `docs/core-api/index.md` | **+1 / −1** | the line-count figure the gate caught going stale |
+
+**148 of 184 changed lines are the test file and the documentation — 80.4 %**,
+which is what a Pass whose whole content is *findability* should look like, and
+is far outside the 45.8–46.7 % band the previous three Passes landed in
+(`Pass 150.0` 45.8 %, `Pass 151.0` 45.8 %, `Pass 143.0` 46.7 %). **The ratio is
+the shape of the work, not a quality signal** — filed beside its per-item form
+per hard rule 10.
+
+---
+
+#### WHAT SHIPPED
+
+```rust
+pub fn whole_operator(page_index: usize, span: ByteSpan, replace: &str) -> Self
+pub fn pinned(self, span: ByteSpan) -> Self          // builder
+```
+
+both on `EditRequest` in `pdfce_core::text_edit` — the twins of the
+`FormatRequest` pair from `Pass 145.0`. The stated equivalences, each pinned by
+a test:
+
+| named spelling | ≡ | since |
+|---|---|---|
+| `EditRequest::whole_operator(page, span, replace)` | `EditRequest::find_replace(page, "", replace).pinned(span)` | `Pass 152.0` names it; the right-hand side has worked since `Pass 145.0` |
+| `FormatRequest::whole_operator(page, span)` | `FormatRequest::new(page, "").pinned(span)` | `Pass 145.0` |
+
+Plus a worked example in `docs/core-api/02-editing-and-saving.md` §*(the
+`whole_operator` block)* — engineer-owned territory (**RULED 2026-08-18**:
+`docs/core-api/` is a maintained artefact owned by `pdfce-engineer`), already
+in the commit, recorded here so a later sweep does not read it as drift.
+
+#### ★★★★★ EVERYTHING ASKED FOR ALREADY WORKED — ENUMERATED, BECAUSE THE ENUMERATION *IS* THE FINDING
+
+Four independent facts, each verified before the constructor was written:
+
+1. **The behaviour.** An empty `find` with a pin has meant *"the whole pinned
+   show operator"* on `edit_text` since `Pass 145.0` — `edit.rs:1643` calls
+   `effective_find`, the same resolver `plan_format`, `preview_font_resources`
+   and `preview_style_resolution` call (`Pass 148.0` made that four-way
+   agreement a **source scan**, `route_enumeration.rs`).
+2. **The test.** `whole_operator_pin.rs::edit_text_gets_the_same_affordance`
+   already existed and was already green.
+3. **The disclosure.** It already emitted the rule-4 off-canvas disclosure
+   naming the extent taken **and** the multi-operator caveat — verified by the
+   engineer on the CLI: **11 characters, three disclosures printed**.
+4. **The shell.** `pdfce-cli edit-text --pin-span` with no `--find` already
+   worked, and that subcommand's own `--find` help documents the empty case
+   explicitly (`main.rs:4365`, `:4511`, `:1956` — three sites, all correct).
+
+**⇒ Nothing in this project could have detected the failure.** There is no
+gate for *"a true sentence nobody can act on"*: the code was correct, the tests
+were green, the sentence was accurate, and `tools/run-gates.sh` was **PASS over
+26 commands**. **The only symptom this failure has is a consuming project
+filing a request for a capability it already possesses** — which is a signal
+that arrives through the request channel, months late, and only if the consumer
+bothers to ask instead of building a workaround.
+
+#### ★★★★★ WHAT THE DOCUMENT ACTUALLY SAID, AND WHY READING IT DID NOT HELP
+
+The edit half was there. In full:
+
+> *"`EditRequest` gets the same affordance by setting `pinned_span` with an
+> empty `find`."*
+
+**Every property that ought to make that sufficient, it had.** It was **true**.
+It was **accurate**. It was in the **right file** (`02-editing-and-saving.md`,
+the mechanics document a shell builds against). It was in the **right section**
+— the block that `pdfceGUI`'s own defect report **cites by name**, along with
+`Pass 145.0` and `FormatRequest::whole_operator`. **They read this page.**
+
+**Three properties it lacked, and each one is separately fatal:**
+
+- **No symbol.** A reader greps `whole_operator` and finds `FormatRequest`'s
+  only. There is nothing to grep for the edit half, because the sentence
+  describes a *spelling* rather than naming a *thing*.
+- **No example.** The reader must compose `find_replace(page, "", replace)`
+  with `.pinned(span)` from a prose description of both — and the prose does
+  not say `find_replace`, because it assumes the reader is already holding an
+  `EditRequest`.
+- **Position under a heading naming the other type.** It was the last sentence
+  of a block headed `FormatRequest`. A reader scanning for *"how do I edit"*
+  has already decided that block is about the other verb.
+
+**★★ The consequence, in their words rather than ours.** Having read it, they
+filed a defect saying a pinned `edit_text` **can only** be addressed by `find`,
+and listed **three ways they had tried to RECONSTRUCT a `find`** for an
+operator they had **already located** — on the operator's own CAD drawing,
+where `text_extract`'s synthesised inter-glyph spacing (**twenty-one spaces**
+in their trace, not present in the content stream) means a rebuilt `find` can
+**never** match. They were doing the hardest available version of a thing that
+was already unnecessary.
+
+#### ★★★★ THE *Next up* BOX WAS WRONG, AND THIS ROLE WROTE IT — `R220`(e)'s SECOND INSTANCE, ONE FILING AFTER (e) WAS WRITTEN
+
+The 306th filing opened a *Next up* box for this inbound. Its heading:
+
+> ~~*"it is `R219`'s shape again: `format_text` was made addressable by PIN
+> ALONE and its sibling `edit_text` was not"*~~
+
+**False.** Both were addressable by pin alone. The box also wrote, as this
+project's own statement:
+
+> ~~*"`format_text` and `edit_text` are two verbs over the same surgery; one is
+> addressable by pin alone and the other is not."*~~
+
+and framed the open question as *"whether `edit_text` **gains** a pin-only
+form"* — a verb it already had.
+
+**★ The mechanism of the error is exactly `R220`(e)**, minted 2026-08-27, one
+filing before this one. The requester supplied a **symptom** they had
+reproduced (`pdfce-diag edit-text-refused`, twenty-one synthesised spaces, a
+pin set the whole time) — **good evidence, and every particular of it held**.
+In the same paragraph they supplied a **mechanism** — *the sibling was never
+fixed* — **guessed from outside the crate, by someone who cannot see
+`edit.rs`**. The observation's credibility transferred to the guess because
+they were one sentence apart, and this role filed the pair as one fact under a
+five-star heading.
+
+**★★ What makes this instance worse than (e)'s founding one, and it is worth
+naming.** In (e)'s founding instance the relayed mechanism was about
+`text_extract`'s internals and was caught before it reached `docs/core-api/`.
+Here the relayed mechanism was about **whether a public verb exists** — the
+cheapest claim in this codebase to check, and `R220`(c) already says to check
+it: *"before writing that pdfce cannot do something … grep the source for the
+capability."* **`grep -n "effective_find" crates/pdfce-core/src/text_edit/edit.rs`
+would have returned the answer in under a minute.** Nobody ran it, because the
+requester had already said so and nobody doubted them.
+
+**★ It was caught by the engineer running the CLI**, not by anyone re-reading
+the box, not by any gate, and not by this role's own hard-rule-11 sweep in the
+filing that created it.
+
+#### THE DECLINE — HONOURING THE PIN OVER A NON-EMPTY `find`
+
+`pdfceGUI`'s option 2, and **they flagged it themselves as a silent contract
+change.** Declined, and the reason is a real capability rather than caution:
+
+**With a non-empty `find` the two operands answer different questions.** The
+pin narrows **WHICH OPERATOR**; the find narrows **WHICH CHARACTERS WITHIN
+IT**. *"Replace `Rev A` with `Rev B`, but only in this one show operator"* is a
+coherent, useful request, and it is the only spelling that expresses it.
+Making the pin outrank the find would delete that combination silently, from
+every existing caller, with no error.
+
+#### VERIFICATION — ALL FIGURES SUPPLIED BY THE ENGINEER EXCEPT WHERE MARKED "run here"
+
+| check | result |
+|---|---|
+| `crates/pdfce-core/tests/whole_operator_pin.rs` | **10 of 10 green**, including the two new ones |
+| new test 1 | `the_named_edit_constructor_and_the_empty_find_spelling_agree` — compares **SAVED BYTES**, not report fields |
+| new test 2 | `the_edit_pinned_builder_matches_direct_field_assignment` |
+| doctest | **1 added; failed on its first run** — `ByteSpan` is `pdfce_core::span`, not `pdfce_core::object` |
+| `tools/run-gates.sh` | **PASS — 26 commands** |
+| `tools/check-core-api-verbs.py` | **PASS — 151 public `EditSession` verbs** (`56 + 61 + 33 + 1`), count agrees (**run here**, at `06e4c27`) |
+| `tools/check-cited-commits-exist.py` | **clean — every cited commit in 79 documents is an ancestor of `HEAD`** (**run here**) |
+| verb count movement | **unchanged at 151.** These are `EditRequest` **constructors**, not `EditSession` verbs — the gate counts the latter |
+
+**★★ The equivalence test's choice of oracle is the load-bearing detail, and
+it is the right one.** Two spellings of one request could agree on every field
+of the returned report and still write different bytes; a caller sees the
+bytes. Comparing **saved output** makes the equivalence the document's claim
+asserts — *"both spellings produce identical bytes"* — the thing actually
+under test, rather than a proxy for it. This is `R211`'s shape (*when two code
+paths owe each other byte-identical output, that is the assertion*), reached
+without needing to be told.
+
+**★ The doctest earned its place on its first execution.** `ByteSpan` is
+`pdfce_core::span`, not `pdfce_core::object` — a wrong `use` path in an example
+block. **That is precisely the error a consumer hits copying the example**, it
+is invisible to every other instrument this project owns (prose is not
+compiled), and it was found by the one mechanism that compiles documentation.
+An example that cannot be pasted is the same defect class this whole Pass is
+about, one level down.
+
+**★ And the gate extended this morning earned its keep the same day.**
+`3dc9eb0` (the 306th filing's *"also shipped"* half, committed 10:14) widened
+`check-core-api-verbs.py` to gate four figures that previously had none.
+`06e4c27`'s documentation edit moved a line count in `docs/core-api/index.md`,
+and **the gate failed on it immediately** — caught at write time, in the same
+session, by a check that had existed for **69 minutes**. Recorded because the
+305th filing asked for that gate extension and the 306th shipped it: this is
+the first evidence it does anything.
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string
+
+**The meaning-change event.** A capability gained a **name**. Everything that
+previously described it as *"set `pinned_span` with an empty `find`"*, or that
+named only the `FormatRequest` half where the edit half is equally the answer,
+now describes it in a form the whole Pass exists to abolish. Searched for **the
+answer a locating reader needs**, not for the wording.
+
+**Four survivors, all live at `06e4c27`.** Two are engineer-owned and reported
+rather than edited; two are this role's own and **fixed in this filing**.
+
+| # | survivor | where | owner | disposition |
+|---|---|---|---|---|
+| **1** | ***"Do not rebuild a `find` string from a run and expect it to match the content stream.** Use `FormatRequest::whole_operator(page, span)`"* — names the **format** half only, in the paragraph that exists to answer a locator | `docs/core-api/01-reading-and-model.md:997–999` | **engineer** (`docs/core-api/`) | **REPORTED — and it is the worst of the four.** This is the `⇒` conclusion of the `/ToUnicode` char-count section, addressed to exactly the reader who has located a run and cannot rebuild its text. `pdfceGUI` were **doing this**, to **edit**, and the one line telling them not to points at the restyle verb |
+| **2** | *"Targeting is by `find` text or by `pinned_span` — the same `GlyphProvenance::operator_span` pin `edit_text` takes"* — names **neither** constructor | `docs/core-api/03-capabilities.md:1251–1254` | **engineer** | **REPORTED.** The capability-shaped document, which `R220`(a) makes the primary landing place, describes the affordance without naming either symbol |
+| **3** | `FEATURES.md`'s pinned-editing row said *"and the same affordance on `EditRequest`"* — **the subordinate-clause shape, in this role's own document** | `docs/FEATURES.md:135` | **this role** | **FIXED this filing** — the constructor is now named, so the capability is greppable from `FEATURES.md` too |
+| **4** | Two `personal_rag/pdf` lessons and the subject index prescribe `FormatRequest::whole_operator(page, span)` as the remedy for a locator who cannot rebuild a `find`, with no edit half | `C:/personal_rag/pdf/lesson_20260827_a_text_run_is_not_a_show_operator.md:107`, `..._tounicode_maps_a_code_to_a_string...md:94`, `C:/personal_rag/pdf/index.md:2553` | **this role** (tier 5) | **FIXED this filing** — dated footers naming both constructors |
+
+**★★★ Survivor 3 is the one worth stopping on, because it is this filing's own
+finding committed in this role's own document.** `FEATURES.md:135` carried the
+edit half as *"and the same affordance on `EditRequest`"* — a **parenthetical
+clause naming a type but not a symbol**, inside a row headed by the
+`FormatRequest` constructor. That is **structurally the same sentence** as the
+`docs/core-api/` one that caused the incident, written by this role, in the
+document `R220` singles out as *"the document that had it right"*. A reader
+grepping `FEATURES.md` for `whole_operator` found one hit and would have drawn
+the same conclusion `pdfceGUI` drew.
+
+**★ Not survivors, checked and cleared:** the three `pdfce-cli` `--find` help
+strings (`main.rs:1956`, `:4365`, `:4511`) each document the empty case
+explicitly and correctly; `docs/ARCHITECTURE.md` §4.2.1 and §12's decision 094
+name `FormatRequest::whole_operator` in passages **about the `operator_span`
+guarantee**, where the format verb is the illustration and not the prescription
+— reported as **considered and left**, so a later sweep does not re-open them.
+
+#### ★ THE CHANNEL CHECK (`R203`(d)) — **NOT CLEAN**, and it is the 304th filing's defect recurring one filing later
+
+`ls -lt` on `D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/`, **run by this
+role at filing time** (2026-08-28, after `06e4c27`):
+
+- **The engineer's outbound is present**:
+  `reply_you_already_have_it_and_that_is_our_defect_not_yours.md`, **11:11**.
+  Its first section tells `pdfceGUI` how to unblock **on the build they already
+  have** — the empty-`find` spelling — before the constructor ships. **That
+  ordering is correct and worth naming**: the reply's job was to remove a
+  blocker, and the constructor removes a *future* one.
+- **The inbound is renamed as consumed**:
+  `done_2026-08-28-pinned-edit-CONSUMED.md`, **08:31**.
+- **★ ONE INBOUND REQUEST IS UNANSWERED AND NAMED IN NO DOCUMENT IN THIS
+  REPOSITORY**: `request_cmyk_default_flips_and_the_naive_formula_goes.md`,
+  from `pdfceGUI`, **mtime 2026-08-28 09:16**. `grep -rn` over `docs/` returns
+  **zero hits** for its name or its subject (**run here**). The 306th filing
+  was committed at **10:14** (`git log -1 --format=%ci 56d849b`, run here) and
+  its channel section names only the 08:31 item, calling the rest of the
+  channel handled.
+
+**★★ What is asserted and what is not.** Asserted, from mtimes and `grep`: the
+file existed **58 minutes** before the 306th filing's commit, and no document
+in this repository mentions it. **Not asserted:** why. The box in that filing
+says its `ls` was run *"at filing time"*; an `ls` at 10:14 would have listed a
+09:16 file. Either the listing was taken earlier than the commit or it was seen
+and not recorded, and **this role cannot distinguish those from here** — so it
+does not guess, per `R220`(e) applied to its own filing rather than to somebody
+else's report.
+
+**★ The shape is `n = 2` in three filings.** The 304th filing recorded exactly
+this: *"a new inbound request landed at 03:57, nineteen minutes before the
+303rd filing's own check, and that filing did not list it because its `ls` was
+taken at DISPATCH time rather than FILING time."* **The remedy was already
+known and written down when this recurrence happened.** No rule is proposed —
+`R203`(d) already requires the filing-time check and the 304th already stated
+the failure mode; what is missing is not a rule.
+
+**Owed:** the 09:16 request needs parsing into a *Next up* box or a reply. It
+is **not** parsed here — this filing has no dispatch for it and scoping is the
+engineer's act.
+
+#### ★ STANDING-RULE DISPOSITION — **`R220` AMENDED IN PLACE (CLAUSE (f)), NOTHING MINTED, AND THE DISPATCH'S SUGGESTED CARRIER IS DECLINED WITH REASONS**
+
+**The dispatch proposed `R197` as the carrier**, describing this as *"`R197`'s
+shape one level up"*, and explicitly did not propose a mint. **`R197` is
+declined as the carrier, and the redirect is the useful half of this
+disposition.**
+
+**Why not `R197`.** `R197`'s subject is a **figure's shelf life** — *a stated
+derivation is not a maintained derivation; publish the anchor or name the
+re-deriver.* Its remedy is **one clause carrying a commit or a gate name**.
+Nothing in this incident is a figure, nothing was stale, and the sentence that
+failed was **true at `HEAD` on the day it was read**. Anchoring it would have
+changed nothing. The dispatch's own analogy names the real link — *"there a
+verb was missing from these documents and had only a chat reply describing it"*
+— but that is `R197`'s **minting incident**, not `R197`'s **rule**. **A rule is
+its text, not its founding story**, and widening `R197` toward findability
+would destroy the exhaustive scope enumeration (*"any count, ratio, headroom
+figure, coverage fraction, N of M or line/citation tally"*) that makes it
+checkable.
+
+**Why `R220`, and why a clause rather than a rule.** `R220` **is** the
+findability rule — *"A CAPABILITY IS DOCUMENTED WHERE THE READER'S QUESTION
+LIVES, NOT ONLY WHERE ITS MECHANISM LIVES"* — minted 2026-08-27 from an
+incident whose shape is this one's: `pdfceGUI` filed a request for
+`format_text`, a capability that existed and was correctly documented. **This
+is that rule's fifth instance and its sharpest**, because it removes the
+remaining excuse: in `R220`'s instances 1 and 2 the entry was in the *wrong
+document* or *indexed by the wrong mechanism*, and a reader could be said not
+to have found it. **Here the reader found it, read it, and still could not act
+on it.** That is a claim about the **form** an entry takes, which (a) and (b)
+do not cover — and it is a **refinement of `R220`'s own subject**, which by
+(d)'s stated test (*"a rule whose remedy duplicates an existing rule's is a
+clause"*) makes it a clause. `R220` has precedent for exactly this: (d) and (e)
+were both added in place, in one filing, without moving the ceiling.
+
+**★ (f), stated so it can be checked:** **a capability's documentation carries
+a SYMBOL a reader can grep and a SNIPPET a reader can paste — never only a true
+sentence describing how to spell it out of other parts.** Where two verbs
+answer the same question, **both are named**; a clause of the form *"X gets the
+same affordance by …"* is the defect this clause exists to catch, and the
+remedy is a **name**, not more prose. **The cheap discharge is one line of
+code in a fenced block.** Checkable after the fact: a reader greps the
+documentation for the symbol the capability's own tests use, and asks whether
+it is there.
+
+**★★ Why (f) is not "write better docs", which is the objection it has to
+survive.** The failing sentence was **maximally good prose** — shorter, more
+accurate and more precise than the block it replaced. **Prose quality was not
+the variable.** The variable was whether the text contained a **token that
+survives `grep`** and a **fragment that survives copy-paste**, and those are
+properties a reviewer can check mechanically **at write time** without
+judgement. That is what separates (f) from an exhortation, and it is the same
+move (d) makes for universals.
+
+**No gate is proposed and none is possible**, on `R220`'s own founding
+reasoning: *"findability is not a property any script can evaluate."* A gate
+could check that a documented symbol **exists** — `check-core-api-verbs.py`
+already does — but not that a **capability** has one.
+
+**Ceiling does NOT move.** Rules stay at **`R224`**, next free **`R225`** —
+confirmed by `python tools/check-ledger-numbers.py`, run after these edits.
+
+**The revisit trigger, taken from the dispatch and adopted as written:** **a
+third occurrence where the remedy is a SYMBOL rather than more prose.** If it
+arrives, (f) has outgrown its parent and earns its own number; until then the
+recurrence count belongs to `R220`, where splitting it would reset a count that
+is itself the finding (`R220`'s own argument against minting `R223`).
+
+**No decision record.** Nothing architectural was decided — no boundary moved,
+no invariant changed, no library chosen. Decision **094** remains the newest;
+next free is **095**.
+
+#### DOCUMENTS EDITED, AND WHAT IS OWED
+
+| document | change |
+|---|---|
+| `docs/ROADMAP.md` | this *Shipped* entry; discharge banner on the 08:31 *Next up* box, **including the correction of its false premise**; `R220` amended in place with clause (f) |
+| `docs/FEATURES.md` | row 135 — `EditRequest::whole_operator` named (sweep survivor 3) |
+| `docs/SESSION_LOG.md` | 307th filing entry |
+| `C:/personal_rag/pdf/` | two lessons + subject index — dated footers naming the edit constructor (sweep survivor 4) |
+
+**Owed back to the engineer, none of it editable from this role:**
+
+1. **Sweep survivor 1** — `docs/core-api/01-reading-and-model.md:997–999`. The
+   `⇒` line that tells a locator not to rebuild a `find` names only
+   `FormatRequest::whole_operator`. **Highest value of the four**: it is the
+   exact paragraph `pdfceGUI` were acting on.
+2. **Sweep survivor 2** — `docs/core-api/03-capabilities.md:1251–1254` names
+   neither constructor, in the document `R220`(a) makes the primary landing
+   place for a capability.
+3. **The 09:16 inbound** — `request_cmyk_default_flips_and_the_naive_formula_goes.md`,
+   unanswered and untracked. Needs a *Next up* box or a reply; scoping is the
+   engineer's act.
+4. **Carried forward, unchanged from the 306th filing:** the **trap-X cause**
+   on the grey/K-black patch is still unknown (the engineer re-reads that
+   patch's content stream), and **`AllProcessSpaces` remains unmeasured
+   against any oracle**.
+
+---
+
 ### `Pass 143.0` (`4094e49`) + the gate extension (`3dc9eb0`) — `pdfce_core::settings::OverprintZeroTintScope` — ★★★★★ **THE BACKLOG ENTRY'S OWN *"Cause"* SECTION WAS WRONG, AND NOTHING SHORT OF AN A/B OF THE RENDERED PIXELS COULD HAVE SAID SO. THE FILED CAUSE WAS IMPLEMENTED EXACTLY AS WRITTEN; IT COMPILED, IT WAS INSTRUMENTED AND DEMONSTRABLY *REACHED* (`converts=true` ON 10 PAINTS), AND IT MOVED **ZERO PIXELS** ON THE FIXTURES AND ON ALL 51 CONFORMANCE PATCHES. THE REAL GATE WAS `Interpreter::overprint_would_change`, WHOSE `_ => false` ARM CARRIED A COMMENT CALLING IT *"a known under-count rather than a claim of zero"* — **TRUE OF THE DISCLOSURE, AND THE SENTENCE DID NOT SAY THE SAME ARM ALSO GATED THE BEHAVIOUR*** — ★★★★★ **THE CONFORMANCE CORPUS IS A POOR ORACLE FOR THIS DEFECT — AND THIS FILING'S FIRST VERSION OF THIS SENTENCE SAID *BLIND*, ON A SCAN RUN BETWEEN THE TWO HALVES OF THE FIX. ~~INSTRUMENTED ACROSS ALL 51 PATCHES, ZERO PAINT A `DeviceGray` SOURCE THROUGH TABLE 149~~ — **CORRECTED THE SAME DAY BY THE ENGINEER, RE-MEASURED ON `4094e49` BY RENDERING EVERY PATCH TWICE WITH THE SHIPPED BINARY: 3 OF 51 CHANGE PIXELS (8,491 / 1,827 / 804) AND 0 OF 3 CHANGE VERDICT.** THE CONCLUSION SURVIVES AND THE REASON DOES NOT: **THE ENTRY'S *"Expected result: back to 5 FAIL or better"* WAS STILL UNREACHABLE BY THIS FIX, AND NOT BECAUSE THE FIX IS WRONG.** SUITE UNCHANGED AT 6 FAIL / 29 PASS / 16 UNRESOLVED — NO REGRESSION, AND ~~NO IMPROVEMENT WAS EVER AVAILABLE~~ NO IMPROVEMENT THE CORPUS COULD SCORE** — ★★★★ **THE STRONGEST ASSERTION IN THE PASS NEEDS NO ORACLE: TWO FIXTURES DIFFER IN EXACTLY ONE WAY — `0.5 g` VERSUS `0 0 0 0.5 k`, THE SAME INK STATED TWICE — SO THE SETTING'S WHOLE MEANING IS *"THESE MUST LAND ON IDENTICAL PIXELS"*, CHECKABLE BY COMPARING PDFCE AGAINST ITSELF (`R215`)** — ★★★ **TWO COPIES OF ONE PREDICATE CANCELLED EACH OTHER UNDER SABOTAGE: THE FIRST CUT GAVE `overprint_would_change` ITS OWN `overprint_scope_covers` HELPER, AND A DELIBERATE SABOTAGE **SURVIVED BECAUSE `classify`'S COPY STILL REFUSED**. `R221`'s FOURTH INSTANCE, AND THE FIRST WHERE DUPLICATION DEFEATED THE *INSTRUMENT* RATHER THAN PRODUCING A WRONG ANSWER** — ★★ **A TEST'S DOC COMMENT CLAIMED IT PINNED THE `!in_image_sample` GUARD; THREE SABOTAGES PROVED THAT FALSE. THE TEST IS GOOD AND THE **COMMENT** WAS WRONG — A SURVIVING SABOTAGE DOES NOT ALWAYS MEAN THE TEST IS WEAK** — ★ **FOUR GATES CAUGHT REAL OMISSIONS ON THE FIRST SWEEP, ONE OF WHICH (`check-settings-consumed.py`) WOULD HAVE LET *SAVING SETTINGS SILENTLY DROP THE NEW ONE*, AND THE ENGINEER DID NOT KNOW THAT GATE EXISTED** — ★★★★★ **AND THIS FILING'S OWN SWEEP FOUND SOMETHING NEITHER COMMIT TOUCHED: THE 2026-08-25 OPERATOR RULING THAT THE LICENSED SUITE'S NAME STAYS OUT OF THIS PUBLIC REPOSITORY IS SATISFIED IN FILE CONTENTS AND FILE NAMES AND **VIOLATED IN 83 COMMIT MESSAGES, 82 OF THEM ALREADY PUSHED**. THE GATE CANNOT SEE COMMIT MESSAGES AND NEVER COULD** — ★★★★★ **AND THE SAME SHAPE BIT THIS FILING TWICE MORE: ITS OWN HEADLINE CORPUS FIGURE WAS A MEASUREMENT TAKEN WHILE THE THING IT MEASURED WAS BEING CHANGED, AND AMENDING `885cf3a` → `4094e49` INVALIDATED 23 HASH CITATIONS IN THESE THREE DOCUMENTS — ALL 23 CAUGHT AND REPOINTED BY `tools/check-cited-commits-exist.py`, AND 10 MORE IN THE TWO RAG TREES THE GATE CANNOT SEE** — 2026-08-28 (306th filing, **AMENDED IN PLACE THE SAME DAY — see *THE CORRECTION TO THIS FILING'S OWN MEASUREMENT*, below**)
 
 **Two commits, filed together because the second discharges an owed item the
@@ -81909,7 +82280,47 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### ★★★★★ THE 08:31 INBOUND — A `pdfceGUI` REQUEST ARRIVED BETWEEN THE 305th FILING'S CHANNEL CHECK AND `Pass 143.0`'s COMMIT. **UNPARSED · NO PASS ID CLAIMED** — and it is `R219`'s shape again: `format_text` was made addressable by PIN ALONE and its sibling `edit_text` was not — filed 2026-08-28 (306th filing)
+### ~~★★★★★ THE 08:31 INBOUND — A `pdfceGUI` REQUEST ARRIVED BETWEEN THE 305th FILING'S CHANNEL CHECK AND `Pass 143.0`'s COMMIT. **UNPARSED · NO PASS ID CLAIMED** — and it is `R219`'s shape again: `format_text` was made addressable by PIN ALONE and its sibling `edit_text` was not~~ — **DISCHARGED 2026-08-28 (307th filing): SCOPED AND SHIPPED AS `Pass 152.0` (`06e4c27`), THREE HOURS AFTER THIS BOX WAS OPENED — AND THE BOX'S OWN PREMISE WAS FALSE** — opened 2026-08-28 (306th filing)
+
+> **★★★★★ DISCHARGE BANNER — READ BEFORE ACTING ON ANYTHING BELOW, BECAUSE
+> THE BOX IS WRONG ABOUT THE ONE THING IT ASSERTS.**
+>
+> **SHIPPED as `Pass 152.0` (`06e4c27`).** The full account is the *Shipped*
+> entry at the head of this file. In one screen:
+>
+> - **`edit_text` WAS ALREADY ADDRESSABLE BY PIN ALONE**, and had been since
+>   `Pass 145.0`. The heading below — *"`format_text` was made addressable by
+>   PIN ALONE and its sibling `edit_text` was not"* — is **false**, and this
+>   role wrote it. `edit.rs:1643` calls `effective_find`; the behaviour is
+>   pinned by `whole_operator_pin.rs::edit_text_gets_the_same_affordance`;
+>   `pdfce-cli edit-text --pin-span` with no `--find` works, and that
+>   subcommand's own `--find` help documents the empty case.
+> - **So this was NOT `R219`'s shape.** `R219` is *a fix reached one route and
+>   not its sibling*. Both routes were fixed. What differed was that one had a
+>   **named constructor** and the other had a **sentence describing how to
+>   spell it**.
+> - **`Pass 152.0` therefore adds NO BEHAVIOUR.** It adds
+>   `EditRequest::whole_operator(page_index, span, replace)` and
+>   `EditRequest::pinned(span)` — a name for something that already worked —
+>   plus a worked example in `docs/core-api/02-editing-and-saving.md`.
+> - **Their option 2 — *honour the pin over a non-empty `find`* — was
+>   DECLINED**, on the ground they flagged themselves: with a non-empty `find`
+>   the pin narrows **which operator** and the find narrows **which characters
+>   within it**, and that combination is real.
+> - **The larger question the box raised is still open**: whether
+>   `text_extract`'s synthesised inter-glyph spacing should be recoverable at
+>   all. Nothing here answers it.
+>
+> **★★ Why this discharge is written at length rather than struck through.**
+> The box was filed by this role from the requester's own framing, and the
+> framing carried a **mechanism** — *"the sibling was never fixed"* — attached
+> to a **real observation** — *"our pinned `edit_text` was refused"*. That is
+> **`R220`(e) exactly**: the symptom is evidence, the mechanism is a
+> hypothesis, and they arrived in one paragraph in one confident voice. The
+> observation was true. The mechanism was wrong, and this role relayed it into
+> `ROADMAP.md` **as this project's own statement about its own crate**, six
+> weeks of documents deep, under a five-star heading. It was caught by the
+> engineer running the CLI, not by anyone re-reading the box.
 
 **★ NO ID IS MINTED HERE, DELIBERATELY.** Assigning a Pass ID is the
 engineer's act (`CLAUDE.md` rule 5, and this role's own dispatch protocol).
@@ -113516,6 +113927,98 @@ same cause (hashes exist only at commit time), two different failure modes.
   **Ceiling does NOT move for either amendment.** Rules stay at **`R222`**,
   next free **`R223`** — confirmed by `python tools/check-ledger-numbers.py`,
   run after these edits.
+
+  **★★★★★ AMENDED IN PLACE 2026-08-28 (307th filing) — CLAUSE (f): A
+  CAPABILITY'S DOCUMENTATION CARRIES A **SYMBOL** A READER CAN GREP AND A
+  **SNIPPET** A READER CAN PASTE — NEVER ONLY A TRUE SENTENCE DESCRIBING HOW
+  TO SPELL IT OUT OF OTHER PARTS. NO MINT, AND THE DISPATCH'S SUGGESTED
+  CARRIER (`R197`) WAS DECLINED WITH REASONS.**
+
+  **The fifth instance, and it is the one that removes the remaining excuse.**
+  `Pass 152.0` (`06e4c27`) above. `pdfceGUI` filed a defect saying a pinned
+  `edit_text` can only be addressed by `find`. **It had been addressable by
+  pin alone since `Pass 145.0`** — resolved by `effective_find`, pinned by a
+  test, emitting its rule-4 disclosure, reachable from
+  `pdfce-cli edit-text --pin-span`, and **documented in
+  `docs/core-api/02-editing-and-saving.md`**, in the mechanics document a
+  shell builds against, in the correct section.
+
+  **★ Their report cites `Pass 145.0` and `FormatRequest::whole_operator` by
+  name. They had read the page.** The edit half read, in full:
+
+  > *"`EditRequest` gets the same affordance by setting `pinned_span` with an
+  > empty `find`."*
+
+  **True, accurate, correctly filed — and it lacked a symbol to grep, an
+  example to paste, and a heading of its own** (it was the last sentence of a
+  block headed `FormatRequest`). They read it, concluded the verb could only
+  be addressed by `find`, and went on to describe three attempts to
+  **reconstruct** a `find` for an operator they had already **located** — on a
+  CAD drawing where `text_extract`'s synthesised inter-glyph spacing means a
+  rebuilt `find` can never match. **The remedy shipped as a Pass that adds no
+  behaviour whatsoever:** `EditRequest::whole_operator` and
+  `EditRequest::pinned`, a name for something that already worked.
+
+  **★★ Why this instance is sharper than 1 and 2, which is the warrant for a
+  clause rather than a footnote.** In instances 1 and 2 the entry was in the
+  **wrong document** or **indexed by the wrong mechanism**, so a reader could
+  fairly be said not to have found it, and clauses (a)/(b) answer that.
+  **Here the reader found it, read it, cited it, and still could not act on
+  it.** That is a claim about the **FORM** an entry takes inside the right
+  document, which (a) and (b) do not reach.
+
+  **★ (f), stated so it can be checked:** **when a Pass documents a
+  capability, the documentation contains a NAME that survives `grep` and a
+  FRAGMENT that survives copy-paste.** Where two verbs answer the same
+  question, **both are named** — a clause of the form *"X gets the same
+  affordance by …"* is exactly the defect this clause exists to catch, and its
+  remedy is a **symbol**, not better prose. **The cheap discharge is one line
+  of code in a fenced block.** Checkable after the fact: grep the
+  documentation for the symbol the capability's own tests use, and ask whether
+  it is there.
+
+  **★★ Why (f) is not "write better docs", which is the objection it must
+  survive.** The failing sentence was **maximally good prose** — shorter,
+  more accurate and more precise than what replaced it. **Prose quality was
+  not the variable.** The variable was whether the text carried a **token that
+  survives `grep`** and a **fragment that survives paste**, both of which a
+  reviewer can check **mechanically at write time, without judgement**. That
+  is what separates (f) from an exhortation, and it is the same move (d) makes
+  for universals.
+
+  **★★ Why `R197` was declined as the carrier.** The engineer's dispatch
+  proposed `R197` — *"`R197`'s shape one level up"* — and did not propose a
+  mint. `R197`'s subject is a **figure's shelf life**: *a stated derivation is
+  not a maintained derivation; publish the anchor or name the re-deriver.*
+  **Nothing here is a figure, nothing was stale, and the sentence was true at
+  `HEAD` on the day it was read** — an anchor would have changed nothing. The
+  dispatch's analogy points at `R197`'s **minting incident** (eight verbs
+  missing from `docs/core-api/`), not at `R197`'s **rule**; **a rule is its
+  text, not its founding story**, and widening `R197` toward findability
+  would destroy the exhaustive scope enumeration that makes it checkable.
+  `R220` **is** the findability rule, so this is a clause on `R220` — by
+  (d)'s own stated test, *"a rule whose remedy duplicates an existing rule's
+  is a clause"*.
+
+  **★ A sixth instance is recorded in the same breath, and it is this role's
+  own.** `docs/FEATURES.md:135` carried the edit half as *"and the same
+  affordance on `EditRequest`"* — a parenthetical naming a **type** but not a
+  **symbol**, inside a row headed by the `FormatRequest` constructor.
+  **Structurally the same sentence**, written by this role, in the document
+  this rule singles out as *"the document that had it right"*. Corrected in
+  the 307th filing. **The capability-shaped document is not immune to the
+  defect just because it is capability-shaped.**
+
+  **No gate, on this rule's own founding reasoning** — *"findability is not a
+  property any script can evaluate."* A gate can check that a documented
+  symbol **exists** (`check-core-api-verbs.py` does); it cannot check that a
+  **capability has one**.
+
+  **Ceiling does NOT move for this amendment.** Rules stay at **`R224`**, next
+  free **`R225`** — confirmed by `python tools/check-ledger-numbers.py`, run
+  after these edits. **Revisit trigger, adopted from the dispatch as written:
+  a third occurrence where the remedy is a SYMBOL rather than more prose.**
+  If it arrives, (f) has outgrown its parent and earns its own number.
 
   **Sibling of `R219`** (enumerate the other routes) and **`R203`** (never
   state a bare verdict about a repository this project does not build):
