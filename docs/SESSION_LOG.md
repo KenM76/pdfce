@@ -70077,6 +70077,41 @@ exactly what we asked for and **we have not consumed it yet**; it is next
 after this."* The ticking bar is *"an operator can reach it in a real
 `pdfceGUI` build"*, and they say they cannot.
 
+> **★★ AMENDMENT, 2026-08-27 (298th filing) — THIS PARAGRAPH WAS WRONG WHEN
+> WRITTEN, AND THE REFUTATION WAS ALREADY IN THE DIRECTORY THIS FILING HAD
+> JUST LISTED. Left standing rather than rewritten (append-only), because the
+> wrong claim IS the evidence for `R203` clause (d).**
+>
+> **Both rows are corrected to `[x]` gui by the 298th filing.** Two channel
+> files are NEWER than the 21:54 one quoted above:
+> `note_142_1_and_144_0_are_both_consumed_and_the_superset_is_deleted.md`
+> (**22:50**) — *"Both consumed the night they shipped, and the workaround is
+> deleted rather than kept"*; `accepted()` is *"now the entire contents of both
+> face combos — the Properties panel's and the Format ribbon's"* and
+> `faces_on_page` is **deleted, not left as a fallback** — and
+> `request_preview_font_resources_trusts_the_callers_find_where_format_request_now_resolves_it.md`
+> (**22:57**) — *"We consumed it tonight and deleted our per-operator `find`
+> construction"* (`Pass 145.0`).
+>
+> **★ The mechanism is NOT "the channel moved".** This filing **ran `ls -lt`**,
+> and demonstrably ran it after 22:39 (it reports the replies written at
+> 22:38–22:39). Whether it ran before or after 22:50 **is not determinable and
+> is not asserted**. What *is* determinable: it **read the file its box was
+> about** and quoted it **to substantiate a claim about the present**, without
+> recording **when** the reading was taken. ⇢ ***A directory listing is not a
+> reading. `ls -lt` tells you a file exists; opening the one above the one you
+> came for is a separate act.***
+>
+> **★★ And the strength of the sentence is part of the defect.** *"A
+> substantiated `[ ]` rather than a cautious one"* turns a checkbox into a
+> **quoted claim**, and a quoted claim **inherits its source's timestamp
+> without carrying it**. A cautious `[ ]` would have been **less wrong and more
+> honest**, because nothing would have been asserted that could go stale. ⇢
+> ***Substantiating a claim raises its confidence without raising its shelf
+> life.*** `R220`(c)'s four prior instances had shelf lives of hours to days;
+> **this one expired in 56 minutes, before the filing that made it was
+> committed.** See **`R203` clause (d)**, *Standing rules*.
+
 **Still in flight / for next session:**
 
 - **★★★★★ A FOURTH `pdfceGUI` REQUEST IS UNPARSED AND HAS NO PASS ID.**
@@ -70188,3 +70223,443 @@ a Rust ecosystem quirk, so neither gets a RAG file. Written down so a later
 index check reads this as a decision, not an omission.
 
 ---
+## 2026-08-27 (298th filing) — `Pass 146.0` (`9f6e732`) SHIPS: a widget's border and visibility can be **READ**, so a properties control need not invent one; ★★★★★ **three `FEATURES.md` `gui` boxes were WRONG at the moment the 297th filing substantiated them, and the refutation was already in the channel directory it had just listed** — the quote it used was **56 minutes old**; ★★★★★ **and one of those newer files reports a LIVE DEFECT in `Pass 142.1`, shipped five hours earlier: `preview_font_resources(page, "", Some(pin))` locates correctly and reports EVERY font as `Accepted`** — an unconditional yes from the control built to prevent exactly that, reached by following `Pass 145.0`'s own guidance; ★★★ **CI was RED when this filing was dispatched and this filing is what turns it green** — `R217`'s ordering invariant violated **twice in one session**, and the thirteen-gate sweep run before each push **omitted the two gates whose entire job is that invariant** (measured: **13 of 19** scripts on disk); ★★ **`R209` clause (e)** and **`R203` clause (d)** amended in place, `R217` given a second amendment note — **nothing minted, and every decline argued**
+
+**Shipped:**
+
+- **`Pass 146.0`** (`9f6e732`) — `forms::Widget` gains `border:
+  Option<BorderSpec>`, `visibility: Option<Visibility>` and `annot_flags:
+  AnnotFlags`, populated by `parse_acroform`; `pdfce-cli list-fields
+  --widgets` prints one opt-in line per widget. Closes the write-without-read
+  asymmetry `pdfceGUI` filed at 21:54: `WidgetEdit` could **write** four widget
+  properties and `forms::Widget` could **read** two.
+
+- **`1e62715`** — *"tools: run-gates.sh, because a hand-typed sweep omitted the
+  two gates that would have caught the red CI"*, **2026-08-27 23:40:09**, +229
+  over three `tools/` files. **A `tools/` commit, not a Pass; no Pass ID
+  claimed** (precedent: the 283rd/284th filings' repair commits). **Filed here
+  pre-emptively — see the correction below.**
+
+**★★★ GIT STATE, CORRECTED IN PLACE RATHER THAN CARRIED.** At dispatch, `HEAD`
+was **`0c254f8`**, `main` was **level with `origin/main`**, `git describe` was
+**`v0.14.0-67-g0c254f8`**, and `git status --porcelain` was **empty**. **All
+four are now stale**, re-run after this role's last edit: **`HEAD` is
+`1e62715`**, which is **NOT pushed**; the tree is **not clean**; and
+`git rev-list --count a2b4e16..HEAD` is **25**, not the 24 an earlier draft of
+this entry carried. **`9f6e732` is two commits below the tip and is pushed.**
+⇢ ***A `git rev-parse` is a timestamp, not a state*** — the third time in this
+one filing that a reading was mistaken for a condition (the others: the channel
+listing, and the gate sweep).
+
+**★★★★★ AND `1e62715` IS OCCURRENCE (C) OF THE VERY SHAPE THIS ENTRY IS
+FILING — a code commit landing inside the librarian's write window, for the
+SECOND time in a row, WHILE THE `R217` CLAUSE FORBIDDING IT WAS BEING
+DRAFTED.** It was **deferred at the tip** when found (`check-commits-filed.py`:
+*"tip `1e62715` is DEFERRED, not yet filed"*), **and this filing landing on top
+of it would have shielded it out of the window and turned CI red a third
+time.** ⇢ ***So it is filed here, in the same commit*** — which is the second
+branch of the clause just written (*hold it, or re-dispatch so the filing can
+cover it*). **The rule proved itself twice in one night, and the second time it
+was caught BECAUSE the clause had just been written.**
+
+**Sixth consecutive filing to find the engineer's tree growing underneath it**,
+not the one that broke the run. Also uncommitted and not this role's:
+`crates/pdfce-core/tests/font_preflight.rs` (+18), `docs/NEXT_SESSION.md`
+(rewritten), two `.claude/agent-memory/pdfce-engineer/` files. **Nothing of the
+engineer's was committed or staged by this filing.**
+
+**Tests (engineer's, relayed; both components re-counted here):** **4,463 →
+4,483, +20** — **+12 in-crate unit tests** over hand-built dictionaries and
+**+8 CLI**, 0 failing. Re-derived by `grep -n "fn "
+crates/pdfce-cli/tests/widget_properties.rs` (8 past five helpers) and `git
+show 9f6e732 -- crates/pdfce-core/src/forms.rs | grep "^+    fn "` (12 past the
+`widget_with` helper); **both agree with the commit message**.
+
+---
+
+**★★★★★ THE CHANNEL FINDING — IT CORRECTS THE FILING IMMEDIATELY BELOW THIS
+ONE, AND IT IS THE LARGEST THING IN THIS ENTRY.**
+
+The 297th filing closed its `FEATURES.md` section with a deliberately strong
+sentence: *"**The `gui` column was NOT rounded up on either new row, and that
+is a substantiated `[ ]` rather than a cautious one.** `pdfceGUI` wrote, in a
+channel file timestamped **2026-08-27 21:54**: 'preview_font_resources is
+exactly what we asked for and **we have not consumed it yet**.'"*
+
+**`ls -lt D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/`, run here: two
+files are NEWER than the one that sentence quotes.**
+
+| file | mtime | what it says |
+|---|---|---|
+| `note_142_1_and_144_0_are_both_consumed_and_the_superset_is_deleted.md` | **22:50** | *"Both consumed the night they shipped, and the workaround is deleted rather than kept."* `accepted()` is *"now the entire contents of both face combos — the Properties panel's and the Format ribbon's"*; **`faces_on_page` deleted, not left as a fallback.** |
+| `request_preview_font_resources_trusts_the_callers_find_where_format_request_now_resolves_it.md` | **22:57** | *"We consumed it tonight and deleted our per-operator `find` construction"* — `Pass 145.0`. **Plus a live defect report; see below.** |
+
+**Both `gui` boxes are corrected to `[x]` this filing**, with the file, its
+mtime **and the time the reading was taken** — the three facts `R203`(d) now
+requires.
+
+**★★ The mechanism is NOT "the channel moved", and that shallow reading is
+what the amendment blocks.** The 297th filing **ran `ls -lt`** — its own box
+quotes the listing and reports the replies written at 22:38–22:39, so the
+listing demonstrably ran after 22:39. **Whether it ran before or after 22:50 is
+not determinable from here and is not asserted.** What *is* determinable: the
+filing **read the file its box was about**, and quoted it **to substantiate a
+claim about the present**, without recording **when** that reading was taken.
+⇢ ***A directory listing is not a reading. `ls -lt` tells you a file exists;
+opening the one above the one you came for is a separate act.***
+
+**★★ AND THE STRENGTH OF THE SENTENCE IS PART OF THE DEFECT.**
+*"A substantiated `[ ]` rather than a cautious one"* converts a checkbox into a
+**quoted claim**, and a quoted claim **inherits the timestamp of its source
+without carrying it**. **A cautious `[ ]` would have been less wrong and more
+honest**, because nothing would have been asserted that could go stale. ⇢
+***Substantiating a claim raises its confidence without raising its shelf
+life.*** `R220`(c)'s four prior instances had shelf lives of hours to days;
+**this one expired in 56 minutes, before the filing that made it was
+committed.**
+
+---
+
+**★★★★★ A LIVE DEFECT IN `Pass 142.1`, REPORTED BY THE CONSUMER FIVE HOURS
+AFTER IT SHIPPED. UNPARSED, NO PASS ID — a ★★★★★ box is open in `ROADMAP.md`
+*Next up*.**
+
+`preview_font_resources(page, "", Some(pin))` **locates correctly and reports
+every font on the page as `Accepted`.** Their traced mechanism, **relayed and
+NOT verified here** (`crates/` is outside this role's remit): `find_anchor`
+with `pinned_span` set never reads `find`; `survey_page_fonts` passes the empty
+string down; `accept_font_target` tests coverage with `text.chars().zip(...)`;
+**`"".chars()` yields nothing, so zero characters are checked and zero refusals
+found.**
+
+**Why anyone calls it that way: because `Pass 145.0` told them to.** A pinned
+request no longer needs a `find`, and they deleted their per-operator `find`
+construction the same night. **Feeding the pre-flight the same way is the
+trap.** ⇢ *After `145.0`, **`FormatRequest` RESOLVES the text and
+`preview_font_resources` TRUSTS the caller's** — two functions taking the same
+two operands and disagreeing about what an empty one means.* **`R221`'s fourth
+instance, and the first found by a consumer rather than by this project.**
+`Pass 142.1`'s own commit message argued the fix for `gate_synthesis` was to
+stop **describing** when `set_font` succeeds and make it **call** the accepting
+code; **the identical shape survived in the parameter list.**
+
+**★ Worse than what it replaced, and silent.** The `fontinfo` superset they
+deleted was at least a superset of the *page's* fonts; this is an
+**unconditional yes**. *"The list looks richer, not broken. The operator picks
+a face, gets a refusal, and the control that was built to prevent exactly that
+has become the thing producing it."* **Not blocking** — their caller passes
+real text today. Two remedies offered (resolve from the anchor operator, or
+refuse an empty `find` by name); their preference is the refusal.
+
+---
+
+**Decisions made this session:**
+
+- **DECISION DECLINED, recorded so the absence is not read as an oversight:
+  the `forms.rs` → `edit.rs` layering note is NOT a decision record.**
+  `forms.rs` now imports `BorderSpec`/`BorderStyle`/`Visibility` from
+  `edit.rs` — a **reading** module referencing types in the **authoring** one.
+  Left there because moving them **changes a published path**
+  (`pdfce_core::edit::BorderSpec`) consumers already build against, and the
+  alternative — a duplicate reading enum — is **the exact drift `R221` exists
+  to prevent**. That content is **`R221` applied**, not a new crate boundary,
+  library choice or invariant; the 297th filing declined `accept_font_target`
+  on the same ground and the 295th declined before it. The engineer
+  independently reached the same view. **Decisions stay at `094`, next free
+  `095`.**
+- **NOTHING WAS MINTED THIS FILING, AND THAT IS THE DECISION.** Three findings
+  each had a plausible new number and each was **widened into an existing rule
+  instead**, on the `R220` precedent the 296th filing argued at length: a new
+  number sitting beside an old one saying a narrower version of the same thing
+  is the drift this project spent the week avoiding. **Standing rules stay at
+  `R223`, next free `R224`.**
+
+**Standing rules amended in place — three, no ceiling movement:**
+
+- **★★ `R203` GAINS CLAUSE (d) — a citation substantiating a `gui` box is a
+  TIMESTAMPED READING of a file, not a fact.** Obliges three things: name the
+  file, its mtime **and the time the reading was taken**; **read every channel
+  file newer than the one you are quoting before you quote it** (bounded by the
+  listing you have already run); and **prefer the bare checkbox to a stale
+  quotation** — a `[ ]` with no sentence decays quietly, a `[ ]` with a
+  quotation decays **loudly and with a citation**, which a later reader trusts
+  harder. **No gate proposed and none is possible**, on `R203`'s founding
+  warrant: a gate would have to know what the other project's build currently
+  does, which is the fact the claim exists to report.
+- **★★ `R209` GAINS CLAUSE (e) — a gate-sweep figure owes its DENOMINATOR.**
+  *"13 gates green"* is **not** naming the set; it is a **count**, and a count
+  without its population **cannot disagree with anything**. It reads as
+  compliance with clause (a) while satisfying none of its purpose. Every sweep
+  figure is now written **`N of M`** — **and a relayed figure is re-expressed
+  with its denominator by whoever relays it**, which is this role, constantly,
+  and the last cheap place to add it.
+  **★★★ THE MECHANICAL REMEDY SHIPPED WHILE THIS CLAUSE WAS BEING DRAFTED,
+  INDEPENDENTLY: `tools/run-gates.sh` (`1e62715`)** — and it is better than the
+  one this role was about to recommend. It derives its list from
+  `check-ci-parity.py --list`, i.e. **from the WORKFLOW, not from the
+  directory**, so a new CI job appears in the runner with no edit to the
+  runner; **the filing gates run LAST by construction**; it does not stop at
+  the first failure; the two skipped commands are **named**.
+  **★★ The two denominators are RECONCILED rather than left side by side** —
+  this clause must not commit the error it was minted over. This role measured
+  **19 scripts on disk, 6 omitted**; the engineer measured **25 commands, 5
+  omitted**. **Both correct, different sets**: the script population includes a
+  file CI does not run and **excludes every non-script command CI does**
+  (`cargo fmt`, clippy, wasm32, `--no-default-features`, the fuzz check). **The
+  workflow-derived list is the better denominator**, for `R209`'s founding
+  reason: *"the gates are green"* is only interesting relative to what CI will
+  run. ⇢ **Quote `N of M` from `run-gates.sh`, not from `ls`.**
+  **★★ And running the list found a defect IN the list on its first run**: the
+  `cargo tree` GUI-denylist command had an **inverted exit sense** — `grep`
+  exits 1 on no match, which is the passing condition — so it **reported
+  failure on a healthy tree and SUCCESS ON A VIOLATED ONE**, the worse
+  direction. **It survived because nothing had ever RUN the list; it was read
+  and retyped.** ⇢ ***Giving a documented list a CONSUMER is what turns its
+  errors into red lines.*** Corrected, and **widened to both crates because CI
+  checks both**. A **third dangling gate reference** (`run-all.sh`, cited in
+  `check-string-gaps.sh`'s header, never on disk) was **made true rather than
+  struck**. ⇢ *A reference inside a trusted document is indistinguishable from
+  a real one until somebody runs `ls`.*
+  **★★ The engineer reached this finding independently within the same hour**,
+  in `feedback_a_gate_sweep_certifies_the_tree_it_ran_on.md`, reaching the same
+  sentence from the other end of the dispatch. **Two roles deriving one finding
+  independently in one hour is a stronger warrant than an occurrence count**,
+  and it is why the amendment was widened with confidence rather than left a
+  candidate.- **★ `R217` GAINS A SECOND AMENDMENT NOTE — the deferral window closes when
+  the librarian is DISPATCHED, not when its filing is COMMITTED.** The working
+  orders read as though a filing is an **event**; it is an **interval**. A
+  filing takes minutes; a commit takes seconds. Added clause: *from dispatch
+  until the filing commit lands, the tree must not gain a code commit* — hold
+  it, or abort and re-dispatch so the filing can cover it.
+
+**Findings + decisions:**
+
+- **★★★ THE FILING-ORDER FAILURE, TWICE IN ONE SESSION, AND THE MECHANISM IS
+  NOT "FORGOT THE ORDERING".** **(A)** `2e6235c`, `cfa2c44` and `0c48bbf`
+  pushed with no filing between them — CI red on `0c48bbf` (run
+  **33136580538**, `gh run list`, read here), job *"verify pdfce-gui strings
+  live in ui_text.rs"*, step *"check that every code commit is filed"*.
+  **(B)** `9f6e732` committed at **23:12:46** and the 297th filing at
+  **23:13:24** — **38 seconds apart** — so the filing, which files
+  `142.1`/`144.0`/`145.0` and **cannot** file a commit that did not exist when
+  it was drafted, landed on top of `9f6e732` and **shielded it out of the
+  one-commit deferral window**. `python tools/check-commits-filed.py`, run here
+  before any edit: **exit 1**, naming `9f6e732`. **This filing is what turns CI
+  green**, and the post-filing colour must be **read from GitHub**, not
+  assumed.
+  **`R217`'s text was already correct** — its 290th-filing amendment says *"one
+  unfiled commit may sit at the tip. Never two"* — **so what failed was
+  compliance, not the rule.** That is exactly why the weight went on the
+  instrument.
+- **★★★ THE INSTRUMENT: THE THIRTEEN-GATE SWEEP OMITTED THE TWO GATES WHOSE
+  ENTIRE JOB IS THIS INVARIANT.** `ls tools/check-*` → **19 scripts on disk**
+  (run here). The 13 named in the commits omit `check-ci-parity`,
+  **`check-commits-filed`**, `check-image-colorspace-truth`,
+  `check-ledger-numbers`, `check-outcome-disclosed` and
+  **`check-passes-filed`**. ⇢ ***A sweep that omits a gate is
+  indistinguishable from a green one*** — it emits the same evidence, a list of
+  names all passing, and **nothing in that output says how many were not
+  asked**. **Same defect as `R205`'s under-reporting gate, one layer up**:
+  `R205` covers a gate that **runs and under-reports**; `R209`(e) covers a
+  sweep that **under-runs**. The immediately preceding filing recorded
+  `check-string-gaps.sh` under-reporting for the third time — **the two
+  findings are siblings and were a filing apart.**
+- **★★ AND THE OMISSION WAS VISIBLE IN THIS PROJECT'S OWN RECORDS ONE FILING
+  BEFORE IT COST ANYTHING.** The 297th filing recorded that `2e6235c` reports
+  **18** gates green and `cfa2c44`/`0c48bbf` report **13**, and left it as
+  *"counts of different bare-gate sets, not a contradiction, quoted rather than
+  reconciled here."* **Declining to RECONCILE two quoted figures was correct**
+  (hard rule 8). **Declining to MEASURE the population that reconciles them was
+  not** — `ls tools/check-*` is one command in this repository, and it would
+  have shown both figures to be subsets of 19 and the sweep to have **shrunk by
+  five mid-session, dropping both filing gates.** ⇢ *This is hard rule 10(a) —
+  file a total beside its denominator — arriving where hard rule 10 was not
+  written to cover: somebody else's sweep, quoted in a commit message.*
+- **★★ THE PASS'S DESIGN IS SET BY A REFUSAL, and it is `CLAUDE.md` rule 4 read
+  correctly from OUTSIDE the project.** *"Just default to Solid 1 pt"* would
+  have worked and would have been wrong: **a properties control has to show the
+  CURRENT value**, and seeded from a default it would show *Solid, 1 pt* over a
+  widget whose file says *Dashed, 3 pt* — **and the operator's first press
+  would write the invention into their document.** They cited pdfce's own
+  `DeviceCMYK`-swatch precedent for the refusal, correctly, and **shipped the
+  pane with the two controls ABSENT** (`R9`) rather than fill them.
+  ⇢ **`border: None` MEANS THE FILE STATES NO BORDER and is NOT
+  `BorderSpec::default()`** — that default is solid/1 pt **because it
+  reproduces the bytes pdfce has always AUTHORED**: **correct for a writer, a
+  lie from a reader.** Escalated to `C:/personal_rag/pdf/` this filing.
+- **★ THE TWO PLACES A DEFAULT *IS* APPLIED, and the distinction is the whole
+  design.** A `/BS` present but missing `/W` takes Table 166's default of 1 —
+  **the file has COMMITTED to having a border by carrying a `/BS`**, so filling
+  in the width the standard specifies is **reading**; **inventing** is
+  producing a border for a widget carrying **neither key**. Same shape for
+  `/Border`'s dash array: it is the **only** discriminator the array form has,
+  so Dashed-when-non-empty is a **faithful reading**, not an inference. **Width
+  0 is a VALUE** (Table 166 says *"no border"*), never an absence. **`/F`
+  absent is 0, which IS one of the four (`ScreenOnly`)** — so a `None`
+  visibility always means *present and unmappable*, never *absent*.
+- **★★ THE CLI TESTS ARE ROUND TRIPS, NOT FIXTURE READS, AND THE REASON
+  GENERALISES.** The defect was an **asymmetry between a writer and a reader**,
+  and **only a test that drives both halves can pin an asymmetry**: `edit-widget
+  --border-style dashed --border-width 3` then `list-fields --widgets` must
+  report `border=D/3.00`. A hand-authored fixture tests the reader against
+  bytes **the author chose**; this tests it against bytes **pdfce chose**,
+  which is the pair that has to agree. ⇢ *When the defect is a disagreement
+  between two code paths, a fixture pins one path and proves nothing about the
+  pair.*
+- **★ NO FORM FIXTURE IN THE CORPUS CARRIES A BORDER AT ALL — measured HERE.**
+  `ls -1 fixtures/synthetic/forms/*.pdf | wc -l` → **11**; `grep -l "/BS"` →
+  **0**; `grep -l "/Border"` → **0**. **Zero of eleven on both keys.** No
+  fixture was added and **none was needed** — the round-trip design is what
+  made one unnecessary. **Contrast the 297th filing**, where `format_twins.pdf`
+  had to be minted. The two decisions are opposite and both correct: *a fixture
+  is owed when the READER must face bytes pdfce would not write, and not owed
+  when the property under test is that a writer and a reader agree.*
+- **★ SABOTAGE.** Making an absent border return `BorderSpec::default()` — the
+  design the requester refused — turns **2 of the 12** unit tests red,
+  **including the one named for it**. The mutation was chosen to be **the
+  defect the Pass exists to prevent** rather than an arbitrary one.
+- **★★ THE CONSUMER'S FOUR CLAIMS ABOUT OUR CRATE WERE CHECKED AND ALL FOUR
+  HELD** (the fourth with a refinement: the one site touching `/BS /S` was a
+  dropped-property **detector**, which maps it to a WARNING and never back to a
+  `BorderStyle` — **a detector that reports a loss is not a reader that returns
+  a value**). **Second consecutive round in which their grep-backed claims
+  survived verification intact**, and the same night they filed a defect report
+  against a Pass of ours with a mechanism that also reads as sound. ⇢ *`R203`
+  is about the FORM of a cross-project claim, not the reporter's competence; a
+  reliable reporter does not convert a claim into a fact.*
+- **★ pdfce CLOSED A HOLE `pdfceGUI` HAD NOT REPORTED, and their write-up of it
+  belongs to both projects.** They had described the `fontinfo` superset as
+  *"usually right, and when it is wrong the operator gets a refusal"* — the
+  **visible** half. `base_font_ambiguous` was the **invisible** half: matching
+  on the stripped `/BaseFont` meant **on 87 % of embedding files a row could
+  reach the wrong twin silently** — wrong font applied, no refusal to show for
+  it. ⇢ ***A superset is not a mild error when the elements are
+  indistinguishable.***
+- **★ THE PROMISED PERFORMANCE REPORT ARRIVED AND IS ANSWERED.** The pre-flight
+  *"costs nothing measurable, because it shares the extraction"*: on `SW41177`
+  (5,903 objects, a real title block) a fourteen-run Bold gesture ran **1,075 ms
+  before** and **1,083 ms after** — inside the noise. True only because they
+  caught a defect of their own: the first draft called their `inspect()` — a
+  full extraction, **392 ms** — while its only caller *had just run one*. ⇢
+  *"A helper that fetches what it needs reads better and hides that somebody
+  upstream fetched it already."*
+- **★ `real_bold()`/`real_italic()` are DELIBERATELY not consumed**, on
+  `R221`'s reasoning from their side: with `Pass 144.0` in, their
+  refusal-names-the-face route already answers, and *"adding a second routing
+  rule while the first one works would be two descriptions of one decision."*
+  **A deliberate non-consumption, not a gap** — recorded so a later filing does
+  not read it as owed work.
+- **★ A CHANNEL CHECK IS A TIMESTAMP, NOT A STATE — n = 4, and this instance
+  is worse than the previous three.** In the first three the newer file merely
+  **arrived**. Here it **refuted a claim the filing was making at the time**,
+  from inside the listing that filing had just run.
+
+**Documents edited this filing:**
+
+- **`docs/ROADMAP.md`** — a new *Shipped* entry at the head for `Pass 146.0`
+  (the reading rules line by line, the round-trip test argument, the sabotage
+  result, the fixture measurement, the filing-order failure and the gate
+  population); the 21:54 inbound box **struck with a discharge banner** in
+  *Next up*, its four *"Not verified here"* labels **left standing on purpose**
+  and its one now-known-wrong section named; **a new ★★★★★ box at the head of
+  *Next up*** for the 22:50 note and the 22:57 defect report; **`R203`(d)**,
+  **`R209`(e)** and **`R217`'s second amendment note** in *Standing rules*.
+- **`docs/FEATURES.md`** — **two `gui` boxes corrected `[ ]` → `[x]`**
+  (`Pass 142.1`'s pre-flight and `Pass 145.0`'s whole-operator pin), each with
+  file, mtime and reading time per `R203`(d), and the pre-flight row also
+  naming the reported trap; **one new Forms row** for reading a widget's border
+  and visibility, `[x]` core / `[x]` cli / **`[ ]` gui** / `[x]` Acrobat.
+- **`docs/SESSION_LOG.md`** — this entry.
+- **`docs/ARCHITECTURE.md`** — **NOT edited.** One decision candidate was
+  declined with the reason recorded above; §12 is unchanged.
+
+**★ The new row's `gui` box was NOT rounded up, and this time the claim carries
+its own reading time.** The reply went out at **23:13** and the listing was
+read at **23:33**; `pdfceGUI` cannot have consumed a capability announced
+twenty minutes ago. **That is a `[ ]` stated with its clock**, which is exactly
+what `R203`(d) — minted from this filing's predecessor getting it wrong — asks
+for.
+
+**Still in flight / for next session:**
+
+- **★★★★★ TWO UNPARSED `pdfceGUI` FILES, ONE OF THEM A LIVE DEFECT REPORT.**
+  `request_preview_font_resources_trusts_the_callers_find_where_format_request_now_resolves_it.md`
+  (**22:57**) — the empty-`find` universal-accept trap in `Pass 142.1`,
+  **`R221`'s fourth instance**, two remedies offered, **not blocking**; and
+  `note_142_1_and_144_0_are_both_consumed_and_the_superset_is_deleted.md`
+  (**22:50**) — a note, **nothing owed**. **No Pass ID claimed for either: the
+  parse is the engineer's act. Next free family is `147`.**
+- **`docs/core-api/`'s `preview_font_resources` prose is part of whatever fixes
+  the 22:57 defect** — it will now be read by callers arriving from
+  `Pass 145.0` and says nothing about what an empty `find` means there.
+  Reported, not edited (engineer-owned).
+- **`docs/core-api/02-editing-and-saving.md:882`** — the `edit_widget` row names
+  `/BS`, `/F`, `/MK /CA` as **writable** and the file has **no corresponding
+  READ row**, so a reader of that table alone would still infer the asymmetry
+  `Pass 146.0` closed. ⇢ *The asymmetry surviving in the DOCUMENTATION after it
+  was closed in the code — the same class the Pass fixed, one layer up.*
+  **Reported as owed.**
+- **`docs/core-api/03-capabilities.md`** — `9f6e732` amends it (+53/−1); **not
+  read line-by-line here.** Third filing running to flag the same thing: check
+  whether the new prose **states a mechanism** or **substitutes a narrower
+  universal**, since the latter is how `R220`'s three-deep escalation kept
+  going.
+- **`docs/NEXT_SESSION.md` is stale by construction** — `2ceec26` rewrote it to
+  point at the three channel items, **all now shipped**, plus this Pass.
+  **Engineer-owned, NOT edited by this role. Second consecutive filing to
+  report it.**
+- **`tools/run-gates.sh` EXISTS as of `1e62715` — an earlier draft of this
+  entry recommended it as owed work, and it shipped while the recommendation
+  was being written.** **Use it; do not hand-type a gate loop again** — that is
+  the habit `R209`(e) is aimed at, not the ordering. **The clause is not
+  discharged by the script**: the runner makes the *membership* derived and
+  cannot make anybody run it, or quote its denominator when relaying the
+  result.
+- **`Pass 143.0`** (the `DeviceGray`-under-overprint spec ambiguity) remains
+  the pick-up item, unchanged in *Backlog*, **now behind the 22:57 defect**.
+- **A BACKUP IS TWO FILINGS OVERDUE.** Newest bundle is
+  **`pdfce-20260827-shutdown-a2b4e16-full.bundle`, 2026-08-27 12:04** (`ls -lt
+  D:/Dev/pdfce-backups/`) and `git rev-list --count a2b4e16..HEAD` = **25** —
+  **re-run after `1e62715` landed; an earlier draft said 24 and that figure is
+  corrected, not carried** (22 at the 297th filing; the +3 are `9f6e732`,
+  `0c254f8` and `1e62715`). **`Pass 146.0` is in no bundle on disk.** It *is* on `origin/main`, so this is belt-vs-braces rather
+  than a single point of failure — **second consecutive filing to say so.**
+
+**Ledger** (`python tools/check-ledger-numbers.py`, run **before** any edit and
+**again after**):
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | highest **`145.0`** headed; `146` claimed-but-unheaded | **`Pass 146.0` SHIPPED and headed**; highest **`146.0`**; **next free family `147`** |
+| decisions | **094** | **094 — unchanged.** One candidate declined, reason recorded. Next free **095** |
+| standing rules | **`R223`** | **`R223` — unchanged.** `R203`(d), `R209`(e) and an `R217` note **amended in place, none re-minted**. Next free **`R224`** |
+| filings | **297** | **298**. Next free **299** |
+| `tools/check-*` on disk | *last counted **18**, 253rd filing* | **19** (`ls tools/check-*`, run here); the uncounted addition is `check-outcome-disclosed.py`. **Fourth correction to this figure in five weeks.** ★ **Superseded as the denominator to quote**: `bash tools/run-gates.sh` (`1e62715`) derives **25 commands** from the workflow, which is the set a "gates green" claim is actually about |
+| gate sweep run by this role | — | **18 of 18 bare gates green, of 19 scripts on disk** (the 19th takes a fixture-directory argument) — the denominator form `R209`(e) now requires, demonstrated on itself |
+| `fixtures/synthetic/forms/` | 11 | **11 — unchanged**; 0 of 11 carry `/BS` or `/Border` |
+| `pdfce-core` public verbs | **149** | **149 — unchanged**; `Pass 146.0` adds three public **FIELDS**, not a verb |
+| `FEATURES.md` `gui` boxes | two `[ ]` asserted as substantiated | **two corrected to `[x]`**; **one new row `[ ]`**, with its reading time stated |
+
+Pre-edit run: *"Pass families with headings : up to 145 (highest ID 145.0) ·
+Pass families MENTIONED : up to 146 (highest ID 146.0) · standing rules : R223
+-> next free is R224 · decision records : 094 -> next free is 095 ·
+SESSION_LOG filings : 297 -> next free is 298"*, and *"clean — no duplicate
+Pass, rule, or decision numbers."* **The pre-edit split between HEADED (145)
+and MENTIONED (146) is exactly the state `R217` describes and this filing
+closes.** Post-edit run quoted in this role's report.
+
+**RAG written this filing:**
+
+- `C:/personal_rag/pdf/lesson_20260827_a_default_correct_for_a_writer_is_a_lie_from_a_reader.md`
+- `D:/dev/rag/rust/the_local_gate_sweep_is_a_subset_of_ci_and_nothing_compares_the_two.md`
+  — **amended, not duplicated** (hard rule 4): the sweep's own **denominator**
+  finding, which is the same file's subject one layer in.
+
+The channel-timestamp and filing-order findings stay **project-discipline** and
+live in `R203`(d), `R209`(e) and `R217`'s note — neither is a PDF-producer
+quirk nor a Rust ecosystem quirk beyond what the amended file already carries.
+**Written down so a later index check reads this as a decision, not an
+omission.**
+
+---
+
