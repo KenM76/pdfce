@@ -12822,8 +12822,16 @@ with a forward pointer.
   **The flat shape stands.**
   **The basis is a measurement of the surface the new verbs had to join,
   not a preference.** `crates/pdfce-cli/src/main.rs`'s `Command` enum
-  (lines 381–2414) carries **52 subcommands; every one is flat**, and
-  `#[command(subcommand)]` occurs **zero** times in it. Two flat naming
+  (lines 381–2414 **as of 2026-08-03**) carried **52 subcommands; every one
+  is flat**, and `#[command(subcommand)]` occurred **zero** times in it.
+  ★ Both figures are deliberately left at their 2026-08-03 values with a date
+  attached rather than refreshed: this paragraph is the *evidence for* decision
+  020, and evidence is a reading taken at a moment. Re-measuring it would
+  silently restate today's surface as the basis for a decision taken against a
+  different one. **The count is now 108 and the line range is wrong by
+  thousands** — that is the claim ageing correctly, not decaying. Use
+  `README.md` for the live figure.
+  Two flat naming
   conventions already coexist — verb-first (`list-fields`, `fill-field`,
   `extract-text`, `regenerate-appearances`) and noun-prefixed
   (`dimension-add`, `group-set-scale`, `object-move`, `node-delete`) — but

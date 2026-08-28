@@ -67,3 +67,4 @@
 - [Sabotage catches false COMMENTS too](feedback_sabotage_catches_false_comments.md) — a surviving sabotage meant my code comment's claim about coverage was wrong, not that the test was weak
 - [A shell flag can be parsed and never used](feedback_a_shell_flag_can_be_parsed_and_never_used.md) — unit tests hit core directly, so a half-wired CLI flag passes them all; only running the binary finds it
 - [Transform side effects are OPTIONS, not answers](feedback_transform_side_effects_are_options_not_answers.md) — Ken: ship the Inkscape toggle (scale stroke width etc.) with the safe default; convergence argues for a DEFAULT, not against an option
+- [An unticked box is unfalsifiable](feedback_an_unticked_box_is_unfalsifiable.md) — `[ ]` in FEATURES.md is a negative existential; nothing fails when it goes stale, so run the verb before reporting a gap

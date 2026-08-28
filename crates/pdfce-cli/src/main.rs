@@ -1449,8 +1449,15 @@ enum Command {
         acknowledge_pdfa: bool,
     },
 
-    /// **Add the font programs a document is missing** — a DRY RUN unless
-    /// `--apply`.
+    /// **Embed the programs for fonts the document ALREADY NAMES** — a DRY
+    /// RUN unless `--apply`.
+    ///
+    /// ★ **It does not add a new font to the document.** This fills in the
+    /// missing *program* for a face the PDF already references; it cannot
+    /// introduce a typeface the file does not use. Nothing currently can —
+    /// `format-text --set-font` selects only among the fonts a page already
+    /// carries. The heading previously read *"add the font programs a
+    /// document is missing"*, which is true and reads like the other thing.
     ///
     /// The constructive mirror of `unembed-font`, and the fix for the one
     /// thing every print-on-demand service rejects a book for: a font the
