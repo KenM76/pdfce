@@ -96,6 +96,408 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 147.0` (`8aa9cea`) — ★★★★★ **A QUERY BUILT TO STOP A SHELL OFFERING UNUSABLE FONTS BECAME AN UNCONDITIONAL YES: `preview_font_resources(page, "", Some(pin))` CHECKED ZERO CHARACTERS AND REPORTED EVERY FACE ON THE PAGE AS `Accepted`, INCLUDING ONE THAT PROVABLY CANNOT SHOW THE RUN** — ★★★★★ **THE FAILURE IS SILENT *AND INVERTED*: THE LIST LOOKS RICHER, NOT BROKEN — STRICTLY WORSE THAN THE `fontinfo` NAME-JOIN SUPERSET IT EXISTS TO REPLACE, WHICH WAS AT LEAST A SUPERSET OF THE PAGE'S FONTS** — ★★★★ **CAUSE: TWO PASSES SHIPPED OUT OF STEP, SO TWO FUNCTIONS TOOK THE SAME TWO OPERANDS AND DISAGREED ABOUT WHAT AN EMPTY ONE MEANS** (`FormatRequest` + `set_font` **resolved** from the pinned operator after `Pass 145.0`; `preview_font_resources` kept passing the caller's string **verbatim**) — ★★★★ **`R221`'s FOURTH INSTANCE, AND THE FIRST FOUND BY A CONSUMER RATHER THAN FROM INSIDE THIS PROJECT** — ★★★ **AND A SECOND HALF THE FIRST CUT ASSUMED WAS ALREADY SAFE: AN *UNPINNED* EMPTY `find` WAS ALSO VACUOUS, BECAUSE `find_anchor` RUNS `s.text.contains(find)` AND EVERY STRING CONTAINS THE EMPTY STRING — THE SAME DEFECT, REACHABLE BY ACCIDENT RATHER THAN BY FOLLOWING GUIDANCE. BOTH OF THE REPORTER'S OFFERED REMEDIES WERE NEEDED AND THE ENGINEER HAD ONE** — ★★ **THE DECISIVE TEST ASSERTS THAT THE PINNED-EMPTY AND EXPLICIT-`find` JSON OUTPUTS ARE *BYTE-IDENTICAL* FOR THE SAME OPERATOR — the property the Pass is about is not that one function improved, it is that the two STOPPED MEANING DIFFERENT THINGS** — ★ **THE `edit_widget` DOC ASYMMETRY THIS ROLE FLAGGED AS OWED ONE FILING AGO IS CLOSED IN THE SAME COMMIT** — 2026-08-28 (299th filing)
+
+**Sourcing.** Shell held and used (hard rule 8). `git show 8aa9cea`,
+`git show --stat 8aa9cea` and `git log -1 --format=%B 8aa9cea` are the primary
+sources. **Every engineering figure below is the engineer's, relayed, and
+labelled as such** — this role ran no build, no test and no render. **Four
+claims were re-derived HERE**, with the command named beside each: the commit's
+file list (`git show --stat`), the `edit_widget` doc fix (`git show 8aa9cea --
+docs/core-api/02-editing-and-saving.md`, read in full), the backup/remote
+position (`ls -lt D:/Dev/pdfce-backups/`, `git rev-list --count`,
+`git rev-parse origin/main`), and the channel listing
+(`ls -lt D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/`).
+
+**Provenance — a consumer defect report against a Pass five hours old, filed by
+following that Pass's own guidance one step further.**
+`D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/request_preview_font_resources_trusts_the_callers_find_where_format_request_now_resolves_it.md`,
+**2026-08-27 22:57**, `pdfceGUI`, against `pdfce-core` at `0c48bbf`. The 298th
+filing opened a ★★★★★ *Next up* box for it and **deliberately claimed no Pass
+ID**, because parsing a request into Passes is the engineer's act. **That box is
+now discharged** — it survives in *Next up* under a struck heading and a
+discharge banner (append-only discipline), and this entry is the delivery
+record.
+
+---
+
+#### ★★★★★ THE DEFECT, AND WHY AN OVER-PERMISSIVE ANSWER IS THE DANGEROUS DIRECTION
+
+```
+preview_font_resources(0, "", Some(pin))
+  F1 accepted=true   F2 accepted=true   F3 accepted=true      <- /F3 CANNOT
+  text=""            accepted_count=3                            show the run
+```
+
+**Three of three accepted; one of the three provably cannot show the run.**
+That is the engineer's in-crate probe, run **before the report was believed**
+(`R203`), and **nothing in the report needed correcting** — the reporter's trace
+was exact at every step.
+
+**The mechanism, now verified rather than relayed** (the 298th filing carried it
+under an explicit *"RELAYED, NOT VERIFIED HERE"* label; the engineer's
+reproduction and commit message discharge that label):
+
+1. `find_anchor` with `pinned_span` set **never reads `find`** — it matches on
+   `pin_names_operator`. An empty `find` therefore **locates the right
+   operator, with no error.**
+2. `survey_page_fonts(.., find)` passes that same empty string down.
+3. `accept_font_target(.., text, ..)` tests coverage with
+   `text.chars().zip(encoded.codes.iter())`.
+4. **`"".chars()` yields nothing. Zero characters checked, zero refusals found.
+   Every entry comes back `Accepted`.**
+
+**★★ WHY THIS IS A PASS AND NOT A DOC LINE — the failure is INVERTED.** An
+ordinary defect in a filtering query produces a *shorter* list, a refusal, or a
+panic, all of which a caller notices. This one produces a **longer** one. The
+consuming shell shows **more** options, nothing errors, nothing logs. And the
+query exists **precisely** to stop offering faces that cannot work, so **the
+control built to prevent a downstream refusal became the thing producing it.**
+
+**★ It is strictly worse than the heuristic it replaced, and the comparison is
+the reporter's own.** `pdfceGUI`'s deleted `fontinfo` name-join superset was at
+least *a superset of the page's fonts, by name*. **An unconditional yes is not
+related to the real set at all.** ⇒ ***"Returns more than it should" is a
+HIGH-severity failure mode for an acceptance query, not benign noise*** — which
+is the generalisation this filing sends to `D:/dev/rag/rust/`.
+
+---
+
+#### ★★★★ `R221`'s FOURTH INSTANCE — AND THE FIRST FOUND FROM OUTSIDE
+
+`Pass 142.1`'s own commit message argued that the fix for `gate_synthesis` was
+to stop **describing** when `set_font` succeeds and make it **call** the
+accepting code. **The identical shape survived in its own parameter list** — the
+pre-flight asks the caller to hand it the text that the resolution step can
+produce itself. The reporter made that argument themselves, by name, four hours
+after the Pass that made it shipped.
+
+**The three prior instances were all found by this project** (two in
+colour/overprint — `Pass 137.1`, `Pass 140.0` — and one in `text_edit`,
+`gate_synthesis` / `Pass 144.0`). **This one was found by a consumer.** That is
+new information about the rule's reach and is recorded as such: `R221` is
+**amended in place** in *Standing rules*, not re-minted. ⇒ *A rule minted from
+inside a project gets its cheapest instances from outside it, because a consumer
+holds the pair of functions the project holds one at a time.*
+
+---
+
+#### ★★★ THE SECOND HALF, WHICH THE FIRST CUT ASSUMED AWAY — AND IT IS THE MORE REACHABLE ONE
+
+The engineer fixed the **pinned** case and *reasoned* that an **unpinned** empty
+`find` already errored, because `match_run` refuses one on the commit path.
+**A test proved otherwise:**
+
+> `find_anchor` with no pin runs `s.text.contains(find)` — and **every string
+> contains the empty string.**
+
+So `preview_font_resources(page, "", None)` **silently matched the FIRST show
+operator on the page** and surveyed against zero characters: the same silent,
+inverted failure, **about an operator the caller never named**, and reachable
+**without a pin at all** — i.e. *by accident* rather than by following
+documentation, which makes it the **more** likely of the two to be hit.
+
+It is now **refused, reusing the sentence `match_run` has used since
+`Pass 14.1`** rather than a second spelling of it — itself an `R221`-shaped
+choice one layer down (one refusal sentence, not two that drift).
+
+**★★ BOTH OF THE REPORTER'S OFFERED REMEDIES WERE NEEDED, AND THEY WERE READ AS
+AN EITHER/OR.** Their request offered (1) *resolve the text from the anchor* and
+(2) *refuse an empty `find` by name*, with (2) marked as their preference
+(*"a refusal we can see beats a list of universal yeses"*). **(1) closes the
+pinned half; (2) closes the unpinned half. Neither closes both.** ⇒ ***When a
+reporter offers two remedies for one symptom, check whether they cover
+different reachability routes before choosing between them.***
+
+⇒ **"Verify each instance, not the class."** Disposition of that recurrence is
+argued below — **no rule minted; `R219` amended in place.**
+
+---
+
+#### FIX, AND THE CLI HALF (rule 11)
+
+- **`preview_font_resources` calls `effective_find(anchor, find, pinned_span)` —
+  THE SAME FUNCTION `plan_format` CALLS**, so the two cannot disagree again.
+  Not a parallel re-implementation of the same resolution: one function, two
+  callers.
+- **`FontPreflight::text` reports the RESOLVED characters**, so a caller reads
+  back **what was actually tested** rather than the empty string it passed in.
+  ⇒ *A query that resolves an operand owes the resolved value back in its
+  result, or the caller cannot tell a resolution from a silent default.*
+- **`pdfce-cli font-preflight` gains `--pin-span START:LEN`** and makes `--find`
+  optional — the same affordance `format-text` / `edit-text` got in
+  `Pass 145.0`. **An empty `--find` with no pin is refused by a message naming
+  the FLAG**, which core cannot know about: the shell's refusal speaks the
+  shell's vocabulary.
+- **`docs/core-api/02-editing-and-saving.md`** gains the paragraph the 298th
+  filing said was owed for `preview_font_resources`, stating what an empty
+  `find` means with and without a pin, **and what it meant before
+  `Pass 147.0`.**
+
+**Commit shape** (`git show --stat 8aa9cea`, run here): **5 files, +317 / −8.**
+Three are tests and docs — `crates/pdfce-core/tests/font_preflight.rs` (+111),
+`crates/pdfce-cli/tests/font_preflight.rs` (+76),
+`docs/core-api/02-editing-and-saving.md` (+11/−1) — against **+76/−1** in
+`crates/pdfce-core/src/text_edit/format.rs` and **+51/−6** in
+`crates/pdfce-cli/src/main.rs`. **187 of the 325 changed lines are test lines**,
+for a defect whose entire nature was that nothing failed.
+
+---
+
+#### ★★ ALSO CLOSED HERE — THE `edit_widget` DOC ASYMMETRY THIS ROLE FLAGGED ONE FILING AGO
+
+**Verified here, not relayed**
+(`git show 8aa9cea -- docs/core-api/02-editing-and-saving.md`, read in full).
+The 298th filing reported, as owed engineer-side work, that
+`docs/core-api/02-editing-and-saving.md`'s `edit_widget` row named `/BS`, `/F`
+and `/MK /CA` as **writable** with **no corresponding read row** — *"the
+asymmetry surviving in the DOCUMENTATION after it was closed in the code — the
+same class the Pass fixed, one layer up."* The row now reads:
+
+> ★ All four are **readable** too since `Pass 146.0` — `forms::Widget::rect` /
+> `border` / `visibility` + `annot_flags` / `caption`. **This row listed four
+> writable properties for months while only two could be read, which is how a
+> consuming shell ended up with two controls it could not honestly populate.**
+
+**★ The correction states its own history rather than silently becoming
+correct.** A reader arriving at that row now learns the current state *and* why
+it was worth writing down — the same treatment a corrected number gets under
+`R215`(d).
+
+⇒ **One owed item reported by this role, discharged by the engineer in the next
+commit, confirmed by reading the diff rather than by taking the commit message's
+word.** Recorded because hard rule 11 asks for survivors to be *reported*, and
+this is the first time in several filings that a reported survivor is verifiably
+gone.
+
+---
+
+#### ★★★★★ HARD-RULE-11 SWEEP — SEARCHED FOR THE CLAIM, NOT FOR A STRING, AND IT FOUND THE SAME DEFECT STILL LIVE IN THE SIBLING QUERY
+
+`Pass 147.0` changes what an empty `find` **means**, which is a meaning-change
+event, which owes a sweep (hard rule 11). The sweep asked *"what else takes
+`(find, pinned_span)` and decides something from the caller's string?"* — the
+**claim**, not the identifier.
+
+**★★★★★ SURVIVOR, AND IT IS A LIVE DEFECT IN A SHIPPED PUBLIC QUERY, NOT A
+STALE SENTENCE.** `EditSession::preview_style_resolution(page_index, find,
+pinned_span, want)` (`crates/pdfce-core/src/edit.rs:7388` →
+`text_edit/format.rs:2635`) — the **other** pure query with the identical
+signature, the one that decides where a Bold button routes — **does not call
+`effective_find`.** Read here, not inferred:
+
+| | resolves `find`? | evidence |
+|---|---|---|
+| `plan_format` (**commit** path) | **YES** | `format.rs:1514` `let find = effective_find(anchor, &req.find, req.pinned_span);` → passed to `gate_synthesis` at `1782` |
+| `preview_font_resources` (**pre-flight**) | **YES, as of this Pass** | `format.rs:3197` |
+| **`preview_style_resolution` (the style preview)** | **NO** | `format.rs:2654` builds its `EditRequest` with `find: find.to_owned()` and passes the **raw** `find` to `probe_synthesis` at four call sites (`2681`, `2688`, `2699`) |
+
+**`grep -n "effective_find" crates/pdfce-core/src/text_edit/format.rs` returns
+exactly two call sites — `1514` and `3197`. There is no third.**
+
+**★★ THE CONSEQUENCE IS THE SAME DEFECT, ONE FUNCTION OVER, AND IT REACHES THE
+SAME CONTROL.** `probe_synthesis` → `gate_synthesis` →
+**`survey_page_fonts(doc, resources, recs, text)` at `format.rs:2395` — the very
+call whose vacuity was this Pass's defect** (the fixed one is the same function
+at `3220`). With `text == ""` every candidate surveys as accepted, so
+`find_styled_face` returns **whichever face it reaches first**, and
+`preview_style_resolution` answers `RealFaceResolves` naming a face that
+**cannot show the run** — which is precisely the state `Pass 144.0` shipped to
+end. **Both halves are present:** with a pin, the vacuous survey; **without**
+one, `find_anchor`'s `s.text.contains("")` matches the **first show operator on
+the page**, so the answer is about an operator the caller never named.
+
+**⇒ This is `R221`'s FIFTH instance and `R219` clause (e)'s first live catch,
+both found by this filing's sweep rather than by a bug report** — and it is the
+sharpest possible demonstration of clause (e): the engineer enumerated one
+sibling route (unpinned vs pinned) inside `preview_font_resources` and fixed
+both, while **the sibling FUNCTION taking the same two operands went unasked in
+the same commit.** ⇒ ***A route enumeration scoped to the function being fixed
+is scoped to the instance, not the class*** — which is the same sentence the
+engineer's own memory file has been carrying since 2026-08-18, arriving here
+from the outside.
+
+**REPORTED, NOT EDITED.** `crates/` is outside this role's remit (hard rule 11
+scope). **A ★★★★★ *Next up* box is opened for it with NO Pass ID claimed** —
+parsing it is the engineer's act. **Next free family is `148`.**
+
+**Scope, stated so it is not over- or under-read:** `preview_style_resolution`
+is a **public `EditSession` method with no `pdfce-cli` subcommand**
+(`grep` over `crates/pdfce-cli/src/main.rs`: no hits), so the reachable consumer
+is a **library caller — i.e. `pdfceGUI`, which drives its Bold/Italic buttons
+from exactly this query.** The **commit** path is unaffected and correct.
+
+**Other survivors: none of substance, and the near-misses are recorded.**
+
+- **`docs/core-api/03-capabilities.md:1344`** — the capability-shaped
+  description of `preview_font_resources` (`R220`'s home, the file a reader
+  arrives at with the *question* rather than the mechanism) **says nothing
+  about what an empty `find` means**, with or without a pin. Not wrong, but a
+  reader arriving from `Pass 145.0`'s release note learns nothing there.
+  **Reported as owed; engineer-owned** (`docs/core-api/` is not this role's to
+  edit). This is the **fourth consecutive filing** to report an item in
+  `docs/core-api/03-capabilities.md`.
+- **`docs/core-api/02-editing-and-saving.md:339`** — the `preview_style_resolution`
+  table row says only *"Pure query."* It is accurate about what the function
+  does and silent about the operand, so it is a **near-miss rather than a false
+  claim**; it becomes owed doc work the moment the survivor above is fixed.
+- **`docs/FEATURES.md:253`** — corrected in this filing (the row previously read
+  *"A trap is reported and unfixed"*, which became false at `8aa9cea`).
+- `format.rs:2259` (`plan_font`'s doc comment) and `format.rs:3105`
+  (`preview_font_resources`' doc comment) **both state the empty-`find`
+  contract explicitly and correctly**, the second including what it meant
+  *before* `Pass 147.0` — **read in full here, not sampled.** `R223`'s
+  obligation (a doc comment's claim about its callers is a measurement) is met
+  for both.
+
+**★ The sweep is what produced this filing's most valuable finding, and the
+finding is a DEFECT rather than a stale sentence.** Every prior hard-rule-11
+sweep in this file has turned up wording that had gone false. **This one turned
+up executable code with the same bug the Pass was closing** — which is the
+strongest evidence yet for the rule's *searched-for-the-claim* clause, since a
+grep for `preview_font_resources` returns `preview_style_resolution` **zero**
+times.
+
+---
+
+#### VERIFICATION (all figures the engineer's, relayed)
+
+| check | result |
+|---|---|
+| test suite | **4,489 passing, 0 failing** — up from **4,483** at `Pass 146.0`, i.e. **+6 = +3 out-of-crate core, +3 CLI** |
+| ★ the decisive assertion | **one CLI test asserts the PINNED-EMPTY and EXPLICIT-`find` JSON outputs are BYTE-IDENTICAL for the same operator** |
+| sabotage (core, pinned half) | reverting to the caller's string turns **2 of the 13** core tests red |
+| ★ sabotage discrimination | the **unpinned-refusal test stays GREEN** under that mutation — **correct**, since it exercises the other half |
+| `check-string-gaps.sh` | **caught a lost line continuation in a NEW test BEFORE it shipped** |
+| `bash tools/run-gates.sh` | **PASS, 25 commands**, including both filing gates |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | **no GUI dependency** (invariant 2) |
+| `cargo check -p pdfce-core --target wasm32-unknown-unknown` | **clean** |
+| driven on the release binary | the pinned-empty query **and** the unpinned refusal |
+
+**★★ THE BYTE-IDENTICAL TEST IS THE ONE TO READ, AND IT IS A DIFFERENT SPECIES
+FROM "THE FIX WORKS".** A test asserting *"the pinned-empty query now returns
+the right verdicts"* would pass if the two paths were fixed **separately** and
+happened to agree today. Asserting **equality of the two outputs** pins the
+property the defect actually was: **two functions taking the same two operands
+must mean the same thing by them.** ⇒ *When the defect is a DISAGREEMENT between
+two paths, the oracle is EQUALITY OF THE TWO OUTPUTS, not correctness of one* —
+the same argument the 298th filing recorded for `Pass 146.0`'s round-trip CLI
+tests, arriving from the opposite direction (there: *a fixture pins one path and
+proves nothing about the pair*).
+
+**★ THE WIDENED GATE FROM `1e62715` MADE ITS FIRST REAL CATCH, ON ITS FIRST REAL
+CHANCE.** `check-string-gaps.sh` found a lost line continuation **in a new
+test**, before it shipped. **The previous instance of that class shipped into a
+release binary** (`DisplayListStale`, 2026-08-18, found by a librarian sweep
+after the fact). ⇒ *This is `R209`(e)'s pay-off and the argument for gates over
+care, now with a live catch rather than a rationale.*
+
+**★ SABOTAGE THAT DISCRIMINATES IS BETTER EVIDENCE THAN SABOTAGE THAT REDDENS
+EVERYTHING.** The mutation reddened the two tests covering the half it broke and
+left the unpinned-refusal test green. A mutation turning **all 13** red would
+have shown the tests are coupled to the *file*, not to the *behaviour*. **The
+engineer reported the green as a result rather than as a worry**, which is the
+correct reading and is named here so a later session does not "fix" it.
+
+---
+
+#### ★★ STANDING-RULE DISPOSITION — TWO AMENDMENTS IN PLACE, NO MINT, AND BOTH DECLINES ARE ARGUED
+
+The dispatch asked whether the **"verify each instance, not the class"**
+recurrence earns anything, and asked for the decision to be **argued rather than
+defaulted**. It does not earn a mint. Two existing rules are amended instead.
+
+**(1) `R221` — amended in place, fourth instance.** New information, not a
+tally: **the first instance found by a consumer rather than from inside**, and
+the first where the two drifting descriptions were **a resolution step and a
+parameter list** rather than two predicates. Ceiling does **not** move.
+
+**(2) `R219` — amended in place, and this instance CHANGES the rule rather than
+counting it.** `R219` reads *"when a Pass fixes one of several routes to the
+same behaviour, enumerate the other routes in the same Pass and say explicitly
+which are left."* The pinned and unpinned calls **are** two routes to one
+behaviour, and the engineer **did** consider the second one — **and answered
+from memory instead of from a test, and was wrong.** Every prior `R219` instance
+is a route that went **unasked**. This is the first where a route was **asked
+and mis-answered**, which is a *different* failure with a *different* remedy:
+enumeration is not enough, **the enumeration's answers have to be measured.**
+That clause is added to `R219`.
+
+**★ WHY NO MINT — three reasons, in order of weight.**
+
+1. **The carrier already exists and already fired.** *"Verify each instance, not
+   the class"* is in the engineer's own agent memory
+   (`.claude/agent-memory/pdfce-engineer/feedback_verify_each_instance_not_the_class.md`),
+   with **five instances from 2026-08-18** and **this one already amended into
+   it in the same session** — read here to confirm, not assumed. A standing rule
+   duplicating a live memory file would be **two descriptions of one rule**,
+   which is `R221`'s own subject. **Minting it would violate the rule this Pass
+   is an instance of.**
+2. **`R219` already owns the project-visible half**, and the gap this instance
+   exposes is a *clause* of `R219`, not a separate obligation. Adding a clause to
+   a rule with four instances is stronger than starting a fifth rule at n = 1 in
+   this file.
+3. **The two-occurrence bar is about the PROJECT record, and this is the first
+   occurrence in it.** The five earlier instances live in agent memory, not in
+   `ROADMAP.md`. Minting on a count carried entirely in another document is the
+   borrowed-evidence move hard rule 10's corollary warns about.
+
+**★ THE COUNTER-ARGUMENT, STATED SO IT IS NOT LOST.** The honest case *for*
+minting: agent memory is read by **one** agent, `ROADMAP.md` by **every** agent
+and by the operator, and this failure has now cost two shipped defects in ten
+days. **If it recurs once more in the project record, mint it — and the argument
+will be REACH, not count.** Recorded as a live trigger, not a closed question.
+
+⇒ **Ceilings unchanged: standing rules stay at `R223`, next free `R224`.
+Decisions stay at `094`, next free `095`.** No decision record: nothing here
+redraws a crate boundary, an invariant or a dependency — the shared
+`effective_find` is an **application** of `R221`, the same disposition the 297th
+and 298th filings gave the same species of candidate.
+
+---
+
+#### ★★ CHANNEL CHECK — RUN FIRST THIS TIME, AND IT CAME BACK CLEAN
+
+`ls -lt D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/`, **run before any
+decision in this filing**, per `R203`(d) — the clause the 298th filing minted
+out of the failure it had just committed. **Result: exactly one file newer than
+that filing's 23:33 reading**, and it is **pdfce's own outbound reply**
+(`reply_the_preflight_now_resolves_the_pin_and_refuses_a_bare_empty_find.md`,
+**2026-08-28 00:07**). **The 23:13 file was opened too**, and it is this
+project's own `Pass 146.0` reply under a `done_…-CONSUMED` name, already
+accounted for by the 298th filing. **Nothing inbound arrived; nothing in this
+filing is refuted by the channel.**
+
+**★ This is the first filing in five where the channel did NOT move underneath
+the check** — the 295th, 296th, 297th and 298th each recorded that shape about
+their predecessor. **The streak breaking is not evidence the rule is
+unnecessary**: it is the first filing that ran the check *first* and *opened
+every newer file* rather than reading a listing and stopping. ⇒ ***A clean
+result from a check that previously kept failing is evidence about the CHECK,
+not about the hazard.*** `R203`(d) stands unamended; its instance count stays at
+**4**.
+
+---
+
+#### BACKUP AND REMOTE — CHECKED, NOT INFERRED (hard rule 8)
+
+| fact | value | command run here |
+|---|---|---|
+| newest bundle | **`pdfce-20260827-shutdown-a2b4e16-full.bundle`, 2026-08-27 12:04** | `ls -lt D:/Dev/pdfce-backups/` |
+| commits since that bundle | **27** (was **25** at the 298th filing; **+2** = `54a3e01`, `8aa9cea`) | `git rev-list --count a2b4e16..HEAD` |
+| `origin/main` | **`54a3e01`** — the 298th filing | `git rev-parse origin/main` |
+| `check-*` scripts on disk | **19** | `ls tools/check-*` |
+
+**★★ `Pass 147.0` IS IN NO BUNDLE *AND* NOT ON `origin` — a genuine single point
+of failure, which `Pass 146.0` was not.** The two previous filings could say
+*"belt-vs-braces: it is on `origin/main` even though no bundle holds it."*
+**That sentence is not available for `8aa9cea`.** It is the deferred tip — the
+engineer pushes **after** this filing commits, so `R217`'s ordering holds and
+the exposure is deliberate and short. **Recorded because the mitigation that
+made the last two filings' backup debt tolerable is absent for this one, and a
+carried-forward sentence would have hidden that.** **A backup is three filings
+overdue.**
+
 ### `Pass 146.0` (`9f6e732`) — ★★★★★ **THREE `FEATURES.md` `gui` BOXES WERE WRONG AT THE MOMENT THE 297th FILING SUBSTANTIATED THEM, AND THE REFUTATION WAS ALREADY IN THE CHANNEL DIRECTORY IT HAD JUST LISTED** — the quote used to justify *"`[ ]`, and that is a substantiated `[ ]` rather than a cautious one"* was **56 minutes old**, and two newer files say *"consumed the night they shipped"* — ★★★★★ **AND ONE OF THOSE FILES REPORTS A LIVE DEFECT IN `Pass 142.1`, SHIPPED FIVE HOURS EARLIER: `preview_font_resources(page, "", Some(pin))` LOCATES CORRECTLY AND REPORTS EVERY FONT ON THE PAGE AS ACCEPTED** — an unconditional yes from the control built to prevent exactly that, reached by following `Pass 145.0`'s own guidance — ★★★★ **A WRITE-WITHOUT-READ ASYMMETRY CLOSED: `WidgetEdit` COULD WRITE FOUR WIDGET PROPERTIES AND `forms::Widget` COULD READ TWO, SO A PROPERTIES CONTROL FOR THE OTHER TWO COULD ONLY HAVE BEEN SEEDED FROM AN INVENTION — AND THE CONSUMING PROJECT REFUSED TO SHIP IT RATHER THAN INVENT ONE.** `border: None` MEANS THE FILE STATES NO BORDER and is **NOT** `BorderSpec::default()`, because that default is solid/1 pt — **correct for a writer, a lie from a reader** — ★★★ **CI WAS RED WHEN THIS FILING WAS DISPATCHED AND THIS FILING IS WHAT TURNS IT GREEN: `R217`'s ordering invariant WAS VIOLATED TWICE IN ONE SESSION, AND THE THIRTEEN-GATE SWEEP RUN BEFORE EACH PUSH OMITTED `check-commits-filed.py` AND `check-passes-filed.py` — THE TWO GATES WHOSE ENTIRE JOB IS THE INVARIANT BEING VIOLATED. MEASURED HERE: 13 OF 19 SCRIPTS ON DISK** — ★★ **`R209` amended in place (clause (e)) and `R203` amended in place (clause (d)); NO NEW RULE MINTED, and both declines are argued** — ★ **THE CLI TESTS ARE ROUND TRIPS, NOT FIXTURE READS, BECAUSE THE DEFECT WAS AN ASYMMETRY AND ONLY A TEST THAT DRIVES BOTH HALVES CAN PIN ONE** — 2026-08-27 (298th filing)
 
 **Sourcing.** Shell held and used (hard rule 8). `git show 9f6e732`,
@@ -78359,7 +78761,164 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### ★★★★★ TWO MORE `pdfceGUI` FILES ARRIVED AT 22:50 AND 22:57 — **ONE OF THEM IS A LIVE DEFECT REPORT AGAINST `Pass 142.1`, SHIPPED FIVE HOURS EARLIER; BOTH ARE UNPARSED AND HAVE NO PASS ID; AND THE PAIR REFUTED A CLAIM THE 297th FILING WAS MAKING WHILE IT WAS BEING MADE** — opened 2026-08-27 (298th filing) — **UNPARSED · NO ID CLAIMED**
+### ★★★★★ `preview_style_resolution` STILL PASSES THE CALLER'S `find` STRAIGHT THROUGH — **`Pass 147.0` FIXED ONE OF THE TWO PURE QUERIES AND THE SIBLING TAKING THE SAME TWO OPERANDS WAS NEVER ASKED ABOUT** — found by the 299th filing's hard-rule-11 sweep, **UNPARSED · NO ID CLAIMED** — opened 2026-08-28 (299th filing)
+
+**★ NO PASS ID IS CLAIMED HERE, DELIBERATELY.** Parsing a defect into Pass
+entries is **the engineer's act** (`CLAUDE.md` rule 5; precedent: the 184th,
+297th and 298th filings' inbound boxes). This box exists so the finding cannot
+be lost between sessions, not to scope it. **Next free family is `148`**
+(`python tools/check-ledger-numbers.py`, run this filing).
+
+**How it was found:** not by a bug report and not by a grep for the changed
+identifier — by asking hard rule 11's question, *"what else makes the same
+CLAIM?"*, of a Pass that changed **what an operand means**. A grep for
+`preview_font_resources` returns `preview_style_resolution` **zero** times.
+
+---
+
+#### THE FINDING
+
+| field | value |
+|---|---|
+| function | `EditSession::preview_style_resolution(page_index, find, pinned_span, want)` |
+| declared | `crates/pdfce-core/src/edit.rs:7388` → `crates/pdfce-core/src/text_edit/format.rs:2635` |
+| reachable from | **a library caller** — `pdfceGUI` drives its Bold/Italic routing from this query. **No `pdfce-cli` subcommand** (`grep` over `crates/pdfce-cli/src/main.rs`: no hits) |
+| commit path | **unaffected and correct** — `plan_format` resolves |
+| blocking? | **Not reported by anyone yet.** It is the *same* defect `pdfceGUI` reported one function over, so a consumer following the same guidance reaches it the same way |
+
+**`effective_find` has exactly TWO call sites** —
+`format.rs:1514` (`plan_format`, the commit path) and `format.rs:3197`
+(`preview_font_resources`, added by `Pass 147.0`). **There is no third.**
+`preview_style_resolution` builds its locating `EditRequest` with
+`find: find.to_owned()` (`format.rs:2654`) and passes the **raw** string to
+`probe_synthesis` at three call sites (`2681`, `2688`, `2699`).
+
+**Both halves of `Pass 147.0`'s defect are present, traced through source read
+here:**
+
+1. **PINNED + empty `find`.** `find_anchor` locates by the pin without reading
+   `find`; `probe_synthesis` → `gate_synthesis` calls
+   **`survey_page_fonts(doc, resources, recs, text)` at `format.rs:2395`** —
+   the same call whose vacuity was `Pass 147.0`'s defect, at the *other* of its
+   two call sites. `""` surveys every candidate as accepted, so
+   `find_styled_face` returns whichever face it reaches first and the query
+   answers **`RealFaceResolves` naming a face that cannot show the run** —
+   precisely the state `Pass 144.0` shipped to end.
+2. **UNPINNED + empty `find`.** `find_anchor` runs `s.text.contains(find)` and
+   **every string contains the empty string**, so it matches the **first show
+   operator on the page** and the answer is about an operator the caller never
+   named.
+
+**★★ WHY THE CONSEQUENCE IS WORSE HERE THAN IN THE PRE-FLIGHT.**
+`preview_font_resources` returns a **list** a shell filters a combo box with; a
+universal yes offers faces that then refuse. `preview_style_resolution` returns
+a **routing decision** — `WouldSynthesize` vs `RealFaceResolves` — and a wrong
+`RealFaceResolves` sends the Bold button to `set_font` **on a face that will
+refuse**, i.e. **the operator gets no bold at all by either route.** That is
+`R221`'s third-instance cost profile (a capability removed), not its
+fourth-instance one (a richer-looking list).
+
+---
+
+#### WHAT THE FIX LOOKS LIKE, AND THE ONE JUDGEMENT IT NEEDS
+
+The mechanical part is one line, and it is the **same** line: resolve with
+`effective_find(anchor, find, pinned_span)` and pass the resolved string to
+`probe_synthesis`, so **all three** entry points ask one function what an empty
+`find` means instead of two of three. The unpinned case is then refused by the
+same `match_run` sentence, exactly as `Pass 147.0` did.
+
+**The judgement the engineer owns**, and the reason this box does not prescribe
+a fix: `preview_style_resolution` has been shipped and consumed for longer than
+the pre-flight, so **the empty-`find`-unpinned refusal is a behaviour change for
+an existing caller**, not only a bug fix. Whether that lands in the same Pass,
+and whether `pdfceGUI` is told before or after, is a scoping call.
+
+**Acceptance criteria this box proposes** (engineer's to accept, amend or
+reject):
+
+1. `preview_style_resolution(page, "", Some(pin))` and
+   `preview_style_resolution(page, real_text, Some(pin))` return **identical**
+   `StyleResolution` for the same operator — the byte-identical oracle
+   `Pass 147.0` used, which asserts *the two spellings mean the same thing*
+   rather than *one of them improved*.
+2. `preview_style_resolution(page, "", None)` is **refused by name**, with
+   `match_run`'s existing sentence rather than a second spelling of it.
+3. **A test that fails if a FOURTH entry point is added without resolving** —
+   or, failing that, the enumeration written down: `grep -c effective_find`
+   must equal the number of functions taking `(find, pinned_span)`. `R219`
+   clause (e) asks for the enumeration's answers to be **measured**; this is
+   the cheapest instrument for it.
+4. `docs/core-api/02-editing-and-saving.md:339`'s row (currently just *"Pure
+   query."*) and `docs/core-api/03-capabilities.md`'s style-routing prose say
+   what an empty `find` means here — the same paragraph `Pass 147.0` added for
+   the pre-flight.
+
+---
+
+#### ★ THE PROCESS FINDING, WHICH IS THE PART THAT GENERALISES
+
+`Pass 147.0` **did** enumerate a sibling route and fixed both halves of it — the
+pinned and unpinned calls **of the function it was fixing.** The sibling
+**function** taking the same two operands went unasked **in the same commit that
+was about exactly this hazard.**
+
+⇒ ***A route enumeration scoped to the function being fixed is scoped to the
+instance, not the class.*** When a Pass changes **what an operand means**, the
+enumeration's unit is *"every entry point taking that operand"*, not *"every
+branch inside this entry point"*. Filed as `R219` clause (e)'s first live catch
+and `R221`'s fifth instance; both rules are **amended in place**, neither
+re-minted. See the `Pass 147.0` *Shipped* entry's sweep section for the full
+derivation.
+
+---
+
+### ~~★★★★★ TWO MORE `pdfceGUI` FILES ARRIVED AT 22:50 AND 22:57 — **ONE OF THEM IS A LIVE DEFECT REPORT AGAINST `Pass 142.1`, SHIPPED FIVE HOURS EARLIER; BOTH ARE UNPARSED AND HAVE NO PASS ID; AND THE PAIR REFUTED A CLAIM THE 297th FILING WAS MAKING WHILE IT WAS BEING MADE**~~ — **DISCHARGED 2026-08-28 (299th filing): FILE 1 PARSED, SCOPED AND SHIPPED AS `Pass 147.0` (`8aa9cea`); FILE 2 WAS A NOTE AND OWED NOTHING** — opened 2026-08-27 (298th filing)
+
+> **★★★ DISCHARGE BANNER — READ BEFORE ACTING ON ANYTHING BELOW.**
+>
+> **FILE 1 (22:57) is SHIPPED.** `Pass 147.0` (`8aa9cea`) takes **BOTH** of the
+> requester's offered remedies, not one: `preview_font_resources` now calls
+> **`effective_find(anchor, find, pinned_span)` — the same function
+> `plan_format` calls** — so a pinned empty `find` resolves to the anchor
+> operator's own characters and the two functions cannot disagree again; and an
+> **unpinned** empty `find` is **refused by name**, reusing `match_run`'s
+> sentence. `FontPreflight::text` reports the **resolved** string.
+> `pdfce-cli font-preflight` gains `--pin-span START:LEN` with `--find`
+> optional. Reply written to
+> `open/reply_the_preflight_now_resolves_the_pin_and_refuses_a_bare_empty_find.md`,
+> **2026-08-28 00:07**. **See the `Pass 147.0` entry at the head of *Shipped***
+> for the delivery record, the sabotage result, the rule dispositions and the
+> ledger.
+>
+> **★★ THE BOX SAID *"EITHER CLOSES IT"* OF THE TWO REMEDIES, AND THAT WAS
+> WRONG — BOTH WERE NEEDED, AND THE ENGINEER SHIPPED ONLY ONE ON THE FIRST
+> CUT.** Remedy (1) closes the **pinned** route; remedy (2) closes the
+> **unpinned** route, where `find_anchor` runs `s.text.contains(find)` and
+> **every string contains the empty string** — the same vacuous survey, about an
+> operator the caller never named, reachable **by accident** rather than by
+> following guidance. **The unpinned half is the MORE reachable one.** The error
+> is left visible below rather than edited out, because it is the transferable
+> finding: ***when a reporter offers two remedies for one symptom, check whether
+> they cover different reachability ROUTES before choosing between them.***
+>
+> **★ THE MECHANISM BELOW IS LABELLED *"RELAYED, NOT VERIFIED HERE"* AND THAT
+> LABEL IS NOW DISCHARGED, NOT STRUCK.** All four traced steps were reproduced
+> in-crate by the engineer before the report was believed (`R203`), and
+> **nothing in the report needed correcting.** The label was the correct
+> epistemic state at filing time; striking it would erase the record of a claim
+> carried honestly until it could be checked — the same treatment the 297th and
+> 298th filings gave their own unverified relays.
+>
+> **★ THE ENGINEER-SIDE ITEM AT THE FOOT OF THIS BOX IS ALSO DONE.**
+> `docs/core-api/`'s `preview_font_resources` prose now states what an empty
+> `find` means with and without a pin, **and what it meant before
+> `Pass 147.0`** (`git show 8aa9cea -- docs/core-api/02-editing-and-saving.md`,
+> read in full by this role).
+>
+> **FILE 2 (22:50) needed nothing and still needs nothing.** Its four
+> load-bearing contents were consumed by the 298th filing (`FEATURES.md`
+> corrections, `R203`(d)) and are unaffected by this discharge.
 
 **★ NO PASS ID IS CLAIMED HERE, DELIBERATELY.** Parsing a consumer request into
 Pass entries is **the engineer's act** (`CLAUDE.md` rule 5; precedent: the 184th
@@ -109073,6 +109632,69 @@ same cause (hashes exist only at commit time), two different failure modes.
   is measured, and again when a later session measures something adjacent.**
   No re-mint; ceiling moves for `R222` below, not for this rule.
 
+  **★★★★ AMENDED 2026-08-28 (299th filing) — NEW CLAUSE (e): THE ENUMERATION'S
+  ANSWERS MUST BE MEASURED, NOT RECALLED. THIS IS THE FIRST INSTANCE WHERE A
+  SIBLING ROUTE WAS *ASKED ABOUT AND MIS-ANSWERED* RATHER THAN LEFT UNASKED,
+  AND IT IS A DIFFERENT FAILURE WITH A DIFFERENT REMEDY.**
+
+  Every instance above is a route that went **unasked** — the rule's whole
+  prescription is therefore *"name the other routes."* `Pass 147.0` (`8aa9cea`)
+  is the first where the engineer **did** name the other route and then
+  **answered from memory**:
+
+  > *"I fixed the **pinned** case and reasoned that the **unpinned** case
+  > already errored, because `match_run` refuses an empty `find` on the commit
+  > path."*
+
+  **It does not.** `find_anchor` with no pin runs `s.text.contains(find)`, and
+  **every string contains the empty string**, so an unpinned empty `find`
+  silently matched the **first show operator on the page** and surveyed against
+  zero characters — the same defect, **about an operator the caller never
+  named**, and reachable **by accident** rather than by following
+  documentation, which makes it the **more** likely of the two to be hit.
+  **A test written expecting to pass is what caught it.**
+
+  **⇒ CLAUSE (e), which is what this rule now asks for that it did not before.**
+  When the enumeration produces the answer *"route B is already fine"*, that
+  answer is a **measurement, not a recollection**, and it is written as a
+  **test** in the same Pass — even (especially) when the test is expected to
+  pass. Cost: one test. **The tell to watch for in yourself is the phrase
+  *"this already errors"* / *"unchanged, and it must stay unchanged"* in a
+  comment or a commit message** — that is a belief stated in the register of a
+  fact, and it is exactly where this instance sat.
+
+  **★★ THE ASYMMETRY THAT MAKES CLAUSE (e) CHEAP TO OBEY AND EXPENSIVE TO
+  SKIP.** *"Route B is broken too"* is self-checking — you fix it and the fix
+  proves the claim. *"Route B is fine"* is **unfalsifiable without an
+  instrument**, produces no artefact, leaves no trace in the diff, and reads in
+  review as diligence (*the engineer considered it*) rather than as an
+  unverified assertion. **The negative answer is the one that needs the test.**
+
+  **★ THE REPORTER HAD ALREADY SUPPLIED THE OTHER HALF AND IT WAS READ AS AN
+  EITHER/OR.** `pdfceGUI` offered two remedies — *resolve the text from the
+  anchor* **or** *refuse an empty `find` by name*, marking the second as their
+  preference. **(1) closes the pinned route; (2) closes the unpinned route;
+  neither closes both.** ⇒ ***When a reporter offers two remedies for one
+  symptom, check whether they cover different reachability ROUTES before
+  choosing between them*** — two remedies for one symptom is itself weak
+  evidence that the reporter has seen two routes, whether or not they said so.
+
+  **★ Disposition of the sibling lesson, argued rather than defaulted.** The
+  engineer's *"verify each instance, not the class"* memory
+  (`.claude/agent-memory/pdfce-engineer/feedback_verify_each_instance_not_the_class.md`,
+  five instances from 2026-08-18, this one amended into it the same session)
+  was considered for a standing-rule mint and **DECLINED**: minting a rule that
+  duplicates a live memory file would be **two descriptions of one rule**,
+  which is `R221`'s own subject, so the mint would violate the rule this Pass
+  is an instance of. It lands here instead, as clause (e), because **the
+  project-visible half of that lesson is an `R219` obligation.** Full argument
+  in the `Pass 147.0` *Shipped* entry, including the counter-argument and the
+  trigger to revisit: **if it recurs once more in the PROJECT record, mint it,
+  and the argument will be REACH — `ROADMAP.md` is read by every agent and by
+  the operator; agent memory is read by one agent.**
+
+  **No re-mint; ceiling unchanged. Rules stay at `R223`, next free `R224`.**
+
 - **R220 — A CAPABILITY IS DOCUMENTED WHERE THE READER'S *QUESTION* LIVES,
   NOT ONLY WHERE ITS *MECHANISM* LIVES; AND A CLAIM THAT PDFCE HAS NO VERB
   FOR SOMETHING IS CHECKED AGAINST **SOURCE** BEFORE IT IS SENT ANYWHERE.**
@@ -109411,6 +110033,65 @@ same cause (hashes exist only at commit time), two different failure modes.
 
   **Ceiling does NOT move for this amendment** — an instance added to an
   existing rule, not a mint. Rules stay at **`R222`**, next free **`R223`**.
+
+  **★★★★ FOURTH INSTANCE, ADDED IN PLACE 2026-08-28 (299th filing) — AND IT IS
+  THE FIRST FOUND BY A CONSUMER RATHER THAN FROM INSIDE THIS PROJECT, WHICH IS
+  NEW INFORMATION ABOUT THE RULE'S REACH AND NOT A TALLY.**
+
+  4. **`preview_font_resources` (`text_edit/format.rs`) — `Pass 147.0`
+     (`8aa9cea`), reported by `pdfceGUI` five hours after `Pass 145.0` shipped
+     and reproduced in-crate before it was believed.** `Pass 145.0` made an
+     empty `find` on a **pinned** request mean *"the whole pinned operator"*,
+     resolved from the anchor, **and told callers so**. The pre-flight kept
+     passing the caller's string **verbatim**. So the two functions took **the
+     same two operands and disagreed about what an empty one means**:
+     `FormatRequest` + `set_font` **resolved**; `preview_font_resources`
+     **trusted the caller**. Measured consequence:
+     `preview_font_resources(0, "", Some(pin))` located the right operator
+     (`find_anchor` never reads `find` when a pin is set), then
+     `accept_font_target` zipped `"".chars()` against the encoded codes —
+     **zero characters checked, zero refusals found, all three faces
+     `Accepted`, including one that provably cannot show the run.** Fixed by
+     both paths calling **one** `effective_find`.
+
+  **★★ THREE THINGS THIS INSTANCE ADDS THAT THE FIRST THREE DID NOT.**
+
+  - **The two drifting descriptions were a RESOLUTION STEP and a PARAMETER
+    LIST**, not two predicates. `R221`'s wording says *"pattern-match a
+    parallel description of when it would succeed"*, and a reader looking only
+    for a hand-written predicate will walk straight past a function signature
+    that **asks the caller for something the callee can compute.** ⇒ *An
+    operand a caller is asked to supply is a description of the callee's own
+    state, and it drifts the same way a predicate does.*
+  - **`Pass 142.1` — the Pass that INTRODUCED this instance — was itself the
+    fix for instance 3.** Its commit message argued that the remedy was to stop
+    `gate_synthesis` **describing** when `set_font` succeeds and make it
+    **call** the accepting code. **The identical shape survived in its own
+    parameter list, four hours later.** ⇒ ***Applying this rule to the body of
+    a function does not apply it to that function's SIGNATURE***, and the
+    signature is where the next caller meets it.
+  - **The failure direction is INVERTED, which is a third distinct cost
+    profile.** Instance 2's error directions were both harmless; instance 3's
+    false positive **removed a capability**; here the false positive produces a
+    **richer-looking answer** — more options, no error, no log — so it is
+    **strictly worse than the crude heuristic it replaced** and cannot be found
+    by looking for something missing. ⇒ *State which direction is harmful (the
+    297th filing's clause), and note that "returns MORE than it should" is a
+    harmful direction for an ACCEPTANCE query even though it is benign for a
+    filter.*
+
+  **★ FOUND FROM OUTSIDE, AND THAT IS THE STRUCTURAL POINT.** Instances 1–3
+  were all found by this project. **A consumer holds the pair of functions this
+  project holds one at a time** — they were handed `Pass 145.0`'s new meaning
+  and `Pass 142.1`'s old one in the same evening and had to make them agree in
+  their own code, which is the operation that surfaces the drift. ⇒ ***A
+  release note that gives an operand a new meaning is a `R221` trigger for
+  every sibling function taking that operand***, and the sweep for those
+  siblings belongs in the Pass that changes the meaning, not in the bug report
+  four hours later.
+
+  **Ceiling does NOT move for this amendment either** — an instance added to an
+  existing rule, not a mint. Rules stay at **`R223`**, next free **`R224`**.
 
   **Sibling of `R219`** (a fix has less reach than it appears to) and of
   **`R151`** (a capability has no caller): this one is about a **gate** having

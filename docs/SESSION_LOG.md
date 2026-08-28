@@ -70663,3 +70663,315 @@ omission.**
 
 ---
 
+
+## 2026-08-28 (299th filing) — `Pass 147.0` (`8aa9cea`) SHIPS: **a query built to stop a shell offering unusable fonts became an UNCONDITIONAL YES** — `preview_font_resources(page, "", Some(pin))` checked **zero characters** and reported every face on the page as `Accepted`; ★★★★★ **and this filing's hard-rule-11 sweep found the SAME DEFECT STILL LIVE ONE FUNCTION OVER** — `preview_style_resolution`, the query that decides where a Bold button routes, is the one entry point of three that never calls `effective_find`, **reported by nobody, found by searching for the CLAIM**; ★★★★ **the cause was two Passes shipping out of step, so two functions took the same two operands and disagreed about what an empty one MEANS** — `R221`'s **fourth** instance, and **the first found by a CONSUMER rather than from inside**; ★★★ **both of the reporter's offered remedies were needed and the engineer had one** — an unpinned empty `find` was also vacuous, because `find_anchor` runs `s.text.contains(find)` and **every string contains the empty string**, making it the MORE reachable half; ★★ **`R219` gains clause (e) — the enumeration's answers must be MEASURED, not RECALLED** — and the *"verify each instance, not the class"* mint is **DECLINED with three reasons and a revisit trigger**, because minting a rule that duplicates a live memory file would be two descriptions of one rule, which is `R221`'s own subject; ★ **the channel check ran FIRST and came back clean for the first time in five filings**
+
+**Dispatch:** *"roadmap update — pass shipped"*, from `pdfce-engineer`, with the
+exact tip hash supplied (`8aa9cea`) and an explicit instruction to run the
+channel check **first** per `R203`(d).
+
+**Shipped:**
+
+- **`Pass 147.0`** (`8aa9cea`) — `preview_font_resources(page, "", Some(pin))`
+  located the right operator, checked **zero characters**, and reported **every
+  face on the page as `Accepted`**, including one that provably cannot show the
+  run. Fixed by calling `effective_find` — the same function `plan_format`
+  calls — and by **refusing** an unpinned empty `find`. CLI:
+  `font-preflight --pin-span START:LEN`, `--find` now optional.
+
+**★★★★★ THE FINDING THIS FILING PRODUCED THAT NOBODY DISPATCHED: THE SAME
+DEFECT IS STILL LIVE ONE FUNCTION OVER.**
+
+The hard-rule-11 sweep asked *"what else takes `(find, pinned_span)` and decides
+something from the caller's string?"* — the **claim**, not the identifier — and
+found **`EditSession::preview_style_resolution`** (`edit.rs:7388` →
+`format.rs:2635`), the query that decides **where a Bold button routes**.
+
+- **`grep -n "effective_find" crates/pdfce-core/src/text_edit/format.rs` returns
+  exactly two call sites**: `1514` (`plan_format`, the commit path) and `3197`
+  (`preview_font_resources`, added by this Pass). **There is no third.**
+- `preview_style_resolution` builds its locating `EditRequest` with
+  `find: find.to_owned()` (`2654`) and passes the **raw** string to
+  `probe_synthesis` at three sites (`2681`, `2688`, `2699`) →
+  `gate_synthesis` → **`survey_page_fonts(..., text)` at `2395`** — *the same
+  call whose vacuity was this Pass's defect, at the other of its two call
+  sites*.
+- **Both halves are present.** Pinned + empty: every candidate surveys as
+  accepted, so it answers `RealFaceResolves` naming a face that then refuses.
+  Unpinned + empty: `contains("")` matches the **first show operator on the
+  page**.
+- **★★ The consequence is WORSE here than in the pre-flight.** A pre-flight
+  returns a **list**, and a universal yes offers faces that later refuse. This
+  returns a **routing decision**, so a wrong `RealFaceResolves` sends Bold to
+  `set_font` on a refusing face — **no bold by either route**, which is
+  `R221`'s *third*-instance cost profile (a capability removed), not its
+  fourth's (a richer-looking list).
+- **Scope, checked:** public `EditSession` method, **no CLI subcommand**, so the
+  reachable consumer is a library caller — `pdfceGUI`, which drives its
+  Bold/Italic buttons from exactly this query. **The commit path is unaffected
+  and correct.**
+- **REPORTED, NOT EDITED** (`crates/` is outside this role's remit). A ★★★★★
+  *Next up* box is open with **no Pass ID claimed** and four proposed acceptance
+  criteria. **Next free family `148`.**
+
+**⇒ The transferable sentence:** ***a route enumeration scoped to the FUNCTION
+being fixed is scoped to the instance, not the class.*** `Pass 147.0` enumerated
+the pinned and unpinned *branches* of the function it was fixing — and did it
+well, catching a defect that way — while the sibling **function** taking the
+same two operands went unasked **in the commit that was about exactly this
+hazard**.
+
+**★ Every prior hard-rule-11 sweep in this file turned up WORDING that had gone
+false. This one turned up EXECUTABLE CODE with the same bug the Pass was
+closing** — the strongest evidence yet for the rule's *search-for-the-claim*
+clause, since a grep for `preview_font_resources` returns
+`preview_style_resolution` **zero** times.
+
+**Findings + decisions:**
+
+- **★★ THE FAILURE WAS SILENT AND INVERTED, WHICH IS WHY IT WAS A PASS AND NOT
+  A DOC LINE.** The list looks **richer**, not broken — nothing errors, nothing
+  logs, and the query built to stop a shell offering unusable faces became the
+  thing producing the refusal. **Strictly worse than the `fontinfo` name-join
+  superset it replaced**, which was at least a superset of the page's fonts by
+  name. ⇒ *"Returns more than it should" is a HIGH-severity failure mode for an
+  ACCEPTANCE query, even though it is benign for a filter.*
+- **★★ THE CAUSE WAS TWO PASSES SHIPPING OUT OF STEP, in the engineer's own
+  words: "one I created by shipping two Passes out of step."** `Pass 145.0` gave
+  an empty `find` on a pinned request a **new meaning** and told callers so;
+  `Pass 142.1`'s pre-flight kept passing the caller's string verbatim. ⇒ ***A
+  release note that gives an operand a new meaning is an `R221` trigger for
+  every sibling function taking that operand***, and that sweep belongs in the
+  Pass that changes the meaning — not in the bug report four hours later, and
+  not in the sweep two filings later (which is where the survivor above came
+  from).
+- **★★ BOTH OF THE REPORTER'S REMEDIES WERE NEEDED AND THEY WERE READ AS AN
+  EITHER/OR.** Remedy (1) *resolve from the anchor* closes the **pinned** route;
+  remedy (2) *refuse by name* closes the **unpinned** route. Neither closes
+  both. The engineer shipped (1), assumed the unpinned case already errored —
+  **and a test written expecting to pass proved otherwise**: `find_anchor` with
+  no pin runs `s.text.contains(find)`, and **every string contains the empty
+  string**. ⇒ *When a reporter offers two remedies for one symptom, check
+  whether they cover different reachability ROUTES before choosing between
+  them.* And: **the unpinned half is the more reachable one**, since it is
+  reached *by accident* rather than by following guidance.
+- **★★ THE DECISIVE TEST IS AN EQUALITY, NOT A CORRECTNESS CHECK.** One CLI test
+  asserts the **pinned-empty and explicit-`find` JSON outputs are
+  BYTE-IDENTICAL** for the same operator. A test asserting *"the pinned-empty
+  query now returns the right verdicts"* would pass if the two paths were fixed
+  separately and happened to agree today. ⇒ *When the defect is a DISAGREEMENT
+  between two paths, the oracle is EQUALITY OF THE TWO OUTPUTS, not correctness
+  of one* — the mirror of the 298th filing's *"a fixture pins one path and
+  proves nothing about the pair"*.
+- **★ SABOTAGE THAT DISCRIMINATES BEATS SABOTAGE THAT REDDENS EVERYTHING.**
+  Reverting to the caller's string turns **2 of 13** core tests red **and leaves
+  the unpinned-refusal test GREEN** — correct, since it exercises the other
+  half. A mutation turning all 13 red would have shown the tests are coupled to
+  the *file*, not the *behaviour*. The engineer reported the green as a
+  **result**, not a worry; named here so a later session does not "fix" it.
+- **★ THE WIDENED GATE FROM `1e62715` MADE ITS FIRST REAL CATCH ON ITS FIRST
+  REAL CHANCE.** `check-string-gaps.sh` caught a lost line continuation **in a
+  new test, before it shipped.** The previous instance of that class
+  (`DisplayListStale`, 2026-08-18) **shipped into a release binary** and was
+  found by a librarian sweep afterwards. ⇒ `R209`(e)'s pay-off, with a live
+  catch rather than a rationale.
+- **★ 187 of the 325 changed lines are test lines** (`git show --stat 8aa9cea`,
+  run here: 5 files, +317/−8; `+111` core tests, `+76` CLI tests, `+11/−1` docs,
+  against `+76/−1` and `+51/−6` of source) — for a defect whose entire nature
+  was that **nothing failed**.
+- **★ AN OWED ITEM THIS ROLE REPORTED WAS DISCHARGED AND VERIFIED, WHICH IS
+  RARE ENOUGH TO SAY.** The 298th filing flagged
+  `docs/core-api/02-editing-and-saving.md`'s `edit_widget` row — four writable
+  widget properties, no read row — as *"the asymmetry surviving in the
+  DOCUMENTATION after it was closed in the code."* `8aa9cea` closes it, **and
+  the row states its own history** rather than silently becoming correct.
+  Confirmed by `git show 8aa9cea -- docs/core-api/02-editing-and-saving.md`,
+  read in full **here**, not by taking the commit message's word.
+
+**Standing-rule dispositions — two amendments in place, NO mint, both declines
+argued:**
+
+- **`R221` — fourth instance, amended in place.** New information, not a tally:
+  **the first instance found by a CONSUMER rather than from inside**, and the
+  first where the two drifting descriptions were **a resolution step and a
+  parameter list** rather than two predicates. Also recorded there: applying
+  `R221` to a function's **body** does not apply it to its **signature**, and
+  the signature is where the next caller meets it — `Pass 142.1` *was* the fix
+  for instance 3 and introduced instance 4 in its own parameter list four hours
+  later. **[Amended again in the same filing: instance 5, the
+  `preview_style_resolution` survivor above.]**
+- **`R219` — NEW CLAUSE (e): the enumeration's answers must be MEASURED, not
+  RECALLED.** Every prior `R219` instance is a route that went **unasked**. This
+  is the first where a route was **asked and mis-answered**. The asymmetry that
+  makes the clause cheap: *"route B is broken too"* is self-checking — you fix
+  it and the fix proves it; *"route B is fine"* is **unfalsifiable without an
+  instrument**, leaves no trace in the diff, and reads in review as diligence.
+  **The negative answer is the one that needs the test.** Watch for the phrase
+  *"this already errors"* / *"unchanged, and it must stay unchanged"* — a belief
+  stated in the register of a fact.
+- **★ NO MINT for "verify each instance, not the class", and the decline is
+  argued rather than defaulted.** Three reasons, in order of weight: (1) the
+  carrier already exists and already fired — it is in the engineer's own agent
+  memory with five instances from 2026-08-18 and **this one already amended into
+  it in the same session** (read here, not assumed), and **a standing rule
+  duplicating a live memory file would be two descriptions of one rule, which is
+  `R221`'s own subject — the mint would violate the rule this Pass is an
+  instance of**; (2) `R219` already owns the project-visible half, and this
+  instance is a *clause* of it; (3) the two-occurrence bar is about the
+  **project record**, and this is the first occurrence in it — minting on a count
+  carried entirely in another document is the borrowed-evidence move hard rule
+  10's corollary warns about. **The counter-argument is recorded as a live
+  trigger:** agent memory is read by one agent, `ROADMAP.md` by every agent and
+  the operator; **if it recurs once more in the project record, mint it, and the
+  argument will be REACH, not count.**
+- **No decision record.** Nothing here redraws a crate boundary, an invariant or
+  a dependency; the shared `effective_find` is an **application** of `R221` —
+  the same disposition the 297th and 298th filings gave the same species of
+  candidate. **Decisions stay at `094`.**
+
+**★★ CHANNEL CHECK — RUN FIRST, AND CLEAN FOR THE FIRST TIME IN FIVE FILINGS.**
+
+`ls -lt D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/`, run **before any
+decision in this filing**, per `R203`(d) — the clause the 298th filing minted
+out of the failure it had just committed. **Exactly one file is newer than that
+filing's 23:33 reading**, and it is **pdfce's own outbound reply**
+(`reply_the_preflight_now_resolves_the_pin_and_refuses_a_bare_empty_find.md`,
+**2026-08-28 00:07**). **The 23:13 file was opened as well** — it is this
+project's own `Pass 146.0` reply under a `done_…-CONSUMED` name, already
+accounted for. **Nothing inbound arrived; nothing in this filing is refuted by
+the channel.**
+
+**★ The streak breaking is not evidence the rule is unnecessary.** The 295th,
+296th, 297th and 298th filings each recorded the shape about their predecessor.
+This is the first filing that ran the check **first** and **opened every newer
+file** rather than reading a listing and stopping. ⇒ ***A clean result from a
+check that previously kept failing is evidence about the CHECK, not about the
+hazard.*** `R203`(d) stands unamended; instance count stays at **4**.
+
+**Documents edited this filing:**
+
+- **`docs/ROADMAP.md`** — a new *Shipped* entry at the head for `Pass 147.0`
+  (the defect and its inverted failure mode, the `R221` reading, the second half
+  the first cut assumed away, the fix and CLI half, the commit shape, the
+  discharged `edit_widget` doc item, the verification table, the rule
+  dispositions, the channel check and the backup position); **a full
+  hard-rule-11 sweep section** carrying the `preview_style_resolution` survivor;
+  the 22:50/22:57 inbound box **struck with a discharge banner** in *Next up*,
+  **with its own "either closes it" error left visible and named** rather than
+  edited out; **a new ★★★★★ box at the head of *Next up*** for the survivor, no
+  Pass ID claimed, four proposed acceptance criteria; **`R221`'s fourth-instance
+  amendment** and **`R219`'s clause (e)** in *Standing rules*, both in place.
+- **`docs/FEATURES.md`** — **no new row** (a correctness fix to a row filed in
+  the 297th filing, per the dispatch). Row 253's `font-preflight` signature
+  updated to `[--find TEXT] [--pin-span START:LEN]`, and its *"a trap is
+  reported and unfixed"* note — **which became FALSE at `8aa9cea`** — replaced
+  by what the resolution now guarantees plus what it meant before. Row 134 gains
+  the **new** unfixed trap (`preview_style_resolution`), in the same terse form
+  the old note used. **No boxes changed:** core/cli/gui were already `[x]`, and
+  `Pass 147.0` adds no capability.
+- **`docs/SESSION_LOG.md`** — this entry.
+- **`docs/ARCHITECTURE.md`** — **NOT edited.** One decision candidate declined
+  with the reason recorded above; §12 unchanged.
+- **`docs/NEXT_SESSION.md`** — **NOT edited, and the owed item is DROPPED.** The
+  engineer rewrote it this session (`git status` shows it modified in their
+  working tree); it is no longer stale. **Two consecutive filings had reported
+  it; that report is now withdrawn.** It still needs one correction — it does
+  not yet mention `Pass 147.0` — **and that is the engineer's, since the file is
+  theirs.**
+
+**Still in flight / for next session:**
+
+- **★★★★★ `preview_style_resolution` IS THE PICK-UP ITEM.** A live defect in a
+  shipped public query, found by this filing, **no Pass ID claimed**, four
+  proposed acceptance criteria in its *Next up* box. **Next free family `148`.**
+  ★ The one judgement it needs, and the reason the box does not prescribe a fix:
+  refusing an unpinned empty `find` there is a **behaviour change for an
+  existing caller**, not only a bug fix, and whether `pdfceGUI` hears before or
+  after is a scoping call.
+- **`docs/core-api/03-capabilities.md`** — its `preview_font_resources`
+  description (line ~1344), the **capability-shaped** file a reader arrives at
+  with the *question* rather than the mechanism (`R220`'s home), **says nothing
+  about what an empty `find` means**, with or without a pin. Not wrong; silent
+  where a reader arriving from `Pass 145.0`'s release note needs it. **Reported
+  as owed; engineer-owned. Fourth consecutive filing to report an item in this
+  file.**
+- **`docs/core-api/02-editing-and-saving.md:339`** — the `preview_style_resolution`
+  row reads only *"Pure query."* A **near-miss, not a false claim**; it becomes
+  owed doc work the moment the survivor is fixed.
+- **`Pass 143.0`** (the `DeviceGray`-under-overprint spec ambiguity) remains in
+  *Backlog*, now behind the survivor.
+- **★★ A BACKUP IS THREE FILINGS OVERDUE, AND THIS ONE IS WORSE THAN THE LAST
+  TWO.** Newest bundle **`pdfce-20260827-shutdown-a2b4e16-full.bundle`,
+  2026-08-27 12:04** (`ls -lt D:/Dev/pdfce-backups/`);
+  `git rev-list --count a2b4e16..HEAD` = **27** (was **25** at the 298th filing;
+  the +2 are `54a3e01` and `8aa9cea`). `git rev-parse origin/main` = **`54a3e01`**.
+  ⇒ **`Pass 147.0` is in NO bundle AND not on `origin` — a genuine single point
+  of failure.** The last two filings could say *"belt-vs-braces: it is on
+  `origin/main` even though no bundle holds it"*; **that sentence is not
+  available for `8aa9cea`.** It is the deferred tip and the engineer pushes
+  **after** this filing commits, so `R217`'s ordering holds and the exposure is
+  deliberate and short — **but the mitigation that made the previous debt
+  tolerable is absent here, and a carried-forward sentence would have hidden
+  that.**
+
+**Ledger** (`python tools/check-ledger-numbers.py`, run **before** any edit and
+**again after**):
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | highest **`146.0`**, headed | **`Pass 147.0` SHIPPED and headed**; highest **`147.0`**; **next free family `148`** |
+| decisions | **094** | **094 — unchanged.** One candidate declined, reason recorded. Next free **095** |
+| standing rules | **`R223`** | **`R223` — unchanged.** `R221` amended in place **twice** (instances 4 and 5); `R219` gains **clause (e)**; **none re-minted**, and the "verify each instance" mint is **declined with three reasons and a revisit trigger**. Next free **`R224`** |
+| filings | **298** | **299**. Next free **300** |
+| `check-*` scripts on disk | **19** (`ls tools/check-*`, run here) | **19 — unchanged.** ★ The denominator to quote for a "gates green" claim remains `bash tools/run-gates.sh` (`1e62715`) at **25 commands**, not the script count — the two measure different sets and `R209`(e) asks for the one the claim is about |
+| test suite (engineer's, relayed) | **4,483 passing / 0 failing** | **4,489 / 0** — **+6 = +3 out-of-crate core, +3 CLI** |
+| `effective_find` call sites | *never counted before* | **2 of the 3 entry points taking `(find, pinned_span)`** (`format.rs:1514`, `3197`; `preview_style_resolution` at `2635` is the third and does **not** call it) — `grep -n`, run here. **★ Filed as a ratio, not a bare count, per hard rule 10(a): the denominator is what makes it a defect rather than a fact** |
+| commits since newest bundle | **25** | **27**; `origin/main` at **`54a3e01`**, so **the tip is in no bundle and unpushed** |
+| `FEATURES.md` rows changed | — | **2 edited, 0 added** — row 253 (signature + the false *"trap … unfixed"* note replaced) and row 134 (the **new** trap). **No boxes ticked; none were owed** |
+
+Pre-edit run: *"Pass families with headings : up to 146 (highest ID 146.0) ·
+Pass families MENTIONED : up to 146 (highest ID 146.0) · standing rules : R223
+-> next free is R224 · decision records : 094 -> next free is 095 ·
+SESSION_LOG filings : 298 -> next free is 299"*, and *"ledger-numbers: clean —
+no duplicate Pass, rule, or decision numbers."* `python
+tools/check-commits-filed.py` and `python tools/check-passes-filed.py` were also
+run pre-edit: both report `8aa9cea` as **DEFERRED — tip commit, its filing is a
+later commit**, which is `R217`'s designed state and is exactly what this filing
+discharges. Post-edit: `bash tools/run-gates.sh` → **PASS, 25 commands,
+including 2 filing gates**, with `commits-filed` and `passes-filed` both now
+**clean and no longer deferred** — the discharge, measured.
+
+**★ THE POST-EDIT RUN CAUGHT THIS FILING'S OWN MISTAKE, WHICH IS THE ONLY
+REASON IT IS NOT IN THE FILE.** The first draft headed this entry
+`## 2026-08-28 — 299th filing: …`. The ledger gate reads **only** the
+declaration form `## YYYY-MM-DD (Nth filing) — …`, so it still printed
+*"SESSION_LOG filings : 298 -> next free is 299"* **with the 299th entry already
+appended** — the entry was invisible to the instrument that counts entries, and
+a 300th filing would have been told to claim `299`. Fixed to the canonical form;
+the re-run reports **299**. ⇒ ***A gate run only BEFORE the edit certifies the
+tree you were about to change, not the one you produced*** — the same shape
+`1e62715`'s runner was built for, arriving here against this role rather than
+the engineer's. This is also the exact failure mode `check-ledger-numbers.py`'s
+own source comments warn about at the 268th filing (a numeral ordinal in a
+heading the parser could not see); **the warning was in the file and did not
+prevent the repeat, which is the argument for running the thing rather than
+reading it.**
+
+**RAG written this filing:**
+
+- `D:/dev/rag/rust/an_empty_operand_makes_a_validating_loop_return_a_universal_yes_and_the_failure_presents_as_a_richer_result.md`
+  — **new**, with a matching bullet added to `D:/dev/rag/rust/index.md` (hard
+  rule 4: `ls | grep -i "empty|vacuo|zip|contains"` first; no existing file
+  covered it). Carries the two Rust-stdlib identities that make the class
+  reachable — `"".chars().zip(xs)` runs the body **zero** times, and
+  **`haystack.contains("")` is `true` for every haystack**, so a locator built
+  on it *silently selects the first candidate rather than erroring* — plus
+  `all()`/`any()` on an empty iterator, the inverted-severity argument, the
+  byte-identical-output oracle, and the design rule (**an empty narrowing
+  operand is resolved from context or refused by name; never passed through**).
+- **Nothing written to `C:/personal_rag/pdf/`**, deliberately: the finding is a
+  **Rust/API-shape** quirk, not a PDF-producer quirk — no real-world file
+  behaves any particular way here. **Recorded so a later index check reads this
+  as a decision, not an omission.**
+
+---
