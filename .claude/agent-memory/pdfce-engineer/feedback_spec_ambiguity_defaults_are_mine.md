@@ -73,6 +73,40 @@ silently — the setting plus its documented reasoning is the disclosure.
   the document's version rather than on operator taste. Only genuine
   intra-edition contradictions need a knob.
 
+## ★★ THE THIRD OUTCOME: DECLINE THE OPERATION ENTIRELY (confirmed 2026-08-28)
+
+The rule above has two outcomes — **ship both, pick a default**. There is a
+third, and it took an operator confirmation to establish that it is allowed:
+**decide the operation has no honest reading and refuse to offer it at all.**
+
+`Pass 159.0` shipped `rotate_dimension` and **declined `scale_dimension`**.
+The reasoning, which is the template:
+
+> Scaling a ce dimension has no coherent semantics. Either the displayed value
+> stays fixed while the geometry grows — so the dimension **lies about the
+> drawing** — or both change, so **nothing was measured** and the operator has
+> *drawn* a number rather than *taken* one. The operation actually wanted is
+> `set_group_scale`, the measurement ratio, which already ships.
+
+Ken, 2026-08-28: **"good call. don't need scaling on dimensions."**
+
+★ **The distinction from the main rule.** "Two defensible answers" means both
+readings produce a coherent result and the choice is taste. Here **neither
+reading is coherent** — so shipping both as options would have manufactured a
+false choice and dressed an incoherent operation as a preference. An option is
+a claim that both settings are correct for somebody.
+
+**How to tell them apart, and it is a real test rather than a feeling:** try to
+write the doc comment for the losing option. If it reads *"choose this when you
+want X"* for some real X, it is a default question. If it can only be written
+as *"choose this to get a wrong answer in a different way"*, it is not an
+option — decline the whole verb, **name the operation the operator actually
+wants**, and say so where they will look for the missing one.
+
+**The obligation that does not change:** the decline is *disclosed*, in the
+same place the verb would have been — its sibling's doc comment, the CLI help,
+and the outcome type. A refusal nobody can find reads as an omission.
+
 **Related:** [[exceed-the-parity-reference-when-you-can]] — same delegation
 shape. Ken sets the goal; the technical call is mine, with the divergence
 recorded.

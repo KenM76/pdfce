@@ -23,33 +23,86 @@ task; everything else in this file is subordinate to it.
 | # | gap | state |
 |---|---|---|
 | 1 | **Rotation** of anything carrying a `/Rect` | **SHIPPED** — `Pass 155.0`, core + CLI. Annotation family only. |
-| 2 | **ce dimensions** — re-measure, rotate/scale, drag extension lines | **NOT STARTED** |
+| 2 | **ce dimensions** | **DONE.** Two of the three gaps I reported **never existed** — see below. Rotation shipped as `Pass 159.0`; scaling **declined by name**, operator confirmed. |
 | 3 | **Bookmarks** — rename, delete, reorder, re-parent | **PARTIAL** — rename and delete ship (`156.0` core, `157.0` CLI). **Reorder and re-parent do not.** |
-| 4 | **Fonts** — restyle to a face the document lacks; replace a font throughout | **NOT STARTED** |
+| 4 | **Fonts** — restyle to a face the document lacks; replace a font throughout | **NOT STARTED, but SCOPED — read §0a before writing any code.** |
 
-### ★★ Take gap 4 (fonts) next, not gap 2 — and the reason is scope shape
+## §0a — GAP 4 (FONTS): MEASURED, NOT GUESSED. Read this before writing code.
 
-This is the librarian's assessment and I agree with it.
+Scoped 2026-08-28 by running the shipped binary. The expensive part of this
+Pass — finding out what already exists — is done.
 
-**Gap 2 is five problems sharing one row.** `Linear` has to reconcile
-`AxisConstraint`; `Angular` is **scale-invariant by design**, so "scale" means
-something else or nothing; `Perimeter`'s centroid-relative offset needs
-re-deriving; and `Circular`'s scale **collides conceptually with the existing
-`set_group_scale` measurement-ratio verb**. A fresh session spends its first
-hour deciding what the verb *means* per variant — **and that decision is
-Ken's, not the engineer's**, because a ce dimension's text *is* its
-measurement, so scaling one is a drafting-semantics question rather than a
-geometry one.
+### What is genuinely missing
 
-**Gap 4 is one problem with a known shape.** `Pass 142.0` is already scoped,
-and it was **de-prioritised rather than declined**. A fresh context can start
-writing immediately.
+**`format-text --set-font` can only select a font the page ALREADY carries.**
+Verified: `font-preflight` on `format_family.pdf` lists exactly the three
+page resources `/F1 /F2 /F3` and adjudicates among those. There is no path to
+a face the page does not have.
 
-**Cheaper option if the next session is short on room:** widget `/MK /R`
-rotation. `rotate_annotation` refuses widgets by name and the refusal message
-already states the mechanism (§12.5.6.19 Table 189, quantised 0/90/180/270).
-Self-contained, no operator decision needed.
+### ★★ What already exists, and this is the part that changes the estimate
 
+**`add-text` ALREADY creates a new `/Font` resource.** Verified: adding a run
+in `Courier-Bold` to a page carrying only Times and Calibri took the font
+count 3 → 4, with the new resource written and disclosed. The builder is
+`build_font_dict(base_font, symbolic, enc, font: Std14)` in
+`crates/pdfce-core/src/text_edit/addtext.rs:1866` — **private, and
+Standard-14 only.**
+
+⇒ So the job is **not** "learn to add a font resource". It is **wire an
+existing capability into a second caller**, which is a much smaller claim.
+
+### The two halves, and they are very different sizes
+
+**4a — a Standard-14 face the page lacks.** The likely common case (an
+operator wanting Helvetica on a Times-only page). Needs: a branch in
+`plan_font` (`format.rs:2263`) for *no page resource accepts AND the request
+names a Std14 face*; `build_font_dict` made reachable; the page's
+`/Resources /Font` patched; **and the surgery rewriting the show operator's
+`/Fn` reference and re-encoding the text into the new encoding.** That last
+step is the intricate one — everything before it is plumbing.
+
+**4b — an operator-supplied face.** Needs FF-C subsetting, `/Widths`
+derivation and a `/FontDescriptor`. Materially larger. `Pass 142.0` is the
+scoped entry.
+
+★ **Do 4a first and ship it alone.** It is the case an operator hits, it needs
+no new file formats, and `--font-dir` already supplies faces for 4b when that
+comes.
+
+### Do NOT trust `embed-font` for this
+
+It **only fills in programs for fonts the document already names**. Its help
+says "the font programs a document is missing", which reads like it can add
+one and cannot.
+
+---
+
+### ★★★ A CORRECTION I OWE, and it is the lesson of the whole session
+
+I reported three ce-dimension gaps to the operator. **Two did not exist.** I
+read them off a `FEATURES.md` row instead of running the program:
+
+| I said | Truth, measured |
+|---|---|
+| can't change what a dimension measures | **FALSE** — `dimension-vertex --op move` re-derives it, 5.000 m → 6.250 m, disclosed |
+| can't drag its extension lines | **FALSE** — `dimension-offset` sets standoff and along-line text position |
+| can't rotate one | true; shipped as `Pass 159.0` |
+
+⇒ **A capability census read off a document is a claim about the document.**
+I spent this whole session finding stale rows in `FEATURES.md` and then quoted
+one to the operator as a measurement of the program. **The check was two CLI
+invocations.** Before reporting any gap, run the verb.
+
+### Scaling a ce dimension is DECLINED, and the operator confirmed it
+
+*"good call. don't need scaling on dimensions."* — Ken, 2026-08-28.
+
+It has no honest reading: either the value stays fixed while the geometry
+grows, so the dimension lies about the drawing, or both change, so nothing was
+measured. `set_group_scale` is the operation actually wanted and already
+ships. **Do not re-open this**; the decline is documented on
+`rotate_dimension` and in the CLI help, where someone looking for the missing
+verb will find it.
 ---
 
 ## §A — RUN `bash tools/run-gates.sh`
