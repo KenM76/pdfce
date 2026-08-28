@@ -2516,6 +2516,58 @@ pub fn setting_page_blend_radius() -> &'static str {
 space. Ordinary screen documents are unaffected either way."
 }
 
+/// The §8.6.7 zero-tint scope, in the operator's terms.
+///
+/// Every string here is written about INK ON PAPER, not about clause numbers.
+/// The operator choosing this is a print buyer looking at a proof that came
+/// back wrong, not somebody reading the standard.
+pub fn setting_grey_overprint_title() -> &'static str {
+    "Whether grey knocks out the ink underneath it"
+}
+
+/// What the standard does not settle here.
+pub fn setting_grey_overprint_silence() -> &'static str {
+    "When a grey shape is set to overprint a spot colour, the standard says \
+the overprint rule applies to full four-colour inks, and does not say whether \
+grey counts as one. Read one way the grey wipes out the colour beneath it; \
+read the other way it lays black over the top and the colour shows through. \
+Acrobat reads it the second way."
+}
+
+/// How far the choice reaches.
+pub fn setting_grey_overprint_radius() -> &'static str {
+    "Affects print files where a grey or black shape is set to overprint a \
+spot colour. Screen documents and files without overprinting are unaffected."
+}
+
+pub fn setting_grey_overprint_grey_as_k() -> &'static str {
+    "Let the colour underneath show through (pdfce's default)"
+}
+
+pub fn setting_grey_overprint_grey_as_k_note() -> &'static str {
+    "Treats grey as black ink, so the spot colour beneath survives. This is \
+what Acrobat does and what a press does."
+}
+
+pub fn setting_grey_overprint_literal() -> &'static str {
+    "Let grey wipe out what is underneath"
+}
+
+pub fn setting_grey_overprint_literal_note() -> &'static str {
+    "The strictest reading of the standard: the overprint rule is for \
+four-colour inks only, so grey replaces everything under it."
+}
+
+pub fn setting_grey_overprint_all() -> &'static str {
+    "Let any colour show through what is underneath"
+}
+
+pub fn setting_grey_overprint_all_note() -> &'static str {
+    "Extends the first option to reds, greens and blues as well as greys. \
+Consistent, but pdfce has no press proof to check it against, so it is not \
+the default."
+}
+
 pub fn setting_page_blend_intent_if_subtractive() -> &'static str {
     "Use the file's ink profile (pdfce's default)"
 }

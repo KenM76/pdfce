@@ -1253,7 +1253,26 @@ fn decode_sampled(
         Space::Indexed {
             overprint: Some(o), ..
         } => Some(o.kind.clone()),
-        Space::Special(cs) => match crate::overprint::classify(cs, true) {
+        Space::Special(cs) => match crate::overprint::classify(
+            cs,
+            true,
+            // ★ NOT a policy read, deliberately, and this is the one place
+            // in the codebase where passing a literal is MORE honest than
+            // threading the operator's setting through.
+            //
+            // `in_image_sample` is `true` here, and `classify` refuses to
+            // upgrade a sampled image under ANY scope — Table 149 gives
+            // `DeviceCmykDirect` the qualifier "and not in a sampled image",
+            // so a CMYK image already falls to `OtherProcess` where `OPM 0`
+            // and `OPM 1` are identical. Reading `policy.overprint_zero_tint_scope`
+            // here would imply the operator's choice reaches this call. It
+            // cannot, and a reader would have to go and prove that.
+            //
+            // Pinned by `a_grey_image_is_never_upgraded_whatever_the_scope`,
+            // so if the `!in_image_sample` guard is ever removed this becomes
+            // a failing test rather than a stale comment.
+            pdfce_core::settings::OverprintZeroTintScope::DeviceCmykOnly,
+        ) {
             Some(k @ crate::overprint::SourceKind::SeparationOrDeviceN { .. }) => Some(k),
             _ => None,
         },
@@ -2579,7 +2598,26 @@ fn resolve_indexed(
     // so an overprinting image in it is already rendered correctly by an
     // ordinary paint and has nothing to carry.
     let op_kind = match &base {
-        Space::Special(cs) => match crate::overprint::classify(cs, true) {
+        Space::Special(cs) => match crate::overprint::classify(
+            cs,
+            true,
+            // ★ NOT a policy read, deliberately, and this is the one place
+            // in the codebase where passing a literal is MORE honest than
+            // threading the operator's setting through.
+            //
+            // `in_image_sample` is `true` here, and `classify` refuses to
+            // upgrade a sampled image under ANY scope — Table 149 gives
+            // `DeviceCmykDirect` the qualifier "and not in a sampled image",
+            // so a CMYK image already falls to `OtherProcess` where `OPM 0`
+            // and `OPM 1` are identical. Reading `policy.overprint_zero_tint_scope`
+            // here would imply the operator's choice reaches this call. It
+            // cannot, and a reader would have to go and prove that.
+            //
+            // Pinned by `a_grey_image_is_never_upgraded_whatever_the_scope`,
+            // so if the `!in_image_sample` guard is ever removed this becomes
+            // a failing test rather than a stale comment.
+            pdfce_core::settings::OverprintZeroTintScope::DeviceCmykOnly,
+        ) {
             Some(k @ crate::overprint::SourceKind::SeparationOrDeviceN { .. }) => Some(k),
             _ => None,
         },

@@ -613,6 +613,12 @@ pub struct RenderOptions {
     /// [`pdfce_core::settings::PageBlendSpaceSource`], whose docs carry the
     /// clause citations and the reason this is a setting rather than a fix.
     pub page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource,
+    /// Which colour spaces get `OPM 1`'s zero-tint rule under overprint —
+    /// the §8.6.7 ambiguity (`Pass 143.0`). See
+    /// [`pdfce_core::settings::OverprintZeroTintScope`], whose docs carry
+    /// the clause citations, both defensible readings, and the measurement
+    /// behind the default.
+    pub overprint_zero_tint_scope: pdfce_core::settings::OverprintZeroTintScope,
     /// How a type 6/7 mesh-shading patch record is byte-padded - spec
     /// ambiguity `MSH-A1`. See
     /// [`pdfce_core::settings::MeshPatchPadding`], whose docs carry the
@@ -695,6 +701,8 @@ pub struct RenderPolicy<'a> {
     pub max_cmyk_buffer_bytes: Option<usize>,
     /// See [`RenderOptions::page_blend_space_source`].
     pub page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource,
+    /// See [`RenderOptions::overprint_zero_tint_scope`].
+    pub overprint_zero_tint_scope: pdfce_core::settings::OverprintZeroTintScope,
     /// See [`RenderOptions::mesh_patch_padding`].
     pub mesh_patch_padding: pdfce_core::settings::MeshPatchPadding,
     /// See [`RenderOptions::mask_resample`].
@@ -738,6 +746,11 @@ impl Default for RenderOptions {
             // intent is subtractive -- see `PageBlendSpaceSource`, whose
             // docs carry why this is a choice and not a right answer.
             page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource::default(),
+            // Acrobat's reading of §8.6.7, not the literal one. This is a
+            // print-conformance axis whose measurement instrument is authored
+            // to press behaviour, so the default follows what the instrument
+            // is FOR -- see `OverprintZeroTintScope::GreyAsKOnly`.
+            overprint_zero_tint_scope: pdfce_core::settings::OverprintZeroTintScope::default(),
             // OFF. The one lossy knob in this struct, and decision 082
             // puts that choice with the operator rather than with the
             // default.
@@ -911,6 +924,36 @@ impl RenderOptions {
     /// The choice is disclosed rather than silent: the resulting space's
     /// provenance is reported as `blend_space_from` on
     /// `pdfce-cli render-page`'s metrics line.
+    /// Choose which colour spaces get `OPM 1`'s zero-tint rule, returning
+    /// `self` for chaining (`Pass 143.0`).
+    ///
+    /// Same `#[non_exhaustive]` reasoning as [`Self::with_annotations`].
+    /// This is the seam the operator's persisted setting arrives through:
+    /// `RenderOptions::default().with_overprint_zero_tint_scope(settings.overprint_zero_tint_scope)`.
+    ///
+    /// # What it changes
+    ///
+    /// Whether a `DeviceGray` fill overprinting a spot backdrop **preserves
+    /// it or knocks it out**. §8.6.7 scopes `OPM 1` to `DeviceCMYK`, and
+    /// grey is not that — but Acrobat converts grey to K-only CMYK first and
+    /// then applies the rule, so its zero C, M and Y leave the backdrop
+    /// alone. Both readings are defensible; see
+    /// [`pdfce_core::settings::OverprintZeroTintScope`].
+    ///
+    /// A sampled image is **never** upgraded, under any value, because Table
+    /// 149 already excludes a CMYK image from the direct-CMYK row.
+    ///
+    /// The choice is disclosed rather than silent: `pdfce-cli render-page`
+    /// reports it on the metrics line.
+    #[must_use]
+    pub fn with_overprint_zero_tint_scope(
+        mut self,
+        scope: pdfce_core::settings::OverprintZeroTintScope,
+    ) -> Self {
+        self.overprint_zero_tint_scope = scope;
+        self
+    }
+
     #[must_use]
     pub fn with_page_blend_space_source(
         mut self,
@@ -1015,6 +1058,7 @@ impl RenderOptions {
             cmyk_intent: self.cmyk_intent,
             max_cmyk_buffer_bytes: self.max_cmyk_buffer_bytes,
             page_blend_space_source: self.page_blend_space_source,
+            overprint_zero_tint_scope: self.overprint_zero_tint_scope,
             mesh_patch_padding: self.mesh_patch_padding,
             mask_resample: self.mask_resample,
             image_minify: self.image_minify,
@@ -1063,6 +1107,9 @@ mod render_policy_tests {
         let options = RenderOptions::default()
             .with_cmyk_intent(pdfce_core::settings::CmykIntent::Naive)
             .with_page_blend_space_source(pdfce_core::settings::PageBlendSpaceSource::DeviceNative)
+            .with_overprint_zero_tint_scope(
+                pdfce_core::settings::OverprintZeroTintScope::DeviceCmykOnly,
+            )
             .with_mesh_patch_padding(pdfce_core::settings::MeshPatchPadding::None)
             .with_mask_resample(pdfce_core::settings::MaskResample::Bilinear)
             .with_image_minify(pdfce_core::settings::MinifyFilter::Smooth)
@@ -1083,6 +1130,11 @@ mod render_policy_tests {
                 // the policy, and a field left at its default would pass
                 // whether or not `with_page_blend_space_source` did anything.
                 page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource::DeviceNative,
+                // NOT the default (`GreyAsKOnly`), for the same reason as the
+                // two above: a projection that dropped this field would still
+                // match if the expected value were the default.
+                overprint_zero_tint_scope:
+                    pdfce_core::settings::OverprintZeroTintScope::DeviceCmykOnly,
                 mesh_patch_padding: pdfce_core::settings::MeshPatchPadding::None,
                 mask_resample: pdfce_core::settings::MaskResample::Bilinear,
                 image_minify: pdfce_core::settings::MinifyFilter::Smooth,

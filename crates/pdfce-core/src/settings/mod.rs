@@ -433,6 +433,135 @@ pub enum CmykIntent {
 /// inferred blending space is exactly the kind of invisible inference that
 /// rule exists for: it changes every colour on the page and leaves no mark
 /// saying so.
+/// Which colour spaces get `OPM 1`'s zero-tint rule under overprint
+/// (`Pass 143.0`) — a genuine spec ambiguity, turned into a setting per the
+/// standing practice rather than decided silently.
+///
+/// # The ambiguity, stated precisely
+///
+/// ISO 32000-1 **§8.6.7** scopes `OPM 1` to *"a tint value of 0.0 for a
+/// colour component **in a `DeviceCMYK` colour space**"*. `DeviceGray` is not
+/// one, so **pdfce's literal reading — that `OPM 1` does not reach it — is
+/// defensible.** Acrobat converts grey to K-only `DeviceCMYK` **first** and
+/// *then* applies `OPM 1`, which is the other defensible reading.
+///
+/// ★ **The standard already contemplates conversion-then-`OPM` for a
+/// neighbouring case and is SILENT about this one.** §8.6.7's escape hatch
+/// reads *"or is implicitly converted to `DeviceCMYK`; see 8.6.5.7"*, and
+/// §8.6.5.7 is titled **"Implicit Conversion of CIE-Based Colour Spaces"** —
+/// CIE-based spaces and nothing else. So a `CalRGB` gets `OPM 1` and a
+/// `DeviceGray` does not, by the letter. That asymmetry is the ambiguity;
+/// there is no sentence resolving it either way.
+///
+/// # What the difference looks like on paper
+///
+/// A 50 % `DeviceGray` fill overprinting a spot backdrop. Under
+/// [`Self::DeviceCmykOnly`] the grey paints all four components and **knocks
+/// the spot out**; under [`Self::GreyAsKOnly`] its zero C, M and Y preserve
+/// the backdrop and only K is laid down. Measured against Acrobat on the
+/// print-conformance suite: 84,120,34 (Acrobat, and this setting's default)
+/// versus 127,127,127 (the literal reading).
+///
+/// # Why no colour conversion is needed to implement it
+///
+/// The renderer already resolves a `DeviceGray` paint to CMYK before the
+/// overprint rules see it — `overprint::rgb_to_cmyk` on equal RGB yields
+/// `[0, 0, 0, 1-g]`, i.e. K-only, exactly. **Only the CLASSIFICATION
+/// changes.** The spot backdrop's ink is likewise already in the four CMYK
+/// planes by paint time (a `Separation` paint goes through its tint transform
+/// into them), so *"preserve the spot backdrop"* is expressible with the
+/// four-component rules alone: **this needs no new colorant plane and is not
+/// blocked on the n-channel compositor.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum OverprintZeroTintScope {
+    /// §8.6.7 to the letter: only a **direct `DeviceCMYK`** source gets
+    /// `OPM 1`'s zero-tint rule. A `DeviceGray` or `DeviceRGB` paint with
+    /// `/OP true` changes nothing about which components it writes.
+    ///
+    /// **Strictly conforming, and it knocks a spot backdrop out** where
+    /// Acrobat preserves it. Choose this to reproduce pdfce's pre-`Pass
+    /// 143.0` output, or when the question is *"what does ISO 32000-1
+    /// literally require?"*
+    DeviceCmykOnly,
+    /// Additionally treat a **`DeviceGray`** source as the K-only
+    /// `DeviceCMYK` it converts to, so its zero C, M and Y preserve the
+    /// backdrop.
+    ///
+    /// **The shipped default**, and this is a print-conformance axis whose
+    /// measurement instrument is authored to press behaviour — so the
+    /// default is determined by what the instrument is for, not by a
+    /// preference. Acrobat does this; the suite is scored against Acrobat.
+    ///
+    /// Scoped to `DeviceGray` and no wider **because that is the extent of
+    /// what was measured**: of the suite's 16 `Separation`-plus-`/OP true`
+    /// patches, **none** carries a `DeviceRGB` fill, so extending the rule to
+    /// RGB here would be an unmeasured behavioural change riding along with
+    /// a measured one. [`Self::AllProcessSpaces`] is where that lives, opt-in.
+    #[default]
+    GreyAsKOnly,
+    /// Treat **every** process space as the `DeviceCMYK` it converts to —
+    /// `DeviceRGB` and `CalRGB` as well as `DeviceGray`.
+    ///
+    /// The most principled reading of *convert-then-`OPM`*: if the argument
+    /// works for grey it works for any space that resolves to CMYK tints.
+    /// **Not the default, because it is unmeasured.** A `DeviceRGB` source
+    /// generally produces non-zero C, M and Y, so this changes little in
+    /// practice — but *"changes little"* is a prediction, and the suite
+    /// contains no patch that would falsify it.
+    ///
+    /// ★ The specific hazard, stated so it is not discovered later: pdfce's
+    /// RGB→CMYK is a **naive** conversion, so a pure red `(1, 0, 0)` becomes
+    /// `C = 0` and would preserve a cyan backdrop under this setting. Whether
+    /// Acrobat agrees is not known here and was not measurable with the
+    /// patches available.
+    AllProcessSpaces,
+}
+
+impl OverprintZeroTintScope {
+    /// Parse a settings-file / command-line token, or `None` if unknown.
+    ///
+    /// ★ ONE VOCABULARY, TWO READERS. The settings parser and
+    /// `pdfce-cli render-page --overprint-zero-tint-scope` both come here, so
+    /// a token the file accepts and a token the flag accepts cannot diverge.
+    /// The alternative — a `match` in each — is two spellings of one enum,
+    /// and the second one is always the one that goes stale.
+    ///
+    /// ```
+    /// use pdfce_core::settings::OverprintZeroTintScope as Scope;
+    /// assert_eq!(Scope::parse("grey_as_k_only"), Some(Scope::GreyAsKOnly));
+    /// assert_eq!(Scope::parse("device_cmyk_only"), Some(Scope::DeviceCmykOnly));
+    /// assert_eq!(Scope::parse("nonsense"), None);
+    /// ```
+    #[must_use]
+    pub fn parse(token: &str) -> Option<Self> {
+        match token {
+            "device_cmyk_only" => Some(Self::DeviceCmykOnly),
+            "grey_as_k_only" => Some(Self::GreyAsKOnly),
+            "all_process_spaces" => Some(Self::AllProcessSpaces),
+            _ => None,
+        }
+    }
+
+    /// The settings-file token for this value — the exact inverse of
+    /// [`Self::parse`].
+    ///
+    /// ```
+    /// use pdfce_core::settings::OverprintZeroTintScope as Scope;
+    /// for s in [Scope::DeviceCmykOnly, Scope::GreyAsKOnly, Scope::AllProcessSpaces] {
+    ///     assert_eq!(Scope::parse(s.as_str()), Some(s), "round trip");
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DeviceCmykOnly => "device_cmyk_only",
+            Self::GreyAsKOnly => "grey_as_k_only",
+            Self::AllProcessSpaces => "all_process_spaces",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum PageBlendSpaceSource {
@@ -1218,6 +1347,9 @@ pub struct Settings {
     /// [`PageBlendSpaceSource`], whose docs carry the clause citations
     /// and the reason this is a setting rather than a fix.
     pub page_blend_space_source: PageBlendSpaceSource,
+    /// Which colour spaces get `OPM 1`'s zero-tint rule (`Pass 143.0`).
+    /// See [`OverprintZeroTintScope`] — the §8.6.7 ambiguity.
+    pub overprint_zero_tint_scope: OverprintZeroTintScope,
     /// How a type 6/7 mesh-shading patch record is byte-padded - spec
     /// ambiguity `MSH-A1`, 8.7.4.5.5/.7/.8. See [`MeshPatchPadding`], whose
     /// docs carry the clause text and the reason it is permanent rather
@@ -1304,6 +1436,7 @@ impl Default for Settings {
             // answer to "what does pdfce do by default?", and tests in
             // this module and in `pdfce-render` pin that agreement.
             page_blend_space_source: PageBlendSpaceSource::default(),
+            overprint_zero_tint_scope: OverprintZeroTintScope::default(),
             mesh_patch_padding: MeshPatchPadding::default(),
             mask_resample: MaskResample::default(),
             image_minify: MinifyFilter::default(),
@@ -1790,6 +1923,18 @@ impl Settings {
                         .to_owned(),
                 }),
             },
+            "overprint_zero_tint_scope" => match OverprintZeroTintScope::parse(value) {
+                Some(scope) => self.overprint_zero_tint_scope = scope,
+                None => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: Self::default()
+                        .overprint_zero_tint_scope
+                        .as_str()
+                        .to_owned(),
+                }),
+            },
             "mesh_patch_padding" => match value {
                 "per_record" => self.mesh_patch_padding = MeshPatchPadding::PerRecord,
                 "none" => self.mesh_patch_padding = MeshPatchPadding::None,
@@ -2073,6 +2218,29 @@ impl Settings {
             out,
             "page_blend_space_source = {}\n",
             page_blend_space_source_token(self.page_blend_space_source)
+        );
+
+        out.push_str(
+            "# Which colour spaces get OPM 1's zero-tint rule under overprint.\n\
+             # ISO 32000-1 8.6.7 scopes that rule to a DeviceCMYK source, and its one\n\
+             # escape hatch points at 8.6.5.7, which covers CIE-BASED spaces only. So a\n\
+             # DeviceGray fill overprinting a spot backdrop either knocks it out (the\n\
+             # literal reading) or preserves it (Acrobat, which converts grey to K-only\n\
+             # CMYK first and then applies the rule). Both are defensible.\n\
+             #\n\
+             #   device_cmyk_only   8.6.7 to the letter; the spot is knocked out\n\
+             #   grey_as_k_only     DEFAULT. Acrobat's reading, for DeviceGray only\n\
+             #   all_process_spaces also DeviceRGB and CalRGB. Principled but\n\
+             #                      unmeasured -- no corpus patch exercises it\n\
+             #\n\
+             # A sampled image is never upgraded under any value: Table 149 already\n\
+             # excludes a CMYK image from the direct-CMYK row, and a grey image is that\n\
+             # case's analogue.\n",
+        );
+        let _ = writeln!(
+            out,
+            "overprint_zero_tint_scope = {}\n",
+            self.overprint_zero_tint_scope.as_str()
         );
 
         out.push_str(
@@ -2771,6 +2939,8 @@ mod tests {
             // NOT the default (`OutputIntentIfSubtractive`) -- see the note
             // above about a value that matches the default proving nothing.
             page_blend_space_source: PageBlendSpaceSource::DeviceNative,
+            // NOT the default (`GreyAsKOnly`), same reason.
+            overprint_zero_tint_scope: OverprintZeroTintScope::DeviceCmykOnly,
             // NOT the default (`PerRecord`), same reason.
             mesh_patch_padding: MeshPatchPadding::None,
             word_gap_ratio: 0.35,

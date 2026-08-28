@@ -2676,6 +2676,25 @@ enum Command {
         /// silent — which, for most of these axes, is most of them.
         #[arg(long)]
         standard: Option<String>,
+        /// Override `overprint_zero_tint_scope` for this render only
+        /// (`Pass 143.0`): `device_cmyk_only`, `grey_as_k_only` (default)
+        /// or `all_process_spaces`.
+        ///
+        /// # The ambiguity this exposes
+        ///
+        /// ISO 32000-1 §8.6.7 scopes `OPM 1`'s zero-tint rule to a
+        /// `DeviceCMYK` source, and its one escape hatch points at §8.6.5.7,
+        /// which covers **CIE-based** spaces only. So a `DeviceGray` fill
+        /// overprinting a spot backdrop either knocks it out (the literal
+        /// reading) or preserves it (Acrobat, which converts grey to K-only
+        /// CMYK first and then applies the rule). pdfce defaults to Acrobat's
+        /// because this is a print axis scored against press behaviour.
+        ///
+        /// Like `--standard`, this is applied OVER the saved settings and is
+        /// **never written back**: one diagnostic render must not silently
+        /// change how every later render behaves.
+        #[arg(long)]
+        overprint_zero_tint_scope: Option<String>,
         /// Render only a **region** of the page, as
         /// `llx,lly,urx,ury` in PDF user-space points.
         ///
@@ -7123,11 +7142,13 @@ fn run() -> ExitCode {
             show_layers,
             hide_layers,
             print_state,
+            overprint_zero_tint_scope,
         } => cmd_render_page(
             &input,
             page,
             scale,
             standard.as_deref(),
+            overprint_zero_tint_scope.as_deref(),
             region.as_deref(),
             &output,
             !no_annotations,
@@ -9454,6 +9475,7 @@ fn cmd_render_page(
     page_number: u32,
     scale: f32,
     standard: Option<&str>,
+    overprint_zero_tint_scope: Option<&str>,
     region: Option<&str>,
     output: &Path,
     annotations: bool,
@@ -9519,6 +9541,40 @@ numbered 1..={})",
     let (mut settings, settings_report) =
         pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
     report_settings(&settings_report);
+
+    // The §8.6.7 zero-tint scope, applied over the saved settings and never
+    // written back — same discipline as `--standard` below, and for the same
+    // reason: one diagnostic render must not change how every later render
+    // behaves.
+    //
+    // ★ Parsed by handing the token to the SETTINGS PARSER rather than by
+    // matching the three strings here. `OverprintZeroTintScope::parse` is the
+    // same function the settings FILE parser calls, so a token the file
+    // accepts and a token this flag accepts cannot diverge. A `match` here
+    // would be a second spelling of one enum, and the second spelling is
+    // always the one that goes stale.
+    if let Some(token) = overprint_zero_tint_scope {
+        use pdfce_core::settings::OverprintZeroTintScope as Scope;
+        match Scope::parse(token) {
+            Some(scope) => {
+                settings.overprint_zero_tint_scope = scope;
+                eprintln!(
+                    "pdfce-cli: render-page: overprint_zero_tint_scope = {} for this render only; your saved setting is unchanged",
+                    scope.as_str()
+                );
+            }
+            None => {
+                // Refuse by name rather than falling back silently. A mistyped
+                // token that renders under the DEFAULT looks exactly like the
+                // flag working — and the operator reached for the flag
+                // precisely because they wanted the non-default.
+                eprintln!(
+                    "pdfce-cli: render-page: unknown --overprint-zero-tint-scope {token:?} — known: device_cmyk_only, grey_as_k_only, all_process_spaces"
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        }
+    }
 
     // The subset-standard preset, applied OVER the operator's saved settings
     // and never written back. A render flag must not mutate a settings file:
@@ -9600,6 +9656,10 @@ numbered 1..={})",
         // of which is knowable from inside the renderer.
         .with_max_cmyk_buffer_bytes(max_cmyk_buffer_bytes)
         .with_page_blend_space_source(settings.page_blend_space_source)
+        // The 8.6.7 ambiguity: which colour spaces get OPM 1's zero-tint
+        // rule. Default preserves a spot backdrop under a DeviceGray fill,
+        // which is Acrobat's reading; `device_cmyk_only` is the literal one.
+        .with_overprint_zero_tint_scope(settings.overprint_zero_tint_scope)
         // `MSH-A1`: what a type 6/7 mesh-shading PATCH record pads to.
         // The clause states the rule for a VERTEX and the patch clauses
         // point back at it without redefining the unit, in both editions.

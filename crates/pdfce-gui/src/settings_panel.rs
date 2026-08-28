@@ -86,8 +86,8 @@ use eframe::egui;
 use pdfce_core::pageops::SeparationPolicy;
 use pdfce_core::settings::{
     ActualTextPrecedence, CmykIntent, CmykJpegPolarity, MaskResample, MeshPatchPadding,
-    MinifyFilter, MissingAppearanceState, PageBlendSpaceSource, QuadPointOrder, Settings,
-    StoreLocation, TrailingEol, UnmappableCode, XrefEntryEol,
+    MinifyFilter, MissingAppearanceState, OverprintZeroTintScope, PageBlendSpaceSource,
+    QuadPointOrder, Settings, StoreLocation, TrailingEol, UnmappableCode, XrefEntryEol,
 };
 
 use crate::ui_text;
@@ -233,6 +233,7 @@ pub fn show(
                     group(ui, ui_text::settings_group_colour(), false, |ui| {
                         cmyk_intent_setting(ui, draft);
                         page_blend_space_setting(ui, draft);
+                        grey_overprint_setting(ui, draft);
                         ui.add_space(10.0);
                         cmyk_jpeg_setting(ui, draft);
                         ui.add_space(10.0);
@@ -440,6 +441,37 @@ fn page_blend_space_setting(ui: &mut egui::Ui, draft: &mut Draft) {
         PageBlendSpaceSource::OutputIntentAlways,
         ui_text::setting_page_blend_intent_always(),
         Some(ui_text::setting_page_blend_intent_always_note()),
+    );
+}
+
+fn grey_overprint_setting(ui: &mut egui::Ui, draft: &mut Draft) {
+    header(
+        ui,
+        ui_text::setting_grey_overprint_title(),
+        ui_text::setting_grey_overprint_silence(),
+        ui_text::setting_grey_overprint_radius(),
+    );
+    let v = &mut draft.working.overprint_zero_tint_scope;
+    option(
+        ui,
+        v,
+        OverprintZeroTintScope::GreyAsKOnly,
+        ui_text::setting_grey_overprint_grey_as_k(),
+        Some(ui_text::setting_grey_overprint_grey_as_k_note()),
+    );
+    option(
+        ui,
+        v,
+        OverprintZeroTintScope::DeviceCmykOnly,
+        ui_text::setting_grey_overprint_literal(),
+        Some(ui_text::setting_grey_overprint_literal_note()),
+    );
+    option(
+        ui,
+        v,
+        OverprintZeroTintScope::AllProcessSpaces,
+        ui_text::setting_grey_overprint_all(),
+        Some(ui_text::setting_grey_overprint_all_note()),
     );
 }
 

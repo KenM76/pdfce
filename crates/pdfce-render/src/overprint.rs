@@ -143,6 +143,7 @@
 //! [`ComponentRule`] for where that choice is made visible.
 
 use crate::color::{ColorSpace, Colorant};
+use pdfce_core::settings::OverprintZeroTintScope;
 
 /// Which of Table 149's source-space rows applies.
 ///
@@ -544,13 +545,62 @@ pub fn authored_tints(kind: &SourceKind, comps: &[f32]) -> Option<[f32; 4]> {
 /// key on. The caller should paint normally and, if overprint was
 /// requested, disclose that it could not be honoured.
 #[must_use]
-pub fn classify(space: &ColorSpace, in_image_sample: bool) -> Option<SourceKind> {
+pub fn classify(
+    space: &ColorSpace,
+    in_image_sample: bool,
+    scope: OverprintZeroTintScope,
+) -> Option<SourceKind> {
+    // Does `scope` let a non-CMYK process space be treated as the CMYK it
+    // converts to?
+    //
+    // ★ `!in_image_sample` is not a copied guard, it is the SAME rule the
+    // `DeviceCmyk` arm below applies for the same reason. Table 149 gives
+    // `DeviceCmykDirect` the qualifier "and not in a sampled image", and a
+    // CMYK IMAGE falls to `OtherProcess` where `OPM 0` and `OPM 1` are
+    // identical. A grey image is that case's exact analogue, so upgrading it
+    // would give a grey image an overprint behaviour a CMYK image does not
+    // get — inverting the standard's own ordering.
+    let converts = !in_image_sample
+        && match scope {
+            OverprintZeroTintScope::DeviceCmykOnly => false,
+            OverprintZeroTintScope::GreyAsKOnly => matches!(space, ColorSpace::DeviceGray),
+            OverprintZeroTintScope::AllProcessSpaces => true,
+            // ★ `#[non_exhaustive]` makes this arm compulsory, and the
+            // compulsory-looking choice is the wrong one. `_ => true` would
+            // make an unrecognised future scope silently WIDEN what overprint
+            // preserves — the paint would stop writing components it used to
+            // write, on a file the operator did not change.
+            //
+            // `false` is the conservative reading: §8.6.7 to the letter, which
+            // is what pdfce did before this Pass existed. An unknown scope
+            // therefore renders as the pre-`Pass 143.0` behaviour rather than
+            // as a guess, and the scope actually in use is reported on
+            // `pdfce-cli render-page`'s metrics line either way, so the
+            // divergence is visible rather than inferred from the pixels.
+            _ => false,
+        };
     match space {
         ColorSpace::DeviceCmyk => Some(if in_image_sample {
             SourceKind::OtherProcess
         } else {
             SourceKind::DeviceCmykDirect
         }),
+        // ★ `Pass 143.0` — the §8.6.7 ambiguity, resolved by SETTING.
+        //
+        // The literal reading gives these `OtherProcess`, whose Table 149 row
+        // is `[Source; 4]` in all three columns — so the paint replaces the
+        // backdrop in every component and a 50 % grey KNOCKS A SPOT BACKDROP
+        // OUT. Acrobat converts grey to K-only `DeviceCMYK` first and then
+        // applies `OPM 1`, so its zero C, M and Y preserve the backdrop.
+        //
+        // Both readings are defensible; see `OverprintZeroTintScope` for why,
+        // and for why the default is Acrobat's. **No conversion happens here**
+        // — the caller has already resolved the paint to CMYK tints, and for
+        // equal RGB `rgb_to_cmyk` yields `[0, 0, 0, 1-g]` exactly. Only the
+        // classification moves.
+        ColorSpace::DeviceGray | ColorSpace::DeviceRgb if converts => {
+            Some(SourceKind::DeviceCmykDirect)
+        }
         ColorSpace::DeviceGray | ColorSpace::DeviceRgb => Some(SourceKind::OtherProcess),
         ColorSpace::Separation { colorant, .. } => Some(SourceKind::SeparationOrDeviceN {
             names: vec![colorant.clone()],
@@ -585,7 +635,7 @@ pub fn classify(space: &ColorSpace, in_image_sample: bool) -> Option<SourceKind>
         // half alone — a correct rule applied to a meaningless number —
         // which is why the obligation is stated here, where somebody
         // adding a call to `classify` will read it.
-        ColorSpace::Indexed { base, .. } => classify(base, in_image_sample),
+        ColorSpace::Indexed { base, .. } => classify(base, in_image_sample, scope),
         _ => Some(SourceKind::OtherProcess),
     }
 }
@@ -1139,7 +1189,7 @@ mod tests {
             lookup: std::sync::Arc::from(vec![0_u8, 255].into_boxed_slice()),
         };
         assert_eq!(
-            classify(&indexed, false),
+            classify(&indexed, false, OverprintZeroTintScope::default()),
             Some(sep(&["Cyan"])),
             "an Indexed space must classify as the space its palette entries \
              are written in"
@@ -1166,7 +1216,10 @@ mod tests {
         // an Indexed palette entry reached through a path fill is not an
         // image sample — so this is the honest call and it is the one the
         // recursion makes.
-        assert_eq!(classify(&indexed, true), Some(SourceKind::OtherProcess));
+        assert_eq!(
+            classify(&indexed, true, OverprintZeroTintScope::default()),
+            Some(SourceKind::OtherProcess)
+        );
     }
 
     fn sep(names: &[&str]) -> SourceKind {
@@ -1336,8 +1389,18 @@ mod tests {
     /// images a mode-1 behaviour they must not have.
     #[test]
     fn a_cmyk_image_sample_does_not_get_mode_one_behaviour() {
-        let direct = classify(&ColorSpace::DeviceCmyk, false).unwrap();
-        let sampled = classify(&ColorSpace::DeviceCmyk, true).unwrap();
+        let direct = classify(
+            &ColorSpace::DeviceCmyk,
+            false,
+            OverprintZeroTintScope::default(),
+        )
+        .unwrap();
+        let sampled = classify(
+            &ColorSpace::DeviceCmyk,
+            true,
+            OverprintZeroTintScope::default(),
+        )
+        .unwrap();
         assert_eq!(direct, SourceKind::DeviceCmykDirect);
         assert_eq!(sampled, SourceKind::OtherProcess);
 

@@ -4518,7 +4518,11 @@ impl Interpreter<'_> {
             // reason unrelated to the defect -- and would quietly empty a
             // counter operators read. One defect, one behaviour change.
             let op = self.gs.current.overprint_fill || self.gs.current.overprint_stroke;
-            let kind = crate::overprint::classify(&shading.color_space, false);
+            let kind = crate::overprint::classify(
+                &shading.color_space,
+                false,
+                self.policy.overprint_zero_tint_scope,
+            );
             let mut painted_natively = false;
             // ★ ONLY a Separation/DeviceN source may take this route, and the
             // exclusion is a correctness guard rather than caution. Table
@@ -4797,14 +4801,88 @@ impl Interpreter<'_> {
             // does not name must survive from the backdrop.
             crate::color::ColorSpace::Separation { .. } => true,
             crate::color::ColorSpace::DeviceN { names, .. } => names.len() < 4,
-            // DeviceGray and DeviceRGB over a CMYK backdrop are a
-            // colour-space question this predicate deliberately does not
-            // answer: §11.7.4.3 is about the components of the CURRENT
-            // space, and pdfce has no group colour space to compare
+            // ★★ `Pass 143.0` — THE GATE, and it is the one the filed
+            // diagnosis did not name.
+            //
+            // This arm used to read `_ => false` unconditionally, with a
+            // comment calling it "a known under-count rather than a claim of
+            // zero". The under-count was not only in the DISCLOSURE: this
+            // predicate is what decides whether `paint_overprint` is called
+            // at all, so a `DeviceGray` fill never reached `classify`, never
+            // reached `cmyk_group_rules`, and was painted normally — knocking
+            // a spot backdrop out.
+            //
+            // ★ That matters for how this Pass was scoped. The filed cause
+            // named `classify` mapping `DeviceGray` to `OtherProcess`, whose
+            // Table 149 row is `[Source; 4]`. Changing `classify` alone moved
+            // ZERO PIXELS, on the fixture and on all 51 corpus patches,
+            // because the paint never got that far. The route named in the
+            // report contributed nothing; this one contributed all of it
+            // (`R219`). Only an A/B of the rendered pixels could tell them
+            // apart — the classification change looked correct, compiled,
+            // and was reached.
+            crate::color::ColorSpace::DeviceGray | crate::color::ColorSpace::DeviceRgb
+                // ★★ ASK `classify`, DO NOT RE-DECIDE. The first cut of this
+                // arm had its own `overprint_scope_covers` helper applying the
+                // same scope rule a second time — and a sabotage that widened
+                // that copy left the whole suite GREEN, because `classify`'s
+                // copy still refused and the two cancelled out.
+                //
+                // Two agreeing implementations of one rule are not redundancy,
+                // they are a drift surface: this predicate decides whether
+                // `paint_overprint` RUNS and `classify` decides which Table 149
+                // row it uses, so a disagreement means a paint composited under
+                // a row that says it should not have been. `R221` — ask the
+                // accepting code, never restate its conditions.
+                if matches!(
+                    crate::overprint::classify(
+                        space,
+                        false,
+                        self.policy.overprint_zero_tint_scope,
+                    ),
+                    Some(crate::overprint::SourceKind::DeviceCmykDirect)
+                ) =>
+            {
+                // Mirrors the `DeviceCmyk` arm above deliberately, on the
+                // CONVERTED tints rather than the stated ones: mode 1 only,
+                // and only when some component is 0.0 and therefore has a
+                // backdrop to preserve. For grey that is always C, M and Y;
+                // for RGB it depends on the colour, which is why this asks
+                // rather than assumes.
+                self.gs.current.overprint_mode == 1
+                    && crate::overprint::rgb_to_cmyk(
+                        // A `DeviceGray` operand is one component; the paint
+                        // pipeline has already resolved it to the equal-RGB
+                        // triple this reads, and `rgb_to_cmyk` on equal RGB
+                        // yields `[0, 0, 0, 1-g]` exactly.
+                        self.resolved_paint_rgb(stroking).0,
+                        self.resolved_paint_rgb(stroking).1,
+                        self.resolved_paint_rgb(stroking).2,
+                    )
+                    .contains(&0.0)
+            }
+            // Everything else is still deliberately unanswered: §11.7.4.3 is
+            // about the components of the CURRENT space, and pdfce has no
+            // group colour space to compare a `Lab` or `CalRGB` source
             // against until the n-channel buffer exists. Not counted, and
-            // that is a known under-count rather than a claim of zero.
+            // that remains a known under-count rather than a claim of zero.
             _ => false,
         }
+    }
+
+    /// The paint colour the pipeline already resolved, as RGB in `0..=1`.
+    ///
+    /// Exists so [`Self::overprint_would_change`] can ask what a non-CMYK
+    /// source converts to WITHOUT duplicating the conversion — the same
+    /// number `paint_overprint` will hand to `cmyk_group_rules` a moment
+    /// later, by the same route.
+    fn resolved_paint_rgb(&self, stroking: bool) -> (f32, f32, f32) {
+        let c = if stroking {
+            self.gs.current.stroke_color
+        } else {
+            self.gs.current.fill_color
+        };
+        (c.r, c.g, c.b)
     }
 
     /// Build the soft mask a `gs` `/SMask` dictionary describes
@@ -5181,7 +5259,7 @@ impl Interpreter<'_> {
         if let Some(cmyk) = space.to_cmyk(comps, &mut scratch) {
             return Some(cmyk);
         }
-        let kind = crate::overprint::classify(space, false)?;
+        let kind = crate::overprint::classify(space, false, self.policy.overprint_zero_tint_scope)?;
         // ★★ THE SPOT-ONLY FALL-THROUGH, AND WITHOUT IT A SPOT COLOUR PAINTS
         // NOTHING AT ALL ON A SUBTRACTIVE PAGE.
         //
@@ -5283,7 +5361,8 @@ impl Interpreter<'_> {
         let (space, comps) = resolved
             .as_ref()
             .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
-        let Some(kind) = overprint::classify(space, false) else {
+        let Some(kind) = overprint::classify(space, false, self.policy.overprint_zero_tint_scope)
+        else {
             return false;
         };
 
