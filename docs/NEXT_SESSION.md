@@ -82,6 +82,60 @@ stays correct either way; this fixes the surround it was hiding behind.
 
 `Pass 142.0` remains **de-prioritised, not closed**, in *Backlog*.
 
+### ★ Two things measured while scoping `143.0`, before any code was written
+
+**1. The filed scoping is CORRECT — I checked and it survived.** The spec RAG
+confirms §8.6.5.7's implicit-conversion clause covers **CIE-based** spaces
+only, so `DeviceGray` is genuinely outside `OPM 1`'s literal scope and pdfce's
+reading is defensible. Acrobat's grey→K-only-then-`OPM 1` reading is the other
+defensible one. **Ship both, default to Acrobat's**, exactly as filed. The
+spot backdrop's ink is *already in the four CMYK planes* by paint time, so
+preserving it IS expressible with the four-component rules — no new plane
+needed for `143.0`.
+
+**2. A SEPARATE finding, and it is not what `143.0` is about — do not
+conflate them.** Table 149's **entire spot-component row family is
+implemented, tested, documented and UNREACHABLE**:
+
+- `overprint::compatible_overprint` has **zero callers outside its own
+  module** — the renderer only ever calls `cmyk_group_rules`, which returns
+  **four** rules;
+- `Component::Spot` is **only ever matched, never constructed** outside tests;
+- `CmykBuffer` has exactly **four** colorant planes, and its own module
+  comment says so: *"the next buffer (spot planes) is runtime-N"*.
+
+So the rule that would preserve a **named** spot component under a process
+paint (`(OtherProcess, Spot) → Backdrop`) is correct and can never fire.
+That is `R151`'s shape at the scale of a table row family, and it belongs to
+the **`Pass 97.x` CMYK+N compositor**, not to `143.0`. Worth its own Backlog
+item; the librarian has it.
+
+★ I nearly filed (2) as a *correction to `143.0`'s scoping*, which would have
+been wrong — the spot ink being pre-converted into the four planes is exactly
+why the filed fix works. Stated here as two findings because they are two.
+
+**3. THE OPEN ACCEPTANCE CRITERION IS ANSWERED BY MEASUREMENT — scope the
+setting to `DeviceGray` ONLY.** The entry asked *"whether the conversion
+applies to `DeviceGray` only or to every non-`DeviceCMYK` process space
+`classify` currently calls `OtherProcess`"*. Measured over the 53-file
+conformance corpus (set `PDFCE_SUITE_DIR`; the private map names the
+directory): of the sixteen patches combining a `Separation`/`DeviceN` with
+`/OP true`, **not one carries a `DeviceRGB` fill** — every count is **0**.
+
+⇒ There is **no measured Acrobat behaviour** for RGB-over-spot under
+overprint, so widening the setting to cover it would be an **unmeasured
+parity claim**. `DeviceGray` is the only non-CMYK process space the corpus
+puts in this position, and it is the one Acrobat was measured on.
+
+★★ **And the corpus supplies its own control**, which is the second
+acceptance criterion and a better one than anything I would have invented:
+**`PCS2_031`** is a grey **IMAGE** overprint, where §8.6.7's `OPM-3` says
+`OPM 1` **shall not** apply. So the setting must move the fill patch —
+**`PCS2_030`**, the one the entry measured at 84,120,34 against pdfce's
+127,127,127 — and must **NOT** move the image one. `classify` already takes
+`in_image_sample`, so the distinction is expressible; **a fix that moves both
+is over-broad, and the corpus says so without anyone having to notice.**
+
 ---
 
 ## §C — WHAT SHIPPED, AND THE TWO NUMBERS WORTH CARRYING

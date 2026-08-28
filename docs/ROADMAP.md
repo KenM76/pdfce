@@ -90367,6 +90367,110 @@ to every non-`DeviceCMYK` process space `classify` currently calls
 `OtherProcess`; and whether `pdfce-cli` gets a flag or only the settings file
 (rule 11 says a subcommand surface ships with the feature).
 
+#### ★★ AMENDMENT 2026-08-28 (301st filing) — **THE SCOPING ABOVE IS CONFIRMED CORRECT AGAINST THE SPEC RAG, AND `Pass 143.0` NEEDS NO NEW COLORANT PLANE**
+
+**Filed BEFORE the work rather than after it, deliberately.** The engineer
+checked this entry against the spec corpus while scoping the Pass and **wrote
+no code**; nothing shipped, so there is no commit to cite. Recorded here so the
+next session does not re-derive it.
+
+**(1) The escape hatch in §8.6.7 covers CIE-BASED spaces only — CONFIRMED.**
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.5.7.md` is titled
+**"Implicit Conversion of CIE-Based Colour Spaces"** (frontmatter `clause:`
+line, read here). §8.6.7's *"or is implicitly converted to `DeviceCMYK`; see
+8.6.5.7"* therefore reaches **CIE-based spaces and nothing else**.
+`DeviceGray` is a **device** space, so it is genuinely outside `OPM 1`'s
+literal scope ⇒ **pdfce's current reading is defensible, exactly as filed**,
+and Acrobat's grey→K-only-then-`OPM 1` reading is the other defensible one.
+**The filed shape — an ambiguity setting defaulting to Acrobat's behaviour
+(`R169`) — stands unchanged.** This amendment adds no scope and removes none.
+
+**(2) ★ WHY THE FIX WORKS AT ALL, which the entry did not state and which a
+future reader will need before reading the item immediately below.** The spot
+backdrop's ink is **already in the four CMYK planes by paint time** — a
+`Separation` paint goes through its tint transform into those planes — so
+*"preserve the spot backdrop"* is **expressible with the four-component rules
+alone**. ⇒ **`Pass 143.0` requires NO new colorant plane and is NOT blocked on
+the n-channel compositor.**
+
+**★ That sentence is load-bearing because of what was measured in the same
+sitting.** The Backlog item directly below reports that Table 149's *named
+spot component* row family is unreachable, and it would be easy — and wrong —
+to read that as *"the real problem is that there is no spot plane"* and rescope
+`143.0` as blocked. It is not. **Two true findings, one of which explains why
+the other is not a blocker on the first.**
+
+---
+
+### Table 149's SPOT-COMPONENT ROW FAMILY is implemented, tested, documented and UNREACHABLE — an `R151` instance at the scale of a ROW FAMILY, and it belongs to `Pass 97.x` (no Pass ID minted — filed 2026-08-28, 301st filing)
+
+**Nothing is wrong with the code. There is no caller and there is no plane.**
+Filed as a **dependent of the `Pass 97.x` CMYK+N compositor family** (see the
+*Pass 97.0 / 97.1 / 97.2 — THE COMPOSITOR* entry below), not as free-standing:
+runtime-N colorant planes are its prerequisite and it cannot be built before
+them.
+
+**Provenance.** Measured by the engineer while scoping `Pass 143.0`, **before
+any code was written**, and filed before the work rather than after it.
+**Reported by no tool and by no person.** ⇒ **Not a defect report** — every
+line of the affected code is correct against Table 149.
+
+**The measurement, three independent greps, each with the command that produced
+it so the next reader can re-run it. All three were re-run by this role at
+filing time and all three reproduce.**
+
+| # | claim | command (run here) | result |
+|---|---|---|---|
+| 1 | `overprint::compatible_overprint` has **zero callers outside its own module** | `grep -rn "compatible_overprint" crates/ tools/` | Only `crates/pdfce-render/src/overprint.rs` — its own definition, its doc examples, its delegation to `compatible_overprint_cmyk`, and `#[cfg(test)]` uses. **Every non-source hit is a build artefact** (`tools/render-profile/target/**`, `.rlib`/`.rmeta`/`.pdb`) |
+| 2 | the renderer's **only** entry point is `cmyk_group_rules`, which returns **four** rules | `grep -rn "cmyk_group_rules" crates/` | **Three call sites, all in `crates/pdfce-render/src/interpret.rs` — `4540`, `5327`, `6895`.** Signature at `overprint.rs:712` returns `[ComponentRule; 4]` — **the process components only** |
+| 3 | `Component::Spot` is **only ever MATCHED, never CONSTRUCTED**, outside tests | `grep -rn "Component::Spot" crates/` | **Three hits: two non-test `match` arms** (`overprint.rs:402`, `:424`) **and one constructor at `:1107`, which is inside `#[cfg(test)] mod tests` (opens at `:1101`)** ⇒ **2 non-test occurrences, both matches, zero constructions** |
+| 4 | `CmykBuffer` carries exactly **four** colorant planes | `grep -n "planes: \[Vec<Chan>; 4\]" crates/pdfce-render/src/cmyk_buffer.rs` | `cmyk_buffer.rs:341`, `planes: [Vec<Chan>; 4]`, doc-commented *"The four colorant planes, `[C, M, Y, K]`"*. That module's own header already says the successor is *"the next buffer (spot planes) is runtime-N"* |
+
+**⇒ What is unreachable.** The rule that preserves a **named spot component
+under a process paint** —
+`(SourceKind::DeviceCmykDirect | SourceKind::OtherProcess, Component::Spot(_))`
+→ `ComponentRule::Backdrop` when `op` — is **correct, doc-commented, unit-tested
+against Table 149, and can never fire in a render.** So is the
+`(SeparationOrDeviceN, Spot)` *"named in source space"* test, which carries the
+`/All` §8.6.6.4 subtlety (`/All` names every colorant by definition, so it
+paints every channel).
+
+**Why this is `R151`'s shape and not merely a dead branch.** `R151` names a
+**shipped capability with no shell reaching it**. This is the same shape at a
+**larger unit**: not one `pub fn` with no caller, but **an entire row family of
+a normative table**, complete with its own tests, that no execution path can
+enter. **The tests pass, so nothing goes red; the doc comments describe live
+behaviour, so nothing reads stale.** A correct rule with no caller and a
+working rule look **identical** from every angle except the call graph — which
+is exactly why this needed a `grep` rather than a reading.
+
+**Acceptance criteria — the engineer's to confirm at scoping time, not settled
+here** (two are offered, both from the finding itself):
+
+1. **Blocked on a compositor with runtime-N colorant planes.** Do not attempt
+   it against the four-plane buffer; there is no spot backdrop in there to
+   preserve. Sequence it behind the n-channel buffer (`Pass 85.5`'s remainder,
+   `Pass 97.2`'s collapse), and note the **already-measured negative result**
+   on that row: the cheap page-sized spot-ink multiplier plate was built,
+   ablated and reverted — **−1 trap of 17, 0 patches of 51 flipped, one patch
+   REGRESSED**. Do not re-attempt the shortcut.
+2. **★ The FIRST acceptance criterion is a test that FAILS BEFORE THE CALL SITE
+   EXISTS.** That is `R151`'s whole lesson restated for this instance: the
+   existing unit tests are green today, against a rule nothing can reach, so
+   **green tests are not evidence the feature works** here. Whatever asserts
+   this row family must be able to distinguish *reached and correct* from
+   *never reached* — a behaviour assertion through the renderer, or a source
+   scan of the kind `Pass 148.0` shipped (`tests/route_enumeration.rs`), not
+   another direct call to the pure function.
+
+**What this does NOT change.** No `FEATURES.md` box moves in either direction:
+a latent unreachable rule is **not a capability**, and it was never claimed as
+one — the *Per-colorant (n-channel) compositing buffer* row already says pdfce
+*"has four process planes and no spot planes, so there is no spot backdrop to
+preserve."* That row is amended by this filing with one clause of **scoping**
+information (the rule half already exists; the work is the planes and the
+caller), and **no box is ticked**.
+
 ---
 
 ### `--in-place` owed on the other `pdfce-cli` editing subcommands (no Pass ID minted — filed 2026-08-27, 279th filing)
@@ -91880,6 +91984,19 @@ added. See that section below.
   free** (`SESSION_LOG.md`, hundred-and-sixty-seventh and
   hundred-and-sixty-eighth filings' own "For next session" ledgers, both
   independently naming 97 as next free before this filing claims it).
+
+  > **★ A DEPENDENT ITEM WAS FILED AGAINST THIS FAMILY 2026-08-28 (301st
+  > filing):** *"Table 149's SPOT-COMPONENT ROW FAMILY is implemented,
+  > tested, documented and UNREACHABLE"* — its own entry sits near the top
+  > of *Backlog*, beside `Pass 143.0`. **The Table 149 rule half already
+  > exists, is doc-commented and is unit-tested**; what this family owes it
+  > is the **runtime-N colorant planes and a caller**, because
+  > `cmyk_group_rules` returns four `ComponentRule`s (`overprint.rs:712`)
+  > and `CmykBuffer` holds four planes (`cmyk_buffer.rs:341`). Read it
+  > before scoping `97.2`, so the spot work is not scoped as though the
+  > rule needed writing — and note its second acceptance criterion, which
+  > is that **the first test written must FAIL before the call site
+  > exists** (`R151`).
 
   > **★★★ AMENDED 2026-08-21 (two-hundred-and-sixteenth filing) —
   > `PASS 97.0` HAS SHIPPED (`7160819`/`9b49ca0`/`86a7b70`, four

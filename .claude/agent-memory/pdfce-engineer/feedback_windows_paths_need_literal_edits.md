@@ -25,6 +25,28 @@ and `\a` are all real escapes, and this project's own documents name
 `D:\builds`, `D:\temp`, `D:\Dev\...`, `\fixtures`, `\target`. Any of those
 after a backslash is a live grenade in a non-raw string.
 
+**RECURRED 2026-08-28, in the SAME FILE, with `\t`.** Writing a corpus path
+into `docs/NEXT_SESSION.md` through a Python heredoc turned `Dev` + backslash +
+`temp` into `Dev` + a literal TAB + `emp`. Identical mechanism, different
+escape, seventeen days later — and again in the one document whose job is to
+orient the next session.
+
+Two things this instance adds:
+
+- **The memory did not prevent it.** I had read this file, and the failure
+  still happened, because at the moment of writing I was thinking about the
+  *content* (a scope decision) and not about the *transport*. The rule is
+  known and is not self-applying.
+- **★ WHAT ACTUALLY CAUGHT IT WAS A DIFFERENT GATE ENTIRELY.**
+  `check-suite-name-absent.py` went red on the same edit — because the same
+  paragraph had named private corpus FILES — and re-reading the block to fix
+  *that* is what surfaced the tab. **A near-miss found as a side effect of an
+  unrelated gate is a near-miss, not a save.** Without the filename mistake,
+  the tab would have shipped exactly as the 0x08 did.
+
+⇒ The durable form of this rule is not "remember"; it is **do not use a
+heredoc for a path at all.** There is no case where `Edit` is worse.
+
 **How to apply:**
 - Paths → `Edit`/`Write`, always. They take literals; nothing is interpreted.
 - If a heredoc is genuinely necessary, use a **raw** string (`r'''...'''`) or

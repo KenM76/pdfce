@@ -1385,8 +1385,36 @@ D:\Dev\pdfce\
                                    Table 149's SPOT row preserves the
                                    backdrop in both modes, and a
                                    flattened-RGB backdrop cannot say
-                                   whether it was spot or process. **The
-                                   cheap approximation was BUILT AND
+                                   whether it was spot or process.
+                                   **★ AMENDED 2026-08-28 (301st
+                                   filing) — the CONCLUSION stands and
+                                   the stated MECHANISM has gone stale.**
+                                   Since `Pass 97.1e` a subtractive page
+                                   composites in four `f32` colorant
+                                   planes, so the backdrop is no longer
+                                   "flattened RGB" — and it still cannot
+                                   say whether the ink was spot or
+                                   process, because a `Separation` paint
+                                   goes through its TINT TRANSFORM into
+                                   those same four planes. Read the
+                                   sentence above as *a four-PROCESS-plane
+                                   backdrop cannot say*. **Two further
+                                   facts, measured 2026-08-28 and filed
+                                   to *Backlog* before any code:** Table
+                                   149's spot-component RULES are already
+                                   written, doc-commented and unit-tested
+                                   but **UNREACHABLE** (`Component::Spot`
+                                   is only ever matched, never
+                                   constructed outside tests;
+                                   `cmyk_group_rules` returns four rules;
+                                   `CmykBuffer` holds four planes) — so
+                                   the work here is **the planes and a
+                                   caller, not the rules**; and
+                                   `Pass 143.0` (`DeviceGray` over a spot
+                                   backdrop) is **NOT blocked on any of
+                                   it**, because the spot ink is already
+                                   in the four planes by paint time.
+                                   **The cheap approximation was BUILT AND
                                    MEASURED: a page-sized spot-ink
                                    multiplier plate moved 17 traps to 16,
                                    flipped 0 patches of 51, regressed one

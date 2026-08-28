@@ -71297,3 +71297,232 @@ for.
   as a decision, not an omission.**
 
 ---
+
+## 2026-08-28 (301st filing) — **NOTHING SHIPPED, AND THAT IS THE POINT: TWO MEASUREMENTS TAKEN WHILE SCOPING `Pass 143.0`, FILED *BEFORE* THE WORK RATHER THAN AFTER IT**; ★★★★★ **finding 1 — `143.0`'s FILED SCOPING IS CONFIRMED CORRECT against the spec RAG (§8.6.5.7 is titled *"Implicit Conversion of CIE-Based Colour Spaces"*, so §8.6.7's escape hatch cannot reach a DEVICE space) and it needs NO NEW COLORANT PLANE**; ★★★★ **finding 2 — Table 149's ENTIRE SPOT-COMPONENT ROW FAMILY is implemented, doc-commented, unit-tested and UNREACHABLE**: `Component::Spot` is only ever MATCHED, never CONSTRUCTED outside tests, `cmyk_group_rules` returns FOUR rules, `CmykBuffer` holds FOUR planes — `R151`'s shape at the scale of a **table ROW FAMILY**, filed to *Backlog* as a dependent of `Pass 97.x`; ★★★ **the process note the engineer asked to be recorded AGAINST HIM: he nearly filed finding 2 as a CORRECTION to finding 1 and it would have been wrong in the confident direction** — *a measurement that surprises you is not automatically a correction to the thing you were measuring*; ★★ **hard-rule-11 sweep found ONE survivor in a LIVING body section — `ARCHITECTURE.md` §3's *"a flattened-RGB backdrop cannot say whether it was spot or process"*, whose CONCLUSION stands and whose MECHANISM went stale when the four-plane buffer shipped — amended in place**; ★ **`origin/main` is `36e7b66` = `HEAD`, so the two-Pass unpushed window the 300th filing recorded is CLOSED** (`git rev-parse`, run here)
+
+**Scope of this filing, stated first so nothing below is over-read.** **No Pass
+shipped. No commit to cite.** The engineer wrote **no code** for either finding;
+both were produced by reading and grepping while scoping `Pass 143.0`, and the
+deliberate choice was to **file them before starting the work** rather than
+after. If a later filing needs a hash for this record, it is the commit that
+carries these edits and the engineer can supply it — **none is invented here**
+(hard rule 8).
+
+**Channel check ran FIRST** (`R203`(d)), `ls -lt` over both directories, and
+every file newer than the 300th filing's reading was opened.
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` holds **one** newer file —
+`note_the_same_defect_was_live_in_preview_style_resolution_too.md`, 00:58,
+**outbound**, pdfce's own note telling the consuming project that `Pass 148.0`
+fixed the second instance of the defect it reported and that the **unpinned
+empty `find` is now a refusal, which is a behaviour change for any call site it
+has.** Nothing inbound, nothing owed. The `iccce_FeatureRequests` sibling's
+newest file is 2026-08-27 14:22 and predates the 300th filing's check —
+**unchanged**.
+
+---
+
+### ★★★★★ FINDING 1 — `Pass 143.0`'s SCOPING IS CONFIRMED CORRECT, AND THE CONFIRMATION IS FILED SO NOBODY RE-DERIVES IT
+
+The engineer checked the filed entry against the spec corpus **before writing
+anything**, and it survived unchanged.
+
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.5.7.md` is titled
+**"Implicit Conversion of CIE-Based Colour Spaces"** (frontmatter `clause:`
+line, read here at filing time). §8.6.7's escape hatch — *"or is implicitly
+converted to `DeviceCMYK`; see 8.6.5.7"* — therefore covers **CIE-based spaces
+and nothing else.** `DeviceGray` is a **device** space ⇒ it is genuinely
+outside `OPM 1`'s literal scope ⇒ **pdfce's current reading is defensible,
+exactly as the Backlog entry says**, and Acrobat's grey→K-only-then-`OPM 1`
+reading is the other defensible one.
+
+**⇒ The filed shape stands unchanged:** an **ambiguity setting defaulting to
+Acrobat's behaviour** (`R169`; Ken 2026-08-08 *"make spec ambiguity a
+setting"*). This filing adds no scope to `143.0` and removes none.
+
+**★ And the sentence the entry did not carry, which is the one that matters
+next:** the spot backdrop's ink is **already in the four CMYK planes by paint
+time** — a `Separation` paint goes through its **tint transform** into those
+planes — so *"preserve the spot backdrop"* is **expressible with the
+four-component rules alone**. **`Pass 143.0` needs NO new colorant plane and is
+NOT blocked on the n-channel compositor.**
+
+---
+
+### ★★★★ FINDING 2 — A CORRECT, TESTED, DOCUMENTED TABLE-149 ROW FAMILY THAT CAN NEVER FIRE
+
+**Measured, not inferred.** Three greps, each stated with its command; **all
+three were re-run by this role at filing time and all three reproduce.**
+
+| # | claim | command | result |
+|---|---|---|---|
+| 1 | `overprint::compatible_overprint` has **zero callers outside `overprint.rs`** | `grep -rn "compatible_overprint" crates/ tools/` | only `crates/pdfce-render/src/overprint.rs` — definition, doc examples, its delegation to `compatible_overprint_cmyk`, `#[cfg(test)]` uses. **Every other hit is a build artefact** under `tools/render-profile/target/` (`.rlib`/`.rmeta`/`.pdb`) |
+| 2 | the renderer's only entry point is `cmyk_group_rules`, returning **four** rules | `grep -rn "cmyk_group_rules" crates/` | **three call sites, all `crates/pdfce-render/src/interpret.rs` — `4540`, `5327`, `6895`**; signature `overprint.rs:712` → `[ComponentRule; 4]`, the **process components only** |
+| 3 | `Component::Spot` is only ever **matched**, never **constructed**, outside tests | `grep -rn "Component::Spot" crates/` | three hits — **two non-test `match` arms** (`overprint.rs:402`, `:424`) and one constructor at `:1107`, **inside `#[cfg(test)] mod tests`, which opens at `:1101`** ⇒ **2 non-test occurrences, 0 constructions** |
+| 4 | `CmykBuffer` carries exactly **four** colorant planes | `grep -n "planes: \[Vec<Chan>; 4\]" crates/pdfce-render/src/cmyk_buffer.rs` | `cmyk_buffer.rs:341`, doc-commented *"The four colorant planes, `[C, M, Y, K]`"*; that module's own header already names its successor: *"the next buffer (spot planes) is runtime-N"* |
+
+**⇒ The rule that preserves a NAMED spot component under a process paint** —
+`(SourceKind::DeviceCmykDirect | SourceKind::OtherProcess, Component::Spot(_))`
+→ `ComponentRule::Backdrop` when `op` — **is correct, doc-commented,
+unit-tested against Table 149, and can never fire in a render.** So is the
+`(SeparationOrDeviceN, Spot)` *"named in source space"* arm, which carries the
+`/All` §8.6.6.4 subtlety.
+
+**Why this is `R151` and not merely a dead branch.** `R151` names a shipped
+capability no shell reaches. This is the same shape at a **larger unit**: not
+one `pub fn` with no caller but **an entire row family of a normative table**,
+with its own tests. **The tests pass, so nothing goes red; the doc comments
+describe live behaviour, so nothing reads stale.** A correct rule with no
+caller and a working rule are **indistinguishable from every angle except the
+call graph** — which is why this needed a `grep` and not a reading.
+
+**Filed to *Backlog* with no Pass ID**, as a **dependent of the `Pass 97.x`
+CMYK+N compositor family** — runtime-N colorant planes are its prerequisite. A
+cross-pointer was added to the `Pass 97.0 / 97.1 / 97.2` compositor entry so
+the spot work is not later scoped as though the **rules** needed writing.
+
+**Two acceptance criteria offered, both the engineer's to confirm:** (1) it is
+**blocked** on the n-channel buffer, and that row already carries a **measured
+negative result** — the cheap spot-ink multiplier plate was built, ablated and
+reverted (**−1 trap of 17, 0 patches of 51 flipped, one patch REGRESSED**); do
+not re-attempt the shortcut. (2) **★ the first test written must FAIL BEFORE
+THE CALL SITE EXISTS** — the existing unit tests are green today against a rule
+nothing can reach, so **green tests are not evidence the feature works** here.
+
+---
+
+### ★★★ THE PROCESS NOTE — RECORDED AGAINST THE ENGINEER AT HIS OWN REQUEST, AND KEPT AS A NOTE RATHER THAN MINTED AS A RULE
+
+He very nearly filed finding 2 as a **correction to `Pass 143.0`'s scoping** —
+*"the filed cause is incomplete; the real problem is that there is no spot
+plane."* **That would have been wrong, and wrong in the confident direction**,
+which is the expensive kind: a correction arrives labelled *verified* and is
+believed harder than what it replaced (hard rule 10's corollary). He caught it
+by asking **what the four planes actually contain at paint time** instead of
+stopping at *"the spot rule is unreachable, therefore the spot is unhandled."*
+
+**⇒ A measurement that surprises you is not automatically a correction to the
+thing you were measuring.** It may be a **second, unrelated fact that happens
+to touch the same module.** Here, the two findings are not even in tension —
+**one explains why the other is not a blocker on the first.**
+
+**Disposition: NOTE, not a standing rule, and the decline is argued.** Three
+reasons. **(a) It has n=1 in this project** — the near-miss did not land, and a
+rule minted on an averted error has no falsifier to point at. **(b) The
+existing rules already reach the failure it would have caused, from both
+sides**: hard rule 10's corollary makes *a correction a claim* with the same
+sourcing bar as what it corrects, and `R219`(e) requires an enumeration's
+answers to be **measured rather than recalled** — the very act that caught it.
+**(c) What is genuinely new here is a habit of INFERENCE, not of procedure**,
+and this project has already paid for minting rules that duplicate a live
+carrier (`R221`'s own subject, and the 299th filing's declined mint). **Revisit
+trigger, stated so this decline is checkable:** a **second** instance in which a
+scoping measurement is written up as a correction to its own subject and turns
+out to be an independent fact ⇒ mint it, with both instances named. **Ceiling
+unchanged at `R224`; next free `R225`.**
+
+---
+
+### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string, and ONE survivor was in a LIVING section
+
+This filing records that a capability's **reachability** is not what the
+documents imply, which is a meaning-change event. Swept `docs/`, `crates/` and
+`docs/core-api/` for the claim *"pdfce cannot tell a spot backdrop from a
+process one, because it flattens spots into RGB."*
+
+| # | where | verdict |
+|---|---|---|
+| **1** | **`ARCHITECTURE.md` §3** (the workspace-layout block's overprint cell) — *"a flattened-RGB backdrop cannot say whether it was spot or process"* | **★ SURVIVOR, and it is in a BODY section — the living-truth tier, not the audit trail. AMENDED IN PLACE, old wording kept legible.** The **conclusion stands**; the **mechanism went stale** when `Pass 97.1e` shipped the four-plane buffer. A subtractive page no longer composites in flattened RGB — and it **still** cannot distinguish spot from process, because a `Separation` paint goes through its **tint transform** into those same four planes. Read it as *a four-PROCESS-plane backdrop cannot say*. The amendment also carries finding 2 and the *"`143.0` is not blocked on it"* clause |
+| 2 | `ARCHITECTURE.md` decision **069**'s record; `ROADMAP.md`'s `85.5` row and its `Shipped` history; a 2026-08-18 `SESSION_LOG.md` entry | **NOT EDITED, deliberately — append-only tiers** (hard rule 1). Each was **correct at its own commit**; the four-plane buffer post-dates all of them. Reported here rather than silently left, so the next reader knows the phrase recurs and knows which copy is the live one |
+| 3 | `crates/pdfce-render/src/overprint.rs` doc comments on the spot arms (`:402`, `:424`) and the module header | **CLEAN.** They describe **what Table 149 says**, never **that the arms are reached**. No claim about callers ⇒ no `R223` exposure |
+| 4 | `FEATURES.md`'s *Overprint SIMULATION* row and its *Per-colorant (n-channel)* row | **ALREADY TRUE** — *"Spot colorants are still flattened, so Table 149's SPOT row is not honoured"* and *"pdfce has four process planes and no spot planes, so there is no spot backdrop to preserve."* The n-channel row is **amended with one clause of SCOPING information** (the rules exist; the work is the planes and a caller). **No box ticked** |
+
+**★ Note the shape of survivor 1, because it is the one this project keeps
+re-learning and hard rule 8's own amendment is an instance of it: an obligation
+stayed correct while its stated REASON went stale, and the stale reason was
+being carried in a living document as though it were still the evidence.** A
+reader scoping the spot work today would have read *"flattens spots into RGB"*
+and mis-scoped the fix as a representation change that had **already shipped**.
+
+---
+
+**Decisions made this session:**
+
+- **None.** No architectural decision was taken; both findings are
+  measurements. **Decision ceiling unchanged at `094`; next free `095`.**
+  Recorded explicitly so a later index check reads this as a decision, not an
+  omission.
+
+**Findings + decisions:**
+
+- **`Pass 143.0`'s scoping is CONFIRMED**, sourced to
+  `iso32000__s__8.6.5.7.md`'s own title. **No new colorant plane needed.**
+- **Table 149's spot-component row family is implemented, tested, documented
+  and unreachable.** `R151`'s shape at row-family scale. Filed to *Backlog*,
+  no Pass ID, dependent on `Pass 97.x`.
+- **The two are independent**, and the second is **not** a blocker on the
+  first. Filing them as one correction would have been the error.
+- **`ARCHITECTURE.md` §3's spot/process mechanism sentence was stale** and is
+  amended; three append-only copies are reported and deliberately untouched.
+
+**Still in flight:**
+
+- **`Pass 143.0` remains the pick-up item**, now with its scoping confirmed and
+  one blocker explicitly ruled out. Nothing about it is started.
+- **`Pass 142.0`** remains **de-prioritised, not closed**, in *Backlog*.
+- The new spot-row Backlog item is **blocked** until the n-channel buffer
+  exists; it is not work anyone can start now.
+
+**For next session:**
+
+- Start `Pass 143.0`. Read its *Backlog* entry **including this filing's
+  amendment** before scoping — the three acceptance criteria it owes are
+  unchanged (the setting's name and enum values; `DeviceGray` only vs every
+  non-`DeviceCMYK` process space `classify` calls `OtherProcess`; whether
+  `pdfce-cli` gets a flag), and the amendment adds that **no plane work is in
+  scope**.
+- **Do not conflate the spot-row item with `143.0`.** They sit adjacent in
+  *Backlog* precisely so the pairing is visible; the amendment says in as many
+  words why the second is not a blocker on the first.
+
+**Ledger** (`python tools/check-ledger-numbers.py`, run **before** any edit and
+**again after**):
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | highest **`148.0`**, headed | **unchanged — `148.0`; next free family `149`.** **No Pass shipped, and no Pass ID was minted**: the new Backlog item is filed **without** an ID, as a dependent of `Pass 97.x` |
+| decisions | **094** | **094 — unchanged.** Next free **095** |
+| standing rules | **`R224`** | **`R224` — unchanged. One candidate DECLINED with three reasons and a revisit trigger** (the process note above). Next free **`R225`** |
+| filings | **300** | **301**. Next free **302** |
+| `ROADMAP.md` changes | — | **1 Backlog item ADDED (no Pass ID)**; **1 amendment** to `Pass 143.0`'s entry; **1 cross-pointer** into the `Pass 97.0 / 97.1 / 97.2` compositor entry |
+| `FEATURES.md` rows changed | — | **2 edited, 0 added, 0 boxes ticked** — the *Per-colorant (n-channel)* row gains the "rules exist, planes and caller do not" clause; the `Pass 143.0` row gains the confirmed-scoping and no-new-plane clause. **A latent unreachable rule is not a capability change in either direction**, which is why nothing moved |
+| `ARCHITECTURE.md` changes | — | **1 body-section amendment** (§3, survivor 1 above). **No decision-log entry** |
+| commits cited | — | **NONE, and none invented.** Nothing shipped |
+| `Component::Spot` constructions outside tests | — | **0 of 3 occurrences** (`grep -rn "Component::Spot" crates/`, run here) — 2 non-test `match` arms, 1 test constructor |
+| `cmyk_group_rules` call sites | — | **3, all in `interpret.rs`** (`4540`, `5327`, `6895`), each receiving **4 of a possible 4+N** `ComponentRule`s |
+| commits since newest bundle | **30** | **32** — newest bundle `pdfce-20260827-shutdown-a2b4e16-full.bundle`, 2026-08-27 12:04 (`ls -lt D:/Dev/pdfce-backups/`), `git rev-list --count a2b4e16..HEAD` = **32**. **A backup is now five filings overdue** |
+| `origin/main` | **`54a3e01`**, two Passes behind | **★ `36e7b66` = `HEAD`** (`git rev-parse origin/main`, run here) — **the unpushed window the 300th filing called the largest single-point-of-failure window in this file is CLOSED.** The **bundle** gap is not, and remains the engineer's act |
+
+Pre-edit run: *"Pass families with headings : up to 148 (highest ID 148.0) ·
+standing rules : R224 -> next free is R225 · decision records : 094 -> next free
+is 095 · SESSION_LOG filings : 300 -> next free is 301"*, and *"ledger-numbers:
+clean."* `python tools/check-commits-filed.py` pre-edit: **clean**, 626 code
+commits checked, 5 known-unfiled carried in the baseline — **so unlike the
+previous two filings this one does not discharge a red gate; it is a
+before-the-work filing, not an after-the-work one.**
+
+**RAG written this filing:**
+
+- **Nothing, and the decision is recorded rather than left as an omission.**
+  Finding 1 is a **spec reading**, which is `pdfce-spec-librarian`'s territory
+  and is **already in that corpus** — `iso32000__s__8.6.5.7.md`'s own title is
+  the whole finding; hard rule 6 forbids this role writing it into
+  `personal_rag/pdf`. Finding 2 is a **project-internal call-graph fact**, not a
+  PDF-domain quirk and not a Rust/egui ecosystem quirk — no real-world file
+  behaves any particular way here, and no future Rust project inherits it. The
+  **generalizable** half — *a correct rule with no caller is indistinguishable
+  from a working one, so the first test must fail before the call site exists* —
+  is `R151`, **already minted and already carried in `ROADMAP.md`**; writing it
+  to `D:/dev/rag/rust/` would be a second description of one rule, which is
+  `R221`'s subject.
+
+---
