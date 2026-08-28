@@ -4310,6 +4310,16 @@ enum Command {
         /// resolves on the page — if one does, the command REFUSES and names
         /// it, because synthesis is never an alternative to a real typeface
         /// (R90). Nothing is ever synthesized without this flag.
+        ///
+        /// "Resolves" means `--set-font` WOULD ACCEPT that face for THIS
+        /// RUN's characters — pdfce checks before it recommends, and the
+        /// refusal quotes the exact `--set-font` argument to retry with. It
+        /// used to check only that a `/BaseFont` contained a style word, and
+        /// on a page whose only Times-Bold could not encode the run that made
+        /// bold unreachable through either verb. If no face of the run's own
+        /// family can show the run, a usable face from ANOTHER family is
+        /// offered instead and the message says so outright. Ask
+        /// `font-preflight` first to know which of the three you will get.
         #[arg(long = "bold-synthetic")]
         bold_synthetic: bool,
         /// Apply SYNTHETIC italic: a 12-degree oblique shear premultiplied

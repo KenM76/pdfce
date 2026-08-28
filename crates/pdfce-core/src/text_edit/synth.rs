@@ -397,9 +397,38 @@ pub fn shear_into(tm: [f64; 6]) -> [f64; 6] {
 /// `Black`, `Heavy` and `Semibold`. The §9.6.4 subset tag (`ABCDEF+`) is
 /// irrelevant to the question and is tolerated by searching the whole string.
 ///
-/// This is deliberately a *heuristic about the name*, and it is used only in
-/// the direction where being wrong is safe: [`detect`] uses it to say "this
-/// looks synthesized", never to refuse an edit.
+/// # It is a heuristic, and it IS used to refuse an edit — read this before
+/// changing it
+///
+/// This doc comment used to say the opposite: *"it is used only in the
+/// direction where being wrong is safe: [`detect`] uses it to say 'this looks
+/// synthesized', never to refuse an edit."* **That was true when written and
+/// was falsified by a later caller** — `text_edit::format`'s synthesis gate,
+/// which refuses `set_synthetic` when a real styled face is available on the
+/// page and asks this function which faces claim the style. Nothing reported
+/// the drift, because `cargo doc` cannot check a claim about callers. The
+/// wording is kept here, struck, rather than quietly replaced: the failure
+/// mode is worth more than the correction.
+///
+/// The two call sites today, and what being wrong costs at each:
+///
+/// - [`detect`] — "this run looks synthesized". A wrong answer mislabels a
+///   report line. Safe, as the old wording said.
+/// - **`format::survey_page_fonts`**, feeding `format::gate_synthesis` — "is
+///   there a real bold face here to use instead?". A wrong answer here used
+///   to make bold **unreachable**: the gate named a face on the strength of
+///   its name alone, and `set_font` then refused it for encoding coverage.
+///   `Pass 144.0`.
+///
+/// What makes that second use safe now is **not** this function getting more
+/// accurate. It is that its answer is `AND`-ed with `set_font`'s own
+/// acceptance test before anything is refused or recommended (`R221`): a
+/// false positive from the name is filtered out by a face that cannot show
+/// the run, and a false negative costs a synthesis where a real face existed
+/// — the conservative direction, exactly as the old wording described.
+///
+/// **So: this may be made more or less eager without breaking the gate, but
+/// it must never become the SOLE evidence for a refusal again.**
 #[must_use]
 pub fn name_claims_bold(base_font: &str) -> bool {
     let n = base_font.to_ascii_lowercase();
@@ -407,7 +436,9 @@ pub fn name_claims_bold(base_font: &str) -> bool {
 }
 
 /// Whether a `/BaseFont` name claims an Italic or Oblique face. Same
-/// evidence and same caveats as [`name_claims_bold`].
+/// evidence and same caveats as [`name_claims_bold`] — **including its
+/// second call site, which refuses an edit.** Read that function's note
+/// before changing this one.
 #[must_use]
 pub fn name_claims_italic(base_font: &str) -> bool {
     let n = base_font.to_ascii_lowercase();

@@ -1223,12 +1223,44 @@ $ pdfce-cli format-text runs-two-explicit.pdf --find ALPHA       --bold-syntheti
       THEN stroke — §9.3.6 Table 106) with a stroke width of 0.22 …
 ```
 
-**★ `gate_synthesis` is the exact complement of `set_font`'s predicate.** It
-refuses synthesis **when a real face IS a page resource** — *"No font
-resources to search: nothing better exists, so the fallback is genuinely the
-only option. Proceed."* So between the two verbs, **every page is covered**:
-where a real Bold exists, `set_font` uses it and synthesis is refused; where
-none exists, synthesis applies and `set_font` refuses.
+**★ `gate_synthesis` refuses synthesis when a real face is available — where
+*available* means `set_font` would ACTUALLY ACCEPT it for this run.** Where a
+usable real Bold exists, `set_font` uses it and synthesis is refused, and the
+refusal quotes the exact selector to retry with; where none exists, synthesis
+applies.
+
+> #### ★★ CORRECTION, 2026-08-27 — this paragraph carried a false universal
+>
+> It used to end: ~~"So between the two verbs, **every page is covered**: where
+> a real Bold exists, `set_font` uses it and synthesis is refused; where none
+> exists, synthesis applies and `set_font` refuses."~~ **That was not true**,
+> and it was sent to `pdfceGUI` in that form.
+>
+> `gate_synthesis` decided *"a real face is available"* from two string tests
+> on `/BaseFont` — a family-stem comparison and a search for `bold`/`black`/
+> `heavy`/`semib` — and asked nothing about whether that face could show the
+> run's characters. On pdfce's own fixture
+> `fixtures/synthetic/textedit/format_family.pdf` it named `/F3`
+> (`Times-Bold`), whose `/Encoding /Differences` reassigns the code for `o`;
+> `--set-font Times-Bold` then refused for coverage, and `/F2` — a bold face on
+> the same page that **does** cover the run — was named by neither refusal.
+> **Both verbs refused. Bold was unreachable on that page** for anyone who did
+> not already know to try a resource pdfce never mentioned.
+>
+> Fixed in `Pass 144.0`: the gate now asks `set_font`'s own acceptance test
+> (`R221` — ask the accepting code, never restate its conditions), and offers a
+> usable face from another family when none of the run's own family can show
+> the run, saying so in the message. **`R90` is not weakened**: synthesis is
+> still a fallback for when no real face *resolves*; "resolves" simply now
+> means what a caller assumed it meant.
+>
+> Note the shape rather than only the fix. *"Every page is covered"* is a
+> claim quantified over all cases and verified on the cases that came to mind —
+> the same failure as *"no such verb exists"*, wearing the opposite sign
+> (`R220` clause (d)).
+>
+> **The guidance below — *"do not grey out a bold button"* — was and remains
+> TRUE**, and was deliberately not touched by this correction.
 
 `R90` is why it is never silent: synthesis is applied **only when asked for
 explicitly**, never as a preference, and the report says so in the operator's
@@ -1254,8 +1286,19 @@ For a UI this is worse than a run-level limit would be: the predicate is a
 property of the **page**, not of the selection, so the same button on
 identical-looking text behaves differently in two files. It is a **named
 refusal** (`FormatError::TargetFontMissing`), never a silent no-op, so a
-shell can drive its control from the error — but a pre-flight enumerating a
-page's font resources would be better, and none exists yet (`Pass 142.1`).
+shell can drive its control from the error — but driving a control from an
+error means offering it, having it pressed, and then apologising.
+
+**`Pass 142.1` shipped the pre-flight that removes that.**
+`EditSession::preview_font_resources(page_index, find, pinned_span)` answers,
+for one located run, which of the page's `/Font` resources `set_font` would
+accept — by calling the accepting code, not by describing it. Per entry it
+gives the **selector that reaches that resource** (the resource key, not the
+`/BaseFont`, when the page carries two subsets of one face — the common case),
+the acceptance verdict with `set_font`'s own refusal message verbatim, and
+whether a real Bold or Italic of that family **would be accepted**. See
+`02-editing-and-saving.md` §1 for the full contract. `pdfce-cli font-preflight`
+is the same answer from a shell.
 
 ### What is refused, and it is never a silent substitution
 

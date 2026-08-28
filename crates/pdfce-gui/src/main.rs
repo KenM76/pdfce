@@ -20566,6 +20566,7 @@ fn style_row_text(
     if let StyleOutcome::RealFaceResolves {
         real_font,
         resource,
+        ..
     } = combined
     {
         return Some((
@@ -20579,6 +20580,7 @@ fn style_row_text(
         Some(StyleOutcome::RealFaceResolves {
             real_font,
             resource,
+            ..
         }) => Some((real_font.as_str(), resource.as_str())),
         _ => None,
     };
@@ -20586,6 +20588,7 @@ fn style_row_text(
         Some(StyleOutcome::RealFaceResolves {
             real_font,
             resource,
+            ..
         }) => Some((real_font.as_str(), resource.as_str())),
         _ => None,
     };
@@ -25749,17 +25752,38 @@ mod tests {
         assert!(caption.contains("Italic"), "{caption}");
     }
 
-    /// The real-face case: `format_family.pdf` carries a real `Times-Bold`
-    /// beside its `Times-Roman` run, so the caption must name that face AND
-    /// say the Apply will be refused — it must NOT promise a font switch,
-    /// because pdfce does not perform one.
+    /// The real-face case: `format_family.pdf` carries a bold face that can
+    /// show the run, so the caption must name **that** face AND say the Apply
+    /// will be refused — it must NOT promise a font switch, because pdfce
+    /// does not perform one.
+    ///
+    /// ## ★ This test asserted `Times-Bold` until `Pass 144.0`, and that was
+    /// the defect
+    ///
+    /// The page carries two bold-named faces: `/F3 Times-Bold`, which family-
+    /// matches the `Times-Roman` run but whose `/Encoding /Differences`
+    /// reassigns the code for `o` and so **cannot show `"hello world"`**, and
+    /// `/F2 Calibri-Bold`, which can. The gate used to pick by name and
+    /// therefore named `/F3` — after which `set_font Times-Bold` refused for
+    /// coverage and the operator had no route to bold at all. This test
+    /// passed throughout, because it asserted the name the gate produced
+    /// rather than that the named face worked.
+    ///
+    /// So the expectation moves to `Calibri-Bold`, and the assertion that
+    /// **the named face is one `set_font` accepts** lives in
+    /// `pdfce-core/tests/synthesis_gate.rs`, where it can be stated as a
+    /// property rather than as a string.
     #[test]
     fn the_style_caption_names_the_real_face_and_does_not_promise_a_switch() {
         use pdfce_core::text_edit::StyleSynthesis;
         let res = preview_on_fixture("format_family.pdf", "hello world", StyleSynthesis::Bold);
         let (caption, refusal) = style_row_text(&res).expect("a style was requested");
         assert!(refusal.is_none(), "core refuses this one, not the GUI");
-        assert!(caption.contains("Times-Bold"), "{caption}");
+        assert!(
+            caption.contains("Calibri-Bold"),
+            "the face named is the one that can SHOW the run, not the one whose \
+             name merely says Bold: {caption}"
+        );
         assert!(caption.contains("REFUSED"), "{caption}");
         assert!(
             caption.contains("Font control"),
@@ -25767,8 +25791,9 @@ mod tests {
         );
     }
 
-    /// **The mixed case.** The page has a real `Times-Bold` but no
-    /// `Times-Italic`. Core's gate is all-or-nothing, so submitting
+    /// **The mixed case.** The page has a usable real bold face
+    /// (`Calibri-Bold` — see the test above for why it is not `Times-Bold`)
+    /// but no italic one at all. Core's gate is all-or-nothing, so submitting
     /// Bold+Italic would synthesize BOTH and quietly pass over the real Bold.
     /// The panel refuses it by name instead, says which axis has the real
     /// face and which does not, and gives the two-step route that works.
@@ -25791,8 +25816,8 @@ mod tests {
                 "the uncovered axis is named: {text}"
             );
             assert!(
-                text.contains("Times-Bold"),
-                "the real face is named: {text}"
+                text.contains("Calibri-Bold"),
+                "the real face is named — the one that can show the run: {text}"
             );
         }
         assert!(

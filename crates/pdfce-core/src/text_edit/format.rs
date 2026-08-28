@@ -1012,14 +1012,38 @@ pub enum FormatError {
     )]
     ConflictingRise,
     /// Synthetic bold/italic was requested but a **real** face with that
-    /// style resolves on the page. R90 makes synthesis fallback-only, so
-    /// pdfce refuses and names the real face to use instead. Nothing was
-    /// applied.
+    /// style resolves on the page — and, since `Pass 144.0`, one that
+    /// `set_font` would actually **accept for this run**. R90 makes synthesis
+    /// fallback-only, so pdfce refuses and names the real face to use
+    /// instead. Nothing was applied.
+    ///
+    /// **The remedy this message states is checked before it is offered.**
+    /// It used to be asserted: the gate found a face whose `/BaseFont`
+    /// contained a style word and told the operator to switch to it, without
+    /// asking whether the switch would work. On
+    /// `fixtures/synthetic/textedit/format_family.pdf` it did not — the named
+    /// face's `/Encoding /Differences` could not show the run — so both verbs
+    /// refused and bold was unreachable. `R222`: a message that names a
+    /// remedy is making a claim, and a claim gets measured.
+    ///
+    /// Retry with [`Self::RealFaceAvailable::selector`], not with
+    /// `real_font`. They are usually the same string and differ exactly when
+    /// the page carries two resources sharing one `/BaseFont`, where the name
+    /// reaches only one of the twins.
     #[error(
         "synthetic {style} was requested for '{run_font}', but a REAL {style} face is available \
-         on this page as '{real_font}' (resource /{resource}). Synthesis is a fallback for when \
+         on this page as '{real_font}' (resource /{resource}){}. Synthesis is a fallback for when \
          no real face resolves, never an alternative to one (rule R90) — change the run's family \
-         to '{real_font}' instead. Nothing was applied."
+         with --set-font {selector:?} instead, which pdfce has already checked can show this \
+         run's characters. Nothing was applied.",
+        if *same_family {
+            String::new()
+        } else {
+            format!(
+                " — note this is a DIFFERENT FAMILY, offered because no face of \
+                 '{run_font}'s own family on this page can show the run"
+            )
+        }
     )]
     RealFaceAvailable {
         /// The style asked for, e.g. `bold`.
@@ -1030,6 +1054,19 @@ pub enum FormatError {
         real_font: String,
         /// Its `/Font` resource key.
         resource: String,
+        /// **The string to hand to `set_font`** to reach that face. Not
+        /// always `real_font`: two resources on a page can share a
+        /// `/BaseFont`, and the name match reaches only one of them, so a
+        /// retry built from the name can land on the twin — possibly the twin
+        /// that refuses. This string always reaches the face pdfce checked.
+        selector: String,
+        /// Whether the offered face is of the run's **own** family.
+        ///
+        /// `false` means no face of the run's family could show this run and
+        /// pdfce fell back to a usable face from another family — a bigger
+        /// change than a weight swap, so it is said out loud in the message
+        /// rather than left for the operator to notice from the name.
+        same_family: bool,
     },
     /// Synthetic italic cannot be applied to this run, because the shear it
     /// requires is a `Tm` injection and this run's context will not survive
@@ -1667,7 +1704,9 @@ pub(crate) fn plan_format_target(
         gate_synthesis(
             doc,
             page_resources_dict,
+            &recs,
             effective_font,
+            &req.find,
             synthesis,
             set_font_name,
         )?;
@@ -2201,75 +2240,111 @@ fn family_stem(base_font: &str) -> String {
     stem.get(..cut).unwrap_or(stem).to_ascii_lowercase()
 }
 
-/// R90's gate: **refuse** synthesis when a real face with the requested
-/// style is available on this page.
+/// R90's gate: **refuse** synthesis when a real face with the requested style
+/// is available on this page — where *available* means `set_font` would
+/// actually **accept** it for this run's text.
 ///
-/// Synthesis is a fallback, not an alternative — so before faking a weight
-/// or a slant, pdfce looks for a genuine sibling in the page's `/Font`
-/// resources: same family stem, and a `/BaseFont` that claims the style
-/// being asked for. If one is found the whole edit is refused and the
-/// operator is told the resource key and name to use instead.
+/// Synthesis is a fallback, not an alternative, so before faking a weight or
+/// a slant pdfce looks for a genuine face carrying that style. What it does
+/// **not** do any more is take the name's word for it.
 ///
-/// `current_resource` is excluded from the search so that a face which
-/// *already* claims the style cannot recommend itself. (Asking for synthetic
-/// bold on `Times-Bold` is a strange request, and it is refused with that
-/// same face named — which reads correctly: the real bold is already there.)
+/// # The three branches, and the third is the one that must not be lost
+///
+/// 1. **A face of the run's own family is accepted** ⇒ refuse, name it. An
+///    operator asking for bold on Times wants Times-Bold, not Calibri-Bold,
+///    and that preference is right and survives here unchanged.
+/// 2. **No family match is accepted, but some other face on the page is** ⇒
+///    refuse, and name **that** one. It is a bigger change than a weight
+///    swap, which is why it is second and why the error says so, but a real
+///    face the operator can use beats a fake weight.
+/// 3. **Nothing on the page is accepted** ⇒ **proceed with synthesis.** It is
+///    genuinely the only route, which is the same reasoning the "no `/Font`
+///    resources at all" early return has always used, applied to the right
+///    predicate.
+///
+/// # Why this reads like a loosened refusal and is not (`Pass 144.0`, `R90`)
+///
+/// `R90` says synthesis is a fallback for when no real face **resolves**.
+/// That is untouched. What changed is the predicate for *resolves* — from
+/// *"exists with a matching family name and a style word in it"* to *"would
+/// actually be accepted for this run"* — because the old one produced this,
+/// on pdfce's own fixture `fixtures/synthetic/textedit/format_family.pdf`:
+///
+/// ```text
+/// --bold-synthetic          refused: a REAL bold face is available as
+///                                    'Times-Bold' (resource /F3)
+/// --set-font Times-Bold     refused: 'o' has no code in Times-Bold's
+///                                    encoding (its /Differences took 111)
+/// --set-font F2             SUCCEEDS  <- never mentioned by either refusal
+/// ```
+///
+/// Both verbs refused and the one face that worked was never named, so **bold
+/// was unreachable on that page** except by an operator who already knew to
+/// try a resource pdfce did not offer. `R90` applied more accurately, not
+/// less. Any change that lets synthesis run while a genuinely usable real
+/// face is present is a regression, not this.
+///
+/// # Why `current_resource` is excluded
+///
+/// So a face cannot cure a synthesis request made against **itself**. Asking
+/// for synthetic bold on a run already in `Times-Bold` is a strange request;
+/// it is not answered by recommending `Times-Bold`. The search skips that
+/// resource and reports whatever else it finds — which on a page with no
+/// other candidate means the synthesis proceeds, doubling the weight, and
+/// that is the shipped behaviour rather than an oversight.
 ///
 /// # Errors
 ///
-/// [`FormatError::RealFaceAvailable`], naming the resource and `/BaseFont`.
+/// [`FormatError::RealFaceAvailable`], naming the resource, the `/BaseFont`,
+/// and whether it is the same family.
 fn gate_synthesis(
     doc: &Document,
     resources: &Dict,
+    recs: &[OpRec],
     run_font: &str,
+    text: &str,
     synthesis: StyleSynthesis,
     current_resource: &[u8],
 ) -> Result<(), FormatError> {
-    let Some(fonts) = resources
-        .get(b"Font")
-        .map(|o| doc.resolve(o))
-        .and_then(Object::as_dict)
-    else {
-        // No font resources to search: nothing better exists, so the
-        // fallback is genuinely the only option. Proceed.
+    let candidates = survey_page_fonts(doc, resources, recs, text);
+    if candidates.is_empty() {
+        // No font resources to search: nothing better exists, so the fallback
+        // is genuinely the only option. Proceed.
+        return Ok(());
+    }
+    let want = family_stem(run_font);
+    let exclude = Some(current_resource);
+
+    // Branch 1, then branch 2. The family preference is expressed by the
+    // ORDER of these two calls rather than by a separate rule, so it cannot
+    // drift from the acceptance test either one applies.
+    let found = find_styled_face(&candidates, Some(&want), synthesis, exclude)
+        .map(|c| (c, true))
+        .or_else(|| find_styled_face(&candidates, None, synthesis, exclude).map(|c| (c, false)));
+
+    // Branch 3.
+    let Some((face, same_family)) = found else {
         return Ok(());
     };
-    let want = family_stem(run_font);
-    for (key, val) in fonts.iter() {
-        let Some(dict) = doc.resolve(val).as_dict() else {
-            continue;
-        };
-        let Some(base) = dict
-            .get(b"BaseFont")
-            .map(|o| doc.resolve(o))
-            .and_then(Object::as_name)
-            .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
-        else {
-            continue;
-        };
-        if family_stem(&base) != want {
-            continue;
-        }
-        let is_self = key.as_bytes() == current_resource;
-        let covers_bold = !synthesis.bold() || name_claims_bold(&base);
-        let covers_italic = !synthesis.italic() || name_claims_italic(&base);
-        // A real face only counts if it covers EVERY style asked for. A
-        // `Times-Bold` does not satisfy a request for synthetic *italic*.
-        if covers_bold && covers_italic && !is_self {
-            return Err(FormatError::RealFaceAvailable {
-                style: match synthesis {
-                    StyleSynthesis::Bold => "bold",
-                    StyleSynthesis::Italic => "italic",
-                    StyleSynthesis::BoldItalic => "bold italic",
-                    StyleSynthesis::None => "styled",
-                },
-                run_font: run_font.to_owned(),
-                real_font: base,
-                resource: String::from_utf8_lossy(key.as_bytes()).into_owned(),
-            });
-        }
-    }
-    Ok(())
+
+    Err(FormatError::RealFaceAvailable {
+        style: match synthesis {
+            StyleSynthesis::Bold => "bold",
+            StyleSynthesis::Italic => "italic",
+            StyleSynthesis::BoldItalic => "bold italic",
+            StyleSynthesis::None => "styled",
+        },
+        run_font: run_font.to_owned(),
+        real_font: face.base_font.clone(),
+        resource: String::from_utf8_lossy(&face.resource).into_owned(),
+        // The string that REACHES the named face, which is not always its
+        // /BaseFont: a page carrying two subsets of one face has two
+        // resources with the same name and `set_font` reaches only one of
+        // them. A caller retrying with the name would land on the twin —
+        // possibly the twin that refuses.
+        selector: face.selector.clone(),
+        same_family,
+    })
 }
 
 // ===================================================================
@@ -2300,6 +2375,13 @@ pub enum StyleOutcome {
         real_font: String,
         /// Its `/Font` resource key on this page (no leading slash).
         resource: String,
+        /// **The string to hand to `set_font` to reach that face**, which is
+        /// not always [`Self::RealFaceResolves::real_font`]: a page carrying
+        /// two subsets of one face has two resources with the same
+        /// `/BaseFont`, and the name match reaches only one of them. Retrying
+        /// with the name can therefore land on the twin — possibly the twin
+        /// that refuses. Retry with this.
+        selector: String,
     },
     /// No real face covers everything asked for, so submitting
     /// `set_synthetic(…)` right now would **apply** the synthesis.
@@ -2409,19 +2491,31 @@ impl StyleResolution {
 fn probe_synthesis(
     doc: &Document,
     resources: &Dict,
+    recs: &[OpRec],
     run_font: &str,
+    text: &str,
     synthesis: StyleSynthesis,
     current_resource: &[u8],
 ) -> Result<StyleOutcome, FormatError> {
-    match gate_synthesis(doc, resources, run_font, synthesis, current_resource) {
+    match gate_synthesis(
+        doc,
+        resources,
+        recs,
+        run_font,
+        text,
+        synthesis,
+        current_resource,
+    ) {
         Ok(()) => Ok(StyleOutcome::WouldSynthesize),
         Err(FormatError::RealFaceAvailable {
             real_font,
             resource,
+            selector,
             ..
         }) => Ok(StyleOutcome::RealFaceResolves {
             real_font,
             resource,
+            selector,
         }),
         Err(other) => Err(other),
     }
@@ -2498,13 +2592,17 @@ pub(crate) fn preview_style_resolution(
     let combined = if want.is_none() {
         None
     } else {
-        Some(probe_synthesis(doc, resources, &run_font, want, current)?)
+        Some(probe_synthesis(
+            doc, resources, &recs, &run_font, find, want, current,
+        )?)
     };
     let bold_axis = if want.bold() {
         Some(probe_synthesis(
             doc,
             resources,
+            &recs,
             &run_font,
+            find,
             StyleSynthesis::Bold,
             current,
         )?)
@@ -2515,7 +2613,9 @@ pub(crate) fn preview_style_resolution(
         Some(probe_synthesis(
             doc,
             resources,
+            &recs,
             &run_font,
+            find,
             StyleSynthesis::Italic,
             current,
         )?)
@@ -2867,6 +2967,39 @@ impl FontPreflight {
     }
 }
 
+/// The accepted Bold and Italic face of **every** family on the page, in one
+/// pass.
+///
+/// # Why this is a map and not `find_styled_face` called per entry
+///
+/// Because the `/Font` dictionary is attacker-controlled and the pre-flight
+/// is a query a shell may call every frame. Scanning the candidate list once
+/// per entry is O(n²) in the number of font resources on one page — fine at
+/// the twenty a real document carries, a hang at the fifty thousand a crafted
+/// one can. One pass, then an index, keeps the whole query linear.
+///
+/// The **first** accepted candidate of each family wins, which is the same
+/// tie-break [`find_styled_face`] applies, taken from the same iteration
+/// order.
+fn styled_by_family(
+    candidates: &[FontCandidate],
+) -> BTreeMap<&str, (Option<usize>, Option<usize>)> {
+    let mut map: BTreeMap<&str, (Option<usize>, Option<usize>)> = BTreeMap::new();
+    for (i, c) in candidates.iter().enumerate() {
+        if c.accepted.is_err() {
+            continue;
+        }
+        let slot = map.entry(c.family.as_str()).or_default();
+        if c.claims_bold && slot.0.is_none() {
+            slot.0 = Some(i);
+        }
+        if c.claims_italic && slot.1.is_none() {
+            slot.1 = Some(i);
+        }
+    }
+    map
+}
+
 /// Turn one surveyed candidate into a [`FontSibling`].
 fn sibling_of(c: &FontCandidate) -> FontSibling {
     FontSibling {
@@ -2932,6 +3065,7 @@ pub(crate) fn preview_font_resources(
     let resources = page_resources(page);
 
     let candidates = survey_page_fonts(doc, resources, &recs, find);
+    let styled = styled_by_family(&candidates);
     let entries = candidates
         .iter()
         .map(|c| FontResourceEntry {
@@ -2952,18 +3086,21 @@ pub(crate) fn preview_font_resources(
                     },
                 },
             },
-            // `None` for `exclude`: an entry that IS the family's real bold
-            // must report itself, or a shell reading it would synthesize
-            // bold on top of a real bold face. See `find_styled_face`.
-            real_bold: find_styled_face(&candidates, Some(&c.family), StyleSynthesis::Bold, None)
+            // An entry that IS the family's real bold reports ITSELF — the
+            // map excludes nothing — because reporting `None` about itself
+            // would tell a shell to synthesize bold on top of a real bold
+            // face. `gate_synthesis` is the caller that does need an
+            // exclusion, and it has one; see `find_styled_face`.
+            real_bold: styled
+                .get(c.family.as_str())
+                .and_then(|(b, _)| *b)
+                .and_then(|i| candidates.get(i))
                 .map(sibling_of),
-            real_italic: find_styled_face(
-                &candidates,
-                Some(&c.family),
-                StyleSynthesis::Italic,
-                None,
-            )
-            .map(sibling_of),
+            real_italic: styled
+                .get(c.family.as_str())
+                .and_then(|(_, it)| *it)
+                .and_then(|i| candidates.get(i))
+                .map(sibling_of),
         })
         .collect();
 
@@ -5355,6 +5492,7 @@ mod tests {
             Some(StyleOutcome::RealFaceResolves {
                 real_font: "Times-Bold".to_owned(),
                 resource: "F2".to_owned(),
+                selector: "Times-Bold".to_owned(),
             })
         );
         assert!(!res.is_mixed(), "a single face covers everything asked for");
