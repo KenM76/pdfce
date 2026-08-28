@@ -11236,11 +11236,6 @@ with_note={with_note} with_author={with_author} need_appearances={need_appearanc
     exit::SUCCESS
 }
 
-/// `list-fields`: inventory a document's AcroForm fields (Pass 7).
-///
-/// Read-only. One `field …` line per terminal field, then a `list-fields …`
-/// summary line carrying the document-level form disclosures. The value is
-/// emitted as a sanitised token so the line stays field-splittable.
 /// `add-bookmark` — append one item to the document outline (§12.3.3).
 ///
 /// # Resolving `--under`, and why it is an index rather than a title
@@ -15498,6 +15493,11 @@ fn describe_style(s: &pdfce_core::richtext::Style) -> String {
     }
 }
 
+/// `list-fields`: inventory a document's AcroForm fields (Pass 7).
+///
+/// Read-only. One `field …` line per terminal field, then a `list-fields …`
+/// summary line carrying the document-level form disclosures. The value is
+/// emitted as a sanitised token so the line stays field-splittable.
 fn cmd_list_fields(input: &Path, fillable_only: bool, rich_text: bool, widgets: bool) -> u8 {
     let doc = match open_document(input) {
         Ok(doc) => doc,

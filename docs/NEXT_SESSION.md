@@ -81,7 +81,23 @@ default-features green.** Do not quote it as if `--all-features` had passed.
    RGB→CMYK is naive, so a pure red preserves a cyan backdrop under it and
    whether Acrobat agrees is unknown. Not the default; do not promote it
    without a measurement.
-5. **`pdfceGUI` has 68 of 149 implemented capabilities unwired** (45.6 %). The
+5. **★ Two `iccce` inbounds arrived 2026-08-28 15:03/15:04** — informational,
+   no reply owed. **Its "invisible X" is NOT the trap X in item 3.** Theirs
+   is `PCS3_130`, a CMM/ICC-source-profile patch they filed as *theirs* under
+   decision 064; yours is the grey/K-black **overprint** patch. Two X's, two
+   patches, two causes, one word — conflating them closes your open item on
+   evidence about a different one.
+6. **★ Its ΔE00 figures are withdrawn by its own author** (iccce `DL-070`: no
+   ΔE against a screen capture). Only the 8-bit deltas may be quoted.
+7. Ambiguity-register entries owed to `pdfce-spec-librarian`:
+   `overprint_zero_tint_scope`, and `render.hairline_clamp_policy` since
+   2026-08-09.
+8. **No CLI tests** for `rename-bookmark`, `delete-bookmark` or
+   `rotate-annotation`. `crates/pdfce-cli/tests/` holds 29 files including
+   `move_annotation.rs` and `resize_annotation.rs`; the last two
+   CLI-shipping Passes added none. Manual binary verification does not
+   survive the session.
+9. **`pdfceGUI` has 68 of 149 implemented capabilities unwired** (45.6 %). The
    CLI gap is **0 of 149** — rule 11 is holding. Every remaining gap in the
    Implemented half is a GUI gap.
 
@@ -118,19 +134,37 @@ remedies are opposite** — delete the duplicate versus change the input.
 
 ### And the one that bit three times in one file
 
-**Doc-comment orphaning.** Splicing a function by anchoring on `pub fn name(`
-lands **inside the previous item's doc block**, by construction, every time.
+**Doc-comment orphaning — FOUR instances, and the mitigation failed on the
+third.** Splicing a function by anchoring on `pub fn name(` lands **inside the
+previous item's doc block**, by construction.
+
 The mitigation I invented — walk back over a contiguous run of `///` lines —
-**failed on the third instance**, because that doc block was not contiguous by
-that test.
+failed on the third instance, and **my first diagnosis of why was wrong.** I
+recorded *"the block was not contiguous"*; the librarian read the source and
+the block is **29 unbroken `///` lines**. What sits between it and the `fn` is
+an **`#[allow(...)]` attribute**, so the walk terminated at **zero steps** and
+spliced between the attribute and the function.
 
-⇒ **A smarter upward walk is not the fix. Insert AFTER a function's closing
-brace**, where there is no preceding doc run to land inside. A doc comment
-binds to what *follows* it.
+★ The two diagnoses have **opposite remedies** — *not contiguous* implies a
+better run-detector, *an attribute intervenes* implies **no upward look can
+ever be sufficient**. The remedy I shipped happens to be the right one:
 
-★ Both detections were **luck**: once a trailing list made clippy complain,
-once a stranded `#[allow]` made it report 9/7 arguments on an unrelated
-function. Neither is a general detector.
+⇒ **Insert AFTER a function's closing brace**, where there is no preceding doc
+run to land inside. A doc comment binds to what *follows* it.
+
+★★ And the RAG carrier had already written the attribute sentence. The
+mitigation was built from that file, **the same day**, implementing its
+doc-run clause while skipping the attribute clause two lines beneath. The
+lesson is not "write it down" — it is that **a remedy was derived from part of
+a finding and shipped as covering the whole.**
+
+★★★ **A fourth instance was live at HEAD for nine days** (`cmd_list_fields`'
+documentation attached to `cmd_add_bookmark` since `d32872a`, `Pass 103.0`) —
+fixed in `Pass 158.0`. Neither accident that caught the others applied to it:
+no trailing list to trip clippy's lazy-continuation lint, no stranded
+attribute to make it report a wrong argument count. **Both catches this
+session were luck, by a different accident each time. Two catches are not
+evidence of coverage.**
 
 ---
 
