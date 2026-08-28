@@ -73667,3 +73667,265 @@ the previous sweep over the same claim found five.
   its subject set is non-empty.
 
 ---
+
+## 2026-08-28 (310th filing) — `Pass 154.0` (`e0652e0`) ships `EditSession::set_markup_note` / `clear_markup_note` + `pdfce-cli set-markup-note` — ★★★★★ **the gap was in the API's SHAPE, not its coverage: every key a note needs was already writable, spec-cited, tested, CLI-flagged and documented as of `Pass 150.0` that morning — what could not happen was writing one A MOMENT LATER, and a geometric markup has no text-entry moment, so `pdfceGUI`'s Comments panel shipped READ-ONLY and four ordinary review acts were absent** ⇒ ***a capability can be completely covered and still unreachable, when its only entry point is bound to a moment the operator's gesture does not contain — and this project counts keys written, never moments a caller can act*** — ★★★★ **the sweep found `03-capabilities.md` §3.1 still headed *"Limit 1 — geometric markup cannot carry note text"*, and `943d482`, THE COMMIT THAT FALSIFIED IT, EDITED THAT FILE AT A HUNK WHOSE FIRST CONTEXT LINE IS LIMIT 1'S OWN CLOSING SENTENCE — it corrected *Limit 2* (a reported survivor) and read past *Limit 1* directly above it** ⇒ ***a reported-survivor list is a WORKLIST, never a scope*** — ★★★ **and *Limit 2*, the 303rd filing's own correction, went stale ONE PASS LATER: it still says resize is *"still unbuilt, and these are real"* after `Pass 151.0`, and the correction itself explains why no gate can catch it (*"a claim of NON-coverage is invisible to a coverage check"*) before becoming one** — ★★ **a sabotage silently did not apply (`\n` against a CRLF file) and reported the suite green — `R224`'s vacuous-scan clause in its THIRD medium with the POLARITY INVERTED, and `Pass 150.0`'s own commit message had prescribed the remedy nine and a half hours earlier** — ★ **the three new verbs were first spliced INSIDE `set_markup_style`'s doc comment by anchoring on `pub fn set_markup_style(`, and clippy caught it only because the block above happens to end in a list — the detection was LUCK**
+
+**Shipped:**
+- **`Pass 154.0` (`e0652e0`)** — `set_markup_note` / `clear_markup_note`,
+  `MarkupNoteChange`, `CommandKind::SetMarkupNote`, and `pdfce-cli
+  set-markup-note` with `--note` / `--note-author` / `--note-date` /
+  `--clear`. **5 files, +803 / −5** (`git show --numstat`, run here). Verb
+  count **151 → 153**; the commit updated both routing-table figures itself.
+
+**Test-FILE share of added lines: 304 of 803 = 37.9 %.** Denominator stated so
+the division is possible; qualifier in the label so a quoted *"37.9 %"* cannot
+travel alone (hard rule 10(a)). **Comparable to the 308th filing's 27.3 %; not
+comparable to the 309th filing's `0 of 118`**, which measured a Pass whose only
+test edit lived inside a source file.
+
+**★ Zero deletions in `crates/`** — purely additive to both shipped crates. No
+signature changed, no variant removed, no existing caller can break. Recorded
+because the two Passes below it were not (`Pass 153.0` removed a `pub` enum
+variant), and *"the recent Passes were breaking"* is an impression that
+survives without a counter-fact.
+
+### ★★★★★ THE FINDING: COVERAGE AND REACH ARE DIFFERENT MEASUREMENTS
+
+`MarkupOptions` reaches `add_markup_with` and `add_text_annotation_with` **and
+nothing else.** `/Contents`, `/T` and `/M` were all writable — correctly, with
+clause citations, with tests, with CLI flags, with documentation — since
+`Pass 150.0` at 04:55 the same day.
+
+**The reason no workaround existed is a fact about the GESTURE.** A cloud, a
+rectangle, a highlight and an arrow are authored **on mouse-release, from
+geometry alone.** There is no dialog in that gesture and there must not be one.
+So the only model that works is *draw the shape → it is selected → type the
+comment in the panel beside the page*, and **the second arrow needs a verb
+acting on an EXISTING annotation.** The consuming project enumerated the four
+alternatives — a note field on the pen; a modal on every shape;
+delete-and-re-author; don't offer it — and shipped the fourth. **Their Comments
+panel, a reviewer's main surface, was a viewer.**
+
+⇒ **Coverage is measured over *keys written*; reach is measured over *moments a
+caller can act*. Every gate this project owns measures the first.**
+`check-core-api-verbs.py` asks whether a verb is documented, never whether an
+operator can get to it. **Same family as `Pass 152.0` one filing earlier**,
+where a capability was complete, true and correctly documented and the only
+missing thing was a **name**; here the only missing thing was a **moment**.
+Two consecutive Passes whose entire content was making an existing capability
+reachable.
+
+### The four design points, each a refusal to do the obvious thing
+
+1. **A partial note does not clear what it omits** — `/Contents` always, `/T`
+   and `/M` only if carried. The natural implementation writes all three and
+   **silently strips the author and date on every typo correction**, leaving a
+   comment from nobody dated never. Pinned by the test a sabotage turns red.
+2. **The disclosure carries the TEXT, not a count.** A restyled shape still
+   shows its geometry; **overwritten words leave nothing on the page.** So
+   `MarkupNoteChange::replaced` carries the previous string and the CLI prints
+   it — where the invocation *is* the commit, it is the only chance to keep the
+   words. Rule 4's obligation, in the one place here that owes it.
+3. **`clear_markup_note` is a separate verb** — an empty comment is a comment,
+   and the saved bytes distinguish `/Contents ()` present from absent.
+4. **Its own `CommandKind::SetMarkupNote`** — undoing an *add* removes the
+   annotation; undoing a *note* change restores the words on a shape that
+   stays. The consumer also **declined** folding `note` into `MarkupStyle`:
+   that type is about how a thing *looks*, its fields are `StyleEdit<T>`, and
+   bundling would make one undo entry out of two operator acts.
+
+**Refused by name:** a ce dimension (its text *is* its measurement) and a
+**widget**, whose `/Contents` is its field's **tooltip** (§12.5.6.19) — owned
+by the field, possibly shared by several widgets. Writing it as a review
+comment would **edit a form's help text from a comments panel.**
+
+### ★★★★ Hard-rule-11 sweep — three live survivors, all in one section
+
+Claim swept for: ***a note can only be written when an annotation is created.***
+All three are in `docs/core-api/03-capabilities.md` §3.1 — the document a
+consuming project builds against. **Reported, not edited** (`docs/core-api/` is
+the engineer's tree).
+
+1. **`:1008–1018` — *"Limit 1 — geometric markup cannot carry note text."***
+   False since `943d482` (04:55). Its last two sentences are **not stale
+   documentation but instructions to state a falsehood**: *"the shell must say
+   so in those words"* directs `pdfceGUI` to tell an operator a blank note is
+   *"expected, not missing data"* on every shape pdfce drew; *"**Opportunity:**
+   note-text authoring for geometric markup … unbuilt in every shell"* names an
+   opportunity that shipped **twice today**.
+   **★ `943d482` EDITED THIS FILE** at `@@ -1017,15 +1017,38 @@` — a hunk whose
+   first context line is Limit 1's own closing sentence. It corrected *Limit 2*,
+   which this role had reported, and **read past *Limit 1*, the claim its own
+   feature had just falsified, one paragraph up.** ⇒ ***a sweep dispatched about
+   one claim does not incidentally check the claim beside it; a reported-survivor
+   list is a worklist, not a scope.***
+2. **`:1020` + `:1044` — *"Limit 2 — a placed markup can be MOVED but not
+   resized"*** and *"**Still unbuilt, and these are real:** resize and rotate"*.
+   Falsified by `Pass 151.0` (`c4425f0`) the same day. **This paragraph IS the
+   303rd filing's correction**, written to repair exactly this defect for
+   `move_annotation`, stale one Pass later — and it contains the sentence
+   explaining why no gate can catch it (*"a claim of NON-coverage is invisible
+   to a coverage check"*) immediately before becoming one. ⇒ ***a correction is
+   a claim with the same shelf life as the one it replaced.***
+3. **Four decayed line-number citations** — `FEATURES.md:110-115`,
+   `FEATURES.md:111`, `FEATURES.md:220`, `ui_text.rs:9577-9584`. The first now
+   points at *Document & pages* rows; the last is `/RV` formatting-tooltip
+   rustdoc. The real string is `ui_text.rs:9838`. The 304th filing found this
+   same decay in **this role's own** owed-work list; the pattern is a citation
+   into a file that grows.
+
+**Checked and CLEAN, reported because a clean result is a finding when the
+neighbouring one found three:** `ui_text.rs:9835–9838` — `comment_row_no_note()`'s
+rustdoc (*"a real, expected state"*) **is still true**; it describes an
+annotation that genuinely has no `/Contents`. The falsehood is
+`03-capabilities.md`'s claim about *which* annotations are in that state.
+Also clean: `MarkupNote`'s and `MarkupOptions::note`'s rustdoc (`edit.rs:3916`,
+`:4148`) — neither claims author-time exclusivity.
+
+### Dispositions
+
+- **`R224` — third dated instance note, MINT DECLINED.** New medium (the
+  sabotage mechanism), inverted polarity (a false *"the test is weak"* rather
+  than a false PASS), but the ★★ clause's own generalisation reaches it and two
+  consecutive filings declined a mint on the same clause. **Ceiling `R224`,
+  next free `R225`.**
+- **No standing rule for the doc-comment splice.** The class has had a
+  cross-project RAG carrier since 2026-08-09; the two new facts are
+  *prescriptions for an insertion anchor*, filed where an editing agent will
+  meet them.
+- **No decision-log entry.** No crate boundary moved, no invariant defined.
+  **The adopted rationale is a QUOTATION of the one already on
+  `CommandKind::SetMarkupStyle`** — recording an application of a standing
+  precedent as a new decision would empty the log's ceiling of meaning.
+  **Decision ceiling stays 095, next free 096.**
+
+### Documents edited
+
+| document | change |
+|---|---|
+| `docs/ROADMAP.md` | `Pass 154.0` *Shipped* entry (top); **third dated instance note on `R224`** |
+| `docs/FEATURES.md` | **four rows** — one new, three corrected (below) |
+| `docs/ARCHITECTURE.md` | **none** — no architectural decision in `e0652e0` |
+| `docs/SESSION_LOG.md` | this entry |
+| `D:/dev/rag/rust/` | **two dated footers** on existing findings (sabotage-verification; doc-comment splice), frontmatter `last_verified` bumped on both, **and both `index.md` bullets amended** — the doc-splice bullet asserted *"zero automated detection surface exists for this defect class"*, which this instance corrects. Hard rule 11 applied to this role's own tree: the amendment reached the index, not only the file |
+
+**`FEATURES.md` rows:** **NEW** *"Write, correct or clear a note on an
+annotation that already exists"* — `[x]` core · `[x]` cli · **`[ ]` gui** ·
+`[x]` Acrobat. *"Note text on markup at author time"* — trailing sentence
+replaced (the shell was waiting on the **edit** verb, not this one).
+*"Author geometric markup"* — note text is no longer author-time-only.
+**"Comments panel"** — `[x]` gui → **`◐`**, and the row now **states** that it
+browses and cannot write, rather than leaving that inferable from the word
+*"browse"*.
+
+### Verification — measured here, none inferred (hard rule 8)
+
+- **`tools/run-gates.sh`: PASS — 26 commands**, both filing gates, reported by
+  the engineer. `check-string-gaps.sh` caught **two** eaten line-continuations
+  again.
+- **8 core tests**, every assertion read back through the ordinary annotation
+  walk **from saved bytes**, not from the returned report — so a report that
+  lies about what it wrote cannot pass. **Every CLI flag driven through the
+  real binary**, malformed date refused with **exit 9**, because unit tests hit
+  core directly and **a parsed-but-dropped flag passes all of them.**
+- **Re-run here at filing time**, `HEAD` = `2380881`:
+  `check-commits-filed.py` → *"1 code commit(s) are in no filing: `e0652e0`"*;
+  `check-passes-filed.py` → the same commit. Both discharged by this filing.
+- **`git rev-list --oneline origin/main..HEAD`, run here:** **5 unpushed** —
+  `1c292bc`, `180f19f`, `2dd1ad6`, `e0652e0`, `2380881`. Decision 090's
+  standing authority covers the fast-forward; **pushing is not this role's
+  act.**
+- **Backup, `ls -lt D:/Dev/pdfce-backups/` run here:** newest is
+  `pdfce-20260828-1416-56d849b-full.bundle` (2026-08-28 10:16, at `56d849b`);
+  `git rev-list --count 56d849b..HEAD` = **7**. Against **5 / 3 / 1** at the
+  309th / 308th / 307th filings — **drifting a fourth filing running, and the
+  increments are growing.**
+- **Channel, `ls -lt` run here at FILING time** (not carried forward — the
+  304th filing's defect was a dispatch-time `ls`): newest in `open/` is the
+  engineer's own reply, 14:28; the request is renamed
+  `done_2026-08-28-markup-note-edit-CONSUMED.md` (12:54). **No unparsed inbound
+  request.**
+
+**Still in flight / owed back to the engineer:**
+
+1. **★ THREE SURVIVORS IN `docs/core-api/03-capabilities.md` §3.1** — Limit 1
+   (false, and instructing a shell to state a falsehood), Limit 2 (the 303rd
+   filing's own correction, stale after `Pass 151.0`), and four decayed
+   line-number citations. **Cited by claim as well as by line**, because line
+   numbers in that file have already decayed once this week.
+2. **Carried forward from the 306th–309th filings:** the **trap-X cause** on
+   the grey/K-black patch is still unknown, and **`AllProcessSpaces` remains
+   unmeasured against any oracle.**
+3. **`pdfceGUI` owes the Comments-panel wiring** — `set_markup_note` /
+   `clear_markup_note` exist and their panel is `◐` until it can write.
+4. **An assessment the engineer asked for, on whether `FEATURES.md` can answer
+   *"what can I not fully edit?"* — recorded below**, because it is a finding
+   about a document this role owns and not a task.
+5. **★★ `Pass 155.0` IS IN THE WORKING TREE, UNCOMMITTED, AS THIS FILING IS
+   WRITTEN — and it lands squarely on survivor 1 above.** `git status` /
+   `git diff --stat`, run here at filing time: `crates/pdfce-core/src/edit.rs`
+   **+349**, `crates/pdfce-cli/src/main.rs` **+199**, and an untracked
+   `crates/pdfce-core/tests/annot_rotate.rs` whose module header reads
+   *"Rotating an annotation (`Pass 155.0`) — the third transform."* **Two
+   consequences, both actionable now rather than next filing:**
+   - **`git commit -a` from this filing would sweep half-finished `Pass 155.0`
+     code into a librarian commit.** This filing touches `docs/` only; the
+     `crates/` changes are not this role's and are not staged by it.
+   - **Survivor 2 should be discharged BY `Pass 155.0`, not separately.**
+     `03-capabilities.md:1044` says *"**Still unbuilt, and these are real:**
+     resize **and rotate**"* — resize has been false since `Pass 151.0` and
+     **rotate is hours from being false too.** Fixing that sentence once, in
+     the Pass that falsifies its second half, is cheaper than fixing it twice;
+     and *"the commit that falsifies a claim edits the file containing it and
+     reads past it"* is exactly the shape survivor 1 records happening to
+     `943d482` this morning. **This is the warning arriving before the
+     instance rather than after it.**
+
+### ★ THE OPERATOR'S QUESTION, MEASURED
+
+Ken asked, in his words, *"it seems to be a recurring theme that the GUI can't
+edit something properly because the feature is still missing"*, and how many
+things are left that aren't completely editable. Counted here over
+`docs/FEATURES.md` at this filing (script over the tables, not by eye):
+
+| section | rows | `core` unbuilt | `cli` unbuilt | `gui` unbuilt `[ ]` | `gui` partial `◐` |
+|---|---:|---:|---:|---:|---:|
+| **Implemented** | 147 | **0** | **0** | **60** | **6** |
+| **Planned** | 58 | 49 | 38 | 51 | 1 |
+
+**Counted AFTER this filing's own four row changes**, not before — the new row
+and the *Comments panel* `[x]` → `◐` both move these figures, and a count taken
+at dispatch time would have disagreed with the document it describes by the
+time anyone read it.
+
+**Two facts, and the second is the answer to his sentence.**
+
+- **Rule 11 is holding perfectly. 0 of 147 implemented rows have an unbuilt
+  CLI** — every capability that ships, ships its `pdfce-cli` subcommand the
+  same session. **Every gap in the Implemented half is a GUI gap.**
+- **60 of 147 implemented capabilities — 40.8 % — are things pdfce can do and
+  `pdfceGUI` cannot reach at all, plus 6 more it reaches only partly:
+  66 of 147 = 44.9 % not fully usable from the GUI.** ⇒ **His premise is
+  inverted for the larger half.**
+  He said *"the feature is still missing"*; for those 66 the feature is
+  **built, tested and CLI-driveable, and unwired**. For the 49 Planned rows
+  with `core` unbuilt, he is right and the feature genuinely does not exist.
+  **The `[ ]` glyph is identical in both cases** — the only thing separating
+  *"nobody built it"* from *"the shell hasn't wired it"* is **which section the
+  row sits in**, a fact about the document's layout rather than about the
+  capability.
+
+**The assessment, which is what the engineer asked for and not a proposal.**
+`FEATURES.md` **holds** the data and **cannot present** it. The question is a
+*filter over the `gui` column of the Implemented section*; the file is grouped
+by **subject-matter domain** (Document & pages, Text, Forms, …) and never by
+shell coverage, so answering it requires scanning 147 rows across twelve
+subsections and reading the third column — and the numbers **60, 6 and 44.9 %
+appear nowhere in the file.** The capability view answers *"can pdfce do X?"* exactly as
+designed; *"what can I not fully edit?"* is a **different axis through the same
+cells**, and no amount of care in maintaining the rows will make it legible.
+
+**Nothing restructured, per the dispatch.** Recorded so the decision — and the
+two numbers — are on record before anyone reaches for the file to answer him.
+
+---

@@ -96,6 +96,289 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 154.0` (`e0652e0`) — `EditSession::set_markup_note` / `clear_markup_note` + `pdfce-cli set-markup-note`: a comment can be written onto a shape that already exists — ★★★★★ **THE CAPABILITY HAD NO WORKAROUND BECAUSE THE GAP WAS IN THE *SHAPE* OF THE API, NOT IN ITS COVERAGE: `MarkupOptions` IS AN AUTHOR-TIME STRUCTURE, AND A GEOMETRIC MARKUP HAS NO TEXT-ENTRY MOMENT — A CLOUD, A RECTANGLE, A HIGHLIGHT AND AN ARROW ARE ALL AUTHORED ON MOUSE-RELEASE FROM GEOMETRY ALONE, SO EVERY NOTE-BEARING ROUTE PDFCE OWNED WAS UNREACHABLE FROM THE GESTURE THAT PRODUCES THE THING TO BE COMMENTED** ⇒ **`pdfceGUI`'s COMMENTS PANEL SHIPPED READ-ONLY AND FOUR ORDINARY REVIEW ACTS WERE ABSENT — COMMENTING A SHAPE YOU JUST DREW, COMMENTING A HIGHLIGHT YOU JUST SWEPT, FIXING YOUR OWN TYPO, AND ANSWERING SOMEBODY ELSE** — ★★★★ **THE FILING'S OWN SWEEP FOUND `docs/core-api/03-capabilities.md` §3.1 STILL HEADED *"Limit 1 — geometric markup cannot carry note text"*, FALSE SINCE `Pass 150.0` NINE AND A HALF HOURS EARLIER — AND `943d482`, THE COMMIT THAT FALSIFIED IT, EDITED THAT FILE AT A HUNK STARTING ON LIMIT 1'S OWN LAST LINE AND CORRECTED *Limit 2* INSTEAD. THE PARAGRAPH ALSO **INSTRUCTS A CONSUMING SHELL TO TELL THE OPERATOR, IN THOSE WORDS**, THAT A BLANK NOTE IS *"expected, not missing data"* ON EVERY SHAPE PDFCE DREW** — ★★★ **AND *Limit 2* — THE 303rd FILING'S OWN CORRECTION — WENT STALE ONE PASS LATER: IT STILL READS *"a placed markup can be MOVED but not resized"* AND *"**Still unbuilt, and these are real:** resize and rotate"*, FALSIFIED BY `Pass 151.0` THE SAME DAY** ⇒ ***A CORRECTION IS NOT A TERMINAL STATE; IT IS A CLAIM WITH THE SAME SHELF LIFE AS THE ONE IT REPLACED*** — ★★ **A SABOTAGE SILENTLY DID NOT APPLY AND THE SUITE REPORTED GREEN — A MULTI-LINE PATTERN WRITTEN WITH `\n` AGAINST A **CRLF** FILE — WHICH IS `R224`'s VACUOUS-SCAN CLAUSE IN ITS THIRD MEDIUM AND ITS SECOND INSTANCE *TODAY*, AND `Pass 150.0`'s OWN COMMIT MESSAGE ALREADY PRESCRIBED THE REMEDY NINE AND A HALF HOURS EARLIER** — ★ **THE THREE NEW VERBS WERE FIRST SPLICED *INSIDE* `set_markup_style`'s DOC COMMENT BY ANCHORING ON `pub fn set_markup_style(`, WHICH SITS *BELOW* ITS `///` BLOCK; CLIPPY CAUGHT IT ONLY BECAUSE THE BLOCK ABOVE HAPPENS TO END IN A LIST — **THE DETECTION WAS LUCK**, AND WITHOUT IT `pdfce-core` WOULD HAVE SHIPPED THREE UNDOCUMENTED VERBS AND ONE FUNCTION DOCUMENTED AS ANOTHER** — 2026-08-28 (310th filing)
+
+**One commit.** `e0652e0`, **5 files, +803 / −5** (`git show --numstat`, run
+here):
+
+| file | +/− | what |
+|---|---:|---|
+| `crates/pdfce-core/tests/markup_note_edit.rs` | **+304 / −0** | the 8 new core tests, all reading back from **saved bytes** |
+| `crates/pdfce-core/src/edit.rs` | **+266 / −0** | `set_markup_note`, `clear_markup_note`, `MarkupNoteChange`, `CommandKind::SetMarkupNote` |
+| `crates/pdfce-cli/src/main.rs` | **+226 / −0** | `set-markup-note` and its four flags |
+| `docs/core-api/02-editing-and-saving.md` | **+6 / −4** | two verb-index rows; `151` → `153` in three places |
+| `docs/core-api/index.md` | **+1 / −1** | routing-table verb count `151` → `153` |
+
+**Test-FILE share of added lines: 304 of 803 = 37.9 %** (hard rule 10(a) — the
+denominator is stated so the division is possible, and the qualifier is in the
+label). **Comparable to the 308th filing's 27.3 %; NOT comparable to the 309th
+filing's `0 of 118`**, which measured a Pass whose only test edit was a literal
+array inside a source file.
+
+**★ Zero deletions in `crates/`.** The Pass is **purely additive** to both
+shipped crates — no signature changed, no variant was removed, no existing
+caller can break. Recorded because the two Passes immediately below it were
+not (`Pass 153.0` removed a `pub` enum variant), and *"the last three Passes
+were breaking"* is the sort of impression that survives without a counter‑fact.
+
+#### ★★★★★ THE GAP WAS IN THE API'S SHAPE, NOT ITS COVERAGE
+
+`MarkupOptions` reaches `add_markup_with` and `add_text_annotation_with` **and
+nothing else.** Every key a note needs — `/Contents`, `/T`, `/M` — was
+writable, correctly, spec-cited, tested, CLI-flagged and documented, as of
+`Pass 150.0` that morning. **What could not happen was writing one a moment
+later.**
+
+**The reason there was no workaround is a fact about the gesture, not about
+the code.** A cloud, a rectangle, a highlight and an arrow are authored **on
+mouse-release, from geometry alone.** There is no dialog in that gesture and
+there must not be one — interrupting every shape a reviewer draws with a text
+box is the interaction nobody ships. So the model every reviewer UI converges
+on is *draw the shape → it is selected → type the comment in the panel beside
+the page*, and **that second arrow requires a verb acting on an EXISTING
+annotation.** The consuming project enumerated the four alternatives and all
+four are bad: a note field on the pen applied to whatever is drawn next
+(nobody would find it); a modal on every shape (unusable); delete-and-re-author
+(new object id, second undo entry, any reply threading pointing at the old id
+breaks); or don't offer it.
+
+⇒ **They shipped the fourth. `pdfceGUI`'s Comments panel — a reviewer's main
+surface — was a viewer.** Four ordinary acts were absent: commenting a shape
+you just drew, commenting a highlight you just swept, fixing a typo in your
+own comment, and answering somebody else's. **Those are not edge cases; they
+are what a review is.**
+
+**★ The generalisable half, and it is decision 058's shape rather than a
+feature request's:** a capability can be **completely covered and still
+unreachable**, when the only entry point is bound to a moment the operator's
+gesture does not contain. Coverage is measured over *keys written*; reach is
+measured over *moments a caller can act*. **This project counts the first and
+has no instrument for the second** — every gate it owns (`check-core-api-verbs`
+included) asks whether a verb is documented, never whether the operator can
+get to it. Same family as `Pass 152.0`'s finding one filing earlier, where a
+capability was complete, true and documented and the only missing thing was a
+**name**; here the only missing thing was a **moment**.
+
+#### THE FOUR DESIGN POINTS, EACH OF WHICH IS A REFUSAL TO DO THE OBVIOUS THING
+
+1. **A partial note does not clear what it omits.** `/Contents` always; `/T`
+   and `/M` **only if the note carries them**. Writing all three
+   unconditionally is the natural implementation and it would **silently strip
+   the author and the date on every typo correction**, leaving a review comment
+   from nobody, dated never — indistinguishable from a note somebody else had
+   mangled. `MarkupNoteChange::keys_written` names what actually moved. **This
+   is the one a shell hits on its second day**, and it is pinned by the test a
+   deliberate sabotage turns red.
+2. **The disclosure carries the TEXT, not a count.** Rule 4's obligation is
+   off-canvas disclosure of what the operator cannot otherwise see, and a note
+   is precisely that: **a restyled shape still shows its geometry; overwritten
+   words leave nothing on the page.** So `MarkupNoteChange::replaced` carries
+   the previous string and the CLI prints it — in the CLI the invocation *is*
+   the commit, so it is the only chance to keep the words. The consuming
+   project asked for exactly this and framed it correctly as the one place a
+   rule-4 disclosure is owed here.
+3. **`clear_markup_note` is a separate verb**, not `set(id, MarkupNote::new(""))`.
+   An empty comment is a comment, and **the saved bytes distinguish
+   `/Contents ()` present from `/Contents` absent** — collapsing the two would
+   make a deliberate blank unwritable and an accidental blank unremovable.
+4. **Its own `CommandKind::SetMarkupNote`**, argued by the consumer and
+   adopted, beside `SetMarkupStyle`. Undoing an *add* removes the annotation;
+   undoing a *note* change restores the previous words **on a shape that
+   stays**. They also **declined** to have `note` folded into `MarkupStyle` —
+   that type is about how a thing *looks* and its fields are `StyleEdit<T>`,
+   while `/Contents` is content; bundling them would make one undo entry out of
+   two operator acts.
+
+**Refusals, both by name.** A **ce dimension** (its text *is* its measurement).
+And a **widget**, whose `/Contents` is its field's **tooltip** (§12.5.6.19) —
+owned by the field and possibly shared by several widgets, so writing it as a
+review comment would **edit a form's help text from a comments panel**. Same
+two refusals and the same error type as the move and resize verbs, which is
+the consistency a consumer can rely on rather than three verbs disagreeing.
+
+#### ★★ `R224`'s VACUOUS-SCAN CLAUSE, THIRD MEDIUM — AND THE REMEDY WAS ALREADY WRITTEN
+
+**The first attempt at the partial-note sabotage silently did not apply**: a
+multi-line pattern written with `\n` against a **CRLF** file never matched, the
+patch tool exited clean, the suite ran green. ⇒ ***"the sabotage survived" and
+"the sabotage never happened" produce byte-identical output***, and the first
+reading of that green is *"the test is weak"* — an instrument fault presenting
+as a finding about the code. Re-applied by line number: **caught**, as
+intended.
+
+This is `R224`'s ★★ clause — *"a scan goes **vacuous rather than red** when its
+anchor is renamed and every assertion over an empty set passes"* — whose 306th
+filing note already generalised it: *"it is not about tests; it is about any
+assertion whose subject set can be empty."* Here the assertion is *"the suite
+goes red under mutation M"* and **M was the empty set**. Two things are new:
+the medium is the **sabotage mechanism itself** rather than a scan or a gate,
+and the **polarity is inverted** — a vacuous scan yields a false PASS, a
+vacuous sabotage yields a false *"this test is weak"*, which sends the reader
+to strengthen a test that was fine.
+
+**★ The part worth more than the instance.** `Pass 150.0` (`943d482`, 04:55
+the same day) hit this exact failure with a different string-eating cause — a
+Python heredoc ate a backslash continuation — and **its commit message already
+states the remedy**: *"A sabotage that does not land looks identical to one the
+tests survived. Re-run with the mutation verified by grep before believing a
+green result."* Nine and a half hours later, same engineer, same session-day,
+same failure. ⇒ **A remedy that lives only in a commit message is read by
+nobody**, which is verbatim `R224`'s own reach argument for why it is a
+standing rule rather than an agent-memory line. Both causes now sit in the
+cross-project RAG file that already owned this class, with a dated footer
+adding the CRLF cause and the Windows-line-ending generalisation.
+
+#### ★ THE DOC-COMMENT SPLICE, AND THE FACT THAT DETECTION WAS LUCK
+
+The three new verbs were first inserted by anchoring on
+`pub fn set_markup_style(` — **which sits *below* its own `///` block.** Rust
+attaches a `///` run to the **next item in the token stream**, so
+`set_markup_style` acquired the new prose and **the three new verbs had no
+docs at all.**
+
+**★ Clippy caught it only because the block above happens to end in a `- `
+list**, which made the spliced paragraph a lazy-continuation violation. **Had
+that block ended in an ordinary paragraph, it would have compiled silently**
+and shipped wrong rustdoc into `docs/core-api/`'s consuming project. This is
+the class already recorded in
+`D:/dev/rag/rust/doc_comment_splice_attaches_to_the_next_declaration_invisibly_to_every_gate.md`
+(2026-08-09, `Pass 38.5`) — **but that file describes cut-and-paste reordering
+and asserts there is no mechanical detector.** This instance adds two facts it
+did not have, and both are now filed there with a dated footer:
+
+- **The hazard is an INSERTION-ANCHOR hazard, and the obvious anchor is the
+  wrong one.** Any script or agent inserting a method by matching
+  `pub fn <name>(` lands **inside the preceding item's doc block**, every
+  time, by construction. Anchor on the blank line above the doc block, or on
+  the previous item's closing brace — never on the signature.
+- **There IS a partial mechanical detector and it is worse than none for
+  planning purposes**, because it is **conditional on the preceding doc block's
+  last line being a list item.** It will fire sometimes and give false
+  confidence about a class it cannot generally see.
+
+#### ★★★★ HARD-RULE-11 SWEEP — SEARCHED FOR THE CLAIM, NOT FOR A STRING
+
+The claim that changed meaning: ***a note can only be written at the moment an
+annotation is created; `MarkupOptions` is the route to `/Contents`.***
+
+**THREE LIVE SURVIVORS, ALL IN `docs/core-api/03-capabilities.md` §3.1 — the
+document a consuming project builds against.** Reported, not edited; `docs/core-api/`
+is the engineer's tree.
+
+| # | site | the claim | falsified by |
+|---|---|---|---|
+| 1 | `03-capabilities.md:1008–1018` | *"**Limit 1 — geometric markup cannot carry note text.** … A Comments panel will therefore show 'no note text' on every shape pdfce itself drew — **expected, not missing data**, and **the shell must say so in those words**. … **Opportunity:** note-text authoring for geometric markup is `FEATURES.md:220`, **unbuilt in every shell**."* | `Pass 150.0` (`943d482`, **04:55 the same day**), then again by this Pass |
+| 2 | `03-capabilities.md:1020` + `:1044` | *"**Limit 2 — a placed markup can be MOVED but not resized or rotated**"* and *"**Still unbuilt, and these are real:** *resize* and *rotate*"* | `Pass 151.0` (`c4425f0`, the same day) |
+| 3 | `03-capabilities.md:991`, `:1017`, `:1018` | line-number citations `FEATURES.md:110-115`, `FEATURES.md:111`, `FEATURES.md:220`, and `ui_text.rs:9577-9584` | all four have decayed; `FEATURES.md:110-115` now points at *Document & pages* rows, and `ui_text.rs:9577-9584` is `/RV` formatting-tooltip rustdoc. The real string is `ui_text.rs:9838` |
+
+**★★★★ SURVIVOR 1 IS THE FINDING, AND ITS SHAPE IS THE PART TO CARRY.**
+`943d482` — **the commit that falsified Limit 1** — *edited this file*, at a
+hunk beginning `@@ -1017,15 +1017,38 @@` whose **first context line is Limit 1's
+own closing sentence.** It corrected *Limit 2* (a survivor this role had
+reported) and **read past *Limit 1*, the claim its own feature had just made
+false, in the paragraph directly above the one it was editing.** ⇒ ***A sweep
+dispatched about one claim does not incidentally check the claim next to it***
+— the engineer was discharging a reported survivor, not re-reading the section,
+and a reported-survivor list is a **worklist**, never a scope.
+
+**And Limit 1's last two sentences are not stale documentation — they are
+operator-facing instructions to state a falsehood.** *"the shell must say so
+in those words"* directs `pdfceGUI` to tell an operator that a blank note is
+*expected* on every shape pdfce drew; *"unbuilt in every shell"* names an
+opportunity that shipped twice today. This is precisely the class the 303rd
+filing named in this same section — *"a flat falsehood instructing a shell NOT
+to build the verb this Pass shipped"* — **recurring two paragraphs above where
+it was found.**
+
+**★★★ SURVIVOR 2 IS THE 303rd FILING'S OWN CORRECTION, STALE ONE PASS LATER.**
+The struck-through block and the *"What is true now"* paragraph beneath it were
+written to repair exactly this defect for `move_annotation`; `resize_annotation`
+shipped the next Pass and the repair became the next stale claim. **The
+correction even explains why no gate can catch it** — *"a claim of NON-coverage
+is invisible to a coverage check"* — and then itself became a claim of
+non-coverage. ⇒ ***A correction is a claim with the same shelf life as the one
+it replaced***, which is hard rule 10's corollary (*a correction is a claim*)
+pointed at the durability of the correction rather than at its sourcing.
+
+**Checked and CLEAN, reported because a clean result is a finding here:**
+`crates/pdfce-gui/src/ui_text.rs:9835–9838` — `comment_row_no_note()`'s rustdoc
+says *"an empty row is indistinguishable from a rendering failure, and this is
+a real, expected state."* **Still true**: it describes an annotation that
+genuinely has no `/Contents`, which remains an ordinary state. The falsehood is
+`03-capabilities.md`'s claim about *which* annotations are in that state, not
+this string. Also clean: `MarkupNote`'s and `MarkupOptions::note`'s rustdoc
+(`edit.rs:3916`, `:4148`), neither of which claims author-time exclusivity.
+
+#### DISPOSITIONS
+
+- **`R224` — THIRD DATED INSTANCE NOTE, MINT DECLINED.** The sabotage medium
+  is new and the polarity is inverted, but the ★★ clause's own 306th-filing
+  generalisation — *"any assertion whose subject set can be empty"* — already
+  reaches it, and two consecutive filings have declined a mint on this clause
+  for the same reason. Elevating per occurrence is forbidden by the 2026-08-05
+  ruling. **Ceiling stays `R224`; next free `R225`.**
+- **NO NEW STANDING RULE for the doc-comment splice.** The class has a
+  cross-project RAG carrier since 2026-08-09 and the two new facts are
+  *prescriptions for an anchor*, not a discipline this project can be found to
+  have violated. Filed where a future editing agent will actually meet them —
+  the RAG file — rather than as a rule nobody consults mid-edit.
+- **NO DECISION-LOG ENTRY.** `e0652e0` moves no crate boundary, defines no
+  invariant and changes no architecture. **The rationale the consumer offered
+  and the engineer adopted — *"undoing an add removes the annotation, undoing a
+  style change puts the previous style back"* — is a QUOTATION of the rationale
+  already recorded on `CommandKind::SetMarkupStyle`.** Recording an application
+  of a standing precedent as a new decision would make the log's own ceiling
+  meaningless. **Ceiling stays at decision 095; next free 096.** *(Considered
+  and rejected: the mixed total/partial write semantics of point 1 above —
+  `/Contents` total, `/T` and `/M` partial, in one struct — is a genuine
+  contract worth stating, and it is stated, in `set_markup_note`'s rustdoc and
+  in `02-editing-and-saving.md`. It binds one verb, not the crate.)*
+
+#### `FEATURES.md` — FOUR ROWS CHANGED (one new, three corrected)
+
+| row | change |
+|---|---|
+| **NEW**, *Implemented → Annotations & markup* | *"Write, correct or clear a note on an annotation that already exists"* — `[x]` core · `[x]` cli · **`[ ]` gui** (told, not shipped to; the request originated in `pdfceGUI` and wiring is theirs) · `[x]` Acrobat |
+| *"Note text on markup at author time"* | trailing sentence **replaced**: *"the shell was waiting on this; consuming it is their work"* was true of the wrong thing — the shell was waiting on the **edit** verb, because a geometric markup has no text-entry moment. Now says so and points at the sibling row |
+| *"Author geometric markup"* | *"Opacity and note text can both be set at authoring time"* → opacity at authoring time, note text at authoring time **or onto the finished shape afterwards** |
+| *"Comments panel — browse every note and markup"* | `[x]` gui → **`◐`**, and the row now **states the limit**: it browses and **cannot write**, and the verbs it needs ship and are unwired. A bare *"browse"* left the panel's read-only nature inferable rather than stated, which is the distinction the legend exists to protect |
+
+#### VERIFICATION
+
+- **`tools/run-gates.sh`: PASS — 26 commands**, both filing gates, reported by
+  the engineer. `check-string-gaps.sh` caught **two** eaten line-continuations
+  again — the same instrument, the same failure mode, a fourth session running.
+- **8 core tests**, every assertion read back through the ordinary annotation
+  walk **from saved bytes** rather than from the returned report — so a report
+  that lies about what it wrote cannot pass.
+- **Every CLI flag driven through the real binary** (`--note`, `--note-author`,
+  `--note-date`, `--clear`, and a malformed date **refused with exit 9**),
+  because unit tests hit core directly and **a parsed-but-dropped flag passes
+  every one of them.**
+- **Re-run here at filing time**, on `HEAD` = `2380881`:
+  `python tools/check-commits-filed.py` → *"1 code commit(s) are in no filing:
+  `e0652e0`"*; `python tools/check-passes-filed.py` → the same commit. **Both
+  name exactly the commit this entry files**, and both are discharged by this
+  filing's own commit.
+- **`git rev-parse` / `git rev-list`, run here:** `HEAD` = `2380881`,
+  `origin/main` = `64224d4`, **5 unpushed** — `1c292bc`, `180f19f`, `2dd1ad6`
+  (308th filing), `e0652e0`, `2380881` (309th filing), listed from
+  `git rev-list --oneline origin/main..HEAD` run here rather than recalled.
+  Standing authority (decision 090) covers an
+  ordinary fast-forward; **pushing is not this role's act** — flagged, not
+  performed.
+- **Backup, `ls -lt D:/Dev/pdfce-backups/` run here:** newest is
+  `pdfce-20260828-1416-56d849b-full.bundle`, 2026-08-28 **10:16**, at
+  `56d849b`. **`git rev-list --count 56d849b..HEAD` = 7** — the bundle is
+  **seven commits behind `HEAD`**, against **5** at the 309th filing, **3** at
+  the 308th and **1** at the 307th. **Drifting for a fourth filing running**,
+  and the increments are growing.
+- **Channel, `ls -lt` run here at filing time (not carried forward):** the
+  newest item in `open/` is the engineer's own reply
+  `reply_a_note_can_be_written_onto_a_shape_that_already_exists.md`, 14:28.
+  The request is renamed `done_2026-08-28-markup-note-edit-CONSUMED.md`
+  (12:54). **No unparsed inbound request.**
+
 ### `Pass 153.1` (`180f19f`) — the five stale claims `Pass 153.0` shipped, all fixed, plus `tools/check-core-api-verbs.py --fix` — ★★★★★ **THE NEW WRITER'S FIRST CUT SILENTLY REWROTE ZERO ROWS BECAUSE IT ANCHORED ON `VERB_INDEX` — `02-editing-and-saving.md`, THE DOCUMENT THE ROUTING TABLE *POINTS AT*, NOT THE ONE THAT *CONTAINS* IT. EVERY SURROUNDING FILTER PASSED AND THE REGEX WAS CORRECT, SO IT READ AS A REGEX PROBLEM FOR THREE DEBUGGING ROUNDS; HAD IT MATCHED, IT WOULD HAVE WRITTEN THE SIZES INTO THE WRONG FILE** ⇒ **`R224`'s VACUOUS-SCAN CLAUSE AT ITS SECOND `tools/` INSTANCE IN THREE DAYS, ON THE SAME SCRIPT AND THE SAME DOCUMENT — AND THE FIRST IN A *WRITER*, WHERE "MATCHED NOTHING" IS NOT MERELY UNINFORMATIVE BUT A NEAR-MISS ON CORRUPTION** — ★★★★ **ALL FIVE OF THE 308th FILING'S SWEEP SURVIVORS ARE DISCHARGED, INCLUDING THE ONLY ONE AN OPERATOR COULD SEE: `ui_text.rs` NO LONGER LABELS `NeutralBlack` "(pdfce's default)", AND `Calibrated` NOW SAYS IT IS** — ★★★ **THE PREDICTION WAS EXACT: `the_written_file_names_every_legal_value_of_every_key` WENT RED ON THE *FIX*, NOT ON THE DEFECT — A TEST ENFORCING A STALE COMMENT IS RED-ON-THE-CORRECTION BY CONSTRUCTION, WHICH IS THE ORDER TO EXPECT RATHER THAN A SURPRISE** — ★★ **`image.rs`'s DEAD DIAGNOSTIC RECIPE IS *KEPT AND LABELLED EXPIRED*, NOT DELETED — decision 087 RESTS ON IT, AND A COMMENT RECORDING HOW A CONCLUSION WAS REACHED OUTLIVES THE METHOD; WHAT IT OWES IS TO SAY THE METHOD NO LONGER RUNS. THE FIFTEEN `RenderOptions` ANCHORS WERE RE-DERIVED FROM SOURCE, NOT HAND-CORRECTED** — ★ **AND THIS COMMIT EXISTS SEPARATELY AT ALL BECAUSE A FILING COMMIT CANNOT FILE ITSELF: CODE AND FILING WERE FIRST COMMITTED TOGETHER, WHICH SENT `check-commits-filed` TO DEFERRED ON THE VERY COMMIT MEANT TO MAKE IT GREEN** — 2026-08-28 (309th filing)
 
 **Proportionate by design.** The *substance* of these five defects — how each
@@ -115263,6 +115546,55 @@ same cause (hashes exist only at commit time), two different failure modes.
   assertion whose subject set can be empty* — and n = 2 in one tree does not
   buy a number when the rule already covers it. **Ceiling stays `R224`, next
   free `R225`.**
+
+  **★★★ THIRD DATED NOTE, 2026-08-28 (310th filing) — THE SAME CLAUSE IN ITS
+  THIRD MEDIUM, WITH THE POLARITY INVERTED, AND THE REMEDY HAD BEEN WRITTEN
+  DOWN NINE AND A HALF HOURS EARLIER BY THE SAME PERSON.** From `Pass 154.0`
+  (`e0652e0`).
+
+  **A sabotage silently did not apply and the suite reported green.** The
+  mutation was a multi-line pattern written with `\n` against a **CRLF** file;
+  it matched nothing, the patch tool exited clean, `cargo test` ran the
+  unmodified code and printed `ok`.
+
+  **Two additions to the clause, both new:**
+
+  - **THE MEDIUM IS THE SABOTAGE MECHANISM ITSELF.** The first two instances
+    were a source scan (a test) and a `tools/` gate over a document — both
+    *instruments that read*. This is the instrument that *perturbs*: the
+    assertion is *"the suite goes red under mutation M"*, and **M was the
+    empty set.** ⇒ *A sabotage-check is an assertion over a subject set like
+    any other, and it inherits this failure whole.*
+  - **★ THE POLARITY IS INVERTED, WHICH MAKES IT WORSE TO READ THAN A FALSE
+    PASS.** A vacuous scan prints a false **PASS** — comfortable, and wrong in
+    the direction everyone already watches for. A vacuous sabotage prints a
+    false ***"the test is weak"*** — a finding that **points at innocent
+    code**, and whose natural response is to spend the next hour strengthening
+    a test that was already correct. **An instrument fault wearing the costume
+    of a result.** The remedy is the same shape as the writer's positive
+    control: **confirm the mutation LANDED — by `git diff` or by grep — before
+    reading anything into the run**, green or red.
+
+  **★★ THE PART THAT IS NOT ABOUT THIS INSTANCE.** `Pass 150.0` (`943d482`,
+  **04:55 the same day**) hit this exact failure with a *different*
+  string-eating cause — a Python heredoc ate a backslash continuation — and
+  **its own commit message states the remedy verbatim**: *"A sabotage that does
+  not land looks identical to one the tests survived. Re-run with the mutation
+  verified by grep before believing a green result."* Nine and a half hours
+  later, same engineer, same session-day, same class, and the prescription did
+  not carry. ⇒ ***A remedy that lives only in a commit message is read by
+  nobody*** — which is `R224`'s own minting argument (*"read by one agent"* vs
+  *"read by every agent and by the operator"*) arriving from the opposite
+  direction: not a rule in the wrong place, but a **correct rule in no place at
+  all.** Both causes are now carried in
+  `D:/dev/rag/rust/a_sabotage_that_does_not_compile_or_change_behavior_measures_nothing_verify_the_mutation_before_trusting_the_catch.md`,
+  which is read across projects, with the Windows CRLF cause generalised.
+
+  **Disposition unchanged from both prior notes: a dated note, no mint.** The
+  ★★ clause's 306th-filing generalisation — *"any assertion whose subject set
+  can be empty"* — reaches this without stretching, and per-occurrence
+  elevation is forbidden by the 2026-08-05 ruling. **Ceiling stays `R224`,
+  next free `R225`.**
 
 ## Update protocol
 
