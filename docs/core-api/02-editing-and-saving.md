@@ -10,7 +10,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 164 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 170 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 164 public `EditSession` methods
+## 1. Verb index — all 170 public `EditSession` methods
 
-**Count: 164.** Established by brace-matched extraction of the four
+**Count: 170.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -2425,6 +2425,122 @@ so that cut would destroy them.
 
 `copy-field --cut OUTPUT.pdf` is the field equivalent, reporting on stderr
 what leaving cost (a cleared selection value, pruned grouping nodes).
+
+### 1.28 Pages on the clipboard (3) — `Pass 171.0`
+
+| I want to… | Call | Returns |
+|---|---|---|
+| Copy whole pages | `copy_pages(&self, indices: &[usize]) -> Result<PageClip, EditError>` | `&self` — commits nothing. |
+| Cut whole pages | `cut_pages(&mut self, indices: &[usize]) -> Result<PageClip, EditError>` | **ONE undo entry.** |
+| Paste whole pages | `paste_pages(&mut self, clip: &PageClip, position: InsertPosition) -> Result<InsertOutcome, EditError>` | `insert_pages`' full outcome. |
+
+`PageClip` lives in **`pdfce_core::pageops`**: `bytes`, `pages`,
+`fields_dropped`, plus `to_bytes()`, `from_bytes(Vec<u8>)`, `len()` (pages),
+`byte_len()`, `is_empty()`.
+
+#### ★ The clip IS a PDF
+
+`PageClip::bytes` is a real, openable document holding exactly the copied
+pages — not a private payload. A shell can hand it to something that is not
+pdfce.
+
+That is the design, not a shortcut. A private page format would be a **second
+implementation of object copying, reference remapping, resource-closure
+walking and page-tree construction** — the most-exercised code in the crate,
+rewritten to be less exercised. `pageops::assemble` already does all of it on
+every `split`, `merge` and `extract-pages` anybody has run, and `insert_pages`
+already consumes exactly this shape coming back in.
+
+The cost, stated: a page clip is **larger** than a private format, because it
+carries a catalog and a page tree.
+
+#### What travels
+
+Everything the pages reach — content, resources, fonts, images, annotations,
+and the `/AcroForm` fields whose widgets are **entirely** on the copied pages.
+A field straddling a copied and an uncopied page is dropped and counted in
+`fields_dropped`.
+
+**Document-level structures do not**: outline, named destinations, page
+labels, `/OCProperties`.
+
+#### ★★ Read `InsertOutcome`. Two fields are invisible in the result.
+
+`paste_pages` is `insert_pages`, so it inherits that contract whole —
+including the trap: **a page's `/Annots` reaches its widgets, so form-field
+boxes ARRIVE even though the `/AcroForm` that owns them does not.** They draw
+like fields and nothing can fill them.
+
+- `orphaned_widgets` — how many.
+- `orphaned_widgets_unrecoverable` — the subset `adopt_widget` cannot even
+  register, because the widget carries no name or type of its own.
+- `source_outline_dropped`, `source_page_labels_dropped`, `page_labels_stale`.
+
+`cut_pages` refuses to remove the last page (`WouldRemoveEveryPage`): a
+document with no pages is not a document, and the failure would not be an
+error but a file that opens to nothing.
+
+**CLI:** `page-copy --pages 1,3,5 --clip F [--cut OUT.pdf]`,
+`page-paste --clip F --at start|end|before:N|after:N`.
+
+---
+
+### 1.29 Bookmarks on the clipboard (3) — `Pass 172.0`
+
+| I want to… | Call | Returns |
+|---|---|---|
+| Copy a bookmark and its subtree | `copy_outline_item(&self, item_id: ObjId) -> Result<OutlineClip, EditError>` | `&self`. |
+| Cut it | `cut_outline_item(&mut self, item_id: ObjId) -> Result<OutlineClip, EditError>` | **ONE undo entry.** |
+| Paste a subtree | `paste_outline_item(&mut self, clip: &OutlineClip, placement: OutlinePlacement) -> Result<OutlinePasteOutcome, EditError>` | **ONE undo entry**, however many bookmarks. |
+
+`OutlineClip` and `OutlineClipItem` live in **`pdfce_core::outline`**, with
+`empty()`, `len()` (counting descendants), `is_empty()`, `deepest_page()`,
+`to_bytes()`, `from_bytes()`.
+
+#### ★ Acrobat cannot do this between two files at all
+
+Adobe's own documentation: bookmarks *"can't be copied directly … from one
+file to another."* Acrobat offers cut/paste **within** a document and nothing
+between two. This is an exceed, and the interesting question — what happens to
+a destination naming a page the other document lacks — is one the parity
+reference never had to answer.
+
+#### What travels, and the one thing that decides the design
+
+Title, destination **including the view** (fit style, zoom, scroll position),
+open state, `/C` colour and `/F` style flags, recursively.
+
+The destination travels because `Destination::Page` is already **document-
+relative** — a 0-based index, not an object reference — so it means the same
+thing in any document that HAS that page.
+
+Carrying the view matters more than it looks: a bookmark to *"Detail B —
+400%"* is copying the zoom as much as the page, and substituting `/Fit` would
+be a loss that still *works* and simply goes somewhere else.
+
+An outline item's dictionary is **all back-pointers** (`/Parent`, `/Prev`,
+`/Next`, `/First`, `/Last`, and `/Count` derived from them), which is why this
+is a model rather than a raw-dictionary carrier like `ClipAnnotation::Raw`.
+
+#### ★★ A destination past the end is DROPPED, not clamped
+
+`OutlinePasteOutcome { items_pasted, destinations_dropped }`.
+
+Clamping to the last page would produce a bookmark that navigates confidently
+to the wrong place. §12.3.3 permits an item with **no** destination (a pure
+grouping entry), so a destination-less bookmark is a legal, honest shape and a
+wrong destination is not.
+
+**Say it before the press, not after**: `clip.deepest_page()` against the
+destination's page count tells a shell exactly how many will not survive. A
+dropped-destination bookmark still shows, still has its title, and does
+nothing when clicked — nothing on screen distinguishes it.
+
+**CLI:** `bookmark-copy --item N --clip F [--cut OUT.pdf]`,
+`bookmark-paste --clip F [--under N]`. `list-outline` now prints `obj=N`,
+which is the number `--item` takes — it printed only a sequence counter
+before, which made the verb unreachable from the one command that lists
+bookmarks.
 
 ## 2. Construction, and the session's three read views
 

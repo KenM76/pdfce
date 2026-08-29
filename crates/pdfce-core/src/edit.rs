@@ -403,6 +403,10 @@ pub enum CommandKind {
     /// after pressing cut has been told the wrong thing about their
     /// clipboard.
     CutSelection,
+    /// A bookmark subtree was PASTED into the outline (`Pass 172.0`) — every
+    /// item, its colour and style patches, and its open state, as ONE undo
+    /// entry.
+    PasteOutlineItem,
     /// A form field, or ONE of its widgets, was deleted (decision 020
     /// §3.6.3): the widget(s) un-listed from their pages' `/Annots`, the
     /// field's `/Kids` or `/AcroForm /Fields` registration patched, any
@@ -5301,6 +5305,15 @@ pub enum EditError {
     /// identity, so two top-level fields with one name are one field with
     /// two widgets, and filling either fills both. No viewer reports this;
     /// the operator finds it by typing.
+    /// A page-level operation refused (`Pass 171.0`).
+    ///
+    /// Wraps [`crate::pageops::PageOpError`] so
+    /// [`EditSession::copy_pages`](crate::edit::EditSession::copy_pages) can
+    /// hand back what the assembler said without this enum growing a variant
+    /// per assembler refusal. Transparent, so the operator reads the
+    /// assembler's own sentence rather than a wrapper's paraphrase of it.
+    #[error(transparent)]
+    PageOp(#[from] crate::pageops::PageOpError),
     /// A **cut** would remove something the clipboard cannot carry back
     /// (`Pass 168.0`).
     ///
@@ -10090,25 +10103,28 @@ impl EditSession {
         }
 
         // 5. DELETE, then fold.
-        let mut commands = 0usize;
+        //
+        // ★ THE FOLD COUNT IS MEASURED, NOT COUNTED. An earlier version of
+        // the outline paste one class up incremented a counter per INTENDED
+        // command, and a verb that returned early without committing made the
+        // count exceed the commands that actually reached the stack --
+        // `coalesce_last` then correctly refused to fold, and the gesture
+        // silently became N undo entries. Reading the stack's own depth
+        // cannot drift from what the stack holds.
+        let depth_before = self.undo.len();
         if !object_indices.is_empty() {
             self.delete_objects(page_index, object_indices)?;
-            commands += 1;
         }
         for &id in &targets {
             // A cascade may already have taken this one -- see the doc
-            // comment. Skipped rather than refused, and it does not count as
-            // a command because none was committed.
+            // comment. Skipped rather than refused.
             if self.value(id).is_none() {
                 continue;
             }
             self.delete_annotation(id)?;
-            commands += 1;
         }
-        // `planned` was already checked against MAX_UNDO_DEPTH and `commands`
-        // is at most `planned`, so this cannot fail -- the return value is
-        // ignored deliberately rather than unwrapped.
-        let _ = self.coalesce_last(commands, CommandKind::CutSelection);
+        let committed = self.undo.len().saturating_sub(depth_before);
+        let _ = self.coalesce_last(committed, CommandKind::CutSelection);
         Ok(clip)
     }
 
@@ -12663,6 +12679,30 @@ pub struct FieldDeletion {
     /// slot in the §12.7.3.2 FQN space, so leaving one behind would refuse a
     /// later field that wanted the name.
     pub emptied_parents: usize,
+}
+
+/// What pasting a bookmark subtree did (`Pass 172.0`).
+///
+/// Two counts, and the second is the one a shell must surface: a bookmark
+/// whose destination was dropped still appears in the panel, still has its
+/// title, and simply does nothing when clicked. Nothing on screen
+/// distinguishes it from one that navigates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct OutlinePasteOutcome {
+    /// How many bookmarks arrived, counting every descendant.
+    pub items_pasted: usize,
+    /// How many arrived **without their destination**, because it named a
+    /// page this document does not have.
+    ///
+    /// Not clamped to the last page: a bookmark that navigates confidently to
+    /// the wrong place is worse than one that plainly does not navigate, and
+    /// §12.3.3 permits an item with no destination.
+    ///
+    /// Ask
+    /// [`OutlineClip::deepest_page`](crate::outline::OutlineClip::deepest_page)
+    /// **before** the press to say this number in advance rather than after.
+    pub destinations_dropped: usize,
 }
 
 /// One occurrence of a search term in the document's page text.
@@ -31607,6 +31647,355 @@ impl EditSession {
                 self.paste_additional_widget(clip, &name, page_id, &slots, path, rect, disclosures)
             }
         }
+    }
+
+    /// **Copy a bookmark and everything under it** (`Pass 172.0`).
+    ///
+    /// ★ Acrobat cannot do this between two documents at all — Adobe's own
+    /// documentation says *"Bookmarks can't be copied directly … from one file
+    /// to another."* This is an exceed over the parity reference, not a catch-up.
+    ///
+    /// The clip carries the **logical** subtree — title, destination, open
+    /// state, colour and style flags, recursively — because an outline item's
+    /// dictionary is all back-pointers (`/Parent`, `/Prev`, `/Next`, `/First`,
+    /// `/Last`) and carrying those would carry a shape that means nothing in
+    /// the destination. See [`OutlineClip`](crate::outline::OutlineClip).
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::OutlineItemNotFound`] when nothing bears `item_id`.
+    pub fn copy_outline_item(
+        &self,
+        item_id: ObjId,
+    ) -> Result<crate::outline::OutlineClip, EditError> {
+        let outline = crate::outline::read_outline(&self.graph());
+        let found = Self::find_outline_item(&outline.items, item_id)
+            .ok_or(EditError::OutlineItemNotFound { id: item_id.num })?;
+        Ok(crate::outline::OutlineClip {
+            items: vec![Self::outline_item_to_clip(found)],
+        })
+    }
+
+    /// **Cut a bookmark and everything under it** — copy it and remove it, as
+    /// ONE undo entry (`Pass 172.0`).
+    ///
+    /// The copy runs first, so a subtree that cannot be carried is refused
+    /// with nothing deleted.
+    ///
+    /// # Errors
+    ///
+    /// Everything [`Self::copy_outline_item`] and
+    /// [`Self::delete_outline_item`] raise.
+    pub fn cut_outline_item(
+        &mut self,
+        item_id: ObjId,
+    ) -> Result<crate::outline::OutlineClip, EditError> {
+        let clip = self.copy_outline_item(item_id)?;
+        self.delete_outline_item(item_id)?;
+        let _ = self.coalesce_last(1, CommandKind::CutSelection);
+        Ok(clip)
+    }
+
+    /// **Paste a bookmark subtree** into this document's outline
+    /// (`Pass 172.0`).
+    ///
+    /// ONE undo entry, however many bookmarks arrive.
+    ///
+    /// # ★ A destination naming a page this document does not have is DROPPED
+    ///
+    /// Not clamped to the last page. Clamping would produce a bookmark that
+    /// navigates confidently to the wrong place; §12.3.3 permits an item with
+    /// no destination (a pure grouping entry), so a destination-less bookmark
+    /// is a legal, honest shape and a wrong destination is not.
+    ///
+    /// [`OutlineClip::deepest_page`](crate::outline::OutlineClip::deepest_page)
+    /// lets a shell say how many will be dropped **before** the press.
+    ///
+    /// # Errors
+    ///
+    /// Everything [`Self::add_outline_item`] raises — encryption, an enforced
+    /// certification, an exhausted object-number space — plus
+    /// [`EditError::SelectionTooLargeForOneUndo`] when the subtree has more
+    /// bookmarks than can be folded into a single undo entry.
+    pub fn paste_outline_item(
+        &mut self,
+        clip: &crate::outline::OutlineClip,
+        placement: OutlinePlacement,
+    ) -> Result<OutlinePasteOutcome, EditError> {
+        if clip.is_empty() {
+            return Ok(OutlinePasteOutcome::default());
+        }
+        // Each bookmark is one `add_outline_item` and possibly one
+        // `set_outline_open`, so the ceiling is two commands per item.
+        let planned = clip.len().saturating_mul(2);
+        if planned > MAX_UNDO_DEPTH {
+            return Err(EditError::SelectionTooLargeForOneUndo {
+                targets: planned,
+                limit: MAX_UNDO_DEPTH,
+            });
+        }
+        let pages = self.page_slots()?.len();
+        let mut outcome = OutlinePasteOutcome::default();
+        // ★ MEASURED, NOT COUNTED. The first cut of this incremented a
+        // counter per intended command -- and `set_outline_open` does not
+        // always commit (it returns early when the state already matches), so
+        // the count could exceed the commands that actually reached the undo
+        // stack. `coalesce_last` then refused to fold (its `undo.len() <
+        // count` guard, correctly) and the paste silently became three undo
+        // entries. A test caught it; nothing else would have.
+        let depth_before = self.undo.len();
+
+        // The placement names WHERE the first root goes; every later root and
+        // every child hangs off what has already been created, so the
+        // placement is consumed once.
+        let parent = match placement {
+            OutlinePlacement::FirstChild { parent } | OutlinePlacement::LastChild { parent } => {
+                parent
+            }
+            OutlinePlacement::Before { sibling } | OutlinePlacement::After { sibling } => {
+                self.outline_parent_of(sibling)
+            }
+        };
+        for item in &clip.items {
+            self.paste_outline_subtree(item, parent, pages, &mut outcome)?;
+        }
+        let committed = self.undo.len().saturating_sub(depth_before);
+        let _ = self.coalesce_last(committed, CommandKind::PasteOutlineItem);
+        Ok(outcome)
+    }
+
+    /// One subtree, depth-first, counting the commands it committed.
+    fn paste_outline_subtree(
+        &mut self,
+        item: &crate::outline::OutlineClipItem,
+        parent: Option<ObjId>,
+        pages: usize,
+        outcome: &mut OutlinePasteOutcome,
+    ) -> Result<(), EditError> {
+        use crate::outline::Destination;
+        // Drop a destination this document cannot honour -- see the verb's
+        // doc for why dropping beats clamping.
+        let destination = match &item.destination {
+            Some(Destination::Page { page_index, view }) if *page_index < pages => {
+                Some(Destination::Page {
+                    page_index: *page_index,
+                    view: view.clone(),
+                })
+            }
+            Some(_) => {
+                outcome.destinations_dropped += 1;
+                None
+            }
+            None => None,
+        };
+        let id = self.add_outline_item(parent, &item.title, destination)?;
+        outcome.items_pasted += 1;
+
+        // `/C` and `/F` have no setter of their own, so they are written
+        // straight onto the item this call just created. Its object is the
+        // session's, not the file's, so this is a patch to something pdfce
+        // owns rather than a rewrite of the operator's document.
+        if (item.color.is_some() || item.style_flags.is_some())
+            && let Some(Object::Dict(d)) = self.value(id).cloned()
+        {
+            {
+                let mut updated = d;
+                if let Some([r, g, b]) = item.color {
+                    updated.insert(
+                        Name::from(b"C"),
+                        Object::Array(vec![Object::Real(r), Object::Real(g), Object::Real(b)]),
+                    );
+                }
+                if let Some(flags) = item.style_flags {
+                    updated.insert(Name::from(b"F"), Object::Integer(flags));
+                }
+                let before = self.state.get(&id).cloned();
+                self.commit(Command {
+                    kind: CommandKind::EditOutlineItem,
+                    objects: vec![ObjectWrite {
+                        id,
+                        before,
+                        after: Some(Object::Dict(updated)),
+                    }],
+                    removals: Vec::new(),
+                    trailer: None,
+                });
+            }
+        }
+
+        for child in &item.children {
+            self.paste_outline_subtree(child, Some(id), pages, outcome)?;
+        }
+        // The open state is set AFTER the children exist: `/Count`'s sign is
+        // what records it (§12.3.3), and an item with no children has no
+        // count to sign.
+        if item.open && !item.children.is_empty() {
+            self.set_outline_open(id, true)?;
+        }
+        Ok(())
+    }
+
+    /// Find an item by id anywhere in a read outline.
+    fn find_outline_item(
+        items: &[crate::outline::OutlineItem],
+        id: ObjId,
+    ) -> Option<&crate::outline::OutlineItem> {
+        for item in items {
+            if item.id == id {
+                return Some(item);
+            }
+            if let Some(found) = Self::find_outline_item(&item.children, id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    /// Project a read outline item onto the clipboard's model.
+    fn outline_item_to_clip(item: &crate::outline::OutlineItem) -> crate::outline::OutlineClipItem {
+        crate::outline::OutlineClipItem {
+            title: item.title.clone(),
+            destination: item.destination.clone(),
+            open: item.open,
+            color: item.color,
+            style_flags: item.style_flags,
+            children: item
+                .children
+                .iter()
+                .map(Self::outline_item_to_clip)
+                .collect(),
+        }
+    }
+
+    /// The parent of an outline item, or `None` when it is top level.
+    fn outline_parent_of(&self, item_id: ObjId) -> Option<ObjId> {
+        let graph = self.graph();
+        let parent = graph
+            .resolved(item_id)
+            .as_dict()?
+            .get(b"Parent")
+            .and_then(Object::as_reference)?;
+        // The outline ROOT is not an item; a child of it is top level, which
+        // `add_outline_item` expresses as `None`.
+        match self.outline_root() {
+            Some((root, _)) if root == parent => None,
+            _ => Some(parent),
+        }
+    }
+
+    /// **Copy whole pages onto the clipboard** (`Pass 171.0`).
+    ///
+    /// # The clip IS a PDF, deliberately
+    ///
+    /// [`PageClip`](crate::pageops::PageClip) holds the bytes of a real,
+    /// openable one-or-more-page document — not a private format. Three
+    /// reasons, in order of how much they matter:
+    ///
+    /// 1. **It already existed and is proven.** `pageops::extract` builds it,
+    ///    and that is the same engine `split`, `merge` and `extract-pages`
+    ///    run on every real document. A private page format would be a second
+    ///    implementation of object copying, reference remapping, resource
+    ///    closure and page-tree construction — the most-exercised code in the
+    ///    crate, re-written to be less exercised.
+    /// 2. **The paste side already existed too.** [`Self::insert_pages`] takes
+    ///    a [`DocumentView`], which a `PageClip`'s bytes produce directly, and
+    ///    brings with it every disclosure that verb has learned to make —
+    ///    orphaned widgets, dropped page labels, a dropped source outline.
+    /// 3. **A shell can hand it to anything.** An operator who pastes page 3
+    ///    into an email is pasting a PDF, not a payload only pdfce can read.
+    ///
+    /// The cost is stated rather than hidden: a page clip is **larger** than a
+    /// private format would be, because it carries a catalog and a page tree.
+    /// For a gesture that moves pages between drawings, that is not a price
+    /// worth optimising away.
+    ///
+    /// # What travels, and what does not
+    ///
+    /// Everything the pages reach: content, resources, fonts, images,
+    /// annotations, and the `/AcroForm` fields whose widgets are **entirely**
+    /// on the copied pages. A field straddling a copied and an uncopied page
+    /// is dropped and counted, because half a field is not a field.
+    ///
+    /// The **document-level** structures do not: the outline, named
+    /// destinations, page labels, `/OCProperties`. `paste_pages` reports what
+    /// that cost on arrival rather than here, because it is the destination
+    /// that determines the damage.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::PageOutOfRange`] for an index the document does not have,
+    /// and whatever `pageops::extract` raises — an object ceiling, a
+    /// preseparated page set under a policy that refuses it.
+    pub fn copy_pages(&self, indices: &[usize]) -> Result<crate::pageops::PageClip, EditError> {
+        let count = self.page_slots()?.len();
+        if let Some(&bad) = indices.iter().find(|i| **i >= count) {
+            return Err(EditError::PageOutOfRange { index: bad, count });
+        }
+        let view = self.view();
+        let (bytes, report) = crate::pageops::extract(&view, indices).map_err(EditError::PageOp)?;
+        Ok(crate::pageops::PageClip {
+            bytes,
+            pages: indices.len(),
+            fields_dropped: report.form_fields_dropped,
+        })
+    }
+
+    /// **Cut whole pages** — copy them to the clipboard and remove them, as
+    /// ONE undo entry (`Pass 171.0`).
+    ///
+    /// The copy runs first, so a page set that cannot be carried is refused
+    /// with nothing deleted — the same contract every other cut verb states.
+    ///
+    /// # Errors
+    ///
+    /// Everything [`Self::copy_pages`] or [`Self::delete_pages`] raises,
+    /// including [`EditError::WouldRemoveEveryPage`]: a document with no pages
+    /// is not a document, so cutting all of them is refused rather than
+    /// producing one.
+    pub fn cut_pages(&mut self, indices: &[usize]) -> Result<crate::pageops::PageClip, EditError> {
+        let clip = self.copy_pages(indices)?;
+        self.delete_pages(indices)?;
+        // One command; the relabel is why a count of 1 is passed rather than
+        // nothing -- an undo control after a page cut should say "undo cut".
+        let _ = self.coalesce_last(1, CommandKind::CutSelection);
+        Ok(clip)
+    }
+
+    /// **Paste whole pages into this document** (`Pass 171.0`).
+    ///
+    /// The clip's bytes are parsed as the document they are and every page in
+    /// them is spliced in at `position`, through [`Self::insert_pages`] — so
+    /// this inherits that verb's entire contract, including its five
+    /// disclosure counters and its ONE-undo-entry guarantee.
+    ///
+    /// # ★ Read the outcome. Two of its fields are invisible in the result.
+    ///
+    /// `orphaned_widgets` is the one that bites: a page's `/Annots` reaches
+    /// its widgets, so form-field boxes ARRIVE even when the `/AcroForm` that
+    /// owns them does not. They draw like fields and nothing can fill them.
+    /// `orphaned_widgets_unrecoverable` is the subset `adopt_widget` cannot
+    /// even register, because the widget carries no name or type of its own.
+    ///
+    /// `source_outline_dropped` and the page-label pair are the others.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::Clip`] when the payload is not a readable PDF — which for
+    /// this clip means "not a PDF at all", since the clip format IS one; plus
+    /// everything [`Self::insert_pages`] raises.
+    pub fn paste_pages(
+        &mut self,
+        clip: &crate::pageops::PageClip,
+        position: crate::pageops::InsertPosition,
+    ) -> Result<InsertOutcome, EditError> {
+        let doc = crate::document::Document::from_bytes(clip.bytes.clone())
+            .map_err(|e| EditError::Clip(crate::vector::ClipError::Content(e.to_string())))?;
+        let view = DocumentView::new(&doc, doc.bytes(), doc.version());
+        let pages: Vec<usize> = (0..crate::page_tree::pages_in(&doc)
+            .map_err(EditError::PageTree)?
+            .len())
+            .collect();
+        self.insert_pages(&view, &pages, position)
     }
 
     /// **Cut a form field** — copy it to the field clipboard and delete it,

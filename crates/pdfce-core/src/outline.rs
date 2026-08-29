@@ -1063,6 +1063,363 @@ fn check_counts(items: &[OutlineItem], disagreements: &mut usize) -> usize {
 /// # }
 /// ```
 #[must_use]
+/// A copied bookmark subtree (`Pass 172.0`).
+///
+/// # ★ Acrobat cannot do this across documents at all
+///
+/// Adobe's own documentation says so by name: *"Bookmarks can't be copied
+/// directly … from one file to another."* Acrobat offers cut and paste of a
+/// bookmark **within** a document and nothing between two. So this is an
+/// exceed over the parity reference rather than catching up to it, and the
+/// interesting design question — what happens to a destination that names a
+/// page the other document does not have — is one Acrobat never had to
+/// answer.
+///
+/// # Why a model and not a raw dictionary
+///
+/// The [`RawAnnotation`](crate::vector::clip::RawAnnotation) trick does not
+/// transfer. An outline item's dictionary is **all back-pointers**:
+/// `/Parent`, `/Prev`, `/Next`, `/First`, `/Last` are the tree, and `/Count`
+/// is derived from it. Carrying them would carry a shape that means nothing
+/// in the destination; stripping them would leave a dictionary with no
+/// content but `/Title`. So the clip carries the **logical** subtree and the
+/// paste rebuilds the links.
+///
+/// # The destination is carried by PAGE INDEX, which is the whole trick
+///
+/// [`Destination::Page`](crate::outline::Destination) is already
+/// document-relative — a 0-based index, not an object reference — so it means
+/// the same thing in any document that HAS that page. A bookmark pointing at
+/// page 3 pastes as a bookmark pointing at page 3.
+///
+/// When the destination document is shorter, the destination is **dropped and
+/// disclosed** rather than clamped to the last page. Clamping would produce a
+/// bookmark that navigates confidently to the wrong place, which is worse than
+/// one that plainly does not navigate: §12.3.3 permits an item with no `/Dest`
+/// (a pure grouping entry), so a destination-less bookmark is a legal, honest
+/// shape and a wrong destination is not.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct OutlineClip {
+    /// The copied roots, in document order. One for a single-subtree copy;
+    /// several when a shell copied a multi-selection.
+    pub items: Vec<OutlineClipItem>,
+}
+
+/// One bookmark in an [`OutlineClip`], with its children.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct OutlineClipItem {
+    /// `/Title`, decoded.
+    pub title: String,
+    /// Where it navigates, or `None` for a pure grouping entry.
+    pub destination: Option<Destination>,
+    /// Whether its children show expanded.
+    pub open: bool,
+    /// `/C`, the display colour in DeviceRGB.
+    pub color: Option<[f64; 3]>,
+    /// `/F`, the display style flags (Table 154: bit 1 italic, bit 2 bold),
+    /// carried raw so bits pdfce does not model are not silently discarded.
+    pub style_flags: Option<i64>,
+    /// Its children, in document order.
+    pub children: Vec<OutlineClipItem>,
+}
+
+impl OutlineClip {
+    /// An empty clip — nothing copied.
+    ///
+    /// ★ Exists because [`OutlineClip`] is `#[non_exhaustive]`, so nothing
+    /// outside this crate can write `OutlineClip { items: vec![] }`. A shell
+    /// needs the empty value to represent *"the clipboard holds no
+    /// bookmarks"*, and without a constructor its only route was to copy
+    /// something and hope.
+    ///
+    /// Found the same way [`PageClip::from_bytes`](crate::pageops::PageClip::from_bytes)
+    /// was: an out-of-crate test failing to compile. An in-crate test can
+    /// build the struct and would never have noticed — which is the argument
+    /// for integration tests living outside the crate they exercise.
+    pub const fn empty() -> Self {
+        Self { items: Vec::new() }
+    }
+
+    /// How many bookmarks the clip holds, counting every descendant.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        fn count(items: &[OutlineClipItem]) -> usize {
+            items.iter().map(|i| 1 + count(&i.children)).sum()
+        }
+        count(&self.items)
+    }
+
+    /// Whether the clip holds nothing.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    /// The deepest page index any bookmark in the clip navigates to.
+    ///
+    /// A shell can compare it against the destination document's page count
+    /// **before** the press and say how many destinations will not survive,
+    /// rather than reporting it afterwards.
+    #[must_use]
+    pub fn deepest_page(&self) -> Option<usize> {
+        fn walk(items: &[OutlineClipItem], best: &mut Option<usize>) {
+            for item in items {
+                if let Some(Destination::Page { page_index, .. }) = item.destination {
+                    *best = Some(best.map_or(page_index, |b: usize| b.max(page_index)));
+                }
+                walk(&item.children, best);
+            }
+        }
+        let mut best = None;
+        walk(&self.items, &mut best);
+        best
+    }
+
+    /// Serialise the clip so it survives leaving this process.
+    ///
+    /// A COS object through the crate's own writer, for the same reason every
+    /// other clipboard in pdfce takes that route: the grammar has one
+    /// implementation on each side rather than a second one per format.
+    #[must_use]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(OUTLINE_CLIP_MAGIC);
+        let mut items = Vec::with_capacity(self.items.len());
+        for item in &self.items {
+            items.push(encode_item(item, 0));
+        }
+        let mut encoded = Vec::new();
+        crate::writer::serialize::write_object(
+            &mut encoded,
+            &Object::Array(items),
+            crate::object::ObjId::new(0, 0),
+            &[],
+            &crate::writer::encoder::IdentityEncoder,
+        );
+        out.extend_from_slice(&encoded);
+        out
+    }
+
+    /// Parse a payload written by [`Self::to_bytes`].
+    ///
+    /// # Errors
+    ///
+    /// [`OutlineClipError::NotAClip`] when the magic does not match — checked
+    /// first, so an unrelated payload is refused with a sentence rather than
+    /// with whatever the parser makes of the wrong bytes — and
+    /// [`OutlineClipError::Content`] when the payload is not the COS shape
+    /// this format writes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, OutlineClipError> {
+        let Some(body) = bytes.strip_prefix(OUTLINE_CLIP_MAGIC.as_slice()) else {
+            return Err(OutlineClipError::NotAClip);
+        };
+        let value = crate::parser::Parser::at(body, 0)
+            .parse_object()
+            .map_err(|e| OutlineClipError::Content(e.to_string()))?;
+        let Some(array) = value.as_array() else {
+            return Err(OutlineClipError::Content(
+                "the payload is not an array of bookmarks".to_owned(),
+            ));
+        };
+        Ok(Self {
+            items: array.iter().filter_map(|o| decode_item(o, 0)).collect(),
+        })
+    }
+}
+
+/// The signature every outline-clip payload starts with.
+pub const OUTLINE_CLIP_MAGIC: &[u8; 12] = b"PDFCEBKM\x00\x00\x00\x01";
+
+/// Why an outline clip could not be read.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum OutlineClipError {
+    /// The payload does not carry the bookmark-clip signature.
+    #[error("this is not a pdfce bookmark payload (it does not carry the clip signature)")]
+    NotAClip,
+    /// The payload is not the COS shape this format writes.
+    #[error("the bookmark payload could not be read: {0}")]
+    Content(String),
+}
+
+fn encode_item(item: &OutlineClipItem, depth: usize) -> Object {
+    let mut d = Dict::new();
+    d.insert(
+        Name::from(b"T"),
+        Object::String(crate::edit::encode_text_string(&item.title)),
+    );
+    if item.open {
+        d.insert(Name::from(b"O"), Object::Boolean(true));
+    }
+    if let Some([r, g, b]) = item.color {
+        d.insert(
+            Name::from(b"C"),
+            Object::Array(vec![Object::Real(r), Object::Real(g), Object::Real(b)]),
+        );
+    }
+    if let Some(flags) = item.style_flags {
+        d.insert(Name::from(b"F"), Object::Integer(flags));
+    }
+    // Only a RESOLVED destination is carried. An unresolvable one already
+    // failed to name a page in the document it came from, so carrying it
+    // would move a defect rather than a bookmark.
+    if let Some(Destination::Page { page_index, view }) = &item.destination {
+        d.insert(
+            Name::from(b"P"),
+            Object::Integer(i64::try_from(*page_index).unwrap_or(0)),
+        );
+        d.insert(Name::from(b"V"), encode_view(view));
+    }
+    // Depth-guarded for the same reason the outline reader is: a clip is
+    // untrusted input, and a hostile nesting must cost a truncated subtree
+    // rather than a stack.
+    if depth < crate::outline::MAX_OUTLINE_DEPTH && !item.children.is_empty() {
+        d.insert(
+            Name::from(b"K"),
+            Object::Array(
+                item.children
+                    .iter()
+                    .map(|c| encode_item(c, depth + 1))
+                    .collect(),
+            ),
+        );
+    }
+    Object::Dict(d)
+}
+
+fn decode_item(obj: &Object, depth: usize) -> Option<OutlineClipItem> {
+    let d = obj.as_dict()?;
+    let title = match d.get(b"T") {
+        Some(Object::String(bytes)) => crate::edit::decode_text_string(bytes).text,
+        _ => String::new(),
+    };
+    let children = if depth < crate::outline::MAX_OUTLINE_DEPTH {
+        match d.get(b"K") {
+            Some(Object::Array(kids)) => kids
+                .iter()
+                .filter_map(|k| decode_item(k, depth + 1))
+                .collect(),
+            _ => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+    Some(OutlineClipItem {
+        title,
+        destination: d
+            .get(b"P")
+            .and_then(Object::as_int)
+            .and_then(|n| usize::try_from(n).ok())
+            .map(|page_index| Destination::Page {
+                page_index,
+                view: decode_view(d.get(b"V")),
+            }),
+        open: matches!(d.get(b"O"), Some(Object::Boolean(true))),
+        color: match d.get(b"C") {
+            Some(Object::Array(a)) => {
+                let n: Vec<f64> = a.iter().filter_map(Object::as_number).collect();
+                match n[..] {
+                    [r, g, b] => Some([r, g, b]),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+        style_flags: d.get(b"F").and_then(Object::as_int),
+        children,
+    })
+}
+
+/// Encode a [`DestView`] as a COS array `[/Fit …params]`, so a pasted
+/// bookmark arrives at the same zoom and scroll position it was copied from.
+///
+/// The alternative was to substitute `/Fit` and disclose the loss. That would
+/// have been honest and still wrong for the gesture: an operator copying a
+/// bookmark to *"Detail B — 400%"* is copying the zoom as much as the page.
+///
+/// A `null` parameter is written as `null`, because §12.3.2 gives it a
+/// meaning — *"leave that aspect of the current view alone"* — distinct from
+/// zero.
+fn encode_view(view: &DestView) -> Object {
+    let num = |v: Option<f64>| v.map_or(Object::Null, Object::Real);
+    let mut out = Vec::new();
+    match view {
+        DestView::Xyz { left, top, zoom } => {
+            out.push(Object::Name(Name::from(b"XYZ")));
+            out.extend([num(*left), num(*top), num(*zoom)]);
+        }
+        DestView::Fit => out.push(Object::Name(Name::from(b"Fit"))),
+        DestView::FitH { top } => {
+            out.push(Object::Name(Name::from(b"FitH")));
+            out.push(num(*top));
+        }
+        DestView::FitV { left } => {
+            out.push(Object::Name(Name::from(b"FitV")));
+            out.push(num(*left));
+        }
+        DestView::FitR {
+            left,
+            bottom,
+            right,
+            top,
+        } => {
+            out.push(Object::Name(Name::from(b"FitR")));
+            out.extend([num(*left), num(*bottom), num(*right), num(*top)]);
+        }
+        DestView::FitB => out.push(Object::Name(Name::from(b"FitB"))),
+        DestView::FitBH { top } => {
+            out.push(Object::Name(Name::from(b"FitBH")));
+            out.push(num(*top));
+        }
+        DestView::FitBV { left } => {
+            out.push(Object::Name(Name::from(b"FitBV")));
+            out.push(num(*left));
+        }
+        // An unrecognised fit name is carried VERBATIM rather than degraded
+        // to `/Fit`: pdfce not modelling a name is not evidence the name is
+        // wrong, and a viewer that knows it should still get it.
+        DestView::Unknown { fit, .. } => {
+            out.push(Object::Name(fit.clone()));
+        }
+        DestView::Absent => out.push(Object::Name(Name::from(b"Fit"))),
+    }
+    Object::Array(out)
+}
+
+/// Read back what [`encode_view`] wrote. Anything unrecognised becomes
+/// [`DestView::Fit`] — the one view every viewer implements.
+fn decode_view(obj: Option<&Object>) -> DestView {
+    let Some(Object::Array(items)) = obj else {
+        return DestView::Fit;
+    };
+    let name = match items.first() {
+        Some(Object::Name(n)) => n.as_bytes().to_vec(),
+        _ => return DestView::Fit,
+    };
+    let at = |i: usize| items.get(i).and_then(Object::as_number);
+    match name.as_slice() {
+        b"XYZ" => DestView::Xyz {
+            left: at(1),
+            top: at(2),
+            zoom: at(3),
+        },
+        b"FitH" => DestView::FitH { top: at(1) },
+        b"FitV" => DestView::FitV { left: at(1) },
+        b"FitR" => DestView::FitR {
+            left: at(1),
+            bottom: at(2),
+            right: at(3),
+            top: at(4),
+        },
+        b"FitB" => DestView::FitB,
+        b"FitBH" => DestView::FitBH { top: at(1) },
+        b"FitBV" => DestView::FitBV { left: at(1) },
+        _ => DestView::Fit,
+    }
+}
+
 pub fn read_outline<G: ObjectGraph + ?Sized>(graph: &G) -> Outline {
     let mut diagnostics = OutlineDiagnostics::default();
 

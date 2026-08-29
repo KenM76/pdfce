@@ -3438,6 +3438,127 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Copy whole pages** to a clipboard file, and with `--cut` remove them
+    /// too (`Pass 171.0`).
+    ///
+    /// THE CLIP IS A PDF. Not a private payload — a real, openable document
+    /// containing exactly the copied pages. Open it, mail it, or hand it to
+    /// `page-paste`.
+    ///
+    /// Everything the pages reach travels: content, resources, fonts, images,
+    /// annotations, and the form fields whose widgets are ENTIRELY on the
+    /// copied pages. A field straddling a copied and an uncopied page is
+    /// dropped and counted, because half a field is not a field.
+    ///
+    /// Document-level structures do not: the outline, named destinations,
+    /// page labels, optional-content groups. `page-paste` reports what that
+    /// cost on arrival, because it is the destination that decides the damage.
+    PageCopy {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page numbers to copy, comma-separated (`1,3,5`).
+        #[arg(long, value_name = "N,N,N")]
+        pages: String,
+        /// Where to write the clip — a PDF.
+        #[arg(long)]
+        clip: PathBuf,
+        /// Also remove the copied pages, writing the result here — CUT.
+        ///
+        /// The copy runs first, so a page set that cannot be carried is
+        /// refused with nothing deleted. REFUSED when it would remove every
+        /// page: a document with no pages is not a document, and the failure
+        /// would not be an error but a file that opens to nothing.
+        #[arg(long, value_name = "OUTPUT.pdf")]
+        cut: Option<PathBuf>,
+        /// Save mode for `--cut`.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
+    /// **Paste whole pages** from a clipboard file into a document
+    /// (`Pass 171.0`).
+    ///
+    /// ★ READ THE COUNTERS. Two of them are invisible in the result.
+    ///
+    /// `orphaned_widgets` is the one that bites: a page's `/Annots` reaches
+    /// its widgets, so form-field boxes ARRIVE even though the `/AcroForm`
+    /// that owns them does not. They draw like fields and nothing can fill
+    /// them. `orphaned_unrecoverable` is the subset that cannot even be
+    /// adopted into a field afterwards, because the widget carries no name or
+    /// type of its own.
+    PagePaste {
+        /// Input PDF — the document the pages are pasted INTO.
+        input: PathBuf,
+        /// The clip file written by `page-copy`.
+        #[arg(long)]
+        clip: PathBuf,
+        /// Where to put them: `start`, `end`, `before:N` or `after:N`
+        /// (1-based).
+        #[arg(long, default_value = "end")]
+        at: String,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
+    /// **Copy a bookmark and everything under it** to a clipboard file, and
+    /// with `--cut` remove it too (`Pass 172.0`).
+    ///
+    /// ★ ACROBAT CANNOT DO THIS BETWEEN TWO FILES AT ALL. Adobe's own
+    /// documentation says bookmarks "can't be copied directly … from one file
+    /// to another"; it offers cut and paste within a document and nothing
+    /// between two.
+    ///
+    /// The clip carries the whole subtree — titles, destinations INCLUDING
+    /// the zoom and scroll position, open state, colour and style flags.
+    ///
+    /// Use `list-outline` to find the object number of the bookmark to copy.
+    BookmarkCopy {
+        /// Input PDF.
+        input: PathBuf,
+        /// The bookmark's object number, as `list-outline` prints it.
+        #[arg(long, value_name = "N")]
+        item: u32,
+        /// Where to write the clip.
+        #[arg(long)]
+        clip: PathBuf,
+        /// Also remove the bookmark and its descendants, writing the result
+        /// here — CUT. The copy runs first, so a subtree that cannot be
+        /// carried is refused with nothing deleted.
+        #[arg(long, value_name = "OUTPUT.pdf")]
+        cut: Option<PathBuf>,
+        /// Save mode for `--cut`.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
+    /// **Paste a bookmark subtree** from a clipboard file (`Pass 172.0`).
+    ///
+    /// ★ A DESTINATION NAMING A PAGE THIS DOCUMENT DOES NOT HAVE IS DROPPED,
+    /// not clamped to the last page. A bookmark that navigates confidently to
+    /// the wrong place is worse than one that plainly does not navigate, and
+    /// §12.3.3 permits an item with no destination. The count is printed.
+    BookmarkPaste {
+        /// Input PDF — the document the bookmarks are pasted INTO.
+        input: PathBuf,
+        /// The clip file written by `bookmark-copy`.
+        #[arg(long)]
+        clip: PathBuf,
+        /// Become the last child of this bookmark's object number. Omit for a
+        /// top-level bookmark.
+        #[arg(long, value_name = "N")]
+        under: Option<u32>,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
     /// Author a new check box (ISO 32000-1 §12.7.4.2).
     ///
     /// Both appearance states are written at creation, so the box is
@@ -7784,6 +7905,58 @@ fn run() -> ExitCode {
             output: &output,
             mode,
             verify_undo,
+        }),
+        Command::BookmarkCopy {
+            input,
+            item,
+            clip,
+            cut,
+            mode,
+        } => cmd_bookmark_copy(&BookmarkCopyArgs {
+            input: &input,
+            item,
+            clip: &clip,
+            cut: cut.as_deref(),
+            mode,
+        }),
+        Command::BookmarkPaste {
+            input,
+            clip,
+            under,
+            output,
+            mode,
+        } => cmd_bookmark_paste(&BookmarkPasteArgs {
+            input: &input,
+            clip: &clip,
+            under,
+            output: &output,
+            mode,
+        }),
+        Command::PageCopy {
+            input,
+            pages,
+            clip,
+            cut,
+            mode,
+        } => cmd_page_copy(&PageCopyArgs {
+            input: &input,
+            pages: &pages,
+            clip: &clip,
+            cut: cut.as_deref(),
+            mode,
+        }),
+        Command::PagePaste {
+            input,
+            clip,
+            at,
+            output,
+            mode,
+        } => cmd_page_paste(&PagePasteArgs {
+            input: &input,
+            clip: &clip,
+            at: &at,
+            output: &output,
+            mode,
         }),
         Command::CopyField {
             input,
@@ -12714,8 +12887,14 @@ fn cmd_list_outline(input: &Path, flat: bool) -> u8 {
             } else {
                 "  ".repeat(it.level)
             };
+            // ★ `obj=` is the OBJECT NUMBER, added with `Pass 172.0`, and it
+            // is not decoration: `bookmark-copy --item N` takes it, and `n=`
+            // is a sequence counter that means nothing to any other verb.
+            // Without it the bookmark clipboard was documented, correct and
+            // unreachable from the one command that lists bookmarks.
             println!(
-                "{indent}bookmark n={n} level={} open={} title={:?} dest={dest}",
+                "{indent}bookmark n={n} obj={} level={} open={} title={:?} dest={dest}",
+                it.id.num,
                 it.level,
                 u32::from(it.open),
                 it.title,
@@ -31686,4 +31865,382 @@ fn cmd_paste_field(args: &PasteFieldArgs<'_>) -> u8 {
         u32::from(saved.undo_identical),
     );
     finish_edit(args.input, &saved)
+}
+
+/// Parse `--pages 1,3,5` into 0-based indices.
+fn parse_page_list(raw: &str) -> Result<Vec<usize>, String> {
+    let mut out = Vec::new();
+    for token in raw.split(',') {
+        let token = token.trim();
+        if token.is_empty() {
+            continue;
+        }
+        let n: usize = token
+            .parse()
+            .map_err(|_| format!("{token:?} is not a page number"))?;
+        // 1-based on this side, 0-based in the engine -- the same convention
+        // every `--page` flag in this binary uses.
+        let index = n
+            .checked_sub(1)
+            .ok_or_else(|| "--pages is 1-based; 0 is not a page".to_owned())?;
+        out.push(index);
+    }
+    if out.is_empty() {
+        return Err("--pages selected nothing".to_owned());
+    }
+    Ok(out)
+}
+
+/// Parse `--at start|end|before:N|after:N` (1-based) into an `InsertPosition`.
+fn parse_insert_position(raw: &str) -> Result<pdfce_core::pageops::InsertPosition, String> {
+    use pdfce_core::pageops::InsertPosition;
+    let raw = raw.trim();
+    if raw.eq_ignore_ascii_case("start") {
+        return Ok(InsertPosition::Start);
+    }
+    if raw.eq_ignore_ascii_case("end") {
+        return Ok(InsertPosition::End);
+    }
+    let (word, number) = raw
+        .split_once(':')
+        .ok_or_else(|| format!("{raw:?} is not start, end, before:N or after:N"))?;
+    let n: usize = number
+        .trim()
+        .parse()
+        .map_err(|_| format!("{number:?} is not a page number"))?;
+    let index = n
+        .checked_sub(1)
+        .ok_or_else(|| "--at is 1-based; 0 is not a page".to_owned())?;
+    match word.trim().to_ascii_lowercase().as_str() {
+        "before" => Ok(InsertPosition::Before(index)),
+        "after" => Ok(InsertPosition::After(index)),
+        other => Err(format!("{other:?} is not before or after")),
+    }
+}
+
+/// Borrowed argument bundle for [`cmd_page_copy`].
+struct PageCopyArgs<'a> {
+    input: &'a Path,
+    pages: &'a str,
+    clip: &'a Path,
+    cut: Option<&'a Path>,
+    mode: SaveMode,
+}
+
+/// `page-copy` — whole pages onto a clipboard file, optionally cutting them.
+fn cmd_page_copy(args: &PageCopyArgs<'_>) -> u8 {
+    let indices = match parse_page_list(args.pages) {
+        Ok(v) => v,
+        Err(message) => {
+            eprintln!("pdfce-cli: page-copy refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // The COPY runs first either way, so a page set that cannot be carried is
+    // refused with nothing deleted.
+    let clip = if args.cut.is_some() {
+        match session.cut_pages(&indices) {
+            Ok(clip) => clip,
+            Err(err) => return report_edit_error(args.input, &err),
+        }
+    } else {
+        match session.copy_pages(&indices) {
+            Ok(clip) => clip,
+            Err(err) => return report_edit_error(args.input, &err),
+        }
+    };
+
+    if let Err(err) = std::fs::write(args.clip, clip.to_bytes()) {
+        eprintln!("pdfce-cli: {}: {err}", args.clip.display());
+        return exit::IO_ERROR;
+    }
+    if clip.fields_dropped > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} form field(s) were NOT carried -- their widgets are not all on the copied pages, and half a field is not a field.",
+            args.input.display(),
+            clip.fields_dropped
+        );
+    }
+    println!(
+        "{} {} pages={} -> {} ({} bytes); fields_dropped={}",
+        if args.cut.is_some() {
+            "page-cut"
+        } else {
+            "page-copy"
+        },
+        args.input.display(),
+        clip.pages,
+        args.clip.display(),
+        clip.byte_len(),
+        clip.fields_dropped,
+    );
+
+    let Some(cut_output) = args.cut else {
+        return exit::SUCCESS;
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        cut_output,
+        args.mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "  cut=1 cut_out={} mode={} changed={} objects={} appended={} out_bytes={}",
+        cut_output.display(),
+        args.mode.name(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// Borrowed argument bundle for [`cmd_page_paste`].
+struct PagePasteArgs<'a> {
+    input: &'a Path,
+    clip: &'a Path,
+    at: &'a str,
+    output: &'a Path,
+    mode: SaveMode,
+}
+
+/// `page-paste` — whole pages from a clipboard file into a document.
+fn cmd_page_paste(args: &PagePasteArgs<'_>) -> u8 {
+    let position = match parse_insert_position(args.at) {
+        Ok(p) => p,
+        Err(message) => {
+            eprintln!("pdfce-cli: page-paste refused: {message}");
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let bytes = match std::fs::read(args.clip) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", args.clip.display());
+            return exit::IO_ERROR;
+        }
+    };
+    let clip = match pdfce_core::pageops::PageClip::from_bytes(bytes) {
+        Ok(clip) => clip,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", args.clip.display());
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let pasted = match session.paste_pages(&clip, position) {
+        Ok(outcome) => outcome,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+
+    // Off-canvas, on stderr. The widget counters are the ones that are
+    // invisible in the result: boxes that draw like form fields and that
+    // nothing can fill.
+    if pasted.orphaned_widgets > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} form-field box(es) arrived WITHOUT the form that owns them ({} of those cannot be adopted into a field afterwards, because the widget carries no name or type of its own). They draw like fields and nothing can fill them.",
+            args.input.display(),
+            pasted.orphaned_widgets,
+            pasted.orphaned_widgets_unrecoverable,
+        );
+    }
+    if pasted.source_outline_dropped {
+        eprintln!(
+            "pdfce-cli: {}: the copied pages' document had an outline (bookmarks); it did not travel. A bookmark tree describes a DOCUMENT, and half of one grafted into another is a claim nobody made.",
+            args.input.display()
+        );
+    }
+    if pasted.source_page_labels_dropped || pasted.page_labels_stale {
+        eprintln!(
+            "pdfce-cli: {}: page labels -- source_dropped={} this_document_now_stale={}.",
+            args.input.display(),
+            u32::from(pasted.source_page_labels_dropped),
+            u32::from(pasted.page_labels_stale),
+        );
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "page-paste {} clip={} at={} pages={} orphaned_widgets={} orphaned_unrecoverable={} outline_dropped={} mode={} -> {}; changed={} objects={} appended={} out_bytes={}",
+        args.input.display(),
+        args.clip.display(),
+        args.at,
+        pasted.pages_inserted,
+        pasted.orphaned_widgets,
+        pasted.orphaned_widgets_unrecoverable,
+        u32::from(pasted.source_outline_dropped),
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// Borrowed argument bundle for [`cmd_bookmark_copy`].
+struct BookmarkCopyArgs<'a> {
+    input: &'a Path,
+    item: u32,
+    clip: &'a Path,
+    cut: Option<&'a Path>,
+    mode: SaveMode,
+}
+
+/// `bookmark-copy` — a bookmark subtree onto a clipboard file.
+fn cmd_bookmark_copy(args: &BookmarkCopyArgs<'_>) -> u8 {
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let id = pdfce_core::object::ObjId::new(args.item, 0);
+    let clip = if args.cut.is_some() {
+        match session.cut_outline_item(id) {
+            Ok(clip) => clip,
+            Err(err) => return report_edit_error(args.input, &err),
+        }
+    } else {
+        match session.copy_outline_item(id) {
+            Ok(clip) => clip,
+            Err(err) => return report_edit_error(args.input, &err),
+        }
+    };
+    let bytes = clip.to_bytes();
+    if let Err(err) = std::fs::write(args.clip, &bytes) {
+        eprintln!("pdfce-cli: {}: {err}", args.clip.display());
+        return exit::IO_ERROR;
+    }
+    println!(
+        "{} {} item={} bookmarks={} deepest_page={} -> {} ({} bytes)",
+        if args.cut.is_some() {
+            "bookmark-cut"
+        } else {
+            "bookmark-copy"
+        },
+        args.input.display(),
+        args.item,
+        clip.len(),
+        clip.deepest_page()
+            .map_or_else(|| "-".to_owned(), |p| (p + 1).to_string()),
+        args.clip.display(),
+        bytes.len(),
+    );
+
+    let Some(cut_output) = args.cut else {
+        return exit::SUCCESS;
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        cut_output,
+        args.mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    println!(
+        "  cut=1 cut_out={} mode={} changed={}",
+        cut_output.display(),
+        args.mode.name(),
+        outcome.changed,
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// Borrowed argument bundle for [`cmd_bookmark_paste`].
+struct BookmarkPasteArgs<'a> {
+    input: &'a Path,
+    clip: &'a Path,
+    under: Option<u32>,
+    output: &'a Path,
+    mode: SaveMode,
+}
+
+/// `bookmark-paste` — a bookmark subtree from a clipboard file.
+fn cmd_bookmark_paste(args: &BookmarkPasteArgs<'_>) -> u8 {
+    let bytes = match std::fs::read(args.clip) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", args.clip.display());
+            return exit::IO_ERROR;
+        }
+    };
+    let clip = match pdfce_core::outline::OutlineClip::from_bytes(&bytes) {
+        Ok(clip) => clip,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", args.clip.display());
+            return exit::EDIT_REFUSED;
+        }
+    };
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let placement = pdfce_core::edit::OutlinePlacement::LastChild {
+        parent: args.under.map(|n| pdfce_core::object::ObjId::new(n, 0)),
+    };
+    let pasted = match session.paste_outline_item(&clip, placement) {
+        Ok(outcome) => outcome,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    if pasted.destinations_dropped > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} bookmark(s) arrived WITHOUT their destination -- it named a page this document does not have. Not clamped to the last page: a bookmark that navigates confidently to the wrong place is worse than one that plainly does not navigate. They still show, and clicking them does nothing.",
+            args.input.display(),
+            pasted.destinations_dropped
+        );
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    println!(
+        "bookmark-paste {} clip={} under={} bookmarks={} destinations_dropped={} mode={} -> {}; changed={}",
+        args.input.display(),
+        args.clip.display(),
+        args.under
+            .map_or_else(|| "top-level".to_owned(), |n| n.to_string()),
+        pasted.items_pasted,
+        pasted.destinations_dropped,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+    );
+    finish_edit(args.input, &outcome)
 }

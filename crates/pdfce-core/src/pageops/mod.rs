@@ -137,6 +137,14 @@ pub enum PageOpError {
     /// A source document's page tree could not be walked.
     #[error("the page tree could not be resolved: {0}")]
     PageTree(#[from] PageTreeError),
+    /// A payload handed to [`PageClip::from_bytes`] is not a document this
+    /// build can open (`Pass 171.0`).
+    ///
+    /// For a page clip that means it is not a PDF, since the clip format IS
+    /// one — so the message says that rather than describing a private
+    /// payload the operator has never heard of.
+    #[error("this is not a PDF, so it cannot be a page clip -- a page clip IS a document: {0}")]
+    NotAPdf(String),
     /// A page index is past the end of its document.
     #[error("page index {index} is out of range (the document has {count} page(s))")]
     PageOutOfRange {
@@ -265,6 +273,127 @@ pub enum PermissionGate {
 /// # Ok(())
 /// # }
 /// ```
+/// Whole pages on the clipboard (`Pass 171.0`).
+///
+/// # It IS a PDF, and that is the design rather than a shortcut
+///
+/// [`Self::bytes`] is a real, openable document containing exactly the copied
+/// pages. Not a private payload — a file any reader can open.
+///
+/// The alternative, a private page format like
+/// [`ObjectClip`](crate::vector::ObjectClip), would have been a **second
+/// implementation of object copying, reference remapping, resource-closure
+/// walking and page-tree construction** — the most-exercised code in this
+/// crate, rewritten to be less exercised. `pageops::assemble` already does all
+/// of it, on every `split`, `merge` and `extract-pages` anybody has ever run,
+/// and [`EditSession::insert_pages`](crate::edit::EditSession::insert_pages)
+/// already consumes exactly this shape on the way back in.
+///
+/// The cost is stated rather than hidden: a page clip is **larger** than a
+/// private format, because it carries a catalog and a page tree beside the
+/// pages. For a gesture that moves sheets between drawings, that is not a
+/// price worth optimising away — and it buys an operator the ability to hand
+/// the clip to something that is not pdfce.
+///
+/// # What it does NOT carry, and why the paste is where you hear about it
+///
+/// Document-level structures do not travel: the outline, named destinations,
+/// page labels, `/OCProperties`. That is not a limit of the format — it is
+/// that a bookmark tree describes a *document*, and half of one, grafted into
+/// another document's tree, is a claim nobody made.
+///
+/// A form field whose widgets straddle a copied and an uncopied page is
+/// dropped and **counted** ([`Self::fields_dropped`]) rather than half-copied.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PageClip {
+    /// The clip, as a complete PDF document.
+    pub bytes: Vec<u8>,
+    /// How many pages it holds.
+    pub pages: usize,
+    /// Form fields left behind because their widgets were not all on the
+    /// copied pages.
+    ///
+    /// Surface it: the operator selected pages, not fields, so a field going
+    /// missing is a consequence of their selection that nothing on the page
+    /// shows.
+    pub fields_dropped: usize,
+}
+
+impl PageClip {
+    /// How many pages the clip holds.
+    ///
+    /// ★ This used to return BYTES while [`Self::is_empty`] answered about
+    /// PAGES, which is exactly the mismatch the Rust API Guidelines' `len`/
+    /// `is_empty` pairing exists to prevent — `len() == 0` and `is_empty()`
+    /// must mean the same thing, and here they could not. Clippy's `len_zero`
+    /// lint surfaced it from a test that compared `len()` to zero.
+    ///
+    /// The byte count is [`Self::byte_len`].
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.pages
+    }
+
+    /// Whether the clip holds no pages.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.pages == 0
+    }
+
+    /// How many bytes the clip's document occupies.
+    #[must_use]
+    pub fn byte_len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    /// The clip's bytes — a complete PDF. Write these to a file, or to the OS
+    /// clipboard, and any reader can open them.
+    #[must_use]
+    pub fn to_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Rebuild a clip from bytes a shell wrote out earlier.
+    ///
+    /// # ★ Why this exists, and how its absence was found
+    ///
+    /// [`PageClip`] is `#[non_exhaustive]`, so **nothing outside this crate
+    /// can construct one with a struct literal** — which is correct (the
+    /// counts must agree with the bytes) and left a consuming shell unable to
+    /// turn a clip file back into a clip at all. A page clipboard whose
+    /// payload can be written and never read is not a clipboard.
+    ///
+    /// It surfaced from an out-of-crate integration test failing to compile,
+    /// which is the only place that constraint is felt: an in-crate test can
+    /// build the struct and would never have noticed.
+    ///
+    /// The counts are **re-derived from the bytes** rather than taken on
+    /// trust. `pages` is what the document actually holds; `fields_dropped` is
+    /// reset to zero, because it describes what the ORIGINAL copy could not
+    /// carry and is not recoverable from the result — a clip read back from
+    /// disk has no memory of what was left behind, and reporting a stale
+    /// number would be worse than reporting none.
+    ///
+    /// # Errors
+    ///
+    /// [`PageOpError::NotAPdf`] when the bytes are not a document this build
+    /// can open — which for a page clip means they are not a PDF, since the
+    /// clip format IS one.
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, PageOpError> {
+        let doc = crate::document::Document::from_bytes(bytes.clone())
+            .map_err(|e| PageOpError::NotAPdf(e.to_string()))?;
+        let pages = crate::page_tree::pages_in(&doc)
+            .map_err(|e| PageOpError::NotAPdf(e.to_string()))?
+            .len();
+        Ok(Self {
+            bytes,
+            pages,
+            fields_dropped: 0,
+        })
+    }
+}
+
 pub fn extract(
     source: &DocumentView<'_>,
     pages: &[usize],
