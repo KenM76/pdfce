@@ -69,3 +69,4 @@
 - [Transform side effects are OPTIONS, not answers](feedback_transform_side_effects_are_options_not_answers.md) — Ken: ship the Inkscape toggle (scale stroke width etc.) with the safe default; convergence argues for a DEFAULT, not against an option
 - [An unticked box is unfalsifiable](feedback_an_unticked_box_is_unfalsifiable.md) — `[ ]` in FEATURES.md is a negative existential; nothing fails when it goes stale, so run the verb before reporting a gap
 - [A banned term cannot be cross-referenced](feedback_a_banned_term_cannot_be_cross_referenced.md) — the scrub ban hid a capability pdfce OWNS; one fact produced both a ruling violation and a wrong "no corpus" conclusion
+- [A doc comment can be shipped UI](feedback_a_doc_comment_can_be_shipped_ui.md) — in clap-derive a `///` IS the `--help`; a gate found 2 blank subcommands in seconds after 6 were found by eye

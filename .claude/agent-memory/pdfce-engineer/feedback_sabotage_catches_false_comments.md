@@ -32,6 +32,36 @@ as a claim audit. This complements [[feedback_a_test_can_become_vacuous_later]]
 (where sabotage distinguishes *why* a test passes) — here it distinguishes
 whether a comment is describing the code or describing an assumption.
 
+## ★★ 2026-08-29, `Pass 161.0` — a THIRD response exists, and it is deletion
+
+The list above says deletion is dishonest. **Twice in one Pass it was the
+correct answer**, and the difference is worth carrying: in `140.2` the narrow
+case the line served was **real**. When it is not, delete the code *and* the
+prose.
+
+- **The claim was about a MECHANISM.** A comment on `move_outline_item`'s
+  "skip unchanged objects" filter said it *"IS the minimal-diff guard"*.
+  Deleting the filter left all 19 new tests green — because `dirty_set()`
+  enforces minimal diff **centrally**, by diffing against the base revision at
+  save time. The filter is real but *local* (a narrower undo entry). Kept, and
+  the comment rewritten to say which mechanism actually guards what.
+  ⇒ **Generalisable, and now in the code:** a per-verb "write only what
+  changed" filter is **unobservable through the public API** and therefore
+  cannot be covered by any test. A green suite is not evidence one is present.
+- **★ The claim was a PARAMETER's whole justification.** `outline_count_chain`
+  shipped with `treat_open: Option<ObjId>` and a five-line doc explaining why
+  `set_outline_open` needed it. Sabotage: green. The chain starts at the item's
+  **parent** and walks upward, so the item can never appear in it and the
+  override could never fire. **I had reasoned my way into an argument for dead
+  code and written it down persuasively.** Parameter and justification both
+  deleted; the negative result kept in the doc.
+
+⇒ **The sharpest form of this rule: prose is the thing sabotage audits, and an
+elaborate justification is a stronger signal than a terse one.** I do not write
+five lines defending something obvious — I write them when I have *reasoned*
+rather than *measured*, which is exactly when I am most likely to be wrong.
+Sabotage the code your comment is proudest of.
+
 ★ Note the asymmetry with the rest of this project's culture: an uncovered line
 recorded **as** uncovered, with its reason, is stronger than a test written to
 make a number go up. Say so in the commit message too; a reader who sees

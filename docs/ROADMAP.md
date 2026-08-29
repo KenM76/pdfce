@@ -96,6 +96,505 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 161.2` (`1fc02f7`, 2026-08-29) — the 5th doc-comment-orphaning instance, CLOSED — and the finding that I reported it fixed once already and had not fixed it — filed 2026-08-29 (318th filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `1fc02f7` (parent `6601783`) is **relayed** from the dispatch.
+**Independently confirmed here** by `Read` on the live tree,
+`crates/pdfce-core/src/edit.rs:1219-1266`: `fn choice_opt_array` (line 1234)
+now carries only its own doc block, ending *"…the document still opens and
+the SUBMITTED DATA is wrong."*, followed by a blank line; the `/BS`
+border-style doc block (*"Build a `/BS` border-style dictionary (§12.5.4
+Table 166)… — R171…"*) sits immediately above `fn border_dict` (line 1258),
+its actual subject, with no other declaration between the block and the
+`fn`. This is the **general-form fix** the sibling RAG finding prescribes —
+insert after the previous item's closing brace and a blank line, never
+directly before the named anchor — not a special case of it.
+
+**This is the fifth of five doc-comment-orphaning instances found during
+`Pass 161.0`'s session (see that entry, and the 317th filing's own record)
+finally closed, and it took two attempts, not one.** I reported this
+instance to the operator earlier in the session as fixed, in a commit
+message listing 6/7/8 as fixed and this one implicitly folded in with them.
+It was not — `pdfce-librarian` verified the claim against live source
+rather than accepting the dispatch's own account, and found the weld still
+live. **Record the meta-finding, not just the fix, because it is the more
+durable half:** a dispatch report is a **claim** about what happened, not a
+record of it, and it is the least-checked artefact this project produces.
+Every other figure in this filing sits behind some gate — a test, a grep, a
+build. The only thing standing behind "I fixed instance 5" was whether the
+reporting agent chose to re-check its own work before saying so. **Finding
+a defect and reporting a defect are separate acts, and the gap between them
+is invisible** — nothing goes red when a session notices something and
+moves on without acting on it. This is the same shape already on record for
+an unticked `[ ]` box in `FEATURES.md` (`Pass 160.0`'s Finding 3): a claim
+that decays in one direction, believed hardest exactly where it is least
+checked. **Verifying a dispatch against live source is correct behaviour
+that should continue** — it is not overhead on top of the filing, it is
+what makes the filing trustworthy at all.
+
+**Why no gate caught either the original weld or the false "fixed" claim.**
+`tools/check-clap-help.py` (`Pass 161.0`) covers only the **donor** half of
+a splice, and only inside `pdfce-cli`'s `Command` enum. `border_dict` is a
+**private function in `pdfce-core`**; nothing requires a private function
+to carry a doc comment (`missing_docs` is not enabled, and would not reach
+private items even if it were), and the structural detector tried earlier
+this session for the splice mechanism itself produced **8,136 false
+positives** and was abandoned (see `doc_comment_splice_…md`). This instance
+sits squarely in the class that gate deliberately does not cover, and was
+fixed by hand — stated here, not implied by its absence from the gate's
+output.
+
+**Verification, relayed (hard rule 8) except the line-level claim above,
+which is confirmed here directly:**
+
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+  warnings` — clean (relayed)
+- `cargo tree -p pdfce-core` / `-p pdfce-render` — no GUI or network deps
+  (invariant untouched; no `Cargo.toml` edited)
+- No test suite exercises doc-comment content — this defect class is
+  unobservable to any test by construction (see the RAG finding); its only
+  check is the direct read performed here
+
+**`FEATURES.md` — no row changes.** This is a doc-comment relocation with
+no behavioral or capability surface; stated explicitly so a future reader
+does not go looking for a row that should have moved and find none.
+
+**`D:\dev\rag\rust\` — dated footer added**, not a new file: the existing
+`doc_comment_splice_attaches_to_the_next_declaration_invisibly_to_every_gate.md`
+gains a fifth-footer update recording instance 5 as fixed, and — new to
+this footer — the claim-verification failure mode (a fix reported before it
+was actually checked) as a sharpening of the file's own "gate blindness"
+theme: the gate that was missing here was not tooling, it was a second read.
+
+**Ledger.**
+
+- **Pass ceiling `161.1` → `161.2`; next free Pass ID `161.3`/new major
+  `162.0`.**
+- **Standing rules ceiling unchanged at `R226`, next free `R227`** — no new
+  rule minted; the dispatch-verification discipline this entry describes is
+  this role's own existing hard-rule-8-adjacent practice (see `MEMORY.md`'s
+  "Verify a dispatch's claim against live source" entry), reconfirmed, not
+  newly stated.
+- **Decision ceiling unchanged at `096`, next free `097`.**
+- **`D:\dev\rag\rust\`: one dated footer added**, no new file (see above).
+- **`C:\personal_rag\pdf\`: nothing filed** — internal/ecosystem finding
+  only, not PDF-domain-empirical.
+- **Owed, discharged:** the 5th doc-comment-orphaning instance is now
+  closed. All eight instances found during the `Pass 161.0` session are
+  fixed.
+
+---
+
+### `Pass 161.1` (`6601783`, 2026-08-29) — the outline cycle guard asked the question in the direction that BREADTH could defeat, and the doc comment justifying that choice was wrong on both of its own grounds — filed 2026-08-29 (318th filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `6601783` (parent `b885777`) and the test-count figures below
+are **relayed** from the dispatch's own report. **Independently confirmed
+here** by `Read`/`Grep` on the live tree (current-state claims, not
+git-history claims): `MAX_OUTLINE_ITEMS: usize = 200_000` at
+`crates/pdfce-core/src/pageops/references.rs:64`; `MAX_OUTLINE_DEPTH: usize
+= 32` at `crates/pdfce-core/src/outline.rs:218`; the replaced cycle-check
+body at `crates/pdfce-core/src/edit.rs:27091-27128`, an upward walk of
+`new_parent`'s `/Parent` chain bounded by `0..=MAX_OUTLINE_DEPTH`, with the
+superseded downward-form reasoning kept legible in a comment rather than
+deleted; and `crates/pdfce-core/tests/outline_move.rs` contains **21**
+`#[test]` functions, confirmed by direct count here (up from 19 at `Pass
+161.0`, matching the "2 added" claim).
+
+**The defect.** `Pass 161.0`'s cycle refusal asked *"is the destination
+inside the subtree I am moving?"* — `outline_subtree(item_id)`, then
+membership — and its own code comment argued at length for the downward
+form over the upward one. **Both halves of that justification were wrong:**
+
+1. *"only the subtree walk is bounded — a pre-existing cycle elsewhere
+   cannot turn this check into a hang."* An upward walk cannot hang
+   either: it is a bounded `for` loop, structurally identical to
+   `is_under_outline_root`, which has run on every outline verb since
+   `Pass 103.0` against cycle-bearing fixtures without incident.
+2. **`outline_subtree` carries a BREADTH guard as well as a depth one** —
+   `MAX_OUTLINE_ITEMS` = **200_000**, independent of `MAX_OUTLINE_DEPTH` =
+   **32**. A subtree wider than 200,000 items **truncates**, so a
+   destination beyond the cut tests as *"not in the subtree"* and the move
+   is **allowed** — authoring the very `/Parent` cycle the check exists to
+   refuse. A cycle here is not cosmetic: the resulting file still parses
+   and saves, and any reader without its own depth guard walks it forever.
+
+**The fix.** Replaced with an upward walk of the destination's `/Parent`
+chain looking for the item being moved, bounded by `MAX_OUTLINE_DEPTH`,
+self-link-guarded. It is **complete** where the downward form was not:
+`is_under_outline_root` has already established, before this check runs,
+that the destination is at most `MAX_OUTLINE_DEPTH` links below the root,
+so a walk of that many steps from it must pass through every one of its
+ancestors. Breadth cannot defeat an upward walk because it never looks
+sideways — the property the previous version could not guarantee.
+
+**Tests: 2 added, 21 total** in `crates/pdfce-core/tests/outline_move.rs`
+(confirmed by direct count here):
+
+- `a_cycle_is_refused_at_the_full_depth_of_the_walk` — walks
+  `fixtures/synthetic/outline/deep.pdf`'s 32-level chain and asserts the
+  refusal holds for **every** descendant, from the shallowest to the
+  deepest, refusing to move the chain's top item under each in turn. A
+  200,000-item fixture is deliberately **not** checked in (project rule 7,
+  and it would dominate the suite's runtime); full **depth** is the
+  testable half of the completeness claim. **Sabotage check, stated in the
+  test's own doc comment: capping the walk at a shallow number of steps
+  fails this test, and only this test.**
+- `a_legal_move_in_the_same_deep_chain_still_succeeds` — the mirror,
+  promoting the chain's deepest item to the top level. Without it, an
+  implementation that refused every move in the fixture unconditionally
+  would pass the test above perfectly.
+
+**Verification, relayed (hard rule 8) except the test-count and
+source-location claims confirmed above:**
+
+- `cargo test -p pdfce-core --test outline_move` — **21 passed** (relayed
+  pass/fail result; the count of 21 is independently confirmed by direct
+  grep, matching)
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+  warnings` — clean (relayed)
+- `cargo tree -p pdfce-core` / `-p pdfce-render` — no GUI or network deps
+  (invariant untouched; no `Cargo.toml` edited)
+
+**`FEATURES.md` — no row changes.** This Pass hardens an existing refusal
+(`move_outline_item`'s cycle check, row: "Reorder and re-parent a
+bookmark") against a correctness gap in how completely it refused; it adds
+no new capability, and neither the `core`/`cli`/`gui` boxes on that row nor
+any other row are affected. Stated explicitly so a future reader does not
+go looking for a row that should have moved and find none.
+
+**`D:\dev\rag\rust\` — nothing filed.** This is a pdfce-internal
+correctness finding about a specific guard's own logic, not a
+generalizable Rust/Cargo/egui-ecosystem finding — it does not belong beside
+the doc-comment-orphaning class (a different mechanism entirely: a doc
+comment binding to the wrong item vs. a boundary check asking a question in
+the wrong direction).
+
+**`C:\personal_rag\pdf\` — nothing filed** — this is an implementation
+defect in pdfce's own guard logic, not an empirical finding about
+real-world PDF producer behavior.
+
+**Amendment to the rustdoc-cleanliness Backlog entry** (see *Backlog*
+below): measured, the dangerous subclass of the 151 broken intra-doc links
+— a doc naming a public verb that does not exist at all, the class that
+could mislead a consuming project — is **exactly one** instance
+(`EditSession::move_outline_item`, closed by `Pass 161.0` shipping the
+verb). The other four `EditSession::*` misses resolve to real `pub fn`s and
+fail on path scope, not existence. Priority note added to that entry; not
+re-scoped or closed.
+
+**Ledger.**
+
+- **Pass ceiling `161.0` → `161.1`; next free Pass ID `161.2`/new major
+  `162.0`.**
+- **Standing rules ceiling unchanged at `R226`, next free `R227`** — no new
+  rule minted; this is a correctness fix to a single verb's own guard, not
+  a new project-wide practice.
+- **Decision ceiling unchanged at `096`, next free `097`.**
+- **`D:\dev\rag\rust\`: nothing filed this Pass** (see above).
+- **`C:\personal_rag\pdf\`: nothing filed this Pass** (see above).
+- **Backlog entry amended** (rustdoc-cleanliness gate): the dangerous
+  subclass measured at exactly 1, now closed; priority note added.
+
+---
+
+### `Pass 161.0` (`b885777`, 2026-08-29) — Bookmark **reorder and re-parent** plus expand/collapse: `move_outline_item`/`OutlinePlacement`, `set_outline_open`, `pdfce-cli move-bookmark`/`set-bookmark-open` — item 3 of the operator's standing "do all 4" is now DONE, item 4 (fonts) is the only one left — ★★★★ **A NEW GATE (`tools/check-clap-help.py`, 27 commands) CLOSED SIX OF EIGHT DOC-COMMENT-ORPHANING INSTANCES FOUND THIS PASS. THE SEVENTH IS FIXED BY HAND. THE 5TH, CHECKED HERE AGAINST LIVE SOURCE RATHER THAN TAKEN ON THE DISPATCH'S WORD, IS STILL LIVE: A `/BS` BORDER-STYLE DOC BLOCK REMAINS WELDED ONTO `choice_opt_array` IN `edit.rs`, AND `border_dict` — THE FUNCTION IT ACTUALLY DESCRIBES — CARRIES NO DOC COMMENT AT ALL** — filed 2026-08-29 (317th filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `b885777` (parent `97d445f`) and every test/gate/verb-count figure
+below (19 core tests, 18 CLI tests, 27 gates, 159 core verbs, 92 `EditError`
+variants, 111 subcommands, the "373 rustdoc warnings / 151 broken intra-doc
+links" measurement) are **relayed** from the dispatch's own report, not
+independently re-run — hard rule 8 permits relaying a figure the dispatcher
+states it measured; it forbids this role inferring one from a document.
+**What is independently checked here**, by `Read`/`Grep` on the live tree
+(current-state claims, not git-history claims): `move_outline_item`,
+`OutlinePlacement`, `OutlineMove`, `EditError::OutlineMoveIntoOwnSubtree` and
+the private `outline_count_chain` helper all exist in
+`crates/pdfce-core/src/edit.rs` (lines 1125, 1193, 4563, 26748, 27017);
+`Command::MoveBookmark`/`Command::SetBookmarkOpen` and their `move-bookmark`/
+`set-bookmark-open` doc comments exist in `crates/pdfce-cli/src/main.rs`
+(lines 1732, 1783, 11766, 11963); `crates/pdfce-cli/tests/bookmarks.rs` exists
+and contains **18** `#[test]` functions, confirmed by direct count here, not
+relayed; `tools/check-clap-help.py` exists; the Acrobat RAG file and the
+`pdfceGUI` reply file both exist at the paths named below.
+
+**★★★★ AND ONE THING THE DISPATCH DID NOT CLAIM WAS FIXED, VERIFIED STILL
+BROKEN.** The dispatch names "the 5th orphaning" — a `/BS` border-style doc
+block welded onto `choice_opt_array` — as a **finding**, and separately says
+"Fixed" only for the 6th, 7th and 8th instances. Read directly against
+`crates/pdfce-core/src/edit.rs:1218-1266` here: the doc block reading *"Build
+a `/BS` border-style dictionary (§12.5.4 Table 166)… — R171 — and the drift
+would show only as a merged field and a separate widget disagreeing about a
+border the operator set once"* sits immediately above `fn choice_opt_array`
+(line 1240), a **choice-field `/Opt` array** builder with its own,
+correctly-attached doc block glued directly beneath the `/BS` one with no
+blank line between — so the two are one `///` run and both bind to
+`choice_opt_array`. `fn border_dict` (line 1258), the function the `/BS`
+prose actually describes, has **no doc comment**: line 1257 is blank, 1258 is
+the bare `fn`. **This is the doc_comment_splice class's 5th live instance,
+distinct from the 6th/7th/8th this Pass fixed, and it is carried forward as
+owed work below — not silently closed by association with the others.**
+
+**Core (`crates/pdfce-core/src/edit.rs`):**
+
+- `move_outline_item(item_id: ObjId, to: OutlinePlacement) -> Result<OutlineMove, EditError>`
+- `set_outline_open(item_id: ObjId, open: bool) -> Result<bool, EditError>`
+- `pub enum OutlinePlacement { FirstChild{parent: Option<ObjId>}, LastChild{parent: Option<ObjId>}, Before{sibling: ObjId}, After{sibling: ObjId} }`
+- `pub struct OutlineMove { moved, from_parent, to_parent, reparented, visible_items }`
+- `EditError::OutlineMoveIntoOwnSubtree { item, target }` — 92nd variant
+- private `outline_count_chain()`, extracted rather than written a fourth and
+  fifth time: `add_outline_item` and `delete_outline_item` already each
+  carried this walk inline, and a move needs it **twice in one call** (R171 —
+  one place for a rule two call sites must not independently re-derive).
+
+**CLI (`crates/pdfce-cli/src/main.rs`):**
+
+- `move-bookmark --n N (--before N | --after N | --under N | --to-top-level) [--first]`
+- `set-bookmark-open --n N [--collapse]`
+- Rule 11 held: core and CLI shipped in the **same** Pass, unlike `156.0`/
+  `157.0` which split across two. The rule-11 census stays **0 of 149** — see
+  the `FEATURES.md` count below for why the denominator itself moves.
+
+**★★★ Design decision 1 — anchors are object ids, never indices.** Outline
+siblings are a doubly-linked list (§12.3.3 Tables 152–153); there is no
+stored index, so an index would have to be *counted* by walking the chain and
+goes stale the instant any sibling changes. A panel that reads rows, lets the
+operator drag one, and calls with the index it read races its own undo stack.
+`move_outline_item`'s `OutlinePlacement` variants all carry `ObjId`.
+
+**★★★ Design decision 2 — the collapsed-destination GAP: both answers ship,
+split by verb, not by flag.** `pdfce-acrobat-librarian` could not source what
+Acrobat does when a bookmark is moved into an **already-collapsed** parent —
+both readings (reveal it, or leave it hidden) are defensible. `move_outline_item`
+**preserves** the destination's open/closed state; `set_outline_open` is the
+other half, called separately when reveal-on-move is wanted. Composing them
+costs **two undo entries**, which is the honest count — a single boolean flag
+folded into the move would have buried a visibility change inside a
+positioning command and put the sign convention in two places instead of one.
+This is the established "two defensible answers → ship both, pick the
+default, don't ask" posture (the same shape as decision 096's third outcome),
+applied at the verb-boundary rather than at a parameter.
+
+**Design decision 3 (sourced, not chosen).** A destination parent that was a
+**leaf** is left **open** by a move, matching `add_outline_item`'s existing
+behaviour — sourced from Acrobat.
+
+**Design decision 4 — a `/Count` that was already wrong stays wrong by the
+same amount.** The verb applies a **delta**; it does not recompute the whole
+chain from scratch. Verified on pdfium's `bookmarks.pdf`, which carries a
+pre-existing `root_count_disagreement` both before and after a move.
+Deliberate on two grounds: recomputing would rewrite objects the move did not
+logically touch (project rule 3, round-trip/minimal-diff), and it would
+silently mask a producer defect `OutlineDiagnostics` already reports
+elsewhere — fixing a symptom the diagnostic exists to surface would make the
+diagnostic lie by omission.
+
+**Acrobat RAG.** `pdfce-acrobat-librarian` produced a **new** file,
+`D:\Dev\Rag-Specialized\Acrobat_Features\bookmarks__move_reorder_reparent.md`,
+cross-referenced from `bookmarks__destinations_and_navigation.md` and
+`index.md`. Recorded here **by name** because a cross-RAG deliverable noted
+only in the producing RAG has been filed, not handed off. Sourced: a subtree
+travels with its item on a move (Adobe PDF Library `PDBookmark`); a
+destination's own state is unaltered by receiving a move; a leaf destination
+is left open. **GAPs, recorded as GAPs, not guessed:** move-into-own-
+descendant behaviour; expand-on-move-into-a-collapsed-parent; non-contiguous
+multi-select; nesting-depth limit (still open from an earlier filing).
+
+**★★ Finding 1 — two of five sabotages survived by corrupting PROSE, not a
+test, and both are generalisable.** Five sabotages were run against the 19
+new core tests; three went red immediately, two survived:
+
+1. Deleting the verb's own "skip unchanged objects" filter left all 19 green.
+   The doc comment claiming that filter *"IS the minimal-diff guard"* was
+   **false** — `dirty_set()` enforces minimal diff centrally, by diffing
+   against the base at save time (§11.1), not per-verb. **Generalisable
+   rule, now in the code comment itself:** a per-verb "write only what
+   changed" filter is unobservable through the public API (nothing outside
+   the crate can see which objects a verb chose to touch versus which the
+   save-time diff chose to keep) and therefore **cannot be covered by any
+   test that exercises the verb from outside**. A green suite is not evidence
+   such a filter is doing anything.
+2. `outline_count_chain` shipped with a `treat_open: Option<ObjId>`
+   parameter and a five-line doc explaining why `set_outline_open` needed
+   it. Sabotage on that branch: green. The chain starts at the item's
+   **parent** and walks upward, so the item itself can never appear in it —
+   the override could never fire. **The engineer had reasoned into an
+   argument for dead code and written it down persuasively.** Parameter and
+   justification deleted; the negative result kept in the doc as the record
+   of why the parameter does not exist.
+
+⇒ **Suggested sharpening of the sabotage-audit discipline (R221/R225
+neighbourhood), NOT MINTED this filing — a recommendation for the engineer's
+or operator's own call, not a standing rule this role imposes unilaterally:**
+prose is what a sabotage run actually audits, not code, and an **elaborate**
+justification is a *stronger* signal of a problem than a terse one — five
+defensive lines get written when someone has *reasoned* their way to a
+conclusion rather than *measured* it.
+
+**★★★★ Finding 2 — doc-comment orphaning reached EIGHT instances this
+session, confirmed independently for six of eight, one still open (see
+above), none of it newly minted as a standing rule this filing (the class and
+its carrier file already exist — `R202`-adjacent, see below).**
+
+| # | site | status, as confirmed here |
+|---|---|---|
+| — | `CommandKind::EditOutlineItem`'s doc cited `EditSession::move_outline_item` since `Pass 156.0`, a verb that did not exist until this Pass | **resolved by this Pass shipping the verb** — confirmed live, the intra-doc link now targets a real item |
+| 5 | `/BS` border-style doc block welded onto `choice_opt_array`, `edit.rs:1218` | **STILL LIVE — see the ★★★★ block above. OWED.** |
+| 6 | `ExtractText`'s entire `--help` text welded onto `ListOutline`, 800 lines away, `main.rs` | **FIXED — confirmed here**, `ExtractText` now carries its own doc comment (`main.rs:2560-2562`) |
+| 7 | `print-preview` shipped a blank `clap` description | **FIXED — confirmed here** (`main.rs:2395-2401`) |
+| 8 | `render-page` shipped a blank `clap` description | **FIXED — confirmed here** (`main.rs:2826-2832`) |
+
+New gate `tools/check-clap-help.py`, wired into `.github/workflows/ci.yml` and
+`tools/check-ci-parity.py`, sweep now **27 commands**, up from 26 — its first
+run is what surfaced instances 7 and 8, neither of which was a splice (no
+donor left empty) — **the class has more than one cause**, so the existing
+"insert after a closing brace" remedy (`doc_comment_splice_…md`, dated
+footers 2026-08-28) could never have closed it alone.
+
+**What did NOT work, recorded so it is not re-derived.** A structural
+detector for the weld itself — *"a doc line whose predecessor is non-empty
+and whose successor is blank"* — produced **8,136 candidates** across
+`crates/`, because that is also the shape of every ordinary paragraph ending.
+Abandoned rather than shipped noisy. The gate catches the **donor** of a
+splice (an item left with nothing) but never the **recipient** (an item left
+with two doc blocks): six of eight instances this session left a donor, two
+(7, 8) did not — this limit is recorded in the script's own header.
+
+**Generalisable, graduated to `D:\dev\rag\rust\` (see *Ledger*):** in a
+`clap`-derive CLI, a doc comment **is** shipped, operator-facing UI, and
+nothing checks it — not the compiler, not clippy, not `missing_docs`
+(private items in a binary crate are exempt), and no test, because no test
+reads help text.
+
+**★★ Finding 3 — a MEASURED gate gap, not fixed this Pass, filed as
+Backlog.** `cargo doc --workspace --no-deps` (dispatch's own run, relayed)
+emits **373 rustdoc warnings, of which 151 are unresolved intra-doc links**
+(131 distinct targets). **No gate builds docs.** In a project whose central
+directive is *"the documentation is the logic,"* the documentation does not
+compile cleanly and nothing says so — this is how the dangling
+`move_outline_item` link (above) survived a full day at `HEAD` undetected.
+Backlog entry filed below.
+
+**CLI-test gap from `Pass 157.0` — CLOSED, partially.**
+`crates/pdfce-cli/tests/bookmarks.rs`, **18 tests** (confirmed by direct
+count here), covers `rename-bookmark` and `delete-bookmark` as well as the
+two new verbs this Pass ships. `docs/NEXT_SESSION.md` §B item 8 can be struck
+for the bookmark half. **`rotate-annotation` still has no CLI test** — that
+half of the owed item carries forward unchanged.
+
+**★★ `R225` (coincident oracle) avoided twice, deliberately, by test
+design.** Nesting Chapter 2 under Chapter 1 produces the reading order
+*"Chapter 1, Section 1.1, Section 1.2, Chapter 2, Section 2.1"* —
+character-for-character what it already was, because a depth-first walk
+visits the same titles in the same sequence regardless of nesting. A test
+asserting the flat title list would pass whether the re-parenting happened
+or not, so the suite asserts on **structure** and `/Count` instead; the CLI
+suite asserts on `level=`. Separately, the dirty-set test was corrected
+mid-Pass: its first draft moved Chapter 2, which was the **last** top-level
+item, so the root's `/Last` genuinely changed and the root was rightly
+dirty — a coincidence the test happened not to need, caught before it could
+launder a broken case as a passing one. **Counts cancelling out and an
+object being unwritten are two different claims**, and a test that cannot
+tell them apart is not testing what it appears to test.
+
+**Verification, relayed (hard rule 8) except the items marked confirmed
+here:**
+
+- `cargo test -p pdfce-core --test outline_move` — **19 passed**
+- `cargo test -p pdfce-cli --test bookmarks` — **18 passed** (test count
+  **confirmed here** by direct `#[test]` grep on the live file, matching)
+- `bash tools/run-gates.sh` — **PASS, 27 commands**, 2 filing gates
+- `python tools/check-core-api-verbs.py` — PASS (**159** verbs, up from 157;
+  `EditError` now **92** variants, up from 91)
+- `python tools/check-clap-help.py` — PASS (111 subcommands)
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
+  warnings` — clean
+- `cargo tree -p pdfce-core` / `-p pdfce-render` — no GUI or network deps
+  (invariant untouched by this Pass; no `Cargo.toml` edited)
+- Binary exercised by hand on the synthetic fixture and on real-world corpus
+  files: reorder, re-parent, promote, cycle refusal, no-op (byte-identical
+  output), expand/collapse, reveal-on-move. 6 of 8 real-world nested outlines
+  moved cleanly; the 2 "failures" were a **pre-existing correct refusal**
+  (recovered xref forces `--mode full`, incremental save refused as designed)
+  — not a defect introduced or exposed by this Pass.
+
+**`docs/core-api/02-editing-and-saving.md`** carries both new verbs,
+`OutlinePlacement`, `OutlineMove`, the refusal table and the collapsed-
+destination reasoning, updated in the same Pass per the standing rule; all
+four stated counts re-derived rather than incremented.
+
+**`FEATURES.md` — four rows changed, two new, one Planned row deleted.**
+Census re-counted here by direct `Grep` over the *Implemented* section
+(`## Implemented` at line 119 to `## Planned` at line 326), not incremented
+from the last published figure:
+
+| Implemented rows | `core` unbuilt | `cli` unbuilt | `cli` partial | `gui` unbuilt | `gui` partial |
+|---:|---:|---:|---:|---:|---:|
+| **152** (was 150) | **0** | **0** | **3** | **65** (was 63) | **6** |
+
+**71 of 152 = 46.7% not fully usable from `pdfceGUI`**, against **69 of 150 =
+46.0%** at the 313th filing. Row count **+2**: the reorder/re-parent row and
+the expand/collapse row are both new Implemented rows, gui `[ ]` on both — no
+`pdfceGUI` build reaches either verb yet. The old Planned row *"Bookmark
+**reorder and re-parent**"* is **deleted**, its capability now covered by the
+new Implemented row rather than by a second row for the same thing. The
+*"Add a bookmark"* row's false clause (*"no reorder or re-parent of an
+existing item yet"*) is corrected to point at the new rows instead of
+re-asserting the gap. The *"Rename a bookmark, or delete one…"* row gains the
+CLI-test-coverage fact it lacked when filed.
+
+**★ Hard-rule-11 sweep — searched for the CLAIM, not for a string.**
+`docs/NEXT_SESSION.md:169-171` (engineer-owned; not edited here per this
+role's remit) still reads *"Bookmark reorder and re-parent… the recommended
+next Pass"* as an **owed** item — that claim is now **false**, discharged by
+this Pass. Reported as a survivor for the engineer to correct, not corrected
+here. `ARCHITECTURE.md` checked and **clean** — its own "reorder" hits are
+all about page/field reordering, unrelated to outlines; no survivor there.
+
+**One reply sent.** `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\
+reply_the_clipboard_route_is_the_same_loss_and_bookmarks_now_move.md`
+(confirmed to exist here), answering `pdfceGUI`'s clipboard-fidelity
+question: `copy_annotations` → `ObjectClip` → `paste_objects` is the **same**
+loss as their existing route (`ClipAnnotation::Markup` is `Box<MarkupSpec>`,
+and `paste_objects` calls plain `add_markup`, additionally dropping opacity),
+**plus** `ObjectClip::to_bytes` does not serialise annotations at all. They
+were advised to keep their current path. A lossless markup copy (`/T`, `/M`,
+note, `/CA`, `/Popup`, `/IRT`, `/RC`) would need `MarkupSpec` extended **and**
+`/IRT` reference rewriting — a graph problem, not a value problem. Filed as
+Backlog below, unscoped, awaiting their answer on whether they need it.
+
+**Ledger.**
+
+- **Pass ceiling `160.0` → `161.0`; next free Pass ID `161.1`/new major
+  `162.0`.**
+- **Standing rules ceiling unchanged at `R226`, next free `R227`.** The
+  sabotage-prose sharpening above is a **suggestion**, not a mint — no rule
+  is minted this filing.
+- **Decision ceiling unchanged at `096`, next free `097`.** "Anchors are
+  object ids, not indices" and "two verbs, not a flag, for the collapsed-
+  destination gap" are API-shape applications of already-established
+  postures (R225-adjacent anti-index discipline; the decide-and-disclose
+  "ship both" rule), not a new crate boundary, library choice or invariant.
+- **`D:\dev\rag\rust\`: one new finding filed** — the clap-derive-help-text-
+  is-unchecked-UI generalisation, filed as its own entry (see the tool's own
+  `index.md` for the exact filename) rather than folded into the existing
+  `doc_comment_splice_…` carrier, because it is a **different** claim (a
+  *coverage gap*, not a *splice mechanism*) even though this session's hunt
+  for one led to the other.
+- **`C:\personal_rag\pdf\`: nothing filed** — every finding this Pass is
+  Rust/CLI-ecosystem or pdfce-internal, none is PDF-domain-empirical.
+- **Backlog gains two entries** (below): a rustdoc-cleanliness gate (151
+  broken intra-doc links, measured), and lossless markup/annotation
+  clipboard-copy fidelity (unscoped, awaiting `pdfceGUI`'s answer).
+- **Owed, carried forward:** the 5th doc-comment-orphaning instance
+  (`/BS`→`choice_opt_array`, `edit.rs:1218`) is **unfixed**; `rotate-
+  annotation` still has no CLI test; `docs/NEXT_SESSION.md:169-171` is a
+  stale survivor the engineer should correct.
+
+---
+
 ### `Pass 160.0` (`6624e18`, 2026-08-28 18:22:02 -0400) — `embed-font --help` corrected, `ARCHITECTURE.md`'s 52-subcommand figure DATED rather than refreshed, and the finding that a `[ ]` box is a negative existential — ★★★★★ **FILED HERE FOR THE FIRST TIME, ONE FILING LATE, AND THE RECURRENCE IS THE FINDING RATHER THAN THE PASS. THIS COMMIT'S OWN MESSAGE DIAGNOSES THE IDENTICAL UNFILED-PASS FAILURE ONE PASS EARLIER (`Pass 158.0`, FILED ABOVE, ALSO ONE FILING LATE) — AND THEN REPEATS IT, IN THE SAME COMMIT.** — 2026-08-28 (315th filing)
 
 **Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
@@ -95369,6 +95868,75 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+### Unscoped — **rustdoc-cleanliness gate** — filed 2026-08-29 (317th filing, `Pass 161.0`'s Finding 3)
+
+**Measured, not estimated.** `cargo doc --workspace --no-deps` emits **373
+rustdoc warnings, of which 151 are unresolved intra-doc links** (131 distinct
+targets). No gate in this project builds documentation at all — not CI, not
+any `tools/check-*.py`. This is how `CommandKind::EditOutlineItem`'s dangling
+reference to `EditSession::move_outline_item` (a verb that did not exist
+until `Pass 161.0`) survived a full day at `HEAD` with nobody noticing.
+
+**Proposed scope:** a new gate running `cargo doc --workspace --no-deps` with
+`RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links"` (or `cargo doc -D
+warnings` more broadly), wired into `tools/run-gates.sh` and CI, **plus** the
+one-time sweep to fix the 151 existing broken links before the gate can be
+turned on without immediately failing. Unscoped — no Pass ID yet; the sweep
+is real work (131 distinct targets), not a one-line fix.
+
+**★ AMENDED 2026-08-29 (318th filing, `Pass 161.1`) — the DANGEROUS subclass
+of the 151 is measured, and it is small.** The risk this entry opens with —
+"this is how the dangling `move_outline_item` link survived a full day at
+`HEAD`" — is specifically about a doc citing a **public verb that does not
+exist at all**: a reference a consuming project (`pdfceGUI`, or any future
+one reading `cargo doc` as its contract) could act on and find nothing.
+Measured directly against the four other `EditSession::*` misses named
+alongside `move_outline_item` in the same hunt:
+
+| citation | resolves to |
+|---|---|
+| `EditSession::move_outline_item` | **did not exist** until `Pass 161.0` shipped it — **closed** |
+| `EditSession::apply_redactions` | exists, real `pub fn` — fails on path/module scope, not existence |
+| `EditSession::fill_text_field` | exists, real `pub fn` — same |
+| `EditSession::fill_text_field_downgrading_rich_text` | exists, real `pub fn` — same |
+| `EditSession::set_button_state` | exists, real `pub fn` — same |
+
+So the "names a verb that isn't there" population among the sampled
+`EditSession::*` misses was **exactly one**, and it is now **zero** — closed
+by the verb shipping the same Pass the link was noticed. The other four (and,
+by inference, most of the remaining 146 unresolved links — not individually
+re-verified here, so stated as an inference, not a re-measurement) are a
+**hygiene** problem — `cargo doc` renders the citation as unlinked plain text
+rather than a clickable reference, which is a real defect in the documentation
+being unreadable as intended, but not one that can send a caller to a
+function that isn't there. **Priority should drop accordingly.** This does
+not close or re-scope the entry — 373 warnings and an unbuilt gate are still
+true — it only corrects what kind of risk the 151 figure represents, so a
+future session does not re-raise "the class that could mislead a consuming
+project" as still-open when the one measured instance of it is gone.
+
+### Unscoped — **lossless markup/annotation clipboard-copy fidelity** — filed 2026-08-29 (317th filing, from `pdfceGUI`'s clipboard-fidelity question)
+
+`pdfceGUI` asked whether their annotation clipboard route loses fidelity.
+Answer (see `Pass 161.0`'s *Shipped* entry for the reply-file path): **yes,
+identically to pdfce's own** `copy_annotations` → `ObjectClip` →
+`paste_objects` route — `ClipAnnotation::Markup` is `Box<MarkupSpec>`, which
+does not carry `/T`, `/M`, note text, `/CA`, `/Popup` or `/IRT`, and
+`paste_objects` calls plain `add_markup`, additionally dropping opacity.
+Separately, `ObjectClip::to_bytes` does not serialise annotations into the
+clip **file** format at all (see the existing *Planned* row, *"Annotations
+survive `ObjectClip::to_bytes`/`from_bytes`"*, `Pass 120.5`) — this Backlog
+entry is about the **in-session** copy/paste path, which is a narrower and
+different gap from that row.
+
+**Why this is a graph problem, not a value problem.** A faithful copy needs
+`MarkupSpec` extended to carry the dropped fields, **and** `/IRT` (in-reply-to)
+reference rewriting across the pasted set — a reply annotation's `/IRT`
+points at another annotation's object id, so pasting a reply without also
+remapping its target either dangles the reference or silently re-targets it
+at whatever object now occupies that id. Unscoped, awaiting `pdfceGUI`'s
+answer on whether they need this before it is sized into a real Pass.
 
 ### `Pass 142.0` — **FF-C WIRED INTO `format_text`: RESTYLE EXISTING TEXT TO A FACE THE PAGE DOES NOT ALREADY CARRY** — ★★ **READ THE SCOPE CORRECTION FIRST, BECAUSE THE COMMIT THAT PROMPTED THIS ENTRY STATES THE GAP TOO WIDELY** — filed 2026-08-27 (293rd filing), **NOT STARTED. ★★★ NO LONGER BLOCKED — THE ANSWER ARRIVED 2026-08-27; DE-PRIORITISED, *NOT* CLOSED (296th filing, amendment below)**
 

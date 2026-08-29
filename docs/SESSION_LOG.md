@@ -74736,3 +74736,201 @@ alternative is worth sourcing) is unanswered and unaffected in substance.
    candidate above to `R227`.
 
 ---
+
+## 2026-08-29 (317th filing) — `Pass 161.0` filed: bookmark reorder/re-parent and expand/collapse; a doc-comment-orphaning hunt reached eight instances and left one genuinely unfixed
+
+**Sourcing.** No shell this session (librarian invocation, hard rule 8). The
+commit hash `b885777` (parent `97d445f`) and every test/gate/verb-count
+figure are **relayed** from the dispatch's own report; independently
+confirmed here via `Read`/`Grep` on live source: the new core symbols in
+`crates/pdfce-core/src/edit.rs`, the new CLI commands and their doc comments
+in `crates/pdfce-cli/src/main.rs`, the 18-test count in
+`crates/pdfce-cli/tests/bookmarks.rs` (direct count, not relayed), and —
+the substantive catch this session — that the "5th doc-comment orphaning"
+the dispatch named as a **finding** (not claimed fixed) is genuinely still
+live at `edit.rs:1218-1266`.
+
+**Shipped:**
+- `Pass 161.0` (`b885777`) — `EditSession::move_outline_item` +
+  `OutlinePlacement` + `EditSession::set_outline_open`, `pdfce-cli
+  move-bookmark`/`set-bookmark-open`. Closes item 3 of the operator's
+  standing "do all 4" instruction (rotation, ce dimensions, bookmarks,
+  fonts) — fonts (item 4) is the only one left unbuilt.
+
+**Decisions made this session:**
+- Outline-move destinations are addressed by **object id, never index** —
+  siblings are an unindexed doubly-linked chain, so an index goes stale the
+  moment anything else changes it.
+- The Acrobat-sourcing GAP on "does moving into a collapsed parent reveal the
+  moved item" is answered by shipping **two separate, composable verbs**
+  (`move_outline_item` preserves; `set_outline_open` is the other half)
+  rather than one verb with a boolean flag — consistent with this project's
+  existing "two defensible answers → ship both" posture, applied at the
+  verb boundary rather than a parameter.
+- A `/Count` that was already wrong (measured on pdfium's `bookmarks.pdf`)
+  stays wrong by the same delta after a move — the verb applies a signed
+  delta, it does not recompute the chain, on both round-trip and don't-mask-
+  the-diagnostic grounds.
+- No new standing rule minted, no new decision-log entry: both candidate
+  patterns this session (anchor-by-id, ship-both-by-verb) are applications of
+  already-established postures, not new architecture.
+
+**Findings + decisions:**
+- **Two sabotages survived by corrupting prose, not a test.** A doc comment
+  claiming a per-verb filter "IS the minimal-diff guard" was false — the
+  guard is centralised in `dirty_set()` at save time and is structurally
+  unobservable through the public API, so no test exercising the verb from
+  outside could ever have caught the false claim. A second sabotage on an
+  `outline_count_chain` parameter survived because the parameter was
+  provably dead code, elaborately justified in a doc comment nobody had
+  measured against. Suggested (not minted) sharpening of the sabotage-audit
+  discipline: an elaborate justification is a *stronger* signal of trouble
+  than a terse one.
+- **Doc-comment orphaning reached eight instances this session.** A dangling
+  intra-doc link (`CommandKind::EditOutlineItem` → `move_outline_item`,
+  a verb that didn't exist until today) triggered a hunt that found two more
+  splice instances (5, 6) and a new gate (`tools/check-clap-help.py`, 27
+  commands) that found two further blank-description instances (7, 8).
+  **Six of eight confirmed fixed here independently. The 5th — a `/BS`
+  border-style doc block welded onto `choice_opt_array`, leaving the actual
+  target function `border_dict` with no doc comment at all — is confirmed
+  STILL LIVE and is carried forward as owed work, not silently closed by
+  association with the other seven.**
+- **A measured, unfixed gate gap:** `cargo doc --workspace --no-deps` emits
+  373 rustdoc warnings, 151 of them broken intra-doc links, and no gate in
+  this project checks documentation build cleanliness at all. Filed as a new
+  unscoped Backlog entry.
+- **`R225` (coincident oracle) avoided twice by test design** — a
+  depth-first title walk is invariant under re-parenting in the test fixture
+  used, so assertions are on structure/`/Count`, not the flat title list;
+  a dirty-set test was corrected mid-Pass after its first draft accidentally
+  moved the one item whose move happened to make the root dirty regardless.
+- One `pdfceGUI` reply sent, answering a clipboard-fidelity question: their
+  route loses exactly what pdfce's own in-session copy/paste route loses,
+  plus `ObjectClip::to_bytes` doesn't serialise annotations at all. Filed as
+  a second new unscoped Backlog entry (lossless markup clipboard copy —
+  a graph problem, needing `/IRT` reference rewriting, not just more fields).
+
+**Still in flight:**
+- The 5th doc-comment-orphaning instance (`edit.rs:1218`, `/BS` doc on
+  `choice_opt_array`, `border_dict` undocumented) — unfixed, `crates/` is
+  outside this role's remit.
+- `rotate-annotation` still has no CLI test (carried forward from the 312th
+  filing, narrowed but not discharged by `Pass 159.0`).
+- `docs/NEXT_SESSION.md:169-171` names bookmark reorder/re-parent as the
+  "recommended next Pass" — now false, discharged by this Pass, and reported
+  to the engineer as a stale survivor rather than edited here (engineer-
+  owned file).
+- Two new Backlog entries, both unscoped: the rustdoc-cleanliness gate, and
+  lossless markup/annotation clipboard-copy fidelity.
+- Item 4 of the operator's "do all 4" (fonts) is the only one of the four
+  remaining unbuilt.
+
+**For next session:**
+1. Ledger: Pass ceiling **`161.0`** (highest), next free **`161.1`**/new
+   major **`162.0`**; standing rules ceiling unchanged **`R226`**, next free
+   **`R227`**; decision-record ceiling unchanged **`096`**, next free
+   **`097`**; operator-question ceiling unchanged **`(bz)`**, next free
+   **`(ca)`**; filing ordinal **317**.
+2. Fix the 5th doc-comment-orphaning instance
+   (`crates/pdfce-core/src/edit.rs:1218` — move the `/BS` border-style doc
+   block onto `border_dict`, restore `choice_opt_array`'s own doc-only
+   heading).
+3. Correct `docs/NEXT_SESSION.md:169-171` (bookmark reorder/re-parent is no
+   longer the recommended next Pass — it shipped).
+4. Consider scoping the rustdoc-cleanliness gate and/or the lossless-markup-
+   clipboard-copy Backlog entries into real Passes.
+5. `rotate-annotation` CLI test still owed.
+
+---
+
+## 2026-08-29 (318th filing) — `Pass 161.1`/`Pass 161.2` filed: the cycle guard hardened against a breadth gap, and the 5th doc-comment-orphaning instance closed on the SECOND attempt, not the first
+
+**Sourcing.** No shell this session (librarian invocation, hard rule 8). Both
+commit hashes (`6601783`, `1fc02f7`) and the test-count/pass-fail figures are
+**relayed** from the dispatch; independently confirmed here via `Read`/`Grep`
+on live source: `MAX_OUTLINE_ITEMS`/`MAX_OUTLINE_DEPTH` values and locations,
+the replaced upward-walk cycle check in `edit.rs`, 21 `#[test]` functions in
+`outline_move.rs` (direct count), and — the substantive catch this session —
+that `border_dict` now genuinely carries the `/BS` doc block and
+`choice_opt_array` genuinely carries its own.
+
+**Shipped:**
+- `Pass 161.1` (`6601783`) — the outline-move cycle refusal, asked
+  **downward** (`outline_subtree` + membership) since `Pass 161.0`, replaced
+  with an **upward** walk of the destination's `/Parent` chain. The downward
+  form's own justifying comment was wrong on both its stated grounds: an
+  upward walk is bounded too (no hang risk either way), and
+  `outline_subtree` carries a **breadth** guard (`MAX_OUTLINE_ITEMS`,
+  200,000) independent of its depth guard, so a subtree wider than that
+  truncates and lets a destination beyond the cut pass as "not in the
+  subtree" — permitting the very `/Parent` cycle the check exists to
+  refuse. The upward form is complete: `is_under_outline_root` already
+  bounds the destination to `MAX_OUTLINE_DEPTH` links from the root before
+  this check runs, so a walk of that many steps must cross every ancestor.
+  2 tests added (21 total, `outline_move.rs`): full-depth-of-walk refusal
+  and its legal-move mirror.
+- `Pass 161.2` (`1fc02f7`) — the 5th doc-comment-orphaning instance
+  (`/BS` block welded onto `choice_opt_array`, `border_dict` undocumented,
+  carried forward unfixed from `Pass 161.0`/the 317th filing) is now
+  genuinely closed. All eight doc-comment-orphaning instances found during
+  the `Pass 161.0` session are fixed as of this Pass.
+
+**Decisions made this session:**
+- No new architecture decisions; decision ceiling stays at `096`. Both
+  Passes are correctness fixes to work shipped the same session, not new
+  crate boundaries, library choices, or invariants.
+
+**Findings + decisions:**
+- **A boundary check can be asked in the wrong direction and look correct
+  by its own reasoning.** `Pass 161.0`'s cycle guard had a five-line comment
+  defending the downward form; both of its defenses were false, and the
+  breadth guard that defeated it (200,000 items) is a completely different
+  quantity from the depth guard (32) that bounded the safe alternative —
+  conflating "bounded" with "bounded the right way" is the generalizable
+  shape.
+- **★ I reported the 5th doc-comment-orphaning instance as fixed once
+  already, and it was not fixed.** `pdfce-librarian` verified the claim
+  against live source rather than accepting it, and found the weld still
+  live — the second attempt is what actually closed it. Recorded as a
+  finding about dispatch reliability, not just about the code: **a
+  dispatch report is a claim, not a record**, and it is the least-checked
+  artefact this project produces — every other figure in a filing sits
+  behind some gate (a test, a build, a grep); a "this is fixed" claim sits
+  behind nothing but the reporting agent choosing to re-check its own work.
+  Finding a defect and reporting a defect are separate acts, and the gap
+  between them is invisible — nothing goes red when a session notices
+  something and does not act on it. Same shape already on record for an
+  unticked `[ ]` box in `FEATURES.md` (`Pass 160.0`). **Verifying dispatches
+  against live source is correct behaviour and should continue** — it is
+  what made this filing's own record trustworthy.
+- **The rustdoc-cleanliness Backlog entry's risk is narrower than it read.**
+  Measured directly: of the five `EditSession::*` doc citations that don't
+  resolve, only `move_outline_item` named a verb that genuinely did not
+  exist (now closed by `Pass 161.0`); the other four resolve to real
+  functions and fail on path scope, a hygiene defect rather than a
+  misleading one. Backlog entry amended in place with the measurement and
+  a lowered-priority note, not closed — 373 warnings and no build gate are
+  still true.
+
+**Still in flight:**
+- The rustdoc-cleanliness gate and the lossless-markup-clipboard-copy
+  Backlog entries remain unscoped.
+- `rotate-annotation` still has no CLI test (carried forward, unchanged).
+- Item 4 of the operator's "do all 4" (fonts) remains the only one of the
+  four unbuilt.
+
+**For next session:**
+1. Ledger: Pass ceiling **`161.2`** (highest), next free **`161.3`**/new
+   major **`162.0`**; standing rules ceiling unchanged **`R226`**, next free
+   **`R227`**; decision-record ceiling unchanged **`096`**, next free
+   **`097`**; operator-question ceiling unchanged **`(bz)`**, next free
+   **`(ca)`**; filing ordinal **318**.
+2. All eight doc-comment-orphaning instances from the `Pass 161.0` session
+   are now closed — nothing owed from that hunt.
+3. Consider scoping the rustdoc-cleanliness gate (now known to guard mostly
+   a hygiene problem, not a misleading-reference problem) and/or the
+   lossless-markup-clipboard-copy Backlog entries into real Passes.
+4. `rotate-annotation` CLI test still owed.
+
+---

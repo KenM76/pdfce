@@ -7,13 +7,8 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
-Written 2026-08-28 late evening. Ledger at write time: **Pass ceiling 160.0**,
-rules **R226**, decisions **096**, filings **316**.
-
-**No code was written in the session that produced this file.** It was a
-scoping and filing session. Everything in §0 is exactly where the previous
-session left it, except item 1 of §B, which is unchanged but now verified
-rather than assumed.
+Written 2026-08-29. Ledger at write time: **Pass ceiling 161.2**, rules
+**R226**, decisions **096**, filings **317+**.
 
 ---
 
@@ -22,288 +17,344 @@ rather than assumed.
 > *"do all 4"* — the four things not completely editable, which he asked me to
 > enumerate and then to fix.
 
-**Two are done. Two are not.** That is still the shape of the current task.
+**Three are done. ONE is left.**
 
 | # | gap | state |
 |---|---|---|
 | 1 | **Rotation** of anything carrying a `/Rect` | **SHIPPED** — `Pass 155.0`, core + CLI. Annotation family only. |
-| 2 | **ce dimensions** | **DONE.** Two of the three gaps reported **never existed**. Rotation shipped as `Pass 159.0`; scaling **declined by name**, operator confirmed. |
-| 3 | **Bookmarks** — rename, delete, reorder, re-parent | **PARTIAL** — rename and delete ship (`156.0` core, `157.0` CLI). **Reorder and re-parent do not.** ★ Re-verified 2026-08-28 by grep over `pdfce-cli/src/main.rs`, `pdfce-core/src/outline.rs` and `edit.rs`: no `reorder`/`reparent`/`move_bookmark` verb exists on the outline family. This is a **measured** absence, not a carried-forward claim. |
-| 4 | **Fonts** — restyle to a face the document lacks; replace a font throughout | **NOT STARTED, but SCOPED — read §0a before writing any code.** |
+| 2 | **ce dimensions** | **DONE.** Two of the three gaps reported never existed. Rotation shipped as `Pass 159.0`; scaling **declined by name**, operator confirmed. |
+| 3 | **Bookmarks** — rename, delete, reorder, re-parent | **DONE 2026-08-29.** Rename/delete were `156.0`/`157.0`; **reorder and re-parent shipped as `Pass 161.0`** (core + CLI, same Pass), hardened by `161.1`. `set_outline_open` shipped alongside. |
+| 4 | **Fonts** — restyle to a face the document lacks; replace a font throughout | **THE ONLY ONE LEFT. Measured and split — read §0a; most of it already exists.** |
 
-**Recommended order: 3 then 4.** Item 3 is the smaller of the two and its
-unlink half already exists (see §B item 1). Item 4 is scoped but is a genuinely
-new capability.
+⇒ **§0a is the next session's work.**
 
-## §0a — GAP 4 (FONTS): MEASURED, NOT GUESSED. Read this before writing code.
+## §0a — GAP 4 (FONTS): MEASURED 2026-08-29 AGAINST THE SHIPPED BINARY
 
-Scoped 2026-08-28 by running the shipped binary. The expensive part of this
-Pass — finding out what already exists — is done.
+### The gap, confirmed by running it — not carried forward
 
-### What is genuinely missing
+`format-text --set-font` refuses **any** face that is not already a font
+resource on the page. Measured on `fixtures/synthetic/textedit/format_family.pdf`
+(which carries exactly `/F1` Times-Roman, `/F2` Calibri-Bold, `/F3` Times-Bold):
 
-**`format-text --set-font` can only select a font the page ALREADY carries.**
-Verified: `font-preflight` on `format_family.pdf` lists exactly the three page
-resources `/F1 /F2 /F3` and adjudicates among those. There is no path to a face
-the page does not have.
+```
+--set-font Helvetica → refused: "not an existing font resource on this page;
+                                 adding a new font resource / embedding a new
+                                 face is deferred (FF-C)"
+--set-font Arial     → same    --set-font Courier → same    --set-font F9 → same
+```
 
-**`embed-font` does NOT close this, and its help text now says so.** It
-supplies the missing font *program* for a face the PDF already **references**.
-It cannot introduce a new face. That correction shipped in `Pass 160.0` — the
-help text was the surface an operator would read *before* filing a bug about
-this exact gap, and it invited the misreading.
+The refusal is honest and by name. `embed-font` does **not** close this — it
+supplies a missing font *program* for a face the PDF already **references**
+(that correction shipped in `Pass 160.0`).
 
-⇒ **The missing capability is: add a font resource to a page that lacks it,
-then point a run at it.** `Pass 142.0` in *Backlog* is the entry for this; it
-is **de-prioritised but NOT closed** — the consuming project said *"synthetic
-is enough, drop 142.0 down the queue"* and explicitly scoped that as a report
-of **their** use, not a decision about ours.
+### ★★★ THE WHOLE AUTHORING HALF ALREADY EXISTS AND HAS NO CALLER FROM THIS
+### PATH. `Pass 162.0` IS WIRING, NOT BUILDING.
 
-## §0b — NEW THIS SESSION: THE CONFORMANCE VALIDATOR BUCKET
+Measured 2026-08-29 by grepping for a writer, **after** first assuming one
+would have to be written. Both of these are in `text_edit/addtext.rs`, already
+exercised by the add-new-text path:
 
-Filed 2026-08-28 (**314th filing**) at the **bottom of `ROADMAP.md`'s Backlog**,
-unscoped, **no Pass ID**, exactly as the operator asked. Do not promote it
-without him saying so.
+| what | where | state |
+|---|---|---|
+| `fn build_font_dict(base_font, symbolic, enc, font) -> Object` | `addtext.rs:1866` | Emits the **full** form — `/Type /Font`, `/Subtype /Type1`, `/BaseFont`, `/FirstChar 32`, `/LastChar 255`, `/Widths` built from `fontdata::encoding_glyph_name` + `std14_width`, **and correctly omits `/Encoding` when `symbolic`**. This is exactly the form the spec RAG recommends. |
+| `pub(crate) fn pick_font_name(existing: &Dict) -> Vec<u8>` | `addtext.rs:1912` | `pdfceF1`, `pdfceF2`, … — first unused. Its doc explains the `pdfce` prefix keeps it clear of the `/F{n}` producer convention, **and that the page and an appended stream share one effective resource dict (§7.8.3)**, so a colliding name would shadow a font the original content depends on. |
 
-**Origin, because it explains the shape:** he surfaced a thread in
-r/accessibility — a US state-org worker with 1000+ pages including fillable
-forms to remediate before a deadline, alone, no budget. The thread's unanimous
-verdict was *"Open source tools cannot remediate PDFs"*, with manual vendors
-quoted at **~$5/page**. A validator is what produces the pass / fail /
-needs-human triage buckets those same commenters recommended.
+⇒ `Pass 162.0` = call these two from `format_text`'s set-font path, write the
+new object, patch `/Resources /Font`, and disclose. **Do not write a third
+font-dict builder.**
 
-**Four arcs, A–D.** The split is by **whether the work can be GRADED**, not by
-difficulty:
+**One mechanical detail so it is not a surprise:** `pick_font_name` is already
+`pub(crate)` and callable from `format.rs`, but **`build_font_dict` is
+module-private** (`fn`, no visibility) in `text_edit::addtext`, and
+`text_edit::format` is a **sibling** module — so it must be widened to
+`pub(crate)`. That is the whole of the access change; both modules are declared
+in `text_edit/mod.rs`.
 
-- **Arc A — implementable AND scoreable today.** PDF/A (all 11 levels),
-  PDF/UA-1, PDF/UA-2, WTPDF. Oracle **and** corpus are already on this machine:
-  **veraPDF 1.30.2** at `D:\tools\verapdf\verapdf.bat`, and **2,907 corpus
-  files** at `fixtures/external/veraPDF-corpus/`. Nothing here needs research
-  first.
-- **Arc B — implementable but UNGRADED.** PDF/X, PDF/VT, PDF/R. veraPDF has no
-  flavour for any of them, and no **redistributable** corpus exists. ★ **PDF/E-2
-  was never published** — the CAD/engineering conformance target is
-  **PDF/A-4e**, which is in arc A with a 19-file corpus. A future session
-  chasing "PDF/E for the CAD files" is chasing a standard that stopped at draft.
-  ★★ **CORRECTION, made 2026-08-28 after the filing and before the push:** the
-  research concluded PDF/X was corpus-**absent**. It is not. **pdfce already
-  holds a licensed PDF/X corpus locally** — the **print-conformance suite** it
-  measures render parity against, whose patch files are labelled by PDF/X part
-  (`…_x1a.pdf`, `…_x3.pdf`) in the private map at
-  `D:\Dev\pdfce-private\suite\manifest.json`. What is absent is a corpus that
-  may be **committed**, which is a different claim. ★★★ **But it is a WEAK
-  oracle and must not be quoted as a strong one:** it is an
-  **all-conforming** set, so it can detect a validator that **wrongly fails** a
-  good file and cannot detect one that **wrongly passes** a bad one — the same
-  limitation already recorded against the Cal Poly PDF/VT corpus. Whether it
-  carries per-file conformance verdicts at all, as opposed to reference images
-  for rendering, is **UNESTABLISHED**.
-- **Arc C — PDF/UA and the human-judgement split.** The deliverable is a
-  **three-bucket verdict — pass / fail / needs human — not a boolean**, and the
-  third bucket is **required by the standard's own scope**: ISO 14289-2 §1
-  newly *excludes* "requirements specific to content", so *"is this alt text
-  correct?"* is outside the standard, not merely untestable.
-- **Arc D — base syntax and PAdES.** Base syntax has **no standard test set by
-  design** (both ISO 32000 editions exclude conformance validation from Scope);
-  the licence-clean substitute is the Arlington PDF Model. PAdES is **not
-  file-alone checkable** — verdicts include `INDETERMINATE` and inputs include
-  trust anchors and a validation policy — and is gated behind `sign` existing
-  at all, which it does not (`Command::Sign` is a stub; `signature.rs`'s own
-  header opens *"This module verifies nothing"*).
+★ **And the acceptance gate needs no change either.** `accept_font_target`
+(`format.rs:2193`) takes `target_dict: &Dict` — a plain dictionary, not an
+object id — so the **synthesized dict can be handed to the existing coverage
+check before anything is written**. Preview and commit therefore cannot drift
+(`R221`) without any new machinery. Build the dict with all-**direct** values
+(no `/FontDescriptor` indirect reference) and there is no chicken-and-egg
+between planning and object allocation.
 
-**Reference material, named here because a cross-RAG deliverable recorded only
-in the producing RAG has been filed, not handed off:**
+### A duplicate worth collapsing while you are in there (R171, not urgent)
 
-- `D:\Dev\Rag-Specialized\PDF_Spec\conformance\conformance__ref__validator_scope.md`
-  (989 lines, 76 `CV-*` ids) — rule counts per level, corpus verdict-encoding
-  convention, licence basis per source.
-- Seven files under `D:\Dev\Rag-Specialized\Acrobat_Features\` — four
-  `pdfa_conform__*`, three `accessibility__*`.
+`vartext::base_font_name` (private, `vartext.rs:389`) and
+`fontdata::std14_base_font_name` (`pub`, `fontdata/mod.rs:317`) are **two
+14-arm tables of the same §9.6.2.2 spellings**. Compared 2026-08-29: **they
+agree on all fourteen**, so this is a duplicate rather than a live defect —
+but it is two answers to "how is this face spelled?" in one binary, and the
+`/BaseFont` name is the thing a reader matches on.
 
-**Two facts from those references that change how the work is sized:**
+`vartext::standard14_font_dict` is a **third** builder, and deliberately
+different: the **minimal 4-key form with no `/Widths`**, for an appearance
+stream's `/Resources` or an `/AcroForm` `/DR`. That difference is defensible
+and documented; do not "unify" it with `build_font_dict` without reading why.
+
+### The rest of what already exists — do not rebuild it either.
+
+- **`crates/pdfce-core/src/fontdata/mod.rs` already contains a complete
+  `Std14` module** — `pub enum Std14`, `std14_by_base_font`, `std14_width`,
+  `std14_descriptor`, built-in encodings for Symbol/ZapfDingbats. Licence
+  cleared (**APAFML**, embeddable in pdfce source; see
+  `PDF_Spec/fonts/font__std14_afm_licensing.md`).
+- **The spec RAG already carries the authoring direction**, decided, in
+  `PDF_Spec/iso32000/iso32000__s__9.6.md` § "ADD-NEW-TEXT addendum":
+  - emit the **full** form — `/FirstChar` + `/LastChar` + `/Widths`, optionally
+    `/FontDescriptor` with **no** `/FontFile` — not the minimal 3-key dict;
+  - `/Encoding /WinAnsiEncoding` for the **12 Latin faces**;
+  - **OMIT `/Encoding` for `Symbol` and `ZapfDingbats`** (built-in encodings,
+    Annex D.5/D.6);
+  - `/BaseFont` **shall** be one of the 14 exact PostScript names.
+- **PDF 1.5 deprecates the standard-14 special treatment as a `should`, not a
+  `shall`** — *"conforming readers shall still provide the special treatment"*.
+  **PDF 2.0's position is UNVERIFIED (paywalled); do NOT cite a 2.0 clause.**
+  Emitting `/Widths` is the posture that is safe regardless of how 2.0 reads.
+
+### So the gap splits, and the halves are very different sizes
+
+- **4a — add a STANDARD-14 font resource to a page that lacks it**, then let
+  `--set-font` accept it. **No font program, no subsetting, no descriptor
+  synthesis, and no new dictionary builder** — see the section above: the
+  builder and the resource-name picker both already exist and are already
+  exercised. This is **wiring plus disclosure**, and is the **recommended next
+  Pass (`162.0`)**. It makes `--set-font Helvetica` work on the fixture above.
+- **4b — add a NON-standard-14 face.** Needs a font program: subset from
+  `--font-dir`, build a `/FontDescriptor` with `/FontFile2`/`/FontFile3`, a
+  widths array, an encoding, and a **unique six-uppercase-letter subset tag
+  that must not collide with any already in the document** (§9.6.4 ST1–ST4,
+  and ST4's uniqueness is **per file**, so the existing document's font names
+  must be scanned, not just session state). This is `Pass 142.0` in *Backlog*,
+  **de-prioritised but NOT closed** — the consuming shell said *"synthetic is
+  enough, drop 142.0 down the queue"* and explicitly scoped that as a report of
+  **their** use, not a decision about ours.
+
+### ★ THE CONSTRAINT THAT WILL BITE, and it is written down in the code already
+
+**The resource dictionary may belong to a Form XObject, not the page.**
+`text_edit/format.rs`'s `plan_format_target` doc says so outright, and says
+that `set_font` being **read-only** about resources is exactly what keeps this
+verb from writing into a form's `/Resources`:
+
+> *"retargeting cannot make this verb write to a form's `/Resources`, and the
+> selector resolves against the **form's** dictionary, which is the correct
+> one: `/F1` inside a form is a different font from `/F1` on the page
+> (§8.10.1)."*
+
+**Pass 162.0 removes that read-only property.** Adding a font to a **shared**
+form's `/Resources` affects **every place that form is drawn**. Decision 076
+already rules that shared forms edit **in place**, so this is consistent rather
+than novel — but it is a side effect the operator did not ask for and it
+**must be disclosed** (project rule 4). Decide and disclose; do not ask.
+
+★ **The disclosure data is already in hand.** `EditPlanTarget`
+(`text_edit/edit.rs:1592`) carries `form: Option<FormRef>` **and**
+`invocations: Option<InvocationSet>` — the form's document-wide invocation set.
+So "this font was added to a form drawn in N places" needs **no new
+measurement**, just the sentence.
+
+---
+
+## §0b — THE CONFORMANCE VALIDATOR BUCKET (unchanged, still unscoped)
+
+Filed 2026-08-28 at the **bottom of `ROADMAP.md`'s Backlog**, **no Pass ID**,
+exactly as the operator asked. **Do not promote it without him saying so.**
+
+Four arcs A–D, split by **whether the work can be GRADED**. Arc A (PDF/A all 11
+levels, PDF/UA-1, PDF/UA-2, WTPDF) has oracle **and** corpus on this machine
+already: **veraPDF 1.30.2** at `D:\tools\verapdf\verapdf.bat` and **2,907
+files** at `fixtures/external/veraPDF-corpus/`.
+
+Two facts that change the sizing, and one parity headline:
 
 1. **UA-2's real cost is not its own 91 rules but the 1,636 ISO/TS 32005
-   structure rules it leans on.** A session reading "91" will under-scope this
-   by an order of magnitude.
+   structure rules it leans on.** A session reading "91" under-scopes by an
+   order of magnitude.
 2. **The corpus's expected verdicts are mechanical from the FILENAME**, not the
-   outline bookmark. Measured over 2,906 files: 2,874 agree, **4 disagree**, 28
-   lack the bookmark. Read the filename; a bookmark-reading implementation will
-   mis-grade four files and never know.
+   outline bookmark. Over 2,906 files: 2,874 agree, **4 disagree**, 28 lack the
+   bookmark. Read the filename.
+3. ★ **Acrobat Pro has no tool that fully validates PDF/UA.** A place to
+   **exceed** the reference rather than match it.
 
-**The parity headline:** ★ **Acrobat Pro has no tool that fully validates
-PDF/UA.** Preflight stamps an identifier and checks isolated points; the
-Accessibility Checker runs 508/WCAG heuristics, not tag-structure rules —
-which is why practitioners run PAC alongside it. This is a place pdfce can
-**exceed** the reference rather than match it.
+**Settled before any code: the validator reports and never mutates.** Any
+repair is a separate, named verb.
 
-**Design constraint, settled before any code:** the validator **reports and
-never mutates.** Acrobat arrived at the same line independently — a Preflight
-*check* only detects; only a *fixup* touches the file; and a fixup that cannot
-fully correct something **discloses the leftover rather than guessing**. That
-is project rule 4 in someone else's product. Any repair is a separate, named
-verb.
+Reference material (named here because a cross-RAG deliverable recorded only in
+the producing RAG has been *filed*, not *handed off*):
+`PDF_Spec/conformance/conformance__ref__validator_scope.md` (989 lines, 76
+`CV-*` ids), plus seven files under `Acrobat_Features/`.
+
+**PDF/E-2 was never published** — the CAD/engineering conformance target is
+**PDF/A-4e** (arc A, 19-file corpus). Do not chase PDF/E.
 
 ---
 
 ## §A — RUN `bash tools/run-gates.sh`
 
-26 commands. It has caught something real on nearly every Pass, including
-defects in the Passes' own new code.
+★ **Now 27 commands, not 26** — `tools/check-clap-help.py` was added
+2026-08-29 and wired into both `ci.yml` and `check-ci-parity.py`.
 
-★ **"PASS — 26 commands" over-claims and the label says so.** Two skips are
-deliberate: `cargo about` (only fires when the dependency set changes) and
+★ **"PASS — 27 commands" over-claims and the label says so.** Two skips are
+deliberate: `cargo about` (only when the dependency set changes) and
 **`cargo test --workspace --all-features`, replaced by plain
 `cargo test --workspace`**. ⇒ **every green this project reports is a
 default-features green.** Do not quote it as if `--all-features` had passed.
 
-★★ **NEW — `R226`: also run `python tools/check-passes-filed.py --strict-tip`
-before ending any session whose tip commit claims a Pass ID.** The plain run
-**deliberately defers the tip** (a commit cannot cite its own hash) and reports
-`clean`. That is correct reasoning with an expiry date, and see §D for how it
-expired.
+★★ `R226`: also run `python tools/check-passes-filed.py --strict-tip` before
+ending any session whose tip commit claims a Pass ID. The plain run
+**deliberately defers the tip** and reports `clean`.
+
+★★★ **A gate sweep certifies the tree it ran on.** Two sweeps were invalidated
+this session by editing source while they ran. Re-run after the last edit, not
+before it.
 
 ---
 
 ## §B — OWED, consolidated
 
-1. **Bookmark reorder and re-parent.** The unlink half is written and exercised
-   by `delete_outline_item`; the relink half is the same machinery pointed the
-   other way. **This is §0 item 3 and the recommended next Pass.**
-2. **Widget rotation (`/MK /R`)** and **ce-dimension rotation** — both refused
+1. **Widget rotation (`/MK /R`)** and **ce-dimension rotation** — both refused
    by name by `rotate_annotation`, both unbuilt.
-3. **The trap X on the grey/K-black conformance patch.** Cause unknown and
+2. **The trap X on the grey/K-black conformance patch.** Cause unknown and
    **not** the defect `Pass 143.0` fixed. Lead: that patch paints the same 50 %
    grey **both ways** (`0.5 g` and `0 0 0 0.5 k`) deliberately, and `G .5` — a
    grey *stroke* — appears in its streams while every synthetic fixture uses
    fills only.
-4. **`OverprintZeroTintScope::AllProcessSpaces` is unmeasured.** pdfce's
+3. **`OverprintZeroTintScope::AllProcessSpaces` is unmeasured.** pdfce's
    RGB→CMYK is naive, so a pure red preserves a cyan backdrop under it and
    whether Acrobat agrees is unknown. Not the default; do not promote it
    without a measurement.
-5. **Two `iccce` inbounds from 2026-08-28 15:03/15:04** — informational, no
-   reply owed. **Its "invisible X" is NOT the trap X in item 3.** Theirs is
-   `PCS3_130`, a CMM/ICC-source-profile patch they filed as *theirs* under
+4. **`iccce`'s "invisible X" is NOT the trap X in item 2.** Theirs is
+   `PCS3_130`, a CMM/ICC-source-profile patch, filed as *theirs* under
    decision 064; ours is the grey/K-black **overprint** patch. Two X's, two
-   patches, two causes, one word — conflating them closes an open item on
-   evidence about a different one.
-6. **`iccce`'s ΔE00 figures are withdrawn by its own author** (`DL-070`: no ΔE
+   patches, two causes, one word.
+5. **`iccce`'s ΔE00 figures are withdrawn by its own author** (`DL-070`: no ΔE
    against a screen capture). Only the 8-bit deltas may be quoted.
-7. Ambiguity-register entries owed to `pdfce-spec-librarian`:
+6. Ambiguity-register entries owed to `pdfce-spec-librarian`:
    `overprint_zero_tint_scope`, and `render.hairline_clamp_policy` since
    2026-08-09.
-8. **No CLI tests** for `rename-bookmark`, `delete-bookmark` or
-   `rotate-annotation`. `crates/pdfce-cli/tests/` holds 29 files including
-   `move_annotation.rs` and `resize_annotation.rs`; the last two CLI-shipping
-   Passes added none. Manual binary verification does not survive the session.
-9. **`pdfceGUI` has 68 of 149 implemented capabilities unwired** (45.6 %). The
-   CLI gap is **0 of 149** — rule 11 is holding. Every remaining gap in the
-   *Implemented* half is a GUI gap.
-10. **★ NEW — a pre-push check for a deferred tip.** `R226` closes §D's hole
-    *procedurally*, and a procedural rule is precisely the kind of thing that
-    was skipped to create the hole. The mechanical form is cheap: refuse a push
-    when the tip is a Pass-claiming commit that `--strict-tip` rejects. **Not
-    built, and NOT to be built unasked** — it changes the operator's own push
-    workflow, and he was not asked. Raise it; do not assume it.
-11. **★ NEW — the gitignore at `.gitignore:20` (`/fixtures/external/`) is
-    LOAD-BEARING and nothing says so.** The staged veraPDF corpus declares
-    CC BY 4.0 over content that includes the **Isartor** suite, whose own
-    manual — shipped inside the corpus as `Isartor test suite manual.pdf` —
-    states *"Redistributing all or parts of the Isartor test suite is also not
-    allowed."* Verified 2026-08-28: `git check-ignore` matches and
-    `git ls-files fixtures/external` returns **0**. **The repository is
-    public**, so committing that tree would *be* redistribution. One
-    `.gitignore` line is the entire control. See operator question `(bx)`.
+7. **`rotate-annotation` still has no CLI test.** The bookmark half of this
+   item was closed 2026-08-29 by `crates/pdfce-cli/tests/bookmarks.rs`
+   (18 tests, covering `rename-bookmark` and `delete-bookmark` retroactively as
+   well as the two new verbs). `rotate-annotation` was not.
+8. **`pdfceGUI` gap: 71 of 152 implemented capabilities unwired (46.7 %).**
+   The CLI gap is **0 of 149** — rule 11 is holding, and `Pass 161.0` kept it
+   holding by shipping core and CLI in one Pass rather than splitting as
+   `156.0`/`157.0` did.
+9. **★ A pre-push check for a deferred tip.** `R226` closes the hole
+   *procedurally*, and a procedural rule is precisely what was skipped to
+   create it. The mechanical form is cheap: refuse a push when the tip is a
+   Pass-claiming commit that `--strict-tip` rejects. **Not built, and NOT to be
+   built unasked** — it changes the operator's own push workflow. Raise it.
+10. **★ `.gitignore:20` (`/fixtures/external/`) is LOAD-BEARING and nothing
+    says so.** The staged veraPDF corpus declares CC BY 4.0 over content that
+    includes the **Isartor** suite, whose own manual — shipped inside the
+    corpus — states *"Redistributing all or parts of the Isartor test suite is
+    also not allowed."* **The repository is public**, so committing that tree
+    would *be* redistribution. One `.gitignore` line is the entire control.
+    See operator question `(bx)`.
+11. **A lossless markup clipboard copy** — filed to Backlog 2026-08-29,
+    unscoped, **awaiting `pdfceGUI`'s answer on whether they need it.** See §F.
 
 ---
 
 ## §C — MEASURED AT WRITE TIME. Re-run; do not copy forward
 
-- `main` was **0 commits ahead of `origin/main`** before this session's filing
-  commit.
-- Latest backup bundle: `pdfce-20260828-2201-ae476bc-full.bundle` — **behind
-  `HEAD`**; re-take.
-- Latest portable build: `D:\builds\pdfce-20260828-1745-66efc9a`. (The previous
-  handoff named `…-1639-eace74c`, which was already stale when written — a
-  reminder that this section decays fastest.)
 - Conformance suite: **6 FAIL / 29 pass / 16 unresolved of 51** — **CARRIED
-  FORWARD, NOT RE-MEASURED this session.** No render code changed, so it should
-  hold; verify before quoting.
-- **Isartor is 204 test files, not 205.** The 205th is the suite's own manual.
-  Both numbers are correct answers to different questions; the corpus-size
-  figure that matters for grading is **204**.
+  FORWARD, NOT RE-MEASURED since 2026-08-27.** No render code has changed
+  since, so it should hold; **verify before quoting.**
+- `cargo doc --workspace --no-deps`: **373 rustdoc warnings, 151 unresolved
+  intra-doc links** (131 distinct). **No gate builds docs.** But see §D — the
+  dangerous subclass is a population of **one** and it is closed.
+- `MAX_OUTLINE_DEPTH` = **32** (`outline.rs:218`);
+  `MAX_OUTLINE_ITEMS` = **200_000** (`pageops/references.rs:64`). The gap
+  between those two numbers is what `Pass 161.1` was about.
+- Real-world outline corpus: of 8 nested outlines under `fixtures/external/`,
+  6 move cleanly; the other 2 hit a **pre-existing correct refusal** (recovered
+  xref ⇒ incremental save refused, `--mode full` succeeds). Not a defect.
+- **Latest backup bundle and portable build are both STALE** — the newest on
+  disk predate this session's three commits. Re-take both.
+- **`main` was 3 commits ahead of `origin/main`** before this session's filing
+  commit (`b885777`, `6601783`, `1fc02f7`).
 
 ---
 
-## §D — THE LESSON THIS SESSION LEARNED, AND THE ONES STILL BITING
+## §D — LESSONS
 
-### ★★ NEW — two correct decisions that interact badly
+### ★★★ Prose is what sabotage audits, and an ELABORATE justification is the
+strongest signal that something is wrong
 
-**`Pass 160.0` shipped code at HEAD, was pushed to a public remote, and was
-never filed.** It was caught 2026-08-28 by reading `check-ledger-numbers.py`'s
-ceiling (159.0) against `git log` (160.0) — by hand, because nothing compares
-those two automatically.
+**Three instances in one session**, all in code I had just written:
 
-**Neither half was a defect on its own:**
+1. A comment claiming a per-verb "skip unchanged objects" filter *"IS the
+   minimal-diff guard"*. Deleting the filter left **all 19 tests green** —
+   `dirty_set()` enforces minimal diff **centrally**, by diffing against the
+   base revision at save time (§11.1). ⇒ **Generalisable, now in the code: a
+   per-verb "write only what changed" filter is UNOBSERVABLE through the public
+   API and therefore cannot be covered by any test. A green suite is not
+   evidence one is present.**
+2. A `treat_open: Option<ObjId>` parameter with a five-line doc explaining why
+   `set_outline_open` needed it. Sabotage: **green**. The chain starts at the
+   item's **parent**, so the item can never appear in it and the override could
+   never fire. **I had reasoned my way into an argument for dead code and
+   written it down persuasively.**
+3. The cycle guard's justification for asking downward rather than upward
+   (`161.1`). Both halves wrong, and the second was a **real hole**.
 
-- `check-passes-filed.py` **defers the tip commit by design** — a commit cannot
-  cite a hash that does not exist yet — and reports `clean`. Correct, and it
-  carries an implicit assumption: *the filing commit follows shortly.*
-- Rule 8 was amended **2026-08-27** (decision **090**, *"always push"*) to make
-  an ordinary fast-forward of `main` standing-authorized.
+⇒ **I do not write five defensive lines about something obvious. I write them
+when I have REASONED rather than MEASURED — which is exactly when I am most
+likely to be wrong. Sabotage the code your comment is proudest of.**
 
-⇒ **The amendment removed the pause between committing and pushing, and that
-pause was also — incidentally, unnoticed — the moment a deferred tip would be
-spotted. One day later, a deferred tip was pushed.** The deferral's expiry
-condition silently became "never".
+### ★★ A dispatch is the least-checked artefact this project produces
 
-★ **The generalisable shape: a check that DEFERS rather than fails depends on
-something happening later, and nothing enforces the later thing.** Search for
-other deferrals on that basis, not on whether they look risky.
+I told `pdfce-librarian` that the fifth doc-comment orphaning was *"Fixed"*.
+**It was not** — I had found it, described it, and moved on. The librarian
+**verified the claim against live source rather than taking the dispatch on
+faith** and reported it back; `Pass 161.2` fixed it.
 
-★★ **And the recurrence is the sharpest part.** `Pass 160.0`'s own commit
-message records catching the identical failure one Pass earlier — *"I told the
-librarian 'Pass 158.0 was already filed'. It was not… A claim about what a
-document CONTAINS is checkable in one command, and I did not run it."* The
-remedy was applied backwards to `158.0` and never forwards to the commit
-applying it. **Same shape as the doc-comment orphaning below: a remedy derived
-from part of a finding, shipped as covering the whole.**
+Every other claim here has a gate behind it. The only thing standing behind a
+subagent dispatch is the subagent choosing to check. **Finding a defect and
+reporting a defect are separate acts, and the gap between them is invisible.**
+
+### ★★ Doc-comment orphaning: EIGHT instances, and the class has MORE THAN ONE
+cause
+
+Six were found by eye over weeks. `tools/check-clap-help.py`, written in twenty
+minutes, found **two more in seconds** (`print-preview`, `render-page`, both
+shipping **blank** `--help`), **neither caused by a splice**. ⇒ the existing
+remedy — *"insert after a closing brace, never before a named anchor"* — could
+never have closed the class, and neither could more careful reading.
+
+**In a clap-derive CLI a doc comment IS shipped operator-facing UI**, and
+nothing checks it: not the compiler, not clippy, not `missing_docs` (private
+items in a binary crate), and no test, **because no test reads help text**.
+
+**What did NOT work, so it is not re-derived:** a structural detector for the
+**weld itself** — *"a doc line whose predecessor is non-empty and whose
+successor is blank"* — produced **8,136 candidates**, because that is the shape
+of every ordinary paragraph ending. Abandoned rather than shipped noisy. The
+gate catches the **donor** of a weld, never the **recipient**.
+
+### ★ The 151 broken doc links are HYGIENE, not a correctness risk
+
+Measured: the dangerous subclass — a doc naming a **public verb that does not
+exist**, the `insert_pages`-disclosure failure mode — was **exactly one**
+(`EditSession::move_outline_item`, dangling since `Pass 156.0`), and
+`Pass 161.0` closed it **by shipping the verb**. The other four `EditSession::*`
+misses all resolve to real `pub fn`s and fail on **path scope**. The Backlog
+entry should be read at that priority.
 
 ### Still biting — `R225`: a fixture whose two candidate answers coincide
 
-**It cannot discriminate between them, and the test reads as passing coverage.**
-Three instances in three subsystems in one day: an appearance whose `/Matrix`
-was the identity (composing a rotation and replacing the matrix give the same
-six numbers); a colour-scope pair with no non-grey source present; an **open**
-bookmark, where visible-count equals subtree-size so the two readings of
-`/Count` coincide.
+Avoided **twice** deliberately in `161.0`: nesting Chapter 2 under Chapter 1
+produces a flat title order **character-for-character identical** to the input,
+so a title-list assertion would pass whether the re-parenting happened or not.
+Assertions are on **structure** and `/Count`; the CLI suite asserts on `level=`.
 
-★ Why it earned a rule rather than a note: **`R221` already names
-sabotage-survival as the signature of a masking defect, but names a different
-cause** (two agreeing predicates). Both return "nothing went red" and **the
-remedies are opposite** — delete the duplicate versus change the input.
-
-### Still biting — doc-comment orphaning, four instances
-
-Splicing a function by anchoring on `pub fn name(` lands **inside the previous
-item's doc block**, by construction. The walk-back-over-`///` mitigation failed
-on the third instance because an **`#[allow(...)]` attribute** intervened, so
-the walk terminated at zero steps.
-
-⇒ **Insert AFTER a function's closing brace.** A doc comment binds to what
-*follows* it, so there is no preceding run to land inside.
-
-★ **A fourth instance was live at HEAD for nine days** and neither accident
-that caught the others applied to it. **Two catches are not evidence of
-coverage.**
-
-### Still biting — an unticked `[ ]` box is unfalsifiable
-
-`[x]` is falsifiable by the build. **`[ ]` is falsifiable by nothing** — no
-test, no gate, no compiler notices a capability arriving. `FEATURES.md`
-therefore decays in exactly one direction and is most wrong where it is most
-consulted. ⇒ **Grep the Implemented section before believing the Planned one**,
-and run the verb before reporting a gap. (§0 item 3 above was re-verified for
-exactly this reason.)
+A related trap caught mid-Pass: the dirty-set test's first version moved the
+**last** top-level item, so the root's `/Last` genuinely moved and the root was
+rightly dirty. **Counts cancelling and an object being unwritten are two
+different claims.**
 
 ---
 
@@ -311,44 +362,42 @@ exactly this reason.)
 
 **None of these block anything.**
 
-### Carried forward — the private suite's name in pushed commit messages
+- **The private suite's name in pushed commit messages** — 82 already-pushed
+  messages, 302 occurrences across 1,042 published commits. The gate scans the
+  **work tree** and never could reach commit messages. Accept, or rewrite and
+  force-push — **his call**. Fresh commits are clean. Re-run the count with the
+  gate's own decoded needles, and **do not write the decoded terms down**.
+- **`(bv)`–`(bz)`, five licence questions** filed with the validator scope, each
+  with a conservative default already chosen. **`(bw)` is the one to read
+  first** — veraPDF's machine-readable **rule definitions** are **CC BY 4.0,
+  not GPL**, softer than assumed and therefore most likely to be waved through;
+  CC BY 4.0 is not a software licence and carries perpetual attribution.
+- **`(bl)` OCR model weights** — whether a **CC-BY-SA-4.0** model file may ship
+  inside pdfce's **MIT** portable folder. *Default if unanswered: ship neither
+  model set.*
 
-It appears in **82 already-pushed commit messages** (302 occurrences across
-1,042 published commits). The gate scans the **work tree** and never could
-reach commit messages; the 2026-08-10 acceptance of material already in history
-predates the 2026-08-25 scrub ruling by two weeks. Accept, or rewrite and
-force-push — **his call**. Fresh commits are clean. Re-run the count with the
-gate's own decoded needles rather than trusting this figure, and **do not write
-the decoded terms down**.
+---
 
-### New 2026-08-28 — five licence questions, `(bv)`–`(bz)`
+## §F — OUTBOUND, AWAITING A REPLY
 
-Filed with the validator scope. Each has a conservative default already chosen,
-so nothing is blocked. Full text in `ROADMAP.md` *Open operator questions*.
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\reply_the_clipboard_route_is_the_same_loss_and_bookmarks_now_move.md`
+(2026-08-29) answers `pdfceGUI`'s clipboard-fidelity question **by
+measurement**:
 
-- **`(bv)`** veraPDF library is GPLv3+/MPLv2+ — invoking `verapdf.bat` as a
-  separate dev-time process is the settled, unproblematic case; **linking is
-  categorically out**. Recorded so the safe half is not re-litigated.
-- **`(bw)`** ★ **The one to read first.** veraPDF's machine-readable **rule
-  definitions** are **CC BY 4.0, not GPL** — softer than assumed, and therefore
-  **the one most likely to be waved through**. CC BY 4.0 is not a software
-  licence and carries perpetual attribution. Whether pdfce may derive its rule
-  set from those profiles is unresolved.
-- **`(bx)`** The Isartor redistribution conflict — see §B item 11.
-- **`(by)`** Arlington PDF Model: `LICENSE` says Apache-2.0, `NOTICE.txt`
-  splits software from documentation; which bucket `tsv/` falls in is
-  unresolved.
-- **`(bz)`** The public PDF/X and PDF/VT corpora the PDF Association's index
-  lists (Altona, Cal Poly, and one whose name this repository does not carry
-  under the 2026-08-25 ruling) state **no licence**, so under project rule 7
-  they cannot be staged — which is the practical reason arc B is ungraded, over
-  and above veraPDF having no flavour for them. ★ **Read this together with the
-  arc B correction in §0b:** pdfce's own licensed **print-conformance suite**
-  is a PDF/X corpus and is already on disk, so the question is about what may
-  be **committed and redistributed**, not about whether any PDF/X files are
-  reachable.
+`copy_annotations` → `ObjectClip` → `paste_objects` is the **same loss** they
+already have — `ClipAnnotation::Markup` is literally `Box<MarkupSpec>`, and
+`paste_objects` calls **plain `add_markup`**, so the clip route additionally
+drops the **opacity** they just wired. And `ObjectClip::to_bytes` **does not
+serialise annotations at all**, so a persisted clipboard would arrive empty of
+markup. **They were told to keep their current path.**
 
-### Still open from earlier — OCR model weights, `(bl)`
+A lossless markup copy (`/T`, `/M`, note, `/CA`, `/Popup`, `/IRT`, `/RC`) needs
+`MarkupSpec` extended **and** `/IRT` reference rewriting — **a graph problem,
+not a value problem**: copying a reply without its parent dangles, copying both
+must rewrite the reference to the pasted parent's new id. Filed to Backlog,
+unscoped. **Do not build it speculatively — they were asked to say whether they
+need it.**
 
-Whether a **CC-BY-SA-4.0** model file may ship inside pdfce's **MIT** portable
-folder. Unchanged. *Default if unanswered: ship neither model set.*
+**Check BOTH channels every session** — `pdfce_FeatureRequests` and
+`iccce_FeatureRequests`. They live outside the repo, so **no gate can
+contradict a stale "it's empty" claim.**
