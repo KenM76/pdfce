@@ -412,3 +412,18 @@ path = "fuzz_targets/type3_font.rs"
 test = false
 doc = false
 bench = false
+
+# Pass 167.0: the two CLIPBOARD payload readers. Both parse untrusted bytes
+# that arrive from OUTSIDE the process -- a clip is written to a file, put on
+# the OS clipboard and read back by a different run -- and both stack two
+# attack surfaces: a length-prefixed binary frame whose every count comes out
+# of the payload, wrapping COS object syntax re-parsed by the crate's own
+# parser. `ObjectClip::from_bytes` shipped in Pass 120.1 with NO fuzz target;
+# the gap was found while adding the field clipboard, not by review, because
+# a clipboard reads like an internal format and is in fact a file format.
+[[bin]]
+name = "clipboard_payloads"
+path = "fuzz_targets/clipboard_payloads.rs"
+test = false
+doc = false
+bench = false

@@ -3277,6 +3277,152 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// Copy a form field onto a portable clip file (`Pass 167.0`).
+    ///
+    /// The clip carries everything the field IS — type, flags, value, default
+    /// value, appearance string, quadding, options, length limit, actions,
+    /// accessibility name, every widget's rectangle, `/MK` colours, border
+    /// style, appearance streams, and the `/AcroForm` `/DR` font its `/DA`
+    /// names — minus its identity (`/T`, `/Parent`, `/Kids`), which
+    /// `paste-field` supplies.
+    ///
+    /// This is the batch half of the gesture Acrobat has no command-line form
+    /// of at all: copy one field from a template drawing, then stamp it onto
+    /// two hundred others in a loop.
+    ///
+    /// REFUSED for a field with no widget annotation (a value-only field has
+    /// nothing to place), and for a SIGNED signature field — a signature
+    /// covers a byte range of the document it was made in (§12.7.4.5), so
+    /// only its "signed by" artwork could travel, into a file nobody signed.
+    /// An UNSIGNED signature field copies normally.
+    CopyField {
+        /// Input PDF.
+        input: PathBuf,
+        /// The fully-qualified name of the field to copy, as `list-fields`
+        /// prints it.
+        #[arg(long)]
+        name: String,
+        /// Where to write the clip.
+        ///
+        /// A private, versioned binary format — not a PDF. `paste-field`
+        /// reads it, and `inspect-field-clip` says what is in it.
+        #[arg(short, long)]
+        output: PathBuf,
+    },
+
+    /// Say what a clip file carries, without pasting it (`Pass 167.0`).
+    ///
+    /// The question a script wants answered BEFORE it stamps two hundred
+    /// files: does this clip bring a calculation with it, does it bring a
+    /// value, does it bring a font, and how many widgets will land.
+    InspectFieldClip {
+        /// The clip file written by `copy-field`.
+        clip: PathBuf,
+    },
+
+    /// Paste a copied form field onto a page (`Pass 167.0`).
+    ///
+    /// TWO PASTES, and they are different on purpose — the operator's own
+    /// ruling, on two different keys in the GUI and two different flags here:
+    ///
+    /// * `--as-new <NAME>` — a NEW, INDEPENDENT field. Its own name, its own
+    ///   value. Refused when the name is already taken; never auto-suffixed,
+    ///   because an engine-invented `Name_2` is a name nobody chose.
+    ///
+    /// * `--as-widget-of <NAME>` — ANOTHER WIDGET of a field that already
+    ///   exists here. One field, two places to see and edit it, one shared
+    ///   value (§12.7.3.2). Refused when that field is not in this document;
+    ///   it never falls back to `--as-new`, because the difference is
+    ///   invisible on the page and shows up only when somebody types in one
+    ///   and the other does not follow.
+    ///
+    /// `--as-widget-of` is the HIGHER-FIDELITY route, which is the
+    /// counter-intuitive part: it does not touch the field object at all, so
+    /// the font, colour, alignment, default value and actions are the
+    /// original's exactly.
+    ///
+    /// Everything the paste dropped, renamed, translated or reused is printed
+    /// to stderr. Read it: an inert calculation and a reused accessibility
+    /// name are both invisible in the file.
+    PasteField {
+        /// Input PDF — the document the field is pasted INTO.
+        input: PathBuf,
+        /// The clip file written by `copy-field`.
+        #[arg(long)]
+        clip: PathBuf,
+        /// 1-based page number to place the field on.
+        #[arg(long)]
+        page: usize,
+        /// Where to place it, in PDF user space, `llx,lly,urx,ury`.
+        ///
+        /// For a single-widget field this rectangle is used verbatim. For a
+        /// MULTI-widget field (a radio group) the group is moved as a unit so
+        /// its first widget's lower-left corner lands on this rectangle's —
+        /// each button keeps its own size and its distance from the others,
+        /// because that spacing is part of what the group means. The
+        /// rectangle's size is then ignored, and the command says so.
+        #[arg(long, value_name = "LLX,LLY,URX,URY", allow_hyphen_values = true)]
+        rect: String,
+        /// Paste as a NEW, INDEPENDENT field with this fully-qualified name.
+        ///
+        /// A period separates levels (§12.7.3.2) and any missing grouping
+        /// ancestors are created, exactly as `add-text-field` does.
+        #[arg(long, value_name = "NAME", conflicts_with = "as_widget_of")]
+        as_new: Option<String>,
+        /// Paste as ANOTHER WIDGET of the field already named this.
+        ///
+        /// One field, one value, two places on the page. Refused when no
+        /// field here bears the name, and refused on a type mismatch.
+        #[arg(long, value_name = "NAME", conflicts_with = "as_new")]
+        as_widget_of: Option<String>,
+        /// Also carry the copied field's VALUE (`--as-new` only).
+        ///
+        /// Off by default: a value is CONTENT. A "Revision" field arriving
+        /// pre-filled with the source drawing's revision is a wrong answer
+        /// that looks like a right one. The DEFAULT value (`/DV`) travels
+        /// either way, so Reset Form still restores the right thing.
+        #[arg(long)]
+        copy_value: bool,
+        /// Also carry the copied field's ACTIONS (`--as-new` only).
+        ///
+        /// Off by default: an action is BEHAVIOUR, and a calculation that
+        /// refers to fields this document does not have arrives inert with
+        /// nothing on screen to show it. When carried, a calculate action is
+        /// appended to `/AcroForm /CO` (§12.7.2 Table 218 requires that array
+        /// once any field has one). pdfce never EXECUTES a script either way.
+        #[arg(long)]
+        copy_actions: bool,
+        /// `/TU`, the accessibility name a screen reader announces
+        /// (`--as-new` only).
+        #[arg(long)]
+        tooltip: Option<String>,
+        /// Reuse the COPIED field's accessibility name (`--as-new` only).
+        ///
+        /// A legitimate explicit answer — you are copying your own field. It
+        /// is reported, because two fields announcing themselves identically
+        /// to a screen reader is invisible to a sighted operator.
+        #[arg(long, conflicts_with_all = ["tooltip", "no_tooltip"])]
+        carry_tooltip: bool,
+        /// Explicitly DECLINE an accessibility name (R105).
+        ///
+        /// Exactly one of `--tooltip` / `--carry-tooltip` / `--no-tooltip` is
+        /// required with `--as-new`. Omitting all three is an error, never a
+        /// silent default: for a form field, `/TU` — not the tag tree — is
+        /// what a screen reader announces.
+        #[arg(long, conflicts_with = "tooltip")]
+        no_tooltip: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the paste reproduces the input byte for
+        /// byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// Author a new check box (ISO 32000-1 §12.7.4.2).
     ///
     /// Both appearance states are written at creation, so the box is
@@ -7606,6 +7752,43 @@ fn run() -> ExitCode {
             stretch,
             natural,
             compression: compression.policy(quality),
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::CopyField {
+            input,
+            name,
+            output,
+        } => cmd_copy_field(&input, &name, &output),
+        Command::InspectFieldClip { clip } => cmd_inspect_field_clip(&clip),
+        Command::PasteField {
+            input,
+            clip,
+            page,
+            rect,
+            as_new,
+            as_widget_of,
+            copy_value,
+            copy_actions,
+            tooltip,
+            carry_tooltip,
+            no_tooltip,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_paste_field(&PasteFieldArgs {
+            input: &input,
+            clip: &clip,
+            page,
+            rect: &rect,
+            as_new: as_new.as_deref(),
+            as_widget_of: as_widget_of.as_deref(),
+            copy_value,
+            copy_actions,
+            tooltip: tooltip.as_deref(),
+            carry_tooltip,
+            no_tooltip,
             output: &output,
             mode,
             verify_undo,
@@ -31133,4 +31316,245 @@ mod tests {
             );
         });
     }
+}
+
+/// Borrowed argument bundle for [`cmd_paste_field`].
+///
+/// A bundle rather than eleven parameters, matching every other authoring
+/// handler in this file: clippy's `too_many_arguments` bites at eight, and a
+/// struct keeps the dispatch arm readable.
+struct PasteFieldArgs<'a> {
+    input: &'a Path,
+    clip: &'a Path,
+    page: usize,
+    rect: &'a str,
+    as_new: Option<&'a str>,
+    as_widget_of: Option<&'a str>,
+    copy_value: bool,
+    copy_actions: bool,
+    tooltip: Option<&'a str>,
+    carry_tooltip: bool,
+    no_tooltip: bool,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `copy-field` — write a field onto a portable clip file.
+fn cmd_copy_field(input: &Path, name: &str, output: &Path) -> u8 {
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let clip = match session.copy_field(name) {
+        Ok(clip) => clip,
+        Err(err) => return report_edit_error(input, &err),
+    };
+    let bytes = clip.to_bytes();
+    if let Err(err) = std::fs::write(output, &bytes) {
+        eprintln!("pdfce-cli: {}: {err}", output.display());
+        return exit::IO_ERROR;
+    }
+    print_field_clip_line("copy-field", Some(input), &clip, output, bytes.len());
+    exit::SUCCESS
+}
+
+/// `inspect-field-clip` — say what a clip carries, without pasting it.
+fn cmd_inspect_field_clip(path: &Path) -> u8 {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", path.display());
+            return exit::IO_ERROR;
+        }
+    };
+    let clip = match pdfce_core::formclip::FieldClip::from_bytes(&bytes) {
+        Ok(clip) => clip,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", path.display());
+            return exit::EDIT_REFUSED;
+        }
+    };
+    print_field_clip_line("inspect-field-clip", None, &clip, path, bytes.len());
+    exit::SUCCESS
+}
+
+/// The one-line summary both clip subcommands print.
+///
+/// Same shape for both so a script can parse one format: the verb, the facts,
+/// then `-> <file>`. Every counted fact is one a caller might branch on
+/// before stamping the clip across a directory — `actions=1` in particular,
+/// because a carried calculation is the thing that is invisible afterwards.
+fn print_field_clip_line(
+    verb: &str,
+    input: Option<&Path>,
+    clip: &pdfce_core::formclip::FieldClip,
+    file: &Path,
+    bytes: usize,
+) {
+    let source = input.map_or_else(String::new, |p| format!("{} ", p.display()));
+    let bbox = clip.bbox().map_or_else(
+        || "-".to_owned(),
+        |r| format!("{},{},{},{}", r.llx, r.lly, r.urx, r.ury),
+    );
+    println!(
+        "{verb} {source}field={:?} type={} button={} widgets={} value={} actions={} calc={} tooltip={} font={} bbox={bbox} objects={} -> {}; bytes={bytes}",
+        clip.source_name(),
+        clip.field_type().map_or("-", field_type_token),
+        clip.button_kind().map_or("-", button_kind_token),
+        clip.widget_count(),
+        u32::from(clip.carries_value()),
+        u32::from(clip.carries_actions()),
+        u32::from(clip.carries_calculation()),
+        clip.tooltip().map_or_else(
+            || "-".to_owned(),
+            |t| format!("{:?}", String::from_utf8_lossy(t))
+        ),
+        clip.carried_font().map_or_else(
+            || "-".to_owned(),
+            |f| String::from_utf8_lossy(f).into_owned()
+        ),
+        clip.object_count(),
+        file.display(),
+    );
+}
+
+const fn field_type_token(ft: pdfce_core::forms::FieldType) -> &'static str {
+    match ft {
+        pdfce_core::forms::FieldType::Button => "Btn",
+        pdfce_core::forms::FieldType::Text => "Tx",
+        pdfce_core::forms::FieldType::Choice => "Ch",
+        pdfce_core::forms::FieldType::Signature => "Sig",
+    }
+}
+
+const fn button_kind_token(kind: pdfce_core::forms::ButtonKind) -> &'static str {
+    match kind {
+        pdfce_core::forms::ButtonKind::Push => "push",
+        pdfce_core::forms::ButtonKind::Check => "check",
+        pdfce_core::forms::ButtonKind::Radio => "radio",
+    }
+}
+
+/// `paste-field` — plant a copied field, under one of the two policies.
+fn cmd_paste_field(args: &PasteFieldArgs<'_>) -> u8 {
+    use pdfce_core::formclip::{FieldClip, FieldPastePolicy, PasteTooltip};
+
+    let (page_index, rect) = match parse_page_and_rect(args.input, args.page, args.rect) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let bytes = match std::fs::read(args.clip) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", args.clip.display());
+            return exit::IO_ERROR;
+        }
+    };
+    let clip = match FieldClip::from_bytes(&bytes) {
+        Ok(clip) => clip,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", args.clip.display());
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    // THE POLICY. `clap`'s `conflicts_with` rules out BOTH; only "neither"
+    // can reach here, and neither is not a default — the two pastes produce
+    // documents that differ in a way nothing on the page shows.
+    let policy = match (args.as_new, args.as_widget_of) {
+        (Some(name), _) => {
+            // R105: exactly one of the three tooltip answers must have been
+            // chosen. `clap` rules out combinations; only "none" gets here.
+            let tooltip = match (args.tooltip, args.carry_tooltip, args.no_tooltip) {
+                (Some(t), _, _) => PasteTooltip::Text(t.to_owned()),
+                (None, true, _) => PasteTooltip::Carry,
+                (None, false, true) => PasteTooltip::Declined,
+                (None, false, false) => {
+                    eprintln!(
+                        "pdfce-cli: {}: decide about the accessibility name — pass --tooltip <text>, --carry-tooltip to reuse the copied field's, or --no-tooltip to decline it. It is what a screen reader announces for a form field, so it is never defaulted silently (R105).",
+                        args.input.display()
+                    );
+                    return exit::EDIT_REFUSED;
+                }
+            };
+            FieldPastePolicy::NewField {
+                name: name.to_owned(),
+                tooltip,
+                copy_value: args.copy_value,
+                copy_actions: args.copy_actions,
+            }
+        }
+        (None, Some(existing)) => FieldPastePolicy::AdditionalWidget {
+            existing: existing.to_owned(),
+        },
+        (None, None) => {
+            eprintln!(
+                "pdfce-cli: {}: choose which paste this is — --as-new <NAME> for an independent field, or --as-widget-of <NAME> for another view of a field already here. The two produce documents that differ only in whether the two places share a value, so there is no safe default.",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let outcome = match session.paste_field(&clip, page_index, rect, &policy) {
+        Ok(outcome) => outcome,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    // Off-canvas by construction: stderr, never stdout, so a script's parsed
+    // line is unaffected and a human still sees every one of them.
+    for disclosure in &outcome.disclosures {
+        eprintln!("pdfce-cli: {}: {disclosure}", args.input.display());
+    }
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(saved) => saved,
+        Err(code) => return code,
+    };
+    let r = &saved.report;
+    println!(
+        "paste-field {} clip={} source_field={:?} policy={} page={} rect={},{},{},{} field={} {} widgets={} created={} merged={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.clip.display(),
+        clip.source_name(),
+        if outcome.created {
+            "new-field"
+        } else {
+            "additional-widget"
+        },
+        args.page,
+        rect.llx,
+        rect.lly,
+        rect.urx,
+        rect.ury,
+        outcome.field_id.num,
+        outcome.field_id.generation,
+        outcome.widget_ids.len(),
+        u32::from(outcome.created),
+        u32::from(outcome.merged),
+        args.mode.name(),
+        args.output.display(),
+        saved.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(saved.undo_verified),
+        u32::from(saved.undo_identical),
+    );
+    finish_edit(args.input, &saved)
 }

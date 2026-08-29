@@ -382,6 +382,16 @@ pub enum CommandKind {
     /// would force that off for the sake of an undo LABEL — a bad trade,
     /// since the label can be generic while `Copy` is relied on throughout.
     AddFormField,
+    /// A COPIED form field was planted onto a page (`Pass 167.0`) — the field
+    /// half, its widgets, the `/Annots` patch, the `/AcroForm` registration
+    /// and any `/DR` font the clip carried, all as ONE undo entry.
+    ///
+    /// Distinct from [`Self::AddFormField`] on purpose, even though both add
+    /// a field: an undo control that says *"paste field"* tells the operator
+    /// which of their two gestures is about to be reversed, and a paste is
+    /// the gesture most likely to be repeated several times before anybody
+    /// looks at the undo stack.
+    PasteFormField,
     /// A form field, or ONE of its widgets, was deleted (decision 020
     /// §3.6.3): the widget(s) un-listed from their pages' `/Annots`, the
     /// field's `/Kids` or `/AcroForm /Fields` registration patched, any
@@ -5280,6 +5290,47 @@ pub enum EditError {
     /// identity, so two top-level fields with one name are one field with
     /// two widgets, and filling either fills both. No viewer reports this;
     /// the operator finds it by typing.
+    /// The field has no widget annotation, so there is nothing to place at a
+    /// rectangle (`Pass 167.0`).
+    ///
+    /// A value-only terminal field is legal under Table 220 — it holds data
+    /// and has no on-page presence. Copying one is refused at the COPY, not
+    /// at the paste, so the operator learns it before spending a placement
+    /// gesture they then have to undo.
+    #[error(
+        "field {name:?} has no widget annotation -- it holds a value but has nothing on any page, so there is nothing to copy onto a rectangle"
+    )]
+    FieldHasNoWidget {
+        /// The field's fully-qualified name.
+        name: String,
+    },
+    /// A SIGNED signature field cannot be copied (`Pass 167.0`).
+    ///
+    /// §12.7.4.5 makes a signature's `/V` an assertion about a byte range of
+    /// **the document it was made in**; it cannot travel, and pdfce will not
+    /// carry the widget's baked *"signed by"* artwork into a file nobody
+    /// signed. An EMPTY `/Sig` field copies normally — that is the useful
+    /// half, and it is how a signature block reaches the next drawing.
+    #[error(
+        "field {name:?} is a SIGNED signature field. A signature covers a byte range of the document it was made in (ISO 32000-1 12.7.4.5), so it cannot be copied -- only its 'signed by' appearance could travel, into a file nobody signed. An unsigned signature field copies normally"
+    )]
+    SignedFieldNotCopyable {
+        /// The field's fully-qualified name.
+        name: String,
+    },
+    /// The clipboard payload's source field had no resolvable `/FT`
+    /// (`Pass 167.0`).
+    ///
+    /// Table 220 makes `/FT` required for a terminal field. pdfce surfaces a
+    /// malformed source rather than repairing it, and it will not invent a
+    /// type for a field it is about to write into somebody's document.
+    #[error(
+        "the copied field {name:?} has no field type (/FT), so pdfce cannot tell what to create -- ISO 32000-1 Table 220 requires one on a terminal field, and inventing one would be a guess written into your form"
+    )]
+    FieldClipUntyped {
+        /// The source field's fully-qualified name, as recorded on the clip.
+        name: String,
+    },
     #[error("a field named {name:?} already exists — supply a different name")]
     FieldNameTaken {
         /// The colliding fully qualified name.
@@ -9431,7 +9482,7 @@ impl EditSession {
         let mut imported: BTreeMap<u32, ObjId> = BTreeMap::new();
         let mut objects: Vec<ObjectWrite> = Vec::new();
         for &clip_id in clip.objects.keys() {
-            self.clip_materialize(clip, clip_id, &mut imported, &mut objects)?;
+            self.clip_materialize(&clip.objects, clip_id, &mut imported, &mut objects)?;
         }
 
         // The appended content stream.
@@ -10289,7 +10340,7 @@ impl EditSession {
     /// The inverse of [`Self::clip_import`]. Same mapping-first cycle guard.
     fn clip_materialize(
         &mut self,
-        clip: &crate::vector::ObjectClip,
+        clip: &BTreeMap<u32, crate::vector::clip::ClipObject>,
         clip_id: u32,
         imported: &mut BTreeMap<u32, ObjId>,
         objects: &mut Vec<ObjectWrite>,
@@ -10299,7 +10350,7 @@ impl EditSession {
         }
         let new_id = ObjId::new(self.alloc_number()?, 0);
         imported.insert(clip_id, new_id);
-        let Some(source) = clip.objects.get(&clip_id) else {
+        let Some(source) = clip.get(&clip_id) else {
             return Err(EditError::Clip(
                 crate::vector::ClipError::DanglingClipObject { object: clip_id },
             ));
@@ -10331,7 +10382,7 @@ impl EditSession {
     /// The value half of [`Self::clip_materialize`].
     fn clip_materialize_value(
         &mut self,
-        clip: &crate::vector::ObjectClip,
+        clip: &BTreeMap<u32, crate::vector::clip::ClipObject>,
         value: &Object,
         imported: &mut BTreeMap<u32, ObjId>,
         objects: &mut Vec<ObjectWrite>,
@@ -14248,6 +14299,37 @@ impl EditSession {
         remaining: &[String],
         field_id: ObjId,
     ) -> Result<(Vec<ObjectWrite>, Option<ObjId>, String), EditError> {
+        let (mut writes, parent, partial, register) =
+            self.place_new_field_deferred(deepest, remaining, field_id)?;
+        if let Some(root) = register {
+            writes.push(self.acroform_register_write(root)?);
+        }
+        Ok((writes, parent, partial))
+    }
+
+    /// [`Self::place_new_field`] without the `/AcroForm` write.
+    ///
+    /// # Why the split exists
+    ///
+    /// The registration is a whole-dictionary write to the `/AcroForm` (or to
+    /// the catalog holding it inline), and **two whole-dictionary writes to
+    /// one object inside one command do not compose** -- each is computed from
+    /// the pre-command state, so the second silently discards the first.
+    ///
+    /// Every `add_*_field` verb touches the `/AcroForm` exactly once, so the
+    /// wrapper above is right for them. [`Self::paste_field`] touches it four
+    /// ways at once -- `/Fields`, the carried `/DR` font, `/CO` and
+    /// `/SigFlags` -- so it needs the root handed back and does its own single
+    /// patch.
+    ///
+    /// The fourth return value is the node to register, or `None` when the
+    /// path hangs off something already rooted.
+    fn place_new_field_deferred(
+        &mut self,
+        deepest: Option<ObjId>,
+        remaining: &[String],
+        field_id: ObjId,
+    ) -> Result<FieldPlacement, EditError> {
         let mut writes = Vec::new();
         let Some((terminal, groups)) = remaining.split_last() else {
             return Err(EditError::FieldNameEmpty);
@@ -14325,11 +14407,19 @@ impl EditSession {
                     after: Some(Object::Dict(updated)),
                 });
             }
-            // Nothing on the path existed: the chain's top is a new root.
-            None => writes.push(self.acroform_register_write(root_of_new_chain)?),
+            // Nothing on the path existed: the chain's top is a new root,
+            // which the CALLER registers -- see this function's doc comment.
+            None => {
+                return Ok((
+                    writes,
+                    field_parent,
+                    terminal.clone(),
+                    Some(root_of_new_chain),
+                ));
+            }
         }
 
-        Ok((writes, field_parent, terminal.clone()))
+        Ok((writes, field_parent, terminal.clone(), None))
     }
 
     /// The `/Rect`, `/P`, `/T`, `/F` and `/TU` entries every authored widget
@@ -30592,6 +30682,839 @@ impl EditSession {
             tagged_document: self.document_is_tagged(),
         }
     }
+}
+
+impl EditSession {
+    /// **Copy a form field onto the field clipboard** (`Pass 167.0`).
+    ///
+    /// Returns a [`FieldClip`] holding everything the field IS — its type,
+    /// flags, value, default value, appearance string, quadding, options,
+    /// length limit, actions, accessibility name, every widget's rectangle,
+    /// `/MK` colours, border, appearance streams, and the `/AcroForm` `/DR`
+    /// font its `/DA` names — minus its identity (`/T`, `/Parent`, `/Kids`).
+    ///
+    /// The clip owns a **closure**, not pointers: it serialises with
+    /// [`FieldClip::to_bytes`] and can be pasted into a different document, a
+    /// different session, or a different run of the program. That is not a
+    /// nicety — the operator copies fields between drawings, so a clipboard
+    /// that only worked in-process would not cover the gesture.
+    ///
+    /// # Two refusals, and why they are here rather than at paste
+    ///
+    /// Both are conditions of the SOURCE, so refusing at copy costs one click
+    /// instead of a placement gesture the operator then has to undo:
+    ///
+    /// - **A field with no widgets** (legal under Table 220 — a value-only
+    ///   terminal) has nothing to place at a rectangle.
+    /// - **A SIGNED signature field.** §12.7.4.5 makes a signature's `/V` a
+    ///   byte-range assertion about *the document it was made in*; it cannot
+    ///   travel. What would travel is the widget's baked `/AP` — the visible
+    ///   *"signed by"* artwork — landing in a file nobody signed. pdfce
+    ///   declines to make that object. An **empty** `/Sig` field copies
+    ///   normally, which is the useful half: it is how a signature block gets
+    ///   onto the next drawing.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::NoInteractiveForm`] when the document has no `/AcroForm`;
+    /// [`EditError::FieldNotFound`] when nothing bears `fqn`;
+    /// [`EditError::FieldHasNoWidget`] and
+    /// [`EditError::SignedFieldNotCopyable`] for the two refusals above;
+    /// [`EditError::Clip`] when the field's closure exceeds
+    /// [`MAX_CLIP_OBJECTS`](crate::formclip::MAX_CLIP_OBJECTS).
+    pub fn copy_field(&self, fqn: &str) -> Result<crate::formclip::FieldClip, EditError> {
+        let form = forms::parse_acroform(&self.graph()).ok_or(EditError::NoInteractiveForm)?;
+        let field = form
+            .field_by_name(fqn)
+            .ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        if field.widgets.is_empty() {
+            return Err(EditError::FieldHasNoWidget {
+                name: fqn.to_owned(),
+            });
+        }
+        if field.field_type == Some(forms::FieldType::Signature) && field.value.is_present() {
+            return Err(EditError::SignedFieldNotCopyable {
+                name: fqn.to_owned(),
+            });
+        }
+        let view = self.view();
+        Ok(crate::formclip::build_field_clip(&view, &form, field)?)
+    }
+
+    /// **Paste a copied form field onto a page** (`Pass 167.0`).
+    ///
+    /// `rect` is where the operator drew. `policy` is which of the two chords
+    /// they pressed — see [`FieldPastePolicy`](crate::formclip::FieldPastePolicy)
+    /// for why the two never fall back to each other.
+    ///
+    /// ONE undoable command, however many objects arrive: the field, its
+    /// widgets, their appearance streams, the page's `/Annots` patch, the
+    /// `/AcroForm` registration, any `/DR` font the clip carried, the `/CO`
+    /// calculation-order entry and the `/SigFlags` bit all undo together.
+    ///
+    /// # What the disclosures cover, and why they are strings
+    ///
+    /// Field *creation* returns a fixed struct of booleans because the set of
+    /// things it can surprise you with is closed. A paste's is not: what a
+    /// clip carries depends on the document it came from. So this returns
+    /// sentences, the same shape
+    /// [`PasteOutcome::disclosures`](crate::edit::PasteOutcome) uses, and it
+    /// says out loud every one of: a dropped value, dropped actions, a
+    /// carried calculation, a renamed font resource, an ignored rectangle
+    /// size, a tab-order position, a dropped structure-tree link, a reused
+    /// accessibility name, and a signature value that could not travel.
+    ///
+    /// This is rule 4 in its narrowed 2026-08-13 form: the pasted field
+    /// renders exactly as a saved-and-reopened one will, with no provisional
+    /// marking anywhere on the page — and the disclosure lives off-canvas,
+    /// here, where a shell can put it in a status line.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FieldClipUntyped`] for a clip whose source field had no
+    /// resolvable `/FT`; [`EditError::FieldNameTaken`] for a `NewField` paste
+    /// onto a name in use; [`EditError::FieldNotFound`] for an
+    /// `AdditionalWidget` paste naming a field this document does not have;
+    /// [`EditError::RadioExportValueTaken`] when a pasted radio widget would
+    /// duplicate an export value already in the group; plus everything
+    /// `field_authoring_preflight` refuses — an undecided accessibility name,
+    /// a degenerate rectangle, encryption, certification, XFA, a page out of
+    /// range, and a cross-type name collision.
+    pub fn paste_field(
+        &mut self,
+        clip: &crate::formclip::FieldClip,
+        page_index: usize,
+        rect: page_tree::Rect,
+        policy: &crate::formclip::FieldPastePolicy,
+    ) -> Result<crate::formclip::FieldPasteOutcome, EditError> {
+        use crate::formclip::{FieldPastePolicy, PasteTooltip};
+
+        let Some(ft) = clip.field_type() else {
+            return Err(EditError::FieldClipUntyped {
+                name: clip.source_name().to_owned(),
+            });
+        };
+        let mut disclosures: Vec<String> = Vec::new();
+
+        // The accessibility-name decision (R105). `AdditionalWidget` declines
+        // for the widget itself, because the FIELD already carries the answer
+        // and a widget kid is not what a screen reader announces.
+        let tooltip = match policy {
+            FieldPastePolicy::AdditionalWidget { .. } => TooltipChoice::Declined,
+            FieldPastePolicy::NewField { tooltip, .. } => match tooltip {
+                PasteTooltip::Undecided => TooltipChoice::Undecided,
+                PasteTooltip::Declined => TooltipChoice::Declined,
+                PasteTooltip::Text(t) => TooltipChoice::Text(t.clone()),
+                PasteTooltip::Carry => match clip.tooltip() {
+                    Some(bytes) => {
+                        disclosures.push(format!(
+                            "paste: the accessibility name {:?} was reused from the copied field. Two form fields announcing themselves identically is a real difficulty for a screen-reader user and is invisible on screen -- give the copy its own name if the two mean different things.",
+                            decode_text_string(bytes).text
+                        ));
+                        TooltipChoice::Text(decode_text_string(bytes).text)
+                    }
+                    None => {
+                        disclosures.push(
+                            "paste: the copied field carried no accessibility name (/TU), so the pasted one has none either. A screen reader will announce nothing for it."
+                                .to_owned(),
+                        );
+                        TooltipChoice::Declined
+                    }
+                },
+            },
+        };
+
+        let name = policy.target_name().to_owned();
+        let (page_id, slots, path, author_disclosures) = self.field_authoring_preflight(
+            &name,
+            rect,
+            page_index,
+            ft,
+            clip.button_kind(),
+            &tooltip,
+        )?;
+        if author_disclosures.tagged_document {
+            disclosures.push(
+                "paste: this document is tagged (/StructTreeRoot), and the pasted field is NOT in its structure tree -- pdfce has no structure-tree writer. The source widget's /StructParent was dropped rather than carried, because it indexed the SOURCE document's parent tree and would have pointed at an unrelated element here."
+                    .to_owned(),
+            );
+        }
+        if author_disclosures.structure_tab_order {
+            disclosures.push(
+                "paste: this page declares a structure-derived tab order (/Tabs /S), so where the pasted field lands in the tab sequence is computed from a tag tree it is not in."
+                    .to_owned(),
+            );
+        } else {
+            disclosures.push(
+                "paste: the pasted widget is APPENDED to the page's /Annots, so under an explicit tab order it is last. pdfce does not re-sort /Annots to place it (R104) -- that would rewrite references it did not logically change, and would restack annotation paint order as a side effect."
+                    .to_owned(),
+            );
+        }
+
+        match policy {
+            FieldPastePolicy::NewField {
+                copy_value,
+                copy_actions,
+                ..
+            } => self.paste_new_field(
+                clip,
+                &name,
+                page_id,
+                &slots,
+                path,
+                rect,
+                &tooltip,
+                *copy_value,
+                *copy_actions,
+                ft,
+                disclosures,
+            ),
+            FieldPastePolicy::AdditionalWidget { .. } => {
+                self.paste_additional_widget(clip, &name, page_id, &slots, path, rect, disclosures)
+            }
+        }
+    }
+
+    /// The `Ctrl+V` half: plant an independent field.
+    #[allow(clippy::too_many_arguments)]
+    fn paste_new_field(
+        &mut self,
+        clip: &crate::formclip::FieldClip,
+        name: &str,
+        page_id: ObjId,
+        slots: &[PageSlot],
+        path: forms_author::FieldPath,
+        rect: page_tree::Rect,
+        tooltip: &TooltipChoice,
+        copy_value: bool,
+        copy_actions: bool,
+        ft: forms::FieldType,
+        mut disclosures: Vec<String>,
+    ) -> Result<crate::formclip::FieldPasteOutcome, EditError> {
+        // THE REFUSAL THAT MAKES THE TWO CHORDS DISTINCT. The preflight
+        // MERGES a same-type terminal, which is exactly what `Ctrl+Shift+V`
+        // wants and exactly what `Ctrl+V` must not do silently.
+        let FieldPath::Vacant { deepest, remaining } = path else {
+            return Err(EditError::FieldNameTaken {
+                name: name.to_owned(),
+            });
+        };
+
+        let field_id = ObjId::new(self.alloc_number()?, 0);
+        // The DEFERRED form: this verb writes the `/AcroForm` ONCE, at the
+        // end, doing four jobs in one patch. Letting `place_new_field`
+        // register here as well would be a second whole-dictionary write to
+        // the same object in the same command, and the second silently
+        // discards the first.
+        let (parent_writes, parent, partial, register_root) =
+            self.place_new_field_deferred(deepest, &remaining, field_id)?;
+
+        let mut imported: BTreeMap<u32, ObjId> = BTreeMap::new();
+        let mut objects: Vec<ObjectWrite> = parent_writes;
+
+        // ---- the field half ------------------------------------------------
+        let mut field = self
+            .clip_materialize_value(
+                clip.objects(),
+                &Object::Dict(clip.field_dict().clone()),
+                &mut imported,
+                &mut objects,
+            )?
+            .as_dict()
+            .cloned()
+            .unwrap_or_default();
+
+        if !copy_value && field.remove(b"V").is_some() {
+            disclosures.push(
+                "paste: the copied field's VALUE was not carried -- the new field starts empty. Its default value (/DV) travelled, so Reset Form restores what the original reset to."
+                    .to_owned(),
+            );
+        }
+        if ft == forms::FieldType::Signature && field.remove(b"V").is_some() {
+            disclosures.push(
+                "paste: a signature's value covers a byte range of the document it was made in (ISO 32000-1 12.7.4.5), so it cannot travel. The pasted field is an EMPTY signature field."
+                    .to_owned(),
+            );
+        }
+        let carried_calculation = copy_actions && clip.carries_calculation();
+        if !copy_actions {
+            let had = field.remove(b"AA").is_some();
+            if had {
+                disclosures.push(
+                    "paste: the copied field's actions (/AA -- format, calculate, validate or keystroke scripts) were NOT carried. Nothing on the page shows this; a field that used to reformat or compute now does neither."
+                        .to_owned(),
+                );
+            }
+        } else if clip.carries_actions() {
+            disclosures.push(
+                "paste: the copied field's actions (/AA) travelled with it. pdfce never executes them (decision 008, NF4), and it does NOT check whether the field names inside a script exist in this document -- a calculation that referred to fields the source had can be silently inert here."
+                    .to_owned(),
+            );
+        }
+
+        for key in [b"T".as_slice(), b"Parent".as_slice(), b"Kids".as_slice()] {
+            field.remove(key);
+        }
+        field.insert(
+            Name::from(b"T"),
+            Object::String(encode_text_string(&partial)),
+        );
+        if let Some(p) = parent {
+            field.insert(Name::from(b"Parent"), Object::Reference(p));
+        }
+        match tooltip.text() {
+            Some(t) => {
+                field.insert(Name::from(b"TU"), Object::String(encode_text_string(t)));
+            }
+            None => {
+                field.remove(b"TU");
+            }
+        }
+
+        // ---- the /DA font --------------------------------------------------
+        //
+        // The font is installed into the destination's `/DR /Font` under the
+        // name the `/DA` uses, unless that name is already taken by a
+        // DIFFERENT font -- in which case the font gets a free name and the
+        // `/DA` is rewritten to match. Renaming the resource rather than
+        // refusing keeps the paste working; rewriting the `/DA` rather than
+        // leaving it is what keeps the two agreeing.
+        let mut dr_install: Option<(Vec<u8>, ObjId)> = None;
+        if let Some((wanted, clip_object)) = clip.da_font_entry() {
+            let font_id =
+                self.clip_materialize(clip.objects(), clip_object, &mut imported, &mut objects)?;
+            let existing = self.dr_font_object(&wanted);
+            let final_name = match existing {
+                // Already present and identical: nothing to install.
+                Some(present) if self.same_font_object(&present, clip, clip_object) => None,
+                Some(_) => {
+                    let fresh = self.free_dr_font_name(&wanted);
+                    disclosures.push(format!(
+                        "paste: this document already uses the font resource /{} for a different font, so the copied one was installed as /{} and the field's /DA rewritten to name it. The pasted field therefore keeps the face, size and colour it had.",
+                        String::from_utf8_lossy(&wanted),
+                        String::from_utf8_lossy(&fresh),
+                    ));
+                    Some(fresh)
+                }
+                None => Some(wanted.clone()),
+            };
+            if let Some(final_name) = final_name {
+                if final_name != wanted
+                    && let Some(Object::String(da)) = field.get(b"DA").cloned()
+                {
+                    field.insert(
+                        Name::from(b"DA"),
+                        Object::String(rewrite_da_font(&da, &wanted, &final_name)),
+                    );
+                }
+                dr_install = Some((final_name, font_id));
+            }
+        }
+
+        // ---- the widgets ---------------------------------------------------
+        let rects = placed_rects(clip, rect, &mut disclosures);
+        let mut widget_ids: Vec<ObjId> = Vec::new();
+        let merged = clip.widget_count() == 1;
+
+        if merged {
+            // Shape A (SS12.5.6.19): one dictionary wearing both hats, which
+            // is the shape every `add_*_field` verb writes for a single-widget
+            // field. Matching it keeps a pasted field indistinguishable from
+            // an authored one.
+            let widget =
+                self.materialize_widget_dict(clip, 0, copy_actions, &mut imported, &mut objects)?;
+            for (key, value) in widget.iter() {
+                field.insert(key.clone(), value.clone());
+            }
+            field.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
+            field.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Widget")));
+            field.insert(Name::from(b"P"), Object::Reference(page_id));
+            field.insert(
+                Name::from(b"Rect"),
+                rect_array(rects.first().copied().unwrap_or(rect)),
+            );
+            widget_ids.push(field_id);
+            objects.push(ObjectWrite {
+                id: field_id,
+                before: None,
+                after: Some(Object::Dict(field)),
+            });
+            objects.extend(self.annots_writes(page_id, field_id, slots)?);
+        } else {
+            // Shape B: the field owns `/Kids`, each kid is a bare widget.
+            let mut kids = Vec::with_capacity(clip.widget_count());
+            let mut pending = Vec::with_capacity(clip.widget_count());
+            for index in 0..clip.widget_count() {
+                let widget_id = ObjId::new(self.alloc_number()?, 0);
+                let mut widget = self.materialize_widget_dict(
+                    clip,
+                    index,
+                    copy_actions,
+                    &mut imported,
+                    &mut objects,
+                )?;
+                // R101: a widget kid carries no field keys, or the reader
+                // promotes it to a separate terminal field and the group
+                // semantics -- radio exclusivity, one shared /V -- are gone.
+                for key in forms_author::FIELD_ONLY_KEYS {
+                    widget.remove(key);
+                }
+                widget.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
+                widget.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Widget")));
+                widget.insert(Name::from(b"Parent"), Object::Reference(field_id));
+                widget.insert(Name::from(b"P"), Object::Reference(page_id));
+                widget.insert(
+                    Name::from(b"Rect"),
+                    rect_array(rects.get(index).copied().unwrap_or(rect)),
+                );
+                kids.push(Object::Reference(widget_id));
+                widget_ids.push(widget_id);
+                pending.push(ObjectWrite {
+                    id: widget_id,
+                    before: None,
+                    after: Some(Object::Dict(widget)),
+                });
+            }
+            field.insert(Name::from(b"Kids"), Object::Array(kids));
+            objects.push(ObjectWrite {
+                id: field_id,
+                before: None,
+                after: Some(Object::Dict(field)),
+            });
+            objects.extend(pending);
+            objects.extend(self.annots_append(page_id, &widget_ids, slots)?);
+        }
+
+        // ---- one /AcroForm write, doing every job at once --------------------
+        //
+        // Two whole-dictionary writes to the same object in one command do not
+        // compose -- each is computed from the pre-command state, so the second
+        // silently discards the first. Registration, the /DR font, /CO and
+        // /SigFlags therefore share one closure.
+        let needs_sig_flag = ft == forms::FieldType::Signature;
+        if carried_calculation {
+            disclosures.push(
+                "paste: the copied field carries a CALCULATE action, so it was appended to the document's calculation order (/AcroForm /CO) -- ISO 32000-1 Table 218 requires that array once any field has one. It is appended at the end; if this field must compute before another, reorder it deliberately."
+                    .to_owned(),
+            );
+        }
+        if needs_sig_flag {
+            disclosures.push(
+                "paste: /AcroForm /SigFlags bit 1 (SignaturesExist) was set, because the document now contains a signature field."
+                    .to_owned(),
+            );
+        }
+        let install = dr_install.clone();
+        objects.push(self.acroform_write(&mut |af| {
+            // SS12.7.3.1 makes `/Fields` the ROOT list, so a node with a
+            // `/Parent` must NOT appear there -- the walk would reach it twice
+            // and give it two fully-qualified names. `register_root` is `None`
+            // exactly when the path hangs off a node that is already rooted.
+            if let Some(root) = register_root {
+                let mut fields = match af.get(b"Fields") {
+                    Some(Object::Array(a)) => a.clone(),
+                    _ => Vec::new(),
+                };
+                fields.push(Object::Reference(root));
+                af.insert(Name::from(b"Fields"), Object::Array(fields));
+            }
+            Self::ensure_default_resources(af);
+            if let Some((font_name, font_id)) = &install {
+                let mut dr = match af.get(b"DR") {
+                    Some(Object::Dict(d)) => d.clone(),
+                    _ => Dict::new(),
+                };
+                let mut fonts = match dr.get(b"Font") {
+                    Some(Object::Dict(d)) => d.clone(),
+                    _ => Dict::new(),
+                };
+                fonts.insert(
+                    Name::from(font_name.as_slice()),
+                    Object::Reference(*font_id),
+                );
+                dr.insert(Name::from(b"Font"), Object::Dict(fonts));
+                af.insert(Name::from(b"DR"), Object::Dict(dr));
+            }
+            if carried_calculation {
+                let mut co = match af.get(b"CO") {
+                    Some(Object::Array(a)) => a.clone(),
+                    _ => Vec::new(),
+                };
+                co.push(Object::Reference(field_id));
+                af.insert(Name::from(b"CO"), Object::Array(co));
+            }
+            if needs_sig_flag {
+                let current = af.get(b"SigFlags").and_then(Object::as_int).unwrap_or(0);
+                af.insert(Name::from(b"SigFlags"), Object::Integer(current | 1));
+            }
+        })?);
+
+        self.commit(Command {
+            kind: CommandKind::PasteFormField,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(crate::formclip::FieldPasteOutcome {
+            field_id,
+            widget_ids,
+            merged,
+            created: true,
+            disclosures,
+        })
+    }
+
+    /// The `Ctrl+Shift+V` half: another view of a field that already exists.
+    // Eight arguments, one over clippy's default. Every one is a result the
+    // shared preflight already computed (`page_id`, `slots`, `path`) or an
+    // operator input (`rect`, `name`); bundling them into a struct here would
+    // exist only to satisfy a count, and would put the two halves of one verb
+    // on different calling conventions.
+    #[allow(clippy::too_many_arguments)]
+    fn paste_additional_widget(
+        &mut self,
+        clip: &crate::formclip::FieldClip,
+        name: &str,
+        page_id: ObjId,
+        slots: &[PageSlot],
+        path: forms_author::FieldPath,
+        rect: page_tree::Rect,
+        mut disclosures: Vec<String>,
+    ) -> Result<crate::formclip::FieldPasteOutcome, EditError> {
+        // THE MIRROR REFUSAL. `Ctrl+Shift+V` means "another view of THIS
+        // field"; a field that is not here has no view to add. Falling back to
+        // creating one would give the operator an independent field where they
+        // asked for a linked one -- and nothing on screen would say so until
+        // somebody typed in one and the other did not follow.
+        let FieldPath::Terminal { id, shape, .. } = path else {
+            return Err(EditError::FieldNotFound {
+                name: name.to_owned(),
+            });
+        };
+
+        if clip.widget_count() > 1 {
+            disclosures.push(format!(
+                "paste: the copied field had {} widgets; ONE was added here. Pasting them all would have given this field several views carrying the same export values, which for a radio group means buttons that select together.",
+                clip.widget_count()
+            ));
+        }
+
+        let mut imported: BTreeMap<u32, ObjId> = BTreeMap::new();
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let mut widget =
+            self.materialize_widget_dict(clip, 0, true, &mut imported, &mut objects)?;
+        widget.insert(Name::from(b"P"), Object::Reference(page_id));
+        widget.insert(Name::from(b"Rect"), rect_array(rect));
+
+        // A radio group's export value is the on-state name in its /AP /N
+        // (SS12.7.4.2.3). Two widgets of one group sharing one on-state are
+        // two buttons that select together -- which is a broken group, so it
+        // is refused with the same error `add_radio_button` uses.
+        if let Some(taken) = self.radio_export_collision(id, &widget) {
+            return Err(EditError::RadioExportValueTaken {
+                fqn: name.to_owned(),
+                state: String::from_utf8_lossy(&taken).into_owned(),
+            });
+        }
+
+        let (merge_writes, widget_id) =
+            self.merge_widget_into_field(id, shape, widget, page_id, slots)?;
+        objects.extend(merge_writes);
+
+        self.commit(Command {
+            kind: CommandKind::PasteFormField,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        disclosures.push(
+            "paste: this is another view of the SAME field -- it shares one value, so typing in either shows in both, and its font, colour, alignment, default value and actions are the original's exactly because the field object was not touched."
+                .to_owned(),
+        );
+        Ok(crate::formclip::FieldPasteOutcome {
+            field_id: id,
+            widget_ids: vec![widget_id],
+            merged: false,
+            created: false,
+            disclosures,
+        })
+    }
+
+    /// Materialise one clip widget's dictionary into this session.
+    fn materialize_widget_dict(
+        &mut self,
+        clip: &crate::formclip::FieldClip,
+        index: usize,
+        copy_actions: bool,
+        imported: &mut BTreeMap<u32, ObjId>,
+        objects: &mut Vec<ObjectWrite>,
+    ) -> Result<Dict, EditError> {
+        let Some(source) = clip.widgets().get(index) else {
+            return Ok(Dict::new());
+        };
+        let mut dict = self
+            .clip_materialize_value(
+                clip.objects(),
+                &Object::Dict(source.dict().clone()),
+                imported,
+                objects,
+            )?
+            .as_dict()
+            .cloned()
+            .unwrap_or_default();
+        if !copy_actions {
+            dict.remove(b"A");
+            dict.remove(b"AA");
+        }
+        Ok(dict)
+    }
+
+    /// The `/AcroForm /DR /Font /<name>` object id in THIS document, if any.
+    fn dr_font_object(&self, name: &[u8]) -> Option<Object> {
+        let graph = self.graph();
+        let catalog = graph.catalog_dict()?;
+        let acroform = graph.resolve(catalog.get(b"AcroForm")?).as_dict()?;
+        let dr = graph.resolve(acroform.get(b"DR")?).as_dict()?;
+        let fonts = graph.resolve(dr.get(b"Font")?).as_dict()?;
+        fonts.get(name).cloned()
+    }
+
+    /// Whether an existing `/DR` font entry is the same font the clip carries.
+    ///
+    /// # Two traps in one four-line function
+    ///
+    /// **It compares against the CLIP, not against the materialised object.**
+    /// The imported font is still a pending `ObjectWrite` inside the command
+    /// being assembled -- `self.graph()` sees COMMITTED state, so resolving
+    /// its fresh id yields `null` and every comparison would fail. Pasting a
+    /// field back into its OWN document would then rename `/TB` to `/TB_1` for
+    /// no reason, which is how this was found.
+    ///
+    /// **It compares by VALUE, not by identity.** The clip's font was imported
+    /// at a fresh object number, so ids can never match, but a standard-14
+    /// font dictionary is byte-identical everywhere and installing a second
+    /// copy would be noise in the file the operator has to read.
+    ///
+    /// A font whose dictionary contains REFERENCES (an embedded program's
+    /// `/FontDescriptor`) will not compare equal, because the clip's
+    /// references are clip-local. That is the conservative direction: a
+    /// needless rename is visible and harmless, a wrong match silently
+    /// restyles the destination's own fields.
+    fn same_font_object(
+        &self,
+        existing: &Object,
+        clip: &crate::formclip::FieldClip,
+        clip_object: u32,
+    ) -> bool {
+        let Some(carried) = clip.objects().get(&clip_object) else {
+            return false;
+        };
+        self.graph().resolve(existing) == &carried.value
+    }
+
+    /// A `/DR /Font` name that is free in this document.
+    ///
+    /// `Helv` becomes `Helv_1`, then `Helv_2`. The suffix is derived from what
+    /// is actually present rather than from a counter, so it is stable across
+    /// runs and cannot collide with itself.
+    fn free_dr_font_name(&self, wanted: &[u8]) -> Vec<u8> {
+        for n in 1..=9999u32 {
+            let mut candidate = wanted.to_vec();
+            candidate.extend_from_slice(format!("_{n}").as_bytes());
+            if self.dr_font_object(&candidate).is_none() {
+                return candidate;
+            }
+        }
+        wanted.to_vec()
+    }
+
+    /// The export value a pasted radio widget would duplicate, if any.
+    fn radio_export_collision(&self, field_id: ObjId, widget: &Dict) -> Option<Vec<u8>> {
+        let form = forms::parse_acroform(&self.graph())?;
+        let field = form.fields.iter().find(|f| f.id == field_id)?;
+        if field.button_kind != Some(forms::ButtonKind::Radio) {
+            return None;
+        }
+        let graph = self.graph();
+        let states: Vec<Vec<u8>> = graph
+            .resolve(widget.get(b"AP")?)
+            .as_dict()
+            .and_then(|ap| graph.resolve(ap.get(b"N")?).as_dict())
+            .map(|n| {
+                n.iter()
+                    .map(|(k, _)| k.as_bytes().to_vec())
+                    .filter(|k| k != b"Off")
+                    .collect()
+            })
+            .unwrap_or_default();
+        states.into_iter().find(|state| {
+            field
+                .widgets
+                .iter()
+                .any(|w| w.on_states.iter().any(|s| s == state))
+        })
+    }
+
+    /// Read-modify-write the catalog's `/AcroForm`, wherever it lives.
+    ///
+    /// # Why one closure rather than one write per job
+    ///
+    /// Two whole-dictionary writes to the same object inside ONE command do
+    /// not compose: each is computed from the pre-command state, so the second
+    /// silently discards the first. A paste needs to touch `/Fields`, `/DR`,
+    /// `/CO` and `/SigFlags` at once, so the branch that answers *"is the
+    /// `/AcroForm` inline or indirect?"* is factored out here and every job
+    /// runs inside one patch.
+    fn acroform_write(&self, patch: &mut dyn FnMut(&mut Dict)) -> Result<ObjectWrite, EditError> {
+        let graph = self.graph();
+        let catalog_id = graph.catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let catalog = graph
+            .resolved(catalog_id)
+            .as_dict()
+            .ok_or(EditError::NotADictionary {
+                id: catalog_id,
+                key: "AcroForm",
+            })?
+            .clone();
+        let existing = catalog.get(b"AcroForm").cloned();
+        match existing {
+            Some(Object::Reference(af_id)) => {
+                let graph = self.graph();
+                let mut af = graph
+                    .resolved(af_id)
+                    .as_dict()
+                    .ok_or(EditError::NotADictionary {
+                        id: af_id,
+                        key: "AcroForm",
+                    })?
+                    .clone();
+                patch(&mut af);
+                let before = self.state.get(&af_id).cloned();
+                Ok(ObjectWrite {
+                    id: af_id,
+                    before,
+                    after: Some(Object::Dict(af)),
+                })
+            }
+            other => {
+                let mut cat = catalog;
+                let mut af = match other {
+                    Some(Object::Dict(d)) => d,
+                    _ => Dict::new(),
+                };
+                patch(&mut af);
+                cat.insert(Name::from(b"AcroForm"), Object::Dict(af));
+                let before = self.state.get(&catalog_id).cloned();
+                Ok(ObjectWrite {
+                    id: catalog_id,
+                    before,
+                    after: Some(Object::Dict(cat)),
+                })
+            }
+        }
+    }
+}
+
+/// What [`EditSession::place_new_field_deferred`] returns.
+///
+/// A named alias rather than a bare tuple because the fourth element is the
+/// one that matters and is the easiest to ignore: the node the CALLER must
+/// register in `/AcroForm /Fields`, or `None` when the path hangs off
+/// something already rooted. Four positional values, three of which are
+/// `Option`s or `Vec`s, is exactly the signature a caller mis-destructures.
+///
+/// `(writes, the terminal's parent, the terminal's own partial name, the node
+/// to register)`.
+type FieldPlacement = (Vec<ObjectWrite>, Option<ObjId>, String, Option<ObjId>);
+
+/// Where each of a clip's widgets lands.
+///
+/// One widget takes the caller's rectangle verbatim -- it is the rectangle the
+/// operator drew. Several are TRANSLATED as a rigid group so widget 0's
+/// lower-left corner lands on the caller's, because a radio group's geometry
+/// (which button is above which, and how far apart) is part of its meaning and
+/// a best-fit rescale into a hand-drawn box is a guess that looks deliberate.
+fn placed_rects(
+    clip: &crate::formclip::FieldClip,
+    rect: page_tree::Rect,
+    disclosures: &mut Vec<String>,
+) -> Vec<page_tree::Rect> {
+    let widgets = clip.widgets();
+    if widgets.len() <= 1 {
+        return vec![rect];
+    }
+    let Some(first) = widgets.first().map(crate::formclip::FieldClipWidget::rect) else {
+        return vec![rect];
+    };
+    let (dx, dy) = (rect.llx - first.llx, rect.lly - first.lly);
+    disclosures.push(format!(
+        "paste: this field has {} widgets, so the group was MOVED as a unit rather than fitted to the rectangle you drew -- each button keeps its own size and its distance from the others. The rectangle's position was used; its size was not.",
+        widgets.len()
+    ));
+    widgets
+        .iter()
+        .map(|w| {
+            let r = w.rect();
+            page_tree::Rect {
+                llx: r.llx + dx,
+                lly: r.lly + dy,
+                urx: r.urx + dx,
+                ury: r.ury + dy,
+            }
+        })
+        .collect()
+}
+
+/// Rewrite the font name in a `/DA` string, leaving everything else alone.
+///
+/// SS12.7.3.3's `/DA` is a content-stream fragment whose `Tf` operator takes a
+/// resource name and a size. Only the name immediately preceding a `Tf` is
+/// touched, so a `/DA` that happens to mention the same word elsewhere (in a
+/// colour-space name, say) is not corrupted.
+fn rewrite_da_font(da: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
+    let text = da.to_vec();
+    let mut out: Vec<u8> = Vec::with_capacity(text.len() + to.len());
+    let tokens: Vec<&[u8]> = text
+        .split(|b| b.is_ascii_whitespace())
+        .filter(|t| !t.is_empty())
+        .collect();
+    let mut replaced: Vec<Vec<u8>> = tokens.iter().map(|t| (*t).to_vec()).collect();
+    let mut wanted = Vec::with_capacity(from.len() + 1);
+    wanted.push(b'/');
+    wanted.extend_from_slice(from);
+    let mut fresh = Vec::with_capacity(to.len() + 1);
+    fresh.push(b'/');
+    fresh.extend_from_slice(to);
+    // The positions to rewrite are collected first, so the scan reads and the
+    // rewrite writes -- no index is used to do both, and none can be out of
+    // range by construction.
+    let targets: Vec<usize> = replaced
+        .iter()
+        .enumerate()
+        .filter(|(i, token)| {
+            *i >= 2
+                && token.as_slice() == b"Tf"
+                && replaced.get(i - 2).is_some_and(|name| *name == wanted)
+        })
+        .map(|(i, _)| i - 2)
+        .collect();
+    for at in targets {
+        if let Some(slot) = replaced.get_mut(at) {
+            slot.clone_from(&fresh);
+        }
+    }
+    for (i, token) in replaced.iter().enumerate() {
+        if i > 0 {
+            out.push(b' ');
+        }
+        out.extend_from_slice(token);
+    }
+    out
 }
 
 #[cfg(test)]

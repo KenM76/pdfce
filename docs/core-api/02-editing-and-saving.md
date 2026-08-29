@@ -7,10 +7,10 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 
 | | |
 |---|---|
-| **Date** | 2026-08-13 |
+| **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 159 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 161 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 159 public `EditSession` methods
+## 1. Verb index — all 161 public `EditSession` methods
 
-**Count: 159.** Established by brace-matched extraction of the four
+**Count: 161.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -966,7 +966,7 @@ iterations because each call re-splices the content stream, and N calls are N
 undo entries. Use `move_objects` / `delete_objects` / `move_nodes`
 (`edit.rs:4600-4620`).
 
-### 1.11 Form-field authoring (5)
+### 1.11 Form-field authoring (5) — see also §1.26, the field clipboard
 
 All five return `Result<FieldAuthorOutcome, EditError>` and are **ONE undo
 entry** each — field dict + widget + baked `/AP` + page `/Annots` + `/AcroForm
@@ -2115,6 +2115,153 @@ Grep target for "what does this return actually contain".
 | `SaveReport` | `writer/save.rs:208` | `bytes_written`, `bytes_appended`, `objects_written`, `objects_verbatim`, `objects_reserialized`, `byte_identical`, `delinearized`, `promoted: Vec<ObjId>`, `objects_deleted` |
 
 ---
+
+### 1.26 Form-field clipboard (2) — `Pass 167.0`
+
+Copy a field, carry it out of the process, plant it somewhere else. Added
+2026-08-29 for the two paste chords the operator ruled on: **`Ctrl+V`** = a
+new independent field, **`Ctrl+Shift+V`** = another widget of the same field.
+
+| I want to… | Call | Returns |
+|---|---|---|
+| Copy a field onto the clipboard | `copy_field(&self, fqn: &str) -> Result<FieldClip, EditError>` | `&self` — allocates nothing, stages nothing, commits nothing. |
+| Plant a copied field | `paste_field(&mut self, clip: &FieldClip, page_index: usize, rect: Rect, policy: &FieldPastePolicy) -> Result<FieldPasteOutcome, EditError>` | **ONE undo entry**, however many objects arrive. |
+
+Types live in **`pdfce_core::formclip`**, not `edit`: `FieldClip`,
+`FieldClipWidget`, `FieldPastePolicy`, `PasteTooltip`, `FieldPasteOutcome`.
+
+#### What a clip carries
+
+Everything the field IS, minus its identity. The field half —
+`/FT /Ff /V /DV /AA /Opt /MaxLen /Q /TI /I /RV /DS /TM /TU /DA /Lock /SV` —
+plus every widget's `/Rect /AP /AS /MK /F /BS /Border /OC /H /A /C /CA`, plus
+the **owned closure** of every object those reach (appearance streams,
+JavaScript streams, action dictionaries), plus the **`/AcroForm /DR /Font`
+entry the field's `/DA` names**.
+
+★ **That last one is the point of the type.** §12.7.3.3 makes the `/DA`'s font
+resolvable in `/DR /Font`. A field carrying `/TB 14 Tf 0 0 1 rg` into a
+document with no `/TB` renders correctly *here* — its `/AP` has its own
+resources — and re-renders wrong in every viewer that regenerates from `/DA`.
+The clip carries the font; the paste installs it, and **renames it plus
+rewrites the `/DA`** when the destination already uses that name for a
+different font.
+
+**Never carried**, each for a stated reason: `/T` (identity — the policy
+supplies it), `/Parent` and `/Kids` (the source's tree), `/P` (a page in
+another document), `/StructParent` (an index into the *source's* parent tree),
+`/NM` (§12.5.2 requires per-page uniqueness), `/M` (a modification date on an
+object that did not exist then; pdfce never reads a clock).
+
+#### `FieldClip` — what a paste UI may ask, before the press
+
+| Accessor | Answers |
+|---|---|
+| `source_name() -> &str` | What it was called. **Seed a rename box with this; it is not the name the paste will use.** |
+| `field_type() -> Option<FieldType>` | `None` ⇒ the source had no `/FT`; `paste_field` refuses with `FieldClipUntyped`. |
+| `button_kind() -> Option<ButtonKind>` | Decisive: a check box and a radio group are both `/FT /Btn`. |
+| `widget_count() -> usize` | **> 1 ⇒ the paste ignores your rectangle's SIZE** (see below). |
+| `widgets() -> &[FieldClipWidget]` | Each with `rect()` and `has_appearance()`. |
+| `carries_actions() -> bool` | ★ **Ask before the press.** A carried calculation and a dropped one are both invisible afterwards. |
+| `carries_calculation() -> bool` | The subset that obliges `/AcroForm /CO` (§12.7.2 Table 218). |
+| `carries_value() -> bool` | Whether `copy_value: true` would do anything. |
+| `tooltip() -> Option<&[u8]>` | `PasteTooltip::Carry` is only meaningful when this is `Some`. |
+| `carried_font() -> Option<&[u8]>` | The `/DR` resource name travelling with it. |
+| `bbox() -> Option<Rect>` | The union of the source widgets' rectangles — for a paste-preview outline. |
+| `object_count() -> usize` | Size of the owned closure. |
+| `to_bytes() / from_bytes` | **Everything survives the round trip** — unlike `ObjectClip`, which drops its annotations. Magic `PDFCEFLD…`, versioned, refuses a newer format. |
+
+#### `FieldPastePolicy` — the two chords, and their refusals
+
+```rust
+FieldPastePolicy::NewField {
+    name: String,            // FQN; a period creates grouping ancestors (§12.7.3.2)
+    tooltip: PasteTooltip,   // Undecided | Carry | Text(String) | Declined
+    copy_value: bool,        // default OFF — a value is CONTENT
+    copy_actions: bool,      // default OFF — an action is BEHAVIOUR
+}
+FieldPastePolicy::AdditionalWidget { existing: String }
+```
+
+| policy | wants the name to be | refuses with |
+|---|---|---|
+| `NewField` | vacant | `EditError::FieldNameTaken` — **never auto-suffixed** |
+| `AdditionalWidget` | an existing terminal of a matching type | `EditError::FieldNotFound`, or a `FieldAuthoring` type collision |
+
+★ **Neither ever falls back to the other, and a shell must not paper over
+that.** The operator pressed a different key on purpose. A `Ctrl+Shift+V` that
+quietly became a `Ctrl+V` produces an independent field where a linked one was
+asked for — a difference nothing on screen shows until somebody types in one
+and the other does not follow.
+
+★ **`AdditionalWidget` is the HIGH-FIDELITY route**, which is the
+counter-intuitive part. It does not touch the field object at all: `/DA`,
+`/Q`, `/V`, `/DV`, `/Ff` and `/AA` are the original's *exactly*, because
+§12.7.3.2 makes it the same field. `NewField` is the lossy one.
+
+#### `PasteTooltip` — R105, with a fourth answer
+
+`Undecided` is **refused** (`EditError::TooltipDecisionRequired`), same as at
+creation. `Carry` is the answer creation does not have: reuse the source's
+`/TU`, which is legitimate because you are copying your own field — and it is
+**disclosed**, because two fields announcing themselves identically to a
+screen reader is invisible to a sighted operator.
+
+#### Multi-widget fields
+
+A radio group is one field with N widgets, each carrying its export value as
+its `/AP /N` on-state name. The clip carries **all of them**, and the paste:
+
+- **one widget** → your `rect` verbatim;
+- **more than one** → the group is **translated** so widget 0's lower-left
+  lands on `rect`'s lower-left; every widget keeps its own size and its offset
+  from widget 0. **Your rect's size is ignored**, and that is disclosed.
+
+`AdditionalWidget` places **one** widget even from a multi-widget clip, and
+says so: adding all of them would give one field several views with duplicate
+export values, i.e. radio buttons that select together.
+`EditError::RadioExportValueTaken` refuses the same collision for a single
+widget.
+
+#### `FieldPasteOutcome`
+
+`field_id: ObjId`, `widget_ids: Vec<ObjId>`, `merged: bool`,
+`created: bool`, `disclosures: Vec<String>`.
+
+`created` is the one fact a shell needs to phrase its own confirmation
+correctly — *"a new field"* and *"another copy of the same field"* are
+different sentences.
+
+★ **`disclosures` is `Vec<String>`, not a struct of booleans like
+`FieldAuthorDisclosures`, and that is deliberate.** Creation's surprises are a
+closed set because pdfce chose every value. A paste's are not: what could be
+dropped, renamed, translated or degraded depends on the document the clip came
+from. **Surface all of them, off-canvas** (`CLAUDE.md` rule 4 as narrowed by
+decision 059 — the pasted field renders exactly as a saved-and-reopened one
+will, with nothing drawn on the page to mark it as pdfce's guess). They cover:
+a dropped value, dropped actions, a carried calculation and its `/CO` entry, a
+renamed font resource, an ignored rectangle size, the `/Annots` tab-order
+position (R104), a dropped structure-tree link on a tagged document, a reused
+accessibility name, and a signature value that could not travel.
+
+#### Refusals at the COPY
+
+Both are conditions of the source, refused early so the operator learns before
+spending a placement gesture:
+
+- `EditError::FieldHasNoWidget` — a value-only terminal field (legal under
+  Table 220) has nothing to place at a rectangle.
+- `EditError::SignedFieldNotCopyable` — a signature's `/V` is a byte-range
+  assertion about the document it was made in (§12.7.4.5). What *could*
+  travel is the widget's baked *"signed by"* artwork, into a file nobody
+  signed. **An UNSIGNED `/Sig` field copies normally**, which is the useful
+  half — it is how a signature block reaches the next drawing.
+
+#### CLI
+
+`copy-field --name <FQN> -o <clip>`, `inspect-field-clip <clip>`, and
+`paste-field --clip <clip> --page N --rect … (--as-new <NAME> | --as-widget-of
+<NAME>)`. Disclosures go to **stderr**, the parseable summary to stdout.
 
 ## 2. Construction, and the session's three read views
 

@@ -405,6 +405,24 @@ pub enum ClipError {
     /// The item's content bytes could not be parsed.
     #[error("a clipboard item's content could not be parsed: {0}")]
     Content(String),
+
+    /// A payload claims more elements than this build will hold
+    /// (`Pass 167.0`).
+    ///
+    /// Separate from [`Self::Truncated`] because the two mean opposite
+    /// things about the sender: a truncated payload was cut short, an
+    /// oversized one was built that way. Checked BEFORE any allocation is
+    /// sized from the count, so a hostile length prefix cannot make a reader
+    /// reserve gigabytes on its way to being refused.
+    #[error(
+        "the clipboard payload declares {found} element(s), more than this build accepts ({limit}) -- refusing rather than allocating for it"
+    )]
+    ClipTooLarge {
+        /// The count the payload declared, or the count a copy would need.
+        found: usize,
+        /// The ceiling this build enforces.
+        limit: usize,
+    },
 }
 
 // ===========================================================================

@@ -101,6 +101,7 @@ pub mod font_unembed;
 pub mod fontdata;
 pub mod fontinfo;
 pub mod form_script;
+pub mod formclip;
 pub mod formcsv;
 pub mod forms;
 pub mod forms_author;
