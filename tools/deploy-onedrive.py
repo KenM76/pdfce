@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""Publish the CLI to OneDrive, alternating `pdfce1` / `pdfce2`.
+
+Operator instruction, 2026-08-29, verbatim:
+
+    "can you always put a new version on onedrive? cycle between folders
+     pdfce1 and pdfce2 when you make new versions so there is always a
+     previous version available. Just need the CLI tool available."
+
+Three requirements, and the third is the one with teeth:
+
+  1. **every new version** goes to OneDrive -- so this runs from the release
+     procedure, not from somebody remembering;
+  2. **the CLI only** -- no `pdfce-gui.exe`;
+  3. **there is ALWAYS a previous version available** -- which is a constraint
+     on what may be OVERWRITTEN, not merely on where to write.
+
+WHY THE ALTERNATION IS DERIVED, NEVER REMEMBERED
+================================================
+
+The obvious implementation keeps a "last used" marker somewhere and flips it.
+That breaks the moment anything happens outside this script -- a manual copy, a
+deploy that half-finished, a folder restored from OneDrive's own version
+history -- and it breaks SILENTLY, by overwriting the copy the operator was
+relying on.
+
+So the target is computed from the folders themselves: **write into whichever
+side is older.** Each folder carries a `VERSION.txt` with an ISO timestamp,
+version and commit. The rule is self-correcting -- if a deploy is skipped, the
+next one still overwrites the older side -- and it needs no state of its own.
+
+An unreadable or missing `VERSION.txt` counts as **infinitely old**, so a fresh
+or damaged folder is chosen first. That is the safe direction: the worst case
+is overwriting something already broken.
+
+★ THE GUARD THAT MATTERS MORE THAN THE ALTERNATION
+
+Running this twice for the SAME version would put that version in both folders
+and **destroy the previous version the whole scheme exists to preserve**. The
+folders would look healthy -- two populated directories, recent timestamps --
+while the property the operator asked for was gone.
+
+So a deploy is REFUSED when the version being published is already present in
+the *other* folder, unless `--force` is passed. Re-releasing the same version
+number after a rebuild is legitimate, which is why the escape hatch exists;
+doing it by accident is not, which is why it is not the default.
+
+WHAT SHIPS
+==========
+
+`pdfce-cli.exe`, the `models/ocrs` folder, `LICENSE`,
+`THIRD_PARTY_LICENSES.md`, `README.md`, and a generated `VERSION.txt`.
+
+The models are ~12 MB and are included deliberately. Without them the CLI
+refuses OCR by name and explains itself -- it does not crash -- but "just the
+CLI tool" means *not the GUI*, not a CLI that cannot do a job it advertises.
+
+USAGE
+=====
+
+    python tools/deploy-onedrive.py                 # from the newest build
+    python tools/deploy-onedrive.py --build DIR     # from a specific one
+    python tools/deploy-onedrive.py --dry-run
+    python tools/deploy-onedrive.py --force         # re-deploy a version
+
+EXIT CODES
+==========
+
+0 deployed (or a clean dry run) -- 1 refused (same version already opposite,
+or no build found) -- 2 the environment is wrong (no OneDrive, no build root).
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+BUILD_ROOT = Path(r"D:\builds")
+SLOTS = ("pdfce1", "pdfce2")
+
+# Relative to a portable build folder. Anything absent is skipped with a note
+# rather than aborting -- a build without OCR models is still a usable CLI.
+PAYLOAD = ("pdfce-cli.exe", "models", "LICENSE", "THIRD_PARTY_LICENSES.md", "README.md")
+
+
+def onedrive_root() -> Path | None:
+    for var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        v = os.environ.get(var)
+        if v and Path(v).is_dir():
+            return Path(v)
+    fallback = Path.home() / "OneDrive"
+    return fallback if fallback.is_dir() else None
+
+
+def newest_build() -> Path | None:
+    if not BUILD_ROOT.is_dir():
+        return None
+    builds = [p for p in BUILD_ROOT.glob("pdfce-*") if (p / "pdfce-cli.exe").is_file()]
+    return max(builds, key=lambda p: p.stat().st_mtime) if builds else None
+
+
+def read_version(slot: Path) -> dict[str, str]:
+    """Parse a slot's `VERSION.txt`. Missing or unreadable == infinitely old."""
+    f = slot / "VERSION.txt"
+    if not f.is_file():
+        return {}
+    out: dict[str, str] = {}
+    try:
+        for line in f.read_text(encoding="utf-8").splitlines():
+            if ":" in line:
+                k, _, v = line.partition(":")
+                out[k.strip().lower()] = v.strip()
+    except OSError:
+        return {}
+    return out
+
+
+def deployed_at(slot: Path) -> str:
+    """Sort key. Empty string sorts first, i.e. oldest, which is intended."""
+    return read_version(slot).get("deployed", "")
+
+
+def cli_version(build: Path) -> tuple[str, str]:
+    """`(version, commit)` straight from the binary that is about to ship.
+
+    Read from the EXE rather than from `Cargo.toml`, because what gets copied
+    is the exe: a stale build directory would otherwise be labelled with the
+    working tree's version and the label would be a lie.
+    """
+    exe = build / "pdfce-cli.exe"
+    try:
+        out = subprocess.run([str(exe), "--version"], capture_output=True, text=True,
+                             timeout=120).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ("unknown", "unknown")
+    version, commit = "unknown", "unknown"
+    for line in out.splitlines():
+        s = line.strip()
+        if s.startswith("pdfce-cli ") and version == "unknown":
+            version = s.split()[1]
+        if s.lower().startswith("revision:"):
+            commit = s.split(":", 1)[1].strip()
+    return (version, commit)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--build", help="portable build folder (default: newest in D:\\builds)")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--force", action="store_true",
+                    help="deploy even if this version already occupies the other slot")
+    args = ap.parse_args()
+
+    root = onedrive_root()
+    if root is None:
+        print("deploy-onedrive: no OneDrive folder found", file=sys.stderr)
+        return 2
+
+    build = Path(args.build) if args.build else newest_build()
+    if build is None or not (build / "pdfce-cli.exe").is_file():
+        print(f"deploy-onedrive: no portable build with a CLI in {BUILD_ROOT}", file=sys.stderr)
+        return 1
+
+    version, commit = cli_version(build)
+    slots = [root / s for s in SLOTS]
+
+    print(f"deploy-onedrive: publishing {version} ({commit})")
+    print(f"  from  {build}")
+    for s in slots:
+        v = read_version(s)
+        state = (f"{v.get('version', '?')} deployed {v.get('deployed', '?')}"
+                 if v else ("empty" if not s.is_dir() else "no VERSION.txt"))
+        print(f"  slot  {s.name:8} {state}")
+
+    # Oldest wins. `deployed_at` returns "" for missing/unreadable, which sorts
+    # first, so a fresh or damaged slot is filled before a healthy one.
+    target = min(slots, key=deployed_at)
+    other = next(s for s in slots if s != target)
+
+    # ★ The guard. Same version in both slots destroys the previous version.
+    other_version = read_version(other).get("version")
+    if other_version == version and version != "unknown" and not args.force:
+        print(
+            f"\ndeploy-onedrive: REFUSED -- {other.name} already holds {version}.\n"
+            "  Deploying it again would put the same version in BOTH slots and\n"
+            "  destroy the previous version this scheme exists to preserve.\n"
+            "  Pass --force if you are deliberately re-deploying after a rebuild.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"\n  -> writing {target.name} (the older slot); {other.name} keeps "
+          f"{other_version or 'its contents'} as the previous version")
+
+    if args.dry_run:
+        print("deploy-onedrive: dry run, nothing written")
+        return 0
+
+    # Replace the slot's contents. Removed first so a payload that shrank
+    # between versions cannot leave a stale file behind that the operator would
+    # reasonably read as part of this build.
+    if target.is_dir():
+        shutil.rmtree(target)
+    target.mkdir(parents=True, exist_ok=True)
+
+    copied, missing = [], []
+    for name in PAYLOAD:
+        src = build / name
+        if not src.exists():
+            missing.append(name)
+            continue
+        dst = target / name
+        if src.is_dir():
+            shutil.copytree(src, dst)
+        else:
+            shutil.copy2(src, dst)
+        copied.append(name)
+
+    stamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    (target / "VERSION.txt").write_text(
+        "\n".join([
+            f"version:  {version}",
+            f"commit:   {commit}",
+            f"deployed: {stamp}",
+            f"source:   {build}",
+            f"slot:     {target.name}",
+            "",
+            "The pdfce command-line tool. The GUI is deliberately not here --",
+            "see this folder's sibling for the previous version.",
+            "",
+            "OCR needs the models/ocrs folder beside the exe; it is included.",
+            "",
+        ]),
+        encoding="utf-8",
+    )
+
+    total = sum(f.stat().st_size for f in target.rglob("*") if f.is_file())
+    print(f"deploy-onedrive: wrote {len(copied)} item(s), {total:,} bytes to {target}")
+    if missing:
+        print(f"  note: not in this build, skipped: {', '.join(missing)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

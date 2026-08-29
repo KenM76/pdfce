@@ -75,6 +75,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import pathlib
 import sys
 
 
@@ -288,6 +289,61 @@ def main(tag: str) -> int:
                   "commit (the tip is deferred since 2026-08-24); it means a "
                   "commit BEHIND the tag is unnarrated. File it.",
             )
+
+    # --- the OneDrive copy the operator asked to always exist -----------
+    #
+    # Operator instruction, 2026-08-29: "can you always put a new version on
+    # onedrive? cycle between folders pdfce1 and pdfce2 ... so there is always
+    # a previous version available."
+    #
+    # ★ Checked HERE rather than left to the release procedure's prose,
+    # because "always" is exactly the kind of instruction that survives two
+    # releases and then quietly stops. `tools/deploy-onedrive.py` does the
+    # work; this asks whether it actually ran for the tag being verified.
+    #
+    # The property verified is the operator's, not the tool's: **this version
+    # is present in one slot and a DIFFERENT version is present in the
+    # other.** Both slots holding the same version passes a naive
+    # "is it deployed?" check and fails what he asked for.
+    import os as _os
+
+    od = None
+    for _var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        _v = _os.environ.get(_var)
+        if _v and pathlib.Path(_v).is_dir():
+            od = pathlib.Path(_v)
+            break
+    if od is None:
+        check(False, "OneDrive is reachable",
+              "no OneDrive folder found -- cannot verify the published CLI")
+    else:
+        want = tag.lstrip("v")
+        found = {}
+        for slot in ("pdfce1", "pdfce2"):
+            vf = od / slot / "VERSION.txt"
+            ver = None
+            if vf.is_file():
+                for line in vf.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if line.lower().startswith("version:"):
+                        ver = line.split(":", 1)[1].strip()
+                        break
+            found[slot] = ver
+        here = [s for s, v in found.items() if v == want]
+        check(
+            bool(here),
+            f"the CLI for {tag} is on OneDrive ({', '.join(here) or 'nowhere'})",
+            f"neither pdfce1 nor pdfce2 holds {want} -- found "
+            f"{found['pdfce1']!r} and {found['pdfce2']!r}. "
+            "Run `python tools/deploy-onedrive.py`.",
+        )
+        others = [v for s, v in found.items() if s not in here and v]
+        check(
+            bool(others),
+            f"a PREVIOUS version is still on OneDrive ({', '.join(others) or 'none'})",
+            "the other slot holds no version -- the point of the two folders "
+            "is that a previous build stays available, and right now one does "
+            "not exist.",
+        )
 
     if problems:
         print(f"\nverify-release: {len(problems)} problem(s): "
