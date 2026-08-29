@@ -392,6 +392,17 @@ pub enum CommandKind {
     /// the gesture most likely to be repeated several times before anybody
     /// looks at the undo stack.
     PasteFormField,
+    /// A selection was CUT -- copied to the clipboard and removed -- as ONE
+    /// undo entry, however many objects and annotations it held
+    /// (`Pass 168.0`).
+    ///
+    /// Distinct from a plain delete so an undo control can say *"undo cut"*.
+    /// The distinction is not cosmetic: undoing a cut restores the page and
+    /// leaves the clipboard holding what was cut, which is a different
+    /// promise from undoing a delete, and an operator who reads "undo delete"
+    /// after pressing cut has been told the wrong thing about their
+    /// clipboard.
+    CutSelection,
     /// A form field, or ONE of its widgets, was deleted (decision 020
     /// §3.6.3): the widget(s) un-listed from their pages' `/Annots`, the
     /// field's `/Kids` or `/AcroForm /Fields` registration patched, any
@@ -5290,6 +5301,46 @@ pub enum EditError {
     /// identity, so two top-level fields with one name are one field with
     /// two widgets, and filling either fills both. No viewer reports this;
     /// the operator finds it by typing.
+    /// A **cut** would remove something the clipboard cannot carry back
+    /// (`Pass 168.0`).
+    ///
+    /// # Why cut refuses where copy does not
+    ///
+    /// Copying an annotation pdfce does not model costs nothing: the original
+    /// stays on the page, the clip carries a
+    /// [`ClipAnnotation::Unsupported`](crate::vector::ClipAnnotation) marker
+    /// so the count is honest, and the paste declines it by name.
+    ///
+    /// Cutting the same annotation is a **deletion wearing a clipboard's
+    /// clothes**. The operator's next gesture is a paste that refuses, and by
+    /// then the only copy is gone. So the cut is refused before anything is
+    /// removed, and the operator can delete it deliberately instead.
+    #[error(
+        "a /{subtype} annotation cannot be carried on the clipboard, so cutting it would delete it with nothing to paste back. Copy leaves it in place and says so; delete it deliberately if that is what you meant"
+    )]
+    CutWouldNotSurvive {
+        /// The annotation `/Subtype` that cannot be carried.
+        subtype: String,
+    },
+    /// A selection has more targets than can be folded into one undo entry
+    /// (`Pass 168.0`).
+    ///
+    /// One operator gesture is one undo entry (`R179`/`R49`), and the folding
+    /// mechanism reaches back over the undo stack, which is bounded by
+    /// [`MAX_UNDO_DEPTH`](crate::edit::MAX_UNDO_DEPTH). A selection larger
+    /// than that could not become one entry, so it is refused **before
+    /// anything is deleted**: a cut that silently became forty undo entries
+    /// is worse than a cut that did not happen, because the operator finds
+    /// out by pressing undo and watching a third of their work come back.
+    #[error(
+        "this selection has {targets} targets, more than the {limit} that can be folded into a single undo entry -- cut it in smaller groups, so one press of undo puts back exactly what one press of cut removed"
+    )]
+    SelectionTooLargeForOneUndo {
+        /// How many separate deletions the gesture would have needed.
+        targets: usize,
+        /// The ceiling, which is [`MAX_UNDO_DEPTH`](crate::edit::MAX_UNDO_DEPTH).
+        limit: usize,
+    },
     /// The field has no widget annotation, so there is nothing to place at a
     /// rectangle (`Pass 167.0`).
     ///
@@ -9216,82 +9267,105 @@ impl EditSession {
     ) -> Result<crate::vector::ObjectClip, EditError> {
         use crate::vector::clip;
 
-        let (page, stream, model) = self.decompose_for_read(page_index)?;
-        let objs = Self::resolve_objects(&model, object_indices)?;
-        // Every resource category, resolved ONCE. Resolving inside the loop
-        // would re-walk the graph per name on a page whose text uses forty
-        // fonts, and would need a borrow that outlives the closure that took
-        // it -- which is what the type system says here rather than a comment.
-        let resolved: BTreeMap<Vec<u8>, Dict> = {
-            let graph = self.graph();
-            crate::vector::clip::RESOURCE_CATEGORIES
-                .iter()
-                .filter_map(|category| {
-                    page.resources
-                        .get(category)
-                        .map(|o| graph.resolve(o))
-                        .and_then(Object::as_dict)
-                        .map(|d| ((*category).to_vec(), d.clone()))
-                })
-                .collect()
-        };
+        // ★ THE PAGE ID COMES FROM THE PAGE TREE, NOT FROM A DECOMPOSITION.
+        //
+        // This whole function used to open with `decompose_for_read`, which
+        // refuses a page with no content stream
+        // (`EditError::VectorEditNoContents`). So copying an ANNOTATION off a
+        // page whose content is empty failed -- a blank sheet carrying review
+        // comments, a stamp-only cover page -- even though an annotation
+        // needs nothing from the content stream at all.
+        //
+        // Found 2026-08-29 by a `cut_annotations` test against a fixture that
+        // happens to have annotations and no content. The decomposition is
+        // now done only when content objects were actually asked for.
+        let slots = self.page_slots()?;
+        let page_id = slots
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count: slots.len(),
+            })?
+            .id;
 
         let mut clip_objects: BTreeMap<u32, clip::ClipObject> = BTreeMap::new();
         let mut mapping: BTreeMap<ObjId, u32> = BTreeMap::new();
         let mut next: u32 = 1;
-        let mut items = Vec::with_capacity(objs.len());
+        let mut items = Vec::with_capacity(object_indices.len());
         let mut bbox = crate::vector::Bounds::EMPTY;
 
-        for obj in objs {
-            let span = obj.bytes();
-            let bytes = stream
-                .buf
-                .get(span.start..span.end())
-                .unwrap_or_default()
-                .to_vec();
-            // The PRELUDE first: state the object depends on but does not
-            // establish in its own bytes (`Pass 120.2`). Its names are bound
-            // exactly like the item's own, which is the whole point -- a `Tf`
-            // synthesised from the decomposition names a resource that must
-            // travel with the clip like any other.
-            let prelude = clip::item_prelude(obj, &bytes);
-            let mut bindings = Vec::new();
-            let mut sites = clip::name_sites(&bytes).map_err(EditError::Clip)?;
-            sites.extend(clip::name_sites(&prelude).map_err(EditError::Clip)?);
-            for site in sites {
-                let Some(entry) = resolved
-                    .get(&site.category)
-                    .and_then(|sub| sub.get(&site.name))
-                else {
-                    return Err(EditError::Clip(clip::ClipError::UnresolvedResource {
-                        category: String::from_utf8_lossy(&site.category).into_owned(),
-                        name: String::from_utf8_lossy(&site.name).into_owned(),
-                    }));
-                };
-                let clip_id =
-                    self.clip_import(entry, &mut clip_objects, &mut mapping, &mut next)?;
-                bindings.push(clip::ClipBinding {
-                    category: site.category,
-                    name: site.name,
-                    object: clip_id,
+        if !object_indices.is_empty() {
+            let (page, stream, model) = self.decompose_for_read(page_index)?;
+            let objs = Self::resolve_objects(&model, object_indices)?;
+            // Every resource category, resolved ONCE. Resolving inside the loop
+            // would re-walk the graph per name on a page whose text uses forty
+            // fonts, and would need a borrow that outlives the closure that took
+            // it -- which is what the type system says here rather than a comment.
+            let resolved: BTreeMap<Vec<u8>, Dict> = {
+                let graph = self.graph();
+                crate::vector::clip::RESOURCE_CATEGORIES
+                    .iter()
+                    .filter_map(|category| {
+                        page.resources
+                            .get(category)
+                            .map(|o| graph.resolve(o))
+                            .and_then(Object::as_dict)
+                            .map(|d| ((*category).to_vec(), d.clone()))
+                    })
+                    .collect()
+            };
+
+            for obj in objs {
+                let span = obj.bytes();
+                let bytes = stream
+                    .buf
+                    .get(span.start..span.end())
+                    .unwrap_or_default()
+                    .to_vec();
+                // The PRELUDE first: state the object depends on but does not
+                // establish in its own bytes (`Pass 120.2`). Its names are bound
+                // exactly like the item's own, which is the whole point -- a `Tf`
+                // synthesised from the decomposition names a resource that must
+                // travel with the clip like any other.
+                let prelude = clip::item_prelude(obj, &bytes);
+                let mut bindings = Vec::new();
+                let mut sites = clip::name_sites(&bytes).map_err(EditError::Clip)?;
+                sites.extend(clip::name_sites(&prelude).map_err(EditError::Clip)?);
+                for site in sites {
+                    let Some(entry) = resolved
+                        .get(&site.category)
+                        .and_then(|sub| sub.get(&site.name))
+                    else {
+                        return Err(EditError::Clip(clip::ClipError::UnresolvedResource {
+                            category: String::from_utf8_lossy(&site.category).into_owned(),
+                            name: String::from_utf8_lossy(&site.name).into_owned(),
+                        }));
+                    };
+                    let clip_id =
+                        self.clip_import(entry, &mut clip_objects, &mut mapping, &mut next)?;
+                    bindings.push(clip::ClipBinding {
+                        category: site.category,
+                        name: site.name,
+                        object: clip_id,
+                    });
+                }
+                bindings.sort();
+                bindings.dedup();
+                bbox = bbox.union(obj.page_bbox());
+                items.push(clip::ClipItem {
+                    bytes,
+                    ctm: clip::item_ctm(obj),
+                    kind: clip::item_kind(obj),
+                    bbox: obj.page_bbox(),
+                    bindings,
+                    prelude,
                 });
             }
-            bindings.sort();
-            bindings.dedup();
-            bbox = bbox.union(obj.page_bbox());
-            items.push(clip::ClipItem {
-                bytes,
-                ctm: clip::item_ctm(obj),
-                kind: clip::item_kind(obj),
-                bbox: obj.page_bbox(),
-                bindings,
-                prelude,
-            });
         }
 
         let mut annotations = Vec::with_capacity(annotation_indices.len());
         if !annotation_indices.is_empty() {
-            let all = crate::annot::page_annotations(&self.graph(), page.id);
+            let all = crate::annot::page_annotations(&self.graph(), page_id);
             let count = all.len();
             for &i in annotation_indices {
                 let annot = all
@@ -9411,9 +9485,7 @@ impl EditSession {
                     placed += 1;
                 }
                 ClipAnnotation::Unsupported { subtype } => {
-                    disclosures.push(format!(
-                        "paste: a /{subtype} annotation was NOT pasted. A widget carries an /AcroForm field registration and a field name, and a renamed field is a DIFFERENT field -- any script, calculation order or parent-child relationship naming the old one would break silently. That is a decision about your form, not a copy."
-                    ));
+                    disclosures.push(unsupported_paste_reason(subtype));
                 }
             }
         }
@@ -9578,9 +9650,7 @@ impl EditSession {
         for annotation in &clip.annotations {
             match annotation {
                 crate::vector::ClipAnnotation::Unsupported { subtype } => {
-                    disclosures.push(format!(
-                        "paste: a /{subtype} annotation was NOT pasted. A widget carries an /AcroForm field registration and a field name, and a renamed field is a DIFFERENT field -- any script, calculation order or parent-child relationship naming the old one would break silently. That is a decision about your form, not a copy."
-                    ));
+                    disclosures.push(unsupported_paste_reason(subtype));
                 }
                 _ => annotations_pasted += 1,
             }
@@ -9623,6 +9693,182 @@ impl EditSession {
     ) -> Result<crate::vector::ObjectClip, EditError> {
         let clip = self.copy_objects(page_index, object_indices)?;
         self.delete_objects(page_index, object_indices)?;
+        Ok(clip)
+    }
+
+    /// **Cut annotations** — copy them to the clipboard and remove them, as
+    /// ONE undo entry (`Pass 168.0`).
+    ///
+    /// The annotation twin of [`Self::cut_objects`], which had covered
+    /// content objects only since `Pass 120.x`: a marked-up drawing's marquee
+    /// catches comments and ce dimensions, and until now the only thing that
+    /// could be *cut* out of one was the geometry underneath them.
+    ///
+    /// `annotation_indices` are positions in the page's `/Annots` array —
+    /// the same address space [`Self::copy_annotations`] takes, and
+    /// deliberately not the content objects' paint-order space.
+    ///
+    /// # Errors
+    ///
+    /// Everything [`Self::copy_annotations`] or [`Self::delete_annotation`]
+    /// would raise, plus [`EditError::CutWouldNotSurvive`] — see
+    /// [`Self::cut_selection`], whose body this is.
+    pub fn cut_annotations(
+        &mut self,
+        page_index: usize,
+        annotation_indices: &[usize],
+    ) -> Result<crate::vector::ObjectClip, EditError> {
+        self.cut_selection(page_index, &[], annotation_indices)
+    }
+
+    /// **Cut content objects AND annotations in one gesture** (`Pass 168.0`).
+    ///
+    /// The cut twin of [`Self::copy_selection`], and the body
+    /// [`Self::cut_annotations`] wraps. One undo entry, however many targets.
+    ///
+    /// # ★ It refuses what the clipboard cannot hold, and that is the point
+    ///
+    /// A **copy** of an annotation pdfce does not model puts a
+    /// [`ClipAnnotation::Unsupported`](crate::vector::ClipAnnotation) marker
+    /// on the clip and loses nothing: the original is still on the page, and
+    /// the paste says by name what it declined to place.
+    ///
+    /// A **cut** of the same annotation would be a deletion wearing a
+    /// clipboard's clothes. The operator's next gesture is a paste that
+    /// refuses, and by then the only copy is gone. So this refuses **before
+    /// deleting anything**, naming the subtype
+    /// ([`EditError::CutWouldNotSurvive`]), and the operator can delete it
+    /// deliberately instead.
+    ///
+    /// That asymmetry between copy and cut is deliberate and is the reason
+    /// this is not simply `copy_selection` followed by two delete calls.
+    ///
+    /// # Order of operations, and why the ids are resolved first
+    ///
+    /// 1. **Copy.** A selection that cannot be copied is refused with nothing
+    ///    deleted — the same contract [`Self::cut_objects`] states.
+    /// 2. **Refuse** an unsupported annotation, per above.
+    /// 3. **Resolve every annotation index to an object id, up front.**
+    ///    Removing an annotation re-indexes every later entry in `/Annots`,
+    ///    so a loop that deleted by *index* would delete the wrong ones from
+    ///    the second iteration on. This is the same staleness that makes
+    ///    `delete_object` unusable in a loop (see [`Self::delete_objects`]).
+    /// 4. **Pre-flight every deletion** with
+    ///    [`Self::annotation_deletion_preview`], so a locked or trap-net
+    ///    annotation half way down the selection refuses the gesture rather
+    ///    than aborting it half-applied.
+    /// 5. Delete, then fold the commands into one entry.
+    ///
+    /// # A cascade may take a later target with it
+    ///
+    /// Deleting a markup annotation also removes its `/Popup`
+    /// (§12.5.6.14). If that pop-up was itself selected, its id is already
+    /// gone by the time its turn comes — that is skipped, not an error, and
+    /// it does not make the gesture partial.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::CutWouldNotSurvive`] for an annotation the clipboard
+    /// cannot hold; [`EditError::SelectionTooLargeForOneUndo`] when the
+    /// selection has more targets than [`MAX_UNDO_DEPTH`] and could therefore
+    /// not be folded into one entry — refused before anything is deleted,
+    /// because a cut that silently became forty undo entries is worse than a
+    /// cut that did not happen; plus everything
+    /// [`Self::copy_selection`], [`Self::delete_objects`] and
+    /// [`Self::delete_annotation`] would raise.
+    pub fn cut_selection(
+        &mut self,
+        page_index: usize,
+        object_indices: &[usize],
+        annotation_indices: &[usize],
+    ) -> Result<crate::vector::ObjectClip, EditError> {
+        use crate::vector::ClipAnnotation;
+
+        // 1. COPY FIRST -- nothing is deleted if the selection cannot be
+        //    carried.
+        let clip = self.copy_selection(page_index, object_indices, annotation_indices)?;
+
+        // 2. REFUSE what a paste could not put back.
+        if let Some(annotation) = clip
+            .annotations
+            .iter()
+            .find(|a| matches!(a, ClipAnnotation::Unsupported { .. }))
+        {
+            let ClipAnnotation::Unsupported { subtype } = annotation else {
+                // Unreachable: `find` matched this pattern. Stated as a
+                // refusal rather than a panic -- this crate is panic-free.
+                return Err(EditError::CutWouldNotSurvive {
+                    subtype: "unknown".to_owned(),
+                });
+            };
+            return Err(EditError::CutWouldNotSurvive {
+                subtype: subtype.clone(),
+            });
+        }
+
+        // 3. RESOLVE IDS UP FRONT. Deleting re-indexes `/Annots`.
+        let mut targets: Vec<ObjId> = Vec::with_capacity(annotation_indices.len());
+        if !annotation_indices.is_empty() {
+            let slots = self.page_slots()?;
+            let page_id = slots
+                .get(page_index)
+                .ok_or(EditError::PageOutOfRange {
+                    index: page_index,
+                    count: slots.len(),
+                })?
+                .id;
+            let all = crate::annot::page_annotations(&self.graph(), page_id);
+            let count = all.len();
+            for &i in annotation_indices {
+                let annot = all
+                    .get(i)
+                    .ok_or(crate::vector::VectorEditError::ObjectOutOfRange { index: i, count })?;
+                let id = annot.id.ok_or(EditError::AnnotationNotFound {
+                    id: ObjId::new(0, 0),
+                })?;
+                targets.push(id);
+            }
+            targets.dedup();
+        }
+
+        // The most commands this gesture can produce: the content delete is
+        // one, each annotation is one. Refused up front rather than
+        // discovered after the deletions, when the only remedy would be N
+        // undo presses.
+        let planned = usize::from(!object_indices.is_empty()) + targets.len();
+        if planned > MAX_UNDO_DEPTH {
+            return Err(EditError::SelectionTooLargeForOneUndo {
+                targets: planned,
+                limit: MAX_UNDO_DEPTH,
+            });
+        }
+
+        // 4. PRE-FLIGHT every annotation deletion, so a refusal half way down
+        //    the selection does not leave the earlier half deleted.
+        for &id in &targets {
+            self.annotation_deletion_preview(id)?;
+        }
+
+        // 5. DELETE, then fold.
+        let mut commands = 0usize;
+        if !object_indices.is_empty() {
+            self.delete_objects(page_index, object_indices)?;
+            commands += 1;
+        }
+        for &id in &targets {
+            // A cascade may already have taken this one -- see the doc
+            // comment. Skipped rather than refused, and it does not count as
+            // a command because none was committed.
+            if self.value(id).is_none() {
+                continue;
+            }
+            self.delete_annotation(id)?;
+            commands += 1;
+        }
+        // `planned` was already checked against MAX_UNDO_DEPTH and `commands`
+        // is at most `planned`, so this cannot fail -- the return value is
+        // ignored deliberately rather than unwrapped.
+        let _ = self.coalesce_last(commands, CommandKind::CutSelection);
         Ok(clip)
     }
 
@@ -10732,6 +10978,142 @@ impl EditSession {
     /// just-created dictionary is visible immediately.
     fn info_id(&self) -> Option<ObjId> {
         self.trailer.get(b"Info").and_then(Object::as_reference)
+    }
+
+    /// Fold the last `count` committed commands into **one undo entry**
+    /// (`Pass 168.0`).
+    ///
+    /// # Why this exists, and why it is a primitive rather than a special case
+    ///
+    /// **One operator gesture is one undo entry** (`R179`/`R49`), and a verb
+    /// offered on an N-target selection acts on the whole selection (`R168`).
+    /// Those two together mean a multi-target verb must produce ONE command —
+    /// which is easy when the verb builds its own writes, and hard when it
+    /// has to delegate to a per-target verb that commits for itself.
+    ///
+    /// [`Self::delete_annotation`] is exactly that shape: it routes a ce
+    /// dimension to [`Self::delete_dimension`] and a redaction mark to
+    /// `delete_redaction_mark`, each of which commits. Reimplementing all
+    /// three cascades inside a multi-delete would be a second copy of the
+    /// most intricate deletion logic in the crate — the kind of duplication
+    /// that ends with one copy missing a guard and no test failing.
+    ///
+    /// So instead: call the per-target verb N times, then fold.
+    ///
+    /// # ★ THE COLLAPSE IS NOT OPTIONAL, and it is why this is not a
+    /// # three-line concatenation
+    ///
+    /// [`Self::undo`] walks a command's `objects` **forward**, applying each
+    /// `before`. That is correct only while an object appears **at most once**
+    /// in one command — which is the same fact recorded elsewhere in this file
+    /// as *"two whole-dictionary writes to one object in one command do not
+    /// compose"*.
+    ///
+    /// A naive concatenation of N commands breaks it immediately: two
+    /// deletions on one page both rewrite that page's `/Annots`, so the page
+    /// object appears twice. The second write's `before` is the first write's
+    /// `after`, so undoing forward would restore the ORIGINAL and then
+    /// re-apply the INTERMEDIATE — leaving the document with one annotation
+    /// still missing and no further undo to reach it.
+    ///
+    /// So a repeated object is collapsed to a single write taking the
+    /// **earliest `before`** and the **latest `after`**, which is exactly the
+    /// state the whole group started and ended in. Removals collapse the same
+    /// way (`was_deleted` from the first sighting, `is_deleted` from the
+    /// last), and so does the trailer.
+    ///
+    /// # Order is preserved for everything else
+    ///
+    /// Objects keep their first-sighting order. Nothing in `undo`/`redo`
+    /// depends on it — every write is independent once duplicates are gone —
+    /// but a stable order makes a command diffable and a test reproducible.
+    ///
+    /// # Refuses to fold what is not there
+    ///
+    /// Returns `false` and folds **nothing** when the undo stack holds fewer
+    /// than `count` commands. That is not defensive noise: `MAX_UNDO_DEPTH`
+    /// trims the stack from the front, so a gesture with more targets than
+    /// the whole history can hold would otherwise fold a *neighbour's*
+    /// command into itself and make an unrelated earlier edit un-undoable.
+    /// A caller that gets `false` has already applied every change; only the
+    /// grouping failed, and the correct response is to say so rather than to
+    /// retry.
+    ///
+    /// `count == 0` and `count == 1` are no-ops that return `true`: zero
+    /// targets is a legitimate empty selection, and one target is already one
+    /// entry.
+    fn coalesce_last(&mut self, count: usize, kind: CommandKind) -> bool {
+        if count == 0 {
+            return true;
+        }
+        if self.undo.len() < count {
+            return false;
+        }
+        if count == 1 {
+            // Already one entry -- but it is labelled with the DESTINATION
+            // verb's kind (`DeleteAnnotation`), not the gesture's. Relabel
+            // it, so an undo control after a one-target cut says "undo cut"
+            // rather than "undo delete". See `CommandKind::CutSelection` for
+            // why that difference is a promise about the clipboard rather
+            // than a wording preference.
+            if let Some(last) = self.undo.last_mut() {
+                last.kind = kind;
+            }
+            return true;
+        }
+        let at = self.undo.len() - count;
+        let group: Vec<Command> = self.undo.split_off(at);
+
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let mut object_at: BTreeMap<ObjId, usize> = BTreeMap::new();
+        let mut removals: Vec<Removal> = Vec::new();
+        let mut removal_at: BTreeMap<ObjId, usize> = BTreeMap::new();
+        let mut trailer: Option<(Dict, Dict)> = None;
+
+        for command in group {
+            for write in command.objects {
+                match object_at.get(&write.id) {
+                    // Seen before: keep the EARLIEST `before` (the state the
+                    // group started in) and take the LATEST `after`.
+                    Some(&slot) => {
+                        if let Some(existing) = objects.get_mut(slot) {
+                            existing.after = write.after;
+                        }
+                    }
+                    None => {
+                        object_at.insert(write.id, objects.len());
+                        objects.push(write);
+                    }
+                }
+            }
+            for removal in command.removals {
+                match removal_at.get(&removal.id) {
+                    Some(&slot) => {
+                        if let Some(existing) = removals.get_mut(slot) {
+                            existing.is_deleted = removal.is_deleted;
+                        }
+                    }
+                    None => {
+                        removal_at.insert(removal.id, removals.len());
+                        removals.push(removal);
+                    }
+                }
+            }
+            if let Some((before, after)) = command.trailer {
+                trailer = Some(match trailer {
+                    Some((first_before, _)) => (first_before, after),
+                    None => (before, after),
+                });
+            }
+        }
+
+        self.undo.push(Command {
+            kind,
+            objects,
+            removals,
+            trailer,
+        });
+        true
     }
 
     /// Apply a command, push it on the undo stack, and invalidate redo.
@@ -23376,17 +23758,94 @@ impl EditSession {
                     .into_iter()
                     .filter(|o| o.as_reference().is_none_or(|id| !root_drop.contains(&id)))
                     .collect();
+
+                // ★ /CO — THE CALCULATION ORDER, pruned here (`Pass 168.0`).
+                //
+                // §12.7.2 Table 218: `/CO` is "an array of INDIRECT
+                // REFERENCES TO FIELD DICTIONARIES with calculation actions".
+                // Removing a field and leaving its reference in `/CO` leaves
+                // the array naming an object that is gone.
+                //
+                // Not corruption — §7.3.10 resolves a dangling reference to
+                // null and calls it legal — but it is a lie the file tells
+                // about itself, and it is COUNTED: `list-fields` on a
+                // document whose only field had just been deleted reported
+                // `fields=0 calc_order=1`. That readout is how this was
+                // found, while smoke-testing the cut verb one class up.
+                //
+                // Filtered against `removing`, not `root_drop`: a calculated
+                // field can sit anywhere in the tree, not only at the root.
+                let co_original: Option<Vec<Object>> = acro
+                    .get(b"CO")
+                    .map(|o| graph.resolve(o))
+                    .and_then(Object::as_array)
+                    .map(<[Object]>::to_vec);
+                let co_holder = match acro.get(b"CO") {
+                    Some(Object::Reference(r)) => Some(*r),
+                    _ => None,
+                };
+                let co_pruned: Option<Vec<Object>> = co_original.and_then(|co| {
+                    let before = co.len();
+                    let pruned: Vec<Object> = co
+                        .into_iter()
+                        .filter(|o| o.as_reference().is_none_or(|id| !removing.contains(&id)))
+                        .collect();
+                    // Written only when it CHANGED. Re-emitting an identical
+                    // array would touch an object the operator did not
+                    // logically modify -- a minimal-diff violation
+                    // (`ARCHITECTURE.md` §5) for no gain.
+                    (pruned.len() != before).then_some(pruned)
+                });
+
+                // The AcroForm dictionary is written AT MOST ONCE in this
+                // command: two whole-dictionary writes to one object do not
+                // compose -- each is computed from the pre-command state, so
+                // the second silently discards the first.
+                let mut acro_dirty = false;
+                if let Some(pruned) = co_pruned {
+                    match co_holder {
+                        // /CO is its own indirect array object: patch it.
+                        Some(arr_id) => writes.push(ObjectWrite {
+                            id: arr_id,
+                            before: self.state.get(&arr_id).cloned(),
+                            after: Some(Object::Array(pruned)),
+                        }),
+                        // /CO is a direct array in the AcroForm dictionary.
+                        None => {
+                            acro.insert(Name::from(b"CO"), Object::Array(pruned));
+                            acro_dirty = true;
+                        }
+                    }
+                }
+
                 match fields_holder {
                     // /Fields is an indirect array object: patch it directly.
                     // Correct whichever dictionary points at it.
-                    Some(arr_id) => writes.push(ObjectWrite {
-                        id: arr_id,
-                        before: self.state.get(&arr_id).cloned(),
-                        after: Some(Object::Array(kept)),
-                    }),
+                    Some(arr_id) => {
+                        writes.push(ObjectWrite {
+                            id: arr_id,
+                            before: self.state.get(&arr_id).cloned(),
+                            after: Some(Object::Array(kept)),
+                        });
+                        if acro_dirty {
+                            let after = if holder_is_catalog {
+                                let mut cat = holder.unwrap_or_default();
+                                cat.insert(Name::from(b"AcroForm"), Object::Dict(acro));
+                                Object::Dict(cat)
+                            } else {
+                                Object::Dict(acro)
+                            };
+                            writes.push(ObjectWrite {
+                                id: holder_id,
+                                before: self.state.get(&holder_id).cloned(),
+                                after: Some(after),
+                            });
+                        }
+                    }
                     // /Fields is a direct array. Rewrite the dictionary that
                     // contains it — nesting the corrected AcroForm back into
-                    // the catalog when that is where it lives.
+                    // the catalog when that is where it lives. This write
+                    // carries the /CO prune too, when there was one.
                     None => {
                         acro.insert(Name::from(b"Fields"), Object::Array(kept));
                         let after = if holder_is_catalog {
@@ -30877,6 +31336,49 @@ impl EditSession {
         }
     }
 
+    /// **Cut a form field** — copy it to the field clipboard and delete it,
+    /// as ONE undo entry (`Pass 168.0`).
+    ///
+    /// The field twin of [`Self::cut_objects`], and the verb that makes
+    /// *move this field to the next cell* one gesture instead of three.
+    ///
+    /// # Why this is a verb and not "call copy, then call delete"
+    ///
+    /// The same reason [`Self::cut_objects`] is: two commands is two undos
+    /// for one gesture, so `Ctrl+X` then `Ctrl+Z` would give the field back
+    /// but leave the clipboard changed, or need two presses. The copy half is
+    /// `&self` and commits nothing, so this is literally copy-then-delete
+    /// with **one** command reaching the undo stack — relabelled
+    /// [`CommandKind::CutSelection`] so an undo control says *"undo cut"*.
+    ///
+    /// The clip is returned rather than stored: pdfce owns no clipboard
+    /// state, and a shell that wants undo to restore the *previous* clip
+    /// contents is holding the only stack that could.
+    ///
+    /// # The copy runs first, and its refusals are the useful ones
+    ///
+    /// A **signed signature field** is refused here exactly as it is by
+    /// [`Self::copy_field`] — and refusing the cut matters more, because a
+    /// cut that carried nothing would have *deleted a signature* and left the
+    /// operator holding an empty clipboard. Delete it deliberately if that is
+    /// what was meant.
+    ///
+    /// # Errors
+    ///
+    /// Everything [`Self::copy_field`] raises — [`EditError::FieldNotFound`],
+    /// [`EditError::FieldHasNoWidget`],
+    /// [`EditError::SignedFieldNotCopyable`], [`EditError::Clip`] — and
+    /// everything [`Self::delete_field`] raises, including the encryption and
+    /// **strict** certification guards. **The copy runs first**, so a field
+    /// that cannot be carried is refused with nothing deleted.
+    pub fn cut_field(&mut self, fqn: &str) -> Result<crate::formclip::FieldCut, EditError> {
+        let clip = self.copy_field(fqn)?;
+        let deletion = self.delete_field(fqn)?;
+        // One command; the relabel is the whole point of passing a count of 1.
+        let _ = self.coalesce_last(1, CommandKind::CutSelection);
+        Ok(crate::formclip::FieldCut { clip, deletion })
+    }
+
     /// The `Ctrl+V` half: plant an independent field.
     #[allow(clippy::too_many_arguments)]
     fn paste_new_field(
@@ -31431,6 +31933,63 @@ impl EditSession {
 /// `(writes, the terminal's parent, the terminal's own partial name, the node
 /// to register)`.
 type FieldPlacement = (Vec<ObjectWrite>, Option<ObjId>, String, Option<ObjId>);
+
+/// Why a particular annotation `/Subtype` was not pasted (`Pass 168.0`).
+///
+/// # ★ This exists because the message used to be wrong for everything but one
+/// # subtype, in two places at once
+///
+/// Both paste sites — the verb and its preview — carried the SAME hardcoded
+/// sentence, and that sentence was about **widgets**:
+///
+/// > *"a /{subtype} annotation was NOT pasted. A widget carries an `/AcroForm`
+/// > field registration and a field name…"*
+///
+/// So copying a `/Link` and pasting it told the operator about form-field
+/// registration and calculation order. The prose was accurate — about a
+/// different object. It was duplicated verbatim in two sites, which is how
+/// one wrong sentence became two, and neither test nor gate could notice
+/// because the string was *well-formed and internally consistent*.
+///
+/// The fix is one function, so the two sites cannot drift again, and a reason
+/// per subtype so the operator is told something true about the thing they
+/// actually copied.
+///
+/// # The reasons are not interchangeable
+///
+/// A widget is refused because **renaming a field is a decision about the
+/// operator's form** — and since `Pass 167.0` there is a verb that asks for
+/// that decision, so the message now points at it rather than ending in a
+/// refusal. A `/Link` is refused because its destination names a page that
+/// may not exist here. A `/Popup` is refused because it is not an independent
+/// annotation at all. Telling the operator the wrong one of those wastes the
+/// only chance the paste had to be useful.
+fn unsupported_paste_reason(subtype: &str) -> String {
+    let why = match subtype {
+        "Widget" => {
+            "a widget carries an /AcroForm field registration and a field name, and a renamed field is a DIFFERENT field -- any script, calculation order or parent-child relationship naming the old one would break silently. Use copy-field / paste-field instead: they ask which of the two pastes you meant (a new independent field, or another view of the same one) and carry the field's appearance, value and actions with it"
+        }
+        "Link" => {
+            "a link's destination names a page or a named destination in the document it came from, and pasting the rectangle without a target that resolves here would give you something that looks clickable and goes nowhere"
+        }
+        "Popup" => {
+            "a pop-up is not an independent annotation -- it belongs to the comment that opens it (ISO 32000-1 12.5.6.14), and one pasted on its own would have no parent. Copy the comment; its pop-up travels with it"
+        }
+        "FileAttachment" => {
+            "an attached file lives in the document's embedded-file tree, not in the annotation, so the marker would paste with nothing behind it"
+        }
+        "Redact" => {
+            "a redaction mark is a pending destructive operation, not artwork. Pasting one would arm a redaction in a document nobody reviewed"
+        }
+        "FreeText" | "Text" | "Stamp" => {
+            "pdfce can author this kind of annotation but cannot yet read one back off a page into the model the clipboard carries, so there is nothing to place. This is a known gap, not a property of your document"
+        }
+        _ => {
+            "pdfce does not model this annotation kind, so it has nothing to place. It was left on the page it was copied from and nothing was lost"
+        }
+    };
+    format!("paste: a /{subtype} annotation was NOT pasted -- {why}.")
+}
 
 /// Where each of a clip's widgets lands.
 ///

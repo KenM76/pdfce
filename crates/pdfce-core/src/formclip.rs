@@ -1175,6 +1175,26 @@ impl FieldClip {
     }
 }
 
+/// What a **cut** did: the clip that was carried, and the deletion that
+/// made room for it (`Pass 168.0`).
+///
+/// Both halves are returned because both carry information the operator
+/// needs and neither can be derived from the other. The clip says what is now
+/// on the clipboard; the deletion says what leaving cost — a cleared
+/// selection value, a pruned grouping node, how many widgets went.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct FieldCut {
+    /// The field, on the clipboard. Serialise it with
+    /// [`FieldClip::to_bytes`] to carry it to another document.
+    pub clip: FieldClip,
+    /// What removing it did to the form it left, including the disclosures
+    /// `delete_field` owes: a `/V` that pointed at a state no remaining
+    /// widget could show, and grouping nodes pruned because they became
+    /// childless.
+    pub deletion: crate::edit::FieldDeletion,
+}
+
 /// What a paste did, and everything about it the operator must be told.
 ///
 /// # Why sentences rather than a struct of booleans

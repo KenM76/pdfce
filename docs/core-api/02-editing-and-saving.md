@@ -10,7 +10,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 161 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 164 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 161 public `EditSession` methods
+## 1. Verb index — all 164 public `EditSession` methods
 
-**Count: 161.** Established by brace-matched extraction of the four
+**Count: 164.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -2262,6 +2262,105 @@ spending a placement gesture:
 `copy-field --name <FQN> -o <clip>`, `inspect-field-clip <clip>`, and
 `paste-field --clip <clip> --page N --rect … (--as-new <NAME> | --as-widget-of
 <NAME>)`. Disclosures go to **stderr**, the parseable summary to stdout.
+
+### 1.27 Cut (3) — `Pass 168.0`
+
+**Cut = copy, then remove, as ONE undo entry.** Before this Pass exactly one
+class of thing in pdfce had all three of cut/copy/paste — page content
+objects. Copy had three entry points and cut had one, the objects-only one.
+
+| I want to… | Call | Returns |
+|---|---|---|
+| Cut annotations | `cut_annotations(&mut self, page_index: usize, annotation_indices: &[usize]) -> Result<ObjectClip, EditError>` | The clip. |
+| Cut content **and** annotations together | `cut_selection(&mut self, page_index, object_indices: &[usize], annotation_indices: &[usize]) -> Result<ObjectClip, EditError>` | The clip. The body the above wraps. |
+| Cut a form field | `cut_field(&mut self, fqn: &str) -> Result<FieldCut, EditError>` | `FieldCut { clip: FieldClip, deletion: FieldDeletion }`. |
+
+`cut_objects` (`Pass 120.x`) is unchanged and still content-only.
+
+#### ★ Cut refuses where copy does not, and a shell must not paper over it
+
+A **copy** of an annotation pdfce does not model costs nothing: the original
+stays on the page, the clip carries an `Unsupported` marker so the count is
+honest, and the paste declines it by name.
+
+A **cut** of the same annotation is a deletion wearing a clipboard's clothes —
+the operator's next gesture is a paste that refuses, and by then the only copy
+is gone. So it is refused **before anything is removed**:
+`EditError::CutWouldNotSurvive { subtype }`.
+
+Today that means a `/Link`, a `/Popup`, a sticky note, a text box, a stamp, a
+`/Redact` mark and a `/Widget` all refuse the cut. **Do not offer Cut as
+enabled and let it fail** — ask the clip first: copy the selection, look for
+an `Unsupported` entry, and grey the control with the subtype named.
+
+`EditError::SignedFieldNotCopyable` plays the same role for `cut_field`, and
+matters more there: a cut that carried nothing would have deleted a signature.
+
+#### One gesture, one undo entry — including across delegated verbs
+
+`R168` says a verb offered on an N-target selection acts on the whole
+selection or refuses. `R179`/`R49` say one gesture is one undo entry. A
+multi-annotation cut has to satisfy both while `delete_annotation` routes ce
+dimensions and redaction marks to verbs that commit for themselves.
+
+It does, by folding the commands afterwards. Two consequences a consumer can
+observe:
+
+- **`undo_depth()` grows by exactly 1** however many things were cut. One
+  press of undo restores all of them.
+- **A selection larger than `MAX_UNDO_DEPTH` (256) is refused by name** —
+  `EditError::SelectionTooLargeForOneUndo { targets, limit }` — *before*
+  anything is deleted. A cut that silently became forty undo entries is worse
+  than a cut that did not happen, because the operator finds out by pressing
+  undo and watching a third of their work come back.
+
+`CommandKind::CutSelection` labels the folded entry, including the
+single-target case, so an undo control says *"undo cut"* rather than *"undo
+delete"*. That is a promise about the clipboard, not a wording preference.
+
+#### Order of operations
+
+1. Copy. A selection that cannot be carried is refused with nothing deleted.
+2. Refuse an unsupported annotation.
+3. Resolve every annotation index to an object id **up front** — removing one
+   re-indexes every later entry in `/Annots`.
+4. Pre-flight every deletion (`annotation_deletion_preview`), so a locked or
+   trap-net annotation half way down the selection refuses the gesture rather
+   than aborting it half-applied.
+5. Delete, then fold.
+
+A cascade may take a later target with it (a markup annotation's `/Popup`
+goes with it, §12.5.6.14). That id is skipped, not an error.
+
+#### Three fixes that shipped with it
+
+- **`copy_annotations` no longer requires the page to have content.** It used
+  to open with a decomposition and refuse `VectorEditNoContents`, so an
+  annotation on a blank sheet — a stamp-only cover page, a page of review
+  comments — could not be copied at all. The decomposition now runs only when
+  content objects were actually asked for.
+- **The paste refusal names the copied subtype's own reason.** Both paste
+  sites carried one hardcoded sentence about **widgets** — `/AcroForm`
+  registration, field names, calculation order — printed whatever had been
+  copied. A `/Link` was answered with an explanation of form-field renaming.
+  One function now, so the two sites cannot drift, and the widget case points
+  at `copy_field`/`paste_field`.
+- **Removing a field prunes `/AcroForm /CO`.** §12.7.2 Table 218 makes `/CO`
+  an array of references to field dictionaries; leaving one behind named an
+  object that was gone. `list-fields` on a document whose only field had just
+  been deleted reported `fields=0 calc_order=1`. A document with no `/CO` is
+  not given one.
+
+#### CLI
+
+`object-copy --cut OUTPUT.pdf` now removes the **annotations** too — it used
+to delete content objects only and still print `cut=1`. And it **refuses
+`--cut` together with `--annotations`**, because `ObjectClip::to_bytes` does
+not serialise annotations: the file the CLI would write cannot put them back,
+so that cut would destroy them.
+
+`copy-field --cut OUTPUT.pdf` is the field equivalent, reporting on stderr
+what leaving cost (a cleared selection value, pruned grouping nodes).
 
 ## 2. Construction, and the session's three read views
 

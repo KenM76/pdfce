@@ -3308,6 +3308,21 @@ enum Command {
         /// reads it, and `inspect-field-clip` says what is in it.
         #[arg(short, long)]
         output: PathBuf,
+        /// Also remove the field from the document, writing the result here —
+        /// CUT (`Pass 168.0`).
+        ///
+        /// Deletes every widget, the field dictionary, its `/AcroForm`
+        /// registration and any grouping node it leaves empty, as ONE undo
+        /// entry with the copy. The clip is written first, so a field that
+        /// cannot be carried is refused with nothing deleted — which matters
+        /// most for a SIGNED signature field, where a cut that carried
+        /// nothing would have deleted a signature and left you holding an
+        /// empty clipboard.
+        #[arg(long, value_name = "OUTPUT.pdf")]
+        cut: Option<PathBuf>,
+        /// Save mode for `--cut`.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
     },
 
     /// Say what a clip file carries, without pasting it (`Pass 167.0`).
@@ -6048,7 +6063,21 @@ enum Command {
         /// format. Write both; use each with its own consumer.
         #[arg(long, value_name = "FILE.pdf")]
         pdf: Option<PathBuf>,
-        /// Also delete the copied objects, writing the result here — cut.
+        /// Also remove what was copied, writing the result here — CUT.
+        ///
+        /// Removes the annotations too, not only the objects. It used not to:
+        /// until `Pass 168.0` this flag deleted content objects and left
+        /// every `--annotations` entry on the page while still reporting
+        /// `cut=1`.
+        ///
+        /// ONE undo entry, however many things were removed — so undoing a
+        /// cut in a shell puts back exactly what one cut took.
+        ///
+        /// REFUSED when the selection holds an annotation the clipboard
+        /// cannot carry back (a `/Link`, a `/Popup`, a sticky note). Copy
+        /// leaves such a thing in place and says so; a cut would delete it
+        /// with nothing to paste, which is a deletion wearing a clipboard's
+        /// clothes.
         #[arg(long, value_name = "OUTPUT.pdf")]
         cut: Option<PathBuf>,
         /// Save mode for `--cut`.
@@ -7760,7 +7789,15 @@ fn run() -> ExitCode {
             input,
             name,
             output,
-        } => cmd_copy_field(&input, &name, &output),
+            cut,
+            mode,
+        } => cmd_copy_field(&CopyFieldArgs {
+            input: &input,
+            name: &name,
+            output: &output,
+            cut: cut.as_deref(),
+            mode,
+        }),
         Command::InspectFieldClip { clip } => cmd_inspect_field_clip(&clip),
         Command::PasteField {
             input,
@@ -29151,9 +29188,43 @@ fn cmd_object_copy(args: &ObjectCopyArgs<'_>) -> u8 {
     // with nothing deleted. Reversed, a cut whose copy half failed would take
     // the objects away with nothing on the clipboard, which is the one outcome
     // the operator cannot recover from by pasting.
-    let clip = match session.copy_selection(page_index, &indices, &annots) {
-        Ok(clip) => clip,
-        Err(err) => return report_edit_error(input, &err),
+    //
+    // ★ THE CUT PATH GOES THROUGH `cut_selection`, and it did not used to.
+    // This handler called `copy_selection` and then `delete_objects` -- which
+    // takes OBJECT indices only. `--annotations 0 --cut out.pdf` therefore
+    // copied the annotation, left it on the page, and printed `cut=1`. The
+    // core had no annotation-aware cut to call until `Pass 168.0`; now it
+    // does, and it also folds every deletion into ONE undo entry and refuses
+    // a selection holding an annotation the clipboard cannot carry back.
+    // ★ AND A CUT WHOSE CLIPBOARD FILE CANNOT HOLD THE THING IS A DELETE.
+    //
+    // `ObjectClip::to_bytes` does not serialise annotations, so a `--cut` of
+    // one would remove it from the page and write a clip file that cannot
+    // put it back -- destroying it, through a flag whose whole promise is
+    // that the thing is on the clipboard. The in-session clipboard carries
+    // annotations fine; the FILE does not, and the CLI only has the file.
+    //
+    // Refused rather than warned, for the same reason `cut_selection`
+    // refuses an annotation it cannot model: by the time the operator finds
+    // out, the only copy is gone. `object-copy` without `--cut` still copies
+    // it and still says the file will not carry it.
+    if cut.is_some() && !annots.is_empty() {
+        eprintln!(
+            "pdfce-cli: object-copy refused: --cut with --annotations would remove {} annotation(s) and write a clipboard file that cannot put them back -- this clip format serialises content objects only. Copy them without --cut, or cut only --objects.",
+            annots.len()
+        );
+        return exit::EDIT_REFUSED;
+    }
+    let clip = if cut.is_some() {
+        match session.cut_selection(page_index, &indices, &annots) {
+            Ok(clip) => clip,
+            Err(err) => return report_edit_error(input, &err),
+        }
+    } else {
+        match session.copy_selection(page_index, &indices, &annots) {
+            Ok(clip) => clip,
+            Err(err) => return report_edit_error(input, &err),
+        }
     };
     let payload = clip.to_bytes();
     if let Err(err) = std::fs::write(clip_path, &payload) {
@@ -29194,9 +29265,9 @@ fn cmd_object_copy(args: &ObjectCopyArgs<'_>) -> u8 {
 
     let mut cut_note = String::from("cut=0");
     if let Some(output) = cut {
-        if let Err(err) = session.delete_objects(page_index, &indices) {
-            return report_edit_error(input, &err);
-        }
+        // The deletion already happened, inside `cut_selection` above -- and
+        // it had to, because a cut is one gesture and therefore one undo
+        // entry. What is left here is the save.
         let outcome = match save_edited(
             &mut session,
             &source,
@@ -31340,27 +31411,94 @@ struct PasteFieldArgs<'a> {
     verify_undo: bool,
 }
 
-/// `copy-field` — write a field onto a portable clip file.
-fn cmd_copy_field(input: &Path, name: &str, output: &Path) -> u8 {
-    let doc = match open_document(input) {
-        Ok(doc) => doc,
-        Err(err) => {
-            eprintln!("pdfce-cli: {}: {err}", input.display());
-            return exit_code_for_doc(&err);
+/// Borrowed argument bundle for [`cmd_copy_field`].
+struct CopyFieldArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    output: &'a Path,
+    cut: Option<&'a Path>,
+    mode: SaveMode,
+}
+
+/// `copy-field` — write a field onto a portable clip file, and with `--cut`
+/// remove it from the document as well.
+fn cmd_copy_field(args: &CopyFieldArgs<'_>) -> u8 {
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // The CUT path goes through `cut_field`, which is copy-then-delete as ONE
+    // undo entry -- not two calls here, for the reason `cut_field`'s own doc
+    // gives: two commands is two undos for one gesture.
+    let (clip, deletion) = if args.cut.is_some() {
+        match session.cut_field(args.name) {
+            Ok(cut) => (cut.clip, Some(cut.deletion)),
+            Err(err) => return report_edit_error(args.input, &err),
+        }
+    } else {
+        match session.copy_field(args.name) {
+            Ok(clip) => (clip, None),
+            Err(err) => return report_edit_error(args.input, &err),
         }
     };
-    let session = pdfce_core::edit::EditSession::new(doc);
-    let clip = match session.copy_field(name) {
-        Ok(clip) => clip,
-        Err(err) => return report_edit_error(input, &err),
-    };
+
     let bytes = clip.to_bytes();
-    if let Err(err) = std::fs::write(output, &bytes) {
-        eprintln!("pdfce-cli: {}: {err}", output.display());
+    if let Err(err) = std::fs::write(args.output, &bytes) {
+        eprintln!("pdfce-cli: {}: {err}", args.output.display());
         return exit::IO_ERROR;
     }
-    print_field_clip_line("copy-field", Some(input), &clip, output, bytes.len());
-    exit::SUCCESS
+
+    let verb = if args.cut.is_some() {
+        "cut-field"
+    } else {
+        "copy-field"
+    };
+    print_field_clip_line(verb, Some(args.input), &clip, args.output, bytes.len());
+
+    let Some(cut_output) = args.cut else {
+        return exit::SUCCESS;
+    };
+    // What leaving cost, on stderr with the other disclosures. `/V` pointing
+    // at a state no remaining widget could show, and grouping nodes pruned
+    // because they became childless, are both invisible in the saved file.
+    if let Some(deletion) = deletion {
+        if deletion.selection_cleared {
+            eprintln!(
+                "pdfce-cli: {}: the cut field held the value, so /V was cleared to /Off on what remains.",
+                args.input.display()
+            );
+        }
+        if deletion.emptied_parents > 0 {
+            eprintln!(
+                "pdfce-cli: {}: {} grouping node(s) became childless and were pruned with the field -- a named node with nothing under it still occupies its slot in the field-name space.",
+                args.input.display(),
+                deletion.emptied_parents
+            );
+        }
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        cut_output,
+        args.mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "  cut=1 cut_out={} mode={} changed={} objects={} appended={} out_bytes={}",
+        cut_output.display(),
+        args.mode.name(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+    );
+    finish_edit(args.input, &outcome)
 }
 
 /// `inspect-field-clip` — say what a clip carries, without pasting it.
