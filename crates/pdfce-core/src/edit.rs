@@ -10390,6 +10390,39 @@ impl EditSession {
             return Err(EditError::DocumentEncrypted);
         }
         self.check_certification()?;
+
+        // ★ AN ANNOTATION-ONLY CLIP NEEDS NO PAGE RESOURCES.
+        //
+        // The full path reads the page through `pages_in`, which treats
+        // `/Resources` as required (§7.7.3.3 says "Required; inheritable")
+        // and fails `MissingRequired("Resources")` without one. So pasting a
+        // comment onto a page that has none -- a blank sheet, a cover page,
+        // `fixtures/synthetic/minimal.pdf` -- was refused for lacking
+        // something the gesture does not use.
+        //
+        // This is the mirror of the copy-side defect fixed in `Pass 168.0`,
+        // where `copy_selection` decomposed unconditionally and could not
+        // copy an annotation off a page with no content. Both had the same
+        // cause: the content path's preconditions applied to a gesture that
+        // is not a content gesture.
+        if clip.is_empty() {
+            let slots = self.page_slots()?;
+            let page = slots.get(page_index).ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count: slots.len(),
+            })?;
+            let empty = Dict::new();
+            let mut plan = crate::vector::plan_paste(clip, &empty, at).map_err(EditError::Clip)?;
+            // `plan_paste` unions the bounds of the ITEMS, of which there are
+            // none -- so the plan's bbox is the empty sentinel and a shell
+            // drawing a paste-preview outline from it would get
+            // `inf,inf,-inf,-inf`. The clip's own bbox already includes the
+            // annotation rectangles (`copy_selection` unions them in), so use
+            // that, mapped through the same placement matrix.
+            plan.bbox = crate::vector::clip::transformed_bounds(clip.bbox(), at);
+            return Ok((plan, page.id, empty));
+        }
+
         let pages = page_tree::pages_in(&self.graph())?;
         let count = pages.len();
         let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {

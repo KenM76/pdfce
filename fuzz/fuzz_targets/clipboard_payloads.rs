@@ -41,11 +41,15 @@
 //! catches the asymmetric case: a payload the reader accepts but the writer
 //! then cannot express, or a round trip that does not converge.
 //!
-//! The re-parse result is compared for the field clipboard, where the format
-//! is total (every field survives serialisation). It is deliberately **not**
-//! compared for `ObjectClip`, whose `to_bytes` documents that it drops the
-//! `annotations` payload — so equality would fail by design rather than by
-//! defect.
+//! The re-parse result is compared for **both** formats, because both are now
+//! total — every value they hold survives serialisation.
+//!
+//! That was not always true of `ObjectClip`: until `Pass 169.0` its
+//! `to_bytes` dropped the `annotations` payload, and this target deliberately
+//! did **not** compare, because equality would have failed by design rather
+//! than by defect. Format version 2 carries them, so the comparison is back
+//! on — and a fuzzer is exactly the thing to falsify "the round trip
+//! converges" on inputs nobody would write by hand.
 //!
 //! ## Also driven: the prefix corpus
 //!
@@ -64,10 +68,19 @@ fuzz_target!(|data: &[u8]| {
     // -- the object clipboard (Pass 120.1) --------------------------------
     if let Ok(clip) = ObjectClip::from_bytes(data) {
         let bytes = clip.to_bytes();
-        // NOT compared for equality: `to_bytes` documents that it drops the
-        // annotations payload, so a mismatch here is the format's stated
-        // limit rather than a defect.
-        let _ = ObjectClip::from_bytes(&bytes);
+        // ★ NOW COMPARED. Until `Pass 169.0` this was deliberately not
+        // checked, because `to_bytes` dropped the annotations payload and a
+        // mismatch was the format's stated limit rather than a defect.
+        // Version 2 carries them, so the format is TOTAL and a round trip
+        // must converge -- which is exactly the property a fuzzer is good at
+        // falsifying on inputs nobody would write by hand.
+        match ObjectClip::from_bytes(&bytes) {
+            Ok(again) => assert!(
+                again == clip,
+                "the object-clip format carries everything it holds, so a round trip must converge",
+            ),
+            Err(e) => panic!("a clip this build wrote must parse back: {e}"),
+        }
         for cut in cuts(bytes.len()) {
             let _ = ObjectClip::from_bytes(bytes.get(..cut).unwrap_or_default());
         }

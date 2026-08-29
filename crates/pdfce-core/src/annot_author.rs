@@ -813,6 +813,414 @@ pub struct AuthoredAppearance {
     pub rect: Rect,
 }
 
+// ---------------------------------------------------------------------------
+// The clipboard codec (`Pass 169.0`)
+// ---------------------------------------------------------------------------
+
+/// The clipboard's exact COS encoding of a [`MarkupSpec`].
+///
+/// # ★ Why this is not `build_appearance(spec).annot`, which was tried first
+///
+/// The obvious route — carry the *annotation dictionary* the spec describes,
+/// and read it back with [`spec_from_dict`] — would have cost no new code at
+/// all, since both halves already ship and are exercised on every real
+/// document. **It is wrong, and it is wrong silently.**
+///
+/// `build_appearance` computes a `/Rect` that BOUNDS WHAT IS DRAWN, which
+/// §12.5.2 requires. A cloudy [`MarkupSpec::Square`]'s scallops bulge outside
+/// the nominal rectangle, so the authored `/Rect` is larger than the spec's.
+/// Reading that dictionary back yields a spec whose rectangle is the expanded
+/// one — measured, on a 100×70 square with intensity 1.5: `10,20,110,90`
+/// became `2.5,12.5,117.5,97.5`.
+///
+/// A clipboard built on that would have **grown a cloudy box by 7.5 pt in
+/// every direction on every copy/paste cycle**, compounding, with no error
+/// and no visibly wrong intermediate state. It is the same class of defect
+/// the clip's `put_f64` guards against by writing bit-exact doubles rather
+/// than decimals — drift that only shows up after enough repetitions, by
+/// which time the operator cannot say when it started.
+///
+/// [`spec_from_dict`] is not at fault: it is a reader for **foreign**
+/// annotations, where the stored `/Rect` *is* the truth and shrinking it
+/// would be an invention. It was simply never the inverse of the author, and
+/// nothing had required it to be.
+///
+/// # What this is instead
+///
+/// A direct encoding of the spec's **own fields**, exact by construction,
+/// expressed as a COS object so it goes through the crate's one
+/// [`write_object`](crate::writer::serialize::write_object) /
+/// [`Parser`](crate::parser::Parser) pair rather than a second byte format —
+/// which was the stated objection to serialising annotations at all.
+///
+/// Keys are pdfce's own, not §12.5.6's, and deliberately so: this describes a
+/// *spec*, not an annotation. `/K` is the variant tag.
+#[must_use]
+pub fn encode_spec(spec: &MarkupSpec) -> Object {
+    let mut d = Dict::new();
+    let tag = |d: &mut Dict, k: &[u8]| d.insert(Name::from(b"K"), Object::Name(Name::from(k)));
+    match spec {
+        MarkupSpec::Square {
+            rect,
+            border,
+            interior,
+            border_width,
+            border_effect,
+        } => {
+            tag(&mut d, b"square");
+            d.insert(Name::from(b"R"), rect_object(*rect));
+            put_colour(&mut d, b"C", border.as_ref());
+            put_colour(&mut d, b"IC", interior.as_ref());
+            d.insert(Name::from(b"W"), Object::Real(*border_width));
+            if let Some(i) = border_effect {
+                d.insert(Name::from(b"BE"), Object::Real(*i));
+            }
+        }
+        MarkupSpec::Circle {
+            rect,
+            border,
+            interior,
+            border_width,
+        } => {
+            tag(&mut d, b"circle");
+            d.insert(Name::from(b"R"), rect_object(*rect));
+            put_colour(&mut d, b"C", border.as_ref());
+            put_colour(&mut d, b"IC", interior.as_ref());
+            d.insert(Name::from(b"W"), Object::Real(*border_width));
+        }
+        MarkupSpec::Line {
+            start,
+            end,
+            color,
+            width,
+            endings,
+        } => {
+            tag(&mut d, b"line");
+            d.insert(Name::from(b"P"), points_object(&[*start, *end]));
+            put_colour(&mut d, b"C", Some(color));
+            d.insert(Name::from(b"W"), Object::Real(*width));
+            d.insert(
+                Name::from(b"LE"),
+                Object::Array(vec![
+                    Object::Name(Name::from(endings.0.name())),
+                    Object::Name(Name::from(endings.1.name())),
+                ]),
+            );
+        }
+        MarkupSpec::Ink {
+            strokes,
+            color,
+            width,
+        } => {
+            tag(&mut d, b"ink");
+            d.insert(
+                Name::from(b"S"),
+                Object::Array(strokes.iter().map(|s| points_object(s)).collect()),
+            );
+            put_colour(&mut d, b"C", Some(color));
+            d.insert(Name::from(b"W"), Object::Real(*width));
+        }
+        MarkupSpec::Polygon {
+            vertices,
+            border,
+            interior,
+            width,
+        } => {
+            tag(&mut d, b"polygon");
+            d.insert(Name::from(b"V"), points_object(vertices));
+            put_colour(&mut d, b"C", border.as_ref());
+            put_colour(&mut d, b"IC", interior.as_ref());
+            d.insert(Name::from(b"W"), Object::Real(*width));
+        }
+        MarkupSpec::Cloud {
+            vertices,
+            border,
+            interior,
+            width,
+            intensity,
+        } => {
+            tag(&mut d, b"cloud");
+            d.insert(Name::from(b"V"), points_object(vertices));
+            put_colour(&mut d, b"C", border.as_ref());
+            put_colour(&mut d, b"IC", interior.as_ref());
+            d.insert(Name::from(b"W"), Object::Real(*width));
+            d.insert(Name::from(b"BE"), Object::Real(*intensity));
+        }
+        MarkupSpec::PolyLine {
+            vertices,
+            color,
+            width,
+        } => {
+            tag(&mut d, b"polyline");
+            d.insert(Name::from(b"V"), points_object(vertices));
+            put_colour(&mut d, b"C", Some(color));
+            d.insert(Name::from(b"W"), Object::Real(*width));
+        }
+        MarkupSpec::TextMarkup { kind, quads, color } => {
+            tag(&mut d, b"textmarkup");
+            d.insert(
+                Name::from(b"TK"),
+                Object::Name(Name::from(text_markup_token(*kind))),
+            );
+            let mut flat = Vec::with_capacity(quads.len() * 8);
+            for q in quads {
+                for (x, y) in [q.ul, q.ur, q.ll, q.lr] {
+                    flat.push(Object::Real(x));
+                    flat.push(Object::Real(y));
+                }
+            }
+            d.insert(Name::from(b"Q"), Object::Array(flat));
+            put_colour(&mut d, b"C", Some(color));
+        }
+    }
+    Object::Dict(d)
+}
+
+/// Read back what [`encode_spec`] wrote.
+///
+/// # Errors
+///
+/// [`SpecReadError::UnsupportedSubtype`] for an unknown or missing variant
+/// tag — a payload from a newer build, or one that is not a spec at all — and
+/// [`SpecReadError::BadGeometry`] when a geometry key is absent or the wrong
+/// shape. Both are refusals, never a partial spec: half a shape pasted is a
+/// wrong shape drawn, and the clip's own version gate is what should have
+/// caught the newer-build case first.
+pub fn decode_spec(obj: &Object) -> Result<MarkupSpec, SpecReadError> {
+    let d = obj.as_dict().ok_or(SpecReadError::UnsupportedSubtype {
+        subtype: "not a dictionary".to_owned(),
+    })?;
+    let kind = match d.get(b"K") {
+        Some(Object::Name(n)) => n.as_bytes().to_vec(),
+        _ => Vec::new(),
+    };
+    // NOT read eagerly: `TextMarkup` has no width, so demanding `/W` up
+    // front refused the one variant that legitimately omits it. Each arm
+    // that needs it calls this; the ones that do not, do not.
+    let width = || {
+        d.get(b"W")
+            .and_then(Object::as_number)
+            .ok_or(SpecReadError::BadGeometry { key: "W" })
+    };
+    let border = colour_of(d.get(b"C"));
+    let interior = colour_of(d.get(b"IC"));
+    let rect = || {
+        d.get(b"R")
+            .and_then(rect_of)
+            .ok_or(SpecReadError::BadGeometry { key: "R" })
+    };
+    let vertices = || {
+        d.get(b"V")
+            .and_then(points_of)
+            .filter(|v: &Vec<(f64, f64)>| !v.is_empty())
+            .ok_or(SpecReadError::BadGeometry { key: "V" })
+    };
+    Ok(match kind.as_slice() {
+        b"square" => MarkupSpec::Square {
+            rect: rect()?,
+            border,
+            interior,
+            border_width: width()?,
+            border_effect: d.get(b"BE").and_then(Object::as_number),
+        },
+        b"circle" => MarkupSpec::Circle {
+            rect: rect()?,
+            border,
+            interior,
+            border_width: width()?,
+        },
+        b"line" => {
+            let p = d
+                .get(b"P")
+                .and_then(points_of)
+                .filter(|p: &Vec<(f64, f64)>| p.len() == 2)
+                .ok_or(SpecReadError::BadGeometry { key: "P" })?;
+            let ends = match d.get(b"LE") {
+                Some(Object::Array(a)) if a.len() == 2 => {
+                    (line_ending_of(a.first()), line_ending_of(a.get(1)))
+                }
+                _ => (LineEnding::None, LineEnding::None),
+            };
+            MarkupSpec::Line {
+                start: *p.first().ok_or(SpecReadError::BadGeometry { key: "P" })?,
+                end: *p.get(1).ok_or(SpecReadError::BadGeometry { key: "P" })?,
+                color: border.unwrap_or(Color::Gray(0.0)),
+                width: width()?,
+                endings: ends,
+            }
+        }
+        b"ink" => {
+            let Some(Object::Array(items)) = d.get(b"S") else {
+                return Err(SpecReadError::BadGeometry { key: "S" });
+            };
+            let strokes: Vec<Vec<(f64, f64)>> = items.iter().filter_map(points_of).collect();
+            if strokes.is_empty() {
+                return Err(SpecReadError::BadGeometry { key: "S" });
+            }
+            MarkupSpec::Ink {
+                strokes,
+                color: border.unwrap_or(Color::Gray(0.0)),
+                width: width()?,
+            }
+        }
+        b"polygon" => MarkupSpec::Polygon {
+            vertices: vertices()?,
+            border,
+            interior,
+            width: width()?,
+        },
+        b"cloud" => MarkupSpec::Cloud {
+            vertices: vertices()?,
+            border,
+            interior,
+            width: width()?,
+            intensity: d
+                .get(b"BE")
+                .and_then(Object::as_number)
+                .ok_or(SpecReadError::BadGeometry { key: "BE" })?,
+        },
+        b"polyline" => MarkupSpec::PolyLine {
+            vertices: vertices()?,
+            color: border.unwrap_or(Color::Gray(0.0)),
+            width: width()?,
+        },
+        b"textmarkup" => {
+            let nums = match d.get(b"Q") {
+                Some(Object::Array(a)) => {
+                    a.iter().filter_map(Object::as_number).collect::<Vec<f64>>()
+                }
+                _ => Vec::new(),
+            };
+            if nums.is_empty() || !nums.len().is_multiple_of(8) {
+                return Err(SpecReadError::BadGeometry { key: "Q" });
+            }
+            let quads = nums
+                .chunks_exact(8)
+                .filter_map(|q| match q {
+                    &[ulx, uly, urx, ury, llx, lly, lrx, lry] => Some(Quad {
+                        ul: (ulx, uly),
+                        ur: (urx, ury),
+                        ll: (llx, lly),
+                        lr: (lrx, lry),
+                    }),
+                    _ => None,
+                })
+                .collect();
+            MarkupSpec::TextMarkup {
+                kind: match d.get(b"TK") {
+                    Some(Object::Name(n)) => match n.as_bytes() {
+                        b"underline" => TextMarkupKind::Underline,
+                        b"strikeout" => TextMarkupKind::StrikeOut,
+                        b"squiggly" => TextMarkupKind::Squiggly,
+                        _ => TextMarkupKind::Highlight,
+                    },
+                    _ => TextMarkupKind::Highlight,
+                },
+                quads,
+                color: border.unwrap_or(Color::Gray(0.0)),
+            }
+        }
+        other => {
+            return Err(SpecReadError::UnsupportedSubtype {
+                subtype: String::from_utf8_lossy(other).into_owned(),
+            });
+        }
+    })
+}
+
+const fn text_markup_token(kind: TextMarkupKind) -> &'static [u8] {
+    match kind {
+        TextMarkupKind::Highlight => b"highlight",
+        TextMarkupKind::Underline => b"underline",
+        TextMarkupKind::StrikeOut => b"strikeout",
+        TextMarkupKind::Squiggly => b"squiggly",
+    }
+}
+
+fn line_ending_of(obj: Option<&Object>) -> LineEnding {
+    match obj {
+        Some(Object::Name(n)) => match n.as_bytes() {
+            b"OpenArrow" => LineEnding::OpenArrow,
+            b"ClosedArrow" => LineEnding::ClosedArrow,
+            _ => LineEnding::None,
+        },
+        _ => LineEnding::None,
+    }
+}
+
+fn rect_object(r: Rect) -> Object {
+    Object::Array(vec![
+        Object::Real(r.llx),
+        Object::Real(r.lly),
+        Object::Real(r.urx),
+        Object::Real(r.ury),
+    ])
+}
+
+fn rect_of(obj: &Object) -> Option<Rect> {
+    let a = obj.as_array()?;
+    match a.iter().filter_map(Object::as_number).collect::<Vec<_>>()[..] {
+        [llx, lly, urx, ury] => Some(Rect { llx, lly, urx, ury }),
+        _ => None,
+    }
+}
+
+fn points_object(points: &[(f64, f64)]) -> Object {
+    let mut flat = Vec::with_capacity(points.len() * 2);
+    for (x, y) in points {
+        flat.push(Object::Real(*x));
+        flat.push(Object::Real(*y));
+    }
+    Object::Array(flat)
+}
+
+fn points_of(obj: &Object) -> Option<Vec<(f64, f64)>> {
+    let nums: Vec<f64> = obj
+        .as_array()?
+        .iter()
+        .filter_map(Object::as_number)
+        .collect();
+    if nums.is_empty() || !nums.len().is_multiple_of(2) {
+        return None;
+    }
+    Some(
+        nums.chunks_exact(2)
+            .filter_map(|p| match p {
+                &[x, y] => Some((x, y)),
+                _ => None,
+            })
+            .collect(),
+    )
+}
+
+/// A colour as its component array — 1, 3 or 4 reals, exactly as §12.5.6's
+/// `/C` uses length to say which space it is in.
+fn put_colour(d: &mut Dict, key: &[u8], colour: Option<&Color>) {
+    let Some(colour) = colour else {
+        return;
+    };
+    let components = match *colour {
+        Color::Gray(g) => vec![g],
+        Color::Rgb(r, g, b) => vec![r, g, b],
+        Color::Cmyk(c, m, y, k) => vec![c, m, y, k],
+    };
+    d.insert(
+        Name::from(key),
+        Object::Array(components.into_iter().map(Object::Real).collect()),
+    );
+}
+
+fn colour_of(obj: Option<&Object>) -> Option<Color> {
+    let a = obj?.as_array()?;
+    let n: Vec<f64> = a.iter().filter_map(Object::as_number).collect();
+    match n[..] {
+        [g] => Some(Color::Gray(g)),
+        [r, g, b] => Some(Color::Rgb(r, g, b)),
+        [c, m, y, k] => Some(Color::Cmyk(c, m, y, k)),
+        _ => None,
+    }
+}
+
 /// The ellipse Bézier constant: the control-point distance, as a fraction
 /// of the radius, that makes four cubic segments approximate a quarter
 /// ellipse to within ~0.02% (`4/3 · (√2 − 1)`).

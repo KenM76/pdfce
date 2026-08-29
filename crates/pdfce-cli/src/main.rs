@@ -29196,25 +29196,11 @@ fn cmd_object_copy(args: &ObjectCopyArgs<'_>) -> u8 {
     // core had no annotation-aware cut to call until `Pass 168.0`; now it
     // does, and it also folds every deletion into ONE undo entry and refuses
     // a selection holding an annotation the clipboard cannot carry back.
-    // ★ AND A CUT WHOSE CLIPBOARD FILE CANNOT HOLD THE THING IS A DELETE.
-    //
-    // `ObjectClip::to_bytes` does not serialise annotations, so a `--cut` of
-    // one would remove it from the page and write a clip file that cannot
-    // put it back -- destroying it, through a flag whose whole promise is
-    // that the thing is on the clipboard. The in-session clipboard carries
-    // annotations fine; the FILE does not, and the CLI only has the file.
-    //
-    // Refused rather than warned, for the same reason `cut_selection`
-    // refuses an annotation it cannot model: by the time the operator finds
-    // out, the only copy is gone. `object-copy` without `--cut` still copies
-    // it and still says the file will not carry it.
-    if cut.is_some() && !annots.is_empty() {
-        eprintln!(
-            "pdfce-cli: object-copy refused: --cut with --annotations would remove {} annotation(s) and write a clipboard file that cannot put them back -- this clip format serialises content objects only. Copy them without --cut, or cut only --objects.",
-            annots.len()
-        );
-        return exit::EDIT_REFUSED;
-    }
+    // NOTE: `--cut` with `--annotations` was REFUSED between `Pass 168.0`
+    // and `Pass 169.0`, because the clip FILE dropped annotations and the CLI
+    // only ever has the file -- so that cut would have destroyed them. The
+    // clip format carries them as of version 2, so the refusal is gone and
+    // the disclosure below no longer fires.
     let clip = if cut.is_some() {
         match session.cut_selection(page_index, &indices, &annots) {
             Ok(clip) => clip,
@@ -29256,9 +29242,14 @@ fn cmd_object_copy(args: &ObjectCopyArgs<'_>) -> u8 {
         );
     }
 
+    // Kept, and it no longer fires: `annotations_survive_serialisation` has
+    // answered `true` for every clip since the format started carrying them
+    // (`Pass 169.0`). Left in place rather than deleted because it is the
+    // honest shape -- if a future clip kind is added that the file cannot
+    // hold, this is where the operator must be told.
     if !clip.annotations_survive_serialisation() {
         eprintln!(
-            "pdfce-cli: object-copy: {} annotation(s) were copied but are NOT carried by the clipboard file -- this cut serialises content objects only, so a paste from this file will place the content and not the annotations.",
+            "pdfce-cli: object-copy: {} annotation(s) were copied but are NOT carried by the clipboard file, so a paste from this file will place the content and not the annotations.",
             clip.annotation_count()
         );
     }

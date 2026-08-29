@@ -871,11 +871,36 @@ The two exceptions are `transform_objects` / `transform_preview`
 > between two renderings; it is pdfce doing the one available and disclosing
 > it. Point-based markup and every ce dimension rotate faithfully.
 >
-> ★★ **`to_bytes` does NOT carry annotations in this cut, and the clip says
-> so**: `clip.annotations_survive_serialisation()`. Ask it before writing a
-> clip to disk — the alternative is a payload that quietly loses the operator's
-> comments, which is the kind of data loss only noticed later. An in-process or
-> in-session annotation clipboard works today.
+> ★★ **`to_bytes` CARRIES annotations as of `Pass 169.0`** (clip format
+> version 2). This paragraph used to say the opposite, and the change is worth
+> stating plainly rather than editing away: until then the clip file dropped
+> every annotation, `clip.annotations_survive_serialisation()` answered `false`
+> whenever the clip held one, and the annotation half of the clipboard was
+> reachable **in-process only** — `pdfce-cli` could never paste an annotation
+> of any kind, because the CLI only ever has the file.
+>
+> `annotations_survive_serialisation()` now answers `true` for every clip. It
+> is **kept, not removed**: it is public, a shell may be branching on it, and a
+> caller that still checks simply always takes the survives branch. Deleting it
+> would be a breaking change made to announce good news.
+>
+> **What makes it exact.** Each annotation travels as the COS object pdfce
+> already has a codec for — `annot_author::encode_spec`/`decode_spec` for a
+> markup spec, `dimension::sidecar`'s for a ce dimension's geometry — written
+> and read by the same `write_object`/`Parser` pair every resource object
+> takes. There is no second byte format, which was the original objection to
+> serialising annotations at all.
+>
+> ★ **A version-1 payload still reads**, carrying its content and no
+> annotations, so a clip written by an older build is not refused.
+>
+> ★ **A ce dimension still travels by group NAME**, matched or created on
+> paste. Its group's **scale, drafting standard and style are NOT carried**, so
+> a dimension pasted into a document with no group of that name lands in a
+> freshly created default-styled group — and, since the label derives from the
+> scale, it can then READ DIFFERENTLY from the one it was copied from. Neither
+> is that dimension's own per-dimension style override carried. Both are owed
+> work, not properties of the format.
 >
 > #### One more limit, named so you do not find it by pressing
 >
@@ -2169,7 +2194,7 @@ object that did not exist then; pdfce never reads a clock).
 | `carried_font() -> Option<&[u8]>` | The `/DR` resource name travelling with it. |
 | `bbox() -> Option<Rect>` | The union of the source widgets' rectangles — for a paste-preview outline. |
 | `object_count() -> usize` | Size of the owned closure. |
-| `to_bytes() / from_bytes` | **Everything survives the round trip** — unlike `ObjectClip`, which drops its annotations. Magic `PDFCEFLD…`, versioned, refuses a newer format. |
+| `to_bytes() / from_bytes` | **Everything survives the round trip.** Magic `PDFCEFLD…`, versioned, refuses a newer format. (`ObjectClip` is total too as of `Pass 169.0`; it was not when this row was written.) |
 
 #### `FieldPastePolicy` — the two chords, and their refusals
 

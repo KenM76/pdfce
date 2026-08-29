@@ -75,7 +75,7 @@ use super::geometry::{Bounds, Matrix};
 /// *will* copy in one and paste in the other. `Pass 120.1` (`to_bytes`) is
 /// what makes that reachable; the version is carried from the start so the
 /// refusal exists before the payload can travel.
-pub const CLIP_VERSION: u32 = 1;
+pub const CLIP_VERSION: u32 = 2;
 
 /// The seven resource categories a content stream can name (§7.8.3 Table 33).
 ///
@@ -280,15 +280,23 @@ pub struct ObjectClip {
     /// The copied **annotations** (`Pass 120.4`) — a separate payload from
     /// [`Self::items`], for the reasons on [`ClipAnnotation`].
     ///
-    /// **Not serialised by [`Self::to_bytes`] in this cut**, and that is a
-    /// stated limit rather than an oversight: `MarkupSpec` and `DimensionKind`
-    /// are rich enums whose byte encoding would be a second format to version
-    /// alongside the content one, and getting it wrong means a clip that
-    /// parses and pastes the wrong shape. An in-session or in-process
-    /// annotation clipboard works today; a serialised one is its own decision.
-    /// [`Self::to_bytes`] therefore drops them and
-    /// [`Self::annotations_survive_serialisation`] says so, rather than
-    /// letting a caller discover it from a count.
+    /// **Serialised as of `Pass 169.0`** (clip format version 2). Until then
+    /// [`Self::to_bytes`] dropped them, and the stated reason was that
+    /// `MarkupSpec` and `DimensionKind` are rich enums whose BYTE encoding
+    /// would be a second format to version alongside the content one.
+    ///
+    /// That objection was right about a byte encoding, and is answered by not
+    /// writing one: each model is carried as **the COS object pdfce already
+    /// has a codec for** — [`encode_spec`](crate::annot_author::encode_spec)
+    /// for a markup spec, `dimension::sidecar`'s for a ce dimension's
+    /// geometry — through the same `write_object`/`Parser` pair every
+    /// resource object above takes. One COS grammar implementation on each
+    /// side; no second format.
+    ///
+    /// The consequence is larger than it looks: until this landed,
+    /// `pdfce-cli` could **never** paste an annotation of any kind, because
+    /// the CLI only ever has the file. The whole annotation half of the
+    /// clipboard was reachable in-process only.
     pub annotations: Vec<ClipAnnotation>,
 }
 
@@ -340,7 +348,19 @@ impl ObjectClip {
     /// instead of finding out on the paste.
     #[must_use]
     pub fn annotations_survive_serialisation(&self) -> bool {
-        self.annotations.is_empty()
+        // ★ ALWAYS TRUE since `Pass 169.0`, and kept rather than removed.
+        //
+        // It used to answer `self.annotations.is_empty()`, because
+        // `to_bytes` dropped them. It does not any more: every
+        // `ClipAnnotation` is carried, so the honest answer is now yes for
+        // every clip.
+        //
+        // A method that can only return `true` is a smell, and deleting it
+        // would be the tidier code -- but it is PUBLIC, a consuming shell is
+        // branching on it, and removing it is a breaking change to say
+        // "the answer improved". A caller that still checks now simply
+        // always takes the survives branch, which is correct.
+        true
     }
 }
 
@@ -458,6 +478,53 @@ fn put_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
     out.extend_from_slice(bytes);
 }
 
+/// How many annotations one clip may carry.
+///
+/// Checked BEFORE the read loop reserves for the count, so a hostile length
+/// prefix cannot make a reader allocate on its way to being refused.
+pub const MAX_CLIP_ANNOTATIONS: usize = 4096;
+
+/// Write a COS object as a length-prefixed PDF-syntax payload.
+///
+/// The same route the clip's resource objects take, so the COS grammar has
+/// exactly one implementation on each side rather than a second one living
+/// here.
+fn put_cos(out: &mut Vec<u8>, value: &Object) {
+    use crate::object::ObjId;
+    use crate::writer::encoder::IdentityEncoder;
+    use crate::writer::serialize::write_object;
+    let mut encoded = Vec::new();
+    write_object(&mut encoded, value, ObjId::new(0, 0), &[], &IdentityEncoder);
+    put_bytes(out, &encoded);
+}
+
+/// The clip's tag for a ce dimension's unit.
+///
+/// A stable integer rather than the unit's `abbrev()`, because two units
+/// share one abbreviation (`DecimalFeet` and `FeetInches` are both `ft`) and
+/// a clip that read the label back would collapse them.
+const fn unit_tag(unit: crate::dimension::Unit) -> u8 {
+    match unit {
+        crate::dimension::Unit::Millimeter => 0,
+        crate::dimension::Unit::Centimeter => 1,
+        crate::dimension::Unit::Meter => 2,
+        crate::dimension::Unit::Inch => 3,
+        crate::dimension::Unit::DecimalFeet => 4,
+        crate::dimension::Unit::FeetInches => 5,
+    }
+}
+
+const fn unit_of_tag(tag: u8) -> crate::dimension::Unit {
+    match tag {
+        1 => crate::dimension::Unit::Centimeter,
+        2 => crate::dimension::Unit::Meter,
+        3 => crate::dimension::Unit::Inch,
+        4 => crate::dimension::Unit::DecimalFeet,
+        5 => crate::dimension::Unit::FeetInches,
+        _ => crate::dimension::Unit::Millimeter,
+    }
+}
+
 /// A cursor over a serialised clip, which refuses rather than panicking on a
 /// short read.
 struct Reader<'a> {
@@ -494,6 +561,14 @@ impl<'a> Reader<'a> {
     fn bytes(&mut self) -> Result<Vec<u8>, ClipError> {
         let len = self.u32()? as usize;
         Ok(self.take(len)?.to_vec())
+    }
+
+    /// Parse a length-prefixed COS payload written by [`put_cos`].
+    fn cos(&mut self) -> Result<Object, ClipError> {
+        let encoded = self.bytes()?;
+        crate::parser::Parser::at(&encoded, 0)
+            .parse_object()
+            .map_err(|e| ClipError::Content(e.to_string()))
     }
 
     fn matrix(&mut self) -> Result<Matrix, ClipError> {
@@ -625,6 +700,40 @@ impl ObjectClip {
                 None => out.push(0),
             }
         }
+        // -- THE ANNOTATIONS (format version 2, `Pass 169.0`) -------------
+        //
+        // Version 1 stopped here, and the field's own doc explained why: a
+        // BYTE encoding of `MarkupSpec` and `DimensionKind` would be a second
+        // format to version alongside this one. That objection stands, and is
+        // answered by not writing one -- each model is carried as the COS
+        // object pdfce already has a codec for, through the same
+        // `write_object`/`Parser` pair every resource object above takes.
+        put_u32(
+            &mut out,
+            u32::try_from(self.annotations.len()).unwrap_or(u32::MAX),
+        );
+        for annotation in &self.annotations {
+            match annotation {
+                ClipAnnotation::Markup(spec) => {
+                    out.push(0);
+                    put_cos(&mut out, &crate::annot_author::encode_spec(spec));
+                }
+                ClipAnnotation::Dimension {
+                    group_name,
+                    unit,
+                    kind,
+                } => {
+                    out.push(1);
+                    put_bytes(&mut out, group_name.as_bytes());
+                    out.push(unit_tag(*unit));
+                    put_cos(&mut out, &crate::dimension::sidecar::serialize_kind(kind));
+                }
+                ClipAnnotation::Unsupported { subtype } => {
+                    out.push(2);
+                    put_bytes(&mut out, subtype.as_bytes());
+                }
+            }
+        }
         out
     }
 
@@ -707,13 +816,53 @@ impl ObjectClip {
             objects.insert(id, ClipObject { value, payload });
         }
 
+        // Version 1 payloads stop here and carry no annotations; version 2
+        // onwards do. Read conditionally rather than refusing, so a clip
+        // written by an older build still pastes its content.
+        let mut annotations = Vec::new();
+        if version >= 2 {
+            let count = r.u32()? as usize;
+            if count > MAX_CLIP_ANNOTATIONS {
+                return Err(ClipError::ClipTooLarge {
+                    found: count,
+                    limit: MAX_CLIP_ANNOTATIONS,
+                });
+            }
+            annotations.reserve(count);
+            for _ in 0..count {
+                annotations.push(match r.take(1)?.first().copied().unwrap_or(2) {
+                    0 => ClipAnnotation::Markup(Box::new(
+                        crate::annot_author::decode_spec(&r.cos()?)
+                            .map_err(|e| ClipError::Content(e.to_string()))?,
+                    )),
+                    1 => {
+                        let group_name = String::from_utf8_lossy(&r.bytes()?).into_owned();
+                        let unit = unit_of_tag(r.take(1)?.first().copied().unwrap_or(0));
+                        let kind = crate::dimension::sidecar::deserialize_kind(&r.cos()?)
+                            .ok_or_else(|| {
+                                ClipError::Content(
+                                    "a ce dimension's geometry could not be read back".to_owned(),
+                                )
+                            })?;
+                        ClipAnnotation::Dimension {
+                            group_name,
+                            unit,
+                            kind: Box::new(kind),
+                        }
+                    }
+                    _ => ClipAnnotation::Unsupported {
+                        subtype: String::from_utf8_lossy(&r.bytes()?).into_owned(),
+                    },
+                });
+            }
+        }
+
         Ok(Self {
             version,
             items,
             objects,
             bbox,
-            // Not carried by this format -- see `ObjectClip::annotations`.
-            annotations: Vec::new(),
+            annotations,
         })
     }
 }
@@ -1350,7 +1499,12 @@ fn free_name(existing: &Dict, category: &[u8], taken: &BTreeSet<Vec<u8>>) -> Vec
 
 /// A bounding box under a matrix — all four corners mapped, then re-enclosed,
 /// because a rotation makes the naive two-corner version wrong.
-fn transformed_bounds(b: Bounds, m: Matrix) -> Bounds {
+/// Map bounds through a page-space matrix, mapping all four corners.
+///
+/// `pub(crate)` as of `Pass 169.0` so `plan_paste_at` can compute the bbox of
+/// an annotation-only paste, whose items are empty and whose bounds therefore
+/// have to come from the clip rather than from the plan.
+pub(crate) fn transformed_bounds(b: Bounds, m: Matrix) -> Bounds {
     if b.min.x > b.max.x {
         return b;
     }

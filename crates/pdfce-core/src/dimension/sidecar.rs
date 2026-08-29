@@ -293,6 +293,39 @@ fn deserialize_group(obj: &Object) -> Option<Group> {
 
 // ---- dimension (de)serialization --------------------------------------------
 
+/// A [`DimensionKind`] alone, as a COS object, for the clipboard
+/// (`Pass 169.0`).
+///
+/// # Why this goes through the whole-record codec rather than beside it
+///
+/// The kind's encoding lives inside [`serialize_dimension`], keyed by
+/// `/Kind`. Writing a second encoder for the same enum is how the two drift:
+/// a new `DimensionKind` variant would be added to one and not the other, and
+/// the failure would be a clipboard that pastes the wrong shape — a
+/// *plausible* wrong shape, since every variant is a valid ce dimension.
+///
+/// So this builds a throwaway record around the kind and reuses the one
+/// encoder. The `/Id` and `/Group` it writes are placeholders and are
+/// **discarded** on read: a dimension id means nothing in another document,
+/// and the group travels by NAME on the clip (see
+/// [`ClipAnnotation::Dimension`](crate::vector::ClipAnnotation)) precisely
+/// because a `GroupId` does not survive the trip either.
+pub(crate) fn serialize_kind(kind: &DimensionKind) -> Object {
+    serialize_dimension(&DimensionRecord {
+        id: DimensionId(0),
+        group: GroupId(0),
+        kind: kind.clone(),
+        annot: None,
+        ap: None,
+        style: crate::dimension::style::StyleOverrides::default(),
+    })
+}
+
+/// Read back what [`serialize_kind`] wrote, discarding the placeholder ids.
+pub(crate) fn deserialize_kind(obj: &Object) -> Option<DimensionKind> {
+    deserialize_dimension(obj).map(|record| record.kind)
+}
+
 fn serialize_dimension(dim: &DimensionRecord) -> Object {
     let mut d = Dict::new();
     d.insert(Name::from(b"Id"), Object::Integer(i64::from(dim.id.0)));

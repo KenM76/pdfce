@@ -1115,12 +1115,26 @@ fn a_rotated_square_annotation_encloses_and_discloses() {
     );
 }
 
-/// ★ **`to_bytes` does not carry annotations, and the clip SAYS SO** rather
-/// than letting a caller discover it from a count that silently drops.
+/// ★ **`to_bytes` CARRIES annotations as of `Pass 169.0`**, and the clip
+/// still says so.
 ///
-/// A shell writing a clip to disk can warn, or keep the in-process copy. The
-/// alternative — a serialised clip that quietly loses the operator's comments
-/// — is the kind of data loss that is only noticed later.
+/// This test used to pin the opposite, and the old wording is worth keeping
+/// legible rather than silently rewritten. It read:
+///
+/// > ★ **`to_bytes` does not carry annotations, and the clip SAYS SO**
+/// > rather than letting a caller discover it from a count that silently
+/// > drops. A shell writing a clip to disk can warn, or keep the in-process
+/// > copy.
+///
+/// That was the right test for a format that dropped them, and the
+/// consequence was larger than the wording admitted: `pdfce-cli` could never
+/// paste an annotation of any kind, because the CLI only ever has the file.
+///
+/// The format carries them now (version 2), so
+/// `annotations_survive_serialisation` answers `true` for every clip. The
+/// method is kept rather than deleted — it is public, a shell may be
+/// branching on it, and a caller that still checks simply always takes the
+/// survives branch.
 #[test]
 fn a_clip_says_whether_serialisation_would_lose_anything() {
     use pdfce_core::annot_author::{Color, MarkupSpec};
@@ -1134,34 +1148,36 @@ fn a_clip_says_whether_serialisation_would_lose_anything() {
         "a content-only clip serialises completely"
     );
 
-    session
-        .add_markup(
-            0,
-            &MarkupSpec::Square {
-                rect: Rect {
-                    llx: 1.0,
-                    lly: 1.0,
-                    urx: 2.0,
-                    ury: 2.0,
-                },
-                border: Some(Color::Rgb(0.0, 0.0, 0.0)),
-                interior: None,
-                border_width: 1.0,
-                border_effect: None,
-            },
-        )
-        .unwrap();
+    let spec = MarkupSpec::Square {
+        rect: Rect {
+            llx: 1.0,
+            lly: 1.0,
+            urx: 2.0,
+            ury: 2.0,
+        },
+        border: Some(Color::Rgb(0.0, 0.0, 0.0)),
+        interior: None,
+        border_width: 1.0,
+        border_effect: None,
+    };
+    session.add_markup(0, &spec).unwrap();
     let with_annots = session.copy_annotations(0, &[0]).unwrap();
     assert!(
-        !with_annots.annotations_survive_serialisation(),
-        "a clip holding annotations must say that to_bytes would drop them"
+        with_annots.annotations_survive_serialisation(),
+        "and so does one holding annotations, since Pass 169.0"
     );
     let parsed =
         pdfce_core::vector::ObjectClip::from_bytes(&with_annots.to_bytes()).expect("it parses");
     assert_eq!(
         parsed.annotation_count(),
-        0,
-        "and the drop is real, not merely warned about"
+        1,
+        "the annotation came through the wire, not merely a promise that it would"
+    );
+    assert_eq!(
+        parsed.annotations, with_annots.annotations,
+        "and it came through UNCHANGED -- the clip carries each annotation as \
+         the COS object pdfce already has a codec for, so the round trip is \
+         exact rather than approximate"
     );
 }
 
