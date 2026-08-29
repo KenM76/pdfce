@@ -10,7 +10,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 170 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 173 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 170 public `EditSession` methods
+## 1. Verb index — all 173 public `EditSession` methods
 
-**Count: 170.** Established by brace-matched extraction of the four
+**Count: 173.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -2541,6 +2541,55 @@ nothing when clicked — nothing on screen distinguishes it.
 which is the number `--item` takes — it printed only a sequence counter
 before, which made the verb unreachable from the one command that lists
 bookmarks.
+
+### 1.30 Embedded files on the clipboard (3) — `Pass 173.0`
+
+| I want to… | Call | Returns |
+|---|---|---|
+| Copy an embedded file | `copy_attachment(&self, key: &[u8]) -> Result<AttachmentClip, EditError>` | `&self`. |
+| Cut one | `cut_attachment(&mut self, key: &[u8]) -> Result<AttachmentClip, EditError>` | **ONE undo entry.** |
+| Paste one | `paste_attachment(&mut self, clip: &AttachmentClip) -> Result<ObjId, EditError>` | The new file-spec object. |
+
+`AttachmentClip` lives in **`pdfce_core::attachments`**: `name`, `bytes`,
+`description`, plus `new(..)`, `len()`, `is_empty()`.
+
+`key` is the name-tree key as `Attachment::name_bytes` gives it — the **raw
+bytes**, not the decoded display name, because §7.9.6 makes a name-tree key a
+byte string and two attachments can decode to the same text.
+
+#### There is no `to_bytes`, deliberately
+
+**The clip's payload IS the file.** Write `bytes` out under `name` and you
+have the attachment; hand the pair back to `paste_attachment` and it goes into
+another document. A private envelope around a file that is already a file
+would be a format nobody needs.
+
+`AttachmentClip::new` exists so a shell can build one from a file the operator
+dropped on the window — which is the honest way to implement *"attach this"*:
+it is a paste.
+
+#### ★★ Cut matters more here than anywhere else on the clipboard
+
+For every other clip, a cut that carried nothing loses something the operator
+can see and re-make — a shape, a comment, a field. **An embedded file is the
+only copy of that data in the document.** A cut whose copy half failed would
+destroy it outright, with nothing on any page to hint it was ever there.
+
+The copy therefore runs first and a refusal detaches nothing, and that
+ordering is asserted by a test rather than inferred from the code.
+
+#### ⚠️ `name` is attacker-controlled text
+
+It came out of a document that arrived from somewhere, and **nothing in
+ISO 32000-1 constrains its content** — `..\..\Windows\System32\evil.exe`,
+`report.pdf\0.exe` and `CON.txt` are all spellable. **Do not pass it to the
+filesystem without sanitising it.** `paste_attachment` writing it back into
+another PDF is safe precisely because it never touches a path.
+
+**CLI:** copy and paste already existed as `extract-attachment` and
+`attach-file`. What was missing was cut: `extract-attachment --cut OUT.pdf`
+now extracts and detaches as one gesture, rather than two invocations an
+operator has to get the order of right.
 
 ## 2. Construction, and the session's three read views
 

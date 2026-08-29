@@ -31883,6 +31883,79 @@ impl EditSession {
         }
     }
 
+    /// **Copy an embedded file onto the clipboard** (`Pass 173.0`).
+    ///
+    /// `key` is the attachment's name-tree key, as
+    /// [`Attachment::name_bytes`](crate::attachments::Attachment::name_bytes)
+    /// gives it — the raw bytes, not the decoded display name, because
+    /// §7.9.6 makes a name-tree key a byte string and two attachments can
+    /// decode to the same text.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::AttachmentNotFound`] when nothing bears that key, and
+    /// [`EditError::AttachmentTreeUnsupported`] when the embedded-file tree
+    /// is a shape this build does not walk.
+    pub fn copy_attachment(
+        &self,
+        key: &[u8],
+    ) -> Result<crate::attachments::AttachmentClip, EditError> {
+        let view = self.view();
+        let listed = crate::attachments::list_attachments(&self.graph());
+        let found = listed
+            .iter()
+            .find(|a| a.name_bytes == key)
+            .ok_or(EditError::AttachmentNotFound)?;
+        // The DECODED bytes: what the operator would get from
+        // `extract-attachment`, and what `attach_file` expects on the way
+        // back in. Carrying the raw stream instead would mean carrying its
+        // `/Filter` chain and re-deriving the same answer at paste time.
+        let bytes = crate::attachments::attachment_bytes(&view, found)
+            .ok_or(EditError::AttachmentNotFound)?;
+        Ok(crate::attachments::AttachmentClip {
+            name: found.name.clone(),
+            bytes,
+            description: found.description.clone(),
+        })
+    }
+
+    /// **Cut an embedded file** — copy it and detach it, as ONE undo entry
+    /// (`Pass 173.0`).
+    ///
+    /// The copy runs first, so an attachment whose bytes cannot be decoded is
+    /// refused with nothing detached — which matters more here than anywhere
+    /// else in the clipboard family: **the embedded file is the only copy of
+    /// that data in the document**, and a cut that carried nothing would
+    /// destroy it.
+    ///
+    /// # Errors
+    ///
+    /// Everything [`Self::copy_attachment`] and [`Self::detach_file`] raise.
+    pub fn cut_attachment(
+        &mut self,
+        key: &[u8],
+    ) -> Result<crate::attachments::AttachmentClip, EditError> {
+        let clip = self.copy_attachment(key)?;
+        self.detach_file(key)?;
+        let _ = self.coalesce_last(1, CommandKind::CutSelection);
+        Ok(clip)
+    }
+
+    /// **Paste an embedded file into this document** (`Pass 173.0`).
+    ///
+    /// A straight [`Self::attach_file`], so it inherits that verb's guards and
+    /// its name-collision behaviour.
+    ///
+    /// # Errors
+    ///
+    /// Everything [`Self::attach_file`] raises.
+    pub fn paste_attachment(
+        &mut self,
+        clip: &crate::attachments::AttachmentClip,
+    ) -> Result<ObjId, EditError> {
+        self.attach_file(&clip.name, &clip.bytes, clip.description.as_deref())
+    }
+
     /// **Copy whole pages onto the clipboard** (`Pass 171.0`).
     ///
     /// # The clip IS a PDF, deliberately

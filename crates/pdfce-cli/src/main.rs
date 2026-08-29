@@ -2158,6 +2158,19 @@ enum Command {
         /// used.
         #[arg(long, short)]
         output: PathBuf,
+        /// Also DETACH the file from the document, writing the result here —
+        /// CUT (`Pass 173.0`).
+        ///
+        /// The extraction runs first, so an attachment whose bytes cannot be
+        /// decoded is refused with nothing detached. That ordering matters
+        /// more here than anywhere else: the embedded file is the ONLY copy
+        /// of that data in the document, so a cut that carried nothing would
+        /// destroy it with nothing on any page to hint it was ever there.
+        #[arg(long, value_name = "OUTPUT.pdf")]
+        cut: Option<PathBuf>,
+        /// Save mode for `--cut`.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
     },
 
     /// **Attach a file to a PDF** as a document-level embedded file
@@ -7628,7 +7641,9 @@ fn run() -> ExitCode {
             input,
             name,
             output,
-        } => cmd_extract_attachment(&input, &name, &output),
+            cut,
+            mode,
+        } => cmd_extract_attachment(&input, &name, &output, cut.as_deref(), mode),
         Command::AttachFile {
             input,
             file,
@@ -13622,7 +13637,13 @@ listing. An empty or short list here is not a statement about the document's fon
 /// a right-to-left override making `gnp.exe` render as `exe.png`. A tool that
 /// wrote to a path taken from inside the document would be a path-traversal
 /// primitive, so this one cannot be asked to.
-fn cmd_extract_attachment(input: &Path, name: &str, output: &Path) -> u8 {
+fn cmd_extract_attachment(
+    input: &Path,
+    name: &str,
+    output: &Path,
+    cut: Option<&Path>,
+    mode: SaveMode,
+) -> u8 {
     let doc = match open_document(input) {
         Ok(doc) => doc,
         Err(err) => {
@@ -13656,7 +13677,37 @@ fn cmd_extract_attachment(input: &Path, name: &str, output: &Path) -> u8 {
             // length (§7.11.4.1 Table 46). A mismatch is REPORTED, not treated
             // as corruption — the bytes are still the bytes.
             println!("  size_check={:?}", extracted.size_check);
-            exit::SUCCESS
+            let Some(cut_output) = cut else {
+                return exit::SUCCESS;
+            };
+            // The CUT half, through the core verb so the detach and the
+            // extraction are the same gesture and one undo entry -- not two
+            // CLI invocations an operator has to get the order of right.
+            let (source, mut session) = match open_for_edit(input) {
+                Ok(pair) => pair,
+                Err(code) => return code,
+            };
+            if let Err(err) = session.cut_attachment(&found.name_bytes) {
+                return report_edit_error(input, &err);
+            }
+            let outcome = match save_edited(
+                &mut session,
+                &source,
+                cut_output,
+                mode,
+                ProducerArg::Preserve,
+                false,
+            ) {
+                Ok(outcome) => outcome,
+                Err(code) => return code,
+            };
+            println!(
+                "  cut=1 cut_out={} mode={} changed={}",
+                cut_output.display(),
+                mode.name(),
+                outcome.changed,
+            );
+            finish_edit(input, &outcome)
         }
         Err(err) => {
             eprintln!("pdfce-cli: {}: {name:?}: {err}", input.display());

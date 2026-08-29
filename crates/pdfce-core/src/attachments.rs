@@ -816,6 +816,75 @@ pub struct ExtractedAttachment {
 /// # }
 /// ```
 #[must_use]
+/// An embedded file on the clipboard (`Pass 173.0`).
+///
+/// # Why the DECODED bytes, and why that is the whole type
+///
+/// The clip carries what `extract-attachment` would have written to disk, not
+/// the raw embedded-file stream with its `/Filter` chain. Two reasons:
+/// [`EditSession::attach_file`](crate::edit::EditSession::attach_file) takes
+/// decoded bytes on the way back in, so carrying the raw form would mean
+/// re-deriving the same answer at paste time; and a clip whose payload is the
+/// file itself is one a shell can hand to anything.
+///
+/// So there is no serialisation method here. **The clip's payload IS the
+/// file** — write [`Self::bytes`] out under [`Self::name`] and you have the
+/// attachment; hand the pair back to
+/// [`paste_attachment`](crate::edit::EditSession::paste_attachment) and it
+/// goes into another document.
+///
+/// # ⚠️ [`Self::name`] is attacker-controlled text
+///
+/// It came out of a document that arrived from somewhere, and **nothing in
+/// ISO 32000-1 constrains its content** — see
+/// [`Attachment::name`](crate::attachments::Attachment::name) for the full
+/// warning and the shapes to expect. **Do not pass it to the filesystem
+/// without sanitising it**, and note that `paste_attachment` writing it back
+/// into another PDF is safe precisely because it never touches a path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct AttachmentClip {
+    /// The attachment's name, decoded. See the type's own warning.
+    pub name: String,
+    /// The file's decoded bytes — the payload itself.
+    pub bytes: Vec<u8>,
+    /// `/Desc`, the human-readable description, when the source carried one.
+    pub description: Option<String>,
+}
+
+impl AttachmentClip {
+    /// Build a clip from a file a shell already has in hand.
+    ///
+    /// Exists for the same reason
+    /// [`PageClip::from_bytes`](crate::pageops::PageClip::from_bytes) does:
+    /// the type is `#[non_exhaustive]`, so a consumer cannot write the struct
+    /// literal, and a clipboard a shell can read and never fill is half a
+    /// clipboard. This is also the honest way to implement *"attach the file
+    /// the operator just dropped on the window"* — it is a paste.
+    pub fn new(name: impl Into<String>, bytes: Vec<u8>, description: Option<String>) -> Self {
+        Self {
+            name: name.into(),
+            bytes,
+            description,
+        }
+    }
+
+    /// How many bytes the attached file holds.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    /// Whether the attached file is empty.
+    ///
+    /// An empty attachment is legal and occasionally meant — a zero-byte
+    /// marker file — so this is a question, not a refusal.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+}
+
 pub fn list_attachments<G: ObjectGraph + ?Sized>(graph: &G) -> Vec<Attachment> {
     list_attachments_with_notes(graph).0
 }
