@@ -833,3 +833,94 @@ fn the_root_has_no_expansion_state() {
         Err(EditError::OutlineRootIsNotAnItem { .. })
     ));
 }
+
+// ---------------------------------------------------------------------------
+// 7. THE CYCLE CHECK AT DEPTH — the property the first implementation could
+//    not guarantee
+// ---------------------------------------------------------------------------
+
+/// ★★ A cycle must be refused for a destination **anywhere** under the item,
+/// not just a shallow one.
+///
+/// This exists because the first implementation asked the question
+/// **downward** — build the item's subtree with `outline_subtree`, test
+/// membership — and `outline_subtree` carries a **breadth** guard
+/// (`MAX_OUTLINE_ITEMS`, 200 000) as well as a depth one. A subtree wider than
+/// that truncates, so a destination beyond the cut tests as *not in the
+/// subtree* and the move is allowed, **authoring the cycle the check exists to
+/// refuse**.
+///
+/// The fix asks it **upward** instead — walk the destination's `/Parent` chain
+/// looking for the item — which is bounded by `MAX_OUTLINE_DEPTH` and cannot
+/// be defeated by breadth at all.
+///
+/// A 200 000-item fixture is not something to check in (project rule 7, and it
+/// would dominate the suite's runtime). What *is* testable, and is the other
+/// half of the completeness claim, is that the upward walk reaches the **full
+/// depth**: `deep.pdf` is a 32-level chain, so refusing a move of the root-most
+/// item under the deepest one exercises the walk to its cap. A walk that
+/// stopped early would allow it.
+#[test]
+fn a_cycle_is_refused_at_the_full_depth_of_the_walk() {
+    let deep =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/synthetic/outline/deep.pdf");
+    let mut s = EditSession::new(Document::load(&deep).expect("load deep.pdf"));
+
+    let chain: Vec<ObjId> = read_outline(&s.graph())
+        .flatten()
+        .iter()
+        .map(|i| i.id)
+        .collect();
+    assert!(
+        chain.len() >= 30,
+        "fixture precondition: deep.pdf is a long chain, got {}",
+        chain.len()
+    );
+    let top = chain[0];
+
+    // Every descendant, from the shallowest to the deepest the reader can see.
+    for (depth, &target) in chain.iter().enumerate().skip(1) {
+        let err = s
+            .move_outline_item(
+                top,
+                OutlinePlacement::LastChild {
+                    parent: Some(target),
+                },
+            )
+            .expect_err("moving the top item under its own descendant is a cycle");
+        assert!(
+            matches!(err, EditError::OutlineMoveIntoOwnSubtree { .. }),
+            "at depth {depth} the refusal was {err:?}, not a cycle refusal — the \
+             ancestry walk stopped before reaching the item"
+        );
+    }
+    assert!(
+        s.dirty_set().is_empty(),
+        "every one of those was a refusal; none may have written anything"
+    );
+}
+
+/// The mirror: a legal move within that same deep chain still succeeds, so the
+/// test above is refusing cycles rather than refusing everything.
+///
+/// Without this, an implementation that returned `OutlineMoveIntoOwnSubtree`
+/// unconditionally would pass the test above perfectly.
+#[test]
+fn a_legal_move_in_the_same_deep_chain_still_succeeds() {
+    let deep =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/synthetic/outline/deep.pdf");
+    let mut s = EditSession::new(Document::load(&deep).expect("load deep.pdf"));
+    let chain: Vec<ObjId> = read_outline(&s.graph())
+        .flatten()
+        .iter()
+        .map(|i| i.id)
+        .collect();
+    let deepest = *chain.last().expect("the chain is not empty");
+
+    let report = s
+        .move_outline_item(deepest, OutlinePlacement::FirstChild { parent: None })
+        .expect("promoting the deepest item to the top level is legal");
+    assert!(report.moved && report.reparented);
+    let after = reload(&s);
+    assert_chain_is_sound(&after);
+}

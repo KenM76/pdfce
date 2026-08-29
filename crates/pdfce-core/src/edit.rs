@@ -27089,17 +27089,47 @@ impl EditSession {
         };
 
         // --- the cycle refusal --------------------------------------------
-        // Asked as "is the destination inside what I am moving?" rather than
-        // "does the destination's /Parent chain reach me?". The two questions
-        // agree on a well-formed tree, but only the subtree walk is bounded
-        // by the thing being moved, so a pre-existing cycle somewhere else in
-        // a damaged file cannot turn this check into a hang.
-        let subtree = self.outline_subtree(item_id);
-        if subtree.contains(&new_parent) {
-            return Err(EditError::OutlineMoveIntoOwnSubtree {
-                item: item_id,
-                target: new_parent,
-            });
+        //
+        // Asked UPWARD -- "does the destination's `/Parent` chain reach the
+        // item I am moving?" -- and bounded by `MAX_OUTLINE_DEPTH` (32).
+        //
+        // ★★ THE DOWNWARD FORM IS NOT SAFE HERE, and this comment used to
+        // argue that it was. The first version called `outline_subtree` and
+        // tested membership, justified on the grounds that only a downward
+        // walk is "bounded by the thing being moved" so a pre-existing cycle
+        // elsewhere could not hang it. Both halves of that were wrong:
+        //
+        //   * An upward walk cannot hang either -- it is a bounded `for` loop,
+        //     exactly like `is_under_outline_root`, which has run on every
+        //     outline verb since `Pass 103.0` against cycle-bearing fixtures.
+        //   * `outline_subtree` carries a BREADTH guard as well as a depth one
+        //     (`MAX_OUTLINE_ITEMS`, 200_000). A subtree wider than that
+        //     TRUNCATES, so a destination beyond the cut would test as "not in
+        //     the subtree" and the move would be allowed -- authoring the very
+        //     cycle the check exists to refuse. Pathological, and precisely
+        //     the shape `ARCHITECTURE.md` §10 says to assume of hostile input.
+        //
+        // The upward walk is COMPLETE for anything that can reach here:
+        // `is_under_outline_root` has already established that `new_parent` is
+        // at most `MAX_OUTLINE_DEPTH` links below the root, so a walk of that
+        // many steps from it must pass through every one of its ancestors --
+        // including `item_id`, if `item_id` is one.
+        let mut cursor = Some(new_parent);
+        for _ in 0..=crate::outline::MAX_OUTLINE_DEPTH {
+            let Some(id) = cursor else { break };
+            if id == item_id {
+                return Err(EditError::OutlineMoveIntoOwnSubtree {
+                    item: item_id,
+                    target: new_parent,
+                });
+            }
+            cursor = match self.value(id) {
+                Some(Object::Dict(d)) => match d.get(b"Parent") {
+                    Some(Object::Reference(r)) if *r != id => Some(*r),
+                    _ => None,
+                },
+                _ => None,
+            };
         }
 
         let reparented = new_parent != old_parent;
