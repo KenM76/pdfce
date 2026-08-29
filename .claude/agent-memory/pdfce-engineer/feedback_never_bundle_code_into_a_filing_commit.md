@@ -69,3 +69,32 @@ against grouping repairs in a code commit, and grouping them there is what
 keeps the filing docs-only.
 
 See [[librarian-needs-exact-hashes]] and [[run-the-projects-own-gates]].
+
+**★ A THIRD DIRECTION, learned 2026-08-29 — the PUSH, not the commit.**
+
+Everything above is about what goes *in* a commit. The push order is a
+separate decision with the same gate behind it, and it now matters more,
+because pushing `main` became standing-authorized on 2026-08-27
+(decision 090, *"always push"*).
+
+**Instance:** `Pass 167.0` (`d59ce99`) and a preceding defect fix
+(`c54f582`) were pushed, then the librarian was dispatched, then the filing
+(`dfdfb7e`) was pushed. CI on the first push went **red by construction** —
+`check-commits-filed.py` correctly reported `c54f582` as *"in no filing"*,
+because at that instant it was. The filing push then went green.
+
+Nothing was wrong with the code, the gates or the filing. **The red run was
+a true statement about a state that existed for twenty minutes**, and it
+sits in the run history for anyone reading CI colour later.
+
+**How to apply:** when a session produces code commits *and* a filing,
+**push once, after the filing commit lands.** Local `run-gates.sh` will
+also report the code commit as unfiled in that window — that is the same
+true-but-transient signal, not a defect to chase. If a push before the
+filing is unavoidable, say so, and check the *next* run rather than
+reporting the first one's colour.
+
+The tip commit is exempt (`commits-filed` defers it: *"a commit cannot cite
+its own hash"*), so pushing a **single** code commit and filing it next
+session is fine. It is the **second** unfiled code commit that turns the
+run red.
