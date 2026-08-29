@@ -108,6 +108,7 @@ LOCAL = {
     "tools/check-bypass-paths.sh": "bash tools/check-bypass-paths.sh",
     "tools/check-core-api-verbs.py": "python tools/check-core-api-verbs.py",
     "tools/check-clap-help.py": "python tools/check-clap-help.py",
+    "tools/check-cited-verbs-exist.py": "python tools/check-cited-verbs-exist.py",
     "tools/check-ledger-numbers.py": "python tools/check-ledger-numbers.py",
     "tools/check-metrics-line-contract.py": "python tools/check-metrics-line-contract.py",
     "tools/check-one-commit-per-command.py": "python tools/check-one-commit-per-command.py",

@@ -17869,10 +17869,22 @@ impl EditSession {
             });
         }
         if target.subtype == b"Widget" {
+            // ★ `rotate_widget` DOES NOT EXIST, and this message used to send
+            // the operator to it as though it did — found 2026-08-29 by
+            // grepping the verb names these refusals cite. The other three
+            // (`rotate_dimension`, `move_dimension_vertex`, `edit_widget`) all
+            // resolve; this one never has.
+            //
+            // That is worse than a dangling doc link: it is a RUNTIME message,
+            // read at the moment the operator is blocked, naming the way out.
+            // So the sentence now says plainly that there is no way out yet.
+            // It still names the verb the capability WILL be, because
+            // "unsupported" with no name is a dead end and "unsupported, and
+            // here is what it would be called" is a search term.
             return Err(EditError::AnnotationMoveWrongVerb {
                 subtype: "form widget".to_owned(),
                 use_instead: "rotate_widget",
-                why: "a widget's rotation is /MK /R (§12.5.6.19 Table 189), a quantised 0/90/180/270 declaration the field's appearance generator reads — not a free-angle transform",
+                why: "a widget's rotation is /MK /R (§12.5.6.19 Table 189), a quantised 0/90/180/270 declaration the field's appearance generator reads — not a free-angle transform. THAT VERB IS NOT BUILT YET, so there is no route to rotating a widget today; the free-angle transform this verb applies would be silently wrong for one",
             });
         }
 
@@ -19083,7 +19095,16 @@ impl EditSession {
             return Err(EditError::AnnotationMoveWrongVerb {
                 subtype: "ce dimension".to_owned(),
                 use_instead: "set_dimension_label",
-                why: "a ce dimension's text IS its measurement, so writing it must go through the verb that keeps the two agreeing",
+                // ★ Also a phantom, found by `tools/check-cited-verbs-exist.py`
+                // on its first run — I had gone looking for one and it found a
+                // second. There is no caption/label-override route on a ce
+                // dimension today: `set_dimension_style` is styling,
+                // `set_dimension_display` is the diameter/radius reading, and
+                // neither writes the text. Marked rather than re-pointed,
+                // because guessing at a near-neighbour verb would put the
+                // operator somewhere that does not do what the sentence
+                // promised — which is the failure being fixed, one step along.
+                why: "a ce dimension's text IS its measurement, so writing it must go through the verb that keeps the two agreeing. THAT VERB IS NOT BUILT YET — a ce dimension's caption is derived from the measurement, and there is no override route today",
             });
         }
         if target.subtype == b"Widget" {

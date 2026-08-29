@@ -424,6 +424,14 @@ jobs:
       - name: check every subcommand carries operator help text
         run: python tools/check-clap-help.py
 
+      # A refusal message names the verb that DOES handle the case. Nothing
+      # else checks those names: they compile, they are &'static str, and no
+      # test asserts on them. Two were phantoms -- `rotate_widget` and
+      # `set_dimension_label` -- read by an operator at the moment they were
+      # blocked, naming a way out that did not exist.
+      - name: check refusal messages cite verbs that exist
+        run: python tools/check-cited-verbs-exist.py
+
       # `render-page`'s stdout line is a published contract written down three
       # times: the `println!` that emits it, the `//!` template a consumer
       # reads, and an `assert_eq!` in the tests. Only the test copy is under
