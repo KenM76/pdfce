@@ -1,13 +1,26 @@
 ---
 name: worktrees-are-a-grep-trap
-description: .claude/worktrees/ holds full repo copies (28 GB, 7 of them as of 2026-08-29) — any recursive grep/find/du from the pdfce repo root must exclude it or it hangs
+description: .claude/worktrees/ accumulates full repo copies (hit 28 GB before being cleared 2026-08-29) — any recursive grep/find/du from the pdfce repo root must exclude it or it hangs
 metadata:
   type: reference
 ---
 
+> **★ CLEARED 2026-08-29** on Ken's instruction (*"clean up the scratch
+> copies"*): 7 worktrees and 10 leftover `worktree-agent-*` branches removed,
+> `.claude/` down from **28 GB to 1.4 MB**, `git worktree list` showing only
+> `main`. **The directory refills** — every `isolation: "worktree"` agent run
+> adds another full copy — so the trap below is dormant, not gone. Re-check
+> with `du -sh .claude` when a recursive command starts feeling slow.
+>
+> Cleanup that worked: `git worktree remove --force <path>` per entry (it
+> deregisters but **fails to delete the files** — "Permission denied", the
+> usual Windows read-only attributes on git objects), then **`rm -rf
+> .claude/worktrees`**, then `git branch -D` the `worktree-agent-*` branches,
+> then `rm -rf .git/worktrees && git worktree prune`.
+
 `D:\Dev\pdfce\.claude\worktrees\` contains **full working copies of the repo**,
 one per `isolation: "worktree"` agent run, each with its own `target/`. Measured
-2026-08-29: **7 worktrees, 28 GB.**
+2026-08-29 before clearing: **7 worktrees, 28 GB.**
 
 **They are gitignored** (`.gitignore:34`, `/.claude/worktrees/`) and
 `git ls-files .claude/worktrees` returns **0**, so they are no risk to the
