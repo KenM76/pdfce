@@ -913,3 +913,137 @@ hits in the preview"* proves nothing and must not be reported as if it did.
 - **ISO 14289-1 is free IN FULL from the PDF Association**, sponsored, but behind a
   **cart flow** (`pdfa-inc.org/cart/?add-to-cart=11541`) — not machine-fetchable.
   Needs the operator.
+
+---
+
+## Item 4m (2026-08-28) — THE CONFORMANCE-STANDARDS ACQUISITION SET: five routes, one of which RETRACTS a premise the role brief itself carries
+
+Learned building `conformance/conformance__ref__validator_scope.md` (a
+"enumerate every conformance standard we could validate" dispatch). Five reusable routes
+and one correction.
+
+### 4m-i ★★ THE WAYBACK `if_` SUFFIX IS THE WHOLE TRICK FOR `pdfa.org` PDFs
+
+`pdfa.org` 403s every direct PDF fetch (item 4h). The Wayback route of item 4d **works
+today** — but only in this exact shape:
+
+```
+curl -s "http://archive.org/wayback/available?url=<url-without-scheme>"   # -> exact timestamp
+curl -sL -o out.pdf "https://web.archive.org/web/<TIMESTAMP>if_/<full-url>"
+```
+
+**The bare year form `https://web.archive.org/web/2024id_/<url>` returned 403.** Use the
+timestamp the availability API gives you, and the **`if_`** suffix (raw content, no
+Wayback banner). This delivered **Matterhorn Protocol 1.1** (689 913 B) and **WTPDF
+1.0.0** (769 457 B), both `%PDF-1.7`, both `pypdf`-readable.
+
+**Also: the Wayback CDX SEARCH endpoint returned an "Internet Archive: Temporarily
+Offline" HTML page later in the same session while the content endpoint kept serving.**
+A CDX failure is **not** evidence a snapshot is missing — go via the availability API.
+
+### 4m-ii `etsi.org` IS A USER-AGENT GATE, NOT A PAYWALL
+
+Every ETSI deliverable 403s to a default `curl` UA and **200s to a browser UA**:
+
+```
+UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0 Safari/537.36"
+curl -sL -A "$UA" -o x.pdf "https://www.etsi.org/deliver/etsi_en/319100_319199/31914201/01.02.01_60/en_31914201v010201p.pdf"
+```
+
+Path grammar: `deliver/etsi_<en|ts>/<range>/<numnodots>/<VV.VV.VV>_60/<en|ts>_<numnodots>v<vvvvvv>p.pdf`.
+**No directory listing is served** (`/deliver/.../<num>/` returns the site's HTML shell),
+so **probe version paths**: `01.01.01_60`, `01.02.01_60`, `01.03.01_60`, … A 404 for one
+version is not a 404 for the deliverable. This found EN 319 142-1 **V1.2.1** and
+EN 319 102-1 **V1.3.1** where recall would have stopped at V1.1.1 — **and ISO 32000-2 §2
+pins PAdES to V1.1.1, so "current ETSI" and "PAdES as PDF 2.0 references it" are
+different documents.**
+
+### 4m-iii ★★★ THE CORRECTION: veraPDF's RULES ARE NOT UNDER THE LIBRARY'S COPYLEFT
+
+The role brief says to use "veraPDF's open validation rules/corpus", and a dispatch
+assumed the rules inherit the library's GPL. **Three separate licences:**
+
+| repo | licence | how verified |
+|---|---|---|
+| `veraPDF-library` | **GPLv3+ / MPLv2+ dual** | README §Licensing; GitHub API `GPL-3.0` |
+| `veraPDF-validation-profiles` | **CC BY 4.0** | repo README only — **no `LICENSE` file, GitHub API reports NO licence** |
+| `veraPDF-corpus` | **CC BY 4.0** | repo README only, same shape |
+
+**Generalise: check the licence of the DATA repo separately from the CODE repo of the
+same project. `api.github.com/repos/<org>/<repo>` → `.license.spdx_id` costs one call,
+and a `null` there means "read the README", not "unlicensed".** The softer answer is the
+dangerous one: a CC-BY data question is more likely to be waved through than a GPL code
+question, and it is still the operator's call.
+
+**And check the NOTICE, not just the LICENSE**: `arlington-pdf-model` has
+`LICENSE` = Apache-2.0 but `NOTICE.txt` says *"Software: Apache-2.0 … Other
+Documentation: CC BY 4.0"* — leaving the `tsv/` **data** in neither bucket.
+
+### 4m-iv ★★ A BUNDLED SUB-CORPUS CAN CARRY ITS OWN, CONTRADICTORY TERMS — READ THE MANUAL INSIDE IT
+
+The veraPDF corpus README declares **CC BY 4.0** over the repository. Inside it,
+`Isartor test files/doc/Isartor test suite manual.pdf` says, verbatim:
+**"Redistributing all or parts of the Isartor test suite is also not allowed."**
+
+**The finding was in a bundled PDF nobody would think to open** — a 20-page *manual*
+sitting beside 204 test files. **Before treating any aggregated corpus as
+redistributable, `find` it for `doc/`, `README`, `LICENSE`, `manual` and read them.**
+The same manual also supplied the only sourced statement of *what Isartor tests* (the
+PDF/A-1b **FAIL quadrant only**, out of a four-quadrant model) and of its
+non-coverage — so the trip paid twice.
+
+### 4m-v THE FREE STATUS REGISTER: `pdfa.org/iso-status/` VIA `r.jina.ai`
+
+One fetch returns the **entire current ISO work programme for PDF**, per working group,
+with **official title / common name / current status / next key date** for every item —
+TC 171/SC 2 WG 5 (PDF/A), WG 7 (PDF/E, 3D), WG 8 (PDF spec, PDF/R, the TS extension
+series), WG 9 (PDF/UA, ISO 32005), WG 12 (XMP), WG 13 (C2PA), JWG 14 (PDF/X), and
+TC 130 WG 2 (PDF/VT, PDF/VCR, PPM, processing steps). The page dates itself
+("Last updated: 9 June 2026").
+
+```
+curl -sL "https://r.jina.ai/https://pdfa.org/iso-status/" > status.txt   # jina defeats the 403
+```
+
+**★ ITS SCOPE IS *CURRENT WORK ITEMS*, SO ABSENCE IS NOT A NEGATIVE FOR OLD PARTS** —
+ISO 15930-1/-3/-4/-5/-6 are absent because they are legacy, not because they do not
+exist. For status of a specific old part, `r.jina.ai` + `iso.org/standard/<id>.html`
+returns a line like `[**Withdrawn**](…#lifecycle) (Edition 1, 2003)` — that is how
+**ISO 15930-5:2003 (PDF/X-2) was confirmed WITHDRAWN** and 15930-1/-3/-4/-6/-8 Published.
+**`iso.org/standard/<id>.html` returning 404 through jina is weak evidence a project was
+abandoned** (it was one of three strands for "PDF/E-2 never published"); one strand was
+the ISO/DIS preview's own voting dates (2013-08-19 → 2013-11-21).
+
+Companion register: **`pdf-association/pdf-corpora` (CC BY 4.0)** is the authoritative
+index of public PDF corpora — but **it states NO licences** and disclaims *"All copyright
+and trademarks remain with their respective owners."* Listing ≠ clearance.
+
+### 4m-vi THE PROFILE-ARITHMETIC MOVE — prove a spec-equivalence claim by SET DIFFERENCE
+
+WTPDF §6.1.3 *claims* an accessibility-level file meets all of ISO 14289-2. **That claim
+is checkable without the paywalled standard**: parse both veraPDF profiles, take
+`{(clause, testNumber)}` for each, diff them.
+
+```
+rid = re.compile(r'<id specification="([^"]*)" clause="([^"]*)" testNumber="([^"]*)"')
+```
+
+Result: `PDFUA-2 \ WTPDF-Accessibility` = the five clause-5 identification rules;
+`WTPDF-Accessibility \ PDFUA-2` = `{6.1.3/1}`; **86 rules identical**. **A vendor's
+equivalence claim is a HYPOTHESIS; a machine-readable rule set makes it a measurement.**
+The same diff, applied within one family, reproduced ISO 19005-1 §5.3's level definition
+exactly (`1a − 1b` = the six rules of §6.3.8 + §6.8) — i.e. **the profiles can be used to
+CORROBORATE a paywalled clause you have only read the front matter of.**
+
+### 4m-vii A TEST CORPUS ENCODES ITS EXPECTED VERDICTS TWICE, AND THE TWO DISAGREE
+
+veraPDF corpus: filename (`…-<pass|fail|undefined>-<instance>.pdf`) **and** a document
+outline bookmark (`expected result: <verdict>`). Measured over all 2 906 test PDFs:
+**2 874 agree, 4 DISAGREE, 28 have no such bookmark** (8 say `Actual result`, 18 have no
+outline at all, **2 contain the typo `espected result`**). One disagreeing file's own
+message reads *"expected message: **File is a valid PDF/A-1b document**"* under
+`expected result: fail`, and another's `instance` bookmark says `b` while its filename
+says `c`. **Prefer the mechanical channel (filename + directory path); parse the human
+channel only for the message; report a mismatch as a corpus defect.** Cost: ~40 lines of
+`pypdf` + `os.walk`, ~4 minutes over 2 906 files.
+

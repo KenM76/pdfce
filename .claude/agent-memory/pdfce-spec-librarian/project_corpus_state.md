@@ -4207,3 +4207,68 @@ edition-shifted inside a sentence about the older edition.
 - **`PYTHONIOENCODING=utf-8` must be exported, or an error `print()` containing `→`
   raises mid-loop AFTER earlier files were already written** — a half-applied patch set
   that looks like a logic bug. Set it on every patch invocation, not just extraction.
+
+---
+
+## Item 60 (2026-08-28) — THE LANDSCAPE-ENUMERATION dispatch: *"scope a future capability across ALL standards"*
+
+Shape: the operator wants a **Backlog scoping document**, not an implementation — an
+accurate enumeration so the roadmap entry names **real** standards and **real** rule
+sets. Deliverable = one cross-family register file. What this shape teaches:
+
+- **★★ A CROSS-FAMILY FILE BREAKS THE FRONTMATTER SCHEMA, AND THAT NEEDS THREE EDITS.**
+  `spec:` and `license_basis:` are single-valued by design; a register quantifying over
+  eight families can honestly be neither. Resolution: **`spec: multi`, `license_basis:
+  MIXED` with a §0 banner assigning a tier to EVERY claim**, plus a new **`measured`**
+  tier for counts computed by the librarian (a count has no *source*, only a reproducible
+  command — it is not a licence at all). **`_TEMPLATE.md` is the edit that gets missed**
+  (this is the second time; see item 57). Three edits: the file, `index.md`,
+  `_TEMPLATE.md` — and here a fourth, `LEGAL_NOTE.md`, because new licence tiers appeared.
+- **★★ THE DISPATCH'S OWN PREMISE WAS HALF WRONG, AND IT WAS THE LICENCE HALF.** It said
+  veraPDF's *"CODE and its machine-readable RULE DEFINITIONS"* are GPLv3/MPLv2 and so
+  cannot be used. **The rules are a separately-licensed CC BY 4.0 repository.** It asked
+  me to "verify this" and *"flag any ambiguity rather than resolving it"* — so the right
+  output was **a correction plus an unresolved flag**, not a decision. Generalise: when a
+  dispatch supplies a licence premise, **verify each artifact separately**; a project's
+  code repo and its data repo routinely differ, and **the softer licence is the more
+  dangerous finding** because it gets waved through.
+- **★ THE MOST VALUABLE FINDING WAS A CONFLICT, NOT A FACT.** The Isartor suite's own
+  manual forbids redistribution while sitting inside a CC-BY-declared corpus. **Do not
+  resolve; report both texts verbatim and name it an operator call.** Then state what is
+  operationally true *today* and what must stay true (`/fixtures/external/` is gitignored,
+  `git ls-files` returns 0, and **the pdfce repo is PUBLIC so committing it would BE
+  redistribution**).
+- **★ AN EXISTING CORPUS FILE ALREADY HELD HALF THE ANSWER.** `pdfx__ref__…` had the ISO
+  15930 Table 1 family map and full clause lists; `pdfa__ref__…` had the PDF/A rendering
+  axes. **The register must POINT, not restate** — and then each pointed-to file gets a
+  dated `UPDATE` footer saying what the register adds, plus a `related_files` entry, so
+  the cross-reference resolves in both directions.
+- **★ A COVERAGE QUESTION IS ANSWERABLE BY MEASUREMENT, NOT ONLY BY READING.** *"Is
+  PDF/X validatable?"* → **`veraPDF-validation-profiles` has exactly two directories,
+  `PDF_A` and `PDF_UA`** (one API call). *"Is UA-2 reachable without the paywall?"* → a
+  set-difference over two profiles proved WTPDF ≡ UA-2 minus the identification rule.
+  *"Which levels does a corpus cover?"* → `os.walk`. **Prefer a measured negative to a
+  read one; label it `measured` and print the command.**
+- **★ WHEN THE OPERATOR'S DOMAIN INTERSECTS ONE FAMILY, SAY SO EXPLICITLY.** The dispatch
+  flagged that Ken works with CAD-exported PDFs, so PDF/E "may matter more here than
+  usual". The honest answer inverted the expectation: **PDF/E-2 was never published and
+  the live engineering target is PDF/A-4e** — a level of a family that already has 111
+  machine rules and a staged corpus. **The domain hint was right and the standard it
+  named was wrong**; answering the hint rather than the letter is the deliverable.
+- **The buckets a validator needs are FIVE, not two**, and three standards force it
+  independently: **F** file-alone / **S** file-set (ISO 16612-2 §5.6, normative) /
+  **X** external context (ETSI EN 319 102-1: `INDETERMINATE` is a first-class verdict) /
+  **H** human judgement (Matterhorn: 47 of 136) / **N** not about files at all
+  (ISO 14289-1 clauses 8–9 constrain readers and AT). **A binary pass/fail report cannot
+  represent any of the three honestly — that is a project-rule-4 disclosure problem.**
+- **Two authorities can both be right and still disagree.** Matterhorn puts 47/136 PDF/UA
+  conditions in the human bucket; veraPDF machine-checks all 96 of its PDF/UA-1 rules and
+  tags only WCAG rules `human`. They answer *"can software decide this?"* vs *"is there a
+  sound test I can write?"*, and veraPDF resolves the gap **by not writing a rule at
+  all**. **Record the disagreement as the finding**; a rule count is complete only
+  relative to what someone chose to encode.
+- **Scope every acquisition negative to the METHOD** (item 4h's lesson, applied five
+  times here): "no free preview located" means *web search on the exact filename against
+  `cdn.standards.iteh.ai` on 2026-08-28*, and a negative of that shape expired in ONE DAY
+  once before.
+

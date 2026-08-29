@@ -68,3 +68,4 @@
 - [A shell flag can be parsed and never used](feedback_a_shell_flag_can_be_parsed_and_never_used.md) — unit tests hit core directly, so a half-wired CLI flag passes them all; only running the binary finds it
 - [Transform side effects are OPTIONS, not answers](feedback_transform_side_effects_are_options_not_answers.md) — Ken: ship the Inkscape toggle (scale stroke width etc.) with the safe default; convergence argues for a DEFAULT, not against an option
 - [An unticked box is unfalsifiable](feedback_an_unticked_box_is_unfalsifiable.md) — `[ ]` in FEATURES.md is a negative existential; nothing fails when it goes stale, so run the verb before reporting a gap
+- [A banned term cannot be cross-referenced](feedback_a_banned_term_cannot_be_cross_referenced.md) — the scrub ban hid a capability pdfce OWNS; one fact produced both a ruling violation and a wrong "no corpus" conclusion

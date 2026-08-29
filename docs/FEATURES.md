@@ -87,6 +87,20 @@ already in the file from CAD; pdfce reads it, never alters it
 `pdfce-cli --help` as stubs that print "not implemented". Not ticked
 anywhere; listed under *Planned*.
 
+**★★★ A `[ ]` IS A NEGATIVE EXISTENTIAL, NOT EVIDENCE — CHECK *IMPLEMENTED*
+BEFORE QUOTING A *PLANNED* ROW AS A GAP (added 2026-08-28, `Pass 159.0`/
+`160.0`).** `[x]` is falsifiable by the build — delete the function, tests go
+red. `[ ]` is falsifiable by **nothing**: no test, no gate, no compiler
+notices a capability arriving. Two *Planned* rows read absent while an
+*Implemented* row 178/184 lines away had already shipped the same
+capability, in core **and** CLI, and a decision document was **titled**
+after the thing the *Planned* row called unbuilt
+(`docs/decisions/026-…`, *"the offset that makes extension lines
+possible"*). Before reporting a gap read from this file — to Ken or to a
+consuming project — grep *Implemented* and `docs/decisions/` first. This
+file decays true → false only, never the reverse, so it is most wrong
+exactly where it is most read.
+
 ### The `Acrobat` column
 
 Does **Acrobat Pro** have the *capability* — never how its UI exposes it.
@@ -358,6 +372,7 @@ the model or verb exists and only the named shell is missing. The
 | [ ] | [ ] | [ ] | [x] | Redaction: mark by dragging on the canvas; Sanitize / Remove Hidden Information. **Sanitize is blocked on `Pass 73.0`** — the rule that would force it to a full rewrite (R58) is asserted, not enforced, so a Sanitize built today would save incrementally and its absence test could not fail. |
 | [ ] | [ ] | [ ] | [x] | Digital signatures — PKCS#7/PAdES signing and verification. |
 | [ ] | [ ] | [ ] | [x] | Bates numbering. |
+| [ ] | [ ] | [ ] | ◐ | Validate an existing document against a named conformance standard (PDF/A, PDF/UA, PDF/X, WTPDF …) and report per-rule pass / fail / needs-human findings, machine-readable — judges a file rather than producing one. Scoped in `ROADMAP.md` Backlog (arcs A–D, unscoped, no Pass ID), nothing built; Acrobat's own coverage is fragmented across Preflight and the Accessibility Checker, with no single PDF/UA validator. |
 | [ ] | [ ] | [ ] | [x] | PDF/A conformance and validation. |
 | [ ] | [ ] | [ ] | [x] | Accessibility (PDF/UA) tagging. |
 | [ ] | [ ] | [ ] | [x] | Document comparison. |

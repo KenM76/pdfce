@@ -74373,3 +74373,366 @@ for the claims, not the strings).
   with them.
 
 ---
+
+## 2026-08-28 (314th filing) — new request filed, nothing built: a conformance-validator Backlog scope, motivated by a Reddit accessibility thread the operator surfaced; two cross-RAG deliverables named by path; five licence questions filed
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8).
+Every measured figure below is relayed from the engineer's dispatch and
+reproduced exactly, not independently re-verified by this role — the
+dispatch's own numbers (rule counts, corpus file counts, line counts) are
+filed as relayed.
+
+**Shipped:** nothing — this is a new-request filing (`CLAUDE.md` rule 5,
+agent-file workflow #1), not a Pass completion. No code touched.
+
+**Decisions made this session:** none. No Pass ID minted (the operator
+asked for this filed at the bottom of Backlog, unscoped); no decision
+record filed (no crate boundary, library or invariant decided — this is
+a survey and a licence-flag exercise, not an architectural choice).
+**Decision-record ceiling unchanged at `096`, next free `097`.**
+
+**Findings + decisions:**
+
+- **Motivating context, on record because it is the reason this exists.**
+  The session opened with the operator asking whether pdfce + AI could
+  help a Reddit r/accessibility thread — a US state-org worker, 1,000+
+  pages including fillable forms, a remediation deadline, one person, no
+  budget. Unanimous thread verdict: *"Open source tools cannot remediate
+  PDFs"* / *"nothing I know of can remediate a PDF in an automated way"*,
+  manual vendors quoted at **~$5/page**. A validator producing
+  **pass / fail / needs-manual-review** buckets is what the thread's own
+  commenters recommended, and is the correct first building block toward
+  ever answering that thread for real.
+- **Two cross-RAG deliverables, named by full path so the hand-off does
+  not repeat the 2026-08-06 `comparison__pdfce_feature_column.md`
+  failure** (the engineer role's own hard-always list records that one
+  as a cross-RAG deliverable that got filed only in the producing RAG):
+  `pdfce-spec-librarian` wrote
+  `D:\Dev\Rag-Specialized\PDF_Spec\conformance\conformance__ref__validator_scope.md`
+  (989 lines, new `conformance\` directory, 76 `CV-*` ids) plus updates
+  to that RAG's `index.md`/`_TEMPLATE.md`/`LEGAL_NOTE.md` and three dated
+  `UPDATE` footers; `pdfce-acrobat-librarian` wrote seven new files under
+  `D:\Dev\Rag-Specialized\Acrobat_Features\` (four `pdfa_conform__*`,
+  three `accessibility__*`) plus its `index.md`. Both named in full in
+  the `ROADMAP.md` Backlog entry itself, not only here.
+- **The measured facts that shape the scope, in one place:** pdfce
+  routes `Command::ValidatePdfa`/`ToPdfa` (and `Sign`/`BatesStamp`) to
+  `unimplemented_stub`; `RenderStandard` already names nine standards
+  (`presets.rs:110`); pdfce writes no structure elements but already
+  detects and discloses `/StructTreeRoot`/`/MarkInfo` inconsistency —
+  **validation is buildable well before tagging is**. veraPDF 1.30.2 is
+  installed and already driven parse-only by
+  `tools/verapdf-parse-gate.py`; its 15 flavours cover PDF/A (all
+  sub-levels), PDF/UA-1/2 and WTPDF but **no PDF/X, PDF/E, PDF/VT or
+  PDF/R** — the fact that splits the scope into arc A (gradable today)
+  and arc B (implementable, ungraded). Corpus on disk: 2,907 PDFs at
+  `fixtures/external/veraPDF-corpus/` (gitignored, `git ls-files` = 0),
+  per-suite counts as tabled in the `ROADMAP.md` entry.
+- **Arc A (PDF/A all 11 levels, PDF/UA-1/2, WTPDF) is gradable from day
+  one** — measured veraPDF rule counts per level (**1A 135 … 4F 111**),
+  UA-1 = 106 rules/296 files, UA-2 = 91 rules/138 files but leans on
+  **1,636** ISO/TS 32005 structure rules (the sizing fact most likely to
+  be underestimated later), and WTPDF's 86-of-its-own-rules overlap with
+  ISO 14289-2 means **the paywalled UA-2 base standard is not needed**
+  to implement it — a procurement result. **The corpus filename is
+  authoritative and the outline bookmark is stale** in 4 of 2,906 files
+  (28 more lack a bookmark) — a future implementation must grade off the
+  filename, not the bookmark.
+- **Arc B (PDF/X, PDF/VT, PDF/R, PDF/E) is implementable but has no
+  oracle and no rights-cleared corpus** — filed as its own arc
+  specifically so a future entry cannot claim arc-B confidence it
+  doesn't have. **PDF/E-2 was never published** (DIS 2013 only); the
+  real CAD/engineering target is **PDF/A-4e**, already in arc A with a
+  corpus and a veraPDF flavour — flagged to the operator by name, since
+  his own working files are CAD exports and a future session chasing
+  "PDF/E" would be chasing a draft that stopped.
+- **Arc C (PDF/UA human-judgement split) is the reason this entry
+  exists.** Matterhorn 1.1: 136 failure conditions, **87 software-alone,
+  47 human, 2 untestable**. veraPDF's own independent encoding: **96
+  machine + 10 WCAG machine + 46 WCAG human**, and **not one PDF/UA-1
+  rule is tagged `human`** at all — an undecidable condition is handled
+  by not writing a rule, not by a human flag. UA-2's Scope **newly
+  excludes "requirements specific to content"** — *"is this alt text
+  correct?"* is outside the standard, not merely hard to test. **The
+  validator's deliverable is therefore a three-bucket verdict —
+  pass/fail/needs-human — required by the standard's own scope, not a
+  UX preference.**
+- **Arc D (base syntax, PAdES) is what is NOT file-alone checkable.**
+  Both ISO 32000 editions explicitly exclude PDF conformance validation
+  from their own Scope — there is no standard base-syntax test set BY
+  DESIGN, and the Arlington PDF Model (Apache-2.0) is the licence-clean
+  substitute. PAdES/EN 319 102-1 verdicts include **`INDETERMINATE`**
+  and need trust anchors and a policy that live outside the file —
+  gated behind `Command::Sign` existing at all (it is a stub whose own
+  header says *"This module verifies nothing"*).
+- **Acrobat parity is a place to exceed, not match** — Acrobat Pro has
+  **no single tool that fully validates PDF/UA**; practitioners run
+  Preflight plus the independent PAC tool because neither alone is
+  trusted. Preflight's own check-vs-fixup distinction (detect+report vs.
+  touch-the-file, disclosing any leftover finding rather than guessing)
+  maps directly onto rule 4 — pdfce's validator should **report, never
+  mutate**, with repair a separate named verb. Of Acrobat's 32
+  accessibility rules, only ~6–7 have a genuine one-click fix; ~20 are
+  manual-only by design.
+- **Five licence questions filed rather than resolved** — licence calls
+  are Ken's (rule 13). `(bv)` veraPDF's GPLv3+/MPLv2+ library code
+  (settled: external-process-only is fine, flagged so it isn't
+  re-litigated); `(bw)` veraPDF's rule *definitions* are separately
+  **CC BY 4.0**, not GPL/MPL — **a correction to the engineer's own
+  dispatch premise this session**, recorded rather than silently fixed,
+  because the corrected form is the more dangerous one (it reads as
+  permissive and is therefore likelier to be waved through); `(bx)` the
+  Isartor-suite no-redistribution clause sits inside a corpus otherwise
+  declared CC BY 4.0, and the repository is now public, so the
+  gitignore-only barrier is a hazard rather than a control until a gate
+  names it; `(by)` Arlington's `NOTICE.txt` splits Apache-2.0 code from
+  CC BY 4.0 "other documentation" and does not say which bucket the
+  `tsv/` data itself is in; `(bz)` the PDF/X/VT corpora carry no stated
+  licence at all and cannot be staged under project rule 7 as things
+  stand. All five carry a stated conservative default.
+- **`docs/FEATURES.md` gains one new *Planned* row**, between Bates
+  numbering and PDF/A conformance-and-validation, all three boxes
+  unticked, Acrobat column `◐` (fragmented coverage, sourced above) —
+  the maintenance contract (rule 5/agent-file workflow #1: a Pass or
+  scope filed with no features row is how the two documents start to
+  diverge). The three existing rows this scope touches are explicitly
+  left unchanged, since none of them is *this* capability.
+
+**Still in flight:**
+
+- All four sub-arcs are filed with acceptance-shaping facts but **not
+  scoped into a Pass** — no Pass ID exists for any of them; the operator
+  said "at the bottom," and that is where this sits.
+- The five licence questions `(bv)`–`(bz)` are unanswered; each carries
+  a conservative default so nothing here blocks scoping arc A's tooling
+  survey later, but no rule derivation, no corpus commit and no arc-B
+  work should proceed past its stated default without an answer.
+- `pdfce-acrobat-librarian`'s one flagged gap (whether Preflight's
+  accessibility fixups overlap the Accessibility Checker's — source
+  403'd) remains open and is that role's to close, not this one's.
+
+**For next session:**
+
+1. If arc A is picked up: mint a Pass ID against sub-arc A specifically
+   (PDF/A + PDF/UA-1/2 + WTPDF, all gradable today) rather than against
+   the whole Backlog entry — arcs B/C/D have different preconditions
+   (a licence answer, a human-judgement UX design, and a signing
+   feature that doesn't exist, respectively).
+2. `(bw)` and `(bx)` are the two licence questions most likely to gate
+   real engineering work early (rule-derivation basis; whether the
+   corpus can ever be committed) — worth prioritising an answer to
+   those two over `(by)`/`(bz)`, which only bind arc D and arc B.
+3. Ledger: standing rules ceiling **`R225`** unchanged, next free
+   **`R226`**; decision-record ceiling **`096`** unchanged, next free
+   **`097`**; Pass family ceiling **`159`** unchanged (`159.0` highest),
+   next free **`159.1`**/new major **`160.0`**; operator-question
+   ceiling moves **`(bu)` → `(bz)`**, next free **`(ca)`**; filing
+   ordinal **314**.
+
+---
+
+## 2026-08-28 (315th filing) — `Pass 160.0` filed: shipped one filing late, and it re-committed the exact failure its own commit message had just diagnosed one Pass earlier
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash, stat and timestamp for `6624e18` are **relayed** from the
+dispatch, not independently re-run. What **was** independently checked, by
+`Read`/`Grep` on the live tree (current-state claims, which do not need a
+shell): the `embed-font --help` text and `ARCHITECTURE.md`'s dated
+52-subcommand note both match the dispatch's description exactly, at
+`crates/pdfce-cli/src/main.rs:1452-1460` and `docs/ARCHITECTURE.md:12822-12833`.
+
+**Shipped:**
+- `Pass 160.0` (`6624e18`, 2026-08-28 18:22:02 -0400) — `embed-font --help`
+  corrected to say what it does *not* do (fills programs for fonts a PDF
+  already names; cannot introduce a new font); `ARCHITECTURE.md`'s
+  "52 subcommands" evidence-for-decision-020 figure dated 2026-08-03 rather
+  than refreshed, with the live figure (108) named beside it and a pointer
+  to `README.md`; and the headline finding, that a `[ ]` box in
+  `FEATURES.md` is a negative existential no build, test or gate can
+  falsify. Filed here for the first time — see below.
+
+**Decisions made this session:** none new. Decision-record ceiling
+unchanged at `096`, next free `097`.
+
+**Findings + decisions:**
+
+- **The recurrence is the finding, not the Pass.** `6624e18`'s own commit
+  message diagnoses correctly that `Pass 158.0` had been misreported to the
+  librarian as "already filed" when it was not, and states the general
+  lesson — *"a claim about what a document contains is checkable in one
+  command, and I did not run it."* The very same commit then ships without
+  dispatching the librarian, so the diagnosis was applied **backwards**, to
+  a Pass already behind, and never **forwards**, to itself. Same shape as
+  `docs/NEXT_SESSION.md` §D's doc-comment-orphaning finding: a remedy
+  derived from part of a finding, shipped as though it covered the whole.
+- **`tools/check-passes-filed.py` already exists and already covers this
+  class by design** — its own header records finding five unfiled and one
+  duplicated Pass commit on 2026-08-06, and it scans every commit whose
+  subject claims a Pass ID. `6624e18`'s subject (`Pass 160.0: …`) matches
+  its pattern. It did not flag this because `6624e18` was `HEAD` at scan
+  time, and the script **deliberately defers its own tip commit** (a commit
+  cannot cite a hash that does not exist until it exists) unless run with
+  `--strict-tip` — correct about *why*, but it leaves a window: if nothing
+  re-runs the check with that flag before the session ends, the deferral
+  never resolves and the gate reports clean indefinitely for an unfiled
+  Pass.
+- **A second, mechanical checker was considered and declined.** It would
+  duplicate `check-passes-filed.py`'s existing hash-based join exactly. The
+  gap is *when* `--strict-tip` gets invoked, not *what* is checked, so the
+  fix is procedural rather than a new script — mirroring hard rule 11's
+  shape (checkable after the fact, not enforceable by a gate, because the
+  enforcement point is a human decision about session end).
+- **`R226` minted** (`ROADMAP.md`, *Standing rules*): before ending any
+  session whose tip commit claims a Pass ID, run
+  `check-passes-filed.py --strict-tip` (or otherwise positively confirm the
+  Pass is filed) rather than letting the default invocation's deferral
+  stand in for a check that was never performed. Standing rules ceiling
+  `R225` → `R226`, next free `R227`.
+- **`FEATURES.md`: no capability shipped, no row added, no box ticked** —
+  this Pass corrects help text and a dated architecture claim, wiring
+  nothing new. **One header paragraph added**, folding the `[ ]`-negative-
+  existential finding into the file's own maintenance contract (already
+  recorded in the engineer's memory,
+  `.claude/agent-memory/pdfce-engineer/feedback_an_unticked_box_is_unfalsifiable.md`,
+  but now also discoverable by a filer who has not read that file).
+- **Invariants not re-verified for this Pass** — the commit touched
+  `pdfce-cli` help text and a doc comment only, no `Cargo.toml`, no writer
+  path, so `cargo tree` and round-trip checks are not applicable and are not
+  claimed as run. Gates: engineer reports `tools/run-gates.sh` **PASS, 26
+  commands**, under the same standing caveat as every recent filing
+  (`cargo about` skipped, `--all-features` not exercised).
+
+**Still in flight:** nothing new opened by this filing. The five licence
+questions `(bv)`-`(bz)` from the 314th filing remain open and are
+unaffected by this one.
+
+**For next session:**
+
+1. Apply `R226` going forward — the next Pass whose tip commit claims a
+   Pass ID should be checked with `--strict-tip` before the session ends,
+   not left to a later filing to discover by grep.
+2. Ledger: standing rules ceiling **`R226`**, next free **`R227`**;
+   decision-record ceiling **`096`** unchanged, next free **`097`**; Pass
+   family ceiling **`160`** (`160.0` highest), next free **`160.1`**/new
+   major **`161.0`**; operator-question ceiling unchanged at **`(bz)`**,
+   next free **`(ca)`**; filing ordinal **315**.
+
+---
+
+## 2026-08-28 (316th filing) — gate scrub: two forbidden-term survivors in `ROADMAP.md` masked; the corpus-absence claim they sat beside was independently WRONG, and the wrongness and the ban share one cause
+
+**Sourcing.** No shell this session (librarian invocation, hard rule 8). The
+two flagged line numbers (`docs/ROADMAP.md:101636`, `:101806`, pre-edit) and
+the private-map contents (`D:\Dev\pdfce-private\suite\manifest.json`) were
+supplied by the dispatch and **independently read by this role via the Read
+tool** before editing — the manifest's patch filenames (`…_x1a.pdf`,
+`…_x3.pdf`, keys `PCS1_010`/`011`/`050`/`051`) were confirmed directly, not
+taken on the dispatch's word alone. The forbidden term itself is not
+reproduced anywhere in this entry, per the operator's 2026-08-25 ruling —
+referred to throughout as "the print-conformance suite" or "the corpus's
+name," matching the masked phrasing already established at
+`ARCHITECTURE.md:24899`, `FEATURES.md:253` and `ROADMAP.md:7945`.
+
+**Shipped:** no Pass — a documentation-only correction, two edits in
+`docs/ROADMAP.md`.
+
+**Findings + decisions:**
+
+- **Job 1 — gate scrub.** Two lines in `docs/ROADMAP.md`'s conformance-
+  validator scoping section (filed the 314th filing) named the print-
+  conformance suite in plaintext: arc B's PDF/X bullet, and operator
+  question `(bz)`. Both rewritten to the established masked phrasing. **How
+  it got in, recorded because the shape recurs:** `pdfce-spec-librarian`'s
+  research genuinely found the name in the PDF Association's own public
+  corpus index — a source that has no reason to know pdfce's internal
+  naming ban — and the engineer's dispatch relayed the phrase verbatim with
+  nothing in the dispatch chain flagging it. **A term banned by an operator
+  ruling is invisible to a researcher who never read the ruling, and a
+  dispatch that does not name the ban cannot transmit it** — the same
+  class of failure as "a subagent cannot check a constraint the dispatch
+  omits," here pointed at a project-wide naming ban rather than a
+  per-dispatch scope omission.
+- **★★★ Job 2 — a substantive correction, found while fixing Job 1.** The
+  314th filing's framing of arc B's PDF/X entry and of question `(bz)` read
+  as though **no PDF/X corpus is available to pdfce at all.** That is
+  wrong. **The forbidden term names pdfce's own licensed print-conformance
+  suite — the same one this project already measures render parity
+  against** — and its patch files, measured 2026-08-28 from the private
+  map, are labelled by PDF/X part (`…_x1a.pdf` = PDF/X-1a, `…_x3.pdf` =
+  PDF/X-3). **pdfce has held a PDF/X corpus on disk the whole time.**
+- **What is actually true, in four parts (all written into `ROADMAP.md`'s
+  `(bz)` entry as a dated correction block, not a silent rewrite):**
+  1. **What is absent is a corpus that may be COMMITTED to this public
+     repository, not one pdfce can reach.** The private, licensed corpus is
+     exactly as usable for local grading as the render-parity harness
+     already proves — it just cannot enter a public repository, under rule
+     7 and the separate `(bt)` licensing ruling. Two different claims; the
+     314th filing collapsed them into one.
+  2. **It is a WEAK oracle and must not be promoted to a strong one.** An
+     all-conforming set detects a validator that wrongly FAILS a good
+     file; it cannot detect one that wrongly PASSES a bad file — the same
+     limitation this arc already records against the Cal Poly PDF/VT
+     corpus, now shown to apply equally to PDF/X.
+  3. **UNESTABLISHED, stated as such rather than assumed:** whether the
+     suite carries per-file conformance verdicts at all, versus reference
+     images for rendering only (what pdfce uses it for today). A renderer
+     oracle and a validator oracle are not the same artefact.
+  4. **Arc B's honesty clause survives.** PDF/X stays ungraded in the
+     strong, public sense — veraPDF still has no PDF/X flavour, no
+     redistributable corpus exists. The correction narrows *why*; it does
+     not promote PDF/X into arc A.
+- **★★★★ The generalisable finding.** The same fact was simultaneously a
+  licence violation (naming the suite in a public repository) and a
+  research error (concluding the suite was absent) — **and the ban is what
+  hid the second from view.** Because the name may not be written anywhere
+  in this repository, no document here could say "we already have this,"
+  so an outside-facing research pass correctly concluded, from what it
+  could read, that no PDF/X corpus reached pdfce. The scrub gate — not a
+  content review — is what surfaced the contradiction, because fixing Job
+  1 required re-reading the exact two lines Job 2 turned out to be wrong
+  about. **A term that may not be written is a fact that cannot be
+  cross-referenced.**
+- **Standing-rule ruling (ledger item): MINT DECLINED at `n=1`.** This
+  project's own established convention (used repeatedly across `R212`,
+  `R217`, `R218` and others) is to decline a mint on a single occurrence
+  and record a **named candidate** instead: *a term an operator ruling
+  forbids a repository from writing becomes, for exactly that reason,
+  invisible to any research pass or cross-reference check run against that
+  repository's own text.* Recorded in `ROADMAP.md`'s `(bz)` correction
+  block, distinguished explicitly from `R218` (a **gate's** input set
+  excluding uncommitted work — a tool-visibility rule) since this
+  candidate is about what a **person or research pass** can find once a
+  true name has been fully removed from a corpus of text — a different
+  mechanism. Standing rules ceiling **unchanged at `R226`**, next free
+  stays **`R227`**.
+- **`docs/FEATURES.md` checked, not changed.** The validator row (line
+  375) lists PDF/A/PDF/UA/PDF/X/WTPDF as target standards without any
+  claim about corpus availability — nothing there was wrong, nothing
+  edited, no box ticked, per the file's own concision contract.
+- **`docs/NEXT_SESSION.md` not edited** — engineer-owned, and already
+  carries the equivalent correction in its own §0b and its `(bz)` entry
+  (independently confirmed by this role via `Grep`/`Read` before writing
+  this entry); this filing's `ROADMAP.md` wording was aligned to match
+  it rather than diverge from it.
+
+**Still in flight:** the five licence questions `(bv)`–`(bz)` remain open;
+`(bz)`'s premise is now corrected but the question itself (whether the
+permanent-ungraded-in-public state is acceptable, or a rights-cleared
+alternative is worth sourcing) is unanswered and unaffected in substance.
+
+**For next session:**
+
+1. Ledger: standing rules ceiling **`R226`** (unchanged), next free
+   **`R227`**; decision-record ceiling **`096`** unchanged, next free
+   **`097`**; Pass family ceiling **`160`** (`160.0` highest) unchanged,
+   next free **`160.1`**/new major **`161.0`**; operator-question ceiling
+   unchanged at **`(bz)`**, next free **`(ca)`**; filing ordinal **316**.
+2. Before the next `git push`, re-run the public-facing scrub gate
+   (`tools/check-suite-name-absent.py`) directly rather than trusting this
+   entry's own "both lines confirmed clear by eye" — this role has no
+   shell and could not run it.
+3. If a second banned-or-redacted term is ever found to have produced a
+   second false "this doesn't exist" conclusion, promote the named
+   candidate above to `R227`.
+
+---
