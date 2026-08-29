@@ -168,10 +168,38 @@ three of them were previously mis-stated in this file.
    181 down to 140. So the render error **cannot be attributed to the table
    even partially by addition**; any account saying "the blue floor did it" is
    arithmetically excluded.
-   ⇒ **`PCS3_132` is an OVERPRINT patch**, and
-   `OverprintZeroTintScope::AllProcessSpaces` is the only open *unmeasured*
-   item on that path. **It is the SUSPECT, not the finding** — the residual is
-   undiagnosed. Measuring it is the next colour move.
+   ⇒ **MEASURED FURTHER, 2026-08-29. Three candidates eliminated:**
+
+   | candidate | test | result |
+   |---|---|---|
+   | the conversion table | applied directly to `.75 0 1 0` | a third of it, **opposite sign on green** |
+   | `OverprintZeroTintScope` (the **setting**) | rendered at all three scopes | **byte-identical**, pixel counts equal to the pixel |
+   | `ICCBased` `/N 4` → `DeviceCMYK` fallback | synthetic `/ICCBased`, `/N 4`, no `/Alternate` | **`(47, 180, 73)`** — correct |
+
+   Plain `DeviceCMYK` `.75 0 1 0 k` also renders `(47, 180, 73)`. So the paint
+   path, the table and the ICCBased resolution each behave **on their own**.
+
+   ★★ **AND A DISTINCTION THAT NEARLY GOT WRITTEN DOWN WRONG.** Having found
+   the zero-tint scope inert, the tempting sentence was *"overprint is
+   eliminated."* **That is false.** What was measured is that **one overprint
+   SETTING is inert on this patch** — not that the overprint **leg** is
+   uninvolved. `PCS3_132` carries `<</OP true /op true>>` and `<</OPM 0>>`
+   ExtGStates, and the zero-tint axis governs a *different* rule.
+   **Eliminating a knob is not eliminating the mechanism the knob sits on.**
+
+   ★ **The sharpened suspect, and it is a HYPOTHESIS not a finding:** the patch
+   also carries a **`/Separation /All /DeviceCMYK`** space — the all-colorants
+   special case (§8.6.6.4) — alongside those overprint states. A
+   `/Separation /All` painted under `/OP true` is the shape that would
+   composite over an otherwise-correct green and land it 23/41/35 counts away
+   **without the table, the fallback or the zero-tint scope moving at all**.
+   Untested. Next place to look.
+
+   ★ **iccce's capture was EXACT.** Rendering the patch here and reading the
+   PNG pixels directly — no display path — gives `(24, 140, 108)`, 12 769 px.
+   The same three integers as their screenshot. Their §11.2 display-path limit
+   is still the right default, but on this quantity it cost nothing.
+
    ★ Also measured: **all three CMYK intents return the identical
    `(47, 181, 73)`** here, so the intent setting is **inert on this patch** and
    the `Naive` deletion costs nothing *for this measurement*. iccce's broader
