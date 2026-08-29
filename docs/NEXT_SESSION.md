@@ -7,8 +7,8 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
-Written 2026-08-29. Ledger at write time: **Pass ceiling 163.0**, rules
-**R227**, decisions **096**, filings **320**.
+Written 2026-08-29. Ledger at write time: **Pass ceiling 164.0**, rules
+**R227**, decisions **096**, filings **322**.
 
 ---
 
@@ -119,46 +119,41 @@ lines, 76 `CV-*` ids) plus seven files under `Acrobat_Features/`.
    - **ce-dimension rotation** shipped as `Pass 159.0`; `rotate_annotation`
      still refuses it **by name and correctly**, pointing at `rotate_dimension`
      — which does exist. That refusal is fine.
-3. **`rotate-annotation` has no CLI test.** The bookmark half of this owed item
-   was closed 2026-08-29 by `crates/pdfce-cli/tests/bookmarks.rs` (18 tests,
-   covering `rename-bookmark`/`delete-bookmark` retroactively). This was not —
-   **and starting it is what found the two phantom verbs above**, so it was
-   displaced rather than done. It is still owed.
-4. **The trap X on the grey/K-black conformance patch.** Cause unknown, **not**
+3. **The trap X on the grey/K-black conformance patch.** Cause unknown, **not**
    the defect `Pass 143.0` fixed. Lead: that patch paints the same 50 % grey
    **both ways** (`0.5 g` and `0 0 0 0.5 k`) deliberately, and `G .5` — a grey
    *stroke* — appears in its streams while every synthetic fixture uses fills.
-5. **`OverprintZeroTintScope::AllProcessSpaces` is unmeasured.** pdfce's
+4. **`OverprintZeroTintScope::AllProcessSpaces` is unmeasured.** pdfce's
    RGB→CMYK is naive, so a pure red preserves a cyan backdrop under it and
    whether Acrobat agrees is unknown. Not the default; do not promote it
    without a measurement.
-6. **`iccce`'s "invisible X" is NOT the trap X in item 4.** Theirs is
+5. **`iccce`'s "invisible X" is NOT the trap X in item 3.** Theirs is
    `PCS3_130`, a CMM/ICC-source-profile patch filed as *theirs* under decision
    064; ours is the grey/K-black **overprint** patch. Two X's, two patches,
    two causes, one word.
-7. **`iccce`'s ΔE00 figures are withdrawn by its own author** (`DL-070`: no ΔE
+6. **`iccce`'s ΔE00 figures are withdrawn by its own author** (`DL-070`: no ΔE
    against a screen capture). Only the 8-bit deltas may be quoted.
-8. Ambiguity-register entries owed to `pdfce-spec-librarian`:
+7. Ambiguity-register entries owed to `pdfce-spec-librarian`:
    `overprint_zero_tint_scope`, and `render.hairline_clamp_policy` since
    2026-08-09.
-9. **A lossless markup clipboard copy** — Backlog, unscoped, **awaiting
+8. **A lossless markup clipboard copy** — Backlog, unscoped, **awaiting
    `pdfceGUI`'s answer on whether they need it.** See §E.
-10. **A rustdoc-cleanliness gate** — Backlog. ★ **Read it at LOW priority:**
+9. **A rustdoc-cleanliness gate** — Backlog. ★ **Read it at LOW priority:**
     measured 2026-08-29, the dangerous subclass (a doc naming a public verb
     that does not exist) was a population of **one**, and `Pass 161.0` closed
     it by shipping the verb. The other 150 are path-scope noise.
-11. **★ A pre-push check for a deferred tip.** `R226` closes the hole
+10. **★ A pre-push check for a deferred tip.** `R226` closes the hole
     *procedurally*, and a procedural rule is what was skipped to create it.
     Mechanical form is cheap: refuse a push when the tip is a Pass-claiming
     commit that `--strict-tip` rejects. **Not built, and NOT to be built
     unasked** — it changes the operator's own push workflow. Raise it.
-12. **★ `.gitignore:20` (`/fixtures/external/`) is LOAD-BEARING and nothing
+11. **★ `.gitignore:20` (`/fixtures/external/`) is LOAD-BEARING and nothing
     says so.** The staged veraPDF corpus declares CC BY 4.0 over content
     including the **Isartor** suite, whose own manual states *"Redistributing
     all or parts of the Isartor test suite is also not allowed."* **The
     repository is public**, so committing that tree would *be* redistribution.
     One `.gitignore` line is the entire control. Operator question `(bx)`.
-13. **★ 28 GB of stale agent worktrees** under `.claude/worktrees/` (7 of
+12. **★ 28 GB of stale agent worktrees** under `.claude/worktrees/` (7 of
     them, gitignored, 0 tracked files). All checked 2026-08-29: **nothing
     unsaved would be lost** — the six untracked `docs/decisions/*.md` in them
     are already in the main repo. Deleting is destructive and outside the

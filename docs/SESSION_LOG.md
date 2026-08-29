@@ -75114,3 +75114,133 @@ commit hash `69689c1` (parent `4268ae9`, the 319th filing's own commit) is
 4. `Pass 142.0` remains open, narrowed to non-standard-14 faces only.
 
 ---
+
+## 2026-08-29 (321st filing) — `Pass 164.0` (`fde9fa2`) filed: `rotate-annotation` CLI test written, 8 tests, closing the gap owed since `Pass 155.0`
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `fde9fa2` is relayed, stated by the engineer to be
+`git log`-verified; the preceding commit (the 321st filing's own commit) is
+relayed as `80b7759`.
+
+**★ Correction, 322nd filing, `git log --oneline -6` (dispatcher-run).** The
+prior paragraph flagged `80b7759` as apparently mismatched against
+`Pass 163.0`'s recorded hash (`69689c1`, above) — there is no mismatch.
+`69689c1` is `Pass 163.0`'s own code commit; `80b7759` is the *320th filing's*
+commit, a different, later hash that records it. See `ROADMAP.md`'s *Update
+protocol → "Pass hash vs. filing hash"* for the convention and for why this
+flag should have been a question back to the dispatcher (one `git log`
+command) rather than a note written into two permanent records.
+
+**Shipped:**
+- `crates/pdfce-cli/tests/rotate_annotation.rs` — 8 tests, closing the
+  CLI-test gap owed since `Pass 155.0`. Covers the CLI-only surface the core
+  suite cannot reach: 0-based annotation index against a 1-based `--page`,
+  `allow_negative_numbers` wiring on `--degrees`/`--anchor-x`/`--anchor-y`,
+  exit codes, the report line.
+- Direction assertion: PDF user space is bottom-left-origin (§8.3.2.3), so
+  positive rotation is **anticlockwise**, invisible at 0°/180°. Sabotage
+  (negate the angle) fails 3 of 8.
+- 360° round-trip asserted at `0.001 pt` tolerance, deliberately not exact —
+  `f64` `sin`/`cos` of 2π leaves a `~2.5e-14 pt` residual, and pdfce does
+  not snap a rotation result to grid or integers by design (a made-up snap
+  threshold would silently move geometry an operator meant to place
+  off-grid). See `ROADMAP.md`'s `Pass 164.0` entry for the full residual
+  figure and reasoning.
+
+**Decisions made this session:**
+- None. Decision ceiling stays at `096`. Test coverage for a capability
+  that shipped whole in `Pass 155.0`; no crate boundary, library choice, or
+  invariant redrawn.
+
+**Findings + decisions:**
+- `FEATURES.md`: zero rows changed — row 205 already correctly showed
+  `[x] core [x] cli` for `rotate_annotation` before this Pass; a
+  coverage-only Pass has no capability row to tick.
+- The no-snapping behaviour is flagged to the engineer as a candidate line
+  for `docs/core-api/02-editing-and-saving.md` (engineer-owned, not edited
+  here) alongside the existing `rotate_annotation` row.
+- No `D:\dev\rag\rust\`/`egui\` or `C:\personal_rag\pdf\` filing — the
+  direction and no-snapping findings are pdfce-internal test-design facts
+  (the trig-residual magnitude is measured, but the underlying fact that
+  `f64` trig round-trips aren't bit-exact is common knowledge, not a
+  non-obvious gotcha), not generalizable ecosystem or PDF-domain findings.
+
+**Still in flight:**
+- Owed item **closed**: `rotate-annotation` CLI test, owed since
+  `Pass 155.0`, carried through `157.0`/`161.0`/`162.0`, displaced again by
+  `163.0` — now shipped. `docs/NEXT_SESSION.md` §A item 3 should be struck
+  by the engineer (engineer-owned file, not edited here).
+- `rotate_widget` and `set_dimension_label` remain unbuilt (`Pass 163.0`).
+- `Pass 142.0` remains open, narrowed to non-standard-14 faces only.
+
+**For next session:**
+1. Ledger: Pass ceiling **`164.0`** (highest), next free **`164.1`**/new
+   major **`165.0`**; standing rules ceiling **`R227`**, next free
+   **`R228`**; decision-record ceiling unchanged **`096`**, next free
+   **`097`**; filing ordinal **321**.
+2. `docs/NEXT_SESSION.md` §A item 3 (`rotate-annotation` CLI test) should
+   be struck by the engineer — closed this filing.
+3. `rotate_widget` and `set_dimension_label` remain unbuilt; the gate
+   `tools/check-cited-verbs-exist.py` (`Pass 163.0`) will pass automatically
+   once either ships.
+4. `Pass 142.0` remains open, narrowed to non-standard-14 faces only.
+
+---
+
+## 2026-08-29 (322nd filing) — correction: the `Pass 163.0`/`Pass 164.0` hash "mismatch" flagged in the 321st filing does not exist
+
+**No new Pass.** This filing corrects a flag this librarian planted in both
+`ROADMAP.md` and this log while filing `Pass 164.0` (321st filing): a note
+that `80b7759` (relayed as the commit preceding `fde9fa2`) did not match
+`69689c1` (`Pass 163.0`'s recorded hash, filed one entry earlier). **There is
+no mismatch.** The dispatcher ran `git log --oneline -6` and both figures are
+correct — they name different things.
+
+**Sourcing.** `git log --oneline -6`, run by the dispatcher (this librarian
+still has no shell), relayed verbatim:
+
+```
+fde9fa2  Pass 164.0: the rotate-annotation CLI test ...
+80b7759  librarian: 320th filing -- Pass 163.0, and R227 minted ...
+69689c1  Pass 163.0: two refusal messages told the operator ...
+4268ae9  librarian: 319th filing -- Pass 162.0 ...
+9c3a1c9  Pass 162.0: text can be restyled ...
+57d5510  librarian: 318th filing -- Passes 161.0/161.1/161.2 ...
+```
+
+**Findings + decisions:**
+- **The convention, now written down** (`ROADMAP.md`'s *Update protocol →
+  "Pass hash vs. filing hash"*, added this filing): a `### Pass NN` entry
+  records the Pass's own **code** commit. The **filing** that records that
+  entry is a separate, later commit — the librarian's own commit message,
+  parented on the Pass's code commit. `80b7759` is the 320th filing's own
+  commit (child of `69689c1`, parent of `fde9fa2`); it was never supposed to
+  equal `Pass 163.0`'s hash, and its not doing so is the convention working,
+  not a discrepancy.
+- **Corrected in place, dated, per hard rule 1**: `ROADMAP.md`'s `Pass 164.0`
+  entry and this log's 321st-filing entry both carry a `★ Correction, 322nd
+  filing` footer rather than a silent rewrite of the flagged text.
+- **The generalisable finding, for the librarian's own future conduct, not
+  for `D:\dev\rag\`:** a flagged uncertainty is itself a claim, and it lands
+  in an append-only record with the same permanence as a fact. Flagging
+  rather than guessing was the right call with no shell available — but
+  flagging *into the permanent record* when the check is one command away,
+  held by the very agent doing the dispatching, was not the cheapest correct
+  move. The cheaper move is to ask the dispatcher to run the command before
+  writing the flag down. This is a `pdfce-librarian`-specific procedural
+  note, not a cross-project RAG finding — it depends on this project's
+  shell-less-librarian arrangement (hard rule 8), so it stays here rather
+  than graduating to `D:\dev\rag\rust\`.
+
+**Still in flight:** unchanged from the 321st filing — `rotate_widget` and
+`set_dimension_label` remain unbuilt; `Pass 142.0` remains open, narrowed to
+non-standard-14 faces only.
+
+**For next session:**
+1. Ledger unchanged from the 321st filing: Pass ceiling **`164.0`**, next
+   free **`164.1`**/new major **`165.0`**; standing rules ceiling **`R227`**,
+   next free **`R228`**; decision-record ceiling unchanged **`096`**, next
+   free **`097`**; filing ordinal **322**.
+2. No new work opened by this filing — it is a correction only.
+
+---

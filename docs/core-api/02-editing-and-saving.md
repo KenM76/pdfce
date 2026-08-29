@@ -1117,8 +1117,31 @@ always errors.
 | Delete any annotation | `delete_annotation(&mut self, annot_id) -> Result<AnnotationDeletion, EditError>` | 10847 | **Routes** to the two specialised verbs above for `/Redact` and ce dimensions. |
 | **Move** any annotation | `move_annotation(&mut self, annot_id, dx, dy) -> Result<AnnotationMove, EditError>` | 16978 | `Pass 149.0`. Translates `/Rect` **and every geometry key**. **Refuses** a widget and a ce dimension by name — see below. |
 | **Resize** any annotation | `resize_annotation(&mut self, annot_id, anchor: (f64, f64), sx, sy, opts: &ResizeOptions) -> Result<AnnotationResize, EditError>` | 17442 | `Pass 151.0`. Scales `/Rect` **and every geometry key** about `anchor`. `/RD` scales by default; `/BS /W` does not — both are flags. **Re-authors the `/AP` only where pdfce drew it**, refusing rather than distorting a foreign one. Same two refusals as `move_annotation`. |
-| **Rotate** any annotation | `rotate_annotation(&mut self, annot_id, anchor: (f64, f64), degrees: f64) -> Result<AnnotationRotate, EditError>` | 17429 | `Pass 155.0`. Turns geometry keys AND composes the rotation into the appearance's own `/Matrix` (§12.5.5 step a), so a FOREIGN appearance rotates correctly and nothing is redrawn. No options type — a rotation is an isometry, so no stroke can distort. `/Rect` grows to the upright box that bounds the result, which §12.5.2 requires. |
+| **Rotate** any annotation | `rotate_annotation(&mut self, annot_id, anchor: (f64, f64), degrees: f64) -> Result<AnnotationRotate, EditError>` | 17429 | `Pass 155.0`. Turns geometry keys AND composes the rotation into the appearance's own `/Matrix` (§12.5.5 step a), so a FOREIGN appearance rotates correctly and nothing is redrawn. No options type — a rotation is an isometry, so no stroke can distort. `/Rect` grows to the upright box that bounds the result, which §12.5.2 requires. **★ The angle is applied AS GIVEN and the result is never snapped** — see below. |
 | Preview an annotation deletion | `annotation_deletion_preview(&self, annot_id) -> Result<AnnotationDeletion, EditError>` | 11316 | Pure `&self` query. |
+
+> #### ★ `rotate_annotation` never snaps, and a caller comparing floats must expect that
+>
+> The angle is applied exactly as given. pdfce does **not** round a
+> near-integer result back to the integer, and does not snap to a grid.
+>
+> The consequence, measured (`Pass 164.0`): rotating `[20 20 90 90]` by
+> **360°** about `(100, 100)` returns
+> `[19.999999999999975, 20.000000000000007, 90, 90.00000000000003]` — the
+> `sin`/`cos` of 2π in `f64`. The residual is ~**2.5e-14 pt**, roughly 1e-16 of
+> a millimetre: no renderer, viewer or measurement can resolve it.
+>
+> **Why it is not rounded away.** A snap threshold is a number nobody chose on
+> evidence, and it would silently move geometry an operator *did* intend to
+> place off-grid. A full turn is also a legitimate edit request rather than a
+> no-op to be optimised away — `rotate_annotation(id, anchor, 360.0)` writes,
+> and reports that it wrote.
+>
+> **What a shell must do:** compare post-rotation `/Rect` values with a
+> tolerance, never with `==`. A UI that decides "did this move?" by exact
+> float equality will answer *yes* to a 360° turn and may loop.
+
+
 | Ask whether annotation deletion is refused document-wide | `annotation_deletion_refusal(&self) -> Option<EditError>` | 11492 | ⚠️ Takes no `annot_id`, so it cannot see the three per-annotation refusals. |
 
 | Restyle an existing markup annotation | `set_markup_style(&mut self, annot_id: ObjId, style: &MarkupStyle) -> Result<MarkupStyleChange, EditError>` | 12372 | Rebuilds the baked `/AP`. |

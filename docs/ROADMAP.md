@@ -96,6 +96,89 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 164.0` (`fde9fa2`, 2026-08-29) — `rotate-annotation` CLI test written, 8 tests, closing the gap owed since `Pass 155.0` — plus the assertion that discriminates rotation DIRECTION, and a full-turn round-trip that is deliberately NOT bit-identical — filed 2026-08-29 (321st filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `fde9fa2` is relayed, stated by the engineer to be
+`git log`-verified; the preceding commit (the 321st filing's own commit) is
+relayed as `80b7759`.
+
+**★ Correction, 322nd filing, `git log --oneline -6` (dispatcher-run, this
+librarian still has no shell).** The prior paragraph flagged an apparent
+mismatch against `Pass 163.0`'s recorded hash (`69689c1`) — there is no
+mismatch; see *Update protocol → "Pass hash vs. filing hash"* for the
+convention this instance confirms, and for why the flag was wrong to plant
+in an append-only record rather than ask for the one command that resolved
+it.
+
+**Shipped:**
+- `crates/pdfce-cli/tests/rotate_annotation.rs` — 8 tests. Covers what the
+  core suite structurally cannot reach for `rotate_annotation` (`Pass
+  155.0`): the CLI's own **0-based annotation index resolved against a
+  1-based `--page`** (an off-by-one here rotates the *wrong* annotation
+  while every core test still passes), `--degrees`/`--anchor-x`/
+  `--anchor-y` carrying `allow_negative_numbers` (without it clap reads
+  `-90` as a flag), exit codes, and the report line a script parses.
+- **The direction assertion.** PDF user space origins bottom-left
+  (§8.3.2.3), so a positive angle turns **anticlockwise** — the opposite of
+  screen convention, and invisible at 0°/180° where clockwise and
+  anticlockwise coincide. Stamp `[20 20 90 90]`, anchor `(100,100)`: +90°
+  anticlockwise → `[110 20 180 90]`; a clockwise implementation would give
+  `[20 110 90 180]`. Sabotage (negate the angle inside `rotate_annotation`)
+  fails 3 of 8 tests.
+- **The 360° test is deliberately NOT a string-equality round-trip.** First
+  written that way, it failed: `sin`/`cos` of 2π in `f64` leaves a residual
+  of `[19.999999999999975, 20.000000000000007, 90, 90.00000000000003]`
+  against the original `[20, 20, 90, 90]` — about `2.5e-14 pt`
+  (`~1e-16 mm`). **Not rounded away** — a snap threshold is a made-up
+  number that would silently move geometry an operator did intend to place
+  off-grid, and a 360° rotation is a legitimate edit request, not a no-op
+  to optimise. Asserted at `0.001 pt` tolerance (four orders of magnitude
+  above the measured noise, four below anything an anchor bug would
+  produce), with the residual written into the test's own doc comment so
+  nobody re-derives it.
+
+**Findings + decisions:**
+- **A behavioural fact about pdfce, made findable by this test, not just a
+  test detail:** a rotation is applied as given; pdfce never snaps the
+  result to a grid or to integers. This is a contract a consuming shell
+  (CLI script, `pdfceGUI`) would want stated — the engineer is weighing
+  whether it earns a line in `docs/core-api/02-editing-and-saving.md`
+  alongside the existing `rotate_annotation` row (`:1120`); that file is
+  engineer-owned and not edited here. **This librarian's read: yes, it
+  belongs** — the existing row already documents the `/Rect`-growth and
+  `/Matrix`-composition contracts at the same density, and "does not snap"
+  is the same species of fact (a caller doing float comparison on a
+  post-rotation `/Rect` needs to know not to assert exact equality).
+- No architecture decision — this Pass is test coverage for a capability
+  that shipped whole in `Pass 155.0`. Decision ceiling stays at `096`.
+
+**`FEATURES.md`: zero rows changed**, confirmed with the engineer's brief
+and cross-checked against row 205 (`crates/pdfce-cli`, "Rotate anything
+carrying a `/Rect`") — already `[x] core [x] cli`, correctly, before this
+Pass; the row describes the verb, not its test coverage, so a coverage-only
+Pass has nothing to tick.
+
+**Still in flight:**
+- **Owed item closed by this Pass**: `rotate-annotation`'s CLI test, owed
+  since `Pass 155.0`, carried forward through `Pass 157.0`, `161.0`,
+  `162.0` and displaced again by `Pass 163.0`'s phantom-verb finding — now
+  shipped. `docs/NEXT_SESSION.md` §A item 3 should be struck by the
+  engineer (engineer-owned file, not edited here).
+- `rotate_widget` and `set_dimension_label` remain unbuilt (`Pass 163.0`'s
+  entry, above).
+- `Pass 142.0`, narrowed (non-standard-14 font faces), remains open.
+
+**Ledger.** Pass ceiling `163.0` → `164.0`; next free `164.1`/new major
+`165.0`. Standing rules unchanged at `R227`, next free `R228` — no mint
+this filing. Decisions unchanged at `096`, next free `097`. `FEATURES.md`:
+zero rows changed (see above). No `D:\dev\rag\rust\`/`egui\` or
+`C:\personal_rag\pdf\` filing this Pass — the direction and no-snapping
+findings are pdfce-internal test-design facts, not generalizable ecosystem
+or PDF-domain findings; both are captured instead in this entry's doc
+comment and in the test file itself, which is where a future session will
+actually look.
+
 ### `Pass 163.0` (`69689c1`, 2026-08-29) — TWO REFUSAL MESSAGES NAMED A VERB THAT HAS NEVER EXISTED — fixed, plus the gate that found a SECOND phantom and a gate defect the fix produced on its own first run — filed 2026-08-29 (320th filing)
 
 **Small Pass, finding larger than the diff.** Found during an autonomous
@@ -119128,3 +119211,49 @@ Watch for a second instance before minting one here.
 > a known-correct practice unenforceable while instances pile up. **This
 > entry is kept in place** (hard rule 1) as the promotion's own provenance.
 > Full text and warrant table: `R198`, above.
+
+### Pass hash vs. filing hash (added 2026-08-29, 322nd filing — CONVENTION, DELIBERATELY NOT A NUMBERED RULE)
+
+**A `### Pass NN` entry's hash is the Pass's own CODE commit. The filing
+commit that records that entry in `ROADMAP.md`/`SESSION_LOG.md` is a
+DIFFERENT, LATER commit — the librarian's own commit, parented on the Pass's
+code commit. The two are never expected to be equal, and their being
+different is the convention working, not a discrepancy.**
+
+Concretely, for consecutive Passes `N` and `N+1`:
+
+```
+code commit for Pass N        ──►  filing commit recording Pass N
+                                        │  (child of the code commit)
+                                        ▼
+code commit for Pass N+1  (parent = the filing commit above)
+```
+
+So *"the commit preceding Pass `N+1`'s code commit"* and *"the hash recorded
+against Pass `N`'s own entry"* name **different commits by design** — the
+former is the filing commit, the latter is the code commit two steps back.
+Reading them as the same figure produces a false mismatch.
+
+**Why this is written down.** The 321st filing (`Pass 164.0`) relayed
+`80b7759` as the commit preceding its own code commit (`fde9fa2`), correctly
+noted it could not verify this with no shell (hard rule 8), and — rather than
+stopping there — went on to flag `80b7759` as apparently contradicting
+`69689c1` (`Pass 163.0`'s own recorded hash, filed one entry earlier). It
+does not contradict it: `80b7759` is the *320th filing's* commit, sitting
+between `69689c1` (`Pass 163.0`'s code commit) and `fde9fa2` (`Pass 164.0`'s
+code commit) exactly as the diagram above predicts. The dispatcher confirmed
+with `git log --oneline -6` (322nd filing) that both figures were correct
+all along.
+
+**The general lesson, kept here rather than promoted to a numbered rule
+because it prescribes no check, only a naming discipline: a flagged
+uncertainty is itself a claim, and it is filed into an append-only record
+with the same permanence as a fact.** Flagging instead of guessing was the
+right call with no shell available (hard rule 8 exists for exactly this
+case) — but flagging *into the permanent record*, when the resolving command
+is one line and is held by the very agent doing the dispatching, is not the
+cheapest correct move available. Where a one-command verification is
+reachable by asking the dispatcher before writing, ask first; reserve the
+written flag for when it genuinely cannot be resolved before the filing
+closes. See `SESSION_LOG.md`'s 322nd-filing entry for the correction this
+produced and the full `git log` excerpt that resolved it.
