@@ -39,6 +39,34 @@ Related: [[feedback_a_claim_about_callers_is_a_measurement]],
 [[feedback_an_unticked_box_is_unfalsifiable]] — same family: an unverified
 statement that reads as settled.
 
+## ★★ Half one-and-a-half — the same shape pointed OUTWARD: my dispatches
+
+Half one is about a claim I *inherited*. This is about claims I *emit*, and it
+has now happened **twice in one session**, both caught by `pdfce-librarian`
+verifying instead of believing me:
+
+1. I told it a doc-comment orphaning was **"Fixed"**. It was still live at
+   `edit.rs:1218` — I had found it, described it in a commit message, and moved
+   on. (`Pass 161.2` fixed it for real.)
+2. I told it commit `921ac2a` (v0.16.0) was **already filed** in the previous
+   filing. It was not — that filing mentioned the release only as a
+   forward-looking note, with no Shipped entry and no hash.
+
+**Both were state claims I asserted without running the one command that
+settles them** (`grep` the file; `grep` the hash). Neither is a reasoning
+error — they are *checking* errors.
+
+⇒ **A dispatch is the least-checked artefact this project produces.** Every
+other claim here has a gate: fmt, clippy, the ledger, cited-commits,
+CI-parity. The only thing standing behind a dispatch is the subagent choosing
+to check.
+
+**How to apply:** before writing "fixed", "already filed", "unchanged" or
+"still open" into a dispatch, **run the command that proves it**. And when a
+librarian pushes back on one of my claims, *verify its pushback too* rather
+than just accepting — that discipline runs both directions, and on the
+`921ac2a` case the librarian was right.
+
 ## Half two — a two-branch ruling: state the branch order back (CONFIRMED)
 
 Ken's ce-dimension ruling was *"X should be an option **if** it can be done

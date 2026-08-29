@@ -96,6 +96,160 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 166.0` (`6dbe953`, 2026-08-29) — the CLI now deploys to OneDrive on every release, alternating two slots so a previous version always survives beside the current one — filed 2026-08-29 (325th filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). Both
+commit hashes below are relayed, stated by the engineer to be `git
+log`-verified; test counts, exit codes and `verify-release.py` output are
+likewise relayed, not independently re-run here.
+
+**Standing operator instruction, verbatim, 2026-08-29:** *"can you always
+put a new version on onedrive? cycle between folders pdfce1 and pdfce2 when
+you make new versions so there is always a previous version available. Just
+need the CLI tool available."* **"Always" is the operative word** — minted
+as `R229` below rather than left as narrative for this Pass alone, precisely
+because an instruction like this is the kind that survives two releases and
+then quietly stops once nobody's session prompt repeats it.
+
+**`tools/deploy-onedrive.py`** publishes `pdfce-cli.exe`, `models/ocrs`,
+`LICENSE`, `THIRD_PARTY_LICENSES.md`, `README.md` and a generated
+`VERSION.txt` into one of two OneDrive slots, `pdfce1` / `pdfce2`. **No
+`pdfce-gui.exe`** — the operator said CLI only. The OCR models ship anyway:
+without them the CLI refuses OCR **by name and explains itself** rather than
+crashing, so shipping them is the honest choice — *"just the CLI tool"*
+means not-the-GUI, not a CLI that cannot do a job it advertises. ~30 MB per
+slot.
+
+**★ The alternation is DERIVED from the folders, never remembered as
+state.** A stored "last used" marker breaks the moment anything happens
+outside the script — a manual copy, an interrupted deploy, a folder restored
+from OneDrive's own version history — and breaks *silently*, by overwriting
+the copy the operator was relying on. The target is instead computed from
+each slot's own `VERSION.txt`: whichever side is **older** gets the write. A
+missing or unreadable `VERSION.txt` counts as **infinitely old**, so a fresh
+or damaged slot is chosen first — the safe direction, since the worst case
+is overwriting something already broken.
+
+**★★ The guard that matters more than the alternation.** Deploying the same
+version twice would put it in *both* slots and destroy the previous version
+the whole scheme exists to preserve, while both folders would still look
+healthy — two populated directories, recent timestamps. Refused unless
+`--force`. **Verified**: a second run of `0.16.0` exits `1` and writes
+nothing.
+
+**`verify-release.py` gained two checks, and the second is the one that
+matters:** *"the CLI for `<tag>` is on OneDrive"* (the naive check — passes
+even if both slots hold the current version) and *"a PREVIOUS version is
+still on OneDrive"* — the operator's **actual** property. A release
+satisfying only the first check has not satisfied the instruction.
+
+**State after this Pass, seeded deliberately on both sides:** `pdfce1` =
+`0.15.0` (previous), `pdfce2` = `0.16.0` (current). With both slots starting
+empty, deploying only `0.16.0` would have satisfied the letter of "always
+deploy" and left **no previous version at all** — the one thing asked for.
+
+**Verification.**
+- Both copies **run from OneDrive**: `0.16.0` and `0.15.0` each report their
+  own version; `list-outline` works from the deployed exe.
+- Double-deploy guard exits `1` and writes nothing (above).
+- `verify-release.py v0.16.0` — clean, including both new checks.
+- `bash tools/run-gates.sh` — the only red was `check-commits-filed.py` on
+  this commit itself, which this filing clears.
+
+**★ `921ac2a` ("v0.16.0, released and verified") was NOT already filed —
+checked per `R228` before repeating the claim.** This filing's dispatch
+stated the release "is already filed in the 324th [filing]." The 324th
+filing's `SESSION_LOG.md` entry names it only under **"For next session"**
+as a forward-looking note ("the operator is cutting `v0.16.0` immediately
+after this filing lands... no action needed here") — not a `ROADMAP.md`
+Shipped entry, and no line in either file named `921ac2a` or `v0.16.0`
+before this filing. Filed properly below, alongside `Pass 166.0`, in the
+same shape as the 324th filing's own catch of `v0.15.0` going unfiled for
+two Passes — the same gap recurring one release later, caught one filing
+sooner this time.
+
+**`FEATURES.md` — checked, zero rows changed.** This is release/
+distribution *tooling* for the operator's own machine, not a new capability
+pdfce can exercise on a PDF; it does not tick the existing Planned row
+"Release and distribution channel" either, since that row names a *public*
+channel (Scoop/WinGet), not a private OneDrive mirror. Stated explicitly
+per this role's maintenance contract.
+
+**No `ARCHITECTURE.md` §12 decision entry.** This is release-procedure
+tooling, not a crate-boundary, invariant, or library choice; decision
+ceiling stays at `098`.
+
+**Transient noted, not chased.** A sweep reported `could not compile
+pdfce-core (lib)` under `--no-default-features`; run alone, the same
+command passes 157 tests. Matches this project's already-documented
+starvation pattern (concurrent heavy I/O, `0xc0000142`-class) rather than a
+code defect — recorded here so it is not re-investigated from scratch.
+
+**Ledger.** Pass ceiling `165.0` → `166.0`; next free `166.1`/new major
+`167.0`. **Standing rules ceiling `R228` → `R229`** (minted below); next
+free `R230`. Decision ceiling unchanged at `098`; next free `099`.
+`FEATURES.md`: zero rows changed (see above). Filing ordinal `324` → `325`.
+
+### `v0.16.0` release (`921ac2a`, 2026-08-29) — cut immediately after the 324th filing landed; filed here alongside `Pass 166.0` because it carried no filing of its own — filed 2026-08-29 (325th filing); **enriched same filing** on the engineer's own follow-up, below
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `921ac2a`, the byte count, the CI run ID, and every test/gate
+figure below are relayed, stated by the engineer to be `git log`/
+`verify-release.py`/CI-verified — not independently re-run here.
+
+**★ Enrichment note.** This entry was first filed thin (hash plus
+"released and verified," no detail) and flagged to the engineer as owed
+fuller detail rather than invented. The engineer supplied it in the same
+filing, before any commit — recorded below in place of the original thin
+paragraph, which is why this entry carries the "enriched same filing"
+marker in its own header instead of a separately-numbered correction.
+
+**What shipped.** Workspace version `0.15.0` → `0.16.0`. GitHub release
+tagged at `921ac2a`, released 2026-08-29T12:35Z, with a **24,545,980-byte**
+portable zip. `verify-release.py v0.16.0` — **clean on all nine checks**,
+including the two `Pass 166.0` OneDrive checks introduced the same day. CI
+— **green at the tagged commit** (run `33252874159`).
+
+**The one Pass this release carries: `Pass 165.0` (`4331be8`, filed
+above)** — an `ICCBased` `/N 4` colour space over `DeviceCMYK` was losing
+its authored tints to a flattened-sRGB round trip, moving the rendered
+colour further from Acrobat's own output on every channel
+(`(24,140,108)` vs. Acrobat's `(59,171,51)`); this release moves it closer
+on every channel (`(47,181,73)`, Δ from ±35/31/57 down to ±12/10/22) via a
+new `SourceKind::ProcessCmykIndirect` variant that deliberately does *not*
+also change `/OPM 1` overprint compositing (see `Pass 165.0` for the full
+derivation — a one-line fix was refused because it would have traded a
+colour bug for a silent overprint regression). A second, independent
+defect in the same code path — `cmyk_bridged_pixels` reporting **0** across
+40,000 reconstructed pixels when the paint had in fact been bridged
+through sRGB — was fixed alongside it.
+
+**Release-time verification (beyond `Pass 165.0`'s own Pass-level
+checks).**
+- **Conformance suite re-measured against the released build**, as any
+  colour-affecting change requires: 51 patches — **6 FAIL / 29 pass / 16
+  unresolved, 0 render errors** — identical to the `v0.15.0` baseline. No
+  verdict moved and none should have: the affected panel's criterion is
+  the *absence* of a trap mark, already met before this fix: the fix
+  improves accuracy the criterion structurally cannot see.
+- `bash tools/run-gates.sh` — 28 commands, clean.
+- **Packaging smoke test verified the shipped artefact, not the working
+  tree**: the portable package was copied to a *fresh* folder and the
+  deployed `pdfce-cli.exe` rendered the *corrected* colour
+  (`(47,181,73)`) from that fresh copy.
+- No dependency changes since `v0.14.0`, so `THIRD_PARTY_LICENSES.md` is
+  unchanged and correctly left unregenerated (rule 13).
+
+**Timing, worth one line:** `v0.15.0` and `v0.16.0` both released
+2026-08-29, roughly 90 minutes apart — the first closing the operator's
+"do all 4" standing instruction, the second fixing the colour defect found
+while investigating the `iccce` `PCS3_132` measurement (see `Pass 165.0`).
+
+**What is independently known to have happened under this tag**: `Pass
+166.0` (above) deployed this build to the current OneDrive slot
+(`pdfce2`), and `verify-release.py v0.16.0` reported clean per the
+engineer, including the two new OneDrive checks that Pass introduced.
+
 ### `Pass 165.0` (`4331be8`, 2026-08-29) — TWO DEFECTS ON ONE PATH: an `ICCBased` `/N 4` CMYK source lost its authored tints to a flattened-colour round trip, and the disclosure counter built to catch that exact crossing was itself blind to it — filed 2026-08-29 (324th filing)
 
 **Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
@@ -118947,7 +119101,86 @@ same cause (hashes exist only at commit time), two different failure modes.
   a document **neither of you has just re-read** — a different failure
   surface, same remedy shape (open the source).
 
+  **★ Instance 3, pointed the OTHER way (325th filing, engineer's own
+  follow-up).** Both prior instances were this librarian catching an
+  inbound dispatch's false characterization before repeating it. This one
+  is the engineer flagging, unprompted, that its **own** two dispatches
+  this session were each a false claim of exactly `R228`'s shape: (a) the
+  `921ac2a`/"already filed in the 324th" claim this filing's own entry
+  above corrects, and (b) a separate report, earlier the same session,
+  that a doc-comment orphaning had been *"Fixed"* when the orphaning was
+  still live in source. Relayed here, not independently re-verified this
+  filing (no shell) — the engineer's own characterization of its second
+  error is itself a claim under this same rule, noted so a future reader
+  does not read it as more settled than "reported by the party who made
+  the error." **The mechanism generalizes past "inbound summary vs.
+  document contents": a dispatch is a claim regardless of which party
+  issues it or what kind of state it describes (a document's contents, or
+  a fix's completeness) — the remedy is unchanged (open the source before
+  repeating the claim), but the source-opener is not always the reader on
+  this end.** Two wrong dispatches from the same engineer inside one
+  session is why this librarian's independent verification is recorded
+  here as load-bearing, not procedural colour — see hard rule 8 for the
+  general form of "the check is the only thing standing between a claim
+  and belief."
+
   **Standing rules ceiling `R227` → `R228`; next free `R229`.**
+
+- **R229 — EVERY RELEASE PUBLISHES THE CLI TO ONEDRIVE, ALTERNATING TWO
+  SLOTS, AND A RELEASE IS NOT VERIFIED UNTIL A *PREVIOUS* VERSION SURVIVES
+  BESIDE THE CURRENT ONE.** Minted 2026-08-29 (325th filing, `Pass 166.0`,
+  `6dbe953`), on a standing operator instruction.
+
+  **Operator, verbatim, 2026-08-29:** *"can you always put a new version on
+  onedrive? cycle between folders pdfce1 and pdfce2 when you make new
+  versions so there is always a previous version available. Just need the
+  CLI tool available."*
+
+  **"Always" is binding on every future release, not only this one** — the
+  failure mode this rule guards against is the instruction surviving two
+  releases and then quietly stopping once no session narrative repeats it.
+
+  **The mechanism.** `tools/deploy-onedrive.py` publishes `pdfce-cli.exe`,
+  `models/ocrs`, `LICENSE`, `THIRD_PARTY_LICENSES.md`, `README.md` and a
+  generated `VERSION.txt` into one of `C:\Users\Ken\OneDrive\pdfce1\` /
+  `pdfce2\`. **CLI only — no `pdfce-gui.exe`**, per the operator's own
+  words; the OCR models ship anyway, because a CLI that refuses OCR by name
+  and explains itself is still doing the job it advertises, and *"just the
+  CLI tool"* means not-the-GUI, not a crippled CLI.
+
+  **The target slot is DERIVED, never remembered.** A stored "last used"
+  marker breaks the instant anything happens outside the script (a manual
+  copy, an interrupted deploy, a OneDrive-restored folder) and breaks
+  *silently*, by overwriting the copy the operator was relying on. Instead:
+  write into whichever slot's own `VERSION.txt` is **older**; a missing or
+  unreadable `VERSION.txt` counts as infinitely old, so a fresh or damaged
+  slot is chosen first — the safe direction, since the worst case is
+  overwriting something already broken.
+
+  **The guard that matters more than the alternation.** Deploying the same
+  version twice would put it in *both* slots and destroy the previous
+  version the whole scheme exists to preserve, while both folders would
+  still look healthy (two populated directories, recent timestamps).
+  `deploy-onedrive.py` refuses a same-version re-deploy unless `--force`;
+  verified — a second run of `0.16.0` exits `1` and writes nothing.
+
+  **`verify-release.py` gained two checks, and the second is the one that
+  matters.** *"The CLI for `<tag>` is on OneDrive"* is the naive check — it
+  passes even if both slots hold the current version. *"A PREVIOUS version
+  is still on OneDrive"* is the operator's actual property; a release that
+  satisfies only the first check has not satisfied the instruction.
+
+  **State after `Pass 166.0`:** both slots were seeded, not only the
+  current one — `pdfce1` = `0.15.0`, `pdfce2` = `0.16.0`. Deploying only
+  `0.16.0` into two empty slots would have satisfied the letter of "always
+  deploy" and left **no previous version at all**, the one thing asked for.
+
+  No body-section counterpart needed in `ARCHITECTURE.md` — this is
+  release-procedure tooling, not a crate-boundary, invariant or library
+  decision, so no decision-log entry either; decision ceiling stays at
+  `098`.
+
+  **Standing rules ceiling `R228` → `R229`; next free `R230`.**
 
 ## Update protocol
 

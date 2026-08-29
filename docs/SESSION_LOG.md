@@ -75591,3 +75591,102 @@ capabilities. Stated explicitly per this role's own maintenance contract.
    release so soon after `v0.15.0`.
 
 ---
+
+## 2026-08-29 (325th filing) — `Pass 166.0` (`6dbe953`) filed: the CLI now deploys to two alternating OneDrive slots on every release, plus a Shipped entry for `v0.16.0` (`921ac2a`) that a dispatch wrongly said was already filed
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). All
+commit hashes, test counts, exit codes and `verify-release.py` output below
+are relayed from the engineer's dispatch, not independently re-run here.
+
+**Shipped:**
+- `Pass 166.0` (`6dbe953`) — `tools/deploy-onedrive.py`, publishing
+  `pdfce-cli.exe` + OCR models + licence/readme files to whichever of
+  `pdfce1`/`pdfce2` on OneDrive has the older `VERSION.txt`, guarded against
+  a same-version double-deploy that would destroy the previous copy the
+  whole scheme exists to preserve. `verify-release.py` gained two matching
+  checks. New standing rule `R229`.
+- `v0.16.0` release (`921ac2a`) — filed here, **enriched later in the same
+  filing** once the engineer supplied the detail this entry originally
+  flagged as owed: 24,545,980-byte portable zip, `verify-release.py`
+  clean on all nine checks, CI green at run `33252874159`, conformance
+  suite re-measured against the released build (51 patches, 6/29/16,
+  identical to `v0.15.0`), and a packaging smoke test against a *fresh*
+  copy of the shipped artefact rather than the working tree. See
+  `ROADMAP.md`'s entry for the full record, including the one Pass this
+  release carries (`Pass 165.0`).
+
+**Decisions made this session:** none — decision ceiling stays at `098`.
+This is release-procedure tooling, not a crate-boundary/invariant/library
+decision.
+
+**Findings + decisions:**
+- **`R229` minted** on a standing operator instruction, verbatim: *"can you
+  always put a new version on onedrive? cycle between folders pdfce1 and
+  pdfce2 when you make new versions so there is always a previous version
+  available. Just need the CLI tool available."* "Always" is binding on
+  every future release. Full mechanism (derived-not-remembered alternation,
+  the double-deploy guard, the two `verify-release.py` checks) in
+  `ROADMAP.md`'s Standing rules section and `Pass 166.0`'s own entry.
+- **★ `R228` fired on this filing's own inbound dispatch.** The dispatch
+  asserted `921ac2a` ("v0.16.0, released and verified") "is already filed in
+  the 324th [filing]." Checked directly per `R228` before repeating it: the
+  324th filing's own entry names `v0.16.0` only under **"For next
+  session"** as a forward-looking note ("the operator is cutting `v0.16.0`
+  immediately after this filing lands... no action needed here") — not a
+  Shipped entry, and neither `921ac2a` nor `v0.16.0` appeared anywhere in
+  `ROADMAP.md` before this filing. The claim was checkable with two greps
+  and was false. Filed properly now instead of relayed as already-done —
+  see the `v0.16.0` entry in `ROADMAP.md`, which is honestly thin because no
+  further release detail (commit count since `v0.15.0`, CI colour,
+  packaging-smoke-test description) was supplied here either.
+- This is the same shape as the 324th filing's own catch of `v0.15.0` going
+  unfiled for two Passes, recurring one release later — caught one filing
+  sooner this time (the very next filing rather than two Passes on).
+- **★ `R228` gained a corroborating third instance, pointed the OTHER
+  way, on the engineer's own unprompted flag.** The `921ac2a` catch above
+  is this librarian catching an inbound dispatch's false claim before
+  repeating it — the first two `R228` instances' own shape. The engineer
+  then reported that its dispatches this session had now been wrong
+  **twice**: the `921ac2a` claim, and a separate, earlier report that a
+  doc-comment orphaning was *"Fixed"* when it was still live in source.
+  Recorded as a corroborating instance under `R228` (`ROADMAP.md`'s
+  Standing rules), generalized past "inbound summary vs. a document's
+  contents": **a dispatch is a claim regardless of which party issues it**
+  — the remedy (open the source before repeating it) held both times only
+  because this librarian checked rather than believed the dispatch.
+  Relayed, not independently re-verified this filing (no shell) — the
+  engineer's account of its own error is itself a claim under the same
+  rule.
+- **Transient noted, not chased**: a sweep reported `could not compile
+  pdfce-core (lib)` under `--no-default-features`; run alone, the same
+  command passes 157 tests. Matches this project's documented starvation
+  pattern (concurrent heavy I/O, `0xc0000142`-class), not a code defect.
+
+**`FEATURES.md`: NO CAPABILITY ROWS CHANGE.** Release/distribution tooling
+for the operator's own machine is not a new thing pdfce can do to a PDF,
+and it does not tick the existing Planned "Release and distribution
+channel" row either — that row names a *public* channel (Scoop/WinGet),
+not a private OneDrive mirror. Stated explicitly per this role's own
+maintenance contract.
+
+**Still in flight:** unchanged from the 324th filing — `docs/NEXT_SESSION.md`
+§A item 5 (`CmykIntent::Calibrated` doc-comment-vs-evidence gap),
+`rotate_widget`, `set_dimension_label`, `Pass 142.0` (narrowed), `PCS3_130`
+cells c/d's disagreement, and the n-channel spot-colorant buffer all carry
+forward untouched.
+
+**For next session:**
+1. Ledger: Pass ceiling **`166.0`**, next free **`166.1`**/new major
+   **`167.0`**; standing rules ceiling **`R229`**, next free **`R230`**;
+   decision-record ceiling **`098`**, next free **`099`**; filing ordinal
+   **325**.
+2. **RESOLVED, same filing.** The fuller `v0.16.0` release record flagged
+   as owed was supplied by the engineer before this filing's commit — see
+   `ROADMAP.md`'s enriched entry and the "Shipped" bullet above. Nothing
+   further owed on this item.
+3. `R229` is now standing and applies to every future release without
+   being re-asked: `tools/deploy-onedrive.py` runs, alternating slots, and
+   `verify-release.py` checks both the current tag and a surviving previous
+   version. A release that skips this step is incomplete under `R229`.
+
+---
