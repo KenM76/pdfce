@@ -303,8 +303,36 @@ pub enum ClipAnnotation {
     Dimension {
         /// The source group's name — matched, or created, on paste.
         group_name: String,
-        /// The source group's unit.
-        unit: crate::dimension::Unit,
+        /// The source group's number FORMAT — its unit, fraction mode,
+        /// decimal marker and precision (`Pass 173.1` widened this from a
+        /// bare `Unit`).
+        ///
+        /// The unit alone was not enough: a group that shows `12 1/2"` and
+        /// one that shows `12.50"` differ only here, and a ce dimension
+        /// landing in the wrong one reads differently for the same reason a
+        /// wrong scale does.
+        format: crate::dimension::NumberFormat,
+        /// The source group's **scale** (`Pass 173.1`).
+        ///
+        /// ★ This is the field whose absence made a pasted ce dimension
+        /// **read differently from the one it was copied from**. A ce
+        /// dimension's label is DERIVED from its group's scale, so landing in
+        /// a freshly created default-styled group changed the number on the
+        /// page — with nothing erroring and nothing marked.
+        ///
+        /// Used only when the destination has **no** group of this name. When
+        /// it has one, the DESTINATION's scale wins and the difference is
+        /// disclosed: the operator's existing group is authoritative about
+        /// its own drawing, and silently re-scaling it to match an incoming
+        /// clip would change every ce dimension already in it.
+        scale: crate::dimension::ScaleState,
+        /// The source group's drafting standard, applied on the same terms as
+        /// [`Self::Dimension::scale`].
+        standard: crate::dimension::DimStandard,
+        /// The ce dimension's **own** style overrides — the bottom tier of
+        /// the cascade, which are its alone and are therefore applied
+        /// unconditionally rather than only when a group is created.
+        style: crate::dimension::StyleOverrides,
         /// The measured geometry.
         kind: Box<crate::dimension::DimensionKind>,
     },
@@ -589,33 +617,6 @@ fn put_cos(out: &mut Vec<u8>, value: &Object) {
     put_bytes(out, &encoded);
 }
 
-/// The clip's tag for a ce dimension's unit.
-///
-/// A stable integer rather than the unit's `abbrev()`, because two units
-/// share one abbreviation (`DecimalFeet` and `FeetInches` are both `ft`) and
-/// a clip that read the label back would collapse them.
-const fn unit_tag(unit: crate::dimension::Unit) -> u8 {
-    match unit {
-        crate::dimension::Unit::Millimeter => 0,
-        crate::dimension::Unit::Centimeter => 1,
-        crate::dimension::Unit::Meter => 2,
-        crate::dimension::Unit::Inch => 3,
-        crate::dimension::Unit::DecimalFeet => 4,
-        crate::dimension::Unit::FeetInches => 5,
-    }
-}
-
-const fn unit_of_tag(tag: u8) -> crate::dimension::Unit {
-    match tag {
-        1 => crate::dimension::Unit::Centimeter,
-        2 => crate::dimension::Unit::Meter,
-        3 => crate::dimension::Unit::Inch,
-        4 => crate::dimension::Unit::DecimalFeet,
-        5 => crate::dimension::Unit::FeetInches,
-        _ => crate::dimension::Unit::Millimeter,
-    }
-}
-
 /// A cursor over a serialised clip, which refuses rather than panicking on a
 /// short read.
 struct Reader<'a> {
@@ -811,12 +812,29 @@ impl ObjectClip {
                 }
                 ClipAnnotation::Dimension {
                     group_name,
-                    unit,
+                    format,
+                    scale,
+                    standard,
+                    style,
                     kind,
                 } => {
                     out.push(1);
                     put_bytes(&mut out, group_name.as_bytes());
-                    out.push(unit_tag(*unit));
+                    // The group's settings travel as the COS objects the
+                    // sidecar codec already writes for them, so a new field on
+                    // `NumberFormat`, `ScaleState`, `DimStandard` or
+                    // `StyleOverrides` cannot be added to the document format
+                    // and forgotten here.
+                    put_cos(
+                        &mut out,
+                        &crate::dimension::sidecar::serialize_group_settings(
+                            format, *scale, *standard,
+                        ),
+                    );
+                    put_cos(
+                        &mut out,
+                        &crate::dimension::sidecar::serialize_overrides(style),
+                    );
                     put_cos(&mut out, &crate::dimension::sidecar::serialize_kind(kind));
                 }
                 ClipAnnotation::Raw(raw) => {
@@ -961,7 +979,15 @@ impl ObjectClip {
                     )),
                     1 => {
                         let group_name = String::from_utf8_lossy(&r.bytes()?).into_owned();
-                        let unit = unit_of_tag(r.take(1)?.first().copied().unwrap_or(0));
+                        let (format, scale, standard) =
+                            crate::dimension::sidecar::deserialize_group_settings(&r.cos()?)
+                                .ok_or_else(|| {
+                                    ClipError::Content(
+                                        "a ce dimension group's settings could not be read back"
+                                            .to_owned(),
+                                    )
+                                })?;
+                        let style = crate::dimension::sidecar::deserialize_overrides(&r.cos()?);
                         let kind = crate::dimension::sidecar::deserialize_kind(&r.cos()?)
                             .ok_or_else(|| {
                                 ClipError::Content(
@@ -970,7 +996,10 @@ impl ObjectClip {
                             })?;
                         ClipAnnotation::Dimension {
                             group_name,
-                            unit,
+                            format,
+                            scale,
+                            standard,
+                            style,
                             kind: Box::new(kind),
                         }
                     }

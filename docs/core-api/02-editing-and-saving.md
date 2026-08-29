@@ -894,13 +894,25 @@ The two exceptions are `transform_objects` / `transform_preview`
 > ★ **A version-1 payload still reads**, carrying its content and no
 > annotations, so a clip written by an older build is not refused.
 >
-> ★ **A ce dimension still travels by group NAME**, matched or created on
-> paste. Its group's **scale, drafting standard and style are NOT carried**, so
-> a dimension pasted into a document with no group of that name lands in a
-> freshly created default-styled group — and, since the label derives from the
-> scale, it can then READ DIFFERENTLY from the one it was copied from. Neither
-> is that dimension's own per-dimension style override carried. Both are owed
-> work, not properties of the format.
+> ★★ **A ce dimension carries its group's SCALE, number format and drafting
+> standard, and its own style overrides** (`Pass 173.1`).
+>
+> This paragraph used to say the opposite, and the change is the whole point
+> of that Pass: a ce dimension's label is **derived** from its group's scale,
+> so landing in a freshly created uncalibrated group **changed the number on
+> the page** — nothing erroring, nothing marked, the drawing simply saying
+> something else. That is the worst shape a defect can take in a measuring
+> tool, and it was the unmet half of `Pass 120.5`'s acceptance criteria.
+>
+> **The group is matched by NAME.** When the destination has no group of that
+> name, one is created carrying the clip's scale, format and standard. When it
+> **has** one, the **destination's** settings win and the paste **discloses
+> that the label may now read differently** — because adopting the clip's
+> scale into an existing group would change the label of every ce dimension
+> already in it, objects that were not part of the paste.
+>
+> The per-ce-dimension style overrides are the bottom tier of the cascade and
+> belong to that object alone, so they are applied either way.
 >
 > #### ★★ Almost every annotation is copyable now (`Pass 170.0`)
 >

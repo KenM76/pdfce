@@ -448,10 +448,18 @@ fn a_ce_dimension_survives_the_clip_file() {
     );
     match wired.annotations.first() {
         Some(ClipAnnotation::Dimension {
-            group_name, unit, ..
+            group_name,
+            format,
+            scale,
+            ..
         }) => {
             assert_eq!(group_name, "Plan");
-            assert_eq!(*unit, Unit::Millimeter);
+            assert_eq!(format.unit, Unit::Millimeter);
+            // ★ `Pass 173.1`: the SCALE travels. Without it a pasted ce
+            // dimension landed in a freshly created default-styled group and
+            // its label -- which is DERIVED from the scale -- read a
+            // different number, with nothing erroring.
+            assert_eq!(*scale, pdfce_core::dimension::ScaleState::NeverSet);
         }
         other => panic!("expected a ce dimension, got {other:?}"),
     }
@@ -650,5 +658,164 @@ fn a_popup_is_refused_because_it_is_not_an_independent_annotation() {
     assert!(
         said.contains("belongs to the comment that opens it"),
         "the refusal gives the POP-UP's reason: {said:?}",
+    );
+}
+
+/// ★★ A pasted ce dimension shows THE SAME NUMBER as the one it was copied
+/// from (`Pass 173.1`).
+///
+/// This is the acceptance criterion `Pass 120.5` stated in 2026-08-21 and
+/// `Pass 169.0` did not meet: carry a ce dimension's group **name, scale and
+/// unit**. `169.0` carried the name and the unit.
+///
+/// A ce dimension's label is **derived** from its group's scale. Landing in a
+/// freshly created, uncalibrated group changed the number on the page —
+/// nothing errored, nothing was marked, and the drawing simply said something
+/// else. That is the worst shape a defect can take in a measuring tool.
+#[test]
+fn a_pasted_ce_dimension_reads_the_same_number_it_was_copied_from() {
+    use pdfce_core::dimension::{DimensionKind, NumberFormat, ScaleState, Unit};
+    use pdfce_core::vector::{ObjectClip, Point};
+
+    let mut source = session("hello.pdf");
+    let group = source
+        .add_dimension_group("Plan", Unit::Millimeter)
+        .expect("group");
+    // 1 pt = 10 mm. A 100 pt span therefore reads 1000 mm here, and would
+    // read something else in an uncalibrated group.
+    source
+        .set_group_scale(
+            group,
+            ScaleState::Calibrated { scale: 10.0 },
+            NumberFormat {
+                unit: Unit::Millimeter,
+                ..Unit::Millimeter.default_format()
+            },
+        )
+        .expect("calibrate");
+    source
+        .add_dimension(
+            0,
+            group,
+            DimensionKind::Linear {
+                a: Point::new(20.0, 20.0),
+                b: Point::new(120.0, 20.0),
+                constraint: pdfce_core::vector::AxisConstraint::Aligned,
+                offset: 12.0,
+                text_along: 0.5,
+            },
+        )
+        .expect("ce dimension");
+
+    let slots = source.page_slots().expect("slots");
+    let page = slots.first().expect("page").id;
+    let index = pdfce_core::annot::page_annotations(&source.graph(), page)
+        .iter()
+        .position(|a| a.id.is_some())
+        .expect("it is on the page");
+    let clip = source.copy_annotations(0, &[index]).expect("copy");
+    let wired = ObjectClip::from_bytes(&clip.to_bytes()).expect("through the wire");
+
+    // The SCALE is on the clip -- the whole point of the Pass.
+    match wired.annotations.first() {
+        Some(pdfce_core::vector::ClipAnnotation::Dimension { scale, .. }) => {
+            assert_eq!(
+                *scale,
+                ScaleState::Calibrated { scale: 10.0 },
+                "the group's scale crossed the wire",
+            );
+        }
+        other => panic!("expected a ce dimension, got {other:?}"),
+    }
+
+    // And it lands in a group calibrated the same way, so the LABEL agrees.
+    let mut destination = session("hello.pdf");
+    destination
+        .paste_objects(0, &wired, pdfce_core::vector::Matrix::IDENTITY)
+        .expect("paste");
+    let model = destination.dimension_model();
+    let landed = model
+        .groups()
+        .iter()
+        .find(|g| g.name == "Plan")
+        .expect("the group was created");
+    assert_eq!(
+        landed.scale,
+        ScaleState::Calibrated { scale: 10.0 },
+        "a pasted ce dimension measures at the scale it was drawn at -- \
+         before this Pass it landed uncalibrated and the number on the page \
+         changed",
+    );
+    assert_eq!(landed.unit(), Unit::Millimeter);
+}
+
+/// ★ When the destination ALREADY has a group of that name, **its** scale
+/// wins — and the paste says so.
+///
+/// The alternative would be to re-scale the operator's existing group to
+/// match an incoming clip, which would change the label of **every ce
+/// dimension already in it** — objects that were not part of the paste.
+#[test]
+fn an_existing_group_keeps_its_own_scale_and_the_paste_discloses_it() {
+    use pdfce_core::dimension::{DimensionKind, NumberFormat, ScaleState, Unit};
+    use pdfce_core::vector::{Matrix, Point};
+
+    let make = |scale: f64| {
+        let mut s = session("hello.pdf");
+        let group = s.add_dimension_group("Plan", Unit::Millimeter).expect("g");
+        s.set_group_scale(
+            group,
+            ScaleState::Calibrated { scale },
+            NumberFormat {
+                unit: Unit::Millimeter,
+                ..Unit::Millimeter.default_format()
+            },
+        )
+        .expect("calibrate");
+        (s, group)
+    };
+
+    let (mut source, group) = make(10.0);
+    source
+        .add_dimension(
+            0,
+            group,
+            DimensionKind::Linear {
+                a: Point::new(20.0, 20.0),
+                b: Point::new(120.0, 20.0),
+                constraint: pdfce_core::vector::AxisConstraint::Aligned,
+                offset: 12.0,
+                text_along: 0.5,
+            },
+        )
+        .expect("ce dimension");
+    let slots = source.page_slots().expect("slots");
+    let page = slots.first().expect("page").id;
+    let index = pdfce_core::annot::page_annotations(&source.graph(), page)
+        .iter()
+        .position(|a| a.id.is_some())
+        .expect("on the page");
+    let clip = source.copy_annotations(0, &[index]).expect("copy");
+
+    // The destination has a "Plan" group at a DIFFERENT scale.
+    let (mut destination, _) = make(25.0);
+    let outcome = destination
+        .paste_objects(0, &clip, Matrix::IDENTITY)
+        .expect("paste");
+    let said = outcome.disclosures.join(" ");
+    assert!(
+        said.contains("ITS scale was kept"),
+        "the operator is told the label may read differently: {said:?}",
+    );
+    let model = destination.dimension_model();
+    let landed = model
+        .groups()
+        .iter()
+        .find(|g| g.name == "Plan")
+        .expect("group");
+    assert_eq!(
+        landed.scale,
+        ScaleState::Calibrated { scale: 25.0 },
+        "the destination's own group was NOT re-scaled to match the clip",
     );
 }

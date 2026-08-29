@@ -293,6 +293,81 @@ fn deserialize_group(obj: &Object) -> Option<Group> {
 
 // ---- dimension (de)serialization --------------------------------------------
 
+/// A ce-dimension group's **display settings** — number format, scale and
+/// drafting standard — as a COS object, for the clipboard (`Pass 173.1`).
+///
+/// # Why this goes through the whole-group codec
+///
+/// Same reason [`serialize_kind`] goes through the whole-record one: a second
+/// encoder for the same fields is how the two drift, and here the drift would
+/// be silent in the worst way — a ce dimension's LABEL is derived from its
+/// group's scale and format, so a field added to the document codec and
+/// forgotten here produces a pasted ce dimension showing **a different
+/// number** with nothing erroring.
+///
+/// The `/Id`, `/Name`, `/Ocg` and `/Visible` this writes are placeholders and
+/// are discarded on read: a group id means nothing in another document, the
+/// name travels separately on the clip, and an optional-content group is a
+/// document-level object the paste re-creates.
+pub(crate) fn serialize_group_settings(
+    format: &NumberFormat,
+    scale: ScaleState,
+    standard: DimStandard,
+) -> Object {
+    let mut group = Group::new(GroupId(0), "", format.unit);
+    group.format = *format;
+    group.scale = scale;
+    group.standard = standard;
+    serialize_group(&group)
+}
+
+/// Read back what [`serialize_group_settings`] wrote, discarding the
+/// placeholders.
+pub(crate) fn deserialize_group_settings(
+    obj: &Object,
+) -> Option<(NumberFormat, ScaleState, DimStandard)> {
+    let g = deserialize_group(obj)?;
+    Some((g.format, g.scale, g.standard))
+}
+
+/// One ce dimension's own style overrides as a COS object, for the clipboard
+/// (`Pass 173.1`).
+///
+/// The bottom tier of the style cascade — the properties this ce dimension
+/// alone carries, distinct from its group's defaults. Routed through the
+/// whole-record codec for the same anti-drift reason as its two siblings
+/// above.
+pub(crate) fn serialize_overrides(style: &StyleOverrides) -> Object {
+    serialize_dimension(&DimensionRecord {
+        id: DimensionId(0),
+        group: GroupId(0),
+        // Any kind will do; the caller reads only the style keys back, and
+        // reusing the real encoder is the point.
+        kind: DimensionKind::Linear {
+            a: Point::new(0.0, 0.0),
+            b: Point::new(1.0, 0.0),
+            constraint: crate::vector::AxisConstraint::Aligned,
+            offset: 0.0,
+            text_along: 0.5,
+        },
+        annot: None,
+        ap: None,
+        style: *style,
+    })
+}
+
+/// Read back what [`serialize_overrides`] wrote.
+///
+/// Returns [`StyleOverrides::default`] — every field `None`, meaning "inherit
+/// everything from the group" — when the payload cannot be read. That is the
+/// safe direction: a ce dimension with no overrides looks like its group,
+/// which is what an operator who never set one expects.
+pub(crate) fn deserialize_overrides(obj: &Object) -> StyleOverrides {
+    deserialize_dimension(obj)
+        .map(|r| r.style)
+        .unwrap_or_default()
+}
+
 /// A [`DimensionKind`] alone, as a COS object, for the clipboard
 /// (`Pass 169.0`).
 ///

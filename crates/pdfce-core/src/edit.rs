@@ -9434,7 +9434,16 @@ impl EditSession {
             {
                 return Ok(crate::vector::ClipAnnotation::Dimension {
                     group_name: group.name.clone(),
-                    unit: group.unit(),
+                    // `Pass 173.1`: the group's SCALE and standard, and this
+                    // ce dimension's own style overrides. Without the scale a
+                    // pasted ce dimension read differently from the one it was
+                    // copied from, because its label is derived from it -- the
+                    // gap `Pass 120.5`'s acceptance criteria named and
+                    // `Pass 169.0` did not close.
+                    format: group.format,
+                    scale: group.scale,
+                    standard: group.standard,
+                    style: record.style,
                     kind: Box::new(record.kind.clone()),
                 });
             }
@@ -9725,12 +9734,33 @@ impl EditSession {
                 }
                 ClipAnnotation::Dimension {
                     group_name,
-                    unit,
+                    format,
+                    scale,
+                    standard,
+                    style,
                     kind,
                 } => {
-                    let group = self.find_or_create_dimension_group(group_name, *unit)?;
+                    let (group, adopted) = self.find_or_create_dimension_group_with(
+                        group_name, format, *scale, *standard,
+                    )?;
+                    // ★ THE DESTINATION'S OWN GROUP WINS, and the difference
+                    // is disclosed. Silently re-scaling an existing group to
+                    // match an incoming clip would change the label of every
+                    // ce dimension already in it -- a change nobody asked for,
+                    // to objects that were not part of the paste.
+                    if !adopted && *scale != self.group_scale(group) {
+                        disclosures.push(format!(
+                            "paste: this document already has a dimension group called {group_name:?}, and ITS scale was kept. The pasted ce dimension is measured at this document's scale, so its label may read differently from the one it was copied from -- the alternative was to re-scale every ce dimension already in that group."
+                        ));
+                    }
                     let moved = crate::dimension::transform_kind(kind, at);
-                    self.add_dimension(page_index, group, moved)?;
+                    let (_, id) = self.add_dimension(page_index, group, moved)?;
+                    // The per-ce-dimension overrides are the BOTTOM tier of
+                    // the cascade and belong to this object alone, so they are
+                    // applied whether the group was created or matched.
+                    if style != &crate::dimension::StyleOverrides::default() {
+                        self.set_dimension_style(id, *style)?;
+                    }
                     placed += 1;
                 }
                 ClipAnnotation::Raw(raw) => {
@@ -9753,16 +9783,56 @@ impl EditSession {
     /// asserting the same thing about it, and a paste that created a second
     /// group of the same name would give the operator two identical entries in
     /// their group list and no way to tell them apart.
-    fn find_or_create_dimension_group(
+    /// [`Self::find_or_create_dimension_group`], carrying a scale and a
+    /// drafting standard onto a group it CREATES (`Pass 173.1`).
+    ///
+    /// Returns the group and whether it was newly created — `true` meaning
+    /// the clip's scale and standard were adopted, `false` meaning a group of
+    /// that name already existed and **its** settings were kept.
+    ///
+    /// # Why the destination's group wins
+    ///
+    /// A ce dimension's label is derived from its group's scale. Adopting an
+    /// incoming clip's scale into an existing group would silently change the
+    /// label of **every ce dimension already in that group** — objects that
+    /// were not part of the paste and whose operator did not ask for them to
+    /// move. So the existing group is authoritative about its own drawing,
+    /// and the paste discloses that the pasted ce dimension is now measured
+    /// at this document's scale.
+    fn find_or_create_dimension_group_with(
         &mut self,
         name: &str,
-        unit: crate::dimension::Unit,
-    ) -> Result<crate::dimension::GroupId, EditError> {
+        format: &crate::dimension::NumberFormat,
+        scale: crate::dimension::ScaleState,
+        standard: crate::dimension::DimStandard,
+    ) -> Result<(crate::dimension::GroupId, bool), EditError> {
         let model = self.read_dimension_model();
         if let Some(existing) = model.groups().iter().find(|g| g.name == name) {
-            return Ok(existing.id);
+            return Ok((existing.id, false));
         }
-        self.add_dimension_group(name, unit)
+        let id = self.add_dimension_group(name, format.unit)?;
+        // Only what differs from a fresh group's defaults is written, so a
+        // clip from an uncalibrated group does not stamp a redundant setting
+        // onto the document it lands in.
+        // The scale and the format go together: `set_group_scale` takes both
+        // because a scale without the format that renders it is half an
+        // answer. Written whenever EITHER differs from a fresh group's
+        // defaults.
+        let fresh = format.unit.default_format();
+        if scale != crate::dimension::ScaleState::NeverSet || *format != fresh {
+            self.set_group_scale(id, scale, *format)?;
+        }
+        if standard != crate::dimension::DimStandard::default() {
+            self.set_group_standard(id, standard)?;
+        }
+        Ok((id, true))
+    }
+
+    /// A group's current scale, or `NeverSet` when it is not in the model.
+    fn group_scale(&self, group: crate::dimension::GroupId) -> crate::dimension::ScaleState {
+        self.read_dimension_model()
+            .group(group)
+            .map_or(crate::dimension::ScaleState::NeverSet, |g| g.scale)
     }
 
     /// **Paste a clipboard payload onto a page** (`Pass 120.0`).
