@@ -902,6 +902,45 @@ The two exceptions are `transform_objects` / `transform_preview`
 > is that dimension's own per-dimension style override carried. Both are owed
 > work, not properties of the format.
 >
+> #### ★★ Almost every annotation is copyable now (`Pass 170.0`)
+>
+> `ClipAnnotation` gained a **`Raw`** variant: any annotation with **no
+> registration outside the page** travels as its own dictionary plus the
+> closure it reaches — appearance streams, action dictionaries, embedded file
+> specifications and all. No model, no reader, no per-subtype work.
+>
+> That is what makes **sticky notes, text boxes and stamps** copyable. pdfce
+> could always *author* those (`TextAnnotSpec`) and had no reader that turned
+> one back into a spec, so each was refused. It is also what makes `/Link`,
+> `/FileAttachment`, `/Caret`, `/Screen` and every exotic subtype work, and it
+> carries the `/CA` opacity, `/T` author, `/Contents` note and `/M` date that
+> the model route dropped on the kinds it *did* handle.
+>
+> **Stripped at copy time**, each because it names something that exists only
+> in the source: `/P`, `/Parent`, `/StructParent`, `/NM`, `/Popup`, `/IRT`.
+>
+> **Four subtypes are still refused, by policy rather than for want of a
+> model** — ask the clip and grey the control rather than letting a paste fail:
+>
+> | subtype | why |
+> |---|---|
+> | `/Widget` | has its own clipboard (`copy_field`), which asks the naming question a raw copy would guess at |
+> | `/Popup` | not an independent annotation (§12.5.6.14) — it belongs to the comment that opens it and travels with it |
+> | `/Redact` | a pending destructive operation, not artwork; pasting one arms a redaction nobody reviewed |
+> | a ce dimension whose sidecar record is missing | pasting the outline without the measurement is the silently-wrong outcome (`R204`) |
+>
+> ★ **A `/Link` is carried, and its destination is checked on paste.** If the
+> target does not resolve in the destination document, `/Dest` and `/A` are
+> **dropped and disclosed** — a link that looks clickable and goes nowhere is
+> worse than a rectangle that plainly does nothing. Acrobat's own
+> cross-document link paste drops the target at an arbitrary place instead.
+>
+> ★ **A raw annotation is MOVED, never rotated or scaled.** It travels with its
+> baked `/AP`, and §12.5.5 maps that appearance's `/BBox` into `/Rect` — so
+> changing the rectangle's shape would stretch the artwork rather than
+> transform the annotation. Disclosed when the paste matrix asks for more than
+> a translation. A modelled markup still re-bakes and rotates faithfully.
+>
 > #### One more limit, named so you do not find it by pressing
 >
 > - **A resource that does not resolve on the SOURCE page refuses the copy**,

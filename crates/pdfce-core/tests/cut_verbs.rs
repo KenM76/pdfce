@@ -152,11 +152,16 @@ fn cutting_an_annotation_the_clipboard_cannot_carry_is_refused_with_nothing_dele
     let before = annot_count(&s);
     assert!(before > 0, "precondition");
 
-    // Index 0 is a /Stamp — authorable by pdfce, but not readable back into
-    // the model the clipboard carries, so it is `Unsupported`.
-    let err = s.cut_annotations(0, &[0]).expect_err("must refuse");
+    // Index 3 is a /Popup — refused BY POLICY, not for want of a model: a
+    // pop-up is not an independent annotation (§12.5.6.14), it belongs to the
+    // comment that opens it and travels with it.
+    //
+    // ★ This test used to use index 0, a /Stamp. `Pass 170.0` made stamps
+    // carryable (they travel as their own dictionary), so the example had to
+    // change — which is the point of the Pass, not a weakening of the test.
+    let err = s.cut_annotations(0, &[3]).expect_err("must refuse");
     assert!(
-        matches!(err, EditError::CutWouldNotSurvive { ref subtype } if subtype == "Stamp"),
+        matches!(err, EditError::CutWouldNotSurvive { ref subtype } if subtype == "Popup"),
         "got {err:?}",
     );
     assert_eq!(
@@ -166,7 +171,7 @@ fn cutting_an_annotation_the_clipboard_cannot_carry_is_refused_with_nothing_dele
     );
 
     // A copy of the same thing is fine, and loses nothing.
-    let clip = s.copy_annotations(0, &[0]).expect("copy is allowed");
+    let clip = s.copy_annotations(0, &[3]).expect("copy is allowed");
     assert_eq!(clip.annotation_count(), 1);
     assert_eq!(annot_count(&s), before, "and the original is still there");
 }
@@ -181,8 +186,8 @@ fn cutting_an_annotation_the_clipboard_cannot_carry_is_refused_with_nothing_dele
 fn one_uncarryable_annotation_refuses_the_whole_selection() {
     let mut s = session("annot/demo-annotated.pdf");
     let before = annot_count(&s);
-    // Index 2 is a /Circle (carryable); index 0 is a /Stamp (not).
-    let err = s.cut_annotations(0, &[2, 0]).expect_err("must refuse");
+    // Index 2 is a /Circle (carryable); index 3 is a /Popup (refused).
+    let err = s.cut_annotations(0, &[2, 3]).expect_err("must refuse");
     assert!(
         matches!(err, EditError::CutWouldNotSurvive { .. }),
         "got {err:?}"
@@ -394,22 +399,26 @@ fn removing_a_calculated_field_prunes_the_calculation_order() {
 ///
 /// Both paste sites used to carry one hardcoded sentence about **widgets** —
 /// `/AcroForm` registration, field names, calculation order — printed
-/// whatever had been copied. Copying a `/Stamp` was answered with an
+/// whatever had been copied. Copying a `/Link` was answered with an
 /// explanation of form-field renaming. The prose was accurate about a
 /// different object, it was duplicated verbatim in two sites, and it was
 /// well-formed enough that nothing could notice.
+///
+/// ★ Uses a `/Popup`, and used to use a `/Stamp`. `Pass 170.0` made stamps
+/// carryable, so the example had to move to something still refused — which
+/// is the Pass working, not the test weakening.
 #[test]
 fn the_paste_refusal_explains_the_subtype_that_was_actually_copied() {
     let mut s = session("annot/demo-annotated.pdf");
-    let clip = s.copy_annotations(0, &[0]).expect("copy the /Stamp");
+    let clip = s.copy_annotations(0, &[3]).expect("copy the /Popup");
     let outcome = s
         .paste_objects(0, &clip, Matrix::IDENTITY)
         .expect("paste places nothing but reports");
     let said = outcome.disclosures.join(" ");
-    assert!(said.contains("/Stamp"), "it names the subtype: {said:?}",);
+    assert!(said.contains("/Popup"), "it names the subtype: {said:?}");
     assert!(
         !said.contains("AcroForm"),
-        "and it does NOT explain form-field registration for a rubber stamp: {said:?}",
+        "and it does NOT explain form-field registration for a pop-up: {said:?}",
     );
 
     // The preview must say the same thing as the verb -- they are two sites

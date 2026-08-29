@@ -176,6 +176,88 @@ pub struct ClipObject {
     pub payload: Option<Vec<u8>>,
 }
 
+/// An annotation carried as **its own dictionary plus the closure it
+/// reaches** (`Pass 170.0`).
+///
+/// # Why a raw carrier exists beside the modelled ones
+///
+/// [`ClipAnnotation`]'s original design copied annotations **through pdfce's
+/// models** — a markup through [`MarkupSpec`], a ce dimension through its
+/// [`DimensionKind`](crate::dimension::DimensionKind) — and that reasoning is
+/// still right for the two kinds that have **registration outside the page**:
+/// a ce dimension has a `/PieceInfo` sidecar record and a group, a widget has
+/// an `/AcroForm` field entry and a name that must not collide. Planting
+/// their raw dictionaries would carry a record naming a group that does not
+/// exist, or a field name that already means something.
+///
+/// **Every other annotation has no such registration**, and for those the
+/// model route was the wrong trade. It cost, measured:
+///
+/// - **Three whole subtypes that could not be copied at all.** pdfce authors
+///   `/FreeText`, `/Text` (a sticky note) and `/Stamp` through
+///   [`TextAnnotSpec`](crate::annot_author::TextAnnotSpec), but has no reader
+///   that turns one back into a spec — so each landed in
+///   [`ClipAnnotation::Unsupported`] and was refused on paste. **A sticky
+///   note is the single most-copied comment in a review workflow.**
+/// - **Everything a `MarkupSpec` does not model**, on the kinds it does:
+///   `/CA` opacity, `/T` the author, `/Contents` the note text, `/M` the
+///   date, `/Popup`, `/RC`. That loss was reported by the consuming shell,
+///   not found here.
+/// - **Every exotic subtype**, permanently: `/Link`, `/FileAttachment`,
+///   `/Caret`, `/Screen`, `/Watermark`. Each would have needed its own model
+///   before it could be copied once.
+///
+/// A raw carrier costs one closure walk and copies all of it exactly.
+///
+/// # What is stripped, and why each
+///
+/// The same list [`FieldClip`](crate::formclip::FieldClip) strips, for the
+/// same reasons — these name things that exist only in the source document:
+///
+/// - **`/P`** — the source page.
+/// - **`/Parent`** — a `/Popup`'s back-reference, and an `/IRT` thread's.
+/// - **`/StructParent`** — an index into the *source's* `/ParentTree`
+///   (§14.7.4.4). pdfce has no structure-tree writer, so carrying the number
+///   would point the destination's tag tree at an arbitrary element.
+/// - **`/NM`** — §12.5.2 requires an annotation name to be unique *within its
+///   page*, so carrying one guarantees a collision the second time a clip is
+///   pasted onto one page.
+/// - **`/Popup`** — a pop-up is a separate annotation object with its own
+///   `/Annots` entry; carrying the reference without the object leaves a
+///   dangling pointer, and carrying the object would plant an annotation the
+///   operator did not select. Disclosed on paste.
+/// - **`/IRT`** — "in reply to". A reply whose parent did not travel is a
+///   comment thread with no root.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct RawAnnotation {
+    /// The `/Subtype`, so a refusal or a summary can name it without
+    /// re-reading the dictionary.
+    pub subtype: String,
+    /// The annotation dictionary, with clip-local references and every
+    /// source-bound key already removed.
+    pub dict: Dict,
+    /// The owned object closure: appearance streams, action dictionaries,
+    /// embedded file specifications, everything the dictionary reaches.
+    pub objects: BTreeMap<u32, ClipObject>,
+    /// The `/Rect` at copy time, in the source page's user space.
+    pub rect: Option<Bounds>,
+}
+
+impl RawAnnotation {
+    /// Whether this annotation carries a destination or an action — a `/Link`
+    /// or a `/Screen`, typically.
+    ///
+    /// Worth asking before a cross-document paste: a destination names a page
+    /// **in the document it came from**, and pasting the rectangle without a
+    /// target that resolves here would give the operator something that looks
+    /// clickable and goes nowhere.
+    #[must_use]
+    pub fn carries_destination(&self) -> bool {
+        self.dict.contains_key(b"Dest") || self.dict.contains_key(b"A")
+    }
+}
+
 /// One annotation on the clipboard (`Pass 120.4`).
 ///
 /// # ★ Why annotations are a SEPARATE payload rather than more `items`
@@ -226,8 +308,16 @@ pub enum ClipAnnotation {
         /// The measured geometry.
         kind: Box<crate::dimension::DimensionKind>,
     },
-    /// An annotation kind this cut does not model — carried so the count is
-    /// honest, refused by name on paste.
+    /// Any annotation with **no registration outside the page**, carried as
+    /// its own dictionary plus the closure it reaches (`Pass 170.0`).
+    ///
+    /// This is what makes sticky notes, text boxes, stamps, links, file
+    /// attachments and every exotic subtype copyable at all — see
+    /// [`RawAnnotation`] for what the model route cost and why the two
+    /// registered kinds above still do not take this path.
+    Raw(Box<RawAnnotation>),
+    /// An annotation kind pdfce **refuses** to copy, carried so the count is
+    /// honest and refused by name on paste.
     ///
     /// **A widget is here deliberately.** Pasting one means registering a
     /// field in the destination's `/AcroForm` under a name that does not
@@ -248,6 +338,7 @@ impl ClipAnnotation {
         match self {
             Self::Markup(_) => "markup".to_owned(),
             Self::Dimension { .. } => "ce dimension".to_owned(),
+            Self::Raw(raw) => raw.subtype.clone(),
             Self::Unsupported { subtype } => format!("{subtype} (unsupported)"),
         }
     }
@@ -728,6 +819,39 @@ impl ObjectClip {
                     out.push(unit_tag(*unit));
                     put_cos(&mut out, &crate::dimension::sidecar::serialize_kind(kind));
                 }
+                ClipAnnotation::Raw(raw) => {
+                    out.push(3);
+                    put_bytes(&mut out, raw.subtype.as_bytes());
+                    put_cos(&mut out, &Object::Dict(raw.dict.clone()));
+                    match raw.rect {
+                        Some(b) => {
+                            out.push(1);
+                            put_bounds(&mut out, b);
+                        }
+                        None => out.push(0),
+                    }
+                    put_u32(
+                        &mut out,
+                        u32::try_from(raw.objects.len()).unwrap_or(u32::MAX),
+                    );
+                    for (&id, object) in &raw.objects {
+                        put_u32(&mut out, id);
+                        let (value, payload): (Object, Option<&Vec<u8>>) = match &object.value {
+                            Object::Stream(stream) => {
+                                (Object::Dict(stream.dict.clone()), object.payload.as_ref())
+                            }
+                            other => (other.clone(), None),
+                        };
+                        put_cos(&mut out, &value);
+                        match payload {
+                            Some(bytes) => {
+                                out.push(1);
+                                put_bytes(&mut out, bytes);
+                            }
+                            None => out.push(0),
+                        }
+                    }
+                }
                 ClipAnnotation::Unsupported { subtype } => {
                     out.push(2);
                     put_bytes(&mut out, subtype.as_bytes());
@@ -849,6 +973,52 @@ impl ObjectClip {
                             unit,
                             kind: Box::new(kind),
                         }
+                    }
+                    3 => {
+                        let subtype = String::from_utf8_lossy(&r.bytes()?).into_owned();
+                        let dict = r.cos()?.as_dict().cloned().ok_or_else(|| {
+                            ClipError::Content(
+                                "a carried annotation is not a dictionary".to_owned(),
+                            )
+                        })?;
+                        let rect = if r.take(1)?.first().copied().unwrap_or(0) == 1 {
+                            Some(r.bounds()?)
+                        } else {
+                            None
+                        };
+                        let object_count = r.u32()? as usize;
+                        if object_count > MAX_CLIP_ANNOTATIONS {
+                            return Err(ClipError::ClipTooLarge {
+                                found: object_count,
+                                limit: MAX_CLIP_ANNOTATIONS,
+                            });
+                        }
+                        let mut objects = BTreeMap::new();
+                        for _ in 0..object_count {
+                            let id = r.u32()?;
+                            let value = r.cos()?;
+                            let payload = if r.take(1)?.first().copied().unwrap_or(0) == 1 {
+                                Some(r.bytes()?)
+                            } else {
+                                None
+                            };
+                            let value = match (&value, &payload) {
+                                (Object::Dict(d), Some(bytes)) => {
+                                    Object::Stream(crate::object::Stream {
+                                        dict: d.clone(),
+                                        data_span: ByteSpan::new(0, bytes.len()),
+                                    })
+                                }
+                                _ => value,
+                            };
+                            objects.insert(id, ClipObject { value, payload });
+                        }
+                        ClipAnnotation::Raw(Box::new(RawAnnotation {
+                            subtype,
+                            dict,
+                            objects,
+                            rect,
+                        }))
                     }
                     _ => ClipAnnotation::Unsupported {
                         subtype: String::from_utf8_lossy(&r.bytes()?).into_owned(),

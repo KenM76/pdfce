@@ -897,15 +897,15 @@ fn dr_font_entry<G: ObjectGraph + ?Sized>(
 /// and small — but the depth guard is not optional: `/AA` and `/AP` are
 /// operator-supplied structures from an untrusted file, and §7.3.7 permits
 /// arbitrary nesting.
-struct Closure<'a> {
+pub(crate) struct Closure<'a> {
     view: &'a DocumentView<'a>,
-    objects: BTreeMap<u32, ClipObject>,
+    pub(crate) objects: BTreeMap<u32, ClipObject>,
     mapping: BTreeMap<ObjId, u32>,
     next: u32,
 }
 
 impl<'a> Closure<'a> {
-    fn new(view: &'a DocumentView<'a>) -> Self {
+    pub(crate) fn new(view: &'a DocumentView<'a>) -> Self {
         Self {
             view,
             objects: BTreeMap::new(),
@@ -916,7 +916,7 @@ impl<'a> Closure<'a> {
 
     /// Store a value that has no source object behind it, returning its
     /// clip-local number.
-    fn adopt(&mut self, value: Object) -> Result<u32, ClipError> {
+    pub(crate) fn adopt(&mut self, value: Object) -> Result<u32, ClipError> {
         let number = self.reserve()?;
         self.objects.insert(
             number,
@@ -945,7 +945,7 @@ impl<'a> Closure<'a> {
     /// Exceeding [`MAX_CLIP_DEPTH`] degrades that sub-tree to `null` rather
     /// than failing the copy, matching `pageops`' posture: a hostile nesting
     /// costs the operator one broken value, not the operation.
-    fn take(&mut self, value: &Object, depth: usize) -> Result<Object, ClipError> {
+    pub(crate) fn take(&mut self, value: &Object, depth: usize) -> Result<Object, ClipError> {
         if depth > MAX_CLIP_DEPTH {
             return Ok(Object::Null);
         }

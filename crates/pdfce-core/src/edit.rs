@@ -9434,9 +9434,245 @@ impl EditSession {
             return Ok(unsupported());
         }
 
+        // THE FOUR REFUSALS. Everything else is carried -- see
+        // `raw_copy_refusal` for why each of these is not.
+        if Self::raw_copy_refusal(&subtype) {
+            return Ok(unsupported());
+        }
+
+        // A markup pdfce MODELS still travels as a spec, because the spec is
+        // what lets a rotated paste re-bake the appearance instead of
+        // enclosing it. Everything else -- and that is most annotations --
+        // travels as its own dictionary.
         match crate::annot_author::spec_from_dict(&self.graph(), &dict) {
             Ok(spec) => Ok(crate::vector::ClipAnnotation::Markup(Box::new(spec))),
-            Err(_) => Ok(unsupported()),
+            Err(_) => self.clip_raw_annotation(annot, id, &dict),
+        }
+    }
+
+    /// Keys an annotation carries that name something in the SOURCE document
+    /// only, and are therefore stripped when it goes on the clipboard.
+    ///
+    /// See [`RawAnnotation`](crate::vector::clip::RawAnnotation) for the
+    /// per-key reasoning. `/Popup` and `/IRT` are the two that are not merely
+    /// unresolvable but would plant a *relationship* the operator did not
+    /// select.
+    const CLIP_STRIPPED_ANNOT_KEYS: &'static [&'static [u8]] =
+        &[b"P", b"Parent", b"StructParent", b"NM", b"Popup", b"IRT"];
+
+    /// Subtypes pdfce refuses to put on the clipboard at all, with the reason.
+    ///
+    /// Everything else is carried — see
+    /// [`RawAnnotation`](crate::vector::clip::RawAnnotation). These four are
+    /// refused because copying them is not the operation the operator wants:
+    ///
+    /// - **`/Widget`** has its own clipboard
+    ///   ([`copy_field`](Self::copy_field)), which asks the naming question a
+    ///   raw copy would have to guess at.
+    /// - **`/Popup`** is not an independent annotation (§12.5.6.14) — it
+    ///   belongs to the comment that opens it, and travels with it.
+    /// - **`/Redact`** is a pending destructive operation, not artwork.
+    ///   Pasting one arms a redaction in a document nobody reviewed.
+    /// - **`/Link`** is carried, not refused — see `clip_annotation`.
+    fn raw_copy_refusal(subtype: &str) -> bool {
+        matches!(subtype, "Widget" | "Popup" | "Redact")
+    }
+
+    /// Carry an annotation as its own dictionary plus the closure it reaches.
+    fn clip_raw_annotation(
+        &self,
+        annot: &crate::annot::Annotation,
+        id: ObjId,
+        dict: &Dict,
+    ) -> Result<crate::vector::ClipAnnotation, EditError> {
+        let subtype = String::from_utf8_lossy(&annot.subtype).into_owned();
+        let view = self.view();
+        let mut closure = crate::formclip::Closure::new(&view);
+        let mut carried = Dict::new();
+        for (key, value) in dict.iter() {
+            if Self::CLIP_STRIPPED_ANNOT_KEYS.contains(&key.as_bytes()) {
+                continue;
+            }
+            carried.insert(key.clone(), closure.take(value, 0)?);
+        }
+        let _ = id;
+        Ok(crate::vector::ClipAnnotation::Raw(Box::new(
+            crate::vector::clip::RawAnnotation {
+                subtype,
+                dict: carried,
+                objects: closure.objects,
+                rect: annot.rect.map(|r| crate::vector::Bounds {
+                    min: crate::vector::Point::new(r.llx, r.lly),
+                    max: crate::vector::Point::new(r.urx, r.ury),
+                }),
+            },
+        )))
+    }
+
+    /// Plant a carried annotation onto `page_index`, translated by `at`.
+    ///
+    /// # Only a translation is applied, and anything else is disclosed
+    ///
+    /// A raw annotation travels with its **baked `/AP`**, which is the whole
+    /// point — it is why a sticky note keeps its icon, a stamp its artwork
+    /// and a markup its opacity, author and note text. A translation moves
+    /// `/Rect` and leaves the appearance correct.
+    ///
+    /// A rotation or a scale does not: §12.5.5 maps the appearance's `/BBox`
+    /// into `/Rect`, so changing the rectangle's SHAPE would stretch the
+    /// artwork rather than transform the annotation. pdfce places it
+    /// translated and says so, rather than distorting a stamp silently.
+    fn paste_raw_annotation(
+        &mut self,
+        page_index: usize,
+        raw: &crate::vector::clip::RawAnnotation,
+        at: crate::vector::Matrix,
+        disclosures: &mut Vec<String>,
+    ) -> Result<(), EditError> {
+        let slots = self.page_slots()?;
+        let page_id = slots
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count: slots.len(),
+            })?
+            .id;
+
+        let mut imported: BTreeMap<u32, ObjId> = BTreeMap::new();
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let mut dict = self
+            .clip_materialize_value(
+                &raw.objects,
+                &Object::Dict(raw.dict.clone()),
+                &mut imported,
+                &mut objects,
+            )?
+            .as_dict()
+            .cloned()
+            .unwrap_or_default();
+
+        // A destination or an action that named the SOURCE document is
+        // dropped rather than planted: a link whose target does not resolve
+        // here looks clickable and goes nowhere, which is worse than a
+        // rectangle that plainly does nothing. Acrobat's own cross-document
+        // link paste drops the target at an arbitrary place; pdfce says so
+        // instead.
+        if raw.carries_destination() && !self.destination_resolves(&dict) {
+            dict.remove(b"Dest");
+            dict.remove(b"A");
+            disclosures.push(format!(
+                "paste: the /{} annotation's destination named a page in the document it was copied FROM, and that target does not exist here -- it was dropped rather than pasted, because a link that looks clickable and goes nowhere is worse than one that plainly does nothing.",
+                raw.subtype
+            ));
+        }
+
+        if let Some(bounds) = raw.rect {
+            let moved = crate::vector::clip::transformed_bounds(bounds, at);
+            let axis_aligned = at.b == 0.0 && at.c == 0.0 && at.a == 1.0 && at.d == 1.0;
+            if !axis_aligned {
+                disclosures.push(format!(
+                    "paste: the /{} annotation was MOVED but not rotated or scaled. It travels with its own baked appearance, and SS12.5.5 maps that appearance's /BBox into /Rect -- so changing the rectangle's shape would stretch the artwork rather than transform the annotation.",
+                    raw.subtype
+                ));
+            }
+            dict.insert(
+                Name::from(b"Rect"),
+                Object::Array(vec![
+                    Object::Real(moved.min.x),
+                    Object::Real(moved.min.y),
+                    Object::Real(moved.max.x),
+                    Object::Real(moved.max.y),
+                ]),
+            );
+        }
+        dict.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
+        dict.insert(Name::from(b"P"), Object::Reference(page_id));
+
+        let annot_id = ObjId::new(self.alloc_number()?, 0);
+        objects.push(ObjectWrite {
+            id: annot_id,
+            before: None,
+            after: Some(Object::Dict(dict)),
+        });
+        objects.extend(self.annots_writes(page_id, annot_id, &slots)?);
+        self.commit(Command {
+            kind: CommandKind::PasteObjects,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
+    }
+
+    /// Whether a carried annotation's `/Dest` or `/A` names something that
+    /// exists in THIS document.
+    ///
+    /// Deliberately conservative: an explicit destination array whose first
+    /// element is a page reference resolves only if that object is a page
+    /// here, and a named destination resolves only if the name is in this
+    /// document's name tree. Anything it cannot decide is treated as NOT
+    /// resolving — dropping a target that would have worked is a visible,
+    /// recoverable disappointment; planting one that does not is a link the
+    /// operator trusts and that silently fails.
+    fn destination_resolves(&self, dict: &Dict) -> bool {
+        let graph = self.graph();
+        let dest = dict
+            .get(b"Dest")
+            .or_else(|| {
+                dict.get(b"A")
+                    .map(|a| graph.resolve(a))
+                    .and_then(Object::as_dict)
+                    .and_then(|a| a.get(b"D"))
+            })
+            .map(|d| graph.resolve(d));
+        match dest {
+            // A named destination: resolves only if this document has it.
+            Some(Object::String(name)) => self.named_destination_exists(name),
+            Some(Object::Name(name)) => self.named_destination_exists(name.as_bytes()),
+            // An explicit destination: its first element must be a page here.
+            Some(Object::Array(items)) => {
+                items
+                    .first()
+                    .and_then(Object::as_reference)
+                    .is_some_and(|page| {
+                        self.page_slots()
+                            .map(|slots| slots.iter().any(|s| s.id == page))
+                            .unwrap_or(false)
+                    })
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether this document's `/Names /Dests` tree holds `name`.
+    ///
+    /// A `/Kids` (multi-level) tree answers **false** rather than walking it:
+    /// the only consumer is the conservative check above, where an
+    /// undecidable answer must be "does not resolve". Reporting a link as
+    /// unresolvable when it would have worked costs the operator a visible,
+    /// recoverable disappointment; the other way round costs them a link they
+    /// trust and that silently fails.
+    fn named_destination_exists(&self, name: &[u8]) -> bool {
+        let Some(catalog_id) = self.graph().catalog_id() else {
+            return false;
+        };
+        let Some(Object::Dict(catalog)) = self.value(catalog_id).cloned() else {
+            return false;
+        };
+        let Some(names) = self.deref_dict(catalog.get(b"Names")) else {
+            return false;
+        };
+        let Some(node) = self.deref_dict(names.get(b"Dests")) else {
+            return false;
+        };
+        if node.contains_key(b"Kids") {
+            return false;
+        }
+        match self.deref_value(node.get(b"Names")) {
+            Some(Object::Array(arr)) => arr
+                .chunks_exact(2)
+                .any(|pair| matches!(pair, [Object::String(k), _] if k == name)),
+            _ => false,
         }
     }
 
@@ -9482,6 +9718,10 @@ impl EditSession {
                     let group = self.find_or_create_dimension_group(group_name, *unit)?;
                     let moved = crate::dimension::transform_kind(kind, at);
                     self.add_dimension(page_index, group, moved)?;
+                    placed += 1;
+                }
+                ClipAnnotation::Raw(raw) => {
+                    self.paste_raw_annotation(page_index, raw, at, &mut disclosures)?;
                     placed += 1;
                 }
                 ClipAnnotation::Unsupported { subtype } => {

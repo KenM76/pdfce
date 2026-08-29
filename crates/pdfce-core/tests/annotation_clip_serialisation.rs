@@ -456,3 +456,199 @@ fn a_ce_dimension_survives_the_clip_file() {
         other => panic!("expected a ce dimension, got {other:?}"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// The raw carrier (`Pass 170.0`)
+// ---------------------------------------------------------------------------
+
+/// ★ A **sticky note** copies and pastes — the single most-copied comment in
+/// a review workflow, and until `Pass 170.0` the clipboard refused it.
+///
+/// pdfce could always *author* one (`TextAnnotSpec::Sticky`); it had no
+/// reader that turned one back into a spec, so it landed in
+/// `ClipAnnotation::Unsupported` and the paste declined it by name. The raw
+/// carrier needs no reader: the annotation travels as its own dictionary plus
+/// the closure it reaches, which is both simpler and lossless.
+#[test]
+fn a_sticky_note_survives_a_copy_and_a_paste() {
+    use pdfce_core::annot_author::{StickyIcon, TextAnnotSpec};
+    use pdfce_core::object::{Name, Object};
+    use pdfce_core::vector::{Matrix, ObjectClip};
+
+    let mut s = session("hello.pdf");
+    s.add_text_annotation(
+        0,
+        &TextAnnotSpec::Sticky {
+            rect: Rect {
+                llx: 30.0,
+                lly: 30.0,
+                urx: 54.0,
+                ury: 54.0,
+            },
+            icon: StickyIcon::Comment,
+            contents: "check this dimension".to_owned(),
+            color: Color::Rgb(1.0, 0.85, 0.0),
+            open: false,
+        },
+    )
+    .expect("author a sticky note");
+
+    let clip = s.copy_annotations(0, &[0]).expect("copy");
+    let wired = ObjectClip::from_bytes(&clip.to_bytes()).expect("through the wire");
+    assert_eq!(wired.annotations, clip.annotations, "unchanged on the wire");
+
+    let mut destination = session("minimal.pdf");
+    let outcome = destination
+        .paste_objects(0, &wired, Matrix::translate(40.0, 0.0))
+        .expect("paste");
+    assert_eq!(outcome.annotations_pasted, 1, "it was PLACED, not refused");
+
+    let slots = destination.page_slots().expect("slots");
+    let page = slots.first().expect("page").id;
+    let placed = pdfce_core::annot::page_annotations(&destination.graph(), page);
+    let id = placed.last().and_then(|a| a.id).expect("an id");
+    let graph = destination.graph();
+    let dict = graph.resolved(id).as_dict().cloned().expect("a dict");
+
+    // The things a MODEL route would have had to re-derive, and that the raw
+    // carrier simply keeps.
+    assert_eq!(
+        dict.get(b"Subtype").and_then(Object::as_name),
+        Some(&Name::from(b"Text")),
+    );
+    assert!(
+        matches!(dict.get(b"Contents"), Some(Object::String(t)) if t == b"check this dimension"),
+        "the note text came with it",
+    );
+    assert!(dict.get(b"Name").is_some(), "and so did the icon");
+    assert!(dict.get(b"AP").is_some(), "and the baked appearance");
+
+    // The source-bound keys did NOT travel; `/P` was rewritten to where it
+    // landed rather than dropped.
+    assert_eq!(
+        dict.get(b"P").and_then(Object::as_reference),
+        Some(page),
+        "/P names the page it landed on",
+    );
+    assert!(dict.get(b"NM").is_none(), "/NM must be unique per page");
+    assert!(
+        dict.get(b"StructParent").is_none(),
+        "/StructParent indexes the SOURCE document's parent tree",
+    );
+}
+
+/// A **stamp** travels with its artwork.
+#[test]
+fn a_stamp_survives_a_copy_and_a_paste() {
+    use pdfce_core::annot_author::{StampName, TextAnnotSpec};
+    use pdfce_core::vector::{Matrix, ObjectClip};
+
+    let mut s = session("hello.pdf");
+    s.add_text_annotation(
+        0,
+        &TextAnnotSpec::Stamp {
+            rect: Rect {
+                llx: 20.0,
+                lly: 20.0,
+                urx: 140.0,
+                ury: 60.0,
+            },
+            name: StampName::Draft,
+            label: Some("SUPERSEDED".to_owned()),
+            color: Color::Rgb(0.8, 0.0, 0.0),
+        },
+    )
+    .expect("author a stamp");
+    let clip = s.copy_annotations(0, &[0]).expect("copy");
+    let wired = ObjectClip::from_bytes(&clip.to_bytes()).expect("wire");
+    let mut destination = session("minimal.pdf");
+    assert_eq!(
+        destination
+            .paste_objects(0, &wired, Matrix::IDENTITY)
+            .expect("paste")
+            .annotations_pasted,
+        1,
+    );
+}
+
+/// A `/FreeText` travels with everything a model route would have dropped —
+/// and a model route dropped **the whole annotation**, because pdfce has no
+/// reader that turns one back into a spec.
+#[test]
+fn a_text_box_travels_with_everything_a_model_route_would_have_dropped() {
+    use pdfce_core::annot_author::TextAnnotSpec;
+    use pdfce_core::fontdata::Std14;
+    use pdfce_core::object::Object;
+    use pdfce_core::vartext::{Quadding, TextColor};
+    use pdfce_core::vector::{Matrix, ObjectClip};
+
+    let mut s = session("hello.pdf");
+    s.add_text_annotation(
+        0,
+        &TextAnnotSpec::FreeText {
+            rect: Rect {
+                llx: 20.0,
+                lly: 20.0,
+                urx: 180.0,
+                ury: 70.0,
+            },
+            text: "revise per RFI 12".to_owned(),
+            font: Std14::Helvetica,
+            font_size: 10.0,
+            color: TextColor::Rgb(0.0, 0.0, 0.8),
+            quadding: Quadding::Left,
+            multiline: true,
+            border: Some(Color::Gray(0.0)),
+            border_width: 1.0,
+        },
+    )
+    .expect("author a text box");
+
+    let clip = s.copy_annotations(0, &[0]).expect("copy");
+    let wired = ObjectClip::from_bytes(&clip.to_bytes()).expect("wire");
+    let mut destination = session("minimal.pdf");
+    destination
+        .paste_objects(0, &wired, Matrix::IDENTITY)
+        .expect("paste");
+
+    let slots = destination.page_slots().expect("slots");
+    let page = slots.first().expect("page").id;
+    let placed = pdfce_core::annot::page_annotations(&destination.graph(), page);
+    let id = placed.last().and_then(|a| a.id).expect("an id");
+    let graph = destination.graph();
+    let dict = graph.resolved(id).as_dict().cloned().expect("dict");
+    assert!(
+        matches!(dict.get(b"Contents"), Some(Object::String(t)) if t == b"revise per RFI 12"),
+        "the words came with it",
+    );
+    assert!(dict.get(b"DA").is_some(), "and the appearance string");
+}
+
+/// A `/Popup` is refused **by policy**, not for want of a model.
+///
+/// §12.5.6.14 makes a pop-up belong to the comment that opens it. One pasted
+/// on its own would have no parent, so it is refused with that reason rather
+/// than planted as an orphan.
+#[test]
+fn a_popup_is_refused_because_it_is_not_an_independent_annotation() {
+    use pdfce_core::vector::{ClipAnnotation, Matrix};
+    let mut s = session("annot/demo-annotated.pdf");
+    let clip = s.copy_annotations(0, &[3]).expect("copy");
+    assert!(
+        matches!(
+            clip.annotations.first(),
+            Some(ClipAnnotation::Unsupported { subtype }) if subtype == "Popup"
+        ),
+        "got {:?}",
+        clip.annotations.first(),
+    );
+    let said = s
+        .paste_objects(0, &clip, Matrix::IDENTITY)
+        .expect("paste reports")
+        .disclosures
+        .join(" ");
+    assert!(
+        said.contains("belongs to the comment that opens it"),
+        "the refusal gives the POP-UP's reason: {said:?}",
+    );
+}
