@@ -75862,3 +75862,324 @@ own text so a future reader does not read green as coverage.
   major `168.0`. **Standing rules ceiling `R230`**, next free `R231`.
   **Decision ceiling `099`**, next free `100`. Operator-question ceiling
   unchanged. Filing ordinal **326**.
+
+## 2026-08-29 (327th filing) — SIX Passes filed in one go: `168.0`–`173.0`, the cut/copy/paste session. `R231` minted, decisions `100` and `101` recorded, `Pass 120.5` found already-shipped-under-a-different-ID and only PARTIALLY discharged
+
+**Sourcing — `R228` was invoked and this filing had a shell and used it.**
+Checked here, on disk: all six commit hashes and their order (`git log
+--format='%H %ad %s'`); clean working tree (`git status --porcelain`, empty);
+**6 commits ahead of `origin/main`** (`git rev-list --count
+origin/main..main`), which matches the five code commits plus `3ac9dd7`; the
+touched-file list per commit (`git show --stat`); **every** named verb, type,
+`EditError` variant and `CommandKind` by `grep -n` over
+`crates/pdfce-core/src/{edit,formclip,outline,attachments}.rs`,
+`pageops/mod.rs` and `vector/clip.rs`; **all five new test files' `#[test]`
+counts — 15 / 11 / 9 / 8 / 7, every one matching the dispatch exactly**; the
+two precondition fixes read in place with their own comments naming the
+shared cause; the ce-dimension group-name-only limit read out of
+`vector/clip.rs` and confirmed against `docs/core-api/02-editing-and-saving.md`;
+`docs/core-api/index.md`'s 173-verb / 98-variant figures; the Acrobat RAG file
+by `ls`; **and both filing gates were run here** (`check-commits-filed.py`
+named exactly the five code commits; `check-passes-filed.py` clean but for
+pre-existing collision notes). **Relayed, not re-run:** `cargo test`, `fmt`,
+`clippy`, `cargo tree`, `fuzz`, and the CLI smoke transcripts. **Each of the
+five commit messages was read in full**, per the dispatch's instruction.
+
+**Shipped:**
+- `Pass 168.0` (`f492e0f`) — `cut_annotations` / `cut_selection` /
+  `cut_field`, the `coalesce_last` undo-folding primitive,
+  `CommandKind::CutSelection`, three new `EditError` variants, `copy-field
+  --cut`, and **four pre-existing defects**.
+- `Pass 169.0` (`fe78023`) — clip format **v2**: annotations survive
+  `ObjectClip::to_bytes`/`from_bytes`. New module `annot_author` (408 lines).
+- `Pass 170.0` (`da52c5c`) — `ClipAnnotation::Raw` / `vector::clip::RawAnnotation`:
+  sticky notes, stamps, text boxes, links and nearly every other subtype copy
+  with their appearance intact, through `formclip::Closure` (now `pub(crate)`).
+- `Pass 171.0` + `Pass 172.0` (`3fe901a`) — `PageClip` and `OutlineClip` /
+  `OutlineClipItem` / `OutlineClipError` / `OutlinePasteOutcome`, six verbs,
+  four CLI subcommands.
+- `Pass 173.0` (`c5fb01a`) — `AttachmentClip`, three verbs,
+  `extract-attachment --cut`.
+- `3ac9dd7` — **no Pass ID, correctly**: the acrobat-librarian's own dispatch
+  notes. Touches no `crates/`/`tools/`/`fixtures/` path, so
+  `check-commits-filed.py` skips it by design; named here so it is not a
+  future "unfiled commit found by accident".
+
+**★★★ THE MEASUREMENT THE WHOLE SESSION ANSWERS, filed as a number so a
+future audit can say whether the ratio moved.** Before `Pass 168.0`,
+**exactly ONE class of thing in pdfce had all three of cut, copy and paste:
+page content objects.** Copy had **three** entry points (`copy_objects`,
+`copy_annotations`, `copy_selection`); cut had **one** — the objects-only one.
+Annotations, form fields: copy and paste, never cut. Pages, bookmarks,
+embedded files: **0 of 3**. ★ **The asymmetry was unremarked anywhere** —
+not in a doc comment, not in `FEATURES.md`, not in a Backlog entry. Six Passes
+later every one of those rows is 3 of 3 at core and cli, and `[ ]` at gui.
+
+**Decisions made this session:**
+- **Decision 100** (`ARCHITECTURE.md` §12) — **a clipboard's payload format is
+  chosen from what the DESTINATION VERB consumes, not from how the source
+  happens to be represented.** So pdfce now has four clip formats on purpose:
+  a page clip **is a PDF** (because `insert_pages` takes a PDF), an attachment
+  clip **has no serialisation method at all** (because `attach_file` takes
+  decoded bytes and a name — the payload *is* the file), an annotation clip
+  carries **the spec's own fields as a COS object** (because `add_markup` takes
+  a spec), a raw annotation carries **its dictionary plus closure** (because
+  `/Annots` takes a dictionary), and a bookmark clip carries **a model**
+  (because an outline dictionary is all back-pointers). ★ The unifying
+  argument: any other choice **manufactures a conversion that must then be
+  kept correct**, and the visible variety is the evidence the rule was
+  followed rather than abandoned.
+- **Decision 101** (`ARCHITECTURE.md` §12, body counterpart **§11.6**, added
+  this filing) — **"one gesture is one undo entry" is achieved by FOLDING N
+  committed commands after the fact (`coalesce_last`), not by composing a
+  bespoke multi-target command** — because several deletion verbs route to
+  specialised verbs that commit for themselves, and rebuilding their writes
+  would duplicate the most intricate deletion logic in the crate. **The fold
+  must COLLAPSE repeated objects (earliest `before`, latest `after`), never
+  concatenate.**
+- **`R231` minted** — *a verb that operates on something attached to a page
+  must not inherit the content path's preconditions.* Two instances one Pass
+  apart, both verified in source here. Taken at **n = 2** rather than the
+  engineer's suggested three, on this project's own stated bar (two instances
+  of the same **cause**, not the same symptom — `R230`'s minting note,
+  `R221`'s precedent), and on three aggravating properties: the failure is a
+  **named refusal**, so it reads as deliberate policy; **no test or gate can
+  see it**, and both were green at HEAD for the life of the verb; and the
+  blast radius is **a whole ordinary document class**, not an edge case.
+- **Mint DECLINED for the `#[non_exhaustive]` finding** (instances **3 and 4**
+  this session — `PageClip`, `OutlineClip`; `AttachmentClip::new` added
+  preemptively). The prescription already exists and **worked again**: the
+  out-of-crate-test habit is what caught both. A dated amendment went to the
+  existing RAG file (hard rule 4), carrying the genuinely new half — *for a
+  boundary type the missing constructor is not ergonomics, it is half the
+  feature.*
+- **Mint DECLINED for the writes-do-not-compose finding** — fourth occurrence
+  of an existing recorded finding; dated footer added instead. **But the
+  fourth occurrence is a new KIND**: the first three were two call sites a
+  human wrote, this one is produced **by the fold primitive itself**, so the
+  rule now belongs on any merge operation and not only on authoring guidance.
+
+**Findings + decisions:**
+- **★★★ A measurement that rejected the cheap design, kept as a test.**
+  Carrying a markup annotation as its **authored dictionary** —
+  `build_appearance` + `spec_from_dict`, both shipping, both exercised — was
+  tried first and is **silently lossy**: `build_appearance` computes a `/Rect`
+  bounding **what is drawn** (§12.5.2), so a cloudy square's scallops bulge
+  outside it and `10,20,110,90` reads back as `2.5,12.5,117.5,97.5`.
+  **+7.5 pt every side, per cycle, compounding, no error.** ★ `spec_from_dict`
+  is **not at fault** — it reads FOREIGN annotations, where the stored `/Rect`
+  *is* the truth. **Two functions that look like a round trip because one
+  writes what the other reads are not a round trip until something asserts
+  it.** → `C:\personal_rag\pdf\` + `D:/dev/rag/rust/`.
+- **★★ A variant that would have been invisible.** There is no `/Cloud`
+  subtype — a revision cloud IS a `/Polygon` with `/BE << /S /C >>`. A lossy
+  round trip returning `Polygon` **flattens every revision cloud that crosses
+  a document boundary**, and the result is a perfectly valid polygon, so
+  **nothing anywhere notices**. → dated footer on the existing 2026-08-19
+  cloud lesson; this is the first instance that *writes* the flattened form
+  rather than mis-rendering it.
+- **★★ The undo fold counted commands it INTENDED, not commands that
+  COMMITTED.** `set_outline_open` returns early without committing when the
+  state already matches; the count exceeded the stack; `coalesce_last`
+  **correctly** refused to fold; the paste **silently became three undo
+  entries.** Nothing errored, every gate green. ★ The durable form: **a guard
+  that refuses on a mismatch protects the data and hides the defect — a
+  correct refusal is not a diagnostic.** Same latent shape fixed
+  **preemptively** in `cut_selection`.
+- **★ A Rust API Guidelines violation surfaced by a lint about something
+  else.** `clippy::len_zero` fired on a test comparing `PageClip::len()` to
+  zero and revealed that `len()` returned **bytes** while `is_empty()`
+  answered about **pages**. Both now mean pages; `byte_len()` is the byte
+  count.
+- **★ Six annotation keys are document-local** and must be stripped when an
+  annotation crosses a file: `/P`, `/Parent`, `/StructParent`, `/NM`,
+  `/Popup`, `/IRT`. **`/StructParent` is the dangerous one** — an *integer*
+  index into the source's `/ParentTree` (§14.7.4.4), so it resolves
+  **successfully** in the destination, to the wrong element, invisible to
+  every dangling-reference check. → `C:\personal_rag\pdf\`.
+- **★ Drop, never clamp, a destination that does not resolve** — for a
+  `/Link` and for a bookmark alike. §12.3.3 permits an outline item with no
+  destination, so the honest shape is legal; a confidently wrong destination
+  is not. And make the resolver **conservative**: anything undecidable counts
+  as *not* resolving.
+- **★ `delete_field` left a stale `/AcroForm` `/CO` entry**, the mirror of the
+  `/CO` finding filed one filing earlier. **Found by reading a disclosure line
+  that printed two numbers which could not both be true** — `fields=0
+  calc_order=1`. No test asserted `/CO`; nothing crashed; every gate green.
+  → dated footer on the existing lesson.
+- **★ A refusal introduced to make a defect honest was retired one Pass later
+  by fixing the defect.** `object-copy --cut --annotations` was refused in
+  `Pass 168.0` precisely because the clip file could not carry what the cut
+  removed; `Pass 169.0` made it carriable. **The refusal was never the answer
+  — it was the placeholder that made the answer findable**, which is the good
+  version of this project's disclosure discipline.
+- **★★ Two Acrobat EXCEEDS, both sourced, both recorded as such** per the
+  operator's standing *"exceed the reference when you can"*: **Acrobat has no
+  real cut** for page content or form fields (only manual copy-then-delete),
+  and **Acrobat cannot copy bookmarks between two files at all** — Adobe's own
+  documentation says so by name. `FEATURES.md`'s `Acrobat` column now reads
+  `◐` on the two cut rows and a **verified `[ ]`** on the bookmark and
+  attachment clipboard rows.
+- **★ Three tests in `cut_verbs.rs` had to change their "uncarryable" example
+  from a `/Stamp` to a `/Popup`** because `Pass 170.0` made stamps copyable.
+  *That is the Pass working, not the tests weakening* — and each says so in
+  place. Worth naming as a convention: **when a capability lands, the tests
+  that pinned its absence must be rewritten, and that rewrite is the most
+  easily mistaken-for-regression diff in a Pass.**
+
+**★★★ `Pass 120.5` — A BACKLOG PASS ID THAT WAS ALREADY SPENT, AND ONLY
+PARTIALLY DISCHARGED. This is the finding of the filing.**
+
+`Pass 169.0`'s scope had **already been assigned an ID on 2026-08-21** (214th
+filing): `Pass 120.5`, *"a versioned annotation payload for `ObjectClip`, so a
+clip's annotations survive `to_bytes`/`from_bytes`"*, sitting in Backlog. The
+session was scoped from a **fresh coverage audit** rather than from the
+Backlog, so the audit re-derived a gap this file had already recorded and gave
+it a new number.
+
+**Hard rule 2 is intact** — nothing was renumbered, nothing was reused for a
+different feature — **but two IDs now name one capability**, and that is
+recorded on `120.5` itself as well as on `169.0`, because a reader arriving at
+a Backlog entry has no reason to fetch a Shipped one.
+
+**★★ And it is NOT fully discharged, in `120.5`'s own acceptance criteria.**
+That entry requires the payload to carry a `MarkupSpec` and a `DimensionKind`
+***"plus its group's name, scale and unit"***. **`Pass 169.0` carries the
+group NAME only** — verified this filing by reading
+`crates/pdfce-core/src/vector/clip.rs` (one `group_name` byte string written
+at `:818`, read at `:963`; no scale, unit, drafting standard or
+per-ce-dimension style override anywhere in the payload) and confirmed against
+`docs/core-api/02-editing-and-saving.md:897–902`.
+
+**The operator-visible consequence, and why this is a gap rather than a
+footnote: a ce dimension's LABEL is derived from its group's scale, so a
+pasted ce dimension can READ DIFFERENTLY from the one it was copied from.**
+Nothing errors, nothing is marked, and the number on the page is simply a
+different number. `FEATURES.md`'s *Planned* section now carries this as its
+own row, replacing the row `Pass 169.0` discharged.
+
+**★ Process observation, reported not minted (one instance).** What was
+missing is any step that **reads Backlog Pass IDs when a new Pass is being
+numbered**. The audit was not wrong to run and the Backlog was not wrong to
+hold the entry; the two simply never met.
+
+**`FEATURES.md` — SEVEN rows changed, four of them new.**
+- **New**, *Document & pages*: cut/copy/paste whole **PAGES** — `[x]` core /
+  `[x]` cli / **`[ ]` gui** / `◐` Acrobat.
+- **New**, *Annotations & markup*: copy/paste **almost any annotation** with
+  its appearance intact — `[x]`/`[x]`/**`[ ]`**/`[x]`.
+- **New**, *Reading, navigation & printing*: cut/copy/paste a **BOOKMARK
+  SUBTREE** between two documents — `[x]`/`[x]`/**`[ ]`**/**`[ ]`** (the
+  Acrobat `[ ]` is a **verified absence**, not a `?`).
+- **New**, same section: cut/copy/paste an **EMBEDDED FILE** —
+  `[x]`/`[x]`/**`[ ]`**/**`[ ]`**.
+- **Amended**, *Vector objects*: the selection-clipboard row — the obsolete
+  *"annotations do not yet survive that serialisation"* clause **struck**
+  (that was the sentence pointing at the now-shipped *Planned* row), cut
+  added, the ce-dimension group-name-only limit stated, Acrobat column
+  `?` → `◐`.
+- **Amended**, *Forms (AcroForm)*: the field-clipboard row gains **cut**, the
+  signed-signature refusal-before-deletion, the `/CO` prune, and Acrobat
+  `[x]` → `◐` (it has copy/paste, it has no cut).
+- **Replaced**, *Planned*: the *"Annotations survive `to_bytes`"* row —
+  **shipped**, so it is replaced by the residual `Pass 120.5` gap (group
+  scale/unit/standard and the per-ce-dimension style override). A second new
+  *Planned* row covers the markup-fidelity remainder.
+
+**★ `gui` is `[ ]` on every one of these and was NOT rounded up.** `pdfceGUI`
+has consumed none of it — it has not yet consumed `Pass 167.0`'s field
+clipboard either. Per the maintenance contract's *"never tick a box you cannot
+substantiate."*
+
+**RAG escalations this filing:**
+- `D:/dev/rag/rust/an_accessor_carries_the_preconditions_of_the_caller_it_was_written_for.md` (new — `R231`'s general half)
+- `D:/dev/rag/rust/a_refused_design_leaves_no_artifact_unless_you_deliberately_make_one.md` (new)
+- `D:/dev/rag/rust/non_exhaustive_is_inert_in_crate_so_only_an_out_of_crate_test_feels_a_consumers_constraint.md` (dated 2026-08-29 footer — instances 3 and 4, plus the boundary-type heuristic; `last_verified` bumped)
+- `D:/dev/rag/rust/n_sequential_whole_object_writes_in_one_command_do_not_compose.md` (dated 2026-08-29 footer — fourth occurrence, first produced by a mechanism)
+- `C:\personal_rag\pdf\lesson_20260829_an_authored_rect_bounds_what_is_drawn_so_reading_it_back_is_not_the_inverse_of_authoring.md` (new)
+- `C:\personal_rag\pdf\lesson_20260829_six_annotation_keys_are_document_local_and_must_be_stripped_when_an_annotation_crosses_a_file.md` (new)
+- `C:\personal_rag\pdf\lesson_20260819_a_revision_cloud_is_a_polygon_with_be_so_a_reader_that_ignores_be_flattens_it.md` (dated footer — the clipboard instance)
+- `C:\personal_rag\pdf\lesson_20260829_acroform_co_required_when_field_carries_aa_c.md` (dated footer — the `delete_field` mirror)
+- `C:\personal_rag\pdf\lesson_20260818_page_copy_carries_widgets_without_acroform.md` (dated footer — the page clipboard inherits it, now with a count)
+- Both subject indexes and `C:\personal_rag\index.md` updated in the same pass.
+
+**★★ HARD RULE 11 SWEEP — searched for the CLAIM, not for a string. TWO
+SURVIVORS, ONE FIXED HERE AND ONE REPORTED.**
+
+Four figures changed meaning: the documented verb count (**161 → 173**),
+`EditError`'s variant count (**95 → 98**), and §02's line and clause counts
+(**3,331 → 3,659**, **85 → 91**). One capability changed meaning:
+*"`ObjectClip::to_bytes` does not carry annotations"* became false.
+
+| survivor | disposition |
+|---|---|
+| `docs/FEATURES.md:164` — *"annotations do not yet survive that serialisation — see Planned"* | **FIXED here.** Within this role's remit. |
+| `docs/ROADMAP.md` Backlog `Pass 120.5` — *"`annotations_survive_serialisation()` returns `false` today"* | **FIXED here**, as an amendment header rather than a rewrite (append-only spirit). |
+| **`docs/NEXT_SESSION.md:293–294` — *"3,331 lines, 85 clauses, 161 verbs, `EditError` 95 variants"*, stated as current** | **REPORTED, NOT EDITED** — `R216`, engineer-owned. **All four are stale as of this filing** (3,659 / 91 / 173 / 98, read out of `docs/core-api/index.md:17`). |
+
+★ **Note the shape, because this is the SECOND CONSECUTIVE FILING to find the
+same four figures stale in the same file.** The 326th filing reported them at
+3,161 / 78 / 159 / 92; the engineer discharged that by re-measuring — and
+**wrote a paragraph beneath the new numbers explaining that the previous ones
+went stale within a day.** They then went stale within *hours*. The engineer
+states it will overwrite `NEXT_SESSION.md` after this report; **that discharges
+this only if the replacement carries the new figures.** The self-aware warning
+did not prevent the recurrence, which is worth more than the correction: **a
+paragraph explaining why a number goes stale is not a mechanism for keeping it
+fresh.** `tools/check-core-api-verbs.py` re-derives two of the four and **does
+not know what `NEXT_SESSION.md` claims.**
+
+**Checked and NOT survivors:** `docs/ROADMAP.md:356` and `:1024` — both dated
+relays inside Shipped/filing entries, correct as of their dates (append-only
+history). `docs/core-api/index.md` — **current**, updated by the engineer in
+the same commits. `crates/pdfce-cli/src/main.rs:29475` — the annotation-
+serialisation warning is retained with a comment stating *"it no longer
+fires"*, which is correct. No `README.md` or `FEATURES.md` verb count exists.
+
+**★ One more thing reported, not fixed: `ARCHITECTURE.md` §4.1 IS STALE BY
+DESIGN AND NOBODY HAS SAID SO.** Its last lettered sync section is **(AB),
+2026-08-23**; `Passes 162.0`–`173.0` have shipped since, and none has a
+section. That is **not** an oversight this filing should silently correct —
+`Pass 167.0` (decision 099) and this filing (decision 100) both carry their
+public-surface accounts in the **§12 decision entry** instead, because
+`docs/core-api/` is now the gate-enforced living record of the core surface
+(**173 verbs, 98 variants, `check-core-api-verbs.py`**) and §4.1 is a
+hand-maintained sync log that cannot compete with it. **The question is
+whether §4.1 should be formally retired with a forward pointer, and that is
+the engineer's call, not this role's.** Raised here so it stops being an
+unspoken drift.
+
+**Still in flight:**
+- **`pdfceGUI` has consumed none of this session's work**, nor `Pass 167.0`'s
+  field clipboard. Every `gui` box added this filing is `[ ]`.
+- **Unpushed commits: 6 at the time this entry was drafted**
+  (`git rev-list --count origin/main..main` = 6), **8 by the time it was
+  committed** — the engineer landed `7d5bf28` (its own agent-memory notes, no
+  `crates/`/`tools/`/`fixtures/` path, correctly skipped by
+  `check-commits-filed.py`) while this filing was being written, and this
+  filing's own commit is the eighth. ★ **Both readings are recorded rather
+  than the second replacing the first**, because the first was correct when
+  taken and the discrepancy is the useful fact: *a count of unpushed commits
+  is a measurement of a moving target, so it needs the moment it was taken
+  attached to it* — the same shape as the `NEXT_SESSION.md` figures in the
+  sweep above, one paragraph earlier in this very entry. The engineer pushes
+  once after this filing lands, standing-authorized under `CLAUDE.md` rule 8
+  as amended by decision 090 (*"always push"*).
+- Owed follow-ups named in the Shipped entries: the ce-dimension group
+  scale/unit/standard on the clipboard; markup `/CA`/`/T`/`/Contents`
+  fidelity (carry both representations, choose by transform); `/IRT` reply
+  remapping, still untouched.
+- **Named destinations and optional-content groups remain 0 of 3, genuinely
+  out of scope rather than skipped**, and the reason is worth keeping:
+  named destinations have `add_named_destination` and **no delete verb**, so
+  there is nothing to cut; layers have **no OCG authoring at all**, so there
+  is **no paste target**. A clipboard needs a delete verb and an author verb
+  before it can exist.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` is the engineer's to overwrite (`R216`); this filing
+  did not touch it. **Its four §02 figures are stale — see the sweep above.**
+- **Ledger after this filing: Pass ceiling `173.0`**, next free `173.1` / new
+  major `174.0`. **Standing rules ceiling `R231`**, next free `R232`.
+  **Decision ceiling `101`**, next free `102`. Operator-question ceiling
+  unchanged. **Filing ordinal 327.**

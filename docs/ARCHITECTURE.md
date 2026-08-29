@@ -7213,6 +7213,55 @@ prose and the code stay reconcilable.)*
   decision, §12 continuation-18 entry).
 - Redo invalidation on new-edit-after-undo behaves as §11.1 states.
 
+### 11.6 Implementation record — `coalesce_last`, the second mechanism the undo stack grew (Pass 168.0, 2026-08-29; decision 101)
+
+*(§11.5 records the overlay design as built. This records the one addition
+the stack has taken since, so §11.1's "one undo step per intent" prose and
+the code stay reconcilable.)*
+
+- **The problem it solves.** `R168` requires a verb offered on an N-target
+  selection to act on the whole selection or refuse; `R179`/`R49` require one
+  gesture to be one undo entry. Several deletion verbs **route** to
+  specialised verbs that commit for themselves (§4.1 (L) —
+  `delete_annotation` routes ce dimensions and redaction marks), so a
+  multi-target gesture cannot build its own writes without duplicating the
+  most intricate deletion logic in the crate.
+- **The mechanism.** `EditSession::coalesce_last(count, kind) -> bool`
+  (private, `crates/pdfce-core/src/edit.rs:11334`) folds the last `count`
+  entries on the undo stack into **one** entry carrying `kind`. The verb calls
+  the per-target verb N times, then folds. Routing, refusals and
+  spec-governed behaviour stay in one implementation.
+- **The fold COLLAPSES repeated objects; it does not concatenate.** `undo()`
+  applies each recorded `before` walking **forward**, which is correct only
+  while an object appears at most once per command. A repeated object is
+  therefore collapsed to a single write taking the **earliest `before` and the
+  latest `after`**; removals and the trailer collapse the same way. A naive
+  concatenation restores the original and then re-applies the intermediate,
+  leaving a document that **looks fine and is wrong by one**. Pinned by
+  sabotage: neutering the duplicate lookup fails
+  `cutting_two_annotations_from_one_page_is_one_undo_entry_and_undo_restores_both`
+  with exactly `left: 1, right: 2`.
+- **`count` is measured from the stack's own depth, never from the caller's
+  intention.** A verb that calls a helper which may **return early without
+  committing** (`set_outline_open` when the state already matches) can
+  otherwise pass a count larger than what reached the stack; the fold's
+  `undo.len() < count` guard then correctly refuses, and the gesture
+  **silently becomes N undo entries** with nothing erroring. See decision 101.
+- **`count == 1` is not a no-op — it relabels.** Without it a one-target cut
+  carries the destination verb's `CommandKind` and an undo control reads
+  *"undo delete"* after the operator pressed **cut**, which is a false promise
+  about the clipboard. `CommandKind::CutSelection` and
+  `CommandKind::PasteOutlineItem` exist for this.
+- **Bounded by `MAX_UNDO_DEPTH` (256):** a larger selection is refused **by
+  name before anything is removed** (`EditError::SelectionTooLargeForOneUndo`).
+- **Not a replacement for §11.3's snapshot fallback.** Snapshots remain the
+  answer for **bulk structural** edits; `coalesce_last` is for N genuine,
+  individually correct, individually spec-governed commands the **operator**
+  performed as one act.
+- **Current users** (2026-08-29): `cut_selection`, `cut_annotations`,
+  `cut_field`, `cut_pages`, `cut_outline_item`, `cut_attachment`,
+  `paste_outline_item`.
+
 ## 12. Decision log
 
 Append-dated entries here whenever an architectural decision is made
@@ -26937,3 +26986,204 @@ free 072.**
   an API-shape choice inside an existing family (`ObjectClip`, `Pass 120.x`),
   and the two fixture findings are filed as `R225` instances 7 and 8 rather
   than as a new cause. **Decision ceiling moves 098 → 099; next free 100.**
+
+- **2026-08-29 — Decision 100. A CLIPBOARD'S PAYLOAD FORMAT IS CHOSEN FROM
+  WHAT THE DESTINATION VERB CONSUMES, NOT FROM HOW THE SOURCE HAPPENS TO BE
+  REPRESENTED — SO PDFCE NOW HAS FOUR DIFFERENT CLIP FORMATS ON PURPOSE**
+  (`Pass 169.0`–`173.0`, `fe78023` / `da52c5c` / `3fe901a` / `c5fb01a`).
+
+  **The question.** Six Passes in one session added clipboards for
+  annotations-in-a-file, raw annotations, pages, bookmark subtrees and
+  embedded files. Each one had to answer *"what does the clip hold?"*, and a
+  consistent-looking answer — *"one versioned private payload per carrier,
+  like `ObjectClip`"* — was available every time and would have been wrong
+  four times out of five.
+
+  **The decision: derive the payload from the destination verb's input
+  type.** Whatever the paste side already consumes is what the clip should
+  hold, because any other choice manufactures a conversion that must then be
+  kept correct.
+
+  | carrier | destination verb consumes | so the clip is | what the alternative would have cost |
+  |---|---|---|---|
+  | pages (`PageClip`, `Pass 171.0`) | `insert_pages`, which takes **a PDF** | **a real, openable PDF** | a second implementation of object copying, reference remapping, resource-closure walking and page-tree construction — *the most-exercised code in this crate, rewritten to be less exercised* |
+  | embedded files (`AttachmentClip`, `Pass 173.0`) | `attach_file`, which takes **decoded bytes + a name** | **the decoded bytes and the name. No serialisation method at all** | an envelope around something that is already a file, plus re-deriving the `/Filter` decode at paste time |
+  | annotations in a clip FILE (`Pass 169.0`) | `add_markup`, which takes **a `MarkupSpec`** | **the spec's own fields, encoded directly as a COS object** | the authored annotation dictionary — **measurably lossy, see below** |
+  | raw annotations (`ClipAnnotation::Raw`, `Pass 170.0`) | the page's `/Annots`, which takes **a dictionary** | **the dictionary plus its closure**, source-only keys stripped | a model per subtype before any of eight could be copied once |
+  | bookmark subtrees (`OutlineClip`, `Pass 172.0`) | `add_outline_item`, which takes **a title + a `Destination`** | **a model** | a dictionary that is *all back-pointers* (`/Parent`/`/Prev`/`/Next`/`/First`/`/Last`); carrying them means nothing in the destination, stripping them leaves only `/Title` |
+
+  **★★ THE MEASUREMENT THAT SETTLED IT, AND IT REJECTED THE FREE ROUTE.** For
+  `Pass 169.0` the zero-new-code option was to carry the annotation
+  **dictionary** — `build_appearance(spec).annot` to write, `spec_from_dict`
+  to read, both already shipping and exercised on every real document. It was
+  tried first. `build_appearance` computes a `/Rect` that bounds **what is
+  drawn**, as §12.5.2 requires; a cloudy `Square`'s scallops bulge outside the
+  nominal rectangle, so reading the authored dictionary back yields the
+  **expanded** rectangle. On a 100 × 70 square at intensity 1.5:
+
+      10,20,110,90   ->   2.5,12.5,117.5,97.5
+
+  **7.5 pt in every direction, per copy/paste cycle, compounding, with no
+  error and no visibly wrong intermediate state.** `spec_from_dict` is not at
+  fault — it reads **foreign** annotations, where the stored `/Rect` *is* the
+  truth. ***It simply was never the inverse of the author, and nothing had
+  ever required it to be.*** The general form, which is the durable half:
+  **two functions that look like a round trip because one writes what the
+  other reads are not a round trip until something asserts it.** The
+  measurement is retained as a test
+  (`the_annotation_dictionary_route_is_not_lossless_which_is_why_the_codec_exists`)
+  so the refused design leaves an artifact — *a rejected route otherwise
+  leaves none, and the next reader sees only the expensive thing that
+  shipped.*
+
+  **★ Why "one format" would have been the wrong kind of consistency.** A
+  uniform private envelope is consistent in **shape** and inconsistent in
+  **cost**: it forces a conversion at one or both ends of every carrier, and
+  each conversion is a place where the two sides can disagree. Deriving from
+  the destination verb makes the number of conversions **zero by
+  construction** for four of the five, and for the fifth (`MarkupSpec` → COS)
+  it is a single codec whose inverse is asserted by test. **The visible
+  variety is the evidence the rule was followed, not evidence it was
+  abandoned.**
+
+  **★★ The corollary that carried the most weight in review: a clip whose
+  payload is a self-describing artifact is a FEATURE, not an implementation
+  leak.** `PageClip::to_bytes()` is a PDF an operator can email;
+  `AttachmentClip` *is* the file. Neither needed a decision to make it
+  interoperable — interoperability fell out of consuming what the paste verb
+  consumes. `ObjectClip` (`Pass 120.1`) remains a private format because
+  content-stream objects genuinely have no public interchange form that
+  carries per-object CTM and resource-name bindings — which is also why
+  `ObjectClip::to_pdf` exists **beside** it rather than replacing it.
+
+  **Consequence for §5 (round-trip / minimal-diff) and `CLAUDE.md` rule 3,
+  and it is the same one decision 099 recorded for `FieldClip`: a paste is an
+  ADDITION.** Nothing the destination already had is respelled. The places a
+  paste touches pre-existing state are enumerable and each is disclosed — the
+  page tree on a page paste, `/Outlines` on a bookmark paste, the
+  `/Names`/`/EmbeddedFiles` tree on an attachment paste, and the page's
+  `/Annots` on an annotation paste.
+
+  **Consequence for §11 / rule 4 in its 059 form:** every paste's surprises
+  are an **open** set — what gets dropped, renamed or degraded depends on the
+  document the clip came from — so each paste outcome carries a
+  `Vec<String>`-shaped disclosure list rather than a fixed flag struct, and
+  the pasted content **renders exactly as a saved-and-reopened document will
+  render**, with nothing on the page marking it as pdfce's guess. The CLI
+  prints; the GUI would report off-canvas.
+
+  **Body-section updates paired with this entry.** §4's public-surface
+  account of `pdfce-core` gains `pageops::PageClip`, `outline::OutlineClip` /
+  `OutlineClipItem` / `OutlineClipError`, `attachments::AttachmentClip`,
+  `vector::clip::RawAnnotation`, `formclip::FieldCut` and
+  `edit::OutlinePasteOutcome`, plus twelve `EditSession` verbs; the
+  consumer-facing contract is `docs/core-api/02-editing-and-saving.md`
+  §§1.27–1.30, and `tools/check-core-api-verbs.py` enforces the count
+  (**161 → 173** verbs, `EditError` **95 → 98** variants — verified in
+  `docs/core-api/index.md` at filing time). §7's CLI account gains
+  `page-copy`, `page-paste`, `bookmark-copy`, `bookmark-paste`,
+  `copy-field --cut`, `extract-attachment --cut`, and a corrected
+  `object-copy --cut`. **No new dependency**, so §9 is unchanged; `cargo tree
+  -p pdfce-core` / `-p pdfce-render` verified clean, so §3's GUI-core
+  separation is intact.
+
+  **No standing rule minted from this decision.** It is a design principle
+  with five instances that all landed the same day — a *decision*, which is
+  what this log is for, rather than a recurring failure a rule would guard
+  against. **Decision ceiling moves 099 → 100; next free 101.**
+
+- **2026-08-29 — Decision 101. "ONE GESTURE IS ONE UNDO ENTRY" IS ACHIEVED BY
+  FOLDING N COMMITTED COMMANDS AFTER THE FACT (`EditSession::coalesce_last`),
+  NOT BY COMPOSING A BESPOKE MULTI-TARGET COMMAND — AND THE FOLD MUST COLLAPSE
+  REPEATED OBJECTS, NOT CONCATENATE THEM** (`Pass 168.0`, `f492e0f`; body
+  counterpart at §11.6).
+
+  **The question.** `R168` says a verb offered on an N-target selection acts
+  on the whole selection or refuses. `R179`/`R49` say one gesture is one undo
+  entry. A multi-annotation cut must satisfy both — but `delete_annotation`
+  **routes** ce dimensions and redaction marks to specialised verbs that
+  commit for themselves (§4.1 (L)), so building the writes directly would mean
+  **a second copy of the most intricate deletion logic in the crate.**
+
+  **The decision: call the per-target verb N times, then fold the last N undo
+  entries into one.** The routing, the refusals and the spec-governed
+  behaviour all stay in exactly one implementation; the undo stack is
+  rewritten afterwards. Private (`fn coalesce_last(&mut self, count: usize,
+  kind: CommandKind) -> bool`), so it is a session-internal mechanism and not
+  a public contract.
+
+  **★★★ THE COLLAPSE IS THE WHOLE OF IT, AND A NAIVE CONCATENATION IS
+  WRONG.** `undo()` walks a command's `objects` **forward**, applying each
+  `before`. That is correct **only while an object appears at most once in one
+  command** — the same fact this project has now recorded four times as *"two
+  whole-dictionary writes to one object in one command do not compose"*
+  (`flatten_fields` via the `R85` oracle; the Shape A→B promotion path;
+  `paste_field` in decision 099; and here).
+
+  Two annotations on one page both rewrite that page's `/Annots`.
+  Concatenated, the page object appears **twice**; the second write's `before`
+  **is** the first write's `after`; undoing forward restores the **original**
+  and then re-applies the **intermediate**. Result: **one annotation still
+  missing, no further undo to reach it, and a document that looks fine and is
+  wrong by one.**
+
+  So a repeated object collapses to **one** write taking the **earliest
+  `before` and the latest `after`**. Removals collapse the same way; so does
+  the trailer.
+
+  **Verified by sabotage rather than by argument:** replacing the duplicate
+  lookup with a constant `None` makes
+  `cutting_two_annotations_from_one_page_is_one_undo_entry_and_undo_restores_both`
+  fail with **exactly `left: 1, right: 2`** — one of two annotations restored.
+  Per `R225`, that is a discriminating sabotage because the wrong
+  implementation yields a **specific wrong number** rather than a crash.
+
+  **★★ `count == 1` IS NOT A NO-OP: IT RELABELS THE ENTRY, AND THAT IS A
+  CORRECTNESS PROPERTY.** A one-target cut otherwise carried the *destination
+  verb's* `CommandKind`, so an undo control read *"undo delete"* after the
+  operator pressed **cut**. **That is a promise about the clipboard**, not a
+  wording preference — undoing a cut must restore the page *and* leave the
+  clip meaningful, and a label saying "delete" tells the operator the wrong
+  thing about what they are about to reverse. Hence
+  `CommandKind::CutSelection` and `CommandKind::PasteOutlineItem`.
+
+  **★★★ THE COUNT MUST COME FROM THE STACK, NOT FROM THE CALLER'S
+  INTENTION** — learned four commits later and folded back into this
+  decision. `paste_outline_item` originally incremented a counter **per
+  intended command**, while `set_outline_open` **returns early without
+  committing** when the state already matches. The count could therefore
+  exceed what reached the stack; `coalesce_last`'s `undo.len() < count` guard
+  **correctly refused to fold**, and the paste **silently became three undo
+  entries.** Nothing errored, every gate stayed green, and the operator would
+  have discovered it by pressing undo and watching a third of their paste come
+  back. The count is now measured from the stack's own depth **before and
+  after**, which cannot drift from what the stack holds. The same latent shape
+  was fixed **preemptively** in `cut_selection`.
+
+  ★ The general form, and the reason this belongs in a decision log rather
+  than only in a commit: **a guard that refuses on a mismatch protects the
+  data and hides the defect.** The guard was right and is why nothing
+  corrupted; it is also why nothing complained. **A correct refusal is not a
+  diagnostic.**
+
+  **The bound, stated rather than discovered later.** A selection larger than
+  `MAX_UNDO_DEPTH` (256) is refused **by name before anything is deleted**
+  (`EditError::SelectionTooLargeForOneUndo`). *A cut that silently became
+  forty undo entries is worse than a cut that did not happen.*
+
+  **Relationship to §11.3.** Snapshot fallback remains the answer for **bulk
+  structural** edits, where per-target commands are not the right shape at
+  all. `coalesce_last` is for the opposite case: N genuine, individually
+  correct, individually spec-governed commands that the **operator** performed
+  as one act.
+
+  **Body-section update paired with this entry: §11.6**, added this filing —
+  §11.5 records the overlay design as built, and this records the second
+  mechanism the undo stack has grown since.
+
+  **No standing rule minted from this decision.** The
+  writes-do-not-compose half is an existing recorded finding gaining its
+  fourth instance (`D:/dev/rag/rust/n_sequential_whole_object_writes_in_one_command_do_not_compose.md`,
+  dated footer added this filing); the intended-vs-committed half is one
+  instance plus one preemptive fix. **Decision ceiling moves 100 → 101; next
+  free 102.**

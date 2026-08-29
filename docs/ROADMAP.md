@@ -96,6 +96,717 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 173.0` (`c5fb01a`, 2026-08-29) — an embedded file can be cut, copied and pasted, and cut matters more here than anywhere else on the clipboard — filed 2026-08-29 (327th filing)
+
+**Sourcing.** `R228` was invoked on this dispatch and **this filing had a
+shell and used it.** Checked here, on disk, not relayed: `git log
+--format='%H %ad %s'` for all six commit hashes and their order; `git status
+--porcelain` (empty); `git rev-list --count origin/main..main` = **6**, so
+the five code commits plus `3ac9dd7` are the unpushed set; `git show --stat`
+per commit for the touched-file list; `grep -n` over
+`crates/pdfce-core/src/{edit,formclip,outline,attachments}.rs`,
+`pageops/mod.rs` and `vector/clip.rs` for **every** named verb, type, error
+variant and `CommandKind`; `grep -c '#\[test\]'` on all five new test files
+(**15 / 11 / 9 / 8 / 7 — every count matched the dispatch exactly**);
+`docs/core-api/index.md` for the 173-verb / 98-`EditError` figures; `ls` for
+the Acrobat RAG file. **Relayed, not re-run:** `cargo test`, `fmt`, `clippy`,
+`cargo tree`, `fuzz`, and the CLI smoke transcripts — those are runs, and
+nothing on disk records them. Each of the five commit messages was **read in
+full**, per the dispatch's instruction.
+
+**The verbs.**
+
+    EditSession::copy_attachment(&[u8])  -> AttachmentClip
+    EditSession::cut_attachment(&[u8])   -> AttachmentClip   ONE undo entry
+    EditSession::paste_attachment(&AttachmentClip) -> ObjId
+    pdfce-cli: extract-attachment --cut OUTPUT.pdf
+
+`attach_file` and `detach_file` shipped 2026-08-12 (`74582ca`/`95c3416`,
+`ARCHITECTURE.md` §4.1 (Q)) and **nothing composed them** for two and a half
+weeks. That is the whole shape of this Pass and of the two before it: the
+building blocks existed; the gesture did not.
+
+**★★ WHY CUT MATTERS MORE HERE THAN ANYWHERE ELSE ON THE CLIPBOARD, and it
+is a property of the DATA, not of the code.** For every other clipboard in
+pdfce a cut whose copy half failed loses something the operator can **see and
+re-make** — a shape, a comment, a form field, a bookmark, a page. **An
+embedded file is the only copy of that data in the document.** A failed cut
+destroys it outright with nothing on any page to hint it was ever there.
+
+So the copy runs first, a refusal detaches nothing, **and that ordering is
+asserted by a test rather than inferred from reading the code** —
+`a_cut_whose_copy_refuses_detaches_nothing`. That distinction is the point:
+it is the one property in this neighbourhood whose violation is
+**unrecoverable**, so it gets an executable pin instead of a reviewer's
+confidence. Undo restores the **bytes**, not merely the name-tree entry, and
+that has its own test for the same reason.
+
+**★ THERE IS NO SERIALISATION METHOD, AND THAT IS THE DESIGN.** The clip's
+payload **is** the file. Write `bytes` out under `name` and you have the
+attachment; hand the pair back and it goes into another document. A private
+envelope around something that is already a file would be a format nobody
+needs — unlike a page clip (which needs a catalog and a page tree to be
+openable) or an annotation clip (whose payload is a dictionary, not a file).
+See **decision 100**, which generalises this across all four carriers.
+
+The clip carries **decoded** bytes, not the raw embedded-file stream with its
+`/Filter` chain, because `attach_file` takes decoded bytes on the way back
+in; carrying the raw form would mean re-deriving the same answer at paste
+time.
+
+**`AttachmentClip::new` exists so a shell can build one from a file the
+operator dropped on the window** — which is the honest implementation of
+"attach this": it is a **paste**. It also closes, preemptively, the
+`#[non_exhaustive]` hole the page and bookmark clips hit one commit earlier
+(see `Pass 171.0`/`172.0` below): *a clipboard a shell can read and never
+fill is half a clipboard.*
+
+**The name is attacker-controlled and the type says so.**
+`AttachmentClip::name` came out of a document that arrived from somewhere,
+and nothing in ISO 32000-1 constrains its content — `..\..\Windows\System32\
+evil.exe`, `report.pdf\0.exe` and `CON.txt` are all spellable. The type
+carries the same warning `attachments::Attachment` does, **plus the reason
+pasting is nonetheless safe**: `paste_attachment` never touches a path.
+`copy_attachment` takes the name-tree key as **raw bytes** rather than the
+decoded display name, because §7.9.6 makes a key a byte string and two
+attachments can decode to the same text.
+
+**CLI shape, and why it is one flag rather than two invocations.** Copy and
+paste already existed as `extract-attachment` and `attach-file`. What was
+missing was **cut** — and doing it as two invocations puts the burden of
+getting the order right on the operator, with the unrecoverable failure mode
+above sitting under the wrong order. `extract-attachment --cut` is one
+gesture through the core verb.
+
+**Verification (relayed).** `cargo test --workspace` green, **155 suites**;
+`tests/attachment_clipboard.rs` 7/7 (**counted here: 7**); `fmt`/`clippy -D
+warnings` clean; `check-core-api-verbs.py` PASS (170 → **173** verbs, figure
+confirmed here in `docs/core-api/index.md:17`); `check-string-gaps.sh` PASS;
+`tools/run-gates.sh` **27 of 29**, the two reds being `check-commits-filed`
+and `check-passes-filed`, **correctly red because this Pass and the five
+before it were unfiled — this filing is what clears them** (both gates were
+run here: `check-commits-filed` named exactly the five code commits, and
+`3ac9dd7` was correctly skipped for touching no `crates/`/`tools/`/
+`fixtures/` path). CLI smoke: attached a file, then `extract-attachment
+--cut` wrote the bytes out **and** removed it (`attachments=0` after).
+
+**Consumer contract:** `docs/core-api/02-editing-and-saving.md` §1.30
+(verified present at line 2545).
+
+### `Pass 171.0` + `Pass 172.0` (`3fe901a`, 2026-08-29) — whole pages and whole bookmark subtrees can be cut, copied and pasted, including between two documents, which Acrobat cannot do for bookmarks at all — filed 2026-08-29 (327th filing)
+
+**Two Pass IDs in one commit**, both filed here. Two of the three remaining
+0-of-3 rows from the coverage audit; each had every building block and
+nothing composing them.
+
+#### `Pass 171.0` — pages
+
+    EditSession::copy_pages(&[usize])  -> PageClip
+    EditSession::cut_pages(&[usize])   -> PageClip           ONE undo entry
+    EditSession::paste_pages(&PageClip, InsertPosition) -> InsertOutcome
+    pdfce-cli: page-copy [--cut], page-paste
+
+**★ THE CLIP IS A PDF, AND THAT IS THE DESIGN RATHER THAN A SHORTCUT.**
+`PageClip::to_bytes()` returns a real, openable document holding exactly the
+copied pages. Not a private payload — a shell can hand it to something that
+is not pdfce, and an operator who pastes page 3 into an email is pasting a
+PDF.
+
+The alternative, a private page format like `ObjectClip`, would have been a
+**second implementation** of object copying, reference remapping,
+resource-closure walking and page-tree construction: *the most-exercised code
+in this crate, rewritten to be less exercised.* `pageops::assemble` already
+does all of it on every split, merge and extract-pages anyone has ever run,
+and `insert_pages` already consumes exactly this shape on the way back in.
+
+**The cost is stated rather than hidden:** a page clip is **larger** than a
+private format would be, because it carries a catalog and a page tree. For a
+gesture that moves sheets between drawings, that is not a price worth
+optimising away.
+
+**`paste_pages` IS `insert_pages`, so it inherits that verb's whole
+contract** — including the trap the CLI now prints on stderr: *a page's
+`/Annots` reaches its widgets, so form-field boxes arrive even though the
+`/AcroForm` that owns them does not.* They draw like fields and nothing can
+fill them. **Measured on the smoke test: pasting `demo-form.pdf`'s page into
+`hello.pdf` gives `orphaned_widgets=2`** — 2 orphans from 1 pasted page
+carrying 2 widgets, i.e. every widget on the page, which is the honest
+denominator (hard rule 10(a)).
+
+**`cut_pages` refuses to remove the last page** (`WouldRemoveEveryPage`). A
+document with no pages is not a document, and the failure would not present
+as an error — it would be a file that opens to nothing.
+
+#### `Pass 172.0` — bookmarks
+
+    EditSession::copy_outline_item(ObjId)  -> OutlineClip
+    EditSession::cut_outline_item(ObjId)   -> OutlineClip     ONE undo entry
+    EditSession::paste_outline_item(&OutlineClip, OutlinePlacement)
+                                           -> OutlinePasteOutcome
+    pdfce-cli: bookmark-copy [--cut], bookmark-paste
+
+**★★ THIS IS AN EXCEED, SOURCED AND NAMED.** Adobe's own documentation, filed
+into the Acrobat RAG this session
+(`D:\Dev\Rag-Specialized\Acrobat_Features\clipboard__cut_copy_paste_coverage_matrix.md`,
+**verified present on disk this filing**, 42,670 bytes, 2026-08-29): bookmarks
+*"can't be copied directly … from one file to another."* Acrobat offers cut
+and paste **within** a document and nothing between two. So the interesting
+design question here is one the parity reference never had to answer — which
+is the operator's standing *"exceed the reference when you can"* landing on a
+capability rather than on a polish detail.
+
+**A MODEL, not a raw dictionary — and the reason does not transfer from the
+annotation carrier one Pass back.** An outline item's dictionary is **all
+back-pointers**: `/Parent`, `/Prev`, `/Next`, `/First`, `/Last`, with
+`/Count` derived from them. Carrying them would carry a shape that means
+nothing in the destination; stripping them would leave a dictionary holding
+nothing but `/Title`. Compare `Pass 170.0` immediately below, where a raw
+dictionary is exactly right — **the carrier is chosen per-family, and
+decision 100 records the rule that decides it.**
+
+**★ The destination travels because `Destination::Page` is already
+document-relative** — a 0-based index, not an object reference — so it means
+the same thing in any document that *has* that page.
+
+**★★ AND THE VIEW TRAVELS WITH IT, WHICH WOULD OTHERWISE HAVE BEEN A SILENT
+LOSS.** Substituting `/Fit` was the easy option and would have looked honest:
+the bookmark still works, it just goes somewhere else. **A bookmark to
+"Detail B — 400%" is copying the zoom as much as the page.** So `DestView` is
+encoded in full **including its null parameters**, because §12.3.2 gives
+`null` a meaning — *leave that aspect of the current view alone* — distinct
+from zero. An **unrecognised fit name is carried verbatim** rather than
+degraded: pdfce not modelling a name is not evidence the name is wrong.
+
+**★ A destination naming a page the destination document does not have is
+DROPPED AND COUNTED — not clamped to the last page.** Clamping produces a
+bookmark that navigates **confidently to the wrong place**; §12.3.3 permits
+an item with **no** destination (a pure grouping entry), so a
+destination-less bookmark is a legal, honest shape and a wrong destination is
+not. `OutlineClip::deepest_page()` lets a shell say how many will not survive
+**before** the press rather than reporting it after — which matters because a
+dropped-destination bookmark still shows, still has its title, and simply
+does nothing when clicked.
+
+#### ★★ TWO DEFECTS FOUND WHILE BUILDING, BOTH PRE-EXISTING IN SHAPE
+
+**1. THE UNDO FOLD COUNTED COMMANDS IT *INTENDED*, NOT COMMANDS THAT
+*COMMITTED*.** `paste_outline_item` incremented a counter per intended
+command. But `set_outline_open` **returns early without committing** when the
+state already matches — so the count could **exceed** the commands that
+actually reached the undo stack. `coalesce_last` then *correctly* refused to
+fold (its `undo.len() < count` guard did its job), and the paste **silently
+became three undo entries instead of one.**
+
+Nothing errored. Every gate was green. The operator would have found out by
+pressing undo and watching a third of their paste come back. Now measured
+from **the stack's own depth**, which cannot drift from what the stack holds
+— and **the same change was applied preemptively to `cut_selection`**, which
+had the same latent shape and had not yet been observed to fail.
+
+★ The durable form, worth carrying past this Pass: **a guard that refuses on
+a mismatch protects the data and hides the defect.** `coalesce_last`'s guard
+is right and is why nothing corrupted; it is also why nothing complained. A
+correct refusal is not a diagnostic.
+
+**2. `list-outline` DID NOT PRINT THE NUMBER `bookmark-copy --item` TAKES.**
+It printed `n=`, a sequence counter that means nothing to any other verb.
+**The bookmark clipboard would have been documented, correct, tested and
+unreachable from the one command that lists bookmarks.** `obj=` is now
+printed beside it. This is this project's recurring *"documented, accurate,
+gate-green and unfindable"* shape — caught this time only because the
+engineer ran its own smoke test end to end rather than trusting the unit
+tests.
+
+#### ★★ TWO API GAPS THE TESTS EXPOSED, AND ONLY OUT-OF-CRATE TESTS COULD
+
+Both surfaced from **integration tests failing to compile** — the only place
+the constraint is felt. An in-crate test builds the struct and never notices.
+
+- **`PageClip` is `#[non_exhaustive]`**, so nothing outside the crate could
+  turn a clip file back into a clip. **A clipboard whose payload can be
+  written and never read is not a clipboard.** → `PageClip::from_bytes` /
+  `to_bytes`, with the counts **re-derived from the bytes** rather than taken
+  on trust.
+- **`OutlineClip` had no way to express "the clipboard holds no bookmarks"**
+  → `OutlineClip::empty()` (verified: `outline.rs:1141`, a `const fn`).
+
+**Instances 3 and 4 of a finding this role wrote two days earlier**
+(`D:/dev/rag/rust/non_exhaustive_is_inert_in_crate_so_only_an_out_of_crate_test_feels_a_consumers_constraint.md`,
+first recorded from `Pass 142.1`, second from `Pass 151.0`'s `ResizeOptions`).
+**Mint declined** — see the standing-rule disposition in this filing's
+`SESSION_LOG.md` entry; a dated amendment went to the existing RAG file
+instead (hard rule 4), carrying the genuinely new half: *for a clipboard type
+the missing constructor is not a convenience, it is half the feature.*
+
+**And one Rust API Guidelines violation clippy surfaced:** `PageClip::len()`
+returned **bytes** while `is_empty()` answered about **pages**. `len() == 0`
+and `is_empty()` must mean the same thing. Both now mean pages;
+`byte_len()` is the byte count. **Verified here** at
+`crates/pdfce-core/src/pageops/mod.rs:334`/`341`/`346`, all three `#[must_use]`.
+Found by `clippy::len_zero` firing on a test — *a lint about a comparison
+found a semantic contradiction between two methods*, which is the useful shape
+of that finding rather than the fix itself.
+
+**Verification (relayed).** `cargo test --workspace` green, **154 suites**;
+`tests/page_clipboard.rs` 9/9 and `tests/outline_clipboard.rs` 8/8
+(**counted here: 9 and 8**); `fmt`/`clippy -D warnings` clean; `cargo tree -p
+pdfce-core` / `-p pdfce-render` no GUI dependency (project rule 2);
+`check-string-gaps.sh` caught one more heredoc-induced gap — **the fourth
+time that gate has earned its place in two days**; `check-core-api-verbs.py`
+PASS (164 → 170 verbs); `check-cli-help-leads.py` PASS — the gate `R230`
+minted **one filing earlier**, green on the six new subcommands this Pass
+adds, which is the first evidence it holds against new authoring rather than
+only against the two instances that founded it.
+
+CLI smoke, both end to end: copied a page out of a form document into
+`hello.pdf` (`orphaned_widgets=2`, disclosed); copied a bookmark out of one
+document and pasted it into a **different** one — the thing Acrobat refuses.
+
+**Consumer contract:** `docs/core-api/02-editing-and-saving.md` §1.28 and
+§1.29 (verified present at lines 2429 and 2488).
+
+### `Pass 170.0` (`da52c5c`, 2026-08-29) — sticky notes, stamps, text boxes and links can be copied, and almost every other annotation too, for one closure walk — filed 2026-08-29 (327th filing)
+
+**What was wrong with the route that already worked.** `ClipAnnotation`
+copied annotations **through pdfce's models**: a markup as a `MarkupSpec`, a
+ce dimension as a `DimensionKind`. That reasoning is still right **for those
+two**, because both have registration **outside the page** — a ce dimension
+has a `/PieceInfo` sidecar record and a group; a widget has an `/AcroForm`
+entry and a name that must not collide. Planting their raw dictionaries would
+carry a record naming a group that does not exist, or a field name that
+already means something.
+
+**★★ EVERY OTHER ANNOTATION HAS NO SUCH REGISTRATION, AND FOR THOSE THE MODEL
+ROUTE WAS THE WRONG TRADE.** It cost, measured:
+
+- **Three whole subtypes that could not be copied at all.** pdfce *authors*
+  `/FreeText`, `/Text` (a sticky note) and `/Stamp` through `TextAnnotSpec`
+  and has **no reader** that turns one back into a spec — so each landed in
+  `Unsupported` and the paste declined it by name. **A sticky note is the
+  single most-copied comment in a review workflow.**
+- **Everything a `MarkupSpec` does not model, on the kinds it does** — `/CA`
+  opacity, `/T` author, `/Contents` note text, `/M` date, `/RC`. *That loss
+  was reported by the consuming shell, not found here* — see the Backlog
+  entry *"lossless markup/annotation clipboard-copy fidelity"*, narrowed by
+  this Pass.
+- **Every exotic subtype, permanently** — `/Link`, `/FileAttachment`,
+  `/Caret`, `/Screen`, `/Watermark`. Each would have needed its own model
+  before it could be copied once.
+
+**`ClipAnnotation::Raw`** (new type `vector::clip::RawAnnotation`, verified at
+`clip.rs:233`) carries the annotation's own dictionary **plus the closure it
+reaches** — appearance streams, action dictionaries, embedded file
+specifications — through **the same closure builder `FieldClip` uses**
+(`formclip::Closure`, promoted to `pub(crate)`, one implementation not two).
+That reuse is the reason the subject line says *"for one closure walk"*: the
+breadth is nearly free because `Pass 167.0` had already built the expensive
+half.
+
+**Stripped at copy time**, each because it names something that exists only
+in the source document: `/P` (the source page), `/Parent`, `/StructParent`
+(an index into the **source's** `/ParentTree`, §14.7.4.4), `/NM` (§12.5.2
+requires per-page uniqueness, so carrying one **guarantees** a collision the
+second time a clip is pasted onto one page), `/Popup` and `/IRT` — both of
+which would plant a **relationship the operator did not select**: a pop-up
+whose object did not travel, a reply whose parent did not.
+
+**Four refusals remain, by POLICY rather than for want of a model** — the
+distinction matters, because a policy refusal is not a gap to be filed:
+
+| refused | why |
+|---|---|
+| `/Widget` | has its own clipboard (`Pass 167.0`), which **asks** the naming question a raw copy would have to guess at |
+| `/Popup` | not an independent annotation (§12.5.6.14) — it belongs to the comment that opens it and travels with it |
+| `/Redact` | a **pending destructive operation**, not artwork; pasting one arms a redaction in a document nobody reviewed |
+| ce dimension with a missing sidecar record | `R204`, unchanged |
+
+**★ A `/Link` IS CARRIED, AND ITS DESTINATION IS CHECKED ON PASTE.** If the
+target does not resolve in the destination — an explicit destination whose
+first element is not a page here, or a named destination this document's
+`/Dests` tree does not hold — `/Dest` and `/A` are **dropped and disclosed**.
+*A link that looks clickable and goes nowhere is worse than a rectangle that
+plainly does nothing.*
+
+The resolver is **deliberately conservative**: anything it cannot decide (a
+multi-level `/Kids` name tree) counts as **not** resolving. The asymmetry is
+argued rather than assumed — dropping a target that would have worked costs
+the operator a **visible, recoverable** disappointment; planting one that
+does not costs them **a link they trust and that silently fails.** Acrobat's
+own cross-document link paste drops the target at an arbitrary place instead,
+so this is a second **exceed** in the same session.
+
+**A raw annotation is MOVED, never rotated or scaled.** It travels with its
+baked `/AP`, which is the whole point — it is why a sticky note keeps its
+icon, a stamp its artwork, a markup its opacity and author. §12.5.5 maps that
+appearance's `/BBox` into `/Rect`, so changing the rectangle's **shape** would
+**stretch the artwork** rather than transform the annotation. pdfce places it
+translated **and says so**, rather than distorting a stamp silently. A
+modelled markup still re-bakes and rotates faithfully — **which is why the
+spec route is kept for the kinds that have one**, and why this Pass leaves an
+owed follow-up rather than a finished job (below).
+
+**★ THREE TESTS IN `cut_verbs.rs` USED A `/Stamp` AS THEIR "UNCARRYABLE"
+EXAMPLE AND HAD TO MOVE TO A `/Popup`.** *That is the Pass working, not the
+tests weakening* — and each one says so in place, so a later reader does not
+mistake a changed fixture for a loosened assertion. Worth naming as a filing
+convention: **when a capability lands, the tests that pinned its absence must
+be rewritten, and the rewrite is the most easily mistaken-for-regression diff
+in a Pass.**
+
+**Verification (relayed).** `cargo test --workspace` green, **152 suites**;
+`tests/annotation_clip_serialisation.rs` 11/11 (**counted here: 11**) — a
+sticky note **across documents** asserting `/Contents`, the icon, the `/AP`,
+and that `/NM` and `/StructParent` did **not** travel while `/P` **was**
+rewritten to where it landed; a stamp; a text box; and the `/Popup` refusal
+by name. `fmt`/`clippy -D warnings` clean; `check-string-gaps.sh` and
+`check-core-api-verbs.py` PASS. CLI smoke end to end: authored a sticky note
+with an author, copied it to a clip file, pasted it into a **different**
+document at an offset — it arrived with `author="Ken"`, its icon and its
+appearance, at the translated rectangle.
+
+**Consumer contract:** `docs/core-api/02-editing-and-saving.md` § *"Almost
+every annotation is copyable now"*.
+
+**★★ OWED, AND NAMED HERE SO IT IS NOT MISTAKEN FOR DONE.** A **markup**
+annotation still travels through `MarkupSpec` (so a rotated paste can
+re-bake), which means it **still drops `/CA`, `/T` and `/Contents` on exactly
+the kinds that HAVE a spec** — the raw carrier fixes this only for the kinds
+that do not. **Carrying both and choosing by transform is the obvious next
+step** and is the engineer's own stated plan. Recorded in the Backlog entry
+*"lossless markup/annotation clipboard-copy fidelity"*, narrowed rather than
+closed.
+
+### `Pass 169.0` (`fe78023`, 2026-08-29) — a comment copied to a clipboard FILE now survives the trip, and the free way of doing it would have grown your shapes on every paste — filed 2026-08-29 (327th filing)
+
+**★ THIS PASS DISCHARGES THE BACKLOG ENTRY `Pass 120.5`, PARTIALLY — SEE THE
+AMENDMENT ON THAT ENTRY.** The ID `120.5` was assigned 2026-08-21 (214th
+filing) for exactly this scope. It was not reused; `169.0` is a fresh ID for
+work `120.5` had already been given. **Hard rule 2 (IDs are stable, never
+reused) is intact — nothing was renumbered — but the two IDs now name one
+capability, and `120.5`'s acceptance criteria are NOT fully met.** Both
+facts are recorded on `120.5` itself rather than only here, because a reader
+arriving at a Backlog entry has no reason to fetch a Shipped one.
+
+**What was wrong, and it was larger than the field's own doc comment
+admitted.** `ObjectClip::to_bytes` dropped every annotation and `from_bytes`
+restored an empty vector. The consequence: ***`pdfce-cli` could never paste
+an annotation of any kind***, because the CLI only ever has the file. The
+whole annotation half of the clipboard — `copy_annotations`,
+`ClipAnnotation::Markup`, `ClipAnnotation::Dimension`,
+`paste_clip_annotations` — was reachable **in-process only, and nothing in
+this workspace was that in-process caller.** Clip format **version 2** carries
+them.
+
+**The objection recorded in the old doc was right, and is answered by not
+doing that.** It read: *"`MarkupSpec` and `DimensionKind` are rich enums whose
+byte encoding would be a second format to version alongside the content one,
+and getting it wrong means a clip that parses and pastes the wrong shape."*
+**Correct — about a BYTE encoding.** So none is written. Each model travels as
+**the COS object pdfce already has a codec for**, through the same
+`write_object`/`Parser` pair every resource object on the clip already takes.
+**One COS grammar implementation on each side; no second format.**
+
+**★★★ AND THE OBVIOUS FREE ROUTE IS WRONG, SILENTLY. MEASURED, NOT ASSUMED —
+AND THE MEASUREMENT IS KEPT AS A TEST.**
+
+The route costing no new code at all: carry **the annotation dictionary the
+spec describes** — `build_appearance(spec).annot` to write, `spec_from_dict`
+to read. Both already ship, both are exercised on every real document. **It
+was tried first.**
+
+`build_appearance` computes a `/Rect` that **bounds what is DRAWN**, which
+§12.5.2 requires. A cloudy `Square`'s scallops bulge outside the nominal
+rectangle, so the authored `/Rect` is **larger** than the spec's. Reading it
+back yields the **expanded** one. Measured, on a 100 × 70 square at intensity
+1.5:
+
+    10,20,110,90   ->   2.5,12.5,117.5,97.5
+
+**7.5 pt in every direction, per copy/paste cycle, compounding, with no
+error and no visibly wrong intermediate state.** Same class of defect the
+clip's `put_f64` already guards against by writing bit-exact doubles rather
+than decimals: **drift that only shows up after enough repetitions, by which
+time the operator cannot say when it started.**
+
+**`spec_from_dict` is NOT at fault**, and saying so is the durable half. It
+reads **foreign** annotations, where the stored `/Rect` **is** the truth and
+shrinking it would be an invention. *It simply was never the inverse of the
+author, and nothing had ever required it to be.* The general shape: **two
+functions that look like a round trip because one writes what the other
+reads are not a round trip unless something asserts it.**
+
+So: `annot_author::encode_spec` / `decode_spec` (new module, 408 lines) — a
+direct encoding of the spec's **own** fields, exact by construction,
+expressed as a COS object. **The rejected measurement is kept as a test**,
+`the_annotation_dictionary_route_is_not_lossless_which_is_why_the_codec_exists`,
+so nobody re-proposes the free route — *including a future session of the
+engineer's own, reading the codec and wondering why it exists.* ★ That is a
+pattern worth generalising: **a refused design leaves no artifact unless one
+is deliberately made, and the next reader sees only the expensive thing that
+shipped.**
+
+**A ce dimension needed no new codec at all.** `dimension::sidecar` already
+encodes `DimensionKind` into `/PieceInfo`. `serialize_kind`/`deserialize_kind`
+**wrap the whole-record codec rather than sitting beside it**, so a new
+`DimensionKind` variant cannot be added to one and not the other — and *that*
+failure would have been a clipboard pasting **a plausible wrong shape**,
+since every variant is a valid ce dimension.
+
+**★★ THE VARIANT THAT WOULD HAVE BEEN INVISIBLE.** There is no `/Cloud`
+subtype in ISO 32000: **a revision cloud IS a `/Polygon` with `/BE << /S /C
+>>`**, recoverable only by reading `/BE` back. A lossy round trip returning
+`Polygon` would have **flattened every revision cloud that crossed a document
+boundary** — and the result is still a perfectly valid polygon, *so nothing
+else would have noticed*. Tested on its own, by name.
+
+**All eight `MarkupSpec` variants round-trip exactly**, through the codec and
+through COS syntax, **against fixtures where NOTHING is at its default** —
+colours differ per variant, widths are not 1.0, the cloud's intensity is not
+an integer. *A round trip that silently substituted a default would pass
+against a fixture built the lazy way.* This is the direct application of the
+finding minted one filing earlier from `Pass 167.0`
+(`a_copy_verb_is_judged_on_values_it_did_not_choose_so_a_default_valued_fixture_cannot_test_it.md`)
+— **the RAG entry was written yesterday and shaped today's fixtures.**
+
+**Two more pre-existing defects, the second a MIRROR of one fixed in
+`Pass 168.0`:**
+
+1. **Pasting an annotation required the page to have `/Resources`.**
+   `plan_paste_at` reads the page through `pages_in`, which treats
+   `/Resources` as required (§7.7.3.3: *"Required; inheritable"*) and fails
+   `MissingRequired("Resources")` without one. So pasting a comment onto a
+   page that has none — a blank sheet, a cover page,
+   `fixtures/synthetic/minimal.pdf` — was **refused for lacking something the
+   gesture does not use.** (Verified here: `edit.rs:10650`, with the fix's
+   own comment naming the shared cause.)
+2. **An annotation-only paste reported an empty bounding box.** `plan_paste`
+   unions the bounds of the **items**, of which an annotation-only clip has
+   none, so `PasteOutcome::bbox` came back `inf,inf,-inf,-inf`. **A shell
+   drawing a paste-preview outline from it would have drawn nothing.** The
+   clip's own bbox already includes the annotation rectangles; it is now
+   used, mapped through the same placement matrix.
+
+**★★ Defect (1) plus `Pass 168.0`'s copy-side defect are TWO INSTANCES OF ONE
+CAUSE — the content path's preconditions applied to a gesture that is not a
+content gesture. `R231` IS MINTED FROM THEM in this filing.** The engineer's
+commit said *"worth a rule if it appears a third time"* and left the call
+here; this role took it at two, on the project's own stated bar (two
+instances of the same **cause**, not the same symptom — `R230`'s minting note,
+`R221`'s precedent). The reasoning is in `R231`.
+
+**What this unblocked, verified at the shell and by eye:**
+
+    pdfce-cli annotate ... --type square --cloud 1.5   author a revision cloud
+    pdfce-cli object-copy ... --annotations 0 --clip f  annotations_serialise=1
+    pdfce-cli object-paste OTHER.pdf --clip f --translate 150,60
+    -> annotations=1, bbox=162.50,72.50,277.50,157.50 (real, not the sentinel)
+
+Rendered the result and **looked at it**: the cloud landed in the destination
+document, still scalloped, still a cloud.
+
+**And `object-copy --cut --annotations` is no longer refused.** `Pass 168.0`
+had to refuse it precisely because the file could not carry what the cut
+removed — **that refusal existed for one Pass and is now obsolete.** ★ A
+refusal introduced to make a defect honest, retired one Pass later by fixing
+the defect, is the good version of this project's disclosure discipline: the
+refusal was never the answer, it was the placeholder that made the answer
+findable.
+
+**Verification (relayed).** `cargo test --workspace` green, **152 suites**;
+`tests/annotation_clip_serialisation.rs` 7/7 at this commit (11 after
+`Pass 170.0`); `tests/object_clipboard.rs` 38/38 — **one test rewritten**,
+since it pinned the old drop-on-serialise behaviour, *and the old wording is
+kept legible in its doc comment rather than silently replaced*.
+`fmt`/`clippy` clean; `run-gates.sh` PASS, 29 commands;
+**`check-string-gaps.sh` caught TWO baked-in gaps introduced by patching
+prose through a heredoc — the third time that gate has earned its place**;
+`cd fuzz && cargo check` clean, and **the round-trip comparison for
+`ObjectClip` is switched back ON, since the format is total again.**
+
+**Consumer contract:** `docs/core-api/02-editing-and-saving.md` states the new
+contract, **keeps the old paragraph legible rather than editing it away**
+(verified here at lines 877–902), and names the two things a ce dimension
+still does **not** carry across a document.
+
+### `Pass 168.0` (`f492e0f`, 2026-08-29) — cut now exists for annotations, mixed selections and form fields, and FOUR things were quietly broken — filed 2026-08-29 (327th filing)
+
+**★★★ THE MEASUREMENT THAT STARTED THE SESSION, AND THE NUMBER TO REMEMBER.**
+The operator asked *"can you make sure we have copy and paste available for
+everything and if not implement?"*, then corrected himself: *"I mean cut,
+copy, and paste."*, then *"yes do all without stopping.."* A coverage audit
+was dispatched before any code was written. Its headline finding:
+
+> **EXACTLY ONE class of thing in pdfce had all three verbs: page content
+> objects.** Copy had **three** entry points (`copy_objects`,
+> `copy_annotations`, `copy_selection`) and cut had **one** — the
+> objects-only one.
+
+**1 of N, with three copy routes and one cut route.** An annotation could be
+copied and pasted and never cut. A form field could be copied and pasted and
+never cut. Pages, bookmarks and embedded files were 0-of-3 outright.
+***The asymmetry was unremarked anywhere*** — not in a doc comment, not in
+`FEATURES.md`, not in a Backlog entry. That is the fact the whole session
+answers, and it is filed as a number so a future audit can say whether the
+ratio moved.
+
+**The verbs.**
+
+    EditSession::cut_annotations(page_index, &[usize]) -> ObjectClip
+    EditSession::cut_selection(page_index, &[usize], &[usize]) -> ObjectClip
+    EditSession::cut_field(fqn) -> FieldCut { clip, deletion }
+    pdfce-cli: copy-field --cut OUTPUT.pdf; object-copy --cut (fixed, below)
+
+**★★ CUT REFUSES WHERE COPY DOES NOT, AND THAT ASYMMETRY IS THE DESIGN.** A
+copy of an annotation pdfce does not model costs nothing: the original stays
+on the page, the clip carries an `Unsupported` marker so the count is honest,
+and the paste declines it by name. **A cut of the same annotation is a
+DELETION WEARING A CLIPBOARD'S CLOTHES.** The operator's next gesture is a
+paste that refuses, and by then the only copy is gone. So it is refused
+**before anything is removed** — `EditError::CutWouldNotSurvive { subtype }`
+— and the operator can delete it deliberately instead.
+`SignedFieldNotCopyable` plays the same role for `cut_field`, and **matters
+more there**: a cut that carried nothing would have deleted a signature and
+left the operator holding an empty clipboard.
+
+**★★★ ONE GESTURE IS ONE UNDO ENTRY, ACROSS VERBS THAT COMMIT FOR
+THEMSELVES.** `R168` says a verb offered on an N-target selection acts on the
+whole selection or refuses. `R179`/`R49` say one gesture is one undo entry. A
+multi-annotation cut has to satisfy both — while `delete_annotation`
+**routes** ce dimensions and redaction marks to verbs that commit for
+themselves (`ARCHITECTURE.md` §4.1 (L)), so a multi-delete cannot just build
+its own writes without becoming **a second copy of the most intricate
+deletion logic in the crate.**
+
+New private primitive: **`EditSession::coalesce_last(count, kind)`** folds the
+last N commands into one undo entry. Call the per-target verb N times, then
+fold. Recorded as **decision 101** with its body-section counterpart at
+`ARCHITECTURE.md` §11.6.
+
+**★★★★ THE COLLAPSE IS THE WHOLE OF IT, AND A NAIVE CONCATENATION IS WRONG.**
+`undo()` walks a command's `objects` **forward**, applying each `before`.
+That is correct **only while an object appears at most once in one command** —
+the same fact this project recorded twice before as *"two whole-dictionary
+writes to one object in one command do not compose"* (`flatten_fields` via the
+`R85` oracle; the Shape A→B promotion; `paste_field` one Pass earlier).
+
+Two annotations on one page both rewrite that page's `/Annots`. Concatenated,
+the page object appears twice; the second write's `before` **is the first
+write's `after`**; undoing forward restores the **original** and then
+re-applies the **intermediate**. Result: **one annotation still missing, no
+further undo to reach it, and a document that LOOKS FINE and is wrong by
+one.**
+
+So a repeated object **collapses to one write taking the earliest `before`
+and the latest `after`.** Removals collapse the same way; so does the trailer.
+
+**Verified by sabotage, not by hope:** replacing the duplicate lookup with a
+constant `None` makes
+`cutting_two_annotations_from_one_page_is_one_undo_entry_and_undo_restores_both`
+fail with **exactly `left: 1, right: 2`** — one of two annotations restored.
+Restored, and it passes. (`R225`: the sabotage is discriminating because the
+wrong implementation produces a **specific** wrong number, not a crash.)
+
+**`count == 1` is not a no-op: it RELABELS the entry.** A one-target cut
+otherwise carried the *destination verb's* kind, so an undo control said
+*"undo delete"* after the operator pressed **cut**. That is **a promise about
+the clipboard**, not a wording preference — hence `CommandKind::CutSelection`.
+
+**A selection larger than `MAX_UNDO_DEPTH` (256) is refused BY NAME before
+anything is deleted** (`SelectionTooLargeForOneUndo`). *A cut that silently
+became forty undo entries is worse than a cut that did not happen: the
+operator finds out by pressing undo and watching a third of their work come
+back.*
+
+#### FOUR DEFECTS FOUND WHILE BUILDING IT — ALL PRE-EXISTING, ALL GREEN
+
+**1. ★★ THE CLI'S CUT DID NOT CUT ANNOTATIONS, AND SAID IT HAD.**
+`object-copy --cut` was implemented as `copy_selection` + `delete_objects` —
+which takes **object indices only**. `--annotations 0 --cut out.pdf` copied
+the annotation, **left it on the page, and printed `cut=1`.** The core had no
+annotation-aware cut to call; now it does. A second, worse layer underneath:
+`ObjectClip::to_bytes` did not serialise annotations, so **even a working cut
+would have written a clip file that cannot put them back.** `--cut` together
+with `--annotations` was therefore **refused** rather than warned about —
+and that refusal became obsolete one Pass later (`Pass 169.0`).
+
+**2. ★ COPYING AN ANNOTATION REQUIRED THE PAGE TO HAVE CONTENT.**
+`copy_selection` opened with `decompose_for_read`, which refuses
+`VectorEditNoContents`. So an annotation on a blank sheet — a stamp-only
+cover page, a page of review comments — **could not be copied AT ALL**,
+though an annotation needs nothing from the content stream. Found because a
+`cut_annotations` test happened to use a fixture with annotations and no
+content. The decomposition now runs **only when content objects were asked
+for.** (Verified here: `edit.rs:9285`.) **Mirrored one Pass later on the
+paste side → `R231`.**
+
+**3. ★★ THE PASTE REFUSAL WAS ABOUT WIDGETS, WHATEVER YOU HAD COPIED.** Both
+paste sites carried **one hardcoded sentence** — *"a `/{subtype}` annotation
+was NOT pasted. A widget carries an `/AcroForm` field registration and a
+field name…"* — so **copying a `/Link` and pasting it explained form-field
+renaming and calculation order.** The prose was **accurate about a different
+object**, and **duplicated verbatim in two sites**, which is how one wrong
+sentence became two. ***Neither test nor gate could notice, because the
+string was well-formed and internally consistent*** — the same shape as
+`R230`'s buried `--help` summary one commit earlier: *a true sentence in the
+wrong place is invisible to every mechanical check.*
+
+One function now (`unsupported_paste_reason`), so the sites cannot drift, and
+**a reason per subtype**: a `/Link`'s destination names a page that may not
+exist here; a `/Popup` is not an independent annotation; a `/Redact` mark is
+a pending destructive operation; `FreeText`/`Text`/`Stamp` are **a known
+read-back gap rather than a property of the document** — and that one became
+false one Pass later, when `Pass 170.0` made all three copyable. The widget
+case now **points at `copy-field`/`paste-field`**, which had existed since
+`Pass 167.0` and which the old sentence never mentioned.
+
+**4. ★★ `delete_field` LEFT A STALE `/AcroForm` `/CO` ENTRY — AND IT WAS
+FOUND BY READING A COUNTER.** §12.7.2 Table 218 makes `/CO` *"an array of
+indirect references to field dictionaries with calculation actions"*.
+Removing a field and leaving its reference there names an object that is
+gone. **Not corruption** — §7.3.10 resolves a dangling reference to `null`
+and calls it legal — **but a lie the file tells about itself, and it is
+COUNTED**: `list-fields` on a document whose only field had just been deleted
+reported **`fields=0 calc_order=1`**. *That readout is how it was found,
+while smoke-testing `cut_field`.*
+
+Pruned in the **same `/AcroForm` write** that patches `/Fields`, because two
+whole-dictionary writes to one object in one command do not compose (above).
+Filtered against **the full removal set, not the root set** — a calculated
+field can sit anywhere in the tree. Written **only when it changed**: a
+document with no `/CO` is not given one, since writing a key that changes
+nothing is a minimal-diff violation (`CLAUDE.md` rule 3). `flatten` goes
+through the same path and is fixed with it.
+
+★ Note the instrument: **a counter that disagreed with a count of zero.** No
+test asserted `/CO`'s contents; nothing crashed; the gate was green. The
+defect surfaced because a **disclosure line printed two numbers that could
+not both be true.** That is the payoff of this project's habit of printing
+denominators (hard rule 10) landing in the codebase rather than in the
+documents.
+
+#### ACROBAT PARITY — AN EXCEED, AND THE RECORD SAYS SO
+
+The Acrobat feature RAG gained
+`clipboard__cut_copy_paste_coverage_matrix.md` this session (`3ac9dd7`
+carries the librarian's own dispatch notes; the RAG file itself is outside
+git, **verified on disk here**). **Acrobat Pro has NO real cut for page
+content or for form fields — only a manual copy-then-delete.** pdfce's cut
+verbs are therefore **ahead of the parity reference, not catching up to it**,
+and **the one-undo-entry guarantee is the part Acrobat's manual sequence
+cannot offer at all.** Recorded under the operator's standing *"exceed the
+reference when you can"*.
+
+**Verification (relayed).** `cargo test --workspace` green, **151 suites**;
+`tests/cut_verbs.rs` 15/15, one sabotage-verified (**counted here: 15**);
+`fmt`/`clippy -D warnings` clean; `cargo tree -p pdfce-core`/`-p
+pdfce-render` no GUI dependency; `run-gates.sh` PASS, 29 commands;
+`check-core-api-verbs.py` PASS (161 → **164** verbs). CLI smoke: `copy-field
+--cut` end to end; `object-copy --cut` now removes the annotation (4 → 3) and
+refuses the case it cannot carry.
+
+**Consumer contract:** `docs/core-api/02-editing-and-saving.md` §1.27
+(verified present at line 2330).
+
 ### `Pass 167.0` (`d59ce99`, 2026-08-29) — a form field can be copied and pasted, and the paste is not lossy: `formclip`, `copy_field`/`paste_field`, three CLI subcommands, and two defects that only a fixture built AWAY FROM ITS DEFAULTS could see — filed 2026-08-29 (326th filing)
 
 **Sourcing, and it is different from the last two filings.** This dispatch
@@ -97022,7 +97733,42 @@ true — it only corrects what kind of risk the 151 figure represents, so a
 future session does not re-raise "the class that could mislead a consuming
 project" as still-open when the one measured instance of it is gone.
 
-### Unscoped — **lossless markup/annotation clipboard-copy fidelity** — filed 2026-08-29 (317th filing, from `pdfceGUI`'s clipboard-fidelity question)
+### Unscoped — **lossless markup/annotation clipboard-copy fidelity** — filed 2026-08-29 (317th filing, from `pdfceGUI`'s clipboard-fidelity question) — ★★ **NARROWED 2026-08-29 (327th filing) BY `Pass 170.0`; STILL OPEN, AND THE HARDER HALF IS THE HALF THAT REMAINS**
+
+> **★★ NARROWED 2026-08-29 (327th filing), from `Pass 170.0` (`da52c5c`).**
+> `ClipAnnotation::Raw` now carries an annotation's **own dictionary plus its
+> closure**, so for every subtype pdfce does **not** model as a spec —
+> `/Text` (sticky notes), `/Stamp`, `/FreeText`, `/Link`, `/FileAttachment`,
+> `/Caret`, `/Screen`, `/Watermark` — `/CA`, `/T`, `/Contents`, `/M` and the
+> baked `/AP` all travel intact, because nothing is re-authored. Three of
+> those subtypes could not previously be copied **at all**. See `Pass 170.0`
+> in *Shipped*.
+>
+> **★★★ WHAT REMAINS, AND IT IS EXACTLY THIS ENTRY'S ORIGINAL SUBJECT.** A
+> **markup** annotation — the kinds that HAVE a `MarkupSpec` — still travels
+> **through the spec**, deliberately, so a rotated paste can re-bake its
+> appearance (§12.5.5: a raw `/AP` can only be translated, never rotated or
+> scaled, without stretching the artwork). **So `/CA`, `/T` and `/Contents`
+> are still dropped on precisely the kinds this entry was filed about.** The
+> capability grew everywhere except where the request pointed.
+>
+> **The engineer's own stated next step**, recorded here rather than left in
+> a commit message: **carry BOTH representations and choose by transform** —
+> the raw dictionary when the paste is a pure translation, the spec when it
+> must rotate or scale. That collapses the trade rather than picking a side,
+> and it is the shape a real Pass for this entry should take.
+>
+> **★ The `/IRT` half is untouched and is still the hard half.** `Pass 170.0`
+> **strips** `/IRT` and `/Popup` at copy time — correctly, because carrying
+> either would plant *a relationship the operator did not select*: a pop-up
+> whose object did not travel, a reply whose parent did not. The
+> reference-rewriting problem this entry names below is therefore **entirely
+> unaddressed**, and stripping is a deliberate holding position, not a
+> partial solution. **Read the "graph problem, not a value problem"
+> paragraph below as fully current.**
+>
+> Still **unscoped**, still awaiting `pdfceGUI`'s answer on whether they need
+> it before it is sized into a real Pass.
 
 `pdfceGUI` asked whether their annotation clipboard route loses fidelity.
 Answer (see `Pass 161.0`'s *Shipped* entry for the reply-file path): **yes,
@@ -98468,7 +99214,52 @@ form that both omits `/Resources` and is itself invoked from inside
 another form. Filed so the inconsistency is tracked rather than latent;
 not urgent, no known fixture exercises it.
 
-### `Pass 120.5` — a versioned annotation payload for `ObjectClip`, so a clip's annotations survive `to_bytes`/`from_bytes`
+### `Pass 120.5` — a versioned annotation payload for `ObjectClip`, so a clip's annotations survive `to_bytes`/`from_bytes` — ★★ **SHIPPED UNDER A DIFFERENT ID (`Pass 169.0`, `fe78023`, 2026-08-29) AND ONLY PARTIALLY DISCHARGED — READ THE AMENDMENT FIRST**
+
+> **★★ AMENDED 2026-08-29 (327th filing). This entry's scope shipped as
+> `Pass 169.0` (`fe78023`), not as `Pass 120.5`. The ID `120.5` was never
+> used and is now retired to this entry — hard rule 2 is intact (nothing was
+> renumbered, nothing was reused for a different feature), but the two IDs
+> name one capability and a reader must not treat this as unbuilt.**
+>
+> **★★★ NOT FULLY DISCHARGED, AND THE GAP IS IN THIS ENTRY'S OWN
+> ACCEPTANCE CRITERIA.** The criterion below reads: round-trip a
+> `MarkupSpec` and a `DimensionKind` ***"plus its group's name, scale and
+> unit"***. **`Pass 169.0` carries the group NAME only.** Verified this
+> filing by reading `crates/pdfce-core/src/vector/clip.rs` — the encoder
+> writes one `group_name` byte string (`clip.rs:305`, `:813`, `:818`) and
+> the decoder reads one back (`:963`, `:972`); there is no scale, unit,
+> drafting standard or per-ce-dimension style override in the payload, and
+> `docs/core-api/02-editing-and-saving.md:897–902` states the same limit in
+> the consumer contract.
+>
+> **★ The operator-visible consequence, which is why this is a gap and not
+> a footnote: a ce dimension's LABEL is derived from its group's scale, so
+> a pasted ce dimension can READ DIFFERENTLY from the one it was copied
+> from.** Nothing errors, nothing is marked, and the number on the page is
+> simply a different number. The engineer named this as owed work in
+> `Pass 169.0`'s commit message rather than letting it pass as a property
+> of the format; it is recorded here so the obligation has a record on the
+> **Backlog** side too, not only on the Shipped side.
+>
+> **What remains in scope for this entry**, therefore, is exactly: carry a
+> ce dimension's **group scale, unit and drafting standard**, and its own
+> **per-ce-dimension style override**, across `to_bytes`/`from_bytes`.
+> Everything else the criteria below ask for has shipped — the second
+> versioned payload with its own magic/version (clip format **v2**), exact
+> `MarkupSpec` round-tripping for all eight variants, and the widget
+> exclusion, which `Pass 167.0`'s dedicated `FieldClip` route now answers
+> properly rather than by refusal.
+>
+> **★ And the shape of the ID collision is worth keeping.** A Backlog entry
+> carrying a real Pass ID sat 78 days' worth of Passes away from the work
+> that discharged it, and the engineer scoped the session from a fresh
+> coverage audit rather than from the Backlog — so the audit re-derived a
+> gap this file had already recorded, and gave it a new number. **The audit
+> was not wrong to run; the Backlog was not wrong to hold the entry. What
+> was missing was any step that reads Backlog IDs when a new Pass is being
+> numbered.** Reported to the engineer as a process observation, not minted
+> as a rule: one instance.
 
 **Filed 2026-08-21 (two-hundred-and-fourteenth filing), the limit named
 rather than left as a footnote in `Pass 120.4`'s own Shipped entry
@@ -119672,6 +120463,103 @@ same cause (hashes exist only at commit time), two different failure modes.
   the house-style anchor, the gate, and the two wirings.
 
   **Standing rules ceiling `R229` → `R230`; next free `R231`.**
+
+- **R231 — A VERB THAT OPERATES ON SOMETHING ATTACHED TO A PAGE MUST NOT
+  INHERIT THE CONTENT PATH'S PRECONDITIONS. AN ANNOTATION GESTURE THAT
+  REFUSES A PAGE FOR HAVING NO CONTENT STREAM, OR NO `/Resources`, IS
+  REFUSING FOR THE ABSENCE OF SOMETHING IT DOES NOT USE — AND THE REFUSAL
+  IS BY NAME, SO IT READS AS A DELIBERATE POLICY.** Minted 2026-08-29
+  (327th filing), from `Pass 168.0` (`f492e0f`) and `Pass 169.0`
+  (`fe78023`), on **two instances of one cause found one Pass apart**.
+
+  **Instance 1 — the copy side (`Pass 168.0`).** `copy_selection` opened
+  with `decompose_for_read`, which refuses a page with no content stream
+  (`EditError::VectorEditNoContents`). **So an annotation on a blank sheet
+  could not be copied at all** — a stamp-only cover page, a page of review
+  comments — though an annotation needs nothing from the content stream.
+  Found because a `cut_annotations` test happened to use a fixture with
+  annotations and no content. Fix: decompose **only when content objects
+  were actually asked for** (`crates/pdfce-core/src/edit.rs:9285`).
+
+  **Instance 2 — the paste side (`Pass 169.0`), the exact mirror.**
+  `plan_paste_at` reads the page through `page_tree::pages_in`, which
+  treats `/Resources` as required (§7.7.3.3, *"Required; inheritable"*) and
+  fails `MissingRequired("Resources")` without one. **So pasting a comment
+  onto a page that has none — a blank sheet, a cover page,
+  `fixtures/synthetic/minimal.pdf` — was refused for lacking something the
+  gesture does not use** (`edit.rs:10650`).
+
+  **★ THE SHARED CAUSE, WHICH IS THE RULE AND NOT THE TWO FIXES.** Both
+  verbs reached the page through **the helper the content-editing verbs
+  use**, because that helper is *the* way to get a page in this crate and
+  it was written for the verbs that need a decomposed content stream. The
+  preconditions came along with the accessor. **Nobody chose them; nobody
+  could see them, because at the call site the code reads as "get the
+  page".**
+
+  **★★ WHY THIS EARNS A MINT AT n = 2 RATHER THAN WAITING FOR A THIRD.**
+  The engineer's own commit wrote *"Two instances, one shape — worth a rule
+  if it appears a third time"* and left the call to this role. Taken at
+  two, on this project's stated bar: **two instances of the same CAUSE,
+  not merely the same symptom** (`R230`'s minting note; `R221`'s
+  precedent). These are not two symptoms of a vague tendency — they are
+  the **same accessor-carries-its-preconditions mechanism**, on the two
+  halves of one round trip, one Pass apart, with the second found only
+  because the first had just been fixed and its shape was fresh.
+
+  Three further facts weigh at two rather than three:
+
+  - **The failure is a REFUSAL BY NAME, so it wears the project's own
+    honesty convention as camouflage.** `VectorEditNoContents` and
+    `MissingRequired("Resources")` are exactly the kind of precise,
+    sourced errors this codebase mints on purpose. A reader hitting one
+    concludes pdfce has **decided** something, not that it tripped over a
+    borrowed precondition. Compare a panic or a wrong result, either of
+    which invites investigation.
+  - **No test or gate can see it**, for the same reason: the verb returns
+    `Err` on an input nobody wrote a test for, and every input anybody did
+    write a test for has content and `/Resources`. **Both instances were
+    green at HEAD.** Instance 1 was found by an accidental fixture choice;
+    instance 2 by deliberately looking for the mirror.
+  - **The blast radius is a whole document class, not an edge case.** A
+    page with no content stream and a page with no `/Resources` are both
+    legal and both ordinary — cover sheets, comment-only sheets, generated
+    blanks, `minimal.pdf`. The verb does not degrade for them; it is
+    **absent** for them.
+
+  **THE OBLIGATION, in one sentence:** *before a verb reaches a page, ask
+  what that verb actually READS from the page — and if the answer does not
+  include the content stream or `/Resources`, do not acquire the page
+  through a helper that requires them.* In this crate that means
+  `page_slots()` for the id, and `decompose_for_read` / `pages_in` only on
+  the branch that genuinely needs a decomposition or resolved resources —
+  which is precisely the shape both fixes took.
+
+  **The general family this belongs to, and how it differs.** This is not
+  the *"a guard written for one caller is inherited by another"* idea in
+  the abstract — it is specifically **an ACCESSOR carrying preconditions
+  that belong to its ORIGINAL CALLER'S purpose**, where the call site
+  reads as a neutral fetch. Sibling of `R227`'s read/write split in
+  spirit: `R227` governs how a checker **reads** source; this governs what
+  a verb may **assume** about the thing it fetched.
+
+  **★ The corollary that makes it checkable rather than aspirational**, and
+  the one to apply on the next clipboard-adjacent verb: **the copy side
+  and the paste side of one round trip are two chances to make the same
+  mistake, and finding it on one side is a standing instruction to look
+  for it on the other.** That is literally how instance 2 was found —
+  `Pass 169.0` went looking for the mirror of `Pass 168.0`'s fix and found
+  it on the first try. The same discipline, applied preemptively in the
+  same session, is what caught the `coalesce_last` counting defect in
+  `cut_selection` before anyone observed it failing (`Pass 172.0`).
+
+  **Escalated to `D:/dev/rag/rust/` this filing** as
+  `an_accessor_carries_the_preconditions_of_the_caller_it_was_written_for.md`
+  — the mechanism is Rust-shaped (one helper, several callers, error
+  propagation via `?` making the borrowed precondition invisible at the
+  call site) and generalises past PDFs.
+
+  **Standing rules ceiling `R230` → `R231`; next free `R232`.**
 
 ## Update protocol
 
