@@ -1,9 +1,44 @@
 ---
 name: a-doc-comment-can-be-shipped-ui
-description: In clap-derive CLIs a doc comment IS the --help text, so an orphaned or missing one ships as blank operator-facing UI that no compiler, linter or test notices — grep for the class, don't wait to spot instances
+description: Text that reaches an operator — a clap --help derived from a doc comment, an error message naming the verb to use instead — is UI that no compiler, linter or test checks; grep for the class, don't wait to spot instances
 metadata:
   type: feedback
 ---
+
+## ★★ The general rule, of which the clap case below is one instance
+
+**Some text in this codebase is shipped operator-facing UI, and nothing checks
+any of it.** Not the compiler, not clippy, not `missing_docs`, and no test —
+because no test reads help strings or error strings. Two families found so far,
+both on 2026-08-29, both live at HEAD:
+
+| family | what it is | gate |
+|---|---|---|
+| a `///` on a clap `Command` variant | the subcommand's `--help` | `tools/check-clap-help.py` |
+| `use_instead: "…"` in a refusal | *"use `X` instead"*, read at the moment the operator is blocked | `tools/check-cited-verbs-exist.py` |
+
+**The second is worse than a dangling doc link**, and that is the part to
+carry: rustdoc at least *warns* about a broken intra-doc link. **Nothing warns
+about a `&'static str`.** It compiles, it is a literal, no test asserts on it,
+and the operator is the first reader who finds out — while blocked, being told
+the way out.
+
+`rotate_widget` had **never existed** and had been cited that way for Passes.
+The gate written to catch it found a **second** on its first run,
+`set_dimension_label`, which I had not gone looking for.
+
+⇒ **The fix is not "point at a real verb" — sometimes there isn't one.** It is
+*name a verb that exists, or say plainly that it does not.* A named-but-unbuilt
+capability is a search term; a bare "unsupported" is a dead end. The gate
+accepts a `NOT BUILT YET` marker for exactly that reason.
+
+★ **And a gate lesson from writing it:** the first version read a **fixed
+six-line window** after the citation to find that marker, and produced a false
+positive within the hour — a comment inserted between `use_instead:` and `why:`
+pushed the marker past the window. **A fixed-size window over source is a guess
+about what a human will write in the gap.** Read to the end of the enclosing
+construct instead. Same shape as the doc-comment walk-back that terminated at
+zero steps because an `#[allow(...)]` intervened.
 
 **In a `clap`-derive CLI, a doc comment is not documentation — it is shipped
 operator-facing UI.** `clap` turns the `///` on a `Command` variant into that

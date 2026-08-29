@@ -74934,3 +74934,103 @@ that `border_dict` now genuinely carries the `/BS` doc block and
 4. `rotate-annotation` CLI test still owed.
 
 ---
+
+## 2026-08-29 (319th filing) — `Pass 162.0` filed: `format-text --set-font` authors a standard-14 font resource on demand — ★★★ THE OPERATOR'S "DO ALL 4" STANDING INSTRUCTION IS COMPLETE
+
+**Sourcing.** No shell this session (librarian invocation, hard rule 8). The
+commit hash `9c3a1c9` (parent chain `97d445f` → `b885777`/161.0 →
+`6601783`/161.1 → `1fc02f7`/161.2 → `57d5510`/318th filing → `9c3a1c9`/
+162.0) is **relayed**, stated by the engineer to be `git log`-verified.
+**Independently confirmed here** by `Grep` on live source:
+`std14_resource_dict` and `bind_font_resource` both exist in
+`crates/pdfce-core/src/text_edit/addtext.rs`; `FormatFormHit` exists in
+`edit.rs`; `inherited_resources_are_patched_not_shadowed` exists in
+`crates/pdfce-core/tests/set_font_new_resource.rs`. Test counts and gate
+results are relayed, not re-run.
+
+**Shipped:**
+- `Pass 162.0` (`9c3a1c9`) — `format-text --set-font` now **authors** a
+  standard-14 (§9.6.2.2) font resource on demand when the target's
+  `/Resources` does not already carry the face, closing the standard-14
+  half of deferral code **FF-C**. A face outside the standard 14 still
+  refuses by name (`TargetFontMissing`) — that remainder stays
+  `Pass 142.0`, narrowed.
+
+**★★★ This closes item 4, the LAST of the operator's standing "do all 4"
+instruction — not just another Pass.** All four are now done: rotation
+(`Pass 155.0`), ce dimensions (`Pass 159.0`), bookmarks (`Pass 161.0`),
+fonts (`Pass 162.0`). This is the first session since the instruction was
+given where there is no next item under it. `docs/NEXT_SESSION.md` §0
+already carries the closing table; nothing further is owed against this
+instruction unless the operator opens a new one.
+
+**Decisions made this session:**
+- No new architecture decisions; decision ceiling stays at `096`. Wiring a
+  font-resource builder into a third caller and fixing an inheritance bug
+  are correctness/consolidation work on an existing capability, not a new
+  crate boundary, library choice, or invariant.
+- Considered minting a standing rule for Finding 1 below (multiple
+  structurally-independent implementations of one verb, extended on a
+  subset, tests green on the subset) and **declined at n = 1** — the
+  project's standing bar for a fresh mint is n = 2 corroborating
+  instances of the *same* mechanism, and the engineer-proposed second
+  instance (`move_outline_item`'s dangling doc link) reads as a different
+  mechanism (documentation outrunning implementation, not duplicate-path
+  drift) on inspection. Filed at full detail in `ROADMAP.md`'s `Pass
+  162.0` entry as the citable precedent for instance 1, so a genuine
+  second instance is recognised rather than re-derived. Standing rules
+  ceiling unchanged at `R226`, next free `R227`.
+
+**Findings + decisions:**
+- **Almost none of the Pass was new code, and that is what sized it.**
+  `build_font_dict()` and `pick_font_name()` already existed in
+  `text_edit/addtext.rs`, exercised by `add_text` since `Pass 16.0`. The
+  work was wiring, not invention: widen both to `pub(crate)`, add one
+  wrapper (`std14_resource_dict`) so the symbolic/encoding pairing has one
+  home, and route the synthesized dictionary through the same coverage
+  gate (`accept_font_target`) everything else uses.
+- **★★★ Two of three save paths were wired, and every unit test passed
+  anyway.** `EditSession::format_text` (page), its form twin, and
+  `text_edit::set_format` (the one-shot `&Document` entry point the CLI
+  actually uses) share no code. The engineer wired the two session paths;
+  every unit test passed, because unit tests exercise the session; the
+  shipped binary printed a disclosure for a font resource it had not
+  written, caught by reading the **output file**, not the report. Fixed by
+  moving the binding rule into one function, `bind_font_resource`, taken
+  over an `ObjectGraph` so all three callers reach it. **The generalizable
+  shape: when a verb has more than one structurally-independent
+  implementation, "all tests pass" only means the tested subset of paths
+  is correct — nothing about that green run distinguishes a fully-wired
+  verb from a partially-wired one.**
+- **§7.8.3: a page's own `/Resources` REPLACES the inherited one, it does
+  not merge.** The first version of the fix gave an inheriting page a
+  direct `/Resources` holding just the new font, which would have orphaned
+  every font the page's existing content already named — the file still
+  parses, and the symptom (unresolved fonts) would not surface until the
+  *next* open, not on write. Fixed by walking `/Parent` (depth-guarded) to
+  the object that actually holds `/Resources`, and patching a shared
+  dictionary in place rather than cloning it (round-trip rule 3).
+  Graduated to `C:\personal_rag\pdf\` as a RAG finding — see below.
+
+**Still in flight:**
+- `Pass 142.0`, narrowed — a font face **outside** the standard 14 needing
+  a real font program (subset from `--font-dir`, `/FontDescriptor`,
+  `/FontFile2`/`/FontFile3`, widths, encoding, a file-unique subset tag).
+  De-prioritised by the consuming shell, not declined.
+- `rotate-annotation` CLI test still owed (carried forward, unchanged).
+- The rustdoc-cleanliness gate and the lossless-markup-clipboard-copy
+  Backlog entries remain unscoped (carried forward, unchanged).
+- No next item under the "do all 4" instruction — pick from `docs/
+  NEXT_SESSION.md` §A (owed items) or raise the Backlog with the operator.
+
+**For next session:**
+1. Ledger: Pass ceiling **`162.0`** (highest), next free **`162.1`**/new
+   major **`163.0`**; standing rules ceiling unchanged **`R226`**, next
+   free **`R227`**; decision-record ceiling unchanged **`096`**, next free
+   **`097`**; filing ordinal **319**.
+2. The "do all 4" instruction is complete. There is no operator-handed-down
+   next item — ask, or pick from owed work.
+3. `Pass 142.0` remains open, narrowed to non-standard-14 faces only.
+4. `rotate-annotation` CLI test still owed.
+
+---

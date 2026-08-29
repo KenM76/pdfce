@@ -96,6 +96,171 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 162.0` (`9c3a1c9`, 2026-08-29) — `format-text --set-font` now AUTHORS a standard-14 font resource on demand, closing the standard-14 half of FF-C — ★★★ **THIS CLOSES ITEM 4, THE LAST OF THE OPERATOR'S STANDING "DO ALL 4" INSTRUCTION** (rotation `155.0`, ce dimensions `159.0`, bookmarks `161.0`, fonts `162.0`) — ★★ **TWO OF THREE SAVE PATHS WERE WIRED, EVERY UNIT TEST PASSED, AND THE SHIPPED BINARY PRINTED A DISCLOSURE FOR A RESOURCE IT HAD NOT WRITTEN** — filed 2026-08-29 (319th filing)
+
+**★ THE STANDING INSTRUCTION IS NOW COMPLETE.** Ken's *"do all 4"* — the four
+things not completely editable, enumerated then fixed — has no next item
+under it as of this Pass. `docs/NEXT_SESSION.md` §0 already carries the
+closing table (rotation / ce dimensions / bookmarks / fonts) and is not
+duplicated here; this entry is the record that closes gap 4's own line in
+that table.
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `9c3a1c9` (parent chain `97d445f` → `b885777` (161.0) →
+`6601783` (161.1) → `1fc02f7` (161.2) → `57d5510` (318th filing) →
+`9c3a1c9` (162.0)) is **relayed** from the dispatch, stated by the engineer
+to be `git log`-verified. **Independently confirmed here** by `Grep` on the
+live tree: `pub(crate) fn std14_resource_dict` and
+`pub(crate) fn bind_font_resource<G: ObjectGraph + ?Sized>` both exist at
+`crates/pdfce-core/src/text_edit/addtext.rs:1957` and `:2037`; `struct
+FormatFormHit` exists in `crates/pdfce-core/src/edit.rs`; the regression
+test `fn inherited_resources_are_patched_not_shadowed` exists at
+`crates/pdfce-core/tests/set_font_new_resource.rs:352`, in a file whose own
+header names the trap by clause (`TargetFontMissing`/`FF-C`, §7.8.3). Test
+counts, gate results and the binary-exercise walk are **relayed**, not
+re-run.
+
+**The gap, closed.** `format-text --set-font` could previously select only a
+face the target's `/Resources` **already carried**; anything else refused
+by name (`FormatError::TargetFontMissing`, deferral code **FF-C**). Now a
+**standard-14** face (§9.6.2.2) is **authored on demand** — no font program
+needed. Outside the standard 14 still refuses with FF-C — that remainder is
+`Pass 142.0`, narrowed (subsetting + embedding), see its *Backlog* entry
+below.
+
+**★ Almost none of this was new code, and that is worth recording because it
+is what sized the Pass.** Two builders already existed in
+`text_edit/addtext.rs`, exercised by the add-new-text path since `Pass
+16.0`: `build_font_dict()` (the full form — `/FirstChar`, `/LastChar`,
+`/Widths` from `fontdata::std14_width`, `/Encoding /WinAnsiEncoding` for the
+twelve Latin faces, correctly **omitted** for Symbol/ZapfDingbats) and
+`pick_font_name()` (`pdfceF1`, `pdfceF2`, … first unused). Both widened to
+`pub(crate)`; one new wrapper, `std14_resource_dict`, so the symbolic/
+encoding pairing has **one** home (`R171`). `accept_font_target` takes a
+plain `&Dict`, so the synthesized dictionary goes through the **same
+coverage gate** before anything is written (`R221`) — no new gate machinery.
+
+**★★★ Two defects found DURING the Pass, both worth recording as
+findings.**
+
+**1 — TWO of THREE save paths were wired, and every test passed anyway.**
+The three: `EditSession::format_text` (page), its form twin, and
+`text_edit::set_format` — the **one-shot** `&Document` entry point that
+builds a `DirtySet` and shares no code with the session. The engineer wired
+the two session paths. **Every unit test passed**, because unit tests
+exercise the session. **The CLI uses the third path.** It **printed the
+disclosure saying a font resource had been added, and saved a file in which
+it had not** — a content stream naming `/pdfceF1` with no `/pdfceF1`
+anywhere in the file. Caught by running the binary and reading the
+**output file** (`list-fonts` said `fonts=3`), not the report, which said
+success. Fixed by moving the binding rule into **one** function,
+`bind_font_resource`, taken over an `ObjectGraph` so all three callers
+reach it.
+
+**2 — inherited `/Resources` would have been SHADOWED.** §7.8.3: a page's
+own `/Resources` **replaces** the inherited one, it does not merge. The
+first helper created a direct `/Resources` on the page holding just the new
+font — which on an inheriting page orphans **every** inherited font the
+page's existing content already names. The file still parses; the original
+text stops resolving its fonts. Caught by noticing `Page.resources` is the
+**resolved** dictionary, not the page's own. `bind_font_resource` now walks
+`/Parent` (depth-guarded per §10) to the object that actually holds
+`/Resources`. A **shared** `/Resources` is patched **in place, never
+cloned** — the entry is unreferenced on other pages and changes nothing
+about how they render, whereas cloning would silently restructure the
+document as a side effect of a restyle (rule 3). Disclosed either way.
+
+**Tests — 12 new, three sabotages.**
+`crates/pdfce-core/tests/set_font_new_resource.rs` (10) and
+`crates/pdfce-cli/tests/format_text.rs` (+2, now 13). Sabotages, each caught
+by exactly the intended tests: drop the extra objects in the one-shot
+writer → 5 of 10 fail; remove the inheritance walk → 1 of 10 fails;
+hard-code the key to `F1` → 3 of 10 fail. **Symbol is the discriminator**:
+Symbol IS standard-14, so the dictionary IS synthesized, and the run is then
+refused on **coverage** — Symbol's built-in encoding has no `h`.
+`TargetFontMissing` there would mean synthesis never ran; a *success* would
+mean pdfce wrote `.notdef` or substituted silently, which the family-change
+contract forbids.
+
+**Also.** `check-string-gaps.sh` caught **three** disclosure strings whose
+line continuations were mangled by heredoc patching — the exact defect that
+gate exists for; fixed. A five-element tuple got a **named type**
+(`FormatFormHit`) rather than an `#[allow]`.
+`docs/core-api/02-editing-and-saving.md`'s *"read-only about resources"*
+claim was true and is now false — corrected in place by the engineer (line
+count now 3,161; clauses 78) — not this librarian's file, confirmed current
+by `Grep` above.
+
+**Verification, relayed.** `cargo test -p pdfce-core --test
+set_font_new_resource` — 10 passed. `cargo test -p pdfce-cli --test
+format_text` — 13 passed. `bash tools/run-gates.sh` — PASS, 27 commands.
+`python tools/check-core-api-verbs.py` — PASS. `cargo fmt --all --check`,
+`cargo clippy --workspace --all-targets -- -D warnings` — clean. Binary:
+every standard-14 face exercised — Courier and Helvetica-Oblique add a
+resource; Times-Roman resolves to the existing `/F1` and adds none;
+Times-Bold and Symbol refuse on coverage by name (`R-INV-7`, naming the
+exact character); Arial refuses on FF-C. Text round-trips through
+`extract-text`.
+
+**`FEATURES.md` — two rows corrected, none added.** Row 148 (*Implemented →
+Text*, "Text formatting on existing text") had its family-change clause
+rewritten: it previously read a face was reachable **only** if the page
+already carried it; that is now false for the standard 14, which are
+**authored on demand**. Rather than duplicate the capability into a new
+row — `FEATURES.md`'s own header forbids growing a row's history and asks
+for one row per capability, and row 148 already **is** the family-change
+row — the standard-14 clause was corrected in place and its trailing
+pointer to the (then-single) `Pass 142.0` Planned row was narrowed to name
+only the remaining, non-standard-14 gap. The `Pass 142.0` Planned row
+itself (line ~356) was **narrowed, not deleted or ticked**: it now reads
+"a face **outside** the standard 14" and points at `Pass 162.0` for the
+half that shipped. `gui` stays `[ ]` throughout — `pdfceGUI` has not wired
+this; the box is **not** rounded up.
+
+**On minting a standing rule for Finding 1 — considered, DECLINED at
+n = 1, recorded so a second instance is recognised as corroboration rather
+than re-derived from scratch.** The engineer asked me to weigh whether
+"wired N of M save paths, tests green on the wired subset, the untested
+path is the one the shell actually uses" deserves a standing rule, citing a
+second instance this session: `move_outline_item`'s dangling doc-link
+(`Pass 161.0`'s entry, above). **I read that as a different mechanism, not
+a corroborating instance of this one.** The doc-link case is documentation
+citing a verb that **did not yet exist on any path** — a *forward*
+reference outrunning implementation, already carried under the existing
+doc-comment-orphaning umbrella (`R202`-adjacent). This Pass's Finding 1 is
+a verb that **existed on all three paths conceptually** but was **wired
+correctly on only two**, with the third silently emitting wrong bytes while
+reporting success — a *duplicate-implementation drift*, closer in shape to
+`R151` (core capability, no caller) than to doc-comment orphaning, but
+distinct from `R151` too: `R151`'s defect is **zero** callers; this one is
+**partial, inconsistent** wiring across structurally-independent
+implementations of one verb, undetectable by any single path's own tests.
+The project's own standing bar for a fresh mint is **n = 2, and the warrant
+is not the count alone** (`R221`'s minting note, *Standing rules*) — one
+clean instance is not enough to name the cause with confidence, and I would
+rather under-mint than mint a rule that turns out, on a second instance, to
+have been named wrong. **Filed here instead, at full detail, as the
+citable precedent** — if a second instance of *this specific shape*
+(a verb reachable by more than one structurally-independent code path,
+extended on a subset, tests green on the subset) turns up, mint it then
+and cite this entry as instance 1. Ceiling unmoved at `R226`; next free
+`R227`.
+
+**RAG finding, graduated to `C:\personal_rag\pdf\`.** §7.8.3's inherited-
+`/Resources`-replaces-not-merges trap and what it means for any tool adding
+a resource to a page: the failure is silent, the file still parses, and the
+symptom (orphaned fonts on an inheriting page) surfaces only on the *next*
+open, not on write. See *Ledger* below for the filename.
+
+**Ledger.** Pass ceiling `161.2` → `162.0`; next free `163.0`. Standing
+rules unchanged at `R226`, next free `R227` — no mint, see above. Decisions
+unchanged at `096`, next free `097` — this Pass is an implementation-detail
+consolidation (three save paths → one), not an architectural boundary
+redraw; no `ARCHITECTURE.md` §12 entry filed. `FEATURES.md`: two rows
+corrected (148, 356), zero added, zero deleted. One RAG finding written to
+`C:\personal_rag\pdf\lesson_20260829_pdf_resources_inherit_replace_not_merge.md`,
+subject index and master index both updated.
+
 ### `Pass 161.2` (`1fc02f7`, 2026-08-29) — the 5th doc-comment-orphaning instance, CLOSED — and the finding that I reported it fixed once already and had not fixed it — filed 2026-08-29 (318th filing)
 
 **Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
@@ -95938,7 +96103,24 @@ remapping its target either dangles the reference or silently re-targets it
 at whatever object now occupies that id. Unscoped, awaiting `pdfceGUI`'s
 answer on whether they need this before it is sized into a real Pass.
 
-### `Pass 142.0` — **FF-C WIRED INTO `format_text`: RESTYLE EXISTING TEXT TO A FACE THE PAGE DOES NOT ALREADY CARRY** — ★★ **READ THE SCOPE CORRECTION FIRST, BECAUSE THE COMMIT THAT PROMPTED THIS ENTRY STATES THE GAP TOO WIDELY** — filed 2026-08-27 (293rd filing), **NOT STARTED. ★★★ NO LONGER BLOCKED — THE ANSWER ARRIVED 2026-08-27; DE-PRIORITISED, *NOT* CLOSED (296th filing, amendment below)**
+### `Pass 142.0` — **FF-C WIRED INTO `format_text`: RESTYLE EXISTING TEXT TO A FACE THE PAGE DOES NOT ALREADY CARRY** — ★★ **READ THE SCOPE CORRECTION FIRST, BECAUSE THE COMMIT THAT PROMPTED THIS ENTRY STATES THE GAP TOO WIDELY** — filed 2026-08-27 (293rd filing), **NOT STARTED. ★★★ NO LONGER BLOCKED — THE ANSWER ARRIVED 2026-08-27; DE-PRIORITISED, *NOT* CLOSED (296th filing, amendment below). ★★★★ NARROWED 2026-08-29 (319th filing) — THE STANDARD-14 HALF SHIPPED AS `Pass 162.0`; ONLY THE NON-STANDARD-14 (EMBEDDED-DONOR) HALF REMAINS HERE**
+
+> **★★★★ NARROWED 2026-08-29 (319th filing), from `Pass 162.0` (`9c3a1c9`).**
+> `format-text --set-font` now authors a **standard-14** (§9.6.2.2) font
+> resource on demand when the target's `/Resources` lacks it — see
+> `Pass 162.0`'s *Shipped* entry above for the full account (`bind_font_
+> resource`, the three-save-paths trap, the §7.8.3 inheritance-shadowing
+> trap). **This entry's remaining scope is exactly its own criterion 4**,
+> unchanged below: a face **outside** the standard 14, which needs a real
+> font program — subset from `--font-dir`, a `/FontDescriptor` with
+> `/FontFile2`/`/FontFile3`, widths, encoding and a file-unique subset tag
+> (§9.6.4 ST1–ST4, uniqueness scoped to the **whole file**, not session
+> state). **Not deleted** — the amendment two paragraphs below already
+> establishes that the consuming shell's *"synthetic is enough"* was a
+> report of **their** use, not a decision about ours, and that reasoning is
+> unaffected by how much of the gap has shipped. `162.0`'s own entry
+> records that `bind_font_resource` is now the **single** implementation
+> this remaining half extends, not a second one to write.
 
 > **★★★ AMENDED 2026-08-27 (296th filing) — THE OPEN QUESTION AT THE FOOT
 > OF THIS ENTRY IS ANSWERED, AND THE ANSWER IS "NOT NOW", NOT "NEVER".**
