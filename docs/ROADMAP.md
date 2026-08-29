@@ -96,6 +96,133 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 163.0` (`69689c1`, 2026-08-29) — TWO REFUSAL MESSAGES NAMED A VERB THAT HAS NEVER EXISTED — fixed, plus the gate that found a SECOND phantom and a gate defect the fix produced on its own first run — filed 2026-08-29 (320th filing)
+
+**Small Pass, finding larger than the diff.** Found during an autonomous
+tick while starting the owed `rotate-annotation` CLI test (see *Still in
+flight*, `Pass 162.0`'s entry) — that test **remains owed**, displaced by
+this.
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `69689c1` (parent `4268ae9`, the 319th filing's own commit) is
+**relayed**, stated by the engineer to be `git log`-verified.
+
+**The defect.** `EditError::AnnotationMoveWrongVerb` refused an operation
+by pointing the operator at the verb that (supposedly) handles it —
+*"this annotation is a form widget; use `rotate_widget` instead — …"*.
+**`rotate_widget` has never been written.** The only occurrence of the
+string anywhere in the codebase was the citation itself. A second, unrelated
+refusal — writing a ce dimension's text — cited `set_dimension_label`,
+also never built (`set_dimension_style` is styling, `set_dimension_display`
+is the diameter/radius reading; neither writes the text).
+
+**★★ Why this is a worse defect class than the dangling doc link `Pass
+161.0` fixed.** That one (`EditSession::move_outline_item`, cited since
+`Pass 156.0`) is read by a **developer** browsing `rustdoc`, and `rustdoc`
+**warns** about a broken intra-doc link — a partial mechanical detector
+exists. This is a **runtime** message, read by an **operator**, at the
+exact moment an operation is refused, and it **names the way out**. There
+was no way out. And **nothing warns**: it compiles (a plain `&'static str`
+/ format literal), no lint fires (`thiserror` never checks a format
+string's literal text against the crate's own symbol table, only its
+interpolated arguments), and no test asserted on it — three tests match
+the variant, one checks `why.contains("/MK /R")`, none looked at
+`use_instead`.
+
+**The fix is not "point at a real verb," because there is not one.** Both
+messages now state plainly the cited verb is **not built yet**, while
+still naming what it will be called — a named-but-unbuilt capability is a
+search term for the next session; a bare "unsupported" is a dead end. The
+refusal itself is unchanged and still correct: a widget's rotation is
+`/MK /R` (§12.5.6.19 Table 189), a quantised 0/90/180/270 declaration, and
+a free-angle transform would be silently wrong for one.
+
+**New gate: `tools/check-cited-verbs-exist.py`.** Every `use_instead:`
+literal in `pdfce-core` must name something that resolves as a `pub
+fn`/`pub(crate) fn`, or the message must say plainly it does not exist.
+Only the leading identifier of a call-shaped citation is checked (e.g.
+`edit_widget(fqn, index, &WidgetEdit::new().with_rect(..))` checks
+`edit_widget`). Of **7** citations swept, **5 resolved** and **2 were
+phantoms** (`rotate_widget`, `set_dimension_label`) — the second found on
+the gate's **first run**, unlooked-for. Wired into `.github/workflows/ci.yml`
+and `tools/check-ci-parity.py`; the local sweep is now **28 commands**
+(was 27).
+
+**★★ A gate lesson, found by the gate failing on the very fix it was
+written for.** The first version of the script read a **fixed six-line
+window** after a citation to find the "not built yet" marker, and produced
+a **false positive within the hour**: an explanatory comment added between
+the struct literal's `use_instead:` and `why:` fields pushed the marker
+past the window, so the gate reported a violation on the exact message it
+had just been taught to accept. **A fixed-size window over source is a
+guess about what a human will write in the gap** — this project's own
+contributors write exactly such comments as a matter of course. Fixed: the
+scanner now reads to the **end of the enclosing struct literal**, bounded
+generously (40 lines) only as a sanity cap, never as the actual
+termination condition.
+
+**This is the SECOND instance of that exact shape.** The first was `Pass
+161.0`'s doc-comment walk-back, which "walked back over a contiguous `///`
+run" and terminated after **zero** steps because the immediately preceding
+line was an `#[allow(clippy::too_many_arguments)]` attribute, not a `///`
+line — splicing a new function's doc comment into the wrong spot. Two
+different tools (a code-insertion routine; a CI verification gate), two
+different Rust constructs (a doc comment's attachment point; a struct
+literal's field extent), same day, same mechanism: a proximity heuristic
+("N lines away" / "the line immediately adjacent") defeated by an
+ordinary, legitimate intervening line. **`R227` minted** — see *Standing
+rules*, below.
+
+**Verification (all measured):**
+- `python tools/check-cited-verbs-exist.py` — PASS, 7 citations
+- Sabotage: strip the NOT-BUILT-YET marker from **both** phantom messages →
+  **both caught**; restore → PASS
+- `cargo test` `annot_rotate` / `annot_resize` / `annot_move` /
+  `markup_note_edit` — **8 + 14 + 9 + 8 passed** (the existing widget-refusal
+  test asserting `why.contains("/MK /R")` still holds)
+- `bash tools/run-gates.sh` — **PASS, 28 commands**
+- `cargo fmt --all --check`, `cargo clippy -- -D warnings`,
+  `tools/check-string-gaps.sh`, `tools/check-ci-parity.py` — all clean
+
+**`FEATURES.md` — NO CAPABILITY ROWS CHANGE.** This Pass fixes message text
+and adds a gate; nothing became newly possible. Row 360 (widget rotation,
+already `[ ] [ ] [ ] [x]`, correctly describing the refusal-by-name) needed
+no edit and none was made — stated explicitly so a future reader does not
+go hunting for a row that should have moved.
+
+**Owed, unchanged and now doubled.** `rotate_widget` and
+`set_dimension_label` are both **still unbuilt** — this Pass made the two
+refusal messages honest about that, it did not build either verb. The gate
+passes automatically the moment either verb ships. `rotate-annotation`'s
+CLI test also remains owed (displaced by this Pass, per the opening note).
+`docs/NEXT_SESSION.md` §A already carries widget rotation as an owed item;
+the `set_dimension_label` gap is **new** and is flagged to the engineer to
+add there (`NEXT_SESSION.md` is engineer-owned, not edited here).
+
+**RAG findings, both graduated to `D:\dev\rag\rust\`.** (1) The general
+finding — error/refusal-message literals naming a verb are unchecked
+operator-facing UI, the same defect family as unchecked `clap --help` text,
+a different syntactic carrier. (2) The gate lesson — a source-scanning
+check must read to a syntactic boundary, never a fixed window; two
+corroborating instances (this Pass's gate, `Pass 161.0`'s doc-comment
+walk-back) promoted it to `R227`. See *Ledger* for filenames.
+
+**Ledger.** Pass ceiling `162.0` → `163.0`; next free `163.1`/new major
+`164.0`. **Standing rules ceiling `R226` → `R227`; next free `R228`** — see
+*Standing rules* for the full mint. Decisions unchanged at `096`, next free
+`097` — this Pass corrects two error messages and adds a verification
+script; no crate boundary, library choice, or invariant redrawn; no
+`ARCHITECTURE.md` §12 entry filed. `FEATURES.md`: zero rows changed (see
+above). Two `D:\dev\rag\rust\` files written —
+`error_refusal_messages_naming_a_verb_are_unchecked_operator_facing_ui.md`
+and
+`a_source_scanning_check_must_read_to_a_syntactic_boundary_not_a_fixed_window.md`
+— plus a cross-reference footer added to the existing
+`doc_comment_splice_attaches_to_the_next_declaration_invisibly_to_every_gate.md`;
+`D:\dev\rag\rust\index.md` updated with both new entries. Nothing filed to
+`C:\personal_rag\pdf\` — this is a Rust/tooling finding, not a PDF-domain
+empirical one.
+
 ### `Pass 162.0` (`9c3a1c9`, 2026-08-29) — `format-text --set-font` now AUTHORS a standard-14 font resource on demand, closing the standard-14 half of FF-C — ★★★ **THIS CLOSES ITEM 4, THE LAST OF THE OPERATOR'S STANDING "DO ALL 4" INSTRUCTION** (rotation `155.0`, ce dimensions `159.0`, bookmarks `161.0`, fonts `162.0`) — ★★ **TWO OF THREE SAVE PATHS WERE WIRED, EVERY UNIT TEST PASSED, AND THE SHIPPED BINARY PRINTED A DISCLOSURE FOR A RESOURCE IT HAD NOT WRITTEN** — filed 2026-08-29 (319th filing)
 
 **★ THE STANDING INSTRUCTION IS NOW COMPLETE.** Ken's *"do all 4"* — the four
@@ -118353,6 +118480,58 @@ same cause (hashes exist only at commit time), two different failure modes.
   160.0`'s entry above for the reasoning. `check-passes-filed.py` already
   performs the comparison a new script would repeat; the fix belongs in
   *when* it is invoked, not in a second implementation of *what* it checks.
+
+- **R227 — A SOURCE-SCANNING CHECK MUST READ TO A SYNTACTIC BOUNDARY,
+  NEVER A FIXED WINDOW OR A BARE-ADJACENCY ASSUMPTION.** Minted 2026-08-29
+  (320th filing), from `Pass 163.0` (`69689c1`), on the strength of two
+  independent, same-day instances of one mechanism — this project's own
+  stated bar for a fresh mint (two corroborating instances of the *same
+  cause*, not merely the same symptom; see `R221`'s minting note above).
+
+  **Instance 1** (`Pass 161.0`, `main.rs:11213`): a doc-comment-splice
+  mitigation walked **backward** over a contiguous run of `///` lines
+  above a function signature to find its insertion/attachment point. The
+  immediately preceding line was `#[allow(clippy::too_many_arguments)]` —
+  an attribute, not a `///` line — so the walk terminated after **zero**
+  steps and spliced the new function's doc comment into the gap between
+  the attribute and the `fn`, below the entire pre-existing block.
+
+  **Instance 2** (`Pass 163.0`, `tools/check-cited-verbs-exist.py`): the
+  gate read a **fixed six-line window** after a `use_instead:` citation
+  looking for a "not built yet" marker phrase. It produced a false
+  positive **within the hour of being written**: an explanatory comment
+  inserted between two fields of the same struct literal pushed the
+  marker past line six, so the gate flagged a message it had just been
+  taught to accept.
+
+  **The shared mechanism.** Both are proximity heuristics over source
+  text — "the thing I want is N lines away" or "the thing I want is the
+  line immediately adjacent, nothing between" — and both were defeated by
+  an **ordinary, legitimate line a human wrote in the gap**: an attribute
+  with a stated reason in one case, an explanatory comment in the other.
+  Neither is unusual code; both are exactly what a careful contributor
+  adds as a matter of course. **A fixed-size or bare-adjacency window is a
+  bet that no such line will ever appear in the gap, and this project's
+  own contributors falsify that bet routinely.**
+
+  **The rule, one sentence:** any script in this repo that locates a
+  marker, boundary, or attachment point by scanning nearby source lines
+  must read to an actual **syntactic boundary** — a blank line at the
+  right scope, a matching closing brace, the enclosing item's own extent
+  — never a fixed line count and never a bare "the line immediately
+  above/below" assumption. A generous numeric cap is acceptable as a
+  sanity bound on a syntactic scan; it must never be the scan's actual
+  termination condition.
+
+  **Sibling of the doc-comment-splice finding** (which supplies instance
+  1) rather than a fold-in of it: one is a defect in edited/generated
+  code (a wrong splice point when *inserting*), the other is a defect in
+  verification tooling (a wrong read point when *scanning* existing
+  code) — same mechanism, opposite side of the read/write boundary, filed
+  as siblings and cross-referenced both directions. Full derivation:
+  `D:/dev/rag/rust/a_source_scanning_check_must_read_to_a_syntactic_boundary_not_a_fixed_window.md`.
+
+  **Standing rules ceiling `R226` → `R227`; next free `R228`.**
 
 ## Update protocol
 

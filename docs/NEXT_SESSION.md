@@ -7,8 +7,8 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
-Written 2026-08-29. Ledger at write time: **Pass ceiling 162.0**, rules
-**R226**, decisions **096**, filings **318+**.
+Written 2026-08-29. Ledger at write time: **Pass ceiling 163.0**, rules
+**R227**, decisions **096**, filings **320**.
 
 ---
 
@@ -103,11 +103,27 @@ lines, 76 `CV-*` ids) plus seven files under `Acrobat_Features/`.
 
 1. **`Pass 142.0`** — non-standard-14 faces (see §0a). The largest remaining
    item, and the natural continuation of `162.0`.
-2. **Widget rotation (`/MK /R`)** and **ce-dimension rotation** — both refused
-   by name by `rotate_annotation`, both unbuilt.
+2. **Two verbs pdfce's own refusals NAME and does not have** — `Pass 163.0`
+   made the messages honest about it; **it did not build them.** The gate
+   `tools/check-cited-verbs-exist.py` passes automatically once either exists.
+   - **`rotate_widget`** — a widget's rotation is `/MK /R` (§12.5.6.19 Table
+     189), a **quantised 0/90/180/270 declaration** the field's appearance
+     generator reads, *not* a free-angle transform. This is the smaller of the
+     two and is well-specified.
+   - **`set_dimension_label`** — an override for a ce dimension's caption.
+     There is **no route today**: `set_dimension_style` is styling,
+     `set_dimension_display` is the diameter/radius reading, neither writes the
+     text. ★ Scope it carefully — a ce dimension's text **is** its measurement
+     (project rule 15), so an override is a deliberate divergence between the
+     two and needs a disclosure story before it needs code.
+   - **ce-dimension rotation** shipped as `Pass 159.0`; `rotate_annotation`
+     still refuses it **by name and correctly**, pointing at `rotate_dimension`
+     — which does exist. That refusal is fine.
 3. **`rotate-annotation` has no CLI test.** The bookmark half of this owed item
    was closed 2026-08-29 by `crates/pdfce-cli/tests/bookmarks.rs` (18 tests,
-   covering `rename-bookmark`/`delete-bookmark` retroactively). This was not.
+   covering `rename-bookmark`/`delete-bookmark` retroactively). This was not —
+   **and starting it is what found the two phantom verbs above**, so it was
+   displaced rather than done. It is still owed.
 4. **The trap X on the grey/K-black conformance patch.** Cause unknown, **not**
    the defect `Pass 143.0` fixed. Lead: that patch paints the same 50 % grey
    **both ways** (`0.5 g` and `0 0 0 0.5 k`) deliberately, and `G .5` — a grey

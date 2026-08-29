@@ -75034,3 +75034,83 @@ instruction unless the operator opens a new one.
 4. `rotate-annotation` CLI test still owed.
 
 ---
+
+## 2026-08-29 (320th filing) — `Pass 163.0` (`69689c1`) filed: two refusal messages named a verb that had never existed; the gate written to catch it found a second phantom on its first run and produced a false positive on its own message within the hour
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `69689c1` (parent `4268ae9`, the 319th filing's own commit) is
+**relayed**, stated by the engineer to be `git log`-verified.
+
+**Shipped:**
+- `Pass 163.0` (`69689c1`) — `EditError::AnnotationMoveWrongVerb` and the
+  ce-dimension text-write refusal both cited a verb pointing the operator
+  at a way out (`rotate_widget`, `set_dimension_label`) that had never been
+  written. Both messages rewritten to state plainly the cited verb is not
+  built yet, still naming what it will be called. New gate
+  `tools/check-cited-verbs-exist.py`: every `use_instead:` citation in
+  `pdfce-core` must resolve as a real `pub fn`/`pub(crate) fn` or say so.
+  Of 7 citations, 5 resolved, 2 were phantoms — the second
+  (`set_dimension_label`) found unlooked-for on the gate's first run.
+  Local sweep now 28 commands (was 27).
+
+**Decisions made this session:**
+- No new architecture decisions; decision ceiling stays at `096`. Two error
+  messages corrected and a verification script added — no crate boundary,
+  library choice, or invariant redrawn.
+- **`R227` MINTED** — see `ROADMAP.md` *Standing rules*. Two independent,
+  same-day instances of one mechanism: a source-scanning check (this
+  Pass's new gate; `Pass 161.0`'s doc-comment walk-back) that assumes a
+  FIXED WINDOW or bare adjacency between a marker and its anchor is
+  defeated by an ordinary, legitimate intervening line (a comment; an
+  attribute). Rule: any such check must read to a syntactic boundary,
+  never a fixed count. Standing rules ceiling `R226` → `R227`; next free
+  `R228`.
+
+**Findings + decisions:**
+- **Why this is worse than the dangling `move_outline_item` doc link
+  `Pass 161.0` fixed.** That one is read by a developer browsing
+  `rustdoc`, which at least warns about a broken intra-doc link. This is a
+  runtime message, read by an operator at the exact moment an operation is
+  refused, naming the specific way out — and nothing warns: it compiles, no
+  lint checks a format literal's text against the crate's own symbol
+  table, and no existing test asserted on the `use_instead` clause.
+- **The gate found a defect in itself the same day it was written.** The
+  first version read a fixed six-line window after a citation; an
+  explanatory comment added between two struct-literal fields pushed the
+  "not built yet" marker past the window, producing a false positive on
+  the very message the gate had just been taught to accept. Fixed by
+  reading to the enclosing struct literal's actual closing brace instead
+  of a line count.
+- **Two RAG findings graduated to `D:\dev\rag\rust\`:**
+  `error_refusal_messages_naming_a_verb_are_unchecked_operator_facing_ui.md`
+  (the general shape — operator-facing text in error literals is unchecked
+  UI, same family as unchecked `clap --help` text, different carrier) and
+  `a_source_scanning_check_must_read_to_a_syntactic_boundary_not_a_fixed_window.md`
+  (the gate lesson that promoted to `R227`). A cross-reference footer was
+  added to the existing `doc_comment_splice_…` file; `D:/dev/rag/rust/index.md`
+  updated with both new entries.
+- `FEATURES.md` — **no rows changed.** Row 360 (widget rotation) already
+  correctly described the refusal-by-name and needed no edit.
+
+**Still in flight:**
+- **Owed, unchanged and now doubled:** `rotate_widget` and
+  `set_dimension_label` are both still unbuilt — this Pass made the
+  refusal messages honest, it did not build either verb. The gate passes
+  automatically once either verb ships.
+- `rotate-annotation` CLI test still owed (displaced by this Pass — it was
+  the task in progress when the phantom-verb finding surfaced).
+- `Pass 142.0`, narrowed (non-standard-14 font faces), remains open.
+
+**For next session:**
+1. Ledger: Pass ceiling **`163.0`** (highest), next free **`163.1`**/new
+   major **`164.0`**; standing rules ceiling **`R227`**, next free
+   **`R228`**; decision-record ceiling unchanged **`096`**, next free
+   **`097`**; filing ordinal **320**.
+2. **`docs/NEXT_SESSION.md` needs an update the librarian did not make**
+   (engineer-owned file, not edited here): add `set_dimension_label` to
+   the owed list alongside `rotate_widget` (already carried in §A).
+3. `rotate-annotation` CLI test is the immediate next task — it was in
+   progress when this Pass's finding displaced it.
+4. `Pass 142.0` remains open, narrowed to non-standard-14 faces only.
+
+---
