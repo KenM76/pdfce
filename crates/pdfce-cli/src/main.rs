@@ -29429,8 +29429,8 @@ fn cmd_object_copy(args: &ObjectCopyArgs<'_>) -> u8 {
     // NOTE: `--cut` with `--annotations` was REFUSED between `Pass 168.0`
     // and `Pass 169.0`, because the clip FILE dropped annotations and the CLI
     // only ever has the file -- so that cut would have destroyed them. The
-    // clip format carries them as of version 2, so the refusal is gone and
-    // the disclosure below no longer fires.
+    // clip format carries them as of version 2, so the refusal is gone. See
+    // the disclosure further down for the state of the branch it guarded.
     let clip = if cut.is_some() {
         match session.cut_selection(page_index, &indices, &annots) {
             Ok(clip) => clip,
@@ -29472,11 +29472,24 @@ fn cmd_object_copy(args: &ObjectCopyArgs<'_>) -> u8 {
         );
     }
 
-    // Kept, and it no longer fires: `annotations_survive_serialisation` has
-    // answered `true` for every clip since the format started carrying them
-    // (`Pass 169.0`). Left in place rather than deleted because it is the
-    // honest shape -- if a future clip kind is added that the file cannot
-    // hold, this is where the operator must be told.
+    // DEAD TODAY, DELIBERATELY KEPT, and the claim is checked rather than
+    // asserted here: `ObjectClip::annotations_survive_serialisation` returns
+    // a constant `true` as of `Pass 169.0`, and
+    // `crates/pdfce-core/tests/object_clipboard.rs`'s
+    // `a_clip_says_whether_serialisation_would_lose_anything` is what pins
+    // that -- so if the answer ever becomes conditional again, a test fails
+    // and leads here.
+    //
+    // ★ The comment this replaces said "it no longer fires" and gave a
+    // narrative reason. That was true, and it was the wrong SHAPE: a prose
+    // claim about what a branch does is exactly the thing that quietly stops
+    // being true when the code under it moves. Naming the test that holds the
+    // invariant makes it checkable by someone who does not believe me.
+    //
+    // Kept rather than deleted because it is the honest place for the
+    // disclosure: if a future clip kind is added that the FILE cannot hold,
+    // this is where the operator must be told, and rebuilding the branch
+    // later is how it gets forgotten.
     if !clip.annotations_survive_serialisation() {
         eprintln!(
             "pdfce-cli: object-copy: {} annotation(s) were copied but are NOT carried by the clipboard file, so a paste from this file will place the content and not the annotations.",
