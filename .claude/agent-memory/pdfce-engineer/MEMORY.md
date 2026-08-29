@@ -72,3 +72,4 @@
 - [A doc comment can be shipped UI](feedback_a_doc_comment_can_be_shipped_ui.md) — in clap-derive a `///` IS the `--help`; a gate found 2 blank subcommands in seconds after 6 were found by eye
 - [A starved test run looks exactly like a broken one](feedback_a_starved_test_run_looks_exactly_like_a_broken_one.md) — 0xc0000142 doctest failures = starvation; run run-gates.sh FOREGROUND with a warm cache, background gets killed
 - [.claude/worktrees is a grep trap](reference_worktrees_are_a_grep_trap.md) — 28 GB of full repo copies; recursive grep/find/du from the repo root hangs or returns worktree copies as if they were the real files
+- [Read the inbound, don't inherit its summary](feedback_read_the_inbound_do_not_inherit_its_summary.md) — a prior session's "no reply owed" is a CLAIM; also: an "if…otherwise…" ruling is a ranked pair and the achievability call is mine (CONFIRMED)
