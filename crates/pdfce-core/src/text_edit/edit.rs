@@ -2894,6 +2894,25 @@ pub(crate) fn write_incremental(
     page: &Page,
     new_content: &[u8],
 ) -> Result<(Vec<u8>, u32, u64), EditError> {
+    write_incremental_with(doc, page, new_content, &[])
+}
+
+/// [`write_incremental`] plus objects the plan requires to exist
+/// (`Pass 162.0`).
+///
+/// `extra` is written into the SAME incremental revision as the content
+/// change, which is what makes the result atomic: a revision carrying a
+/// content stream that names `/pdfceF1` and no `/pdfceF1` is a document whose
+/// text does not render, and a reader has no way to tell that from a corrupt
+/// file. An id `extra` names that the base does not define is a **created**
+/// object — `DirtySet::replace` appends it and gives it a fresh
+/// cross-reference entry (§7.5.6).
+pub(crate) fn write_incremental_with(
+    doc: &Document,
+    page: &Page,
+    new_content: &[u8],
+    extra_objects: &[(ObjId, Object)],
+) -> Result<(Vec<u8>, u32, u64), EditError> {
     let content_id = *page
         .contents
         .first()
@@ -2911,6 +2930,10 @@ pub(crate) fn write_incremental(
         let empty = stage(&mut staging, base_len, &[]);
         dirty.replace(*id, make_raw_stream(empty, 0));
         extra += 1;
+    }
+
+    for (id, value) in extra_objects {
+        dirty.replace(*id, value.clone());
     }
 
     dirty.set_staging(staging);
@@ -2954,6 +2977,28 @@ pub(crate) fn write_incremental_form(
     form_dict: &Dict,
     new_content: &[u8],
 ) -> Result<Vec<u8>, EditError> {
+    write_incremental_form_with(doc, form_id, form_dict, new_content, &[])
+}
+
+/// [`write_incremental_form`] plus objects the plan requires to exist — the
+/// form twin of [`write_incremental_with`] (`Pass 162.0`). See that function
+/// for why `extra` must land in the same revision.
+///
+/// `extra` must NOT contain `form_id`: the form is a stream rebuilt here from
+/// `form_dict`, and a second write for the same id in one revision means the
+/// later silently wins. The caller feeds a patched form dictionary in through
+/// `form_dict` instead.
+pub(crate) fn write_incremental_form_with(
+    doc: &Document,
+    form_id: ObjId,
+    form_dict: &Dict,
+    new_content: &[u8],
+    extra: &[(ObjId, Object)],
+) -> Result<Vec<u8>, EditError> {
+    debug_assert!(
+        !extra.iter().any(|(id, _)| *id == form_id),
+        "the form's own object must arrive via `form_dict`, not `extra`"
+    );
     let mut dirty = DirtySet::empty();
     let base_len = doc.bytes().len();
     let mut staging: Vec<u8> = Vec::new();
@@ -2962,6 +3007,9 @@ pub(crate) fn write_incremental_form(
         form_id,
         make_form_stream(form_dict, span, new_content.len()),
     );
+    for (id, value) in extra {
+        dirty.replace(*id, value.clone());
+    }
     dirty.set_staging(staging);
     let (bytes, _report) = save_incremental(doc, &dirty, &SaveOptions::identity())?;
     Ok(bytes)

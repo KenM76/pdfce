@@ -242,7 +242,7 @@ use crate::text_edit::edit::{
     MatchRun, OpRec, Rec, ShowData, ShowElem, ShowOp, Walk, carried_codes, classify_font,
     compensating_tj, effective_find, emit_show, emit_tm, find_anchor, glyph_advance_with,
     is_subset_tag, mat_mul, match_run, refuse_unsuitable_form, resolve_font_dict, splice,
-    trust_disclosure, write_incremental,
+    trust_disclosure, write_incremental_with,
 };
 use crate::text_edit::encoding::{InverseEncoding, RInvTrigger, Refusal};
 use crate::text_edit::synth::{
@@ -1251,16 +1251,85 @@ pub fn set_format(
     // the form XObject's own. The plan's report already carries the correct
     // content_object / extra_objects_emptied, so the page write's returned
     // identity is discarded.
+    // ★★ `Pass 162.0`: the THIRD save path, and the one the CLI actually uses.
+    //
+    // `EditSession::format_text` and its form twin bind a newly created font
+    // resource into their own command. This one-shot entry point builds a
+    // `DirtySet` against an immutable `&Document` and shares none of that
+    // code — so the first cut of this Pass wired the two session paths, and
+    // `pdfce-cli format-text --set-font Helvetica` PRINTED the disclosure
+    // saying a resource had been added and wrote a file in which it had not:
+    // a content stream naming `/pdfceF1`, and no `/pdfceF1` anywhere. Every
+    // unit test passed, because they exercise the session.
+    //
+    // The binding rule itself is NOT duplicated here — `bind_font_resource`
+    // is the one implementation, taken over an `ObjectGraph` precisely so all
+    // three callers can reach it (`R171`).
+    let extra_objects: Vec<(crate::object::ObjId, Object)> = match &plan.created_font {
+        None => Vec::new(),
+        Some((key, dict)) => {
+            // A fresh object number for a one-shot save. `next_object_number`
+            // is the document's own answer -- the max of what it defines and
+            // what its `/Size` claims -- so it cannot collide with an id the
+            // trailer reserves but no object occupies. `DirtySet::replace` on
+            // an id the base does not define is a CREATED object (§7.5.6).
+            let font_id = crate::object::ObjId::new(
+                doc.next_object_number().ok_or_else(|| {
+                    FormatError::Unsupported(
+                        "this document cannot take another object -- its object numbers \
+                             are exhausted, so the new font resource has nowhere to go"
+                            .to_owned(),
+                    )
+                })?,
+                0,
+            );
+            let (owner_id, may_inherit) = match target.form.as_ref() {
+                // A form XObject carries its own `/Resources` (§8.10.1) and
+                // has no page-tree parent to inherit one from.
+                Some(form) => (form.id, false),
+                None => (page.id, true),
+            };
+            let (objects, _shared) = crate::text_edit::addtext::bind_font_resource(
+                &doc.view(),
+                owner_id,
+                may_inherit,
+                key,
+                font_id,
+                dict.clone(),
+            );
+            objects
+        }
+    };
+
     let bytes = match target.form.as_ref() {
-        Some(form) => crate::text_edit::edit::write_incremental_form(
-            doc,
-            form.id,
-            &form.dict,
-            &plan.new_content,
-        )
-        .map_err(FormatError::from_edit)?,
+        Some(form) => {
+            // The binder may have patched the form's OWN dictionary (when its
+            // `/Resources` is direct). That must reach `write_incremental_form`
+            // as the dictionary it rebuilds the STREAM from -- writing it as a
+            // bare dict beside the stream would replace the form with an
+            // object that has no content.
+            let mut form_dict = form.dict.clone();
+            let mut side = Vec::new();
+            for (id, value) in extra_objects {
+                if id == form.id {
+                    if let Object::Dict(d) = value {
+                        form_dict = d;
+                    }
+                } else {
+                    side.push((id, value));
+                }
+            }
+            crate::text_edit::edit::write_incremental_form_with(
+                doc,
+                form.id,
+                &form_dict,
+                &plan.new_content,
+                &side,
+            )
+            .map_err(FormatError::from_edit)?
+        }
         None => {
-            write_incremental(doc, page, &plan.new_content)
+            write_incremental_with(doc, page, &plan.new_content, &extra_objects)
                 .map_err(FormatError::from_edit)?
                 .0
         }
@@ -1347,6 +1416,22 @@ pub(crate) struct FormatPlan {
     pub(crate) new_content: Vec<u8>,
     /// The complete disclosure/diagnostic report.
     pub(crate) report: FormatReport,
+    /// A `/Font` resource the caller must CREATE for `new_content` to be
+    /// valid — the key it is bound under, and the complete, all-direct font
+    /// dictionary (`Pass 162.0`).
+    ///
+    /// `None` on every path that did not introduce a face. `Some` only when
+    /// `--set-font` named a **standard-14** face the target's resource
+    /// dictionary did not carry, in which case `new_content`'s `Tf` operator
+    /// already names this key and the document is INCOMPLETE until the
+    /// resource exists.
+    ///
+    /// ★ The caller owns the write because only the caller can allocate an
+    /// object number: planning runs against an immutable `&Document`. Nothing
+    /// here is optional to act on — dropping it produces a content stream
+    /// naming a resource that does not exist, which §7.8.3 leaves undefined
+    /// and which viewers render as missing text rather than as an error.
+    pub(crate) created_font: Option<(Vec<u8>, Dict)>,
 }
 
 /// Plan a FORMAT edit over an already-decoded content `stream`: locate the
@@ -1516,6 +1601,12 @@ pub(crate) fn plan_format_target(
 
     // --- resolve the family-change target, if any, and re-encode the run ---
     let font_plan = plan_font(doc, page_resources_dict, &recs, req, find)?;
+
+    // Lifted out immediately, and cloned, so the resource-creation payload
+    // cannot be lost to a later move of `font_plan` — it is the one part of
+    // the plan the CALLER must act on, and a silently dropped `created` is a
+    // content stream naming a `/Font` resource that does not exist.
+    let created_font = font_plan.as_ref().and_then(|p| p.created.clone());
 
     // --- the run's BASE size: what it would be shown at with no script
     //     reduction. Every R89 ratio (script rise, script size, relative
@@ -2105,6 +2196,7 @@ pub(crate) fn plan_format_target(
     Ok(FormatPlan {
         new_content,
         report,
+        created_font,
     })
 }
 
@@ -2122,6 +2214,20 @@ struct FontPlan {
     embedded: bool,
     subset: bool,
     disclosures: Vec<String>,
+    /// A font resource this plan must CREATE before the new content is valid
+    /// (`Pass 162.0`): the resource key to bind it under, and the complete,
+    /// all-direct font dictionary to write.
+    ///
+    /// `None` on the ordinary path, where the target face was already a
+    /// resource and nothing new is written. `Some` only for a standard-14
+    /// face the target dictionary did not carry.
+    ///
+    /// Carried as data rather than written here because planning holds an
+    /// IMMUTABLE `&Document` and cannot allocate an object number. The `Tf`
+    /// operator the splice emits names the resource KEY, which is decided
+    /// above, so the content bytes are already correct without knowing what
+    /// number the dictionary will get.
+    created: Option<(Vec<u8>, Dict)>,
 }
 
 /// What `set_font`'s acceptance test decided about **one** candidate face,
@@ -2271,22 +2377,92 @@ fn plan_font(
         return Ok(None);
     };
     // Locate an existing font resource by key, then by /BaseFont.
-    let (resource, target_dict) = resolve_target_resource(doc, resources, &sel.selector)
-        .ok_or_else(|| FormatError::TargetFontMissing(sel.selector.clone()))?;
+    //
+    // ★★ `Pass 162.0`: a miss is no longer the end. Until now this verb was
+    // strictly READ-ONLY about resources — a face the page did not already
+    // carry was `TargetFontMissing`, and an operator asking for Helvetica on a
+    // page built from Times got a refusal naming a deferral code (FF-C).
+    //
+    // The refusal was honest but it made "restyle this to a face the document
+    // lacks" unreachable through any verb: `embed_font` supplies a missing
+    // font PROGRAM for a face the file already REFERENCES, and cannot
+    // introduce one.
+    //
+    // A **standard-14** face is the half of that gap that needs no font
+    // program at all (§9.6.2.2), so it is closed here. Anything else still
+    // refuses, because introducing it means subsetting and embedding a real
+    // program — `Pass 142.0`, still deferred, and the refusal below still
+    // names FF-C for exactly that case.
+    let (resource, target_dict, created) =
+        match resolve_target_resource(doc, resources, &sel.selector) {
+            Some((key, dict)) => (key, dict.clone(), None),
+            None => {
+                // Not on the page. Is it a face pdfce can author outright?
+                let face = crate::fontdata::std14_by_base_font(&sel.selector)
+                    .ok_or_else(|| FormatError::TargetFontMissing(sel.selector.clone()))?;
+                let Object::Dict(dict) = crate::text_edit::addtext::std14_resource_dict(face)
+                else {
+                    // `std14_resource_dict` returns `Object::Dict` by
+                    // construction; this arm is unreachable and is written as a
+                    // refusal rather than an `unwrap` so a future change to
+                    // that return type cannot panic a caller.
+                    return Err(FormatError::TargetFontMissing(sel.selector.clone()));
+                };
+                // ★ The resource NAME is chosen against the dictionary this
+                // edit actually resolves against — which is the FORM's when the
+                // run lives inside a form XObject, not the page's. §7.8.3: the
+                // name is local to the stream, so `/F1` inside a form is a
+                // different font from `/F1` on the page, and a name picked
+                // against the wrong dictionary would either collide (shadowing
+                // a font the original content depends on) or be needlessly
+                // suffixed.
+                let existing_fonts = resources
+                    .get(b"Font")
+                    .map(|o| doc.resolve(o))
+                    .and_then(Object::as_dict)
+                    .cloned()
+                    .unwrap_or_default();
+                let key = crate::text_edit::addtext::pick_font_name(&existing_fonts);
+                (key.clone(), dict.clone(), Some((key, dict)))
+            }
+        };
 
     // `find`, not `req.find`: on a pinned whole-operator request the two
     // differ, and coverage must be checked against the characters actually
     // being re-encoded (`Pass 145.0`).
-    let accepted = accept_font_target(doc, recs, &resource, target_dict, find)?;
+    //
+    // ★ Run against the SYNTHESIZED dictionary too, unchanged. The dictionary
+    // is complete and all-direct before this point, so the coverage gate an
+    // operator previews (`preview_font_resources`) and the gate this commit
+    // path enforces are the same code on the same bytes (`R221`). A synthesized
+    // Helvetica that cannot show the run is refused exactly like a page font
+    // that cannot — never `.notdef`, never a silent substitution.
+    let accepted = accept_font_target(doc, recs, &resource, &target_dict, find)?;
 
     let mut disclosures = accepted.disclosures;
-    disclosures.push(format!(
-        "font: the run's family/style was changed to '{}' and its {} character(s) were re-encoded \
-         into that face's /Encoding (minimal-diff; no new font resource added, no embedding — \
-         subsetting is FF-C).",
-        accepted.font.base_font,
-        find.chars().count()
-    ));
+    match &created {
+        None => disclosures.push(format!(
+            "font: the run's family/style was changed to '{}' and its {} character(s) were \
+             re-encoded into that face's /Encoding (minimal-diff; no new font resource added, \
+             no embedding — subsetting is FF-C).",
+            accepted.font.base_font,
+            find.chars().count()
+        )),
+        // The invocation IS the commit in `pdfce-cli` and there is no undo, so
+        // the thing pdfce did that the operator did not ask for is stated on
+        // the way past (project rule 4). What they asked for was a restyle;
+        // what also happened is that this page or form gained a resource it
+        // did not have.
+        Some((key, _)) => disclosures.push(format!(
+            "font: '{}' was NOT a font resource here, so pdfce ADDED one as /{} — a standard-14 \
+             face (ISO 32000-1 §9.6.2.2), so no font program is embedded and no bytes of glyph \
+             outline were added. The run's {} character(s) were re-encoded into it. A face \
+             outside the standard 14 still requires embedding and is still refused (FF-C).",
+            accepted.font.base_font,
+            String::from_utf8_lossy(key),
+            find.chars().count()
+        )),
+    }
 
     Ok(Some(FontPlan {
         resource,
@@ -2295,6 +2471,7 @@ fn plan_font(
         embedded: accepted.embedded,
         subset: accepted.subset,
         disclosures,
+        created,
     }))
 }
 

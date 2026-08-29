@@ -6329,6 +6329,22 @@ struct PageSplice {
     new_page_ids: Vec<ObjId>,
 }
 
+/// What the form scan in `format_text_in_form` carries out of its loop: the
+/// form's id and dictionary, the spliced content, the report, and — since
+/// `Pass 162.0` — a `/Font` resource the plan requires to be created.
+///
+/// Named rather than written inline because clippy is right that five
+/// positional elements is past the point of self-explanation, and because the
+/// fifth was added by a later Pass: a tuple that grows is a tuple whose reader
+/// has to count commas to find out which field moved.
+type FormatFormHit = (
+    ObjId,
+    Dict,
+    Vec<u8>,
+    crate::text_edit::FormatReport,
+    Option<(Vec<u8>, Dict)>,
+);
+
 impl EditSession {
     /// Open an editing session over `doc`.
     ///
@@ -7725,6 +7741,75 @@ impl EditSession {
         }
     }
 
+    /// Build the writes that create a new `/Font` resource under `key`,
+    /// bound into `owner`'s `/Resources` `/Font` (`Pass 162.0`).
+    ///
+    /// Returns the extra [`ObjectWrite`]s to append to the command, plus a
+    /// replacement `owner` dictionary when the binding had to be made
+    /// **inside** it (because its `/Resources`, or that dictionary's `/Font`,
+    /// is a direct value rather than a reference).
+    ///
+    /// # ★★ Why a shared `/Resources` is PATCHED IN PLACE and not cloned
+    ///
+    /// A page's `/Resources` is very often an indirect object shared by every
+    /// page a producer emitted, and the same is true of the `/Font`
+    /// sub-dictionary. There are exactly two ways to add an entry:
+    ///
+    /// * **Patch the shared object.** Every page sharing it gains one extra
+    ///   `/Font` entry. That entry is **unreferenced** on those pages — no
+    ///   content stream there names `pdfceFn` — so nothing about how they
+    ///   render changes. The cost is a few bytes and a resource an inspector
+    ///   can see.
+    /// * **Clone it for this page.** The page stops sharing, which is a
+    ///   *structural rewrite of the document performed as a side effect of a
+    ///   text restyle* — precisely what project rule 3 forbids. It also
+    ///   silently de-duplicates a producer's deliberate sharing, growing the
+    ///   file by the size of the whole resource dictionary, and it changes
+    ///   what a later edit to the shared dictionary reaches.
+    ///
+    /// pdfce patches. An unreferenced extra entry is inert; an unrequested
+    /// structural change is not. The sharing IS disclosed by the caller so the
+    /// operator is not surprised by a diff touching an object they associate
+    /// with other pages.
+    ///
+    /// # Depth
+    ///
+    /// Four shapes have to be handled and all four occur in real files:
+    /// `/Resources` direct or indirect, crossed with `/Font` present or
+    /// absent. A missing `/Font` is created; a missing `/Resources` is created
+    /// as a direct dictionary, since a page with no resources at all has
+    /// nothing to share.
+    fn font_resource_writes(
+        &mut self,
+        owner_id: ObjId,
+        may_inherit: bool,
+        key: &[u8],
+        font: Dict,
+    ) -> Result<(Vec<ObjectWrite>, bool), EditError> {
+        let font_id = ObjId::new(self.alloc_number()?, 0);
+        // ★ `self.graph()`, not `self.base`: the resource dictionary may
+        // already have been edited earlier in this session, and binding
+        // against the base revision would drop those edits when this write
+        // replaces the object.
+        let (objects, shared) = crate::text_edit::addtext::bind_font_resource(
+            &self.graph(),
+            owner_id,
+            may_inherit,
+            key,
+            font_id,
+            font,
+        );
+        let writes = objects
+            .into_iter()
+            .map(|(id, value)| ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(value),
+            })
+            .collect();
+        Ok((writes, shared))
+    }
+
     /// Apply one in-place page-text FORMAT edit (size / fill-colour model /
     /// font family) as a single undo-able command — the session-integrated
     /// sibling of [`text_edit::set_format`](crate::text_edit::set_format),
@@ -7786,14 +7871,50 @@ impl EditSession {
                         .map_err(FmtError::Content)?;
                     match plan_format(&self.base, &page, &stream, req, opts) {
                         Ok(plan) => {
-                            let command = self.text_edit_command(
+                            let mut report = plan.report;
+                            let mut command = self.text_edit_command(
                                 CommandKind::FormatText,
                                 content_id,
                                 &page,
                                 plan.new_content,
                             );
+                            // `Pass 162.0`: the plan may require a `/Font`
+                            // resource that does not exist yet. It goes into
+                            // the SAME command, so one undo removes both the
+                            // restyle and the resource it needed -- an undo
+                            // that left the font behind would leave an
+                            // orphaned object the operator never asked for.
+                            if let Some((key, dict)) = plan.created_font {
+                                let (writes, shared) = self
+                                    .font_resource_writes(page.id, true, &key, dict)
+                                    .map_err(|e| {
+                                        // The only realistic failure is
+                                        // object-number exhaustion. Named
+                                        // rather than collapsed into a
+                                        // generic refusal, because "this
+                                        // document cannot take another
+                                        // object" is actionable and "the
+                                        // font change failed" is not.
+                                        FmtError::Unsupported(format!(
+                                            "the new font resource could not be allocated: {e}"
+                                        ))
+                                    })?;
+                                command.objects.extend(writes);
+                                if shared {
+                                    report.disclosures.push(
+                                        "font: this page's /Resources is an object SHARED with \
+                                         other pages, so the new font resource is visible to \
+                                         them too. It is unreferenced there and changes nothing \
+                                         about how they render -- pdfce patches the shared \
+                                         dictionary rather than cloning it, because cloning \
+                                         would silently restructure the document as a side \
+                                         effect of a restyle."
+                                            .to_owned(),
+                                    );
+                                }
+                            }
                             self.commit(command);
-                            return Ok(plan.report);
+                            return Ok(report);
                         }
                         Err(e) => Some(e),
                     }
@@ -7841,7 +7962,7 @@ impl EditSession {
         let mut map = forms::invocation_map(&self.base, &self.view());
         let mut seen: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
         let mut first_locational = page_error;
-        let mut found: Option<(ObjId, Dict, Vec<u8>, crate::text_edit::FormatReport)> = None;
+        let mut found: Option<FormatFormHit> = None;
         for form in scan.forms {
             if let crate::text_edit::EditTarget::Form { object } = req.target
                 && form.id.num != object
@@ -7860,7 +7981,13 @@ impl EditSession {
             let target = crate::text_edit::edit::EditPlanTarget::form(form, invocations);
             match plan_format_target(&self.base, &target, &stream, req, opts) {
                 Ok(plan) => {
-                    found = Some((form_id, form_dict, plan.new_content, plan.report));
+                    found = Some((
+                        form_id,
+                        form_dict,
+                        plan.new_content,
+                        plan.report,
+                        plan.created_font,
+                    ));
                     break;
                 }
                 Err(e) if is_locational_format_error(&e) => {
@@ -7871,10 +7998,72 @@ impl EditSession {
                 Err(e) => return Err(e),
             }
         }
-        let Some((form_id, form_dict, new_content, report)) = found else {
+        let Some((form_id, form_dict, new_content, mut report, created)) = found else {
             return Err(first_locational.unwrap_or_else(|| FmtError::NoMatch(req.find.clone())));
         };
-        let command = self.form_edit_command(form_id, &form_dict, new_content);
+        // `Pass 162.0`, the form half. The resource is bound BEFORE the
+        // stream is built, so `form_edit_command` serialises the already
+        // patched dictionary. Building the stream first and patching after
+        // would put two writes for one object id in one command, where the
+        // later silently wins and which one that is depends on ordering
+        // nobody stated.
+        //
+        // `may_inherit` is FALSE: a form XObject carries its own `/Resources`
+        // (§8.10.1) and has no `/Parent` chain to inherit one from -- walking
+        // one would be walking the page tree from an object that is not in it.
+        let mut form_dict = form_dict;
+        let mut extra: Vec<ObjectWrite> = Vec::new();
+        if let Some((key, dict)) = created {
+            let font_id = ObjId::new(
+                self.alloc_number()
+                    .map_err(|e| FmtError::Unsupported(format!("{e}")))?,
+                0,
+            );
+            let (objects, shared) = crate::text_edit::addtext::bind_font_resource(
+                &self.graph(),
+                form_id,
+                false,
+                &key,
+                font_id,
+                dict,
+            );
+            for (id, value) in objects {
+                if id == form_id {
+                    // ★★ The binder returned the FORM'S OWN dictionary,
+                    // patched — which happens whenever the form's
+                    // `/Resources` is a direct value. It must NOT be written
+                    // as a plain dictionary: a form XObject is a STREAM, and
+                    // emitting a bare dict for its id would replace the whole
+                    // form with something that has no content at all.
+                    //
+                    // It is also the id `form_edit_command` is about to write.
+                    // Two writes for one id in one command means the later
+                    // silently wins, and which one that is depends on ordering
+                    // nobody stated. So it is fed into the stream rebuild
+                    // instead of appended beside it.
+                    if let Object::Dict(d) = value {
+                        form_dict = d;
+                    }
+                    continue;
+                }
+                extra.push(ObjectWrite {
+                    id,
+                    before: self.state.get(&id).cloned(),
+                    after: Some(value),
+                });
+            }
+            if shared {
+                report.disclosures.push(
+                    "font: the new font resource was added to a FORM XObject's /Resources. If \
+                     that form is drawn in more than one place, every one of them shares this \
+                     dictionary -- the entry is unreferenced except by the run that was \
+                     restyled, so nothing else changes how it draws."
+                        .to_owned(),
+                );
+            }
+        }
+        let mut command = self.form_edit_command(form_id, &form_dict, new_content);
+        command.objects.extend(extra);
         self.commit(command);
         Ok(report)
     }

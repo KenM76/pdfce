@@ -311,8 +311,45 @@ need their own policy).
 >   have to translate that decision between two verbs acting on the same run.
 >   A family change (`set_font`) resolves its target face against the **form's**
 >   resource dictionary, which is the correct one — `/F1` inside a form is a
->   different font from `/F1` on the page — and is read-only about it, so a face
->   that does not resolve is still `TargetFontMissing`, never an insertion.
+>   different font from `/F1` on the page. **★ It is no longer read-only about
+>   that dictionary — see `Pass 162.0` below.**
+> - **★★ `set_font` can now ADD a font resource (`Pass 162.0`).** Until this
+>   Pass the verb refused any face the target's `/Resources` did not already
+>   carry, with `TargetFontMissing` naming the deferral code `FF-C`. That made
+>   *"restyle this to a face the document lacks"* unreachable through **any**
+>   verb: `embed_font` supplies a missing font **program** for a face the file
+>   already **references**, and cannot introduce one.
+>
+>   A **standard-14** face (§9.6.2.2) needs no font program, so it is authored
+>   on demand: a `/Type1` dictionary with `/FirstChar`, `/LastChar` and
+>   `/Widths` from pdfce's compiled Core-14 metrics, `/Encoding
+>   /WinAnsiEncoding` for the twelve Latin faces and **no `/Encoding`** for
+>   `Symbol`/`ZapfDingbats` (built-in, Annex D.5/D.6). No `/FontDescriptor`, no
+>   embedded bytes. **Anything outside the standard 14 still refuses with
+>   `FF-C`** — that needs subsetting and embedding, which is `Pass 142.0`.
+>
+>   Four things a shell must know:
+>
+>   1. **It is disclosed, always.** The report names the face and the key it
+>      was bound under (`pdfceF1`, `pdfceF2`, … — the `pdfce` prefix keeps it
+>      clear of the `/F{n}` producer convention, and the first unused name is
+>      taken so it can never shadow a font the original content depends on).
+>   2. **The coverage gate is unchanged.** A synthesized face that cannot show
+>      the run is refused by name exactly like a page font that cannot — never
+>      `.notdef`, never a silent substitution. `Symbol` on Latin text refuses
+>      on *coverage*, not on *missing resource*, and the two messages differ.
+>   3. **A shared `/Resources` is patched, not cloned.** Page resources are
+>      routinely one object shared by every page. The new entry is
+>      **unreferenced** on the others and changes nothing about how they
+>      render; cloning would silently restructure the document as a side effect
+>      of a restyle (rule 3). The report says when this happened.
+>   4. **★ Inherited resources are patched on the ancestor that holds them.**
+>      §7.8.3: a page's own `/Resources` *replaces* the inherited one rather
+>      than merging, so giving an inheriting page a direct `/Resources`
+>      containing only the new font would orphan every font its existing
+>      content already names. pdfce walks `/Parent` to the holder instead.
+>
+>   Undo removes the resource with the restyle — they are one command.
 > - **`reflow_block` and `add_text` still reach page-stream text only.**
 >   `editability()` reports `edit_text`'s reach, so for those two it is now
 >   optimistic — check `GlyphProvenance::content_stream` directly if you gate on

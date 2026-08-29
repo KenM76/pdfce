@@ -1193,7 +1193,7 @@ fn build_content_embedded(
 /// EXACT same repertoire and code table the committed add will use — no
 /// GUI-side approximation, the duplication-drift risk decision 016 §0.3 and
 /// Pass 16.2 spec §4.2 both call out.
-fn face_encoding(font: Std14) -> (InverseEncoding, BaseEncoding, bool) {
+pub(crate) fn face_encoding(font: Std14) -> (InverseEncoding, BaseEncoding, bool) {
     let base_font_name = fontdata::std14_base_font_name(font);
     let symbolic = matches!(font, Std14::Symbol | Std14::ZapfDingbats);
     let enc = if symbolic {
@@ -1863,7 +1863,12 @@ fn emit_boxed_line_show(out: &mut Vec<u8>, line: &LaidLine, space_code: u8, size
 /// from `fontdata::std14_width` under the SAME encoding used to encode the run
 /// (so codes and widths agree); a code with no glyph gets width 0 (§9.8.2
 /// `MissingWidth` default).
-fn build_font_dict(base_font: &str, symbolic: bool, enc: BaseEncoding, font: Std14) -> Object {
+pub(crate) fn build_font_dict(
+    base_font: &str,
+    symbolic: bool,
+    enc: BaseEncoding,
+    font: Std14,
+) -> Object {
     const FIRST_CHAR: u16 = 32;
     const LAST_CHAR: u16 = 255;
 
@@ -1902,6 +1907,58 @@ fn build_font_dict(base_font: &str, symbolic: bool, enc: BaseEncoding, font: Std
     Object::Dict(d)
 }
 
+/// The complete standard-14 `/Font` resource dictionary for `font`, ready to
+/// be written into a `/Resources` `/Font` (`Pass 162.0`).
+///
+/// # Why this wrapper exists rather than two calls at each site
+///
+/// Building the dictionary correctly needs **two** decisions that must agree:
+/// whether the face is symbolic (which decides whether `/Encoding` is written
+/// at all), and which [`BaseEncoding`] the `/Widths` array is indexed by. Get
+/// them out of step and the file still opens — the dictionary declares one
+/// encoding and its widths were measured under another, so every advance is
+/// plausibly wrong and the text simply mis-spaces. Nothing errors.
+///
+/// [`face_encoding`] already answers both, and [`build_font_dict`] already
+/// consumes them, but the pairing lived only inside `add_text`'s call site.
+/// `Pass 162.0` added a **second** caller — `format_text`'s `--set-font`, which
+/// may now introduce a face the page does not carry — and a second inline
+/// pairing is exactly the arrangement in which the two come to disagree
+/// (`R171`). One function, one convention.
+///
+/// The `InverseEncoding` [`face_encoding`] also returns is discarded here: this
+/// caller is authoring a **resource**, not encoding a run. That is a few
+/// microseconds of wasted table-building per invocation, and it is deliberately
+/// preferred over a second copy of the symbolic/encoding rule.
+///
+/// # What it emits, and why the full form
+///
+/// `/Type`, `/Subtype /Type1`, `/BaseFont`, `/FirstChar 32`, `/LastChar 255`
+/// and `/Widths` — plus `/Encoding /WinAnsiEncoding` for the twelve Latin
+/// faces, **omitted** for `Symbol` and `ZapfDingbats`, whose built-in
+/// encodings (Annex D.5/D.6) are the only correct ones.
+///
+/// ISO 32000-1 §9.6.2.2 permits a bare four-key dictionary for a standard-14
+/// face, and PDF 1.5 **deprecates** that special treatment as a `should` —
+/// *"conforming writers should represent all fonts using a complete font
+/// descriptor"*, while *"conforming readers shall still provide the special
+/// treatment"*. So the bare form is universally readable and the full form is
+/// what the standard prefers. pdfce emits `/Widths` because it costs nothing
+/// (the metrics are already compiled in, from the APAFML Core-14 AFMs) and it
+/// makes the run's spacing **self-contained** — a reader with no built-in
+/// standard-14 metrics still lays it out correctly.
+///
+/// `/FontDescriptor` is **not** emitted. It is optional for a standard-14 face
+/// with no font program, and omitting it keeps every value in this dictionary
+/// **direct**, so the dictionary is complete before any object number is
+/// allocated. That is what lets `format_text` hand it to its existing
+/// coverage gate at PLAN time and write it at COMMIT time (`R221`: the answer
+/// a caller previews and the answer the commit enforces cannot drift).
+pub(crate) fn std14_resource_dict(font: Std14) -> Object {
+    let (_inverse, enc, symbolic) = face_encoding(font);
+    build_font_dict(fontdata::std14_base_font_name(font), symbolic, enc, font)
+}
+
 /// Pick a `/Font` resource name not already present in `existing`.
 ///
 /// `pdfceF1`, then `pdfceF2`, … — the first unused, so the new name can never
@@ -1915,6 +1972,152 @@ pub(crate) fn pick_font_name(existing: &Dict) -> Vec<u8> {
         .find(|cand| existing.get(cand.as_bytes()).is_none())
         .unwrap_or_else(|| "pdfceFx".to_owned())
         .into_bytes()
+}
+
+/// Bind a new `/Font` resource under `key` into `owner_id`'s effective
+/// `/Resources` `/Font`, returning **every object that must be written** and
+/// whether the dictionary it landed in is shared (`Pass 162.0`).
+///
+/// The returned vector always begins with the font dictionary itself at
+/// `font_id`, followed by whichever enclosing object had to change.
+///
+/// # Why this is a free function over [`ObjectGraph`] and not a method
+///
+/// There are **three** save paths that can introduce a font resource, and they
+/// do not share a type: `EditSession::format_text` (page), the same session's
+/// form twin, and the one-shot `text_edit::set_format`, which builds a
+/// [`DirtySet`](crate::writer::DirtySet) against an immutable `&Document`. The
+/// first version of this Pass bound the resource inside the session and shipped
+/// a **half-wired feature**: the CLI, which uses the one-shot path, printed the
+/// disclosure saying a resource had been added and saved a file in which it had
+/// not — a content stream naming `/pdfceF1` and no `/pdfceF1` anywhere. Every
+/// unit test passed, because they exercise the session.
+///
+/// So the rule lives in one function, over the narrowest thing all three can
+/// supply: a graph that can resolve an id. `R171` — and this is the case where
+/// the second implementation would have been *invisible*, since the two paths
+/// produce different file bytes for the same request and only one is covered by
+/// unit tests.
+///
+/// # ★★ Inheritance first, because getting it wrong breaks the page
+///
+/// §7.8.3: a page's own `/Resources` **replaces** the one it would inherit from
+/// its `/Pages` ancestors — it does not merge. On a page with no `/Resources`
+/// of its own, creating a direct one holding just the new font would **shadow**
+/// every inherited font, image and colour space the page's existing content
+/// already names. The file still parses; the page's original text stops
+/// resolving its fonts.
+///
+/// So the object that actually holds `/Resources` is located first, walking
+/// `/Parent` when `may_inherit` (pages) and not when it does not — a form
+/// XObject carries its own (§8.10.1) and has no page-tree parent to inherit
+/// from. Depth-guarded per `ARCHITECTURE.md` §10: `/Parent` in a damaged or
+/// hostile file can cycle.
+///
+/// # ★★ Why a shared `/Resources` is PATCHED IN PLACE and not cloned
+///
+/// A page's `/Resources`, and the `/Font` sub-dictionary inside it, are very
+/// often indirect objects shared by every page a producer emitted. There are
+/// two ways to add an entry:
+///
+/// * **Patch the shared object.** Every page sharing it gains one extra
+///   `/Font` entry, which is **unreferenced** on those pages — no content
+///   stream there names `pdfceFn` — so nothing about how they render changes.
+/// * **Clone it for this page.** The page stops sharing, which is a
+///   *structural rewrite of the document performed as a side effect of a text
+///   restyle*, exactly what project rule 3 forbids. It also silently
+///   de-duplicates a producer's deliberate sharing and grows the file by the
+///   size of the whole resource dictionary.
+///
+/// pdfce patches. An unreferenced extra entry is inert; an unrequested
+/// structural change is not. `shared` is returned so the caller can say so.
+///
+/// The write is made at the **innermost indirect level**, so the fewest objects
+/// change: if `/Font` is its own object, only that object moves.
+pub(crate) fn bind_font_resource<G: crate::graph::ObjectGraph + ?Sized>(
+    graph: &G,
+    owner_id: ObjId,
+    may_inherit: bool,
+    key: &[u8],
+    font_id: ObjId,
+    font: Dict,
+) -> (Vec<(ObjId, Object)>, bool) {
+    let mut out: Vec<(ObjId, Object)> = vec![(font_id, Object::Dict(font))];
+    let bind = Object::Reference(font_id);
+
+    // --- which object holds /Resources? ---
+    let mut holder = owner_id;
+    if may_inherit {
+        let mut cursor = owner_id;
+        for _ in 0..crate::outline::MAX_OUTLINE_DEPTH {
+            let Some(Object::Dict(d)) = graph.value(cursor) else {
+                break;
+            };
+            if d.get(b"Resources").is_some() {
+                holder = cursor;
+                break;
+            }
+            match d.get(b"Parent") {
+                Some(Object::Reference(r)) if *r != cursor => cursor = *r,
+                // Nobody in the chain has one: fall back to the owner, where
+                // creating a direct `/Resources` shadows nothing.
+                _ => break,
+            }
+        }
+    }
+    let owner = match graph.value(holder) {
+        Some(Object::Dict(d)) => d.clone(),
+        _ => Dict::new(),
+    };
+
+    // --- where does /Resources live on it? ---
+    let res_ref = match owner.get(b"Resources") {
+        Some(Object::Reference(r)) => Some(*r),
+        _ => None,
+    };
+    let mut resources = match owner.get(b"Resources") {
+        // A `/Resources` that does not resolve to a dictionary is treated as
+        // ABSENT rather than as an error, matching `outline_root`'s handling of
+        // a damaged `/Outlines`: refusing an edit because a broken file carries
+        // `/Resources 7` is the worse outcome.
+        Some(Object::Reference(r)) => match graph.value(*r) {
+            Some(Object::Dict(d)) => d.clone(),
+            _ => Dict::new(),
+        },
+        Some(Object::Dict(d)) => d.clone(),
+        _ => Dict::new(),
+    };
+
+    // --- and /Font inside that? ---
+    let font_ref = match resources.get(b"Font") {
+        Some(Object::Reference(r)) => Some(*r),
+        _ => None,
+    };
+    let mut fonts = match resources.get(b"Font") {
+        Some(Object::Reference(r)) => match graph.value(*r) {
+            Some(Object::Dict(d)) => d.clone(),
+            _ => Dict::new(),
+        },
+        Some(Object::Dict(d)) => d.clone(),
+        _ => Dict::new(),
+    };
+    fonts.insert(Name(key.to_vec()), bind);
+
+    let shared = res_ref.is_some() || font_ref.is_some() || holder != owner_id;
+
+    if let Some(fid) = font_ref {
+        out.push((fid, Object::Dict(fonts)));
+        return (out, shared);
+    }
+    resources.insert(Name::from(b"Font"), Object::Dict(fonts));
+    if let Some(rid) = res_ref {
+        out.push((rid, Object::Dict(resources)));
+        return (out, shared);
+    }
+    let mut owner = owner;
+    owner.insert(Name::from(b"Resources"), Object::Dict(resources));
+    out.push((holder, Object::Dict(owner)));
+    (out, shared)
 }
 
 /// Whether the document is tagged: `/StructTreeRoot` present, or `/MarkInfo

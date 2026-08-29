@@ -56,6 +56,16 @@ fn run(args: &[&str]) -> Output {
         .expect("the binary runs")
 }
 
+/// Run the binary with NO subcommand prepended — [`run`] hard-codes
+/// `format-text`, and these assertions have to re-read the OUTPUT FILE with a
+/// different verb to check what actually landed in it.
+fn run_raw(args: &[&str]) -> Output {
+    Command::new(BIN)
+        .args(args)
+        .output()
+        .expect("the binary runs")
+}
+
 fn stdout(out: &Output) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
@@ -321,4 +331,85 @@ fn bad_color_spec_is_refused_before_io() {
     ]);
     assert_eq!(out.status.code(), Some(EDIT_REFUSED));
     assert!(!out_path.exists());
+}
+
+// ---------------------------------------------------------------------------
+// `Pass 162.0` — a face the page does NOT carry
+// ---------------------------------------------------------------------------
+
+/// ★★ The CLI uses `text_edit::set_format`, a save path the `EditSession`
+/// tests never touch.
+///
+/// This Pass first wired the resource-creation into the two session paths
+/// only. Every core unit test passed. The binary printed the disclosure saying
+/// a font resource had been added and wrote a file in which it had not — a
+/// content stream naming `/pdfceF1` with no `/pdfceF1` anywhere. That is the
+/// defect this test exists for, and it is asserted on the OUTPUT FILE
+/// (`list-fonts` re-reads it) rather than on the report the command printed
+/// about itself.
+#[test]
+fn set_font_to_a_face_the_page_lacks_adds_the_resource_to_the_file() {
+    let out_path = temp_path("newface");
+    let out = run(&[
+        fixture("format_family.pdf").to_str().unwrap(),
+        "--find",
+        "hello",
+        "--set-font",
+        "Helvetica",
+        "-o",
+        out_path.to_str().unwrap(),
+    ]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("was NOT a font resource here")
+            || stdout(&out).contains("was NOT a font resource here"),
+        "adding a resource the operator did not ask for must be disclosed — \
+         the invocation IS the commit here, so this is the only chance to say \
+         so: {}{}",
+        stdout(&out),
+        stderr(&out)
+    );
+
+    // The file, not the report.
+    let listed = run_raw(&["list-fonts", out_path.to_str().unwrap()]);
+    assert!(listed.status.success());
+    let text = stdout(&listed);
+    assert!(
+        text.contains("name=\"Helvetica\""),
+        "the saved file must actually carry the font: {text}"
+    );
+    assert!(
+        text.contains("resources=pdfceF1"),
+        "bound under the non-colliding key the disclosure named: {text}"
+    );
+
+    // And the words survive the re-encode.
+    let extracted = run_raw(&["extract-text", out_path.to_str().unwrap()]);
+    assert!(
+        stdout(&extracted).contains("hello world"),
+        "the restyled run must still read: {}",
+        stdout(&extracted)
+    );
+}
+
+/// A face outside the standard 14 still needs a font program, so it is still
+/// refused — and the refusal still names both the face and the deferral, so it
+/// does not read as a permanent no.
+#[test]
+fn set_font_to_a_non_standard_14_face_is_still_refused() {
+    let out_path = temp_path("arial");
+    let out = run(&[
+        fixture("format_family.pdf").to_str().unwrap(),
+        "--find",
+        "hello",
+        "--set-font",
+        "Arial",
+        "-o",
+        out_path.to_str().unwrap(),
+    ]);
+    assert_ne!(out.status.code(), Some(0), "Arial cannot be authored");
+    let err = stderr(&out);
+    assert!(err.contains("Arial"), "{err}");
+    assert!(err.contains("FF-C"), "{err}");
+    assert!(!out_path.exists(), "a refusal must write no output file");
 }
