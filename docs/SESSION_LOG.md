@@ -76183,3 +76183,223 @@ unspoken drift.
   major `174.0`. **Standing rules ceiling `R231`**, next free `R232`.
   **Decision ceiling `101`**, next free `102`. Operator-question ceiling
   unchanged. **Filing ordinal 327.**
+
+---
+
+## 2026-08-29 (328th filing) — a SHORT filing that closes a gap this role found: `Pass 173.1` discharges `Pass 120.5` completely. `ARCHITECTURE.md` §4.1 RETIRED (decision `102`), `R232` minted, and the mint decided the retirement
+
+**Sourcing — `R228` was invoked and this filing had a shell and used it.**
+Checked here, on disk, not relayed: `git log --format='%H %s' -5` for
+`f07ec78` and `0d17510` and their order relative to the 327th filing's own
+commit `f833115`; `git status --porcelain` (**empty**); `git rev-list --count
+origin/main..main` = **10** at the time of writing; `git show --stat f07ec78`
+for the six-file touch list (**+405 / −52**); **both commit messages read in
+full**, per the dispatch's instruction; `ClipAnnotation::Dimension`'s field
+list read out of `crates/pdfce-core/src/vector/clip.rs:290–337`; the four new
+codecs located in `crates/pdfce-core/src/dimension/sidecar.rs` at `:312`,
+`:326`, `:340`, `:365` and their four call sites in `clip.rs` at `:830`,
+`:836`, `:983`, `:990`; `grep -c '#[test]'` on
+`crates/pdfce-core/tests/annotation_clip_serialisation.rs` = **13**, with both
+new test function names read individually; `unit_tag`/`unit_of_tag` confirmed
+**absent** (`grep`, zero hits); the paste disclosure string read **verbatim**
+out of the `edit.rs` diff; the `docs/core-api/02-editing-and-saving.md` change
+read **as a diff**, so the replaced wording is on the record; the pdfceGUI
+note confirmed present by `ls` (**9,245 bytes**, 17:53); §§1.27–1.30 headings
+located by `grep` at `:2342`, `:2441`, `:2500`, `:2557`. **Relayed, not
+re-run:** `cargo test --workspace` (green, **155 suites**), `fmt`, `clippy`,
+`check-core-api-verbs.py`, `check-string-gaps.sh`.
+
+**Shipped:**
+- `Pass 173.1` (`f07ec78`) — a pasted **ce dimension** shows the same number
+  it was copied from. `ClipAnnotation::Dimension` gains `scale: ScaleState`,
+  `standard: DimStandard` and `style: StyleOverrides`, and its `unit: Unit`
+  widens to `format: NumberFormat`. Four new `pub(crate)` codecs in
+  `dimension/sidecar.rs`. **No new verb** — the verb count stays at 173.
+- `0d17510` — **no Pass ID, correctly**: `docs/NEXT_SESSION.md`, which is
+  engineer-owned under `R216`. Named here so it is not a future "unfiled
+  commit found by accident".
+
+**★★★ THE FILING'S OWN CATCH, DISCHARGED WITHIN THE DAY — and the shape is
+worth more than the fix.** The 327th filing found that `Pass 120.5`'s
+acceptance criteria asked for a ce dimension's group *"name, scale and unit"*
+and that `Pass 169.0` carried the **name only**. That was not found by a gate,
+a test or a review of the code — **it was found by reading a Backlog entry's
+own stated criteria against what shipped.** Every gate was green, 155 suites
+passed, and the defect was that **a pasted ce dimension read a different
+number from the one it was copied from**, because a ce dimension's label is
+*derived* from its group's scale and the clip landed in a freshly created,
+uncalibrated group. ★ **Nothing errored and nothing was marked — which is
+exactly the failure CLAUDE.md rule 4 forbids: not a wrong rendering, a wrong
+inference rendered perfectly.**
+
+**Decisions made this session:**
+- **Decision 102** (`ARCHITECTURE.md` §12; body counterpart is §4.1 itself) —
+  **§4.1, the hand-maintained `pdfce-core` surface sync log, is RETIRED with a
+  forward pointer to `docs/core-api/` and `tools/check-core-api-verbs.py`,
+  rather than backfilled.** (A)–(AB) are kept as dated history. The engineer
+  ruled the outcome and delegated the execution back, `ARCHITECTURE.md` being
+  librarian-owned. ★ **The argument is not "we stopped updating it"** — it is
+  that a second, unenforced account of a gate-enforced surface is a
+  **scheduled contradiction**, because the enforced copy is compelled to stay
+  current and the prose one is not. Backfilling twelve Passes would have been
+  `R232`'s third instance, committed deliberately.
+- **`R232` minted** — *a figure copied into a document no gate reads drifts at
+  the rate its **source** changes, not at the rate its **copy** is annotated;
+  the remedy is to delete the copy and write the command that derives it.*
+  Librarian-minted at the engineer's explicit invitation, at **n = 2** on this
+  project's stated bar (two instances of one *cause*).
+- **Hard-rule-2 call made and recorded:** `Pass 120.5` **stays in *Backlog*,
+  retitled CLOSED**, rather than moving to *Shipped*. Reasoning on the entry:
+  moving it would mint a **third** Shipped entry for **one** capability, and
+  *Shipped* is ordered by ship date — which `120.5` does not have, never
+  having shipped under this ID. What the ID owns is the record of an
+  **assignment**, and that belongs where the assignment was made.
+
+**Findings + decisions:**
+- **★★★ `R232`'s warrant is that `R212`'s OWN PRESCRIBED REMEDY WAS APPLIED
+  AND FAILED.** `R212` clause (b) says *name the authoritative copy in the
+  other copy*. The engineer did exactly that in `NEXT_SESSION.md` §C — *"the
+  gate re-derives all of these"* — and the four figures went stale **faster**
+  than before: within a day the first time, **within hours** the second. ⇒
+  **`R212` (b) is sufficient for a CONTRACT and insufficient for a NUMBER.**
+  A prose contract restated elsewhere is still approximately true when the
+  source moves; **a number is wrong the instant the source moves, and wrong in
+  a form that reads as measured fact.**
+- **★★ The interesting half is not the staleness, it is that THE WARNING DID
+  NOT WORK.** The rewrite that produced the second stale set **carried a
+  paragraph explaining that the previous figures had gone stale within a day**,
+  and named the reason a freshness promise suppresses the re-check it invites.
+  Correct, read, ineffective. ⇒ **Annotating a stale-prone copy is not a
+  remedy** — it is a true sentence beside a false one, and the false one is
+  the half that travels. Same shape as hard rule 10's ablation row, where the
+  correct reading was printed *above* the incorrect one for four filings.
+- **★★ The engineer's fix is the right one and is the rule's carrier: he
+  REMOVED the numbers rather than correcting them a third time**, leaving
+  `python tools/check-core-api-verbs.py`. **A pointer cannot rot** — and it
+  removes the thing a gate would have had to watch, which is why `R232`
+  prescribes **no gate** (the identity set of "which prose figure is a copy of
+  which derived one" is not enumerable in advance — hard rule 10's own
+  reasoning for declining a figure-consistency checker).
+- **★ `R232` decided a live question in the same filing**, which is the best
+  available evidence it generalises: §4.1's twelve-Pass backlog. That is what
+  turns "keep it fresh" into a rule with a **prescription** — retire, don't
+  backfill — rather than an exhortation.
+- **★★ The design finding inside `Pass 173.1`: the honest option still
+  changes a number, so it is DISCLOSED rather than hidden.** When the
+  destination already has a group of the clip's name, the **destination's**
+  scale wins and the paste says so off-canvas. Adopting the clip's scale would
+  have changed the label of **every ce dimension already in that group** —
+  objects that were not part of the paste. ★ Rule 4 working as written: no
+  gate, no on-canvas marking, the pasted ce dimension renders exactly as the
+  saved document will render it, and the *uncertainty is stated in the
+  disclosure* rather than implied by a confirm button.
+- **★ Widening `unit: Unit` to `format: NumberFormat` was not scope creep.**
+  A group showing `12 1/2"` and one showing `12.50"` differ **only** there —
+  same unit, same scale — so carrying the scale without the format that
+  renders it closes half the hole and leaves the other half **looking**
+  closed. `set_group_scale` already takes both together; the clipboard now
+  matches the verb.
+- **★★ The anti-drift shape, third instance in this neighbourhood.** The four
+  new codecs are **thin wrappers over the sidecar's whole-group and
+  whole-record codecs** with throwaway placeholder ids, not a second encoder —
+  the shape `serialize_kind` already used. Stated as a failure mode rather
+  than as tidiness: **a field added to the document codec and forgotten in a
+  second clipboard encoder produces a pasted ce dimension showing a DIFFERENT
+  NUMBER, with nothing erroring.**
+- **★ The sabotage was discriminating because the FIXTURE was, not because the
+  sabotage was clever.** The new positive test uses a group calibrated at
+  **10.0**, not at any default — which is what makes disabling the scale write
+  fail it. A fixture sitting at the default value passes against an
+  implementation that carries nothing at all: `R225`'s exact trap
+  (`Pass 155.0`'s identity `/Matrix`), avoided here on purpose.
+- **★ The dead `unit_tag`/`unit_of_tag` pair from `Pass 169.0` was deleted
+  rather than left unused** — verified absent by `grep` this filing. Worth a
+  line because the alternative (leave it, it is harmless) is how a format
+  grows a field two readers disagree about.
+
+**★★ HARD RULE 11 SWEEP — searched for the CLAIM, not for a string. THREE
+SURVIVORS, ALL THREE FIXED HERE; ONE NEW OWED ITEM REPORTED.**
+
+One capability changed meaning: *"a ce dimension travels by group NAME only,
+so a pasted one can read a different number"* became **false**. One figure
+changed: `docs/core-api/02-editing-and-saving.md` **3,659 → 3,671 lines**
+(clause count unchanged at 91; verb count unchanged at 173 — this Pass added
+no verb).
+
+| survivor | disposition |
+|---|---|
+| `docs/FEATURES.md` *Vector objects* — *"A ce dimension travels by group NAME only … can READ DIFFERENTLY … see Planned"* | **FIXED here.** Row rewritten (not appended to, per the file's own header rule) to state what travels and the destination-wins rule. |
+| `docs/FEATURES.md` *Planned* — the whole residual row for the `120.5` gap | **REMOVED here.** The capability is now stated in the *Implemented* row above. **The markup-fidelity Planned row (`/CA`, `/T`, `/Contents` on the eight `MarkupSpec` kinds) STAYS** — a different residual, still real, and `/IRT` reply remapping is still untouched. |
+| `docs/ROADMAP.md` Backlog `Pass 120.5` — *"What remains in scope … is exactly: carry a ce dimension's group scale, unit and drafting standard"* | **FIXED here** as a header amendment plus an in-place marker on that paragraph, not a rewrite (append-only spirit, hard rule 1). |
+
+**Checked and NOT survivors**, so the edges are honest:
+`docs/core-api/02-editing-and-saving.md` — **current**, the paragraph was
+*replaced* by the engineer in `f07ec78` itself, and replacement was the right
+call because the old wording stated the loss **as a property of the format**,
+which amending would have left standing. `docs/core-api/index.md:17` —
+current (`3,671`). `docs/NEXT_SESSION.md` — the four figures are **gone**, not
+corrected, so there is nothing left to go stale. `docs/FEATURES.md`
+*ce dimensions* section — its group row talks about `set_group_scale` and
+re-parenting, makes no clipboard claim, correctly untouched.
+`docs/ROADMAP.md` Shipped entries for `169.0` and `120.4` — dated history,
+correct as of their dates.
+
+**★ ONE NEW OWED ITEM, REPORTED NOT FIXED (outside this role's remit —
+`crates/` is the engineer's).** `crates/pdfce-cli/src/main.rs` carries the
+annotation-serialisation warning retained with a comment saying *"it no longer
+fires"* (checked and accepted as correct by the 327th filing). **That comment
+is now describing a second state it did not anticipate** — the warning was
+about annotations not surviving at all, and the ce-dimension caveat that
+outlived it is now also gone. Worth one read to confirm the comment still says
+something true rather than something merely not-false.
+
+**★ `docs/core-api/` §§1.27–1.30 CONFIRMED AS THE CONSUMER-FACING CONTRACT,
+per the dispatch's request.** The `pdfceGUI` note under
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` is **not in git**, so the
+durable record must be inside the repo. Verified this filing that every
+`ROADMAP.md` Shipped entry from that session names it: `Pass 168.0` → §1.27,
+`Pass 171.0`/`172.0` → §1.28 and §1.29, `Pass 173.0` → §1.30, `Pass 170.0` →
+the *"Almost every annotation is copyable now"* section, and `Pass 173.1` →
+the ce-dimension paragraph in the clip-format section. All four numbered
+headings located by `grep` at `:2342`, `:2441`, `:2500`, `:2557`.
+
+**RAG escalations this filing: NONE, and the reason is stated rather than
+left as an absence.** `Pass 173.1`'s findings are **project-shaped, not
+ecosystem-shaped**: the label-derives-from-scale consequence is a fact about
+pdfce's own ce-dimension model, and the anti-drift wrapper shape gains no new
+mechanism over the existing recorded finding, so hard rule 4 says edit, not
+add — and there is nothing new to add. `R232`'s general form (*delete the
+copy, keep the derivation*) **is** ecosystem-shaped and is a candidate for
+`D:/dev/rag/rust/`, but it is one document-discipline pattern with two
+instances in one repository; **owed, not skipped** — flagged in *For next
+session* below rather than written thin.
+
+**Still in flight:**
+- **`pdfceGUI` has consumed none of the cut/copy/paste work**, `Pass 167.0`'s
+  field clipboard included. Every `gui` box on those rows is `[ ]` and was not
+  rounded up.
+- **Unpushed: 10** at the time this entry was drafted (`git rev-list --count
+  origin/main..main`), which is the eight the 327th filing recorded plus
+  `f07ec78` and `0d17510`; this filing's own commit makes eleven. ★ The figure
+  is filed **with the moment it was taken attached**, per the same reasoning
+  the 327th filing recorded: a count of unpushed commits measures a moving
+  target. Pushing `main` is standing-authorized (`CLAUDE.md` rule 8, decision
+  090 — *"always push"*); **cutting a release is not.**
+- **Named destinations and optional-content groups remain 0 of 3**, for the
+  reason recorded yesterday: no delete verb for the first, no authoring at all
+  for the second. A clipboard needs a delete verb and an author verb before it
+  can exist.
+- Markup `/CA` / `/T` / `/Contents` fidelity across the clipboard, and `/IRT`
+  reply remapping — the remaining clipboard residuals.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` is the engineer's (`R216`); this filing did not touch
+  it. **Its §C figures are now a pointer, not a copy — do not re-add them.**
+- **Owed to `D:/dev/rag/rust/`:** `R232`'s general form, once it has an
+  instance outside this repository. Deliberately not written thin today.
+- **Owed to the engineer:** one read of the `pdfce-cli` annotation-
+  serialisation warning comment (above).
+- **Ledger after this filing: Pass ceiling `173.1`**, next free `173.2` / new
+  major `174.0`. **Standing rules ceiling `R232`**, next free `R233`.
+  **Decision ceiling `102`**, next free `103`. Operator-question ceiling
+  unchanged. **Filing ordinal 328.**

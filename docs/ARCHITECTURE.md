@@ -2482,9 +2482,64 @@ read this §4 entry as FF-C being complete; see `ROADMAP.md`'s Pass
 
 ---
 
-## 4.1 §4 SYNC — the ACTUAL `pdfce-core` surface, read from the crate on 2026-08-05
+## 4.1 §4 SYNC — the `pdfce-core` surface log, **RETIRED 2026-08-29** (decision 102). ★ **FOR THE CURRENT SURFACE READ `docs/core-api/`, NOT THIS SECTION**
 
-**Why this subsection exists, and what it supersedes.** Everything above
+> ### ★★★ RETIRED — READ THIS BEFORE READING ANYTHING BELOW IT
+>
+> **This section is no longer maintained and must not be read as the current
+> `pdfce-core` surface.** Its last lettered sync is **(AB), 2026-08-23**;
+> `Passes 162.0`–`173.1` shipped after it and **none of them has a section
+> here, deliberately**.
+>
+> **Where the surface account lives now:**
+>
+> | you want | read |
+> |---|---|
+> | the current public surface of `pdfce-core` | **`docs/core-api/`** — `01-reading-and-model.md`, `02-editing-and-saving.md` (every public `EditSession` verb, the command/undo contract, `EditError`'s variants), `03-capabilities.md` |
+> | proof those documents are not stale | **`python tools/check-core-api-verbs.py`** — it derives the verb count and the `EditError` variant count from the crate and **fails** on a missing verb or a stale figure. It runs in CI. |
+> | why a surface changed, and what was rejected | **§12 decision log**, below — `Pass 167.0` → decision **099**, the clipboard formats → decision **100**, `coalesce_last` → decision **101** (body counterpart §11.6) |
+> | when a surface changed | **`docs/ROADMAP.md`** *Shipped*, which carries a per-Pass verification block |
+>
+> **★★ WHY RETIREMENT RATHER THAN BACKFILL — the decision, argued, because
+> "we stopped updating it" is not a reason and this is not that.** §4.1 is a
+> **hand-maintained** log of a surface that is now **gate-enforced elsewhere**.
+> Backfilling twelve Passes would produce a second, unenforced account of the
+> same facts — and a second account of a number is not redundancy, it is a
+> **guaranteed future contradiction**, because the enforced copy is compelled
+> to stay current and the hand-written one is not. That is `R212`'s mechanism
+> (drift is one-directional, always toward the enforced copy) and `R232`'s
+> sharpening of it (for a **figure**, naming the authoritative copy is not
+> enough — delete the copy and point at the derivation). **Backfilling would
+> have been `R232`'s third instance, committed on purpose.**
+>
+> The immediate trigger was the third: `docs/NEXT_SESSION.md` §C held four
+> figures copied out of `docs/core-api/index.md` and was found stale **in two
+> consecutive filings**, the second time within hours of a rewrite that
+> already carried a paragraph explaining why the previous figures had gone
+> stale. The engineer removed the numbers rather than correcting them again
+> (`0d17510`) and referred §4.1 here for the same reason.
+>
+> **★ WHAT IS KEPT, AND WHY IT IS KEPT RATHER THAN DELETED.** Sections
+> **(A)–(AB)** below stay **exactly as written**, per hard rule 1 (the record
+> is append-only). They are **dated history and remain correct as of their
+> dates** — several are the only written account of a **breaking** change and
+> of the reasoning behind it: (A) the shipped names diverging from the Pass-0
+> target, (C) decision 027's signature changes, (F) composite-text editability,
+> (K) `ObjectGraph: Send + Sync`, (Y) a contract *correction* that changed what
+> a field claims while changing nothing it does. Deleting those would destroy
+> evidence to tidy an index. ★ **They are history, not a stale copy** —
+> `R232`'s scope clause says exactly this, and it is why the two rules do not
+> collide here.
+>
+> **What a reader must NOT do with (A)–(AB):** treat any of them as a
+> statement about the crate *today*. Each is true as of its own date and
+> several have since been superseded — check `docs/core-api/` and run the
+> gate.
+>
+> **Nothing about §4.1's retirement changes §4.2** (*Published model
+> guarantees*), which is a **contract**, not a sync log, and stays live.
+
+**Why this subsection existed, and what it superseded.** Everything above
 in §4 is a chain of dated *target* and *IMPLEMENTED* blocks, last extended
 at **Pass 21.0 (2026-08-03)**. Between then and 2026-08-05 the crate
 shipped Passes **25.0–25.6, 26.0–26.1, 27.0–27.2, 28.0, 29.0, 30.0,
@@ -2504,6 +2559,14 @@ it is marked **UNVERIFIED** rather than asserted or quietly dropped.
 **audit trail** — what was targeted, when, and why. §4.1 is the **living
 truth**. When they conflict, §4.1 governs, and every conflict this sync
 found is named below rather than papered over.
+
+> ★ **SUPERSEDED 2026-08-29 (decision 102).** The sentence above — *"§4.1 is
+> the living truth"* — was true from 2026-08-05 to 2026-08-23 and is **false
+> now**; it is kept rather than rewritten because it is what the section was
+> built to be, and because a retired document that quietly re-describes itself
+> as never having made the claim is harder to audit than one that shows the
+> claim being withdrawn. **`docs/core-api/` is the living truth; this whole
+> section is audit trail.** See the retirement block at the head of §4.1.
 
 ---
 
@@ -27187,3 +27250,83 @@ free 072.**
   dated footer added this filing); the intended-vs-committed half is one
   instance plus one preemptive fix. **Decision ceiling moves 100 → 101; next
   free 102.**
+
+- **2026-08-29 — Decision 102. `ARCHITECTURE.md` §4.1 — THE HAND-MAINTAINED
+  `pdfce-core` SURFACE SYNC LOG — IS RETIRED WITH A FORWARD POINTER TO
+  `docs/core-api/` AND `tools/check-core-api-verbs.py`, RATHER THAN
+  BACKFILLED. ITS (A)–(AB) SECTIONS ARE KEPT AS DATED HISTORY. ★ THE
+  ARGUMENT IS NOT "WE STOPPED UPDATING IT" — IT IS THAT A SECOND,
+  UNENFORCED ACCOUNT OF A GATE-ENFORCED SURFACE IS NOT REDUNDANCY BUT A
+  SCHEDULED CONTRADICTION.**
+
+  **The decision was the librarian's, at the engineer's explicit
+  delegation**, and the execution is this filing's (328th). The 327th filing
+  reported §4.1 as stale-by-design and stated that formally retiring it was
+  the engineer's call, not the librarian's; the engineer ruled *"retire it
+  with a forward pointer, rather than backfilling twelve Passes"* and handed
+  the execution back, since `ARCHITECTURE.md` is librarian-owned. Recording
+  both halves because the ownership split is the reason this sat unspoken for
+  six days: **each role was correctly declining to act inside the other's
+  remit, and nobody was declining to decide.**
+
+  **The state that forced the question.** §4.1's last lettered sync is
+  **(AB), 2026-08-23**. `Passes 162.0`–`173.1` — twelve Passes including the
+  entire cut/copy/paste session, four new clip types and thirteen new verbs —
+  shipped after it with **no section here**. Meanwhile `docs/core-api/` grew
+  to three files (2,656 + 3,671 + 2,568 lines) covering **all 173 public
+  verbs** and `EditError`'s **98** variants, and
+  `tools/check-core-api-verbs.py` **fails CI** on a missing verb or a stale
+  count.
+
+  **★★ WHY NOT BACKFILL, which is the option a conscientious reader reaches
+  for first.** Backfilling produces two written accounts of one surface,
+  **one of which is compelled to stay current and one of which is not.**
+  `R212` records the consequence as a regime rather than an accident: such a
+  pair does not drift randomly, it drifts in **exactly one direction**,
+  leaving the hand-written copy — the one a reader reaches for because it
+  reads like prose — as the stale one. `R232`, minted the same day from
+  `docs/NEXT_SESSION.md`'s four figures going stale in two consecutive
+  filings, sharpens it for **numbers** specifically: naming the authoritative
+  copy is not enough, because a number is wrong the instant its source moves
+  and is wrong in a form that reads as measured fact. **Backfilling would
+  have been that rule's third instance, committed deliberately, twelve
+  sections deep.**
+
+  **★★ WHY NOT DELETE, either — and this is the half that keeps the record
+  honest.** (A)–(AB) are **dated history**, correct as of their dates, and
+  several are the **only** written account of a breaking change plus its
+  reasoning: (A) the shipped names diverging from the Pass-0 target list, (C)
+  decision 027's five changed signatures and two removed error variants, (F)
+  composite `/Type0` text becoming editable and R-INV-4 narrowing, (K)
+  `ObjectGraph` gaining `Send + Sync`, (Y) a contract *correction* that
+  changed what `structure_tab_order` **claims** while changing nothing it
+  **does**. Hard rule 1 forbids rewriting history and it is right to: deleting
+  those would destroy evidence in order to tidy an index. **History is not a
+  stale copy of a current value — it is a record of a past one**, which is
+  precisely `R232`'s scope clause and why the two rules meet cleanly instead
+  of colliding.
+
+  **What the retirement actually consists of**, so a future reader can check
+  it was done rather than take this entry's word: a retirement block at the
+  head of §4.1 routing to `docs/core-api/`, to `check-core-api-verbs.py`, to
+  §12 for *why* a surface changed and to `ROADMAP.md` *Shipped* for *when*;
+  the heading itself marked RETIRED; and the *"§4.1 is the living truth"*
+  sentence marked **superseded in place** rather than rewritten, so the
+  withdrawn claim is visible. **§4.2 (*Published model guarantees*) is
+  untouched** — that is a **contract**, not a sync log, and stays live.
+
+  **★ The general form, which is why this is a decision and not a chore.**
+  **A document earns retirement when something else carries its account AND
+  that something else is enforced.** Both halves are required: a replacement
+  that is merely *better* leaves the old document as a plausible second
+  opinion, and an enforced replacement that covers only part of the account
+  leaves a real gap. Here both hold — `docs/core-api/` is more complete than
+  §4.1 ever was (§4.1's own section (I) admits it never enumerated
+  `EditSession`, listing **57 of 63** verbs as out of scope), and the gate
+  makes staleness a red build rather than a reading error.
+
+  **No body-section counterpart beyond §4.1 itself**, which is the section
+  this decision edits. **Decision ceiling moves 101 → 102; next free 103.**
+  **Standing rule `R232` was minted from the same finding** (`ROADMAP.md`
+  *Standing rules*) and generalises past this section to any figure copied
+  into a document nothing gates.
