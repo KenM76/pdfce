@@ -187,13 +187,37 @@ three of them were previously mis-stated in this file.
    ExtGStates, and the zero-tint axis governs a *different* rule.
    **Eliminating a knob is not eliminating the mechanism the knob sits on.**
 
-   ★ **The sharpened suspect, and it is a HYPOTHESIS not a finding:** the patch
-   also carries a **`/Separation /All /DeviceCMYK`** space — the all-colorants
-   special case (§8.6.6.4) — alongside those overprint states. A
-   `/Separation /All` painted under `/OP true` is the shape that would
-   composite over an otherwise-correct green and land it 23/41/35 counts away
-   **without the table, the fallback or the zero-tint scope moving at all**.
-   Untested. Next place to look.
+   ★★★ **FIVE HYPOTHESES REFUTED, 2026-08-29.** Each by rendering a
+   synthetic that isolates one ingredient. **Every one renders `(47, 180, 73)`
+   — correct.** The residual survives all of them:
+
+   | # | hypothesis | how tested | result |
+   |---|---|---|---|
+   | 1 | the conversion table | applied directly to `.75 0 1 0` | a third of it, **opposite sign on green** |
+   | 2 | `OverprintZeroTintScope` | the patch at all three scopes | **byte-identical** output |
+   | 3 | `/Separation /All` under `/OP true` | synthetic, tints 0 and 1 | knocks the green out to **white / black** — nowhere near |
+   | 4 | the overprint STATE | synthetic × 5: `OPM 0`, `OPM 1`, `OP`+`op`, ICCBased and DeviceCMYK | all **correct** |
+   | 5 | the real 1.4 MB source ICC profile | obj 19 lifted **verbatim** into the synthetic | **correct** — so pdfce really does use the `/Alternate` fallback its doc comment claims |
+
+   ★★ **AND A DISTINCTION THAT NEARLY GOT WRITTEN DOWN WRONG.** After #2 the
+   tempting sentence was *"overprint is eliminated."* **False.** #2 shows one
+   overprint **SETTING** is inert on this patch; #4 is what actually clears the
+   overprint **state**. **Eliminating a knob is not eliminating the mechanism
+   the knob sits on**, and the two needed separate experiments.
+
+   ★ **THE LIVE CANDIDATE: the PDF/X-4 OUTPUT INTENT.** The patch carries
+   `/OutputIntents [<< /S /GTS_PDFX /OutputConditionIdentifier
+   (ISO Coated v2 300% (ECI)) /DestOutputProfile 3 0 R >>]`. **This is the one
+   input no synthetic has yet carried**, and it is the mechanism `iccce`'s
+   `DEFAULT_DESTINATION.md` governs.
+
+   ⚠ **A sixth test was attempted and is INCONCLUSIVE — do not read it as a
+   refutation.** The destination profile it lifted came out at **1 253 bytes**
+   when obj 3 is **~1.46 MB**: the `N 0 obj` regex matched the wrong object.
+   The run printed `(47, 180, 73)`, which means nothing, because the intent it
+   attached was not the patch's. **Redo it by resolving obj 3 through the
+   xref/object streams rather than by regex**, then re-run. That is the next
+   move and it is one experiment away.
 
    ★ **iccce's capture was EXACT.** Rendering the patch here and reading the
    PNG pixels directly — no display path — gives `(24, 140, 108)`, 12 769 px.
