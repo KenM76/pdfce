@@ -8,7 +8,7 @@ true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
 Written 2026-08-29. Ledger at write time: **Pass ceiling 164.0**, rules
-**R227**, decisions **096**, filings **322**.
+**R228**, decisions **097**, filings **323**.
 
 ---
 
@@ -27,9 +27,13 @@ given where there is no next item under it.
 | 3 | **Bookmarks** — rename, delete, reorder, re-parent | `156.0`/`157.0` rename+delete; **`161.0` reorder + re-parent + expand/collapse**, hardened by `161.1`. |
 | 4 | **Fonts** — restyle to a face the document lacks | **`Pass 162.0`** — the **standard-14 half**. See §0a for the half that remains. |
 
-⇒ **There is no obvious "next" handed down by the operator.** Pick from §A
-(owed items) or raise the Backlog with him. **Do not promote the conformance
-validator (§0b) without him saying so** — he asked for it to sit unscoped.
+⇒ **The next thing IS handed down: the ce-dimension text override, decision
+097.** He ruled on its shape on 2026-08-29 — see §A item 1. He did **not** rule on
+the schedule, so it sits in Backlog rather than *Next up*, but it is the only
+item on the list he has personally specified.
+
+**Do not promote the conformance validator (§0b) without him saying so** — his
+words, 2026-08-29: *"we'll deal with the conformance validator later."*
 
 ## §0a — WHAT GAP 4 DID AND DID NOT CLOSE
 
@@ -101,67 +105,134 @@ lines, 76 `CV-*` ids) plus seven files under `Acrobat_Features/`.
 
 ## §A — OWED, consolidated. This is the pick-from list now.
 
-1. **`Pass 142.0`** — non-standard-14 faces (see §0a). The largest remaining
+1. **★★ THE ce-DIMENSION TEXT OVERRIDE — decision 097, the operator's own
+   ruling (2026-08-29).** The only item here he has personally specified.
+   Verbatim: *"dimension text override should be an option if it can be
+   selected to be overridden or not so the override can be undone. otherwise we
+   need to add a manual dimension tool where the user just enters the value of
+   the dimension."*
+   **Read it as two branches with a condition, not one instruction:**
+   - **Branch 1, preferred — the override is a SELECTABLE STATE, not a
+     destructive edit.** The ce dimension **keeps its measured value** while an
+     override is in force; overriding is a flag plus a string; **clearing it
+     restores the measured text** with no re-measure, **and that must survive
+     save-and-reopen** — so the measured value persists in the sidecar
+     *alongside* the override. This is what makes it compatible with project
+     rule 15 (a ce dimension's text **is** its measurement) and rule 4 (an
+     operator-supplied divergence is disclosed and reversible, never silent).
+   - **Branch 2, fallback only — a manual dimension tool**, where the operator
+     types a value that was never measured. A **different object class**, not
+     an override: nothing to restore, nothing to diverge from. Do **not** build
+     it as a substitute for branch 1.
+   - **Engineering read: branch 1 is achievable.** `/PieceInfo` already carries
+     pdfce's own per-dimension state, so `override: Option<String>` beside the
+     measured value is additive and round-trips.
+   - ★ **Naming is constrained**: `Pass 163.0` made a refusal cite
+     `set_dimension_label` and say it is NOT BUILT YET. Whatever ships takes
+     that name, or the message changes —
+     `tools/check-cited-verbs-exist.py` enforces the pair.
+   - **Prerequisite before code: the disclosure story.** What does a shell show
+     when a dimension's text is *not* its measurement?
+
+2. **`Pass 142.0`** — non-standard-14 faces (see §0a). The largest remaining
    item, and the natural continuation of `162.0`.
-2. **Two verbs pdfce's own refusals NAME and does not have** — `Pass 163.0`
-   made the messages honest about it; **it did not build them.** The gate
-   `tools/check-cited-verbs-exist.py` passes automatically once either exists.
-   - **`rotate_widget`** — a widget's rotation is `/MK /R` (§12.5.6.19 Table
-     189), a **quantised 0/90/180/270 declaration** the field's appearance
-     generator reads, *not* a free-angle transform. This is the smaller of the
-     two and is well-specified.
-   - **`set_dimension_label`** — an override for a ce dimension's caption.
-     There is **no route today**: `set_dimension_style` is styling,
-     `set_dimension_display` is the diameter/radius reading, neither writes the
-     text. ★ Scope it carefully — a ce dimension's text **is** its measurement
-     (project rule 15), so an override is a deliberate divergence between the
-     two and needs a disclosure story before it needs code.
-   - **ce-dimension rotation** shipped as `Pass 159.0`; `rotate_annotation`
-     still refuses it **by name and correctly**, pointing at `rotate_dimension`
-     — which does exist. That refusal is fine.
-3. **The trap X on the grey/K-black conformance patch.** Cause unknown, **not**
+
+3. **Two verbs pdfce's own refusals NAME and does not have** — `Pass 163.0`
+   made the messages honest; **it did not build them.**
+   - **`rotate_widget`** — `/MK /R` (§12.5.6.19 Table 189), a **quantised
+     0/90/180/270 declaration**, not a free-angle transform. Well-specified and
+     the smaller of the two.
+   - **`set_dimension_label`** — now superseded in scope by item 1; build it
+     under decision 097's shape, not as a bare setter.
+
+### ★★ The colour cluster — six items, and item 4 is the lead
+
+These came out of the iccce exchange of 2026-08-28/29. **Read them together**;
+three of them were previously mis-stated in this file.
+
+4. **★★★ The `PCS3_132` residual — MEASURED 2026-08-29, and it is NOT the
+   conversion table.** iccce asked for the table-isolated number and it splits
+   the error decisively. `PCS3_132` paints its green as **`.75 0 1 0`**
+   (recovered from the content stream, no render in the loop):
+
+   | channel | Acrobat | table only | iccce's capture of our render |
+   |---|---:|---:|---:|
+   | red | 59 | 47 | 24 |
+   | green | 171 | **181** | 140 |
+   | blue | 51 | 73 | 108 |
+
+   Split as Acrobat → table → everything else: the table contributes
+   **−12 / +10 / +22**, the rest of the path **−23 / −41 / +35**.
+   ★ **The rest is the larger term on every channel and on GREEN IT IS THE
+   OPPOSITE SIGN** — the table takes 171 *up* to 181, something after it takes
+   181 down to 140. So the render error **cannot be attributed to the table
+   even partially by addition**; any account saying "the blue floor did it" is
+   arithmetically excluded.
+   ⇒ **`PCS3_132` is an OVERPRINT patch**, and
+   `OverprintZeroTintScope::AllProcessSpaces` is the only open *unmeasured*
+   item on that path. **It is the SUSPECT, not the finding** — the residual is
+   undiagnosed. Measuring it is the next colour move.
+   ★ Also measured: **all three CMYK intents return the identical
+   `(47, 181, 73)`** here, so the intent setting is **inert on this patch** and
+   the `Naive` deletion costs nothing *for this measurement*. iccce's broader
+   point about losing the three-way diagnostic instrument stands, narrowed.
+
+5. **★ A shipped default's stated rationale has evidence against it.**
+   `CmykIntent::Calibrated`'s doc comment justifies its cool mid-greys as
+   *"what Acrobat shows, which is the point."* On `PCS3_230`'s 25 % gray iccce
+   measured Acrobat at **exactly (98, 98, 98)** — perfectly neutral — against
+   pdfce's **(99, 100, 103)**. One patch at one level is not the sample that
+   claim is about, and it is a cross-renderer comparison carrying a
+   display-path limit. But it is a **load-bearing justification for a shipped
+   default with evidence pointing the other way**, and this project has a rule
+   about that shape. Either widen the sample or soften the comment; do not
+   leave it as it stands.
+
+6. **`PCS3_130` cells c and d disagree with each other by ~8 counts** — same
+   CMYK source, one **vector**, one **image**. iccce's cheap explanation is
+   image-path resampling; untested. **Ours to look at.**
+
+7. **The trap X on the grey/K-black conformance patch.** Cause unknown, **not**
    the defect `Pass 143.0` fixed. Lead: that patch paints the same 50 % grey
    **both ways** (`0.5 g` and `0 0 0 0.5 k`) deliberately, and `G .5` — a grey
    *stroke* — appears in its streams while every synthetic fixture uses fills.
-4. **`OverprintZeroTintScope::AllProcessSpaces` is unmeasured.** pdfce's
-   RGB→CMYK is naive, so a pure red preserves a cyan backdrop under it and
-   whether Acrobat agrees is unknown. Not the default; do not promote it
-   without a measurement.
-5. **`iccce`'s "invisible X" is NOT the trap X in item 3.** Theirs is
-   `PCS3_130`, a CMM/ICC-source-profile patch filed as *theirs* under decision
-   064; ours is the grey/K-black **overprint** patch. Two X's, two patches,
-   two causes, one word.
-6. **`iccce`'s ΔE00 figures are withdrawn by its own author** (`DL-070`: no ΔE
-   against a screen capture). Only the 8-bit deltas may be quoted.
-7. Ambiguity-register entries owed to `pdfce-spec-librarian`:
-   `overprint_zero_tint_scope`, and `render.hairline_clamp_policy` since
-   2026-08-09.
-8. **A lossless markup clipboard copy** — Backlog, unscoped, **awaiting
-   `pdfceGUI`'s answer on whether they need it.** See §E.
-9. **A rustdoc-cleanliness gate** — Backlog. ★ **Read it at LOW priority:**
-    measured 2026-08-29, the dangerous subclass (a doc naming a public verb
-    that does not exist) was a population of **one**, and `Pass 161.0` closed
-    it by shipping the verb. The other 150 are path-scope noise.
-10. **★ A pre-push check for a deferred tip.** `R226` closes the hole
+   ★ **NOT the same as iccce's "invisible X"** — theirs is `PCS3_130`, a
+   CMM/source-profile patch, filed as theirs under decision 064 and now
+   answered. Two X's, two patches, two causes, one word.
+
+8. **★ iccce's ΔE00 figures are WITHDRAWN by their own author** (`DL-070`: no
+   ΔE of any formula, in any space, against a screen capture). That includes
+   the *"49–58 ΔE00"* that was in one note's original **filename** and the
+   *"296×/314× factor"* column. **Only 8-bit channel counts may be quoted**,
+   which is why every number in items 4–6 above is in counts.
+
+9. **`PCS3_132`/`PCS3_133` PASS their own criterion and must not be written up
+   as suite failures.** Their pass condition is the *absence* of an X, and
+   there is no X. The gap is an **accuracy gap on a conformance-passing
+   panel** — a different claim, and iccce asked specifically that the
+   distinction be kept.
+
+### The rest
+
+10. Ambiguity-register entries owed to `pdfce-spec-librarian`:
+    `overprint_zero_tint_scope`, and `render.hairline_clamp_policy` since
+    2026-08-09.
+11. **A lossless markup clipboard copy** — Backlog, unscoped, **awaiting
+    `pdfceGUI`'s answer on whether they need it.** See §E.
+12. **A rustdoc-cleanliness gate** — Backlog. ★ **LOW priority:** measured
+    2026-08-29, the dangerous subclass (a doc naming a public verb that does
+    not exist) was a population of **one**, and `Pass 161.0` closed it by
+    shipping the verb. The other 150 are path-scope noise.
+13. **★ A pre-push check for a deferred tip.** `R226` closes the hole
     *procedurally*, and a procedural rule is what was skipped to create it.
-    Mechanical form is cheap: refuse a push when the tip is a Pass-claiming
-    commit that `--strict-tip` rejects. **Not built, and NOT to be built
-    unasked** — it changes the operator's own push workflow. Raise it.
-11. **★ `.gitignore:20` (`/fixtures/external/`) is LOAD-BEARING and nothing
+    **Not built, and NOT to be built unasked** — it changes the operator's own
+    push workflow. Raise it.
+14. **★ `.gitignore:20` (`/fixtures/external/`) is LOAD-BEARING and nothing
     says so.** The staged veraPDF corpus declares CC BY 4.0 over content
     including the **Isartor** suite, whose own manual states *"Redistributing
     all or parts of the Isartor test suite is also not allowed."* **The
     repository is public**, so committing that tree would *be* redistribution.
     One `.gitignore` line is the entire control. Operator question `(bx)`.
-12. **★ 28 GB of stale agent worktrees** under `.claude/worktrees/` (7 of
-    them, gitignored, 0 tracked files). All checked 2026-08-29: **nothing
-    unsaved would be lost** — the six untracked `docs/decisions/*.md` in them
-    are already in the main repo. Deleting is destructive and outside the
-    working tree, so it is **the operator's call**; it has been raised.
-    Cleanup if he agrees: `git worktree remove --force <path>` each, then
-    `git worktree prune`.
-
----
 
 ## §B — HOW TO RUN THE GATES, because this cost an hour
 
@@ -299,7 +370,6 @@ assertion would pass whether the re-parenting happened or not. Assert on
 - **`(bl)` OCR model weights** — whether a **CC-BY-SA-4.0** model file may ship
   inside pdfce's **MIT** portable folder. *Default if unanswered: ship neither
   model set.*
-- **The 28 GB of stale worktrees** (§A item 13) — raised, awaiting his word.
 
 ## §F — OUTBOUND, AWAITING A REPLY
 

@@ -26596,3 +26596,83 @@ free 072.**
   it governs how a *decision* is reached, not how a Pass is scoped — the
   2026-08-05 ruling's own criterion. **Standing-rule ceiling unmoved at `R225`;
   next free `R226`. Decision ceiling moves 095 → 096; next free 097.**
+
+- **2026-08-29 — Decision 097. THE ce-DIMENSION TEXT OVERRIDE IS A
+  SELECTABLE, REVERSIBLE STATE LAYERED ON TOP OF THE MEASURED VALUE —
+  NEVER A DESTRUCTIVE REPLACEMENT OF IT — AND A "MANUAL DIMENSION" TOOL
+  IS A DIFFERENT OBJECT CLASS, BUILT ONLY IF THIS FAILS.** No Pass shipped
+  this filing; this is a scoping ruling, recorded so the eventual build
+  does not re-derive it from a shorter operator sentence than the one he
+  actually gave. Ken, verbatim, 2026-08-29:
+
+  > *"dimension text override should be an option if it can be selected to
+  > be overridden or not so the override can be undone. otherwise we need
+  > to add a manual dimension tool where the user just enters the value of
+  > the dimension."*
+
+  **Two branches with a condition, not one instruction — the condition is
+  load-bearing and easy to read past.** *"If it can be selected to be
+  overridden or not so the override can be undone"* is a requirement about
+  the **reversibility of the override itself**, distinct from ordinary
+  command-level undo (which already exists and is not what he is asking
+  for here — an override that merely goes through the undo stack is
+  reversible only until the next edit, exactly like every other command).
+
+  - **Branch 1 (preferred).** The override is a **toggle plus a string**,
+    not an edit to the measured value:
+    - the ce dimension **retains its measured value** while an override is
+      in force — nothing is overwritten, only shadowed for display;
+    - overriding is **setting the flag and supplying replacement text**;
+    - **clearing the flag restores the measured text exactly**, with no
+      re-measurement and no data loss, **including after save-and-reopen**
+      — which means the measured value must **persist in the `/PieceInfo`
+      sidecar alongside the override**, not merely in in-session state.
+    This is what makes branch 1 compatible with `CLAUDE.md` rule 15 (a ce
+    dimension's text *is* its measurement — an override does not repeal
+    that, it sits declared beside it) and with rule 4 (fuzzy, never
+    sneaky — an operator-supplied divergence from the measured value is
+    exactly the kind of thing that must be disclosed and reversible,
+    never silently substituted).
+  - **Branch 2 (fallback, ONLY if branch 1 turns out unachievable).** A
+    manual dimension tool where the operator types a value that was never
+    measured at all. **This is a different object class, not a variant of
+    the override** — nothing to restore, nothing to diverge from, because
+    there was never a measurement underneath it. Branch 2 must not be
+    built as a substitute for branch 1 on convenience grounds; it answers
+    a different need (annotating something that cannot be measured at
+    all) and would misrepresent every dimension it was used on if used in
+    branch 1's place.
+
+  **Engineering read, recorded so a future session can act on it without
+  re-litigating feasibility.** Branch 1 is achievable and cheap: the
+  `/PieceInfo` sidecar already carries pdfce's own per-dimension state
+  (`ARCHITECTURE.md` §4.1's dimension model; see the ce-dimension glossary
+  entries in `ROADMAP.md`), so an additive `override: Option<String>`
+  field beside the existing measured value round-trips for free under the
+  round-trip/minimal-diff invariant (rule 3) — nothing pdfce didn't
+  logically touch changes shape. No architectural obstacle is known; this
+  decision record exists to fix the **shape** of the eventual verb before
+  it is built, not because the shape is in doubt.
+
+  **★ A naming constraint this decision imposes on the eventual build.**
+  `Pass 163.0` (`69689c1`) made a refusal message cite `set_dimension_label`
+  by name and state it is **not built yet**, and `tools/
+  check-cited-verbs-exist.py` enforces that pairing mechanically. Whatever
+  ships to satisfy branch 1 must either take the name `set_dimension_label`
+  or the refusal message must be updated in the same Pass — the gate will
+  fail otherwise, by design, and that failure would be the gate doing its
+  job, not a defect in it.
+
+  **Body-section updates.** None to §3, §4, §4.1 or §4.2 this filing — no
+  crate boundary or published guarantee has moved, because nothing has
+  shipped. **When branch 1 ships**, its Pass entry owes §4's `EditSession`
+  verb-surface table a new row and, if the sidecar schema gains the
+  `override` field described above, a one-line update to §4.1's dimension-
+  model description of `/PieceInfo`'s contents.
+
+  **No standing rule minted.** This is a single scoping ruling on a single
+  capability, not a recurring mechanism — the "decide-and-disclose has a
+  third outcome" generalisation already lives at decision 096 and does not
+  need a second citation here; branch 1/branch 2 is an ordinary
+  preferred/fallback scope, not a new posture. **Decision ceiling moves
+  096 → 097; next free 098.**

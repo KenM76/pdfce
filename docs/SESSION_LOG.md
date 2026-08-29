@@ -59030,6 +59030,11 @@ behind).
   further **28 GB across seven stale agent worktrees** and was **left alone**.
   Standing hazard, not an incident: the debug tree grows without bound and the
   failure lands on the one step an operator is waiting on.
+  **★ Struck 2026-08-29 (323rd filing):** the 28 GB is gone (operator
+  cleanup, *"clean up the scratch copies"* — seven worktrees + ten
+  `worktree-agent-*` branches removed, `.claude/` now 1.4 MB, `git worktree
+  list` shows only `main`, verified healthy at `cf37a27`). The disk-space
+  hazard mechanism itself is unchanged.
 - **Two figures from the dispatch re-based onto their real denominators**
   (hard rule 10). *"34 commits pushed"* is a **push** count for the session;
   the release's own number is **58** (`git rev-list --count v0.7.0..v0.8.0`),
@@ -75242,5 +75247,239 @@ non-standard-14 faces only.
    next free **`R228`**; decision-record ceiling unchanged **`096`**, next
    free **`097`**; filing ordinal **322**.
 2. No new work opened by this filing — it is a correction only.
+
+---
+
+## 2026-08-29 (323rd filing) — no Pass shipped: decision 097 (the ce-dimension text override, ruled by the operator), a Backlog entry scoped from it, `R228` minted, and an `iccce` measurement that puts the render-error math the OTHER way from every account anyone had written down
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8).
+Every figure below is relayed from the engineer's dispatch — a table-
+isolated 8-bit-channel measurement the engineer ran at the operator's
+optional ask, reproduced exactly, not independently re-run by this role.
+The commit hash `cf37a27` (working-tree HEAD at dispatch time) and the
+28 GB worktree-cleanup figures are likewise relayed, not shell-verified
+here, and are reported below in that form rather than asserted as
+checked (hard rule 8).
+
+**Shipped:** nothing. This filing is a decision record, two Backlog
+annotations, a standing-rule mint, and a findings capture.
+
+**Decisions made this session:**
+
+- **Decision 097 — the ce-dimension text override is a selectable,
+  reversible STATE on top of the measured value, never a destructive
+  replacement of it; a manual-entry dimension tool is a different object
+  class, built only if that fails.** Full derivation in
+  `ARCHITECTURE.md` §12. Ken's ruling, verbatim: *"dimension text
+  override should be an option if it can be selected to be overridden or
+  not so the override can be undone. otherwise we need to add a manual
+  dimension tool where the user just enters the value of the
+  dimension."* **The condition he attaches — "so the override CAN BE
+  UNDONE" — is about the reversibility of the override ITSELF, not
+  ordinary command-level undo**, which already exists and answers a
+  different question. Branch 1 (preferred): flag + replacement text,
+  additive to `/PieceInfo`, measured value retained underneath and
+  restored exactly when the flag clears, including across
+  save-and-reopen. Branch 2 (fallback only): a typed value with nothing
+  measured underneath it at all — not a variant of the override, a
+  different capability, not to be built as a substitute for branch 1.
+  **Naming constraint carried into the Backlog entry:** the eventual verb
+  must take the name `set_dimension_label` (already cited, as NOT BUILT
+  YET, in `Pass 163.0`'s refusal messages) or those messages must be
+  updated in the same Pass — `tools/check-cited-verbs-exist.py` enforces
+  the pair. **Decision ceiling 096 → 097; next free 098.**
+- **`R228` minted** — see `ROADMAP.md` *Standing rules* for the full
+  text. Two corroborating instances of one mechanism: a claim of the
+  shape *"document X says/contains Y"*, inherited from an earlier
+  characterization and repeated without independently opening X.
+  Instance 1 is the 313th filing's `Pass 158.0` non-existence-in-any-
+  document finding; instance 2 is below (the iccce-notes
+  mischaracterization). **Standing rules ceiling `R227` → `R228`; next
+  free `R229`.**
+
+**Backlog filed:**
+
+- **New entry** — *"ce-dimension text override — a selectable, reversible
+  divergence from the measured value"*, `ROADMAP.md` *Backlog*, unscoped,
+  no Pass ID, scoped from decision 097. Not promoted to *Next up* — the
+  operator ruled on shape, not schedule.
+- **Conformance validator entry annotated**, not re-scoped: Ken, verbatim,
+  *"we'll deal with the conformance validator later."* This confirms the
+  314th filing's own sequencing instruction (*"the operator said 'at the
+  bottom'"*) rather than changing it — recorded so a future session reads
+  deliberate deferral, not silence, if the entry sits untouched for a
+  while.
+
+**Findings + decisions — the `iccce` table-isolated measurement:**
+
+- **What was asked and what was run.** The optional ask in
+  `note_the_blue_floor_has_a_second_instance_in_saturated_green.md` was a
+  render of `PCS3_132`'s table **in isolation**. Method: `PCS3_132` paints
+  green as `.75 0 1 0` (recovered from the content stream, no render in
+  the loop) put through `pdfce_core::color::cmyk_to_srgb_with` and
+  nothing else in the path. Reply filed at
+  `D:/Dev/FeatureRequests/iccce_FeatureRequests/open/reply_the_table_isolated_number_you_asked_for_and_it_is_a_third.md`.
+  Per `iccce`'s own standing decision `DL-070`, **no ΔE is computed
+  against a screen capture anywhere in this reply or this entry** — only
+  8-bit channel counts are quoted, as required.
+
+- **The measurement, in the required per-figure-with-total form (hard
+  rule 10):**
+
+  | channel | Acrobat | table alone | pdfce full render |
+  |---|---:|---:|---:|
+  | red | 59 | 47 | 24 |
+  | green | 171 | **181** | 140 |
+  | blue | 51 | 73 | 108 |
+
+  Split as Acrobat → table → everything-else-in-the-path, the two
+  contributing terms per channel:
+
+  | channel | table's contribution | rest-of-path's contribution |
+  |---|---:|---:|
+  | red | −12 | **−23** |
+  | green | **+10** | **−41** |
+  | blue | +22 | **+35** |
+
+- **★★★ THE FINDING: on every channel the non-table stage is the LARGER
+  term, and on GREEN it runs the OPPOSITE SIGN from the table.** The
+  table alone takes Acrobat's 171 *up* to 181; something downstream of it
+  then takes 181 *down* to 140. **The render error cannot be attributed to
+  the table even partially by simple addition** — whatever the non-table
+  stage is doing, it must first cancel the table's own +10 and then
+  travel a further 41 in the other direction. Any account that reads
+  "the blue floor (the table) did it" is arithmetically excluded by this
+  measurement, not merely unconfirmed by it.
+
+- **Consequences filed as such — a suspect, not a diagnosis; a cost
+  narrowed, not erased; a pass narrowed to a gap; a default's own
+  justification undercut by one data point; a new untested discrepancy;
+  and a withdrawal check that came back clean:**
+
+  1. **`OverprintZeroTintScope::AllProcessSpaces` is now a NAMED SUSPECT
+     for the residual** — `PCS3_132` is an overprint patch, and it is the
+     only unmeasured stage on the path once the table itself is cleared.
+     **Recorded as a suspect, not a finding** — no diagnosis has been
+     done. This sharpens, but does not close, the long-carried owed item
+     *"`AllProcessSpaces` is shipped and unmeasured against any oracle"*
+     (carried since the 306th filing).
+  2. **All three `CmykIntent` values return the identical `(47, 181, 73)`
+     for this one input** — on `PCS3_132`, the intent setting is
+     **inert**. This narrows, without erasing, `iccce`'s broader
+     complaint about `Pass 153.0` deleting the three-way `Naive`
+     diagnostic instrument: the deletion costs nothing **for this
+     specific measurement**, but the instrument's general loss is a
+     separate, live cost this entry does not resolve either way.
+  3. **`PCS3_132`/`PCS3_133` PASS their own conformance criterion, and
+     that is a narrower claim than "the suite is right about this
+     panel."** The criterion is the *absence* of a visible X, and there
+     is no X. **This is an accuracy gap on a conformance-passing panel**,
+     not a suite failure — `iccce` asked explicitly that it not be
+     written up as the latter, and it is not, here or anywhere this
+     entry touches.
+  4. **★ A shipped default's own stated rationale now has a measured data
+     point pointing the other way.** `CmykIntent::Calibrated`'s doc
+     comment justifies its cool mid-greys as *"what Acrobat shows, which
+     is the point."* On `PCS3_230`'s 25 % gray, `iccce` measured Acrobat
+     at **exactly (98, 98, 98)** — perfectly neutral — against pdfce's
+     **(99, 100, 103)**. One patch at one tone level is not the sample
+     that claim was built on, and it is a cross-renderer comparison
+     carrying a display-path limit of its own — **but it is a
+     load-bearing justification for a shipped default with a measurement
+     pointing the other way, and this project has a standing discipline
+     about that shape** (hard rule 10's whole point: a claim is checked
+     against the world, not against how confidently it reads). **Filed as
+     owed — investigate, do not re-litigate the default from this one
+     cell alone.**
+  5. **`PCS3_130` cells c and d disagree by ~8 counts on the same CMYK
+     source** — one cell is vector, one is image. `iccce`'s own
+     hypothesis (image-path resampling) is **untested**. Filed as owed,
+     ours to look at, not theirs.
+  6. **All ΔE figures in both `iccce` notes are withdrawn by their own
+     author under `DL-070`**, including the *"49–58 ΔE00"* figure and the
+     companion note's cross-renderer factor column. **Checked here**:
+     `grep -in "ΔE" docs/ROADMAP.md docs/SESSION_LOG.md
+     docs/ARCHITECTURE.md docs/NEXT_SESSION.md` finds every existing
+     citation of that figure **already recorded in withdrawn form**
+     (`ROADMAP.md:1739-1747`, `SESSION_LOG.md:74054/74080/74264`,
+     `NEXT_SESSION.md:134`) — nothing to strike. `R228`'s corollary
+     applies to this check itself: it was performed, not assumed.
+
+- **★ THE PROCESS FAILURE, recorded because it is the reason this sat a
+  day and because it is `R228`'s own second instance.** Both `iccce`
+  notes arrived 2026-08-28 and sat unread. A prior session's handoff
+  characterized them as *"informational, no reply owed"* — true of the
+  first note, **incomplete** for the second, whose own header reads
+  *"informational, with one optional ask."* That characterization was
+  then repeated in a status report **without either file being opened**.
+  Ken caught it; no gate could have — `check-disclosure-channel.sh`
+  verifies a note's route, not its content, per hard rule 11's own
+  argument against a content-checking gate. **A characterization of an
+  inbound message is a claim like any other, and this project already
+  had a rule with a stronger warrant than a single occurrence** (see
+  `R228`, minted above from this and the 313th filing's parallel case).
+
+**Verification (relayed, not shell-checked here — hard rule 8):**
+
+- `grep -in "ΔE" docs/ROADMAP.md docs/SESSION_LOG.md
+  docs/ARCHITECTURE.md docs/NEXT_SESSION.md` — every existing citation
+  already in withdrawn form; performed as part of this filing (see
+  consequence 6, above), result affirmed by re-reading the grep hits
+  quoted there.
+- `.claude/` worktree cleanup: relayed as seven stale agent worktrees +
+  ten leftover `worktree-agent-*` branches removed, `.claude/` now
+  1.4 MB, `git worktree list` showing only `main`, repo verified healthy
+  at `cf37a27`. **Struck at both locations that carried the 28 GB
+  figure** — `ROADMAP.md`'s disk-incident table (dated footer appended)
+  and this log's own restatement at the 2026-08-10-era filing (dated
+  footer appended in place, hard rule 1). The disk-space hazard
+  *mechanism* (unbounded `target/debug` growth, worktree accumulation
+  over a long autonomous-dispatch run) is unchanged and will recur — the
+  reservoir is closed, not the cause.
+
+**`FEATURES.md`: NO CAPABILITY ROWS CHANGE.** Nothing shipped this
+filing — a decision, two Backlog annotations, a standing-rule mint, and a
+findings capture touch no shipped capability. Stated explicitly per this
+role's own maintenance contract, so a reader does not go looking for a
+row that was never meant to move.
+
+**Still in flight:**
+- `rotate_widget` and `set_dimension_label` remain unbuilt (carried,
+  unchanged) — `set_dimension_label` is now also the name constraint
+  decision 097 imposes on the ce-dimension text override, so its build is
+  now two owed items pointing at one name.
+- `Pass 142.0`, narrowed (non-standard-14 font faces), remains open.
+- The rustdoc-cleanliness gate and lossless-markup-clipboard-copy
+  Backlog entries remain unscoped (carried, unchanged).
+- Conformance validator: **explicitly deferred by the operator this
+  filing** — not a gap, a parked item.
+- ce-dimension text override: **scoped this filing, not started.**
+- **Owed, new this filing:** `OverprintZeroTintScope::AllProcessSpaces`
+  as a named suspect for `PCS3_132`'s residual (diagnosis not done);
+  `CmykIntent::Calibrated`'s doc-comment rationale vs. the `PCS3_230`
+  measurement (investigate, don't re-litigate from one cell);
+  `PCS3_130` cells c/d's ~8-count disagreement (image-path resampling,
+  untested hypothesis).
+- Carried, unchanged: the grey/K-black overprint trap-X cause is still
+  unknown (distinct from `iccce`'s own, already-attributed X on
+  `PCS3_130`); the `pdfce-spec-librarian` spec-ambiguity-register items
+  (`overprint_zero_tint_scope`, `render.hairline_clamp_policy`); the
+  private suite's name in 82 already-pushed commit messages (operator's
+  call, blocks nothing).
+
+**For next session:**
+1. Ledger: Pass ceiling unchanged **`164.0`**, next free **`164.1`**/new
+   major **`165.0`**; standing rules ceiling **`R228`**, next free
+   **`R229`**; decision-record ceiling **`097`**, next free **`098`**;
+   filing ordinal **323**.
+2. `docs/NEXT_SESSION.md` item 12 (the 28 GB worktree figure) is now
+   stale and should be struck by the engineer — engineer-owned file, not
+   edited here.
+3. The ce-dimension text override (decision 097, Backlog-scoped) is
+   available to pick up whenever the operator schedules it — branch 1 is
+   assessed achievable and the naming constraint is already recorded.
+4. The three new `iccce`-derived owed items (above) are candidates for a
+   short, cheap investigation session — none is blocking, none has a
+   diagnosis yet.
 
 ---

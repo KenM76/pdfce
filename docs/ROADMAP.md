@@ -19691,6 +19691,15 @@ nothing currently reclaims.
 Filed to `D:/dev/rag/rust/` as an ecosystem fact (nothing about it is
 pdfce-specific) and to `NEXT_SESSION.md` as a pre-flight check.
 
+**★ Struck 2026-08-29 (323rd filing).** The 28 GB reservoir measured above
+is gone — operator-authorised (*"clean up the scratch copies"*): seven
+stale agent worktrees plus ten leftover `worktree-agent-*` branches
+removed, `.claude/` now measures 1.4 MB, `git worktree list` shows only
+`main`, repo verified healthy at `cf37a27`. This closes the specific
+reservoir measured at filing time, **not** the standing hazard mechanism
+above it (`target/debug` growth, worktree accumulation over a long
+autonomous-dispatch run), which is unchanged and will recur.
+
 ---
 
 #### `FEATURES.md` — NO CAPABILITY ROW MOVES; ONE STALE LITERAL REPAIRED
@@ -102460,6 +102469,15 @@ added. See that section below.
 
 ### Conformance validator — `validate <file> --standard <X>`, standards pdfce can implement and SCORE today — unscoped, no Pass ID
 
+**★ EXPLICIT OPERATOR DEFERRAL, 2026-08-29 (323rd filing).** Ken,
+verbatim: *"we'll deal with the conformance validator later."* Recorded so
+a future session reads this entry as **deliberately parked**, not merely
+unattended — the 314th filing's own instruction (*"do not promote any
+part of this to Next up — the operator said 'at the bottom'"*) already
+said as much about sequencing; this is the operator's own confirmation of
+that sequencing, not a new scope change. Still unscoped, no Pass ID, not
+promoted to *Next up*. Nothing below this note is superseded by it.
+
 **Filed 2026-08-28 (314th filing).** Motivating context, on record because
 it is the reason this exists: the session began with the operator asking
 whether pdfce + AI could help a Reddit thread in r/accessibility — a US
@@ -102717,6 +102735,42 @@ does not claim pdfce validates anything today; does not claim veraPDF
 parity as an outcome — veraPDF's own PDF/A rule counts alone total well
 over a thousand across eleven levels, and UA-2 leans on 1,636 further
 ISO/TS 32005 rules.
+
+### ce-dimension text override — a selectable, reversible divergence from the measured value — unscoped, no Pass ID
+
+**Filed 2026-08-29 (323rd filing), from an operator ruling; see
+`ARCHITECTURE.md` decision 097 for the full derivation, including the
+verbatim instruction, the branch-1/branch-2 reading, and the naming
+constraint against `set_dimension_label`.** Recorded here only in
+scope-entry form so it is findable from the Backlog list without opening
+the decision record.
+
+**Scope (branch 1, the preferred and expected build):**
+
+- a flag + replacement-text field on a ce dimension, additive to the
+  existing `/PieceInfo` sidecar, that **shadows the displayed text without
+  touching the measured value underneath it**;
+- clearing the flag restores the measured text exactly, with no
+  re-measurement, including after save-and-reopen;
+- the disclosure story is a **prerequisite, not an afterthought** — what
+  the shell shows when a ce dimension's displayed text is not its
+  measurement is exactly the kind of inference `CLAUDE.md` rule 4 governs,
+  and that off-canvas disclosure design should be scoped alongside the
+  verb, not bolted on after.
+
+**Branch 2 (manual dimension tool, typed value, never measured) is
+explicitly NOT this entry's scope** — it is a fallback, only if branch 1
+turns out unachievable, and a different object class if it is ever built.
+See decision 097 for why the two must not be conflated.
+
+**Naming constraint, carried from decision 097 so it is not missed at
+scoping time:** the eventual verb must either be named
+`set_dimension_label` or `Pass 163.0`'s refusal messages (which cite that
+name and say NOT BUILT YET) must be updated in the same Pass —
+`tools/check-cited-verbs-exist.py` enforces the pair mechanically.
+
+**Not promoted to *Next up* or *In progress* — the operator ruled on the
+shape, not the schedule.** No Pass ID assigned.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
@@ -118615,6 +118669,53 @@ same cause (hashes exist only at commit time), two different failure modes.
   `D:/dev/rag/rust/a_source_scanning_check_must_read_to_a_syntactic_boundary_not_a_fixed_window.md`.
 
   **Standing rules ceiling `R226` → `R227`; next free `R228`.**
+
+- **R228 — A CHARACTERIZATION OF A DOCUMENT'S CONTENTS IS ITSELF AN
+  UNVERIFIED CLAIM, AND MUST BE CHECKED BY OPENING THE DOCUMENT BEFORE IT
+  IS REPEATED.** Minted 2026-08-29 (323rd filing), on two corroborating
+  instances of one mechanism — this project's own stated bar for a fresh
+  mint (two instances of the *same cause*, not merely the same symptom;
+  see `R221`'s minting note, above).
+
+  **Instance 1** (313th filing, `Pass 158.0`/`159.0`): a dispatch stated
+  `Pass 158.0` was *"already filed as part of the run you saw."* `grep -n
+  "Pass 158\.0\|8326d33" docs/ROADMAP.md docs/FEATURES.md
+  docs/SESSION_LOG.md` returned **nothing**, and `git log` put `8326d33`
+  **after** the 312th filing's own commit — the claim was checkable in one
+  command and false. That filing's own finding: *"a claim about what a
+  document CONTAINS is checkable in one command."*
+
+  **Instance 2** (this filing): a prior session's handoff summarised two
+  `iccce` inbound notes as *"informational, no reply owed"*, and that
+  characterization was repeated in a status report **without either file
+  being opened**. The second note's own header reads *"informational,
+  **with one optional ask**"* — the inherited summary was wrong from the
+  file's own first line, and the optional ask sat unanswered for a day
+  because the characterization, not the document, was trusted.
+
+  **The shared mechanism.** Both are a claim of the shape *"document X
+  says/contains Y"*, inherited from an earlier characterization (a
+  dispatch's own account, a prior session's handoff) and repeated without
+  independently opening X. Neither failure was a reasoning error once the
+  premise was accepted — both were caught the moment someone actually
+  read the source. **A characterization is not evidence, however
+  confidently phrased or however many sessions have carried it forward.**
+
+  **The rule, one sentence:** before repeating any claim about what a
+  document says, contains, concludes, or requires — "already filed",
+  "informational, no reply owed", "closed", "unchanged since" — open the
+  document (or `grep` it) yourself; do not relay an inherited
+  characterization as though it were a reading.
+
+  **Distinguished from hard rule 10's corollary** (`SESSION_LOG.md`'s
+  312th-filing finding, *"a filing's account of its own change is a claim
+  … the cheapest check is `grep` on the file you just wrote"*): that
+  corollary is about trusting your **own** prior description of your
+  **own** edit. `R228` is about trusting **someone else's** description of
+  a document **neither of you has just re-read** — a different failure
+  surface, same remedy shape (open the source).
+
+  **Standing rules ceiling `R227` → `R228`; next free `R229`.**
 
 ## Update protocol
 
