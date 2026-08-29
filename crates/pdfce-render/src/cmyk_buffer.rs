@@ -641,6 +641,33 @@ impl CmykBuffer {
         self.bridged
     }
 
+    /// Record `n` pixels of a **solid paint** that reached this buffer through
+    /// the sRGB bridge rather than as authored colorants (`Pass 165.0`).
+    ///
+    /// # ★★ Why this exists: the counter was under-reporting its own subject
+    ///
+    /// [`Self::bridged`] is documented as *"pixels whose colour reached this
+    /// buffer through the sRGB bridge rather than as authored colorants"*, and
+    /// [`crate::cmyk_paint::paint_solid_into_cmyk`] says *"every such paint is
+    /// counted by the buffer's own bridge counter."*
+    ///
+    /// **Neither was true for solid paints.** `bridged` was incremented only on
+    /// the IMAGE path. A page whose every solid fill was reconstructed from
+    /// flattened sRGB reported `cmyk_bridged_pixels=0` -- byte-identical to a
+    /// page composited entirely from authored ink.
+    ///
+    /// Measured on a PDF/X-4 patch: 40 000 reconstructed pixels, counter `0`,
+    /// output 23/41/35 counts from the authored colour. pdfce approximated and
+    /// reported that it had not, which is project rule 4 broken rather than an
+    /// accuracy gap -- and an honest counter would have pointed at the cause in
+    /// one render instead of six hypotheses.
+    ///
+    /// Taking a count rather than incrementing per pixel because the caller
+    /// already has one: `composite_mask` returns the pixels it changed.
+    pub(crate) fn record_bridged_solid(&mut self, n: u32) {
+        self.bridged += u64::from(n);
+    }
+
     /// How many transparency groups could not be composited natively. See
     /// the field's documentation for the two cases it covers.
     pub(crate) const fn groups_approximated(&self) -> u64 {

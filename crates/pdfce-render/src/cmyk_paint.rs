@@ -236,6 +236,12 @@ pub(crate) fn paint_solid_into_cmyk(
     match &brush.brush {
         Brush::Solid { rgba } => {
             let alpha = f32::from(rgba[3]) / 255.0;
+            // ★ `Pass 165.0`: whether this paint was AUTHORED or RECONSTRUCTED
+            // is decided here and nowhere else, so it is recorded here. The
+            // counter used to be incremented only on the image path, which made
+            // this doc comment's own promise ("every such paint is counted")
+            // false for every solid fill.
+            let bridged = brush.cmyk.is_none();
             let colour = brush.cmyk.unwrap_or_else(|| {
                 crate::overprint::rgb_to_cmyk(
                     f32::from(rgba[0]) / 255.0,
@@ -243,7 +249,10 @@ pub(crate) fn paint_solid_into_cmyk(
                     f32::from(rgba[2]) / 255.0,
                 )
             });
-            buf.composite_mask(&cov, region, colour, alpha, blend);
+            let painted = buf.composite_mask(&cov, region, colour, alpha, blend);
+            if bridged {
+                buf.record_bridged_solid(painted);
+            }
         }
         Brush::Image { .. } => {
             // See the doc comment: unreachable through the interpreter,

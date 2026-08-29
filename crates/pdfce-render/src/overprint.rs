@@ -161,6 +161,42 @@ pub enum SourceKind {
     /// `OPM 0`. A CMYK *image* falls into the other row, where the two
     /// overprint modes are identical.
     DeviceCmykDirect,
+    /// Four process tints stated directly, but through a space that is **not**
+    /// `DeviceCMYK` for Table 149 Row 1's purposes -- today, an `ICCBased`
+    /// with `/N 4` whose `/Alternate` resolves to `DeviceCMYK` (`Pass 165.0`).
+    ///
+    /// # ★★ Why this is a separate variant rather than either neighbour
+    ///
+    /// The two questions [`SourceKind`] is asked look like one and are not:
+    ///
+    /// 1. **Which Table 149 row applies?** [`Self::DeviceCmykDirect`] is the
+    ///    only row where `OPM 1` differs from `OPM 0`, and §8.6.7 scopes that
+    ///    rule to a `DeviceCMYK` source. An `ICCBased` is not one, so
+    ///    reclassifying it into that variant would silently change what
+    ///    overprint preserves -- a spec deviation, not a fix.
+    /// 2. **Can the authored tints be READ?** Yes: the operands of an
+    ///    `ICCBased` `/N 4` space *are* CMYK tints, sitting right there.
+    ///
+    /// Answering (2) by moving the source into (1)'s variant was the tempting
+    /// one-line fix and it would have traded a colour bug for an overprint bug.
+    /// This variant answers **yes to (2) and no to (1)**: it behaves exactly as
+    /// [`Self::OtherProcess`] in [`cmyk_group_rules`], and exactly as
+    /// [`Self::DeviceCmykDirect`] in [`authored_tints`].
+    ///
+    /// # What it fixes
+    ///
+    /// Without it, `authored_tints` returned `None` for these spaces and the
+    /// caller fell through to `rgb_to_cmyk` on the already-flattened paint --
+    /// a max-GCR transform its own doc calls *"chosen for exact
+    /// round-tripping, not for accuracy"*. Measured on a PDF/X-4 patch:
+    /// authored `.75 0 1 0` came back as `(0.7382, 0, 0.5942, 0.2906)` --
+    /// **yellow collapsed 1.0 -> 0.59 and black invented at 0.29** -- rendering
+    /// `(24, 140, 108)` where the authored tints give `(47, 181, 73)`.
+    ///
+    /// `authored_tints`'s own doc already said `None` was for *"an `ICCBased`
+    /// that did not resolve to CMYK"*. The **implementation never made that
+    /// distinction**; this variant is what makes the documented behaviour real.
+    ProcessCmykIndirect,
     /// Any other process colour space — including `DeviceCMYK` reached any
     /// other way (an image sample, an `ICCBased` with four components,
     /// `DeviceRGB`, `DeviceGray`, `CalRGB`, `Lab`).
@@ -389,7 +425,14 @@ pub fn compatible_overprint_cmyk(
         (SourceKind::DeviceCmykDirect, Component::OtherProcess) => ComponentRule::Source,
 
         // --- Row 2: any other process colour space, process component.
-        (SourceKind::OtherProcess, Component::ProcessCmyk | Component::OtherProcess) => {
+        //
+        // `ProcessCmykIndirect` sits here DELIBERATELY and not in Row 1: its
+        // tints are readable but it is not a `DeviceCMYK` source, and §8.6.7
+        // scopes `OPM 1`'s zero-tint rule to one. See that variant's docs.
+        (
+            SourceKind::OtherProcess | SourceKind::ProcessCmykIndirect,
+            Component::ProcessCmyk | Component::OtherProcess,
+        ) => {
             // Note there is NO OPM distinction here. This is exactly why
             // `DeviceCmykDirect` is a separate variant: a CMYK image lands
             // in this row and must NOT get the mode-1 behaviour.
@@ -400,7 +443,12 @@ pub fn compatible_overprint_cmyk(
         //     third line). A process paint does not name any spot colorant,
         //     so with overprint off it erases them and with overprint on it
         //     leaves them alone.
-        (SourceKind::DeviceCmykDirect | SourceKind::OtherProcess, Component::Spot(_)) => {
+        (
+            SourceKind::DeviceCmykDirect
+            | SourceKind::OtherProcess
+            | SourceKind::ProcessCmykIndirect,
+            Component::Spot(_),
+        ) => {
             if op {
                 ComponentRule::Backdrop
             } else {
@@ -494,7 +542,10 @@ pub fn compatible_overprint_cmyk(
 #[must_use]
 pub fn authored_tints(kind: &SourceKind, comps: &[f32]) -> Option<[f32; 4]> {
     match kind {
-        SourceKind::DeviceCmykDirect if comps.len() == 4 => {
+        // `ProcessCmykIndirect` reads IDENTICALLY to `DeviceCmykDirect` here
+        // -- the whole point of the variant is that the tints are stated even
+        // though the overprint row is not Row 1.
+        SourceKind::DeviceCmykDirect | SourceKind::ProcessCmykIndirect if comps.len() == 4 => {
             Some([comps[0], comps[1], comps[2], comps[3]])
         }
         SourceKind::SeparationOrDeviceN { names } => {
@@ -525,7 +576,10 @@ pub fn authored_tints(kind: &SourceKind, comps: &[f32]) -> Option<[f32; 4]> {
         // UNAVAILABLE for a group and "the special overprinting blend mode
         // reverts to Normal". A group result has no authored tints to read
         // because it is not an authored colour at all.
-        SourceKind::DeviceCmykDirect | SourceKind::OtherProcess | SourceKind::Group => None,
+        SourceKind::DeviceCmykDirect
+        | SourceKind::ProcessCmykIndirect
+        | SourceKind::OtherProcess
+        | SourceKind::Group => None,
     }
 }
 
@@ -636,6 +690,21 @@ pub fn classify(
         // which is why the obligation is stated here, where somebody
         // adding a call to `classify` will read it.
         ColorSpace::Indexed { base, .. } => classify(base, in_image_sample, scope),
+        // ★★ `Pass 165.0` -- an `ICCBased` `/N 4` over `DeviceCMYK` states real
+        // CMYK tints, and they were being thrown away and re-derived from the
+        // flattened paint colour.
+        //
+        // Deliberately NARROW. Only `/N 4` with a `DeviceCMYK` alternate, and
+        // only outside an image sample -- the same qualifier Table 149 gives
+        // Row 1 and for the same reason. Every other `ICCBased` (1- or
+        // 3-component, or a non-CMYK alternate) still falls to the catch-all
+        // and is unchanged, so this cannot quietly widen the `Pass 143.0`
+        // grey/RGB upgrade to spaces that never had it.
+        ColorSpace::IccBased {
+            n: 4, alternate, ..
+        } if !in_image_sample && matches!(**alternate, ColorSpace::DeviceCmyk) => {
+            Some(SourceKind::ProcessCmykIndirect)
+        }
         _ => Some(SourceKind::OtherProcess),
     }
 }
@@ -786,7 +855,13 @@ pub fn cmyk_group_rules(
         // "Any process colour space" — every process component is `c_s`,
         // in all three columns. Overprint is inert, which is why a
         // DeviceRGB or DeviceGray paint with /OP true changes nothing.
-        SourceKind::OtherProcess => [ComponentRule::Source; 4],
+        //
+        // ★ `ProcessCmykIndirect` belongs HERE, not in the arm above. Its
+        // tints are readable (that is what `authored_tints` is for) but it is
+        // not a `DeviceCMYK` source, and §8.6.7 scopes `OPM 1`'s zero-tint
+        // rule to one. Putting it in the `DeviceCmykDirect` arm would trade a
+        // colour bug for an overprint bug.
+        SourceKind::OtherProcess | SourceKind::ProcessCmykIndirect => [ComponentRule::Source; 4],
 
         SourceKind::SeparationOrDeviceN { names } => {
             let mut out = [if op {
@@ -949,7 +1024,10 @@ pub fn composite(
 #[must_use]
 pub fn names_a_process_colorant(kind: &SourceKind) -> bool {
     match kind {
-        SourceKind::DeviceCmykDirect | SourceKind::OtherProcess | SourceKind::Group => true,
+        SourceKind::DeviceCmykDirect
+        | SourceKind::ProcessCmykIndirect
+        | SourceKind::OtherProcess
+        | SourceKind::Group => true,
         SourceKind::SeparationOrDeviceN { names } => names.iter().any(|n| match n {
             Colorant::All => true,
             Colorant::None => false,
@@ -1193,6 +1271,124 @@ mod tests {
             Some(sep(&["Cyan"])),
             "an Indexed space must classify as the space its palette entries \
              are written in"
+        );
+    }
+
+    /// An `ICCBased` `/N 4` over `DeviceCMYK` builds the space the way the
+    /// interpreter does, for the tests below.
+    fn iccbased_cmyk() -> ColorSpace {
+        ColorSpace::IccBased {
+            n: 4,
+            alternate: std::sync::Arc::new(ColorSpace::DeviceCmyk),
+            alternate_explicit: true,
+        }
+    }
+
+    /// ★★ `Pass 165.0` — an `ICCBased` `/N 4` states real CMYK tints, and they
+    /// must be READABLE without becoming a `DeviceCMYK` source.
+    ///
+    /// Before this, the space classified as [`SourceKind::OtherProcess`],
+    /// `authored_tints` returned `None`, and the caller fell through to
+    /// `rgb_to_cmyk` on the already-flattened paint — a max-GCR transform its
+    /// own doc calls *"chosen for exact round-tripping, not for accuracy"*.
+    ///
+    /// Measured on a PDF/X-4 patch: authored `.75 0 1 0` came back as
+    /// `(0.7382, 0, 0.5942, 0.2906)` — **yellow collapsed 1.0 → 0.59 and black
+    /// invented at 0.29** — rendering `(24, 140, 108)` where the authored tints
+    /// give `(47, 181, 73)`. Acrobat renders `(59, 171, 51)`, so the authored
+    /// value is also the closer one.
+    #[test]
+    fn iccbased_cmyk_states_its_tints_and_they_are_read() {
+        let kind = classify(&iccbased_cmyk(), false, OverprintZeroTintScope::default())
+            .expect("an ICCBased CMYK space classifies");
+        assert_eq!(
+            kind,
+            SourceKind::ProcessCmykIndirect,
+            "an ICCBased /N 4 over DeviceCMYK must classify as the variant \
+             whose tints are readable"
+        );
+        assert_eq!(
+            authored_tints(&kind, &[0.75, 0.0, 1.0, 0.0]),
+            Some([0.75, 0.0, 1.0, 0.0]),
+            "the operands ARE the tints; returning None here is what threw the \
+             authored value away and re-derived it from its own approximation"
+        );
+    }
+
+    /// ★★★ …and it must **not** become a `DeviceCMYK` source, because that is
+    /// the one Table 149 row where `OPM 1` differs from `OPM 0`.
+    ///
+    /// This is the test that stops the tempting one-line fix. Reclassifying
+    /// `ICCBased` as [`SourceKind::DeviceCmykDirect`] would have made
+    /// `authored_tints` work *and* silently changed what overprint preserves:
+    /// §8.6.7 scopes the zero-tint rule to a `DeviceCMYK` source, which an
+    /// `ICCBased` is not. That trades a colour bug for an overprint bug, and
+    /// nothing else in the suite would have caught it.
+    #[test]
+    fn iccbased_cmyk_does_not_get_device_cmyk_overprint_semantics() {
+        let icc = classify(&iccbased_cmyk(), false, OverprintZeroTintScope::default())
+            .expect("classifies");
+        let device = classify(
+            &ColorSpace::DeviceCmyk,
+            false,
+            OverprintZeroTintScope::default(),
+        )
+        .expect("classifies");
+        assert_ne!(icc, device, "the two must not collapse into one variant");
+
+        // A zero component under OP true / OPM 1: the DeviceCMYK source
+        // preserves the backdrop, the ICCBased source must not.
+        let tints = [0.0, 0.5, 0.5, 0.0];
+        let icc_rules = cmyk_group_rules(&icc, tints, true, 1);
+        let device_rules = cmyk_group_rules(&device, tints, true, 1);
+
+        assert_eq!(
+            device_rules[0],
+            ComponentRule::Backdrop,
+            "control: a DeviceCMYK source with OPM 1 preserves a zero component"
+        );
+        assert_eq!(
+            icc_rules,
+            [ComponentRule::Source; 4],
+            "an ICCBased source is Table 149 Row 2 -- every component is the \
+             source, in all three columns. If this ever reads Backdrop, the \
+             colour fix has been made by breaking overprint."
+        );
+    }
+
+    /// The narrowness is deliberate and is asserted, so a later widening is a
+    /// decision rather than an accident.
+    ///
+    /// Only `/N 4` over `DeviceCMYK`, and only outside an image sample — the
+    /// same qualifier Table 149 gives Row 1, for the same reason. A 3-component
+    /// `ICCBased`, or one whose alternate is not CMYK, states no CMYK tints and
+    /// must still bridge.
+    #[test]
+    fn the_iccbased_arm_is_narrow_on_purpose() {
+        let scope = OverprintZeroTintScope::default();
+
+        let rgb_alt = ColorSpace::IccBased {
+            n: 3,
+            alternate: std::sync::Arc::new(ColorSpace::DeviceRgb),
+            alternate_explicit: true,
+        };
+        assert_eq!(
+            classify(&rgb_alt, false, scope),
+            Some(SourceKind::OtherProcess),
+            "a 3-component ICCBased states no CMYK tints"
+        );
+
+        assert_eq!(
+            classify(&iccbased_cmyk(), true, scope),
+            Some(SourceKind::OtherProcess),
+            "IN A SAMPLED IMAGE it stays OtherProcess -- the same qualifier \
+             Table 149 gives Row 1, and a CMYK image already lands there"
+        );
+
+        assert_eq!(
+            authored_tints(&SourceKind::ProcessCmykIndirect, &[0.5, 0.5, 0.5]),
+            None,
+            "three operands are not four tints, whatever the space said"
         );
     }
 
