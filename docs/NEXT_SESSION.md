@@ -238,8 +238,59 @@ three of them were previously mis-stated in this file.
    colours can differ at different scales; *"slightly"* understates 23/41/35
    counts.
 
-   ⇒ **Next: measure the CMYK buffer's sRGB round trip.** Not the table — that
-   is cleared. The suspect is the buffer's own conversion.
+   ★★★ **DIAGNOSED TO THE LINE, 2026-08-29. Two defects, and the second is
+   the worse one by this project's own rules.**
+
+   **The buffer is innocent.** `CmykBuffer::to_srgb_over_white` converts out
+   through the *same* `cmyk_to_srgb_with` as the direct call. The value is
+   wrong on the way **IN**. Same four numbers, same buffer, same intent:
+
+   | entry path | rendered |
+   |---|---:|
+   | `DeviceCMYK` — `.75 0 1 0 k` | **(47, 181, 73)** ✅ |
+   | `ICCBased` — `/CS1 cs .75 0 1 0 scn` | **(24, 140, 108)** ❌ |
+
+   **DEFECT A — an authored CMYK value is thrown away and re-derived from its
+   own sRGB approximation.** `overprint::authored_tints` keeps the authored
+   tints for `SourceKind::DeviceCmykDirect` and for
+   `SourceKind::SeparationOrDeviceN`, and returns **`None`** for
+   `OtherProcess` — which is where an **ICCBased CMYK** lands. `interpret.rs`
+   then falls through to `overprint::rgb_to_cmyk(paint colour)`, a **max-GCR**
+   transform its own doc calls *"chosen for exact round-tripping, not for
+   accuracy."*
+
+   **Proven numerically, exact to the integer on all three channels:**
+
+   ```text
+   authored          cmyk .75 0 1 0        -> (47, 181, 73)
+   reconstructed     cmyk .7382 0 .5942 .2906
+   round-tripped                            -> (24, 140, 108)
+   observed ICCBased                        -> (24, 140, 108)
+   ```
+
+   Yellow collapses **1.0 → 0.59** and black is **invented at 0.29**.
+
+   ★ **The fix is one classification.** An `ICCBased` space with `/N 4` — which
+   pdfce *already* resolves to `DeviceCMYK` through the `/Alternate` fallback —
+   should classify as `DeviceCmykDirect`, not `OtherProcess`. Small change;
+   **but it moves rendered colour on every PDF/X file with ICCBased CMYK**, so
+   it needs the conformance suite re-measured in the same Pass. That is why it
+   is not a tick-sized fix.
+
+   ⚠⚠ **DEFECT B — `cmyk_bridged_pixels` REPORTS 0 WHILE THIS HAPPENS.**
+   `cmyk_paint.rs`'s doc says *"Every such paint is counted by the buffer's own
+   bridge counter, so a page composited largely from reconstructions says so."*
+   Measured on the failing render: **`cmyk_bridged_pixels=0`** across 40 000
+   reconstructed pixels — identical to the correct DeviceCMYK render.
+
+   The reconstruction at `interpret.rs:5392` is **not** the one the counter
+   watches. So pdfce approximated a colour and **reported that it had not**,
+   which is project rule 4 broken rather than an accuracy gap. **Fix B even if
+   A is deferred** — an honest counter would have led here in one render
+   instead of six hypotheses.
+
+   ★ Note `BrushSpec::with_cmyk` is called **only from tests**; production
+   never populates that field. Worth understanding before touching either.
 
    ★ **The five refutations that came first**, each a synthetic isolating one
    ingredient, every one rendering the correct `(47, 180, 73)`:
