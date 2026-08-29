@@ -96,6 +96,342 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 167.0` (`d59ce99`, 2026-08-29) — a form field can be copied and pasted, and the paste is not lossy: `formclip`, `copy_field`/`paste_field`, three CLI subcommands, and two defects that only a fixture built AWAY FROM ITS DEFAULTS could see — filed 2026-08-29 (326th filing)
+
+**Sourcing, and it is different from the last two filings.** This dispatch
+carried an explicit `R228` instruction — *"two of my dispatches were wrong
+earlier this session; verify the commit hashes and file contents directly
+before repeating them"* — and this filing **had a shell and used it**. Every
+figure below was checked here, not relayed:
+
+| claim | how it was checked |
+|---|---|
+| `c54f582` and `d59ce99` exist, in that order, on `main` | `git log --oneline -8` |
+| both are on `origin/main` | `git log --oneline -3 origin/main` — tip is `d59ce99` |
+| working tree clean | `git status --short` — empty |
+| the 14 files this Pass touches | `git show --stat --format="" d59ce99` |
+| `formclip.rs` really defines the six named types and four constants | `grep -n` over `crates/pdfce-core/src/formclip.rs` |
+| `copy_field`/`paste_field`/`CommandKind::PasteFormField`/the three new `EditError` variants/`place_new_field_deferred` | `grep -n` over `crates/pdfce-core/src/edit.rs` (lines 394, 5303, 5317, 5330, 14327, 30725, 30785) |
+| `ClipError::ClipTooLarge` | `grep -rn` over `crates/pdfce-core/src/` |
+| the three CLI subcommands | `grep -n "CopyField\|InspectFieldClip\|PasteField"` over `crates/pdfce-cli/src/main.rs` |
+| `docs/core-api/02-editing-and-saving.md` §1.26 exists and the verb-index heading now reads 161 | `grep -n "^## \|^### 1\."` on the file |
+| both fixtures and the generator and the fuzz target are tracked | `ls fixtures/synthetic/forms/`, `ls fuzz/fuzz_targets/clipboard_payloads.rs` |
+| the operator ruling is quoted correctly | **opened** `request_form_fields_cannot_be_pasted_and_half_of_it_already_works.md` — lines 5–6 |
+
+Everything checked agreed with the dispatch. **Test counts, `clippy`/`fmt`
+results, gate results and the CLI smoke-test transcript are relayed** — those
+are runs, not file contents, and nothing on disk records them.
+
+**Origin.** `pdfceGUI` filed
+`D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/request_form_fields_cannot_be_pasted_and_half_of_it_already_works.md`
+(2026-08-29, measured against `e9412f6`). **Operator ruling, verbatim from
+that file's own line 5:** *"ctrl v for paste as new. ctrl shift v for paste
+as duplicate."* Two chords, two policies, one verb.
+
+**★ The design argument, which is the durable half.** The consuming shell had
+weighed a clip against six property setters, and its own reasoning is why the
+clip won: **a setter has to EXPRESS a property; a clip only has to CARRY it.**
+Expressing `/DA` means reconciling a named font against the destination's
+`/AcroForm /DR /Font` — a Pass on its own. Expressing `/AA` means modelling an
+action dictionary pdfce deliberately never executes. Expressing `/MK` means
+modelling ten appearance-characteristic keys `forms::Widget` declines to model
+(`R43`). A clip sidesteps all three: it takes the bytes that are there, owns
+them, and puts them back. **The price is that it must own a CLOSURE, not
+pointers**, because the destination is usually a different document — and that
+closure is the bulk of the module. Recorded as **decision 099**.
+
+**What ships.** `crates/pdfce-core/src/formclip.rs` (1,399 lines) —
+`FieldClip`, `FieldClipWidget`, `FieldPastePolicy` (`NewField` /
+`AdditionalWidget`), `PasteTooltip` (`Undecided`/`Carry`/`Text`/`Declined`),
+`FieldPasteOutcome`, and `FIELD_CLIP_VERSION` = 1, `FIELD_CLIP_MAGIC` =
+`b"PDFCEFLD\x00\x00\x00\x01"`, `MAX_CLIP_OBJECTS` = 4096, `MAX_CLIP_WIDGETS` =
+512. `EditSession::copy_field(&self, fqn) -> Result<FieldClip, EditError>`
+allocates and stages nothing; `EditSession::paste_field(&mut self, clip,
+page_index, rect, policy) -> Result<FieldPasteOutcome, EditError>` is **one
+undo entry however many objects arrive**, under the new
+`CommandKind::PasteFormField`. Three new `EditError` variants
+(`FieldHasNoWidget`, `SignedFieldNotCopyable`, `FieldClipUntyped`) and one new
+`ClipError` variant (`ClipTooLarge`). `pdfce-cli` gains `copy-field`,
+`inspect-field-clip`, `paste-field`.
+
+**★★ The `/DR` font travels, and nobody asked for it.** §12.7.3.3 makes the
+`/DA`'s `Tf` name resolvable in `/AcroForm /DR /Font`. A field carrying
+`/TB 14 Tf 0 0 1 rg` into a document with no `/TB` **renders correctly in
+pdfce** — its `/AP` carries its own resources — and re-renders wrong in every
+viewer that regenerates from `/DA`. **That is a document which works here and
+nowhere else, which is worse than a visible failure**, because the producing
+tool is the one place it cannot be observed. The clip carries the font entry;
+the paste installs it, and where the destination already binds that name to a
+*different* font, installs it under a free name and rewrites the `/DA` to
+match. Neither document's look changes. Escalated to `C:\personal_rag\pdf\`.
+
+**`/Ff` travels as an integer**, so `DoNotSpellCheck`, `DoNotScroll`,
+`FileSelect`, `RichText` and `CommitOnSelChange` arrive for free — flags **no
+authoring spec in pdfce can express**, which is why there is a test on
+`DoNotSpellCheck` specifically: a read-and-re-author path structurally cannot
+reproduce it.
+
+**Never carried, each with a stated reason:** `/T` (identity — the policy
+supplies it), `/Parent` and `/Kids` (the source's tree), `/P` (a page in
+another document), `/StructParent` (an index into the *source's* parent tree),
+`/NM` (§12.5.2 requires per-page uniqueness, so carrying one guarantees a
+collision the second time you paste onto a page), `/M` (a modification date on
+an object that did not exist then; pdfce never reads a clock).
+
+**Two refusals at the COPY, not the paste**, because both are conditions of
+the *source*, so refusing early costs one click instead of a placement gesture
+the operator then undoes. `FieldHasNoWidget` — a value-only terminal (legal
+under Table 220) has nothing to place at a rectangle. `SignedFieldNotCopyable`
+— dropping `/V` and disclosing it was available; what stopped it is **what
+would have travelled**: the widget's baked *"signed by"* artwork, into a file
+nobody signed. pdfce declines to make that object rather than making it and
+warning about it, the same posture redaction takes. **An UNSIGNED `/Sig` field
+copies normally**, which is the useful half and is how a signature block
+reaches the next drawing.
+
+**Disclosures are sentences, not booleans, and the reason is structural.**
+`FieldAuthorDisclosures` is a fixed struct of flags because field *creation's*
+surprises are a **closed set** — pdfce chose every value. A paste's are not:
+what could be dropped, renamed, translated or degraded depends on the document
+the clip came from. So `FieldPasteOutcome::disclosures` is `Vec<String>`,
+matching `PasteOutcome`. Rule 4 in its **059** form: the pasted field renders
+exactly as a saved-and-reopened one will, nothing on the page marks it as
+pdfce's guess, and the disclosure lives off-canvas — stderr in the CLI, the
+parseable summary on stdout.
+
+**Serialisation is total, and this is the contrast with `ObjectClip`.**
+Magic-prefixed, versioned, **refuses a newer format rather than
+half-understanding it**, count-guarded before any allocation is sized from a
+length prefix, depth-guarded on the closure walk. Object values go out through
+the crate's own `write_object` and come back through its own `Parser`, so the
+COS grammar has **one implementation on each side**. Unlike `ObjectClip` —
+which drops its annotations because they are rich Rust enums — **everything a
+`FieldClip` holds survives the round trip**, because a field clip is
+dictionaries and streams; a test asserts that a clip through bytes and a clip
+that stayed in memory produce **byte-identical documents**.
+
+**★★★ Three defects, and the third is the one with a precedent.**
+
+1. A merged (Shape A) field's `/T` leaked into the clip's **widget** half, and
+   the paste folds the widget half over the field half — so **the source's
+   name silently won and every paste came back under the original name**.
+   Three fields named `TitleBlock.Revision`, all well formed.
+2. The same leak with `/DA` **undid the font-resource rename the paste had
+   just performed AND DISCLOSED**. The disclosure said `/TB_1`; the field said
+   `/TB`. ***A disclosure can be true about what the code intended and false
+   about what it wrote.***
+3. **Structural, and a repeat of a class this project has already named:**
+   `paste_field` called `place_new_field` (which registers the new root in
+   `/AcroForm /Fields`) and then wrote the `/AcroForm` **again** itself for
+   `/DR`, `/CO` and `/SigFlags`. **Two whole-dictionary writes to one object
+   inside one command do not compose** — each is computed from the pre-command
+   state, so the second silently discards the first. Fixed by splitting
+   `place_new_field` into a thin wrapper over a new
+   `place_new_field_deferred` (`edit.rs:14327`) that hands the root back, so a
+   caller with several `/AcroForm` jobs does them in **one** patch. §12.7.3.1
+   makes `/Fields` the root list, so a node with a `/Parent` must not appear
+   there — the walk would reach it twice and give it two fully-qualified
+   names, which is exactly what the symptom was.
+
+**★★★★ THE FIXTURES ARE WHY 1 AND 2 WERE FOUND, AND THE GENERAL FORM IS THE
+FINDING.** `fixtures/synthetic/forms/rich-field-form.pdf` (1,614 B) and
+`rival-font-form.pdf` (540 B), byte-authored by
+`tools/gen-form-clipboard-fixtures.py` (`LEGAL.md` §5 category (a), wholly
+synthetic; provenance appended to `fixtures/synthetic/forms/PROVENANCE.md`).
+
+***Field CREATION chooses every value itself, so a fixture carrying the
+authoring defaults can verify it. A field COPY is judged entirely on values
+pdfce did NOT choose — and every one of them is invisible when the fixture's
+value equals the authoring default.*** A `/DA` of `/Helv 0 Tf 0 g` cannot show
+that font, size and colour travelled: it is exactly what a re-author writes
+anyway. A black `/MK /BC` cannot show that the border colour travelled:
+`add_text_field` hard-writes black. A `/DA` naming `/Helv` cannot show that
+the `/DR` font travelled: `ensure_default_resources` puts `/Helv` in every
+destination regardless. **So nothing in `rich-field-form.pdf` is at its
+default**, and `rival-font-form.pdf` exists solely so a paste that silently
+CLOBBERED the destination's own `/TB` would fail — its `/TB` is Courier where
+the source's is Helvetica-Bold. **Tests written against `demo-form.pdf` would
+have passed against an implementation that carried nothing at all.**
+
+Filed as **instances 7 and 8 of `R225`** (see that rule's dated instance note,
+below) — a new *kind of coincidence* under the cause `R225` already names, not
+a new cause, so **no re-mint**. The actionable general half is now
+`D:/dev/rag/rust/a_copy_verb_is_judged_on_values_it_did_not_choose_so_a_default_valued_fixture_cannot_test_it.md`.
+
+**★★ `ObjectClip::from_bytes` had NO fuzz target at all, since `Pass 120.1`.**
+It parses untrusted bytes that arrive from outside the process. Found while
+adding the field clipboard, **not by review**, because *a clipboard reads like
+an internal format and is in fact a file format*. `fuzz/fuzz_targets/
+clipboard_payloads.rs` now covers **both** readers, round-trips every
+successful parse, and feeds each re-serialisation back in at four truncation
+points — a partial write being the single most likely real-world corruption
+for a payload that leaves the process. **Not `R153`**: `R153` is about an
+existing harness going stale as its module grows; this is a deserializer that
+never had a harness at all. **No mint** (one instance; the 2026-08-05 ruling
+forbids elevating per occurrence) — filed to
+`D:/dev/rag/rust/an_internal_looking_serialisation_that_crosses_the_process_boundary_is_a_file_format.md`.
+
+**★ `/AcroForm /CO` is REQUIRED once any field carries an `/AA /C`**
+(§12.7.2 Table 218). A paste that carries a calculate action must append the
+field to `/CO` or the destination becomes non-conformant. **The request did
+not mention this**; it came from the spec RAG (`iso32000__s__12.7.2.md`).
+Escalated to `C:\personal_rag\pdf\`.
+
+**★ A near-miss recorded because the deletion was invisible to every
+instrument.** An `rm -rf` on a directory the engineer assumed it had created
+destroyed two pre-existing files — `crates/pdfce-core/examples/
+gray_equivalence_probe.rs` and `orphan_probe.rs`. Caught by `git status`
+before committing and restored with `git checkout`; nothing was lost. The
+interesting half is that **the build, the tests and `clippy` were all green
+with the files gone** — `examples/` is not compiled by `cargo test`, so the
+only instrument that could see it was `git status`. Filed to
+`C:\personal_rag\claude_code\`.
+
+**Verification (relayed — these are runs, not file contents).**
+`cargo test --workspace` green; `cargo test --workspace --all-features` green;
+`crates/pdfce-core/tests/form_field_clipboard.rs` **24/24**; `formclip` unit
+tests **7/7**; one new doc-test. `cargo fmt --check` clean; `cargo clippy
+--workspace --all-targets -- -D warnings` clean. `cargo tree -p pdfce-core`
+and `-p pdfce-render` show **no GUI dependency** (grep for
+`egui`/`eframe`/`winit`/`wgpu`/`glow` returned nothing) — invariant 2 holds.
+`tools/run-gates.sh` **PASS, 29 commands**, including both filing gates.
+`tools/check-core-api-verbs.py` PASS (**159 → 161** documented verbs; `EditError`
+**92 → 95** variants). `cd fuzz && cargo check` clean. **CLI smoke test against
+the real binary:** `copy-field` → `inspect-field-clip` → `paste-field` under
+both policies, including cross-document into a document with **no `/AcroForm`
+at all**, then `list-fields` read the pasted field back with `flags=0x400000`,
+`aa=1`, `calc_order=1`, `border=D/2.00`; every refusal exercised at the shell
+(no policy flag, no tooltip answer, a signed signature field, a non-clip
+payload).
+
+**No new Cargo dependency**, so no `PRIOR_ART.md` entry and no
+`THIRD_PARTY_LICENSES.md` regeneration is owed (project rule 13). **Packaging
+untouched**, so no smoke test was run.
+
+**★ Hard rule 11 sweep — ONE SURVIVOR, OWED TO THE ENGINEER.**
+`docs/NEXT_SESSION.md:279` states §02's size as *"3,161 lines, 78 clauses, 159
+verbs, `EditError` 92 variants — the gate re-derives all of these"*. **All
+four figures are now wrong** (3,331 / 85 / 161 / 95). `NEXT_SESSION.md` is
+engineer-owned (`R216`), so this is **reported, not edited**; the engineer
+said it will overwrite the file, which discharges this only if the replacement
+carries the new numbers. **The sentence "the gate re-derives all of these" is
+what hid it** — a claim that a figure is machine-maintained suppresses the
+reading that would notice it is not. `docs/ROADMAP.md:1391` holds the same old
+pair and is **not** a survivor: it sits in `Pass 161.0`'s *Sourcing* paragraph
+as a dated relay, which append-only history keeps correct.
+
+**★ The consumer-facing contract is `docs/core-api/02-editing-and-saving.md`
+§1.26, and that is deliberate.** A reply was written to the shared channel at
+`D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/reply_the_field_clipboard_ships_and_your_ctrl_v_is_lossless_now.md`
+(verified present) — **but that folder is not in git**, so per its own
+`README.md` the durable record has to be a pdfce document. §1.26 is it:
+verified present at line 2119, with the two signatures, the carried-key list,
+the `/DR`-font rationale and the refusals. `docs/core-api/index.md` updated in
+the same commit.
+
+**`FEATURES.md` — three rows changed, one of them new.** New *Forms
+(AcroForm)* row, `[x]` core / `[x]` cli / **`[ ]` gui** — `pdfceGUI` filed the
+request and has not consumed the reply, so **the gui box is genuinely empty
+and was not rounded up** (the maintenance contract's "never tick a box you
+cannot substantiate"). The *Copy/cut/paste a selection* row (`ObjectClip`,
+line 164) **amended with a pointer**: its *"widgets refuse by name"* clause is
+still correct **for the object-clipboard route** and would otherwise read as
+contradicting the new row. The *Create a field* row cross-referenced, since
+`add_*_field` with an existing `/T` remains a legitimate way to add a widget
+and is **not** deprecated.
+
+**Ledger.** Pass ceiling `166.0` → `167.0`; next free `167.1` / new major
+`168.0`. **Standing rules ceiling `R229` → `R230`** (minted below); next free
+`R231`. **Decision ceiling `098` → `099`** (`ARCHITECTURE.md` §12); next free
+`100`. `FEATURES.md`: three rows changed (one new). Filing ordinal `325` →
+`326`.
+
+### `c54f582` (2026-08-29) — two subcommands advertised themselves as a DIFFERENT command in shipped `--help`, and a gate so the next one is found on purpose — **no Pass ID; a defect fix plus tooling** — filed 2026-08-29 (326th filing)
+
+**No Pass ID claimed, and that is correct.** This changes nothing pdfce can do
+to a PDF. It corrects text pdfce prints about itself and adds a gate.
+
+**Sourcing.** `git show --stat --format="" c54f582` — four files
+(`.github/workflows/ci.yml` +16, `crates/pdfce-cli/src/main.rs` +15/−8,
+`tools/check-ci-parity.py` +1, `tools/check-cli-help-leads.py` +131). The
+diff itself was read here, not relayed; the gate's measured counts and the
+sabotage run are relayed.
+
+**What was wrong.** In clap-derive **a `///` doc comment IS the shipped
+`--help` text, and only its FIRST line becomes the short summary.** Two
+`Command` variants had a paragraph belonging to a neighbour spliced into the
+top of their block, so `clap` promoted the wrong paragraph and the real
+summary sat below, invisible:
+
+| variant | its shipped summary read | whose subject that is |
+|---|---|---|
+| `fetch-ocr-models` | *"Render a page to a PNG image."* | `render-page`'s. It downloads model weights. |
+| `print` | *"**Report what printing this document WOULD do**, without printing"* | `print-preview`'s — while its own *"**Send pages to a printer.**"* sat **eleven lines down** |
+
+**Both pre-existing at HEAD**, neither introduced by this session's work.
+**`print` is the worse of the two**: a scripted caller reading `pdfce-cli
+--help` was told the command is a reporter. **It is the command with
+`--send`.**
+
+**Why it survived, which is the part worth keeping.** Nothing failed. It
+compiled, every test passed, `cargo doc` rendered it, and **the prose was
+individually accurate — only in the wrong place**. A reviewer reading the diff
+that introduced it would have seen correct sentences. The only way to see the
+defect is to read the rendered `--help` **against the command names**, and no
+gate did that. It was found by running `pdfce-cli --help` and reading it while
+smoke-testing something unrelated.
+
+**The fix, and the asymmetry in it is deliberate.** `fetch-ocr-models`: the
+stray line **deleted** — it duplicated `render-page`'s subject and added
+nothing. `print`: **REORDERED, not deleted** — every word kept, its own bold
+summary promoted to line 1, and the dry-run paragraph demoted to body prose
+**rewritten to say "without `--send`"** so it reads as a description of *this*
+command rather than of `print-preview`. (Verified in the diff: the `print`
+hunk is +5/−5 with no prose lost.)
+
+**The gate.** `tools/check-cli-help-leads.py` (131 lines), wired into
+`.github/workflows/ci.yml:477` and registered in `tools/check-ci-parity.py:115`
+so `tools/run-gates.sh` picks it up — **both wirings verified by `grep`
+here**, which matters because `R209` exists precisely because a CI job with no
+local runner is unobserved rather than passing.
+
+The invariant comes from this project's own house style (every subcommand doc
+opens with a bold lead-in): ***a `///` line that STARTS a bold lead-in must be
+the FIRST line of its doc block.*** A bold lead-in appearing after a line that
+closed a sentence means a second summary was spliced into somebody else's
+block. Bold used mid-sentence for emphasis is unaffected (the line does not
+start with `**`); a lead-in wrapping onto a second line is unaffected (the
+previous line does not end in a full stop). **Measured before the fix: 2
+candidates across 31,000 lines, 2 true positives, 0 false positives.**
+Verified after the fix **by sabotage** — re-inserting the `fetch-ocr-models`
+line makes it red with `file:line` and both sentences printed; removing it
+makes it green. (`R225`: the sabotage is discriminating here because the
+fixture is the real source tree, and the wrong implementation — a scan that
+only looks at line 1 — would report **zero**, not two.)
+
+**Minted as `R230`, below.** The engineer asked for the mint and left wording,
+number and shape to this role. Taken as a **new rule rather than an amendment**
+to the doc-comment-orphaning family, for a reason the family does not cover:
+orphaning is about a comment landing on the **wrong item**, and the existing
+`D:/dev/rag/rust/a_doc_block_inserted_above_the_summary_line_buries_it_and_every_gate_passes.md`
+is about a summary buried on the **right item in a rustdoc index**. Neither
+says what makes this one expensive: **the buried summary is not merely
+unhelpful, it is a description of a different command, and it is shipped UI**.
+The rustdoc file explicitly declined a gate (*"deciding which paragraph should
+be an item's summary requires knowing what the item is for"*); clap-derive
+plus this project's house style supplies the missing syntactic anchor, so a
+gate **is** possible here — which is itself the new fact.
+
+**`FEATURES.md` — checked, ZERO rows changed, stated explicitly per this
+role's maintenance contract.** A `--help` correctness fix and a source-scanning
+gate tick no capability box: nothing pdfce can do to a PDF changed. The CLI
+subcommand surface is unchanged in count and in behaviour — only the text
+describing two of them.
+
+**No `ARCHITECTURE.md` §12 decision entry** for this commit. Choosing a gate
+over a note is not a crate-boundary, invariant or library decision; the mint
+below is where it belongs.
+
 ### `Pass 166.0` (`6dbe953`, 2026-08-29) — the CLI now deploys to OneDrive on every release, alternating two slots so a previous version always survives beside the current one — filed 2026-08-29 (325th filing)
 
 **Sourcing.** No shell this filing (librarian invocation, hard rule 8). Both
@@ -118971,6 +119307,63 @@ same cause (hashes exist only at commit time), two different failure modes.
   `D:/dev/rag/rust/a_sabotage_can_only_be_as_discriminating_as_the_fixture_it_runs_on.md`
   as a dated footer**, per hard rule 4 (edit, do not duplicate).
 
+  **★★ DATED INSTANCE NOTE — 2026-08-29 (326th filing), `Pass 167.0`
+  (`d59ce99`): INSTANCES 7 AND 8, AND THEY NAME A KIND OF COINCIDENCE THE
+  TABLE DID NOT HAVE — *THE AUTHORING DEFAULT*. NO RE-MINT; NO NEW CAUSE;
+  CEILING STAYS `R225`, NEXT FREE `R226`.**
+
+  Both were live defects in `EditSession::paste_field`, both shipped green
+  against the existing corpus, and both were caught only by a fixture built so
+  that **nothing in it is at its authoring default**:
+
+  | # | the two answers that coincided | on what |
+  |---|---|---|
+  | **7** | the clip carrying the source's `/T` in its **widget** half vs. the policy supplying a new name | any fixture where the field is Shape B (unmerged), so no `/T` sits on the widget to leak |
+  | **8** | the paste's `/DA` font-resource **rename** surviving vs. being undone by the same widget-half fold | a `/DA` naming `/Helv`, which `ensure_default_resources` installs in every destination anyway |
+
+  **★★★ THE GENERAL FORM, WHICH IS THE ROW TO CARRY: A *CREATE* VERB AND A
+  *COPY* VERB HAVE OPPOSITE FIXTURE REQUIREMENTS.** Field **creation** chooses
+  every value itself, so a fixture carrying the authoring defaults can verify
+  it — the expected value is a constant the test can write down. A field
+  **copy** is judged **entirely on values pdfce did NOT choose**, and every one
+  of them is **invisible when the fixture's value equals the authoring
+  default**, because *"carried it"* and *"re-derived it"* then produce the same
+  bytes. Worked, from this Pass:
+
+  - a `/DA` of `/Helv 0 Tf 0 g` cannot show that font, size and colour
+    travelled — it is exactly what a re-author writes anyway;
+  - a black `/MK /BC` cannot show that the border colour travelled —
+    `add_text_field` hard-writes black;
+  - a `/DA` naming `/Helv` cannot show that the `/DR` **font entry**
+    travelled — `ensure_default_resources` puts `/Helv` in every destination
+    regardless.
+
+  **Tests against `demo-form.pdf` would have passed against an implementation
+  that carried NOTHING AT ALL.** The remedy is `R225`'s own — change the input
+  — discharged as `fixtures/synthetic/forms/rich-field-form.pdf` (nothing at
+  its default) and `rival-font-form.pdf` (a destination whose `/TB` is Courier
+  where the source's is Helvetica-Bold, so a paste that silently **clobbered**
+  the destination's own font would fail).
+
+  **★ Why the founding table would not have caught this.** Its degenerate-value
+  row reads *"zero, or a symmetric input"*, and instance 4b already widened that
+  to *a fixture on the symmetry axis of the transform under test*. **An
+  authoring default is a third face of the same thing and reads as none of
+  them**: it does not look like zero, it does not look symmetric, and it looks
+  *representative* — it is what the corpus's own generator writes, which is
+  precisely why it is the value the wrong implementation also produces.
+  **Whenever the thing under test is CARRIAGE rather than CHOICE, the
+  authoring default is the one value that cannot test it.**
+
+  **Instance count now 8 (3 + 3 + 2).** Filed under `R225` because the remedy
+  is `R225`'s and the cause is `R225`'s. The actionable general half is a new
+  file rather than a footer on the sabotage finding, because a future engineer
+  building any copy/clone/carry verb will grep for the **verb**, not for
+  *sabotage*:
+  `D:/dev/rag/rust/a_copy_verb_is_judged_on_values_it_did_not_choose_so_a_default_valued_fixture_cannot_test_it.md`,
+  cross-referenced both directions with
+  `D:/dev/rag/rust/a_sabotage_can_only_be_as_discriminating_as_the_fixture_it_runs_on.md`.
+
 - **R226 — A DEFERRED GATE MUST BE RE-RUN WITH THE FLAG THAT RESOLVES THE
   DEFERRAL BEFORE THE SESSION ENDS, OR THE DEFERRAL NEVER RESOLVES.** Minted
   2026-08-28 (315th filing), from `Pass 160.0` (`6624e18`).
@@ -119181,6 +119574,104 @@ same cause (hashes exist only at commit time), two different failure modes.
   `098`.
 
   **Standing rules ceiling `R228` → `R229`; next free `R230`.**
+
+- **R230 — IN A `clap`-DERIVE COMMAND ENUM A `///` DOC COMMENT IS SHIPPED
+  USER INTERFACE, AND ONLY ITS FIRST LINE IS THE SUMMARY. A PARAGRAPH
+  ADDED ABOVE THAT LINE DOES NOT MERELY BURY IT — IT SHIPS A DESCRIPTION
+  OF A DIFFERENT COMMAND, AND EVERY GATE STAYS GREEN.** Minted 2026-08-29
+  (326th filing), from `c54f582`, on two corroborating instances of one
+  mechanism found in the same reading — this project's stated bar for a
+  fresh mint (two instances of the same *cause*, not merely the same
+  symptom; see `R221`'s minting note).
+
+  **Instance 1** — `fetch-ocr-models` began `/// Render a page to a PNG
+  image.`, which is `render-page`'s subject. It downloads model weights.
+
+  **Instance 2, the expensive one** — `print` began *"**Report what
+  printing this document WOULD do**, without printing"*, which is
+  `print-preview`'s subject, while its own *"**Send pages to a
+  printer.**"* sat **eleven lines down**. **Its shipped summary claimed it
+  does not print. It is the command with `--send`.**
+
+  **The shared mechanism.** A paragraph spliced at a **line offset** that
+  landed inside the *preceding* variant's `///` block. That is an error
+  made by an editing tool, not by an author, so it recurs — and it is the
+  same mechanical family as the doc-comment orphaning already recorded
+  for `#[non_exhaustive]` enum variants, where an insertion aimed above an
+  `fn` or a variant lands inside the doc comment above it instead.
+
+  **★ WHY THIS IS A NEW RULE AND NOT AN AMENDMENT, which is the part a
+  future session will want to re-litigate.** Two neighbouring records
+  already exist and **neither covers this**:
+
+  - The **doc-comment-orphaning** family is about a comment landing on the
+    **wrong item**. Here it lands on the **right item**, in the wrong
+    position inside that item's own block.
+  - `D:/dev/rag/rust/a_doc_block_inserted_above_the_summary_line_buries_it_and_every_gate_passes.md`
+    is about exactly that wrong position — **in a rustdoc index**, where
+    the cost is a reader who cannot tell what a type is for.
+
+  **What neither says is what makes this instance expensive: the buried
+  summary is SHIPPED UI, and what surfaces in its place is a true sentence
+  about a DIFFERENT command.** A rustdoc index entry that reads oddly is a
+  documentation defect; `pdfce-cli --help` telling a scripted caller that
+  `print` does not print is a **behavioural claim about the tool, wrong,
+  in the tool's own voice**. `CLAUDE.md` rule 11 makes the CLI a
+  first-class product surface, not a debug aid — so its `--help` text is
+  product copy, and the claim-bearing-copy discipline applies to it.
+
+  **★★ And the second new fact is that a GATE IS POSSIBLE HERE, where the
+  rustdoc file explicitly declined one.** That file's own reasoning was
+  *"deciding which paragraph should be an item's summary requires knowing
+  what the item is for, which is the fact the summary exists to state"* —
+  correct for arbitrary rustdoc. **`clap`-derive plus this project's house
+  style supplies the missing syntactic anchor**: every subcommand doc opens
+  with a **bold lead-in**, so the invariant becomes mechanical —
+
+      a `///` line that STARTS a bold lead-in must be the FIRST line of
+      its doc block.
+
+  A bold lead-in appearing after a line that closed a sentence means a
+  second summary was spliced into somebody else's block. Bold used
+  mid-sentence for emphasis is unaffected (the line does not start with
+  `**`); a lead-in wrapping onto a second line is unaffected (the previous
+  line does not end in a full stop). **`tools/check-cli-help-leads.py`,
+  wired at `.github/workflows/ci.yml:477` and registered at
+  `tools/check-ci-parity.py:115`** so `tools/run-gates.sh` runs it —
+  registering it in both places is `R209` (*a CI job with no local runner
+  is unobserved, not passing*), discharged at mint time rather than owed.
+
+  **Measured at mint: 2 candidates across 31,000 lines, 2 true positives,
+  0 false positives** — per hard rule 10, the denominator is recorded so
+  the precision is recomputable, and the false-positive rate is
+  `0 / 2 = 0` on the founding set, which is a claim about a *small* set
+  and should be read as such.
+
+  **The obligation, in one sentence:** when adding prose to any
+  `clap`-derive `Command` variant's `///` block, put it **after** the
+  existing lead-in — and if it genuinely belongs first, **rewrite the
+  lead-in**, never displace it; the variant still owes `clap` a one-line
+  summary of **itself**.
+
+  **★ The house style is now load-bearing, not cosmetic.** The gate works
+  because every subcommand opens with a bold lead-in. A variant written
+  without one is invisible to the gate — not flagged, just unchecked — so
+  **dropping the convention silently removes the coverage** rather than
+  turning it red. That is `R224`'s vacuity shape pointed at a style rule,
+  and it is the maintenance cost this mint accepts.
+
+  **Sibling of `R227`** (*a source-scanning check must read to a syntactic
+  boundary*): `R227` governs how a checker **reads** source; this governs
+  what an **author writes** into a doc block that ships. Same read/write
+  split `R227` itself draws against the doc-comment-splice finding.
+
+  **Full derivation:** the general half is a dated 2026-08-29 amendment on
+  `D:/dev/rag/rust/a_doc_block_inserted_above_the_summary_line_buries_it_and_every_gate_passes.md`
+  (hard rule 4 — edit, do not duplicate), which is where any future Rust
+  project will look for it; **what stays here is the pdfce-specific half**:
+  the house-style anchor, the gate, and the two wirings.
+
+  **Standing rules ceiling `R229` → `R230`; next free `R231`.**
 
 ## Update protocol
 

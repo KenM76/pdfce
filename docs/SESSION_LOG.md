@@ -75690,3 +75690,175 @@ forward untouched.
    version. A release that skips this step is incomplete under `R229`.
 
 ---
+
+## 2026-08-29 (326th filing) — `Pass 167.0` (`d59ce99`) filed: a form field can be copied and pasted losslessly; plus `c54f582`, two subcommands whose shipped `--help` described a DIFFERENT command; `R230` minted, decision 099 recorded
+
+**Sourcing note, and it differs from the last two filings.** The dispatch
+carried an explicit `R228` instruction to verify before repeating, on the
+grounds that two of this session's earlier dispatches had been wrong. **This
+filing had a shell and used it.** Both commit hashes, their order, their
+presence on `origin/main`, the clean working tree, all fourteen touched files,
+every named type/verb/variant, both wirings of the new gate, the existence of
+§1.26 and of both fixtures and the fuzz target, and the operator's verbatim
+ruling **were checked here, on disk**. Every checked claim agreed with the
+dispatch. **Test counts, `clippy`/`fmt`/gate results and the CLI smoke-test
+transcript are relayed** — those are runs, not file contents, and nothing on
+disk records them.
+
+**Shipped:**
+- `Pass 167.0` (`d59ce99`) — `pdfce_core::formclip` (`FieldClip`,
+  `FieldClipWidget`, `FieldPastePolicy`, `PasteTooltip`, `FieldPasteOutcome`),
+  `EditSession::copy_field`/`paste_field`, `CommandKind::PasteFormField`,
+  three new `EditError` variants and one new `ClipError` variant, the CLI's
+  `copy-field`/`inspect-field-clip`/`paste-field`, two new synthetic fixtures
+  plus their generator, and a new fuzz target covering **both** clipboard
+  readers.
+- `c54f582` — **no Pass ID**, correctly: a `--help` correctness fix plus
+  `tools/check-cli-help-leads.py`, wired into CI **and** registered for
+  `run-gates.sh`.
+
+**Decisions made this session:**
+- **Decision 099** (`ARCHITECTURE.md` §12) — a field clipboard is a
+  `FieldClip` owning its closure by value, in its own module, rather than a
+  set of property setters. The argument in one sentence: ***a setter has to
+  EXPRESS a property; a clip only has to CARRY it.*** Expressing `/DA` means
+  reconciling a font against the destination's `/DR`; `/AA` means modelling an
+  action dictionary pdfce never executes; `/MK` means modelling ten keys
+  `forms::Widget` declines to model. And the whole `/Ff` word travels for
+  free, so `DoNotSpellCheck`/`FileSelect`/`RichText` arrive — **which a
+  read-and-re-author path cannot reproduce at all**. The setter route was not
+  merely more expensive; it was incomplete by construction.
+- **`R230` minted** — in a `clap`-derive command enum a `///` doc comment is
+  **shipped UI**, only its first line is the summary, and a paragraph added
+  above it ships a description of a **different command** while every gate
+  stays green. Taken as a new rule rather than an amendment because the
+  doc-comment-orphaning family is about the **wrong item**, and the existing
+  rustdoc RAG finding is about a buried summary in a **documentation index** —
+  neither covers *shipped UI asserting a false thing about the tool*, and
+  neither could propose a gate. This project's house style (every subcommand
+  doc opens with a bold lead-in) supplies the syntactic anchor that makes one
+  possible, which is itself the new fact.
+- **`R225` gains instances 7 and 8, no re-mint** — a new *kind* of coincidence
+  under the cause already named, per the 2026-08-05 ruling against elevating
+  per occurrence.
+- **Mint declined** for the whole-dictionary-write finding — already covered
+  by the `R85` oracle precedent and by an existing RAG file; a dated footer
+  was added there instead (hard rule 4).
+- **Mint declined** for the missing-fuzz-target finding — one instance, and it
+  is **not** `R153` (that rule is about an existing harness going stale as its
+  module grows; this was a deserializer that never had a harness).
+
+**Findings + decisions:**
+- **★ `/AcroForm` `/CO` is REQUIRED once any field carries an `/AA` `/C`**
+  (§12.7.2 Table 218). A paste carrying a calculate action must append the
+  field to `/CO` or the destination becomes non-conformant. The request did
+  not mention it; it came from the spec RAG. → `C:\personal_rag\pdf\`.
+- **★★ A `/DA` without the `/DR` font it names produces a document that works
+  in pdfce and NOWHERE ELSE** — pdfce renders it correctly because the `/AP`
+  carries its own resources; every viewer that regenerates from `/DA`
+  (§12.7.3.3) gets it wrong. **Worse than a visible failure**, because the
+  producing tool is the one place it cannot be observed. This is why the clip
+  carries the `/DR` `/Font` entry. → `C:\personal_rag\pdf\`.
+- **★★★ Two defects that shipped green and were caught only by a fixture built
+  so nothing is at its authoring default.** A merged (Shape A) field's `/T`
+  leaked into the clip's *widget* half, and the paste folds widget over field,
+  so the source's name silently won and every paste came back under the
+  original name. The same leak with `/DA` **undid the font-resource rename the
+  paste had just performed and disclosed** — the disclosure said `/TB_1`, the
+  field said `/TB`. ***A disclosure can be true about what the code intended
+  and false about what it wrote.*** The durable form: **field CREATION chooses
+  every value itself, so a default-valued fixture can verify it; a field COPY
+  is judged entirely on values pdfce did NOT choose, and every one of them is
+  invisible when the fixture's value equals the authoring default.** Tests
+  against `demo-form.pdf` would have passed against an implementation that
+  carried nothing at all.
+- **★★ Two whole-dictionary writes to one object inside ONE command do not
+  compose** — each is computed from the pre-command state, so the second
+  silently discards the first. Third recorded occurrence in this codebase
+  (`flatten_fields` via the `R85` oracle; the Shape A→B promotion path;
+  now `paste_field`). Fixed by `place_new_field_deferred`, which hands the
+  root back so several `/AcroForm` jobs go into one patch.
+- **★ `ObjectClip::from_bytes` had no fuzz target at all since `Pass 120.1`**,
+  while parsing untrusted bytes that arrive from outside the process. Found
+  while adding the field clipboard, **not by review**, because a clipboard
+  reads like an internal format and is in fact a file format.
+- **★ A near-miss worth recording for its invisibility, not its damage.** An
+  `rm -rf` on a directory the engineer assumed it had created destroyed two
+  pre-existing files (`crates/pdfce-core/examples/gray_equivalence_probe.rs`,
+  `orphan_probe.rs`). Caught by `git status` before committing and restored
+  with `git checkout`; nothing lost. **The build, the tests and `clippy` were
+  all green with the files gone** — `examples/` is not compiled by `cargo
+  test`, so `git status` was the only instrument that could see it.
+
+**`FEATURES.md` — three rows changed, one of them new.** New *Forms
+(AcroForm)* row for the field clipboard, `[x]` core / `[x]` cli / **`[ ]`
+gui** — `pdfceGUI` filed the request and has not consumed the reply, so the
+gui box stays empty and was **not** rounded up. The *Copy/cut/paste a
+selection* row (`ObjectClip`) amended with a pointer, because its *"widgets
+refuse by name"* clause is still correct for that route and would otherwise
+read as contradicting the new row. The *Create a field* row cross-referenced,
+since `add_*_field` with an existing `/T` remains legitimate and is not
+deprecated. **`c54f582` ticks ZERO boxes** and that is stated explicitly in
+its `ROADMAP.md` entry — it changes nothing pdfce can do to a PDF.
+
+**RAG escalations this filing:**
+- `C:\personal_rag\pdf\lesson_20260829_acroform_co_required_when_field_carries_aa_c.md` (new)
+- `C:\personal_rag\pdf\lesson_20260829_da_without_dr_font_renders_only_in_the_producing_tool.md` (new)
+- `D:/dev/rag/rust/a_copy_verb_is_judged_on_values_it_did_not_choose_so_a_default_valued_fixture_cannot_test_it.md` (new)
+- `D:/dev/rag/rust/an_internal_looking_serialisation_that_crosses_the_process_boundary_is_a_file_format.md` (new)
+- `D:/dev/rag/rust/a_doc_block_inserted_above_the_summary_line_buries_it_and_every_gate_passes.md` (dated 2026-08-29 footer — the `clap`-derive branch)
+- `D:/dev/rag/rust/n_sequential_whole_object_writes_in_one_command_do_not_compose.md` (dated 2026-08-29 footer — third occurrence)
+- `D:/dev/rag/rust/a_sabotage_can_only_be_as_discriminating_as_the_fixture_it_runs_on.md` (dated 2026-08-29 footer — cross-reference to the new copy-verb file)
+- `C:\personal_rag\claude_code\lesson_20260829_rm_rf_on_an_assumed_own_directory_is_invisible_to_build_and_tests.md` (new)
+
+**Hard rule 11 sweep (meaning-change / stale-claim survivors) — ONE SURVIVOR
+FOUND, REPORTED NOT FIXED.** Four figures changed meaning this Pass: the
+documented verb count (159 → 161), `EditError`'s variant count (92 → 95), and
+§02's own line and clause counts (3,161 → 3,331 lines; 78 → 85 clauses).
+`tools/check-core-api-verbs.py` PASSes and `docs/core-api/index.md` was
+updated in the same commit — that is the mechanical half, and it is green.
+
+**★ `docs/NEXT_SESSION.md:279` carries ALL FOUR of the old figures, as a live
+statement of current state**, not as history:
+
+> *"`docs/core-api/02-editing-and-saving.md`: **3,161 lines, 78 clauses, 159
+> verbs, `EditError` 92 variants.** The gate re-derives all of these."*
+
+**Reported, not edited** — `NEXT_SESSION.md` is engineer-owned under `R216`,
+and hard rule 11 says report and do not edit outside this role's remit. The
+engineer stated it will overwrite the file this session; **that discharges it
+only if the replacement carries the new figures**, so it is named here rather
+than assumed handled. ★ Note what made it findable: the sentence *"the gate
+re-derives all of these"* reads as a guarantee of freshness and is exactly why
+three passes over that file would not have re-checked the numbers beside it —
+**a claim that something is machine-maintained suppresses the reading that
+would notice it is not.**
+
+**Checked and NOT a survivor:** `docs/ROADMAP.md:1391` also holds *"159 core
+verbs, 92 `EditError` variants"*, inside the `Pass 161.0` Shipped entry's
+**Sourcing** paragraph, where it is a dated relay of what was measured then.
+Append-only history is correct as of its date. `FEATURES.md` states no verb
+count. `README.md` states none.
+
+**One thing to watch, reported not fixed:** `R230`'s
+gate only sees variants that follow the house style of opening with a bold
+lead-in. A variant written without one is **not flagged, merely unchecked** —
+`R224`'s vacuity shape aimed at a style rule. That is recorded in the rule's
+own text so a future reader does not read green as coverage.
+
+**Still in flight:**
+- `pdfceGUI` has not consumed the reply
+  (`reply_the_field_clipboard_ships_and_your_ctrl_v_is_lossless_now.md`,
+  verified present in the shared channel). **That folder is not in git**, so
+  the durable contract is `docs/core-api/02-editing-and-saving.md` §1.26 —
+  named in the `ROADMAP.md` entry for exactly that reason.
+- The gui box on the new `FEATURES.md` row stays `[ ]` until they wire the two
+  chords.
+
+**For next session:**
+- `docs/NEXT_SESSION.md` is the engineer's to overwrite (`R216`); this filing
+  did not touch it.
+- Ledger after this filing: **Pass ceiling `167.0`**, next free `167.1` / new
+  major `168.0`. **Standing rules ceiling `R230`**, next free `R231`.
+  **Decision ceiling `099`**, next free `100`. Operator-question ceiling
+  unchanged. Filing ordinal **326**.

@@ -7,8 +7,8 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
-Written 2026-08-29. Ledger at write time: **Pass ceiling 165.0**, rules
-**R228**, decisions **098**, filings **324**.
+Written 2026-08-29 (second write of the day). Ledger at write time: **Pass
+ceiling 167.0**, rules **R230**, decisions **099**, filings **326**.
 
 ---
 
@@ -34,6 +34,21 @@ item on the list he has personally specified.
 
 **Do not promote the conformance validator (§0b) without him saying so** — his
 words, 2026-08-29: *"we'll deal with the conformance validator later."*
+
+### ★ SINCE THAT WAS WRITTEN: `Pass 167.0` shipped, from the CHANNEL, not from §A
+
+Later the same day, `pdfceGUI` filed a request and Ken ruled on it directly —
+*"ctrl v for paste as new. ctrl shift v for paste as duplicate."* That became
+**`Pass 167.0`**, the form-field clipboard (`pdfce_core::formclip`,
+`copy_field`/`paste_field`, three CLI subcommands, `docs/core-api` §1.26).
+
+**Note the shape, because it will recur: the work that got done came from the
+channel, and §A's pick-from list was not consulted.** That is not a mistake —
+an operator ruling outranks a backlog — but it means **§A is a list of things
+nobody has picked, not a queue that drains.** Decision 097 (§A item 1) is
+still the only item Ken has personally specified and is still unstarted.
+
+**The reply is out and unanswered** — see §F.
 
 ## §0a — WHAT GAP 4 DID AND DID NOT CLOSE
 
@@ -275,8 +290,16 @@ exactly how the two filing gates got omitted and CI went red.
 - `MAX_OUTLINE_DEPTH` = **32** (`outline.rs:218`);
   `MAX_OUTLINE_ITEMS` = **200_000** (`pageops/references.rs:64`). The gap
   between those two is what `Pass 161.1` was about.
-- `docs/core-api/02-editing-and-saving.md`: **3,161 lines, 78 clauses, 159
-  verbs, `EditError` 92 variants.** The gate re-derives all of these.
+- `docs/core-api/02-editing-and-saving.md`: **3,331 lines, 85 clauses, 161
+  verbs, `EditError` 95 variants** (re-measured 2026-08-29 after `Pass 167.0`
+  added §1.26).
+  ★ **The previous write of this file said 3,161 / 78 / 159 / 92 and added
+  "the gate re-derives all of these" — and all four were stale within a day.**
+  That sentence is the reason: it reads as a freshness guarantee and therefore
+  SUPPRESSES the re-check it invites. `tools/check-core-api-verbs.py` derives
+  the verb count and the `EditError` count and fails on a mismatch; it does
+  **not** know what this file claims. Re-run it and copy its output; do not
+  trust a number here because a gate exists somewhere.
 - Real-world outline corpus: of 8 nested outlines under `fixtures/external/`,
   6 move cleanly; the other 2 hit a **pre-existing correct refusal** (recovered
   xref ⇒ incremental save refused, `--mode full` succeeds). Not a defect.
@@ -384,6 +407,38 @@ told to keep their current path.**
 A lossless markup copy (`/T`, `/M`, note, `/CA`, `/Popup`, `/IRT`, `/RC`) needs
 `MarkupSpec` extended **and** `/IRT` reference rewriting — **a graph problem,
 not a value problem**. Backlog, unscoped. **Do not build it speculatively.**
+
+### `reply_the_field_clipboard_ships_and_your_ctrl_v_is_lossless_now.md` (2026-08-29)
+
+Answers `request_form_fields_cannot_be_pasted_and_half_of_it_already_works.md`.
+Every row of their loss table now travels, plus two they did not ask for: the
+**`/DR` font the `/DA` names** (without it a field renders correctly in pdfce
+and wrong in every viewer that regenerates from `/DA`, §12.7.3.3), and the
+**flags no `New*Field` spec can express** (`/Ff` travels as an integer).
+
+**Three things they should act on and may not have:**
+- their hand-maintained fidelity table (their §7) is **obsolete — tell them to
+  delete it** if they reply without mentioning it;
+- `widget_count() > 1` must be checked **before** they draw a rubber-band
+  rectangle: a multi-widget paste ignores the rect's SIZE;
+- `carries_actions()` is meant to be asked **before the press**, not read from
+  the outcome after it.
+
+**Durable record** (that folder is not in git): `docs/core-api/02-editing-and-saving.md`
+**§1.26**, `crates/pdfce-core/src/formclip.rs`, and
+`crates/pdfce-core/tests/form_field_clipboard.rs`.
+
+### ★ INBOUND AND OWED — `iccce`, since 2026-08-29 07:12
+
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\openequest_one_printf_splits_the_last_of_it_and_part_may_be_mine.md`
+— **unanswered.** They are declining our *"ours, in the compositor"*
+attribution as premature: a CMYK buffer does **two separable things**
+(composites in CMYK — ours; converts to sRGB on exit — **theirs**, under
+decision 064), and `--max-cmyk-buffer-bytes` turns **both** off together, so
+our measurement cannot tell them apart. **The ask is one printf**: the four
+CMYK values in the buffer immediately before the exit conversion, for
+`PCS3_132`'s green. Small, and it is the lead item in §A's colour cluster by
+another route.
 
 **Check BOTH channels every session** — `pdfce_FeatureRequests` and
 `iccce_FeatureRequests`. They live outside the repo, so **no gate can

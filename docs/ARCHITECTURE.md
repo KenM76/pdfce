@@ -26826,3 +26826,114 @@ free 072.**
   **No standing rule minted.** A classification-invariant fix inside an
   existing decision family (069/079/etc.), not a new mechanism. **Decision
   ceiling moves 097 → 098; next free 099.**
+
+- **2026-08-29 — Decision 099. A FIELD CLIPBOARD IS A `FieldClip` THAT OWNS
+  ITS CLOSURE BY VALUE, IN ITS OWN MODULE `pdfce_core::formclip`, RATHER THAN
+  A SET OF PROPERTY SETTERS ON `EditSession`** (`Pass 167.0`, `d59ce99`).
+
+  **The question.** `pdfceGUI` needed `Ctrl+V` (paste as a new independent
+  field) to stop being lossy. It had measured the loss itself and offered two
+  shapes: **(a)** six or so new property setters on the existing `add_*_field`
+  authoring path, so a shell could read a field and re-author it faithfully;
+  **(b)** a clipboard type that copies a field wholesale. Operator ruling
+  behind the request, Ken 2026-08-29, verbatim: *"ctrl v for paste as new. ctrl
+  shift v for paste as duplicate."* — which settles the **chords**, not the
+  **shape**.
+
+  **The decision: (b).** And the argument is one sentence, worth carrying
+  because it generalises past forms: ***a setter has to EXPRESS a property; a
+  clip only has to CARRY it.***
+
+  | property | what "express it" would have cost |
+  |---|---|
+  | `/DA` | reconciling a named font against the destination's `/AcroForm` `/DR` `/Font` — a Pass on its own |
+  | `/AA` | modelling an action dictionary pdfce **deliberately never executes** |
+  | `/MK` | modelling ten appearance-characteristic keys `forms::Widget` declines to model (`R43`) |
+
+  A clip sidesteps all three: it takes the bytes that are there, owns them, and
+  puts them back. It also delivers, for free, a class of value **no authoring
+  API in pdfce can express at all** — the whole `/Ff` word, so
+  `DoNotSpellCheck`, `DoNotScroll`, `FileSelect`, `RichText` and
+  `CommitOnSelChange` travel. **A read-and-re-author path structurally cannot
+  reproduce those**, which is the strongest form the argument takes: (a) was
+  not merely more expensive, it was **incomplete by construction**.
+
+  **The price, stated so it is not rediscovered as a surprise.** The clip must
+  own a **closure**, not pointers, because the destination is usually a
+  different document — appearance streams, JavaScript streams, action
+  dictionaries, all copied by value and renumbered on arrival. That closure is
+  the bulk of `formclip.rs` (1,399 lines), and it is why the type carries
+  `MAX_CLIP_OBJECTS` (4096) and `MAX_CLIP_WIDGETS` (512): a length prefix from
+  outside the process must not size an allocation.
+
+  **Module placement — `pdfce_core::formclip`, not `edit`.** Same precedent as
+  `vector::clip`'s `ObjectClip`: a clipboard is a **data type with a wire
+  format**, and `edit.rs` is the session/command layer. The two verbs
+  (`EditSession::copy_field`, `::paste_field`) live in `edit.rs` where every
+  other session verb lives; the types they move do not. §3's crate layout is
+  unchanged — this is a module inside `pdfce-core`, with **no new dependency**
+  and no GUI reach (`cargo tree -p pdfce-core` verified clean).
+
+  **★ Consequence for §5 (round-trip / minimal-diff) and for `CLAUDE.md` rule
+  3: a paste is an ADDITION, and the destination's own objects are not
+  rewritten.** The one place the paste touches something pre-existing is the
+  `/AcroForm` dictionary — `/Fields`, and where the clip carries a font or a
+  calculation, `/DR` and `/CO` — and §12.7.2 Table 218 **requires** the `/CO`
+  append once a field carries an `/AA` `/C`. Where the destination already
+  binds the `/DA`'s font name to a **different** font, the incoming font is
+  installed under a **free** name and the incoming `/DA` is rewritten to match:
+  **neither document's look changes**, and the rewrite is disclosed. Nothing
+  the destination already had is respelled.
+
+  **★★ Consequence for §11 / rule 4, in its 059 form.** A paste's surprises are
+  **not a closed set** — what could be dropped, renamed, translated or degraded
+  depends on the document the clip came from — so `FieldPasteOutcome::
+  disclosures` is `Vec<String>`, matching `PasteOutcome`, rather than the fixed
+  flag struct field **creation** uses (`FieldAuthorDisclosures`). That
+  asymmetry is deliberate and is the general rule for this codebase: **a verb
+  that CHOOSES its values can enumerate its disclosures at compile time; a verb
+  that CARRIES values it did not choose cannot.** The pasted field renders
+  exactly as a saved-and-reopened one will, with nothing on the page marking it
+  as pdfce's guess; the CLI prints the disclosures to stderr and the parseable
+  summary to stdout.
+
+  **★★★ A structural correction this decision forced, and it is a repeat of a
+  named class.** `paste_field` initially called `place_new_field` (which
+  registers the new root in `/AcroForm` `/Fields`) and then wrote the
+  `/AcroForm` **again** for `/DR`, `/CO` and `/SigFlags`. **Two
+  whole-dictionary writes to one object inside one command do not compose** —
+  each is computed from the pre-command state, so the second silently discards
+  the first. `place_new_field` is now a thin wrapper over
+  `place_new_field_deferred` (`edit.rs:14327`), which hands the root back so a
+  caller with several `/AcroForm` jobs performs them in **one** patch. This is
+  the same failure the `R85` oracle caught in `flatten_fields` and the Shape
+  A→B promotion path hit before it; the generalisable form is already at
+  `D:/dev/rag/rust/n_sequential_whole_object_writes_in_one_command_do_not_compose.md`,
+  now with a dated 2026-08-29 footer for this third occurrence.
+
+  **Refusals are conditions of the SOURCE, so they fire at the copy.**
+  `FieldHasNoWidget` (a value-only terminal, legal under Table 220, has nothing
+  to place at a rectangle) and `SignedFieldNotCopyable`. The second is a
+  *posture* choice worth recording: dropping `/V` and disclosing it was
+  available; what stopped it is **what would still have travelled** — the
+  widget's baked *"signed by"* artwork, into a file nobody signed. pdfce
+  declines to make that object rather than making it and warning about it, the
+  same posture redaction takes (§5's deliberate exception, read the other way).
+  An **unsigned** `/Sig` field copies normally.
+
+  **Body-section updates paired with this entry**, per this log's
+  decision/body-pairing rule: §4's public-surface account of `pdfce-core` now
+  has a `formclip` module and two more `EditSession` verbs
+  (`docs/core-api/02-editing-and-saving.md` §1.26 is the consumer-facing
+  contract, and `tools/check-core-api-verbs.py` enforces the count: **159 →
+  161** verbs, `EditError` **92 → 95** variants). §10.2's fuzz-target roster
+  gains `fuzz/fuzz_targets/clipboard_payloads.rs`, which covers **both**
+  clipboard readers — `ObjectClip::from_bytes` had had **no** fuzz target since
+  `Pass 120.1`, found while adding this one and not by review.
+
+  **One standing rule minted this filing (`R230`), and it is not this
+  decision's** — it is the `clap`-derive `--help` finding from the sibling
+  commit `c54f582`. **No mint from this decision**: the clip-vs-setters call is
+  an API-shape choice inside an existing family (`ObjectClip`, `Pass 120.x`),
+  and the two fixture findings are filed as `R225` instances 7 and 8 rather
+  than as a new cause. **Decision ceiling moves 098 → 099; next free 100.**
