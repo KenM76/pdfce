@@ -2222,18 +2222,18 @@ enum Command {
         mode: SaveMode,
     },
 
-    /// **Report what printing this document WOULD do**, without printing.
+    /// **Send pages to a printer.** Does a DRY RUN unless `--send` is
+    /// given.
     ///
-    /// Resolves the printer, reads its resolution and printable area,
-    /// and places every selected page onto the sheet — reporting the
-    /// scale, the offset, and whether content would fall off the edge.
-    /// It has no flag that starts a job.
+    /// Without `--send` it reports what printing this document WOULD do,
+    /// without printing: it resolves the printer, reads its resolution and
+    /// printable area, and places every selected page onto the sheet —
+    /// reporting the scale, the offset, and whether content would fall off
+    /// the edge.
     ///
     /// Acrobat clips an oversized page silently. This names the pages
     /// that would lose content, so a scripted caller can refuse before
     /// paper is consumed rather than discover it afterwards.
-    /// **Send pages to a printer.** Does a DRY RUN unless `--send` is
-    /// given.
     ///
     /// Every step runs either way — the device is opened, its resolution
     /// and printable area are read, placement is computed and the pages
@@ -2606,7 +2606,6 @@ enum Command {
         spans: bool,
     },
 
-    /// Render a page to a PNG image.
     /// **Download the OCR model weights**, verified against a pinned
     /// SHA-256 before anything is written.
     ///

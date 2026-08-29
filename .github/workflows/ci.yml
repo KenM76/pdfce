@@ -460,6 +460,22 @@ jobs:
       - name: check the licensed suite is not named anywhere
         run: python tools/check-suite-name-absent.py
 
+      # In clap-derive a `///` doc comment IS the shipped `--help` text, and
+      # only its FIRST line becomes the short summary. A doc block whose real
+      # summary sits in the middle therefore ships a --help line describing a
+      # DIFFERENT command, and nothing fails: it compiles, tests pass, and the
+      # operator reads the wrong sentence.
+      #
+      # Two pre-existing instances were found on 2026-08-29 by running
+      # `pdfce-cli --help` and reading it, which no test did: `fetch-ocr-models`
+      # advertised itself as "Render a page to a PNG image", and `print`
+      # advertised itself as the command that does NOT print. Both were a
+      # paragraph spliced at a line offset that landed inside the PRECEDING
+      # variant's doc comment -- a mechanical editing error, so it recurs and
+      # is mechanically detectable.
+      - name: check no subcommand summary is buried in its doc comment
+        run: python tools/check-cli-help-leads.py
+
       # One operator gesture is ONE undo entry (R179/R49). A `commit()` inside
       # a loop is N entries for one gesture, and leaves earlier commits
       # standing when a later iteration fails -- the `import_form_data` defect
