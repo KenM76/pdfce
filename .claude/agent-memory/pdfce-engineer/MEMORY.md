@@ -74,3 +74,5 @@
 - [.claude/worktrees is a grep trap](reference_worktrees_are_a_grep_trap.md) — 28 GB of full repo copies; recursive grep/find/du from the repo root hangs or returns worktree copies as if they were the real files
 - [Read the inbound, don't inherit its summary](feedback_read_the_inbound_do_not_inherit_its_summary.md) — a prior session's "no reply owed" is a CLAIM; also: an "if…otherwise…" ruling is a ranked pair and the achievability call is mine (CONFIRMED)
 - [OneDrive CLI slots](project_onedrive_cli_slots.md) — every release publishes the CLI to pdfce1/pdfce2 alternately; the quiet failure is BOTH slots holding the same version, not a missed deploy
+- [A default-valued fixture cannot falsify a carry](feedback_a_default_valued_fixture_cannot_falsify_a_carry.md) — if X equals what the code writes anyway, the test passes on an implementation that carried nothing
+- [Never `rm -rf` a directory you only assumed you created](feedback_never_rm_rf_a_directory_you_only_assumed_you_created.md) — `mkdir -p` + `rm -rf` ate two committed files; only `git status` saw it
