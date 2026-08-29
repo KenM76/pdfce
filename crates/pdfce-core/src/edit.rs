@@ -1215,12 +1215,6 @@ pub struct OutlineMove {
     pub visible_items: usize,
 }
 
-/// Build a `/BS` border-style dictionary (§12.5.4 Table 166).
-///
-/// One place, called from both widget branches of `add_text_field`. Writing
-/// the two inline would be two implementations of one rule that could drift
-/// — R171 — and the drift would show only as a merged field and a separate
-/// widget disagreeing about a border the operator set once.
 /// A choice field's `/Opt` array (§12.7.4.4).
 ///
 /// An element is a bare `(Display)` string when export and display coincide,
@@ -1255,6 +1249,12 @@ fn choice_opt_array(options: &[ChoiceOption]) -> Object {
     )
 }
 
+/// Build a `/BS` border-style dictionary (§12.5.4 Table 166).
+///
+/// One place, called from both widget branches of `add_text_field`. Writing
+/// the two inline would be two implementations of one rule that could drift
+/// — R171 — and the drift would show only as a merged field and a separate
+/// widget disagreeing about a border the operator set once.
 fn border_dict(border: BorderSpec) -> Dict {
     let mut bs = Dict::new();
     bs.insert(
