@@ -75483,3 +75483,111 @@ row that was never meant to move.
    diagnosis yet.
 
 ---
+
+## 2026-08-29 (324th filing) — `Pass 165.0` (`4331be8`) filed: the `PCS3_132` residual is diagnosed to the line as TWO defects, not one, and the unfiled `v0.15.0` release commit is filed alongside it
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8).
+Both commit hashes below, all test counts, suite figures and channel
+values are relayed from the engineer's dispatch, not independently
+re-run here.
+
+**Shipped:**
+- `Pass 165.0` (`4331be8`) — a new `SourceKind::ProcessCmykIndirect`
+  variant so an `ICCBased` `/N 4` CMYK source keeps its authored tints
+  without inheriting Table 149's one value-dependent overprint row; a
+  bridge-disclosure counter (`cmyk_bridged_pixels`) wired for solid
+  paints, having been wired for images only since it shipped.
+- `v0.15.0` release (`89a2af9`) — filed here, two Passes after it was cut,
+  because it was a code commit `check-commits-filed.py` had no filing to
+  join it against. See both full entries in `ROADMAP.md` *Shipped*.
+
+**Decisions made this session:**
+- **Decision 098** — the `SourceKind` invariant split (readable tints vs.
+  Table 149 row applicability are different questions for an `ICCBased`
+  `/N 4` source), with the refused one-line fix (merge into
+  `DeviceCmykDirect`) and why it was refused recorded in full. Paired
+  body-section amendments added to two existing §12 blocks (the Table
+  149/`DeviceCmykDirect` decision, the `cmyk_bridged_pixels` narrative).
+  **Decision ceiling 097 → 098; next free 099.**
+
+**Findings + decisions:**
+- **This is the SIXTH attempt at the `PCS3_132` residual across three
+  filings (313th, 323rd, this one), and the first to close it.** Five
+  hypotheses were refuted in the two prior filings (the conversion table,
+  the zero-tint overprint setting, `/Separation /All`, the overprint
+  state, the source ICC profile lifted verbatim) — all correct on their
+  own terms, none the cause. The cause was the CMYK compositing buffer's
+  *input* side: an `ICCBased`/N4 source's authored tints were unreadable
+  by `overprint::authored_tints`, so its colour was reconstructed from an
+  already-flattened paint value instead. Measured exact to the integer:
+  authored `.75 0 1 0` → `(47,181,73)`; observed (reconstructed)
+  `.7382 0 .5942 .2906` → `(24,140,108)` — yellow 1.0 → 0.59, black
+  invented at 0.29.
+- **The one-line fix was refused on its own strength, not deferred.**
+  Classifying `ICCBased`/N4 as `DeviceCmykDirect` would have fixed the
+  colour AND silently changed overprint's compositing rule for every
+  ICC-tagged CMYK file, because `DeviceCmykDirect` is Table 149's one
+  value-dependent row and §8.6.7 scopes that value-dependence to a source
+  stated directly as `DeviceCMYK`. A third `SourceKind` variant
+  (`ProcessCmykIndirect`) answers the two questions separately instead.
+- **A second, independent defect on the same render**: the disclosure
+  counter that exists specifically to make this class of crossing visible
+  (`cmyk_bridged_pixels`) was itself blind to it — wired for the image
+  decode path only, never for the structurally identical solid-paint
+  path. Measured `cmyk_bridged_pixels = 0` over 40,000 pixels that had, in
+  fact, all been bridged. **This is at least the fourth instance of this
+  shape in the project** (disclosure counter's declared population
+  diverging from its actual call-site coverage), captured as a standalone
+  cross-project finding rather than left as unindexed prose a fifth time.
+- **Conformance suite re-measured and unchanged**: 51 patches — 6 FAIL, 29
+  pass, 16 UNRESOLVED, 0 render errors, identical to the carried-forward
+  baseline. `PCS3_132`/`PCS3_133` already pass their own criterion
+  (absence of a trap mark); this fix is an accuracy gain on a
+  conformance-**passing** panel, a distinction the suite cannot score.
+- **The `v0.15.0` release commit (`89a2af9`) went unfiled for two Passes**
+  because the engineer cut it and moved directly to the next task without
+  a filing. Caught by `check-commits-filed.py`, filed here. Headline: the
+  operator's "do all 4" standing instruction (rotation/ce dimensions/
+  bookmarks/fonts) is now closed in a released, operator-installable
+  artifact, not only at HEAD.
+
+**`FEATURES.md`: NO CAPABILITY ROWS CHANGE.** Both defects were
+implementation bugs in already-shipped, correctly-described capabilities
+(row 262 Overprint SIMULATION, row 256 Subtractive compositing buffer) —
+checked, neither row's text made a claim this Pass falsifies or newly
+satisfies. The release entry is a distribution event over already-filed
+capabilities. Stated explicitly per this role's own maintenance contract.
+
+**RAG findings:**
+- `D:/dev/rag/rust/a_disclosure_counters_population_claim_is_per_call_site_not_per_object_class.md`
+  — new file, defect B's general form; `index.md` updated.
+- `C:\personal_rag\pdf\lesson_20260821_terminal_conversion_wants_accuracy_round_trip_wants_invertibility.md`
+  — fifth amendment (defect A is the fifth instance of this project's
+  "do not cross" CMYK round-trip family); subject index and master
+  `personal_rag/index.md` both updated with the amendment.
+
+**Still in flight:**
+- `docs/NEXT_SESSION.md` §A item 4 (the `PCS3_132` residual) is now
+  **resolved** — flagged to the engineer to strike (engineer-owned file,
+  not edited here).
+- §A item 5 (`CmykIntent::Calibrated`'s doc-comment rationale vs. the
+  `PCS3_230` measurement) is **explicitly NOT resolved** — do not strike
+  it, it is a separate, still-open finding.
+- `rotate_widget`, `set_dimension_label`, `Pass 142.0` (narrowed),
+  `PCS3_130` cells c/d's disagreement, and the n-channel spot-colorant
+  buffer all remain open, carried unchanged from the 323rd filing.
+
+**For next session:**
+1. Ledger: Pass ceiling **`165.0`**, next free **`165.1`**/new major
+   **`166.0`**; standing rules ceiling **`R228`**, next free **`R229`**
+   (no mint this filing); decision-record ceiling **`098`**, next free
+   **`099`**; filing ordinal **324**.
+2. `docs/NEXT_SESSION.md` item 4 should be struck by the engineer
+   (resolved); item 5 should NOT be struck (still open) — engineer-owned
+   file, not edited here.
+3. The operator is cutting `v0.16.0` immediately after this filing lands,
+   so `Pass 165.0` will be in a release within the hour — no action
+   needed here, noted so a future session is not surprised by a second
+   release so soon after `v0.15.0`.
+
+---

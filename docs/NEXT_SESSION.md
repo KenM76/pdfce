@@ -7,8 +7,8 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
-Written 2026-08-29. Ledger at write time: **Pass ceiling 164.0**, rules
-**R228**, decisions **097**, filings **323**.
+Written 2026-08-29. Ledger at write time: **Pass ceiling 165.0**, rules
+**R228**, decisions **098**, filings **324**.
 
 ---
 
@@ -150,186 +150,31 @@ lines, 76 `CV-*` ids) plus seven files under `Acrobat_Features/`.
 These came out of the iccce exchange of 2026-08-28/29. **Read them together**;
 three of them were previously mis-stated in this file.
 
-4. **★★★ The `PCS3_132` residual — MEASURED 2026-08-29, and it is NOT the
-   conversion table.** iccce asked for the table-isolated number and it splits
-   the error decisively. `PCS3_132` paints its green as **`.75 0 1 0`**
-   (recovered from the content stream, no render in the loop):
+4. **✅ RESOLVED — the `PCS3_132` residual was OUR compositor, and it is
+   fixed** (`Pass 165.0`, released in **v0.16.0**). Kept as one paragraph
+   because the *method* is the reusable part.
 
-   | channel | Acrobat | table only | iccce's capture of our render |
-   |---|---:|---:|---:|
-   | red | 59 | 47 | 24 |
-   | green | 171 | **181** | 140 |
-   | blue | 51 | 73 | 108 |
+   An `ICCBased` `/N 4` over `DeviceCMYK` states real CMYK tints;
+   `authored_tints` returned `None` for it, so the paint was re-derived from
+   its own **flattened sRGB** through a max-GCR transform — yellow **1.0 →
+   0.59**, black **invented at 0.29**, rendering `(24, 140, 108)` where the
+   authored tints give `(47, 181, 73)`. Fixed with a **new**
+   `SourceKind::ProcessCmykIndirect`, deliberately *not* by reclassifying into
+   `DeviceCmykDirect` — that is the only Table 149 row where `OPM 1` differs
+   from `OPM 0`, so the one-line fix would have traded a colour bug for an
+   overprint bug. A test exists solely to fail if anyone tries it.
 
-   Split as Acrobat → table → everything else: the table contributes
-   **−12 / +10 / +22**, the rest of the path **−23 / −41 / +35**.
-   ★ **The rest is the larger term on every channel and on GREEN IT IS THE
-   OPPOSITE SIGN** — the table takes 171 *up* to 181, something after it takes
-   181 down to 140. So the render error **cannot be attributed to the table
-   even partially by addition**; any account saying "the blue floor did it" is
-   arithmetically excluded.
-   ⇒ **MEASURED FURTHER, 2026-08-29. Three candidates eliminated:**
+   **The second defect was the expensive one:** `cmyk_bridged_pixels` reported
+   **0** across 40 000 reconstructed pixels — the counter whose entire job is
+   to say *"this page was composited from approximations"*. An honest counter
+   would have pointed at the cause in **one** render instead of six hypotheses
+   and a wrong test. Now demonstrated **both ways**, because a counter stuck at
+   zero reads identically to a correct one.
 
-   | candidate | test | result |
-   |---|---|---|
-   | the conversion table | applied directly to `.75 0 1 0` | a third of it, **opposite sign on green** |
-   | `OverprintZeroTintScope` (the **setting**) | rendered at all three scopes | **byte-identical**, pixel counts equal to the pixel |
-   | `ICCBased` `/N 4` → `DeviceCMYK` fallback | synthetic `/ICCBased`, `/N 4`, no `/Alternate` | **`(47, 180, 73)`** — correct |
-
-   Plain `DeviceCMYK` `.75 0 1 0 k` also renders `(47, 180, 73)`. So the paint
-   path, the table and the ICCBased resolution each behave **on their own**.
-
-   ★★ **AND A DISTINCTION THAT NEARLY GOT WRITTEN DOWN WRONG.** Having found
-   the zero-tint scope inert, the tempting sentence was *"overprint is
-   eliminated."* **That is false.** What was measured is that **one overprint
-   SETTING is inert on this patch** — not that the overprint **leg** is
-   uninvolved. `PCS3_132` carries `<</OP true /op true>>` and `<</OPM 0>>`
-   ExtGStates, and the zero-tint axis governs a *different* rule.
-   **Eliminating a knob is not eliminating the mechanism the knob sits on.**
-
-   ★★★ **FIVE HYPOTHESES REFUTED, 2026-08-29.** Each by rendering a
-   synthetic that isolates one ingredient. **Every one renders `(47, 180, 73)`
-   — correct.** The residual survives all of them:
-
-   | # | hypothesis | how tested | result |
-   |---|---|---|---|
-   | 1 | the conversion table | applied directly to `.75 0 1 0` | a third of it, **opposite sign on green** |
-   | 2 | `OverprintZeroTintScope` | the patch at all three scopes | **byte-identical** output |
-   | 3 | `/Separation /All` under `/OP true` | synthetic, tints 0 and 1 | knocks the green out to **white / black** — nowhere near |
-   | 4 | the overprint STATE | synthetic × 5: `OPM 0`, `OPM 1`, `OP`+`op`, ICCBased and DeviceCMYK | all **correct** |
-   | 5 | the real 1.4 MB source ICC profile | obj 19 lifted **verbatim** into the synthetic | **correct** — so pdfce really does use the `/Alternate` fallback its doc comment claims |
-
-   ★★ **AND A DISTINCTION THAT NEARLY GOT WRITTEN DOWN WRONG.** After #2 the
-   tempting sentence was *"overprint is eliminated."* **False.** #2 shows one
-   overprint **SETTING** is inert on this patch; #4 is what actually clears the
-   overprint **state**. **Eliminating a knob is not eliminating the mechanism
-   the knob sits on**, and the two needed separate experiments.
-
-   ★★★ **FOUND, 2026-08-29. It is the CMYK COMPOSITING BUFFER.**
-
-   The chain: `PCS3_132` is **PDF/X-4** and declares `/OutputIntents` with a
-   subtractive destination → pdfce's
-   `PageBlendSpaceSource::OutputIntentIfSubtractive` composites the page in a
-   **four-colorant CMYK buffer** instead of on screen → **that buffer is the
-   entire residual.**
-
-   Confirmed with the shipped `--max-cmyk-buffer-bytes` flag, which forces the
-   documented on-screen fallback, on **both** the real patch and a 6-object
-   synthetic:
-
-   | render | `cmyk_buffer_refused` | green |
-   |---|---|---:|
-   | the patch, default | `0` | **(24, 140, 108)** |
-   | the patch, `--max-cmyk-buffer-bytes 1024` | `1` | **(47, 180, 73)** |
-   | synthetic, default | `0` | **(24, 140, 108)** |
-   | synthetic, tiny buffer | `1` | **(47, 180, 73)** |
-
-   ★★ **AND THE DIRECTION IS THE UNCOMFORTABLE PART.** Against Acrobat's
-   `(59, 171, 51)`: on-screen is **−12 / +10 / +22**, the CMYK buffer is
-   **−35 / −31 / +57**. **The buffer exists to be MORE faithful for print, and
-   here it is roughly three times further from Acrobat on every channel than
-   the fallback it replaces.** One patch, and a print-correct blend is not the
-   same goal as a match-Acrobat blend — but the buffer's conversion back to
-   sRGB had never been measured against anything, and the first time it was, it
-   lost.
-
-   ⚠ **The same page renders two different greens depending on whether a
-   memory ceiling was hit.** `--max-cmyk-buffer-bytes`'s own help says the
-   colours can differ at different scales; *"slightly"* understates 23/41/35
-   counts.
-
-   ★★★ **DIAGNOSED TO THE LINE, 2026-08-29. Two defects, and the second is
-   the worse one by this project's own rules.**
-
-   **The buffer is innocent.** `CmykBuffer::to_srgb_over_white` converts out
-   through the *same* `cmyk_to_srgb_with` as the direct call. The value is
-   wrong on the way **IN**. Same four numbers, same buffer, same intent:
-
-   | entry path | rendered |
-   |---|---:|
-   | `DeviceCMYK` — `.75 0 1 0 k` | **(47, 181, 73)** ✅ |
-   | `ICCBased` — `/CS1 cs .75 0 1 0 scn` | **(24, 140, 108)** ❌ |
-
-   **DEFECT A — an authored CMYK value is thrown away and re-derived from its
-   own sRGB approximation.** `overprint::authored_tints` keeps the authored
-   tints for `SourceKind::DeviceCmykDirect` and for
-   `SourceKind::SeparationOrDeviceN`, and returns **`None`** for
-   `OtherProcess` — which is where an **ICCBased CMYK** lands. `interpret.rs`
-   then falls through to `overprint::rgb_to_cmyk(paint colour)`, a **max-GCR**
-   transform its own doc calls *"chosen for exact round-tripping, not for
-   accuracy."*
-
-   **Proven numerically, exact to the integer on all three channels:**
-
-   ```text
-   authored          cmyk .75 0 1 0        -> (47, 181, 73)
-   reconstructed     cmyk .7382 0 .5942 .2906
-   round-tripped                            -> (24, 140, 108)
-   observed ICCBased                        -> (24, 140, 108)
-   ```
-
-   Yellow collapses **1.0 → 0.59** and black is **invented at 0.29**.
-
-   ★ **The fix is one classification.** An `ICCBased` space with `/N 4` — which
-   pdfce *already* resolves to `DeviceCMYK` through the `/Alternate` fallback —
-   should classify as `DeviceCmykDirect`, not `OtherProcess`. Small change;
-   **but it moves rendered colour on every PDF/X file with ICCBased CMYK**, so
-   it needs the conformance suite re-measured in the same Pass. That is why it
-   is not a tick-sized fix.
-
-   ⚠⚠ **DEFECT B — `cmyk_bridged_pixels` REPORTS 0 WHILE THIS HAPPENS.**
-   `cmyk_paint.rs`'s doc says *"Every such paint is counted by the buffer's own
-   bridge counter, so a page composited largely from reconstructions says so."*
-   Measured on the failing render: **`cmyk_bridged_pixels=0`** across 40 000
-   reconstructed pixels — identical to the correct DeviceCMYK render.
-
-   The reconstruction at `interpret.rs:5392` is **not** the one the counter
-   watches. So pdfce approximated a colour and **reported that it had not**,
-   which is project rule 4 broken rather than an accuracy gap. **Fix B even if
-   A is deferred** — an honest counter would have led here in one render
-   instead of six hypotheses.
-
-   ★ Note `BrushSpec::with_cmyk` is called **only from tests**; production
-   never populates that field. Worth understanding before touching either.
-
-   ★ **The five refutations that came first**, each a synthetic isolating one
-   ingredient, every one rendering the correct `(47, 180, 73)`:
-
-   | # | hypothesis | result |
-   |---|---|---|
-   | 1 | the conversion table | a third of it, **opposite sign on green** |
-   | 2 | `OverprintZeroTintScope` | all three scopes **byte-identical** |
-   | 3 | `/Separation /All` under `/OP true` | knocks the green out to white/black |
-   | 4 | the overprint **state** | five variants, all correct |
-   | 5 | the real 1.4 MB **source** ICC profile, lifted verbatim | correct |
-
-   ★ **#5 positively**: pdfce really does resolve `ICCBased` through the
-   `/Alternate` fallback its doc comment claims — the profile bytes do not
-   reach the result. A documented claim that survived being tested.
-
-   ★★ **A knob is not a mechanism.** After #2 the tempting sentence was
-   *"overprint is eliminated."* False — #2 clears a **setting**, #4 clears the
-   **state**, and they needed separate experiments.
-
-   ⚠⚠ **AND A TEST THAT PRINTED THE RIGHT-LOOKING ANSWER FOR THE WRONG
-   REASON.** The first output-intent attempt matched `13 0 obj` inside a search
-   for `3 0 obj`, attached a **1 253-byte `/Info` dictionary** as a 1.46 MB ICC
-   profile, and returned `(47, 180, 73)` — **indistinguishable from the five
-   genuine refutations.** Caught on the **byte count** against the file's own
-   declared `/Length 1462566`, not on the result. Every lift now verifies
-   against the declared length and aborts on mismatch.
-   **A wrong test that agrees with your priors is the expensive kind**, and it
-   was one line from being written up as a sixth refutation.
-
-   ★ **iccce's capture was EXACT.** Rendering the patch here and reading the
-   PNG pixels directly — no display path — gives `(24, 140, 108)`, 12 769 px.
-   The same three integers as their screenshot. Their §11.2 display-path limit
-   is still the right default, but on this quantity it cost nothing.
-
-   ★ Also measured: **all three CMYK intents return the identical
-   `(47, 181, 73)`** here, so the intent setting is **inert on this patch** and
-   the `Naive` deletion costs nothing *for this measurement*. iccce's broader
-   point about losing the three-way diagnostic instrument stands, narrowed.
+   Conformance suite re-measured: **6 FAIL / 29 pass / 16 unresolved, 0 render
+   errors — unchanged.** No verdict moved, and none should have: the panel's
+   criterion is the **absence** of a trap mark and was already met. The fix
+   improves accuracy the suite's criterion **structurally cannot see**.
 
 5. **★ A shipped default's stated rationale has evidence against it.**
    `CmykIntent::Calibrated`'s doc comment justifies its cool mid-greys as

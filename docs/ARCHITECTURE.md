@@ -23980,6 +23980,27 @@ this decision's own §2/§4 already turned on, applied a third time: **do
 not build a once-per-object shortcut for a rule the spec states
 per-pixel.**
 
+**★ AMENDED 2026-08-29 (324th filing, `Pass 165.0`, `4331be8`, decision
+098) — the "value-dependent Row 1 is `DeviceCMYK`-stated-directly only"
+guard above gained a THIRD kind of source that reads Row 1's tints
+without taking Row 1's rule, and it matters because the wrong merge was
+nearly shipped as the fix.** An `ICCBased` colour space with `/N 4`
+resolving to `DeviceCMYK` through the `/Alternate` fallback (§8.6.5.5) was
+losing its authored tints entirely — `overprint::authored_tints` had no
+arm for it and fell through to reconstructing CMYK from the already-
+converted RGB paint colour, which is decision 079's "do not cross" defect
+family, a fifth instance. The one-line fix — classify it as
+`DeviceCmykDirect` — was rejected for exactly this section's own reason:
+Row 1's `/OPM 1` value-dependent rule is scoped by §8.6.7 to a source
+**stated directly**, not to one that merely *resolves* to it, so widening
+`DeviceCmykDirect` would have handed this source Row 1's behaviour along
+with its tints. New variant `SourceKind::ProcessCmykIndirect` answers the
+two questions this section already distinguishes — "are the tints
+readable" and "which Table 149 row applies" — separately: readable like
+`DeviceCmykDirect` (in `authored_tints`), ordinary like `OtherProcess` (in
+`cmyk_group_rules`, i.e. every component `ComponentRule::Source`). Full
+derivation: decision 098, above.
+
 **One geometry walk, not two.** `sample_at()` — the pixel-centre-and-
 `/BBox` coverage predicate a shading's paint already used — was extracted
 and is now called by both the normal paint route and the new overprint
@@ -25063,6 +25084,35 @@ free 072.**
   **25,870** pixels simply moved from one to the other (25,870 → 0 and
   0 → 25,870). A bridged pixel has been through a many-to-one conversion
   and back; a native one has not.
+
+  **★★★★★ AMENDED 2026-08-29 (324th filing, `Pass 165.0`, `4331be8`) —
+  every prior amendment above changed WHICH POPULATION the counter
+  counts; this one is the first defect in WHETHER THE COUNTER FIRES AT
+  ALL for a population it always claimed to cover.** `cmyk_paint.rs`'s own
+  doc said *"every such paint is counted by the buffer's own bridge
+  counter"* — true of the image path (`note_unbridged_image`), never
+  wired for the **solid-paint** path (fills/strokes): `record_bridged_solid`
+  did not exist and nothing called it, so a fill or stroke whose colour
+  reached the buffer through the sRGB bridge (`brush.cmyk.is_none()`) was
+  bridged and silently uncounted. **Measured on the failing render:
+  `cmyk_bridged_pixels = 0` across 40,000 reconstructed pixels — identical
+  to a correctly-native `DeviceCMYK` render of the same shape.** Rule 4 is
+  the rule this breaks, not accuracy: pdfce approximated a colour and
+  **reported that it had not**. Demonstrated both ways on the same shape
+  (DeviceRGB fill → 40,000 bridged; DeviceCMYK fill → 0), so the counter
+  now discriminates the two cases it always claimed to. **This is a
+  corroborating instance of a pattern this project has now seen at least
+  four times without promoting it to a numbered rule** (the text/glyph
+  overprint counter, `Pass 85.4e`'s decision-log entry above; the
+  process-image population, `Pass 130.2`'s amendment above;
+  `cmyk_bridged_pixels`'s own four population changes, this same block)
+  — a disclosure counter's declared population is a claim about every
+  *call site* that can produce a member of it, not only the first one
+  wired, and nothing short of grepping every producer catches a
+  silently-unwired one. First captured as a standalone, cross-project
+  finding at
+  `D:/dev/rag/rust/a_disclosure_counters_population_claim_is_per_call_site_not_per_object_class.md`
+  rather than left as prose recurring in this file a fifth time.
 
   **(d) `f32`, on one type alias.** `cmyk_buffer::Chan`, so revisiting it is
   one line. §11.4.4's `1/α_gn` is what forces floats at all: an 8-bit
@@ -26676,3 +26726,103 @@ free 072.**
   need a second citation here; branch 1/branch 2 is an ordinary
   preferred/fallback scope, not a new posture. **Decision ceiling moves
   096 → 097; next free 098.**
+
+- **2026-08-29 — Decision 098. `ICCBased` WITH `/N 4` RESOLVING TO
+  `DeviceCMYK` GETS ITS OWN `SourceKind` VARIANT — NEVER MERGED INTO
+  `DeviceCmykDirect` — BECAUSE THE TWO QUESTIONS "ARE ITS TINTS READABLE"
+  AND "DOES ROW 1 APPLY" HAVE DIFFERENT ANSWERS FOR THIS SOURCE.** `Pass
+  165.0` (`4331be8`), found while chasing an `iccce`-reported render
+  divergence on `PCS3_132` down to the line.
+
+  **The defect this decision's fix closes.**
+  `overprint::authored_tints` reads the file's own stated CMYK tints for
+  `SourceKind::DeviceCmykDirect` and `SourceKind::SeparationOrDeviceN`, and
+  returns `None` for `OtherProcess` — the bucket an `ICCBased` space with
+  `/N 4` resolving to `DeviceCMYK` through the `/Alternate` fallback fell
+  into. `None` sent `interpret.rs` to `overprint::rgb_to_cmyk` on the
+  **already-flattened paint colour** — a naive max-GCR transform whose own
+  doc names it *"chosen for exact round-tripping, not for accuracy"* and
+  which was never paired with the outbound leg the paint colour actually
+  took (`Rgb::from_cmyk`, calibrated, carries an intent). **Proven exact to
+  the integer on all three channels:** authored `cmyk .75 0 1 0` renders
+  `(47, 181, 73)`; reconstructed from the round trip, `cmyk .7382 0 .5942
+  .2906` renders `(24, 140, 108)` — the observed, wrong value. Yellow
+  collapsed **1.0 → 0.59**; black was **invented at 0.29**. **This is the
+  same root cause as decision 079's "do not cross" family** (rgb→cmyk→rgb
+  is not the identity when the two legs are different functions) applied
+  to a fifth source population; see the personal_rag amendment cited below
+  for the full lineage.
+
+  **Why the one-line fix (reclassify as `DeviceCmykDirect`) was refused.**
+  Table 149's `DeviceCmykDirect` row is the **one** row in the table whose
+  `/OPM 1` behaviour differs from `/OPM 0`, and §8.6.7 scopes that rule to
+  a source **stated directly** as `DeviceCMYK` — not to any process space
+  that merely *resolves* to one. Widening `DeviceCmykDirect` to also match
+  `ICCBased`/N4 would have silently changed overprint's compositing
+  behaviour for every ICC-tagged CMYK file, on the strength of a fix aimed
+  at colour, and **nothing in the existing suite would have caught the
+  regression** — trading one bug for a different one shipped as a fix.
+
+  **The resolution: a third `SourceKind` variant, `ProcessCmykIndirect`,
+  answering the two questions separately instead of collapsing them.**
+  *Yes*, its tints are readable — `authored_tints` treats it exactly as
+  `DeviceCmykDirect`. *No*, it is not Table 149's Row 1 — `cmyk_group_rules`
+  treats it exactly as `OtherProcess` (`ComponentRule::Source` on every
+  component, the ordinary non-value-dependent row). **A new variant, not a
+  widened `|` pattern, because only a variant forces the compiler to make
+  the caller choose at every match site** — five call sites in
+  `crates/pdfce-render/src/overprint.rs` had to decide, and did.
+  `classify()`'s new arm is deliberately narrow: `/N 4` only, `DeviceCMYK`
+  alternate only, and **outside a sampled image only** — the same
+  qualifier Table 149's own Row 1 carries — so no other `ICCBased`
+  resolution (RGB, Gray, or a CMYK source found *inside* an image sample)
+  is touched, and `Pass 143.0`'s grey/RGB classification is untouched.
+
+  **This makes documented behaviour real rather than inventing new
+  behaviour.** `authored_tints`'s own rustdoc already said `None` was
+  returned for *"an `ICCBased` that did not resolve to CMYK"* — the
+  implementation never drew that distinction; it returned `None` for
+  every `ICCBased`, resolved or not. The fix closes the gap between the
+  doc comment and the code, it does not relax either.
+
+  **Suite re-measured, as any colour-affecting change must be** (this
+  project's own standing discipline): **51 patches — 6 FAIL, 29 pass, 16
+  UNRESOLVED, 0 render errors, IDENTICAL to the carried-forward baseline.**
+  No verdict was expected to move: the suite's own criterion for this
+  patch is the *absence* of a trap mark, already satisfied before this
+  fix: `PCS3_132`/`PCS3_133` **pass their own criterion** (item 9 of the
+  colour cluster; do not write them up as suite failures). The fix
+  improves accuracy on a conformance-**passing** panel, a distinction the
+  suite structurally cannot see — the exact distinction `iccce` asked be
+  kept.
+
+  **Measured result, red/green/blue against Acrobat's `(59, 171, 51)`, per
+  hard rule 10's figure-beside-its-arithmetic form:**
+
+  | | red | green | blue | Δ Acrobat |
+  |---|---:|---:|---:|---|
+  | before (`OtherProcess`, reconstructed) | 24 | 140 | 108 | −35 / −31 / +57 |
+  | after (`ProcessCmykIndirect`, authored) | 47 | 181 | 73 | −12 / +10 / +22 |
+
+  Closer to Acrobat on every channel; not colorimetric agreement — no ICC
+  profile is applied anywhere in this path.
+
+  **Tests, 3 added, 2 sabotaged:**
+  `iccbased_cmyk_states_its_tints_and_they_are_read`,
+  `iccbased_cmyk_does_not_get_device_cmyk_overprint_semantics`,
+  `the_iccbased_arm_is_narrow_on_purpose`. Reverting the new arm fails 1 of
+  17 overprint tests; **routing it through `DeviceCmykDirect` instead of a
+  dedicated variant fails 2 of 17**, including the test written
+  specifically to catch that exact trade.
+
+  **Body-section update — the paired amendment this decision-log/body
+  pairing rule requires.** §12's own Table-149/`DeviceCmykDirect` block
+  (above, the `overprint::composite`/`Pass 130.2` decision) and this
+  file's `cmyk_bridged_pixels` narrative (§12, `Pass 130.1` decision) both
+  carry a same-day amendment cross-referencing this decision — see those
+  two blocks. No change to §3, §4 or §4.1: `SourceKind` is
+  `pdfce-render`-internal, never part of `pdfce-core`'s published surface.
+
+  **No standing rule minted.** A classification-invariant fix inside an
+  existing decision family (069/079/etc.), not a new mechanism. **Decision
+  ceiling moves 097 → 098; next free 099.**

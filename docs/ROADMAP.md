@@ -96,6 +96,238 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 165.0` (`4331be8`, 2026-08-29) — TWO DEFECTS ON ONE PATH: an `ICCBased` `/N 4` CMYK source lost its authored tints to a flattened-colour round trip, and the disclosure counter built to catch that exact crossing was itself blind to it — filed 2026-08-29 (324th filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
+commit hash `4331be8` is relayed, stated by the engineer to be
+`git log`-verified. Every test count, suite figure and channel value below
+is likewise relayed from the engineer's dispatch, not independently
+re-run here.
+
+**Found by chasing an `iccce`-reported render divergence down to the
+line.** `docs/NEXT_SESSION.md` §A item 4 (the `PCS3_132` residual) carried
+five refuted hypotheses across two prior filings (313th–323rd); this Pass
+is the sixth attempt, and it is the one that found it — **two defects,
+diagnosed to the exact line, not narrowed further.**
+
+**DEFECT A — an authored CMYK value was thrown away and re-derived from
+its own flattened sRGB approximation.** `overprint::authored_tints` reads
+the file's own stated tints for `SourceKind::DeviceCmykDirect` and
+`SourceKind::SeparationOrDeviceN`, and returned `None` for `OtherProcess`
+— the bucket an `ICCBased` colour space with `/N 4` resolving to
+`DeviceCMYK` through the `/Alternate` fallback fell into. `interpret.rs`
+then fell through to `overprint::rgb_to_cmyk` on the **already-flattened
+paint colour**, a max-GCR transform whose own doc names it *"chosen for
+exact round-tripping, not for accuracy"* — and which was never paired with
+the outbound leg the colour actually took. **Proven exact to the integer
+on all three channels:**
+
+```text
+authored          cmyk .75 0 1 0        -> (47, 181, 73)
+reconstructed     cmyk .7382 0 .5942 .2906
+round-tripped                            -> (24, 140, 108)
+observed                                 -> (24, 140, 108)
+```
+
+Yellow collapsed **1.0 → 0.59**; black was **invented at 0.29**.
+
+**★★ The fix is deliberately NOT the one-line fix.** Reclassifying
+`ICCBased`/N4 as `DeviceCmykDirect` would have made `authored_tints` work
+— and silently changed **overprint's compositing rule**, because Table
+149's `DeviceCmykDirect` row is the one row whose `/OPM 1` behaviour is
+value-dependent, and §8.6.7 scopes that rule to a source **stated
+directly** as `DeviceCMYK`, not one that merely resolves to it. Merging
+the two buckets would have traded a colour bug for an overprint
+regression, **and nothing in the existing suite would have caught it.**
+
+**Resolution: a new `SourceKind::ProcessCmykIndirect` variant**, answering
+the two questions separately instead of collapsing them onto one enum arm
+— *yes* its tints are readable (treated exactly as `DeviceCmykDirect` in
+`authored_tints`), *no* it is not Table 149's Row 1 (treated exactly as
+`OtherProcess` in `cmyk_group_rules`). **A new variant, not a widened `|`
+pattern, because only a variant forces every one of the five match sites
+in `overprint.rs` to make a deliberate choice.** `classify()`'s new arm is
+narrow by design: `/N 4` only, `DeviceCMYK` alternate only, **outside a
+sampled image only** — the same qualifier Table 149's own Row 1 carries —
+so no other `ICCBased` resolution, and no `Pass 143.0` grey/RGB
+classification, is touched.
+
+★ `authored_tints`'s own rustdoc already said `None` was for *"an
+`ICCBased` that did not resolve to CMYK"* — the implementation never made
+that distinction. **This makes documented behaviour real, not new.**
+
+**⚠⚠ DEFECT B — the disclosure counter built to catch exactly this kind
+of crossing was itself blind to it.** `CmykBuffer::bridged` is documented
+as *"pixels whose colour reached this buffer through the sRGB bridge
+rather than as authored colorants"*, and `cmyk_paint.rs`'s own doc says
+*"every such paint is counted."* **Neither was true for solid paints** —
+`bridged` was incremented only on the image decode path
+(`note_unbridged_image`); the structurally identical solid-paint branch
+(`brush.cmyk.is_none()` in `cmyk_paint.rs`) had no equivalent call at all.
+
+Measured on the failing render: **`cmyk_bridged_pixels = 0`** across
+40,000 reconstructed pixels — byte-indistinguishable from a correctly-
+native `DeviceCMYK` render of the same shape. **pdfce approximated a
+colour and reported that it had not — project rule 4 broken, not an
+accuracy gap.** Demonstrated both ways on the same code so the zero could
+not read as "correctly zero": a `DeviceRGB` fill (must bridge) counted
+40,000; a `DeviceCMYK` fill (must not) counted 0. Fix: one call,
+`record_bridged_solid`, added beside the existing `note_unbridged_image`.
+
+★ **Fixing B mattered independently of A** — an honest counter would have
+pointed at defect A's cause in one render instead of the six hypotheses
+this residual actually took across three filings.
+
+**Result, per hard rule 10's figure-beside-its-arithmetic form, against
+Acrobat's `(59, 171, 51)`:**
+
+| | red | green | blue | Δ Acrobat |
+|---|---:|---:|---:|---|
+| before | 24 | 140 | 108 | −35 / −31 / +57 |
+| after | 47 | 181 | 73 | −12 / +10 / +22 |
+
+Closer on every channel; **not** colorimetric agreement — no ICC profile
+is applied anywhere in this path.
+
+**★ Conformance suite RE-MEASURED, as any colour-affecting change must
+be: 51 patches — 6 FAIL, 29 pass, 16 UNRESOLVED, 0 render errors —
+IDENTICAL to the carried-forward baseline.** No verdict change was
+expected: `PCS3_132`/`PCS3_133` already **pass their own criterion**
+(absence of a trap mark) — see `docs/NEXT_SESSION.md` §A item 9. The fix
+is an accuracy improvement on a conformance-**passing** panel, a
+distinction the suite structurally cannot see — exactly the distinction
+`iccce` asked be kept, and this entry keeps its shape.
+
+**Tests — 3 added, two sabotages:**
+`iccbased_cmyk_states_its_tints_and_they_are_read`,
+`iccbased_cmyk_does_not_get_device_cmyk_overprint_semantics`,
+`the_iccbased_arm_is_narrow_on_purpose`. Reverting the new arm fails 1 of
+17 overprint tests; **routing it through `DeviceCmykDirect` instead of the
+new variant fails 2 of 17**, including the test written specifically to
+catch that exact trade.
+
+**Invariant checks.** `SourceKind`/`authored_tints`/`cmyk_group_rules`/
+`classify`/`CmykBuffer::bridged` are all `pdfce-render`-internal; no
+change to `pdfce-core`'s public surface, so GUI-core separation
+(`cargo tree`) is not implicated. Round-trip/minimal-diff unaffected — a
+rendering-accuracy fix, no document bytes touched. No packaging change,
+no packaging smoke test required this Pass.
+
+**`FEATURES.md` — checked, zero rows changed.** Row 262 (Overprint
+SIMULATION) and row 256 (Subtractive compositing buffer) both describe
+the CURRENT, post-fix behaviour accurately and made no claim about
+`ICCBased`/N4 sources or about `cmyk_bridged_pixels`'s completeness that
+this Pass falsifies or newly satisfies — both defects were implementation
+bugs in already-shipped, correctly-described capabilities, not capability
+gaps. Row 351 (`ICCBased` through a real ICC profile, gated on `iccce`) is
+unrelated — that row is about ICC-profile-based colour transform, not
+about reading a source's own stated tints for overprint purposes. Stated
+explicitly per this role's maintenance contract so a reader does not go
+hunting for a row that should have moved.
+
+**Decision 098 minted** (`ARCHITECTURE.md` §12) — the `SourceKind`
+invariant split, with the refused one-line fix and its reasoning recorded
+in full. Paired body-section amendments added to the existing Table
+149/`DeviceCmykDirect` decision block and to the `cmyk_bridged_pixels`
+narrative (both in §12), per the decision-log/body-section pairing rule —
+`SourceKind` is `pdfce-render`-internal, so no change to §3/§4/§4.1.
+**Decision ceiling moves 097 → 098; next free 099.**
+
+**No standing rule minted for defect B**, though it is at least the
+**fourth** corroborating instance in this project of a disclosure
+counter's declared population silently diverging from its actual call-
+site coverage (the text/glyph overprint counter; the process-image
+population; `cmyk_bridged_pixels`'s own four population redefinitions).
+Rather than let this recur as unindexed prose a fifth time, it is now
+captured as a standalone, cross-project finding —
+`D:/dev/rag/rust/a_disclosure_counters_population_claim_is_per_call_site_not_per_object_class.md`
+— and `D:/dev/rag/rust/index.md` updated with the new entry.
+
+**`C:\personal_rag\pdf\` — fifth amendment to an existing lesson, not a
+new file.** `lesson_20260821_terminal_conversion_wants_accuracy_round_trip_wants_invertibility.md`
+already chronicles four prior instances of this exact "do not cross"
+family (shadings, images, meshes, `Separation`/`DeviceN` path fills); this
+is the fifth population (`ICCBased`/N4) and it is a general PDF-engine
+trap, not pdfce-specific — an `ICCBased` space stating real CMYK tints,
+lost by any renderer that reaches them only through the flattened paint
+colour. `personal_rag/pdf/index.md` and the master `personal_rag/index.md`
+both updated with the amendment (per this project's existing convention
+of one master-index line per amendment, not only per new file).
+
+**Owed items resolved.** `docs/NEXT_SESSION.md` §A item 4 (the
+`PCS3_132` residual) is now **fully diagnosed and fixed** — flagged to the
+engineer to strike (engineer-owned file, not edited here). §A item 5 (the
+`CmykIntent::Calibrated` doc-comment-vs-evidence gap) is **explicitly NOT
+resolved by this Pass** and should not be struck — it is a separate,
+still-open finding about a different default.
+
+**Still in flight:**
+- `rotate_widget` and `set_dimension_label` remain unbuilt (carried,
+  unchanged from `Pass 164.0`'s entry).
+- `Pass 142.0`, narrowed (non-standard-14 font faces), remains open.
+- `CmykIntent::Calibrated`'s doc-comment rationale vs. the `PCS3_230`
+  measurement (carried, unresolved by this Pass).
+- `PCS3_130` cells c/d's ~8-count disagreement (carried, untested
+  hypothesis).
+- The n-channel (per-spot-colorant) buffer remains the only path to the
+  suite's remaining overprint/spot FAILs (carried, unscoped).
+
+**Ledger.** Pass ceiling `164.0` → `165.0`; next free `165.1`/new major
+`166.0`. Standing rules unchanged at `R228`, next free `R229` — no mint
+this filing (see disposition above). Decision ceiling `097` → `098`; next
+free `099`. `FEATURES.md`: zero rows changed (see above). One new
+`D:\dev\rag\rust\` file written (see above), `index.md` updated. One
+existing `C:\personal_rag\pdf\` lesson amended (fifth amendment), both its
+subject index and the master `personal_rag/index.md` updated.
+
+### `v0.15.0` release (`89a2af9`, 2026-08-29) — cut on the operator's instruction, closing the "do all 4" standing item; filed here after `check-commits-filed.py` caught it unfiled two Passes later — filed 2026-08-29 (324th filing)
+
+**Sourcing.** No shell this filing (librarian invocation, hard rule 8).
+The commit hash `89a2af9` is relayed, stated by the engineer to be
+`git log`-verified; release-tooling output (`verify-release.py`, CI
+status, packaging smoke test) is likewise relayed, not independently
+re-run here.
+
+**Why this entry exists.** `89a2af9` is a code commit (a version bump plus
+release scaffolding) that was cut and pushed but never named in a
+`ROADMAP.md`/`SESSION_LOG.md`/`FEATURES.md` filing — `check-commits-filed.py`
+went red on it. **The engineer cut the release and moved straight to the
+next task without filing the release commit itself**; the gate caught it
+two Passes later (at `Pass 165.0`, above). A release commit is a code
+commit and is filed like any other, per the same convention that filed
+`v0.14.0`'s own commits (271st filing).
+
+**What shipped.** Workspace version 0.14.0 → 0.15.0, covering **43 Pass
+commits since `v0.14.0`**. Tag pushed, GitHub release created with a 24 MB
+portable zip. `verify-release.py v0.15.0` — **clean on every check.** CI —
+**green at the tagged commit.**
+
+**★ Headline: the operator's standing "do all 4" instruction is closed as
+of this release** — rotation (`Pass 155.0`), ce dimensions (`Pass 159.0`),
+bookmarks (`Pass 161.0`), fonts (`Pass 162.0`), the last of which was
+already recorded as closing the instruction at its own Shipped entry
+(319th filing); this release is the point at which all four ship to an
+operator-installable artifact together.
+
+**Packaging smoke test — done properly, not merely re-run.** The portable
+folder was copied to a **fresh path** and both binaries exercised against
+a file **outside** it: `move-bookmark` and `format-text --set-font
+Helvetica` both produced correct output; `pdfce-gui --version` responded.
+No dependency changes since `v0.14.0`, so `THIRD_PARTY_LICENSES.md` was
+correctly left unregenerated (rule 13 — regenerate only when the
+dependency set changes).
+
+**`FEATURES.md`: no rows changed** — a release is a packaging/distribution
+event over already-filed capabilities, not a new one.
+
+**No decision, no standing rule.** A version bump and release cut is
+neither an architectural decision nor a recurring engineering mechanism.
+
+**Ledger.** No Pass ID, no ledger movement of its own — this entry exists
+solely so `tools/check-commits-filed.py` has a filing to join `89a2af9`
+against. See `Pass 165.0`'s entry, above, for this session's actual
+ledger deltas.
+
 ### `Pass 164.0` (`fde9fa2`, 2026-08-29) — `rotate-annotation` CLI test written, 8 tests, closing the gap owed since `Pass 155.0` — plus the assertion that discriminates rotation DIRECTION, and a full-turn round-trip that is deliberately NOT bit-identical — filed 2026-08-29 (321st filing)
 
 **Sourcing.** No shell this filing (librarian invocation, hard rule 8). The
