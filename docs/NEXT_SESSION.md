@@ -7,8 +7,8 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
-Written 2026-08-29 (second write of the day). Ledger at write time: **Pass
-ceiling 167.0**, rules **R230**, decisions **099**, filings **326**.
+Written 2026-08-29 (third write of the day). Ledger at write time: **Pass
+ceiling 173.1**, rules **R231**, decisions **101**, filings **327**.
 
 ---
 
@@ -35,7 +35,41 @@ item on the list he has personally specified.
 **Do not promote the conformance validator (§0b) without him saying so** — his
 words, 2026-08-29: *"we'll deal with the conformance validator later."*
 
-### ★ SINCE THAT WAS WRITTEN: `Pass 167.0` shipped, from the CHANNEL, not from §A
+### ★ SINCE THAT WAS WRITTEN: SEVEN PASSES, none of them from §A
+
+`Pass 167.0` came from the pdfceGUI channel. `168.0`–`173.1` came from a
+direct operator instruction: *"can you make sure we have cut, copy, and paste
+available for everything and if not implement?"* → *"yes do all without
+stopping."*
+
+**cut/copy/paste is now available for**: page content, annotations (markup, ce
+dimensions, sticky notes, text boxes, stamps, links, file-attachment markers
+and every exotic subtype), form fields, whole pages, bookmark subtrees and
+embedded files. Before the session, **exactly one** class had all three verbs.
+
+**Still 0-of-3, and both for a real reason rather than because they were
+skipped:** named destinations (`add_named_destination` exists; there is no
+delete verb) and optional-content groups (there is **no OCG authoring at
+all**, so there is no paste target). Either would be a Pass about its own
+missing verbs first.
+
+**One residual, recorded on `Pass 120.5`'s Backlog entry:** a modelled markup
+(the eight `MarkupSpec` kinds) still drops `/CA` opacity, `/T` author and
+`/Contents` note, because the spec route is what lets a rotated paste re-bake
+the appearance. The raw carrier fixes it only for kinds *without* a spec.
+Carrying both and choosing by transform is the obvious next step.
+
+★★ **AND A PROCESS OBSERVATION WORTH ACTING ON BEFORE THE NEXT SESSION.**
+`Pass 120.5` had been in Backlog since 2026-08-21 with `Pass 169.0`'s exact
+scope. I scoped this session from a fresh coverage audit and never read the
+Backlog, so the audit re-derived a gap this file had already recorded and gave
+it a new ID — and `120.5`'s stated criteria then caught that `169.0` had met
+only half of them (`Pass 173.1` closed the rest). The audit was right to run;
+the Backlog was right to hold the entry. **What is missing is any step that
+reads Backlog IDs when a new Pass is being numbered.** One instance, so not a
+rule — but grep the Backlog for the capability before assigning an ID.
+
+### ★ AND BEFORE THAT: `Pass 167.0` shipped, from the CHANNEL, not from §A
 
 Later the same day, `pdfceGUI` filed a request and Ken ruled on it directly —
 *"ctrl v for paste as new. ctrl shift v for paste as duplicate."* That became
@@ -290,16 +324,26 @@ exactly how the two filing gates got omitted and CI went red.
 - `MAX_OUTLINE_DEPTH` = **32** (`outline.rs:218`);
   `MAX_OUTLINE_ITEMS` = **200_000** (`pageops/references.rs:64`). The gap
   between those two is what `Pass 161.1` was about.
-- `docs/core-api/02-editing-and-saving.md`: **3,331 lines, 85 clauses, 161
-  verbs, `EditError` 95 variants** (re-measured 2026-08-29 after `Pass 167.0`
-  added §1.26).
-  ★ **The previous write of this file said 3,161 / 78 / 159 / 92 and added
-  "the gate re-derives all of these" — and all four were stale within a day.**
-  That sentence is the reason: it reads as a freshness guarantee and therefore
-  SUPPRESSES the re-check it invites. `tools/check-core-api-verbs.py` derives
-  the verb count and the `EditError` count and fails on a mismatch; it does
-  **not** know what this file claims. Re-run it and copy its output; do not
-  trust a number here because a gate exists somewhere.
+- `docs/core-api/02-editing-and-saving.md`'s size, clause count, verb count
+  and `EditError` variant count: **DELIBERATELY NOT STATED HERE ANY MORE.**
+  Run `python tools/check-core-api-verbs.py` — it derives all four and prints
+  them, and it is the only thing that cannot be stale.
+
+  ★★ **Why the numbers were removed rather than corrected for a third time.**
+  This bullet has now gone stale twice in two consecutive filings, and the
+  second time it went stale **within hours** of being rewritten. The rewrite
+  even carried a paragraph explaining that the previous figures had gone stale
+  within a day — and that paragraph did not help, because the failure was
+  never a lack of warning.
+
+  **A number duplicated into a file no gate reads will drift, and the rate is
+  set by how fast the source changes, not by how firmly the copy is
+  annotated.** `check-core-api-verbs.py` guards `docs/core-api/`; it has no
+  idea this file exists. So the fix is to stop holding a second copy — the
+  pointer is always right, and a pointer cannot rot.
+
+  Same reasoning applies to anything else in §C: prefer the command that
+  measures it to the number it measured.
 - Real-world outline corpus: of 8 nested outlines under `fixtures/external/`,
   6 move cleanly; the other 2 hit a **pre-existing correct refusal** (recovered
   xref ⇒ incremental save refused, `--mode full` succeeds). Not a defect.
@@ -375,6 +419,22 @@ assertion would pass whether the re-parenting happened or not. Assert on
 
 ---
 
+## §D2 — ONE THING I DECIDED AND DID NOT EXECUTE
+
+`ARCHITECTURE.md` §4.1's surface sync log **ends at (AB), 2026-08-23**, with
+Passes 162.0–173.1 unrecorded. The librarian reported it and said the call was
+mine.
+
+**Decided: retire §4.1 with a forward pointer**, rather than backfilling
+twelve Passes into it. `docs/core-api/` now carries the surface account, is
+**gate-enforced** (`check-core-api-verbs.py` fails on a missing verb or a
+stale count), and decisions 099–101 carry the reasoning. A second,
+hand-maintained surface log beside a gate-enforced one is exactly the
+duplicated-number shape that made §C rot twice this week.
+
+**Not executed** — `ARCHITECTURE.md` is librarian-owned. Hand this to the next
+filing as the instruction, with the pointer text.
+
 ## §E — OPERATOR DECISIONS OUTSTANDING
 
 **None of these block anything.**
@@ -430,7 +490,8 @@ and wrong in every viewer that regenerates from `/DA`, §12.7.3.3), and the
 
 ### ★ INBOUND AND OWED — `iccce`, since 2026-08-29 07:12
 
-`D:\Dev\FeatureRequests\iccce_FeatureRequests\openequest_one_printf_splits_the_last_of_it_and_part_may_be_mine.md`
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open
+equest_one_printf_splits_the_last_of_it_and_part_may_be_mine.md`
 — **unanswered.** They are declining our *"ours, in the compositor"*
 attribution as premature: a CMYK buffer does **two separable things**
 (composites in CMYK — ours; converts to sRGB on exit — **theirs**, under
@@ -439,6 +500,19 @@ our measurement cannot tell them apart. **The ask is one printf**: the four
 CMYK values in the buffer immediately before the exit conversion, for
 `PCS3_132`'s green. Small, and it is the lead item in §A's colour cluster by
 another route.
+
+### `note_cut_copy_paste_now_covers_almost_everything_and_six_things_were_broken.md` (2026-08-29)
+
+Unprompted heads-up after the cut/copy/paste sweep. **They have not consumed
+any of it** — every `gui` box on the new `FEATURES.md` rows is `[ ]`.
+
+The three things it asks them to wire, in order, because each is a question
+they can ask **while the operator can still choose**:
+1. `carries_actions()` / an `Unsupported` entry **before the press**, so Cut is
+   greyed with a reason rather than failing.
+2. `InsertOutcome::orphaned_widgets` on a page paste — it produces a document
+   that looks right and is not.
+3. `OutlineClip::deepest_page()` before a bookmark paste, same shape.
 
 **Check BOTH channels every session** — `pdfce_FeatureRequests` and
 `iccce_FeatureRequests`. They live outside the repo, so **no gate can
