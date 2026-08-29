@@ -205,19 +205,70 @@ three of them were previously mis-stated in this file.
    overprint **state**. **Eliminating a knob is not eliminating the mechanism
    the knob sits on**, and the two needed separate experiments.
 
-   ★ **THE LIVE CANDIDATE: the PDF/X-4 OUTPUT INTENT.** The patch carries
-   `/OutputIntents [<< /S /GTS_PDFX /OutputConditionIdentifier
-   (ISO Coated v2 300% (ECI)) /DestOutputProfile 3 0 R >>]`. **This is the one
-   input no synthetic has yet carried**, and it is the mechanism `iccce`'s
-   `DEFAULT_DESTINATION.md` governs.
+   ★★★ **FOUND, 2026-08-29. It is the CMYK COMPOSITING BUFFER.**
 
-   ⚠ **A sixth test was attempted and is INCONCLUSIVE — do not read it as a
-   refutation.** The destination profile it lifted came out at **1 253 bytes**
-   when obj 3 is **~1.46 MB**: the `N 0 obj` regex matched the wrong object.
-   The run printed `(47, 180, 73)`, which means nothing, because the intent it
-   attached was not the patch's. **Redo it by resolving obj 3 through the
-   xref/object streams rather than by regex**, then re-run. That is the next
-   move and it is one experiment away.
+   The chain: `PCS3_132` is **PDF/X-4** and declares `/OutputIntents` with a
+   subtractive destination → pdfce's
+   `PageBlendSpaceSource::OutputIntentIfSubtractive` composites the page in a
+   **four-colorant CMYK buffer** instead of on screen → **that buffer is the
+   entire residual.**
+
+   Confirmed with the shipped `--max-cmyk-buffer-bytes` flag, which forces the
+   documented on-screen fallback, on **both** the real patch and a 6-object
+   synthetic:
+
+   | render | `cmyk_buffer_refused` | green |
+   |---|---|---:|
+   | the patch, default | `0` | **(24, 140, 108)** |
+   | the patch, `--max-cmyk-buffer-bytes 1024` | `1` | **(47, 180, 73)** |
+   | synthetic, default | `0` | **(24, 140, 108)** |
+   | synthetic, tiny buffer | `1` | **(47, 180, 73)** |
+
+   ★★ **AND THE DIRECTION IS THE UNCOMFORTABLE PART.** Against Acrobat's
+   `(59, 171, 51)`: on-screen is **−12 / +10 / +22**, the CMYK buffer is
+   **−35 / −31 / +57**. **The buffer exists to be MORE faithful for print, and
+   here it is roughly three times further from Acrobat on every channel than
+   the fallback it replaces.** One patch, and a print-correct blend is not the
+   same goal as a match-Acrobat blend — but the buffer's conversion back to
+   sRGB had never been measured against anything, and the first time it was, it
+   lost.
+
+   ⚠ **The same page renders two different greens depending on whether a
+   memory ceiling was hit.** `--max-cmyk-buffer-bytes`'s own help says the
+   colours can differ at different scales; *"slightly"* understates 23/41/35
+   counts.
+
+   ⇒ **Next: measure the CMYK buffer's sRGB round trip.** Not the table — that
+   is cleared. The suspect is the buffer's own conversion.
+
+   ★ **The five refutations that came first**, each a synthetic isolating one
+   ingredient, every one rendering the correct `(47, 180, 73)`:
+
+   | # | hypothesis | result |
+   |---|---|---|
+   | 1 | the conversion table | a third of it, **opposite sign on green** |
+   | 2 | `OverprintZeroTintScope` | all three scopes **byte-identical** |
+   | 3 | `/Separation /All` under `/OP true` | knocks the green out to white/black |
+   | 4 | the overprint **state** | five variants, all correct |
+   | 5 | the real 1.4 MB **source** ICC profile, lifted verbatim | correct |
+
+   ★ **#5 positively**: pdfce really does resolve `ICCBased` through the
+   `/Alternate` fallback its doc comment claims — the profile bytes do not
+   reach the result. A documented claim that survived being tested.
+
+   ★★ **A knob is not a mechanism.** After #2 the tempting sentence was
+   *"overprint is eliminated."* False — #2 clears a **setting**, #4 clears the
+   **state**, and they needed separate experiments.
+
+   ⚠⚠ **AND A TEST THAT PRINTED THE RIGHT-LOOKING ANSWER FOR THE WRONG
+   REASON.** The first output-intent attempt matched `13 0 obj` inside a search
+   for `3 0 obj`, attached a **1 253-byte `/Info` dictionary** as a 1.46 MB ICC
+   profile, and returned `(47, 180, 73)` — **indistinguishable from the five
+   genuine refutations.** Caught on the **byte count** against the file's own
+   declared `/Length 1462566`, not on the result. Every lift now verifies
+   against the declared length and aborts on mismatch.
+   **A wrong test that agrees with your priors is the expensive kind**, and it
+   was one line from being written up as a sixth refutation.
 
    ★ **iccce's capture was EXACT.** Rendering the patch here and reading the
    PNG pixels directly — no display path — gives `(24, 140, 108)`, 12 769 px.
