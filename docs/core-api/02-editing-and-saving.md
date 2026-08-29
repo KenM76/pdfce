@@ -9,8 +9,8 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 |---|---|
 | **Date** | 2026-08-13 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
-| **Primary subject** | `crates/pdfce-core/src/edit.rs` (34753) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 157 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 159 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 157 public `EditSession` methods
+## 1. Verb index — all 159 public `EditSession` methods
 
-**Count: 157.** Established by brace-matched extraction of the four
+**Count: 159.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -1424,6 +1424,8 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 | **Rotate a ce dimension** | `rotate_dimension(&mut self, dimension: DimensionId, pivot: (f64, f64), degrees: f64) -> Result<DimensionRotate, EditError>` | `Pass 159.0`. The measured value is UNCHANGED by construction — a rotation is an isometry. **Scaling is deliberately not offered**: it has no honest reading, and `set_group_scale` is the operation actually wanted. A `Linear` axis constraint is relaxed to `Aligned` and reported. |
 | **Rename a bookmark** | `set_outline_title(&mut self, item_id: ObjId, title: &str) -> Result<(), EditError>` | `Pass 156.0`. The commonest bookmark edit, and the one with no structural risk. Encoded through the same text-string path as every other title. |
 | **Delete a bookmark and its subtree** | `delete_outline_item(&mut self, item_id: ObjId) -> Result<usize, EditError>` | `Pass 156.0`. Relinks the sibling chain (`/First`, `/Last`, `/Next`, `/Prev`) and fixes `/Count` on every OPEN ancestor and the root. Returns how many objects went. Refuses the outline ROOT by name — that is a different act. |
+| **Move a bookmark — reorder or re-parent** | `move_outline_item(&mut self, item_id: ObjId, to: OutlinePlacement) -> Result<OutlineMove, EditError>` | `Pass 161.0`. The subtree travels with it. Unlinks from one sibling chain and splices into another, netting `/Count` up **both** branches. ONE undo entry. See below. |
+| **Expand or collapse a bookmark** | `set_outline_open(&mut self, item_id: ObjId, open: bool) -> Result<bool, EditError>` | `Pass 161.0`. Flips `/Count`'s sign and propagates the **magnitude** to the ancestors that can now see (or no longer see) the subtree. `false` = nothing to do (a leaf, or already in that state) — not an error. |
 
 `parent: None` means top level; otherwise the id of an existing item, which
 you get from `read_outline`. The item is appended **last** among its
@@ -1478,6 +1480,90 @@ CLI: `pdfce-cli add-bookmark --title … [--page N] [--top Y] [--under n]`,
 where `--under` takes the `n=` number `list-outline` prints. **The indices
 shift after every add** — they are positions in the current tree, not stable
 handles — so a batch of adds must re-list between them.
+
+#### ★ Added 2026-08-29 — `Pass 161.0`: moving one
+
+```rust
+pub enum OutlinePlacement {
+    FirstChild { parent: Option<ObjId> },   // None = the outline root
+    LastChild  { parent: Option<ObjId> },
+    Before     { sibling: ObjId },
+    After      { sibling: ObjId },
+}
+
+pub struct OutlineMove {
+    pub moved: bool,            // false = already there; nothing written
+    pub from_parent: ObjId,
+    pub to_parent: ObjId,
+    pub reparented: bool,       // crossed parents rather than reordering
+    pub visible_items: usize,   // the item + its VISIBLE descendants
+}
+```
+
+**Anchors are object ids, not indices.** An outline's siblings are a
+doubly-linked list, not an array — there is no stored index, so an index
+parameter would have to be counted by walking the chain and would go stale the
+moment any sibling changes. A shell that reads a panel, lets the operator drag
+a row, and calls with the index it read has a race with its own undo stack.
+
+**Reordering and re-parenting are one verb.** `Before`/`After` against a
+current sibling reorders; the same variants against a sibling elsewhere, or
+`FirstChild`/`LastChild` with a different parent, re-parent. There is
+deliberately no separate promote/demote verb — those are this enum with a
+different anchor.
+
+| Guarantee | Detail |
+|---|---|
+| The subtree travels | Matches `delete_outline_item` and Acrobat's own model. A chapter takes its sections. |
+| The destination is untouched | `/Dest` and `/A` are never read or written. A move changes where a bookmark **sits**, not where it **goes**. |
+| The item's own expansion state survives | A collapsed branch arrives collapsed. |
+| `/Count` is netted, not applied twice | Ancestors common to both branches get **one** write with the net, or none when it is zero. |
+| A no-op costs nothing | No objects, no undo entry. `moved: false`. |
+
+**`visible_items` is not the subtree size.** A collapsed bookmark reports
+**1** however large it is — that is what it contributes to an ancestor's
+`/Count`. A shell saying *"moved 1 bookmark (7 nested)"* must take the number
+from here rather than recompute it, or it has a second implementation of the
+sign convention.
+
+##### The one place pdfce chose its own answer
+
+Moving a bookmark into a parent that is **already collapsed** leaves it
+hidden. Whether a tool should then expand that parent could not be sourced
+from Acrobat either way — the Acrobat reference records it as a GAP — and both
+answers are defensible: revealing respects *"I just put it there"*, preserving
+respects *"I collapsed that on purpose"*.
+
+**Both ship, split by verb.** `move_outline_item` preserves;
+`set_outline_open` is the other half. Call both for reveal-on-drop and get
+**two** undo entries, which is the honest count — an operator who did not want
+the expansion can undo it without undoing the move.
+
+A destination parent that was a **leaf** is a different case and is left
+**open**, matching `add_outline_item` and Acrobat (sourced): a node gaining
+its first child gains a positive `/Count`. The alternative drops the bookmark
+somewhere invisible the instant the operator put it there.
+
+##### What is refused
+
+| Case | Error |
+|---|---|
+| the item, or an anchor, is the outline ROOT | `OutlineRootIsNotAnItem { id }` |
+| the item, parent or anchor is not reachable from the outline root | `OutlineItemNotFound { id }` |
+| the destination is inside the item's own subtree | `OutlineMoveIntoOwnSubtree { item, target }` |
+
+The cycle refusal is not a clamp. Splicing an item under its own descendant
+produces a file that still parses and whose `/Parent` chain loops — pdfce's
+walkers survive only because §10 makes them depth-guarded; a viewer without
+that guard hangs. Moving to the target's parent instead would put the
+bookmark somewhere nobody asked for, and detaching the subtree first would
+silently delete navigation the operator was reorganising.
+
+CLI: `pdfce-cli move-bookmark --n N (--before N|--after N|--under N|--to-top-level) [--first]`
+and `pdfce-cli set-bookmark-open --n N [--collapse]`. Both index by
+`list-outline`'s `n=`, and the cycle refusal is re-phrased into those numbers
+rather than passing the core's object ids through.
+
 ### 1.20 Form-field adoption (1)
 
 > #### ★ Added 2026-08-19 — `Pass 103.1`

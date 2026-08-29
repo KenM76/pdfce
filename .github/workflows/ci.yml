@@ -415,6 +415,15 @@ jobs:
       - name: check every public verb is documented and the counts agree
         run: python tools/check-core-api-verbs.py
 
+      # clap derives every subcommand's `--help` from the doc comment on its
+      # `Command` variant, so a variant with no doc ships a BLANK description
+      # and nothing in the build notices -- not clippy, not missing_docs
+      # (private items in a binary crate), not any test, because no test reads
+      # help text. Found `extract-text`'s help welded onto `list-outline`, then
+      # `print-preview` and `render-page` shipping blank, all live at HEAD.
+      - name: check every subcommand carries operator help text
+        run: python tools/check-clap-help.py
+
       # `render-page`'s stdout line is a published contract written down three
       # times: the `println!` that emits it, the `//!` template a consumer
       # reads, and an `assert_eq!` in the tests. Only the test copy is under

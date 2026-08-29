@@ -1633,20 +1633,6 @@ enum Command {
         output: PathBuf,
     },
 
-    /// Extract a document's text content (ISO 32000-1 §9.10).
-    ///
-    /// Prints what the file actually says, plus the word spaces and line
-    /// breaks pdfce had to DERIVE from glyph geometry — because outside
-    /// a Tagged PDF the standard guarantees neither (§14.8.2.5, and the
-    /// negative results S1–S9). `--json` splits the two apart run by
-    /// run, so a caller that wants only the sourced characters can have
-    /// exactly those.
-    ///
-    /// Diagnostics are never optional and never silent: how many
-    /// character codes came from each rung of the §9.10.2 ladder, how
-    /// many fell through it to U+FFFD, which fonts carry no recoverable
-    /// Unicode at all, and how many spaces and line breaks pdfce
-    /// invented.
     /// **List the document's bookmarks** (ISO 32000-1 §12.3.3).
     ///
     /// Reports the outline tree with each item's nesting level, its
@@ -1695,6 +1681,114 @@ enum Command {
         /// Which bookmark — the `n=` value `list-outline` prints, 1-based.
         #[arg(long)]
         n: usize,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
+    /// **Move a bookmark** — reorder it among its siblings, or nest it under a
+    /// different one (`Pass 161.0`).
+    ///
+    /// The bookmark's whole subtree travels with it, as Acrobat does: a
+    /// chapter moved under a different part takes its sections along. Its
+    /// destination is untouched — a move changes where a bookmark *sits*, not
+    /// where it *goes*.
+    ///
+    /// Every bookmark is named by the `n=` number `list-outline` prints, so
+    /// the two commands compose: read the tree, pick a row, pick a target.
+    ///
+    /// # Choosing the destination
+    ///
+    /// Exactly one of these:
+    ///
+    /// * `--before N` / `--after N` — land next to bookmark `N`, under
+    ///   whatever parent `N` has. This is how you reorder.
+    /// * `--under N` — become the LAST child of bookmark `N`, which is where
+    ///   `add-bookmark` puts a new one. Add `--first` for the first child
+    ///   instead.
+    /// * `--to-top-level` — become a top-level bookmark, last; `--first`
+    ///   makes it the first.
+    ///
+    /// # What it refuses, and why each one matters
+    ///
+    /// Moving a bookmark under one of its own descendants is **refused**: it
+    /// would make the outline's `/Parent` chain a cycle, producing a file that
+    /// still opens and that a reader without a depth guard walks forever.
+    ///
+    /// Moving a bookmark to where it already is is **not** an error — it
+    /// reports `moved=0` and writes nothing, because a script rebuilding an
+    /// outline issues redundant moves by construction.
+    ///
+    /// # `/Count` is maintained for you
+    ///
+    /// Every ancestor carries a count of the items visible beneath it, and the
+    /// two branches of a move must be adjusted in opposite directions
+    /// (§12.3.3 Tables 152–153). Moving a bookmark into a COLLAPSED parent
+    /// hides it, so the counts above go DOWN even though nothing was deleted —
+    /// that is correct, and `visible=` reports how many items moved.
+    MoveBookmark {
+        /// Input PDF.
+        input: PathBuf,
+        /// Which bookmark to move — the `n=` value `list-outline` prints,
+        /// 1-based.
+        #[arg(long)]
+        n: usize,
+        /// Land immediately before bookmark N, under N's parent.
+        #[arg(long, group = "destination")]
+        before: Option<usize>,
+        /// Land immediately after bookmark N, under N's parent.
+        #[arg(long, group = "destination")]
+        after: Option<usize>,
+        /// Become a child of bookmark N — last by default, first with
+        /// `--first`.
+        #[arg(long, group = "destination")]
+        under: Option<usize>,
+        /// Become a top-level bookmark — last by default, first with
+        /// `--first`.
+        #[arg(long, group = "destination")]
+        to_top_level: bool,
+        /// With `--under` or `--to-top-level`, land FIRST among the children
+        /// rather than last.
+        #[arg(long)]
+        first: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
+    /// **Expand or collapse a bookmark** (`Pass 161.0`).
+    ///
+    /// A bookmark with children is stored open or closed, and the state
+    /// survives a save — it is the sign of `/Count` (§12.3.3 Table 153), not a
+    /// viewer preference. This sets it.
+    ///
+    /// # Why this is separate from `move-bookmark`
+    ///
+    /// Moving a bookmark into a collapsed parent leaves it hidden. Whether a
+    /// tool should then expand that parent is a real two-answer question —
+    /// revealing respects "I just put it there", preserving respects "I
+    /// collapsed that on purpose" — and Acrobat's own behaviour could not be
+    /// sourced either way. pdfce ships both: the move preserves, and this
+    /// expands. Run them together for reveal-on-move.
+    ///
+    /// A bookmark with no children has no expansion state and reports
+    /// `changed=0` rather than failing, so a sweep over every row does not
+    /// have to filter first.
+    SetBookmarkOpen {
+        /// Input PDF.
+        input: PathBuf,
+        /// Which bookmark — the `n=` value `list-outline` prints, 1-based.
+        #[arg(long)]
+        n: usize,
+        /// Collapse it instead of expanding it.
+        #[arg(long)]
+        collapse: bool,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -2292,6 +2386,19 @@ enum Command {
         booklet_subset: BookletSubsetArg,
     },
 
+    /// **Report what a print WOULD do**, without printing anything
+    /// (`Pass 138.0`).
+    ///
+    /// Resolves the printer, reads its resolution and printable area, and
+    /// places every selected page onto the sheet — exactly as a real print
+    /// would — then reports the result instead of spooling it. There is
+    /// deliberately no flag here that starts a job.
+    ///
+    /// # The clip report is the point
+    ///
+    /// Acrobat clips an oversized page SILENTLY. pdfce names the pages that
+    /// would lose content and reflects it in the exit code, so a scripted
+    /// caller can refuse to print rather than discover the loss on paper.
     PrintPreview {
         /// Input PDF.
         input: PathBuf,
@@ -2439,6 +2546,20 @@ enum Command {
         ignore_case: bool,
     },
 
+    /// Extract a document's text content (ISO 32000-1 §9.10).
+    ///
+    /// Prints what the file actually says, plus the word spaces and line
+    /// breaks pdfce had to DERIVE from glyph geometry — because outside
+    /// a Tagged PDF the standard guarantees neither (§14.8.2.5, and the
+    /// negative results S1–S9). `--json` splits the two apart run by
+    /// run, so a caller that wants only the sourced characters can have
+    /// exactly those.
+    ///
+    /// Diagnostics are never optional and never silent: how many
+    /// character codes came from each rung of the §9.10.2 ladder, how
+    /// many fell through it to U+FFFD, which fonts carry no recoverable
+    /// Unicode at all, and how many spaces and line breaks pdfce
+    /// invented.
     ExtractText {
         /// Input PDF.
         input: PathBuf,
@@ -2688,6 +2809,27 @@ enum Command {
         #[arg(long)]
         dump_image: Option<PathBuf>,
     },
+    /// **Rasterise one page to a PNG** (ISO 32000-1 §8, §9).
+    ///
+    /// Interprets the page's content stream and writes the result at the
+    /// requested scale. `--page` is 1-based, matching how every reader and
+    /// every human numbers pages.
+    ///
+    /// # Fidelity is reported, never assumed
+    ///
+    /// One machine-readable line on stdout always; a human-readable
+    /// expansion on stderr ONLY when the render was less than fully
+    /// faithful — substituted fonts, unsupported constructs, clamped
+    /// geometry. A clean render writes nothing to stderr, so a non-empty
+    /// stderr is a real signal and `2>/dev/null` is never needed.
+    ///
+    /// # No system fonts are discovered
+    ///
+    /// The default render is deterministic (`R19`): a batch job whose output
+    /// depends on which fonts the runner happens to have installed is not one
+    /// anyone can trust. `--font-dir` is the explicit, disclosed opt-in, and
+    /// glyphs drawn from a supplied face are counted separately from
+    /// substituted ones.
     RenderPage {
         /// Input PDF.
         input: PathBuf,
@@ -7137,6 +7279,34 @@ fn run() -> ExitCode {
             output,
             mode,
         } => cmd_edit_bookmark(&input, n, None, &output, mode),
+        Command::MoveBookmark {
+            input,
+            n,
+            before,
+            after,
+            under,
+            to_top_level,
+            first,
+            output,
+            mode,
+        } => cmd_move_bookmark(
+            &input,
+            n,
+            before,
+            after,
+            under,
+            to_top_level,
+            first,
+            &output,
+            mode,
+        ),
+        Command::SetBookmarkOpen {
+            input,
+            n,
+            collapse,
+            output,
+            mode,
+        } => cmd_set_bookmark_open(&input, n, collapse, &output, mode),
         Command::AddBookmark {
             input,
             title,
@@ -11591,6 +11761,275 @@ fn count_outline_items(items: &[pdfce_core::outline::OutlineItem]) -> usize {
         stack.extend(item.children.iter());
     }
     n
+}
+
+/// `move-bookmark` — reorder or re-parent one bookmark (`Pass 161.0`).
+///
+/// # Why the four destination flags collapse to one enum here
+///
+/// `clap`'s `group = "destination"` makes `--before`, `--after`, `--under` and
+/// `--to-top-level` mutually exclusive at parse time, so this function never
+/// sees two of them. It can still see **none**, which is the one combination
+/// the group cannot forbid without making a destination mandatory in a way
+/// that reads badly in `--help`, so it is refused here by name.
+///
+/// `--first` is deliberately NOT in the group: it modifies `--under` and
+/// `--to-top-level` rather than competing with them, and it is silently
+/// meaningless with `--before`/`--after` — which is refused rather than
+/// ignored, because a flag that does nothing is a flag whose author believed
+/// it did something.
+///
+/// # The disclosure
+///
+/// The invocation is the commit in `pdfce-cli` — no session, no undo — so
+/// everything the core worked out is printed on the way past (project rule 4,
+/// `pdfce-cli` half). That includes the case where **nothing happened**:
+/// `moved=0` is printed rather than a silent success, because "the bookmark is
+/// already there" and "the command did not run" look identical otherwise.
+///
+/// A move into a collapsed parent reduces the counts above it even though
+/// nothing was deleted. That is correct and surprising, so it gets its own
+/// sentence on stderr rather than being left for the operator to discover from
+/// a viewer's panel.
+// Nine parameters, and they are nine because the SUBCOMMAND has nine flags:
+// this function's shape is `clap`'s, not a design choice. Bundling them into
+// a struct would add a type whose only job is to be destructured one line
+// later, and would put the destination flags one indirection away from the
+// mutual-exclusion check that is the whole reason they are separate.
+#[allow(clippy::too_many_arguments)]
+fn cmd_move_bookmark(
+    input: &Path,
+    n: usize,
+    before: Option<usize>,
+    after: Option<usize>,
+    under: Option<usize>,
+    to_top_level: bool,
+    first: bool,
+    output: &Path,
+    mode: SaveMode,
+) -> u8 {
+    if n == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --n is 1-based, matching `list-outline`'s own numbering",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    if before.is_none() && after.is_none() && under.is_none() && !to_top_level {
+        eprintln!(
+            "pdfce-cli: {}: a move needs a destination — one of --before N, --after N, --under N or --to-top-level",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    if first && (before.is_some() || after.is_some()) {
+        eprintln!(
+            "pdfce-cli: {}: --first modifies --under and --to-top-level; with --before or --after the position is already exact",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    for (flag, value) in [("--before", before), ("--after", after), ("--under", under)] {
+        if value == Some(0) {
+            eprintln!(
+                "pdfce-cli: {}: {flag} is 1-based, matching `list-outline`'s own numbering",
+                input.display()
+            );
+            return exit::RUNTIME_ERROR;
+        }
+    }
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // Resolve every `n=` against ONE reading of the outline, before anything
+    // is edited. Resolving the anchor after the move would index a tree that
+    // has already changed shape under it.
+    let (item_id, item_title, anchor_id) = {
+        let outline = pdfce_core::outline::read_outline(&session.graph());
+        let total = count_outline_items(&outline.items);
+        let resolve = |which: usize| nth_outline_item(&outline.items, which);
+        let Some(item_id) = resolve(n) else {
+            eprintln!(
+                "pdfce-cli: {}: no bookmark {n} — the document has {total}",
+                input.display()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let title = outline
+            .flatten()
+            .get(n - 1)
+            .map_or_else(String::new, |i| i.title.clone());
+        let anchor = match before.or(after).or(under) {
+            None => None,
+            Some(which) => match resolve(which) {
+                Some(id) => Some(id),
+                None => {
+                    eprintln!(
+                        "pdfce-cli: {}: no bookmark {which} — the document has {total}",
+                        input.display()
+                    );
+                    return exit::RUNTIME_ERROR;
+                }
+            },
+        };
+        (item_id, title, anchor)
+    };
+
+    let placement = match (before, after, under, to_top_level) {
+        (Some(_), _, _, _) => pdfce_core::edit::OutlinePlacement::Before {
+            sibling: anchor_id.expect("--before resolved above"),
+        },
+        (_, Some(_), _, _) => pdfce_core::edit::OutlinePlacement::After {
+            sibling: anchor_id.expect("--after resolved above"),
+        },
+        (_, _, Some(_), _) if first => {
+            pdfce_core::edit::OutlinePlacement::FirstChild { parent: anchor_id }
+        }
+        (_, _, Some(_), _) => pdfce_core::edit::OutlinePlacement::LastChild { parent: anchor_id },
+        (_, _, _, true) if first => pdfce_core::edit::OutlinePlacement::FirstChild { parent: None },
+        (_, _, _, true) => pdfce_core::edit::OutlinePlacement::LastChild { parent: None },
+        // Unreachable: the four-flag guard above returns before this point.
+        _ => unreachable!("a destination was verified present"),
+    };
+
+    let report = match session.move_outline_item(item_id, placement) {
+        Ok(r) => r,
+        // ★ The cycle refusal is re-phrased rather than passed through.
+        //
+        // The core's message names OBJECT IDS, which is right for the core —
+        // its caller passed object ids. But this command's operator never saw
+        // one: they typed `--n 1 --under 2`, and an error that answers with
+        // "bookmark 9 0 cannot be moved under 11 0" is a message about
+        // identifiers that appear nowhere in `list-outline`'s output. Every
+        // other refusal in this function speaks `n=`; this one has to as well,
+        // or the CLI has two vocabularies and the operator has to learn the
+        // one pdfce uses internally to act on the failure.
+        Err(pdfce_core::edit::EditError::OutlineMoveIntoOwnSubtree { .. }) => {
+            let target = before.or(after).or(under);
+            eprintln!(
+                "pdfce-cli: {}: bookmark {n} cannot be moved {} — that would put it inside its own subtree, making the outline's /Parent chain a cycle. Move it to a bookmark that is not beneath it, or promote it with --to-top-level first.",
+                input.display(),
+                match target {
+                    Some(t) => format!("under bookmark {t}"),
+                    None => "there".to_string(),
+                }
+            );
+            return exit::RUNTIME_ERROR;
+        }
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    if report.moved && report.reparented && report.visible_items > 1 {
+        eprintln!(
+            "pdfce-cli: {}: {} outline items moved, not 1 — a bookmark takes everything beneath it, as Acrobat does.",
+            input.display(),
+            report.visible_items
+        );
+    }
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(o) => o,
+        Err(code) => return code,
+    };
+
+    println!(
+        "move-bookmark {} n={n} {:?} moved={} reparented={} visible={} -> {}",
+        input.display(),
+        item_title,
+        u32::from(report.moved),
+        u32::from(report.reparented),
+        report.visible_items,
+        output.display()
+    );
+    if !report.moved {
+        eprintln!(
+            "pdfce-cli: {}: the bookmark is already in that position — nothing was written",
+            input.display()
+        );
+    }
+    finish_edit(input, &saved)
+}
+
+/// `set-bookmark-open` — expand or collapse one bookmark (`Pass 161.0`).
+///
+/// See [`cmd_move_bookmark`] for why this is a separate verb rather than a
+/// flag on the move: the two answers to "what happens to a collapsed
+/// destination" are both defensible, so both ship, and composing them is one
+/// extra invocation rather than a boolean buried in an unrelated command.
+fn cmd_set_bookmark_open(
+    input: &Path,
+    n: usize,
+    collapse: bool,
+    output: &Path,
+    mode: SaveMode,
+) -> u8 {
+    if n == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --n is 1-based, matching `list-outline`'s own numbering",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let (item_id, item_title) = {
+        let outline = pdfce_core::outline::read_outline(&session.graph());
+        let flat = outline.flatten();
+        let Some(item) = flat.get(n - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no bookmark {n} — the document has {}",
+                input.display(),
+                flat.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        (item.id, item.title.clone())
+    };
+
+    let changed = match session.set_outline_open(item_id, !collapse) {
+        Ok(c) => c,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(o) => o,
+        Err(code) => return code,
+    };
+
+    println!(
+        "set-bookmark-open {} n={n} {:?} open={} changed={} -> {}",
+        input.display(),
+        item_title,
+        u32::from(!collapse),
+        u32::from(changed),
+        output.display()
+    );
+    if !changed {
+        eprintln!(
+            "pdfce-cli: {}: that bookmark has no children, or was already in that state — nothing was written",
+            input.display()
+        );
+    }
+    finish_edit(input, &saved)
 }
 
 /// `adopt-widget` — register an existing widget annotation as a form field

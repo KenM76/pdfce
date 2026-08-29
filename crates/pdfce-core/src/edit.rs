@@ -1091,6 +1091,130 @@ fn destination_kind(d: &crate::outline::Destination) -> &'static str {
     }
 }
 
+/// Where a bookmark should land when [`EditSession::move_outline_item`]
+/// moves it (`Pass 161.0`).
+///
+/// # Why a placement enum rather than an index
+///
+/// The obvious signature is `move_outline_item(item, new_parent, index)`,
+/// and it is wrong for this data structure. An outline's siblings are a
+/// **doubly-linked list** (§12.3.3 Table 153: `/Prev`, `/Next`), not an
+/// array — there is no stored index, so an index parameter would have to be
+/// *counted* by walking the chain, and every caller holding one would be
+/// holding a number that silently goes stale the moment any sibling is added
+/// or removed. A shell that reads a panel, lets the operator drag a row, and
+/// then calls with the index it read has a race with its own undo stack.
+///
+/// The anchors below are **object ids**, which do not go stale: a bookmark
+/// that still exists is still a valid anchor, and one that does not is
+/// refused by name via [`EditError::OutlineItemNotFound`] instead of
+/// silently landing in the wrong slot.
+///
+/// # The four cases cover both halves of the operation
+///
+/// *Reordering* (same parent, new position) is [`Self::Before`] /
+/// [`Self::After`] against a current sibling. *Re-parenting* (nesting under
+/// a different bookmark, or promoting to top level) is [`Self::FirstChild`]
+/// / [`Self::LastChild`] with the new parent — or the same `Before`/`After`
+/// against a sibling that happens to live somewhere else, which does both at
+/// once. There is deliberately no separate "promote"/"demote" verb: those are
+/// this enum with a different anchor, and a second spelling of one operation
+/// is exactly how two implementations of one rule come to disagree (`R171`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum OutlinePlacement {
+    /// Become the **first** child of `parent`, or of the outline root when
+    /// `parent` is `None` — that is, the first top-level bookmark.
+    ///
+    /// `None` means the root explicitly, mirroring
+    /// [`EditSession::add_outline_item`]'s `parent` parameter, so "make this
+    /// a top-level bookmark" does not require the caller to know the root's
+    /// object id (which is not part of pdfce's public surface).
+    FirstChild {
+        /// The destination parent, or `None` for the outline root.
+        parent: Option<ObjId>,
+    },
+    /// Become the **last** child of `parent`, or the last top-level bookmark
+    /// when `parent` is `None`.
+    ///
+    /// This is the placement [`EditSession::add_outline_item`] uses for a new
+    /// item, so "move it back where a fresh one would go" is expressible.
+    LastChild {
+        /// The destination parent, or `None` for the outline root.
+        parent: Option<ObjId>,
+    },
+    /// Become the sibling immediately **before** `sibling`, under whatever
+    /// parent `sibling` currently has.
+    ///
+    /// The destination parent is *derived* from the anchor rather than passed
+    /// alongside it, because passing both admits a combination that cannot be
+    /// satisfied — an anchor that is not a child of the stated parent — and
+    /// the only honest responses to that are a refusal for a contradiction
+    /// the caller did not intend, or silently believing one of the two.
+    Before {
+        /// The bookmark to land in front of.
+        sibling: ObjId,
+    },
+    /// Become the sibling immediately **after** `sibling`, under whatever
+    /// parent `sibling` currently has.
+    After {
+        /// The bookmark to land behind.
+        sibling: ObjId,
+    },
+}
+
+/// What [`EditSession::move_outline_item`] did — the off-canvas disclosure
+/// for a move (`Pass 161.0`).
+///
+/// # Why the verb returns a report instead of `()`
+///
+/// Project rule 4 (*fuzzy, never sneaky*) requires that anything pdfce worked
+/// out for itself is **disclosed**, and a move has two such facts that the
+/// caller did not state and cannot see: whether the item actually went
+/// anywhere, and how much navigation travelled with it.
+///
+/// `moved` exists because *"put it after the bookmark it is already after"*
+/// is a legitimate request with a legitimate answer — nothing — and the two
+/// ways of reporting nothing are both bad. Returning `Ok(())` makes a no-op
+/// indistinguishable from a real move, so an undo control offers an entry
+/// that undoes nothing. Returning an error makes a harmless request look like
+/// a failure, which is worse: a shell rebuilding an outline top-down issues
+/// redundant moves *by construction*. So a no-op writes **no objects and
+/// creates no undo entry**, and says so here.
+///
+/// `visible_items` is the count a `/Count` propagation moved between the two
+/// branches — the item plus its visible descendants, which is **not** its
+/// subtree size when the item is collapsed. A shell can say *"moved 1
+/// bookmark (7 nested)"* only if the core tells it; recomputing it shell-side
+/// would be a second implementation of the sign convention documented on
+/// [`EditSession::add_outline_item`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct OutlineMove {
+    /// Whether anything was written. `false` means the requested placement is
+    /// where the bookmark already was; no objects changed and no undo entry
+    /// was created.
+    pub moved: bool,
+    /// The parent the bookmark had before the move. Equal to `to_parent` on a
+    /// pure reorder.
+    pub from_parent: ObjId,
+    /// The parent the bookmark has after the move.
+    pub to_parent: ObjId,
+    /// Whether the move crossed parents (`from_parent != to_parent`) rather
+    /// than reordering within one.
+    ///
+    /// Carried separately from comparing the two ids because it is the fact a
+    /// disclosure sentence turns on — *"moved"* versus *"nested under"* — and
+    /// a shell deriving it independently is a second place for the two to
+    /// disagree.
+    pub reparented: bool,
+    /// How many items the move carried for `/Count` purposes: the bookmark
+    /// itself plus its **visible** descendants. A collapsed bookmark reports
+    /// `1` however large its subtree is, per §12.3.3 Table 153's sign
+    /// convention.
+    pub visible_items: usize,
+}
+
 /// Build a `/BS` border-style dictionary (§12.5.4 Table 166).
 ///
 /// One place, called from both widget branches of `add_text_field`. Writing
@@ -4410,6 +4534,37 @@ pub enum EditError {
     OutlineRootIsNotAnItem {
         /// The object that was passed.
         id: ObjId,
+    },
+    /// [`EditSession::move_outline_item`] was asked to move a bookmark
+    /// **into its own subtree** (`Pass 161.0`).
+    ///
+    /// # Why this is a refusal and not a clamp
+    ///
+    /// The outline is a tree held together by `/Parent`, `/First`, `/Last`,
+    /// `/Prev` and `/Next` (§12.3.3 Tables 152–153), and **none of those
+    /// keys is checked by anything at open time**. Splicing an item under
+    /// one of its own descendants produces a file that still parses, still
+    /// saves, and whose `/Parent` chain is a **cycle** — a reader walking it
+    /// never terminates, and pdfce's own walkers survive only because
+    /// `ARCHITECTURE.md` §10 makes every one of them depth-guarded. A viewer
+    /// without that guard hangs.
+    ///
+    /// The tempting alternatives are both worse than refusing. *Clamping* —
+    /// moving the item to the target's parent instead — puts the bookmark
+    /// somewhere the operator did not ask for and cannot predict.
+    /// *Detaching the subtree first* silently deletes navigation the operator
+    /// was reorganising, which is the opposite of what a move is for.
+    ///
+    /// Both ids are carried so a shell can name the two bookmarks involved
+    /// rather than saying "invalid move".
+    #[error(
+        "bookmark {item} cannot be moved under {target}, which is inside its own subtree -- that would make the outline's /Parent chain a cycle"
+    )]
+    OutlineMoveIntoOwnSubtree {
+        /// The bookmark being moved.
+        item: ObjId,
+        /// The requested destination parent, which lies under `item`.
+        target: ObjId,
     },
     /// A resize factor was zero or non-finite (`Pass 151.0`).
     ///
@@ -26538,6 +26693,627 @@ impl EditSession {
             Some(Object::Dict(d)) => Some((id, d.clone())),
             _ => None,
         }
+    }
+
+    /// The chain of outline nodes whose `/Count` a change under `parent_id`
+    /// must adjust — the parent, then every ancestor up to and including the
+    /// **first closed one** (`Pass 161.0`).
+    ///
+    /// # ★ Why the walk stops at a closed node rather than at the root
+    ///
+    /// §12.3.3 Table 153: an item's `/Count` counts its **visible**
+    /// descendants, and a closed item's count is negative — the magnitude
+    /// being what *would* be visible if it were opened. So a closed node's
+    /// own magnitude changes when its subtree grows or shrinks, but the
+    /// number it contributes to **its** parent does not: a closed node
+    /// contributes exactly 1 (itself) however large it gets. The first closed
+    /// node is therefore both the last node that must be rewritten and the
+    /// first node above which nothing changed.
+    ///
+    /// Walking further would rewrite objects whose contents are identical,
+    /// which is a round-trip/minimal-diff violation (`ARCHITECTURE.md` §5),
+    /// not merely wasted bytes: an incremental save appends every object it
+    /// is handed, so the file would grow for an edit that did not happen.
+    ///
+    /// # Extracted rather than written a third time
+    ///
+    /// [`Self::add_outline_item`] and [`Self::delete_outline_item`] each
+    /// carry this walk inline. A move needs it **twice in one call** — once
+    /// subtracting from the old branch, once adding to the new — so a fourth
+    /// and fifth inline copy was the alternative. `R171`: two implementations
+    /// of one rule drift, and the drift here is invisible (the file opens,
+    /// the outline draws, one collapsed ancestor's count is simply wrong
+    /// until somebody expands it).
+    ///
+    /// Returned as ids rather than applied in place because a move's two
+    /// chains **overlap**: every common ancestor of the old and the new
+    /// parent appears in both, with equal and opposite deltas, and must end
+    /// up written **once with the net** — or, when the net is zero, not
+    /// written at all. Applying each walk as it is computed cannot express
+    /// that.
+    ///
+    /// ★ There is deliberately no "treat this node as open" override, and an
+    /// earlier version of this function had one — added for
+    /// [`Self::set_outline_open`], on the reasoning that a node being expanded
+    /// is still closed on disk while the chain above it is computed. That
+    /// reasoning is wrong, and it was **sabotage that established it, not
+    /// re-reading**: the chain starts at the item's PARENT and walks upward,
+    /// so the item itself can never appear in it and the override could never
+    /// fire. Deleting the branch left every outline test green. What the
+    /// caller actually needs is to pass the right DELTA (the magnitude, not
+    /// 1), which it does.
+    ///
+    /// Depth-guarded per `ARCHITECTURE.md` §10: `/Parent` in a damaged or
+    /// hostile file can cycle, and this follows it unconditionally.
+    fn outline_count_chain(&self, parent_id: ObjId, root_id: ObjId) -> Vec<ObjId> {
+        let mut out = Vec::new();
+        let mut cursor = Some(parent_id);
+        for _ in 0..crate::outline::MAX_OUTLINE_DEPTH {
+            let Some(id) = cursor else { break };
+            if out.contains(&id) {
+                break;
+            }
+            out.push(id);
+            if id == root_id {
+                break;
+            }
+            let Some(Object::Dict(d)) = self.value(id) else {
+                break;
+            };
+            // The sign IS the open/closed state -- there is no `/Open` key.
+            // A missing `/Count` reads as open, which is right: a leaf about
+            // to gain its first child is not a collapsed subtree.
+            let open = !matches!(d.get(b"Count"), Some(Object::Integer(n)) if *n < 0);
+            if !open {
+                break;
+            }
+            cursor = match d.get(b"Parent") {
+                Some(Object::Reference(r)) => Some(*r),
+                _ => None,
+            };
+        }
+        out
+    }
+
+    /// Expand or collapse a bookmark, preserving the count it would have if
+    /// opened (`Pass 161.0`). One undo entry. Returns whether anything
+    /// changed.
+    ///
+    /// # Why this is a verb and not a flag on [`Self::move_outline_item`]
+    ///
+    /// The Acrobat reference could not source what Acrobat does when a
+    /// bookmark is moved into a parent that is **collapsed** — whether the
+    /// parent is expanded to reveal the arrival, or left as the operator set
+    /// it. That is a genuine two-answer question: revealing respects *"I
+    /// just put it there"*, preserving respects *"I collapsed that on
+    /// purpose"*.
+    ///
+    /// Both are shipped, and the split is by **verb** rather than by option.
+    /// A move changes position; expansion changes visibility; a shell that
+    /// wants reveal-on-drop calls both and gets **two** undo entries, which
+    /// is the honest count — an operator who did not want the expansion can
+    /// undo it without undoing the move. Folding it into a boolean would
+    /// bury a state change inside an unrelated command, and would put the
+    /// sign convention in two places (`R171`).
+    ///
+    /// # `/Count` is two quantities and this touches both
+    ///
+    /// On the item, the **sign** carries the state and the magnitude is what
+    /// would be visible (§12.3.3 Table 153). Flipping the sign therefore
+    /// changes what the item contributes to its parent by exactly the
+    /// magnitude: a closed node contributes 1 (itself); an open one
+    /// contributes `1 + magnitude`. So expanding a node with magnitude 7 adds
+    /// **7** to every ancestor up to the first closed one — not 1, and not 8.
+    ///
+    /// # A leaf is not "collapsed"
+    ///
+    /// An item with no descendants carries no `/Count` at all (Table 153
+    /// makes it *"required if the item has any descendants"*), and there is
+    /// nothing to expand or collapse. Reported as `false` — no change — not
+    /// as an error: asking a leaf to expand is what a "collapse all" sweep
+    /// does to every row it walks, and refusing would make the sweep's caller
+    /// filter first for no gain.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::move_outline_item`]: the encryption and certification
+    /// guards, [`EditError::NotADictionary`], and
+    /// [`EditError::OutlineRootIsNotAnItem`] — the ROOT's `/Count` is the
+    /// other quantity (it counts visible items at every level and *"cannot be
+    /// negative"*), so it has no open/closed state to set.
+    pub fn set_outline_open(&mut self, item_id: ObjId, open: bool) -> Result<bool, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let Some((root_id, _)) = self.outline_root() else {
+            return Err(EditError::OutlineItemNotFound { id: item_id.num });
+        };
+        let Some(Object::Dict(item)) = self.value(item_id).cloned() else {
+            return Err(EditError::NotADictionary {
+                id: item_id,
+                key: "Count",
+            });
+        };
+        let parent_id = match item.get(b"Parent") {
+            Some(Object::Reference(r)) => *r,
+            _ => return Err(EditError::OutlineRootIsNotAnItem { id: item_id }),
+        };
+        if !self.is_under_outline_root(item_id, root_id) {
+            return Err(EditError::OutlineItemNotFound { id: item_id.num });
+        }
+
+        let current = match item.get(b"Count") {
+            Some(Object::Integer(n)) => *n,
+            // A leaf: nothing to expand, nothing to collapse.
+            _ => return Ok(false),
+        };
+        if current == 0 || (current > 0) == open {
+            return Ok(false);
+        }
+        let magnitude = current.saturating_abs();
+
+        let mut work: BTreeMap<ObjId, Dict> = BTreeMap::new();
+        let mut flipped = item.clone();
+        flipped.insert(
+            Name::from(b"Count"),
+            Object::Integer(if open { magnitude } else { -magnitude }),
+        );
+        work.insert(item_id, flipped);
+
+        // Opening reveals `magnitude` more items to every ancestor that can
+        // see them; closing hides the same number. THE MAGNITUDE, not 1: a
+        // closed node contributes 1 to its parent and an open one contributes
+        // `1 + magnitude`, so flipping the sign moves exactly `magnitude`.
+        let delta = if open { magnitude } else { -magnitude };
+        for id in self.outline_count_chain(parent_id, root_id) {
+            let Some(Object::Dict(d)) = self.value(id) else {
+                continue;
+            };
+            let mut d = d.clone();
+            adjust_outline_count(&mut d, delta);
+            work.insert(id, d);
+        }
+
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        for (id, d) in work {
+            let after = Object::Dict(d);
+            if self.value(id) == Some(&after) {
+                continue;
+            }
+            objects.push(ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(after),
+            });
+        }
+        if objects.is_empty() {
+            return Ok(false);
+        }
+        self.commit(Command {
+            kind: CommandKind::EditOutlineItem,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(true)
+    }
+
+    /// Move an existing bookmark within the outline — **reorder** it among
+    /// its siblings, or **re-parent** it under a different one, carrying its
+    /// whole subtree (`Pass 161.0`). One undo entry.
+    ///
+    /// This is the second half of the bookmark-editing surface. `Pass 156.0`
+    /// shipped rename and delete, so a bookmark could be created, retitled
+    /// and removed — but an outline in the wrong **order** could only be
+    /// fixed by deleting a branch and re-authoring it, which loses every
+    /// destination, colour and style on it and is not an edit any operator
+    /// would call a reorganisation.
+    ///
+    /// # What moves
+    ///
+    /// **The subtree travels with the item.** This matches
+    /// [`Self::delete_outline_item`]'s subtree semantics and, per the Acrobat
+    /// reference, Acrobat's own model: its `PDBookmark` unlink/add-child pair
+    /// operates on the node, which owns its children wherever `/Parent`
+    /// points, and there is no API path that leaves them behind. A chapter
+    /// dragged under a different part takes its sections with it.
+    ///
+    /// # What does NOT change, deliberately
+    ///
+    /// * **The destination.** A bookmark's `/Dest` or `/A` is where it
+    ///   *goes*, not where it *sits*; a move changes position in the tree
+    ///   only, and nothing here reads or writes either key. Acrobat agrees —
+    ///   moved bookmarks continue to point at the same pages.
+    /// * **The item's own expansion state.** Its `/Count` sign is preserved,
+    ///   so a collapsed branch arrives collapsed.
+    /// * **The destination parent's expansion state**, when it already has
+    ///   children. A parent the operator deliberately collapsed stays
+    ///   collapsed, and [`Self::set_outline_open`] is the verb for the other
+    ///   answer — see its docs for why this is split by verb rather than
+    ///   offered as a flag. (The Acrobat reference records this specific case
+    ///   as an unsourced GAP, so it is pdfce's own default, chosen and stated
+    ///   rather than inherited.)
+    /// * **Every ancestor above the first closed one**, per
+    ///   [`Self::outline_count_chain`] — including, on a pure reorder,
+    ///   *every* ancestor: moving an item among its own siblings changes no
+    ///   visible count anywhere, so only the four link keys are rewritten.
+    /// * **A `/Count` that was ALREADY WRONG.** This applies a **delta**; it
+    ///   does not recompute. A document whose producer wrote a bad count stays
+    ///   wrong by exactly the same amount after a move — verified on
+    ///   `pdfium`'s `bookmarks.pdf`, which carries a root-count disagreement
+    ///   before and after. That is deliberate on two grounds: recomputing
+    ///   would rewrite objects the operator did not touch (project rule 3,
+    ///   *do not normalise as a side effect of an unrelated edit*), and it
+    ///   would **silently mask a producer defect** that
+    ///   [`crate::outline::OutlineDiagnostics`] already reports by name. A
+    ///   shell wanting the repair should offer it as its own verb, so the
+    ///   operator knows a rewrite happened.
+    ///
+    /// # What DOES change beyond position, and is disclosed
+    ///
+    /// A destination parent that was a **leaf** becomes **open**, exactly as
+    /// in [`Self::add_outline_item`], and the Acrobat reference sources the
+    /// same behaviour: a parent with no prior children is left open after one
+    /// is added. The alternative is dropping the bookmark into a collapsed
+    /// parent where it is invisible the instant the operator put it there.
+    /// [`OutlineMove`] carries the facts a shell needs to say so.
+    ///
+    /// # The dictionaries a move touches, and why none can be skipped
+    ///
+    /// An outline is a doubly-linked sibling chain inside a tree (§12.3.3
+    /// Tables 152–153). Unlinking touches the old `/Prev`'s `/Next` (or the
+    /// old parent's `/First`) and the old `/Next`'s `/Prev` (or the old
+    /// parent's `/Last`); splicing touches the same four on the new side; the
+    /// item's own `/Parent`, `/Prev` and `/Next` are rewritten; and `/Count`
+    /// propagates up **both** branches. Leave any one and the tree still
+    /// parses — a reader walking `/First` then `/Next` either stops early,
+    /// revisits an item, or never terminates.
+    ///
+    /// The whole edit is computed in a scratch copy first and only the
+    /// dictionaries that genuinely differ are committed, so a common ancestor
+    /// that loses and regains the same count is **not** rewritten.
+    ///
+    /// # Errors
+    ///
+    /// * [`EditError::OutlineRootIsNotAnItem`] — `item_id` is the outline
+    ///   root, which has no `/Parent` and cannot be positioned relative to
+    ///   anything. Also raised for a `Before`/`After` anchor that is the
+    ///   root, for the same reason: the root has no siblings.
+    /// * [`EditError::OutlineItemNotFound`] — `item_id`, or the destination
+    ///   parent or anchor, is not reachable from this document's outline
+    ///   root. Checked by walking `/Parent`, not by guessing from keys — see
+    ///   [`Self::is_under_outline_root`] for the page-tree bug that motivated
+    ///   that choice.
+    /// * [`EditError::OutlineMoveIntoOwnSubtree`] — the destination lies
+    ///   under the item being moved, which would make `/Parent` a cycle.
+    ///   Refused unconditionally; the Acrobat reference could not source what
+    ///   Acrobat does here, and a cycle is a defect whatever Acrobat does.
+    /// * [`EditError::NotADictionary`] — `item_id` does not resolve to a
+    ///   dictionary at all.
+    /// * The encryption and certification guards, as every editing verb.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use pdfce_core::edit::{EditSession, OutlinePlacement};
+    /// # fn demo(session: &mut EditSession, chapter: pdfce_core::object::ObjId,
+    /// #         part: pdfce_core::object::ObjId)
+    /// #     -> Result<(), Box<dyn std::error::Error>> {
+    /// // Nest a chapter (and its sections) under a part, at the end.
+    /// let report = session.move_outline_item(
+    ///     chapter,
+    ///     OutlinePlacement::LastChild { parent: Some(part) },
+    /// )?;
+    /// if report.moved && report.reparented {
+    ///     println!("nested {} bookmark(s)", report.visible_items);
+    /// }
+    /// // Promote it back to the top level, first position.
+    /// session.move_outline_item(chapter, OutlinePlacement::FirstChild { parent: None })?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn move_outline_item(
+        &mut self,
+        item_id: ObjId,
+        to: OutlinePlacement,
+    ) -> Result<OutlineMove, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        // A document with no outline has no item to move, so whatever id the
+        // caller is holding did not come from this document's outline.
+        let Some((root_id, _)) = self.outline_root() else {
+            return Err(EditError::OutlineItemNotFound { id: item_id.num });
+        };
+
+        let Some(Object::Dict(item)) = self.value(item_id).cloned() else {
+            return Err(EditError::NotADictionary {
+                id: item_id,
+                key: "Title",
+            });
+        };
+        let old_parent = match item.get(b"Parent") {
+            Some(Object::Reference(r)) => *r,
+            _ => return Err(EditError::OutlineRootIsNotAnItem { id: item_id }),
+        };
+        if !self.is_under_outline_root(item_id, root_id) {
+            return Err(EditError::OutlineItemNotFound { id: item_id.num });
+        }
+
+        let visible = self.visible_outline_count(item_id);
+        let unchanged = |from: ObjId| OutlineMove {
+            moved: false,
+            from_parent: from,
+            to_parent: from,
+            reparented: false,
+            visible_items: visible,
+        };
+
+        // "Before/after myself" is where the item already is. Answered here
+        // rather than left to fall through, because the anchor's `/Prev` is
+        // read AFTER unlinking below and the item's own links are stale by
+        // then -- it would resolve to the wrong slot rather than to nothing.
+        if let OutlinePlacement::Before { sibling } | OutlinePlacement::After { sibling } = to
+            && sibling == item_id
+        {
+            return Ok(unchanged(old_parent));
+        }
+
+        // --- resolve the destination parent -------------------------------
+        let new_parent = match to {
+            OutlinePlacement::FirstChild { parent } | OutlinePlacement::LastChild { parent } => {
+                let p = parent.unwrap_or(root_id);
+                if !matches!(self.value(p), Some(Object::Dict(_)))
+                    || (p != root_id && !self.is_under_outline_root(p, root_id))
+                {
+                    return Err(EditError::OutlineItemNotFound { id: p.num });
+                }
+                p
+            }
+            OutlinePlacement::Before { sibling } | OutlinePlacement::After { sibling } => {
+                if !self.is_under_outline_root(sibling, root_id) {
+                    return Err(EditError::OutlineItemNotFound { id: sibling.num });
+                }
+                match self.value(sibling) {
+                    Some(Object::Dict(d)) => match d.get(b"Parent") {
+                        Some(Object::Reference(r)) => *r,
+                        _ => return Err(EditError::OutlineRootIsNotAnItem { id: sibling }),
+                    },
+                    _ => return Err(EditError::OutlineItemNotFound { id: sibling.num }),
+                }
+            }
+        };
+
+        // --- the cycle refusal --------------------------------------------
+        // Asked as "is the destination inside what I am moving?" rather than
+        // "does the destination's /Parent chain reach me?". The two questions
+        // agree on a well-formed tree, but only the subtree walk is bounded
+        // by the thing being moved, so a pre-existing cycle somewhere else in
+        // a damaged file cannot turn this check into a hang.
+        let subtree = self.outline_subtree(item_id);
+        if subtree.contains(&new_parent) {
+            return Err(EditError::OutlineMoveIntoOwnSubtree {
+                item: item_id,
+                target: new_parent,
+            });
+        }
+
+        let reparented = new_parent != old_parent;
+
+        // --- `/Count` deltas, computed BEFORE anything is mutated ---------
+        // Openness does not change during a move (the sign is preserved), so
+        // both chains can be walked against the pre-move state and merged.
+        // A pure reorder moves nothing between branches, so it has no deltas
+        // at all -- not "deltas that cancel", none computed.
+        let mut deltas: BTreeMap<ObjId, i64> = BTreeMap::new();
+        if reparented {
+            let carried = i64::try_from(visible).unwrap_or(i64::MAX);
+            for id in self.outline_count_chain(old_parent, root_id) {
+                *deltas.entry(id).or_insert(0) -= carried;
+            }
+            for id in self.outline_count_chain(new_parent, root_id) {
+                *deltas.entry(id).or_insert(0) += carried;
+            }
+        }
+
+        // --- the scratch copy ---------------------------------------------
+        // Every read and write below goes through `work`, so the splice sees
+        // the POST-unlink state. That is what makes the ordinary case of
+        // nudging an item one slot along its own chain correct: the anchor's
+        // `/Next` must be the one it has after the hole closed, not before.
+        let mut work: BTreeMap<ObjId, Dict> = BTreeMap::new();
+        let load = |me: &Self, work: &mut BTreeMap<ObjId, Dict>, id: ObjId| -> bool {
+            if work.contains_key(&id) {
+                return true;
+            }
+            match me.value(id) {
+                Some(Object::Dict(d)) => {
+                    let d = d.clone();
+                    work.insert(id, d);
+                    true
+                }
+                _ => false,
+            }
+        };
+        let link = |work: &BTreeMap<ObjId, Dict>, id: ObjId, key: &[u8]| -> Option<ObjId> {
+            match work.get(&id)?.get(key) {
+                Some(Object::Reference(r)) => Some(*r),
+                _ => None,
+            }
+        };
+        let set_or_clear = |d: &mut Dict, key: &[u8], v: Option<ObjId>| match v {
+            Some(r) => {
+                d.insert(Name::from(key), Object::Reference(r));
+            }
+            None => {
+                d.remove(key);
+            }
+        };
+
+        load(self, &mut work, item_id);
+        load(self, &mut work, old_parent);
+        load(self, &mut work, new_parent);
+        let old_prev = link(&work, item_id, b"Prev");
+        let old_next = link(&work, item_id, b"Next");
+        if let Some(p) = old_prev {
+            load(self, &mut work, p);
+        }
+        if let Some(n) = old_next {
+            load(self, &mut work, n);
+        }
+
+        // --- unlink from the old chain ------------------------------------
+        match old_prev {
+            Some(p) => {
+                if let Some(d) = work.get_mut(&p) {
+                    set_or_clear(d, b"Next", old_next);
+                }
+            }
+            None => {
+                if let Some(d) = work.get_mut(&old_parent) {
+                    set_or_clear(d, b"First", old_next);
+                }
+            }
+        }
+        match old_next {
+            Some(n) => {
+                if let Some(d) = work.get_mut(&n) {
+                    set_or_clear(d, b"Prev", old_prev);
+                }
+            }
+            None => {
+                if let Some(d) = work.get_mut(&old_parent) {
+                    set_or_clear(d, b"Last", old_prev);
+                }
+            }
+        }
+
+        // --- where does it go, in post-unlink terms? -----------------------
+        // All four placements reduce to "insert after `anchor`, or become
+        // first when there is none", which is the one splice they share.
+        let anchor = match to {
+            OutlinePlacement::FirstChild { .. } => None,
+            OutlinePlacement::LastChild { .. } => link(&work, new_parent, b"Last"),
+            OutlinePlacement::After { sibling } => Some(sibling),
+            OutlinePlacement::Before { sibling } => {
+                load(self, &mut work, sibling);
+                link(&work, sibling, b"Prev")
+            }
+        };
+
+        // A request for the position the item already occupies. Discarding
+        // `work` here is what makes a no-op cost nothing: no objects, no undo
+        // entry, no dirty set -- see [`OutlineMove::moved`].
+        if !reparented && anchor == old_prev {
+            return Ok(unchanged(old_parent));
+        }
+
+        // --- splice into the new chain ------------------------------------
+        if let Some(a) = anchor {
+            load(self, &mut work, a);
+        }
+        let new_next = match anchor {
+            Some(a) => link(&work, a, b"Next"),
+            None => link(&work, new_parent, b"First"),
+        };
+        if let Some(n) = new_next {
+            load(self, &mut work, n);
+        }
+        if let Some(d) = work.get_mut(&item_id) {
+            d.insert(Name::from(b"Parent"), Object::Reference(new_parent));
+            set_or_clear(d, b"Prev", anchor);
+            set_or_clear(d, b"Next", new_next);
+        }
+        match anchor {
+            Some(a) => {
+                if let Some(d) = work.get_mut(&a) {
+                    d.insert(Name::from(b"Next"), Object::Reference(item_id));
+                }
+            }
+            None => {
+                if let Some(d) = work.get_mut(&new_parent) {
+                    d.insert(Name::from(b"First"), Object::Reference(item_id));
+                }
+            }
+        }
+        match new_next {
+            Some(n) => {
+                if let Some(d) = work.get_mut(&n) {
+                    d.insert(Name::from(b"Prev"), Object::Reference(item_id));
+                }
+            }
+            None => {
+                if let Some(d) = work.get_mut(&new_parent) {
+                    d.insert(Name::from(b"Last"), Object::Reference(item_id));
+                }
+            }
+        }
+
+        // --- apply the merged `/Count` deltas ------------------------------
+        for (id, delta) in deltas {
+            if delta == 0 {
+                continue;
+            }
+            if !load(self, &mut work, id) {
+                continue;
+            }
+            if let Some(d) = work.get_mut(&id) {
+                adjust_outline_count(d, delta);
+            }
+        }
+
+        // --- commit only what actually differs -----------------------------
+        //
+        // ★ THIS IS NOT THE MINIMAL-DIFF GUARD, and an earlier version of this
+        // comment said it was. `dirty_set` is (§11.1): it diffs `state`
+        // against the BASE revision at save time, so an object written here
+        // with a value equal to its base value is skipped there regardless of
+        // what this loop does. Sabotaging this filter left all 19 tests in
+        // `outline_move.rs` green -- which is the measurement that corrected
+        // the claim, and the reason it is written down instead of quietly
+        // fixed.
+        //
+        // What the filter genuinely buys is a narrower COMMAND: an undo entry
+        // that does not carry `before == after` pairs, and a reachable
+        // `objects.is_empty()` below. Both are local to this verb.
+        //
+        // The consequence worth stating, because a future verb author will
+        // hit it: a per-verb "write only what changed" filter is
+        // **unobservable through the public API** and therefore cannot be
+        // covered by a test. Omitting one costs nothing at save time. Do not
+        // read a green suite as evidence that one is present.
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        for (id, d) in work {
+            let after = Object::Dict(d);
+            if self.value(id) == Some(&after) {
+                continue;
+            }
+            objects.push(ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(after),
+            });
+        }
+        if objects.is_empty() {
+            return Ok(unchanged(old_parent));
+        }
+        self.commit(Command {
+            kind: CommandKind::EditOutlineItem,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(OutlineMove {
+            moved: true,
+            from_parent: old_parent,
+            to_parent: new_parent,
+            reparented,
+            visible_items: visible,
+        })
     }
     /// Rename a dimension group. One undo entry.
     ///
