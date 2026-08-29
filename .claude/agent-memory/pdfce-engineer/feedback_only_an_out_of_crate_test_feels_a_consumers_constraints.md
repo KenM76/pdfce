@@ -59,3 +59,30 @@ Two things the repeat teaches that the first instance did not:
 
 Related: [[project_gui_request_channel]] — the channel is where this failure
 arrives if the test does not catch it first.
+
+**★ TWICE MORE IN ONE SESSION, 2026-08-29, and both were MISSING
+CONSTRUCTORS rather than a blocked literal in a test.**
+
+`Pass 171.0` and `172.0` added `PageClip` and `OutlineClip`, both
+`#[non_exhaustive]`. The integration tests would not compile — and the fix was
+not "make the test build it another way", it was **that the public API had a
+hole**:
+
+- **`PageClip`**: nothing outside the crate could turn a clip *file* back into
+  a clip. A clipboard whose payload can be written and never read is not a
+  clipboard. → `from_bytes` / `to_bytes`, with the counts **re-derived from
+  the bytes** rather than taken on trust.
+- **`OutlineClip`**: no way to express *"the clipboard holds nothing"*. →
+  `empty()`.
+- **`AttachmentClip`**: the same hole, spotted in advance this time. →
+  `new(..)`, which also turns out to be the honest way to implement *"attach
+  the file the operator just dropped on the window"* — it is a paste.
+
+**The generalisation worth carrying: every `#[non_exhaustive]` type a
+consumer is expected to HOLD needs at least one constructor a consumer can
+reach.** `#[non_exhaustive]` is right (the invariants are the crate's), but it
+converts "no constructor" from a mild inconvenience into a hard wall, and the
+wall is invisible from inside the crate.
+
+Ask it at design time, per type: *how does a shell that has bytes, or has
+nothing, get one of these?*

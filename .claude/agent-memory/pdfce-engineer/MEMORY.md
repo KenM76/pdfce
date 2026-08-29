@@ -76,3 +76,5 @@
 - [OneDrive CLI slots](project_onedrive_cli_slots.md) — every release publishes the CLI to pdfce1/pdfce2 alternately; the quiet failure is BOTH slots holding the same version, not a missed deploy
 - [A default-valued fixture cannot falsify a carry](feedback_a_default_valued_fixture_cannot_falsify_a_carry.md) — if X equals what the code writes anyway, the test passes on an implementation that carried nothing
 - [Never `rm -rf` a directory you only assumed you created](feedback_never_rm_rf_a_directory_you_only_assumed_you_created.md) — `mkdir -p` + `rm -rf` ate two committed files; only `git status` saw it
+- [Two shipping functions are not an inverse pair](feedback_two_shipping_functions_are_not_an_inverse_pair.md) — a writer+reader that both ship can still drift a shape 7.5pt per round trip; measure before building on it
+- [Count what committed, not what you intended](feedback_count_what_committed_not_what_you_intended.md) — an early-returning callee makes an intent counter over-count, and the undo fold then silently does not happen
