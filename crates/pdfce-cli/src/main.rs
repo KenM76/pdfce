@@ -25916,6 +25916,19 @@ fn cmd_rename_field(
         );
     }
 
+    // The categorical half of `Pass 184.0`, stated whenever the document has
+    // any action at all. It is deliberately NOT a count of affected buttons --
+    // naming those needs a carrier traversal pdfce has not built -- and saying
+    // the weaker true thing now beats saying nothing until the stronger one
+    // exists. A rename that silently stops a Reset button resetting is live
+    // silence, not a latent bug.
+    if rename.actions_not_retargeted > 0 {
+        eprintln!(
+            "pdfce-cli: field {name:?}: this document carries {} action(s), and pdfce did NOT update any of them. Reset, submit and show/hide buttons name their target fields by NAME, so any button that named {:?} no longer finds it. That number is every action in the file, not the ones affected -- pdfce cannot yet tell you which.",
+            rename.actions_not_retargeted, rename.from
+        );
+    }
+
     let outcome = match save_edited(
         &mut session,
         &source,
@@ -25929,11 +25942,12 @@ fn cmd_rename_field(
     };
     let r = &outcome.report;
     println!(
-        "rename-field {} from={:?} to={:?} descendants_renamed={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        "rename-field {} from={:?} to={:?} descendants_renamed={} actions_not_retargeted={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
         input.display(),
         rename.from,
         rename.to,
         rename.descendants_renamed,
+        rename.actions_not_retargeted,
         mode.name(),
         output.display(),
         outcome.changed,

@@ -151,6 +151,13 @@ OUTCOME_STRUCTS: list[tuple[str, str]] = [
     # named fields that own no widget at all, for which the button they just
     # made does nothing.
     ("crates/pdfce-core/src/edit.rs", "HideDisclosure"),
+    # `Pass 184.0` criterion A. `FieldRename` has carried a rule-4 disclosure
+    # since it was written -- `descendants_renamed`, the count that tells an
+    # operator a one-field request renamed six -- and was never on this list,
+    # which is the `EditReport` lesson again: a struct outside the list is a
+    # struct whose fields can be dropped on the floor while the gate reports
+    # clean. Added when the second disclosure landed rather than afterwards.
+    ("crates/pdfce-core/src/edit.rs", "FieldRename"),
 ]
 
 # `Struct::field` -> why no shell reads it. A reason is mandatory: see the

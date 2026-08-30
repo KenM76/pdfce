@@ -364,3 +364,37 @@ Related: [[a-default-valued-fixture-cannot-falsify-a-carry]] is what the
 corrected fixture is an instance of; [[sabotage-catches-false-comments]] is
 why the counterfactual was worth running.
 
+
+**★★ TWO MORE WAYS A PATCH SCRIPT DESTROYS WORK SILENTLY — both hit on
+2026-08-30, both in the same afternoon, neither covered above.**
+
+**(a) `pathlib.Path.write_text()` rewrites the WHOLE FILE to CRLF on Windows.**
+Default `newline=None` translates every `\n` to `os.linesep`. A one-line
+sabotage-and-restore script therefore converted all 40,699 lines of
+`crates/pdfce-core/src/edit.rs` from LF to CRLF while restoring it
+"identical" — `read_text() == original` compares *after* translation, so the
+script's own assertion passed. `git diff --stat` looked normal (the line
+counts were right); the only tell was git's `"CRLF will be replaced by LF"`
+warning, which is easy to read as noise.
+
+⇒ **Always pass `newline='\n'` to `write_text`**, and after any script that
+rewrites a source file, check `python -c "print(open(F,'rb').read().count(b'\r\n'))"`
+before committing. A whitespace-only 40k-line diff in a public repo is not
+recoverable by apology.
+
+**(b) A sabotage LOOP leaves the previous case applied when a later anchor
+fails.** The loop wrote sabotage 2, ran it, then hit `assert n == 1` on case
+3's anchor and raised — and the restore was *after* the loop, so it never
+ran. `crates/pdfce-core/src/edit.rs` sat on disk with the grouping-node
+refusal deleted, and the only reason it was noticed was habitually running
+`git diff --stat` afterwards.
+
+This is the same shape as the fourth instance above (a sabotage that never
+applied looks like a suite that survived it) pointed the other way: **a
+sabotage that never *un*-applied looks like working code.** And it is worse,
+because the tests then pass — the sabotaged case is the one already proven to
+fail, so re-running the whole file would have gone red, but re-running
+anything else goes green.
+
+⇒ **Restore in a `try`/`finally`, never after the loop**, and **validate every
+anchor up front** before touching the file at all. Both are one line each.

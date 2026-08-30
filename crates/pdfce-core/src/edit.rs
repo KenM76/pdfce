@@ -13394,7 +13394,7 @@ pub enum PageView {
 /// - 2026-08-30, *"a reset button should actually reset"* → [`Self::ResetForm`].
 /// - 2026-08-30, later: *"make the submit and other options that don't need
 ///   javascript available for buttons with the safeguards like we had
-///   planned"* → the other four variants, and the safeguards are
+///   planned"* → the other five variants, and the safeguards are
 ///   [`ButtonActionChange::submit`] plus the refusals listed on
 ///   [`EditSession::set_button_action`].
 ///
@@ -13416,7 +13416,7 @@ pub enum PageView {
 /// arbitrary; a reader who assumes the *other* will conclude a submit is as
 /// inert as a reset.
 ///
-/// # The closed set, so this is a selection with a boundary rather than five
+/// # The closed set, so this is a selection with a boundary rather than six
 /// arbitrary picks
 ///
 /// ISO 32000-1 defines **eight** action types that are both script-free and
@@ -15369,6 +15369,7 @@ pub struct WidgetEditOutcome {
 /// is that disclosure, and it is why the count is returned rather than
 /// discarded.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct FieldRename {
     /// The fully-qualified name before the rename.
     pub from: String,
@@ -15380,6 +15381,48 @@ pub struct FieldRename {
     /// Zero for a terminal field with no children — the common case, and the
     /// one where the operator's mental model and the effect coincide.
     pub descendants_renamed: usize,
+    /// **How many actions this document carries — none of whose field-name
+    /// targets this rename updated** (`Pass 184.0` criterion A).
+    ///
+    /// # ★ A CATEGORICAL disclosure, deliberately, and the number is not the
+    /// answer to the question you want answered
+    ///
+    /// `/ResetForm` and `/SubmitForm` name their targets in `/Fields`, and
+    /// `/Hide` names its in `/T`, as **fully-qualified name strings** —
+    /// pdfce's own deliberate choice ([`EditSession::set_button_action`]),
+    /// because a name survives a field being renumbered or copied between
+    /// documents where an indirect reference does not.
+    ///
+    /// **A rename is the one operation that breaks that choice**, and pdfce
+    /// does not yet repair it. So a button reading "Reset" may quietly stop
+    /// resetting the field it was drawn for.
+    ///
+    /// This count is **every action in the document**, not the actions that
+    /// name [`Self::from`]. It is therefore an **upper bound and usually a
+    /// large overestimate** — most documents' actions have nothing to do with
+    /// this field. Saying so is the point: the honest statement available
+    /// without a full carrier traversal is *"this document has actions and
+    /// none of them were updated"*, and that statement is worth making now
+    /// rather than after the traversal is built.
+    ///
+    /// # Why the precise count is a separate Pass and this is not
+    ///
+    /// Naming the affected buttons needs a walk of all seventeen action
+    /// carrier sites with `/Next` chains — the walk `forms::scan_javascript`
+    /// owns — generalised to a visitor. That is a real refactor of the
+    /// crate's most defect-prone function, and writing a **second, narrower**
+    /// walker instead is the exact defect class this project keeps recording.
+    /// The repair and the precise count are `Pass 184.0`.
+    ///
+    /// **But the SENTENCE was never blocked on the refactor**, and folding
+    /// the two together is how this came to look deferred. A rename that
+    /// silently breaks a button and says nothing is live silence, not a
+    /// latent bug — which is why the categorical half ships here and the
+    /// counting half does not.
+    ///
+    /// `0` means the document carries no actions at all, and therefore that
+    /// there is nothing this rename could have broken in that way.
+    pub actions_not_retargeted: usize,
 }
 
 /// What a [`flatten_fields`](EditSession::flatten_fields) operation did
@@ -18431,6 +18474,9 @@ impl EditSession {
                 from: fqn.to_owned(),
                 to: new_fqn,
                 descendants_renamed: 0,
+                // A no-op rename retargets nothing because it renames
+                // nothing, so the categorical disclosure has nothing to say.
+                actions_not_retargeted: 0,
             });
         }
 
@@ -18457,6 +18503,15 @@ impl EditSession {
             .map(|form| form.descendants_of(fqn).count())
             .unwrap_or(0);
 
+        // The categorical half of `Pass 184.0`. Counted off the SHIPPED action
+        // scanner rather than a new one -- `scan_javascript` already walks all
+        // seventeen carrier sites and follows `/Next`, with its own guards, so
+        // this borrows a traversal that is already correct rather than adding a
+        // second one that would drift from it. It answers a WEAKER question
+        // than the one an operator wants (see `actions_not_retargeted`), and
+        // that is stated rather than papered over.
+        let actions_not_retargeted = forms::scan_javascript(&self.graph()).actions_scanned;
+
         let Some(Object::Dict(dict)) = self.value(target) else {
             return Err(EditError::FieldNotFound {
                 name: fqn.to_owned(),
@@ -18480,6 +18535,7 @@ impl EditSession {
             from: fqn.to_owned(),
             to: new_fqn,
             descendants_renamed,
+            actions_not_retargeted,
         })
     }
 

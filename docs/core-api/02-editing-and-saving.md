@@ -1070,7 +1070,7 @@ only creation verb whose successful result is a control that does not work"*
 | Preview a grouping-node deletion | `field_group_deletion_preview(&mut self, fqn) -> Result<FieldGroupDeletion, EditError>` | 8535 | ⚠️ Takes `&mut self` although it writes nothing. |
 | Delete a grouping node and its subtree | `delete_field_group(&mut self, fqn) -> Result<FieldGroupDeletion, EditError>` | 8574 | Refuses a terminal with `NotAGroupingNode` — deliberately **not** redirected to `delete_field`. |
 | Delete ONE widget of a field | `delete_widget(&mut self, fqn, index: usize) -> Result<FieldDeletion, EditError>` | 8764 | Siblings survive. |
-| Rename a field | `rename_field(&mut self, fqn, new_partial: &str) -> Result<FieldRename, EditError>` | 8889 | `new_partial` is **one path segment**, never an FQN; a period is refused. |
+| Rename a field | `rename_field(&mut self, fqn, new_partial: &str) -> Result<FieldRename, EditError>` | 8889 | `new_partial` is **one path segment**, never an FQN; a period is refused. ★ **`FieldRename::actions_not_retargeted` is a CATEGORICAL disclosure you must surface** (`Pass 184.0` criterion A): reset, submit and show/hide buttons name their targets by **fully-qualified name**, and a rename does **not** update them, so a button can silently stop working. The number is **every action in the document**, not the affected ones — an upper bound, deliberately, because naming the affected buttons needs a carrier traversal pdfce has not built (`Pass 184.0`). `0` means there is nothing this rename could have broken that way. **`census_dangling` cannot see this** — a name string leaves no dangling object reference. |
 | Move one widget's `/Rect` | `move_widget(&mut self, fqn, index, dx, dy) -> Result<WidgetMove, EditError>` | 9032 | **No appearance regeneration** — §12.5.5 step b makes matrix **A** a pure translation. |
 | **Give a push button an action** | `set_button_action(&mut self, fqn, action: Option<ButtonAction>) -> Result<ButtonActionChange, EditError>` | 24148 | ✅ **`ResetForm`** (`Pass 182.0`) **+ `SubmitForm` / `GoToPage` / `Named` / `Uri`** (`Pass 183.0`, second operator ruling the same day). **`/JavaScript` and `/Launch` are refused permanently.** `None` removes any action, including one pdfce would never author — `ButtonActionChange::replaced` NAMES it, so a form editor knows it destroyed a script. A submit fills `ButtonActionChange::submit` with what the button *would* send — read §1.12b before wiring one. Refuses a non-push-button, a reset/submit target that does not exist, an undecidable destination, a Table 237 flag gate, and a page index past the end — all before writing. |
 | **Rotate one widget** | `rotate_widget(&mut self, fqn, index, degrees: i64) -> Result<WidgetRotation, EditError>` | 16588 | ✅ **`/MK /R` + a REDRAWN appearance** (`Pass 177.0`). ⚠️ **COUNTERCLOCKWISE** — the page's `/Rotate` is the clockwise one. Multiples of 90 only, reduced into `[0, 360)` and the reduction reported. **`/Rect` does not move**; the appearance is redrawn into a `w`/`h`-swapped `/BBox` and stood upright by `/Matrix`. Rotating to `0` **removes** the key. Refuses a non-multiple of 90 with `WidgetRotationNotQuarterTurn`. |
@@ -1080,7 +1080,7 @@ only creation verb whose successful result is a control that does not work"*
 
 #### ★ 1.12b Button actions (`Pass 183.0`/`Pass 183.1`) — and the one disclosure a shell MUST surface
 
-`ButtonAction` is `#[non_exhaustive]`. Five variants:
+`ButtonAction` is `#[non_exhaustive]`. Six variants:
 
 | variant | writes | notes |
 |---|---|---|

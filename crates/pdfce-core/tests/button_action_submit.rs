@@ -901,3 +901,49 @@ fn authoring_a_hide_reaches_nothing() {
         "it IS counted as an annotation action"
     );
 }
+
+/// **Renaming a field says that button actions were not retargeted**
+/// (`Pass 184.0` criterion A).
+///
+/// ★ pdfce writes reset, submit and hide targets as **name strings**, by its
+/// own deliberate choice, because a name survives renumbering and copying
+/// where an indirect reference does not. **A rename is the one operation that
+/// breaks that choice**, and pdfce does not repair it.
+///
+/// It also **cannot be caught by `census_dangling`**: a name string leaves no
+/// dangling object reference, so the graph census that `Pass 183.0` widened
+/// to non-link annotations is structurally blind to this. Two different
+/// invisibilities; that Pass fixed one of them.
+///
+/// So the disclosure is categorical rather than counted — the honest thing
+/// available without a full carrier traversal — and this test pins that it is
+/// **made at all**, and that it is `0` when there is genuinely nothing to
+/// warn about.
+#[test]
+fn a_rename_discloses_that_button_actions_were_not_retargeted() {
+    // A document with an action: a Reset button naming the field about to be
+    // renamed.
+    let mut s = session();
+    s.set_button_action(
+        "Go",
+        Some(ButtonAction::ResetForm {
+            scope: pdfce_core::edit::ResetScope::Only(vec!["Name".to_owned()]),
+        }),
+    )
+    .expect("authors");
+    let renamed = s.rename_field("Name", "Renamed").expect("renames");
+    assert_eq!(renamed.to, "Renamed");
+    assert!(
+        renamed.actions_not_retargeted >= 1,
+        "the document has an action and pdfce updated none of them"
+    );
+
+    // …and a document with no actions at all has nothing to warn about, so the
+    // disclosure is not noise on every rename.
+    let mut clean = session();
+    let quiet = clean.rename_field("Name", "Renamed").expect("renames");
+    assert_eq!(
+        quiet.actions_not_retargeted, 0,
+        "no actions in the file means nothing this rename could have broken"
+    );
+}
