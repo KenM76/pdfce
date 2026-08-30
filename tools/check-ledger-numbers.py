@@ -426,7 +426,107 @@ ARCH_DECISION = re.compile(
 # WHICH numbers are "spoken for" if a filing ever writes a forward reference to
 # a decision it does not then mint. That costs one skipped number. The opposite
 # error costs a duplicate decision record that nothing here can see.
-ARCH_DECISION_MENTION = re.compile(r"[Dd]ecision\s+(\d{3})\b")
+#
+# ============================================================================
+# THE PARAGRAPH ABOVE WAS WRONG, AND IT WAS WRONG IN THE SENTENCE THAT
+# PROMISED IT COULD NOT BE (2026-08-29, THIRD OCCURRENCE IN THIS ONE TOOL)
+# ============================================================================
+#
+# "it cannot under-report, whatever spelling a future filing invents" was
+# written above a pattern that requires WHITESPACE between the word and the
+# digits. On 2026-08-29 this tool printed
+#
+#     decision records    : 103 -> next free is 104
+#
+# while decision 104 already existed, declared at ARCHITECTURE.md:27459 as
+#
+#     - **2026-08-29 - decision `104`: ...
+#
+# with a BACKTICK between the word and the number -- which is this project's
+# own prevailing house style for a number, used throughout that same document.
+# So the spelling that broke it was not exotic. It was the normal one.
+#
+# Found by the librarian while filing the Pass that recorded the SAME SHAPE one
+# level up: `Pass 174.6`'s survivor sweep grepped the section sign with the
+# clause number and missed a line that spelled it without one.
+#
+# THE GENERALISATION, and it is why this comment is long rather than the fix
+# being quiet: A CLAIM IN A COMMENT IS NOT A CHECK. The previous fix widened
+# the pattern AND wrote forty lines arguing the widening was total. That
+# argument is sound about the SOURCE -- any mention, anywhere in the file --
+# and entirely silent about the SEPARATOR, which is the part a writer actually
+# varies. The failure surface of a claim-sweep is its PUNCTUATION, not its
+# words.
+#
+# So the pattern now tolerates wrapping punctuation, AND `_self_check()` below
+# PROVES it does, on the exact spellings that have broken it. A gate that
+# asserts its own coverage cannot make this claim falsely a fourth time.
+#
+# ★ `(?!\d)` RATHER THAN `\b`, AND THE SELF-CHECK BELOW IS WHY THIS LINE SAYS
+# SO. The first draft of this widening kept `\b` and failed its own new
+# assertion on `**decision _103_**` — because `_` is a WORD character, so
+# `3` followed by `_` is not a word boundary and the match never happened.
+# Underscore is markdown italics, i.e. one of the very wrapping styles this
+# pattern was being widened to tolerate: the fix and the bug were the same
+# character. `(?!\d)` says what is actually meant — *these three digits are
+# not part of a longer number* — without asserting anything about what comes
+# after them.
+ARCH_DECISION_MENTION = re.compile(r"[Dd]ecision\s+[`'\"*_#\[(]{0,3}(\d{3})(?!\d)")
+
+# The spellings this tool must be able to see. Each is a real or plausible way
+# this project writes a decision number; the FIRST entry is the one that
+# actually broke it, copied from the line that did. Checked at run time by
+# `_self_check()` — a list nothing executes is a wish.
+DECISION_SPELLINGS = (
+    ("- **2026-08-29 - decision `104`: a thing", 104),
+    ("### Decision 099 - a heading", 99),
+    ("**Decision 087** - bold declaration", 87),
+    ("see decision 012 for the reasoning", 12),
+    ('a quote: "decision 077" in prose', 77),
+    ("(decision 061) parenthesised", 61),
+    ("**decision _103_**", 103),
+)
+
+
+def _self_check():
+    """Prove the decision-ceiling pattern sees every spelling this project uses.
+
+    # Why this runs in the tool rather than in a test
+
+    Because this file is not in `cargo test` and has no test suite of its own,
+    and the failure it guards is **silent**: the tool prints a confidently
+    wrong ceiling and exits 0. There is nothing to notice, and nothing else in
+    this project detects a duplicate decision number (§12 duplicate detection
+    is deliberately absent — see `collect_decisions`). Running the assertions
+    inside the tool is the only place they are guaranteed to execute, and the
+    cost is microseconds.
+
+    # Why the list is SPELLINGS rather than an argument about the regex
+
+    Because *"the pattern is permissive enough"* is not decidable by reading
+    it — that is precisely the reading that failed, twice, in writing. A
+    spelling that has broken this tool in the field is a **fact**. Add to the
+    list when a new one appears; never remove one.
+
+    # Exit code
+
+    `2` — the same code as *"the check could not run"*, not `1`. A checker that
+    cannot see its own subject has not found a fault in the repository; it has
+    found one in itself, and those are different answers to different people.
+    """
+    for text, want in DECISION_SPELLINGS:
+        found = ARCH_DECISION_MENTION.search(text)
+        got = int(found.group(1)) if found else None
+        if got != want:
+            print(
+                "check-ledger-numbers: SELF-CHECK FAILED. The decision-ceiling "
+                f"pattern cannot see {text!r} (expected {want}, got {got}).\n"
+                "  This tool has printed a wrong ceiling three times for exactly "
+                "this reason. Widen ARCH_DECISION_MENTION; do not shorten the "
+                "spelling list to make this pass.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
 
 def collect_decisions():
@@ -676,6 +776,11 @@ def collect_filing_ordinals(text):
 
 
 def main() -> int:
+    # ★ FIRST, BEFORE READING ANYTHING. The instrument is checked before the
+    # subject is measured — a wrong ceiling from a blind pattern is worse than
+    # no ceiling, because it is confidently wrong and nothing downstream
+    # disagrees with it. See `_self_check`.
+    _self_check()
     stats = "--stats" in sys.argv
     lines = read_lines(ROADMAP)
     secs = section_index(lines)
