@@ -90190,6 +90190,213 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### `Pass 179.0` — **BOLD BECOMES AUTOMATIC: A FALLBACK LADDER THAT BINDS A REAL FACE WHEN ONE EXISTS AND SYNTHESISES WHEN ONE DOES NOT, WITH NO OPERATOR INTERVENTION** — ★★★ **OPERATOR RULING, 2026-08-30; DECISION `106`. REVERSES THREE CLAUSES OF pdfce's OWN DOCUMENTED POSTURE AND AMENDS `R90`** — filed 2026-08-30 (340th filing), **NOT STARTED**
+
+**The ruling, verbatim (Ken, 2026-08-30):**
+
+> *"bold font should be automatically used if available, but otherwise
+> synthetic should be supported, and the user shouldn't have to intervene."*
+
+Given in reply to the engineer asking which of two remaining items to take
+next — custom fonts (`Pass 142.0`) or the colour work. **So it is a ruling on
+the font item, and it re-weights it.** The full record, including the three
+overruled clauses quoted so the prior wording stays legible, is
+`ARCHITECTURE.md` §12 **decision `106`**. This entry is the work.
+
+**★ ID assignment.** `CLAUDE.md` rule 5 makes the ID the engineer's act; the
+engineer's dispatch for this filing **explicitly delegated it** (*"Assign Pass
+IDs and report them back to me — I will build against them"*). Highest ID
+before this filing was `178.2`; **`179.0` and `179.1` are minted here, highest
+ID now `179.1`, next free family `180`.** The numbering is **not** an ordering
+— see `179.1`.
+
+#### What is wrong today, measured
+
+Read from live source and from the **shipped binary**
+(`target/release/pdfce-cli.exe`), not from the docs:
+
+1. **There is no "make this bold" verb.** Two separate controls:
+   `--set-font <FACE>` and `--bold-synthetic`. The operator picks.
+2. **`--bold-synthetic` REFUSES when a real bold face resolves**
+   (`FormatError::RealFaceAvailable`, `format.rs:1099`), quoting the
+   `--set-font` argument to retry with — **two calls with a refusal between
+   them.**
+3. **"Available" means fonts already on that page and nothing else.**
+   `gate_synthesis` → `survey_page_fonts` (`format.rs:2563`, `:2997`). Branch
+   1 prefers the run's own family, branch 2 accepts another family, branch 3
+   finds nothing and synthesis proceeds.
+4. **★ The standard-14 Bold sibling is not considered.** A page whose only
+   font resource is `Helvetica` takes branch 3 and synthesises, though
+   `Helvetica-Bold` needs **no embedding at all** and is already modelled
+   (`fontdata::Std14::HelveticaBold`, `std14_by_base_font`).
+5. `font-preflight` exists to tell an operator which of the three outcomes
+   they would get — **itself the intervention step the ruling removes.**
+
+#### ★★★ The measurement found a live defect — `Pass 179.1`, below
+
+On `fixtures/synthetic/textedit/format_other.pdf` (one font resource,
+`Helvetica`, `std14=1`), same file and same run, three commands:
+
+| command | shipped answer |
+|---|---|
+| `font-preflight --find hello` | `real_bold=-`, then **`"bold: no real bold face of this run's family is accepted here — --bold-synthetic is the route"`** |
+| `format-text --find hello --set-font Helvetica-Bold` | ★ **SUCCEEDS** — `set_font=Helvetica->Helvetica-Bold`, adding `/pdfceF1`, *"a standard-14 face … so no font program is embedded"* |
+| `format-text --find hello --bold-synthetic` | proceeds, disclosing *"no real Bold face resolves … so pdfce **cannot make this change with a genuine typeface**"* |
+
+⇒ **Both quoted strings are FALSE on every standard-14 page.** pdfce made the
+change with a genuine typeface one command earlier. See `Pass 179.1`.
+
+#### The ladder — the engineer's read, not the operator's
+
+The ruling fixes the **policy** (automatic, no intervention); the **rungs**
+are pdfce's own choice:
+
+| rung | source of the face | status |
+|---|---|---|
+| **1** | a real bold face already on the page | machinery **exists** — currently **refuses** instead of binding |
+| **2** | ★ the **standard-14 Bold sibling of the run's OWN face** (`Helvetica`→`Helvetica-Bold`, `Times-Roman`→`Times-Bold`, `Courier`→`Courier-Bold`) | **the cheap win, and cheaper than first stated**: the *binding* half shipped in `Pass 162.0` (`std14_resource_dict` + `bind_font_resource`); only the **automatic selection** is new |
+| **3** | a face supplied via `--font-dir` (decision 012) | ★★ **IS `Pass 142.0`** — see below. **Ships absent from this Pass** |
+| **4** | synthetic, **disclosed off-canvas** per rule 4 | emission exists; its disclosure *text* is wrong today (`179.1`) |
+
+**★★ Rung 3 is `Pass 142.0` wearing a different name.** `--font-dir` on
+`format-text` supplies **non-embedded faces for rendering and measurement**
+today (`main.rs:5332`); it does not put a font program **into the document**.
+Binding a `--font-dir` face a run never referenced needs subsetting and
+embedding (§9.6.4 ST1–ST4, deferral code **FF-C**) — exactly `142.0`'s
+narrowed remainder. ⇒ **`179.0` ships with rung 3 absent and grows it when
+`142.0` lands.** `142.0` is not a competitor to this Pass; it is the ladder's
+rung-3 supplier.
+
+**★ The re-weighting, stated precisely.** `142.0`'s Backlog entry carries the
+consuming project's use report — *"Synthetic is enough. Drop `142.0` down the
+queue."* — and that stands. The ruling **raises this automatic-ladder work
+above `142.0`; it does not raise `142.0` itself.** Rung 2 delivers a **real**
+bold for Helvetica / Times / Courier text with **no embedding**, which covers
+a large share of the CAD and office documents this project actually sees —
+i.e. much of what `142.0` was wanted for arrives without `142.0`.
+
+#### ★ The one genuinely debatable rung, and it is OPEN
+
+If the run is an embedded **Arial** and no Arial Bold exists, rung 2 does
+**not** fire — `Helvetica-Bold` is a *different family*. Synthetic keeps the
+letterforms and fakes the weight; a cross-family real bold keeps the weight
+and changes the letterforms. Rung 2 is deliberately scoped to the run's **own**
+family, matching `gate_synthesis`'s existing same-family-first preference.
+**`pdfce-acrobat-librarian` was dispatched in parallel and did NOT close it**
+(`Acrobat_Features/text_edit__synthetic_bold_italic_styles.md`, addendum
+2026-08-30):
+
+- **CLOSED — Acrobat's Bold toggle is a FONT-VARIANT SWAP, not a style flag.**
+  *"'Bold' means a different font"*; *"It's not a separate setting from the
+  font like in Word."* ⇒ rungs 1–3 are the shape Acrobat itself has.
+- **CLOSED, and a free EXCEED — Acrobat's preference is ONE COMBINED toggle**
+  for bold *and* italic. pdfce's `StyleSynthesis::{Bold, Italic, BoldItalic}`
+  already has per-axis granularity, so pdfce can **bind a real Bold and
+  synthesise Italic in the same operation.** Take it; record the divergence.
+- **★ STILL GAP — cross-family substitution.** *"No source — Adobe or
+  community — describes this branch at all."* Same-family-only is *"merely the
+  more parsimonious reading … not a stated rule."* **Do not record it as
+  Acrobat-confirmed.**
+- **★★ STILL GAP — standard-14 siblings.** No source, any session. ⇒ **rung 2
+  is NOT a parity claim** and must be argued from pdfce's own capability
+  boundary (the decision-020 posture), not from Acrobat.
+- Weak evidence that Acrobat's fallback-off behaviour is a **silent no-op or a
+  greyed control** — the opposite of pdfce's explicit refusal. Under this
+  ruling pdfce does **neither**: it acts, and it discloses.
+
+#### Rule 4, which this looks like it collides with and does not
+
+Decision 059 settled the shape: rule 4 mandates **non-silence**, never
+**visible machinery**. ⇒ **The bound face renders exactly as saved content
+will render; WHICH RUNG FIRED IS DISCLOSED OFF-CANVAS.** No accept/reject
+gate, no provisional marking, no `font-preflight` round trip required of the
+operator. **★ And the disclosure must name the rung**: *"Bold applied"* is
+silence with a receipt — binding a real face, authoring a standard-14 sibling
+into the file, and stroking the existing face are three different things to
+have done to a document.
+
+#### Acceptance criteria
+
+1. **One verb reaches bold.** A caller asks for bold (and/or italic) **without
+   knowing** whether a real face exists; `FormatError::RealFaceAvailable`
+   stops being reachable from that verb. Core + CLI, same Pass (rule 11).
+2. **Rung 1 binds instead of refusing** — the face `gate_synthesis` finds
+   today is now applied, through the same `accept_font_target` coverage gate
+   that `set_font` uses (`R221`; do not build a second acceptance test).
+3. **★ Rung 2 fires**: `format_other.pdf` above, asked for bold with no face
+   named, binds `Helvetica-Bold` and embeds nothing. **This is the Pass's
+   discriminating fixture** — it is the exact input on which the shipped
+   binary currently synthesises.
+4. **Rung 4 still reachable, still spec-native** — `R90`'s emission half is
+   untouched: `Tr 2`, user-space stroke width, matched stroking colour, `Tm`
+   shear, never double-strike, provenance never written into the PDF.
+5. **Per-axis independence is exercised** — a fixture where a real Bold binds
+   and Italic is synthesised **in one operation** (the Acrobat exceed above).
+6. **The disclosure names the rung**, and a test asserts the string reaches
+   **stdout/stderr of the shipped binary**, not only that the core returns it
+   — the `Pass 162.0` finding-1 trap (two of three save paths wired, every
+   unit test green, the shell using the third).
+7. **The explicit verbs survive as overrides.** `--bold-synthetic` must remain
+   reachable for an operator who wants the stroke *despite* an available real
+   face — the ruling removes the **obligation** to choose, not the
+   **ability**. It no longer refuses; it discloses that it is overriding a
+   real face.
+8. `cargo fmt --check`, `cargo clippy -D warnings`, `bash tools/run-gates.sh`
+   clean; `FEATURES.md` rows 149, 280 and the *Planned* ladder row updated in
+   the shipping filing.
+
+#### Not in this Pass, stated so it is not assumed
+
+- **Rung 3** (`--font-dir` donor) — that is `Pass 142.0`.
+- **Any global preference.** The ruling removes the *need* to intervene; it
+  does not ask for an Acrobat-style set-and-forget switch, and `R90`'s
+  never-a-global-preference clause survives that far.
+- **`crates/pdfce-gui`** — paused (GUI-pause block); the `gui` column tracks
+  `D:\dev\pdfceGUI`, which must be notified rather than built here.
+
+---
+
+### `Pass 179.1` — **SIX PLACES SAY "no real bold on the page ⇒ synthesis is the route", AND THAT HAS BEEN FALSE ON EVERY STANDARD-14 PAGE SINCE `Pass 162.0`** — ★★ **A HARD-RULE-11 SURVIVOR SET, SHIPPABLE INDEPENDENTLY AND BEFORE `179.0`** — filed 2026-08-30 (340th filing), **NOT STARTED**
+
+**The numbering is not an ordering.** `179.1` is **wrong today**, regardless
+of whether the ladder is ever built, and per Ken's standing *"fix bugs on
+discovery"* it should not wait behind `179.0`. If `179.0` ships first it
+**absorbs** `179.1`; the separate ID exists so the strings cannot vanish
+between filings if it does not.
+
+**Cause.** `Pass 162.0` (`9c3a1c9`, 2026-08-29) widened **what `--set-font`
+can reach** — a standard-14 face is authored on demand. Its filing corrected
+the **family-change** claim (`FEATURES.md` row 149) and
+`docs/core-api/02-editing-and-saving.md`'s *"read-only about resources"*
+claim. It did **not** correct the **routing** claim, a different sentence
+about the same widened reach. **A sweep that follows the verb whose behaviour
+changed misses the claims phrased about its consequences.**
+
+**Survivors, from a hard-rule-11 clause-(e) sweep** — case-insensitive grep
+for the bare keywords `real bold` / `is the route` / `synthesis is` over the
+five files the feature touches, every hit read:
+
+| # | location | the claim | severity |
+|---|---|---|---|
+| **1** | `crates/pdfce-cli/src/main.rs:22660` | `font-preflight` **stdout**: *"bold: no real bold face of this run's family is accepted here — `--bold-synthetic` is the route"* | ★★★ **the only copy an operator reads.** FALSE, measured |
+| **2** | `crates/pdfce-cli/src/main.rs:22670` | same for italic (`Helvetica-Oblique`, `Times-Italic`, `Courier-Oblique`) | ★★★ same |
+| **3** | `crates/pdfce-cli/src/main.rs:2100`–`2101` | module rustdoc: *"a `real_bold=-` does NOT mean the control should be disabled, it means synthesis is the route"* | ★ incomplete — the conclusion is right, the reason is now wrong |
+| **4** | `crates/pdfce-cli/src/main.rs:5300` | `--bold-synthetic` help: *"a FALLBACK for when no real Bold face resolves **on the page**"* | ★ narrow — accurate about the gate, presents the page as the whole universe |
+| **5** | `crates/pdfce-core/src/text_edit/format.rs:3268` | `FontPreflight::real_bold()` rustdoc: *"`None` does **not** mean 'grey the button out': synthesis is the other route"* | ★ same shape as 3 |
+| **6** | `crates/pdfce-core/src/text_edit/synth.rs:273`–`274` | the rule-4 **disclosure string**: *"no real {} face resolves for '{}' on this page, so pdfce **cannot make this change with a genuine typeface**"* | ★★★ **a rule-4 disclosure asserting a capability limit that does not exist** |
+
+**Survivors 7–8 are `FEATURES.md` rows 149 and 280 — CORRECTED IN THIS
+FILING**, not left for the Pass, because a features row overstating or
+understating shipped behaviour is a correction owed now.
+
+**★ Not edited here.** Survivors 1–6 are in `crates/`, outside this role's
+remit (hard rule 11: *report; do not edit `crates/`*).
+
+**Scope note.** `real_bold`'s underlying **data** need not change for `179.1`
+— `FontPreflight` legitimately reports what is **on the page**. What is wrong
+is every sentence that turns that page-scoped fact into a **routing verdict**.
+Fixing the strings is the minimum; **`179.0` fixes the verdict.**
+
 ### ★★★★ TWO CHANNEL ITEMS ARE OWED AND NAMED IN NO PDFCE DOCUMENT — a `pdfceGUI` REQUEST unanswered since 17:35, and an `iccce` REPLY that arrived AFTER the dispatch was written and strengthens a pdfce open item. **NO PASS ID CLAIMED** — opened 2026-08-29 (330th filing)
 
 **★ NO ID IS MINTED HERE, DELIBERATELY.** Assigning a Pass ID is the
@@ -101351,6 +101558,37 @@ answer on whether they need this before it is sized into a real Pass.
 
 ### `Pass 142.0` — **FF-C WIRED INTO `format_text`: RESTYLE EXISTING TEXT TO A FACE THE PAGE DOES NOT ALREADY CARRY** — ★★ **READ THE SCOPE CORRECTION FIRST, BECAUSE THE COMMIT THAT PROMPTED THIS ENTRY STATES THE GAP TOO WIDELY** — filed 2026-08-27 (293rd filing), **NOT STARTED. ★★★ NO LONGER BLOCKED — THE ANSWER ARRIVED 2026-08-27; DE-PRIORITISED, *NOT* CLOSED (296th filing, amendment below). ★★★★ NARROWED 2026-08-29 (319th filing) — THE STANDARD-14 HALF SHIPPED AS `Pass 162.0`; ONLY THE NON-STANDARD-14 (EMBEDDED-DONOR) HALF REMAINS HERE**
 
+> **★★★★★ RE-WEIGHTED 2026-08-30 (340th filing), by an OPERATOR RULING —
+> decision `106`. THIS ENTRY DOES NOT MOVE, AND THAT IS THE POINT.** Ken,
+> verbatim: *"bold font should be automatically used if available, but
+> otherwise synthetic should be supported, and the user shouldn't have to
+> intervene."* Given in reply to the engineer asking whether to take **this
+> item** or the colour work next. Three consequences, all of them about
+> where `142.0` now sits rather than about what it contains:
+>
+> 1. **The ruling raises the NEW automatic-ladder work (`Pass 179.0`) above
+>    `142.0`; it does NOT raise `142.0` itself.** The ladder's **rung 2** —
+>    the standard-14 Bold sibling of the run's own face,
+>    `Helvetica`→`Helvetica-Bold` — delivers a **real** bold for
+>    Helvetica / Times / Courier text with **no embedding**, and that covers
+>    a large share of the CAD and office documents this project actually
+>    sees. ⇒ **Much of what `142.0` was wanted for arrives without `142.0`.**
+> 2. **★★ `142.0` IS THE LADDER'S RUNG 3.** `Pass 179.0`'s rung 3 — *"a face
+>    supplied via `--font-dir`"* — is not new work; it is **this entry**.
+>    `--font-dir` on `format-text` today supplies non-embedded faces for
+>    rendering and measurement only (decision 012, `main.rs:5332`); binding a
+>    donor face a run never referenced needs subsetting and embedding, which
+>    is criterion 4 below verbatim. ⇒ **`179.0` ships with rung 3 ABSENT and
+>    grows it when this lands.** The two are not competitors.
+> 3. The consuming project's use report — *"Synthetic is enough. Drop
+>    `142.0` down the queue"*, recorded in the 296th-filing amendment below —
+>    **stands unchanged.** Nothing in the ruling contradicts it; the ruling
+>    is about **who chooses** between real and synthetic, not about whether
+>    an embedded donor is needed.
+>
+> **★ De-prioritised, still NOT closed and still NOT declined**, exactly as
+> the 296th filing left it.
+
 > **★★★★ NARROWED 2026-08-29 (319th filing), from `Pass 162.0` (`9c3a1c9`).**
 > `format-text --set-font` now authors a **standard-14** (§9.6.2.2) font
 > resource on demand when the target's `/Resources` lacks it — see
@@ -111933,8 +112171,32 @@ not a judgment call:**
   model stores these as a discriminated `Absolute | Relative` quantity;
   superscript/subscript are always `Relative`, and the absolute operand
   is re-derived whenever `Tfs` changes.
-- **R90 — Synthetic bold/italic is per-use, declinable, fallback-only,
-  and self-evident (decision 019, 2026-08-03).** Offered only when no
+- **R90 — Synthetic bold/italic is ~~per-use, declinable,~~ fallback-only,
+  and self-evident (decision 019, 2026-08-03).**
+
+  **★★★ AMENDED 2026-08-30 by an OPERATOR RULING — decision `106`,
+  `ARCHITECTURE.md` §12. THE "per-use, declinable, never automatic" HALF
+  OF THIS RULE IS OVERRULED. THE EMISSION HALF IS UNTOUCHED.** Ken,
+  verbatim: *"bold font should be automatically used if available, but
+  otherwise synthetic should be supported, and the user shouldn't have to
+  intervene."*
+
+  | half of R90 | disposition |
+  |---|---|
+  | **fallback-only** — a real face is preferred to a synthesised one | ★ **SURVIVES, STRENGTHENED.** The ruling moves the obligation *off* the operator and *onto* pdfce: preferring a real face was a thing the operator had to do by choosing the other verb, and becomes a thing pdfce does |
+  | ~~**per-use, declinable, a named per-application choice on every use**~~ | ★★ **OVERRULED.** Synthesis is now the last rung of an automatic ladder (`Pass 179.0`), reached without the operator asking for it |
+  | ~~**"deliberately stricter than Acrobat"**~~ | ★ **OVERRULED as a boast.** It described a posture the operator has now declined. Retained only as a record of what was chosen and reversed |
+  | **never a global preference** | **SURVIVES.** The ruling removes the *need* to intervene; it does not ask for an Acrobat-style set-and-forget switch |
+  | **spec-native emission** — `Tr 2`, user-space stroke width, matched stroking colour, `Tm` shear, never double-strike, provenance never written into the PDF | ★★★ **WHOLLY UNTOUCHED.** Everything from *"Emitted by spec-native means only"* below is unaffected by decision 106 |
+  | **the disclosure obligation** | **SURVIVES, and is now load-bearing.** With the gate gone, the disclosure is the *only* thing standing between the ladder and a rule-4 violation — and it must name **which rung fired** |
+
+  **Do not read the strikethroughs as a licence to synthesise in preference
+  to a real face.** The ladder's whole ordering principle is this rule's
+  surviving half.
+
+  **The rule's original text follows unaltered**, per this project's
+  convention of keeping reversed wording legible rather than rewriting it —
+  read it against the table above, not on its own. Offered only when no
   real Bold/Italic resource resolves (the same coverage check that
   gates a real family/style change, Pass 14.2); never a global
   preference — a named, declinable, per-application choice on every use

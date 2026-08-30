@@ -79100,3 +79100,295 @@ disk state from documents, and a dispatch is a document.**
    loop over the same verb list and none of which has been measured.
 4. **Measure the backup bundle and `origin` divergence**, and file both figures
    with the command that produced them.
+
+## 2026-08-30 (340th filing) — **AN OPERATOR RULING, NOT A PASS: bold becomes an AUTOMATIC fallback ladder, reversing three clauses of pdfce's own documented posture. Decision `106` filed; `Pass 179.0` and `179.1` minted; `R90` AMENDED.** ★★★ **And the measurement taken to write the record DROVE THE SHIPPED BINARY and found a live defect: `font-preflight` prints "`--bold-synthetic` is the route" on a page where `--set-font Helvetica-Bold` SUCCEEDS one command later — six copies of that claim, one of them a rule-4 disclosure**
+
+**Shipped:** **nothing.** No Pass shipped this filing and no code was written.
+`crates/` is untouched by this role, per hard rule 11. The three files edited
+are `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/FEATURES.md`.
+
+**Sourcing.** A shell was held. `git log`, `git status --porcelain`,
+`git rev-list --count origin/main..HEAD`, `ls -lt /d/Dev/pdfce-backups/` and
+five `tools/check-*` gates were **run by this role**, not relayed. The three
+binary invocations in the table below were **run by this role** against
+`target/release/pdfce-cli.exe`. Every line number cited was **re-verified by
+`grep` at `HEAD` = `49caa88` after** the git check, because the tree has moved
+under three consecutive filings (`R201`).
+
+---
+
+### The ruling (Ken, 2026-08-30), verbatim
+
+> *"bold font should be automatically used if available, but otherwise
+> synthetic should be supported, and the user shouldn't have to intervene."*
+
+Given in reply to the engineer asking which of two remaining items to take
+next — custom fonts (`Pass 142.0`) or the colour work. **So it is a ruling on
+the font item, and it re-weights it.**
+
+### Decisions made this session
+
+**Decision `106`** (`ARCHITECTURE.md` §12) — *bold is resolved by an automatic
+fallback ladder, not by an operator choosing between two verbs.* Ceiling
+**105 → 106; next free 107**, confirmed by `python tools/check-ledger-numbers.py`.
+
+**★★ Why this earned a decision record rather than a Backlog line: it reverses
+a posture this project chose on purpose and wrote down.** The prior wording is
+kept legible per the convention decisions 024 and 059 established for rule 4.
+`FormatRequest::set_synthetic`'s doc comment (`format.rs:667`) **said** it was
+*"the operator's **explicit, per-use acceptance**"*, that *"**nothing is ever
+applied silently**"*, and that a resolving real face makes the request
+*"**refused** by name"* — **"deliberately stricter than Acrobat"**. Three of
+those clauses are overruled. **One survives and is the ladder's whole ordering
+principle:** *a fallback, never an alternative to a real face.* The ruling
+**strengthens** that clause — preferring a real face stops being an obligation
+on the operator and becomes an obligation on pdfce.
+
+**`R90` amended in the same filing, with a clause-by-clause disposition
+table** — because leaving a standing rule reading *"never a global preference,
+a named declinable per-application choice on every use"* beside a decision
+saying the opposite is exactly the cross-record contradiction hard rule 10
+exists to prevent. **Emission half wholly untouched** (`Tr 2`, user-space
+stroke width, matched stroking colour, `Tm` shear, never double-strike,
+provenance never written into the PDF). **`R235` stays the ceiling; next free
+`R236`. No mint** — one operator ruling on one capability, and the mint bar is
+two *independent* occurrences.
+
+### ★★★ Findings + decisions — the measurement found a LIVE DEFECT
+
+The dispatch asked for five measurements to be stated as measured. They hold,
+and **a sixth thing turned up that the dispatch did not ask for**, because the
+binary was driven rather than only read — the 339th filing's own lesson,
+applied.
+
+**Confirmed as measured** (live source at `49caa88`): there is no "make this
+bold" verb, only `--set-font` and `--bold-synthetic`; `--bold-synthetic`
+**refuses** when a real bold resolves (`format.rs:1099`); "available" means the
+page's `/Resources /Font` and nothing else (`gate_synthesis` →
+`survey_page_fonts`, `format.rs:2563`/`:2997`); **the standard-14 Bold sibling
+is not considered**, though `fontdata::Std14::HelveticaBold` and
+`std14_by_base_font` model it; and `font-preflight` exists to answer a question
+the ruling removes the need to ask.
+
+**★★★ THE DEFECT.** `fixtures/synthetic/textedit/format_other.pdf` — one font
+resource, `Helvetica`, `std14=1` (confirmed by `list-fonts`). Same file, same
+run, three commands:
+
+| command | shipped answer |
+|---|---|
+| `font-preflight --find hello` | `real_bold=-`, then **`"bold: no real bold face of this run's family is accepted here — --bold-synthetic is the route"`** |
+| `format-text --find hello --set-font Helvetica-Bold` | ★ **SUCCEEDS** — `set_font=Helvetica->Helvetica-Bold`, disclosing *"'Helvetica-Bold' was NOT a font resource here, so pdfce ADDED one as /pdfceF1 — a standard-14 face (ISO 32000-1 §9.6.2.2), so no font program is embedded"* |
+| `format-text --find hello --bold-synthetic` | proceeds, disclosing *"no real Bold face resolves for 'Helvetica' on this page, so pdfce **cannot make this change with a genuine typeface**"* |
+
+⇒ **Both quoted strings are FALSE on every standard-14 page.** pdfce made the
+change with a genuine typeface one command earlier. The second is a **rule-4
+disclosure asserting a capability limit that does not exist** — rule 4's
+failure mode in the one direction nobody was watching for: **understating
+pdfce's own reach.** Filed as `Pass 179.1`.
+
+**★★ THE CAUSE IS A HARD-RULE-11 SWEEP THAT RAN HALFWAY, AND ITS SHAPE IS THE
+GENERALISABLE HALF.** `Pass 162.0` (`9c3a1c9`, 2026-08-29) widened **what
+`--set-font` can reach**. Its filing corrected the **family-change** claim
+(`FEATURES.md` row 149) and `docs/core-api/02-editing-and-saving.md`'s
+*"read-only about resources"* claim — both sentences **about the verb whose
+behaviour changed**. It did not correct the **routing** claim — *"no real bold
+on the page ⇒ synthesis is the route"* — which is a sentence **about that
+verb's consequences**, in six places. ⇒ **A sweep that follows the verb misses
+the claims phrased about what the verb implies.** That is a genuinely new
+shape beside clause (e)'s spelling problem: here every copy was spelled
+differently *and* was about a different subject (`--bold-synthetic`,
+`real_bold`, a button, a disclosure) than the thing that changed
+(`--set-font`).
+
+**Survivors 1–6, in `crates/` — REPORTED, NOT EDITED** (hard rule 11 scope),
+found by a clause-(e) sweep: case-insensitive grep for the bare keywords
+`real bold` / `is the route` / `synthesis is` over the **five files the
+feature touches**, every hit read.
+
+| # | location (verified at `49caa88`) | severity |
+|---|---|---|
+| 1 | `crates/pdfce-cli/src/main.rs:22660` — `font-preflight` **stdout** | ★★★ the only copy an operator reads. FALSE, measured |
+| 2 | `crates/pdfce-cli/src/main.rs:22670` — same for italic | ★★★ same (`Helvetica-Oblique`, `Times-Italic`, `Courier-Oblique`) |
+| 3 | `crates/pdfce-cli/src/main.rs:2100`–`2101` — module rustdoc | ★ conclusion right, reason now wrong |
+| 4 | `crates/pdfce-cli/src/main.rs:5300` — `--bold-synthetic` help | ★ accurate about the gate, presents the page as the whole universe |
+| 5 | `crates/pdfce-core/src/text_edit/format.rs:3268` — `real_bold()` rustdoc | ★ same shape as 3 |
+| 6 | `crates/pdfce-core/src/text_edit/synth.rs:273`–`274` — the rule-4 **disclosure string** | ★★★ asserts a capability limit that does not exist |
+
+**Survivors that SURVIVE AND ARE CORRECT, recorded so the next sweep does not
+"fix" them** (clause (e)'s reporting half): `format.rs:668` and `:1099`'s
+*"synthesis is a fallback … never an alternative to one"* — that is `R90`'s
+surviving half, and decision 106 strengthens rather than weakens it;
+`format.rs:2530`'s whole *"Why `current_resource` is excluded"* rationale,
+which is about a face curing a request made against itself and is untouched by
+the ruling; and `format.rs:3199`'s *"reporting `None` about itself"* note.
+
+**★ Two of this role's own draft claims were checked against live source and
+one was CORRECTED before filing** (the corollary to hard rule 11). The draft
+put survivor 3 at `main.rs:2100` and survivor 6 at `synth.rs:273`; grep put
+the actual sentences at `2100`–`2101` and `273`–`274`. Both citations were
+widened before the record was written.
+
+**★★ A correction to the dispatch's own framing — rung 3 is not new work.**
+The dispatch listed the ladder's rung 3 as *"a face supplied via
+`--font-dir`"*. `--font-dir` on `format-text` supplies **non-embedded faces
+for rendering and measurement only** (decision 012, `main.rs:5332`); binding a
+donor face a run never referenced requires subsetting and embedding (§9.6.4
+ST1–ST4, FF-C) — **which is `Pass 142.0`'s narrowed remainder verbatim.** ⇒
+**Rung 3 IS `142.0`. `179.0` ships with that rung ABSENT and grows it when
+`142.0` lands.** The two are not competitors; `142.0` is the ladder's rung-3
+supplier. Recorded in `142.0`'s Backlog entry and in decision 106.
+
+**★ A second correction, in pdfce's favour — rung 2 is cheaper than stated.**
+The dispatch called rung 2 *"★ new, and the cheap win"*. The **binding** half
+shipped in `Pass 162.0` (`std14_resource_dict`, `bind_font_resource`, the
+§7.8.3 inheritance walk); only the **automatic selection** is new.
+
+### What the parallel Acrobat dispatch returned — and what it did NOT close
+
+`Acrobat_Features/text_edit__synthetic_bold_italic_styles.md` carries an
+addendum dated **2026-08-30**, written in reply to this same ruling. Four
+sub-questions; **two closed, two still GAP** — and the two that closed are the
+ones that matter least to the rung order.
+
+- **CLOSED — Acrobat's Bold toggle is a FONT-VARIANT SWAP, not a style flag.**
+  Two independent community sources: *"'Bold' means a different font"*; *"It's
+  not a separate setting from the font like in Word."* ⇒ rungs 1–3 are the
+  shape Acrobat itself has. pdfce's ladder is not an invention; what pdfce
+  lacked was the automation.
+- **CLOSED, and it is a free EXCEED** — Acrobat's preference is **one combined
+  toggle** for bold *and* italic. pdfce's `StyleSynthesis::{Bold, Italic,
+  BoldItalic}` already has per-axis granularity, so pdfce can **bind a real
+  Bold and synthesise Italic in one operation**, which Acrobat's preference
+  cannot express. Per Ken's standing *"exceed the parity reference when you
+  can"*: take it, record the divergence. Written into `179.0` as acceptance
+  criterion 5.
+- **★ STILL GAP — cross-family substitution**, the engineer's own
+  self-declared debatable rung. *"No source — Adobe or community — describes
+  this branch at all,"* checked 2026-08-30 across three sessions.
+  Same-family-only is *"merely the more parsimonious reading … not a stated
+  rule."* ⇒ **the rung order may still change before the Pass ships**, and
+  decision 106 says the question was open at filing time, as the dispatch
+  asked.
+- **★★ STILL GAP — standard-14 siblings.** No source, any session, on whether
+  Acrobat consults a base-14 table before falling to synthesis. ⇒ **RUNG 2 IS
+  NOT A PARITY CLAIM AND MUST NOT BE ARGUED AS ONE.** It is decided from
+  pdfce's own capability boundary — the decision-020 posture — and pdfce's
+  base-14 metrics, dictionary builder and resource binder are its warrant.
+- Weak, symptom-shaped evidence that Acrobat's fallback-off behaviour is a
+  **silent no-op or a greyed control**, the *opposite* of pdfce's explicit
+  refusal. Under this ruling pdfce does **neither**: it acts, and it discloses.
+
+### ★★★ Rule 4, which this looks like it collides with and does not
+
+The ladder is pdfce choosing a face the operator did not name — which is the
+literal trigger for rule 4. **Decision 059 already settled the shape:** rule 4
+has been read twice as a mandate for **visible machinery** when it was only
+ever a mandate for **non-silence**. This is the **third** instance of that
+misreading being corrected, and the first corrected **in advance** — by the
+operator, before the machinery existed, rather than after it shipped and
+annoyed him. ⇒ the bound face renders exactly as saved content will render;
+**which rung fired is disclosed off-canvas**; no accept/reject gate; no
+`font-preflight` round trip demanded of the operator.
+
+**★ And the disclosure must name the RUNG.** *"Bold applied"* is silence with
+a receipt. Binding a real face, authoring a standard-14 sibling **into the
+file**, and stroking the existing face are three different things to have done
+to a document — one adds an object, one changes what a viewer substitutes, one
+changes only the paint — and telling them apart is the whole content of the
+obligation.
+
+### `FEATURES.md` — three rows changed, NOTHING TICKED
+
+Nothing shipped, so nothing was ticked. Two corrections were owed **now**,
+independently of the Pass, and one *Planned* row was added.
+
+- **Row 149** (*Implemented → Text*, text formatting on existing text) — the
+  synthesis clause read *"bold and italic **on a page with no such face** are
+  SYNTHESISED"*, which reads as a statement about availability and is really a
+  statement about **one dictionary**. Rewritten to name the scope
+  (*"where the PAGE'S OWN `/Resources /Font` carries no such face"*) and to
+  state outright that **the synthesis gate and the family-change clause in the
+  same row survey different sets, and the gate's is narrower** — with the
+  measured `Helvetica` case and pointers to `179.0`/`179.1`. ★ The row
+  contained both facts already and a reader could not tell they disagreed.
+- **Row 280** (`font-preflight`) — said it *"states whether a real **Bold**
+  and **Italic** of the family would be **accepted** — which is what routes a
+  Bold button to `set_font` versus `set_synthetic`."* **The scope word was
+  missing and the routing conclusion is false**: `real_bold` is *on this
+  page*, which since `Pass 162.0` is narrower than what `set_font` reaches.
+  Corrected with the measurement.
+- **New *Planned* row, first in predicted order** — *"make a run bold (or
+  italic) without choosing between two verbs"*, `[ ]`/`[ ]`/`[ ]`, Acrobat
+  `◐` (it has the variant swap and it synthesises, but only behind the single
+  combined preference). Placed first because *Planned* order derives from
+  *Next up*. **No row was duplicated** — row 149 remains the family-change and
+  synthesis row; the new row is the **automatic-selection** capability, which
+  exists in no form today.
+- The `Pass 142.0` *Planned* row now also names itself as **rung 3** of the
+  ladder.
+
+### Ledger
+
+| | |
+|---|---|
+| Pass IDs | highest before this filing **`178.2`**; **`179.0`** and **`179.1`** minted here. Highest ID now **`179.1`**; next free family **`180`**. ★ IDs minted by this role only because **the engineer's dispatch explicitly delegated it** (`CLAUDE.md` rule 5 otherwise makes it his act) |
+| Decisions | **`106`** filed. Ceiling **105 → 106; next free `107`** |
+| Standing rules | **none minted.** `R235` stays the ceiling, **next free `R236`**. **`R90` AMENDED** (not minted) |
+| Filings | this is the **340th**; next free **341** |
+| Gate confirming all three ceilings | `python tools/check-ledger-numbers.py` → *"standing rules: R235 → next free is R236 / decision records: 106 → next free is 107 / SESSION_LOG filings: 339 → next free is 340"*, **run at filing time, before this entry was appended** |
+
+### Git and backup state — MEASURED, not inferred (hard rule 8)
+
+| fact | command | result |
+|---|---|---|
+| `HEAD` | `git log --oneline -3` | **`49caa88`** (`b9115fd` = 339th filing, `d6a2e6d` below it) |
+| working tree, **first** check (start of filing) | `git status --porcelain` | only this filing's three `docs/` files modified |
+| working tree, **second** check (end of filing) | `git status --porcelain` | ★★ **`crates/pdfce-core/src/edit.rs` and `crates/pdfce-core/src/settings/mod.rs` had ALSO become modified** — the engineer is editing concurrently. **`R201`'s fourth consecutive filing.** Neither file is this role's; nothing here was written by or is claimed about them |
+| ★ divergence from `origin` | `git rev-list --count origin/main..HEAD` | **0 — `main` is fully pushed.** The 339th filing declined to assert this and was right to; it is now measured, and the answer is that nothing is owed |
+| backup bundle | `ls -lt /d/Dev/pdfce-backups/` | newest `pdfce-20260830-0553-d6a2e6d-full.bundle`, **05:51**, at `d6a2e6d` |
+| bundle staleness | `git rev-list --count d6a2e6d..HEAD` | ★ **2 commits behind** (`b9115fd`, `49caa88`) — a figure, and the command that produced it |
+
+**★ The 339th filing's own owed item is DISCHARGED, and by a commit, not by a
+claim.** It listed `docs/core-api/02-editing-and-saving.md` §6.6 as *"the only
+core-api piece outstanding"*. `git show --stat 49caa88` is titled *"correct
+three false statements in core-api 6.6, and three Pass citations in shipped
+`--help`"* and touches that file (+44/−15). **Verified by `git show`, not read
+off a commit subject alone.** That commit also touched `main.rs` — checked, and
+it did **not** touch any of survivors 1–6, so their line numbers above are
+current rather than pre-move.
+
+### Still in flight
+
+- **`Pass 179.1` is a live defect in shipped output and should not wait behind
+  `179.0`.** Per Ken's standing *"fix bugs on discovery"*, the six strings are
+  wrong today regardless of whether the ladder is ever built. If `179.0` ships
+  first it absorbs `179.1`; the separate ID exists so the strings cannot vanish
+  between filings if it does not.
+- **The cross-family rung is OPEN** and is the one thing that could change
+  `179.0`'s design before it ships. Acrobat cannot answer it.
+- **`bash tools/run-gates.sh` has NOT been run** this filing; five gates were
+  run individually (`check-ledger-numbers`, `check-passes-filed`,
+  `check-cited-verbs-exist`, `check-cited-commits-exist`,
+  `check-suite-name-absent`) and all five are clean.
+- **`D:\dev\pdfceGUI` notification is now FIVE items deep**, carried from the
+  339th filing and unchanged: `rotate_widget`/`rotate-widget` (`Pass 177.0`);
+  `group-rename`/`group-delete`/`dimension-group`/`dimension-label`
+  (`176.0`, `175.0`); the layer panel greying the default group's toggle
+  (`178.0`); the four new ce-dimension-group refusals; **and now the coming
+  bold ladder** — the last of which changes what a Bold button should do, so a
+  shell that has already wired `real_bold()`-style routing will need to unwire
+  it. `FEATURES.md` row 280 says `real_bold()` was *deliberately not taken* by
+  that project, which is fortunate.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — still
+  open, a sixth filing; Reader only on this machine.
+- **`ARCHITECTURE.md` §4 sweep still unfinished** — a fifth filing.
+
+### For next session
+
+1. **Decide the cross-family rung** before building `179.0`, or build rungs
+   1/2/4 and leave it explicitly unbuilt. Acrobat will not settle it; this is
+   pdfce's own call and should be recorded as such.
+2. **Ship `179.1` first if `179.0` is not immediate** — six false strings, two
+   of them on stdout, one of them a rule-4 disclosure.
+3. **Send the `pdfceGUI` note**, now six items.
+4. **Take a backup bundle** — 2 commits behind, measured above.
