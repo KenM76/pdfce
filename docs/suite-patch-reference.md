@@ -222,6 +222,57 @@ and PCS 12.0 were **silently changed** in the suite's 4.0 revision *"to
 prevent ghosting effect"*, **filenames unchanged**. **Pin fixtures to a file
 hash.**
 
+### ★★ MEASURED 2026-08-29 (`Pass 174.2`) — all three surviving traps, attributed
+
+Recorded here because this patch had been carried as *"cause unknown, and
+**not** the defect `Pass 143.0` fixed"* for a week, with a lead
+(*"`.5 G` — a grey **stroke** — appears in its streams while every synthetic
+fixture uses fills"*) that turns out to be **the wrong lead**. Both halves
+are worth keeping: the finding, and the fact that the plausible lead was
+plausible.
+
+**The instrument** is `--probe-ink` (`Pass 174.0`), which reads the ink in
+the colorant buffer rather than the sRGB it converts to, so the X and its
+surround can be compared as *ink* instead of as pixels.
+
+| trap (device px, scale 2) | X's ink | surround's ink | reference shows |
+|---|---|---|---|
+| `(27, 68)` | `0 0 0 0.500` | `0.443 0 0.885 0.500` | whole cell green — X invisible |
+| `(28, 135)` | `0 0 0 0.500` | `0.443 0 0.885 0.500` | whole cell green — X invisible |
+| `(434, 136)` | `0.500 0 1.000 0.500` | `0.029 0 0.059 0.500` | whole cell neutral grey |
+
+**1. The `Pass 143.0` ambiguity is REFUTED as the cause, by ablation.**
+Rendering the same pixel under all three `overprint_zero_tint_scope` values —
+`device_cmyk_only`, `grey_as_k_only`, `all_process_spaces` — returns
+**bit-identical ink**. The setting moves the page's total effective-overprint
+count (24 / 29 / 29) and does not move this pixel at all. The §8.6.7 grey
+question is real and is not what is happening here.
+
+**2. The grey-STROKE lead is refuted too, and is worth recording as a near
+miss.** `.5 G` does occur in this patch — but under `/GS5`, on a *different*
+cell. The two traps at `(27,68)` and `(28,135)` are `0 0 0 .5 k` and `.5 g`
+**fills** under `/GS4`, and their whole 49×49 interior is wrong, not a
+0.283 pt outline. A stroke defect cannot produce a solid wrong X. ★ The lead
+was reasonable — every synthetic fixture pdfce owns does use fills, and `B`
+(fill **and** stroke) is genuinely unusual — but *"an untested route exists"*
+is not *"the untested route is the cause"*, and here it was not.
+
+**3. The actual cause: pdfce has no per-spot-colorant plane.** The backdrop
+is `/CS1 = [/DeviceN [/Black /Suite Green] /DeviceCMYK]`, and pdfce flattens
+Suite Green into C/M/Y — the measured `0.443 0 0.885` above **is** that
+flattening. A `DeviceCMYK` source specifies C, M, Y and K, so Table 149 has
+it knock those four out; but it does **not** name Suite Green, whose plane
+must therefore survive. In pdfce there is no such plane to survive, so
+knocking out C/M/Y destroys the spot with them. The suite's own DERIVED
+truth table above says cells a/b/c/g/h/i must all read *"Green + 50 % K"*,
+which is exactly what a surviving spot plane produces.
+
+⇒ **`PCS030` belongs to the same bucket as `PCS020`, `PCS040` and `PCS081`:
+the n-channel (per-colorant) buffer.** It is not a separate unknown, and
+`ROADMAP.md`'s existing "the remaining overprint/spot FAILs need a real
+n-channel buffer" line already covers it. One fewer open mystery, no new
+work.
+
 **UNRESOLVED — cell e/k backdrop.** The ReadMe says *"a 50% Gray vector
 object is set to overprint **a Gray object**"*; the caption says *"50% gray
 over **CMYK**"*. Wording is identical in the standalone ReadMe, the combined
