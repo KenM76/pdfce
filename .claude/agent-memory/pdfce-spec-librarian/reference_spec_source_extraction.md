@@ -1073,3 +1073,59 @@ channel only for the message; report a mismatch as a corpus defect.** Cost: ~40 
    Companion negative, also cheap: **`grep -n "Table <N>" <errata_page>.txt` → 0
    hits proves the table you are quoting is unamended**, which is what lets a file
    say "the row stands as printed in both editions".
+
+4o. **★★ GRADE A SILENCE BY COUNTING HOW OFTEN THE STANDARD SAYS THE THING
+   ELSEWHERE — "the sibling clause says it and this one does not" is EVIDENCE, and
+   it is the difference between DERIVED and SOURCED.** Established 2026-08-30 on
+   ISO 32000-1 §12.6.4.10 (Hide actions). The dispatch asked *"may a `/Hide` `/T`
+   array mix annotation references and field-name strings, as `/Fields` explicitly
+   may?"* The naive answer is "the row doesn't forbid it, so yes". The measurement:
+
+   ```python
+   d = re.sub(r"\s+", "", open(DUMP, encoding="utf-8").read().lower())
+   d.count("elementsofbothkindsmaybemixed")        # -> 2 in 1.7, 2 in 2.0
+   d.count("alldescendantsofthespecifiedfields")   # -> 2 in 1.7, 2 in 2.0
+   ```
+
+   **Both sentences occur exactly twice per edition and both times in a `/Fields`
+   row** (submit Table 236 / reset Table 238). Neither is in Table 210. So the
+   permission to mix and the descendant expansion are **SOURCED for `/Fields` and
+   merely DERIVED (or, for descendants, genuinely UNDEFINED) for `/T`** — and the
+   standard's own habit of spelling both out makes the omission *conspicuous*
+   rather than merely silent. **A count of 2-and-both-elsewhere is a much stronger
+   report than a count of 0-here.** Generalise: whenever a clause is silent on a
+   property, grep the property's *characteristic sentence* across the whole
+   document; if the standard states it explicitly for structurally identical
+   siblings, say so and downgrade the grade. Uses 4b's whitespace-stripped counting
+   (the sentences wrap, so a raw `grep -c` under-counts).
+
+   **4o-bis — THE SAME MOVE FINDS OUT-OF-CLAUSE CARRIERS. Grep the FEATURE'S NAME
+   over the whole document before declaring a clause's footprint complete.**
+   `grep -in "hide action"` over ISO 32000-1 returned **7 lines, 5 of them inside
+   §12.6.4.10** — and **2 in §12.8.5, Table 259, the LEGAL ATTESTATION dictionary**,
+   whose `/HideAnnotationActions` counts hide actions beside `JavaScriptActions`,
+   `LaunchActions` and `URIActions` as content that *"may result in unexpected
+   rendering"*. **That row is the standard's own justification for disclosing the
+   feature**, it lives four clauses away, and no amount of reading §12.6.4.10
+   would surface it. It was also **absent from the corpus entirely** —
+   `iso32000__s__12.8.md` had explicitly scoped §12.8.5 out. **Table 259 is a
+   ready-made "which constructs does ISO consider potentially misleading?" list;
+   check it whenever a Pass authors an interactive construct.**
+
+4p. **A CLAUSE NUMBER IS NOT A KEY — 1.7 §12.6.4.10 is HIDE, 2.0 §12.6.4.10 is
+   MOVIE.** The errata-page grep for the 1.7 number returned a hit that looked like
+   a Hide erratum and was a Movie one (Issue #676). The corpus already knew *table*
+   numbers collide across editions; **clause numbers in the §12.6.4.x range collide
+   too, by exactly one, because 2.0 inserted `GoToDp` at .5.** Search the 2.0 number
+   on 2.0 sources and the 1.7 number on 1.7 sources, never mixed.
+
+4q. **A THREE-CHANNEL ERRATA NEGATIVE IS CHEAP AND IS WORTH RECORDING AS A FINDING.**
+   For §12.6.4.10 all three said *unamended*: (i) `/Annots` sweep over the staged
+   2.0 ±4 pages — **zero markup annots on the clause's own two pages**, while the
+   same run returned annots on neighbouring pages (which proves the tool worked, and
+   is the control that makes the negative meaningful); (ii) the free
+   `pdf-issues.pdfa.org/32000-2-2020/clause12.html` — its TOC lists **only**
+   sub-clauses that have errata, so `12.6.4.11` = 0 hits is a real negative;
+   (iii) API searches by key name *and* phenomenon. **Always include a positive
+   control in the annotation sweep** — "zero hits" from a broken script and "zero
+   hits" from a clean clause look identical.

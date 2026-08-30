@@ -4728,3 +4728,172 @@ register filing is item 61h's seven-touchpoint edit with recomputed percentages;
 doing it half-way inside a lookup dispatch is how stale counts get minted. State
 the bucket you *expect* (`MK-A1`/`A2`/`A3` are bucket 2, so **no settings count
 changes**) so the next filer can move fast.
+
+---
+
+## 63. The **INGEST-A-SMALL-CLAUSE-IN-FULL-BEFORE-A-PASS-IS-WRITTEN-FROM-IT** dispatch — *"clause C is 3 table rows; the corpus has the type-level row only; the implementation turns on the key you have not covered"* (2026-08-30, §12.6.4.10 Hide actions, `iso32000__s__12.6.4.10.md`, for `Pass 183.1`)
+
+**Shape.** The dispatch named the exact gap (`/H`), listed 6 graded questions, and asked
+for a census as a 7th. The clause is **tiny** — one page, three rows, four sentences.
+**The file came out ~950 lines anyway**, and almost none of it is the clause.
+
+### 63a. ★★★ GRADE A SILENCE BY COUNTING HOW OFTEN THE STANDARD SAYS THE THING **ELSEWHERE**
+
+The single most transferable move of the session. The dispatch asked whether a `/Hide`
+`/T` **array may mix** annotation references and field-name strings *"as Table 236's and
+Table 238's `/Fields` arrays explicitly may"*. The lazy answer: *"nothing forbids it."*
+
+The measurement (whitespace-stripped, per extraction item 4b):
+
+| phrase | ISO 32000-1 | ISO 32000-2 | where |
+|---|---|---|---|
+| `elementsofbothkindsmaybemixed` | **2** | **2** | submit `/Fields`, reset `/Fields` — **never Table 210** |
+| `alldescendantsofthespecifiedfields` | **2** | **2** | submit flag bit 1, reset flag bit 1 — **never Table 210** |
+
+⇒ both properties are **SOURCED for `/Fields` and merely DERIVED (mixing) or genuinely
+UNDEFINED (descendants) for `/T`**. **A count of "2, and both elsewhere" is a far stronger
+report than "0 here"** — it converts a silence into a *conspicuous* silence, because the
+standard demonstrably knows how to say the thing and did not. The descendant one was the
+larger finding: it means **naming a NON-TERMINAL field in `/T` is undefined**, which the
+implementation must refuse or disclose. Generalises to any "is X permitted?" question:
+**grep the property's characteristic sentence document-wide and report where it DOES
+occur.**
+
+### 63b. ★★ GREP THE FEATURE'S NAME OVER THE WHOLE DOCUMENT BEFORE DECLARING ITS FOOTPRINT COMPLETE — THE JUSTIFICATION CAN LIVE FOUR CLAUSES AWAY
+
+`grep -in "hide action"` returned **7 lines in 1.7 / 8 in 2.0**. Five are the clause. **Two
+are §12.8.5 Table 259, the LEGAL ATTESTATION dictionary**, whose `/HideAnnotationActions`
+counts hide actions **beside `JavaScriptActions`, `LaunchActions`, `URIActions`,
+`MovieActions`, `SoundActions`, `GoToRemoteActions`** — under a clause saying these are
+capabilities that *"can make the rendered appearance of a PDF document vary … could
+potentially be used to construct a document that misleads the recipient"*, and that a
+certifying writer **should** enumerate *"all content that may result in unexpected
+rendering"*.
+
+**That is an ISO hook for pdfce's rule-4 disclosure obligation, and no amount of reading
+§12.6.4.10 surfaces it.** It was also **absent from the corpus** — `iso32000__s__12.8.md`
+had explicitly **scoped §12.8.5 out** ("legal attestations (Table 259)" is on its
+do-not-answer list), so the first place the corpus holds that row is a file about a
+completely different clause. **Table 259 is a ready-made "which constructs does ISO
+itself consider potentially misleading?" list — consult it whenever a Pass authors an
+interactive construct**, and expect an out-of-clause carrier for any feature with
+security or legibility consequences.
+
+### 63c. ★★ A **CLAUSE NUMBER** IS NOT A KEY ACROSS EDITIONS — 1.7 §12.6.4.10 IS *HIDE*, 2.0 §12.6.4.10 IS *MOVIE*
+
+The corpus already knew table numbers collide. **Clause numbers in §12.6.4.x collide too,
+offset by exactly one, because ISO 32000-2 inserted `GoToDp` at §12.6.4.5.** The errata
+grep for `12.6.4.10` on the 2.0 errata page returned a hit that looked like a Hide erratum
+and was Issue #676, a **Movie** table's bold-styling fix. **Search 2.0 numbers on 2.0
+sources and 1.7 numbers on 1.7 sources, never mixed** — and put the map in the file's own
+§0, because the next reader will do it too.
+
+### 63d. ★★ A THREE-CHANNEL ERRATA **NEGATIVE** IS CHEAP, AND IT NEEDS A **POSITIVE CONTROL**
+
+*"Unamended in both editions"* was reported as a finding, not as the absence of a search:
+
+1. `/Annots` sweep over the staged 2.0, **±4 pages** — zero markup annots on the clause's
+   own two pages. **The same run returned annots on the neighbouring pages** (#256 on URI
+   actions, #282/#265 on Go-To-3D-View). **That is the control**: "zero hits" from a broken
+   script and "zero hits" from a clean clause are indistinguishable without it.
+2. The free `pdf-issues.pdfa.org/32000-2-2020/clause12.html` — its TOC lists **only**
+   sub-clauses that have errata, so `12.6.4.11` = 0 is a genuine negative.
+3. API searches, **by key name and by phenomenon** (extraction item 4n).
+
+The ±4-page window paid again (extraction item 4k): it surfaced **`HD-E1`** — both
+editions print *"shall be `GoTo3DView` for a **transition** action"*, ISO-approved erratum
+**#265** fixes the 2.0 one, **the 1.7 one stands forever**, and the corrected sentence is
+**free and quotable** from the rendered `<ins>`/`<del>` page even though the page it edits
+is licensed.
+
+### 63e. ★★ THE **CENSUS** DELIVERABLE — AND THE TWO-PREDICATE TRAP
+
+The dispatch asked, deliberately as a census and not an ingestion, for *"every action type
+that (a) needs no JavaScript and (b) reaches nothing outside the document"*, so an enum
+could be justified **as a closed set rather than an unexplained selection of five**.
+
+**The finding that made the census honest: those are TWO predicates, and the caller's own
+enum satisfies only the first.** pdfce authors `SubmitForm` and `URI`, which are
+script-free and **do** reach outside — deliberately, because the operator asked for the
+script-free set. **Collapsing the two predicates is exactly how a reader concludes the
+selection is arbitrary.** State them separately; put the failing members in the table with
+their reason; enumerate the OUT set too (all 18 / 20 types accounted for) so the list reads
+as *closed* rather than *curated*.
+
+Two more census lessons:
+
+- **A type's membership can be a property of the API's SHAPE, not of the action type.**
+  `Named` is unbounded in the standard (open registry, *"further names may be added"*),
+  and is in the closed set **only because** the Rust enum restricts `/N` to Table 211's
+  four names. Say that in the enum's doc comment.
+- **Say what each unbuilt one would NEED, from the table, and correct the dispatch's
+  guesses.** The dispatch guessed *"an OCG name tree"* for `/SetOCGState`; OCGs are reached
+  through `/OCProperties /OCGs`, **not a name tree**, and the real cost is that `/State` is
+  a **run-length sequence grammar** (a name applies to all following groups until the next
+  name), not a map. `/Trans` turned out **pointless as a standalone button action** — it
+  only does anything *"during a sequence of actions"*. Both are sizing facts a future Pass
+  gets for free.
+
+### 63f. ★ THE KEY THE IMPLEMENTATION TURNS ON WAS A **DEFAULT**, AND THE DEFAULT INVERTS THE FEATURE
+
+`/H` is `(Optional)` with **`Default value: true`**, and `true` means **hide**. So the
+universal "flag absent ⇒ flag off" reflex authors a button whose label says *Show* and
+whose behaviour is *hide*. **When a dispatch says "quote the row; do not paraphrase the
+default", that is usually because the default is doing semantic work** — look for others of
+this shape (`/PreserveRB` default `true`, widget `/H` default `I`, submit `/Flags` default
+0 meaning *FDF by POST* rather than *nothing*).
+
+### 63g. ★ KEY-NAME COLLISION **WITHIN ONE FEATURE**, ONE INDIRECTION APART
+
+On a single push button: the **widget** carries `/H` = a **name** (highlighting mode,
+default `I`, values including `T (Toggle)`), and its `/A` **action** carries `/H` = a
+**boolean** (default `true`). `/T` collides as well. Previous collisions in this corpus
+were across unrelated features (`/BE`, `/CharSet`, `/PA`); **this one is inside the object
+graph of the very thing being authored**, so a key-name-keyed writer that is not
+dictionary-typed will cross them. **Check the CONTAINER's own table for the key you are
+about to write, not only the clause you are reading.**
+
+### 63h. ★ THE FQN-VS-REFERENCE TRADE HAS AN ASYMMETRIC FAILURE MODE NOBODY MEASURES
+
+pdfce prefers **fully-qualified-name strings** over indirect references for action targets,
+because a name survives renumbering and cross-document copying. Correct — **and the cost is
+invisible**: a name goes stale on a **field RENAME**, and a rename leaves **no dangling
+reference** for a dangling-reference census to find, because a text string is not a
+reference. ⇒ the rename path must **sweep `/S /Hide` `/T` strings**. Generalise: **for
+every by-name reference the corpus recommends, name the mutation that breaks it and say
+which existing check will NOT catch it.**
+
+Also edition-gated in an unusual direction: **`/T`'s FQN form carries NO `(PDF 1.3)`
+qualifier** while the structurally identical `/Fields` elements do ⇒ an FQN in `/T` is legal
+in a **PDF 1.2** document. *Derived from the absence of a qualifier where the sibling rows
+demonstrably add one — an argument from the standard's consistent practice, not from
+silence alone.*
+
+### 63i. ★★ THE BIGGEST AMBIGUITY WAS ONE NOBODY ASKED ABOUT
+
+Six questions were dispatched. **The largest-blast-radius finding was a seventh**: the
+standard **never says whether executing a hide action DIRTIES the document.** `Hidden`
+lives in `/F` on a persistent annotation dictionary; `markthedocumentasmodified` = 0/0.
+Resolution recommended as **transient view state**, on two independent arguments neither of
+which is in §12.6: **`DocMDP`** (otherwise every roll-over tool tip in a signed form
+restricts the signature) and **PDF/A's `Hidden` = 0 requirement** (surfaced as a side
+finding from errata Issue #192). **Crucially it does NOT gate the authoring Pass** — say so
+explicitly, or a reader treats the ambiguity as a blocker.
+
+### 63j. Filing shape
+
+- `iso32000__s__12.6.4.10.md`, modelled on `iso32000__s__12.7.5.2.md` (same motivation,
+  same SOURCED / DERIVED / SILENT grading, same explicit negative inventory).
+- ID scheme `HD-0.x` (read-first) / `HD-Wn` (authoring rules) / `HD-Nn` (measured
+  negatives) / `HD-An` (ambiguities) / `HD-E1` (erratum) / `HD-G1` (gap).
+- `index.md`: **1 file-table row + 9 trigger rows + 8 search-recipe lines + the prefix-table
+  COUNT + the prefix-table CONTENTS blurb.** The count was recounted from disk
+  (`101 → 102`) **before** writing — first session in six where it was not stale.
+- **★ A RECIPE MUST BE RUN, NOT JUST WRITTEN.** Three of the eight failed on first
+  execution: an em dash inside a `Grep` pattern (matched nothing), a `{a,b}` brace glob
+  (unsupported), and a quoted sentence that **line-wrapped in my own file** so a flat phrase
+  grep missed it — fixed by unwrapping the quote. **Execute every search recipe you add,
+  against the file you just wrote.**
+- Bash heredocs broke **twice** on the spec's punctuation at this size — use the `Write`
+  tool for the file and for any multi-line script, then run it (corpus-state item 51's
+  lesson, reconfirmed).
