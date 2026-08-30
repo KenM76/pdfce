@@ -2075,6 +2075,30 @@ CLI: `pdfce-cli add-named-dest --name X --page N [--top Y]`, then
 > | Delete, answering the members question | `delete_dimension_group_with(&mut self, group: GroupId, policy: GroupDeletion) -> Result<usize, EditError>` | Count of members reassigned. ONE undo entry. ⚠️ **Refuses the DEFAULT group with `DimensionGroupIsDefault`, whatever the policy** (`Pass 176.0`) — see below. |
 > | **Move a dimension to another group** | `set_dimension_group(&mut self, dimension: DimensionId, group: GroupId) -> Result<(), EditError>` | ★ **RE-MEASURES it** — see below. |
 >
+> ### ★★ Every ce-dimension group verb now refuses an id that does not exist
+>
+> Until `Pass 178.0`–`178.2` **four of them did not**, and each failed
+> differently:
+>
+> | verb | what it did | fixed in |
+> |---|---|---|
+> | `delete_dimension_group_with(0, …)` | deleted the default group → **the whole measurement model vanished on the next open**, silently | `176.0` |
+> | `toggle_dimension_layer(0, false)` | returned `Ok(true)`, committed, wrote a revision, changed nothing | `178.0` |
+> | `toggle_dimension_layer(99, …)` | returned `Ok(true)` for a group that does not exist | `178.0` |
+> | `add_dimension(page, 99, …)` | **authored into the DEFAULT group** and returned success | `178.1` |
+> | `set_group_scale(99, …)` | returned `Ok` and changed nothing | `178.2` |
+>
+> **The shape, which is now standing rule `R235`:** a pure-model helper that
+> enforces a rule by returning a *result value* — `()`, `bool`, or a
+> freshly-minted id — has no channel to refuse, so the rule is invisible at the
+> verb that ships through it. The session verb owes the `Err`.
+>
+> **For a shell this means one thing:** a group id cached across a reload now
+> produces an error where it used to appear to work. That error is correct and
+> the previous silence was not. The sweep that found these drove **every**
+> ce-dimension, widget, annotation and page-op verb with an out-of-range
+> identifier; everything outside the ce-dimension group family already refused.
+>
 > ★★ **The default group also cannot be HIDDEN** (`DimensionGroupNotHideable`,
 > `Pass 178.0`), and `toggle_dimension_layer` **now refuses an unknown group**
 > like every sibling group verb already did. Until that Pass it answered
@@ -2158,9 +2182,9 @@ differently. `siblings_untouched` reports how many were left alone.
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
 | Read the sidecar model | `dimension_model(&self) -> DimensionModel` | 15361 | Overlay-aware; a fresh model if none stored. |
-| Author a ce dimension | `add_dimension(&mut self, page_index, group: GroupId, kind: DimensionKind) -> Result<(ObjId, DimensionId), EditError>` | 15380 | Annotation id + model id. ONE undo entry. |
+| Author a ce dimension | `add_dimension(&mut self, page_index, group: GroupId, kind: DimensionKind) -> Result<(ObjId, DimensionId), EditError>` | 15380 | Annotation id + model id. ONE undo entry. ⚠️ **Refuses an unknown `group` since `Pass 178.1`** — it used to author into the DEFAULT group silently and return success, and the group carries the scale, so the ce dimension was measured at a scale nobody chose. |
 | Create a group | `add_dimension_group(&mut self, name, unit: Unit) -> Result<GroupId, EditError>` | 15523 | Scale-never-set, visible, OCG allocated lazily. |
-| Set a group's scale + number format | `set_group_scale(&mut self, group, scale: ScaleState, format: NumberFormat) -> Result<usize, EditError>` | 15549 | **Count of members regenerated.** |
+| Set a group's scale + number format | `set_group_scale(&mut self, group, scale: ScaleState, format: NumberFormat) -> Result<usize, EditError>` | 15549 | **Count of members regenerated.** ⚠️ **Refuses an unknown `group` since `Pass 178.2`** — it used to return `Ok` and change nothing. |
 | Toggle a group's layer | `toggle_dimension_layer(&mut self, group, visible) -> Result<bool, EditError>` | 15600 | Resulting visibility. The default group is un-hideable. |
 | Hit-test ce dimensions on a page | `dimension_rects(&self, page_index) -> Vec<(DimensionId, [f64;4])>` | 15645 | `[llx, lly, urx, ury]` page space. |
 | List groups present on a page | `dimension_groups_on_page(&self, page_index) -> Vec<GroupId>` | 15725 | Model order. |
