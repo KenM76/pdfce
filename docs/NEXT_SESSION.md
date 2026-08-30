@@ -11,309 +11,152 @@ Written 2026-08-30. **For the ledger — Pass ceiling, standing-rule ceiling,
 decision ceiling, filing count — run `python tools/check-ledger-numbers.py`.**
 It derives all four and is the only thing that cannot be stale.
 
-★ **The four numbers used to be printed here, with a note saying not to trust
-them.** They were wrong within an hour of the first save, and by the 333rd
-filing they were stale on all four axes at once (`174.6` → `174.9`, `330` →
-`333`). Per `R232`(b) — *when a stale figure is found for the second time, do
-not correct it a third time; delete it* — and `R232`(c) — *an annotation
-admitting a number is stale-prone does not discharge (a) or (b)* — the numbers
-are gone and the command stands in their place. **A pointer cannot rot.**
-
 ---
 
-## §0 — ★★★ THE COLOUR CLUSTER IS CLOSED
+## §0 ★★★ THE OWED LIST FROM THE LAST HANDOFF IS EMPTY
 
-The operator's instruction was to **finish the colour work for the licensed
-print-conformance suite** (his own wording named it; the name is scrubbed per
-the 2026-08-25 ruling, and writing his sentence out verbatim is how this file
-failed `check-suite-name-absent.py` on its first save) — the six-item colour
-cluster in the previous handoff's §A, items 4–9, plus item 10.
-**All of it is discharged.** This is the first session in weeks with no owed
-colour item.
+Every item the previous `§A` carried is discharged or is the operator's call.
+This is the first handoff in weeks with nothing carried forward.
 
 | was | now |
 |---|---|
-| **4.** the `PCS3_132` residual | already fixed (`Pass 165.0`); **the attribution is now SPLIT and the sibling has accepted it** — `Pass 174.0` |
-| **5.** `CmykIntent::Calibrated`'s doc comment vs the evidence | **measured and corrected** — `Pass 174.1` |
-| **6.** `PCS3_130` cells c/d, ~8 counts apart, "ours to look at" | **answered; the resampling hypothesis REFUTED by ablation; cause is in the file** — reported to the sibling |
-| **7.** `PCS2_030`'s trap X, "cause unknown" | **attributed** — same bucket as `PCS020`/`PCS040`/`PCS081` — `Pass 174.2` |
-| **8./9.** the withdrawn ΔE figures; both patches PASS their own criterion | honoured in every outbound; counts only, and the accuracy-gap-on-a-passing-panel distinction kept |
-| **10.** two ambiguity-register entries owed to `pdfce-spec-librarian` since 2026-08-09 | **filed** (`OP-A5`, `LW-A1`), and the audit found **two of my statements wrong** — see §B |
+| **1.** five survivors of `Pass 174.9`'s withdrawn claim | discharged by the 334th filing |
+| **2.** the **ce-dimension text override**, decision 097 — the only item Ken had personally specified | **SHIPPED**, `Pass 175.0` |
+| **3.** `Pass 142.0`, a font face outside the standard 14 | **still open, still de-prioritised** — see §B |
+| **4.** `rotate_widget` | **SHIPPED**, `Pass 177.0` |
+| **5.** the n-channel buffer | **operator's call, unchanged** — see §B |
 
-**What is NOT closed and was never in scope:** the **n-channel
-(per-spot-colorant) buffer**, which is the only path to the suite's remaining
-overprint/spot FAILs. Unchanged, unscoped, and now carrying one more patch
-(`PCS2_030`) that used to be a separate mystery. **Do not scope it without the
-operator** — it is a large architectural change to the compositor.
+**Both phantom verbs are discharged.** `tools/check-cited-verbs-exist.py` now
+reports 7/7 resolving with **none marked unbuilt** — the first time that gate
+has been clean in that sense since it was written.
 
 ---
 
-## §A — OWED. This is the pick-from list.
+## §A — THERE IS NO PICK-FROM LIST. Pick work, then read §C first.
 
-1. **★★ FIVE OWED SURVIVORS OF A WITHDRAWN CLAIM, from the 333rd filing's
-   hard-rule-11 sweep.** `Pass 174.9` withdrew *"the value is destroyed and
-   the widget is orphaned"* — the defect is a **demotion**; the `/V` survives
-   in the bytes and nothing is orphaned — and corrected it in three places.
-   **Five copies survived.** In priority order:
-   - `crates/pdfce-core/src/forms_author.rs:239-240`, the **`#[error]`
-     template**: *"nesting under it would destroy it"*. `EditError::FieldAuthoring`
-     is `#[error(transparent)]` (`edit.rs:5102`), so this is **verbatim what
-     the operator reads**, and the correction reached the rustdoc **three
-     lines above it** and stopped.
-   - `docs/core-api/03-capabilities.md:948-949`: *"the value is already
-     gone"*, **four lines below the same bullet's own *"still carries
-     `/V (K. Mantle)`"***. One bullet contradicting itself, in the document
-     `pdfceGUI` builds against.
-   - `crates/pdfce-core/src/forms_author.rs:230`: *"there is no repair that
-     puts the value back"* — the reason `174.9`'s own commit message withdrew
-     by name.
-   - `crates/pdfce-core/tests/form_field_merge.rs:1229` and `:1248` — an
-     `expect_err` message and a test doc comment.
-   ★ **Re-run the sweep after fixing**: case-insensitive `destroy|orphan` over
-   the four touched files, every hit read. **Hits that survive and are
-   CORRECT** (do not "fix" them): `forms_author.rs:255` (`RenameCollision`)
-   and the whole `InsertOutcome::orphaned_widgets` family, which describes
-   `insert_pages`, a genuinely orphaning verb. Full table in the 333rd filing
-   and in `Pass 174.9`'s *Shipped* entry. **`R222` instance 6.**
+Nothing is owed. What follows are candidates, ordered by my read of value, not
+by obligation. **None of them is a commitment made to anyone.**
 
-2. **★★ THE ce-DIMENSION TEXT OVERRIDE — decision 097, the operator's own
-   ruling (2026-08-29).** Still the only item on this list Ken has personally
-   specified, and still unstarted. Verbatim: *"dimension text override should
-   be an option if it can be selected to be overridden or not so the override
-   can be undone. otherwise we need to add a manual dimension tool where the
-   user just enters the value of the dimension."*
-   **Two branches with a condition, not one instruction:**
-   - **Branch 1, preferred — the override is a SELECTABLE STATE.** The ce
-     dimension **keeps its measured value** while an override is in force;
-     overriding is a flag plus a string; **clearing it restores the measured
-     text** with no re-measure, **and that must survive save-and-reopen** — so
-     the measured value persists in the sidecar *alongside* the override.
-   - **Branch 2, fallback only — a manual dimension tool.** A **different
-     object class**, not an override. Do not build it as a substitute.
-   - **Achievable:** `/PieceInfo` already carries pdfce's per-dimension state,
-     so `override: Option<String>` beside the measured value is additive and
-     round-trips.
-   - ★ **Naming is constrained:** `Pass 163.0` made a refusal cite
-     `set_dimension_label` and say it is NOT BUILT YET.
-     `tools/check-cited-verbs-exist.py` enforces the pair.
-   - **Prerequisite: the disclosure story.** What does a shell show when a
-     dimension's text is not its measurement?
+1. **★ CHECK BOTH FeatureRequests CHANNELS FIRST.** They live outside the repo
+   so no gate can contradict a stale "it's empty":
+   - `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`
+   - `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\`
 
-3. **`Pass 142.0`** — a font face **outside** the standard 14. The largest
-   remaining item. Needs a real font program: subset from `--font-dir`, a
-   `/FontDescriptor` with `/FontFile2`/`/FontFile3`, widths, encoding, and a
-   **six-uppercase-letter subset tag unique across the WHOLE FILE** (§9.6.4
-   ST4's uniqueness is per *file*, so the existing document's font names must
-   be scanned, not just session state). De-prioritised, not declined.
-   ★ **`bind_font_resource` (`text_edit/addtext.rs`) is the single
-   implementation of "add a `/Font` entry"; `142.0` extends it, it does not
-   write a second one.** And **there are THREE save paths**:
-   `EditSession::format_text`, its form twin, and the one-shot
-   `text_edit::set_format` — **which is the one the CLI uses.** `Pass 162.0`
-   wired two, every unit test passed, and the binary printed a disclosure
-   about a resource it had not written.
+   **Two outbound notes were left there on 2026-08-30 and one carries a
+   question I want answered**, in
+   `note_widgets_rotate_now_and_three_verbs_you_could_not_reach.md` §"What
+   we'd find useful back": *does Acrobat actually honour `/MK /R` when it
+   disagrees with a baked `/AP`?* The standard says a conforming PDF 2.0
+   reader ignores it (erratum #56). **What shipping readers do is unmeasured
+   and this project asserts nothing either way.** Acrobat Reader is installed
+   here; that measurement is takeable without waiting for a reply.
 
-4. **`rotate_widget`** — `/MK /R` (§12.5.6.19 Table 189), a **quantised
-   0/90/180/270 declaration**, not a free-angle transform. Named by one of
-   pdfce's own refusals and not built. Well-specified and small.
+2. **★★ A DEFECT CLASS THIS SESSION FOUND TWICE AND DID NOT SWEEP FOR.**
+   `Pass 176.0` fixed a rule enforced in a pure-model helper and **not** in the
+   session verb that ships through it (`delete_dimension_group_with` vs
+   `DimensionModel::delete_group`). It was latent for months because nothing
+   called the verb with the argument that reached it.
 
-5. **The n-channel buffer** — see §0. Operator's call.
+   The librarian declined to mint a rule at `n=1` and argued the decline well.
+   **But nobody has looked for a second instance** — the decline was a judgement
+   about the two candidates offered, not a search. `DimensionModel` and
+   `forms::` have several `pub(crate)` helpers with guards; the session verbs
+   that wrap them are the shipping surface. A sweep is cheap and would either
+   mint a rule on evidence or close the question.
 
-6. **A lossless markup clipboard copy** — Backlog, unscoped, **awaiting
-   `pdfceGUI`'s answer on whether they need it.** Needs `MarkupSpec` extended
-   **and** `/IRT` reference rewriting: a graph problem, not a value problem.
-   **Do not build it speculatively.**
+3. **`Pass 142.0`** — a font face outside the standard 14. The largest
+   remaining named item, **de-prioritised by the consuming project's own use
+   report, not by us**: *"Synthetic is enough. Drop `142.0` down the queue."*
+   Their reasoning is a use report and worth re-reading before re-weighing it
+   (CAD exports, 8 pt notes, *"a fabricator reading a print, not a
+   typographer"*). It is **not closed and not declined** — a different consumer
+   setting body text would weigh it differently.
+   ★ `bind_font_resource` (`text_edit/addtext.rs`) is the single implementation
+   of "add a `/Font` entry"; `142.0` extends it and does not write a second one.
+   And **there are THREE save paths**: `EditSession::format_text`, its form
+   twin, and the one-shot `text_edit::set_format` — **which is the one the CLI
+   uses.** `Pass 162.0` wired two, every unit test passed, and the binary
+   printed a disclosure about a resource it had not written.
 
-7. **A rustdoc-cleanliness gate** — Backlog, **LOW**. The dangerous subclass
-   (a doc naming a public verb that does not exist) was a population of
-   **one** and is closed; the other ~150 are path-scope noise.
+4. **The n-channel (per-spot-colorant) buffer** — the only path to the print
+   suite's remaining overprint/spot FAILs. **Operator's call; do not scope it
+   without him.** It is a large architectural change to the compositor.
 
-8. **★ A pre-push check for a deferred tip.** `R226` closes the hole
-   *procedurally*. **Not built, and NOT to be built unasked** — it changes the
-   operator's own push workflow. Raise it.
-
-9. **★ `.gitignore:20` (`/fixtures/external/`) is LOAD-BEARING and nothing
-   says so.** The staged veraPDF corpus declares CC BY 4.0 over content
-   including the **Isartor** suite, whose own manual forbids redistribution.
-   **The repository is public**, so committing that tree would *be*
-   redistribution. One `.gitignore` line is the entire control. Operator
-   question `(bx)`.
-
-10. **`(bv)`–`(bz)`, five licence questions** and **`(bl)`, the OCR model
-    weights**, each with a conservative default already chosen. None blocks
-    anything.
+5. **`CmykIntent::Calibrated`'s cool greys** — now carrying **three**
+   independent lines of evidence after `Pass 175.1` (the reference's own
+   neutrality, pdfce's measured spread, and `iccce`'s real ICC transform
+   corroborated against `lcms2` to 0.22 counts). **Still not ours to fix** —
+   decision 064 puts the conversion in `iccce`'s domain and the operator ruled
+   the default on 2026-08-28. What changed is the strength of the evidence, and
+   `settings/mod.rs`'s doc comment now records it.
+   ★ **And the black end is a FALSE-DEFECT TRAP in the same table**: pdfce is
+   the *closer* answer there and `iccce` said so unprompted. Read that doc
+   comment before touching anything CMYK.
 
 ---
 
-## §B — ★★★ THE LESSON OF THIS SESSION, AND IT IS NOT ABOUT COLOUR
+## §B — What is deliberately NOT being worked, and why
 
-**Two of my own claims were audited and found wrong, by two different agents,
-in the same session I made them. Neither was caught by any of the 29 gates,
-and both lived in documents another project builds against.**
-
-1. `--probe-ink`'s **worked example** shipped `srgb=24,140,108` — the
-   **pre-`Pass 165.0` defect value** — in the CLI's `--help` and in
-   `docs/core-api/03-capabilities.md`. So the example restated, in
-   operator-facing documentation, exactly the premise the same session had
-   just measured away, while a test twenty files over asserted the correct
-   value for the same operand. **The librarian found it.**
-2. `OverprintZeroTintScope`'s doc called itself *"a genuine spec ambiguity"*
-   with *"no sentence resolving it either way"*. **Three sentences resolve
-   it** under ISO 32000-1 (§8.6.7's next sentence excludes *"conversions from
-   some other colour space"*; Tables 148/149 row 2 tabulate the case and give
-   it `OPM 0` behaviour). **`pdfce-spec-librarian` found it**, auditing the
-   dispatch it was given. ISO 32000-**2** deletes two of the three, so the
-   question is **edition-gated**.
-
-⇒ **A WORKED EXAMPLE IS A CLAIM.** A stale one is a wrong claim that reads as
-an illustration, and nothing in this project checks one. ⇒ **AND AN AUDIT
-DISPATCH IS WORTH MORE THAN THE FILING IT ASKS FOR.** Both agents were sent
-to *write something*; both returned corrections to the thing that sent them,
-because the dispatch stated its premises explicitly enough to be checked.
-**State your premises in a dispatch. That is what makes it auditable.**
-
-### Two more from this session
-
-**A measurement whose outcome is entailed by the spec is not a measurement of
-the implementation.** `Pass 174.2` ablated `overprint_zero_tint_scope` over a
-grey-over-**spot** patch and got bit-identical ink from all three settings —
-but Tables 148/149 force that result on a spot backdrop regardless. It would
-have been identical on a correct implementation and a broken one. The
-discriminating case is grey over **process** components (`OP-N3`).
-
-**`R233`, minted this session, fired twice on the same day.** An aggregate's
-discriminating power is the fraction of the population where the correct and
-the **null** answers differ, not the population's size. Instance 1: *125 of
-132 achromatic regions stay achromatic (95 %)* — but 125 of them are **paper
-white**, where a conversion that did nothing also scores perfectly, and the
-real population is **7 mid-greys of which 0 stay neutral**. Instance 2: an
-operand census where **one file supplied 59 %** of the population.
+- **`Pass 142.0`** — §A item 3. De-prioritised by the consumer, not declined.
+- **The n-channel buffer** — §A item 4. Operator's call.
+- **ce-dimension tolerance, the ISO 286 fit classes** — needs a sourced
+  class/table lookup this project does not have. Every other tolerance form
+  ships.
+- **A manual dimension tool** (decision 097 branch 2) — **not built and not
+  needed.** Branch 1 shipped and is reversible, which was the condition. If a
+  consumer wants an object with a typed value and no measurement underneath, it
+  becomes a real request rather than a contingency.
 
 ---
 
-## §C — HOW TO RUN THE GATES
+## §C — ★★ READ THIS BEFORE WRITING CODE. Four traps this session walked into.
 
-★ **29 commands.** ★ **"PASS — 29" over-claims and the label says so:** two
-deliberate skips — `cargo about` (only when the dependency set changes) and
-**`cargo test --workspace --all-features`, replaced by plain
-`cargo test --workspace`**. ⇒ **every green this project reports is a
-default-features green.**
+Each cost real time on 2026-08-30 and each is cheap to avoid.
 
-★★★ **THE RECIPE. Deviating from it cost an hour on 2026-08-29 and cost
-another 20 minutes on 2026-08-30:**
+1. **★★★ Anchor a splice on the FIRST LINE OF THE DOC BLOCK, never on the
+   `fn` / `pub struct` / variant line.** Anchoring on the item lands the new
+   code **between that item's `///` block and its `#[derive]`s and the item
+   itself**. This happened **three times in one session**, in three shapes: a
+   clap variant (would have shipped wrong `--help`), a CLI handler `fn` (caught
+   by clippy's `doc_lazy_continuation` and `check-cli-help-leads.py`), and a
+   `pub struct` with derives (caught by `E0119`). Two of three were caught by
+   gates; do not rely on that.
 
-1. **Warm the cache first**: `cargo test --workspace --no-run`.
-2. **Run in the FOREGROUND**: `timeout 580 bash tools/run-gates.sh`.
-   ★ **Chaining the warm-up and the sweep in one command pushes the WHOLE
-   THING past the foreground limit and into the background**, which is exactly
-   what the recipe forbids. Two commands, not one.
-3. **Do nothing else while it runs.** No `du`, no `find`, no `git status` on a
-   worktree, no second cargo, **no subagent**. Concurrent heavy I/O starves
-   the doctest binary and it fails with `0xc0000142` / *"Couldn't compile the
-   test"* across dozens of unrelated files. **That looks exactly like a broken
-   tree and is not.** Confirm with `cargo test -p pdfce-core --doc` alone
-   before diagnosing anything.
+2. **A byte scan over an incrementally-saved PDF sees EVERY revision.** It can
+   prove *presence* and can never prove *absence*, and `.last()` on such a scan
+   reads as "the current value" and is not — an earlier revision's `/Matrix`
+   stays in the bytes forever. Assert absence by **rendering**, or by reopening
+   and resolving.
 
-★★ `R226`: also run `python tools/check-passes-filed.py --strict-tip` before
-ending any session whose tip commit claims a Pass ID. The plain run
-**deliberately defers the tip** and reports `clean`.
+3. **Measure the crop before reporting a render defect.** A ce dimension
+   rendered with the dimension line apparently running through its caption
+   turned out to be the *fixture's own page content* at the same coordinates —
+   the object being measured. A freshly authored dimension breaks correctly. A
+   false renderer-defect report was one step away, twice in one day.
 
-★★★ **A gate sweep certifies the tree it ran on.** Re-run after the last edit.
-**Do not hand-type a subset** to dodge the time limit — that is how the two
-filing gates got omitted and CI went red.
+4. **`git add -A` is unsafe here.** Subagents write their own memory and doc
+   files while you work; three of them were live in this session. Stage your
+   own paths by name.
 
 ---
 
-## §D — MEASURED AT WRITE TIME. Re-run; do not copy forward
+## §D — State of the tree
 
-- **Conformance suite, RE-MEASURED 2026-08-29 (not carried forward):**
-  **6 FAIL / 29 clean / 16 unresolved of 51, 0 render errors — unchanged.**
-  The 16 unresolved split 8 `REF` / 5 `REF-PASS` / 3 `MARK?`. The 6 FAILs:
-  `PCS2_020` (6 traps), `PCS2_030` (3), `PCS2_040` (3), `PCS2_081` (1),
-  `PCS3_130` (4), `PCS3_161` (12).
-  Command: `python tools/suite-check.py "$PDFCE_SUITE_DIR"
-  --reference-dir "$PDFCE_SUITE_REFS" --json`.
-- **`docs/core-api/`'s sizes and counts: DELIBERATELY NOT STATED HERE.** Run
-  `python tools/check-core-api-verbs.py` — it derives and prints all four, and
-  it is the only thing that cannot be stale. (This bullet held numbers twice
-  and they rotted both times, the second time within hours.)
-- **Latest backup bundle and portable build are both STALE** — both predate
-  this session. Re-take.
-- **`main` is ahead of `origin`.** Push is standing-authorized (decision 090,
-  *"always push"*) — but **cutting a tag or a release is not**, and neither is
-  a force push or a non-`main` branch.
+Run these rather than trusting the sentence:
 
-### The two colour instruments, both new and both out-of-tree
+```
+python tools/check-ledger-numbers.py      # all four ceilings
+bash tools/run-gates.sh                   # the full sweep, 29 commands
+git rev-list --count origin/main..main    # how far ahead
+ls -lt D:/Dev/pdfce-backups/              # newest bundle
+```
 
-- `tools/flat-color-parity.py` — pdfce vs the reference engine on **flat
-  regions only**, each region **eroded before sampling** so edge antialiasing
-  cannot enter the number. `--neutrals` restricts to achromatic reference
-  regions. **This is the only instrument pdfce has that measures colour
-  accuracy**; `render-parity` conflates colour with structure and
-  `suite-check` reads conformance traps.
-- `tools/cmyk-operand-census.py` — which `DeviceCMYK` operands the table is
-  actually asked for. **Lower bound by construction** (no `sc`/`scn` behind a
-  resolved space, no images, no shadings) and it says so. `--set` emits the
-  operand list alone, with no file names — use that whenever the corpus is
-  licensed.
-
-Both need `PDFCE_SUITE_DIR` / `PDFCE_SUITE_REFS`; both skip loudly without.
-
----
-
-## §E — THE CHANNELS. Check BOTH every session.
-
-`D:\Dev\FeatureRequests\pdfce_FeatureRequests\` and
-`D:\Dev\FeatureRequests\iccce_FeatureRequests\`. **They live outside the repo,
-so no gate can contradict a stale "it's empty" claim.**
-
-★ **`iccce` reorganised its channel mid-session on 2026-08-29**: `open/` +
-`archive/YYYY-MM-DD-<topic>-N-<party>-<slug>.md` + an `INDEX.md` that is *the
-memory*. **A session lists `open/` and nothing else**; `archive/` is read only
-when an `INDEX.md` row points at it. A file you wrote may have been archived
-out from under you — mine was, twenty minutes after I wrote it.
-
-**Colour thread status: CLOSED by them, nothing owed.** They accept the
-probe's answer, **withdrew their own "the fallback beats the buffer by 3×"**
-as an artefact of an older binary, and returned **(65, 171, 61)** for
-`.75 0 1 0` against our (47, 181, 73) and the capture's (59, 171, 51) — closer
-on all three channels, lcms2-corroborated to four decimal places.
-
-★★ **Carry their standing limit into pdfce's own thinking, because it is
-right and it cuts against us:** *the reference capture is a REFERENCE, NOT A
-TARGET.* "Closer to Acrobat" must never harden into "tune toward Acrobat" —
-that makes a screen capture the ground truth.
-
-**Outbound, and ANSWERED the same evening — nothing owed either way.**
-pdfce sent `note_the_operand_list_you_asked_for_49_tuples_covering_95_percent.md`
-(49 operands covering 95 % of paint events, pdfce's sRGB beside each);
-`iccce` answered in
-`open/reply_the_49_rows_and_the_black_end_is_where_i_am_weaker.md` with their
-column for all 49, through the patch's own `/DestOutputProfile` to the
-OS-shipped sRGB, media-relative, lcms2-corroborated to **0.22 counts** across
-the whole set.
-
-★★★ **Three things in that reply are worth more than the numbers:**
-
-1. **The two tables answer DIFFERENT QUESTIONS.** pdfce's table exists for
-   documents with **no output intent**; theirs converts through a **declared**
-   output condition. *"Where a document declares an output intent, you should
-   not be consulting a table at all."* That is a real gap in pdfce and nobody
-   has scoped it.
-2. **The disagreement is regional, and each region has a different cause.**
-   On the **black end** iccce is lighter and **pdfce is closer to the
-   reference** — because their black-point estimator **refuses by name** on
-   that profile, and *"refusing and being wrong look identical in a table."*
-   On the **achromatic axis** it goes the other way: their greys are neutral,
-   pdfce's are cool by 2–5 counts on every row. **Their row 3 is 158,159,159
-   against pdfce's 147,148,152 and the reference's 156,156,156.**
-   ⇒ *"Which engine is better"* is the wrong question.
-3. ⇒ **That is a THIRD independent line against `CmykIntent::Calibrated`'s
-   stated rationale** on the grey axis — the reference's exact neutrality, the
-   flat-colour sweep, and now the profile's own answer. `Pass 174.1` corrected
-   the doc comment and deliberately left the table alone; **if that ever gets
-   revisited, this is the evidence, and the achromatic axis is where to
-   start.**
-
-★ **Do NOT fit the table to those 49 numbers** (decision 064, and their own
-sign-flipped rule). Keep them as a regression datum.
+- **`main` was ahead of `origin/main` when this was written.** Pushing is
+  **standing-authorized** (rule 8, decision 090 — *"always push"*); cutting a
+  tag or release is **not**, and neither is a force push or a non-`main`
+  branch. Scrub `check-suite-name-absent.py` green **before** pushing
+  regardless — the repository is public, so a push publishes.
+- **The filing gates defer only the TIP commit.** A code commit that is not the
+  tip and not filed turns them red, which is normal between a Pass and its
+  filing and is what `R217` (hold the push until the filing commits) exists for.
+- The backup bundle drifts about one commit per Pass. A fresh one is cheap.

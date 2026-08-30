@@ -46,6 +46,7 @@
 - [Two defensible answers? Ship both, pick the default](feedback_spec_ambiguity_defaults_are_mine.md) — NOT just spec ambiguity; Ken refused to be asked twice, and never ask a consuming project either
 - [A gate that under-reports looks green](feedback_a_gate_that_underreports_looks_green.md) — found only by forecasting its output; fix the CLASS, not the spelling that failed
 - [Inserting before an anchor orphans its doc comment](feedback_inserting_before_an_anchor_orphans_its_doc_comment.md) — splicing before `fn`/variant lands inside the preceding `///`; clap ships it as wrong `--help`
+- [Anchor on the DOC BLOCK, not the item](feedback_anchor_on_the_doc_block_not_the_item.md) — 3 recurrences in one session; on a `pub struct` it re-parents the `#[derive]`s and the compiler rejects it
 - [A splice's END marker must be searched from START](feedback_splice_end_marker_must_be_searched_from_start.md) — `s.index(END)` from 0 silently DUPLICATED 141 doc lines; every gate green, a reading agent caught it
 - [Form-XObject text editing state](project_form_xobject_editing.md) — shipped 2026-08-20; shared forms edit IN PLACE by decision 076; the real CAD file found two defects 20 green tests could not
 - [A correct fix can be unreachable](feedback_a_correct_fix_can_be_unreachable.md) — A/B the counters on a pre-fix binary; a plan's ORDERING of two items is its least-checked claim
