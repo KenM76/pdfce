@@ -174,9 +174,37 @@ pub enum FormAuthorError {
     /// `Text.2` cannot be created while `Text` is a terminal field: giving
     /// `Text` field-kids makes it non-terminal (§12.7.3.1), and a
     /// non-terminal has no type of its own (Table 220) — so `Text`'s own
-    /// `/FT`, `/V` and widget stop belonging to any field. **The value is
-    /// destroyed and the widget is orphaned on the page**, still drawn, still
-    /// in `/Annots`, belonging to nothing.
+    /// `/FT`, `/V` and widget stop belonging to any field.
+    ///
+    /// # ★★★ WHAT THE BYTES ACTUALLY DO, because the obvious description is
+    /// wrong and it was written here first
+    ///
+    /// This paragraph read *"the value is destroyed and the widget is orphaned
+    /// on the page"* until it was checked against a file the defect had
+    /// actually produced. **Both halves are false**, and the truth is the more
+    /// dangerous shape:
+    ///
+    /// ```text
+    /// 1  /Catalog  /AcroForm << /Fields [6 0 R] >>
+    /// 3  /Page     /Annots [6 0 R  9 0 R]
+    /// 6  /Annot /Widget /FT /Tx /T (Text) /V (K. Mantle) ... /Kids [9 0 R]
+    /// 9  /Annot /Widget /FT /Tx /T (2) /Parent 6 0 R /V ()
+    /// ```
+    ///
+    /// **Nothing is orphaned and nothing is deleted.** Object 6 is still the
+    /// sole entry in `/Fields`, still in `/Annots`, and **still carries
+    /// `/V (K. Mantle)`**. What it acquired is `/Kids` — so it is now
+    /// non-terminal, its `/FT` and `/V` are *inheritable defaults for its
+    /// kids* rather than its own, and it is simultaneously a painted `/Widget`
+    /// and a non-terminal field, which §12.7.3.1 does not contemplate.
+    ///
+    /// ⇒ **This is a DEMOTION that makes the data unaddressable, not a
+    /// deletion.** Every reader projecting the field tree — pdfce's included —
+    /// correctly reports one field named `Text.2`, while the operator's value
+    /// sits in the file reachable by no form verb, no FDF export and no
+    /// script. *"Silent data loss"* is still the right name; *"destroyed"* and
+    /// *"orphaned"* are not, and a shell hunting for this with an
+    /// orphaned-widget accessor would find nothing.
     ///
     /// # ★★ THE MIRROR OF [`Self::NameIsGroupingNode`], AND THE DESTRUCTIVE ONE
     ///

@@ -15112,9 +15112,14 @@ impl EditSession {
         // §12.7.3.1 makes `Text` non-terminal — and Table 220 gives a
         // non-terminal no type of its own, so its `/FT`, its `/V` and its
         // widget stopped belonging to any field. Measured on the shell's own
-        // four-command reproduction: a filled-in field and its value gone,
-        // its widget still drawn on the page and listed under nothing, and
-        // the command reporting success with `changed=4`.
+        // four-command reproduction: a filled-in field gone from the listing,
+        // its box still drawn on the page and belonging to nothing
+        // addressable, and the command reporting success with `changed=4`.
+        //
+        // ★ NOT "the value is deleted" -- see `FieldPathCrossesTerminal`'s own
+        // docs for the object graph. The `/V` survives in the bytes; what it
+        // stops being is a FIELD's. The distinction matters to anyone
+        // diagnosing it, because an orphaned-widget census reports nothing.
         //
         // ★ The test is "has no field kids", not a heuristic about `/FT` or
         // `/V`, because that IS §12.7.3.1's definition of terminal: *"a field

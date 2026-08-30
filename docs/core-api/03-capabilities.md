@@ -937,10 +937,14 @@ count by exactly that many.
   and the name is a group"*, this one is *"you asked for a child and the
   ancestor is a terminal"*. Creating `Text.2` while `Text` is a terminal gives
   `Text` field-kids, which makes it non-terminal (§12.7.3.1) — and Table 220
-  gives a non-terminal no type of its own, so `Text`'s `/FT`, its `/V` **and
-  its value** stop belonging to any field while its widget stays drawn on the
-  page under nothing. Until `Pass 174.8` that happened **silently**, reporting
-  success. `fqn` is the name the operator typed (`Text.2`), not the unmatched
+  gives a non-terminal no type of its own, so `Text`'s `/FT` and `/V` become
+  *inheritable defaults for its kids* rather than its own. Until `Pass 174.8`
+  that happened **silently**, reporting success.
+  ★ **It is a demotion, not a deletion, and an orphaned-widget census will not
+  find it.** Measured on a damaged file: object 6 is still the sole `/Fields`
+  entry, still in `/Annots`, and still carries `/V (K. Mantle)` — while every
+  reader correctly projects one field named `Text.2` and the operator's value
+  is reachable by no form verb, no FDF export and no script. `fqn` is the name the operator typed (`Text.2`), not the unmatched
   tail. **There is no repair verb and none is planned** — by the time anything
   could report it the value is already gone, so the answer is the refusal.
   A *deliberate* promotion (`Text` → a group, the original demoted to `Text.0`
