@@ -25230,17 +25230,38 @@ impl EditSession {
         (matched, writes)
     }
 
-    /// Every object id that is part of the page tree — leaves and the nodes
-    /// above them (`Pass 185.1`).
+    /// Every object id whose removal would cost the document its page tree —
+    /// the leaves, the nodes above them, **and the catalog** (`Pass 185.1`).
     ///
-    /// From `page_slots`, which already returns each page's `ancestors`, so
-    /// this is the reachable tree exactly as the reader walks it rather than a
-    /// second traversal that could disagree with it.
+    /// The page half comes from `page_slots`, which already returns each
+    /// page's `ancestors`, so it is the reachable tree exactly as the reader
+    /// walks it rather than a second traversal that could disagree with it.
+    ///
+    /// # ★ The catalog is here because leaving it out did not fix the bug
+    ///
+    /// The first cut of this function was pages-and-ancestors only, and it
+    /// closed the reproducer. The fuzzer then hit **the same postcondition,
+    /// from the same verb, with the same `NoPageTreeRoot`** — because
+    /// `page_slots`'s `ancestors` chain stops at the `/Pages` ROOT and never
+    /// includes the catalog that points at it. An `/AcroForm` whose `/Fields`
+    /// names the **catalog** therefore walked straight through the guard, and
+    /// deleting it left a document with no `/Root` to find a page tree from.
+    ///
+    /// ⇒ **A guard built from "the tree" is not a guard against losing the
+    /// tree**, because the thing that *reaches* the tree is not in it. The
+    /// symptom named this exactly — `NoPageTreeRoot`, not `NoPages` — and I
+    /// read the first fix's green reproducer as covering the class rather
+    /// than as covering the one case it was written from.
     fn page_tree_object_ids(&self) -> Result<std::collections::HashSet<ObjId>, EditError> {
         let mut ids = std::collections::HashSet::new();
         for slot in self.page_slots()? {
             ids.insert(slot.id);
             ids.extend(slot.ancestors.iter().copied());
+        }
+        // The document catalog: not part of the page tree, and the only object
+        // whose loss produces `NoPageTreeRoot` rather than an empty document.
+        if let Some(catalog) = self.graph().catalog_id() {
+            ids.insert(catalog);
         }
         Ok(ids)
     }
