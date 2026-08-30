@@ -1072,11 +1072,63 @@ only creation verb whose successful result is a control that does not work"*
 | Delete ONE widget of a field | `delete_widget(&mut self, fqn, index: usize) -> Result<FieldDeletion, EditError>` | 8764 | Siblings survive. |
 | Rename a field | `rename_field(&mut self, fqn, new_partial: &str) -> Result<FieldRename, EditError>` | 8889 | `new_partial` is **one path segment**, never an FQN; a period is refused. |
 | Move one widget's `/Rect` | `move_widget(&mut self, fqn, index, dx, dy) -> Result<WidgetMove, EditError>` | 9032 | **No appearance regeneration** — §12.5.5 step b makes matrix **A** a pure translation. |
-| **Give a push button an action** | `set_button_action(&mut self, fqn, action: Option<ButtonAction>) -> Result<ButtonActionChange, EditError>` | 23480 | ✅ **`ResetForm` only** (`Pass 182.0`, operator ruling). `None` removes any action, including one pdfce would never author — `ButtonActionChange::replaced` NAMES it, so a form editor knows it destroyed a script. Refuses a non-push-button, and a reset target that does not exist, before writing. |
+| **Give a push button an action** | `set_button_action(&mut self, fqn, action: Option<ButtonAction>) -> Result<ButtonActionChange, EditError>` | 24148 | ✅ **`ResetForm`** (`Pass 182.0`) **+ `SubmitForm` / `GoToPage` / `Named` / `Uri`** (`Pass 183.0`, second operator ruling the same day). **`/JavaScript` and `/Launch` are refused permanently.** `None` removes any action, including one pdfce would never author — `ButtonActionChange::replaced` NAMES it, so a form editor knows it destroyed a script. A submit fills `ButtonActionChange::submit` with what the button *would* send — read §1.12b before wiring one. Refuses a non-push-button, a reset/submit target that does not exist, an undecidable destination, a Table 237 flag gate, and a page index past the end — all before writing. |
 | **Rotate one widget** | `rotate_widget(&mut self, fqn, index, degrees: i64) -> Result<WidgetRotation, EditError>` | 16588 | ✅ **`/MK /R` + a REDRAWN appearance** (`Pass 177.0`). ⚠️ **COUNTERCLOCKWISE** — the page's `/Rotate` is the clockwise one. Multiples of 90 only, reduced into `[0, 360)` and the reduction reported. **`/Rect` does not move**; the appearance is redrawn into a `w`/`h`-swapped `/BBox` and stood upright by `/Matrix`. Rotating to `0` **removes** the key. Refuses a non-multiple of 90 with `WidgetRotationNotQuarterTurn`. |
 | Read an existing field's copyable properties | `field_defaults(&self, source: &str) -> Result<FieldDefaults, EditError>` | 9211 | For `--defaults-from` / "copy style from". |
 | **Change a field's field-scope properties** | `edit_field(&mut self, fqn, edit: &FieldEdit) -> Result<FieldEditOutcome, EditError>` | — | `Pass 134.0`. Flags, `/MaxLen`, `/TU`, `/Opt`. **Shared by every widget the field owns.** |
 | **Change ONE widget's properties** | `edit_widget(&mut self, fqn, index, edit: &WidgetEdit) -> Result<WidgetEditOutcome, EditError>` | — | `Pass 134.0`. `/Rect` (move **and resize**), `/BS`, `/F`, `/MK` `/CA`. **Per placement.** ★ All four are **readable** too since `Pass 146.0` — `forms::Widget::rect` / `border` / `visibility` + `annot_flags` / `caption`. This row listed four writable properties for months while only two could be read, which is how a consuming shell ended up with two controls it could not honestly populate. See `03-capabilities.md`'s `Widget` block. |
+
+#### ★ 1.12b Button actions (`Pass 183.0`) — and the one disclosure a shell MUST surface
+
+`ButtonAction` is `#[non_exhaustive]`. Five variants:
+
+| variant | writes | notes |
+|---|---|---|
+| `ResetForm { scope: ResetScope }` | `/S /ResetForm` | `ResetScope::All` **omits** `/Fields` — an empty array means "reset zero fields". |
+| `SubmitForm(SubmitSpec)` | `/S /SubmitForm` | See below. |
+| `GoToPage { page_index, view: PageView }` | `/S /GoTo` | The page is written as an **indirect reference**, so it survives a reorder. `PageView` is `WholePage` / `FullWidth` / `TopLeft`; coordinates are computed from the target page's crop box, so you supply none. |
+| `Named(NamedAction)` | `/S /Named` | The four of Table 211: `NextPage`, `PrevPage`, `FirstPage`, `LastPage`. |
+| `Uri { uri }` | `/S /URI` | **Authored as data. pdfce never follows one.** |
+
+**`SubmitSpec` is `#[non_exhaustive]`** — build it with `SubmitSpec::new(url)`
+and assign fields; a struct literal will not compile from outside the crate.
+`format` is a `SubmitFormat` enum (`Fdf(FdfOptions)` / `Html { get,
+coordinates }` / `Xfdf` / `WholeDocument`) rather than a flag word, because
+ISO 32000-1's format selection is a **precedence chain** and nine of its flags
+carry *"shall be used only when…"* gates. Most illegal combinations are
+therefore unrepresentable; the one that is not (`only_current_user_annotations`
+without `include_annotations`) is refused with `ButtonActionSubmitFlags`.
+
+**★ `ButtonActionChange::submit` is not optional to surface.** It is `Some`
+exactly when the action is a submit, and every field on it describes something
+the operator **cannot see any other way**:
+
+- **hidden fields submit exactly like visible ones** — `Hidden` is an
+  *annotation* flag and every submit selector addresses *field* dictionaries,
+  so they are simply on different objects;
+- **`Password` values are submitted** — that flag's NOTE constrains storage,
+  not transmission;
+- **a `FileSelect` field sends the CONTENTS of a local file** it names;
+- **the baseline FDF payload carries this document's own path** and its
+  trailer `/ID`, with no flag set at all;
+- **`include_incremental_updates` performs a SAVE first** and ships every byte
+  since the document was opened, signatures included;
+- **`WholeDocument` ignores field selection entirely** — there is no partial
+  PDF submission, so show the categorical sentence, never a count.
+
+`SubmitDisclosure::summary()` is the always-on one-liner; the itemised lists
+are the "one gesture away" half. Acrobat's own warning names **scheme and host
+only** — not the port, not the path — and says nothing whatever about the
+payload, so this is a deliberate parity-plus, not a copy.
+
+**Nothing is sent by authoring one.** `pdfce-core` has no network code and
+fires no trigger; honouring a button press is a different feature under
+different rules. A submit destination must be **absolute and 7-bit ASCII**
+(`ButtonActionDestination` otherwise) — that is a *decidability* rule, not a
+whitelist. **No host, scheme or port is refused anywhere**: destination policy
+is open by operator ruling, and every safety control here is a pdfce product
+decision with a named conformance cost, because the standard states no consent
+rule, no TLS rule and no redirect rule at all.
 
 #### ★ 1.12a Editing a field after it exists (`Pass 134.0`) — read this before wiring a properties pane
 

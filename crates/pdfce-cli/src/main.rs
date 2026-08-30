@@ -4403,29 +4403,51 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
-    /// **Make a push button actually do something** (Pass 182.0,
-    /// ISO 32000-1 12.7.5.3): attach a Reset action, or take one away.
+    /// **Make a push button actually do something** (Pass 182.0/183.0,
+    /// ISO 32000-1 12.6.4 and 12.7.5): reset, submit, navigate, open a URL,
+    /// or take the action away again.
     ///
-    /// Until now pdfce authored push buttons that were valid and INERT, and
-    /// said so on every creation, because writing `/A` reaches launch
-    /// actions, network submits and JavaScript. The operator moved that
-    /// boundary exactly one notch on 2026-08-30 -- "a reset button should
-    /// actually reset" -- so this attaches a Reset and nothing else.
+    /// pdfce used to author push buttons that were valid and INERT, and said
+    /// so on every creation, because writing `/A` reaches launch actions,
+    /// network submits and JavaScript. The operator moved that boundary
+    /// twice on 2026-08-30: first "a reset button should actually reset",
+    /// then "make the submit and other options that don't need javascript
+    /// available for buttons with the safeguards like we had planned".
     ///
-    /// `--reset` resets every field. `--reset-only A,B` resets just those.
-    /// `--reset-except A,B` resets everything else. `--clear` removes
-    /// whatever action the button had, which is what you want when you open
-    /// somebody else's form and want the button inert; the result line names
-    /// what it removed, including a script pdfce would never write back.
+    /// WHAT A BUTTON CAN BE GIVEN
     ///
-    /// A field that is not a push button is refused by name, and so is a
-    /// reset target that does not exist -- checked BEFORE anything is
-    /// written, so a typo cannot leave a button pointing at a field that is
-    /// not there.
+    /// `--reset` resets every field; `--reset-only A,B` just those;
+    /// `--reset-except A,B` everything else. `--submit URL` sends form data
+    /// to a URL the document names. `--goto-page N` jumps to a page in this
+    /// document. `--named next-page` and friends are the four
+    /// reader-predefined navigation actions. `--uri URL` opens a link.
+    /// `--clear` removes whatever action was there, which is what you want
+    /// when you open somebody else's form and want the button inert; the
+    /// result line names what it removed, including a script pdfce would
+    /// never write back.
     ///
-    /// SUBMIT AND JAVASCRIPT ARE NOT OFFERED. A submit sends data somewhere
-    /// and no shell can audit the address; JavaScript pdfce recognises and
-    /// never runs or writes.
+    /// AUTHORING A SUBMIT SENDS NOTHING. pdfce has no network code and fires
+    /// no trigger; this writes a declaration another program may honour. What
+    /// you get instead is a computed statement of what that button WOULD send
+    /// -- the full URL including port and path, the format, the method, the
+    /// field count, and specifically the things you cannot see: hidden
+    /// fields, password fields, file-select fields that carry a local file
+    /// off the machine, whether the whole document goes, and whether the
+    /// baseline FDF payload carries this document's own path. Acrobat's
+    /// equivalent warning names the host only and says nothing at all about
+    /// the payload.
+    ///
+    /// REFUSALS, ALL BEFORE ANYTHING IS WRITTEN. A field that is not a push
+    /// button; a reset or submit target that does not exist; a relative or
+    /// non-ASCII destination, because a relative one resolves differently in
+    /// different readers and pdfce will not author a button whose target it
+    /// cannot state; and a flag combination the standard forbids with a
+    /// `shall`. No host is ever refused -- destination policy is open, by
+    /// operator ruling.
+    ///
+    /// JAVASCRIPT AND LAUNCH ARE NOT OFFERED, permanently. pdfce recognises
+    /// scripts and never runs or writes them; a launch action starts a
+    /// program.
     SetButtonAction {
         /// Input PDF.
         input: PathBuf,
@@ -4433,16 +4455,82 @@ enum Command {
         #[arg(long)]
         name: String,
         /// Reset every field in the form.
-        #[arg(long, conflicts_with_all = ["reset_only", "reset_except", "clear"])]
+        #[arg(long, conflicts_with_all = ["reset_only", "reset_except", "clear", "submit", "goto_page", "named", "uri"])]
         reset: bool,
         /// Reset ONLY these fields (comma-separated fully-qualified names).
-        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_except", "clear"])]
+        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_except", "clear", "submit", "goto_page", "named", "uri"])]
         reset_only: Vec<String>,
         /// Reset everything EXCEPT these fields.
-        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_only", "clear"])]
+        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_only", "clear", "submit", "goto_page", "named", "uri"])]
         reset_except: Vec<String>,
+        /// Send the form to this URL when the button is pressed.
+        ///
+        /// Must be absolute and ASCII. Any host, any scheme -- the operator
+        /// set destination policy open. The result line states in full what
+        /// this button would send.
+        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "goto_page", "named", "uri"])]
+        submit: Option<String>,
+        /// The submission format (ISO 32000-1 Table 237 bits 3, 6, 9).
+        ///
+        /// `fdf` is the baseline and is what a zero flag word means. `pdf`
+        /// sends the ENTIRE document file and ignores field selection
+        /// entirely -- there is no partial-PDF submission.
+        #[arg(long, value_enum, default_value_t = SubmitFormatArg::Fdf)]
+        submit_format: SubmitFormatArg,
+        /// Submit ONLY these fields, and their descendants.
+        #[arg(long, value_delimiter = ',', conflicts_with = "submit_except")]
+        submit_only: Vec<String>,
+        /// Submit everything EXCEPT these fields.
+        #[arg(long, value_delimiter = ',')]
+        submit_except: Vec<String>,
+        /// Use HTTP GET instead of POST. HTML format only -- Table 237 bit 4
+        /// `shall` be clear otherwise.
+        #[arg(long)]
+        submit_get: bool,
+        /// Also send where the mouse was clicked. HTML format only.
+        #[arg(long)]
+        submit_coordinates: bool,
+        /// Send empty fields too, by name only -- form structure, not data.
+        #[arg(long)]
+        include_no_value_fields: bool,
+        /// Normalise date-looking values to the standard date format.
+        #[arg(long)]
+        canonical_dates: bool,
+        /// Include every markup annotation in the document, whoever wrote
+        /// them. FDF format only.
+        #[arg(long)]
+        include_annotations: bool,
+        /// Narrow --include-annotations to the current user's, as judged by
+        /// the receiving server. FDF format only, and requires it.
+        #[arg(long)]
+        only_current_user_annotations: bool,
+        /// Also send every incremental update since the document was opened.
+        /// THIS PERFORMS A SAVE FIRST, and ships signatures with it. FDF
+        /// format only.
+        #[arg(long)]
+        include_incremental_updates: bool,
+        /// Suppress this document's own file path from the payload. The one
+        /// privacy-narrowing flag in the whole word. FDF format only.
+        #[arg(long)]
+        exclude_document_path: bool,
+        /// Embed a copy of this whole PDF inside the submitted FDF. FDF
+        /// format only.
+        #[arg(long)]
+        embed_form: bool,
+        /// Jump to this page (0-based) in THIS document when pressed.
+        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "named", "uri"])]
+        goto_page: Option<usize>,
+        /// How the page is positioned on arrival.
+        #[arg(long, value_enum, default_value_t = GotoViewArg::WholePage)]
+        goto_view: GotoViewArg,
+        /// One of the four reader-predefined navigation actions.
+        #[arg(long, value_enum, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "goto_page", "uri"])]
+        named: Option<NamedActionArg>,
+        /// Open this URI. Authored as data -- pdfce never follows one.
+        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "goto_page", "named"])]
+        uri: Option<String>,
         /// Remove the button's action, leaving it inert.
-        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except"])]
+        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "submit", "goto_page", "named", "uri"])]
         clear: bool,
         /// Output path.
         #[arg(short, long)]
@@ -4631,11 +4719,14 @@ enum Command {
 
     /// Author a new push button (ISO 32000-1 §12.7.4.2.2).
     ///
-    /// The button is created WITH NO ACTION and does nothing when clicked —
-    /// pdfce recognises and preserves actions but never authors one. What
-    /// this makes is a valid, inert control: a placeholder to be wired up
-    /// elsewhere, and that is stated on every run rather than left to be
-    /// discovered.
+    /// The button is created WITH NO ACTION and does nothing when clicked.
+    /// What this makes is a valid, inert control, and that is stated on every
+    /// run rather than left to be discovered.
+    ///
+    /// GIVING IT ONE IS A SEPARATE COMMAND -- `set-button-action`, which
+    /// attaches a reset, a submit, page navigation or a URL. Creation
+    /// deliberately does not: a button that gained behaviour as a side effect
+    /// of being drawn is exactly what the inert default protects against.
     ///
     /// A push button has no value in any state (§12.7.4.2.2 — it "shall not
     /// use the V and DV entries"), so `fill-field` cannot target it and
@@ -7525,6 +7616,92 @@ impl From<VisibilityArg> for pdfce_core::edit::Visibility {
     }
 }
 
+/// `--submit-format` on `set-button-action` (ISO 32000-1 Table 237 bits 3,
+/// 6, 9).
+///
+/// The standard selects the format with a strict precedence chain rather than
+/// independent bits — `SubmitPDF` ≻ `XFDF` ≻ `ExportFormat` — so this is one
+/// choice, not three switches. `pdfce-core`'s `SubmitFormat` carries the
+/// format-specific flags with the format; the CLI's per-flag options are
+/// folded into whichever variant this names, and options belonging to a
+/// different format are **refused by name** rather than silently dropped.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+enum SubmitFormatArg {
+    /// Forms Data Format, by POST. The baseline, and what a zero flag word
+    /// means. Carries this document's own path and identity fingerprint
+    /// unless `--exclude-document-path`.
+    Fdf,
+    /// HTML form encoding. The only format that may use GET or send click
+    /// coordinates.
+    Html,
+    /// XFDF — FDF expressed as XML.
+    Xfdf,
+    /// The ENTIRE document file. Ignores field selection completely; there is
+    /// no partial-PDF submission.
+    Pdf,
+}
+
+/// `--goto-view` on `set-button-action` (ISO 32000-1 Table 151).
+///
+/// Every coordinate is computed from the target page's own crop box, so none
+/// of these takes a number: a caller who had to supply `top` in user space
+/// would have to read the page box first, and would get it wrong on a
+/// cropped page.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+enum GotoViewArg {
+    /// Fit the whole page in the window (`/Fit`).
+    WholePage,
+    /// Fit the page's full width, top edge at the top (`/FitH`).
+    FullWidth,
+    /// The page's top-left corner, current zoom retained (`/XYZ`).
+    TopLeft,
+}
+
+/// `--named` on `set-button-action` (ISO 32000-1 Table 211).
+///
+/// The registry is open — *"further names may be added"* — but exactly these
+/// four are defined in both editions, and an unrecognised name is the one
+/// place the standard tells a reader to *"take no action"*. Authoring a fifth
+/// would author a button that does nothing.
+// The shared `Page` postfix is not repetition to be factored out: these four
+// spellings are the standard's own (Table 211 `/NextPage`, `/PrevPage`,
+// `/FirstPage`, `/LastPage`), and clap derives the operator-facing values
+// `next-page` … `last-page` from them. Shortening to `Next`/`Prev` would put
+// names in `--help` that appear nowhere in the format.
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+enum NamedActionArg {
+    /// Go to the next page.
+    NextPage,
+    /// Go to the previous page.
+    PrevPage,
+    /// Go to the first page.
+    FirstPage,
+    /// Go to the last page.
+    LastPage,
+}
+
+impl From<NamedActionArg> for pdfce_core::edit::NamedAction {
+    fn from(arg: NamedActionArg) -> Self {
+        match arg {
+            NamedActionArg::NextPage => Self::NextPage,
+            NamedActionArg::PrevPage => Self::PrevPage,
+            NamedActionArg::FirstPage => Self::FirstPage,
+            NamedActionArg::LastPage => Self::LastPage,
+        }
+    }
+}
+
+impl From<GotoViewArg> for pdfce_core::edit::PageView {
+    fn from(arg: GotoViewArg) -> Self {
+        match arg {
+            GotoViewArg::WholePage => Self::WholePage,
+            GotoViewArg::FullWidth => Self::FullWidth,
+            GotoViewArg::TopLeft => Self::TopLeft,
+        }
+    }
+}
+
 /// Which save path an **editing** subcommand uses.
 ///
 /// Deliberately a separate enum from [`RoundTripMode`], which carries a
@@ -8532,6 +8709,23 @@ fn run() -> ExitCode {
             reset,
             reset_only,
             reset_except,
+            submit,
+            submit_format,
+            submit_only,
+            submit_except,
+            submit_get,
+            submit_coordinates,
+            include_no_value_fields,
+            canonical_dates,
+            include_annotations,
+            only_current_user_annotations,
+            include_incremental_updates,
+            exclude_document_path,
+            embed_form,
+            goto_page,
+            goto_view,
+            named,
+            uri,
             clear,
             output,
             mode,
@@ -8542,6 +8736,23 @@ fn run() -> ExitCode {
             reset,
             reset_only: &reset_only,
             reset_except: &reset_except,
+            submit: submit.as_deref(),
+            submit_format,
+            submit_only: &submit_only,
+            submit_except: &submit_except,
+            submit_get,
+            submit_coordinates,
+            include_no_value_fields,
+            canonical_dates,
+            include_annotations,
+            only_current_user_annotations,
+            include_incremental_updates,
+            exclude_document_path,
+            embed_form,
+            goto_page,
+            goto_view,
+            named,
+            uri: uri.as_deref(),
             clear,
             output: &output,
             mode,
@@ -25808,10 +26019,168 @@ struct SetButtonActionArgs<'a> {
     reset: bool,
     reset_only: &'a [String],
     reset_except: &'a [String],
+    submit: Option<&'a str>,
+    submit_format: SubmitFormatArg,
+    submit_only: &'a [String],
+    submit_except: &'a [String],
+    submit_get: bool,
+    submit_coordinates: bool,
+    include_no_value_fields: bool,
+    canonical_dates: bool,
+    include_annotations: bool,
+    only_current_user_annotations: bool,
+    include_incremental_updates: bool,
+    exclude_document_path: bool,
+    embed_form: bool,
+    goto_page: Option<usize>,
+    goto_view: GotoViewArg,
+    named: Option<NamedActionArg>,
+    uri: Option<&'a str>,
     clear: bool,
     output: &'a Path,
     mode: SaveMode,
     verify_undo: bool,
+}
+
+impl SetButtonActionArgs<'_> {
+    /// Build the `/SubmitForm` spec, refusing every option that belongs to a
+    /// different format **by name**.
+    ///
+    /// # ★ Why refuse rather than ignore
+    ///
+    /// `pdfce-core`'s `SubmitFormat` makes the standard's nine flag gates
+    /// unrepresentable — `--submit-get` has nowhere to live in an FDF submit.
+    /// A shell that simply dropped it would parse a flag, act on nothing, and
+    /// print a success line: the operator asked for GET, was told the submit
+    /// was written, and got POST. That is the "a shell flag can be parsed and
+    /// never used" failure, and unit tests against core cannot see it because
+    /// core was never asked.
+    fn submit_spec(&self, url: &str) -> Result<pdfce_core::edit::SubmitSpec, String> {
+        use pdfce_core::edit::{FdfOptions, SubmitFormat, SubmitScope, SubmitSpec};
+
+        let html_only = [
+            (self.submit_get, "--submit-get"),
+            (self.submit_coordinates, "--submit-coordinates"),
+        ];
+        let fdf_only = [
+            (self.include_annotations, "--include-annotations"),
+            (
+                self.only_current_user_annotations,
+                "--only-current-user-annotations",
+            ),
+            (
+                self.include_incremental_updates,
+                "--include-incremental-updates",
+            ),
+            (self.exclude_document_path, "--exclude-document-path"),
+            (self.embed_form, "--embed-form"),
+        ];
+        let refuse = |set: &[(bool, &str)], why: &str| -> Result<(), String> {
+            for (given, flag) in set {
+                if *given {
+                    return Err(format!("{flag} {why}"));
+                }
+            }
+            Ok(())
+        };
+
+        let format = match self.submit_format {
+            SubmitFormatArg::Fdf => {
+                refuse(
+                    &html_only,
+                    "applies only to --submit-format html: ISO 32000-1 Table 237 says bits 4 \
+and 5 `shall` be clear unless ExportFormat is set",
+                )?;
+                let mut opts = FdfOptions::default();
+                opts.include_annotations = self.include_annotations;
+                opts.only_current_user_annotations = self.only_current_user_annotations;
+                opts.include_incremental_updates = self.include_incremental_updates;
+                opts.exclude_document_path = self.exclude_document_path;
+                opts.embed_form = self.embed_form;
+                SubmitFormat::Fdf(opts)
+            }
+            SubmitFormatArg::Html => {
+                refuse(
+                    &fdf_only,
+                    "applies only to --submit-format fdf: Table 237 says each of bits 7, 8, 11, \
+12 and 14 `shall be used only when the form is being submitted in Forms Data Format`",
+                )?;
+                SubmitFormat::Html {
+                    get: self.submit_get,
+                    coordinates: self.submit_coordinates,
+                }
+            }
+            SubmitFormatArg::Xfdf => {
+                refuse(&html_only, "applies only to --submit-format html")?;
+                refuse(&fdf_only, "applies only to --submit-format fdf")?;
+                SubmitFormat::Xfdf
+            }
+            SubmitFormatArg::Pdf => {
+                refuse(&html_only, "applies only to --submit-format html")?;
+                refuse(&fdf_only, "applies only to --submit-format fdf")?;
+                // Bit 9: "all other flags shall be ignored except GetMethod".
+                // Refused rather than accepted-and-ignored so the operator
+                // learns their selection did nothing NOW, not from a server
+                // that received the whole file.
+                refuse(
+                    &[
+                        (!self.submit_only.is_empty(), "--submit-only"),
+                        (!self.submit_except.is_empty(), "--submit-except"),
+                        (self.include_no_value_fields, "--include-no-value-fields"),
+                        (self.canonical_dates, "--canonical-dates"),
+                    ],
+                    "has no meaning with --submit-format pdf: bit 9 says all other flags \
+`shall be ignored`, so the ENTIRE document goes and field selection does not apply",
+                )?;
+                SubmitFormat::WholeDocument
+            }
+        };
+
+        let scope = if !self.submit_only.is_empty() {
+            SubmitScope::Only(self.submit_only.to_vec())
+        } else if !self.submit_except.is_empty() {
+            SubmitScope::Except(self.submit_except.to_vec())
+        } else {
+            SubmitScope::All
+        };
+
+        let mut spec = SubmitSpec::new(url);
+        spec.format = format;
+        spec.scope = scope;
+        spec.include_no_value_fields = self.include_no_value_fields;
+        spec.canonical_dates = self.canonical_dates;
+        Ok(spec)
+    }
+
+    /// Every submit-shaped option that was given without `--submit`.
+    ///
+    /// Same reasoning as [`Self::submit_spec`]'s refusals, one level up: a
+    /// `--submit-format html` on a `--reset` invocation is an operator who
+    /// believes something about the command that is not true.
+    fn stray_submit_options(&self) -> Vec<&'static str> {
+        [
+            (!self.submit_only.is_empty(), "--submit-only"),
+            (!self.submit_except.is_empty(), "--submit-except"),
+            (self.submit_get, "--submit-get"),
+            (self.submit_coordinates, "--submit-coordinates"),
+            (self.include_no_value_fields, "--include-no-value-fields"),
+            (self.canonical_dates, "--canonical-dates"),
+            (self.include_annotations, "--include-annotations"),
+            (
+                self.only_current_user_annotations,
+                "--only-current-user-annotations",
+            ),
+            (
+                self.include_incremental_updates,
+                "--include-incremental-updates",
+            ),
+            (self.exclude_document_path, "--exclude-document-path"),
+            (self.embed_form, "--embed-form"),
+        ]
+        .into_iter()
+        .filter_map(|(given, flag)| given.then_some(flag))
+        .collect()
+    }
 }
 
 /// `set-button-action` -- attach a Reset action to a push button, or remove
@@ -25832,6 +26201,20 @@ struct SetButtonActionArgs<'a> {
 fn cmd_set_button_action(args: &SetButtonActionArgs) -> u8 {
     use pdfce_core::edit::{ButtonAction, ResetScope};
 
+    if args.submit.is_none() {
+        let stray = args.stray_submit_options();
+        if !stray.is_empty() {
+            eprintln!(
+                "pdfce-cli: {} {} only to --submit, and this is not a submit. Nothing was \
+written -- a flag that is parsed and then ignored is how an operator ends up believing \
+something about a file that is not true.",
+                stray.join(", "),
+                if stray.len() == 1 { "applies" } else { "apply" }
+            );
+            return exit::EDIT_REFUSED;
+        }
+    }
+
     let action = if args.clear {
         None
     } else if args.reset {
@@ -25846,10 +26229,30 @@ fn cmd_set_button_action(args: &SetButtonActionArgs) -> u8 {
         Some(ButtonAction::ResetForm {
             scope: ResetScope::Except(args.reset_except.to_vec()),
         })
+    } else if let Some(url) = args.submit {
+        match args.submit_spec(url) {
+            Ok(spec) => Some(ButtonAction::SubmitForm(spec)),
+            Err(why) => {
+                eprintln!("pdfce-cli: {why}");
+                return exit::EDIT_REFUSED;
+            }
+        }
+    } else if let Some(page_index) = args.goto_page {
+        Some(ButtonAction::GoToPage {
+            page_index,
+            view: args.goto_view.into(),
+        })
+    } else if let Some(named) = args.named {
+        Some(ButtonAction::Named(named.into()))
+    } else if let Some(uri) = args.uri {
+        Some(ButtonAction::Uri {
+            uri: uri.to_owned(),
+        })
     } else {
         eprintln!(
             "pdfce-cli: say what the button should do: --reset, --reset-only A,B, \
---reset-except A,B, or --clear to remove its action"
+--reset-except A,B, --submit URL, --goto-page N, --named next-page, --uri URL, or --clear to \
+remove its action"
         );
         return exit::EDIT_REFUSED;
     };
@@ -25874,15 +26277,24 @@ fn cmd_set_button_action(args: &SetButtonActionArgs) -> u8 {
         Err(code) => return code,
     };
     let r = &outcome.report;
+    let applied = match &change.applied {
+        None => "none",
+        Some(ButtonAction::ResetForm { .. }) => "ResetForm",
+        Some(ButtonAction::SubmitForm(_)) => "SubmitForm",
+        Some(ButtonAction::GoToPage { .. }) => "GoTo",
+        Some(ButtonAction::Named(_)) => "Named",
+        Some(ButtonAction::Uri { .. }) => "URI",
+        // `ButtonAction` is `#[non_exhaustive]`: a variant added in core and
+        // not taught to this shell would otherwise stop compiling here, which
+        // is the right outcome, but the arm has to exist for the crate to
+        // build at all across a version skew.
+        Some(_) => "other",
+    };
     println!(
         "set-button-action {} name={} action={} replaced={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
         args.input.display(),
         args.name,
-        if change.applied.is_some() {
-            "ResetForm"
-        } else {
-            "none"
-        },
+        applied,
         change.replaced.as_deref().unwrap_or("-"),
         args.mode.name(),
         args.output.display(),
@@ -25893,7 +26305,115 @@ fn cmd_set_button_action(args: &SetButtonActionArgs) -> u8 {
         u32::from(outcome.undo_verified),
         u32::from(outcome.undo_identical),
     );
+    if let Some(d) = &change.submit {
+        report_submit_disclosure(args.input, d);
+    }
     finish_edit(args.input, &outcome)
+}
+
+/// **State what the button just authored would send** (`Pass 183.0`).
+///
+/// ## Contract
+///
+/// - Prints the always-on summary first, then every itemised list that is not
+///   empty. In the GUI the itemisation is one gesture away; in `pdfce-cli` the
+///   invocation IS the commit (rule 11), so there is no later screen and it is
+///   printed on the way past.
+/// - Goes to **stderr**, like every other disclosure here, so the stdout
+///   metrics line stays machine-parseable.
+/// - Reads **every** field of `SubmitDisclosure`. A field no shell reads is a
+///   disclosure that does not happen — see `tools/check-outcome-disclosed.py`,
+///   which enforces exactly that and lists this struct.
+fn report_submit_disclosure(input: &Path, d: &pdfce_core::edit::SubmitDisclosure) {
+    eprintln!(
+        "pdfce-cli: {}: this button {}",
+        input.display(),
+        d.summary()
+    );
+    eprintln!(
+        "  destination: {} (scheme {}, {}), format {}, method {}",
+        d.url,
+        d.scheme,
+        if d.encrypted {
+            "encrypted"
+        } else {
+            "NOT encrypted -- the data travels in the clear"
+        },
+        d.format,
+        d.method,
+    );
+    if d.whole_document {
+        eprintln!(
+            "  the ENTIRE document file is sent. Field selection does not apply -- there is no \
+partial-PDF submission -- so attachments, metadata, every prior revision and any private \
+application data go with it."
+        );
+    } else {
+        eprintln!(
+            "  {} field value(s){}",
+            d.fields.len(),
+            if d.fields.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", d.fields.join(", "))
+            }
+        );
+    }
+    let lists: [(&[String], &str); 6] = [
+        (
+            &d.hidden_fields,
+            "HIDDEN field(s) -- their values are sent and you were never shown them",
+        ),
+        (&d.password_fields, "password field(s)"),
+        (
+            &d.file_select_fields,
+            "file-select field(s) -- each sends the CONTENTS of a local file named by its own text",
+        ),
+        (
+            &d.valueless_fields,
+            "empty field(s), sent by name only (form structure, not data)",
+        ),
+        (
+            &d.excluded_by_no_export,
+            "field(s) NOT sent: their NoExport flag overrides your selection",
+        ),
+        (
+            &d.required_without_value,
+            "required field(s) with no value yet -- the standard obliges them to have one at \
+submit time and names no consequence",
+        ),
+    ];
+    for (names, why) in lists {
+        if !names.is_empty() {
+            eprintln!("  {} {}: {}", names.len(), why, names.join(", "));
+        }
+    }
+    if d.includes_document_path {
+        eprintln!(
+            "  the payload also carries THIS DOCUMENT'S OWN FILE PATH and its identity \
+fingerprint. That is the baseline FDF behaviour with no flag set; --exclude-document-path \
+suppresses it."
+        );
+    }
+    if d.includes_incremental_updates {
+        eprintln!(
+            "  the payload carries every incremental update since the document was opened, \
+signatures included -- and a SAVE is performed immediately before sending."
+        );
+    }
+    if d.includes_annotations {
+        eprintln!("  the payload carries the document's markup annotations, whoever wrote them.");
+    }
+    if d.embeds_source_document {
+        eprintln!("  the payload embeds a copy of this whole PDF inside itself.");
+    }
+    if d.includes_click_coordinates {
+        eprintln!("  the payload carries where the mouse was clicked on the button.");
+    }
+    eprintln!(
+        "  pdfce sent nothing: it has no network code and fires no trigger. This describes what \
+another program would send if it honoured the button."
+    );
 }
 
 /// `move-widget` — translate one widget annotation's `/Rect`.
@@ -27695,7 +28215,7 @@ fn report_field_disclosures(name: &str, d: pdfce_core::edit::FieldAuthorDisclosu
     }
     if d.push_button_inert {
         eprintln!(
-            "pdfce-cli: field {name:?}: this push button has NO ACTION and does nothing when clicked. pdfce recognises and preserves actions but never authors one, so what was created is a valid, inert button — a placeholder to be wired up elsewhere, not a working submit or reset."
+            "pdfce-cli: field {name:?}: this push button has NO ACTION and does nothing when clicked. Creation never attaches one, so what was created is a valid, inert button, not a working submit or reset. Give it behaviour with `set-button-action --name {name} --reset` (or --submit, --goto-page, --named, --uri)."
         );
     }
     if d.push_button_no_caption {
@@ -32298,7 +32818,8 @@ fn cmd_delete_pages(
 
     println!(
         "delete-pages {} mode={} signature={} -> {}; pages_removed={} objects_freed={} \
-dangling_bookmarks={} dangling_links={} dangling_dests={} page_labels_stale={} {} {}",
+dangling_bookmarks={} dangling_links={} dangling_annot_actions={} dangling_dests={} \
+page_labels_stale={} {} {}",
         input.display(),
         mode.name(),
         signature_token(outcome.signature),
@@ -32307,6 +32828,7 @@ dangling_bookmarks={} dangling_links={} dangling_dests={} page_labels_stale={} {
         outcome.objects_freed,
         outcome.dangling.outline_items,
         outcome.dangling.links,
+        outcome.dangling.non_link_annotations,
         outcome.dangling.named_destinations,
         u32::from(outcome.dangling.page_labels_stale),
         separation_metrics(&outcome.separations),
@@ -32317,12 +32839,14 @@ dangling_bookmarks={} dangling_links={} dangling_dests={} page_labels_stale={} {
     // command-line form.
     if !outcome.dangling.is_empty() {
         eprintln!(
-            "pdfce-cli: {}: {} bookmark(s), {} link(s) and {} named destination(s) pointed at a \
-removed page and now point nowhere. pdfce reports them and does not repair them — repointing one \
-at whatever page now occupies that index would be pdfce deciding what the author meant.",
+            "pdfce-cli: {}: {} bookmark(s), {} link(s), {} button/annotation action(s) and {} \
+named destination(s) pointed at a removed page and now point nowhere. pdfce reports them and does \
+not repair them — repointing one at whatever page now occupies that index would be pdfce deciding \
+what the author meant.",
             input.display(),
             outcome.dangling.outline_items,
             outcome.dangling.links,
+            outcome.dangling.non_link_annotations,
             outcome.dangling.named_destinations
         );
     }

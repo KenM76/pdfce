@@ -21,9 +21,11 @@
 //! value" while the dictionary carries `/V /Off` is a model that is lying,
 //! and the model is what every other test in the suite reads through.
 //!
-//! The other load-bearing property is the **inert disclosure**. Decision 009
-//! posture A means pdfce never authors an action, so this is the only
-//! creation verb whose successful result is a control that does not work.
+//! The other load-bearing property is the **inert disclosure**. Push-button
+//! CREATION authors no action — `set_button_action` is the separate,
+//! deliberate second act that does (`Pass 182.0`/`Pass 183.0`) — so this is
+//! the only creation verb whose successful result is a control that does not
+//! work.
 //! `push_button_inert` is asserted on every path — create, merge, defaults —
 //! because a disclosure that is true 100% of the time is exactly the kind
 //! that gets optimised into a doc comment and then into nothing.

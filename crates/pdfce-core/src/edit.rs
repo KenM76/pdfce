@@ -1667,9 +1667,9 @@ pub struct FieldAuthorDisclosures {
     ///
     /// Every other field type pdfce authors is complete on creation: a text
     /// field can be typed into, a check box ticked, a choice field selected
-    /// from. A push button's entire function is its action, and decision 009
-    /// posture A means pdfce never authors one — so this is the only creation
-    /// verb whose successful result is a control that does not work.
+    /// from. A push button's entire function is its action, and **creation
+    /// attaches none** — so this is the only creation verb whose successful
+    /// result is a control that does not work.
     ///
     /// That is not a defect and the button is not malformed; §12.7.4.2.2
     /// makes an action-less push button perfectly valid, and a placeholder to
@@ -1677,9 +1677,21 @@ pub struct FieldAuthorDisclosures {
     /// shape rule 4 exists for — pdfce did something the operator did not ask
     /// for (nothing) and would otherwise discover by clicking.
     ///
-    /// Not suppressible and not conditional: there is no state in which a
-    /// pdfce-authored push button HAS an action, so a flag that were
-    /// sometimes false would only mean the disclosure had a bug.
+    /// # ★ This flag is about CREATION, and that distinction became load-bearing
+    ///
+    /// This doc block used to say *"there is no state in which a
+    /// pdfce-authored push button HAS an action"*, and that was true when it
+    /// was written and is now false: `Pass 182.0` and `Pass 183.0` gave
+    /// [`EditSession::set_button_action`] a reset, a submit, in-document
+    /// navigation, the four named page actions and a URI.
+    ///
+    /// The **flag** is unchanged and still always `true` for a created push
+    /// button, because giving one behaviour is a deliberate second act a
+    /// shell has to go out of its way to call — which is the property that
+    /// makes an inert default worth having. Only the sentence explaining it
+    /// was wrong, and it is recorded here rather than silently rewritten
+    /// because a claim about what pdfce *can never do* ages differently from
+    /// a claim about what it *did on this call*.
     pub push_button_inert: bool,
     /// A push button was created with an **empty `/MK` `/CA`** — a blank
     /// plate with no label. Always `false` for other types.
@@ -4844,6 +4856,54 @@ pub enum EditError {
     ButtonActionWrongFieldType {
         /// The fully-qualified field name.
         name: String,
+    },
+    /// A `/SubmitForm` or `/URI` destination pdfce will not author
+    /// (`Pass 183.0`).
+    ///
+    /// # ★ Every case here is an AMBIGUOUS destination, not a disliked one
+    ///
+    /// The operator's ruling on destination policy is **open** — *"we'll allow
+    /// a submit to send filled data wherever the document's author said"* — so
+    /// pdfce refuses no host, no scheme and no port. What it refuses is a
+    /// destination it cannot *state*, because a disclosure whose subject is
+    /// undecidable is worse than no disclosure:
+    ///
+    /// - **A relative URL.** §7.11.2.2 resolves it against the *containing
+    ///   document's own location*, which for a file on disk is a local path;
+    ///   and for `/URI`, ISO issue #256 records that readers disagree on
+    ///   §12.6.4.8's `/Base` concatenation badly enough that *"only the host
+    ///   portion gets used"* in some of them. Two readers, two destinations,
+    ///   one file.
+    /// - **Non-ASCII bytes.** §7.11.5 requires RFC 1738 character encoding and
+    ///   notes 7-bit ASCII is a strict subset of PDFDocEncoding; ISO 32000-2
+    ///   then says `/URI`'s type is `ASCII string` in one column and *"encoded
+    ///   in UTF-8"* in the next (`AC-A3`), which is a contradiction pdfce
+    ///   declines to pick a side of by writing bytes into it.
+    /// - **An empty destination**, which is not a destination.
+    #[error(
+        "pdfce will not author {url:?} as a destination: {why}. The rule is not which hosts are allowed -- the operator set that policy open -- but that pdfce must be able to state exactly where a button sends data before it writes one"
+    )]
+    ButtonActionDestination {
+        /// The destination as supplied.
+        url: String,
+        /// Which of the undecidable cases this was, in one clause.
+        why: &'static str,
+    },
+    /// A submit flag combination ISO 32000-1 forbids with a `shall`
+    /// (`Pass 183.0`, Table 237 §5.2's gate list).
+    ///
+    /// Nine flags carry a *"shall be used only when …"* clause and **not one
+    /// states what a reader does when it is violated**, so a file that breaks
+    /// one is non-conforming with no defined recovery — every reader is free
+    /// to do something different. [`SubmitFormat`] makes most of the gates
+    /// unrepresentable; this covers the one that a type cannot
+    /// (`ExclNonUserAnnots` requires `IncludeAnnotations`).
+    #[error(
+        "submit flag combination refused: {why} (ISO 32000-1 12.7.5.2 Table 237). The standard states the constraint as a `shall` and states no reader behaviour for breaking it, so the file would be non-conforming with no defined outcome"
+    )]
+    ButtonActionSubmitFlags {
+        /// Which gate was violated, and what to set instead.
+        why: &'static str,
     },
     /// The **default** ce-dimension group was asked to be HIDDEN
     /// (`Pass 178.0`).
@@ -12959,29 +13019,364 @@ pub enum ResetScope {
     Except(Vec<String>),
 }
 
-/// What a push button does when clicked (`Pass 182.0`).
+/// Which fields a [`ButtonAction::SubmitForm`] sends
+/// (ISO 32000-1 §12.7.5.2, Table 236 `/Fields` + Table 237 bit 1).
 ///
-/// # ★ Deliberately one variant, and the boundary is the point
+/// # ★ Why this is NOT [`ResetScope`], despite the identical shape
+///
+/// The two `/Fields` arrays have the same *grammar* — indirect references or
+/// PDF-1.3 fully-qualified-name strings, mixed — and genuinely different
+/// *semantics*. Modelling them as one type would import the wrong meaning at
+/// every use site. The divergences, all from the spec corpus's side-by-side
+/// (`iso32000__s__12.7.5.2.md` §2.1):
+///
+/// | | Reset (Table 238) | Submit (Table 236) |
+/// |---|---|---|
+/// | entry omitted | **all** fields reset | all fields **except `NoExport` ones**, and except valueless ones unless `IncludeNoValueFields` is set |
+/// | descendant expansion, exclude mode | unspecified in 1.7 | **unspecified in both editions** |
+/// | out-of-band veto | none | **`NoExport` (`/Ff` bit 3) overrides the array AND the flag** |
+/// | push buttons | *"the action has no effect"* | **submitted, with `/AP` as the value — but only when `/Fields` is present** |
+///
+/// That last row is the trap: [`Self::All`] omits `/Fields`, and omitting it
+/// **excludes push buttons by a `shall`**. Naming fields explicitly pulls the
+/// buttons back in. Two spellings of "everything" that are not the same
+/// document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SubmitScope {
+    /// Every field that has a value, minus every field whose `NoExport` flag
+    /// is set.
+    ///
+    /// Written by **omitting** `/Fields`, which Table 236 defines as *"all
+    /// fields in the document's interactive form shall be submitted except
+    /// those whose `NoExport` flag … is set"* and as making the
+    /// `Include/Exclude` flag ignored. Push buttons are excluded — see the
+    /// type's own table.
+    All,
+    /// Only these fields, by fully-qualified name, **and their descendants**.
+    ///
+    /// `/Fields` with the flag CLEAR. Table 237 bit 1 states the descendant
+    /// expansion with a `shall`, which Reset's parallel sentence does not, so
+    /// naming a grouping node submits its whole subtree.
+    Only(Vec<String>),
+    /// Everything EXCEPT these fields (and their descendants).
+    ///
+    /// `/Fields` with the `Include/Exclude` flag SET (bit 1, value 1).
+    Except(Vec<String>),
+}
+
+/// The FDF-only submit flags (ISO 32000-1 Table 237 bits 7, 8, 11, 12, 14).
+///
+/// Every bit here carries a *"shall be used only when the form is being
+/// submitted in Forms Data Format"* clause, so they live on the FDF variant of
+/// [`SubmitFormat`] rather than beside it — a gate the standard states as a
+/// `shall` becomes unrepresentable rather than merely discouraged.
+///
+/// # Constructing one
+///
+/// `#[non_exhaustive]`, so build it as
+/// `let mut o = FdfOptions::default(); o.include_annotations = true;` — the
+/// same shape [`ResizeOptions`] uses, and for the same reason recorded there:
+/// a struct literal from outside the crate will not compile.
+///
+/// **Every field defaults to `false`, and every `false` is the narrower
+/// payload.** That is deliberate: each of these bits *adds* something to what
+/// leaves the machine, and [`SubmitDisclosure`] has to say so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct FdfOptions {
+    /// Bit 7 `IncludeAppendSaves` — ship `/Differences`, *"the contents of all
+    /// incremental updates to the underlying PDF document"*.
+    ///
+    /// # ★ This turns a submit into a SAVE
+    ///
+    /// Nothing in the word "submit" says so.
+    ///
+    /// §12.7.5.2 requires an incremental update to be written *immediately
+    /// before* transmission, so the payload is **every byte since the document
+    /// was opened** — signatures included, and re-sending what an earlier
+    /// submit already sent. The largest non-`SubmitPDF` item in the payload
+    /// table, and [`SubmitDisclosure::includes_incremental_updates`] exists
+    /// for it alone.
+    pub include_incremental_updates: bool,
+    /// Bit 8 `IncludeAnnotations` — ship **all** markup annotations
+    /// (§12.5.6.2), whoever authored them.
+    pub include_annotations: bool,
+    /// Bit 11 `ExclNonUserAnnots` — narrow bit 8 to annotations whose `/T`
+    /// matches *"the current user, as determined by the remote server"*.
+    ///
+    /// Legal only when [`Self::include_annotations`] is also set; the standard
+    /// says so with a `shall` and states no reader recovery, so
+    /// [`EditSession::set_button_action`] refuses the combination by name
+    /// rather than writing a non-conforming flag word.
+    ///
+    /// Note who decides: **the server**. A narrowing whose criterion lives at
+    /// the destination is not a narrowing the operator can verify.
+    pub only_current_user_annotations: bool,
+    /// Bit 12 `ExclFKey` — omit the FDF `/F` entry, i.e. **suppress the source
+    /// document's local path**.
+    ///
+    /// The only privacy-*narrowing* flag in the whole word. Off by default
+    /// because that is what `/Flags 0` means, not because the path should be
+    /// sent — see [`SubmitDisclosure::includes_document_path`].
+    pub exclude_document_path: bool,
+    /// Bit 14 `EmbedForm` — make the FDF `/F` a file specification carrying an
+    /// **embedded file stream of the source PDF**.
+    ///
+    /// The whole document again, inside the FDF.
+    pub embed_form: bool,
+}
+
+/// Which of the four submission formats a [`ButtonAction::SubmitForm`] selects
+/// (ISO 32000-1 §12.7.5.2, Table 237 bits 3, 4, 5, 6, 9).
+///
+/// # ★ An enum, because format selection is a precedence chain
+///
+/// It is not a set of independent bits, and modelling it as one is the error.
+///
+/// `SubmitPDF`(9) ≻ `XFDF`(6) ≻ `ExportFormat`(3), stated with a `shall`
+/// (*"If set, all other flags shall be ignored except `GetMethod`"*). Nine
+/// further bits carry *"shall be used only when …"* gates, and **not one of
+/// them states what a reader does when the gate is violated**. Modelling the
+/// flag word as a `u32` of independent bools would make a dozen
+/// non-conforming files trivially authorable and would push the decision onto
+/// every caller; modelling it as this enum makes most of them unrepresentable.
+///
+/// `/Flags 0` — the absent-or-zero case — is **FDF by POST**, which is a
+/// decision the standard makes rather than an absence of one. pdfce therefore
+/// writes `/Flags` explicitly on every submit it authors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SubmitFormat {
+    /// Forms Data Format, by POST. Bits 3, 6 and 9 all clear — the baseline.
+    ///
+    /// **The baseline payload is not just field values.** It also carries the
+    /// FDF `/F` (the source document's *file path*) and `/ID` (its trailer
+    /// fingerprint), with no flag set at all. See
+    /// [`SubmitDisclosure::includes_document_path`].
+    Fdf(FdfOptions),
+    /// HTML Form format. Bit 3 `ExportFormat` set.
+    Html {
+        /// Bit 4 `GetMethod` — submit by HTTP GET instead of POST.
+        ///
+        /// Legal **only** in this variant: bit 4's own text says *"if
+        /// `ExportFormat` is clear, this flag shall also be clear"*, which is
+        /// why it is not a field of [`SubmitFormat`] itself.
+        get: bool,
+        /// Bit 5 `SubmitCoordinates` — also transmit the mouse click's `x`/`y`
+        /// relative to the widget's `/Rect` upper-left corner.
+        ///
+        /// An interaction datum, not form data. Same `ExportFormat` gate as
+        /// `get` above — bit 5 carries the identical *"shall also be clear"*
+        /// sentence.
+        coordinates: bool,
+    },
+    /// XFDF (XML-based FDF). Bit 6 set.
+    Xfdf,
+    /// **The entire document file**, MIME `application/pdf`. Bit 9
+    /// `SubmitPDF` set.
+    ///
+    /// # ★ `/Fields` is DEAD under this flag, and the disclosure is categorical
+    ///
+    /// Bit 9 says all other flags *shall be ignored*, `Include/Exclude`
+    /// among them. **There is no such thing as a partial PDF submission** —
+    /// whole file or nothing, including attachments, metadata, prior
+    /// incremental-update history and private `/PieceInfo`.
+    ///
+    /// # Why no `get` here
+    ///
+    /// Bit 9 exempts `GetMethod` from being ignored, so the standard
+    /// *contemplates* `/Flags 264`; bit 4 forbids `GetMethod` while
+    /// `ExportFormat` is clear, with a `shall`. **Two `shall`s, no stated
+    /// precedence** (`SF-A3`). Both spellings are non-conforming under one
+    /// clause or the other, so pdfce authors neither and this variant is
+    /// POST-only. The refusal is by omission and this paragraph is its record.
+    WholeDocument,
+}
+
+/// A `/SubmitForm` action to author (ISO 32000-1 §12.7.5.2, Table 236).
+///
+/// # Constructing one
+///
+/// [`SubmitSpec::new`], then assign fields — `#[non_exhaustive]`, so a struct
+/// literal from outside `pdfce-core` will not compile.
+///
+/// ```no_run
+/// use pdfce_core::edit::{FdfOptions, SubmitFormat, SubmitScope, SubmitSpec};
+///
+/// let mut spec = SubmitSpec::new("https://example.com/collect");
+/// spec.format = SubmitFormat::Fdf(FdfOptions::default());
+/// spec.scope = SubmitScope::Only(vec!["Name".to_owned(), "Email".to_owned()]);
+/// ```
+///
+/// # What authoring one does NOT do
+///
+/// **Nothing leaves this machine.** `pdfce-core` has no network code and
+/// cannot acquire any (`R12`, permanently, for core and render); this writes a
+/// declaration into a file, and `R54` governs whether anything ever fires it.
+/// The safeguard that applies at *authoring* time is
+/// [`ButtonActionChange::submit`] — a computed statement of what this button
+/// would send if some other program honoured it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SubmitSpec {
+    /// The destination, written as `/F << /Type /Filespec /FS /URL /F (…) >>`.
+    ///
+    /// # ★ Never a bare string, whatever real files do
+    ///
+    /// Table 236 types `/F` as a *file specification* and only constrains it
+    /// to a URL in prose. §7.11.1 lets a file specification be a bare string —
+    /// and a bare string, by §7.11.2, is a **file-system path**, not a URL.
+    /// The standard states no reader rule for that case (`SF-A1`), so pdfce
+    /// writes the one unambiguous form: the dictionary with `/FS /URL`
+    /// (`SF-0.6`, and §13.3's minimum conformant object).
+    ///
+    /// Must be absolute and 7-bit ASCII; both are checked before anything is
+    /// written. See [`EditError::ButtonActionDestination`].
+    pub url: String,
+    /// Which of the four formats, and the format-specific flags.
+    pub format: SubmitFormat,
+    /// Which fields. See [`SubmitScope`], and note that
+    /// [`SubmitFormat::WholeDocument`] ignores it entirely.
+    pub scope: SubmitScope,
+    /// Bit 2 `IncludeNoValueFields` — send empty fields *by name only*.
+    ///
+    /// Sends form **structure**, not just data. No gating clause, so it
+    /// applies in every format.
+    pub include_no_value_fields: bool,
+    /// Bit 10 `CanonicalFormat` — normalise date-looking values to §7.9.4.
+    ///
+    /// Also ungated, so it applies in every format. The standard's own NOTE
+    /// admits it cannot tell which field is a date: *"the interpretation of a
+    /// form field as a date is not specified explicitly in the field itself
+    /// but only in the JavaScript code that processes it."*
+    pub canonical_dates: bool,
+}
+
+impl SubmitSpec {
+    /// A submit to `url` with the baseline payload: FDF, POST, every field
+    /// that has a value, minus `NoExport`.
+    ///
+    /// That baseline is `/Flags 0` — and it is not empty. See
+    /// [`SubmitFormat::Fdf`] for what it carries beyond the field values.
+    #[must_use]
+    pub fn new(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            format: SubmitFormat::Fdf(FdfOptions::default()),
+            scope: SubmitScope::All,
+            include_no_value_fields: false,
+            canonical_dates: false,
+        }
+    }
+}
+
+/// One of the four reader-predefined actions of ISO 32000-1 §12.6.4.11,
+/// Table 211.
+///
+/// The registry is deliberately open — *"further names may be added"* — but
+/// **exactly these four are defined in both editions**, and an unrecognised
+/// name is the standard's only explicit recognise-and-ignore instruction for
+/// actions (*"it shall take no action"*). Authoring outside the four would be
+/// authoring a button that does nothing in a conforming reader, so pdfce
+/// authors only the four.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum NamedAction {
+    /// `/NextPage`.
+    NextPage,
+    /// `/PrevPage`.
+    PrevPage,
+    /// `/FirstPage`.
+    FirstPage,
+    /// `/LastPage`.
+    LastPage,
+}
+
+impl NamedAction {
+    /// The `/N` name this writes, exactly as Table 211 spells it.
+    #[must_use]
+    pub const fn as_pdf_name(self) -> &'static [u8] {
+        match self {
+            Self::NextPage => b"NextPage",
+            Self::PrevPage => b"PrevPage",
+            Self::FirstPage => b"FirstPage",
+            Self::LastPage => b"LastPage",
+        }
+    }
+}
+
+/// How a [`ButtonAction::GoToPage`] positions the page it lands on
+/// (ISO 32000-1 §12.3.2.2, Table 151).
+///
+/// # ★ Three variants, and every coordinate is COMPUTED rather than supplied
+///
+/// Table 151's parameterised forms take user-space coordinates, and a caller
+/// who supplies them has to know the target page's box — which pdfce knows and
+/// the caller usually does not. So the parameters are derived from the page's
+/// own crop box at authoring time and this enum carries none, which keeps it
+/// `Copy`, `Eq`, and impossible to get half-right.
+///
+/// `null` is a legal Table 151 parameter meaning *"retain the current value"*,
+/// and [`Self::TopLeft`] uses it for `zoom` deliberately: jumping to a
+/// bookmark should not silently re-zoom the operator's window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PageView {
+    /// `[page /Fit]` — fit the whole page in the window.
+    ///
+    /// Table 151: if the two magnification factors differ, the **smaller** is
+    /// used and the page is centred in the other dimension.
+    WholePage,
+    /// `[page /FitH top]` — fit the page's full width, `top` at the top edge.
+    ///
+    /// `top` is the target page's crop-box upper edge.
+    FullWidth,
+    /// `[page /XYZ left top null]` — the page's top-left corner, current
+    /// magnification retained.
+    ///
+    /// `left`/`top` are the crop box's `llx`/`ury`. The `null` zoom is Table
+    /// 151's *"retain unchanged"*; note the standard states the
+    /// `0`-means-`null` equivalence **only** for `zoom`, never for `left` or
+    /// `top`, so a literal `0` left edge stays literal.
+    TopLeft,
+}
+
+/// What a push button does when clicked (`Pass 182.0`, extended `Pass 183.0`).
+///
+/// # ★ The boundary this moves, and how far
 ///
 /// `/A` reaches launch actions, network submits, embedded-file opens and
 /// JavaScript. Authoring that surface is a security decision, and pdfce's
 /// standing posture (decision 009 posture A) was to author **no** action at
-/// all — which is why `add_push_button` has always created a valid button that
-/// does nothing, and says so.
+/// all — which is why `add_push_button` still creates a valid button that does
+/// nothing, and says so.
 ///
-/// The operator moved that boundary on 2026-08-30, and moved it exactly one
-/// notch: *"a reset button should actually reset."* So this enum carries
-/// `ResetForm` and nothing else.
+/// The operator moved it twice, in five days:
 ///
-/// `/SubmitForm` is **refused by omission**, on the consuming shell's own
-/// argument rather than over its objection: its whole purpose is to send data
-/// somewhere, which is a network capability wearing a form control's clothes,
-/// and no shell can audit the URL an operator types. `/JavaScript` is refused
-/// for the reason it has always been — pdfce recognises scripts and never
-/// runs or writes them (`NF4`).
+/// - 2026-08-30, *"a reset button should actually reset"* → [`Self::ResetForm`].
+/// - 2026-08-30, later: *"make the submit and other options that don't need
+///   javascript available for buttons with the safeguards like we had
+///   planned"* → the other four variants, and the safeguards are
+///   [`ButtonActionChange::submit`] plus the refusals listed on
+///   [`EditSession::set_button_action`].
 ///
-/// A future variant is a decision, not an omission. Adding one should say
-/// which operator sentence authorises it.
+/// # What stays refused, by name and permanently
+///
+/// - **`/JavaScript`** — pdfce recognises scripts, never runs them and never
+///   writes them (`R53`, `NF4`). Authoring one would put bytes on disk asking
+///   for a capability this project has ruled out of scope, not merely
+///   deferred.
+/// - **`/Launch`** — starts a program or opens a file outside the document.
+///   Collides with `R13`, and there is no disclosure that makes "this button
+///   runs something" safe to author blind.
+/// - **`/GoToR`, `/GoToE`, `/ImportData`, `/Movie`, `/Rendition`, `/Sound`,
+///   `/Thread`** — each reaches a file or a URL the same way a submit does,
+///   without a submit's computable payload. Not refused on principle; simply
+///   not asked for, and the disclosure work each would need has not been done.
+///
+/// A future variant is a decision, not an omission. Adding one should name the
+/// operator sentence that authorises it, as the two above do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ButtonAction {
@@ -12994,6 +13389,230 @@ pub enum ButtonAction {
         /// Which fields. See [`ResetScope`].
         scope: ResetScope,
     },
+    /// §12.7.5.2. Sends form data to a URL the **document's author** chose.
+    ///
+    /// The one variant here that reaches off the machine, and the reason
+    /// [`ButtonActionChange::submit`] exists. Authoring it sends nothing —
+    /// `pdfce-core` has no network code — but it writes a declaration that
+    /// some other program may honour, so the payload is computed and disclosed
+    /// at the moment it is written rather than at the moment it fires.
+    SubmitForm(SubmitSpec),
+    /// §12.6.4.2. Jumps to a page in **this** document.
+    ///
+    /// No reach: the destination is written as an indirect reference to the
+    /// page object (Table 151's *"`page` is an indirect reference to a page
+    /// object"*), so it survives page reordering by construction and a page
+    /// deletion is counted by
+    /// [`crate::pageops::references::census_dangling`] rather than silently
+    /// breaking.
+    ///
+    /// `/GoToR` — the same jump into *another file* — is deliberately not
+    /// offered: it names a page by **integer index** in a document pdfce
+    /// cannot see, so nothing can be validated and nothing can be disclosed.
+    GoToPage {
+        /// 0-based index into the current page order.
+        page_index: usize,
+        /// Where on the page to land. See [`PageView`].
+        view: PageView,
+    },
+    /// §12.6.4.11. One of the four reader-predefined navigation actions.
+    ///
+    /// No reach, no parameters, no destination to break — the cheapest working
+    /// button in the format.
+    Named(NamedAction),
+    /// §12.6.4.7. A URI for the reader to resolve — authored as **data only**.
+    ///
+    /// **pdfce never follows one.** Recognising a `/URI` and refusing to
+    /// resolve it is existing, shipped behaviour; this writes one, and the two
+    /// halves are deliberately asymmetric because authoring is a file edit and
+    /// following is a network act.
+    ///
+    /// Relative URIs are **refused** ([`EditError::ButtonActionDestination`]).
+    /// §12.6.4.8's `/Base` machinery resolves them, but ISO issue #256 records
+    /// that readers disagree on the trailing-slash rule badly enough that
+    /// *"only the host portion gets used"* in some — so the destination of a
+    /// relative `/URI` is implementation-dependent, and authoring one would be
+    /// authoring a button whose target pdfce cannot state.
+    Uri {
+        /// An absolute, 7-bit-ASCII URI. Written to `/URI` verbatim.
+        uri: String,
+    },
+}
+
+/// **What a `/SubmitForm` button would send, computed when it is authored**
+/// (`Pass 183.0`, ISO 32000-1 §12.7.5.2).
+///
+/// # ★ This is the safeguard. It is the whole safeguard available at authoring
+/// time, and it is where pdfce exceeds Acrobat.
+///
+/// Measured against the Acrobat Reader on this machine, 2026-08-26: its submit
+/// warning names **scheme and host only** — not the port, not the path — and
+/// says **nothing whatever about the payload**. No field count, no whole-file
+/// indication, no mention of hidden fields. Its own button *tooltip* is more
+/// informative than its security prompt.
+///
+/// pdfce states the full destination and the payload, and it states them at
+/// the moment the button is written, because that is the moment a person is
+/// deciding. Every field below answers a question an operator cannot answer by
+/// any other means:
+///
+/// | fact | why it is invisible otherwise |
+/// |---|---|
+/// | [`Self::hidden_fields`] | a `Hidden` widget's value submits exactly like a visible one — `Hidden` is an **annotation** flag and every submit selector addresses **field** dictionaries, so the two are simply on different objects |
+/// | [`Self::password_fields`] | the `Password` flag's NOTE constrains *storage*, not transmission |
+/// | [`Self::file_select_fields`] | §12.7.4.3 makes such a field's text *"the pathname of a file whose contents shall be submitted"* — a local file walks out |
+/// | [`Self::includes_document_path`] | the baseline FDF payload carries the source document's **path** and trailer `/ID`, with no flag set |
+/// | [`Self::includes_incremental_updates`] | the submit performs a **save** first and ships every byte since open, signatures included |
+/// | [`Self::whole_document`] | `SubmitPDF` ignores `/Fields` entirely; there is no partial-PDF submission |
+///
+/// # ★ And every one of these controls is pdfce's, not the standard's
+///
+/// The spec ingestion recorded sixteen explicit negatives: **no consent rule,
+/// no privacy rule, no TLS rule, no redirect rule, no timeout, no size limit,
+/// no failure-handling rule**, and `https` appears zero times in ISO 32000-1.
+/// Disclosure here is a product decision with a named conformance cost, and
+/// saying so is part of making it honestly.
+///
+/// # Ordering, which is load-bearing
+///
+/// `NoExport` has **explicit precedence** over `/Fields` and the
+/// `Include/Exclude` flag, so it is applied **last** when computing
+/// [`Self::fields`]. An implementation that applies it earlier silently
+/// exports a field its author marked non-exportable — and the disclosure would
+/// then be wrong in the one direction that matters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SubmitDisclosure {
+    /// The destination, in full — scheme, host, **port and path included**.
+    pub url: String,
+    /// The URL's scheme, lowercased (`"https"`, `"http"`, `"file"`, …).
+    pub scheme: String,
+    /// Whether the transport encrypts. `true` only for `https`.
+    ///
+    /// A plain `http` destination sends filled form data in the clear. pdfce
+    /// **allows** it — the operator ruled the default open, *"wherever the
+    /// document's author said"* — and says so rather than blocking, which is
+    /// the same disclose-don't-block posture the rest of the ladder takes.
+    pub encrypted: bool,
+    /// The payload format, in an operator's words: `"FDF"`, `"HTML Form"`,
+    /// `"XFDF"` or `"the entire document (PDF)"`.
+    pub format: &'static str,
+    /// `"POST"` or `"GET"`.
+    pub method: &'static str,
+    /// `true` when the whole file goes ([`SubmitFormat::WholeDocument`]).
+    ///
+    /// When set, [`Self::fields`] is **empty and meaningless** — not "no
+    /// fields are sent", but "field selection does not apply". Say the
+    /// categorical thing, never a count.
+    pub whole_document: bool,
+    /// The fully-qualified names that would be transmitted, in document order,
+    /// after every selection rule and `NoExport` have been applied.
+    pub fields: Vec<String>,
+    /// Of [`Self::fields`], those whose widget carries the `Hidden`
+    /// annotation flag.
+    ///
+    /// **The killer case, and the feature's real justification.** These values
+    /// were never shown to the operator and they leave anyway.
+    pub hidden_fields: Vec<String>,
+    /// Of [`Self::fields`], those with the `Password` field flag set.
+    pub password_fields: Vec<String>,
+    /// Of [`Self::fields`], those with the `FileSelect` flag — each of which
+    /// submits **the contents of a local file** named by its own text.
+    pub file_select_fields: Vec<String>,
+    /// Of [`Self::fields`], those included by name only because
+    /// [`SubmitSpec::include_no_value_fields`] is set.
+    ///
+    /// Form *structure* rather than form data.
+    pub valueless_fields: Vec<String>,
+    /// Fields the selection would have sent that `NoExport` vetoed.
+    ///
+    /// Reported because a silent veto and a silent inclusion are equally
+    /// surprising: an operator who expects a field to be sent should be told
+    /// it will not be.
+    pub excluded_by_no_export: Vec<String>,
+    /// Fields with the `Required` flag that currently have no value.
+    ///
+    /// `Required` is a **submit-time** obligation — *"the field shall have a
+    /// value at the time it is exported by a submit-form action"* — and the
+    /// standard states the obligation with **no consequence** for breaking it.
+    /// So this is a heads-up, not a refusal.
+    pub required_without_value: Vec<String>,
+    /// Whether the payload carries the source document's local path and
+    /// trailer `/ID` fingerprint (FDF, unless `ExclFKey`).
+    pub includes_document_path: bool,
+    /// Whether the payload carries `/Differences` — every incremental update
+    /// since the document was opened.
+    pub includes_incremental_updates: bool,
+    /// Whether the payload carries the document's markup annotations.
+    pub includes_annotations: bool,
+    /// Whether the payload embeds the whole source PDF inside the FDF
+    /// (`EmbedForm`).
+    pub embeds_source_document: bool,
+    /// Whether the mouse click's coordinates travel with the data
+    /// (`SubmitCoordinates`).
+    pub includes_click_coordinates: bool,
+}
+
+impl SubmitDisclosure {
+    /// **The one line a shell shows without being asked** — the always-on
+    /// summary, with the itemised lists one gesture away.
+    ///
+    /// The proposal this implements was originally *"payload disclosure off by
+    /// default, one gesture away"*, and the engineer withdrew it as too weak
+    /// once the spec ingestion established that four of the six payload facts
+    /// are undetectable by any other means. What survives from that proposal
+    /// is the *itemisation* being one gesture away — not the summary.
+    ///
+    /// Deliberately never empty and never silent: even the narrowest submit
+    /// gets a destination and a count.
+    #[must_use]
+    pub fn summary(&self) -> String {
+        let mut s = format!("sends to {} ({})", self.url, self.format);
+        if !self.encrypted {
+            s.push_str(", UNENCRYPTED");
+        }
+        if self.whole_document {
+            s.push_str(
+                "; the ENTIRE document file, including attachments, metadata and prior revisions",
+            );
+        } else {
+            s.push_str(&format!("; {} field value(s)", self.fields.len()));
+        }
+        if !self.hidden_fields.is_empty() {
+            s.push_str(&format!(
+                "; {} HIDDEN field(s) you were never shown",
+                self.hidden_fields.len()
+            ));
+        }
+        if !self.password_fields.is_empty() {
+            s.push_str(&format!(
+                "; {} password field(s)",
+                self.password_fields.len()
+            ));
+        }
+        if !self.file_select_fields.is_empty() {
+            s.push_str(&format!(
+                "; {} LOCAL FILE(s) named by a file-select field",
+                self.file_select_fields.len()
+            ));
+        }
+        if self.includes_document_path {
+            s.push_str("; this document's own file path and identity fingerprint");
+        }
+        if self.includes_incremental_updates {
+            s.push_str("; every saved change since it was opened (a SAVE happens first)");
+        }
+        if self.embeds_source_document {
+            s.push_str("; a copy of this whole document embedded in the payload");
+        }
+        if self.includes_annotations {
+            s.push_str("; all markup annotations, whoever wrote them");
+        }
+        if self.includes_click_coordinates {
+            s.push_str("; where you clicked");
+        }
+        s
+    }
 }
 
 /// What [`EditSession::set_button_action`] did (`Pass 182.0`).
@@ -13016,6 +13635,21 @@ pub struct ButtonActionChange {
     pub replaced: Option<String>,
     /// The action in force afterwards, or `None` if it was removed.
     pub applied: Option<ButtonAction>,
+    /// **What the button would send, if the action is a submit** — computed
+    /// against the document as it stands at the moment of authoring
+    /// (`Pass 183.0`).
+    ///
+    /// `Some` exactly when [`Self::applied`] is a
+    /// [`ButtonAction::SubmitForm`]. See [`SubmitDisclosure`] for why this is
+    /// the safeguard rather than an extra.
+    ///
+    /// # It is a snapshot, and saying so is part of the disclosure
+    ///
+    /// The include set is computed from the fields that exist *now*. Adding a
+    /// field later widens what a `SubmitScope::All` button sends, without
+    /// touching the button. That is the standard's design, not pdfce's, and a
+    /// shell that caches this string across edits will show a stale one.
+    pub submit: Option<SubmitDisclosure>,
 }
 
 /// What [`EditSession::set_dimension_label`] did, and the two captions a
@@ -23459,19 +24093,37 @@ impl EditSession {
     }
 
     /// **Give a push button an action, or take one away** — as one undoable
-    /// command (`Pass 182.0`).
+    /// command (`Pass 182.0`; the non-JavaScript action set, `Pass 183.0`).
     ///
-    /// # ★ This moves a deliberate boundary, one notch, on an operator ruling
+    /// # ★ This moves a deliberate boundary, on two operator rulings
     ///
     /// `add_push_button` has always authored a button that does nothing, and
     /// `push_button_inert` says so on every creation. That was decision 009
     /// posture A: `/A` reaches launch actions, network submits, embedded-file
     /// opens and JavaScript, and pdfce authored **none** of them.
     ///
-    /// The operator moved it on 2026-08-30: *"a reset button should actually
-    /// reset."* So [`ButtonAction`] carries `ResetForm` and nothing else —
-    /// `/SubmitForm` is a network capability wearing a form control's clothes,
-    /// and `/JavaScript` is `NF4`.
+    /// - 2026-08-30: *"a reset button should actually reset."* →
+    ///   [`ButtonAction::ResetForm`].
+    /// - 2026-08-30, later the same day: *"make the submit and other options
+    ///   that don't need javascript available for buttons with the safeguards
+    ///   like we had planned."* → [`ButtonAction::SubmitForm`],
+    ///   [`ButtonAction::GoToPage`], [`ButtonAction::Named`],
+    ///   [`ButtonAction::Uri`].
+    ///
+    /// **"The safeguards like we had planned"** is a reference to a written
+    /// plan, not a general instruction, and it resolves to specific things:
+    /// the destination is disclosed in full, the payload is disclosed at all
+    /// (which Acrobat never does), and every non-conforming or undecidable
+    /// input is **refused by name** rather than written. All three are below.
+    ///
+    /// # Nothing here goes anywhere
+    ///
+    /// This writes a declaration into a file. `pdfce-core` has no network
+    /// code, cannot acquire any, and fires no trigger — authoring a submit and
+    /// honouring one are different features, in different crates, under
+    /// different rules. The whole safeguard available at *authoring* time is
+    /// telling the truth about what was written, which is
+    /// [`ButtonActionChange::submit`].
     ///
     /// # On an EXISTING button, deliberately
     ///
@@ -23491,12 +24143,21 @@ impl EditSession {
     ///
     /// # Errors
     ///
-    /// - [`EditError::FieldNotFound`] — no such field, or a named reset target
-    ///   that does not exist. Checked **before** anything is written, the same
-    ///   discipline [`Self::reset_form`] uses, so a typo cannot leave a button
-    ///   pointing at a field that is not there.
+    /// Every check runs **before anything is written**, the same discipline
+    /// [`Self::reset_form`] uses, so a refusal never leaves a half-authored
+    /// button behind.
+    ///
+    /// - [`EditError::FieldNotFound`] — no such field, or a named reset or
+    ///   submit target that does not exist. A button pointing at a missing
+    ///   field does less than it says, and the operator finds out by clicking
+    ///   it somewhere else.
     /// - [`EditError::ButtonActionWrongFieldType`] — the field is not a push
     ///   button.
+    /// - [`EditError::ButtonActionDestination`] — a submit or URI destination
+    ///   pdfce cannot state unambiguously (relative, non-ASCII, empty).
+    /// - [`EditError::ButtonActionSubmitFlags`] — a Table 237 gate the type
+    ///   system could not close.
+    /// - [`EditError::PageOutOfRange`] — a `GoToPage` index past the end.
     /// - The encryption and certification guards.
     pub fn set_button_action(
         &mut self,
@@ -23543,6 +24204,37 @@ impl EditSession {
                     return Err(EditError::FieldNotFound { name: name.clone() });
                 }
             }
+        }
+
+        // Submit: the destination, the flag gates and the named targets, all
+        // before any write. Same discipline, three more ways to be wrong.
+        if let Some(ButtonAction::SubmitForm(spec)) = &action {
+            Self::check_destination(&spec.url)?;
+            if let SubmitFormat::Fdf(opts) = &spec.format
+                && opts.only_current_user_annotations
+                && !opts.include_annotations
+            {
+                return Err(EditError::ButtonActionSubmitFlags {
+                    why: "ExclNonUserAnnots (bit 11) narrows IncludeAnnotations (bit 8) and \
+                          `shall be used only when` that flag is set; set include_annotations \
+                          too, or clear only_current_user_annotations",
+                });
+            }
+            let named: &[String] = match &spec.scope {
+                SubmitScope::All => &[],
+                SubmitScope::Only(v) | SubmitScope::Except(v) => v,
+            };
+            for name in named {
+                if !form.fields.iter().any(|f| &f.fully_qualified_name == name) {
+                    return Err(EditError::FieldNotFound { name: name.clone() });
+                }
+            }
+        }
+
+        // A `/URI` pdfce cannot state the target of is refused for exactly the
+        // same reason a submit destination is -- see `ButtonActionDestination`.
+        if let Some(ButtonAction::Uri { uri }) = &action {
+            Self::check_destination(uri)?;
         }
 
         let widget = field
@@ -23599,7 +24291,105 @@ impl EditSession {
                 }
                 updated.insert(Name::from(b"A"), Object::Dict(a));
             }
+            Some(ButtonAction::SubmitForm(spec)) => {
+                let mut a = Dict::new();
+                a.insert(Name::from(b"Type"), Object::Name(Name::from(b"Action")));
+                a.insert(Name::from(b"S"), Object::Name(Name::from(b"SubmitForm")));
+                // §13.3's minimum conformant object: the Filespec DICTIONARY
+                // with `/FS /URL`, never a bare string. A bare string is a
+                // FILE-SYSTEM PATH by §7.11.2 and the standard states no reader
+                // rule for one here (`SF-A1`).
+                let mut f = Dict::new();
+                f.insert(Name::from(b"Type"), Object::Name(Name::from(b"Filespec")));
+                f.insert(Name::from(b"FS"), Object::Name(Name::from(b"URL")));
+                f.insert(
+                    Name::from(b"F"),
+                    Object::String(spec.url.clone().into_bytes()),
+                );
+                a.insert(Name::from(b"F"), Object::Dict(f));
+                match &spec.scope {
+                    SubmitScope::All => {}
+                    SubmitScope::Only(names) | SubmitScope::Except(names) => {
+                        a.insert(Name::from(b"Fields"), Self::fqn_array(names));
+                    }
+                }
+                // `/Flags` is written EXPLICITLY even when it is 0. Table 236
+                // defaults it to 0, and 0 means FDF-by-POST -- a decision the
+                // standard makes, not an absence of one. Writing it says which
+                // payload was chosen instead of leaving a reader to infer it.
+                a.insert(
+                    Name::from(b"Flags"),
+                    Object::Integer(i64::from(Self::submit_flag_word(spec))),
+                );
+                updated.insert(Name::from(b"A"), Object::Dict(a));
+            }
+            Some(ButtonAction::GoToPage { page_index, view }) => {
+                // Resolved here rather than earlier so the failure path is a
+                // plain `?`. Nothing has been written yet -- the single
+                // `commit` is below the match -- so returning from inside it
+                // still leaves the document untouched.
+                let pages = self.pages()?;
+                let count = pages.len();
+                let page = pages.get(*page_index).ok_or(EditError::PageOutOfRange {
+                    index: *page_index,
+                    count,
+                })?;
+                let (page_id, crop, view) = (page.id, page.crop_box, *view);
+                let mut a = Dict::new();
+                a.insert(Name::from(b"Type"), Object::Name(Name::from(b"Action")));
+                a.insert(Name::from(b"S"), Object::Name(Name::from(b"GoTo")));
+                // Table 151: `page` is an INDIRECT REFERENCE to a page object.
+                // That is what makes the destination survive a reorder without
+                // anything having to rewrite it.
+                let mut d = vec![Object::Reference(page_id)];
+                match view {
+                    PageView::WholePage => d.push(Object::Name(Name::from(b"Fit"))),
+                    PageView::FullWidth => {
+                        d.push(Object::Name(Name::from(b"FitH")));
+                        d.push(Object::Real(crop.ury));
+                    }
+                    PageView::TopLeft => {
+                        d.push(Object::Name(Name::from(b"XYZ")));
+                        d.push(Object::Real(crop.llx));
+                        d.push(Object::Real(crop.ury));
+                        // `null` zoom = "retain unchanged" (Table 151). Note
+                        // the 0-means-null equivalence is stated ONLY for zoom,
+                        // never for left/top, so the two coordinates above are
+                        // literal even when they are 0.
+                        d.push(Object::Null);
+                    }
+                }
+                a.insert(Name::from(b"D"), Object::Array(d));
+                updated.insert(Name::from(b"A"), Object::Dict(a));
+            }
+            Some(ButtonAction::Named(named)) => {
+                let mut a = Dict::new();
+                a.insert(Name::from(b"Type"), Object::Name(Name::from(b"Action")));
+                a.insert(Name::from(b"S"), Object::Name(Name::from(b"Named")));
+                a.insert(
+                    Name::from(b"N"),
+                    Object::Name(Name::from(named.as_pdf_name())),
+                );
+                updated.insert(Name::from(b"A"), Object::Dict(a));
+            }
+            Some(ButtonAction::Uri { uri }) => {
+                let mut a = Dict::new();
+                a.insert(Name::from(b"Type"), Object::Name(Name::from(b"Action")));
+                a.insert(Name::from(b"S"), Object::Name(Name::from(b"URI")));
+                // Table 206's `/URI` is a plain string, NOT a file
+                // specification -- unlike a submit's `/F`, which is. Two
+                // destinations, two encodings, in adjacent clauses.
+                a.insert(Name::from(b"URI"), Object::String(uri.clone().into_bytes()));
+                updated.insert(Name::from(b"A"), Object::Dict(a));
+            }
         }
+
+        // Computed BEFORE the commit, from the form as parsed above, so the
+        // disclosure describes the same document the action was written into.
+        let submit = match &action {
+            Some(ButtonAction::SubmitForm(spec)) => Some(Self::disclose_submit(&form, spec)),
+            _ => None,
+        };
 
         let objects = vec![ObjectWrite {
             id: widget.id,
@@ -23619,7 +24409,247 @@ impl EditSession {
             name: fqn.to_owned(),
             replaced,
             applied: action,
+            submit,
         })
+    }
+
+    /// Refuse a destination pdfce cannot state unambiguously.
+    ///
+    /// Shared by `/SubmitForm`'s `/F` and `/URI`'s `/URI` because the failure
+    /// is the same in both: a relative or non-ASCII destination resolves
+    /// differently in different readers, and a disclosure whose subject is
+    /// undecidable is worse than none. See
+    /// [`EditError::ButtonActionDestination`] for each case's source.
+    ///
+    /// **This is not a whitelist and must not grow into one by accident.** The
+    /// operator ruled destination policy open; every check here is about
+    /// *decidability*, never about who is on the other end.
+    fn check_destination(url: &str) -> Result<(), EditError> {
+        if url.trim().is_empty() {
+            return Err(EditError::ButtonActionDestination {
+                url: url.to_owned(),
+                why: "it is empty",
+            });
+        }
+        if !url.is_ascii() {
+            return Err(EditError::ButtonActionDestination {
+                url: url.to_owned(),
+                why: "it contains non-ASCII bytes, and 7.11.5 requires RFC 1738 encoding \
+                      (percent-encode them first)",
+            });
+        }
+        if url.bytes().any(|b| b.is_ascii_control() || b == b' ') {
+            return Err(EditError::ButtonActionDestination {
+                url: url.to_owned(),
+                why: "it contains a space or a control character, which no URL grammar admits \
+                      unescaped",
+            });
+        }
+        // A scheme per RFC 3986: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+        // followed by ':'. Checked structurally rather than against a list of
+        // known schemes -- `file:`, `mailto:` and anything else registered
+        // later are all decidable destinations, and the ruling is open.
+        let has_scheme = url.split_once(':').is_some_and(|(scheme, _)| {
+            let mut bytes = scheme.bytes();
+            bytes.next().is_some_and(|b| b.is_ascii_alphabetic())
+                && bytes.all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
+        });
+        if !has_scheme {
+            return Err(EditError::ButtonActionDestination {
+                url: url.to_owned(),
+                why: "it is relative, and a relative destination resolves against the \
+                      document's own location (7.11.2.2) or against /Base, which ISO issue \
+                      #256 records readers disagreeing about -- so its target would depend \
+                      on who opens the file",
+            });
+        }
+        Ok(())
+    }
+
+    /// The `/Flags` word for a submit spec (Table 237).
+    ///
+    /// Every bit is derived from the typed spec, so a gate the type system
+    /// closes cannot be violated here: [`SubmitFormat`] is what keeps
+    /// `GetMethod` out of an FDF submit and `IncludeAnnotations` out of an
+    /// HTML one, rather than a check somebody has to remember to write.
+    ///
+    /// Bit 13 is never set — it has **no row** in either edition's table and
+    /// falls under the clause's *"all undefined flag bits shall be reserved
+    /// and shall be set to 0"*.
+    fn submit_flag_word(spec: &SubmitSpec) -> u32 {
+        let mut flags = 0u32;
+        match &spec.scope {
+            SubmitScope::All | SubmitScope::Only(_) => {}
+            // Bit 1 SET = the array says what to EXCLUDE. One integer apart
+            // from Only, and it inverts the meaning.
+            SubmitScope::Except(_) => flags |= 1,
+        }
+        if spec.include_no_value_fields {
+            flags |= 1 << 1; // bit 2
+        }
+        if spec.canonical_dates {
+            flags |= 1 << 9; // bit 10
+        }
+        match &spec.format {
+            SubmitFormat::Fdf(opts) => {
+                if opts.include_incremental_updates {
+                    flags |= 1 << 6; // bit 7
+                }
+                if opts.include_annotations {
+                    flags |= 1 << 7; // bit 8
+                }
+                if opts.only_current_user_annotations {
+                    flags |= 1 << 10; // bit 11
+                }
+                if opts.exclude_document_path {
+                    flags |= 1 << 11; // bit 12
+                }
+                if opts.embed_form {
+                    flags |= 1 << 13; // bit 14
+                }
+            }
+            SubmitFormat::Html { get, coordinates } => {
+                flags |= 1 << 2; // bit 3 ExportFormat
+                if *get {
+                    flags |= 1 << 3; // bit 4
+                }
+                if *coordinates {
+                    flags |= 1 << 4; // bit 5
+                }
+            }
+            SubmitFormat::Xfdf => flags |= 1 << 5, // bit 6
+            SubmitFormat::WholeDocument => flags |= 1 << 8, // bit 9
+        }
+        flags
+    }
+
+    /// Compute [`SubmitDisclosure`] — what this submit would actually send.
+    ///
+    /// # The order of operations is the specification, not an implementation
+    /// detail
+    ///
+    /// 1. Resolve the include set from `/Fields` + `Include/Exclude`, expanding
+    ///    descendants (a named grouping node carries its whole subtree).
+    /// 2. Drop push buttons **when `/Fields` was omitted** — §12.7.5.2 excludes
+    ///    them by a `shall` in exactly that case, and pulls them back in, with
+    ///    their `/AP` as the value, when the array is present.
+    /// 3. Drop valueless fields unless `IncludeNoValueFields`.
+    /// 4. **Apply `NoExport` last**, because Table 236 gives it explicit
+    ///    precedence over both the array and the flag. Applying it earlier
+    ///    exports a field the author marked non-exportable, and does it
+    ///    silently.
+    ///
+    /// Under [`SubmitFormat::WholeDocument`] none of this applies: bit 9
+    /// ignores `/Fields` entirely, so the field lists come back empty and
+    /// [`SubmitDisclosure::whole_document`] is the answer.
+    fn disclose_submit(form: &forms::AcroForm, spec: &SubmitSpec) -> SubmitDisclosure {
+        let scheme = spec
+            .url
+            .split(':')
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let whole_document = matches!(spec.format, SubmitFormat::WholeDocument);
+        let (format, method) = match &spec.format {
+            SubmitFormat::Fdf(_) => ("FDF", "POST"),
+            SubmitFormat::Html { get: true, .. } => ("HTML Form", "GET"),
+            SubmitFormat::Html { get: false, .. } => ("HTML Form", "POST"),
+            SubmitFormat::Xfdf => ("XFDF", "POST"),
+            SubmitFormat::WholeDocument => ("the entire document (PDF)", "POST"),
+        };
+        let fdf = match &spec.format {
+            SubmitFormat::Fdf(opts) => Some(*opts),
+            _ => None,
+        };
+
+        let mut disclosure = SubmitDisclosure {
+            url: spec.url.clone(),
+            scheme: scheme.clone(),
+            encrypted: scheme == "https",
+            format,
+            method,
+            whole_document,
+            fields: Vec::new(),
+            hidden_fields: Vec::new(),
+            password_fields: Vec::new(),
+            file_select_fields: Vec::new(),
+            valueless_fields: Vec::new(),
+            excluded_by_no_export: Vec::new(),
+            required_without_value: Vec::new(),
+            includes_document_path: fdf.is_some_and(|o| !o.exclude_document_path),
+            includes_incremental_updates: fdf.is_some_and(|o| o.include_incremental_updates),
+            includes_annotations: fdf.is_some_and(|o| o.include_annotations),
+            embeds_source_document: fdf.is_some_and(|o| o.embed_form),
+            includes_click_coordinates: matches!(
+                spec.format,
+                SubmitFormat::Html {
+                    coordinates: true,
+                    ..
+                }
+            ),
+        };
+        if whole_document {
+            return disclosure;
+        }
+
+        let names_present = !matches!(spec.scope, SubmitScope::All);
+        for field in &form.fields {
+            let fqn = &field.fully_qualified_name;
+            // Step 1: selection, with descendant expansion. `A.B` is a
+            // descendant of `A`; `AB` is not, which is why the dot is part of
+            // the prefix rather than a bare `starts_with`.
+            let listed = match &spec.scope {
+                SubmitScope::All => false,
+                SubmitScope::Only(v) | SubmitScope::Except(v) => v
+                    .iter()
+                    .any(|n| n == fqn || fqn.starts_with(&format!("{n}."))),
+            };
+            let selected = match &spec.scope {
+                SubmitScope::All => true,
+                SubmitScope::Only(_) => listed,
+                SubmitScope::Except(_) => !listed,
+            };
+            if !selected {
+                continue;
+            }
+            // Step 2: push buttons ride only when `/Fields` is present.
+            let is_push = field.field_type == Some(forms::FieldType::Button)
+                && field.flags.has(forms::FieldFlags::PUSHBUTTON);
+            if is_push && !names_present {
+                continue;
+            }
+            // Step 3: valueless fields.
+            let has_value = field.value.is_present();
+            if !has_value && !is_push && !spec.include_no_value_fields {
+                continue;
+            }
+            // Step 4: `NoExport` LAST, with explicit precedence over both.
+            if field.flags.no_export() {
+                disclosure.excluded_by_no_export.push(fqn.clone());
+                continue;
+            }
+
+            disclosure.fields.push(fqn.clone());
+            if !has_value && !is_push {
+                disclosure.valueless_fields.push(fqn.clone());
+            }
+            if field.flags.has(forms::FieldFlags::PASSWORD) {
+                disclosure.password_fields.push(fqn.clone());
+            }
+            if field.flags.has(forms::FieldFlags::FILE_SELECT) {
+                disclosure.file_select_fields.push(fqn.clone());
+            }
+            if field.flags.required() && !has_value {
+                disclosure.required_without_value.push(fqn.clone());
+            }
+            // `Hidden` is an ANNOTATION flag on the widget, not a field flag --
+            // which is exactly why a hidden field submits like any other, and
+            // why an operator cannot see this one coming.
+            if field.widgets.iter().any(|w| w.annot_flags.hidden()) {
+                disclosure.hidden_fields.push(fqn.clone());
+            }
+        }
+        disclosure
     }
 
     /// `/Fields` as text strings (§12.7.5.3 Table 238).

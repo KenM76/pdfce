@@ -217,7 +217,8 @@ impl DestinationResolver {
     }
 
     /// Resolve the destination of an object that carries `/Dest` and/or
-    /// `/A` — an outline item (§12.3.3) or a link annotation (§12.5.6.5).
+    /// `/A` — an outline item (§12.3.3) or **any** annotation (§12.5.6), link
+    /// or widget or otherwise.
     ///
     /// `/Dest` is checked first because §12.3.3 makes the two mutually
     /// exclusive (*"shall not be present"* together) and a malformed file
@@ -334,6 +335,30 @@ pub struct DanglingReport {
     /// their page, so reporting them would inflate the number with
     /// references that no longer exist to be broken.
     pub links: usize,
+    /// **Non-link annotations** on surviving pages whose `/A` `/GoTo` names a
+    /// removed page (`Pass 183.0`).
+    ///
+    /// # ★ Why this is a separate field and not a widening of [`Self::links`]
+    ///
+    /// Until `Pass 183.0` this census walked link annotations **only**, and
+    /// that was correct: a `/GoTo` could only reach a page from an outline
+    /// item, a named destination or a link, because those were the only
+    /// carriers anything authored. Then `set_button_action` learned to write
+    /// `/A << /S /GoTo … >>` **on a push button's widget**, and the census
+    /// went from complete to under-reporting in the same commit — silently,
+    /// because an under-reporting counter reads exactly like a clean bill of
+    /// health.
+    ///
+    /// That is a defect class this project keeps meeting (the `/A`-versus-
+    /// `/AA` network-hazard blindness of `Pass 133.0` is the same shape), so
+    /// the fix here counts **every** annotation subtype that is not a link
+    /// rather than adding widgets and waiting for the next carrier. `/Screen`,
+    /// `/Movie` and any future subtype carry `/A` too.
+    ///
+    /// Kept separate from [`Self::links`] because the operator sentence is
+    /// different: a broken link is *"a link in the text goes nowhere"*, a
+    /// broken widget action is *"a button on the form stopped working"*.
+    pub non_link_annotations: usize,
     /// Named destinations (§12.3.2.3) that resolve to a removed page.
     pub named_destinations: usize,
     /// Whether the document carries a `/PageLabels` number tree
@@ -354,6 +379,7 @@ impl DanglingReport {
     pub const fn is_empty(&self) -> bool {
         self.outline_items == 0
             && self.links == 0
+            && self.non_link_annotations == 0
             && self.named_destinations == 0
             && !self.page_labels_stale
     }
@@ -427,13 +453,18 @@ pub fn census_dangling<G: ObjectGraph + ?Sized>(
                 .and_then(Object::as_name)
                 .map(Name::as_bytes)
                 .is_some_and(|s| s == b"Link");
-            if !is_link {
-                continue;
-            }
             if let Some(target) = resolver.resolve_target(graph, dict)
                 && removed.contains(&target)
             {
-                report.links += 1;
+                // Every annotation subtype is asked, not just `/Link` --
+                // see `DanglingReport::non_link_annotations` for why the
+                // subtype filter that used to sit above this line was a
+                // silent under-report the moment buttons gained actions.
+                if is_link {
+                    report.links += 1;
+                } else {
+                    report.non_link_annotations += 1;
+                }
             }
         }
     }

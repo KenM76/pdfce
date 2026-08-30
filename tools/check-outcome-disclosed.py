@@ -138,6 +138,13 @@ OUTCOME_STRUCTS: list[tuple[str, str]] = [
     # reports clean.
     ("crates/pdfce-core/src/edit.rs", "TransformOutcome"),
     ("crates/pdfce-core/src/edit.rs", "PasteOutcome"),
+    # `Pass 183.0`. Not named `*Outcome`, and it is the strongest case on the
+    # list: every field of `SubmitDisclosure` describes something a
+    # `/SubmitForm` button would send that the operator CANNOT SEE by any other
+    # means -- hidden field values, a password field, a local file carried off
+    # the machine, the document's own path. A field dropped on the floor here
+    # is not an unstated number, it is an undisclosed exfiltration.
+    ("crates/pdfce-core/src/edit.rs", "SubmitDisclosure"),
 ]
 
 # `Struct::field` -> why no shell reads it. A reason is mandatory: see the

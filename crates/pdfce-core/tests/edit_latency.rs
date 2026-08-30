@@ -180,6 +180,10 @@ fn one_edit_costs_a_whole_decomposition() {
     let hit_ms = t.elapsed().as_secs_f64() * 1000.0;
 
     println!(
+        // string-gap-exempt: the run after CACHED is column alignment — it
+        // lines this measurement up under the UNCACHED line printed above, so
+        // the two numbers sit in the same column and can be read against each
+        // other. Rejoining it would break the table this test exists to print.
         "  CACHED    decompose {cached_pre_ms:.0} ms + verb {cached_mv_ms:.0} ms; \
 a repeat lookup on unchanged content is {hit_ms:.1} ms"
     );
