@@ -77325,3 +77325,120 @@ wrong."** Recorded as a bug in the gate, **not** as a weakening of `R232`.
    standing-authorized (rule 8, decision 090); scrub
    `check-suite-name-absent.py` green first — **it was clean at filing time.**
    The backup bundle **already contains `HEAD`**; no bundle is owed.
+
+
+---
+
+## 2026-08-29 (332nd filing) — `Pass 174.7` filed: the ledger gate printed a ceiling that was ALREADY TAKEN, and the fix's own self-check caught the fix — SESSION CLOSE
+
+**Shipped:**
+
+- **`Pass 174.7`** (`4ace44f`) — `tools/check-ledger-numbers.py`'s
+  `ARCH_DECISION_MENTION` required **whitespace** between the word and the
+  digits; `docs/ARCHITECTURE.md:27459` spells it with a **backtick**, this
+  project's own house style. **A/B on the real document: old pattern max 103,
+  new pattern max 104, and the only number the old one missed is exactly the
+  one that was about to be duplicated.** §12 duplicate detection is
+  deliberately absent, so nothing else here would have caught it. **1 file,
+  +106 / −1**; no crate touched.
+
+**Decisions made this session (this filing):**
+
+- **`pdfce-librarian` hard rule 11 gains clause (e)** — *a sweep for a claim is
+  only as good as its spelling of the claim; narrow the file set and widen the
+  pattern; report the hits that survive and are correct.* Drafted by this role
+  in the 331st filing and **deliberately not added unilaterally**; **the
+  engineer asked for it** and it is written in the drafted wording. Same
+  minting precedent as hard rule 11 itself. **Paid for twice in one day** — a
+  section sign (survivor 7) and a backtick (this gate).
+- **No standing-rule mint, and this role agrees with the reason.** The ceiling
+  moved twice today (`R233`, `R234`); the bar is *a parent remedy applied and
+  insufficient*, and hard rule 11's parent remedy **was applied and worked** —
+  it found six survivors nobody else found. It missed on **spelling**, which is
+  what clause (e) fixes. **`R234`; next free `R235`. Decision `104`; next free
+  `105`** — and the gate now prints that, which it did not an hour ago.
+
+**Findings + decisions:**
+
+- **★★ A CLAIM IN A COMMENT IS NOT A CHECK.** The previous fix to this tool
+  widened the pattern *and* wrote forty lines arguing the widening was total:
+  *"it cannot under-report, whatever spelling a future filing invents."* That
+  argument is **sound about the SOURCE** — any mention, anywhere in the file —
+  and **entirely silent about the SEPARATOR**, which is the part a writer
+  varies. ⇒ **The failure surface of a claim-matching pattern is its
+  PUNCTUATION, not its words.** Third occurrence in that one tool.
+- **The fix's second half is the point:** `_self_check()` runs **first in
+  `main()`**, asserting the pattern against a list of spellings whose **first
+  entry is copied verbatim from the line that broke it**, and exits **2** — *a
+  checker that cannot see its own subject has not found a fault in the
+  repository, it has found one in itself.*
+- **★★★ THE SELF-CHECK EARNED ITS KEEP ON ITS FIRST RUN, AGAINST THIS COMMIT'S
+  OWN FIX.** The widened pattern initially kept `` and **failed the new
+  assertion** on `**decision _103_**` — `_` is a **word** character, so `3`
+  followed by `_` is not a word boundary. **Underscore is markdown italics,
+  one of the very wrapping styles the widening existed to tolerate: the fix
+  and the bug were the same character.** `(?!\d)` now says what is meant. ⇒
+  **Never end a markdown-tolerant number pattern in ``.**
+- **`FEATURES.md`: ZERO rows change**, checkboxes and prose —
+  `git diff 645880b 4ace44f -- docs/FEATURES.md` = **0 lines**, run here, not
+  relayed.
+
+**★ THE SESSION'S SHAPE, because it is unusual and worth the paragraph.**
+
+The operator asked for **one** thing — finish the colour work — and it was
+finished (`Pass 174.0`–`174.3`). **Then four of the eight Passes came from
+AGENTS AUDITING THIS SESSION'S OWN OUTPUT**: `174.4` withdrew a note telling
+another project they were wrong, before it was sent; `174.5` found a worked
+example shipping the **pre-fix** value and an "ambiguity" that is a
+**divergence**; `174.6` discharged **seven** hard-rule-11 survivors, one of
+which the sweep's own grep could not see; and `174.7` fixed a **live** gate
+that had been printing a taken ceiling. **None of the four was caught by any of
+the 29 gates**, and that is not a gap in the gates — three of the four are
+content claims, and no mechanical check can content-check a claim without
+already knowing the fact the claim reports. **The carrier is the reading, on
+the librarian and specialist side, which is precisely why hard rules 10 and 11
+are procedural commitments rather than tooling.** The one that *was*
+mechanisable — the gate — has now been mechanised, with an assertion rather
+than an argument.
+
+**Cross-project record:**
+
+- `D:/dev/rag/rust/a_claim_in_a_comment_is_not_a_check.md` — **new**; the
+  **fix** half. Sits between `a_gate_states_what_it_cannot_see.md` (the
+  obligation the forty-line comment was trying to discharge) and
+  `a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md` (the
+  **defect** half, filed at the 331st). Cross-reference added to that file's
+  *Related* section, and `D:/dev/rag/rust/index.md` updated — same filing.
+- **Written as a separate file, not a paragraph in the sweep file**, because
+  the two teach different audiences: the sweep file is the method for a
+  **person** sweeping; this one is the design of a **checker**, and its
+  applicability (ceilings, ID allocators, duplicate detectors, any tool whose
+  failure mode is a wrong value with exit 0) reaches code that has no sweep in
+  it. Recorded in the Rust/ecosystem tree, not `C:\personal_rag\pdf\` —
+  nothing in it depends on the subject being PDF.
+
+**Still in flight:**
+
+- The **n-colorant buffer** bucket (`PCS2_020` / `PCS2_030` / `PCS2_040` /
+  `PCS2_081`), which also owns the eventual **re-derivation** of
+  `grey_overprint.rs`'s assertions.
+- **`CmykIntent::Calibrated`'s cool greys** — open, three independent lines
+  against the stated rationale, table deliberately unchanged (decision 064).
+- **`/OutputIntents`-aware CMYK conversion** — blocked on `iccce` shipping a
+  consumable API. No Pass ID.
+- **The 17:35 `pdfceGUI` inbound** — unparsed. The standing operator ruling
+  puts inbound requests ahead of other work.
+
+**For next session:**
+
+1. **Parse the 17:35 `pdfceGUI` inbound first** — carried forward unchanged
+   from the 331st filing.
+2. **`main` is 13 commits ahead of `origin/main`** (`git rev-list --count
+   origin/main..main`, run here). Pushing is standing-authorized (rule 8,
+   decision 090); scrub `check-suite-name-absent.py` green first. The backup
+   bundle `pdfce-20260829-2250-0eb9119-full.bundle` **verifies clean** but was
+   taken at `0eb9119` — **two filings and one Pass ago**; a fresh bundle is
+   cheap and is the honest next step.
+3. **Nothing is owed from this filing.** Both owed items of the 331st are
+   discharged, and the discharge is noted in that filing's own OWED section
+   rather than by editing it.

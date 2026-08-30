@@ -96,6 +96,94 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 174.7` (`4ace44f`, 2026-08-29) — the ledger gate printed a ceiling that was ALREADY TAKEN, for the third time, in the sentence that promised it could not — and the fix's own self-check caught the fix — filed 2026-08-29 (332nd filing)
+
+**Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
+here, on disk, not relayed: `git status --short` (**empty**); `git remote -v`
+(**`github.com/KenM76/pdfce.git`** — a push publishes);
+`git rev-list --count origin/main..main` = **13**; `git show --stat 4ace44f` =
+**1 file, +106 / −1** (`tools/check-ledger-numbers.py` only); **the commit
+message and the whole diff read here**; `python tools/check-ledger-numbers.py`
+re-run — **clean, and now printing `decision records : 104 -> next free is
+105`**, which is the number this file's 331st filing asserted against it;
+`python tools/check-commits-filed.py` (**669 code commits, 5 baseline**,
+reporting the tip DEFERRED — which this filing resolves);
+`git diff 645880b 4ace44f -- docs/FEATURES.md` = **0 lines**, so
+**`FEATURES.md`: zero rows change, checkboxes AND prose — verified, not
+relayed**; `ls -lt D:/Dev/pdfce-backups/` + `git bundle verify` on the newest
+(**`pdfce-20260829-2250-0eb9119-full.bundle`, "records a complete history …
+is okay"**). **Relayed, not re-run:** `bash tools/run-gates.sh` (**PASS — 29
+commands, incl. 2 filing gates**). ★ **`cargo tree` was NOT re-run and is NOT
+claimed** — no crate was touched; the GUI-core separation invariant is
+**unchallenged**, which is not the same statement as **verified**.
+
+**This discharges owed item 1 of the 331st filing**, below.
+
+**The defect.** `ARCH_DECISION_MENTION` required **whitespace** between the
+word and the digits; the declaration at `docs/ARCHITECTURE.md:27459` spells it
+with a **backtick** — this project's own house style for a number, used
+throughout that same document. **So the spelling that broke it was the normal
+one.** A/B on the real document, run by the engineer: **old pattern max 103,
+new pattern max 104, and the only number the old one missed is exactly the one
+that was about to be duplicated.** §12 duplicate detection is deliberately
+absent (that function's own docstring), so **nothing else here would have
+caught the duplicate this invited.**
+
+**The fix is two parts and the second is the point.**
+
+1. The pattern tolerates wrapping punctuation:
+   `[Dd]ecision\s+[backtick ' " * _ # [ (]{0,3}(\d{3})(?!\d)`.
+2. **`_self_check()` runs FIRST in `main()`**, before anything is read, and
+   asserts the pattern against a list of spellings — **the first entry copied
+   verbatim from the line that broke it**. It exits **2**, not 1: *a checker
+   that cannot see its own subject has not found a fault in the repository, it
+   has found one in itself, and those are different answers to different
+   people.*
+
+★★★ **THE SELF-CHECK EARNED ITS KEEP ON ITS FIRST RUN, AGAINST THIS COMMIT'S
+OWN FIX.** The widened pattern initially kept `\b` and **failed the new
+assertion** on `**decision _103_**` — `_` is a **word** character, so `3`
+followed by `_` is not a word boundary. **Underscore is markdown italics, i.e.
+one of the very wrapping styles the widening existed to tolerate: the fix and
+the bug were the same character.** The only reason that is a footnote rather
+than a fourth occurrence is **that the assertion ran**. `(?!\d)` now says what
+is meant.
+
+⇒ **The transferable sentence: A CLAIM IN A COMMENT IS NOT A CHECK.** The
+previous fix widened the pattern *and* wrote forty lines arguing the widening
+was total. That argument is **sound about the SOURCE** — any mention, anywhere
+in the file — and **entirely silent about the SEPARATOR**, which is the part a
+writer varies. This is the sharpening of *"a gate states what it cannot see"*:
+a comment enumerating a blind spot **discharges nothing if the enumeration is
+itself an argument rather than an assertion the tool runs.**
+
+**`pdfce-librarian` hard rule 11 clause (e) — WRITTEN, and at the engineer's
+request.** The 331st filing drafted clause (e) and declined to add it
+unilaterally, per hard rule 11's own minting precedent. **The engineer's
+answer was to write it**, in the wording drafted — *narrow the file set and
+widen the pattern; punctuation the writer varies is the failure surface;
+report the hits that survive and are correct*. Recorded here as **the
+engineer's act, not this role's**, which is the whole point of the precedent.
+⇒ **Owed item 2 of the 331st filing discharged.**
+
+**No rule mint, and this role agrees with the dispatch on the reason.** The
+ceiling moved **twice today** (`R233`, `R234`), and the bar is *a parent
+remedy applied and insufficient*. The parent remedy — hard rule 11's *search
+for the CLAIM, not for a string* — **was applied and it worked**; it missed on
+**spelling**, and clause (e) is where that is fixed. **Standing rules ceiling
+UNCHANGED: `R234`; next free `R235`. Decision ceiling UNCHANGED: `104`; next
+free `105`** — and the gate now agrees with that sentence, which it did not an
+hour ago.
+
+**Cross-project record:**
+`D:/dev/rag/rust/a_claim_in_a_comment_is_not_a_check.md` — the fix half, and
+the self-check's first-run catch. Sits between
+`a_gate_states_what_it_cannot_see.md` (the obligation the forty-line comment
+was trying to discharge) and
+`a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md` (the
+defect half, filed at the 331st). `D:/dev/rag/rust/index.md` updated in the
+same filing.
+
 ### `Pass 174.6` (`0eb9119`, 2026-08-29) — THE FIVE OWED SURVIVORS DISCHARGED, PLUS A SEVENTH THE SWEEP'S OWN GREP COULD NOT SEE — and while verifying it, a SECOND instance of the same shape, LIVE, in the gate `NEXT_SESSION.md` was just repointed at — filed 2026-08-29 (331st filing)
 
 **Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
@@ -382,6 +470,15 @@ append-only record's answer until the tool is fixed.
    false positive. **Same finding as survivor 7, different tree.**
 2. **A clause on hard rule 11**, per the recommendation above — or a reasoned
    refusal, which is equally a discharge.
+
+> **★★ DISCHARGE NOTE, APPENDED 2026-08-29 (332nd filing). BOTH ITEMS ARE
+> DISCHARGED IN `Pass 174.7` (`4ace44f`)** — entry at the head of this file.
+> Item 1: the pattern now tolerates wrapping punctuation **and** a
+> `_self_check()` asserts that, running first in `main()` and exiting **2**;
+> `python tools/check-ledger-numbers.py` re-run here prints
+> **`decision records : 104 -> next free is 105`**. Item 2: **the engineer
+> wrote clause (e)**, in the wording drafted above — asked for, not taken.
+> The recommendation itself is left exactly as filed, per hard rule 1.
 
 ---
 

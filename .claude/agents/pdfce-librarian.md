@@ -550,6 +550,31 @@ has both a subject-index entry and a master-index entry, and that
     at `main.rs:7057` was wrong — that span was already corrected — and
     **checking it is what turned up the real survivor at `main.rs:7027`.**
 
+    **★ CLAUSE (e), ADDED 2026-08-29 by the engineer, at your recommendation —
+    A SWEEP FOR A CLAIM IS ONLY AS GOOD AS ITS SPELLING OF THE CLAIM. NARROW
+    THE FILE SET AND WIDEN THE PATTERN, NOT THE REVERSE.** Grep
+    case-insensitively for the claim's **bare keyword** over the handful of
+    files the feature touches and read every hit — rather than grepping the
+    exact phrase over the whole tree. **Punctuation the writer varies is the
+    failure surface**: `§`, backticks, en-dashes, curly quotes, hyphenation.
+    A global grep for the keyword returns dozens of correct uses and is
+    unreadable; the same grep over six files is six seconds of reading. **And
+    report the hits that SURVIVE and are correct**, so the next sweep does not
+    "fix" them — for `overprint_zero_tint_scope` those are `OP-A3` and `OP-A6`.
+
+    **Same minting precedent as the rule above:** you drafted this in the 331st
+    filing and declined to add it unilaterally; **the engineer asked for it**,
+    and this is it. **Paid for twice in one day** — survivor 7
+    (`crates/pdfce-cli/src/main.rs:10677`, missed on a **section sign**) and the
+    ledger gate's decision ceiling (`tools/check-ledger-numbers.py`, missed on a
+    **backtick**). Both searches had **already been deliberately widened once**,
+    which is the trap: a search that has been generalised feels finished.
+    **Corollary from the fix side:** *a claim in a comment is not a check* — the
+    ledger gate's forty-line comment argued the widening was total and the
+    argument was silent about the separator. Derivations:
+    `D:/dev/rag/rust/a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md`
+    and `D:/dev/rag/rust/a_claim_in_a_comment_is_not_a_check.md`.
+
     **Full derivation:**
     `D:/dev/rag/rust/disclosure_text_must_be_tested_against_producing_branch.md`
     (FORWARD SLASHES DELIBERATELY. From 2026-08-18 to 2026-08-22 this
