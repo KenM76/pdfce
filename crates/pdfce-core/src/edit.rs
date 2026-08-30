@@ -6592,6 +6592,53 @@ pub struct EditSession {
     /// pdf.js emit and expect — so a caller that never sets it authors exactly
     /// what every previous pdfce build authored.
     quad_point_order: QuadPointOrder,
+    /// The most recent page decode + decomposition, keyed by the content
+    /// object and **the staged span its bytes occupy** (`Pass 181.0`).
+    ///
+    /// # Why this exists
+    ///
+    /// Measured on a 130k-object CAD drawing, release build
+    /// (`tests/edit_latency.rs`): `decompose_page` is ~488 ms and
+    /// `move_objects` ~405 ms on the same page. A shell decomposes to obtain
+    /// the object indices it passes in, so without this the identical 5.6 MB
+    /// content stream is parsed twice for one drag — reported by `pdfceGUI`
+    /// as a boundary finding, and reproduced here before being believed.
+    ///
+    /// # ★★ THE KEY IS A SPAN BECAUSE A DIGEST DEFEATED ITSELF
+    ///
+    /// The first design hashed the decoded content bytes. It was provably
+    /// correct and it was nearly worthless, which the instrument showed and
+    /// no amount of reading would have: **a cache hit cost 292 ms**, because
+    /// computing the key requires *decoding* the stream, and the flate decode
+    /// is roughly 60 % of the total. The cache avoided the cheaper half of
+    /// the work it was built to avoid.
+    ///
+    /// The span is exact and free. `stage_bytes` is strictly append-only —
+    /// it takes `start` as the current end and only ever extends — so a
+    /// `ByteSpan` identifies one immutable payload and **span equality
+    /// implies byte equality**. Content not in `state` comes from the base
+    /// document, which is immutable, so `content_id` alone identifies it.
+    /// Undo is safe for the same reason: restoring an earlier span restores
+    /// exactly those bytes.
+    ///
+    /// A generation counter was also rejected, and for a different reason: it
+    /// is correct only if every mutation site remembers to bump it, which is
+    /// a claim about callers, and the cost of one forgotten site is a model
+    /// whose indices address different objects than the page holds — silent
+    /// corruption of the operator's drawing.
+    ///
+    /// # One slot, and both halves
+    ///
+    /// The decoded [`crate::content::ContentStream`] is cached alongside the
+    /// model because it is the expensive half; caching only the model would
+    /// leave the decode to be repeated. One slot matches the access pattern
+    /// (an operator edits one page repeatedly) and cannot grow unbounded.
+    ///
+    /// ★ A plain field behind `&mut self`, NOT a `RefCell`: interior
+    /// mutability reachable through `&self` would make `EditSession` no
+    /// longer `Sync`, and `Send + Sync` is exactly what lets a shell move the
+    /// session to a worker thread and keep this cost off the UI thread.
+    page_objects_cache: Option<PageObjectsCache>,
 }
 
 /// What [`EditSession::copy_and_splice`] produced, before any command is
@@ -6668,6 +6715,7 @@ impl EditSession {
             undo: Vec::new(),
             redo: Vec::new(),
             quad_point_order: QuadPointOrder::default(),
+            page_objects_cache: None,
             #[cfg(debug_assertions)]
             base_page_tree_walked: walkable,
         }
@@ -11353,15 +11401,130 @@ impl EditSession {
             .map(|planned| planned.disclosures)
     }
 
-    /// The shared body of [`Self::vector_surgery`] and
-    /// [`Self::vector_surgery_planned`] (`Pass 113.0`).
+    /// **The page's vector objects, decomposed — memoised** (`Pass 181.0`).
     ///
-    /// `kind` is an `Option` so the two wrappers differ in exactly one thing —
-    /// whether a command is committed — rather than in a copy of the guards,
-    /// the page lookup and the decomposition. `None` is currently unused by
-    /// any caller and is kept because the alternative is a second body: see
-    /// [`Self::vector_plan_only`]'s own note on the read half it duplicates
-    /// for `&self`.
+    /// The same model [`crate::vector::decompose_page`] returns for
+    /// `self.view()`, which is what a shell calls today, but cached: a second
+    /// call against unchanged content is free, and — the point — **the
+    /// editing verbs consult the same cache**, so a shell that decomposed a
+    /// page to obtain object indices does not then pay for the identical
+    /// parse again inside `move_objects`.
+    ///
+    /// # What this is worth
+    ///
+    /// Measured on a 130k-object CAD drawing, release build
+    /// (`tests/edit_latency.rs`):
+    ///
+    /// ```text
+    ///   decompose_page                482 ms
+    ///   move_objects (one object)     441 ms   <- essentially one decompose
+    ///   decompose again after it      502 ms
+    ///   -----------------------------------------
+    ///   one drag                      942 ms of parsing
+    /// ```
+    ///
+    /// Routing the shell's call through here removes the middle line: the
+    /// verb finds the model already built. The last line cannot be removed by
+    /// caching — the edit changed the content, so the post-edit model is one
+    /// nobody has yet.
+    ///
+    /// # ★ Why `&mut self` on a read-shaped method
+    ///
+    /// Populating a cache is a mutation. The alternative — interior
+    /// mutability behind `&self` — would make `EditSession` no longer `Sync`,
+    /// and `Send + Sync` is what lets a shell move the whole session to a
+    /// worker thread and keep this cost off the UI thread entirely. That is
+    /// worth more than the ergonomics of a shared borrow.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::PageOutOfRange`] for an unknown page;
+    /// [`EditError::VectorEditNoContents`] for a page with no content stream;
+    /// [`EditError::VectorEditContent`] if the content cannot be decoded.
+    pub fn page_objects(
+        &mut self,
+        page_index: usize,
+    ) -> Result<std::sync::Arc<crate::vector::PageObjects>, EditError> {
+        let pages = page_tree::pages(&self.base)?;
+        let count = pages.len();
+        let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
+            index: page_index,
+            count,
+        })?;
+        let content_id = *page
+            .contents
+            .first()
+            .ok_or(EditError::VectorEditNoContents { page_index })?;
+        Ok(self.page_content_and_objects(content_id, page)?.1)
+    }
+
+    /// The cache lookup shared by [`Self::page_objects`] and the editing
+    /// verbs, so both populate and both benefit from one entry.
+    ///
+    /// A second implementation of this would be a second answer to "is the
+    /// cached model current", and the two would eventually disagree — which
+    /// for a cache keyed to object INDICES means an edit addressing the wrong
+    /// objects.
+    ///
+    /// Returns the decoded stream as well as the model: the decode is the
+    /// expensive half and both callers need it.
+    fn page_content_and_objects(
+        &mut self,
+        content_id: ObjId,
+        page: &Page,
+    ) -> Result<
+        (
+            std::sync::Arc<crate::content::ContentStream>,
+            std::sync::Arc<crate::vector::PageObjects>,
+        ),
+        EditError,
+    > {
+        // The key, computed WITHOUT decoding anything — see the field's docs.
+        let span = match self.state.get(&content_id) {
+            Some(Object::Stream(st)) => Some(st.data_span),
+            _ => None,
+        };
+        if let Some(c) = &self.page_objects_cache
+            && c.content_id == content_id
+            && c.span == span
+        {
+            return Ok((
+                std::sync::Arc::clone(&c.stream),
+                std::sync::Arc::clone(&c.objects),
+            ));
+        }
+
+        let stream = std::sync::Arc::new(
+            self.current_page_content(content_id, page)
+                .map_err(EditError::VectorEditContent)?,
+        );
+        // Same resolvers the verbs have always used, and for the same stated
+        // reason: page `/Resources` are not rewritten by content surgery, so
+        // base and session agree on them and the base view is the one
+        // guaranteed borrowable here.
+        let objects = {
+            let base_view = self.base.view();
+            let resolver = crate::vector::DocumentXObjects {
+                view: &base_view,
+                resources: &page.resources,
+            };
+            let fonts = crate::vector::DocumentFonts::new(&base_view, &page.resources);
+            std::sync::Arc::new(crate::vector::decompose_with_fonts(
+                &stream,
+                crate::vector::Matrix::IDENTITY,
+                &resolver,
+                &fonts,
+            ))
+        };
+        self.page_objects_cache = Some(PageObjectsCache {
+            content_id,
+            span,
+            stream: std::sync::Arc::clone(&stream),
+            objects: std::sync::Arc::clone(&objects),
+        });
+        Ok((stream, objects))
+    }
+
     fn vector_surgery_inner(
         &mut self,
         kind: Option<CommandKind>,
@@ -11416,41 +11579,17 @@ impl EditSession {
         // for `content_id`, and `text_edit_command`'s `first_edit` gate
         // already distinguishes the first rewrite from later ones.
         let new_content = {
-            let stream = self
-                .current_page_content(content_id, page)
-                .map_err(EditError::VectorEditContent)?;
-            // The XObject resolver reads the BASE view deliberately: page
-            // `/Resources` are not rewritten by content surgery, so base and
-            // session agree on them, and the base view is the one guaranteed
-            // to be borrowable here.
-            let base_view = self.base.view();
-            let resolver = crate::vector::DocumentXObjects {
-                view: &base_view,
-                resources: &page.resources,
-            };
-            // ★ FONTS TOO, since `Pass 32.0`. This used to be a bare
-            // `decompose` with the XObject resolver alone, and that was
-            // invisible for as long as every verb reachable through here
-            // was a PATH verb — paths need no font.
+            // ★ ONE CALL FOR BOTH HALVES (`Pass 181.0`), and it used to be
+            // three separate pieces of work here: decode the content stream,
+            // build the XObject and font resolvers, decompose.
             //
-            // `TextObject::runs` is populated by LAYING OUT each show
-            // operator, which needs a resolvable `Tf`. With no font
-            // resolver every text object decomposes with **zero** runs, so
-            // `delete_text_run` refused every real document with "the
-            // object has 0 run(s)" while `object-list` — which does pass a
-            // font resolver — reported four. Found by running the CLI
-            // subcommand against a fixture, not by reading this function.
-            //
-            // Same base-view reasoning as the XObject resolver directly
-            // above: page `/Resources` are not rewritten by content
-            // surgery, so base and session agree on them.
-            let fonts = crate::vector::DocumentFonts::new(&base_view, &page.resources);
-            let model = crate::vector::decompose_with_fonts(
-                &stream,
-                crate::vector::Matrix::IDENTITY,
-                &resolver,
-                &fonts,
-            );
+            // All three now live behind the cache, because splitting them
+            // defeats it. An earlier cut of this Pass kept the decode here
+            // and cached only the model, and the instrument showed what
+            // reading it would not have: a cache HIT still cost 292 ms of the
+            // 405, because the flate decode is the larger half. Caching the
+            // model without the stream caches the cheaper part.
+            let (stream, model) = self.page_content_and_objects(content_id, page)?;
             plan(&stream, &model)?
         };
 
@@ -12748,6 +12887,24 @@ pub struct AnnotationRotate {
 /// HAD a note and it was replaced."* [`Self::replaced`] is that case, and it
 /// carries the previous text rather than a count, so a shell can offer it
 /// back rather than only mention its size.
+/// One memoised page decode + decomposition (`Pass 181.0`).
+///
+/// See [`EditSession::page_objects`] for what it is worth and why the key is
+/// a span rather than a digest of the content.
+#[derive(Debug)]
+struct PageObjectsCache {
+    /// The content object this was built from.
+    content_id: ObjId,
+    /// The staged span holding its bytes, or `None` when the content is the
+    /// base document's and therefore immutable.
+    span: Option<crate::span::ByteSpan>,
+    /// The decoded content — the expensive half, cached so a hit does not
+    /// repeat the flate decode.
+    stream: std::sync::Arc<crate::content::ContentStream>,
+    /// The decomposition of that content.
+    objects: std::sync::Arc<crate::vector::PageObjects>,
+}
+
 /// What [`EditSession::set_dimension_label`] did, and the two captions a
 /// shell needs to disclose it (`Pass 175.0`, decision 097).
 ///
