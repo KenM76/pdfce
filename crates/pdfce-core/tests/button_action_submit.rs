@@ -161,6 +161,99 @@ fn form_with_every_field_shape() -> Vec<u8> {
     buf
 }
 
+/// Assemble a one-page PDF from a list of object bodies (1-based).
+///
+/// Shared by the two fixtures below so that a change to the trailer or the
+/// xref shape cannot make one of them true and the other stale.
+fn assemble(bodies: &[String]) -> Vec<u8> {
+    let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in bodies.iter().enumerate() {
+        offsets.push(buf.len());
+        buf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref_at = buf.len();
+    let size = bodies.len() + 1;
+    buf.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \n").as_bytes());
+    for off in &offsets {
+        buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
+    }
+    buf.extend_from_slice(
+        format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n")
+            .as_bytes(),
+    );
+    buf
+}
+
+/// A form whose Reset button's `/Fields` is an **indirect reference** to an
+/// array object (object 7), rather than an inline array.
+///
+/// ★ No pdfce verb authors this shape, and real producers do. Table 236 types
+/// `/Fields` as an ordinary array value, and any ordinary value may be
+/// indirect — so a traversal that only looks inside the action dictionary
+/// finds nothing here and reports a clean repair over a broken form.
+fn form_with_an_indirect_target_list() -> Vec<u8> {
+    let content = "BT /Helv 12 Tf 60 700 Td (form) Tj ET\n";
+    let bodies = [
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R 6 0 R] \
+         /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 8 0 R >> >> >> >>"
+            .to_owned(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 750] /Resources \
+         << /Font << /Helv 8 0 R >> >> /Contents 4 0 R /Annots [5 0 R 6 0 R] >>"
+            .to_owned(),
+        format!(
+            "<< /Length {} >>\nstream\n{content}endstream",
+            content.len()
+        ),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (Name) /V (typed) /DV (factory) \
+         /Rect [20 700 200 720] /P 3 0 R /F 4 /DA (/Helv 12 Tf 0 g) >>"
+            .to_owned(),
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (Go) \
+         /Rect [20 400 100 425] /P 3 0 R /F 4 /MK << /CA (Go) >> \
+         /A << /Type /Action /S /ResetForm /Fields 7 0 R >> >>"
+            .to_owned(),
+        // 7 — the target list, in its own object.
+        "[(Name)]".to_owned(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+            .to_owned(),
+    ];
+    assemble(&bodies)
+}
+
+/// A form whose button carries a **JavaScript** action naming the field.
+///
+/// The script is a plain string containing `getField("Name")`. It is not a
+/// target list, `R55` requires it to round-trip byte-identical, and rewriting
+/// inside it would be a corruption that only surfaces when the form stops
+/// calculating.
+fn form_with_a_script_naming_the_field() -> Vec<u8> {
+    let content = "BT /Helv 12 Tf 60 700 Td (form) Tj ET\n";
+    let bodies = [
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R 6 0 R] \
+         /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 7 0 R >> >> >> >>"
+            .to_owned(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 750] /Resources \
+         << /Font << /Helv 7 0 R >> >> /Contents 4 0 R /Annots [5 0 R 6 0 R] >>"
+            .to_owned(),
+        format!(
+            "<< /Length {} >>\nstream\n{content}endstream",
+            content.len()
+        ),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (Name) /V (typed) /DV (factory) \
+         /Rect [20 700 200 720] /P 3 0 R /F 4 /DA (/Helv 12 Tf 0 g) >>"
+            .to_owned(),
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (Go) \
+         /Rect [20 400 100 425] /P 3 0 R /F 4 /MK << /CA (Go) >> \
+         /A << /Type /Action /S /JavaScript /JS (this.getField(\"Name\").value = 1;) >> >>"
+            .to_owned(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+            .to_owned(),
+    ];
+    assemble(&bodies)
+}
+
 fn session() -> EditSession {
     EditSession::new(Document::from_bytes(form_with_every_field_shape()).unwrap())
 }
@@ -902,27 +995,77 @@ fn authoring_a_hide_reaches_nothing() {
     );
 }
 
-/// **Renaming a field says that button actions were not retargeted**
-/// (`Pass 184.0` criterion A).
+/// **`Name` is not a prefix of `Nameless`, and one missing dot would make it
+/// one.**
 ///
-/// ★ pdfce writes reset, submit and hide targets as **name strings**, by its
-/// own deliberate choice, because a name survives renumbering and copying
-/// where an indirect reference does not. **A rename is the one operation that
-/// breaks that choice**, and pdfce does not repair it.
+/// ★★ The separator is what makes a prefix match mean *descendant*.
+/// §12.7.3.2 joins segments with `.`, so `Name.` is an ancestor path and
+/// `Name` alone is a string that happens to start the same way. Matching
+/// without the dot would rename an action's target from `Nameless` to
+/// `Renamedless` — a field that does not exist, on a button nobody touched.
 ///
-/// It also **cannot be caught by `census_dangling`**: a name string leaves no
-/// dangling object reference, so the graph census that `Pass 183.0` widened
-/// to non-link annotations is structurally blind to this. Two different
-/// invisibilities; that Pass fixed one of them.
+/// The fixture carries both names for exactly this test; asserting it on a
+/// document without a same-prefix sibling would pass on the broken code.
 ///
-/// So the disclosure is categorical rather than counted — the honest thing
-/// available without a full carrier traversal — and this test pins that it is
-/// **made at all**, and that it is `0` when there is genuinely nothing to
-/// warn about.
+/// ★ It is also the property the first version of this disclosure could not
+/// express at all. It shipped as `actions_not_retargeted` — *every* action in
+/// the document, an upper bound — so here it would have said `1` where the
+/// true answer is `0`: the difference between a warning and a false alarm
+/// about a button that is fine.
 #[test]
-fn a_rename_discloses_that_button_actions_were_not_retargeted() {
-    // A document with an action: a Reset button naming the field about to be
-    // renamed.
+fn a_same_prefix_sibling_is_not_a_descendant() {
+    let mut s = session();
+    s.set_button_action(
+        "Go",
+        Some(ButtonAction::ResetForm {
+            scope: pdfce_core::edit::ResetScope::Only(vec!["Nameless".to_owned()]),
+        }),
+    )
+    .expect("authors");
+
+    let out = s.rename_field("Name", "Renamed").expect("renames");
+    assert_eq!(
+        out.action_targets_retargeted, 0,
+        "`Nameless` is not beneath `Name`; only `Name.` would be"
+    );
+    let after = saved(&s);
+    assert!(
+        after.contains("(Nameless)"),
+        "the target survives verbatim: {after}"
+    );
+    assert!(
+        !after.contains("(Renamedless)"),
+        "…and was not mangled into a field that does not exist: {after}"
+    );
+
+    // A document with no actions at all reports zero for the plain reason.
+    let mut clean = session();
+    let quiet = clean.rename_field("Name", "Renamed").expect("renames");
+    assert_eq!(quiet.action_targets_retargeted, 0);
+}
+
+// ---------------------------------------------------------------------------
+// `Pass 184.0` B/C/D — the name strings, repaired on rename and counted on
+// delete.
+//
+// pdfce writes reset, submit and hide targets as fully-qualified NAME STRINGS
+// by its own deliberate choice: a name survives a field being renumbered or
+// copied between documents where an indirect reference does not. A RENAME is
+// the one operation that breaks that choice, and a DELETE orphans it.
+//
+// ★ Neither is visible to `census_dangling`. A name string leaves no dangling
+// object reference, so the graph census `Pass 183.0` widened from links to
+// every annotation subtype is structurally blind to this. That is why these
+// tests exist here rather than beside the page-ops ones.
+// ---------------------------------------------------------------------------
+
+/// **A rename repoints every action that named the field, in the same
+/// undoable command.**
+///
+/// One command matters twice over: undo restores the name and the buttons
+/// together, and no save can contain one without the other.
+#[test]
+fn a_rename_repoints_the_actions_that_named_the_field() {
     let mut s = session();
     s.set_button_action(
         "Go",
@@ -931,19 +1074,191 @@ fn a_rename_discloses_that_button_actions_were_not_retargeted() {
         }),
     )
     .expect("authors");
-    let renamed = s.rename_field("Name", "Renamed").expect("renames");
-    assert_eq!(renamed.to, "Renamed");
+    let before = saved(&s);
+    assert!(before.contains("/Fields [(Name)]"), "{before}");
+
+    let out = s.rename_field("Name", "Renamed").expect("renames");
+    assert_eq!(out.action_targets_retargeted, 1);
+
+    let after = saved(&s);
     assert!(
-        renamed.actions_not_retargeted >= 1,
-        "the document has an action and pdfce updated none of them"
+        after.contains("/Fields [(Renamed)]"),
+        "the action follows the rename: {after}"
+    );
+    assert!(
+        !after.contains("/Fields [(Name)]"),
+        "and the old name is gone: {after}"
     );
 
-    // …and a document with no actions at all has nothing to warn about, so the
-    // disclosure is not noise on every rename.
-    let mut clean = session();
-    let quiet = clean.rename_field("Name", "Renamed").expect("renames");
+    // One command: undoing the rename restores the action too.
+    s.undo().expect("undo");
     assert_eq!(
-        quiet.actions_not_retargeted, 0,
-        "no actions in the file means nothing this rename could have broken"
+        saved(&s),
+        before,
+        "the rename and the repair must undo together"
+    );
+}
+
+/// **Descendants are repointed too, and a same-prefix sibling is not.**
+///
+/// Renaming `Group` makes `Group.Inner` into `Renamed.Inner` — §12.7.3.2
+/// builds that name from the one that moved — so an action naming the
+/// descendant has to follow. The dot in the prefix is what keeps a field
+/// called `GroupX` out of it, and it is one character away from being wrong.
+#[test]
+fn a_rename_follows_descendants_and_stops_at_the_dot() {
+    let mut s = session();
+    s.set_button_action(
+        "Go",
+        Some(ButtonAction::SetHidden {
+            targets: vec!["Group.Inner".to_owned(), "Name".to_owned()],
+            hidden: true,
+        }),
+    )
+    .expect("authors");
+
+    let out = s.rename_field("Group", "Renamed").expect("renames");
+    assert_eq!(
+        out.action_targets_retargeted, 1,
+        "only the descendant matched; `Name` is untouched"
+    );
+    let after = saved(&s);
+    assert!(after.contains("(Renamed.Inner)"), "{after}");
+    assert!(
+        after.contains("(Name)"),
+        "the sibling is left alone: {after}"
+    );
+}
+
+/// **A submit's `/Fields` is repointed as readily as a reset's.**
+///
+/// Same key, different action type, and the vocabulary lives in one place so
+/// that adding a third carrier cannot reach only two of them.
+#[test]
+fn a_rename_repoints_a_submit_target_too() {
+    let mut spec = SubmitSpec::new("https://e.com/x");
+    spec.scope = SubmitScope::Only(vec!["Name".to_owned()]);
+    let mut s = session();
+    s.set_button_action("Go", Some(ButtonAction::SubmitForm(spec)))
+        .expect("authors");
+
+    let out = s.rename_field("Name", "Renamed").expect("renames");
+    assert_eq!(out.action_targets_retargeted, 1);
+    assert!(saved(&s).contains("/Fields [(Renamed)]"));
+}
+
+/// **A target list living in its own object is repaired too.**
+///
+/// ★ The case the two-pass design exists for, and the one a single-pass
+/// implementation silently gets wrong. `/Fields` is an ordinary value, so a
+/// producer may write `21 0 R` pointing at an array object. The traversal
+/// deliberately does not follow references — that is what lets a per-object
+/// sweep be complete without a graph walk — so it reports the id and a second
+/// pass visits it.
+///
+/// Getting this wrong repairs MOST buttons, which reads as repairing all of
+/// them.
+#[test]
+fn an_indirect_target_list_is_repaired_by_the_second_pass() {
+    let bytes = form_with_an_indirect_target_list();
+    // Rebuild the document with the button carrying an action whose /Fields is
+    // an INDIRECT reference to an array object, which no pdfce verb authors and
+    // real producers do.
+
+    let mut s = EditSession::new(Document::from_bytes(bytes).unwrap());
+
+    let out = s.rename_field("Name", "Renamed").expect("renames");
+    assert_eq!(
+        out.action_targets_retargeted, 1,
+        "the name lives in its own object and must still be found"
+    );
+    let after = saved(&s);
+    assert!(after.contains("(Renamed)"), "{after}");
+}
+
+/// **A delete counts the actions it orphaned and repairs none of them.**
+///
+/// The asymmetry with the rename is the point: a rename supplies the new name,
+/// so rewriting is a substitution; a delete supplies nothing, and "what should
+/// this button reset instead?" has no correct answer. Dropping the entry
+/// silently would change what the button does to the fields that remain.
+#[test]
+fn a_delete_counts_orphaned_action_targets_and_repairs_nothing() {
+    let mut s = session();
+    s.set_button_action(
+        "Go",
+        Some(ButtonAction::ResetForm {
+            scope: pdfce_core::edit::ResetScope::Only(vec!["Name".to_owned()]),
+        }),
+    )
+    .expect("authors");
+
+    let deletion = s.delete_field("Name").expect("deletes");
+    assert_eq!(deletion.action_targets_orphaned, 1);
+
+    // ★ Asserted on the TARGET LIST, not on the bare name. `saved` returns the
+    // base bytes plus the update, and the base carries `/T (Name)` on the field
+    // dictionary itself -- so `contains("(Name)")` passes whatever the sweep
+    // did to the action, which makes it a test of nothing. Found by sabotage:
+    // rewriting the target to an empty string survived the weaker assertion.
+    let after = saved(&s);
+    assert!(
+        after.contains("/Fields [(Name)]"),
+        "the stale target is LEFT exactly as it was, deliberately: {after}"
+    );
+}
+
+/// **Deleting a grouping node counts its whole subtree's orphans.**
+#[test]
+fn a_group_delete_counts_orphans_by_prefix() {
+    let mut s = session();
+    s.set_button_action(
+        "Go",
+        Some(ButtonAction::SetHidden {
+            targets: vec!["Group.Inner".to_owned()],
+            hidden: true,
+        }),
+    )
+    .expect("authors");
+
+    let deletion = s.delete_field_group("Group").expect("deletes");
+    assert_eq!(
+        deletion.action_targets_orphaned, 1,
+        "the deleted subtree's terminal was named by the hide action"
+    );
+}
+
+/// **A JavaScript action naming the field is NOT rewritten.**
+///
+/// ★ `R55` requires every JavaScript carrier to round-trip byte-identical, and
+/// a script that mentions a field name is not a target list. Rewriting inside
+/// one is a corruption with good intentions, and it would be invisible until a
+/// form stopped calculating.
+///
+/// The assertion is on the script surviving **byte-identical**, which is the
+/// property the rule states, not merely on the count being what we wanted.
+#[test]
+fn a_script_naming_the_field_is_left_byte_identical() {
+    let bytes = form_with_a_script_naming_the_field();
+    let mut s = EditSession::new(Document::from_bytes(bytes).unwrap());
+    let out = s.rename_field("Name", "Renamed").expect("renames");
+    assert_eq!(
+        out.action_targets_retargeted, 0,
+        "a script is not a target list"
+    );
+    // ★ `saved` returns the BASE BYTES PLUS the appended update, so the script
+    // is necessarily present once -- in the original revision, where it
+    // belongs. The property under test is that it is not present TWICE: a
+    // second copy would mean the object was re-emitted, which under an
+    // incremental save is exactly what "pdfce rewrote it" looks like.
+    let after = saved(&s);
+    assert_eq!(
+        after.matches("getField").count(),
+        1,
+        "the script survives byte-identical in the base revision and is not re-emitted by the update: {after}"
+    );
+    assert!(
+        after.contains("(Renamed)"),
+        "…while the rename itself did happen"
     );
 }

@@ -2367,6 +2367,243 @@ fn action_is_javascript(action: &Object) -> bool {
 /// answer at all — and, for this scan in particular, worth much more than a
 /// zero that cannot be distinguished from a clean file.
 pub const MAX_ACTION_CHAIN_DEPTH: usize = 32;
+/// The deepest nesting this project walks INSIDE one indirect object when
+/// looking for action target lists (`Pass 184.0`).
+///
+/// Not the same guard as [`MAX_ACTION_CHAIN_DEPTH`], which bounds a walk
+/// ACROSS objects through `/Next`. This one bounds a walk WITHIN a single
+/// object's value — arrays inside dictionaries inside arrays. A direct value
+/// cannot form a cycle (only an indirect reference can, and this traversal
+/// does not follow them), so this is a size guard rather than a cycle guard,
+/// and `ARCHITECTURE.md` §10 wants one regardless of which it is.
+pub const MAX_ACTION_NEST_DEPTH: usize = 64;
+
+/// A place an action names a field **by fully-qualified name string** that
+/// [`retarget_action_field_names`] could not rewrite, because the list lives
+/// in its own indirect object (`Pass 184.0`).
+///
+/// `/Fields` (Tables 236, 238) and `/Hide`'s `/T` (Table 210) are ordinary
+/// values, so a producer may write them as `5 0 R` pointing at an array
+/// object rather than inline. That traversal deliberately does **not** follow
+/// references — not following them is what lets a per-object sweep be
+/// complete without a graph walk — so it reports the id instead and the
+/// caller visits it in a second pass.
+///
+/// Missing this case is the difference between a rename that repairs most
+/// buttons and one that repairs all of them, and the failure is silent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeferredTargetList {
+    /// The object holding the array, or the lone name string.
+    pub id: ObjId,
+}
+
+/// **Offer every field name an action uses to name its targets a
+/// replacement** (`Pass 184.0`).
+///
+/// # What this is for
+///
+/// pdfce authors `/ResetForm` and `/SubmitForm` `/Fields` entries, and
+/// `/Hide` `/T` entries, as **fully-qualified name strings** rather than
+/// indirect references — deliberately, because a name survives a field being
+/// renumbered or copied between documents where a reference does not. The
+/// cost of that choice is that a **rename** breaks them and a **delete**
+/// orphans them, and neither is visible to
+/// [`crate::pageops::references::census_dangling`]: a name string leaves no
+/// dangling object reference, so a graph census is structurally blind to it.
+///
+/// This is the traversal that makes both cases addressable. `f` is called
+/// with every such name; returning `Some(new)` rewrites it, returning `None`
+/// leaves it alone — so one function both counts (always answer `None`, and
+/// tally) and repairs (answer with the new name).
+///
+/// # ★ Why this walks OBJECTS where [`scan_javascript`] walks CARRIERS
+///
+/// `scan_javascript` walks the seventeen places the standard says an action
+/// can be reached from, because its question is *"what would a reader
+/// actually run?"* — and an action nothing can reach runs never.
+///
+/// This function's question is the opposite: *"what strings in this file name
+/// this field?"* An action in an object no carrier reaches still contains the
+/// stale name, and rewriting it is harmless and right. So the caller sweeps
+/// **every live object** and calls this on each, which is a strict
+/// **superset** of the carrier walk and therefore cannot under-report
+/// relative to it.
+///
+/// That is also why this is **not a second copy** of the carrier walk. It
+/// shares no traversal with it, answers a different question, and merging the
+/// two would make neither more correct.
+///
+/// # What is recognised, and what is deliberately left alone
+///
+/// - `/S /ResetForm` and `/S /SubmitForm` → the **string** elements of
+///   `/Fields`. Elements that are indirect references point at field objects,
+///   which a rename does not move, so ignoring them is correct rather than
+///   incomplete.
+/// - `/S /Hide` → `/T`, which Table 210 permits as one string, one reference,
+///   or an array mixing them. Only strings are offered.
+/// - **Nothing else. `/JavaScript` bodies are never touched.** Scripts
+///   mention field names constantly, and `R55` requires every JavaScript
+///   carrier to round-trip byte-identical. A regex over somebody's script is
+///   not a rename; it is a corruption with good intentions.
+///
+/// # Returns
+///
+/// `(Some(rewritten), deferred)` when anything changed, `(None, deferred)`
+/// otherwise. `deferred` names objects holding a target list this traversal
+/// could not reach — see [`DeferredTargetList`].
+pub fn retarget_action_field_names<F>(
+    value: &Object,
+    f: &mut F,
+) -> (Option<Object>, Vec<DeferredTargetList>)
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    let mut deferred = Vec::new();
+    let out = retarget_inner(value, 0, f, &mut deferred);
+    (out, deferred)
+}
+
+/// Rewrite a bare target list — the second pass, for a
+/// [`DeferredTargetList`] object (`Pass 184.0`).
+///
+/// The object IS the list, so there is no action dictionary around it to
+/// recognise. That means the caller must only hand this an id that
+/// [`retarget_action_field_names`] reported, never an arbitrary object:
+/// applied to something else it would rewrite strings that are not field
+/// names at all.
+pub fn retarget_target_list<F>(value: &Object, f: &mut F) -> Option<Object>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    rewrite_name_list(value, f)
+}
+
+/// The recursive half of [`retarget_action_field_names`].
+fn retarget_inner<F>(
+    value: &Object,
+    depth: usize,
+    f: &mut F,
+    deferred: &mut Vec<DeferredTargetList>,
+) -> Option<Object>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    if depth >= MAX_ACTION_NEST_DEPTH {
+        return None;
+    }
+    match value {
+        Object::Array(items) => {
+            let mut changed = false;
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                match retarget_inner(item, depth + 1, f, deferred) {
+                    Some(new) => {
+                        changed = true;
+                        out.push(new);
+                    }
+                    None => out.push(item.clone()),
+                }
+            }
+            changed.then_some(Object::Array(out))
+        }
+        Object::Dict(dict) => {
+            let mut updated = dict.clone();
+            let mut changed = false;
+
+            // The action target vocabulary, in one place. `/S` is Required on
+            // every action dictionary (Table 193), so its absence means this
+            // is not an action and only the generic recursion below applies.
+            let subtype = dict
+                .get(b"S")
+                .and_then(Object::as_name)
+                .map(crate::object::Name::as_bytes);
+            let target_key: Option<&[u8]> = match subtype {
+                Some(b"ResetForm" | b"SubmitForm") => Some(b"Fields"),
+                Some(b"Hide") => Some(b"T"),
+                _ => None,
+            };
+            if let Some(key) = target_key {
+                match dict.get(key) {
+                    // The list is elsewhere. Reported, never followed.
+                    Some(Object::Reference(id)) => {
+                        deferred.push(DeferredTargetList { id: *id });
+                    }
+                    Some(v) => {
+                        if let Some(new) = rewrite_name_list(v, f) {
+                            updated.insert(crate::object::Name::from(key), new);
+                            changed = true;
+                        }
+                    }
+                    None => {}
+                }
+            }
+
+            // Generic recursion, so an action nested inside `/Next`, inside a
+            // trigger dictionary, or inside anything else is still reached.
+            // The target key handled above is SKIPPED here: recursing into it
+            // as well would offer every name to `f` a second time and double
+            // whatever count the caller is keeping.
+            for (k, v) in dict.iter() {
+                if target_key == Some(k.as_bytes()) {
+                    continue;
+                }
+                if let Some(new) = retarget_inner(v, depth + 1, f, deferred) {
+                    updated.insert(k.clone(), new);
+                    changed = true;
+                }
+            }
+            changed.then_some(Object::Dict(updated))
+        }
+        // A stream's DICTIONARY can carry an action exactly as any other
+        // dictionary can; its data cannot, and is not searched.
+        Object::Stream(stream) => {
+            let dict = Object::Dict(stream.dict.clone());
+            retarget_inner(&dict, depth + 1, f, deferred).and_then(|o| {
+                o.as_dict().map(|d| {
+                    let mut s = stream.clone();
+                    s.dict = d.clone();
+                    Object::Stream(s)
+                })
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Offer every name in a target-list value to `f`.
+///
+/// The value is one string, or an array mixing strings with indirect field
+/// references. References are left exactly as found: they name an object, not
+/// a name, and a rename does not move the object.
+fn rewrite_name_list<F>(value: &Object, f: &mut F) -> Option<Object>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    match value {
+        Object::String(bytes) => f(&crate::edit::decode_text_string(bytes).text)
+            .map(|new| Object::String(crate::edit::encode_text_string(&new))),
+        Object::Array(items) => {
+            let mut changed = false;
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                match item {
+                    Object::String(bytes) => {
+                        match f(&crate::edit::decode_text_string(bytes).text) {
+                            Some(new) => {
+                                changed = true;
+                                out.push(Object::String(crate::edit::encode_text_string(&new)));
+                            }
+                            None => out.push(item.clone()),
+                        }
+                    }
+                    other => out.push(other.clone()),
+                }
+            }
+            changed.then_some(Object::Array(out))
+        }
+        _ => None,
+    }
+}
 
 /// The most actions one scan will classify, across every carrier.
 ///

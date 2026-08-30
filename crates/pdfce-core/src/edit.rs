@@ -14099,6 +14099,37 @@ pub struct FieldDeletion {
     /// slot in the §12.7.3.2 FQN space, so leaving one behind would refuse a
     /// later field that wanted the name.
     pub emptied_parents: usize,
+    /// **Button actions left naming a field that no longer exists**
+    /// (`Pass 184.0`), counted as name strings.
+    ///
+    /// `/ResetForm` and `/SubmitForm` name their targets in `/Fields`, and
+    /// `/Hide` names its in `/T`, as fully-qualified **name strings**. This
+    /// deletion did not repair them, so each one is a button that will do
+    /// less than it says when pressed.
+    ///
+    /// # ★ Counted and NOT repaired, and that asymmetry is the point
+    ///
+    /// [`FieldRename::action_targets_retargeted`] uses the same traversal and
+    /// **does** repair, because a rename supplies the new name and the
+    /// rewrite is a substitution. A deletion supplies nothing: *"what should
+    /// this button reset instead?"* has no correct answer, and removing the
+    /// name from the list would silently change what the button does to the
+    /// remaining fields. pdfce reports and leaves it, which is the same
+    /// posture [`DeleteOutcome::dangling`] takes for bookmarks and links.
+    ///
+    /// # ★★ And `census_dangling` CANNOT SEE THIS
+    ///
+    /// A name string leaves **no dangling object reference**, so the graph
+    /// census — which `Pass 183.0` widened from link annotations to every
+    /// annotation subtype — is structurally blind to it. The two counts
+    /// answer different questions about the same deletion and neither
+    /// subsumes the other.
+    ///
+    /// **JavaScript is not counted.** A script naming the deleted field is
+    /// equally broken and pdfce neither reads nor rewrites script bodies
+    /// (`R55`), so this number is a floor for scripted forms rather than a
+    /// total.
+    pub action_targets_orphaned: usize,
 }
 
 /// What pasting a bookmark subtree did (`Pass 172.0`).
@@ -14867,6 +14898,28 @@ pub struct FieldGroupDeletion {
     ///
     /// This is what the cascade ACTUALLY emptied, not a prediction.
     pub nodes_removed: usize,
+    /// **Button actions left naming a field this deletion removed**
+    /// (`Pass 184.0`), counted as name strings.
+    ///
+    /// The subtree version of
+    /// [`FieldDeletion::action_targets_orphaned`] — read that field for why
+    /// this counts and does not repair, and for why
+    /// [`crate::pageops::references::census_dangling`] cannot see any of it.
+    ///
+    /// Matched by **prefix**, not by exact name: deleting `Address` takes
+    /// `Address.City` with it, so an action naming either is orphaned. That
+    /// is the same subtree [`Self::terminals`] lists, reached through a
+    /// different door.
+    ///
+    /// # Always `0` on a preview
+    ///
+    /// **Not a count of zero — a "not measured".**
+    /// [`EditSession::field_group_deletion_preview`] answers *"what would go"*
+    /// from the field tree alone, and this number needs a sweep of every
+    /// object in the document. Running one for a question nothing displays
+    /// yet would make the preview cost scale with the file rather than with
+    /// the subtree. Read it from the deletion, never from the preview.
+    pub action_targets_orphaned: usize,
     /// The fully-qualified names of those grouping nodes, deepest-first.
     ///
     /// # Why this exists, having first been left out
@@ -15381,11 +15434,19 @@ pub struct FieldRename {
     /// Zero for a terminal field with no children — the common case, and the
     /// one where the operator's mental model and the effect coincide.
     pub descendants_renamed: usize,
-    /// **How many actions this document carries — none of whose field-name
-    /// targets this rename updated** (`Pass 184.0` criterion A).
+    /// **How many action target names this rename REPAIRED**
+    /// (`Pass 184.0`).
     ///
-    /// # ★ A CATEGORICAL disclosure, deliberately, and the number is not the
-    /// answer to the question you want answered
+    /// # ★ This field replaced a categorical one, six hours old, and the
+    /// supersession is recorded rather than silently applied
+    ///
+    /// It shipped that morning as `actions_not_retargeted`: *every* action in
+    /// the document, an upper bound, because pdfce could not yet tell which
+    /// of them named this field. That was the honest number available without
+    /// a traversal, and it is now the wrong one — an upper bound is worth
+    /// stating only while the exact answer does not exist. **A shell reading
+    /// the old name will not compile**, which is the outcome to want: a
+    /// renamed field whose meaning changed is worse than one that vanished.
     ///
     /// `/ResetForm` and `/SubmitForm` name their targets in `/Fields`, and
     /// `/Hide` names its in `/T`, as **fully-qualified name strings** —
@@ -15393,36 +15454,39 @@ pub struct FieldRename {
     /// because a name survives a field being renumbered or copied between
     /// documents where an indirect reference does not.
     ///
-    /// **A rename is the one operation that breaks that choice**, and pdfce
-    /// does not yet repair it. So a button reading "Reset" may quietly stop
-    /// resetting the field it was drawn for.
+    /// **A rename is the one operation that breaks that choice.** So this
+    /// rename repairs them, in the same undoable command as the `/T` write,
+    /// and this is how many name strings it rewrote.
     ///
-    /// This count is **every action in the document**, not the actions that
-    /// name [`Self::from`]. It is therefore an **upper bound and usually a
-    /// large overestimate** — most documents' actions have nothing to do with
-    /// this field. Saying so is the point: the honest statement available
-    /// without a full carrier traversal is *"this document has actions and
-    /// none of them were updated"*, and that statement is worth making now
-    /// rather than after the traversal is built.
+    /// # Why repair is right HERE and refusing to repair is right on a delete
     ///
-    /// # Why the precise count is a separate Pass and this is not
+    /// pdfce knows both the old name and the new one exactly, so rewriting
+    /// the string is a **substitution, not a guess**. A *deleted* field has no
+    /// such answer — "what did the author mean this button to reset now?" has
+    /// no correct value — so [`FieldDeletion::action_targets_orphaned`]
+    /// counts and does not repair. Same traversal, opposite conclusion, and
+    /// the difference is whether pdfce has to invent anything.
     ///
-    /// Naming the affected buttons needs a walk of all seventeen action
-    /// carrier sites with `/Next` chains — the walk `forms::scan_javascript`
-    /// owns — generalised to a visitor. That is a real refactor of the
-    /// crate's most defect-prone function, and writing a **second, narrower**
-    /// walker instead is the exact defect class this project keeps recording.
-    /// The repair and the precise count are `Pass 184.0`.
+    /// # It counts NAME STRINGS, not buttons
     ///
-    /// **But the SENTENCE was never blocked on the refactor**, and folding
-    /// the two together is how this came to look deferred. A rename that
-    /// silently breaks a button and says nothing is live silence, not a
-    /// latent bug — which is why the categorical half ships here and the
-    /// counting half does not.
+    /// One button naming three fields, all renamed, is three. One field named
+    /// by three buttons is also three. The number an operator wants is
+    /// usually the second reading, and pdfce does not distinguish them —
+    /// stated here rather than left to be inferred from a plausible-looking
+    /// count.
     ///
-    /// `0` means the document carries no actions at all, and therefore that
-    /// there is nothing this rename could have broken in that way.
-    pub actions_not_retargeted: usize,
+    /// # What is NOT repaired, and must not be implied to be
+    ///
+    /// **JavaScript.** Scripts name fields constantly, and `R55` requires
+    /// every script carrier to round-trip byte-identical. A form whose logic
+    /// lives in a script is not fixed by this.
+    ///
+    /// Descendants are included: renaming `Address` rewrites an action naming
+    /// `Address.City` to `Location.City`, because §12.7.3.2 builds that name
+    /// from the one that moved. That is the same subtree
+    /// [`Self::descendants_renamed`] counts, reached through a different
+    /// door.
+    pub action_targets_retargeted: usize,
 }
 
 /// What a [`flatten_fields`](EditSession::flatten_fields) operation did
@@ -17195,6 +17259,14 @@ impl EditSession {
         let (field, _) = self.deletion_preflight(fqn)?;
         let slots = self.page_slots()?;
 
+        // Counted BEFORE anything is removed, off the document as it still
+        // stands, and deliberately not repaired -- see
+        // `FieldDeletion::action_targets_orphaned`. A terminal field has no
+        // descendants, so the match is exact rather than prefixed.
+        let deleted_name = field.fully_qualified_name.clone();
+        let (action_targets_orphaned, _) =
+            self.sweep_action_targets(&|name: &str| name == deleted_name, None);
+
         let widget_ids: Vec<ObjId> = field
             .widgets
             .iter()
@@ -17232,6 +17304,7 @@ impl EditSession {
             field_removed: true,
             selection_cleared: false,
             emptied_parents: emptied.len(),
+            action_targets_orphaned,
         })
     }
 
@@ -17370,8 +17443,16 @@ impl EditSession {
             emptied.len(),
             preview.nodes,
         );
+        // Counted BEFORE the removal, off the document as it still stands,
+        // and by PREFIX because a grouping node takes its whole subtree.
+        let group_prefix = format!("{fqn}.");
+        let (action_targets_orphaned, _) = self.sweep_action_targets(
+            &|name: &str| name == fqn || name.starts_with(&group_prefix),
+            None,
+        );
         Ok(FieldGroupDeletion {
             nodes_removed: emptied.len(),
+            action_targets_orphaned,
             ..preview
         })
     }
@@ -17452,6 +17533,9 @@ impl EditSession {
 
         let widgets_removed = terminals.iter().map(|f| f.widgets.len()).sum();
         let preview = FieldGroupDeletion {
+            // See the field's own doc comment: zero here is "not measured",
+            // and the deletion overwrites it with the real count.
+            action_targets_orphaned: 0,
             group_name: fqn.to_owned(),
             terminals: terminals
                 .iter()
@@ -17574,6 +17658,11 @@ impl EditSession {
             field_removed: false,
             selection_cleared: held_selection,
             emptied_parents: 0,
+            // Deleting ONE widget leaves the field, its name and therefore
+            // every action naming it intact. Zero here is a fact, not a
+            // not-tracked: there is nothing for a deleted appearance to
+            // orphan.
+            action_targets_orphaned: 0,
         })
     }
 
@@ -18474,9 +18563,8 @@ impl EditSession {
                 from: fqn.to_owned(),
                 to: new_fqn,
                 descendants_renamed: 0,
-                // A no-op rename retargets nothing because it renames
-                // nothing, so the categorical disclosure has nothing to say.
-                actions_not_retargeted: 0,
+                // A no-op rename repairs nothing because it breaks nothing.
+                action_targets_retargeted: 0,
             });
         }
 
@@ -18503,14 +18591,27 @@ impl EditSession {
             .map(|form| form.descendants_of(fqn).count())
             .unwrap_or(0);
 
-        // The categorical half of `Pass 184.0`. Counted off the SHIPPED action
-        // scanner rather than a new one -- `scan_javascript` already walks all
-        // seventeen carrier sites and follows `/Next`, with its own guards, so
-        // this borrows a traversal that is already correct rather than adding a
-        // second one that would drift from it. It answers a WEAKER question
-        // than the one an operator wants (see `actions_not_retargeted`), and
-        // that is stated rather than papered over.
-        let actions_not_retargeted = forms::scan_javascript(&self.graph()).actions_scanned;
+        // ★ REPAIR the actions that name this field, in the SAME command as
+        // the rename itself. Two properties depend on it being one command:
+        // undo restores the name and the buttons together, and a save can
+        // never contain one without the other.
+        //
+        // The prefix carries the dot, which is what makes renaming `Address`
+        // rewrite `Address.City` and leave `Addressed` alone -- the same
+        // distinction `descendants_of` draws, and the same one that makes
+        // `descendants_renamed` a real number rather than a guess.
+        let old_prefix = format!("{fqn}.");
+        let new_prefix = format!("{new_fqn}.");
+        let matches = |name: &str| name == fqn || name.starts_with(&old_prefix);
+        let replace = |name: &str| {
+            if name == fqn {
+                new_fqn.clone()
+            } else {
+                format!("{}{}", new_prefix, &name[old_prefix.len()..])
+            }
+        };
+        let (action_targets_retargeted, mut action_writes) =
+            self.sweep_action_targets(&matches, Some(&replace));
 
         let Some(Object::Dict(dict)) = self.value(target) else {
             return Err(EditError::FieldNotFound {
@@ -18520,13 +18621,22 @@ impl EditSession {
         let mut dict = dict.clone();
         dict.insert(Name::from(b"T"), Object::String(only_segment.into_bytes()));
 
+        // The field's own `/T` first, then the repairs. If the sweep already
+        // staged a write for this object -- an action parked inside the field
+        // dictionary itself is unusual but legal -- the `/T` edit wins and the
+        // sweep's copy is dropped, because the sweep read the object BEFORE
+        // this dictionary was rebuilt and would otherwise write the old name
+        // back over it.
+        action_writes.retain(|w| w.id != target);
+        let mut objects = vec![ObjectWrite {
+            id: target,
+            before: self.state.get(&target).cloned(),
+            after: Some(Object::Dict(dict)),
+        }];
+        objects.append(&mut action_writes);
         self.commit(Command {
             kind: CommandKind::RenameFormField,
-            objects: vec![ObjectWrite {
-                id: target,
-                before: self.state.get(&target).cloned(),
-                after: Some(Object::Dict(dict)),
-            }],
+            objects,
             removals: Vec::new(),
             trailer: None,
         });
@@ -18535,7 +18645,7 @@ impl EditSession {
             from: fqn.to_owned(),
             to: new_fqn,
             descendants_renamed,
-            actions_not_retargeted,
+            action_targets_retargeted,
         })
     }
 
@@ -24956,6 +25066,111 @@ impl EditSession {
             }
         }
         disclosure
+    }
+
+    /// Every object id the session can currently read (`Pass 184.0`).
+    ///
+    /// The base revision's objects plus everything an edit has staged, minus
+    /// everything an edit has deleted. Deliberately **not** a reachability
+    /// walk: an object no carrier reaches can still contain a stale field
+    /// name, and rewriting it is harmless and right.
+    fn live_object_ids(&self) -> Vec<ObjId> {
+        let mut ids: Vec<ObjId> = self.base.objects().map(|io| io.id).collect();
+        ids.extend(self.state.keys().copied());
+        ids.sort_unstable();
+        ids.dedup();
+        ids.retain(|id| !self.deleted.contains(id));
+        ids
+    }
+
+    /// **Find — and optionally repair — every action that names a field by
+    /// fully-qualified name** (`Pass 184.0`).
+    ///
+    /// Returns how many name strings matched, and the object writes that
+    /// would repair them. With `replacement` as `None` nothing is rewritten
+    /// and the count alone comes back, which is the delete case: pdfce can
+    /// say what a deletion orphaned but has nothing to repoint it at.
+    ///
+    /// # ★ Two passes, because a target list may live in its own object
+    ///
+    /// `/Fields` and `/Hide`'s `/T` are ordinary values, so a producer may
+    /// write `5 0 R` instead of an inline array.
+    /// [`forms::retarget_action_field_names`] does not follow references —
+    /// that is what makes a per-object sweep complete without a graph walk —
+    /// so it reports those ids and the second pass below visits them.
+    ///
+    /// Missing that case would repair most buttons and silently leave the
+    /// rest, which is worse than repairing none: a partial repair reads as a
+    /// complete one.
+    ///
+    /// # What it will not touch
+    ///
+    /// JavaScript. Scripts name fields constantly and `R55` requires every
+    /// script carrier to round-trip byte-identical; rewriting inside one is a
+    /// corruption with good intentions. A form whose logic lives in a script
+    /// is not made correct by this and the disclosure must not imply it is.
+    fn sweep_action_targets(
+        &self,
+        matches: &dyn Fn(&str) -> bool,
+        replacement: Option<&dyn Fn(&str) -> String>,
+    ) -> (usize, Vec<ObjectWrite>) {
+        let mut matched = 0usize;
+        let mut writes: Vec<ObjectWrite> = Vec::new();
+        let mut deferred_ids: Vec<ObjId> = Vec::new();
+
+        // Pass 1 — every live object, looking for action dictionaries.
+        for id in self.live_object_ids() {
+            let Some(value) = self.value(id).cloned() else {
+                continue;
+            };
+            let mut offer = |name: &str| -> Option<String> {
+                if !matches(name) {
+                    return None;
+                }
+                matched += 1;
+                replacement.map(|r| r(name))
+            };
+            let (rewritten, deferred) = forms::retarget_action_field_names(&value, &mut offer);
+            deferred_ids.extend(deferred.into_iter().map(|d| d.id));
+            if let Some(new) = rewritten {
+                writes.push(ObjectWrite {
+                    id,
+                    before: self.state.get(&id).cloned(),
+                    after: Some(new),
+                });
+            }
+        }
+
+        // Pass 2 — the target lists that live in their own objects. Deduped
+        // because one array object may be shared by several actions, and
+        // rewriting it twice would double the count and stage two writes for
+        // one object.
+        deferred_ids.sort_unstable();
+        deferred_ids.dedup();
+        for id in deferred_ids {
+            if writes.iter().any(|w| w.id == id) {
+                continue;
+            }
+            let Some(value) = self.value(id).cloned() else {
+                continue;
+            };
+            let mut offer = |name: &str| -> Option<String> {
+                if !matches(name) {
+                    return None;
+                }
+                matched += 1;
+                replacement.map(|r| r(name))
+            };
+            if let Some(new) = forms::retarget_target_list(&value, &mut offer) {
+                writes.push(ObjectWrite {
+                    id,
+                    before: self.state.get(&id).cloned(),
+                    after: Some(new),
+                });
+            }
+        }
+
+        (matched, writes)
     }
 
     /// `/Fields` as text strings (§12.7.5.3 Table 238).

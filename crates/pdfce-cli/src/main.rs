@@ -25916,16 +25916,16 @@ fn cmd_rename_field(
         );
     }
 
-    // The categorical half of `Pass 184.0`, stated whenever the document has
-    // any action at all. It is deliberately NOT a count of affected buttons --
-    // naming those needs a carrier traversal pdfce has not built -- and saying
-    // the weaker true thing now beats saying nothing until the stronger one
-    // exists. A rename that silently stops a Reset button resetting is live
-    // silence, not a latent bug.
-    if rename.actions_not_retargeted > 0 {
+    // `Pass 184.0`. Reset, submit and show/hide buttons name their targets by
+    // NAME, so a rename breaks them -- and this repairs them in the same
+    // undoable command. Reported because pdfce edited objects the operator did
+    // not name, which is exactly what rule 4 is about, and because a form whose
+    // logic lives in a SCRIPT is NOT fixed by this and must not be implied to
+    // be.
+    if rename.action_targets_retargeted > 0 {
         eprintln!(
-            "pdfce-cli: field {name:?}: this document carries {} action(s), and pdfce did NOT update any of them. Reset, submit and show/hide buttons name their target fields by NAME, so any button that named {:?} no longer finds it. That number is every action in the file, not the ones affected -- pdfce cannot yet tell you which.",
-            rename.actions_not_retargeted, rename.from
+            "pdfce-cli: field {name:?}: {} button-action target(s) named the old name and were repointed at {:?} in the same undoable step -- reset, submit and show/hide buttons name their fields by NAME, so a rename would otherwise have left them pointing at nothing. JavaScript is NOT rewritten: a script that names the old field is still broken.",
+            rename.action_targets_retargeted, rename.to
         );
     }
 
@@ -25942,12 +25942,12 @@ fn cmd_rename_field(
     };
     let r = &outcome.report;
     println!(
-        "rename-field {} from={:?} to={:?} descendants_renamed={} actions_not_retargeted={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        "rename-field {} from={:?} to={:?} descendants_renamed={} action_targets_retargeted={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
         input.display(),
         rename.from,
         rename.to,
         rename.descendants_renamed,
-        rename.actions_not_retargeted,
+        rename.action_targets_retargeted,
         mode.name(),
         output.display(),
         outcome.changed,
@@ -27700,6 +27700,17 @@ fn cmd_delete_form_field(
             "pdfce-cli: field {name:?}: the widget you deleted held this field's selected value, which no remaining widget can display — the selection has been cleared to Off"
         );
     }
+    // `Pass 184.0`. Counted, never repaired: a deletion supplies no
+    // replacement name, and quietly dropping the entry would change what the
+    // button does to the fields that remain. Same traversal as the rename's
+    // repair, opposite conclusion, and the difference is whether pdfce has to
+    // invent anything.
+    if deletion.action_targets_orphaned > 0 {
+        eprintln!(
+            "pdfce-cli: field {name:?}: {} button-action target(s) still name it and now point at nothing. pdfce does NOT repair these -- there is no correct field to repoint a Reset button at -- so each is a button that will do less than it says. They are invisible to the dangling-reference census, because a name is not a reference.",
+            deletion.action_targets_orphaned
+        );
+    }
     if deletion.emptied_parents > 0 {
         eprintln!(
             "pdfce-cli: field {name:?}: {} grouping node(s) were left with no fields beneath them and were removed as well — a named node owning nothing still occupies its slot in the field-name space",
@@ -27725,7 +27736,7 @@ fn cmd_delete_form_field(
         "delete-field"
     };
     println!(
-        "{verb} {} name={:?} index={} widgets_removed={} field_removed={} selection_cleared={} emptied_parents={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        "{verb} {} name={:?} index={} widgets_removed={} field_removed={} selection_cleared={} emptied_parents={} action_targets_orphaned={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
         input.display(),
         name,
         index.map_or_else(|| "-".to_owned(), |i| i.to_string()),
@@ -27733,6 +27744,7 @@ fn cmd_delete_form_field(
         u32::from(deletion.field_removed),
         u32::from(deletion.selection_cleared),
         deletion.emptied_parents,
+        deletion.action_targets_orphaned,
         mode.name(),
         output.display(),
         outcome.changed,
@@ -27827,6 +27839,15 @@ fn cmd_delete_field_group(
     for t in &deletion.terminals {
         println!("deleted field={t:?}");
     }
+    // `Pass 184.0`. Counted, never repaired -- see the field-delete path for
+    // why a deletion cannot supply a replacement name. Matched by PREFIX here,
+    // because a grouping node takes its whole subtree with it.
+    if deletion.action_targets_orphaned > 0 {
+        eprintln!(
+            "pdfce-cli: {} button-action target(s) still name a field in this group and now point at nothing. pdfce does NOT repair these -- there is no correct field to repoint a Reset button at. They are invisible to the dangling-reference census, because a name is not a reference.",
+            deletion.action_targets_orphaned
+        );
+    }
 
     let outcome = match save_edited(
         &mut session,
@@ -27841,12 +27862,13 @@ fn cmd_delete_field_group(
     };
     let r = &outcome.report;
     println!(
-        "delete-field-group {} name={:?} terminals={} widgets_removed={} nodes_removed={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        "delete-field-group {} name={:?} terminals={} widgets_removed={} nodes_removed={} action_targets_orphaned={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
         input.display(),
         name,
         deletion.terminals.len(),
         deletion.widgets_removed,
         deletion.nodes_removed,
+        deletion.action_targets_orphaned,
         mode.name(),
         output.display(),
         outcome.changed,
@@ -33548,6 +33570,16 @@ fn cmd_copy_field(args: &CopyFieldArgs<'_>) -> u8 {
                 "pdfce-cli: {}: {} grouping node(s) became childless and were pruned with the field -- a named node with nothing under it still occupies its slot in the field-name space.",
                 args.input.display(),
                 deletion.emptied_parents
+            );
+        }
+        // `Pass 184.0`. A cut removes the field from THIS document, so any
+        // button here that named it is now pointing at nothing -- and the
+        // pasted copy in the other document has no button naming it either.
+        if deletion.action_targets_orphaned > 0 {
+            eprintln!(
+                "pdfce-cli: {}: {} button-action target(s) still name the field you cut and now point at nothing. pdfce does not repair these; the buttons stayed behind and the field did not.",
+                args.input.display(),
+                deletion.action_targets_orphaned
             );
         }
     }
