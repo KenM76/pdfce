@@ -328,3 +328,39 @@ about the other direction, and a long rules document accumulates exactly that
 kind of stale advice. The two paragraphs above recommending raw strings and
 doubled backslashes were both later shown insufficient; they are kept visible
 rather than deleted, but they are **not** current guidance.
+
+---
+
+## 2026-08-30 — it is not only PROSE. It ate a SABOTAGE SCRIPT.
+
+The rule above is written about commit messages and error strings. The same
+collapse hit a **verification script**, where the consequence is worse: a
+sabotage that does not apply is **indistinguishable from a test that catches
+nothing**.
+
+Sabotaging a settings writer through a quoted bash heredoc, the search string
+`\n` reached Python as a **real newline** rather than backslash-n, so it
+matched nothing, the `.replace()` was a silent no-op, and the test suite
+passed. I read that pass as *"the test is robust"*. It proved nothing at all.
+
+**How to apply.** Two habits, and the second is the one that generalises:
+
+1. Write any script containing a backslash with the **Write tool**, never a
+   bash heredoc. Or build the escape at runtime — `chr(92) + "n"` — which no
+   shell can touch.
+2. ★ **Every sabotage asserts that it applied.** `assert s.count(old) == 1`
+   before the replace. A sabotage is a measurement, and an instrument that
+   silently failed to fire reads exactly like a negative result.
+
+**The same run then produced a second lesson.** With the sabotage finally
+applied, three tests failed — but by the *unknown-key* assertion, not the
+value comparison, because renaming a key is not the failure mode being
+claimed. Only OMITTING it is. **Sabotage the thing the comment actually
+claims**, then run the **counterfactual** (old fixture + omitted key) to prove
+the claim was not already covered by a sibling test. Here it was not: the old
+fixture passed all 35, the corrected one fails.
+
+Related: [[a-default-valued-fixture-cannot-falsify-a-carry]] is what the
+corrected fixture is an instance of; [[sabotage-catches-false-comments]] is
+why the counterfactual was worth running.
+
