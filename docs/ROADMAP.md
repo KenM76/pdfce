@@ -96,6 +96,385 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 174.6` (`0eb9119`, 2026-08-29) — THE FIVE OWED SURVIVORS DISCHARGED, PLUS A SEVENTH THE SWEEP'S OWN GREP COULD NOT SEE — and while verifying it, a SECOND instance of the same shape, LIVE, in the gate `NEXT_SESSION.md` was just repointed at — filed 2026-08-29 (331st filing)
+
+**Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
+here, on disk, not relayed: `git log --oneline -5`; `git status --short`
+(**empty**); `git remote -v` (**`github.com/KenM76/pdfce.git`** — a push
+publishes); `git rev-list --count origin/main..main` = **11**;
+`git show --stat 0eb9119` = **7 files, +118 / −34**; **the commit message read
+in full**; **every diff hunk read as a diff**, so the withdrawn wording is on
+this record; `python tools/check-commits-filed.py` reporting **the tip
+DEFERRED** before this filing (668 code commits checked, 5 carried in the
+baseline); `python tools/check-suite-name-absent.py` **clean**; `python
+tools/check-ledger-numbers.py` **clean, and wrong — see below**;
+`cargo test -p pdfce-render --test grey_overprint` **re-run here: 7 passed**;
+`git diff 5468b9f 0eb9119 -- docs/FEATURES.md` = **0 lines**; `ls -lt
+D:/Dev/pdfce-backups/` plus `git bundle list-heads` on the newest
+(**`pdfce-20260829-2250-0eb9119-full.bundle`**, and `git rev-list --count
+<bundle-tip>..HEAD` = **0** — the bundle **CONTAINS `HEAD`**, taken 12 minutes
+after the commit; the 330th filing's *"50 commits behind"* was true when written
+and is not now). **Relayed, not re-run:** `bash tools/run-gates.sh` (**PASS — 29
+commands, incl. 2 filing gates**, two standing skips ⇒ a **default-features**
+green), `cargo fmt --all --check`, `cargo clippy --workspace --all-targets
+-- -D warnings`, `check-clap-help.py` (**118 subcommands**), `check-string-gaps`.
+★ **`cargo tree` was NOT re-run and is NOT claimed** — no crate manifest was
+touched, no dependency added; the GUI-core separation invariant is
+**unchallenged this session**, which is a different statement from **verified
+this session**.
+
+**No behaviour change. 7 files, +118 / −34**, five of them doc-comment or
+prose. This is the discharge half of the 330th filing's hard-rule-11 sweep.
+
+---
+
+#### The five reported survivors, all discharged
+
+Sites 1–5 of the 330th filing's table, each correction **stating what the line
+said before rather than replacing it**, per house style and `R234`(d):
+
+| # | site | discharged as |
+|---|---|---|
+| 1 | `crates/pdfce-core/src/settings/mod.rs:1479` | *"a **divergence from ISO 32000-1** toward Acrobat, edition-gated … This line said "the §8.6.7 ambiguity" until `Pass 174.6`, **960 lines below the block `Pass 174.5` corrected and in the same file**"* |
+| 2 | `crates/pdfce-render/src/overprint.rs:642` | *"a DIVERGENCE from ISO 32000-1 toward Acrobat, offered as a SETTING"*, with the three grounds and the edition gate named at the site |
+| 3 | `crates/pdfce-render/src/font/mod.rs:617` | *"the three grounds"* replaces *"both defensible readings"*; the prior wording parenthesised rather than deleted |
+| 4 | `crates/pdfce-render/tests/grey_overprint.rs:1` | module header **rewritten, not patched** — see below |
+| 5 | `docs/suite-patch-reference.md:244` | the bolded lead itself now carries the correction, and **names its own survival** as the sharpest of the six |
+
+**Verified by grep here, not relayed:** a case-insensitive sweep for
+`8\.6\.7 ambiguit` and `defensible reading` over the whole tree now returns
+**only** (a) the corrections' own *"this said X until `Pass 174.6`"* clauses,
+(b) the append-only record's survivor tables, and (c) four unrelated **true**
+uses of *"defensible reading"* in other subsystems. ⇒ **No live copy of the
+withdrawn claim survives.**
+
+---
+
+#### ★★★ SURVIVOR 7, AND IT IS THE FINDING — THE SWEEP MISSED IT ON A SINGLE CHARACTER
+
+`crates/pdfce-cli/src/main.rs:10677` said *"The 8.6.7 ambiguity: which colour
+spaces get OPM 1's zero-tint rule"*. The 330th filing's sweep did not find it,
+and the reason is the entry:
+
+> **The sweep grepped "§8.6.7 ambiguity" — WITH THE SECTION SIGN — and that
+> line has no `§`.**
+
+⇒ **A sweep for a CLAIM is only as good as its SPELLING of the claim**, which
+is the same failure the sweep exists to catch, one level up. The 330th filing's
+own framing — *"a sweep that starts from the diff sees what changed; only a
+sweep that starts from the claim sees what did not"* — is right and needs one
+more clause: ★ **and a sweep that starts from one PHRASING of the claim sees
+only that phrasing.**
+
+**The method that found it, and it is the generalisable half:** re-grep
+**case-insensitively for the bare word `ambiguity`**, **scoped to the
+overprint-related files**, and read every hit — rather than grepping the phrase
+globally. ⇒ **NARROW THE FILE SET AND WIDEN THE PATTERN, NOT THE REVERSE.** A
+global grep for `ambiguity` returns dozens of correct uses and is unreadable;
+the same grep over six files is six seconds of reading. **Both halves are
+load-bearing**: widening the pattern alone makes the result unreadable, and
+narrowing the file set alone leaves the spelling defect intact.
+
+**Two hits in that area SURVIVE and are CORRECT — verified here by reading
+both, not assumed:**
+
+| site | what it says | why it stands |
+|---|---|---|
+| `crates/pdfce-render/src/overprint.rs:135` | **`OP-A3`** — the standard defines *two* overprint parameters (stroking / non-stroking) and never says which one indexes the `OP` column of Tables 148/149 | genuinely unresolved; the consolidator records it unresolved in **both** §8.6.7 and §11.7.4, and the module **refuses to guess** — `op` is an explicit argument supplied by the caller |
+| `docs/suite-patch-reference.md:333` | **`OP-A6`** — image masks and `OPM`: §8.6.7 excludes *"the painting of images"* without carving out image masks, but a stencil paints with the current non-stroking colour (§8.9.6.2) | **confirmed two-sided by `pdfce-spec-librarian`**, and *"the suite ships no image mask, so it has no evidence either way"* |
+
+★ **A future sweep must not "fix" those two.** They are precisely why a blanket
+string ban on the word *ambiguity* would be wrong and a **claim-level** sweep is
+the only correct instrument. Recording them here is the cheapest available
+guard: the next sweep reads this row before it edits.
+
+---
+
+#### ★★★★ AND THE SAME SHAPE, A SECOND TIME THE SAME DAY, LIVE, IN A GATE — `check-ledger-numbers.py` CANNOT SEE `decision 104`, BECAUSE OF A BACKTICK
+
+**Found while verifying this dispatch, by running the tool rather than relaying
+its result.** `python tools/check-ledger-numbers.py` prints:
+
+```text
+  decision records    : 103 -> next free is 104
+```
+
+**`decision 104` already exists** — `docs/ARCHITECTURE.md:27459`,
+`OverprintZeroTintScope::GreyAsKOnly` retained as a knowing divergence, written
+by the 330th filing and cited by name in `R234`'s own text at
+`docs/ROADMAP.md:121943`. ⇒ **The gate is offering a number that is already
+taken.**
+
+**The cause, proven by running the tool's own regex over the file rather than by
+inspecting the file.** The ceiling scan is
+
+```python
+ARCH_DECISION_MENTION = re.compile(r"[Dd]ecision\s+(\d{3})\b")
+```
+
+and its maximum over `docs/ARCHITECTURE.md` is **103**. The three lines in that
+file containing both *decision* and *104* are:
+
+```text
+27452  **Decision ceiling moves 102 → 103; next free 104.**
+27459  - **2026-08-29 — decision `104`: `OverprintZeroTintScope::GreyAsKOnly` IS
+27556  **Decision ceiling moves 103 → 104; next free 105.**
+```
+
+**Line 27459 is the declaration, and it spells the number with a BACKTICK
+between the word and the digits.** `\s+(\d{3})` requires the digits to follow
+whitespace directly, so it does not match. Lines 27452 and 27556 put `104` after
+*"next free"* and *"moves 103 →"*, where no form of the word *decision*
+immediately precedes it.
+
+★★★ **THIS IS THE EXACT FAILURE THE TOOL'S OWN FORTY-LINE COMMENT SAYS IT FIXED
+AND PROVED COULD NOT RECUR.** That comment, immediately above
+`ARCH_DECISION_MENTION`, reads: *"THE FIX IS TO STOP PATTERN-MATCHING A
+SPELLING … the widening therefore cannot produce a false ceiling, and it cannot
+under-report, **whatever spelling a future filing invents**."* **It still
+pattern-matches a spelling** — it matches *bare digits after whitespace* — and
+**this project's house style wraps every identifier in backticks**, so the house
+style and the gate's own pattern are in direct conflict.
+`collect_decisions()`'s docstring already names the consequence: *"this checker
+printed 'next free is 039' — a number that was ALREADY TAKEN, TWICE. That is
+worse than no answer … a confidently wrong ceiling is how a duplicate gets
+created rather than caught."*
+
+**Severity, stated rather than implied.** §12 duplicate detection is
+**deliberately absent** (the tool's own docstring says so), so **nothing else in
+this project would catch a duplicate decision 104.** The next filing that trusts
+that line mints one. ⇒ **owed work, engineer-owned, filed below.**
+
+★★ **AND IT LANDS ON THE ONE SENTENCE `Pass 174.6` JUST WROTE.**
+`docs/NEXT_SESSION.md`'s ledger line was replaced in this very commit with:
+
+> *"★ Do not trust that line — run `python tools/check-ledger-numbers.py`, which
+> derives all four and is the only thing that cannot be stale."*
+
+That is `R232`(a) applied **correctly** — delete the copy, name the command —
+and the command it names is, at this moment, **wrong by one on the decision
+ceiling**, while the stated number beside it (*"decisions **104**"*) is the
+**right** one. ⇒ **`R232`'s remedy is sound and its guarantee is conditional: a
+derivation is only as good as its own pattern, and *"cannot be stale"* is not
+the same claim as *"cannot be wrong."*** Recorded here rather than as an
+amendment to `R232`, because `R232` does not need weakening — the gate needs
+fixing.
+
+★ **Note the convergence, because it is why both go in one entry.** Survivor 7
+was missed on a **section sign**; the decision ceiling is missed on a
+**backtick**. Two searches, an hour apart, **both deliberately widened to be
+robust**, both defeated by **one punctuation character the widening did not
+anticipate.** That is a single finding with two instances, not two findings.
+
+---
+
+#### The test module's header was rewritten, not patched — and it now carries two facts a future session would otherwise pay for
+
+`crates/pdfce-render/tests/grey_overprint.rs` (survivor 4) is the file whose
+entire purpose is this setting, so patching one phrase would have left the wrong
+frame in place. The header now carries:
+
+1. **The three grounds**, with the struck prior wording (*~~"Both are
+   defensible, so pdfce ships both"~~*) kept legible — and the part the old
+   header got wrong: **only the third ground was ever in the doc, and alone it
+   does read like a silence, which is how the error was made.**
+2. **The edition gate.** ISO 32000-2 deletes two of the three provisions that
+   settle it in 1.7, so **the behaviour is edition-gated and a test file about
+   it has to say which edition it is talking about** (`R234`(c)).
+3. ★★★ **NEW, AND IT IS A NOTE TO A FUTURE SESSION ABOUT A TEST SUITE:** these
+   fixtures **cannot discriminate the setting on a SPOT backdrop** (`OP-N3`).
+   Tables 148/149 put *"any process colour space"* × **spot** colorant ×
+   `OP true` at `c_b` — *do not paint* — in **both** overprint-mode columns, so
+   a conforming engine preserves that backdrop whichever way the setting is
+   read. pdfce's settings differ **only because pdfce flattens a spot into C, M
+   and Y**, leaving no spot colorant for that row to protect. ⇒ **the difference
+   these tests observe is real, its cause is pdfce's own representation, and the
+   assertions are EXPECTED TO MOVE when the n-colorant buffer lands — they
+   should be RE-DERIVED, not patched.**
+
+★ **That third item is the kind of fact that is invisible until it costs someone
+an afternoon**: without it, a session that lands the n-colorant buffer sees
+seven green tests go red, reads them as a regression, and patches the numbers
+back.
+
+---
+
+#### `docs/FEATURES.md` — VERIFIED, not relayed
+
+The dispatch said *"zero rows change, checkboxes AND prose — and please verify
+that rather than relaying it, since the same sentence was half wrong last
+time."* **Verified and true, both halves.** `git diff 5468b9f 0eb9119 --
+docs/FEATURES.md` returns **0 lines**, and `git show --stat 0eb9119` does not
+list the file at all. The `overprint_zero_tint_scope` row already carries the
+corrected characterisation — the 330th filing fixed its prose, which was the
+survivor this role owned — and `Pass 174.6` moved **no capability, no checkbox
+and no sentence** in it. ⇒ **`FEATURES.md`: zero rows changed. Correct as
+dispatched.**
+
+★ **Why the same sentence was half wrong last time and is right this time**: the
+330th filing's dispatch asserted *"zero rows change"* about a commit whose
+withdrawn claim **had a copy in `FEATURES.md` prose**. `Pass 174.6` changes no
+claim that `FEATURES.md` states, so the two are not the same situation — and the
+difference was established **by running the diff**, not by reasoning about it.
+
+---
+
+#### The rule question — DECLINED, with the reason, and a recommendation the engineer owns
+
+The dispatch left open whether survivor 7 warrants amending `R232` again, a
+clause on `R234`, or neither, and said the engineer is not pre-deciding it.
+**Neither — and the recommendation belongs somewhere else entirely.**
+
+- **Not `R232`.** `R232` governs **figures copied into documents no gate
+  reads**. Survivor 7 is not a figure and was not copied. The ledger-gate
+  instance above *touches* `R232` but **strengthens it rather than amending
+  it**: the remedy worked, the derivation under it did not, and that is a bug in
+  a tool, not a defect in the rule.
+- **Not `R234`.** `R234` governs **negative claims about a STANDARD** — *"the
+  spec is silent"* — and its clause (b) (*search the neighbouring text and the
+  tables, not only the clause*) is genuinely the same shape one level up, which
+  is worth noting and is **not the same corpus**. Survivor 7 is a claim about
+  **pdfce's own tree**. Folding a self-sweep obligation into a spec-sourcing
+  rule would blur the one boundary `R234` is careful about.
+- **Not a new standing rule.** The ceiling moved **twice today** (`R233`,
+  `R234`), and this project's stated bar for a mint is *a parent remedy applied
+  and insufficient*, not *a parent remedy imperfectly executed*. The parent
+  remedy here — hard-rule-11's *search for the CLAIM, not for a string* — **was
+  applied and it worked**: it found six survivors nobody else found. It missed a
+  seventh on a spelling. ⇒ **Sharpen the method; do not move the ceiling.** Same
+  warrant `R232` used to decline instance 3, and the engineer's own read.
+
+**★ THE RULE THAT OWNS SWEEP-METHOD IS `pdfce-librarian` HARD RULE 11**, and it
+lives in `.claude/agents/pdfce-librarian.md`, not in `ROADMAP.md`. **This role
+declines to amend its own agent file unilaterally** — the precedent is hard rule
+11's own minting on 2026-08-18: *"You proposed accepting this and correctly
+declined to amend this file unilaterally; the amendment is the engineer's
+act."* ⇒ **Recommended clause, for the engineer to write or to refuse:**
+
+> **(e) A SWEEP FOR A CLAIM IS ONLY AS GOOD AS ITS SPELLING OF THE CLAIM.
+> NARROW THE FILE SET AND WIDEN THE PATTERN, NOT THE REVERSE.** Grep
+> case-insensitively for the claim's **bare keyword** over the handful of files
+> the feature touches and read every hit — rather than grepping the exact phrase
+> over the whole tree. **Punctuation the writer varies is the failure surface**:
+> `§`, backticks, en-dashes, curly quotes, hyphenation. A global grep for the
+> keyword returns dozens of correct uses and is unreadable; the same grep over
+> six files is six seconds of reading. **And report the hits that SURVIVE and
+> are correct**, so the next sweep does not "fix" them — for
+> `overprint_zero_tint_scope` those are `OP-A3` and `OP-A6`.
+
+**Standing rules ceiling UNCHANGED: `R234`; next free `R235`.** **Decision
+ceiling UNCHANGED: `104`; next free `105`** — stated explicitly here because
+`check-ledger-numbers.py` currently says otherwise, and this line is the
+append-only record's answer until the tool is fixed.
+
+---
+
+#### ★ OWED — engineer-owned, no Pass ID claimed
+
+1. **★★ `tools/check-ledger-numbers.py`'s decision-ceiling scan misses a
+   backtick-wrapped number** (`ARCH_DECISION_MENTION`). It reports *next free is
+   104* while `decision 104` exists, and §12 duplicate detection is deliberately
+   absent, so **nothing else would catch the duplicate it invites.** The minimal
+   fix admits optional punctuation between the word and the digits; the
+   **honest** fix is the one the tool's own comment already argued for and did
+   not reach — for a **ceiling**, stop matching a spelling at all, since a
+   ceiling is a MAX over mentions and cannot be raised above a real number by a
+   false positive. **Same finding as survivor 7, different tree.**
+2. **A clause on hard rule 11**, per the recommendation above — or a reasoned
+   refusal, which is equally a discharge.
+
+---
+
+#### CHANNEL — one item, and it strengthens an open pdfce item rather than opening one
+
+**`iccce` answered the 49-operand list at 21:44**
+(`D:/Dev/FeatureRequests/iccce_FeatureRequests/open/reply_the_49_rows_and_the_black_end_is_where_i_am_weaker.md`,
+status *"nothing owed back"*, durable location their
+`docs/SUITE_COMPATIBILITY.md` §11.10). **The 330th filing already recorded this
+reply's substance in full** under *ITEM 2* of its channel section, flagged
+unread by the engineer at the time; **the engineer has now read it**, and this
+entry files the one thing *ITEM 2* recorded as a limit but did **not** file as
+owed work. **The reply itself was read here, in full, not relayed.**
+
+**Unchanged and already on the record** (see `Pass 174.5`'s entry, *ITEM 2*):
+destination named as pdfce asked — the patch's own `/DestOutputProfile` (a
+v2.4.0 `prtr` CMYK/Lab, *ISO Coated v2 300% (ECI)*) → the **OS-shipped** sRGB
+profile, **media-relative**, **`--bpc` refused by name (`A42`)**; oracle lcms2
+2.19.1 with a **max iccce↔lcms2 divergence of 0.2154 counts across all 49
+operands**; the spread (**9 of 49** agreeing within 5 counts on every channel,
+**median worst-channel difference 11 counts**, **maximum 34**, **5 of 49** at
+≥ 20); and the regional split — pdfce closer on the **black end** because
+*their* black-point estimator refuses by name (*"refusing and being wrong look
+identical in a table"*), `iccce` closer on the **achromatic axis**, where their
+greys are neutral and pdfce's are cool by 2–5 counts on **every** row (**row 3:
+`iccce` `158,159,159`, pdfce `147,148,152`, reference `156,156,156`**).
+
+★ **One small correction to their document, since this record cites it:** §1's
+prose says *"the six worst rows are, without exception, the darkest ones"* and
+then **tabulates four** (rows 38, 8, 23, 1). The four are correct and the claim
+is unaffected; **the count is not**. Noted so a future reader of this entry does
+not go looking for two missing rows.
+
+**★★★ THE OWED ITEM, and it is the most actionable sentence in the reply:**
+
+> *"Where a document declares an output intent, you should not be consulting a
+> table at all."*
+
+**pdfce's `cmyk_table.rs` exists for documents with NO output intent; `iccce`'s
+column converts through a DECLARED output condition. The two tables answer
+different questions** — for a PDF/X-4 file they coincide only because
+`DeviceCMYK` genuinely *means* the output intent's space there, and for a
+document with no output intent *"there is no colorimetrically right answer at
+all."*
+
+★ **The gap is REAL and it is NOT new to the record — it is consumer 1 of the
+existing `iccce`-blocked bucket**: *"`/OutputIntents`-aware CMYK conversion — a
+PDF/X file's embedded destination profile is normative (§8.6.5.6/§14.11.5) and
+currently ignored; every CMYK patch converts through pdfce's own baked-table
+fallback regardless"*, which already carries the legal calculus (**a PDF/X
+output intent's profile arrives inside the operator's own document** — pdfce
+neither ships nor redistributes it, so the constraint that forced a baked table
+is **absent on this path**). **Nothing in that bucket is built, no Pass ID is
+assigned, and none is claimed here.** ⇒ **This is a STRENGTHENING of an existing
+Backlog item, not a new one**, and it is filed that way deliberately: a
+duplicate entry would have split the legal calculus away from the requirement it
+governs.
+
+**What `iccce`'s reply ADDS** is the sharpest available statement of *why* the
+fallback is the wrong instrument in that case — not *inaccurate*, but
+**answering a different question** — plus a demonstration that the conversion is
+producible on their side today (49 operands, lcms2-corroborated to 0.22 counts).
+★ **That demonstration does NOT unblock the bucket:** a one-off table computed by
+hand is not the consumable API the bucket waits on, and the bucket's own note —
+*"do not scope a Pass against a moving target on the far side of a channel
+neither party controls"* — still holds.
+
+**★★ A THIRD INDEPENDENT LINE against `CmykIntent::Calibrated`'s stated
+rationale on the grey axis**, after the reference capture's exact neutrality and
+`Pass 174.1`'s own flat-colour sweep. `Pass 174.1` corrected the doc comment and
+**deliberately left the table alone**; **this does not change that.** ★ **The
+table must NOT be fitted to those 49 numbers** — decision **064**, and `iccce`'s
+own sign-flipped form of their rule (*"you should not hand-tune toward these 49
+numbers any more than I should tune toward the Acrobat capture"*). **Keep them
+as a regression datum.** The open item is **strengthened, not resolved**, and
+the achromatic axis is where a future session would start.
+
+---
+
+#### Cross-project record
+
+**`D:/dev/rag/rust/a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md`**
+— the sweep-method finding with **both** instances (the section sign and the
+backtick). Recorded there rather than in `C:\personal_rag\pdf\` because it is
+**documentation-maintenance methodology, not PDF-domain knowledge**: nothing in
+it depends on the subject being PDF, and it sits beside the existing
+`a_claim_phrased_as_an_absence_is_invisible_to_a_grep_for_the_thing_that_now_exists.md`
+and `disclosure_text_must_be_tested_against_producing_branch.md`, which are the
+same family. `D:/dev/rag/rust/index.md` updated in the same filing.
+
+**Nothing written to `D:\Dev\Rag-Specialized\PDF_Spec\`** — hard rule 6.
+`OP-A3`, `OP-A5`, `OP-A6` and `OP-N3` are `pdfce-spec-librarian`'s territory.
+
 ### `Pass 174.5` (`c751606`, 2026-08-29) — TWO DOC CLAIMS AUDITED AND FOUND WRONG: a worked example that shipped the PRE-FIX value, and an "ambiguity" that is a DIVERGENCE. Both found by OTHER AGENTS auditing this session's own output, neither by any of the 29 gates — filed 2026-08-29 (330th filing)
 
 **Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
@@ -249,6 +628,30 @@ commit used, finds **six more**:
 | 4 | `crates/pdfce-render/tests/grey_overprint.rs:1` | module title: *"A `DeviceGray` fill overprinting a spot backdrop — **the §8.6.7 ambiguity**"* | engineer |
 | 5 | `docs/suite-patch-reference.md:244` | **`Pass 174.5` EDITED THIS VERY LINE and left `"The Pass 143.0 ambiguity is not the cause"` in the bolded lead** — the correction landed in the paragraph below the claim it corrects | engineer |
 | 6 | ★ `docs/FEATURES.md:268` | *"**A genuine spec ambiguity**: §8.6.7's one escape hatch points at §8.6.5.7 … so **both readings are defensible**"* — the withdrawn sentence, near-verbatim | ★ **this role — FIXED IN THIS FILING** |
+
+**★★★ DISCHARGE NOTE, APPENDED 2026-08-29 (331st filing) — ALL FIVE
+ENGINEER-OWNED SURVIVORS ARE FIXED IN `Pass 174.6` (`0eb9119`), AND THERE WAS A
+**SEVENTH** THIS TABLE COULD NOT SEE.** The table above is left exactly as
+filed, per hard rule 1 — it is a dated report, correct as of the 330th filing,
+and the seventh site is recorded here rather than added as a row to it.
+
+- **Sites 1–5: discharged**, each correction stating what the line said before
+  rather than replacing it. Verified by re-grepping the tree at `0eb9119`: no
+  live copy of the withdrawn claim survives.
+- **★★ SURVIVOR 7 — `crates/pdfce-cli/src/main.rs:10677`**, which said *"The
+  8.6.7 ambiguity: which colour spaces get OPM 1's zero-tint rule"*. **This
+  sweep missed it because the sweep grepped `§8.6.7 ambiguity` — WITH THE
+  SECTION SIGN — and that line has no `§`.** ⇒ *A sweep for a claim is only as
+  good as its SPELLING of the claim*, which is this very sweep's own failure one
+  level up. Found by narrowing the FILE SET and widening the PATTERN
+  (case-insensitive `ambiguity` over the overprint files) rather than the
+  reverse. Full account, plus a **second instance of the same shape found the
+  same day in `tools/check-ledger-numbers.py`**, in `Pass 174.6`'s entry at the
+  head of this file.
+- **★ TWO HITS IN THAT AREA SURVIVE AND ARE CORRECT** — `OP-A3`
+  (`crates/pdfce-render/src/overprint.rs:135`) and `OP-A6`
+  (`docs/suite-patch-reference.md:333`). **A future sweep must not "fix"
+  them.**
 
 **★ Survivor 5 is the sharpest of the six and survivor 1 is a close second**,
 for the same reason: *the correction and the survivor were in the same file, in
@@ -101379,6 +101782,30 @@ added. See that section below.
      pdfce would not ship it, redistribute it, or need one in its
      portable folder. The constraint that forced a baked table is
      absent on this path.
+
+     **★★★ STRENGTHENED 2026-08-29 (331st filing) — `iccce` STATED THE GAP
+     BETTER THAN THIS ITEM DID, AND IT IS A DIFFERENT-QUESTION PROBLEM RATHER
+     THAN AN ACCURACY ONE.** Their reply on the 49-operand list
+     (`reply_the_49_rows_and_the_black_end_is_where_i_am_weaker.md`,
+     2026-08-29 21:44) says it in one sentence: *"where a document declares an
+     output intent, you should not be consulting a table at all."* ⇒
+     **pdfce's `cmyk_table.rs` exists for documents with NO output intent;
+     converting through a DECLARED output condition is a different question,
+     and for a PDF/X-4 file the two coincide only because `DeviceCMYK`
+     genuinely MEANS the output intent's space there.** For a document with no
+     output intent *"there is no colorimetrically right answer at all"*, so the
+     baked table is not a worse answer to this question — **it is an answer to
+     the other one.** Recorded as a strengthening of THIS item rather than as a
+     new Backlog entry, deliberately: a duplicate would have split the legal
+     calculus above away from the requirement it governs.
+     ★ **This does NOT unblock the bucket.** `iccce` demonstrated the
+     conversion is producible on their side today — 49 operands through a real
+     `/DestOutputProfile` to the OS-shipped sRGB, media-relative,
+     lcms2-corroborated to **0.22 counts** — but **a table computed by hand is
+     not the consumable API this bucket waits on**, and the bucket's own note
+     (*"do not scope a Pass against a moving target on the far side of a
+     channel neither party controls"*) still holds. **No Pass ID claimed.**
+     Full account: `Pass 174.6`'s entry at the head of this file.
   2. **`/ICCBased` colour spaces resolved through a real profile**
      instead of falling back to `/Alternate` (see `Pass 84.0`'s
      `FEATURES.md` row update, above, and the `icc_alternate`/
