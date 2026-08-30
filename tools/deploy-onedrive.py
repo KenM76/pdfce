@@ -149,6 +149,94 @@ def cli_version(build: Path) -> tuple[str, str]:
     return (version, commit)
 
 
+def _empty_slot(target: Path, *, attempts: int = 8, delay: float = 0.5) -> None:
+    """Empty a OneDrive slot **in place**, without removing the slot itself.
+
+    WHY NOT ``shutil.rmtree``
+    =========================
+
+    Measured 2026-08-30 while cutting ``v0.17.0``. ``shutil.rmtree`` on a slot
+    fails with ``PermissionError: [WinError 5] Access is denied`` -- and the
+    path it names is a **directory**, never a file. Retrying for six seconds
+    did not help; the failure simply walked outward as the tree collapsed
+    (``models/ocrs``, then ``models``, then the slot root).
+
+    Then the discriminating test: in that same folder, deleting a file
+    succeeded, and ``rmdir`` of an empty subdirectory succeeded. **Only the
+    slot ROOT refuses**, because it is a top-level synced folder and the sync
+    engine holds it open for as long as OneDrive is running. It is not a
+    transient lock and no amount of retrying clears it.
+
+    So the removal was never necessary. ``rmtree`` insists on unlinking the
+    root it was given; the requirement is only that **no stale file survives**
+    a payload that shrank between versions. Emptying the directory satisfies
+    that exactly, and asks the filesystem for nothing it has refused.
+
+    ★ WHAT THE FAILED ATTEMPTS LEFT BEHIND, WHICH IS THE REAL HAZARD
+
+    The first failure left the slot INCONSISTENT -- ``LICENSE`` gone,
+    ``models/ocrs`` emptied, but the previous ``pdfce-cli.exe`` and its
+    ``VERSION.txt`` still in place. That folder still looks populated and its
+    ``VERSION.txt`` still names a version an operator would trust, while the
+    payload beside it is no longer that version's payload.
+
+    The entire point of two slots is that the other one is a **working**
+    fallback. A half-emptied slot passes a glance -- the same quiet-failure
+    shape the double-deploy guard exists for, arriving through the filesystem
+    instead of through the alternation. Hence: raise rather than continue, and
+    say plainly that the slot is now untrustworthy.
+
+    Empty subdirectories left behind are harmless and are tolerated: the
+    payload copy recreates or overwrites them, and refusing to proceed over a
+    directory with nothing in it would fail a deploy that is actually fine.
+    """
+    import time
+
+    def _unlink(path: Path) -> None:
+        last: OSError | None = None
+        for _ in range(attempts):
+            try:
+                path.unlink()
+                return
+            except FileNotFoundError:
+                return
+            except PermissionError as exc:  # noqa: PERF203 - retry is the point
+                last = exc
+                time.sleep(delay)
+        raise RuntimeError(
+            f"could not delete {path} after {attempts} attempts. The slot "
+            f"{target} is now PARTIALLY EMPTIED and must not be relied on as "
+            f"the previous version until this script completes. Close anything "
+            f"using it (a running pdfce-cli.exe cannot be replaced on Windows) "
+            f"and re-run."
+        )
+
+    # Bottom-up so a directory is only attempted after its contents are gone.
+    for root, dirs, files in os.walk(target, topdown=False):
+        for name in files:
+            _unlink(Path(root) / name)
+        for name in dirs:
+            try:
+                (Path(root) / name).rmdir()
+            except OSError:
+                # Tolerated -- see the docstring. An empty directory is not a
+                # stale file and cannot be mistaken for part of this build.
+                pass
+
+    # The contract this function actually owes: no FILE survives. Directories
+    # are allowed to; asserting on them would reintroduce the failure this
+    # exists to avoid.
+    leftover = [
+        str(Path(r) / f) for r, _d, fs in os.walk(target) for f in fs
+    ]
+    if leftover:
+        raise RuntimeError(
+            f"{len(leftover)} file(s) survived emptying {target}, e.g. "
+            f"{leftover[0]} -- refusing to write a payload over an unknown "
+            f"mixture of two versions."
+        )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--build", help="portable build folder (default: newest in D:\\builds)")
@@ -206,7 +294,7 @@ def main() -> int:
     # between versions cannot leave a stale file behind that the operator would
     # reasonably read as part of this build.
     if target.is_dir():
-        shutil.rmtree(target)
+        _empty_slot(target)
     target.mkdir(parents=True, exist_ok=True)
 
     copied, missing = [], []
