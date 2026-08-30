@@ -56,10 +56,32 @@ written exemption at the site.
 
 The filing's ledger counted **named helpers** (2 of 2). The unit was then
 widened to include bare inline assertions — finding #3 is one — and **the wider
-denominator was never taken**. Measured 2026-08-30 by
-`grep -rn "debug_assert\(_eq\|_ne\)\?!"` over `pdfce-core` +
-`pdfce-render`: **27 invocations**, of which the ones this rule actually
-reaches:
+denominator was never taken**.
+
+**It is 24** — 12 in `pdfce-core`, 12 in `pdfce-render` — and getting there
+took three wrong answers, which is worth more than the number:
+
+| published | actual | why |
+|---|---|---|
+| 34 (349th filing) | — | never right at any commit |
+| 27 (`7ac98da`, mine) | — | counted grep **hits**, three of which are **comment lines** |
+| **24** | ✓ | independently derived twice, agreeing |
+
+★★ **A source grep over a documentation-first codebase counts the codebase's
+own prose about the construct.** The three lines that inflated my count are
+`edit.rs:12085`, `12092` and `xref_out.rs:282` — the careful reasoning about
+*why* the guard is a `debug_assert!` and not a `panic!`. **The best-written
+lines in the region are the ones that corrupted the census.**
+
+And the shape is `7ac98da`'s own headline turned back on it: *sourcing a figure
+makes it auditable, not durable* — that commit named its exact command and
+still published the wrong **noun** (hits, not invocations).
+
+⇒ **Publish the decomposition, not the total**, so a reader checks by addition:
+`grep -c debug_assert` = 56 mentions = **24 invocations** + 6
+`cfg(debug_assertions)` + 2 `fn` definitions + 24 lines of prose about them.
+
+The sites this rule actually reaches:
 
 | site | verdict |
 |---|---|
