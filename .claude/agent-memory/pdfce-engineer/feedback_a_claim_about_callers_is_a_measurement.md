@@ -74,3 +74,36 @@ because it carries a recent date.
 - Related but distinct: [[feedback-absence-needs-an-unscoped-query]] is about a
   query being *wrongly scoped*; this is about a *correct* query's result being
   quoted long after it was run.
+
+---
+
+## ★ 2026-08-30 — the class widened, and I hit it again in a session ABOUT it
+
+The rule above is about claims that a comment **states**. The same failure
+happens with claims I make **to myself while reading**, and those leave no
+artefact at all.
+
+Sweeping for `R235` (a verb that acts on an identifier without checking it
+exists), I read `EditSession::set_group_style`, saw its guard, and concluded
+its neighbour `set_group_scale` was guarded too. It was not. I then wrote that
+conclusion into a working note as settled.
+
+**It was found by DRIVING the binary, not by reading harder** — eight probes
+with a bogus id, one minute. Seven verbs refused; that one printed a success
+line naming a group it had not touched. The reading had taken far longer and
+produced the wrong answer.
+
+**How to apply:** when the question is *"does this code path check X?"* across
+a **family** of similar functions, probe the family against the shipped binary
+rather than reading them. Two properties make it strictly better: it is
+faster per item, and it **cannot** generalise from a sibling — which is the
+specific mistake reading makes. Reading is for *why*; running is for *whether*.
+
+**The tell that you are about to make this error:** the words *"and its
+neighbour does the same"* — or any conclusion about function B reached while
+looking at function A.
+
+Related: [[verify-each-instance-not-the-class]] is the same shape one level up
+(an oracle run on one of two new variants). This is that lesson arriving from
+the reading side rather than the testing side.
+
