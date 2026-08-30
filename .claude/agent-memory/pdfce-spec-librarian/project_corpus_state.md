@@ -1,6 +1,6 @@
 ---
 name: pdf-spec-corpus-state
-description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 61 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
+description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 62 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
 metadata:
   type: project
 ---
@@ -67,6 +67,7 @@ heading (`**<N>. `).**
 | 51 | ★ **THE TWO-GAPS-NAMED-FROM-OUTSIDE dispatch** (body § 51, line ~3078) — index row added 2026-08-20; the item had been appended without one. "Clause X is ENTIRELY ABSENT" is a coverage HYPOTHESIS; an ID minted by a SIBLING corpus; the refutation is in the OLDER edition; a third clause settles a two-`should` tie; a version-delta negative can be true of the SENTENCE and false of the CONCEPT; a recorded negative is a PREDICTION and expires; UNREMEDIED ≠ PERMANENT; quote the FREE edition of a sentence that exists in both; Write the script, then run it |
 | 52 | ★ **THE SIBLING-CARRIER dispatch** ("build clause C's file, parallel to C′'s"). The dispatch's "clause X is absent" was true of the FILE and false of the COVERAGE — **third instance** · **★ the headline was a CORRECTION to the corpus's own record, and its mechanism is corpus-wide: an ISO 32000-2 erratum's review `/State` is a CHAIN of `/Text` replies linked by `/IRT` — LATEST `/M` wins — and 376 of 547 `Accepted` annots (68.7 %) carry a later `Completed` reply, so an `Accepted` read from the first reply is stale two times in three** · **a table NUMBER can name DIFFERENT TABLES in the two editions** (1.7 T178 = polygon, 2.0 T178 = LINE) · **a `free_primary` table row can be corrupted by COPY-PASTE, and the next edition printing it clean is the proof** · **a key can be VACUOUS in one edition** (1.7's `/IC` fills "line endings" on a shape that has none) **and the later edition's ADDITION proves it** · complementary restrictions in one table are a pattern — grep for the mirror of a recorded one · **"must X bound Y?" can be a true negative whose practical answer is a DIFFERENT clause with a DIFFERENT failure mode** (no clipping; §12.5.5 SCALES the `/AP` to `/Rect`) · three readings can disagree on legality and agree on the decision · **a term with EXACTLY 1 hit per edition IS the headline** · a ~58 kB Bash heredoc dies with `ENAMETOOLONG`, use Write |
 | 61 | ★ **THE OVERDUE-REGISTER-FILING dispatch** (*"two ambiguity entries have been owed to you; file them in the register's existing schema"*) — the transcription is the cheap half, **the audit is the deliverable, and BOTH ambiguities were misstated**. *"Neither reading contradicts any `shall`"* is CHECKABLE: refuted by **the adjacent sentence**, by **a summary TABLE that enumerates the case** (Tables 148/149 row 2), and ⇒ the finding is a **spec-vs-Acrobat DIVERGENCE, not a silence**. But **ISO 32000-2 DELETED two of the three supports** (including a whole table — grep table TITLES, a deletion leaves no renumbering trace). A **null measurement over a settings axis** was **predicted by a table row** ⇒ the FIXTURE was wrong, not the axis. *"The spec says nothing about sub-pixel strokes"* — **grep the RASTERISING clause (clause 10), not the parameter clause**: three provisions, and the carve-out releases the **ZERO-width** case, not the sub-pixel one. The residual ambiguity survives **only because the normative model is BILEVEL** (`anti-?alias` = 4 hits/edition, none in clause 10). **The dispatch's blanket preamble about its own codebase was FALSE** ("both are shipped"; one had **0 hits workspace-wide**) — verify the blanket, not just the caveat. And a register **"verified by grep on <date>"** line was **892 hits stale** and had mis-bucketed ~20 IDs. |
+| 62 | ★ **THE VERIFY-MY-RECALL / DIRECTION-OF-A-CONSTANT dispatch** (*"my recall says key K is CCW and its sibling CW — do NOT take that as a premise"*). **The recall was CORRECT and the file was still the deliverable**: the headline is the SENTENCE STRUCTURE (two parallel rows differing in one word), not the verdict. ★★★ **To test whether a qualifying phrase carries meaning, find another key using the IDENTICAL phrase** — the movie `/Rotate` says *"clockwise relative to the page"* against `/MK /R`'s *"counterclockwise relative to the page"* ⇒ the phrase carries NOTHING. ★★★ **A *"the spec is silent"* question can be ANSWERED BY AN ERRATUM** — search the errata repo by the CONTAINER key (`MK+dictionary` hit; `rotate+widget` = 0), and the corrected sentence is FREE and QUOTABLE where the ISO page is not. An ignore-list membership is a **THREE-state** fact (1.7 / 2.0-as-printed / 2.0+errata). **Bound every "NOT SOURCED" with a key-name term count first** (`MK` = 4 hits/edition, all in one clause pair ⇒ "no fifth place to look"). **GREP SPELLING: the standard uses BOTH `counterclockwise` (7) and `counter clockwise` (2, two words) and the two-word form is where the CONVENTION-DEFINING loci are** (§8.3.4's rotation matrix). A **THIRD copy-paste erratum** found and the corpus had transcribed it faithfully (Table 188 cites `/L` on a table with no `/L`) — detection heuristic now 3-for-3, but the PROOF shape differs (2.0 **deleted** here vs **printed clean** for `PG-E1`). A cross-edition **table-number collision hit THREE tables at once** and one number was already cited elsewhere ⇒ grep the corpus for the OLD number. **The standard's own generation RECIPE excluded the key** (§12.7.3.3's upright `/BBox`) — stronger than absence of a prohibition. **The dispatch's own codebase error was in a STRING LITERAL** (a refusal message asserting `{0,90,180,270}` and "the generator reads it"; both refuted). File count stale a FIFTH session. |
 
 ---
 
@@ -4476,3 +4477,254 @@ mis-bucketed as *deferred* when their status is actually *unknown*).
   corroborated** — veraPDF's `PDFA-4.xml` has exactly **one** overprint rule and
   it is `object="PDICCBasedCMYK"`, ISO_19005_4 §6.2.4.2 test 2. Recorded as
   unsourced, with the measurement, so nobody re-derives the doubt.
+
+---
+
+## 62. The **VERIFY-MY-RECALL / DIRECTION-OF-A-CONSTANT** dispatch — *"my training data says key K is CCW while its sibling is CW; do NOT take that as a premise, source it and say which way it reads"* (2026-08-30, `/MK /R` widget rotation, `iso32000__s__12.5.6.19.md`)
+
+Shape: the engineer is about to write **one integer** and knows the value's
+*meaning* is the risk, not its syntax. He named his own recall and explicitly
+forbade using it as a premise. **He was right, and confirming him was still the
+whole job** — because the deliverable is not the verdict, it is *why the trap
+exists* and *what else in the standard shares the trap*.
+
+### 62a. ★★ WHEN THE DISPATCH'S RECALL TURNS OUT CORRECT, THE FILE IS STILL WORTH WRITING — AND THE HEADLINE IS THE **SENTENCE STRUCTURE**, NOT THE VERDICT
+
+`/MK /R` = *"the number of degrees by which the widget annotation shall be
+rotated **counterclockwise** relative to the page. The value shall be a multiple
+of 90. Default value: 0."* Page `/Rotate` = *"the number of degrees by which the
+page shall be rotated **clockwise** when displayed or printed. The value shall be
+a multiple of 90. Default value: 0."*
+
+**The two sentences are otherwise parallel; the direction word is the ONLY
+difference.** That observation — not "CCW, confirmed" — is what makes the file
+useful, because it explains why every implementer's memory blurs the two.
+**A dispatch that says *"say which way it actually reads"* is asking for a
+measurement in both directions; report the verdict AND the structural reason.**
+
+### 62b. ★★★ TO TEST WHETHER A QUALIFYING PHRASE CARRIES MEANING, FIND ANOTHER KEY THAT USES THE **IDENTICAL PHRASE**
+
+`/MK /R` says *"counterclockwise **relative to the page**"*. I nearly wrote that
+the phrase implied the frame. Then `grep -i "degrees" | grep -i rotat` surfaced
+the **movie dictionary's `/Rotate`** (§13.4 T295 / 2.0 T306): *"rotated
+**clockwise** relative to the page"* — **same phrase, opposite sense, same
+standard, both editions.**
+
+⇒ *"relative to the page"* carries **no** directional convention. Only the
+direction word does. **Generalise: when a spec row hangs a value on a qualifying
+phrase, sweep the document for other rows using that phrase before attributing
+any semantics to it.** The sweep is one grep and it flipped a claim I was about
+to make.
+
+Bonus from the same sweep: the standard's **only explicit warning about the
+clash** lives on the *transition dictionary's* `/Di` row — *"(This differs from
+the page object's `Rotate` entry, which is measured clockwise from the top.)"* —
+i.e. ISO knows the hazard, documents it once, and documents it **nowhere near**
+the key the engineer is writing.
+
+### 62c. ★★★ A *"THE SPEC IS SILENT ON X"* QUESTION CAN BE **ANSWERED BY AN ERRATUM** — SEARCH THE ERRATA REPO WITH THE DISPATCH'S OWN QUESTION WORDS
+
+Question 3 was *"when a widget has a baked `/AP`, does `/MK /R` still apply?"*.
+Both editions **as printed** are silent. Then:
+
+```bash
+curl -s "https://api.github.com/search/issues?q=repo:pdf-association/pdf-issues+MK+dictionary&per_page=20"
+```
+
+→ **issue #56, *"Clarify status of MK dictionary for widget annotations with AP
+appearance dictionary"*** — literally the same question, asked by another
+implementer in 2021, **closed `ISO approved`** with a TWG minute:
+*"PDF TWG: OK to ignore MK for Widget."* The corrected §12.5.2 sentence inserts
+`MK` into the ignore list.
+
+**Three lessons in one:**
+1. **A key-name search of the errata repo is a first-class SEMANTIC search.**
+   `rotate+widget` and `widget+rotation` both returned **0**; `MK+dictionary`
+   returned the answer. Search the **container**, not the phenomenon.
+2. **The errata edit gives you a FREE, QUOTABLE sentence for text that is
+   otherwise licensed.** The corrected §12.5.2 paragraph is public
+   (`pdf-issues.pdfa.org` + the GitHub issue), so it can go into a corpus file
+   *and* into pdfce's public MIT code, while the ISO 32000-2 page it edits
+   cannot.
+3. **The submitter's own body text is the clearest statement of the ambiguity**
+   (already recorded as memory item 4j) — and here the **maintainer's summary
+   comment** was better still: *"ISO 32000 is silent on how to
+   construct/reconstruct appearance streams from all the various dict keys …
+   there is currently no expectation that all PDF processors would construct
+   visually identical appearance streams."* That single quote closes an entire
+   class of future questions.
+
+### 62d. ★★ AN IGNORE-LIST MEMBERSHIP IS A **THREE-STATE** FACT: (edition × errata)
+
+| State | `/MK` vs `/AP` |
+|---|---|
+| ISO 32000-1 | **no such paragraph exists at all** — precedence is stated per table row, and the widget row does not name `/MK` ⇒ genuine silence |
+| ISO 32000-2 **as printed** | the paragraph exists; the list is `C IC Border BS BE BM CA ca H DA Q DS LE LL LLE Sy` — **`MK` absent** ⇒ still silent |
+| ISO 32000-2 **+ erratum #56** | `MK` **inserted** (and `BM` **removed**) ⇒ **ignored when rendering the `/AP`** |
+
+**Never answer "does the standard say?" with two states when errata exist.**
+And note the *shape* of the consequence: it turns the engineer's one-key write
+into a **no-op** for conforming 2.0 renderers — the worst bug class, because the
+command appears to succeed.
+
+### 62e. ★★ BOUND EVERY *"NOT SOURCED"* WITH A KEY-NAME TERM COUNT FIRST
+
+```bash
+grep -c "\bMK\b" /c/tmp/iso32000_dump.txt     # 4
+grep -c "\bMK\b" /c/tmp/iso32000_2_dump.txt   # 4
+```
+
+Four hits per edition, **all inside §12.5.6.18–.19**. That one measurement makes
+every subsequent "the standard does not say" **credible instead of merely
+unrefuted** — it proves there is no fifth place to look. Pair it with a
+clause-scoped count for the clause the reader would *expect* to answer:
+**clause 12.7 (Interactive Forms), 1 857 / 1 891 lines, `[Rr]otat` = 0, `MK` = 0
+in BOTH editions.** Put both tables in the file.
+
+### 62f. ★★ GREP SPELLING — THE STANDARD USES **TWO** SPELLINGS AND THE LOAD-BEARING LOCI ARE IN THE ONE YOU WILL MISS
+
+Measured, both editions, identical counts:
+
+| Spelling | hits |
+|---|---|
+| `counterclockwise` (one word) | **7** |
+| `counter clockwise` (**two words, space**) | **2** |
+| `counter-clockwise` | **0** |
+| `anticlockwise` / `anti-clockwise` | **0** |
+
+★ **The two-word form is exactly where §8.3.4's rotation-matrix sentence
+(`[cos q sin q -sin q cos q 0 0]` … *"counter clockwise"*) and §8.9.4's `cm`
+example live** — i.e. the two sentences that define PDF's positive-angle
+convention. A one-word grep returns the table rows and misses the *convention*.
+**Always `counter[ -]?clockwise`.** And carry `anticlockwise` in a file's
+keywords even though it is 0 hits in the source, so a future search in that
+spelling lands somewhere.
+
+Practical payoff here: §8.3.4's CCW matrix is **literally** `Matrix::rotate` in
+`pdfce-core` ⇒ `/MK /R` needs **no sign flip**, and page `/Rotate` is the
+outlier. That is the sentence the engineer actually needed.
+
+### 62g. ★★★ A **THIRD** COPY-PASTE ERRATUM IN ISO 32000-1, AND THIS CORPUS HAD TRANSCRIBED IT FAITHFULLY
+
+ISO 32000-1 **Table 188** (widget) `BS` row: *"The annotation dictionary's `AP`
+entry, if present, shall take precedence over the **`L`** and `BS` entries."*
+**A widget has no `/L` key** (Table 188 = `Subtype H MK A AA BS Parent`). The
+sentence is copied verbatim from **Table 175 (line annotation)**, where `/L` is
+the endpoints. `iso32000__s__12.5.6.md` line 41 had recorded *"`/AP` precedence
+over `L`/`BS` (Table 188)"* — a faithful transcription of a defective row,
+sitting in the corpus as if it were a rule.
+
+**The detection heuristic is now 3-for-3** (item 4i's `/URLType`; `PG-E1`'s
+`Vertices`-cites-Table-174; this): **a row that cites a sibling key its own table
+does not have belongs to a different table.** Cheap, and it fires on a single
+read.
+
+★ **But the PROOF shape differs, and both must be checked:**
+- `PG-E1`: **2.0 prints the row CLEAN** ⇒ the erratum is confirmed by correction.
+- `MK-E1`: **2.0 DELETES the sentence outright** ⇒ confirmed by removal — and
+  2.0 retains that precedence sentence **exactly once in the whole standard**
+  (FreeText `/DA`, Table 177), down from ~11 occurrences in 1.7.
+  `grep -c "take precedence"` per edition is the one-command way to see it.
+
+**Never silently fix a transcribed defect. Annotate it in place**, so anyone who
+cited the old line sees what changed.
+
+### 62h. ★★ A CROSS-EDITION TABLE-NUMBER COLLISION CAN HIT **THREE** TABLES AT ONCE — AND ONE OF THEM IS ALREADY CITED ELSEWHERE IN THE CORPUS
+
+| Number | ISO 32000-1 | ISO 32000-2 |
+|---|---|---|
+| 188 | **widget** | **sound** |
+| 189 | **`/MK` appearance characteristics** | **movie** |
+| 192 | **redaction** | **`/MK` appearance characteristics** |
+
+`iso32000__s__12.5.6.23.md` says *"Table 192 verbatim"* meaning **1.7's
+redaction** table; this build cites Table 192 meaning **2.0's `/MK`** table.
+Both correct, and a bare "Table 192" in the corpus became ambiguous the moment
+the new file landed.
+
+**⇒ When a clause build renumbers a table, `grep` the corpus for the OLD number
+and go annotate the file that uses it.** One edition banner, added to the
+neighbour, costs a minute and prevents a wrong-table read later. (Same treatment
+as item 53/61h's absent-scope-banner fix: annotate the neighbour, don't edit its
+frontmatter.)
+
+### 62i. ★★ THE STANDARD'S OWN **RECIPE** CAN EXCLUDE THE KEY YOU ARE RESEARCHING — THAT IS STRONGER THAN THE ABSENCE OF A PROHIBITION
+
+§12.7.3.3 (1.7) / §12.7.4.3 (2.0) is the **only** place either edition says how
+to build a widget's `/AP`. Its `/BBox` rule is *"lower-left corner … set to
+(0,0) … top and right coordinates are taken from the dimensions of the
+annotation rectangle"* — **no `/Matrix` clause, no rotation clause, and `/MK`
+and `/R` appear nowhere in the subclause.** A processor following it literally
+produces an **upright** appearance for a widget carrying `/R 90`.
+
+⇒ Don't argue a negative only from "the standard never forbids it". **Find the
+constructive procedure and show the key is not one of its inputs.**
+
+### 62j. ★★ READ THE CODE THE DISPATCH IS ABOUT — THE ERROR WAS IN A **STRING LITERAL**
+
+`crates/pdfce-core/src/edit.rs` ~18941 refuses widgets with:
+*"a widget's rotation is `/MK /R` (§12.5.6.19 Table 189), **a quantised
+0/90/180/270 declaration the field's appearance generator reads**"*.
+
+Both bolded halves are wrong against the sources:
+1. **`{0,90,180,270}` is pdfce's normalisation, not the standard's.** *"shall be
+   a multiple of 90"* is the **entire** constraint — `-90`, `270`, `450` are all
+   conforming, no modulo rule, no recovery rule. **The proof that this is a
+   deliberate stop:** `GlyphOrientationVertical` (§14.8.5.4) *is* bounded —
+   *"a multiple of 90 degrees **between -180 and +360**"* — so ISO writes ranges
+   when it means them. (Same sibling-clause move as items 46/57.)
+2. *"the appearance generator reads"* is true **only while regenerating**; a
+   conforming 2.0 renderer **ignores `/MK`** (62c/62d).
+
+**A refusal message is claim-bearing copy read at the moment of maximum
+operator attention.** Grep the codebase for the clause number your dispatch
+names and audit every sentence that cites it.
+
+### 62k. ★ THE "WHICH MECHANISM?" QUESTION WAS DECIDED BY **ENUMERATING THE READINGS IN A TABLE** AND SCORING THEM ON TWO AXES
+
+*"Does `/Rect` change when `/R` changes?"* is unstated. Three readings, all
+self-consistent, all conforming. The one adopted is the only one that is
+**simultaneously undistorted** (because §12.5.5 step (b) scales the transformed
+appearance box onto `/Rect` **anisotropically**, so a 90°-rotated swapped `/BBox`
+lands 1:1 on an unchanged `/Rect`) **and minimal-diff** (pdfce rule 3).
+
+⇒ When the standard genuinely does not choose, **publish the enumeration with a
+consequence column, name the adopted reading as this corpus's and attributed,
+and say which pdfce rule broke the tie.** Do not present a derived choice as
+ISO's.
+
+### 62l. ★ TWO CHEAP NEGATIVES THAT MADE THE FILE STRONGER
+
+- **`grep -rn "MK" _sources/verapdf_profiles/*.xml` → 0 hits across all 18
+  profiles** ⇒ **no PDF/A, PDF/UA, WCAG or WTPDF rule constrains `/MK` at all.**
+  One command; removes a whole conformance worry (`license_basis: measured`).
+- **Errata search for `rotate+widget` / `widget+rotation` → 0 issues** ⇒ no
+  public erratum has ever been filed against `/R`'s direction, and the rendered
+  clause-12 errata page carries **no `<ins>`/`<del>` anywhere in Tables 191/192**.
+  The row stands as printed in both editions.
+
+### 62m. The counting failure, FIFTH session running — and by yet another route
+
+`find . -name "*.md" -not -path "./_sources/*" | wc -l` measured **171** after
+this build ⇒ **170** before it. The 2026-08-28 status cell said **169**. It was
+already stale by one *before* I touched anything. **Recount with the stated
+command every time; never extrapolate `previous + 1`.** (`iso32000__s__*` was
+correct at 100 → 101, `ls`-verified — the per-prefix cells are more reliable than
+the whole-corpus cell.)
+
+### 62n. Filing shape for a LOOKUP dispatch that turns into a clause build
+
+Touched **6 places**: the new clause file; `iso32000__s__12.5.6.md` **twice**
+(the GAP marker → `GAP CLOSED`, struck-through not deleted; and the Table-188
+row → `MK-E1` annotation); `iso32000__s__12.5.6.23.md` (edition banner for the
+Table-192 collision); and `index.md` **five times** (status entry, prefix-table
+count + contents cell, file-manifest row, a pointer row in the existing widget
+trigger table + a whole new trigger section, six ambiguity rows, a search-recipe
+block).
+
+★ **The ambiguity register was NOT filed** — deliberately, and **recorded as a
+visible debt in `index.md`'s register banner** rather than left silent. A
+register filing is item 61h's seven-touchpoint edit with recomputed percentages;
+doing it half-way inside a lookup dispatch is how stale counts get minted. State
+the bucket you *expect* (`MK-A1`/`A2`/`A3` are bucket 2, so **no settings count
+changes**) so the next filer can move fast.

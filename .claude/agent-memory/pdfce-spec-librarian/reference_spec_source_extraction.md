@@ -1047,3 +1047,29 @@ says `c`. **Prefer the mechanical channel (filename + directory path); parse the
 channel only for the message; report a mismatch as a corpus defect.** Cost: ~40 lines of
 `pypdf` + `os.walk`, ~4 minutes over 2 906 files.
 
+
+
+4n. **★ SEARCH THE ERRATA REPO BY THE **CONTAINER KEY NAME**, NOT BY THE PHENOMENON —
+   AND TREAT A HIT AS AN ANSWER TO A *"THE SPEC IS SILENT"* QUESTION.** Established
+   2026-08-30 chasing *"does `/MK /R` apply when a widget has a baked `/AP`?"*.
+   ```bash
+   curl -s "https://api.github.com/search/issues?q=repo:pdf-association/pdf-issues+MK+dictionary&per_page=20"
+   ```
+   `rotate+widget` → **0**. `widget+rotation` → **0**. `MK+dictionary` → **issue #56,
+   *"Clarify status of MK dictionary for widget annotations with AP appearance
+   dictionary"*, closed, label `ISO approved`** — literally the dispatch's question,
+   asked by another implementer in 2021, with a TWG minute in the comments
+   (*"PDF TWG: OK to ignore MK for Widget."*). **Both ISO editions are silent
+   as printed; the errata are not.**
+   Two operational consequences:
+   - **The corrected sentence is FREE AND QUOTABLE even when the page it edits is
+     licensed.** `https://pdf-issues.pdfa.org/32000-2-2020/clause<NN>.html` renders
+     the `<ins>`/`<del>`; strip tags to `[INS]`/`[DEL]` markers with a 6-line Python
+     regex and grep the result. Here it yielded a full corrected §12.5.2 paragraph
+     that could go into a corpus file **and** into public MIT source, where the
+     ISO 32000-2 page could not.
+   - **A membership-in-a-list fact is THREE-state**: edition A / edition B as
+     printed / edition B + errata. Never answer "does the standard say?" with two.
+   Companion negative, also cheap: **`grep -n "Table <N>" <errata_page>.txt` → 0
+   hits proves the table you are quoting is unamended**, which is what lets a file
+   say "the row stands as printed in both editions".
