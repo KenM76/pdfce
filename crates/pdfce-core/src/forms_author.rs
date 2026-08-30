@@ -227,17 +227,40 @@ pub enum FormAuthorError {
     ///
     /// # Not a conversion, and not a conversion-with-a-disclosure
     ///
-    /// Refused outright, because there is no repair that puts the value back:
-    /// by the time anything could report it, the field has already stopped
-    /// being a field. A *deliberate* promotion — `Text` becoming a group with
-    /// the original demoted to `Text.0`, keeping its value — is a different
-    /// verb with its own name and its own confirmation, because it **renames
-    /// an existing field**, and a field's name is its identity to every
-    /// script, calculation order, FDF import and external mapping that refers
-    /// to it. That verb is not built and was not asked for.
+    /// Refused outright. **Not** because there is nothing to put back — the
+    /// object graph above shows the `/V` survives — but because the operator's
+    /// document would already be wrong in a way they cannot see, and an
+    /// after-the-fact repair verb is a worse answer than the operation
+    /// refusing. That is the consuming shell's own reasoning, adopted.
+    ///
+    /// A *deliberate* promotion — `Text` becoming a group with the original
+    /// demoted to `Text.0`, keeping its value — is a different verb with its
+    /// own name and its own confirmation, because it **renames an existing
+    /// field**, and a field's name is its identity to every script,
+    /// calculation order, FDF import and external mapping that refers to it.
+    /// That verb is not built and was not asked for.
+    ///
+    /// # ★★★ THE MESSAGE BELOW IS SHIPPED UI, AND IT SURVIVED THE CORRECTION
+    /// THREE LINES ABOVE IT
+    ///
+    /// [`crate::edit::EditError::FieldAuthoring`] is `#[error(transparent)]`,
+    /// so this template **is verbatim what `pdfce-cli` and the GUI print**.
+    /// `Pass 174.9` corrected *"destroy"* in the rustdoc, in the choke-point
+    /// comment and in `docs/core-api` — and stopped **three lines short of the
+    /// one copy an operator actually reads**, leaving the withdrawn word in
+    /// the only place it was ever going to be seen. Found by
+    /// `pdfce-librarian`'s sweep, not by any gate; `missing_docs` does not
+    /// read format strings and no test asserts on this text.
+    ///
+    /// ⇒ `R222`'s sixth instance, and the one that extends its media list:
+    /// **when a doc-comment claim is corrected, the `#[error(…)]` template
+    /// beside it is a copy of that claim.** So is a test's `expect_err`
+    /// message. Both are prose, neither is compiled against anything.
     #[error(
         "cannot create `{fqn}`: `{terminal}` is already a field, and nesting under it would \
-         destroy it — a field with kids has no type, value or widget of its own (\u{a7}12.7.3.1)"
+         stop it being one — a field with kids has no type, value or widget of its own \
+         (\u{a7}12.7.3.1), so `{terminal}`'s value would stay in the file and become \
+         unreachable by name"
     )]
     FieldPathCrossesTerminal {
         /// The fully-qualified name requested.

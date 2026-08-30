@@ -1226,7 +1226,7 @@ fn a_dotted_path_may_not_nest_under_an_existing_terminal_field() {
         .expect("the terminal");
     let err = s
         .add_text_field(&NewTextField::new(0, "Text.2", r2()).declining_tooltip())
-        .expect_err("nesting under a terminal destroys it");
+        .expect_err("nesting under a terminal stops it being a field");
     match err {
         EditError::FieldAuthoring(FormAuthorError::FieldPathCrossesTerminal { fqn, terminal }) => {
             // ★ `fqn` is what the OPERATOR TYPED, not the unmatched tail. The
@@ -1245,9 +1245,10 @@ fn a_dotted_path_may_not_nest_under_an_existing_terminal_field() {
 ///
 /// Separate from the assertion above deliberately: *"one field remains"* and
 /// *"the field that remains is the one that was there, intact"* are different
-/// claims, and the defect being guarded destroyed the **value** while leaving
-/// a field-shaped object behind. A count alone would have passed against the
-/// bug on any document whose field had never been filled in.
+/// claims, and the defect being guarded left the **value** in the file while
+/// making it unreachable by name — a field-shaped object with a value nothing
+/// can address. A count alone would have passed against the bug on any
+/// document whose field had never been filled in.
 #[test]
 fn a_refused_nesting_leaves_the_terminals_value_untouched() {
     let mut s = blank();

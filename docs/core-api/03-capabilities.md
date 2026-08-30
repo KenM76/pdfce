@@ -944,9 +944,12 @@ count by exactly that many.
   find it.** Measured on a damaged file: object 6 is still the sole `/Fields`
   entry, still in `/Annots`, and still carries `/V (K. Mantle)` — while every
   reader correctly projects one field named `Text.2` and the operator's value
-  is reachable by no form verb, no FDF export and no script. `fqn` is the name the operator typed (`Text.2`), not the unmatched
-  tail. **There is no repair verb and none is planned** — by the time anything
-  could report it the value is already gone, so the answer is the refusal.
+  is reachable by no form verb, no FDF export and no script.
+  `fqn` is the name the operator typed (`Text.2`), not the unmatched tail.
+  **There is no repair verb and none is planned** — not because there is
+  nothing to put back (there is), but because the operator's document would
+  already be wrong in a way they cannot see, and refusing the operation is a
+  better answer than repairing it afterwards.
   A *deliberate* promotion (`Text` → a group, the original demoted to `Text.0`
   keeping its value) would be a different verb with its own confirmation,
   because it **renames an existing field**, and a field's name is its identity
