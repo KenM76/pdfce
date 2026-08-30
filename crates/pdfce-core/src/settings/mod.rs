@@ -435,11 +435,91 @@ pub enum CmykIntent {
     /// A fixture whose expected value equals what the code writes anyway
     /// cannot falsify anything, and 125 of those 132 were that fixture.
     ///
+    /// # ★★ A THIRD INDEPENDENT LINE ARRIVED, AND IT MOVES THE "THIN BASIS"
+    /// SENTENCE BELOW
+    ///
+    /// The paragraph after this one says two grey levels is a thin basis for
+    /// moving a shipped default. That was true when written and is weaker now,
+    /// so it is qualified here rather than left to read as current.
+    ///
+    /// On 2026-08-29 the sibling `iccce` project ran the **actual ICC
+    /// transform** — the print-conformance patch's own `/DestOutputProfile`
+    /// (a v2.4.0 `prtr` CMYK/Lab) to the OS-shipped sRGB profile,
+    /// media-relative colorimetric — over 49 operands, and corroborated its
+    /// own arithmetic against `lcms2` 2.19.1 to **0.22 counts**. On the
+    /// achromatic axis:
+    ///
+    /// ```text
+    ///   pure-K ink   reference    pdfce (Calibrated)   iccce (real transform)
+    ///   0 0 0 0.50   156,156,156     147,148,152           158,159,159
+    ///   0 0 0 0.35        —          177,178,182           189,189,190
+    /// ```
+    ///
+    /// **iccce returns NEUTRAL greys and lands within 2–3 counts of the
+    /// reference; pdfce is cool on every row, blue above red by 2 to 5.** So
+    /// the evidence for the hue divergence is now three lines that did not
+    /// come from each other: the reference's own exact neutrality, pdfce's
+    /// measured spread over the corpus, and the profile's own answer computed
+    /// by a separate engine against `lcms2`. **Still not a reason to change
+    /// the conversion here** — decision 064 puts it in `iccce`'s domain and
+    /// the operator ruled the default — but a future session weighing the
+    /// evidence should weigh three lines, not two.
+    ///
+    /// # ★★★ AND THE BLACK END IS A FALSE-DEFECT TRAP — pdfce IS THE CLOSER
+    /// ANSWER THERE, WHICH THE TABLE DOES NOT SHOW
+    ///
+    /// The same 49-operand comparison disagrees far more at the dark end
+    /// (median worst-channel difference 11 counts, maximum 34), and **on every
+    /// one of the six worst rows `iccce` is LIGHTER**:
+    ///
+    /// ```text
+    ///   operand              pdfce        iccce
+    ///   0.00 0.00 0.00 1.00  35, 31, 31   43, 43, 42
+    ///   1.00 1.00 1.00 1.00   0,  0,  0   28, 27, 24
+    ///   0.10 1.00 1.00 1.00  11,  0,  0   45, 28, 22
+    /// ```
+    ///
+    /// **Read naively, that table says pdfce's blacks are 8 to 34 counts
+    /// wrong.** They are not, and `iccce` said so unprompted and in its own
+    /// words: *"on the black end, do not read my column as the better answer …
+    /// it is the answer of an engine that declined to estimate something yours
+    /// effectively assumes. Refusing and being wrong look identical in a
+    /// table; only this paragraph distinguishes them."*
+    ///
+    /// The mechanism is **black point compensation**. Media-relative *without*
+    /// BPC returns the profile's actual darkest printable colour, which is
+    /// what `iccce` returns because its black-point estimator **refuses by
+    /// name** on this profile rather than guessing. Acrobat's display path is
+    /// almost certainly media-relative *with* BPC, which pulls that black down
+    /// toward display black — and pdfce's `35, 31, 31` is within a count of
+    /// the `#231F20` this type documents for K-only black, i.e. pdfce matches
+    /// the reference here and `iccce` does not.
+    ///
+    /// ★ **Recorded because the trap is asymmetric and invisible in the
+    /// numbers.** The SAME comparison makes pdfce look wrong on the grey axis
+    /// (it is) and wrong on the black end (it is not), and nothing in the
+    /// table distinguishes the two. A session that "fixes" the black end
+    /// toward `iccce`'s column would move pdfce AWAY from the reference by up
+    /// to 34 counts while believing it had closed a gap. *"Which engine is
+    /// better"* is the wrong question — different regions, different answers,
+    /// different causes.
+    ///
+    /// ★ **Not a fitting target either way.** `iccce`'s own position, held to
+    /// symmetrically: *"you should not hand-tune toward these 49 numbers any
+    /// more than I should tune toward the Acrobat capture."* 49 pixels bought
+    /// at the cost of every other one is the trade decision 064 exists to
+    /// prevent. The right use is a **regression datum** — what a real
+    /// transform through a real declared output condition returns for the
+    /// operands pdfce actually paints.
+    ///
     /// **Not changed here, deliberately.** The conversion itself is the
-    /// sibling `iccce` project's domain under decision 064, two levels is a
-    /// thin basis for moving a shipped default, and the operator ruled this
-    /// default on 2026-08-28. What is owed is an accurate justification, and
-    /// that is what this is.
+    /// sibling `iccce` project's domain under decision 064, and the operator
+    /// ruled this default on 2026-08-28. What is owed is an accurate
+    /// justification, and that is what this is. (The "two levels is a thin
+    /// basis" reasoning above stands as the state of the evidence when it was
+    /// measured; the third line qualifying it is recorded two sections up
+    /// rather than by rewriting it, because the sequence is the part a future
+    /// session needs.)
     #[default]
     Calibrated,
     /// As [`Self::Calibrated`], except that pure black — `C = M = Y = 0`
