@@ -14,7 +14,7 @@ thing that cannot be stale.
 
 ---
 
-## §0 NOTHING IS OWED. The button-action arc is closed.
+## §0 ONE THING IS IN FLIGHT: `Pass 185.1`. The button-action arc is closed.
 
 `Pass 182.0` → `183.0` → `183.1` → `184.0` ran end to end today, and the last
 of them repaired a defect the first three created. Concretely, a push button
@@ -38,6 +38,10 @@ layout, the remainder of `Pass 131.0`. ★ It is **appearance work** (`R43`'s
 neighbourhood), not a continuation of the action work — a session scoping it as
 "the rest of the button actions" would scope the wrong thing.
 
+**★ `Pass 185.1` is IN FLIGHT and may be uncommitted when you read this.** Run
+`git status` first. It is the form-edit fuzz target plus the page-tree guard it
+found — see §A item 2 — and it carries **one unresolved item**, §C item 6.
+
 ---
 
 ## §A — Candidates, ordered by my read of value. None is a commitment.
@@ -54,15 +58,25 @@ neighbourhood), not a continuation of the action work — a session scoping it a
    `rename_field`/`delete_field` **changed behaviour** on verbs they already
    call. Nothing is owed back.
 
-2. **`Pass 185.0` — a CI job named after one of its steps.** The job "verify
-   pdfce-gui strings live in ui_text.rs" also runs the filing gates, so a
-   filing failure reports as a red job named after a string check that is
-   perfectly clean. It cost a diagnostic cycle today.
-   ★ **The finding was already filed on 2026-08-12** and has been correct,
-   complete and actionable ever since — and **inert, because nothing was ever
-   scheduled against it.** That job has gone from 3 steps to 19; misattributed
-   red runs are up from 5 to 7. Small, mechanical, and it stops a recurring
-   waste of exactly the kind that reads as a real failure.
+2. **`Pass 185.1` — the form-edit fuzz target and what it found in two
+   minutes.** `fuzz/fuzz_targets/form_edit_sequence.rs` drives
+   `set_button_action`, `rename_field`, `delete_field` and
+   `delete_field_group` over mutated documents, and immediately hit a
+   **release-silent page-tree corruption**: an `/AcroForm` whose `/Fields`
+   names an object that is also a `/Page`. `parse_acroform` models it as a
+   field (correctly — the form dictionary says it is one), the deletion
+   removed the page, and the only thing that complained was a
+   `#[cfg(debug_assertions)]` postcondition that is **compiled out of the
+   build operators run**.
+   ★ Guarded on all three deletion routes and reproduced in a hand-built
+   fixture (`crates/pdfce-core/tests/form_delete_page_tree.rs`). **A second,
+   different page-tree crash was seen once and has not been reproduced** —
+   see §C item 6 before assuming the class is closed.
+
+   ★★ **`Pass 185.0` shipped this morning and this target is the reason to
+   care about it**: the fuzz gate is the one this role skips, twice recorded
+   and twice recurred, and the first target written after saying so found a
+   real defect in an existing verb within two minutes.
 
 3. **`Pass 142.0`** — a font face outside the standard 14. The largest
    remaining *named* feature, **de-prioritised by the consuming project's own
@@ -105,7 +119,7 @@ neighbourhood), not a continuation of the action work — a session scoping it a
 
 ---
 
-## §C — ★★ READ BEFORE WRITING CODE. Five traps from this session.
+## §C — ★★ READ BEFORE WRITING CODE. Six items from this session.
 
 1. **★★★ A CORRECTION THAT REACHES THE STRUCTURE AND STOPS SHORT OF THE
    PROSE.** Four instances today, every one found by a reader rather than a
@@ -137,7 +151,24 @@ neighbourhood), not a continuation of the action work — a session scoping it a
    elsewhere (the call site discards the writes, so no argument can defeat it),
    and a mutation that is semantically a no-op. Ask in that order.
 
-5. **Patch-script hazards, both of which destroy work silently.**
+5. **★★ A SECOND PAGE-TREE CRASH, SEEN ONCE, NOT REPRODUCED — do not assume
+   `Pass 185.1` closed the class.** After the three deletion routes were
+   guarded, `cargo +nightly fuzz run form_edit_sequence` hit the same
+   `debug_assert_page_tree_still_walks` postcondition again, at a different
+   line, and I could not get it back: two subsequent runs (50k and 90k
+   iterations) were clean, and **libFuzzer wrote no artifact**, because Rust's
+   abort on Windows exits `0xc0000409` before its crash handler saves one.
+
+   Two things to carry:
+   - **Run it with `-seed=N` fixed** so a crash is replayable, and consider
+     making the target print the input itself on panic — the harness cannot be
+     relied on to.
+   - **The absence of a reproduction is not evidence of a fix.** The first
+     crash was reproduced deterministically in a hand-built fixture *before*
+     being fixed; this one was not, so it is open. The ASan DLL path and the
+     invocation are in `.claude/agent-memory/pdfce-engineer/reference_fuzz_asan_dll.md`.
+
+6. **Patch-script hazards, both of which destroy work silently.**
    `pathlib.write_text()` rewrites a whole file to CRLF unless you pass
    `newline`; and a sabotage loop that asserts on a *later* case leaves an
    *earlier* case's sabotage on disk if the restore is after the loop rather
@@ -154,7 +185,8 @@ Run these rather than trusting the sentence:
 
 ```
 python tools/check-ledger-numbers.py      # all four ceilings
-bash tools/run-gates.sh                   # the full sweep, 29 commands
+bash tools/run-gates.sh                   # the full sweep; it derives its
+                                          # own list, so do not memorise a count
 git rev-list --count origin/main..main    # how far ahead
 ls -lt D:/Dev/pdfce-backups/              # newest bundle
 gh run list --limit 3                     # CI's colour, from GitHub

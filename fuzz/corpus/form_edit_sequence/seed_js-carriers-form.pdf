@@ -1,0 +1,52 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Names << /JavaScript 7 0 R >> /AcroForm << /Fields [4 0 R 5 0 R] /CO [5 0 R 4 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >> >> >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> /Annots [4 0 R 5 0 R] >>
+endobj
+4 0 obj
+<< /FT /Tx /T (Price) /V (10.00) /Type /Annot /Subtype /Widget /Rect [20 150 140 172] /P 3 0 R /F 4 >>
+endobj
+5 0 obj
+<< /FT /Tx /T (Total) /V (20.00) /Type /Annot /Subtype /Widget /Rect [20 110 140 132] /P 3 0 R /F 4 /AA << /C << /S /JavaScript /JS 8 0 R >> /F << /S /JavaScript /JS (AFNumber_Format\(2, 0, 0, 0, $, true\);) >> >> >>
+endobj
+6 0 obj
+<< /Length 5 >>
+stream
+BT ET
+endstream
+endobj
+7 0 obj
+<< /Names [(docInit) 9 0 R] >>
+endobj
+8 0 obj
+<< /Length 47 >>
+stream
+event.value = 2 * this.getField('Price').value;
+endstream
+endobj
+9 0 obj
+<< /S /JavaScript /JS (console.println\('init'\);) >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000282 00000 n 
+0000000339 00000 n 
+0000000449 00000 n 
+0000000567 00000 n 
+0000000799 00000 n 
+0000000853 00000 n 
+0000000899 00000 n 
+0000000996 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+1065
+%%EOF

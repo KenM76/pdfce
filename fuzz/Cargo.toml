@@ -427,3 +427,19 @@ path = "fuzz_targets/clipboard_payloads.rs"
 test = false
 doc = false
 bench = false
+
+# `Pass 185.1`: the form-edit WRITE path, and the object-wide action-target
+# sweep `Pass 184.0` put underneath it. `form_model` fuzzes the read side only;
+# nothing drove `rename_field`, `delete_field` or `set_button_action` against
+# untrusted input, and the sweep recurses through EVERY live object of an
+# arbitrary document bounded by one constant nobody had ever driven
+# (`forms::MAX_ACTION_NEST_DEPTH`). The standing rule asks for a fuzz target
+# whenever new code touches untrusted-input parsing; the fuzz half is the one
+# this role forgets, twice recorded and twice recurred, so it is written down
+# here as well as in the target's own header.
+[[bin]]
+name = "form_edit_sequence"
+path = "fuzz_targets/form_edit_sequence.rs"
+test = false
+doc = false
+bench = false

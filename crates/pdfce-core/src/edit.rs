@@ -4933,6 +4933,27 @@ pub enum EditError {
         /// The grouping-node name that was supplied.
         name: String,
     },
+    /// A form object that a deletion would remove is **also a page-tree
+    /// node** (`Pass 185.1`).
+    ///
+    /// Found by `fuzz/fuzz_targets/form_edit_sequence.rs`: an `/AcroForm`
+    /// whose `/Fields` names an object that is also a `/Page`.
+    /// [`forms::parse_acroform`] models it as a field — correctly, since the
+    /// form dictionary says it is one — and deleting it removed the page,
+    /// leaving a document pdfce itself could not reopen.
+    ///
+    /// **Refused rather than resolved**: the file says the object is both
+    /// things, and choosing which one it "really" is would be an inference
+    /// about a malformed document made silently on a destructive verb.
+    #[error(
+        "field {name:?} resolves to object {object}, which is part of this document's page tree -- deleting it would delete a page. The file says that object is BOTH a form field and a page; pdfce will not decide which it meant by destroying the page tree"
+    )]
+    FieldObjectIsInPageTree {
+        /// The fully-qualified field name the caller asked to delete.
+        name: String,
+        /// The object number that is in both structures.
+        object: u32,
+    },
     /// A `/Hide` action was asked to target nothing at all (`Pass 183.1`).
     ///
     /// `/T` is **`(Required)`** in Table 210, so there is no such thing as a
@@ -17284,6 +17305,16 @@ impl EditSession {
         let mut objects = objects;
         objects.extend(form_writes);
 
+        // ★ REFUSE before committing if any object about to be removed is a
+        // page-tree node. See `refuse_if_in_page_tree`: a fuzzer found a form
+        // whose `/Fields` named a `/Page`, and the release build has no
+        // postcondition to catch it.
+        let doomed: Vec<ObjId> = std::iter::once(field.id)
+            .chain(widget_ids.iter().copied())
+            .chain(emptied.iter().copied())
+            .collect();
+        self.refuse_if_in_page_tree(fqn, &doomed)?;
+
         // The field dict, its non-merged widgets, and every grouping node the
         // removal emptied. A merged widget IS the field dict, so it is not
         // deleted twice.
@@ -17407,6 +17438,18 @@ impl EditSession {
         let mut objects = self.unlist_widgets(&widgets, &slots)?;
         let (form_writes, emptied) = self.remove_fields_from_form(&field_ids)?;
         objects.extend(form_writes);
+
+        // ★ Same guard as `delete_field`, at its own removal set rather than
+        // borrowed from it. The two build their sets in different functions,
+        // and a guard added to one is exactly the kind of fix that leaves the
+        // other broken beside it.
+        let doomed: Vec<ObjId> = field_ids
+            .iter()
+            .copied()
+            .chain(widget_ids.iter().copied())
+            .chain(emptied.iter().copied())
+            .collect();
+        self.refuse_if_in_page_tree(fqn, &doomed)?;
 
         let removals: Vec<Removal> = field_ids
             .iter()
@@ -17636,6 +17679,13 @@ impl EditSession {
             for w in field.widgets.iter().filter(|w| w.id != widget.id) {
                 objects.push(self.set_widget_as(w.id, b"Off")?);
             }
+        }
+
+        // ★ Third route, guarded on its own terms. A widget annotation that is
+        // ALSO a page is the same collision one level down, and `delete_widget`
+        // reaches it without going through either verb above.
+        if !widget.merged {
+            self.refuse_if_in_page_tree(fqn, &[widget.id])?;
         }
 
         let removals = if widget.merged {
@@ -25178,6 +25228,67 @@ impl EditSession {
         }
 
         (matched, writes)
+    }
+
+    /// Every object id that is part of the page tree — leaves and the nodes
+    /// above them (`Pass 185.1`).
+    ///
+    /// From `page_slots`, which already returns each page's `ancestors`, so
+    /// this is the reachable tree exactly as the reader walks it rather than a
+    /// second traversal that could disagree with it.
+    fn page_tree_object_ids(&self) -> Result<std::collections::HashSet<ObjId>, EditError> {
+        let mut ids = std::collections::HashSet::new();
+        for slot in self.page_slots()? {
+            ids.insert(slot.id);
+            ids.extend(slot.ancestors.iter().copied());
+        }
+        Ok(ids)
+    }
+
+    /// **Refuse to delete a form object that is also a page-tree node**
+    /// (`Pass 185.1`).
+    ///
+    /// # ★ Found by a fuzzer two minutes after the target first existed
+    ///
+    /// `fuzz/fuzz_targets/form_edit_sequence.rs` drove `delete_field` over
+    /// mutated documents and hit `debug_assert_page_tree_still_walks`. The
+    /// shape reduces to an `/AcroForm` whose `/Fields` names an object that is
+    /// **also a `/Page`**. `forms::parse_acroform` models it as a field —
+    /// correctly, because the form dictionary says it is one and §12.7.3
+    /// states no rule that a field may not also be something else — and the
+    /// deletion then removed the page.
+    ///
+    /// **The severity is worse than the panic suggests.** That postcondition
+    /// is `#[cfg(debug_assertions)]`, so in the build operators run it is
+    /// compiled out: the verb returned `Ok` and produced a file pdfce itself
+    /// cannot reopen. Its own message names that outcome as the shape of the
+    /// 2026-08-20 `/Contents` corruption.
+    ///
+    /// # Why refuse rather than delete the field-ness and keep the page
+    ///
+    /// Because pdfce would have to decide which of the two things the object
+    /// really is, and the file says both. Stripping `/FT` and leaving the page
+    /// is a defensible different answer — but it is an inference about a
+    /// malformed document, made silently, on a destructive verb. A refusal
+    /// naming the collision leaves the operator with a document they can look
+    /// at, which is the outcome `ARCHITECTURE.md` §10's fail-clean posture
+    /// asks for.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FieldObjectIsInPageTree`] when any id in `ids` is a page
+    /// or a node above one; [`EditError::PageTree`] if the tree cannot be
+    /// walked at all, in which case there is nothing to protect and the
+    /// caller's own error surfaces first.
+    fn refuse_if_in_page_tree(&self, name: &str, ids: &[ObjId]) -> Result<(), EditError> {
+        let tree = self.page_tree_object_ids()?;
+        if let Some(id) = ids.iter().find(|id| tree.contains(id)) {
+            return Err(EditError::FieldObjectIsInPageTree {
+                name: name.to_owned(),
+                object: id.num,
+            });
+        }
+        Ok(())
     }
 
     /// `/Fields` as text strings (§12.7.5.3 Table 238).
