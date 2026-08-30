@@ -662,6 +662,110 @@ pub struct RenderOptions {
     /// put a plausible appearance on screen with nothing to say pdfce
     /// picked it.
     pub missing_as: MissingAppearanceState,
+    /// **Report the INK at one device pixel**, as `(x, y)` in the raster's
+    /// own coordinates — origin top-left, the same numbers an image editor
+    /// shows. `None` (the default) probes nothing and costs nothing.
+    ///
+    /// # What it answers that a PNG cannot
+    ///
+    /// A saved raster is sRGB. It is the *output* of pdfce's colour
+    /// pipeline, and every question about what happened *inside* that
+    /// pipeline — how much of each ink is on this pixel, was the page
+    /// composited in ink at all, did the colorant values survive the
+    /// composite — is unanswerable from it. Two very different colorant
+    /// states can flatten to the same sRGB triple, and the interesting
+    /// defects live exactly there.
+    ///
+    /// The probe reads the four-colorant page buffer **immediately before
+    /// the exit conversion to sRGB** (§11.4.7's "convert the result to the
+    /// device's native colour space"), so it splits a colour error into
+    /// the half that happened during compositing and the half that
+    /// happened during conversion. For a single opaque paint over an empty
+    /// page a correct composite is the identity on its operand, so an
+    /// operand that arrives unchanged and an output that is still wrong
+    /// convicts the conversion and acquits the compositor.
+    ///
+    /// # When the page was not composited in ink
+    ///
+    /// Most pages are not: pdfce allocates the colorant buffer only when
+    /// [`Self::page_blend_space_source`] resolves to a subtractive blending
+    /// space, and it falls back to on-screen compositing when the buffer
+    /// would exceed [`Self::max_cmyk_buffer_bytes`]. In both cases the
+    /// probe still reports — with **no colorant values**, because there
+    /// were none, rather than by manufacturing them from the sRGB result.
+    /// Reconstructing CMYK from sRGB is a *different* number that would be
+    /// indistinguishable from a measurement (this is `R188`'s shape: two
+    /// routes to a value are one measurement only if they are independent).
+    ///
+    /// # Out of range is not an error
+    ///
+    /// A coordinate outside the raster reports
+    /// [`InkProbeSource::OutOfRange`] and the render proceeds. A probe is a
+    /// diagnostic; refusing to draw the page because a diagnostic asked
+    /// about a pixel that does not exist would trade the operator's actual
+    /// output for their question about it.
+    pub ink_probe: Option<(u32, u32)>,
+}
+
+/// Where an [`InkProbe`]'s numbers came from — and, for two of the three
+/// variants, why there are no colorant numbers at all.
+///
+/// This exists so a reader of a probe line cannot mistake *"this page was
+/// not composited in ink"* for *"this pixel has no ink on it"*. They are
+/// wholly different facts and both would print as four blanks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum InkProbeSource {
+    /// The page **was** composited in a four-colorant buffer, and the
+    /// values are that buffer's, read immediately before the exit
+    /// conversion to sRGB. This is the only variant carrying colorants.
+    CmykBuffer,
+    /// The page was composited **on screen**, in sRGB — either because its
+    /// blending colour space is additive, or because the colorant buffer
+    /// was refused for memory (`cmyk_buffer_refused` on the same render).
+    /// There are no colorant values to report.
+    ScreenSrgb,
+    /// The requested coordinate lies outside the raster. Nothing was read.
+    OutOfRange,
+}
+
+/// One pixel's ink, sampled at the operator's request.
+///
+/// Emitted only when [`RenderOptions::ink_probe`] is set; absent otherwise,
+/// so a caller cannot read a probe that was never asked for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct InkProbe {
+    /// The device pixel asked about, echoed back so a report line is
+    /// self-describing.
+    pub x: u32,
+    /// The device pixel asked about, echoed back. Origin top-left.
+    pub y: u32,
+    /// Where the numbers came from — and whether [`Self::cmyk`] exists.
+    pub source: InkProbeSource,
+    /// Cyan, magenta, yellow, black tints in `0.0..=1.0`, as they stood in
+    /// the page's colorant buffer **before** the conversion to sRGB.
+    ///
+    /// `None` for every source other than [`InkProbeSource::CmykBuffer`] —
+    /// see [`RenderOptions::ink_probe`] for why this is not filled in by
+    /// converting the sRGB result backwards.
+    pub cmyk: Option<[f32; 4]>,
+    /// The page group's alpha at this pixel, before the media composite
+    /// over white. `None` when there was no colorant buffer to read it
+    /// from.
+    ///
+    /// Reported because a colorant tuple is uninterpretable without it: a
+    /// pixel holding `[0,0,0,0]` at `α = 0` is *bare paper*, and one
+    /// holding `[0,0,0,0]` at `α = 1` is *deliberately painted no-ink*,
+    /// which behave differently under overprint.
+    pub alpha: Option<f32>,
+    /// The final 8-bit sRGB the raster actually carries at this pixel,
+    /// after the exit conversion and the media composite over white.
+    ///
+    /// Always present (except [`InkProbeSource::OutOfRange`]), and it is
+    /// the half of the pair that a PNG can also answer — carried here so a
+    /// single probe line states both ends of the conversion under test.
+    pub srgb: Option<[u8; 3]>,
 }
 
 /// The subset of [`RenderOptions`] that has to reach the interpreter and
@@ -786,6 +890,9 @@ impl Default for RenderOptions {
             // See the field docs: the print-correct answer is the safe
             // default, and a viewer opts in.
             view_magnification: None,
+            // Nobody asked, so nothing is sampled. A probe is a question
+            // the operator puts, never a cost every render pays.
+            ink_probe: None,
         }
     }
 }
@@ -877,6 +984,35 @@ impl RenderOptions {
     #[must_use]
     pub fn with_cmyk_intent(mut self, intent: CmykIntent) -> Self {
         self.cmyk_intent = intent;
+        self
+    }
+
+    /// **Ask what ink is at one device pixel**, returning `self` for
+    /// chaining. See [`Self::ink_probe`] for what the answer means and for
+    /// the two cases where there are no colorant numbers to give.
+    ///
+    /// Same `#[non_exhaustive]` reasoning as [`Self::with_annotations`].
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use pdfce_render::{RenderOptions, InkProbeSource};
+    /// let options = RenderOptions::default().with_ink_probe(612, 440);
+    /// # let page: pdfce_core::page_tree::Page = unimplemented!();
+    /// # let doc: pdfce_core::view::DocumentView<'_> = unimplemented!();
+    /// let rendered = pdfce_render::render_page_with_view(&doc, &page, 2.0, &options)?;
+    /// if let Some(probe) = rendered.diagnostics.ink_probe {
+    ///     match probe.source {
+    ///         InkProbeSource::CmykBuffer => println!("ink {:?}", probe.cmyk),
+    ///         // Not a failure — this page simply never held ink.
+    ///         _ => println!("no colorant buffer; srgb {:?}", probe.srgb),
+    ///     }
+    /// }
+    /// # Ok::<(), pdfce_render::RenderError>(())
+    /// ```
+    #[must_use]
+    pub const fn with_ink_probe(mut self, x: u32, y: u32) -> Self {
+        self.ink_probe = Some((x, y));
         self
     }
 

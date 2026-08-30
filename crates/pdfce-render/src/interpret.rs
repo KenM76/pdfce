@@ -1468,6 +1468,24 @@ pub struct Diagnostics {
     /// non-zero `encountered` beside a zero `painted` is otherwise easy to
     /// read as a bug rather than as the honest report it is.
     pub shading: crate::shading::ShadingDiagnostics,
+    /// The answer to [`crate::RenderOptions::ink_probe`], when one was
+    /// asked. `None` means nobody asked.
+    ///
+    /// # Why this is not a counter, and so is not on the metrics line
+    ///
+    /// Every other field here is a census the render produces whether or
+    /// not anyone wanted it, and the machine-readable stdout line carries
+    /// them as `key=<integer>` pairs. This one is a **question the operator
+    /// put**, its payload is four floats and a classification rather than
+    /// an integer, and it is absent by default. Folding it into that line
+    /// would either change the line's shape for every render or emit
+    /// placeholder zeros that read exactly like *"no ink here"* — the one
+    /// misreading [`crate::InkProbeSource`] exists to prevent.
+    ///
+    /// Filled at the same point the colorant buffer is converted to sRGB,
+    /// not by the interpreter, because that is the moment the question is
+    /// about.
+    pub ink_probe: Option<crate::InkProbe>,
 }
 
 impl Diagnostics {

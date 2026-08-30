@@ -2277,9 +2277,11 @@ builders**, `:684-690`): `fonts: FontEnvironment` `:432`, `annotations: bool`
 `with_annotations` `:805`, `with_annotation_scope` `:821`, `with_cmyk_intent`
 `:878`, `with_cancel` `:972`, `with_mask_resample` `:996`, `with_image_minify`
 `:1004`, `with_cmyk_jpeg_polarity` `:1012`, `with_layers` `:1028`,
-`with_view_magnification` `:1038`, `with_missing_as` `:1043`, and
+`with_view_magnification` `:1038`, `with_missing_as` `:1043`,
 `with_max_cmyk_buffer_bytes` (`Pass 132.0` — see **§7.3a**, which is the one
-knob whose value you should COMPUTE rather than pick).
+knob whose value you should COMPUTE rather than pick), and `with_ink_probe`
+(`Pass 174.0` — see **§7.3b**; it is the only one of these that ANSWERS a
+question rather than changing what is drawn).
 
 `AnnotationScope` (`annot.rs:348`) is the comments-and-forms filter:
 
@@ -2385,6 +2387,69 @@ zero on a page whose transparency happens to fall outside the rendered
 region, so a status line keyed on it goes quiet exactly where the operator
 scrolled away from the affected patch. The first says *the correct buffer was
 not available*, which is a property of the raster.
+
+### 7.3b The ink probe — what is in the colorant buffer, before it stops existing
+
+**Added `Pass 174.0`.** `RenderOptions::with_ink_probe(x, y)` (device pixels,
+origin **top-left**) fills `Diagnostics::ink_probe: Option<InkProbe>`. It
+changes no pixel of the output and costs nothing when unset.
+
+```rust
+use pdfce_render::{InkProbeSource, RenderOptions};
+
+let options = RenderOptions::default().with_ink_probe(612, 440);
+let page = pdfce_render::render_page_with_view(&doc.view(), &page, 2.0, &options)?;
+if let Some(p) = page.diagnostics.ink_probe {
+    match p.source {
+        InkProbeSource::CmykBuffer => println!("ink {:?} alpha {:?}", p.cmyk, p.alpha),
+        InkProbeSource::ScreenSrgb => println!("no ink: composited on screen"),
+        InkProbeSource::OutOfRange => println!("outside the raster"),
+        _ => {}
+    }
+}
+```
+
+**What it answers that a PNG cannot.** A raster is sRGB — the *output* of the
+colour pipeline — so every question about what happened *inside* the pipeline
+is unanswerable from it, and two very different colorant states flatten to the
+same triple. A page destined for ink is composited in a four-colorant buffer
+and converted to sRGB at the very end; the probe reads that buffer
+**immediately before the conversion**, which splits a colour error into the
+half that happened while compositing and the half that happened while
+converting.
+
+**★ The property that makes it an oracle:** for a **single opaque paint over
+an empty page** a correct colorant composite is the **identity on its
+operand** — transparent backdrop, alpha 1, Normal blend, nothing to blend
+with. So an operand that arrives unchanged and a colour that is still wrong
+**convicts the conversion and acquits the compositor**. That is the whole
+content of the probe, and `crates/pdfce-render/tests/ink_probe.rs` pins it.
+
+**When there are no colorant numbers.** `InkProbeSource::ScreenSrgb` — the
+page's blending space was additive, or the buffer exceeded
+`max_cmyk_buffer_bytes` (§7.3a). `cmyk` and `alpha` are `None`, deliberately:
+running the sRGB result backwards through `rgb_to_cmyk` would fill the fields
+convincingly with a **different quantity**, a max-GCR reconstruction of the
+output rather than a reading of a composite that never happened. Every field
+is present in the CLI's line with `-` where there is no value, so *"this page
+was never composited in ink"* and *"this pixel has no ink on it"* cannot be
+confused.
+
+**Out of range is a report, not a refusal.** The raster's size depends on the
+scale, the region and the page's own box, so a coordinate cannot be judged
+when it is parsed — and a diagnostic must not destroy the output it was asked
+about.
+
+**In the CLI:** `pdfce-cli render-page --probe-ink X,Y`, which prints one
+extra line beside the stable metrics line:
+
+```text
+ink-probe: x=200 y=200 source=cmyk-buffer c=0.750 m=0.000 y=1.000 k=0.000 alpha=1.000 srgb=24,140,108
+```
+
+It is a **second line, not more keys on the first one**: the metrics line is
+`key=<integer>` pairs in a published fixed order, and this payload is four
+floats plus a classification that is absent unless asked for.
 
 ### 7.3 Cancellation — the off-thread contract
 

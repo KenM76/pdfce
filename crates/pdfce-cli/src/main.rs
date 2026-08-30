@@ -159,6 +159,23 @@
 //!               cmyk_native_image_pixels=<n>
 //! ```
 //!
+//! ★ **`render-page` prints a SECOND line when `--probe-ink X,Y` is
+//! given, and only then** (`Pass 174.0`). It is deliberately not part of
+//! the template above, because the template is a contract about
+//! `key=<integer>` pairs in a fixed order and this is neither integers nor
+//! unconditional:
+//!
+//! ```text
+//! ink-probe: x=<n> y=<n> source=<cmyk-buffer|screen-srgb|out-of-range> \
+//!            c=<f|-> m=<f|-> y=<f|-> k=<f|-> alpha=<f|-> srgb=<r,g,b|->
+//! ```
+//!
+//! Every key is present in every variant, with `-` where there is no
+//! value — so *"this page was never composited in ink"* (`screen-srgb`,
+//! no colorants) and *"this pixel has no ink on it"* (`cmyk-buffer`, all
+//! zero) cannot be confused. The metrics line always comes FIRST, so a
+//! script that reads one line off this command is unaffected.
+//!
 //! ★ **Every key is listed, and the placeholders are uniform.** Two
 //! things were wrong with the previous version of that block, and only the
 //! second was cosmetic.
@@ -3037,6 +3054,45 @@ enum Command {
         /// cannot honour falls back and discloses it rather than crashing.
         #[arg(long, value_name = "SIZE")]
         max_cmyk_buffer_bytes: Option<String>,
+        /// **Report the INK at one device pixel**, as `X,Y` — origin
+        /// top-left, the same numbers an image editor shows. Prints one
+        /// extra `ink-probe:` line; changes no pixel of the output.
+        ///
+        /// # What it answers that the PNG cannot
+        ///
+        /// The PNG is sRGB. It is the OUTPUT of pdfce's colour pipeline,
+        /// so every question about what happened inside that pipeline is
+        /// unanswerable from it — and two very different ink states can
+        /// flatten to the same sRGB triple.
+        ///
+        /// A page destined for ink is composited in a four-colorant
+        /// buffer and converted to sRGB at the very end. This probe reads
+        /// that buffer IMMEDIATELY BEFORE the conversion, which splits a
+        /// colour error into the half that happened while compositing and
+        /// the half that happened while converting. For a single opaque
+        /// paint on an empty page a correct composite is the identity on
+        /// its operand, so an operand that arrives unchanged and a colour
+        /// that is still wrong convicts the conversion.
+        ///
+        /// # When there is no ink to report
+        ///
+        /// Most pages are not composited in ink — only those whose
+        /// blending colour space is subtractive, and not those where the
+        /// buffer exceeded `--max-cmyk-buffer-bytes`. Both cases report
+        /// `source=screen-srgb` and NO colorant values, rather than
+        /// manufacturing four numbers by running the sRGB result
+        /// backwards. That reconstruction is a different quantity and
+        /// would be indistinguishable from a measurement.
+        ///
+        /// # Out of range is a report, not a refusal
+        ///
+        /// The raster's size is not known until `--scale`, `--region` and
+        /// the page's own box have been resolved, so a coordinate cannot
+        /// be validated when it is parsed. One outside the raster prints
+        /// `source=out-of-range` and the page still renders: a diagnostic
+        /// must not destroy the output it was asked about.
+        #[arg(long, value_name = "X,Y")]
+        probe_ink: Option<String>,
         /// Directory of font files to supply for the document's
         /// NON-embedded fonts (decision 012). Repeatable. pdfce walks each
         /// directory, registers every readable `.ttf`/`.otf`/`.ttc`/`.cff`/
@@ -7826,6 +7882,7 @@ fn run() -> ExitCode {
             no_annotations,
             fast_subpixel,
             max_cmyk_buffer_bytes,
+            probe_ink,
             font_dirs,
             show_layers,
             hide_layers,
@@ -7842,6 +7899,7 @@ fn run() -> ExitCode {
             !no_annotations,
             fast_subpixel,
             max_cmyk_buffer_bytes.as_deref(),
+            probe_ink.as_deref(),
             &font_dirs,
             &show_layers,
             &hide_layers,
@@ -9636,6 +9694,101 @@ fn has_font_extension(path: &Path) -> bool {
         .is_some_and(|e| FONT_FILE_EXTENSIONS.contains(&e.as_str()))
 }
 
+/// Render one [`pdfce_render::InkProbe`] as its own stdout line.
+///
+/// # The shape, and why absence is spelled rather than omitted
+///
+/// ```text
+/// ink-probe: x=200 y=200 source=cmyk-buffer c=0.750 m=0.000 y=1.000 k=0.000 alpha=1.000 srgb=24,140,108
+/// ink-probe: x=200 y=200 source=screen-srgb c=- m=- y=- k=- alpha=- srgb=47,180,73
+/// ink-probe: x=99999 y=7 source=out-of-range c=- m=- y=- k=- alpha=- srgb=-
+/// ```
+///
+/// Every key is present in every variant, with `-` where there is no
+/// value. A line whose key set changes with the answer forces a parser to
+/// branch before it can read anything, and — worse for a human — makes
+/// *"this page was never composited in ink"* and *"this pixel has no ink
+/// on it"* look like the same output. They are wholly different facts.
+/// `source=` is what separates them, and it is second on the line so it is
+/// read before the numbers it qualifies.
+///
+/// Three decimals on the tints: a colorant is authored as a decimal
+/// fraction in a content stream and 0.001 is finer than any press or any
+/// 8-bit channel can resolve, so more digits would publish `f32`
+/// representation noise as if it were ink.
+fn format_ink_probe(probe: &pdfce_render::InkProbe) -> String {
+    let source = match probe.source {
+        pdfce_render::InkProbeSource::CmykBuffer => "cmyk-buffer",
+        pdfce_render::InkProbeSource::ScreenSrgb => "screen-srgb",
+        pdfce_render::InkProbeSource::OutOfRange => "out-of-range",
+        // `#[non_exhaustive]`, so a variant added upstream must still
+        // print something rather than fail to compile a shell that has not
+        // caught up. It prints the fact that it is unrecognised, which is
+        // the honest report.
+        _ => "unknown",
+    };
+    let ink = probe.cmyk.map_or_else(
+        || "c=- m=- y=- k=-".to_owned(),
+        |v| format!("c={:.3} m={:.3} y={:.3} k={:.3}", v[0], v[1], v[2], v[3]),
+    );
+    let alpha = probe
+        .alpha
+        .map_or_else(|| "-".to_owned(), |a| format!("{a:.3}"));
+    let srgb = probe
+        .srgb
+        .map_or_else(|| "-".to_owned(), |c| format!("{},{},{}", c[0], c[1], c[2]));
+    format!(
+        "ink-probe: x={} y={} source={source} {ink} alpha={alpha} srgb={srgb}",
+        probe.x, probe.y
+    )
+}
+
+/// Parse `--probe-ink X,Y` into a device-pixel coordinate.
+///
+/// # Why this is not `parse_region`'s cousin
+///
+/// A region is in **user space** — points, origin bottom-left, `f64`, and
+/// negative values are ordinary. A probe is in **device space** — pixels,
+/// origin top-left, integral, and a negative value is meaningless rather
+/// than merely unusual. Sharing a parser between the two would mean one of
+/// them accepting a coordinate system it cannot honour, which is a worse
+/// outcome than two small functions.
+///
+/// # What is refused here, and what deliberately is not
+///
+/// Refused: a wrong field count, a non-integer, a negative. Each of those
+/// is decidable from the string alone.
+///
+/// **Not** refused: a coordinate larger than the raster. The raster's size
+/// is a function of `--scale`, `--region` and the page's own box, none of
+/// which have been resolved at parse time — and reporting
+/// `source=out-of-range` after the render is a strictly better answer than
+/// a refusal, because it can say what the raster's size actually *was*.
+///
+/// # Errors
+///
+/// Returns a human-readable reason: a wrong field count, a field that is
+/// not a whole number, or a negative coordinate.
+fn parse_probe_ink(spec: &str) -> Result<(u32, u32), String> {
+    let parts: Vec<&str> = spec.split(',').map(str::trim).collect();
+    if parts.len() != 2 {
+        return Err(format!(
+            "expected 2 comma-separated whole numbers `X,Y` in DEVICE PIXELS (origin top-left), got {}",
+            parts.len()
+        ));
+    }
+    let mut v = [0u32; 2];
+    for (i, (slot, text)) in v.iter_mut().zip(parts.iter()).enumerate() {
+        *slot = text.parse::<u32>().map_err(|_| {
+            format!(
+                "field {} ({text:?}) is not a whole, non-negative number. These are DEVICE PIXELS at the rendered scale, not PDF points: a probe of a page rendered at --scale 2 wants twice the point coordinate, and its origin is the TOP-left, not the bottom-left a /MediaBox uses",
+                ["X", "Y"][i]
+            )
+        })?;
+    }
+    Ok((v[0], v[1]))
+}
+
 /// Parse `--region llx,lly,urx,ury` into a user-space rectangle.
 ///
 /// # Why the errors are this specific
@@ -10321,6 +10474,7 @@ fn cmd_render_page(
     annotations: bool,
     fast_subpixel: bool,
     max_cmyk_buffer_bytes: Option<&str>,
+    probe_ink: Option<&str>,
     font_dirs: &[PathBuf],
     show_layers: &[String],
     hide_layers: &[String],
@@ -10520,6 +10674,20 @@ numbered 1..={})",
     // the reason `RenderOptions`'s own docs give: the type is
     // `#[non_exhaustive]`, so field assignment is the documented way in.
     render_options.subpixel_culling = fast_subpixel;
+    // `--probe-ink X,Y`. A malformed pair is refused HERE, before the
+    // render, because it is an operator mistake and nothing about the
+    // document can fix it -- unlike a coordinate that is well-formed but
+    // outside the raster, which cannot be judged until the page geometry
+    // has been resolved and is therefore reported rather than refused.
+    if let Some(spec) = probe_ink {
+        match parse_probe_ink(spec) {
+            Ok((x, y)) => render_options.ink_probe = Some((x, y)),
+            Err(msg) => {
+                eprintln!("pdfce-cli: --probe-ink: {msg}");
+                return exit::RUNTIME_ERROR;
+            }
+        }
+    }
     // `render-page` produces a raster for LOOKING AT, so it is a viewer
     // under §8.11.4.5 and applies `View`-event `/AS` usage at the
     // requested scale. The print path is the one the clause forbids this
@@ -11001,6 +11169,19 @@ cmyk_groups_approximated={} cmyk_unbridged_images={} cmyk_native_image_pixels={}
         // rule: the complement of `cmyk_bridged_pixels`.
         d.cmyk_native_image_pixels,
     );
+    // ★ A SECOND LINE, NOT MORE KEYS ON THE FIRST ONE.
+    //
+    // The stable line is `key=<integer>` pairs in a fixed order and a
+    // published contract (`tools/check-metrics-line-contract.py` holds all
+    // three copies of it in step). This payload is four floats and a
+    // classification, it is absent unless asked for, and folding it in
+    // would mean either changing that line's shape for every render or
+    // emitting placeholder zeros -- which read exactly like "no ink here",
+    // the one misreading `InkProbeSource` exists to prevent. So it gets its
+    // own prefixed line, which a parser can select or ignore whole.
+    if let Some(probe) = d.ink_probe {
+        println!("{}", format_ink_probe(&probe));
+    }
     report_diagnostics(
         d,
         max_cmyk_buffer_bytes,

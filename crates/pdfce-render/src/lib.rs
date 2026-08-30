@@ -106,7 +106,10 @@ pub use color::{ColorDiagnostics, ColorSpace, ColorState, Colorant, DeviceSpace}
 pub use display_list::{
     ClipId, DisplayList, DisplayListKey, MAX_DISPLAY_LIST_BYTES, PoisonReason, record_page,
 };
-pub use font::{FallbackKey, FontData, FontEnvironment, GlyphSource, RenderOptions, RenderPolicy};
+pub use font::{
+    FallbackKey, FontData, FontEnvironment, GlyphSource, InkProbe, InkProbeSource, RenderOptions,
+    RenderPolicy,
+};
 pub use interpret::Diagnostics;
 pub use layer_state::LayerVisibility;
 pub use shading::{ColorRamp, Geometry, PaintRoute, Shading, ShadingDiagnostics, ShadingFunction};
@@ -790,13 +793,45 @@ fn render_impl(
         // be a blank page. Keeping the (empty) pixmap and flattening it is
         // the same outcome the additive path would produce for a page that
         // painted nothing, which is at least a white sheet.
+        // ★ SAMPLED BEFORE THE COLLAPSE, WHICH IS THE ENTIRE POINT.
+        // `to_srgb_over_white` consumes the colorant state into sRGB and
+        // the buffer is dropped immediately after; one line later there is
+        // nothing left to ask. A probe taken after the collapse could only
+        // report the same number a PNG already carries.
+        let probe_cmyk = options
+            .ink_probe
+            .map(|(px, py)| probe_ink_from_buffer(&buffer, px, py, width, height));
         if let Some(collapsed) = buffer.to_srgb_over_white() {
             pixmap = collapsed;
         } else {
             flatten_page_group_over_white(&mut pixmap);
         }
+        diagnostics.ink_probe = probe_cmyk;
     } else {
         flatten_page_group_over_white(&mut pixmap);
+        diagnostics.ink_probe = options
+            .ink_probe
+            .map(|(px, py)| probe_ink_screen(px, py, width, height));
+    }
+    // The sRGB half is read from the finished raster in BOTH branches, so
+    // one probe line always states both ends of the conversion under test.
+    // Deliberately after the collapse: this is the number the operator's
+    // PNG carries, and reading it from anywhere else would let the probe
+    // and the file disagree.
+    if let Some(probe) = diagnostics
+        .ink_probe
+        .as_mut()
+        .filter(|p| p.source != InkProbeSource::OutOfRange)
+    {
+        let idx = (probe.y as usize) * (width as usize) + (probe.x as usize);
+        if let Some(px) = pixmap.pixels().get(idx) {
+            // `demultiply` because the page is opaque here (alpha 255
+            // after the media composite), so the premultiplied bytes
+            // already are the colour -- but going through the accessor
+            // keeps this correct if that ever stops being true.
+            let c = px.demultiply();
+            probe.srgb = Some([c.red(), c.green(), c.blue()]);
+        }
     }
 
     Ok(RenderedPage {
@@ -832,6 +867,68 @@ fn render_impl(
 /// precision loss on the covered pixels — a fully covered pixel
 /// (`αg = 255`) is returned byte-identical, which is what keeps every
 /// existing pixel assertion in the test suite stable.
+/// Read one pixel's colorants out of the page's four-colorant buffer.
+///
+/// # Why the range check is here and not at the flag
+///
+/// Because the raster's dimensions are not known until the page's
+/// geometry has been resolved — `--region`, `--scale` and the `/MediaBox`
+/// between them decide it — so a coordinate the operator supplies cannot
+/// be validated when it is parsed. Validating it here means the report
+/// can say *"outside a 1224 × 1584 raster"* rather than *"invalid"*, which
+/// is the difference between a usable answer and a rejection.
+fn probe_ink_from_buffer(
+    buffer: &cmyk_buffer::CmykBuffer,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> InkProbe {
+    if x >= width || y >= height {
+        return InkProbe {
+            x,
+            y,
+            source: InkProbeSource::OutOfRange,
+            cmyk: None,
+            alpha: None,
+            srgb: None,
+        };
+    }
+    let px = buffer.pixel((y as usize) * (width as usize) + (x as usize));
+    InkProbe {
+        x,
+        y,
+        source: InkProbeSource::CmykBuffer,
+        cmyk: Some(px.c),
+        alpha: Some(px.a),
+        // Filled by the caller from the finished raster; see there.
+        srgb: None,
+    }
+}
+
+/// The same question asked of a page that never held ink.
+///
+/// Returns the classification and nothing else. The temptation is to run
+/// the sRGB result back through `rgb_to_cmyk` and report *that* — it would
+/// fill four fields, print identically, and be a **different quantity**:
+/// a max-GCR reconstruction of the output rather than a reading of a
+/// composite that never happened. `PCS3_132`'s green is the standing
+/// example of what that substitution costs (decision 098).
+const fn probe_ink_screen(x: u32, y: u32, width: u32, height: u32) -> InkProbe {
+    InkProbe {
+        x,
+        y,
+        source: if x >= width || y >= height {
+            InkProbeSource::OutOfRange
+        } else {
+            InkProbeSource::ScreenSrgb
+        },
+        cmyk: None,
+        alpha: None,
+        srgb: None,
+    }
+}
+
 fn flatten_page_group_over_white(pixmap: &mut Pixmap) {
     for px in pixmap.pixels_mut() {
         let a = u32::from(px.alpha());

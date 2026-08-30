@@ -1837,3 +1837,198 @@ endstream"
         "THE POINT OF THIS TEST: the shortfall is attributed. Without this key, `annots=1 annots_painted=0` reads exactly like a failure: {without:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// `--probe-ink` — Pass 174.0
+// ---------------------------------------------------------------------------
+
+/// A page whose group declares `/DeviceCMYK`, carrying one opaque `k` fill.
+///
+/// Built inline rather than read from `fixtures/synthetic/ink-probe/` on
+/// purpose: this file's whole convention is that the structure under test is
+/// visible at the call site (see the module header), and the structure under
+/// test here is *the page group*, which is one dictionary entry. The
+/// committed fixtures exist for the `pdfce-render` unit tests, where the
+/// question is about the compositor rather than about the CLI's report.
+fn cmyk_group_pdf(content: &str) -> Vec<u8> {
+    build_pdf(&[
+        (1, "<< /Type /Catalog /Pages 2 0 R >>".into()),
+        (
+            2,
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 100] >>".into(),
+        ),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+             /Group << /S /Transparency /CS /DeviceCMYK >> /Resources << >> >>"
+                .into(),
+        ),
+        (
+            4,
+            format!(
+                "<< /Length {} >>\nstream\n{content}\nendstream",
+                content.len()
+            ),
+        ),
+    ])
+}
+
+/// ★ THE ANSWER THE SIBLING `iccce` PROJECT ASKED FOR, THROUGH THE BINARY.
+///
+/// A single opaque `0.75 0 1 0 k` fill on a page composited in ink reaches
+/// the exit conversion with its operand intact. The composite is an identity
+/// here — transparent backdrop, alpha 1, Normal blend — so anything still
+/// wrong about the colour is downstream of this point, in the conversion.
+///
+/// Asserted through the CLI rather than only in `pdfce-render` because the
+/// unit tests exercise the library and this is the surface the other project
+/// can actually run. `Pass 162.0`'s lesson: the untested path is the shipped
+/// one.
+#[test]
+fn probe_ink_reports_the_colorants_in_the_buffer_before_the_conversion() {
+    let dir = TempDir::new("probe-ink");
+    let pdf = dir.write("ink.pdf", &cmyk_group_pdf("0.75 0 1 0 k 20 20 160 60 re f"));
+    let png = dir.join("out.png");
+
+    let out = run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "--probe-ink",
+        "100,50",
+        "-o",
+        png.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+
+    let all = stdout(&out);
+    let lines: Vec<&str> = all.trim_end().split('\n').collect();
+    assert_eq!(
+        lines.len(),
+        2,
+        "the probe adds ONE line and does not disturb the metrics line: {all:?}"
+    );
+    assert!(
+        lines[0].starts_with("rendered "),
+        "the stable metrics line stays FIRST, so a script that reads one line \
+         off this command keeps working: {all:?}"
+    );
+    assert_eq!(
+        lines[1],
+        "ink-probe: x=100 y=50 source=cmyk-buffer c=0.750 m=0.000 y=1.000 k=0.000 \
+         alpha=1.000 srgb=47,181,73",
+        "the operand written by the content stream must arrive at the exit \
+         conversion unchanged; a difference here is a defect in the COMPOSITOR, \
+         not in the conversion"
+    );
+}
+
+/// The control: the same paint with no page group. There is no colorant
+/// buffer, so there are no colorants — reported as `-`, not reconstructed.
+///
+/// Without this, an implementation that echoed the content stream's operands
+/// instead of reading the buffer would pass the test above.
+#[test]
+fn probe_ink_on_a_page_composited_on_screen_reports_no_colorants() {
+    let dir = TempDir::new("probe-screen");
+    let pdf = dir.write(
+        "flat.pdf",
+        &multipage_pdf(&["0.75 0 1 0 k 20 20 160 60 re f"]),
+    );
+    let png = dir.join("out.png");
+
+    let out = run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "--probe-ink",
+        "100,50",
+        "-o",
+        png.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+
+    let all = stdout(&out);
+    let probe = all.trim_end().split('\n').nth(1).expect("a probe line");
+    assert!(
+        probe.contains("source=screen-srgb"),
+        "no page group means no ink: {probe:?}"
+    );
+    assert!(
+        probe.contains("c=- m=- y=- k=- alpha=-"),
+        "EVERY key is present with `-` for absent, so \"this page was never \
+         composited in ink\" cannot be read as \"this pixel has no ink\": {probe:?}"
+    );
+    assert!(
+        probe.contains("srgb="),
+        "the raster exists either way, so its colour is always reportable: {probe:?}"
+    );
+}
+
+/// A coordinate outside the raster is a report, not a refusal — and the page
+/// still renders.
+///
+/// The raster's size is a function of `--scale`, `--region` and the page's own
+/// box, none of which are resolved when the flag is parsed. Refusing here
+/// would let a diagnostic destroy the output it was asked about.
+#[test]
+fn probe_ink_outside_the_raster_still_renders_the_page() {
+    let dir = TempDir::new("probe-oob");
+    let pdf = dir.write("flat.pdf", &multipage_pdf(&["0 0 0 rg 10 10 50 50 re f"]));
+    let png = dir.join("out.png");
+
+    let out = run(&[
+        "render-page",
+        pdf.to_str().unwrap(),
+        "--probe-ink",
+        "99999,7",
+        "-o",
+        png.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(png_dimensions(&png), (200, 100), "the page still rendered");
+    let all = stdout(&out);
+    assert!(
+        all.contains("source=out-of-range"),
+        "the probe says it could not answer, rather than answering wrongly: {all:?}"
+    );
+}
+
+/// A malformed coordinate IS refused, because it is decidable from the string
+/// alone and nothing about the document could make it valid.
+///
+/// ★ `-4,2` is deliberately NOT in this list, and its absence is the finding.
+/// A value beginning with `-` is eaten by `clap` as a flag name before this
+/// parser sees it, so it exits `2` (usage) with `clap`'s message rather than
+/// `1` with ours. `--region` carries `allow_hyphen_values` to defeat exactly
+/// that, because a `/MediaBox` may legitimately have a negative origin. A
+/// DEVICE pixel may not — there is no raster whose top-left is left of
+/// itself — so the flag is left without it and `clap`'s refusal stands. The
+/// `4,-2` form below is the one that reaches this parser, and it is refused
+/// here.
+#[test]
+fn probe_ink_rejects_a_coordinate_it_can_judge_without_the_document() {
+    let dir = TempDir::new("probe-bad");
+    let pdf = dir.write("flat.pdf", &multipage_pdf(&["0 0 0 rg 10 10 50 50 re f"]));
+    let png = dir.join("out.png");
+
+    for spec in ["1", "1,2,3", "4,-2", "a,b", "1.5,2"] {
+        let out = run(&[
+            "render-page",
+            pdf.to_str().unwrap(),
+            "--probe-ink",
+            spec,
+            "-o",
+            png.to_str().unwrap(),
+        ]);
+        assert_eq!(
+            code(&out),
+            1,
+            "{spec:?} should be refused: {}",
+            stdout(&out)
+        );
+        assert!(
+            stderr(&out).contains("--probe-ink"),
+            "the message must name the flag: {}",
+            stderr(&out)
+        );
+    }
+}
