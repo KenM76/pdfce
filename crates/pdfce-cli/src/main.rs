@@ -10674,9 +10674,17 @@ numbered 1..={})",
         // of which is knowable from inside the renderer.
         .with_max_cmyk_buffer_bytes(max_cmyk_buffer_bytes)
         .with_page_blend_space_source(settings.page_blend_space_source)
-        // The 8.6.7 ambiguity: which colour spaces get OPM 1's zero-tint
-        // rule. Default preserves a spot backdrop under a DeviceGray fill,
-        // which is Acrobat's reading; `device_cmyk_only` is the literal one.
+        // Which colour spaces get OPM 1's zero-tint rule. The default
+        // preserves a spot backdrop under a DeviceGray fill, which is
+        // Acrobat's reading and a DIVERGENCE from ISO 32000-1;
+        // `device_cmyk_only` is the conforming one. Edition-gated: 32000-2
+        // deletes two of the three provisions that settle it in 1.7.
+        //
+        // ★ SURVIVOR 7. This said "The 8.6.7 ambiguity" and was missed by the
+        // 330th filing's own sweep, which grepped `§8.6.7 ambiguity` — with
+        // the section sign. This line has no `§`. A sweep for a CLAIM is only
+        // as good as its spelling of the claim, which is the same failure the
+        // sweep existed to catch, one level up.
         .with_overprint_zero_tint_scope(settings.overprint_zero_tint_scope)
         // `MSH-A1`: what a type 6/7 mesh-shading PATCH record pads to.
         // The clause states the rule for a VERTEX and the patch clauses

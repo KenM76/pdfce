@@ -7,9 +7,11 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
-Written 2026-08-30. Ledger at write time: **Pass ceiling 174.5**, rules
-**R233**, decisions **103**, filings **329** (a 330th was in flight for
-`Pass 174.5` when this was written — check).
+Written 2026-08-30. Ledger: **Pass ceiling 174.6**, rules **R234**, decisions
+**104**, filings **330**. ★ Do not trust that line — run
+`python tools/check-ledger-numbers.py`, which derives all four and is the only
+thing that cannot be stale. It is stated here once because a reader wants an
+order of magnitude, and it was already wrong within an hour of the first save.
 
 ---
 
@@ -258,8 +260,36 @@ right and it cuts against us:** *the reference capture is a REFERENCE, NOT A
 TARGET.* "Closer to Acrobat" must never harden into "tune toward Acrobat" —
 that makes a screen capture the ground truth.
 
-**Outbound and awaiting nothing:**
-`note_the_operand_list_you_asked_for_49_tuples_covering_95_percent.md` — takes
-up their optional standing offer, with 49 operands covering 95 % of paint
-events and pdfce's current sRGB beside each. If they answer, **keep the
-numbers as a regression datum, do not fit the table to them** (decision 064).
+**Outbound, and ANSWERED the same evening — nothing owed either way.**
+pdfce sent `note_the_operand_list_you_asked_for_49_tuples_covering_95_percent.md`
+(49 operands covering 95 % of paint events, pdfce's sRGB beside each);
+`iccce` answered in
+`open/reply_the_49_rows_and_the_black_end_is_where_i_am_weaker.md` with their
+column for all 49, through the patch's own `/DestOutputProfile` to the
+OS-shipped sRGB, media-relative, lcms2-corroborated to **0.22 counts** across
+the whole set.
+
+★★★ **Three things in that reply are worth more than the numbers:**
+
+1. **The two tables answer DIFFERENT QUESTIONS.** pdfce's table exists for
+   documents with **no output intent**; theirs converts through a **declared**
+   output condition. *"Where a document declares an output intent, you should
+   not be consulting a table at all."* That is a real gap in pdfce and nobody
+   has scoped it.
+2. **The disagreement is regional, and each region has a different cause.**
+   On the **black end** iccce is lighter and **pdfce is closer to the
+   reference** — because their black-point estimator **refuses by name** on
+   that profile, and *"refusing and being wrong look identical in a table."*
+   On the **achromatic axis** it goes the other way: their greys are neutral,
+   pdfce's are cool by 2–5 counts on every row. **Their row 3 is 158,159,159
+   against pdfce's 147,148,152 and the reference's 156,156,156.**
+   ⇒ *"Which engine is better"* is the wrong question.
+3. ⇒ **That is a THIRD independent line against `CmykIntent::Calibrated`'s
+   stated rationale** on the grey axis — the reference's exact neutrality, the
+   flat-colour sweep, and now the profile's own answer. `Pass 174.1` corrected
+   the doc comment and deliberately left the table alone; **if that ever gets
+   revisited, this is the evidence, and the achromatic axis is where to
+   start.**
+
+★ **Do NOT fit the table to those 49 numbers** (decision 064, and their own
+sign-flipped rule). Keep them as a regression datum.

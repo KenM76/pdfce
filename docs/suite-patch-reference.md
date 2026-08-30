@@ -241,7 +241,13 @@ surround can be compared as *ink* instead of as pixels.
 | `(28, 135)` | `0 0 0 0.500` | `0.443 0 0.885 0.500` | whole cell green — X invisible |
 | `(434, 136)` | `0.500 0 1.000 0.500` | `0.029 0 0.059 0.500` | whole cell neutral grey |
 
-**1. The `Pass 143.0` ambiguity is not the cause.** Rendering the same pixel
+**1. `overprint_zero_tint_scope` is not the cause — and this line said "the
+`Pass 143.0` ambiguity" until `Pass 174.6`.** It is a **divergence** from
+ISO 32000-1, not an ambiguity (`OP-A5`), and the correction shipped in the
+paragraph immediately below **while the bolded lead above it kept the word**.
+That is the sharpest of the six hard-rule-11 survivors the 330th filing found:
+*a sweep that starts from the diff sees what changed; only a sweep that starts
+from the claim sees what did not.* Rendering the same pixel
 under all three `overprint_zero_tint_scope` values — `device_cmyk_only`,
 `grey_as_k_only`, `all_process_spaces` — returns **bit-identical ink**. The
 setting moves the page's total effective-overprint count (24 / 29 / 29) and

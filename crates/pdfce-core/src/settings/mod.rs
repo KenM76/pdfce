@@ -1476,7 +1476,11 @@ pub struct Settings {
     /// and the reason this is a setting rather than a fix.
     pub page_blend_space_source: PageBlendSpaceSource,
     /// Which colour spaces get `OPM 1`'s zero-tint rule (`Pass 143.0`).
-    /// See [`OverprintZeroTintScope`] — the §8.6.7 ambiguity.
+    /// See [`OverprintZeroTintScope`] — a **divergence from ISO 32000-1**
+    /// toward Acrobat, edition-gated (32000-2 opens the question that 1.7
+    /// answers). This line said *"the §8.6.7 ambiguity"* until `Pass 174.6`,
+    /// **960 lines below the block `Pass 174.5` corrected and in the same
+    /// file** — `R234`'s own worked example.
     pub overprint_zero_tint_scope: OverprintZeroTintScope,
     /// How a type 6/7 mesh-shading patch record is byte-padded - spec
     /// ambiguity `MSH-A1`, 8.7.4.5.5/.7/.8. See [`MeshPatchPadding`], whose

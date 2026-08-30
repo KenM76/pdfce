@@ -639,7 +639,12 @@ pub fn classify(
         } else {
             SourceKind::DeviceCmykDirect
         }),
-        // ★ `Pass 143.0` — the §8.6.7 ambiguity, resolved by SETTING.
+        // ★ `Pass 143.0` — a DIVERGENCE from ISO 32000-1 toward Acrobat,
+        // offered as a SETTING. (Called "the §8.6.7 ambiguity" until
+        // `Pass 174.6`: §8.6.7's next sentence excludes "conversions from
+        // some other colour space" by name, and Tables 148/149 row 2
+        // tabulate the case and give it OPM-0 behaviour. ISO 32000-2 deletes
+        // both, so the question is edition-gated and only OPEN in 2.0.)
         //
         // The literal reading gives these `OtherProcess`, whose Table 149 row
         // is `[Source; 4]` in all three columns — so the paint replaces the

@@ -1,24 +1,52 @@
-//! # A `DeviceGray` fill overprinting a spot backdrop — the §8.6.7 ambiguity
-//! (`Pass 143.0`)
+//! # A `DeviceGray` fill overprinting a spot backdrop — a DIVERGENCE from
+//! ISO 32000-1 toward Acrobat (`Pass 143.0`), offered as a setting
 //!
-//! ## The two defensible readings
+//! ## ★★ THIS HEADER SAID "the §8.6.7 ambiguity" AND "both defensible
+//! readings" UNTIL `Pass 174.6`, AND THAT WAS WRONG FOR ISO 32000-1
 //!
-//! ISO 32000-1 **§8.6.7** scopes `OPM 1`'s zero-tint rule to *"a colour
-//! component **in a `DeviceCMYK` colour space**"*. Its single escape hatch —
-//! *"or is implicitly converted to `DeviceCMYK`; see 8.6.5.7"* — points at a
-//! clause titled **"Implicit Conversion of CIE-Based Colour Spaces"**, which
-//! reaches CIE-based spaces and nothing else. `DeviceGray` is a *device*
-//! space, so:
+//! Struck rather than rewritten, because the mistake is the transferable
+//! part: ~~"Both are defensible, so pdfce ships both"~~. **Three provisions
+//! settle it against the convert-first reading** (spec register `OP-A5`):
 //!
-//! * the **literal** reading is that `OPM 1` does not reach it, and a grey
-//!   fill writes all four components and knocks the spot backdrop out;
-//! * **Acrobat** converts grey to K-only `DeviceCMYK` first and *then*
-//!   applies `OPM 1`, so its zero C, M and Y preserve the backdrop.
+//! 1. §8.6.7's **next sentence**: *"shall not apply … to any colours that are
+//!    the result of a computation, such as those in a shading pattern **or
+//!    conversions from some other colour space**."* A `DeviceGray` →
+//!    `DeviceCMYK` map is exactly that, and §10.3.3 gives the arithmetic as a
+//!    `shall`.
+//! 2. **Tables 148/149 row 2** tabulate *"any process colour space (including
+//!    other cases of `DeviceCMYK`)"* × process colorant × `OP true, OPM 1` =
+//!    **"Paint source"**, identical to the `OPM 0` column. The standard did
+//!    not omit non-CMYK process spaces; it enumerated them.
+//! 3. §8.6.7's escape hatch — *"or is implicitly converted to `DeviceCMYK`;
+//!    see 8.6.5.7"* — points at **"Implicit Conversion of CIE-Based Colour
+//!    Spaces"**, CIE-based and nothing else. **This third ground is the only
+//!    one the old header had**, and alone it does read like a silence, which
+//!    is how the error was made.
 //!
-//! Both are defensible, so pdfce ships both behind
-//! `OverprintZeroTintScope` and defaults to Acrobat's — this is a
-//! print-conformance axis and the measurement instrument is authored to press
-//! behaviour.
+//! ★ **ISO 32000-2 DELETES the first two**, so the question really is open
+//! there. The behaviour is **edition-gated**, and a test file about it has to
+//! say which edition it is talking about.
+//!
+//! So: the **literal** (and, under 1.7, the **conforming**) reading is that
+//! `OPM 1` does not reach a `DeviceGray` source — the fill writes all four
+//! components and knocks a spot backdrop out. **Acrobat** converts grey to
+//! K-only `DeviceCMYK` first and then applies `OPM 1`, preserving the
+//! backdrop's C, M and Y. **pdfce defaults to Acrobat's and therefore
+//! DIVERGES**, deliberately: this is a print-conformance axis whose
+//! measurement instrument is authored to press behaviour. That is a choice
+//! the operator can reverse with `device_cmyk_only`, and it owes them a
+//! disclosure that an ambiguity would not.
+//!
+//! ★★★ **AND THESE FIXTURES CANNOT DISCRIMINATE THE SETTING IF THE BACKDROP
+//! IS A SPOT.** Tables 148/149 put *"any process colour space"* × **spot**
+//! colorant × `OP true` at `c_b` — *do not paint* — in **both** overprint-mode
+//! columns, so a conforming engine preserves that backdrop whichever way the
+//! setting is read (spec register `OP-N3`). pdfce's settings differ here only
+//! because **pdfce flattens a spot into C, M and Y**, leaving no spot colorant
+//! for that row to protect. The difference these tests observe is real; its
+//! cause is pdfce's representation, and **it will change when the n-colorant
+//! buffer lands** — at which point these assertions are expected to move and
+//! should be re-derived rather than patched.
 //!
 //! ## ★★★ Why these tests exist rather than a conformance-suite run
 //!

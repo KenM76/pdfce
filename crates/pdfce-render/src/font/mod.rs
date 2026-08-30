@@ -614,10 +614,13 @@ pub struct RenderOptions {
     /// clause citations and the reason this is a setting rather than a fix.
     pub page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource,
     /// Which colour spaces get `OPM 1`'s zero-tint rule under overprint —
-    /// the §8.6.7 ambiguity (`Pass 143.0`). See
+    /// a **divergence from ISO 32000-1** toward Acrobat (`Pass 143.0`), and
+    /// edition-gated: 32000-2 deletes two of the three provisions that
+    /// settle it in 1.7. See
     /// [`pdfce_core::settings::OverprintZeroTintScope`], whose docs carry
-    /// the clause citations, both defensible readings, and the measurement
-    /// behind the default.
+    /// the clause citations, the three grounds, and the measurement behind
+    /// the default. (This said *"the §8.6.7 ambiguity … both defensible
+    /// readings"* until `Pass 174.6`.)
     pub overprint_zero_tint_scope: pdfce_core::settings::OverprintZeroTintScope,
     /// How a type 6/7 mesh-shading patch record is byte-padded - spec
     /// ambiguity `MSH-A1`. See
