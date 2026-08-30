@@ -1,9 +1,32 @@
 # PLAN — Making push buttons work: actions, submission, and an out-of-tree scripting/network plugin model
 
-**Status: DRAFT PLAN. Nothing here is built, filed, or decided beyond the
-operator rulings quoted verbatim in §1.** Authored by `pdfce-engineer`,
-2026-08-26, at the operator's request ("draft a full plan now on what we
-have"). This document is engineer-owned, in the same class as
+**★★ STATUS AMENDED 2026-08-30 — PHASE 1 IS BUILT AND SHIPPED.** The banner
+below said *"Nothing here is built"* and that was true for four days. It is
+kept legible rather than silently rewritten, because a plan that quietly
+becomes a status report is a plan nobody can date.
+
+- **§8 Phase 1 (action authoring) — SHIPPED**, as `Pass 182.0` (`bc49a8e`,
+  `/ResetForm`) and `Pass 183.0` (`cff102a`, `/SubmitForm`, `/GoTo`,
+  `/Named`, `/URI`, and the payload disclosure of §6.3/§6.3.1). **Two items
+  of Phase 1 are NOT built**: `/AP` `/D` (the pressed appearance) and `/MK`
+  icon/label layout.
+- **§11 prerequisite 3 — DISCHARGED** before Phase 1, as it required:
+  `Pass 133.0` (`afd8da8`) fixed the `/A`-versus-`/AA` hazard blindness of
+  §2.7. Verified again on 2026-08-30 on the shipped binary — `inspect`,
+  `list-fields` and `list-annotations` all disclose a pdfce-authored submit.
+- **§8 Phases 2–5 — UNBUILT and unchanged.** Nothing dispatches. `R54` is
+  **not engaged** by Phase 1 and its decision-088 amendment is **not relied
+  on**; `R12` is not engaged either, since no crate gained network code.
+- **★ §1's O4/O5 ladder was written for DISPATCH, and three of its four rungs
+  are unreachable from authoring.** Only rung 3 (payload disclosure) survived
+  into Phase 1 — and it turned out to be the rung with the most in it. A
+  future session reading §6 as a Phase-1 checklist will look for a whitelist
+  and a redirect check that have nowhere to live yet.
+
+**Original status, retained: DRAFT PLAN. Nothing here is built, filed, or
+decided beyond the operator rulings quoted verbatim in §1.** Authored by
+`pdfce-engineer`, 2026-08-26, at the operator's request ("draft a full plan
+now on what we have"). This document is engineer-owned, in the same class as
 `docs/ocr-engine-survey.md` — a sourcing-and-design record that precedes a
 decision record, not a substitute for one.
 
@@ -25,18 +48,30 @@ no code may rely on the amendment before it is filed.
 
 ## 0. Reader's orientation — the one-paragraph version
 
-pdfce can already *create* push buttons that are structurally correct in
-every viewer and that do **nothing** when pressed, because pdfce authors no
-action on them and fires no trigger for one. Making them work splits into
-three genuinely separate problems that this plan keeps separate throughout:
-**(a)** authoring an action into the file, **(b)** honouring an action when
-an operator presses the button, and **(c)** executing embedded JavaScript.
-(a) and (b) are small, safe, and mostly blocked on a rule written for (c).
-(c) is large, is prohibited scope today, and is the subject of the plugin
-proposal. **The single most consequential finding in this plan is that (b) is
-blocked by a rule nobody was thinking about — `R54`, "no trigger event ever
-fires" — which is separate from the JavaScript rule and bites a plain,
-script-free Reset button.**
+Making a push button work splits into three genuinely separate problems that
+this plan keeps separate throughout: **(a)** authoring an action into the
+file, **(b)** honouring an action when an operator presses the button, and
+**(c)** executing embedded JavaScript. (a) and (b) are small and safe; (b) is
+blocked on a rule written for (c). (c) is large, is prohibited scope today,
+and is the subject of the plugin proposal. **The single most consequential
+finding in this plan is that (b) is blocked by a rule nobody was thinking
+about — `R54`, "no trigger event ever fires" — which is separate from the
+JavaScript rule and bites a plain, script-free Reset button.**
+
+**★ AMENDED 2026-08-30. (a) IS BUILT** — see the status banner at the head of
+this document. This paragraph opened by saying pdfce *"can already create
+push buttons … that do **nothing** when pressed, because pdfce authors no
+action on them and fires no trigger for one"*, and **half of that is now
+false**: `EditSession::set_button_action` authors `/ResetForm`,
+`/SubmitForm`, `/GoTo`, `/Named` and `/URI` (`Pass 182.0`/`Pass 183.0`).
+**Creation** still authors none, deliberately; **firing** still never
+happens, so (b) is untouched and `R54` is not engaged.
+
+Recorded here rather than rewritten away because of the shape it repeats: the
+banner at the head of this file was updated in the same edit that left this
+sentence alone. A correction that reaches a status block and stops short of
+the prose is this project's most-repeated documentation defect, and the
+sentence it stopped short of is always the one a reader actually reads.
 
 ---
 
@@ -99,16 +134,29 @@ Undo reproduces the input byte-for-byte.
 **Not reachable in `pdfceGUI`** — field creation is unbuilt there; the
 type palette shows push button absent rather than greyed.
 
-### 2.2 Action authoring: does not exist, anywhere
+### 2.2 Action authoring: did not exist, anywhere — **★ AMENDED 2026-08-30, this is the bullet Phase 1 retired**
 
-There is **no code path in pdfce that writes an `/A` entry**, on a push
-button or on anything else. There is no link-annotation authoring either.
-`grep` for `add_link` / `NewLink` returns nothing. This is not a gap in the
-button feature; it is a capability the project has never had.
+Kept in the past tense with the measurement intact, following §2.3's
+precedent, because §2 is a dated snapshot and its value is what was true when
+the plan was written.
 
-Every push button pdfce creates is disclosed as inert on both channels
-(`FieldAuthorDisclosures::push_button_inert`), which is why this has never
-silently surprised anyone.
+**As of 2026-08-30 there IS a code path that writes an `/A` entry**:
+`EditSession::set_button_action`, on a push button's widget, authoring
+`/ResetForm` (`Pass 182.0`, `bc49a8e`) and `/SubmitForm`, `/GoTo`, `/Named`,
+`/URI` (`Pass 183.0`, `cff102a`). **Link-annotation authoring is still
+absent** — `grep` for `add_link` / `NewLink` still returns nothing — and the
+`/A`-writing primitive built here is the one a future link Pass would reuse,
+exactly as §8 Phase 1 predicted.
+
+Original measurement, 2026-08-26: *"There is **no code path in pdfce that
+writes an `/A` entry**, on a push button or on anything else. … This is not a
+gap in the button feature; it is a capability the project has never had."*
+
+Every push button pdfce **creates** is still disclosed as inert on both
+channels (`FieldAuthorDisclosures::push_button_inert`), which is why this
+never silently surprised anyone. **The flag is unchanged; three sentences
+explaining it said "pdfce never authors one" and were corrected in
+`cff102a`.**
 
 ### 2.3 Action *reading*: partially exists, and is good
 
@@ -800,7 +848,30 @@ because under O8 there will not be one. That is a design constraint on
 Phases 1–3, not merely a description of them: nothing in them may be
 specified as "…and the rest is handled by a script."
 
-### Phase 1 — Action authoring, safe subset. No plugin, no network, no interpreter.
+### Phase 1 — Action authoring, safe subset. No plugin, no network, no interpreter. **★ SHIPPED 2026-08-30 (`bc49a8e`, `cff102a`), except `/AP` `/D` and `/MK` layout.**
+
+**What the operator actually said, and it is not what this phase assumed.**
+This phase was written expecting `/SubmitForm` to be authored *"as data"*
+pending Phase 2. The operator's ruling — *"make the submit and other options
+that don't need javascript available for buttons with the safeguards like we
+had planned"* — arrived as a single instruction covering the whole list, and
+`Pass 183.0` shipped it in one Pass rather than the two this phasing implied.
+
+**The safeguards that survived into authoring**, since §6's ladder is a
+dispatch ladder: the full destination is stated (rung 2's *content*, at
+authoring time), the **payload** is computed and disclosed (rung 3, §6.3.1 in
+full), `http` is allowed and said rather than blocked (rung 4's proposed
+default), and every undecidable destination or non-conforming flag word is
+**refused by name**. Rung 1's whitelist has nothing to gate: pdfce sends
+nothing.
+
+**One thing this phase did not anticipate and Phase 2 inherits:** authoring a
+`/GoTo` on a **widget** made `pageops::references::census_dangling` — which
+walked `/Link` annotations only — under-report by construction. Fixed in the
+same commit, `DanglingReport::non_link_annotations`. Any later carrier this
+plan adds (`/Screen`, a link-annotation Pass) should check the same census
+before shipping.
+
 
 Author `/A` on push buttons (and, for free, the same primitive serves future
 link annotations):
