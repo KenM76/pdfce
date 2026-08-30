@@ -241,12 +241,26 @@ surround can be compared as *ink* instead of as pixels.
 | `(28, 135)` | `0 0 0 0.500` | `0.443 0 0.885 0.500` | whole cell green — X invisible |
 | `(434, 136)` | `0.500 0 1.000 0.500` | `0.029 0 0.059 0.500` | whole cell neutral grey |
 
-**1. The `Pass 143.0` ambiguity is REFUTED as the cause, by ablation.**
-Rendering the same pixel under all three `overprint_zero_tint_scope` values —
-`device_cmyk_only`, `grey_as_k_only`, `all_process_spaces` — returns
-**bit-identical ink**. The setting moves the page's total effective-overprint
-count (24 / 29 / 29) and does not move this pixel at all. The §8.6.7 grey
-question is real and is not what is happening here.
+**1. The `Pass 143.0` ambiguity is not the cause.** Rendering the same pixel
+under all three `overprint_zero_tint_scope` values — `device_cmyk_only`,
+`grey_as_k_only`, `all_process_spaces` — returns **bit-identical ink**. The
+setting moves the page's total effective-overprint count (24 / 29 / 29) and
+does not move this pixel at all.
+
+★★ **AND THE ABLATION IS WEAKER THAN IT LOOKED, which is worth more than the
+conclusion it supported.** Audited by `pdfce-spec-librarian` the same day
+(register `OP-N3`): Tables 148/149 put *"any process colour space"* × **spot
+colorant** × `OP true` at `c_b` — *do not paint* — in **both** the `OPM 0`
+and `OPM 1` columns. So on a **spot** backdrop all three settings agree by
+construction, and a bit-identical result was **forced by the table**. It
+would have come out identical on a correct implementation and on a broken
+one. **The discriminating case is grey over PROCESS components**, and this
+patch's failing cells are not it.
+
+The conclusion stands — the cause is §3 below, derived from the file's own
+colour spaces rather than from the ablation — but the ablation is a
+consistency check, not the evidence. A measurement whose outcome is entailed
+by the spec is not a measurement of the implementation.
 
 **2. The grey-STROKE lead is refuted too, and is worth recording as a near
 miss.** `.5 G` does occur in this patch — but under `/GS5`, on a *different*

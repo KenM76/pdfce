@@ -2444,12 +2444,25 @@ about.
 extra line beside the stable metrics line:
 
 ```text
-ink-probe: x=200 y=200 source=cmyk-buffer c=0.750 m=0.000 y=1.000 k=0.000 alpha=1.000 srgb=24,140,108
+ink-probe: x=200 y=200 source=cmyk-buffer c=0.750 m=0.000 y=1.000 k=0.000 alpha=1.000 srgb=47,181,73
 ```
 
 It is a **second line, not more keys on the first one**: the metrics line is
 `key=<integer>` pairs in a published fixed order, and this payload is four
 floats plus a classification that is absent unless asked for.
+
+**★ The same page composited ON SCREEN gives `srgb=47,180,73` for that
+operand — one count of blue apart.** That is a property of the compositing
+path, not of the conversion: one path converts an 8-bit paint colour, the
+other converts `f32` colorants at the very end. **Every `DeviceCMYK` colour
+carries that ±1 blue**, so do not read a one-count difference between two
+probes, or between pdfce and another engine, as a disagreement.
+
+*(This block's example read `srgb=24,140,108` until `Pass 174.5`. That is the
+**pre-`Pass 165.0` defect value** — so this document, which a consuming
+project builds against, was restating the very claim `Pass 174.0` measured
+away. Recorded rather than silently corrected: a worked example is a claim,
+and a stale one is a wrong claim that reads as an illustration.)*
 
 ### 7.3 Cancellation — the off-thread contract
 

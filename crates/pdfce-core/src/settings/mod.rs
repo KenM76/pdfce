@@ -515,24 +515,60 @@ pub enum CmykIntent {
 /// rule exists for: it changes every colour on the page and leaves no mark
 /// saying so.
 /// Which colour spaces get `OPM 1`'s zero-tint rule under overprint
-/// (`Pass 143.0`) — a genuine spec ambiguity, turned into a setting per the
-/// standing practice rather than decided silently.
+/// (`Pass 143.0`) — turned into a setting per the standing practice rather
+/// than decided silently.
 ///
-/// # The ambiguity, stated precisely
+/// # ★★★ WHAT THIS IS, CORRECTED 2026-08-29 (`Pass 174.5`): IT IS A
+/// DIVERGENCE UNDER ISO 32000-1, NOT A TWO-READINGS SILENCE
 ///
-/// ISO 32000-1 **§8.6.7** scopes `OPM 1` to *"a tint value of 0.0 for a
-/// colour component **in a `DeviceCMYK` colour space**"*. `DeviceGray` is not
-/// one, so **pdfce's literal reading — that `OPM 1` does not reach it — is
-/// defensible.** Acrobat converts grey to K-only `DeviceCMYK` **first** and
-/// *then* applies `OPM 1`, which is the other defensible reading.
+/// This block, and this type's own first line, said *"a genuine spec
+/// ambiguity"* and *"there is no sentence resolving it either way"*. Audited
+/// against the spec corpus by `pdfce-spec-librarian` and **that is wrong for
+/// ISO 32000-1, on three independent grounds** (register `OP-A5`):
 ///
-/// ★ **The standard already contemplates conversion-then-`OPM` for a
-/// neighbouring case and is SILENT about this one.** §8.6.7's escape hatch
-/// reads *"or is implicitly converted to `DeviceCMYK`; see 8.6.5.7"*, and
-/// §8.6.5.7 is titled **"Implicit Conversion of CIE-Based Colour Spaces"** —
-/// CIE-based spaces and nothing else. So a `CalRGB` gets `OPM 1` and a
-/// `DeviceGray` does not, by the letter. That asymmetry is the ambiguity;
-/// there is no sentence resolving it either way.
+/// 1. **§8.6.7's very next sentence excludes it in terms.** *"It shall not
+///    apply … to any colours that are the result of a computation, such as
+///    those in a shading pattern **or conversions from some other colour
+///    space**."* A `DeviceGray` → `DeviceCMYK` map is precisely that, and
+///    §10.3.3 even specifies the arithmetic as a `shall`.
+/// 2. **Tables 148/149 row 2 enumerate the case and give it `OPM 0`
+///    behaviour.** Source space *"Any process colour space (including other
+///    cases of `DeviceCMYK`)"* × process colorant × `OP true, OPM 1` =
+///    **"Paint source"**, identical to the `OPM 0` column. The standard did
+///    not omit non-`DeviceCMYK` process spaces; it tabulated them.
+/// 3. §8.6.7's escape hatch points at §8.6.5.7, **"Implicit Conversion of
+///    CIE-Based Colour Spaces"** — CIE-based and nothing else. (This third
+///    point is the only one the previous wording had, and alone it does read
+///    like a silence.)
+///
+/// ★★ **ISO 32000-2 DELETES TWO OF THE THREE**, so the question is
+/// **edition-gated**: 2.0 replaces the computed-colour sentence with a bare
+/// *"images or shadings"*, and drops the opaque-model table entirely. Under
+/// 2.0 this is much closer to a real silence. Under 1.7 it is not.
+///
+/// ⇒ **[`Self::GreyAsKOnly`], the shipped default, is a deliberate
+/// divergence from ISO 32000-1 toward Acrobat**, and it is the right default
+/// for the reason given below — but it must be *described* as a divergence.
+/// A divergence owes the operator a disclosure that an ambiguity does not,
+/// and calling it an ambiguity was quietly discharging that obligation by
+/// misnaming it.
+///
+/// # ★ AND A TEST-DESIGN CONSEQUENCE THAT ALREADY COST A MEASUREMENT
+///
+/// Tables 148/149 also say: *"Any process colour space"* × **spot colorant**
+/// × `OP true` = `c_b` — **"do not paint"** — in **both** the `OPM 0` and
+/// `OPM 1` columns. So a grey fill over a **spot** backdrop preserves that
+/// backdrop under **all three** of these settings and under **either**
+/// reading.
+///
+/// **A grey-over-spot patch therefore cannot discriminate this setting at
+/// all.** `Pass 174.2` ran exactly that ablation on the conformance corpus,
+/// got bit-identical ink from all three values, and reported it as evidence
+/// the setting was not the cause. The conclusion was right and the
+/// *inference* was weaker than it looked: the result was forced by the table
+/// and would have been identical on a correct implementation and a broken
+/// one. **The discriminating case is grey over PROCESS components.**
+/// Recorded as `OP-N3` in the spec register so nobody re-runs it.
 ///
 /// # What the difference looks like on paper
 ///
@@ -542,6 +578,17 @@ pub enum CmykIntent {
 /// the backdrop and only K is laid down. Measured against Acrobat on the
 /// print-conformance suite: 84,120,34 (Acrobat, and this setting's default)
 /// versus 127,127,127 (the literal reading).
+///
+/// ★ **This example is about what PDFCE does, not about what the standard
+/// requires**, and the difference is the section above. Tables 148/149 put
+/// *"any process colour space" × spot colorant × `OP true`* at `c_b` under
+/// **both** overprint modes — so a *conforming* engine preserves that spot
+/// backdrop whichever way this setting is read. The reason pdfce's two
+/// settings differ here at all is that pdfce **flattens a spot into C, M and
+/// Y**, so there is no spot colorant for that table row to protect and the
+/// paint meets the process-colorant row instead. The observable difference
+/// is real; its cause is pdfce's representation, and it will change when the
+/// n-colorant buffer lands.
 ///
 /// # Why no colour conversion is needed to implement it
 ///

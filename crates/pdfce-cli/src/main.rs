@@ -2900,15 +2900,23 @@ enum Command {
         /// (`Pass 143.0`): `device_cmyk_only`, `grey_as_k_only` (default)
         /// or `all_process_spaces`.
         ///
-        /// # The ambiguity this exposes
+        /// # What this exposes, and it is a DIVERGENCE, not an ambiguity
         ///
         /// ISO 32000-1 §8.6.7 scopes `OPM 1`'s zero-tint rule to a
-        /// `DeviceCMYK` source, and its one escape hatch points at §8.6.5.7,
-        /// which covers **CIE-based** spaces only. So a `DeviceGray` fill
-        /// overprinting a spot backdrop either knocks it out (the literal
-        /// reading) or preserves it (Acrobat, which converts grey to K-only
-        /// CMYK first and then applies the rule). pdfce defaults to Acrobat's
+        /// `DeviceCMYK` source. A `DeviceGray` fill under `/OP true` either
+        /// knocks its backdrop out (the literal reading) or preserves the
+        /// backdrop's C, M and Y (Acrobat, which converts grey to K-only CMYK
+        /// first and then applies the rule). pdfce's default is Acrobat's,
         /// because this is a print axis scored against press behaviour.
+        ///
+        /// ★ This help said "the ambiguity this exposes" until `Pass 174.5`,
+        /// and under **ISO 32000-1** that is wrong: §8.6.7's next sentence
+        /// excludes *"conversions from some other colour space"* by name, and
+        /// Tables 148/149 tabulate *"any process colour space"* and give it
+        /// `OPM 0` behaviour. **The default is a deliberate divergence toward
+        /// Acrobat.** ISO 32000-**2** deletes both of those supports, so the
+        /// question really is open there — the edition matters. Choosing
+        /// `device_cmyk_only` gets you ISO 32000-1 to the letter.
         ///
         /// Like `--standard`, this is applied OVER the saved settings and is
         /// **never written back**: one diagnostic render must not silently
@@ -9699,10 +9707,26 @@ fn has_font_extension(path: &Path) -> bool {
 /// # The shape, and why absence is spelled rather than omitted
 ///
 /// ```text
-/// ink-probe: x=200 y=200 source=cmyk-buffer c=0.750 m=0.000 y=1.000 k=0.000 alpha=1.000 srgb=24,140,108
+/// ink-probe: x=200 y=200 source=cmyk-buffer c=0.750 m=0.000 y=1.000 k=0.000 alpha=1.000 srgb=47,181,73
 /// ink-probe: x=200 y=200 source=screen-srgb c=- m=- y=- k=- alpha=- srgb=47,180,73
 /// ink-probe: x=99999 y=7 source=out-of-range c=- m=- y=- k=- alpha=- srgb=-
 /// ```
+///
+/// ★ The first two lines are the SAME PAGE and the SAME OPERAND, rendered
+/// with and without a colorant buffer, and they differ by **one count of
+/// blue**. That is real and is a property of the compositing path, not of
+/// the conversion table — one path converts an 8-bit paint colour, the
+/// other converts `f32` colorants at the very end. Do not read a one-count
+/// blue between two probes as a disagreement.
+///
+/// ★★ These example values were `srgb=24,140,108` on the buffer line until
+/// `Pass 174.5`, and that is worth a sentence rather than a silent edit:
+/// `(24,140,108)` is the **pre-`Pass 165.0` defect value**, so the example
+/// restated — in shipped operator-facing documentation — exactly the
+/// *"the fallback beats the buffer"* premise that `Pass 174.0` measured
+/// away, while a test twenty files over asserted `47,181,73` for the same
+/// operand. A worked example is a claim, and a stale one is a wrong claim
+/// that reads as an illustration.
 ///
 /// Every key is present in every variant, with `-` where there is no
 /// value. A line whose key set changes with the answer forces a parser to
