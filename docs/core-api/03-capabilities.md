@@ -927,9 +927,27 @@ count by exactly that many.
   attaches another widget to one field; a rename names an existing field
   *and* a new name, and silently fusing them *"would destroy an identity they
   never offered up."* Surface `FieldTypeCollision`, `NameIsGroupingNode`,
-  `RenameCollision`, `PeriodInPartialName`, `EmptyName`, `PathTooDeep`
-  (`forms_author.rs:145`) as operator-actionable refusals — each names the
-  field and what is in the way.
+  `FieldPathCrossesTerminal`, `RenameCollision`, `PeriodInPartialName`,
+  `EmptyName`, `PathTooDeep` (`forms_author.rs:145`) as operator-actionable
+  refusals — each names the field and what is in the way.
+- ★★ **A dotted path may not nest under an existing TERMINAL field**, and this
+  is the refusal to wire if you are wiring only one. `FieldPathCrossesTerminal
+  { fqn, terminal }` (`Pass 174.8`) is the **mirror** of `NameIsGroupingNode`
+  and the destructive half of the pair: that one is *"you asked for a terminal
+  and the name is a group"*, this one is *"you asked for a child and the
+  ancestor is a terminal"*. Creating `Text.2` while `Text` is a terminal gives
+  `Text` field-kids, which makes it non-terminal (§12.7.3.1) — and Table 220
+  gives a non-terminal no type of its own, so `Text`'s `/FT`, its `/V` **and
+  its value** stop belonging to any field while its widget stays drawn on the
+  page under nothing. Until `Pass 174.8` that happened **silently**, reporting
+  success. `fqn` is the name the operator typed (`Text.2`), not the unmatched
+  tail. **There is no repair verb and none is planned** — by the time anything
+  could report it the value is already gone, so the answer is the refusal.
+  A *deliberate* promotion (`Text` → a group, the original demoted to `Text.0`
+  keeping its value) would be a different verb with its own confirmation,
+  because it **renames an existing field**, and a field's name is its identity
+  to every script, calculation order and FDF mapping that refers to it. It is
+  not built.
 - **A widget written with a `/T` is not a second view of a field — it is a
   second field underneath it**, silently composing `Ref.Ref`
   (`forms_author.rs:528-535`, `FIELD_ONLY_KEYS`).

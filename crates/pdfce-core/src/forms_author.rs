@@ -169,6 +169,54 @@ pub enum FormAuthorError {
         /// The fully-qualified name requested.
         fqn: String,
     },
+    /// The requested path descends **through an existing TERMINAL field**.
+    ///
+    /// `Text.2` cannot be created while `Text` is a terminal field: giving
+    /// `Text` field-kids makes it non-terminal (§12.7.3.1), and a
+    /// non-terminal has no type of its own (Table 220) — so `Text`'s own
+    /// `/FT`, `/V` and widget stop belonging to any field. **The value is
+    /// destroyed and the widget is orphaned on the page**, still drawn, still
+    /// in `/Annots`, belonging to nothing.
+    ///
+    /// # ★★ THE MIRROR OF [`Self::NameIsGroupingNode`], AND THE DESTRUCTIVE ONE
+    ///
+    /// That variant guards *"you asked for a terminal and the name is a
+    /// group"*, and has since the choke point was written. This guards *"you
+    /// asked for a child and the ancestor is a terminal"* — the same collision
+    /// from the other side, and **the more damaging direction**: the first
+    /// refuses, and until `Pass 174.8` the second silently **converted and
+    /// discarded**. Reported by the consuming shell with a four-command
+    /// reproduction; `add-text-field` returned success, `changed=4`, and no
+    /// disclosure.
+    ///
+    /// ★ The resolver has always handed this case back correctly —
+    /// [`resolve_field_path`]'s own comment says *"the caller will find
+    /// `deepest` is a terminal and can refuse or create beneath it as its own
+    /// rules require"*. **No caller refused.** A hole documented at the place
+    /// that hands it over is still a hole; the note read as a design note
+    /// rather than as an obligation, which is exactly how a half-present guard
+    /// stays half-present.
+    ///
+    /// # Not a conversion, and not a conversion-with-a-disclosure
+    ///
+    /// Refused outright, because there is no repair that puts the value back:
+    /// by the time anything could report it, the field has already stopped
+    /// being a field. A *deliberate* promotion — `Text` becoming a group with
+    /// the original demoted to `Text.0`, keeping its value — is a different
+    /// verb with its own name and its own confirmation, because it **renames
+    /// an existing field**, and a field's name is its identity to every
+    /// script, calculation order, FDF import and external mapping that refers
+    /// to it. That verb is not built and was not asked for.
+    #[error(
+        "cannot create `{fqn}`: `{terminal}` is already a field, and nesting under it would \
+         destroy it — a field with kids has no type, value or widget of its own (\u{a7}12.7.3.1)"
+    )]
+    FieldPathCrossesTerminal {
+        /// The fully-qualified name requested.
+        fqn: String,
+        /// The fully-qualified name of the existing terminal field in the way.
+        terminal: String,
+    },
     /// A rename would land the field on a name something else already holds.
     ///
     /// **Refused rather than merged, and the asymmetry with creation is
@@ -400,6 +448,72 @@ fn partial_name<G: ObjectGraph + ?Sized>(graph: &G, id: ObjId) -> Option<String>
         _ => return None,
     };
     Some(crate::edit::decode_text_string(&bytes).text)
+}
+
+/// How many of a node's `/Kids` are CHILD FIELDS — zero means **terminal**.
+///
+/// §12.7.3.1 defines a terminal field as one *"that does not have kids that
+/// are fields"*, so this **is** the terminal test, not a proxy for it. Exposed
+/// to `edit.rs` because [`FormAuthorError::FieldPathCrossesTerminal`]'s guard
+/// lives at the authoring choke point, and a second implementation of
+/// "terminal" would be a second place for the reader and the writer to
+/// disagree about what a field is.
+///
+/// A count rather than the `Vec`: the guard asks a yes/no question, and
+/// returning the ids would invite a caller to walk them and re-derive the
+/// answer differently.
+pub(crate) fn child_field_count<G: ObjectGraph + ?Sized>(graph: &G, id: ObjId) -> usize {
+    child_fields(graph, id).len()
+}
+
+/// A node's fully-qualified name — every ancestor's `/T`, joined by `.`.
+///
+/// §12.7.3.2: *"the fully qualified field name is the partial field name of
+/// the field's ancestors, separated by periods, followed by the field's own
+/// partial name."* Used only to NAME the field standing in the way of a
+/// refusal, which is the whole value of that refusal: *"`Text.2` cannot be
+/// created"* is a restatement of the request, while *"`Text` is already a
+/// field"* is the fact the operator has to act on.
+///
+/// # Why it walks `/Parent` rather than being threaded down from the resolver
+///
+/// Because the guard sits at the writer's choke point, which is reached from
+/// four verbs and has only the object id. Threading the matched prefix through
+/// every one of them to save a short upward walk would put the same string in
+/// four places, which is where they start to disagree.
+///
+/// Returns `None` for a node with no `/T` at all. The depth guard mirrors
+/// every other tree walk in this crate: a `/Parent` cycle in a hostile file
+/// must terminate, and a name is a diagnostic, so a truncated one is a far
+/// better outcome than a hang.
+pub(crate) fn fully_qualified_name<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    id: ObjId,
+) -> Option<String> {
+    const MAX_DEPTH: usize = 64;
+    let mut parts = vec![partial_name(graph, id)?];
+    let mut current = id;
+    let mut seen: HashSet<ObjId> = HashSet::new();
+    seen.insert(current);
+    for _ in 0..MAX_DEPTH {
+        let Some(parent) = graph
+            .resolved(current)
+            .as_dict()
+            .and_then(|d| d.get(b"Parent"))
+            .and_then(Object::as_reference)
+        else {
+            break;
+        };
+        if !seen.insert(parent) {
+            break;
+        }
+        if let Some(name) = partial_name(graph, parent) {
+            parts.push(name);
+        }
+        current = parent;
+    }
+    parts.reverse();
+    Some(parts.join("."))
 }
 
 /// The `/Kids` entries that are CHILD FIELDS rather than bare widgets.

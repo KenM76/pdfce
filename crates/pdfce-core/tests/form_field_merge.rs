@@ -1195,3 +1195,100 @@ fn tabs_declared_on_an_ancestor_still_counts() {
         "the ancestor has none, so the page's own value is what fired",
     );
 }
+
+// ---------------------------------------------------------------------------
+// The fifth outcome — a path that descends THROUGH a terminal (`Pass 174.8`)
+// ---------------------------------------------------------------------------
+
+/// ★★ A dotted path may not nest under an existing **terminal** field.
+///
+/// **The mirror of `a_grouping_node_cannot_become_a_terminal_field` above, and
+/// the destructive direction.** That one guards *"you asked for a terminal and
+/// the name is a group"* and has always refused. This one is *"you asked for a
+/// child and the ancestor is a terminal"* — and until `Pass 174.8` it
+/// **converted and discarded**: appending a `/Kids` to `Text` makes it
+/// non-terminal (§12.7.3.1), Table 220 gives a non-terminal no type of its
+/// own, and `Text`'s `/FT`, `/V` and widget stop belonging to any field.
+///
+/// Reported by the consuming shell with a four-command reproduction, and
+/// reproduced here before the fix: a filled-in `Text` and its value gone, its
+/// widget still drawn on the page and listed under nothing, and the command
+/// reporting success with `changed=4` and no disclosure.
+///
+/// ★ The resolver had always handed this case back correctly —
+/// `resolve_field_path`'s own comment says the caller *"can refuse or create
+/// beneath it as its own rules require"*. **No caller refused.** A hole
+/// documented at the point that hands it over is still a hole.
+#[test]
+fn a_dotted_path_may_not_nest_under_an_existing_terminal_field() {
+    let mut s = blank();
+    s.add_text_field(&NewTextField::new(0, "Text", r1()).declining_tooltip())
+        .expect("the terminal");
+    let err = s
+        .add_text_field(&NewTextField::new(0, "Text.2", r2()).declining_tooltip())
+        .expect_err("nesting under a terminal destroys it");
+    match err {
+        EditError::FieldAuthoring(FormAuthorError::FieldPathCrossesTerminal { fqn, terminal }) => {
+            // ★ `fqn` is what the OPERATOR TYPED, not the unmatched tail. The
+            // first draft of the guard reported "cannot create `2`", because
+            // `remaining` carries only the segments that did not match — a
+            // name the operator never wrote and cannot search for.
+            assert_eq!(fqn, "Text.2");
+            assert_eq!(terminal, "Text");
+        }
+        other => panic!("expected FieldPathCrossesTerminal, got {other:?}"),
+    }
+    assert_eq!(form(&s).fields.len(), 1, "the refusal wrote nothing");
+}
+
+/// The refusal must not cost the existing field anything — value included.
+///
+/// Separate from the assertion above deliberately: *"one field remains"* and
+/// *"the field that remains is the one that was there, intact"* are different
+/// claims, and the defect being guarded destroyed the **value** while leaving
+/// a field-shaped object behind. A count alone would have passed against the
+/// bug on any document whose field had never been filled in.
+#[test]
+fn a_refused_nesting_leaves_the_terminals_value_untouched() {
+    let mut s = blank();
+    s.add_text_field(&NewTextField::new(0, "Text", r1()).declining_tooltip())
+        .expect("the terminal");
+    s.fill_text_field("Text", "K. Mantle").expect("fill");
+    assert_eq!(field(&s, "Text").value.display_text(), "K. Mantle");
+
+    let _ = s
+        .add_text_field(&NewTextField::new(0, "Text.2", r2()).declining_tooltip())
+        .expect_err("refused");
+
+    let after = field(&s, "Text");
+    assert_eq!(
+        after.value.display_text(),
+        "K. Mantle",
+        "the value the operator typed must survive a refusal"
+    );
+    assert_eq!(after.widgets.len(), 1, "and its widget is still its own");
+}
+
+/// Non-vacuity: a LEGITIMATE dotted path still creates its group, and a
+/// sibling still joins it.
+///
+/// Without this, the guard could refuse every dotted name and both tests above
+/// would still pass — which would trade a data-loss defect for a feature
+/// removal, and `Pass 174.8`'s whole claim is that it does not.
+#[test]
+fn a_dotted_path_into_vacant_space_still_creates_its_group() {
+    let mut s = blank();
+    s.add_text_field(&NewTextField::new(0, "Addr.City", r1()).declining_tooltip())
+        .expect("a fresh two-level path");
+    s.add_text_field(&NewTextField::new(0, "Addr.Zip", r2()).declining_tooltip())
+        .expect("a sibling under the group the first call created");
+
+    let f = form(&s);
+    let mut names: Vec<&str> = f
+        .fields
+        .iter()
+        .map(|x| x.fully_qualified_name.as_str())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, ["Addr.City", "Addr.Zip"]);
+}

@@ -15100,6 +15100,53 @@ impl EditSession {
             return Err(EditError::FieldNameEmpty);
         };
 
+        // ★★ THE PATH MUST NOT DESCEND THROUGH AN EXISTING TERMINAL FIELD
+        // (`Pass 174.8`).
+        //
+        // `resolve_field_path` returns `Vacant { deepest, remaining }` for
+        // BOTH "nothing below this group exists yet" and "the path wants to
+        // descend through a terminal", and its own comment says the caller
+        // "can refuse or create beneath it as its own rules require".
+        // **No caller refused**, so `add-text-field --name "Text.2"` against
+        // an existing terminal `Text` appended a `/Kids` to it, which by
+        // §12.7.3.1 makes `Text` non-terminal — and Table 220 gives a
+        // non-terminal no type of its own, so its `/FT`, its `/V` and its
+        // widget stopped belonging to any field. Measured on the shell's own
+        // four-command reproduction: a filled-in field and its value gone,
+        // its widget still drawn on the page and listed under nothing, and
+        // the command reporting success with `changed=4`.
+        //
+        // ★ The test is "has no field kids", not a heuristic about `/FT` or
+        // `/V`, because that IS §12.7.3.1's definition of terminal: *"a field
+        // that does not have kids that are fields"*. An empty grouping node
+        // is a terminal by the standard's own words, so refusing there is
+        // correct rather than conservative — and nothing in pdfce authors one.
+        //
+        // Placed HERE, in the single deferred choke point, rather than in each
+        // `add_*_field`: all three authoring verbs and `paste_field` reach it,
+        // and the sibling guard this mirrors (`NameIsGroupingNode`) is spread
+        // across five call sites and had to be written five times.
+        //
+        // ★ `fqn` IS REBUILT FROM THE TERMINAL'S OWN NAME PLUS THE TAIL, NOT
+        // TAKEN FROM `remaining`. `remaining` is only the UNMATCHED tail — for
+        // `Text.2` over an existing `Text` it is just `["2"]`, and the first
+        // draft of this guard duly told the operator *"cannot create `2`"*,
+        // which is not a name they typed and not one they could search for.
+        // A refusal that renames the request is a refusal the operator has to
+        // decode before they can act on it.
+        if let Some(existing) =
+            deepest.filter(|id| forms_author::child_field_count(&self.graph(), *id) == 0)
+        {
+            let terminal = forms_author::fully_qualified_name(&self.graph(), existing)
+                .unwrap_or_else(|| "<unnamed>".to_owned());
+            let mut fqn = terminal.clone();
+            fqn.push('.');
+            fqn.push_str(&remaining.join("."));
+            return Err(
+                forms_author::FormAuthorError::FieldPathCrossesTerminal { fqn, terminal }.into(),
+            );
+        }
+
         // Allocate every grouping node first, so each can name the next.
         let mut group_ids = Vec::with_capacity(groups.len());
         for _ in groups {
