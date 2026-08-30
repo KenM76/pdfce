@@ -7157,8 +7157,15 @@ a corruption class exists and is undetectable in the shipping build; the
 assertion is the *detector*, and it needs an *input source*.
 
 ★★ **The unit is NOT "a named helper", and that scoping was corrected before
-the rule shipped.** `grep -rn "fn debug_assert" crates/*/src/` finds **2**;
-`grep -rn "debug_assert" crates/pdfce-core/src/` finds **34**. The same fuzz
+the rule shipped.** `grep -rn "fn debug_assert" crates/*/src/` finds **2**; the
+population of real **invocations** across `pdfce-core` + `pdfce-render` is
+**24** (12 + 12), measured 2026-08-30 at `7ac98da` — census and per-site
+verdicts in `ROADMAP.md`'s `R236` under *THE DENOMINATOR*.
+~~`grep -rn "debug_assert" crates/pdfce-core/src/` finds **34**~~ — **struck
+2026-08-30 (350th filing): that command returns 44, not 34, and always did;
+of those, 7 are `cfg(debug_assertions)` attributes and 10 are comment prose
+ABOUT `debug_assert`. A source grep over a documentation-first codebase counts
+the codebase's own self-description.** The same fuzz
 target's **third** finding is a **bare inline `debug_assert_eq!`**
 (`edit.rs:17486`) comparing two independent derivations of one quantity — a
 postcondition in substance whatever its syntax. **The unit is: any assertion

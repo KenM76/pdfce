@@ -833,6 +833,84 @@ anybody remembering.
   re-drafting it unasked is larger than a filing should take. **Engineer's
   call.**
 
+#### ★★ AMENDMENT, 350th filing (2026-08-30) — **ALL FOUR RULE-11 SURVIVORS DISCHARGED, NONE DEFERRED — AND `R236`'s DENOMINATOR, TAKEN AT LAST, WAS WRONG TWICE ON THE WAY IN**
+
+**No new Pass.** Two docs-only commits landed against already-filed Passes:
+`8d8dbb5` (2026-08-30 19:05:24) and `7ac98da` (19:37:21). `origin/main` is at
+`7ac98da`; `git rev-parse origin/main HEAD` returns the same hash, so nothing
+is unpushed.
+
+**The four survivors this entry reported as *owed, not fixed here* are all
+acted on**, and in three of four cases the engineer took the recommendation
+rather than the obvious repair:
+
+| survivor | disposition in `7ac98da` |
+|---|---|
+| `ci.yml:777` — *"There are 24 (measured 2026-08-25, `ls fuzz/fuzz_targets/*.rs \| wc -l`)"* | ★★ **DELETED**, not corrected and not gated. **Sourcing a figure makes it auditable, not durable** — the comment now records that the fix for a stale LIST shipped a stale COUNT and inherited the whole defect. |
+| `fuzz/Cargo.toml` — the twin 8-target list | **DELETED**, now a pointer. The engineer's note: he had that file open twice that day without seeing it. ⇒ **Deleting one copy of a hand-maintained list does not find the other one.** |
+| `edit.rs:12034` — *"live exactly where it earns its cost"* | *"exactly"* removed; this Pass falsified it. |
+| `edit.rs:25234` — catalog line stamped `Pass 185.1` | now `185.2`, reason inline — the whole point of `185.2` is that `185.1`'s set did **not** contain the catalog. |
+
+Plus `NEXT_SESSION.md` §D's *"four filings"* for `.tmp_bench.py` → **seven**,
+four lines from the *"29 commands"* the engineer had corrected the right way
+two hours earlier. ⇒ **Correcting one instance of a claim creates the feeling
+of having corrected the claim.**
+
+**★★ `R236` NOW HAS A DENOMINATOR, AND IT LIVES IN THE RULE.** This entry
+ledgered **named helpers, 2 of 2**, then correctly widened the unit to bare
+inline assertions and **never took the wider count**. It has now been taken —
+**24 invocations**, classified — and the census is written into `R236`'s own
+text under *THE DENOMINATOR*, because its first home
+(`docs/NEXT_SESSION.md`) is overwritten every session. What falls out is one
+named uncovered site (**`edit.rs:21669`**, annotation deletion, reached by no
+fuzz target — `annot_walk` reads, `annot_author` writes, verified here by
+grepping both targets for `delete`/`remove`: no hits) and one unaudited group
+of ten (`cmyk_buffer.rs`).
+
+**★★★★ AND THE COUNT ITSELF WAS WRONG TWICE, BOTH TIMES BY THE SAME
+MECHANISM — IN A RULE WHOSE ENTIRE SUBJECT IS A NUMBER.** The `34` this filing
+published was **never correct** (the command returns **44**, at `e77459b`, at
+`58dc367` and at `7ac98da` alike), and the `27 invocations` that corrected it
+counts **hits**, of which **3 are comment lines**. **24.** The mechanism:
+**a source grep over a documentation-first codebase counts the codebase's own
+prose about the construct** — `edit.rs:12085` and `12092` are two lines
+explaining *why* this is a `debug_assert!` and not a `panic!`, the
+best-reasoned lines in the region, and they are the ones that corrupted the
+count. ⇒ **The noun must name what the command counts**; `7ac98da` sourced its
+command exactly and still wrote *"invocations"*, which is that commit's own
+headline finding turned back on the correction carrying it. Struck and
+corrected in `R236`'s text; derivation in
+`D:/dev/rag/rust/a_source_grep_census_counts_the_codebases_own_prose_about_the_construct.md`.
+
+**★ TWO PROCESS FINDINGS PAIRED, because they are one boundary seen from both
+sides.** The engineer's *"a green `run-gates.sh` is not permission to commit;
+it certifies the TREE, not the ACT"* (recorded above) has a reader's-side
+mirror: **`check-passes-filed` DEFERS THE TIP, so a PASS-30 taken *at* the tip
+is not evidence the tip is filed.** Neither a state check before a commit nor a
+gate sweep at a tip can see `R217`'s window, because that window is a property
+of **commit order**. File the pair together; either alone reads as a quirk.
+
+**★ THE `tail` FINDING IS ALREADY A CORPUS ENTRY** — checked, not assumed:
+`D:/dev/rag/rust/tail_discards_the_head_of_a_failure_which_is_the_half_that_names_the_cause.md`
+(`last_verified: 2026-08-30`) already carries **both** shapes the engineer
+named, `run-gates.sh … | tail -25` and `cargo fuzz run … | tail -40`. Nothing
+owed; recorded so a future filing does not re-derive it.
+
+**Two corrections to this entry's own Ledger, by measurement:**
+- ~~*"Backup bundle is ONE COMMIT STALE"*~~ — **true when written, false now.**
+  By `ls -lt D:\Dev\pdfce-backups\`: `pdfce-20260830-1937-7ac98da-full.bundle`,
+  **current at `HEAD`**. It was refreshed at `8d8dbb5` before this entry's
+  report landed.
+- **`SESSION_LOG` filings.** 349 → **350** (this amendment); next free **351**.
+- **Ceilings unmoved.** `R236` remains the ceiling, next free **`R237`** —
+  **no rule minted, no rule amended in substance**; `R236`'s text gains a
+  measured denominator and two struck figures, which is discharging its
+  obligation, not changing it. Decisions: `110` the ceiling, next free **`111`**.
+- **Still owed, carried forward unchanged:** `Pass 38.5` C9; `Pass 184.0`
+  criterion E; the `windows-latest` `fuzz-smoke` sibling; the `-seed=1` re-run
+  against `Pass 185.2`'s fix; and `ARCHITECTURE.md` §10.2's future tense.
+  `.tmp_bench.py` still untracked — **eighth filing**, deliberate.
+
 ---
 
 ### `Pass 185.0` (`cec4069`, 2026-08-30) — **★★★★ THE JOB IS RENAMED AND A GATE NOW FALSIFIES ITS COUNT — `Pass 185.0` IS CLOSED, 4 OF 4 CRITERIA DISCHARGED** — ★★★ **CRITERION B WAS OWED TO *THIS ROLE'S* TREE, NOT THE ENGINEER'S, AND IS DISCHARGED IN THIS FILING RATHER THAN BY THE COMMIT** — ★★ **THE ENGINEER'S TWO SABOTAGES BOTH TESTED A NAME *ALREADY* STALE; THE SABOTAGE THAT TESTS THE *TRIGGER* WAS RUN HERE AND IS THE ONE THAT DEMONSTRATES CRITERION C** — ★ **THE GATE REFUSES TO JUDGE WHETHER A NAME IS FAIR, AND THAT REFUSAL IS THE TRANSFERABLE PART** — filed 2026-08-30 (348th filing)
@@ -129488,9 +129566,13 @@ same cause (hashes exist only at commit time), two different failure modes.
   **★★★ THE UNIT — CORRECTED BEFORE THIS RULE SHIPPED, BY THE SAME FUZZ TARGET
   THAT FOUNDED IT.** The first draft of `R236`, written earlier in this filing,
   set the unit as *"a named postcondition helper"* and the population as
-  **2 of 2**, explicitly excluding the **34** bare `debug_assert!` call sites
-  in `pdfce-core/src` as *"inline sanity checks inside a single function's own
-  reasoning"*. **That was too narrow, and the counter-example arrived before
+  **2 of 2**, explicitly excluding the ~~34~~ **12** bare `debug_assert!` call
+  sites in `pdfce-core/src` as *"inline sanity checks inside a single
+  function's own reasoning"*. (**The `34` is struck because it was never
+  right** — see *THE CENSUS'S OWN FIRST TWO PUBLISHED FIGURES* below; the
+  excluded set was 12, and the wrongness of the number is independent of the
+  wrongness of the exclusion.) **That was too narrow, and the counter-example
+  arrived before
   the ink dried:** the target's **third** finding (`8d8dbb5`, still OPEN) is a
   **bare inline `debug_assert_eq!` at `edit.rs:17486`**, comparing
   `emptied.len()` against `preview.nodes.len()` — **two independent derivations
@@ -129502,9 +129584,73 @@ same cause (hashes exist only at commit time), two different failure modes.
   not the population**:
 
   ```bash
-  grep -rn "fn debug_assert" crates/*/src/              # named helpers: 2
-  grep -rn "debug_assert" crates/pdfce-core/src/ | wc -l  # all sites: 34
+  # named helpers -- the cheap first cut, NOT the population
+  grep -rn "fn debug_assert" crates/pdfce-core/src/ crates/pdfce-render/src/
+  # -> 2
+
+  # the population: real INVOCATIONS, comment mentions excluded
+  grep -rn "debug_assert\(_eq\|_ne\)\?!" \
+    crates/pdfce-core/src/ crates/pdfce-render/src/ \
+    | grep -vE ":\s*(//|\*)"
+  # -> 24  (12 core + 12 render), measured 2026-08-30 at `7ac98da`
   ```
+
+  **★★★ THE DENOMINATOR — TRANSPLANTED HERE ON PURPOSE, BECAUSE ITS FIRST HOME
+  WAS A FILE THAT GETS OVERWRITTEN.** The census below was measured into
+  `docs/NEXT_SESSION.md`, which is engineer-owned and rewritten every session.
+  A rule whose obligation has no denominator is a rule every busy session
+  defers — the exact failure mode `R236` was minted about — so the denominator
+  lives **in the rule**, where the rule is read from.
+
+  **24 invocations across `pdfce-core` + `pdfce-render`**, measured 2026-08-30
+  at `7ac98da` by the command above. What the rule actually reaches:
+
+  | site(s) | count | verdict |
+  |---|---|---|
+  | `edit.rs:12095` — page-tree postcondition (helper 1) | 1 | **COVERED** — `form_edit_sequence`, `pageops_sequence` |
+  | `edit.rs:17486` — group cascade vs prediction | 1 | **OPEN, finding #3** — the target reaches it; see `Pass 185.2`'s amendment |
+  | ★ **`edit.rs:21669`** — *"the target was located on some page, so at least that page must be patched"* | 1 | ★★ **UNCOVERED — THE CONCRETE WORK `R236` CREATES.** No fuzz target drives annotation **DELETION**: `annot_walk` reads, `annot_author` writes. Verified 2026-08-30 — neither target's source contains `delete` or `remove`. |
+  | `ccitt.rs:236`, `lexer.rs:400`, `parser.rs:699` | 3 | COVERED — `image_codec_ccitt` / `parse_object` / `load_document` |
+  | `cmyk_buffer.rs` | 10 | ★ **UNAUDITED — the second thing to look at.** Render side; no verdict claimed either way. |
+  | `mesh.rs` | 2 | COVERED — `mesh_shading` |
+  | `text_edit/edit.rs:2998`, `addtext.rs:682`, `xref_out.rs` ×2, `writer/content.rs` ×2 (helper 2), `crypto/rc4.rs:56` | 7 | **EXEMPT** — caller-convention or pdfce-constructed state, not untrusted-derived. This is the reasoning `writer/content.rs:649` had already written for itself. |
+
+  ⇒ **One named uncovered site and one unaudited group of ten.** That is a
+  finite work item, not an exhortation, and it is what makes the rule
+  survivable by a session in a hurry.
+
+  **★★★★ AND THE CENSUS'S OWN FIRST TWO PUBLISHED FIGURES WERE BOTH WRONG —
+  BY THE SAME MECHANISM, IN THE SAME RULE, WITHIN ONE DAY OF EACH OTHER.**
+  Recorded here rather than quietly corrected, because `R236` is a rule *about
+  a number* and its number failed twice:
+
+  - **`34` — never correct.** The struck line above read
+    `grep -rn "debug_assert" crates/pdfce-core/src/ | wc -l  # all sites: 34`.
+    Re-measured at `e77459b`, at `58dc367` and at `7ac98da`, that command
+    returns **44**, not 34 — it was already wrong on the day the 349th filing
+    wrote it. And 44 is not the population either: **7** of those lines are
+    `cfg(debug_assertions)` attributes and **10** are prose *about*
+    `debug_assert` in comments. The real core figure is **12**.
+  - **`27` — the correction inherited the defect.** `7ac98da` and
+    `docs/NEXT_SESSION.md:61` both report *"**27 invocations**"* from
+    `grep -rn "debug_assert\(_eq\|_ne\)\?!"`. That command returns 27 **hits**,
+    of which **3 are comment lines** — `edit.rs:12085`, `edit.rs:12092`,
+    `writer/xref_out.rs:282`. **24 invocations.**
+
+  **The mechanism, which is the transferable part: a source grep over a
+  DOCUMENTATION-FIRST codebase counts the codebase's own prose about the
+  construct.** The better a project documents a mechanism, the more its
+  self-description inflates any census of that mechanism — and the inflation
+  scales with the very discipline the project is proud of. `edit.rs:12085` and
+  `12092` are two lines of careful reasoning explaining *why* this is a
+  `debug_assert!` and not a `panic!`; they are the best-written lines in the
+  region, and they are the ones that corrupted the count.
+  ⇒ **The noun in the sentence must name what the command counts.** "Hits" and
+  "invocations" are different nouns; `7ac98da` sourced the command exactly and
+  still wrote the wrong noun — which is that commit's *own* headline finding
+  (**sourcing a figure makes it auditable, not durable**) turned back on the
+  correction that carried it. Cross-project derivation:
+  `D:/dev/rag/rust/a_source_grep_census_counts_the_codebases_own_prose_about_the_construct.md`.
 
   **What is still excluded, and it is a judgement rather than a count:** an
   assertion over a value the same function just computed from its own
