@@ -7122,6 +7122,87 @@ General rule going forward: a guard against adversarial input lives in
 whichever of `pdfce-core`/`pdfce-render` actually performs the
 recursive/expanding operation being guarded.
 
+### 10.4 A `debug_assert` postcondition is a tripwire, not a guard — the two are different mechanisms with different audiences (2026-08-30, `Pass 185.1`/`185.2`, standing rule `R236`)
+
+**Added because §10.2 above is bootstrap-era text and does not describe the
+mechanism this project actually leans on most.** §10.2 says *set up a
+`cargo-fuzz` target* and *expand to each filter decoder*; twenty-seven targets
+later, the interesting question is no longer *which parsers are fuzzed* but
+**what tells you a fuzzed run went wrong.** Two distinct mechanisms answer
+that, they are easy to confuse, and confusing them is what let a corruption
+ship for seventy-four Passes.
+
+| | a **guard** | a **tripwire** |
+|---|---|---|
+| example | `EditError::FieldObjectIsInPageTree`, `MAX_XOBJECT_DEPTH` | `debug_assert_page_tree_still_walks` (`edit.rs`), `debug_assert_not_in_path` (`writer/content.rs`) |
+| present in the shipping build | **yes** | **no** — `#[cfg(debug_assertions)]`, compiled out |
+| audience | the **operator** — it refuses, names the collision, and leaves a document they can look at | the **developer, and only via a test or a fuzzer** |
+| what its silence means in release | the input was fine | **nothing at all** — it is not there |
+
+**★★ The failure mode, concretely, because it is not obvious.** A
+`debug_assert` postcondition over a committed state change reads like
+protection. It is not. In the build operators run, a verb that violates it
+returns `Ok`, saves `Ok`, and writes a file pdfce cannot reopen — which is
+precisely the shape the 2026-08-20 `/Contents` corruption had, and which
+`debug_assert_page_tree_still_walks`'s own panic message names. **The only
+thing that makes such an assertion speak is somebody generating the input**,
+and a test suite generates the inputs its authors thought of. A `cargo-fuzz`
+build has debug assertions on; that is the only reason `Pass 185.1`'s defect
+was ever visible.
+
+⇒ **`R236`:** every `debug_assert` postcondition over state derived from
+untrusted input **owes a `cargo-fuzz` target over the verbs it guards, or a
+written exemption at the site.** Writing such an assertion is an admission that
+a corruption class exists and is undetectable in the shipping build; the
+assertion is the *detector*, and it needs an *input source*.
+
+★★ **The unit is NOT "a named helper", and that scoping was corrected before
+the rule shipped.** `grep -rn "fn debug_assert" crates/*/src/` finds **2**;
+`grep -rn "debug_assert" crates/pdfce-core/src/` finds **34**. The same fuzz
+target's **third** finding is a **bare inline `debug_assert_eq!`**
+(`edit.rs:17486`) comparing two independent derivations of one quantity — a
+postcondition in substance whatever its syntax. **The unit is: any assertion
+made after a mutation, over committed state or over two independent derivations
+of one quantity.** The named-helper grep is the cheap first cut, not the
+population. **Discriminator:** *could two parts of this program disagree about
+this?* If yes, adversarial input can make them.
+
+★ **Severity is part of the finding, not a footnote.** That third item is a
+`debug_assert_eq!` over a **disclosure count**, so its release-build
+consequence is a **wrong `nodes_removed` reported to the operator — not
+corruption.** Filing it beside two page-tree destructions without saying so
+would send the next reader to the wrong priority. **An open item inherits the
+severity of what it was found next to unless its own severity is stated.**
+
+**★ This does NOT move a guard into the release build.** `Pass 111.0`'s
+reasoning stands: the page-tree postcondition re-walks the whole tree,
+`O(pages)` per command, and a batch job committing thousands of edits should
+not pay for it. When a specific collision *is* found, the remedy is a **named
+refusal** in the release build — that is what `FieldObjectIsInPageTree` is —
+not a promoted assertion. The tripwire finds the class; the guard closes the
+member.
+
+**★★ What `R236` buys and what it does not, both measured on its founding
+arc.**
+
+- **It buys adversarial input.** The target found the first defect within two
+  minutes of existing.
+- **It does not buy a correct protected set.** `Pass 185.1` guarded three
+  deletion routes; a fourth (`cut_field`) was verified to delegate. Route
+  coverage was total — and every route consulted a set built from
+  `page_slots`, whose `ancestors` chain stops at the `/Pages` root and **omits
+  the catalog that points at it**. `Pass 185.2` is that omission.
+  ⇒ **A guard built from "the tree" is not a guard against losing the tree,
+  because the thing that reaches the structure is outside a walk of the
+  structure.** Generalise this whenever a protected set is enumerated by
+  walking what it protects.
+- **It does not buy execution.** `.github/workflows/ci.yml`'s `fuzz-smoke` job
+  runs `cargo +nightly fuzz build` and never `cargo fuzz run` — deliberately
+  (*"minutes-long runs in CI buy little coverage and cost every push"*). Both
+  defects in this arc were found by a **person choosing to fuzz**. `R236`
+  schedules a target's compilation, not its execution, and a future reader must
+  not read *"a target exists"* as *"the class is covered"*.
+
 ## 11. Undo/redo architecture
 
 Identified as a real design gap 2026-07-23: the UI standing rule
@@ -28375,3 +28456,85 @@ free 072.**
   at design time**, not a behavioural commitment a reviewer can check after the
   fact — the same warrant on which decision `108` declined `R236` a day
   earlier.
+
+### 2026-08-30 (three-hundred-and-forty-ninth filing) — decision 110: **WHEN A MALFORMED DOCUMENT MAKES A DESTRUCTIVE VERB AMBIGUOUS, pdfce REFUSES BY NAME — AND THAT IS *NOT* "HARD-CODING A CHOICE THE STANDARD LEAVES OPEN", BECAUSE A REFUSAL IS THE DECLINE TO CHOOSE. THE CONDITION THAT WOULD FLIP IT TO A SETTING IS NAMED HERE**
+
+**Context.** `Pass 185.1` (`e77459b`) / `Pass 185.2` (`c17f1b5`). A fuzz target
+over the form-edit write path found an `/AcroForm` whose `/Fields` names an
+object that is **also a `/Page`** — and, one Pass later, one that names the
+**catalog**. `forms::parse_acroform` models it as a field, correctly: the form
+dictionary says it is one, and **§12.7.3 states no rule that a field may not
+also be something else.** `delete_field` then removed the page (or the
+catalog), and the document had no page tree. In the shipping build this was
+**silent** — the only complaint came from a `#[cfg(debug_assertions)]`
+postcondition (see §10.4 and `R236`).
+
+**The decision.** `EditError::FieldObjectIsInPageTree { name, object }` — a
+named refusal, raised **before any mutation**, on all three field-removal
+routes (`delete_field`, `delete_field_group`, `delete_widget`) and inherited by
+`cut_field`, which delegates.
+
+**★★ WHY THIS IS RECORDED AT ALL, RATHER THAN LEFT IN THE DOC COMMENT: A
+STANDING OPERATOR INSTRUCTION POINTS THE OTHER WAY, AND A FUTURE SESSION WILL
+BE RIGHT TO ASK.** Ken's ruling of 2026-08-08, carried in this project's
+auto-memory: ***"never hard-code a choice the standard leaves open"*** — make
+spec ambiguity a **setting**. §12.7.3 does leave this open. So why is there no
+`--on-field-is-page=refuse|strip|delete`?
+
+**Because a refusal is the opposite of choosing a reading.** The settings rule
+governs cases where two interpretations each produce a defensible **result**
+and pdfce must produce one anyway. `Settings::overprint_zero_tint_scope` is the
+canonical shape and shows the test clearly: **every render must paint
+something**, so declining to choose is not available, and hard-coding one
+reading would silently impose it. Here the two dispositions are *delete the
+page* and *strip the field-ness*, and **both are inferences about a malformed
+document, made silently, on a destructive verb** — which is project rule 4
+("fuzzy, never sneaky") from the other direction. The refusal names the
+collision and hands the operator back a document they can still look at, which
+is §10's fail-clean posture.
+
+⇒ **The distinguishing question, stated so it can be reused:** *is pdfce
+obliged to produce an output here?* If **yes** and the standard permits two,
+that is a **setting** (`R169`/`R206`: ship both readings, default to the one
+the measurement instrument is authored for). If **no** — the operation can
+decline and leave the input intact — a **named refusal** is correct, and adding
+a setting would be *manufacturing* the choice the standard left open rather
+than resolving it.
+
+**★★ THE CONDITION THAT FLIPS THIS, NAMED SO THE DECISION CAN DISAGREE WITH
+THE FUTURE RATHER THAN MERELY OUTLIVE IT.** The refusal is right **because the
+shape has only ever been produced by a mutator.** If a **named real producer**
+is ever observed emitting it — a form generator reusing an object number, a
+merge/append tool aliasing a `/Page` or the catalog into `/Fields` — then an
+operator with a genuine document is being refused a legitimate edit; the case
+stops being malformed-input handling and becomes **producer compatibility**,
+and **the setting becomes the correct answer.** The evidence that would flip it
+is **one file from a named producer**, and it belongs in `C:\personal_rag\pdf\`
+when it appears. Until then, refusing is the answer; the moment it appears,
+this record is the thing to cite for *why the answer changes* rather than
+re-arguing it from scratch.
+
+**What this decision does NOT cover.** It is scoped to removal verbs that
+resolve an object **through the `/AcroForm`**. `delete_page`, annotation
+deletion and the vector-edit removals were **not** examined for this collision
+and the guard does not reach them. Written down as unexamined rather than left
+silent — and `Pass 185.2` is a live warning about how such a boundary reads in
+hindsight, since `Pass 185.1`'s protected set was also believed complete.
+
+**Body-section counterpart:** **§10.4** (added in this filing) — the
+guard-versus-tripwire distinction and standing rule `R236`, which is this
+decision's companion: **`R236` is about FINDING a member of the class; `110` is
+about WHAT TO DO with one once found.** No crate boundary is redrawn and no
+§4.2 published guarantee moves; the living account of the verb's contract is
+`docs/core-api/02-editing-and-saving.md` (engineer-owned) and the variant's own
+rustdoc.
+
+**GUI-core separation:** **not re-verified and NOT claimed** — no code was
+written in this filing and no crate manifest was touched in either commit, so
+`cargo tree` was neither run nor asserted (hard rule 8). The only manifest
+edited by the Passes was `fuzz/Cargo.toml`, which is outside the workspace by
+construction.
+
+**Decision ceiling moves `109` → `110`; next free `111`.** **Standing rule
+ceiling moves `R235` → `R236`** — minted in the same filing, text in
+`ROADMAP.md`'s *Standing rules*.

@@ -81571,3 +81571,268 @@ the bare keywords `ui-strings` / `ui_strings`, `29 command`, `nineteen`,
 > SHELF LIFE, not a property of the filing.** Hard rule 8 says check rather than
 > infer; this adds that a check has a timestamp, and that the one worth quoting
 > in a *Sourcing* block is the one taken when the commit is made.
+
+---
+
+## 2026-08-30 (349th filing) — `Pass 185.1` (`e77459b`) AND `Pass 185.2` (`c17f1b5`) filed together: a fuzz target found a release-silent page-tree corruption in two minutes, its fix was built from the wrong set, and the open item that caught that was closed 22 minutes into this filing
+
+**Shipped:**
+- **`Pass 185.1`** (`e77459b`) — `fuzz/fuzz_targets/form_edit_sequence.rs`, the
+  first fuzz target over the form-edit **WRITE** path, plus three committed
+  seeds (3,691 bytes over 3 = 1,230 bytes each). Within two minutes of first
+  existing it found a **release-silent page-tree corruption** in `delete_field`,
+  a verb shipping since `Pass 20.x`. New refusal
+  `EditError::FieldObjectIsInPageTree` — the **110th** `EditError` variant.
+- **`Pass 185.2`** (`c17f1b5`) — the catalog added to the protected set. **The
+  "second crash" `185.1` filed as an unreduced open item was not a second class
+  at all**: same verb, same `NoPageTreeRoot`, walking through the guard because
+  `page_slots`'s `ancestors` chain stops at the `/Pages` root and **the catalog
+  that points at the page tree is not in it**.
+
+**Decisions made this session:**
+- **`R236` MINTED** — a `debug_assert` postcondition over state derived from
+  untrusted input is a **tripwire for a fuzzer, not a guard for an operator**;
+  writing one is an admission that a corruption class is undetectable in the
+  shipping build, so it owes a `cargo-fuzz` target over the verbs it guards, or
+  a written exemption in the helper's own doc comment. Minted at `n = 1`,
+  argued: the population is **enumerable in advance and already enumerated**
+  (2 of 2 helpers — 1 in scope, 1 exempt), so a second instance would add no
+  information, and waiting for one means waiting for a second release-silent
+  corruption to ship. **The existing fuzz obligation could not have caught
+  this**: its trigger is *new* code that *parses*, and `delete_field` is
+  neither — it is old, and it **edits** a structure somebody else parsed.
+- **Decision `110` RECORDED** — a refusal on a malformed document is **not**
+  "hard-coding a choice the standard leaves open" (Ken, 2026-08-08). The
+  distinguishing question, stated for reuse: *is pdfce obliged to produce an
+  output here?* If yes and the standard permits two readings → **setting**
+  (`overprint_zero_tint_scope`'s shape: every render must paint something). If
+  no → **named refusal**, and adding a setting would *manufacture* the choice
+  rather than resolve it. **The flip condition is named**: one file from a
+  **named real producer** emitting the shape turns this from malformed-input
+  handling into producer compatibility, and the setting becomes correct.
+- **`ARCHITECTURE.md` §10.4 added** — the guard-versus-tripwire table, `R236`'s
+  home in the body, and the three things `R236` buys and does not buy.
+
+**Findings + decisions:**
+- **★★★★ THE SEVERITY WAS IN THE `#[cfg]`, NOT IN THE PANIC.** The only thing
+  that complained was `debug_assert_page_tree_still_walks`, which is
+  `#[cfg(debug_assertions)]` and **compiled out of the build operators run**.
+  There, the verb returns `Ok`, the save returns `Ok`, and the output is a file
+  pdfce cannot reopen — the outcome that guard's own message names as the shape
+  of the 2026-08-20 `/Contents` corruption. A `cargo-fuzz` build has debug
+  assertions on, which is the only reason it was ever visible. The
+  postcondition landed at `Pass 111.0` and sat silent for **~74 Passes** —
+  not because it was wrong, but because nothing was generating the input.
+- **★★★★ THE OPEN ITEM PAID FOR ITSELF IN THIRTY MINUTES, AND THAT IS THE
+  STRONGEST ARGUMENT IN THIS FILING FOR THE DISCIPLINE THE DISPATCH ASKED
+  FOR.** The engineer's own verdict: *"`NEXT_SESSION.md` §C item 5 and the
+  previous commit both say 'the absence of a reproduction is not evidence of a
+  fix', and that sentence is the only reason this was still being chased an
+  hour later instead of shipped as done."* Two later clean fuzz runs (50k, 90k)
+  were the trap — a clean run is a statement about the inputs that run happened
+  to generate, and a `-seed=1` run demonstrably *did* contain the failing input.
+  **Mis-scoping an open item cost a sentence; closing it early would have cost
+  a release.**
+- **★★★★ ENUMERATING THE *CALLERS* OF A GUARD SAYS NOTHING ABOUT THE
+  CORRECTNESS OF WHAT THE GUARD *CONTAINS*.** `185.1` guarded three deletion
+  routes separately (and this role verified a fourth, `cut_field`, delegates to
+  `delete_field`, with `copy_field` being `&self` so a refused cut commits
+  nothing). **Route coverage was total and the guard was still wrong.** Caller
+  enumeration is the easier, more visible, more satisfying check — it absorbed
+  the commit message, this role's verification and the reproducer, while the
+  set itself went unexamined by all three. ⇒ **A guard built from "the tree" is
+  not a guard against losing the tree**, because the thing that *reaches* a
+  structure is outside a walk *of* it.
+- **★★★ THE SYMPTOM NAMED IT FROM THE FIRST CRASH.** `NoPageTreeRoot`, not
+  `NoPages`. Losing a page gives fewer pages; losing the **root** is what that
+  variant means — and it was in every panic message read, *including the ones
+  quoted verbatim in `e77459b`'s own commit message*. The answer was inside the
+  text somebody was already reading.
+- **★★★★ THREE OBSERVATION HARNESSES DISCARDED THE EVIDENCE THAT EXPLAINED A
+  FAILURE, IN THREE TOOLS, ON ONE DAY, BY TWO AGENTS WHO HAD NOT SPOKEN.**
+  (1) libFuzzer wrote **no artifact** — Rust's abort on Windows exits
+  `0xc0000409` before the crash handler saves one. (2) The engineer's
+  `tail -40` on a background fuzz capture kept the **bottom** of the backtrace,
+  which names libFuzzer's internals instead of the verb. (3) **This role's own
+  `| tail -25` on a gate sweep destroyed a failing test's entire output**, so
+  that failure cannot be diagnosed retrospectively. ⇒ **`tail` is the wrong
+  tool for the output of anything that can fail: the part that names the cause
+  is at the TOP of a panic and at the TOP of a test failure.** Redirect to a
+  file; grep the file for the head. What worked for the engineer was `-seed=N`
+  plus grepping for the panic head.
+- **★★★ RULE-11 SWEEP — FOUR SURVIVORS, ALL OUTSIDE `docs/`, ALL REPORTED,
+  NONE EDITED.** The sharpest is a pair:
+  - `fuzz/Cargo.toml`'s header hand-lists **EIGHT** fuzz targets; there are
+    **27** (two independent counts: `ls fuzz/fuzz_targets/*.rs | wc -l` and
+    `grep -c '^\[\[bin\]\]'`). **It is the TWIN of a list deleted five days ago**
+    — `ccf9ed3` (2026-08-25) removed the same eight names in the same order from
+    `.github/workflows/ci.yml`, diagnosing it correctly as *"a hand-maintained
+    list beside an automatic mechanism has nothing forcing it to stay true"*.
+    **That sweep searched the file it was correcting**, and the twin sits in the
+    very file the workflow's replacement text *points at*. ⇒ **Clause (e) says a
+    sweep is only as good as its spelling of the claim; this adds that a sweep
+    is only as good as its list of PLACES — and the place a correction names
+    inside its own replacement text is the first one it fails to check.**
+  - **`.github/workflows/ci.yml:777` — THE CORRECTION IS ITSELF STALE.** It
+    reads *"There are 24 (measured 2026-08-25, `ls fuzz/fuzz_targets/*.rs | wc
+    -l`)"*. There are **27**. ★★ **Hard rule 10's corollary — *a correction is a
+    claim* — caught in the act.** That figure is impeccably sourced: dated, with
+    the exact command. It was correct when written. **Sourcing a figure makes it
+    AUDITABLE; it does not make it DURABLE.** And note what the fix reached for
+    — *"a pointer rather than a list"* — then wrote a **count** beside the
+    pointer, which is **the same defect at lower resolution**: a list of 8 goes
+    wrong loudly, a count of 24 goes wrong silently and still reads as
+    precision. **Remedy recommended: delete the count, do not gate it.**
+  - `crates/pdfce-core/src/edit.rs:12034` — *"CI runs the test suite in debug,
+    so the guard is live **exactly** where it earns its cost"*. **This Pass
+    falsifies "exactly"**: the fuzzer found cases CI's suite did not contain,
+    twice, and the release-build outcome is not "the operator gains nothing" but
+    a silently corrupted file. The performance rationale and the gating decision
+    are **untouched and correct** — do not over-correct.
+  - `crates/pdfce-core/src/edit.rs:25234` — the catalog line is stamped
+    `Pass 185.1`; the catalog half is **`Pass 185.2`**.
+- **★★★ THE GATE SWEEP DISAGREED WITH ITSELF, AND THE TREE HAD TWO WRITERS.**
+  Measured, with times: sweep 1 completed **18:43:09** and FAILED 1 of 30
+  (`cargo test --workspace`); the same command standalone exited **0** at
+  18:51:47; **`c17f1b5` was committed at 18:52:52**; sweep 2 completed
+  **19:00:24** with `cargo test` green and only the two **filing** gates red,
+  which is correct and expected. ⇒ Sweep 1 ran while the engineer was editing
+  `crates/pdfce-core/src/edit.rs` and running `cargo test --all-features` plus a
+  seeded fuzz campaign **in the same tree and the same `target/`**. **A sweep
+  run against a tree another agent is writing to measures neither the commit nor
+  the tree.**
+- **★★ A GATE MECHANIC WORTH KNOWING, because it explains two PASS-30 claims
+  that look like contradictions and are not.** `check-passes-filed` /
+  `check-commits-filed` **DEFER the tip commit** — *"a commit cannot cite its
+  own hash; its filing is a later commit"*. So a **`run-gates.sh` PASS-30 taken
+  AT the tip is not evidence that the tip is filed**; it is evidence that the
+  question was deferred. Both the dispatch's PASS-30 for `e77459b` and
+  `c17f1b5`'s own PASS-30 are true readings that say nothing about filing.
+- **`FEATURES.md` — CHECKED, 0 ROWS CHANGED, and the reason recorded** because
+  "no change" and "not checked" look identical in an absent note. Two halves,
+  unticked for different reasons: (1) a refusal on **malformed** input is not a
+  capability change — the precedent test was applied, not asserted: this file
+  *does* record refusals (lines 180, 227), and both of those are reachable on a
+  **valid** document, while `FieldObjectIsInPageTree` fires only on a shape no
+  real producer has been observed to emit; (2) **test infrastructure has never
+  been a row** — `grep -i fuzz docs/FEATURES.md` → **0 rows** against 27
+  existing targets, and ticking `core` for a fuzz target would break the file's
+  own ticking bar.
+
+**Still in flight:**
+- **A `-seed=1` re-run against `Pass 185.2`'s fix was in flight at commit time
+  and its result is recorded nowhere.** The argument for meaning is sound (the
+  previous seeded run reproduced within budget) but **the clean run itself is
+  not in evidence.** Run it and record it, or stop citing it.
+- **Nothing scheduled runs the fuzzer.** `.github/workflows/ci.yml`'s
+  `fuzz-smoke` job runs `cargo +nightly fuzz build` and **never
+  `cargo fuzz run`** — deliberately. **Both defects in this arc were found by a
+  person choosing to fuzz.** `R236` schedules a target's compilation, not its
+  execution.
+- **Backup bundle is ONE COMMIT STALE** — newest on disk is
+  `pdfce-20260830-1831-e77459b-full.bundle` (by `ls`); `HEAD` = `origin/main` =
+  `c17f1b5`. Stated as measured, not rounded.
+- `.tmp_bench.py` untracked, **seventh filing**, deliberate. Also uncommitted
+  and **not this role's**:
+  `.claude/agent-memory/pdfce-engineer/feedback_never_bundle_code_into_a_filing_commit.md`.
+- **`Pass 38.5` C9** (`/StructParent` / `/OBJR`) and **`Pass 184.0` criterion
+  E** — still owed, still un-minted. A `windows-latest` sibling for the
+  `fuzz-smoke` job is filed to Backlog by that job's own comment and is not yet
+  a Pass.
+
+**For next session:**
+- **`docs/NEXT_SESSION.md` needs four corrections, all engineer-owned.** §C item
+  5 is **discharged** by `Pass 185.2` and should be rewritten as the closed
+  finding it now is; §0 and §A item 2 both cross-reference *"§C item 6"* for it
+  and the item is **§C item 5** (item 6 is the patch-script hazards); and §D
+  still says `.tmp_bench.py` has been untracked *"for four filings"* when it is
+  **seven** — a stale count in the **same §D block** whose neighbouring stale
+  count was just corrected.
+- **The standing recommendation is unchanged and unexecuted**: a *"what
+  schedules this?"* clause for `.claude/agents/pdfce-librarian.md`. The
+  engineer's ruling is right — *"I agree with the argument and it is not mine to
+  add"* — **amending an agent file is the operator's act.** ★★ And he supplied a
+  second data point pointing the **opposite** way from the one the
+  recommendation assumes: the fuzz-gate lesson **was** scheduled (agent memory
+  *and* the standing "always" list) and **it still took saying it out loud in a
+  handoff before he acted.** ⇒ **Scheduling is NECESSARY and, on this evidence,
+  NOT SUFFICIENT.** Two data points now sit on opposite sides of the same rule —
+  `Pass 185.0` an unscheduled lesson failing to act, `Pass 185.1` a scheduled
+  one — and both belong in front of Ken when he rules.
+- **His sentence, filed as he asked, from the third sabotage:** ***"when a
+  criterion IS a trigger, the verification owes a test that fires it."*** Re-run
+  against the live workflow and **CAUGHT** — *"job 'audits' says '(20 checks)'
+  and runs 21."*
+- **Never pipe a gate sweep or a fuzz run through `tail`.** Redirect to a file,
+  grep for the head. Three instances in one day.
+
+> ★★★★ **AMENDMENT, WRITTEN BEFORE THIS FILING WAS COMMITTED — THE TREE MOVED A
+> THIRD TIME, THE FUZZ TARGET HAS FOUND *THREE* THINGS, AND ONE IS STILL OPEN.**
+>
+> `8d8dbb5` (docs-only, 19:05:24, pushed) rewrote `NEXT_SESSION.md` §C item 5
+> into a table. **Three findings from `form_edit_sequence` in its first
+> afternoon**, not two:
+>
+> | # | verb | what | state |
+> |---|---|---|---|
+> | 1 | `delete_field` | a field that is also a **page** → no page tree | **FIXED**, `Pass 185.1` |
+> | 2 | `delete_field` | a field that is the **catalog** → `NoPageTreeRoot` | **FIXED**, `Pass 185.2` |
+> | 3 | `delete_field_group` | `debug_assert_eq!` at `edit.rs:17486` — emptied-node **cascade and prediction disagree** | ★★ **OPEN** |
+>
+> ★★★ **#3 IS SIZED HONESTLY, AND THE SIZING IS THE FINDING.** It is a
+> `debug_assert_eq!` over a **disclosure count**, so in the build operators run
+> it is a **wrong `nodes_removed`, not corruption.** The engineer's reason for
+> saying so out loud: *"filing it beside two page-tree destructions without
+> saying so would make the next session spend a day at the wrong priority."*
+> ⇒ **An open item inherits the severity of what it was found NEXT TO unless
+> its own severity is stated** — a severity is as much a part of an open item
+> as a reproduction is. Known/guessed is split too: verb, assertion and
+> location are **measured**; the same-FQN hypothesis (two grouping nodes
+> sharing one name — trivially `""` for a `/T`-less node, exactly what a fuzzer
+> reaches) is **labelled a guess**.
+>
+> ★★ **`R236`'S UNIT WAS CORRECTED BEFORE IT SHIPPED, BY THE TARGET THAT
+> FOUNDED IT.** The draft set the unit as *"a named postcondition helper"*,
+> population **2 of 2**, explicitly excluding the 34 bare `debug_assert!` sites
+> as *"inline sanity checks"*. Finding #3 is a **bare inline
+> `debug_assert_eq!`** comparing `emptied.len()` to `preview.nodes.len()` —
+> **two independent derivations of one quantity**, a postcondition in substance
+> whatever its syntax. Had the rule shipped narrow, **its ledger would have read
+> "2 of 2, one covered, one exempt" — a clean bill of health issued while a live
+> instance of its own class sat open in a file its founding Pass had just
+> edited.** ⇒ **An enumeration that excludes a category by ADJECTIVE rather
+> than by TEST reads complete while being short.** Corrected unit: *any
+> assertion made after a mutation, over committed state or over two independent
+> derivations of one quantity.* Discriminator: **could two parts of this program
+> disagree about this?**
+>
+> ★ **`R217` WAS BROKEN AND THE ENGINEER RECORDED IT HIMSELF — AND IT IS WHY
+> THIS FILING'S SWEEP 2 WENT RED.** `Pass 185.2` was pushed while `185.1` was
+> still out for filing, so `185.1` **lost its tip deferral** and
+> `check-passes-filed` named it UNFILED. His account: *"the fix was ready, the
+> gates were green at that moment, and the gate only turns red at the NEXT
+> commit… the failure was momentum, not ignorance."*
+>
+> ★★★★ **HIS SENTENCE, WHICH IS THE MOST REUSABLE THING IN THE ARC AND THE
+> EXACT MIRROR OF THIS FILING'S OWN DEFERRAL FINDING: *"a green
+> `run-gates.sh` is not permission to commit; it certifies the TREE, not the
+> ACT."*** This filing reached the same boundary from the reader's side — *a
+> PASS-30 taken at the tip is not evidence the tip is filed, because the
+> question was deferred.* **Two independent derivations, one by the committer
+> and one by the reader, of one fact: `R217`'s window is a property of COMMIT
+> ORDER, and no state check taken before the commit can see it.**
+>
+> **Three tree moves during one filing**, all measured: a working-tree change
+> (recorded by the 348th), `c17f1b5` at 18:52:52 (code — closed the open item),
+> `8d8dbb5` at 19:05:24 (docs — added the third finding). ⇒ The 348th's
+> sentence gains a stronger form: **on an actively-worked tree, re-measure
+> before the COMMIT, not only at the start — and re-read any engineer-owned
+> document your filing REPORTS ON, because a filing that reports owed work can
+> have that work discharged underneath it.** **Two of the four
+> `NEXT_SESSION.md` corrections reported above were discharged by `8d8dbb5`
+> before this commit landed**; the `ROADMAP.md` entry's corrections table is
+> written against `8d8dbb5` and is the accurate one. **Still stale there:** §D's
+> *"`.tmp_bench.py` untracked for four filings"* — it is the **seventh**, and it
+> sits four lines from the *"29 commands"* count he corrected the right way this
+> afternoon. **Correcting one instance of a claim creates the feeling of having
+> corrected the claim.**
