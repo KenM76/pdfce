@@ -80912,3 +80912,282 @@ four new files + two dated footers + four index entries (281 → 285 files).**
 8. ★ **A working-orders reminder that survived this filing:** between a code
    commit and its filing, **nothing else lands — including a subagent's own
    memory commit.** That is what turned `3762b5d` red.
+
+> ★★★ **AMENDMENT FOOTER on the 345th entry, 2026-08-30 (346th filing).** Three
+> claims above are superseded; the entry is otherwise left intact because every
+> claim in it is anchored to `92b9f99`, where it was true.
+>
+> 1. **"Renaming a field still repairs nothing; deleting a field still discloses
+>    nothing"** (*Still in flight*) — **FALSIFIED at `b62e069`**, four hours
+>    later. A rename **repairs** (`FieldRename::action_targets_retargeted`) and
+>    five delete-shaped CLI verbs **disclose**
+>    (`action_targets_orphaned`).
+> 2. **"`Pass 184.0` is 1 of 7"** — now **6 of 7**. Criterion **B** was
+>    **withdrawn on argument**, not discharged: it asked for a refactor of
+>    `forms::scan_javascript`, and the sweep this Pass needed walks the **object
+>    universe**, a strict superset of the carrier walk answering a different
+>    question. `scan_javascript` is untouched. **Criterion F is still OPEN** and
+>    is the reason the Pass is not closed.
+> 3. ★★ **"1 new core test (27 in the file, up from 25)"** — **the total was
+>    wrong by one.** Measured 2026-08-30 by
+>    `git show 92b9f99:crates/pdfce-core/tests/button_action_submit.rs | grep -c "#[test]"`:
+>    **26**, against **25** at `8456c45`. **The delta was right and nobody
+>    performed the addition** — hard rule 10's own failure mode, inside the
+>    filing that cites hard rule 10.
+
+## 2026-08-30 (346th filing) — **`Pass 184.0` criteria B/C/D (`b62e069`) filed; the Pass moves to *Shipped* as 6 of 7 and is NOT closed.** ★★★★ **CRITERION F IS ONE LOCATION SHORT AND THE LOCATION IS `census_dangling` ITSELF — THE BLINDNESS IS STATED EVERYWHERE THE FIX TOUCHED AND NOWHERE THE CHECKER LIVES, INSIDE A TYPE WHOSE OWN DOC BLOCK ALREADY ARGUES THE POINT.** ★★★ **THE ENGINEER SIZED CRITERION B AS A REFACTOR AND IT WAS THE WRONG SHAPE: THE DIFFICULTY OF THE OBVIOUS IMPLEMENTATION STOOD IN FOR THE DIFFICULTY OF THE PROBLEM.** ★★ **A SURVIVING SABOTAGE IS NOT ALWAYS A WEAK TEST — THREE REASONS APPEARED IN ONE PASS WITH THREE DIFFERENT REMEDIES.** ★ **TWO TEST COUNTS CORRECTED FROM `git show`, ONE OF THEM THIS ROLE'S OWN**
+
+**Sourcing (`R228`).** A shell was held and used; **no code was written in this
+filing.** Measured here: `git log` / `git show` / `git show --stat` /
+`git rev-parse HEAD origin/main` / `git status --porcelain`;
+`grep -c "#[test]"` at three commits; live greps of `edit.rs`, `forms.rs`,
+`pageops/references.rs`, `main.rs`, `docs/core-api/*.md`, `NEXT_SESSION.md`;
+`ls tools/check-*` (**23**). **`run-gates.sh` PASS on 29 commands and backup
+currency at `b62e069` are RELAYED from the engineer**, not re-measured.
+
+### Shipped
+
+- **`Pass 184.0` criteria B/C/D** (`b62e069`) — **893 insertions / 94 deletions
+  across 5 files.** `FieldRename::action_targets_retargeted` **repairs** the
+  reset/submit/hide buttons a rename used to break, in the **same undoable
+  command** as the `/T` write; `FieldDeletion` and `FieldGroupDeletion` gain
+  `action_targets_orphaned`, **counted and never repaired**. **Five CLI verbs**
+  report it — `rename-field`, `delete-field`, `delete-widget`,
+  `delete-field-group`, `cut-field` — as a metrics token and a stderr line.
+  **Four new public items in `forms`, not three**: the dispatch named
+  `retarget_action_field_names`, `retarget_target_list` and
+  `DeferredTargetList`; `MAX_ACTION_NEST_DEPTH: usize = 64` arrived with them.
+  ★ **7 new tests, 33 in the file** (measured: 25 → 26 → 33 across `8456c45`,
+  `92b9f99`, `b62e069`); **the dispatch and the commit message both say 11.**
+  Two new fixtures — one with an **indirect `/Fields`**, one with a JavaScript
+  action naming the field.
+- ★ **`Pass 184.0` moved from *Next up* into *Shipped*** as **substantially
+  delivered, 6 of 7**, with criterion F open and reported. The Pass ID no
+  longer appears in *Next up*; a pointer block replaces it.
+
+### Decisions made this session
+
+- ★★ **Decision `109` MINTED** — **pdfce repairs a reference when it knows the
+  replacement exactly, and discloses without repairing when repair would
+  require inventing intent.** One sweep, two verbs, opposite conclusions.
+  Filed because the failure mode is **tidying**: two sibling verbs sharing a
+  traversal, one repairing and one not, reads on inspection as an oversight,
+  and "make these consistent" destroys the design in either direction. Names
+  the rule `DeleteOutcome::dangling` had already been an instance of since
+  `Pass 38.5`. **Limit stated:** knowing the replacement is necessary, not
+  sufficient — `R55` blocks the repair inside JavaScript, so the counts are a
+  **floor** for scripted forms. **Indirection corollary:** `/Fields` may be an
+  indirect reference, and a single-pass sweep repairs **most** buttons, which
+  is worse than repairing none. Decision ceiling `108` → **`109`**, next free
+  `110`. **No standing rule minted**, and the decline is argued.
+
+### Findings + decisions
+
+- ★★★★ **FINDING 1 — criterion F's own failure mode, reproduced inside the doc
+  block that names it.** F asked for `census_dangling`'s blindness to be stated
+  *in its rustdoc and `docs/core-api/`*. **Measured here:** the statement exists
+  in `FieldDeletion`'s rustdoc, `FieldRename`'s, and three rows of
+  `docs/core-api/02-editing-and-saving.md` — and is **absent** from
+  `census_dangling`'s own rustdoc, from `DanglingReport`'s type-level doc, and
+  from `docs/core-api/01-reading-and-model.md:141`. ⇒ **The reader who calls the
+  census and gets `is_empty() == true` still gets a clean bill of health with no
+  footnote — the exact reader F was written for.** ★★ **And
+  `DanglingReport::non_link_annotations`'s doc block already contains the
+  argument** (*"an under-reporting counter reads exactly like a clean bill of
+  health… a defect class this project keeps meeting"*) and stops one class
+  short. ★ **Mechanism: a sweep scoped by the DIFF.** C and D touched `edit.rs`,
+  `main.rs` and `02-editing-and-saving.md`; `references.rs` and
+  `01-reading-and-model.md` are in neither file set, so nothing pointed at them.
+  **A criterion about a component you are not editing is invisible to a sweep
+  scoped by the edit.** Three doc-comment edits owed, named by location.
+- ★★★ **FINDING 2 — the difficulty of the obvious implementation is not the
+  difficulty of the problem.** This role wrote criterion B (*"generalise the
+  17-site carrier walk to a visitor… writing a second, narrower walker is
+  explicitly REFUSED"*) and `NEXT_SESSION.md` restated it. **True in every
+  clause and beside the point:** `scan_javascript` walks **carriers** because
+  its question is *"what would a reader RUN?"*; this Pass asks *"what strings
+  NAME this field?"* and must walk the **object universe** — a strict
+  **superset**, sharing no traversal. **The refactor was correctly assessed as
+  risky and was never the work.** ⇒ **A hard implementation is evidence that
+  the implementation is hard, not evidence about the problem** — and the two
+  get conflated exactly when the hard implementation is the first one to come
+  to mind. **Diagnostic:** write the question the existing machinery answers
+  and the question you need answered as two sentences side by side; if they
+  differ, **reuse is a coincidence, not an economy.** ★ Adjacent to but **not
+  the same as** the 345th's *"attention follows structure"*: that one is about
+  proofreading, this one about scoping, and it happens before any text exists.
+  ⇒ `D:/dev/rag/rust/`. ★★ **Disposition on B is WITHDRAWN, not discharged** —
+  a discharged criterion would send a future reader looking for a visitor that
+  does not exist.
+- ★★ **FINDING 3 — a surviving sabotage is not always a weak test; three
+  reasons, three remedies.** (1) **A vacuous assertion** — `saved()` returns
+  base bytes **plus** the incremental update, so `contains("(Name)")` was
+  satisfied by the base's own `/T (Name)` whatever the sweep did. **The same
+  trap had bitten a different test in the same file twenty minutes earlier.**
+  (2) **A guarantee enforced elsewhere** — `delete_field` discards the sweep's
+  writes with `_`, so no argument passed *to* the sweep can make it repair; the
+  property is **structural** and only a sabotage removing the discard expresses
+  it (that one is caught). (3) **A semantically null mutation** — `/JS`-as-target
+  changes nothing alone; the defect is a **conjunction** with greedy-substring
+  matching, and composed it is caught. ⇒ **The corpus's polarity table gains a
+  fourth row:** a sabotage against a **structurally enforced** guarantee prints
+  a false *"weak"* aimed at code that is **correct by construction** — the one
+  case where the honest response is to write the reason down and stop, because
+  strengthening a test against a guarantee it cannot reach yields a tautology.
+- ★ **The doc-orphan trap, third instance today** — a doc block inserted without
+  its `pub` line landed on top of the **next** field's doc block. **The compiler
+  caught it (E0560, twice) only because the constructors referenced the missing
+  field.** ⇒ **The compiler was a coincidental oracle, not a guard**: a doc-only
+  insertion has no constructor to break and would have shipped, leaving one
+  field's documentation attached to another.
+- ★ **A tenth string-gap occurrence with a NEW mechanism** — every prior
+  instance is a backslash **lost in transit**; this one **survived transit and
+  was flattened by `cargo fmt`**, which rejoined the continued literal and left
+  the eaten indentation as a ten-space gap. `check-string-gaps.sh` caught it
+  pre-commit. **Two causes, one signature** — and the transit remedy (never a
+  heredoc) does nothing about the formatter. **Relayed, not reproduced** — the
+  defect was repaired before `b62e069`.
+
+### Findings escalated
+
+- **`D:/dev/rag/rust/`** — two new files
+  (`the_difficulty_of_the_obvious_implementation_is_not_the_difficulty_of_the_problem.md`,
+  `an_assertion_over_an_append_only_artefact_cannot_see_what_the_base_already_contained.md`)
+  plus three dated footers (the sabotage-taxonomy file, the string-gap file,
+  the doc-orphan file) and index entries.
+- **`C:\personal_rag\pdf\`** — one new lesson (an action's target list may be
+  an **indirect reference**, so a per-object sweep must defer and second-pass)
+  plus a dated footer on
+  `lesson_20260830_name_string_reference_leaves_no_dangling_reference_so_the_graph_census_is_blind.md`
+  recording that the fix shipped and what shape it took.
+
+### Rule-11 sweep — searched for the CLAIM
+
+**Survivors of *"a rename repairs nothing / a delete discloses nothing"*:**
+★★ **`docs/NEXT_SESSION.md` §0 in full** — a four-row table listing B, C and D
+as `OWED`, the sentence *"pdfce repairs nothing"*, and the whole *"Why B is a
+refactor and not a line"* paragraph. **Engineer-owned, `R216` says overwrite;
+NOT edited, REPORTED**, and it is the highest-value survivor because `MEMORY.md`
+directs a resuming session to read it **before** `ROADMAP.md`.
+`FEATURES.md`'s rename row — **replaced**. `ROADMAP.md`'s criterion-A *Shipped*
+entry and this log's 345th entry — **dated footers, not rewrites**.
+`ROADMAP.md`'s *Next up* section — **removed**, the Pass having shipped.
+
+★ **Survivors verified CORRECT and left alone** (clause (e)): `edit.rs:15443`
+and `button_action_submit.rs:1011` name `actions_not_retargeted` **on purpose**,
+as the supersession record — deleting them erases the only account of why the
+field changed name; `edit.rs:18566` (*"A no-op rename repairs nothing because it
+breaks nothing"*) is a different, true claim about `from == to`;
+`ROADMAP.md:50602`, this log's line 39257 and `attachments.rs:462` are about
+refusals and filespecs, unrelated.
+
+### ★★★ Measured at the END of this filing — a second sweep for the same claim, disjoint results
+
+**The tree was clean but for `?? .tmp_bench.py` at this filing's first command;
+at its last, `git status --porcelain` reports six more modified files, none of
+them this role's** — `edit.rs`, `main.rs`, `ui_text.rs`,
+`form_field_hierarchy.rs`, `docs/core-api/02-editing-and-saving.md`,
+`03-capabilities.md`, `index.md`, plus two engineer agent-memory files
+(`+56 / −13`). **The engineer is running his own rule-11 sweep on the same
+claim while this filing writes.** Uncommitted work has no hash and cannot be
+filed; this is the report.
+
+★★★★ **The two sweeps found DISJOINT sets.** This filing searched
+`retarget` / `orphan` / `repair` / `disclos` / `census_dangling` / `C8`; his
+searched **`submit mapping`** — a **fifth spelling of the same claim**, naming
+the consequence rather than the mechanism, containing **none** of this role's
+six keywords, and it would have survived this sweep entirely. ⇒ **Clause (e)
+says narrow the file set and widen the pattern; the pattern here was widened
+over the words THIS ROLE had written.** The keyword list is drawn from the
+vocabulary of whoever is sweeping — which is the clause's own trap, one level
+up.
+
+★ **Two `submit mapping` survivors remain**, measured after his edits:
+**`crates/pdfce-core/src/forms.rs:1029`** — *"breakage outside the document —
+FDF entries, JavaScript references, submit mappings"*, now **wrong for one of
+its three examples**, since submit mappings inside the document are repaired
+(**reported, not edited**); and **`ROADMAP.md:71688` (`Pass 20.6`) /
+`SESSION_LOG.md:24786`** — ★ **CORRECT AS HISTORY and deliberately untouched**,
+reported per clause (e) so the next sweep does not "fix" them.
+
+### Invariants
+
+- **GUI-core separation: NOT re-verified and NOT claimed** — no code written, no
+  manifest touched (hard rule 8).
+- **Round-trip / minimal-diff:** ★ **this Pass WRITES, and that is new.** The
+  rewrite is confined to objects the rename logically touched — an object
+  holding the old name **is** part of what a rename means — and every write
+  rides in the rename's own undoable command.
+- **Rule 4:** off-canvas in both shells; no gate, no badge, no page marking.
+  ★ **The repair is not an inference**, so `059`'s clause is not engaged; it is
+  disclosed anyway, because a rename that rewrote objects the operator did not
+  name is what the off-canvas report is for.
+- **`git rev-parse HEAD origin/main`: both `b62e069`** — measured here.
+- **`git status --porcelain`: `?? .tmp_bench.py`** — ★ **FOURTH filing carrying
+  it.** The repository is **public**. Staging by path is the right habit and is
+  not a disposal.
+- **Backup currency at `b62e069`: RELAYED, not measured here** (hard rule 8).
+- **CI colour at `b62e069`: NOT read** and therefore not asserted. ★ `R217`'s
+  window: `b62e069` is the tip and **DEFERRED**, so its filing gate is green
+  *because* nothing sits on top of it — **this filing's commit is what closes
+  the window correctly.** Fourth instance of the window mattering today.
+
+### Ledger
+
+Pass ceiling **`185.0` — UNCHANGED**, next free `185.1` / new major `186.0`.
+**Standing rules ceiling `R235` — UNCHANGED**, next free `R236`; no rule minted,
+none amended. ★ **Decision ceiling `108` → `109`**, next free `110`.
+**`FEATURES.md`: three rows changed** (rename, delete, cut/copy); no new row.
+**`D:/dev/rag/rust/`: 2 new files + 3 dated footers + index entries.**
+**`C:\personal_rag\pdf\`: 1 new lesson + 1 dated footer + 2 index entries.**
+**Two numeric corrections filed with their world-source (`git show`), one
+against this role's own 345th filing.** Filing ordinal `345` → **`346`**.
+
+### Still in flight
+
+- ★★★★ **`Pass 184.0` criterion F — OPEN, three doc-comment edits, no logic.**
+  `crates/pdfce-core/src/pageops/references.rs` (`census_dangling`'s rustdoc and
+  `DanglingReport`'s type-level doc or `is_empty`) and
+  `docs/core-api/01-reading-and-model.md:141` must say that name-string action
+  targets are outside the census's domain **by construction**. **`is_empty()`
+  is the strongest single place** — it is the sentence that reads as a clean
+  bill of health.
+- ★★★ **`docs/NEXT_SESSION.md` §0 is entirely stale** and is read *before*
+  `ROADMAP.md` on a resume. Engineer-owned; **owed an overwrite**, not a patch
+  (`R216`).
+- ★★ **`Pass 185.0` NOT STARTED** — the CI job rename/split.
+  `.github/workflows/` is engineer-owned and was not edited here.
+- **The `Pass 38.5` C9 debt** (`/StructParent` / `/OBJR`) — **owed and
+  un-minted**, deliberately excluded from `184.0` with the reason stated.
+- **`Pass 179.0`** — the automatic bold ladder — still `NOT STARTED`.
+- **`Pass 131.0`'s remainder is APPEARANCE work**; `131.1` / `131.2` untouched.
+- ★ **`.tmp_bench.py` still untracked — FOURTH filing.** The repository is
+  public.
+- **`D:\dev\pdfceGUI` notification still TEN items deep** — unchanged.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — a
+  **twelfth** filing; Reader only on this machine.
+- **`ARCHITECTURE.md` §4 sweep still unfinished** — an **eleventh** filing.
+- **The two broken markdown tables in `ROADMAP.md`** — still unrepaired,
+  deliberately.
+
+### For next session
+
+1. ★★★★ **Close `Pass 184.0` — criterion F, three doc-comment edits**, named by
+   file and location above. It is the cheapest criterion in the Pass and the one
+   whose absence reads as a clean bill of health.
+2. ★★★ **Overwrite `docs/NEXT_SESSION.md` §0** before anything else — it tells a
+   resuming session that the repair is owed, and the repair shipped.
+3. ★★ **Decide `Pass 185.0`: split the `ui-strings` job, or rename it.** One line
+   of YAML for the rename; the RAG file ranks *split* higher and says why.
+   **Seven misattributed red runs and eighteen days say this is overdue.**
+4. **Read CI's final colour at `b62e069` and at this filing from GitHub** — not
+   read here.
+5. ★ **Consider hard-rule-11 clause (f)** — *"when you correct a heading and a
+   table, read the prose between them"* — drafted in the 345th filing. **This
+   role declined to add it unilaterally; it is the engineer's act.**
+6. **Dispose of `.tmp_bench.py`** — fourth filing carrying it.
+7. **Send the `pdfceGUI` note — ten items**, still owed.
+8. ★ **A calibration reminder, from finding 2:** before accepting a plan that
+   says *"this needs a refactor"*, write down the question the existing
+   machinery answers and the question you need answered. **This role wrote the
+   refactor plan; the engineer disproved it; nothing in review would have.**

@@ -28272,3 +28272,106 @@ free 072.**
   minted** — `R235` stays the ceiling, next free `R236`, and the decline is
   argued above rather than left implicit.
 
+
+- **2026-08-30 — Decision `109`: pdfce REPAIRS A REFERENCE WHEN IT KNOWS THE
+  REPLACEMENT EXACTLY, AND DISCLOSES WITHOUT REPAIRING WHEN REPAIR WOULD
+  REQUIRE INVENTING INTENT — SO TWO VERBS SHARING ONE TRAVERSAL REACH OPPOSITE
+  CONCLUSIONS, DELIBERATELY.** Filed in the **346th filing** (librarian; a
+  shell was held and used; **no code was written in this filing**). First
+  applied in `Pass 184.0` criteria C and D (`b62e069`); `ROADMAP.md`'s
+  *Shipped* section carries the engineering detail.
+
+  **★★★ THE TRIGGERING CASE.** `/ResetForm` and `/SubmitForm` name their
+  targets in `/Fields`, and `/Hide` names its in `/T`, as **fully-qualified
+  name strings** — pdfce's own deliberate choice, because a name survives a
+  field being renumbered or copied between documents where an indirect
+  reference does not (`Pass 182.0`, `183.0`, `183.1`). **A rename breaks that
+  choice and a delete orphans it.** One sweep of the object universe finds
+  every affected name string for both verbs. **What the two verbs then do with
+  the finding is opposite:**
+
+  | verb | does pdfce know the replacement? | ★ what it does |
+  |---|---|---|
+  | `rename_field` | ★ **yes — both names, exactly** | **REPAIRS**, and reports the count (`action_targets_retargeted`) |
+  | `delete_field` / `delete_field_group` / `cut_field` | ★★ **no — there is no replacement** | **COUNTS and leaves it** (`action_targets_orphaned`) |
+
+  **★★★ THE CRITERION, STATED SO IT IS REUSED RATHER THAN RE-DERIVED.**
+
+  > **Repair is a SUBSTITUTION when the operation supplies the new value, and
+  > an INVENTION when it does not. pdfce performs substitutions and discloses
+  > them; it refuses inventions and discloses those too.**
+
+  ⇒ On a rename, *"what should this button reset now?"* has exactly one correct
+  answer and the operator supplied it. On a delete the same question **has no
+  answer** — and each of the three plausible repairs is a different guess about
+  intent: dropping the name from the list **silently changes what the button
+  does to the fields that remain**, dropping the whole action removes a control
+  the operator never mentioned, and retargeting invents a substitute. **A
+  delete-time repair is not a cautious version of a rename-time repair; it is a
+  different act.**
+
+  **★★ WHY THIS IS FILED AS A DECISION RATHER THAN LEFT IN THE TWO RUSTDOCS.**
+  Because the failure mode is *tidying*. Two sibling verbs, one traversal, one
+  repairing and one not, reads on inspection as an oversight — and the
+  correction a reviewer reaches for ("make these consistent") destroys the
+  design in whichever direction it is applied. **Consistency here would mean
+  either inventing intent on delete, or refusing a repair pdfce can perform
+  exactly.** The asymmetry is the load-bearing part, and a doc comment on each
+  of two types does not stop a third verb from being written with neither
+  posture.
+
+  **★ WHERE IT ALREADY HELD, so this is a naming rather than an invention.**
+  `DeleteOutcome::dangling` has taken the report-don't-repair posture for
+  bookmarks and links since `Pass 38.5`, for the same reason — a deleted page
+  gives no replacement destination. **This decision states the rule those two
+  cases were already instances of**, and makes it available to the verbs that
+  have not been written yet (delete a named destination, delete an OCG, remove
+  an embedded file that a `/GoToE` names).
+
+  **★★ HOW RULE 4 BINDS, since a repair could be mistaken for an inference.**
+  **Nothing here is inferred.** Decision `059` narrowed rule 4 to guesses;
+  a substitution from two exactly-known names is not a guess, so **no gate, no
+  badge, no provisional rendering, and the repaired document renders exactly as
+  the saved one will.** The disclosure is owed anyway and is given
+  **off-canvas** — a `key=value` token and a stderr prose line in `pdfce-cli`,
+  where the invocation is the commit — **because a rename that rewrote objects
+  the operator did not name is exactly the thing the off-canvas report exists
+  to state.** Rule 4 forbids silence, not action.
+
+  **★ THE LIMIT, stated because a repair is a cheap thing to reach for.**
+  Knowing the replacement is **necessary and not sufficient**: the repair must
+  also be one pdfce is allowed to make. **JavaScript is the standing
+  counter-example** — a script names fields constantly and pdfce knows both
+  names there too, but `R55` requires every script carrier to round-trip
+  byte-identical, so **pdfce does not rewrite inside one.** ⇒ The counts are a
+  **FLOOR for scripted forms, not a total**, and every disclosure says so.
+  **A repair blocked by another rule is disclosed as a limit, never quietly
+  attempted.**
+
+  **★★ AND THE INDIRECTION COROLLARY, because it is where a correct rule
+  produces a wrong outcome.** `/Fields` may be an **indirect reference to an
+  array object** rather than an inline array — a shape no pdfce verb authors
+  and real producers do. A single-pass per-object sweep that does not follow
+  references **repairs most buttons and reports success**, which is strictly
+  worse than repairing none: a partial repair removes the operator's reason to
+  check. ⇒ **The sweep reports the ids it could not reach
+  (`forms::DeferredTargetList`) and a second pass visits them, deduped** — not
+  following references is exactly what lets a per-object sweep be complete
+  without a graph walk, so the deferral is the price of that property, not a
+  workaround. **Fixture-pinned.**
+
+  **Body-section counterpart: none required.** No crate boundary is redrawn and
+  no §4.2 published guarantee moves; the living account is the two fields'
+  rustdoc and `docs/core-api/02-editing-and-saving.md` (engineer-owned).
+
+  **GUI-core separation:** **not re-verified and NOT claimed** — no code was
+  written in this filing, no crate manifest was touched, no dependency added,
+  so `cargo tree` was neither run nor asserted (hard rule 8).
+
+  **Decision ceiling moves `108` → `109`; next free `110`. No standing rule
+  minted** — `R235` stays the ceiling, next free `R236`. The mint was
+  considered: a rule would have to read *"check whether the operation supplies
+  the replacement before repairing"*, which is an **adjudication test applied
+  at design time**, not a behavioural commitment a reviewer can check after the
+  fact — the same warrant on which decision `108` declined `R236` a day
+  earlier.
