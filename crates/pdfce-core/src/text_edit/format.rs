@@ -1119,9 +1119,26 @@ pub enum FormatError {
     ConflictingRise,
     /// Synthetic bold/italic was requested but a **real** face with that
     /// style resolves on the page — and, since `Pass 144.0`, one that
-    /// `set_font` would actually **accept for this run**. R90 makes synthesis
-    /// fallback-only, so pdfce refuses and names the real face to use
-    /// instead. Nothing was applied.
+    /// `set_font` would actually **accept for this run**.
+    ///
+    /// # ★★ THIS ERROR ONLY REACHES A CALLER UNDER ONE POSTURE
+    ///
+    /// It used to say *"pdfce refuses and names the real face to use instead.
+    /// Nothing was applied."* — unconditionally true until decision 106.
+    ///
+    /// It is now returned only under
+    /// [`crate::settings::StylePolicy::Refuse`]. Under `Auto` (the default)
+    /// and `Warn` this value is still **constructed**, then caught inside
+    /// `plan_format` and converted into
+    /// [`FormatReport::real_face_passed_over`](crate::text_edit::FormatReport::real_face_passed_over)
+    /// — so the edit **is** applied and its message is carried as a
+    /// disclosure rather than a failure.
+    ///
+    /// That is deliberate: one construction site means the sentence an
+    /// operator reads is identical whether it arrives as a refusal or as a
+    /// note. But it means *"nothing was applied"* is a property of the
+    /// POSTURE, not of this type, and a caller must not infer the former
+    /// from the latter.
     ///
     /// **The remedy this message states is checked before it is offered.**
     /// It used to be asserted: the gate found a face whose `/BaseFont`
@@ -2574,9 +2591,20 @@ fn family_stem(base_font: &str) -> String {
     stem.get(..cut).unwrap_or(stem).to_ascii_lowercase()
 }
 
-/// R90's gate: **refuse** synthesis when a real face with the requested style
-/// is available on this page — where *available* means `set_font` would
-/// actually **accept** it for this run's text.
+/// R90's gate: **answer whether** a real face with the requested style is
+/// available on this page — where *available* means `set_font` would actually
+/// **accept** it for this run's text.
+///
+/// # ★★ IT ANSWERS; IT NO LONGER DECIDES
+///
+/// This said *"**refuse** synthesis when …"* until decision 106, and naming a
+/// function's job wrongly is worse than a stale example — a reader trusts the
+/// first line.
+///
+/// An `Err` here means *"a real face was available"*, nothing more. What
+/// happens next is the caller's, in `plan_format`: refuse it, carry it as a
+/// disclosure, or both. The survey and the acceptance test are unchanged and
+/// are the same in every posture, which is what keeps one resolution path.
 ///
 /// Synthesis is a fallback, not an alternative, so before faking a weight or
 /// a slant pdfce looks for a genuine face carrying that style. What it does
@@ -2696,14 +2724,35 @@ fn gate_synthesis(
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum StyleOutcome {
-    /// A real face covering everything asked for resolves on this page.
-    /// Submitting `set_synthetic(…)` right now would be **refused** with
-    /// [`FormatError::RealFaceAvailable`] naming exactly these two strings.
+    /// A real face covering everything asked for resolves **as a resource on
+    /// this page**.
     ///
-    /// Note what this does **not** promise: pdfce will not switch to that
-    /// face on the operator's behalf. The commit path refuses and points at
-    /// it; changing the family is a separate, explicit act through the font
-    /// control. Copy that implies otherwise misstates the mechanism.
+    /// # ★★ WHAT SUBMITTING WOULD DO IS NOW POSTURE-DEPENDENT
+    ///
+    /// This doc used to say a `set_synthetic(…)` submitted now *"would be
+    /// **refused**"*, full stop. Since decision 106 that is true only under
+    /// [`crate::settings::StylePolicy::Refuse`]. Under `Auto` (the default)
+    /// and `Warn` the synthesis **is applied**, and the face named here is
+    /// reported as
+    /// [`FormatReport::real_face_passed_over`](crate::text_edit::FormatReport::real_face_passed_over)
+    /// instead.
+    ///
+    /// ★ **This type's own contract is why that mattered enough to fix.**
+    /// The note below says *"inventing a third state here would let a preview
+    /// promise something the commit path cannot honour"* — and for a while
+    /// this variant did exactly that, promising a refusal the commit path
+    /// would not perform. It arrived by a route the note did not anticipate:
+    /// not a new state, but the same state ceasing to mean one thing.
+    ///
+    /// **A shell must read the posture to know what pressing the button
+    /// does.** This variant answers *"is a real face available"* — which is
+    /// stable — and not *"will this be refused"*, which is not.
+    ///
+    /// Note what this still does **not** promise: pdfce will not switch to
+    /// that face on the operator's behalf. Changing the family is a separate,
+    /// explicit act through the font control. (The automatic ladder that
+    /// *would* switch is `Pass 179.0` and is not built.) Copy that implies
+    /// otherwise misstates the mechanism.
     RealFaceResolves {
         /// The `/BaseFont` of the real face that resolves.
         real_font: String,
@@ -2723,7 +2772,12 @@ pub enum StyleOutcome {
 }
 
 impl StyleOutcome {
-    /// Whether a real face resolves — i.e. whether the gate would refuse.
+    /// Whether a real face resolves as a resource on this page.
+    ///
+    /// **NOT "whether the gate would refuse"**, which is what this said until
+    /// decision 106 and is now posture-dependent — see
+    /// [`Self::RealFaceResolves`]. The question this answers is the stable
+    /// one; the other changes with [`crate::settings::StylePolicy`].
     ///
     /// Named so callers do not have to pattern-match a `#[non_exhaustive]`
     /// enum just to ask a yes/no question.
@@ -3332,13 +3386,20 @@ impl FontPreflight {
             .find(|e| e.resource == self.run_resource)
     }
 
-    /// A real Bold face of the **run's own family** that `set_font` would
-    /// accept — the fact that decides whether a Bold button routes to
-    /// `set_font` or to `set_synthetic`.
+    /// A real Bold face of the **run's own family**, PRESENT AS A RESOURCE ON
+    /// THIS PAGE, that `set_font` would accept.
     ///
-    /// `None` does **not** mean "grey the button out": synthesis is the other
-    /// route and it is a real one. It means the button should route to
-    /// `set_synthetic`.
+    /// `None` does **not** mean "grey the button out". But the reason is
+    /// wider than this comment used to give: it said *"synthesis is the other
+    /// route"*, and synthesis is ONE other route. The standard-14 bold names
+    /// (`Helvetica-Bold`, `Times-Bold`, `Courier-Bold`) are another —
+    /// `set_font` binds them with no embedding at all, and **this survey does
+    /// not look for them**, so `None` under-reports what is reachable.
+    ///
+    /// Closing that gap is the automatic ladder, `Pass 179.0`, which is not
+    /// built. Until it is, a shell that treats `None` as "synthesis is the
+    /// only option" will fake a weight on a plain Helvetica page where a real
+    /// one was one command away.
     #[must_use]
     pub fn real_bold(&self) -> Option<&FontSibling> {
         self.run_entry().and_then(|e| e.real_bold.as_ref())

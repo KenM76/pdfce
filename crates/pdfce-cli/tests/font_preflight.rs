@@ -134,10 +134,25 @@ fn a_bold_claim_that_cannot_cover_the_run_routes_to_synthesis_not_to_that_face()
     assert!(row(&text, "F3").contains("claims=bold"));
     // …but the verdict that decides a button says otherwise.
     assert!(
-        text.contains("bold: no real bold face of this run's family is accepted here"),
+        text.contains("no real bold face of this run's family is a resource ON THIS PAGE"),
         "{text}"
     );
-    assert!(text.contains("--bold-synthetic is the route"), "{text}");
+    // ★ The old assertion here required "--bold-synthetic is the route".
+    //
+    // That sentence was FALSE and had been since `Pass 162.0`: on this same
+    // page `--set-font Helvetica-Bold` succeeds and embeds nothing, so
+    // synthesis was never "the" route. The line understated what pdfce can
+    // do, which sends an operator to the worse remedy and fails nothing.
+    //
+    // The message now offers both and says which one this survey does not
+    // look for, so the test pins BOTH halves — a correction that named only
+    // the standard-14 route without saying it is unsurveyed would be true and
+    // still misleading.
+    assert!(text.contains("--bold-synthetic is one route"), "{text}");
+    assert!(
+        text.contains("Helvetica-Bold") && text.contains("NOT surveyed by this check"),
+        "the other route, and the scope of the check, must both be stated: {text}"
+    );
 }
 
 #[test]

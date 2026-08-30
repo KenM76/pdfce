@@ -444,11 +444,21 @@ pub fn shear_into(tm: [f64; 6]) -> [f64; 6] {
 /// direction where being wrong is safe: [`detect`] uses it to say 'this looks
 /// synthesized', never to refuse an edit."* **That was true when written and
 /// was falsified by a later caller** — `text_edit::format`'s synthesis gate,
-/// which refuses `set_synthetic` when a real styled face is available on the
-/// page and asks this function which faces claim the style. Nothing reported
-/// the drift, because `cargo doc` cannot check a claim about callers. The
-/// wording is kept here, struck, rather than quietly replaced: the failure
-/// mode is worth more than the correction.
+/// which asks this function which faces claim the style. Nothing reported the
+/// drift, because `cargo doc` cannot check a claim about callers. The wording
+/// is kept here, struck, rather than quietly replaced: the failure mode is
+/// worth more than the correction.
+///
+/// ★★ **AND IT HAS NOW DRIFTED A SECOND TIME, BY THE SAME MECHANISM.** The
+/// correction above said the gate *"refuses `set_synthetic` when a real styled
+/// face is available"*. Decision 106 made that posture-dependent: the gate
+/// **answers**, and only [`crate::settings::StylePolicy::Refuse`] turns the
+/// answer into a refusal. Falsified by a later caller again, reported by
+/// nothing again.
+///
+/// Two drifts, one cause, in a comment whose own body already named the
+/// cause. A claim about callers is a measurement and goes stale silently;
+/// writing that down did not stop it happening.
 ///
 /// The two call sites today, and what being wrong costs at each:
 ///

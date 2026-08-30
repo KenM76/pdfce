@@ -1355,11 +1355,22 @@ $ pdfce-cli format-text runs-two-explicit.pdf --find ALPHA       --bold-syntheti
       THEN stroke — §9.3.6 Table 106) with a stroke width of 0.22 …
 ```
 
-**★ `gate_synthesis` refuses synthesis when a real face is available — where
-*available* means `set_font` would ACTUALLY ACCEPT it for this run.** Where a
-usable real Bold exists, `set_font` uses it and synthesis is refused, and the
-refusal quotes the exact selector to retry with; where none exists, synthesis
-applies.
+**★★ `gate_synthesis` ANSWERS whether a real face is available; what happens
+next is the POSTURE's** (`Pass 179.2`, decision 106). *Available* still means
+`set_font` would ACTUALLY ACCEPT it for this run, and the survey is unchanged.
+
+| `style_policy` | a real face IS available | none is |
+|---|---|---|
+| `auto` *(default)* | synthesis is **applied**, and the face is named in `FormatReport::real_face_passed_over` | synthesis applies |
+| `warn` | the same, and the shell should surface it prominently | synthesis applies |
+| `refuse` | **refused**, quoting the exact selector to retry with — pdfce's behaviour before this was a choice | synthesis applies |
+
+This paragraph previously said, flatly, that synthesis *"is refused"*. That was
+true of every build up to `0.16.0` and is now true only of `refuse`.
+
+⚠️ **A shell must read the posture to know what pressing the button does.**
+`StyleOutcome::RealFaceResolves` answers *"is a real face available"* — which
+is stable — and NOT *"will this be refused"*, which is not.
 
 > #### ★★ CORRECTION, 2026-08-27 — this paragraph carried a false universal
 >
@@ -1394,10 +1405,21 @@ applies.
 > **The guidance below — *"do not grey out a bold button"* — was and remains
 > TRUE**, and was deliberately not touched by this correction.
 
-`R90` is why it is never silent: synthesis is applied **only when asked for
-explicitly**, never as a preference, and the report says so in the operator's
-words — *"a FALLBACK, not an alternative to a real face […] the letterforms
-are the regular face's, thickened."*
+~~`R90` is why it is never silent: synthesis is applied **only when asked for
+explicitly**, never as a preference…~~ — **struck, and false twice over since
+decision 106.** Under `auto` synthesis IS applied as a preference (a persisted
+one, `style_policy`), and *"never silent"* is the exact claim `Pass 179.2`
+deleted from the disclosure string itself because the ruling falsified it.
+
+What survives, and it is the half that matters: **synthesis is still never an
+alternative to a real face** — the ladder always prefers a genuine one, in
+every posture, and the report still says in the operator's words *"a FALLBACK,
+not an alternative to a real face […] the letterforms are the regular face's,
+thickened."* `R90`'s guarantee is now **reachable rather than mandatory**: set
+`style_policy = refuse` and you have `R90`'s original gate back, unchanged.
+
+**Nothing is undisclosed.** Removing the gate did not remove the disclosure —
+`auto` reports the passed-over face on stdout, `warn` on stderr.
 
 **The one real refusal, and it is narrow.** Synthetic *italic* premultiplies
 a shear into the run's text matrix, which is **not** text state and so is not

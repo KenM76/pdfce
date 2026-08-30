@@ -2095,10 +2095,11 @@ enum Command {
     ///   character and perfectly usable for text that does not. The refusal
     ///   printed is the one `--set-font` itself would print, verbatim.
     /// - **Whether a real Bold or Italic of the family would be ACCEPTED** —
-    ///   accepted, not merely named `Bold`. That is the fact deciding whether
-    ///   a style control should route to `--set-font` or to
-    ///   `--bold-synthetic`; a `real_bold=-` does NOT mean the control should
-    ///   be disabled, it means synthesis is the route.
+    ///   accepted, not merely named `Bold`. A `real_bold=-` does NOT mean a
+    ///   style control should be disabled — but the reason is broader than
+    ///   this line used to give. It said "it means synthesis is the route";
+    ///   synthesis is ONE route, and `--set-font Helvetica-Bold` is another
+    ///   that needs no embedding and that this survey does not look for.
     ///
     /// Read-only: it opens the file, answers, and writes nothing.
     FontPreflight {
@@ -5297,24 +5298,33 @@ enum Command {
         rise: Option<String>,
         /// Apply SYNTHETIC bold: text rendering mode 2 (fill-then-stroke)
         /// with a user-space stroke width and the stroking colour matched to
-        /// the fill (§9.3.6). This is a FALLBACK for when no real Bold face
-        /// resolves on the page — if one does, the command REFUSES and names
-        /// it, because synthesis is never an alternative to a real typeface
-        /// (R90). Nothing is ever synthesized without this flag.
+        /// the fill (§9.3.6). A synthesised weight is the regular letterforms
+        /// thickened, not a real typeface. Nothing is synthesised without
+        /// this flag.
         ///
-        /// "Resolves" means `--set-font` WOULD ACCEPT that face for THIS
-        /// RUN's characters — pdfce checks before it recommends, and the
-        /// refusal quotes the exact `--set-font` argument to retry with. It
-        /// used to check only that a `/BaseFont` contained a style word, and
-        /// on a page whose only Times-Bold could not encode the run that made
-        /// bold unreachable through either verb. If no face of the run's own
-        /// family can show the run, a usable face from ANOTHER family is
-        /// offered instead and the message says so outright. Ask
-        /// `font-preflight` first to know which of the three you will get.
+        /// WHAT HAPPENS IF A REAL BOLD FACE IS AVAILABLE depends on
+        /// `--style-policy` (or the stored `style_policy` setting): `auto`
+        /// applies the synthesis and NAMES the face it passed over, `warn`
+        /// does the same and warns, `refuse` stops and points at that face.
+        /// `refuse` is what this command always did before that became a
+        /// choice.
+        ///
+        /// "Available" means a face already present as a resource ON THIS
+        /// PAGE that `--set-font` WOULD ACCEPT for THIS RUN's characters —
+        /// pdfce checks before it recommends and quotes the exact
+        /// `--set-font` argument. If no face of the run's own family can show
+        /// the run, a usable face from ANOTHER family is offered and the
+        /// message says so outright.
+        ///
+        /// It does NOT include the standard-14 bold names
+        /// (`Helvetica-Bold`, `Times-Bold`, `Courier-Bold`), which
+        /// `--set-font` can bind with no embedding at all. So "no real bold
+        /// face is available" is a statement about this page's resources, not
+        /// about what pdfce can do. Ask `font-preflight` first.
         #[arg(long = "bold-synthetic")]
         bold_synthetic: bool,
         /// Apply SYNTHETIC italic: a 12-degree oblique shear premultiplied
-        /// into the run's text matrix. Same fallback-only gate as
+        /// into the run's text matrix. Same `--style-policy` handling as
         /// `--bold-synthetic`. REFUSED when a Td/TD/T* next-line operator
         /// follows the run inside the same text object (the injected matrix
         /// would displace that line), and refused with `--pin`.
@@ -22729,8 +22739,10 @@ fn cmd_font_preflight(
             s.selector
         ),
         None => println!(
-            "bold: no real bold face of this run's family is accepted here — \
-             --bold-synthetic is the route"
+            "bold: no real bold face of this run's family is a resource ON THIS PAGE. \
+             --bold-synthetic is one route; the other is --set-font with a standard-14 \
+             bold name (Helvetica-Bold, Times-Bold, Courier-Bold), which needs no \
+             embedding and is NOT surveyed by this check"
         ),
     }
     match pre.real_italic() {
@@ -22739,8 +22751,10 @@ fn cmd_font_preflight(
             s.selector
         ),
         None => println!(
-            "italic: no real italic face of this run's family is accepted here — \
-             --italic-synthetic is the route"
+            "italic: no real italic face of this run's family is a resource ON THIS PAGE. \
+             --italic-synthetic is one route; the other is --set-font with a standard-14 \
+             oblique name (Helvetica-Oblique, Times-Italic, Courier-Oblique), which needs \
+             no embedding and is NOT surveyed by this check"
         ),
     }
     exit::SUCCESS
