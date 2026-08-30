@@ -79743,3 +79743,434 @@ not a redesign.
 5. **Push.** `main` is **3 commits ahead of `origin`** and pushing is
    standing-authorized (decision 090, *"always push"*); scrub
    `check-suite-name-absent.py` green first, since the repository is public.
+
+## 2026-08-30 (342nd filing) — **A RELEASE-BLOCKING FILING: `Pass 179.1` + `Pass 179.3` (`2c93f6a`) and the `v0.17.0` VERSION BUMP (`71d13aa`).** ★★★ **BOTH FILING GATES WERE RED AT `2c93f6a` AT DISPATCH AND ARE GREEN AT THE END OF THIS ENTRY — `check-commits-filed` exit 0 over 683 commits, `check-passes-filed` exit 0, both re-run here and quoted verbatim.** ★★ **THIRTEEN FALSE STATEMENTS DISCHARGED ACROSS TWO DIFFERENTLY-CAUSED SETS, ONE OF THEM IN `docs/core-api/` — AND NOTHING pdfce DOES CHANGED.** ★ **`v0.17.0` IS RECORDED CUT-BUT-NOT-YET-OBSERVED: NO TAG, NO PUSH, NO GITHUB RELEASE, ALL MEASURED FROM A SHELL**
+
+**Shipped, filed to *Shipped* this filing:**
+
+- **`Pass 179.1` + `Pass 179.3`** (`2c93f6a`) — thirteen false statements, two
+  causes. Set one (`179.1`, six locations): *"no real bold ⇒ synthesis is the
+  route"*, false on every standard-14 page since `Pass 162.0` — **seventeen
+  Passes**. Set two (`179.3`, eight): *"the gate refuses"*, made
+  posture-conditional by `Pass 179.2` **hours earlier**. They overlap in
+  **one** location, so thirteen and not fourteen.
+- **`v0.17.0` VERSION BUMP** (`71d13aa`) — `0.16.0` → `0.17.0`, minor.
+  `Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.lock` only.
+
+**Files edited by this role:** `docs/ROADMAP.md`, `docs/FEATURES.md`,
+`docs/ARCHITECTURE.md`, `docs/SESSION_LOG.md`,
+`D:/dev/rag/rust/a_test_asserting_a_user_facing_string_pins_that_claim_so_correcting_it_reads_as_a_regression.md`,
+`D:/dev/rag/rust/a_head_anchored_id_scan_cannot_see_the_second_id_in_a_combined_subject_line.md`,
+`D:/dev/rag/rust/index.md`. **`crates/` and `docs/core-api/` untouched**
+(hard rule 11) — both were the engineer's to edit and both were edited by him
+in `2c93f6a`, which is what this filing discharges.
+
+**Sourcing — `R228`.** A shell was held and used. **Run here, not relayed:**
+`python tools/check-commits-filed.py`, `python tools/check-passes-filed.py`,
+`python tools/check-ledger-numbers.py`, `python
+tools/check-suite-name-absent.py`, `git log`/`git show`/`git show --stat`/
+`git diff --shortstat`/`git status --porcelain`/`git rev-list --count`/
+`git tag --list`, `gh release list --limit 3`, `ls -lt /d/Dev/pdfce-backups/`.
+**Every before/after quotation in the two `ROADMAP.md` entries was read out of
+`git show 2c93f6a`'s own diff**, not carried forward from the dispatch or from
+the 341st filing. **Relayed and NOT re-run:** `cargo test --workspace
+--all-features`, `cargo fmt --check`, `cargo clippy --all-targets
+--all-features -D warnings`, `check-core-api-verbs`, `check-clap-help` (123
+subcommands), `check-cli-help-leads`, and every figure in `71d13aa`'s
+verification block.
+
+---
+
+### ★★★ THE BOUNDARY, FIRST — IT IS THE SAME ONE THE 341st FILING DREW, AND IT WILL BE MISREAD THE SAME WAY
+
+**`Pass 179.1` + `179.3` changed no behaviour.** `survey_page_fonts` still
+reads `/Resources /Font` and still ignores the standard-14 siblings, so on
+`fixtures/synthetic/textedit/format_other.pdf` pdfce **still synthesises where
+`--set-font Helvetica-Bold` would bind a real face with no embedding**, in
+every posture. The commit is 181 added lines of which **not one is a branch, a
+condition or a moved call site** — doc comments, two `println!` literals, and
+the test assertions that pin them.
+
+⇒ **What shipped is that pdfce stopped saying it could not do a thing it can.**
+The routing defect is `Pass 179.0`, and `Pass 179.0` is still `NOT STARTED`.
+
+**Measured on the shipped binary, on the one-`Helvetica`-resource fixture,
+the two facts side by side:** `font-preflight` now prints *"…is a resource ON
+THIS PAGE. `--bold-synthetic` is one route; the other is `--set-font` with a
+standard-14 bold name … NOT surveyed by this check"*, and
+`format-text --set-font Helvetica-Bold` on that same file **SUCCEEDS**. **The
+sentence and the capability agree now. They did not before.**
+
+### ★★ TWO SETS, TWO CAUSES — filed as one commit, entered as one entry, counted as two
+
+| | **set one — `179.1`** | **set two — `179.3`** |
+|---|---|---|
+| claim | *"synthesis is the route"* | *"the gate refuses"* |
+| false since | `Pass 162.0`, seventeen Passes | `Pass 179.2`, hours |
+| cause | **a hard-rule-11 sweep that ran halfway** — `162.0` corrected the sentences **about** the verb it widened, never the sentences about that verb's **consequences** | **a meaning change**, correctly found and reported by the 341st filing's own sweep |
+
+**A Pass fixing one would not have fixed the other**, which is why the 341st
+filing refused to merge them and refused to mint an ID for set two. The
+engineer assigned **`179.3`**.
+
+### The three that mattered most, and why each correction is shaped the way it is
+
+1. **`font-preflight`'s stdout** — the only copy an operator reads. ★★ **The
+   scope disclaimer is the load-bearing half**: a correction naming the
+   standard-14 route *without* saying the survey does not look there would
+   have been **true and still misleading**, implying pdfce had looked and
+   found nothing.
+2. **`--bold-synthetic`'s `--help`** — *"if one does, the command REFUSES"*
+   sat **twenty lines above** the new `--style-policy` text implying it does
+   not. **In clap-derive a `///` IS the shipped UI**, so this was two
+   paragraphs of one `--help` screen disagreeing about whether the command
+   refuses. Replaced with the posture handling.
+3. **`docs/core-api/03-capabilities.md`** — the contract `pdfceGUI` builds
+   against. Got a **posture table** plus an explicit ⚠️ *a shell must read the
+   posture to know what its button does*. `:1397`'s *"never as a preference"*
+   is **struck with its replacement stated**, because ★★ **a struck claim with
+   nothing put in its place reads as a capability withdrawn** — a consumer
+   seeing `~~never silent~~` with no successor would reasonably conclude pdfce
+   had stopped disclosing. What survives is stated: synthesis is still never
+   an alternative to a real face, and `style_policy = refuse` restores `R90`'s
+   original gate intact.
+
+### ★★★ MY JUDGEMENT ON THE TWICE-DRIFTED COMMENT — NO MINT, AND HERE IS THE TRIGGER THAT WOULD CHANGE THAT
+
+`synth.rs`'s `looks_styled` rustdoc already carried a **struck first version**
+and its own diagnosis — *"was falsified by a later caller … Nothing reported
+the drift, because `cargo doc` cannot check a claim about callers"* — and has
+now been falsified by a later caller **again**. Struck a second time, in place.
+
+**I decline to mint `R236`, and the engineer's read is right that this is
+`R222`'s neighbourhood.** Reasoning, so nobody re-opens it:
+
+- **The mechanism is already named** — a claim about *callers* is a
+  measurement, it goes stale silently, `cargo doc` structurally cannot check
+  it. `R222` covers that at six instances.
+- **What is new is the SHAPE, not the mechanism: twice, by the SAME NAMED
+  CAUSE, in the SAME comment.** ★★★ **Writing the cause down did not prevent
+  the recurrence.** That is a finding about the **limits of documenting a
+  failure mode** — which is exactly the thing this project keeps discovering
+  and exactly the thing a standing rule cannot fix, because a standing rule
+  *is* documenting a failure mode.
+- **A rule needs an enforcement story and this one has none.** The only gate
+  that could catch it would have to verify a claim about callers — the thing
+  `cargo doc` cannot do and the reason the drift is silent. **A gate that
+  cannot fire enforces nothing**
+  (`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`), and three
+  prior mint requests in this project were declined on that same warrant.
+- ⇒ **Recorded as an observation on `R222`, not as `R236`.** ★ **The trigger,
+  stated so the next session does not re-derive the bar: a THIRD drift on this
+  comment, or a SECOND comment drifting twice by its own named cause, is
+  `n = 2` on the new shape and the mint is warranted.**
+
+### ★★ A GREEN TEST WAS HOLDING THE DEFECT IN PLACE — and this is the mirror of the 341st filing's own question
+
+`a_bold_claim_that_cannot_cover_the_run_routes_to_synthesis_not_to_that_face`
+**required** stdout to contain `"--bold-synthetic is the route"` — pinning a
+claim wrong for seventeen Passes.
+
+⇒ **The test was not merely failing to catch the defect; it required the
+defect.** Correcting the string turns the suite red, and the ordinary reading
+of red is *"the change is wrong"*.
+
+★ **The 341st filing asked, of five tests that went red when a behaviour became
+conditional: *does relaxing this restore the assertion, or delete it?*** The
+mirror is the question this Pass answers: **what is a GREEN test pinning, and
+is that thing still true?** A green assertion over a user-facing string is a
+standing requirement that the claim keep being made. **Escalated to
+`D:/dev/rag/rust/` as a cross-project finding** — it is not PDF-specific and
+not pdfce-specific.
+
+### ★★★ FINDINGS OF MY OWN — THREE, ALL FOUND BY MEASURING RATHER THAN READING
+
+**1 — The `v0.17.0` release notes' scope figures were measured THREE COMMITS
+before the commit that carries them.**
+
+| figure | `71d13aa` says | **measured here** |
+|---|---|---|
+| commits since `v0.16.0` | 59 | **62** |
+| files changed | 92 | **96** |
+| insertions / deletions | +31,271 / −793 | **+32,418 / −861** |
+| distinct Pass IDs | 27, `166.0`–`179.2` | **30, `166.0`–`179.3`** |
+
+**Neither set is wrong — they measure different commits.** The message is
+exact at `74ac410`: `git rev-list --count 921ac2a..74ac410` → **59**, and
+`git diff --shortstat 921ac2a 74ac410` → **92 files, +31,271, −793**, matching
+to the digit. **62 − 59 = 3**, and the three are `0240837`, `2c93f6a`,
+`71d13aa`. Filed **beside** the message's figures rather than replacing them,
+per hard rule 10 — a figure filed in a form that can **disagree** with
+something.
+
+**2 — ★★ The Pass count is short by more than the drafting gap, and the extra
+cause is a GATE BLIND SPOT.** Even at `74ac410` the true count is **28**, not
+27: **`Pass 172.0` never appears at the head of a subject line**, having
+shipped inside `3fe901a` — *"`Pass 171.0 + 172.0`: …"*. The same shape hides
+`179.3` inside `2c93f6a`'s *"`Pass 179.1 + 179.3`"*.
+
+⇒ **A combined `Pass A + B` subject makes `B` invisible to a head-anchored
+scan** — including to `tools/check-passes-filed.py`, whose `SUBJECT_CLAIM` is
+`^(?:★\s*)?Pass (ID)\b`. **Measured, not inferred: that gate's output this
+filing named `Pass 179.1` alone and never asked about `179.3`.** ★ **It is a
+blind spot, not a failure** — the gate's join key is the **hash**, so citing
+`2c93f6a` files everything the commit carried, and it went green. **No rule
+minted:** the gate's docstring already discloses the honest limit of a
+subject-line grep, so this is a **second instance of a disclosed limit**.
+Escalated to `D:/dev/rag/rust/`.
+
+**3 — ★★ AN OFF-BY-ONE INSIDE ONE FILING, ACROSS THREE OF ITS OWN RECORDS.**
+The 341st filing's `Pass 179.2` Shipped entry §12 said the new survivor set was
+**"Seven locations"**. Its own `Pass 179.1` entry listed **A–H** and said in §5
+*"the new set is EIGHT locations (A–H)"*; its `SESSION_LOG.md` entry said
+**eight** too. **One filing, three records, one of them off by one, and nothing
+compares records.** ★★★ **This is hard rule 10's failure mode landing on a
+COUNT** — the same mechanism as that filing's own `R90` finding: *review is an
+operation on one claim; consistency is an operation on a set, and nothing in an
+append-only record performs it.* **Corrected in place with the wrong figure
+struck.** The remedy costs nothing and is already written: **state a count
+where it can disagree with the enumeration beside it**, which the table did and
+the §12 bullet did not. **No new rule — this is rule 10 working as written, one
+filing later.**
+
+### ★ HITS THAT SURVIVE MY SWEEP AND ARE CORRECT — recorded per hard rule 11 clause (e), so the next sweep does not "fix" them
+
+- **`format.rs:3159–3160`** — *"which the caller then recommends and `set_font`
+  then refuses"*. `set_font`'s **own coverage refusal**, which `StylePolicy`
+  does not reach. **Leave it.**
+- **`03-capabilities.md:1362–1394`** — the 2026-08-27 correction block and its
+  *"do not grey out a bold button"* guidance. Both still true; deliberately
+  untouched by `2c93f6a` and by me.
+- **`ARCHITECTURE.md` §12, decision 106's *"WHAT WAS MEASURED BEFORE THIS WAS
+  FILED"* table** — quotes both now-corrected strings. ★★ **Correct as dated,
+  and LEFT VERBATIM ON PURPOSE.** It is the measurement the ruling was made on;
+  **a dated measurement rewritten into agreement with today is evidence
+  destroyed.** A dated amendment was appended **beside** it instead, saying the
+  strings are fixed on disk — and saying that **row 2 of that table is
+  unchanged behaviour and still true.**
+- **`FEATURES.md` row 281's quotation of the old string** — now framed as *"it
+  used to print … and now prints …"*, which is a historical quote and correct.
+
+### The sweep of MY OWN tree — hard rule 11, clause (e): narrow the file set, widen the pattern
+
+Case-insensitive `refus` and `route`/`genuine typeface` over
+`docs/FEATURES.md`, `docs/ARCHITECTURE.md`, `docs/NEXT_SESSION.md`, every hit
+read. `docs/ROADMAP.md` and `docs/SESSION_LOG.md` are append-only history and
+were swept only for **live, forward-looking** claims — a dated entry describing
+what was true then is not a survivor. **Six survivors found and fixed**, listed
+in the `FEATURES.md` and *corrections* sections below. `docs/NEXT_SESSION.md`:
+**zero hits** — engineer-owned, and clean.
+
+### `FEATURES.md` — **NO NEW ROWS**, three rows corrected
+
+**The verdict, stated because it was asked:** every change in `179.1`/`179.3`
+is a correction to a **statement**, not a capability. **A features row is a
+capability claim, and no capability moved**, so a new row would have asserted
+a capability that does not exist. `FEATURES.md` gained nothing and lost
+nothing; three of its rows were **wrong** and are now right.
+
+- **Row 149** — *"correcting the six strings … is `Pass 179.1`"* → **SHIPPED at
+  `2c93f6a`, together with the eight of `179.3`; thirteen locations, routing
+  deliberately untouched.** ★ And a **second, unrelated survivor found in the
+  same row**: *"the synthesis gate **refuses** only for a face `set_font` would
+  actually ACCEPT"* stated the refusal **unconditionally** — corrected to *"the
+  gate **answers** …, and only `style_policy = refuse` turns that answer into a
+  refusal"*. **That sentence was a member of set two that nobody had listed.**
+- **Row 281** — ★★ **the worst of the three.** It quoted the shipped stdout
+  verbatim: *"prints `--bold-synthetic is the route`"*. **That string no longer
+  exists.** Rewritten to quote the old and the new, and — the load-bearing
+  half — to split *"the STRING is fixed (`179.1`)"* from *"the routing VERDICT
+  is not (`179.0`, still `[ ]`)"*.
+- **Row 346** (the ladder, `[ ]`/`[ ]`/`[ ]`) — now names `179.1`/`179.3` as
+  having corrected the strings, and closes with **"Those Passes changed what
+  pdfce SAYS; this row is what pdfce DOES, and it is still `[ ]`."**
+- ★ **Row-number drift, worth one line and re-measured not re-derived:** the
+  341st filing corrected *"rows 149 and 280"*; they are **149 and 281** today,
+  because that same filing inserted the new `style_policy` row at **150** and
+  pushed everything below down by one. **A row number is a measurement with a
+  shelf life, exactly as a line number is.**
+
+### Corrections made to prior records by this filing
+
+| record | was | now |
+|---|---|---|
+| `ROADMAP.md`, `Pass 179.2` §12 | *"**Seven** locations"* | **struck → EIGHT (A–H)**, with the three-records analysis above |
+| `ROADMAP.md`, `Pass 179.2` §12 | *"see `179.1`'s re-scoping in *Next up*"* | **struck → `179.1` SHIPPED; the tables live in the Shipped entry** (the *Next up* entry was deleted on ship, fully-delete-on-ship convention) |
+| `ROADMAP.md`, `Pass 179.0` ID paragraph | *"highest ID now `179.1`"* | **carried forward → highest is `179.3`; `.1`, `.2`, `.3` all shipped before `.0` was begun**, so the numbering is now *visibly* not an ordering |
+| `ROADMAP.md`, `Pass 179.0` rung table | rung 1 *"currently **refuses** instead of binding"*; rung 4 *"its disclosure text is wrong today"* | **rung 1 struck → refuses only under `refuse`, passes over under `auto`; either way does NOT bind, which is the missing rung.** **rung 4 → DISCHARGED at `2c93f6a`** |
+| `ARCHITECTURE.md` §12, decision 106 | same two rung cells, plus the measurement table | **same two cells struck/discharged; the table left verbatim with a dated amendment beside it** |
+
+### Decisions this session
+
+**NONE.** Neither commit carries an architectural decision: `2c93f6a` corrects
+statements about decision `106`'s consequences, and `71d13aa` is a version
+number. ★ **Decision `106` is untouched by this filing** and stands as amended
+in the 341st. **The decision ceiling does NOT move: `106`, next free `107`.**
+
+### Standing rules
+
+**NONE MINTED.** See the twice-drifted judgement above for the declined one and
+its trigger. **`R235` remains the ceiling, next free `R236`.**
+
+### ★★★ THE RELEASE — CUT-BUT-NOT-YET-OBSERVED, AND WHY THE TAG GOES ON *THIS* COMMIT
+
+Recorded in the `v0.9.0` shape (255th filing), because at the moment this entry
+is written **none of it has happened**:
+
+| fact | command run here | result |
+|---|---|---|
+| a `v0.17.0` tag exists? | `git tag --list 'v0.17*'` | **empty — NO TAG** |
+| unpushed commits | `git rev-list --count origin/main..HEAD` | **6** — `06d11e9`, `8671daa`, `74ac410`, `0240837`, `2c93f6a`, `71d13aa` |
+| newest GitHub release | `gh release list --limit 3` | **`v0.16.0`**, 2026-08-29T12:35:27Z, still `Latest` |
+| OneDrive deploy | **not checked from here** | ★ **unknown, not absent** — `verify-release.py`'s two `Pass 166.0` checks are the instrument |
+
+**Nothing above is a prediction and nothing above is a claim that it happened.**
+The engineer tags, pushes, publishes and deploys after this commit lands;
+**completing the record is a later filing's job.**
+
+**★ Why the tag belongs on this filing's commit.** Both filing gates were **red
+at `2c93f6a`** and CI runs both, so a tag at `71d13aa` would be a tag at a
+commit whose CI is **red on a docs debt** — the `v0.10.0` incident (259th
+filing) exactly, which cost a tag delete, a retag, a force-push and a rebuilt
+release asset. The `v0.9.0` record's line is quoted rather than re-derived:
+tagging a filing commit **"remains strictly better and costs nothing."**
+
+★★ **And note what that means about `71d13aa`'s own verification block**, which
+claims a clean 29-command `run-gates.sh` **including both filing gates**. It was
+**true when it ran and false shortly after** — `R217`'s shape again: **a green
+gate sweep is a claim about the tree it ran on, not a durable property of any
+commit in it.**
+
+### ★★ COMPATIBILITY — the three behaviour changes in `v0.17.0`, filed in the roadmap rather than left in a commit message
+
+| change | what a consumer meets | how to restore |
+|---|---|---|
+| `style_policy` defaults to `auto` | `--bold-synthetic` **SUCCEEDS** where it previously **refused**; a caller branching on the refusal never sees that branch | `style_policy = refuse` |
+| four ce-dimension verbs refuse an unknown group id | a stale group id produces an error **that did not exist before** | **none, and none is wanted — the error is correct and the previous silence was not** (`R235`) |
+| a ce-dimension text override ⇒ sidecar **schema v4** | an **older** pdfce refuses to edit that document's ce dimensions | a document without an override is still written at **v3** (decision 105 — per document, not per build) |
+
+### Ledger
+
+| | |
+|---|---|
+| Passes | **`179.1` and `179.3` filed to *Shipped*** (`2c93f6a`); the `Pass 179.1` *Next up* entry **deleted on ship** (175 lines), its two survivor tables carried into the Shipped entry. **Highest ID now `179.3`; next free family `180`.** ★ **`Pass 179.0` remains `NOT STARTED`** |
+| Releases | **`v0.17.0` version bump filed** (`71d13aa`) as a version-bump record, **not** a release record |
+| Decisions | **none.** Ceiling **106**, next free **107** |
+| Standing rules | **none minted.** Ceiling **`R235`**, next free **`R236`** |
+| Filings | this is the **342nd**; next free **343** |
+| Gate confirming all three ceilings | `python tools/check-ledger-numbers.py` → *"standing rules: R235 → next free is R236 / decision records: 106 → next free is 107 / SESSION_LOG filings: 341 → next free is 342"*, and *"Pass families with headings: up to 179 (highest ID **179.3**)"*, **run after this filing's `ROADMAP.md` edits**, `clean`, exit 0 |
+
+### ★★★ THE TWO FILING GATES — the reason this filing was blocking, output quoted verbatim
+
+**At dispatch, RED:**
+
+```
+commits-filed: tip 71d13aa is DEFERRED, not yet filed.
+commits-filed: 1 code commit(s) are in no filing.
+  2c93f6a  2026-08-30 09:16:43 -0400 Pass 179.1 + 179.3: thirteen statements …
+```
+```
+UNFILED  2c93f6a  Pass 179.1  Pass 179.1 + 179.3: thirteen statements that were false …
+```
+
+**After this filing's edits, GREEN — both re-run here:**
+
+```
+commits-filed: clean — 683 code commit(s) checked (whole history);
+  5 known-unfiled carried in the baseline
+```
+`exit 0`
+
+```
+passes-filed: clean - every Pass-claiming commit is filed
+```
+`exit 0`
+
+★ Also run and clean: `check-ledger-numbers` (exit 0) and
+`check-suite-name-absent` (*"clean -- nothing in the work tree, staged or not,
+names it or mentions it"*, exit 0) — the public-facing gate, scrubbed before a
+push because the repository is public.
+
+### Git and backup state — MEASURED, not inferred (hard rule 8)
+
+| fact | command | result |
+|---|---|---|
+| `HEAD` | `git log --oneline -2` | **`71d13aa`** (`v0.17.0` bump) over **`2c93f6a`** (`Pass 179.1 + 179.3`) |
+| working tree at filing start | `git status --porcelain` | **clean, empty output** |
+| ★ the 341st filing's unreconciled `.relnotes` | `ls -la .relnotes` | **ABSENT** — *"No such file or directory"*. That filing reported two irreconcilable readings of the same file and refused to pick one; it is simply gone now. **Recorded as an observation, not as an explanation** — nothing here claims to know what removed it (`R201`, sixth consecutive filing) |
+| divergence from `origin` | `git rev-list --count origin/main..HEAD` | **6** — grown from 3 across one filing |
+| backup bundle | `ls -lt /d/Dev/pdfce-backups/` | newest still `pdfce-20260830-0553-d6a2e6d-full.bundle`, **05:51**, at `d6a2e6d` — **unchanged for a third consecutive filing** |
+| bundle staleness | `git rev-list --count d6a2e6d..HEAD` | ★★ **8 commits behind** — **2 → 5 → 8 across three filings, and nobody has taken one** |
+| GUI-core separation | *not re-run this filing* | ★ **stated as not measured**, not as clean. No `Cargo.toml` moved in either commit, so the invariant had no route to change; the 341st filing's **0** over a 99-line resolved tree stands as the last measurement |
+
+### Still in flight
+
+- **★★★ `Pass 179.0` — the automatic ladder — is `NOT STARTED`**, and is now
+  the **only** remaining item in the bold cluster. It builds on top of the
+  posture selector: it must make the ladder automatic **in every posture**,
+  since a posture selects only what pdfce *says about* a fallback, never which
+  face it picks. **Rung 2 does not exist.**
+- **The cross-family rung is still OPEN** and Acrobat cannot settle it — the
+  one thing that could change `179.0`'s design before it ships.
+- **★★ THE RELEASE IS HALF-DONE BY CONSTRUCTION.** Tag, push, GitHub release,
+  `verify-release.py`, OneDrive deploy — **all after this commit**. A later
+  filing completes the `v0.17.0` record; **until then it is a version-bump
+  record and must not be read as a release record.**
+- **★★ BACKUP BUNDLE IS 8 COMMITS BEHIND** and has grown 2 → 5 → 8 across three
+  filings. **This is the third filing to say so.** It is about to be a release
+  point, which is the worst moment to have no recent bundle.
+- **`D:\dev\pdfceGUI` notification is now EIGHT items deep** — the seven
+  carried from the 339th–341st filings, **plus (new) the `docs/core-api/`
+  posture table itself**, which is the document that project builds against and
+  which changed meaning in `2c93f6a`. ★ **That one is not optional**: their
+  refusal-handling code was written against *"`gate_synthesis` refuses"*, and
+  under the shipped default it does not. Their deliberate decision not to take
+  `real_bold()`/`real_italic()` remains fortunate.
+- **`bash tools/run-gates.sh` has NOT been run this filing**; four gates were
+  run individually and all four are clean.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — still open,
+  an **eighth** filing; Reader only on this machine.
+- **`ARCHITECTURE.md` §4 sweep still unfinished** — a **seventh** filing.
+- **The broken markdown table at `ROADMAP.md`** (four columns, rows `a2`/`a3`
+  carrying three cells, an em-dash where a pipe belongs) — **still unrepaired,
+  deliberately**, because the correct split is a guess about the author's
+  column intent. ★ **Its line numbers have MOVED AGAIN** — this filing inserted
+  ~390 lines above it and deleted 175 below that; the 341st filing's
+  `96722`–`96723` is stale. **Not restated here as a number**, because a number
+  that will be wrong by the next commit is worse than the instruction to
+  `grep` for the `a2` row.
+- ★★ **A THIRD BROKEN TABLE ROW, FOUND THIS FILING AND MISSED BY THE CHECK THAT
+  FOUND THE OTHER TWO.** The 341st filing ran a whole-file table-cell count over
+  all four `docs/` files and reported *"2 mismatched rows in 4 files; the other
+  three files are clean"*. Re-run here **with inline-code spans and escaped
+  pipes masked**, the same scan finds a **third** in `ROADMAP.md`: the
+  `Pass 48.3` row of a `Pass | What | Blocked on` table (grep for
+  `` `Pass 48.3` | **GUI drag-and-drop image placement`` — deliberately not a
+  line number, per the bullet above). ★ **It is a DIFFERENT defect from the
+  `a2`/`a3` one**: not an em-dash where a pipe belongs, but a **soft-wrapped
+  table row** — the cells continue on following lines that do not begin with
+  `|`, so the row renders as a two-cell fragment and the rest as loose prose.
+  **Also not repaired**, for the same reason and one more: the wrap spans many
+  lines and re-joining them is a formatting judgement about the author's
+  intent. ★★★ **The finding worth carrying is about the CHECK, not the table:
+  an unmasked cell count over a document full of `` `auto | warn | refuse` ``
+  produces ~50 false positives, and a reader who has just waded through those
+  stops trusting the check — which is how the third row survived a scan that
+  had already caught two.** Mask inline code spans and `\|` before counting.
+
+### For next session
+
+1. **★★ TAG `v0.17.0` ON THIS FILING'S COMMIT**, not on `71d13aa`. Both filing
+   gates are green here and were red there.
+2. **Take a backup bundle FIRST — 8 commits behind, measured, third filing in a
+   row.** Before the tag, not after.
+3. **Push.** `main` is **6 commits ahead of `origin`** and pushing is
+   standing-authorized (decision 090, *"always push"*);
+   `check-suite-name-absent.py` is **already green**, measured this filing.
+4. **Cut the release, deploy to OneDrive, run `verify-release.py v0.17.0`, read
+   CI's colour from GitHub itself** — then **report back so the `v0.17.0` entry
+   can be completed.** It is filed cut-but-not-yet-observed on purpose.
+5. **Send the `pdfceGUI` note**, now eight items, and flag the
+   `docs/core-api/03-capabilities.md` posture table specifically.
+6. **`Pass 179.0`** is the next real engineering item, and the only one left in
+   the bold cluster.

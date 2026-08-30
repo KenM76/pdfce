@@ -27903,6 +27903,23 @@ free 072.**
   follows the verb whose behaviour changed misses the claims phrased about
   its consequences.**
 
+  > **★★ AMENDMENT, 2026-08-30 (342nd filing) — THE SIX STRINGS ARE
+  > CORRECTED ON DISK; THE TABLE ABOVE IS NOT.** `Pass 179.1` shipped at
+  > `2c93f6a`, alongside `Pass 179.3` (eight further locations, a *different*
+  > cause — `Pass 179.2` making the refusal posture-conditional). Rows 1 and 3
+  > of the table above quote strings the binary **no longer prints**:
+  > `font-preflight` now names **both** routes and says the standard-14 route
+  > is *"NOT surveyed by this check"*, and the synthesis disclosure no longer
+  > asserts pdfce *"cannot make this change with a genuine typeface"*.
+  > **The table is left verbatim deliberately.** It is the measurement the
+  > ruling was made on, taken on 2026-08-30 before the fix, and a dated
+  > measurement rewritten into agreement with today is evidence destroyed.
+  > ★★★ **Row 2 is UNCHANGED BEHAVIOUR and still true**: `--set-font
+  > Helvetica-Bold` still succeeds one command after `--bold-synthetic`
+  > synthesises on the same page. `179.1`/`179.3` corrected what pdfce
+  > **says**; the **routing** defect this decision was made to fix is
+  > `Pass 179.0`, and it is still `NOT STARTED`.
+
   **★★ THE ENGINEERING READ — THE LADDER. This half is the ENGINEER'S, not
   the operator's**, recorded so a future session does not re-derive it. The
   ruling fixes the *policy* (automatic, no intervention); the *rungs* are
@@ -27910,10 +27927,10 @@ free 072.**
 
   | rung | source of the face | status |
   |---|---|---|
-  | **1** | a real bold face already present on the page | machinery **exists** — it currently **refuses** instead of binding (`gate_synthesis`) |
+  | **1** | a real bold face already present on the page | machinery **exists** — ~~it currently **refuses** instead of binding~~ → ★ **corrected 2026-08-30 (342nd filing): since `Pass 179.2` `gate_synthesis` ANSWERS; only `style_policy = refuse` turns the answer into a refusal, and the default `auto` passes the face over and names it. It does **not bind** in any posture — that is the missing rung** |
   | **2** | ★ the **standard-14 Bold sibling of the run's OWN face** — `Helvetica`→`Helvetica-Bold`, `Times-Roman`→`Times-Bold`, `Courier`→`Courier-Bold` | **the cheap win.** ★★ **Cheaper than the dispatch stated**: the *binding* half shipped in `Pass 162.0`; only the **automatic selection** is new |
   | **3** | a face supplied via `--font-dir` (decision 012) | ★★ **this rung IS `Pass 142.0`**, not new work — see below |
-  | **4** | synthetic, **disclosed off-canvas** per rule 4 | emission machinery exists; the disclosure's *text* is wrong today (survivor 6) |
+  | **4** | synthetic, **disclosed off-canvas** per rule 4 | emission machinery exists; ~~the disclosure's *text* is wrong today (survivor 6)~~ → ★★ **DISCHARGED 2026-08-30 at `2c93f6a` (`Pass 179.1`, filed 342nd) — the disclosure text is correct now; the rung is unchanged** |
 
   **★★ RUNG 3 IS `Pass 142.0` WEARING A DIFFERENT NAME, AND THAT IS A
   CORRECTION TO THE DISPATCH'S OWN FRAMING.** `--font-dir` on `format-text`

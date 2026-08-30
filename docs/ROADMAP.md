@@ -96,6 +96,397 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `v0.17.0` VERSION BUMP (`71d13aa`, 2026-08-30) — `0.16.0` → **`0.17.0`, MINOR** — ★★★ **CUT-BUT-NOT-YET-OBSERVED: AT FILING TIME THERE IS NO `v0.17.0` TAG, NO PUSH, NO GITHUB RELEASE AND NOTHING CONFIRMED ON ONEDRIVE — MEASURED FROM A SHELL, NOT INFERRED** — ★★ **AND THE RELEASE NOTES' OWN SCOPE FIGURES WERE MEASURED THREE COMMITS BEFORE THE COMMIT THAT CARRIES THEM; THE TRUE FIGURES ARE FILED HERE BESIDE THEM** — ★ **THE TAG GOES ON THIS FILING'S OWN COMMIT, NOT ON `71d13aa`, BECAUSE BOTH FILING GATES WERE RED AT `2c93f6a` AND CI RUNS BOTH** — filed 2026-08-30 (342nd filing)
+
+**Sourcing — hard rule 8. This filing held a shell and used it.** Every git,
+tag, release and backup figure below was produced by a command run here, and
+the command is named beside the figure. Relayed and *not* re-run: the
+`cargo test` / `fmt` / `clippy` / `wasm32` / `fuzz` / `cargo tree` /
+`run-gates.sh` results quoted in `71d13aa`'s own message.
+
+**What the commit is.** Workspace version `0.16.0` → `0.17.0`, **minor**.
+`Cargo.toml`, `Cargo.lock` and `fuzz/Cargo.lock` **only** — three files, no
+code. Its commit message **is** the release notes; this entry does not restate
+them, it records the scope, the compatibility surface and the release state.
+
+#### ★★★ RELEASE STATE — CUT, NOT YET OBSERVED
+
+Recorded in the shape `v0.9.0`'s entry (255th filing) used, and for the same
+reason: the tag, the push and the publication happen **after** this filing's
+commit exists, so asserting any of them here would be asserting something this
+role cannot have seen. **Nothing below is a prediction, and nothing below is a
+claim that it happened.**
+
+| fact | command run here | result |
+|---|---|---|
+| a `v0.17.0` tag exists? | `git tag --list 'v0.17*'` | **empty — NO TAG** |
+| commits unpushed | `git rev-list --count origin/main..HEAD` | **6** — `06d11e9`, `8671daa`, `74ac410`, `0240837`, `2c93f6a`, `71d13aa`. **`71d13aa` IS NOT PUSHED** |
+| newest GitHub release | `gh release list --limit 3` | **`v0.16.0`**, 2026-08-29T12:35:27Z, still flagged `Latest`. **No `v0.17.0` release** |
+| OneDrive deploy | **not checked from here** | ★ stated as **unknown**, not as absent — `verify-release.py`'s two OneDrive checks (`Pass 166.0`) are the instrument, and they run at release time |
+
+⇒ **`v0.17.0` is a version bump on disk and nothing more, as of this entry.**
+The engineer tags, pushes, publishes and deploys after this commit lands and
+reports back; **completing this record is a later filing's job.** Same
+discipline as `v0.9.0`, `v0.10.0`, `v0.11.0`, `v0.12.0` and `v0.13.0` — a
+version-bump record is not a release record until someone has looked.
+
+**★ Why the tag goes on THIS filing's commit and not on `71d13aa`.** Both
+filing gates were **red at `2c93f6a`** (`Pass 179.1 + 179.3` was in no filing)
+and CI runs both, so a tag at `71d13aa` would be a tag at a commit whose CI is
+**red on a docs debt** — exactly the `v0.10.0` incident (259th filing), which
+cost a tag delete, a retag, a force-push and a rebuilt release asset. The
+`v0.9.0` record's line stands and is quoted rather than re-derived: tagging a
+filing commit **"remains strictly better and costs nothing."**
+
+#### ★★ SCOPE — THE COMMIT MESSAGE'S FIGURES, AND THE MEASURED ONES BESIDE THEM
+
+Hard rule 10: a figure is filed in a form that can **disagree** with something,
+with its denominator and its measuring point.
+
+| figure | `71d13aa`'s message says | **measured here** | measuring point |
+|---|---|---|---|
+| commits since `v0.16.0` | 59 | **62** | `git rev-list --count 921ac2a..71d13aa` |
+| files changed | 92 | **96** | `git diff --shortstat 921ac2a 71d13aa` |
+| insertions / deletions | +31,271 / −793 | **+32,418 / −861** | same |
+| distinct Pass IDs | 27, `166.0`–`179.2` | **30, `166.0`–`179.3`** | `git log --format=%s 921ac2a..71d13aa`, IDs extracted and de-duplicated |
+
+**Neither set is wrong; they are measurements of different commits.** The
+message's four figures are exact at **`74ac410`** — verified here:
+`git rev-list --count 921ac2a..74ac410` → **59**, and
+`git diff --shortstat 921ac2a 74ac410` → **92 files, +31,271, −793**, matching
+the message to the digit. The release notes were drafted **three commits
+early**, before `0240837` (the 341st filing), `2c93f6a`
+(`Pass 179.1 + 179.3`) and the bump itself. **62 − 59 = 3**, and the three are
+named.
+
+**★ The Pass count is off by more than the drafting gap, and the extra cause is
+worth filing.** Even at `74ac410` the true count is **28**, not 27 — because
+**`Pass 172.0` never appears at the head of a subject line.** It shipped inside
+`3fe901a`, *"`Pass 171.0 + 172.0`: whole pages and whole bookmark subtrees…"*.
+The same shape hides `179.3` inside `2c93f6a`'s *"`Pass 179.1 + 179.3`"*.
+
+⇒ **A combined `Pass A + B` subject makes `B` invisible to a head-anchored
+scan** — including to `tools/check-passes-filed.py`, whose `SUBJECT_CLAIM`
+regex is `^(?:★\s*)?Pass (ID)\b` and which therefore demanded a filing for
+`179.1` and **never asked about `179.3`**. Measured, not inferred: that gate's
+own output this filing named `Pass 179.1` alone. **This is a gate blind spot,
+not a gate failure** — the **hash** join closes it, because citing `2c93f6a`
+files everything that commit carried. Recorded so a future audit does not read
+a Pass count off a subject scan and believe it. **No rule minted:** the correct
+home is the gate's own docstring, which already states the honest limit of a
+subject-line grep, and this is a **second instance of a limit already
+disclosed** rather than a new finding.
+
+#### What the release carries — headline, one line each
+
+Restated from `71d13aa`'s own notes, which are the authority:
+
+- **Copy and paste reaches almost everything** — form fields, nearly every
+  annotation type, whole pages, whole bookmark subtrees, embedded files; within
+  one document or between two, with cut alongside copy, and cut refusing before
+  it deletes anything the clipboard could not carry back.
+  **Pasting bookmarks BETWEEN two documents is something Acrobat cannot do.**
+- **A ce-dimension text override that SHADOWS rather than replaces** — the
+  measurement stays underneath, clearing restores it exactly with no
+  re-measurement, and `<DIM>` keeps a custom caption tracking the geometry
+  (`Pass 175.0`, decision 097).
+- **Form widgets rotate** — `/MK /R` **plus a redrawn appearance**, because the
+  flag alone is a no-op in every modern reader (`Pass 177.0`).
+- **The bold/italic fallback posture** — `style_policy = auto | warn | refuse`
+  (`Pass 179.2`, operator ruling, decision 106).
+- **Three ce-dimension group verbs became scriptable** — rename, delete with an
+  explicit member policy, and move-between-groups had working engine code no
+  command line could reach.
+- **The fixes that change what a file says** — the default-group deletion that
+  could **silently erase every ce dimension in a drawing**; the `55 5/8"` →
+  `55.62 mm` unit defect (an inch magnitude wearing a millimetre label, 25.4×
+  out, on a drawing); **four verbs that reported success and did nothing**; a
+  dotted field name that silently demoted the terminal field it nested under;
+  and a disclosure that **understated** pdfce by asserting it could not do
+  something it can.
+
+#### ★★ COMPATIBILITY — THREE BEHAVIOUR CHANGES A CONSUMER WILL MEET
+
+Filed here, in the roadmap, rather than left inside a commit message: these are
+the half of a minor bump that is **not** additive.
+
+| change | what a consumer meets | how to restore the old behaviour |
+|---|---|---|
+| `style_policy` defaults to **`auto`** | `--bold-synthetic` on a page carrying a real bold face **now SUCCEEDS** where it previously **refused**. A caller that treated the refusal as a branch will never see that branch | set `style_policy = refuse` — `R90`'s original gate, behaviour kept verbatim |
+| four ce-dimension verbs now **refuse an unknown group id** | a cached or stale group id produces an error that **did not exist before** | none, and none is wanted: **the error is correct and the previous silence was not** (`R235`) |
+| a ce-dimension **text override** is written at sidecar **schema version 4** | an **older** pdfce will refuse to edit that document's ce dimensions | a document *without* an override is still written at version **3** and is unaffected (decision 105 — the version is chosen **per document**, not per build) |
+
+#### Verification (relayed from `71d13aa`, not re-run here)
+
+`cargo test --workspace --all-features` green; `cargo fmt --check` and
+`cargo clippy --workspace --all-targets --all-features -D warnings` clean;
+`cargo check` for `wasm32-unknown-unknown`; `cd fuzz && cargo check --bins`;
+`cargo tree -p pdfce-core -p pdfce-render` free of any GUI or network
+dependency; the full **29-command** gate sweep via `tools/run-gates.sh`,
+**including both filing gates**.
+
+★ **That last clause needs its timestamp stamped on it, and this is `R217`'s
+shape again**: a green `run-gates.sh` is a claim about **the tree it ran on**,
+not a durable property of any commit in it. **At this filing's start both
+filing gates were RED at `2c93f6a`** — measured here, output quoted in the
+Ledger below. **The sweep was true when it ran and false shortly after**, which
+is precisely why the tag moves to the filing commit rather than to `71d13aa`.
+
+**Dependencies unchanged since `v0.16.0`**, so `THIRD_PARTY_LICENSES.md` is
+correctly left unregenerated (rule 13). *Carried forward from `v0.16.0`'s
+entry; not independently re-measured this filing, and said so.*
+
+---
+
+### `Pass 179.1` + `Pass 179.3` (`2c93f6a`, 2026-08-30) — **THIRTEEN STATEMENTS THAT WERE FALSE, TWO CAUSES, AND ONE OF THEM LEFT THE REPOSITORY** — ★★★ **BOTH SURVIVOR SETS THE 341st FILING MEASURED AND DELIBERATELY DID NOT EDIT ARE DISCHARGED HERE — INCLUDING THE ONE IN `docs/core-api/`, THE CONTRACT `pdfceGUI` BUILDS AGAINST** — ★★ **THE TWO SETS ARE IN ONE COMMIT BECAUSE THEY OVERLAP IN ONE LOCATION, BUT THEIR CAUSES DIFFER AND THIS ENTRY SAYS SO** — ★ **NOTHING pdfce DOES CHANGED: THESE CORRECTIONS MAKE IT TELL THE TRUTH ABOUT WHAT IT ALREADY DID** — filed 2026-08-30 (342nd filing)
+
+**★★★ THE BOUNDARY, FIRST, BECAUSE IT IS THE SENTENCE A HURRIED READER WILL
+GET WRONG.** This Pass changed **no behaviour**. `survey_page_fonts` still
+reads `/Resources /Font` and **still does not consider the standard-14
+siblings**, so on `fixtures/synthetic/textedit/format_other.pdf` — a
+`Helvetica`-only page — pdfce still synthesises where
+`--set-font Helvetica-Bold` would bind a real face with no embedding. **Closing
+that gap is `Pass 179.0`, and `Pass 179.0` is still `NOT STARTED`.** What
+shipped here is that **pdfce stopped saying it could not do a thing it can**.
+This is the same boundary the 341st filing drew for `Pass 179.2`, drawn again
+because the two Passes invite the same misreading.
+
+**Sourcing — `R228`.** This filing held a shell and used it. Run here, not
+relayed: `python tools/check-ledger-numbers.py`, `python
+tools/check-commits-filed.py`, `python tools/check-passes-filed.py`,
+`git log`/`git show`/`git diff`/`git status --porcelain`/`git rev-list`/
+`git tag --list`, `gh release list`, `ls -lt /d/Dev/pdfce-backups/`. **Every
+claim in the before/after tables below was read out of `git show 2c93f6a`'s own
+diff**, not carried forward from the dispatch or from the 341st filing's
+line numbers. **Relayed and not re-run:** `cargo test --workspace
+--all-features`, `fmt`, `clippy --all-targets --all-features -D warnings`, and
+the three named `check-*` gates.
+
+#### ★★ TWO SETS, TWO CAUSES — THE PART THAT MUST NOT BE COLLAPSED
+
+| | **Set one — `Pass 179.1`, six locations** | **Set two — `Pass 179.3`, eight locations** |
+|---|---|---|
+| the false claim | *"no real bold on this page ⇒ **synthesis is the route**"* | *"the gate **refuses**"* |
+| false since | **`Pass 162.0`** (`9c3a1c9`, 2026-08-29) — seventeen Passes | **`Pass 179.2`** (`8671daa`), **hours** earlier the same day |
+| cause | ★ **a hard-rule-11 sweep that ran halfway.** `162.0` widened what `--set-font` can reach, and corrected the sentences **about that verb**; it never touched the sentences about that verb's **consequences** | ★ **a meaning change**, cleanly caused and correctly reported by the 341st filing's own sweep — not a missed sweep at all |
+| overlap | **one location**, `main.rs:5300–5302` — set one's survivor 4 **is** set two's item A. One fix closes both | same |
+
+**Filed as one commit, entered as one entry, counted as two.** ⇒ **thirteen
+distinct locations**, not fourteen. **A Pass that fixed one set would not have
+fixed the other**, which is exactly why the 341st filing refused to merge them
+and refused to mint an ID for set two — assigning it is the engineer's act
+(`CLAUDE.md` rule 5), and the engineer assigned **`179.3`**.
+
+#### ★★★ THE THREE THAT MATTERED MOST
+
+**1 — `font-preflight`'s stdout: the only copy an operator reads.**
+`main.rs:22739` and `:22751`.
+
+> **was:** *"bold: no real bold face of this run's family is accepted here — `--bold-synthetic` is the route"*
+>
+> **is:** *"bold: no real bold face of this run's family is **a resource ON THIS PAGE**. `--bold-synthetic` is **one** route; the other is `--set-font` with a standard-14 bold name (`Helvetica-Bold`, `Times-Bold`, `Courier-Bold`), which needs no embedding and is **NOT surveyed by this check**"*
+
+★★ **The scope disclaimer is the load-bearing half, and the reason is worth
+keeping.** A correction that merely named the standard-14 route would have been
+**true and still misleading**: it would have implied the survey had looked and
+found nothing, when the survey never looks there at all. **The italic string
+got the same treatment** (`Helvetica-Oblique`, `Times-Italic`,
+`Courier-Oblique`).
+
+**2 — `--bold-synthetic`'s `--help`: a contradiction visible in one screen.**
+`main.rs:5300–5302` said *"if one does, the command **REFUSES** and names it"*
+**twenty lines above** the new `--style-policy` help saying `refuse` *"is what
+this command always did before that became a choice"* — which implies the
+others do not. **In clap-derive a `///` IS the shipped UI**, so this was not a
+stale comment; it was two adjacent paragraphs of one `--help` screen
+disagreeing about whether the command refuses. It now describes the **posture
+handling** — `auto` applies and names the passed-over face, `warn` also warns,
+`refuse` stops — and states outright that *"available"* excludes the
+standard-14 bold names, so *"no real bold face is available"* is **a statement
+about this page's resources, not about what pdfce can do**.
+
+**3 — `docs/core-api/03-capabilities.md`: this one left the repository.**
+The published contract `pdfceGUI` builds against carried two false claims:
+
+- `:1358–1361` — *"`gate_synthesis` **refuses** synthesis when a real face is
+  available"*. Replaced with **`gate_synthesis` ANSWERS**, plus a
+  three-row **posture table** (`auto` / `warn` / `refuse` × real face available
+  / none is) and an explicit ⚠️ warning: **a shell must read the posture to
+  know what pressing its button does.**
+- `:1397` — *"`R90` is why it is never silent: synthesis is applied **only when
+  asked for explicitly, never as a preference**"*. ★★★ **False twice over.**
+  Under `auto` it **is** applied as a preference — a **persisted** one — and
+  *"never silent"* is the **exact claim `Pass 179.2` deleted from the
+  disclosure string itself** because the ruling falsified it. **Struck, with
+  its replacement stated.**
+
+★★ **The struck claim's SURVIVING half is stated too, and that is a
+deliberate, reusable move.** The replacement says plainly that **synthesis is
+still never an alternative to a real face** — the ladder prefers a genuine one
+in every posture — and that `R90`'s guarantee is now **reachable rather than
+mandatory**: `style_policy = refuse` restores the original gate, unchanged.
+**A struck claim with nothing put in its place reads as a capability
+withdrawn**, and a consuming project reading `~~never silent~~` with no
+successor would reasonably conclude pdfce had stopped disclosing. It has not:
+`auto` reports the passed-over face on stdout, `warn` on stderr. `index.md`'s
+line count for the file was updated in the same commit, 2,674 → **2,696**.
+
+#### ★ ONE COMMENT HAS NOW DRIFTED TWICE, BY THE SAME MECHANISM, AND ITS OWN BODY ALREADY NAMED THE CAUSE
+
+`synth.rs`'s `looks_styled` rustdoc (item **G** of set two) already carried a
+**struck first version** and its own diagnosis, verbatim: *"That was true when
+written and was falsified by a later caller … Nothing reported the drift,
+because `cargo doc` cannot check a claim about callers."* **It has been
+falsified by a later caller again** — the correction itself said the gate
+*"refuses `set_synthetic` when a real styled face is available"*, and decision
+106 made that posture-dependent. **Struck again, in place**, with the second
+drift recorded beside the first.
+
+**The judgement, stated so a future session does not re-open it: NO RULE IS
+MINTED, and `R222` is not extended.** Reasoning, in the shape this project
+requires for a decline:
+
+- **The mechanism is already named, in the very comment it keeps happening
+  to.** A claim about *callers* is a **measurement**, it goes stale silently,
+  and `cargo doc` structurally cannot check it. That is `R222`'s
+  neighbourhood — a doc comment orphaned by a change elsewhere — and `R222`
+  already covers it at six instances.
+- **What is new is not the mechanism but the SHAPE: twice, by the SAME NAMED
+  CAUSE, in the SAME comment.** ★★★ **Writing the cause down did not prevent
+  the recurrence** — which is a finding about the *limits of documenting a
+  failure mode*, not a new failure mode.
+- **A rule would have to be enforceable to be worth minting, and this one is
+  not.** The only mechanical check that could catch it is one that verifies a
+  claim about callers, which is the thing `cargo doc` cannot do and the reason
+  the drift is silent in the first place. **A gate that cannot fire enforces
+  nothing** (`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md`),
+  and this project has declined three prior mint requests on exactly that
+  warrant.
+- ⇒ **Recorded as an observation on `R222`, not as `R236`.** `R235` remains
+  the standing-rule ceiling. **If a third drift lands on this same comment, or
+  a second comment drifts twice by its own named cause, that is `n = 2` on the
+  new shape and the mint is warranted** — stated as a trigger so the next
+  session does not have to re-derive the bar.
+
+#### ★★ A TEST PINNED THE FALSE SENTENCE — SEVENTEEN PASSES OF IT
+
+`crates/pdfce-cli/tests/font_preflight.rs`'s
+`a_bold_claim_that_cannot_cover_the_run_routes_to_synthesis_not_to_that_face`
+**required** stdout to contain `"--bold-synthetic is the route"`.
+
+⇒ **The test was not merely failing to catch the defect; it was holding the
+defect in place.** A correction to the string would have turned the suite red,
+and the obvious reading of a red test is *"the change is wrong"*. It now pins
+**both routes AND the scope disclaimer**, so the assertion protects the
+corrected claim instead of the false one.
+
+★ **This is the 341st filing's own finding arriving from the other side.** That
+filing asked, of five tests that went red when a behaviour became conditional:
+*"does relaxing this red test restore the assertion, or delete it?"* **The
+mirror question is the one this Pass answers:** *what is a green test pinning,
+and is that thing still true?* **A green test is a claim, and it goes stale
+exactly like a comment does.** Neither question has a gate and neither is
+proposed for one.
+
+#### SET ONE — `Pass 179.1`, six locations, all discharged
+
+Line numbers are **as re-measured in the 341st filing at `74ac410`** and the
+fix is read from `2c93f6a`'s diff.
+
+| # | location | was | is |
+|---|---|---|---|
+| **1** | `main.rs:22739` | `font-preflight` stdout, bold: *"— `--bold-synthetic` is the route"* | names **both** routes + *"NOT surveyed by this check"* |
+| **2** | `main.rs:22751` | same for italic | same, with the three oblique names |
+| **3** | `main.rs:2101` | module rustdoc: *"a `real_bold=-` … means synthesis is the route"* | quotes its own old wording, then: *"synthesis is ONE route, and `--set-font Helvetica-Bold` is another that needs no embedding and **that this survey does not look for**"* |
+| **4** | `main.rs:5300–5302` | *"a FALLBACK for when no real Bold face resolves **on the page** — if one does, the command REFUSES"* | posture handling + *"It does NOT include the standard-14 bold names"* — **= set two's item A; one fix, both sets** |
+| **5** | `format.rs:3268` (`FontPreflight::real_bold`) | *"`None` does **not** mean 'grey the button out': synthesis is the other route"* | *"PRESENT AS A RESOURCE ON THIS PAGE"*, plus ★ *"this survey does not look for them, so `None` **under-reports what is reachable**"* and a named consequence: a shell treating `None` as *synthesis only* *"will fake a weight on a plain Helvetica page where a real one was one command away"* |
+| **6** | `synth.rs:313–317` | the **rule-4 disclosure string**: *"…so pdfce **cannot make this change with a genuine typeface**"* | ★★★ **discharged.** The 341st filing graded this *not discharged* by `Pass 179.2` and was right — `179.2` had added the word `HERE`, which **narrows the claim without making it true** |
+
+★ **Survivors 7–8 were `FEATURES.md` rows and were corrected by the 341st
+filing itself**, not left for the Pass, because a features row that misstates
+shipped behaviour is a correction owed immediately. ★ **Filed there as rows
+149 and 280; they are rows 149 and 281 today**, because that same filing
+inserted the new `style_policy` row at 150 and pushed everything below it down
+by one. **A row number is a measurement with a shelf life, exactly as a line
+number is** — re-measured here by `grep`, not adjusted by arithmetic. **Both
+were swept again this filing, and the sweep found MORE** — see the
+`FEATURES.md` section below.
+
+#### SET TWO — `Pass 179.3`, eight locations (A–H), all discharged
+
+| # | location | was | is |
+|---|---|---|---|
+| **A** | `main.rs:5300–5302` | *"if one does, the command **REFUSES** and names it"* | ★★★ posture-conditional; **= set one's survivor 4** |
+| **B** | `main.rs:5318–5319` | `--italic-synthetic`: *"Same **fallback-only gate** as `--bold-synthetic`"* | *"Same `--style-policy` handling as `--bold-synthetic`"* — ★ derivative, and listed separately precisely so it was not assumed *"already covered"* by A |
+| **C** | `format.rs:1121–1124` (`FormatError::RealFaceAvailable`) | *"pdfce **refuses** and names the real face to use instead. **Nothing was applied.**"* | ★★ a `# ★★ THIS ERROR ONLY REACHES A CALLER UNDER ONE POSTURE` section: under `Auto`/`Warn` the value is **constructed, caught inside `plan_format`, and converted into `FormatReport::real_face_passed_over`** — *"the edit **is** applied"*. ★ The one-construction-site design is defended in place (**the operator reads an identical sentence whether it arrives as a refusal or as a note**) and then the trap is named: *"'nothing was applied' is a property of the POSTURE, not of this type"* |
+| **D** | `format.rs:2577–2578` (`gate_synthesis`) | *"R90's gate: **refuse** synthesis when …"* | *"**answer whether** a real face … is available"*, under a heading `IT ANSWERS; IT NO LONGER DECIDES`, with the reason spelled out: **naming a function's job wrongly is worse than a stale example, because a reader trusts the first line** |
+| **E** | `format.rs:2700–2706` (`StyleOutcome::RealFaceResolves`) | *"Submitting `set_synthetic(…)` right now would be **refused**"* | ★★★ **the sharpest of the set, and its own note is why.** That note reads *"inventing a third state here would let a preview promise something the commit path cannot honour"* — and for a while **the variant did exactly that**. ★★ **It arrived by a route the note did not anticipate: not a new state, but the same state ceasing to mean one thing.** It now answers *"is a real face available"* — stable — and says outright that *"will this be refused"* is **not** |
+| **F** | `format.rs:2726` (`StyleOutcome::is_real_face`) | *"i.e. whether the gate would **refuse**"* | *"**NOT** 'whether the gate would refuse' … the question this answers is the stable one"* — ★ the convenience predicate a shell actually calls |
+| **G** | `synth.rs:445–447` (`looks_styled`) | *"… **which refuses** `set_synthetic` when a real styled face is available"* | ★★ struck **a second time**; see the twice-drifted section above |
+| **H** | `docs/core-api/03-capabilities.md:1358–1361`, `:1397` | the published contract | ★★★ posture table + ⚠️ warning; `:1397` struck **with its replacement and its surviving half stated** |
+
+#### ★ HITS THAT SURVIVE THE SWEEP AND ARE CORRECT — recorded per hard rule 11 clause (e), so the next sweep does not "fix" them
+
+- **`format.rs:3159–3160`** — `find_styled_face`'s *"which the caller then
+  recommends and `set_font` then refuses"*. That is **`set_font`'s own coverage
+  refusal**, which `StylePolicy` does not reach and `Pass 179.2` did not touch.
+  **Leave it.**
+- **`03-capabilities.md:1362–1394`** — the 2026-08-27 correction block, and its
+  *"do not grey out a bold button"* guidance. **Both still true**; the commit
+  deliberately left them intact and said so.
+- **`ARCHITECTURE.md` §12, decision 106's *"WHAT WAS MEASURED BEFORE THIS WAS
+  FILED"* list, item 2** — *"`--bold-synthetic` REFUSES when a real bold face
+  resolves"*. ★ **Correct as dated**: it is a measurement of the pre-ruling
+  binary, taken and labelled as such, inside an append-only decision record.
+  **Do not "correct" a dated measurement into agreement with today.**
+
+#### ★★ WHAT WAS DELIBERATELY NOT FIXED — say it plainly or it will be read as fixed
+
+**`survey_page_fonts` still ignores the standard-14 siblings.** That is
+`Pass 179.0` — the automatic ladder, operator ruling, decision 106 — and it is
+**unbuilt**. `gate_synthesis`'s survey, its acceptance test and every branch
+it takes are **byte-for-byte what they were before this commit**, in every
+posture. ⇒ **On the discriminating fixture, pdfce still synthesises where a
+real face was one command away.** The defect that remains is a **routing**
+defect; the defect that closed was a **truthfulness** defect.
+
+**MEASURED on the shipped binary, on `format_other.pdf` (one `Helvetica`
+resource) — the two facts side by side, which is the whole point:**
+
+| command | result |
+|---|---|
+| `font-preflight` | *"no real bold face … is a resource **ON THIS PAGE**. `--bold-synthetic` is one route; the other is `--set-font` with a standard-14 bold name … **NOT surveyed by this check**"* |
+| `format-text --set-font Helvetica-Bold` | ★ **SUCCEEDS** |
+
+**The sentence and the capability now agree.** Before this commit they did not,
+and the disagreement was in the **understating** direction — the direction the
+341st filing flagged as having *no natural alarm*: a claim that a capability is
+**absent** sends the operator to a **worse** remedy, **nothing fails**, and it
+reads as **modesty**.
+
+#### Verification
+
+`cargo test --workspace --all-features` **green**; `cargo fmt --check` and
+`cargo clippy --workspace --all-targets --all-features -D warnings` **clean**;
+`tools/check-core-api-verbs.py`, `tools/check-clap-help.py` (**123
+subcommands**) and `tools/check-cli-help-leads.py` **all PASS**. *All relayed
+from `2c93f6a`, not re-run this filing; the three gates re-run here are the
+ledger gate and the two filing gates — see the Ledger.*
+
+**Diffstat, read here from `git show --stat 2c93f6a`:** 6 files, **+181 /
+−59** — `crates/pdfce-cli/src/main.rs` (+58/−33 net 25),
+`crates/pdfce-cli/tests/font_preflight.rs`, `crates/pdfce-core/src/text_edit/
+format.rs` (the largest, 101 lines touched), `crates/pdfce-core/src/text_edit/
+synth.rs`, `docs/core-api/03-capabilities.md`, `docs/core-api/index.md`.
+★ **Thirteen locations' worth of correction in 181 added lines, and the only
+`.rs` changes are doc comments, two `println!` string literals and the test
+assertions that pin them** — no branch, no condition, no call site moved. **A
+truthfulness Pass should look exactly like this**, and if a future one touches
+control flow, that is the signal it has become a behaviour Pass and owes a
+different kind of verification.
+
+---
+
 ### `Pass 179.2` (`8671daa`, 2026-08-30) — ★★★ **A SECOND OPERATOR RULING, MINUTES AFTER THE FIRST, TURNED A REVERSAL INTO A DEFAULT: THE REFUSAL IS KEPT AND DEMOTED TO AN OPT-IN POSTURE, AND `auto` SHIPS AS THE DEFAULT** — ★★ **THE DISCLOSURE THE NEW DEFAULT REPLACED WAS SHIPPING THREE FALSE CLAIMS IN ONE SENTENCE, ONE OF THEM CONTRADICTING ANOTHER FIELD OF THE SAME REPORT** — ★ **THE AUTOMATIC LADDER ITSELF IS `Pass 179.0` AND IS STILL NOT BUILT** — filed 2026-08-30 (341st filing)
 
 **★★★ READ THIS BOUNDARY BEFORE READING ANYTHING ELSE IN THIS ENTRY.** The
@@ -384,13 +775,31 @@ project now has three same-day instances across two roles to price it.
   passes over (under `auto`/`warn`); **rung 2 does not exist**, so the
   standard-14 sibling is still never considered.
 - **`Pass 179.1`'s survivors 1–5 are untouched.** Survivor 6 is **partly**
-  discharged — see `179.1`'s re-scoping in *Next up*.
+  discharged — ~~see `179.1`'s re-scoping in *Next up*~~ → **`179.1` SHIPPED
+  at `2c93f6a`; the re-scoping and both survivor tables now live in the
+  `Pass 179.1` + `Pass 179.3` Shipped entry at the head of this section**
+  (342nd filing; the *Next up* entry was deleted on ship, per this project's
+  fully-delete-on-ship convention).
 - ★★★ **This Pass created a SECOND survivor set of its own**, from its own
   meaning change (*the refusal is now posture-conditional and OFF by
-  default*). **Seven locations, one of them on `--help`.** Reported in
-  `179.1`'s entry under *Next up*; **no Pass ID is minted for it here**,
-  because assigning one is the engineer's act (`CLAUDE.md` rule 5) and this
-  filing's dispatch did not delegate it, unlike the 340th's.
+  default*). ~~**Seven locations, one of them on `--help`.**~~ → ★★
+  **CORRECTED 2026-08-30 (342nd filing): EIGHT locations, A–H.** *Seven* was
+  wrong **in the same filing that wrote *eight* twice** — the `Pass 179.1`
+  entry's own table listed A–H and its §5 said *"the new set is EIGHT
+  locations (A–H)"*, and the `SESSION_LOG.md` entry said eight as well. **One
+  filing, three records, one of them off by one, and nothing compares
+  records.** ★ **This is hard rule 10's failure mode landing on a COUNT rather
+  than on a measurement**, and by the same mechanism as the 341st filing's own
+  `R90` finding: *review is an operation on one claim; consistency is an
+  operation on a set, and nothing in an append-only record performs it.* The
+  remedy is unchanged and costs nothing — **state the count where it can
+  disagree with the enumeration beside it**, which the table did and this
+  bullet did not. **No new rule; this is rule 10 working exactly as written,
+  one filing later.**
+  **No Pass ID was minted for the set here**, because assigning one is the
+  engineer's act (`CLAUDE.md` rule 5) and that filing's dispatch did not
+  delegate it, unlike the 340th's. → **The engineer assigned `Pass 179.3`,
+  shipped at `2c93f6a`, filed 342nd.**
 
 ---
 
@@ -90508,6 +90917,15 @@ before this filing was `178.2`; **`179.0` and `179.1` are minted here, highest
 ID now `179.1`, next free family `180`.** The numbering is **not** an ordering
 — see `179.1`.
 
+> **★ Carried forward, 2026-08-30 (342nd filing).** The 341st filing recorded
+> a **second, differently-caused survivor set** with **no ID**, deliberately.
+> The engineer assigned **`Pass 179.3`**, and `179.1` + `179.3` shipped
+> together at `2c93f6a` — **both filed to *Shipped*, both discharged.**
+> ⇒ **Highest Pass ID is now `179.3`; `179.2` and `179.3` are SHIPPED,
+> `179.0` is NOT STARTED, and next free family is still `180`.** ★ **The
+> numbering is still not an ordering, and it is now visibly so: `.1`, `.2`
+> and `.3` all shipped before `.0` was begun.**
+
 #### What is wrong today, measured
 
 Read from live source and from the **shipped binary**
@@ -90544,6 +90962,22 @@ On `fixtures/synthetic/textedit/format_other.pdf` (one font resource,
 ⇒ **Both quoted strings are FALSE on every standard-14 page.** pdfce made the
 change with a genuine typeface one command earlier. See `Pass 179.1`.
 
+> **★★ AMENDMENT, 2026-08-30 (342nd filing) — THE TWO QUOTED STRINGS ARE
+> CORRECTED ON DISK; THE TABLE ABOVE IS A DATED MEASUREMENT AND STAYS.**
+> `Pass 179.1` + `Pass 179.3` shipped at `2c93f6a`. `font-preflight` now names
+> **both** routes and says the standard-14 route is *"NOT surveyed by this
+> check"*; `--bold-synthetic`'s disclosure no longer asserts pdfce *"cannot
+> make this change with a genuine typeface"*. **The table above is left
+> verbatim on purpose** — it is what the binary said on 2026-08-30 before the
+> fix, and rewriting a dated measurement into agreement with today destroys
+> the evidence the ruling was made on.
+> **★★★ WHAT IS *NOT* FIXED, AND THIS IS THE WHOLE OF `179.0`:** the third
+> row of that table is **unchanged behaviour**. `format-text --set-font
+> Helvetica-Bold` still succeeds one command after `--bold-synthetic`
+> synthesises on the same page, because `survey_page_fonts` still ignores the
+> standard-14 siblings. **`179.1`/`179.3` corrected what pdfce SAYS; `179.0`
+> is what pdfce DOES, and it is still `NOT STARTED`.**
+
 #### The ladder — the engineer's read, not the operator's
 
 The ruling fixes the **policy** (automatic, no intervention); the **rungs**
@@ -90551,10 +90985,10 @@ are pdfce's own choice:
 
 | rung | source of the face | status |
 |---|---|---|
-| **1** | a real bold face already on the page | machinery **exists** — currently **refuses** instead of binding |
+| **1** | a real bold face already on the page | machinery **exists** — ~~currently **refuses** instead of binding~~ → ★ **corrected 2026-08-30 (342nd filing): since `Pass 179.2` it refuses only under `style_policy = refuse`; under the default `auto` it **passes the face over and names it**. Either way it does **not bind**, which is the rung that is missing** |
 | **2** | ★ the **standard-14 Bold sibling of the run's OWN face** (`Helvetica`→`Helvetica-Bold`, `Times-Roman`→`Times-Bold`, `Courier`→`Courier-Bold`) | **the cheap win, and cheaper than first stated**: the *binding* half shipped in `Pass 162.0` (`std14_resource_dict` + `bind_font_resource`); only the **automatic selection** is new |
 | **3** | a face supplied via `--font-dir` (decision 012) | ★★ **IS `Pass 142.0`** — see below. **Ships absent from this Pass** |
-| **4** | synthetic, **disclosed off-canvas** per rule 4 | emission exists; its disclosure *text* is wrong today (`179.1`) |
+| **4** | synthetic, **disclosed off-canvas** per rule 4 | emission exists; ~~its disclosure *text* is wrong today (`179.1`)~~ → ★★ **DISCHARGED 2026-08-30 at `2c93f6a` (`Pass 179.1` + `179.3`, filed 342nd). The disclosure text is correct now; the rung itself is unchanged** |
 
 **★★ Rung 3 is `Pass 142.0` wearing a different name.** `--font-dir` on
 `format-text` supplies **non-embedded faces for rendering and measurement**
@@ -90666,181 +91100,6 @@ have done to a document.
   `D:\dev\pdfceGUI`, which must be notified rather than built here.
 
 ---
-
-### `Pass 179.1` — **SIX PLACES SAY "no real bold on the page ⇒ synthesis is the route", AND THAT HAS BEEN FALSE ON EVERY STANDARD-14 PAGE SINCE `Pass 162.0`** — ★★ **A HARD-RULE-11 SURVIVOR SET, SHIPPABLE INDEPENDENTLY AND BEFORE `179.0`** — filed 2026-08-30 (340th filing), **NOT STARTED** — ★★★ **AMENDED 2026-08-30 (341st filing) AFTER `Pass 179.2`: STILL SIX, NOT FIVE — survivor 6 is only PARTLY discharged and survivor 4 got WORSE — PLUS A SECOND, DIFFERENTLY-CAUSED SURVIVOR SET OF EIGHT WITH NO PASS ID. SEE THE AMENDMENT AT THE FOOT OF THIS ENTRY**
-
-**The numbering is not an ordering.** `179.1` is **wrong today**, regardless
-of whether the ladder is ever built, and per Ken's standing *"fix bugs on
-discovery"* it should not wait behind `179.0`. If `179.0` ships first it
-**absorbs** `179.1`; the separate ID exists so the strings cannot vanish
-between filings if it does not.
-
-**Cause.** `Pass 162.0` (`9c3a1c9`, 2026-08-29) widened **what `--set-font`
-can reach** — a standard-14 face is authored on demand. Its filing corrected
-the **family-change** claim (`FEATURES.md` row 149) and
-`docs/core-api/02-editing-and-saving.md`'s *"read-only about resources"*
-claim. It did **not** correct the **routing** claim, a different sentence
-about the same widened reach. **A sweep that follows the verb whose behaviour
-changed misses the claims phrased about its consequences.**
-
-**Survivors, from a hard-rule-11 clause-(e) sweep** — case-insensitive grep
-for the bare keywords `real bold` / `is the route` / `synthesis is` over the
-five files the feature touches, every hit read:
-
-| # | location | the claim | severity |
-|---|---|---|---|
-| **1** | `crates/pdfce-cli/src/main.rs:22660` | `font-preflight` **stdout**: *"bold: no real bold face of this run's family is accepted here — `--bold-synthetic` is the route"* | ★★★ **the only copy an operator reads.** FALSE, measured |
-| **2** | `crates/pdfce-cli/src/main.rs:22670` | same for italic (`Helvetica-Oblique`, `Times-Italic`, `Courier-Oblique`) | ★★★ same |
-| **3** | `crates/pdfce-cli/src/main.rs:2100`–`2101` | module rustdoc: *"a `real_bold=-` does NOT mean the control should be disabled, it means synthesis is the route"* | ★ incomplete — the conclusion is right, the reason is now wrong |
-| **4** | `crates/pdfce-cli/src/main.rs:5300` | `--bold-synthetic` help: *"a FALLBACK for when no real Bold face resolves **on the page**"* | ★ narrow — accurate about the gate, presents the page as the whole universe |
-| **5** | `crates/pdfce-core/src/text_edit/format.rs:3268` | `FontPreflight::real_bold()` rustdoc: *"`None` does **not** mean 'grey the button out': synthesis is the other route"* | ★ same shape as 3 |
-| **6** | `crates/pdfce-core/src/text_edit/synth.rs:273`–`274` | the rule-4 **disclosure string**: *"no real {} face resolves for '{}' on this page, so pdfce **cannot make this change with a genuine typeface**"* | ★★★ **a rule-4 disclosure asserting a capability limit that does not exist** |
-
-**Survivors 7–8 are `FEATURES.md` rows 149 and 280 — CORRECTED IN THIS
-FILING**, not left for the Pass, because a features row overstating or
-understating shipped behaviour is a correction owed now.
-
-**★ Not edited here.** Survivors 1–6 are in `crates/`, outside this role's
-remit (hard rule 11: *report; do not edit `crates/`*).
-
-**Scope note.** `real_bold`'s underlying **data** need not change for `179.1`
-— `FontPreflight` legitimately reports what is **on the page**. What is wrong
-is every sentence that turns that page-scoped fact into a **routing verdict**.
-Fixing the strings is the minimum; **`179.0` fixes the verdict.**
-
----
-
-## ★★★ AMENDMENT, 2026-08-30 (341st filing), AFTER `Pass 179.2` (`8671daa`)
-
-**Re-measured against live source at `74ac410`, not carried forward.** The
-dispatch for this filing asked whether survivor 6 is discharged and proposed
-re-scoping `179.1` to five. **The answer is no on both counts, and the count
-is still SIX.**
-
-### 1. LINE NUMBERS, CORRECTED — SURVIVORS 1 AND 2 MOVED
-
-`Pass 179.2` added 112 lines to `main.rs` **above** them. **Re-measured, not
-adjusted by arithmetic:**
-
-| # | filed as | **is now** | verified by |
-|---|---|---|---|
-| **1** | `main.rs:22660` | **`main.rs:22733`** | `grep -n "is the route"` |
-| **2** | `main.rs:22670` | **`main.rs:22743`** | same |
-| **3** | `main.rs:2100–2101` | **unchanged, `:2101`** | same grep |
-| **4** | `main.rs:5300` | **unchanged, `:5300–5302`** | `grep -n "resolves on the page"` |
-| **5** | `format.rs:3268` | **unchanged** | read at `:3262–3272` |
-| **6** | `synth.rs:273–274` | **`synth.rs:313–317`** | read in full |
-
-★ The 340th filing predicted its own line numbers would need re-checking after
-the next code commit and it was right for two of six. **A line number in an
-append-only record is a measurement with a shelf life**; re-measure, never
-re-derive from a diffstat.
-
-### 2. ★★★ SURVIVOR 6 — **PARTLY** DISCHARGED. THE HALF `179.1` WAS FILED FOR SURVIVES
-
-`Pass 179.2` rewrote `SynthesisOffer::disclosure()` so it branches on
-`passed_over`. **That one sentence carried three false claims, and they had
-three different causes and three different fates:**
-
-| the claim | fate | evidence |
-|---|---|---|
-| *"never applied silently, never as a global preference"* | ★★ **FULLY DISCHARGED.** Deleted, and a test now asserts the string is **absent** | falsified by ruling 2 + `StylePolicy::Auto` shipping as the default |
-| the contradiction with `real_face_passed_over` naming the face | ★★ **FULLY DISCHARGED.** The `Some` arm names the face and says how to be stopped | `synth.rs:300-311` |
-| ★★★ *"no real Bold face resolves … so pdfce **cannot make this change with a genuine typeface**"* on a **standard-14** page | ★★★ **NOT DISCHARGED. THIS IS THE HALF `179.1` WAS FILED FOR.** | see below |
-
-**Why it survives, mechanically.** `gate_synthesis` → `survey_page_fonts`
-still reads `/Resources /Font` **and nothing else** — `Pass 179.2` deliberately
-did not touch the survey, because changing *which face is found* would have
-been the second resolution path it exists to prevent. So on the
-`Helvetica`-only fixture **nothing is passed over**, `passed_over` is `None`,
-and **the `else` arm ships the original sentence** (`synth.rs:313-317`).
-
-**One word was added — `HERE`** — *"cannot make this change with a genuine
-typeface **HERE**"*. **It narrows the claim and does not make it true.**
-`--set-font Helvetica-Bold` makes exactly that change with a genuine typeface
-**on that same page, in the same session**. *"Here"* can only mean *"with the
-faces already in this page's resource dictionary"*, which is **the very
-scoping the operator cannot see and which caused the defect**. A qualifier
-that requires the reader to already know the bug is not a fix.
-
-⇒ **Survivor 6 stays on the list**, re-pointed at `synth.rs:313-317`, with its
-scope narrowed to the standard-14 claim alone. Its severity is **unchanged at
-★★★**: it is still a rule-4 disclosure asserting a capability limit that does
-not exist, and it is still the **understating** direction.
-
-### 3. ★★ SURVIVOR 4 GOT **WORSE**, NOT STALE — RE-GRADED ★ → ★★★
-
-Filed as *"★ narrow — accurate about the gate, presents the page as the whole
-universe"*. **It is no longer accurate about the gate.** `main.rs:5300-5302`
-still reads:
-
-> *"This is a FALLBACK for when no real Bold face resolves on the page — **if
-> one does, the command REFUSES and names it**"*
-
-Under the **shipped default** (`auto`) the command **does not refuse**. And
-the contradiction is **twenty lines apart in one `--help` screen**: the new
-`--style-policy` text at `:5331-5335` says `refuse` *"is what pdfce always did
-before this became a choice"* — correctly implying the others do not — while
-`--bold-synthetic` above it still states the refusal flatly.
-
-★ **Two adjacent help strings for one command, disagreeing about whether that
-command refuses.** This is the `Pass 174.10` shape again: the correction
-reached one copy and stopped short of the one an operator reads.
-
-### 4. ★★★★ A **SECOND** SURVIVOR SET — FROM `Pass 179.2`'s OWN MEANING CHANGE. **NO PASS ID CLAIMED**
-
-**★ NO ID IS MINTED.** Assigning one is the engineer's act (`CLAUDE.md`
-rule 5); the 340th filing minted `179.0`/`179.1` **only** because that
-dispatch explicitly delegated it, and this one did not. **The engineer decides
-whether this is `179.1`'s remainder or its own Pass.** It is recorded here so
-it cannot be lost between filings.
-
-**The meaning change** (hard rule 11's trigger, and its 2026-08-23 amendment:
-*a ruling about a behaviour is itself a meaning-change event*): **the refusal
-is now POSTURE-CONDITIONAL and OFF BY DEFAULT.** Every sentence that states it
-unconditionally is now false of the shipped default.
-
-**Sweep method — clause (e): narrow the file set, widen the pattern.**
-Case-insensitive grep for the bare keyword `refus` over the six files the
-feature touches (`main.rs`, `format.rs`, `synth.rs`, `edit.rs`,
-`settings/mod.rs`, `docs/core-api/03-capabilities.md`), intersected with
-`synth|real |bold|italic`, **every hit read**.
-
-| # | location | the claim, now false of the default | severity |
-|---|---|---|---|
-| **A** | `crates/pdfce-cli/src/main.rs:5300–5302` | *"if one does, the command **REFUSES** and names it"* | ★★★ **the only copy an operator reads.** = survivor 4 re-graded; **one fix closes both** |
-| **B** | `crates/pdfce-cli/src/main.rs:5318–5319` | `--italic-synthetic`: *"Same fallback-only gate as `--bold-synthetic`"* | ★ derivative — correct **iff** A is fixed; listed so it is not "already covered" by assumption |
-| **C** | `crates/pdfce-core/src/text_edit/format.rs:1121–1124` | `FormatError::RealFaceAvailable` rustdoc: *"pdfce **refuses** and names the real face to use instead. **Nothing was applied.**"* | ★★ under `auto`/`warn` the error is **constructed, caught, and converted to a report field** — the edit **is** applied. The error type's own doc is wrong about when it reaches a caller |
-| **D** | `crates/pdfce-core/src/text_edit/format.rs:2577–2578` | `gate_synthesis` rustdoc: *"R90's gate: **refuse** synthesis when …"* | ★★ the gate no longer refuses — it **answers**, and `plan_format:1936-1938` routes the answer. Naming the function's job wrongly is worse than a stale example |
-| **E** | `crates/pdfce-core/src/text_edit/format.rs:2700–2706` | `StyleOutcome::RealFaceResolves`: *"Submitting `set_synthetic(…)` right now would be **refused**"* and *"The commit path **refuses** and points at it"* | ★★★ **the worst of the set, and its own doc says why.** This is the **preview** type, whose stated contract is *"Inventing a third state here would let a preview promise something the commit path cannot honour."* Under `auto` **the preview now promises a refusal the commit path will not perform** — the exact failure the comment forbids, arriving by a route the comment did not anticipate |
-| **F** | `crates/pdfce-core/src/text_edit/format.rs:2726` | `StyleOutcome::is_real_face` rustdoc: *"i.e. whether the gate would **refuse**"* | ★ same shape as E, on the convenience predicate a shell actually calls |
-| **G** | `crates/pdfce-core/src/text_edit/synth.rs:445–447` | `looks_styled` rustdoc: *"`text_edit::format`'s synthesis gate, **which refuses** `set_synthetic` when a real styled face is available on the page"* | ★★ **this doc comment has now drifted TWICE BY THE SAME MECHANISM.** Its own body records the first drift — *"This doc comment used to say the opposite … was falsified by a later caller … Nothing reported the drift, because `cargo doc` cannot check a claim about callers"* — and it has been falsified by a later caller again |
-| **H** | `docs/core-api/03-capabilities.md:1358–1361`, `:1397` | the published contract `pdfceGUI` builds against: *"`gate_synthesis` **refuses** synthesis when a real face is available"* and *"`R90` is why it is never silent: synthesis is applied **only when asked for explicitly, never as a preference**"* | ★★★ **this one leaves the repository.** `:1397` is now false twice over — synthesis under `auto` **is** applied as a preference, and *"never silent"* is the claim `179.2` deleted from the disclosure itself. **`docs/core-api/` is engineer-maintained (gated by `tools/check-core-api-verbs.py`); reported, not edited** |
-
-**★ ONE HIT SURVIVES THE SWEEP AND IS CORRECT — recorded per clause (e) so
-the next sweep does not "fix" it:** `format.rs:3159-3160`, `find_styled_face`'s
-*"which the caller then recommends and `set_font` then refuses"*. That is
-**`set_font`'s own coverage refusal**, which `Pass 179.2` did not touch and
-`StylePolicy` does not reach. **Leave it.**
-
-**Also correct and deliberately untouched:** `03-capabilities.md`'s 2026-08-27
-correction block (`:1362-1394`) and its *"do not grey out a bold button"*
-guidance — both remain true.
-
-### 5. THE COUNT, STATED SO IT CANNOT BE MISREAD
-
-- **`179.1` is still SIX survivors, not five.** 1, 2, 3, 5 untouched; 4
-  untouched **and re-graded ★ → ★★★**; 6 **partly** discharged with its
-  ★★★ half intact.
-- **The new set is EIGHT locations (A–H), of which A is survivor 4** — so
-  **thirteen distinct locations** are owed across the two sets, **two of them
-  on `--help` or stdout** and **one of them (H) in the contract another
-  project builds against**.
-- **The two sets have different causes and should not be merged silently:**
-  `179.1`'s cause is `Pass 162.0` widening `--set-font`'s reach; the new set's
-  cause is `Pass 179.2` itself making the refusal conditional. **A Pass that
-  fixes one does not fix the other**, and a session that reads "the bold
-  strings" as one job will ship half of it.
 
 ### ★★★★ TWO CHANNEL ITEMS ARE OWED AND NAMED IN NO PDFCE DOCUMENT — a `pdfceGUI` REQUEST unanswered since 17:35, and an `iccce` REPLY that arrived AFTER the dispatch was written and strengthens a pdfce open item. **NO PASS ID CLAIMED** — opened 2026-08-29 (330th filing)
 
