@@ -1,6 +1,6 @@
 ---
 name: pdf-spec-corpus-state
-description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 55 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
+description: PDF_Spec RAG conventions NOT recorded in its own index.md — prefix splits, gap/retraction vocabulary, axis re-audits, evidencing negatives, and 61 numbered dispatch-shape findings. Too long to read whole; grep by item number or keyword using the index at the top.
 metadata:
   type: project
 ---
@@ -66,6 +66,7 @@ heading (`**<N>. `).**
 | 55 | ★ **THE STANDARDISATION-STATUS dispatch** ("note we'll have to add X when it becomes part of the standard") — the operator's sentence contains a PREMISE and auditing it IS the deliverable; **it was wrong in BOTH directions at once** (no ISO work item AND already published elsewhere, two days earlier, as an industry extension) · a dispatch that pre-blesses "not standardised is a complete answer" is naming a SHAPE, not lowering the bar · **measure the negative THREE ways — term count, the clause RUNNING OUT, the table ENUMERATING** — and a fourth against the ERRATA ANNOTATIONS · **★ a false citation with a plausible clause number ("ISO 32000-2 §7.4.11") was in every search summary, traced to an unmerged PR's body — verify the clause EXISTS before verifying what it says, and put the refutation in the corpus** · a source's licence can be BETTER than any you hold (CC-BY-4.0 ⇒ first verbatim-redistributable document here) · **a publisher's `SHALL` is not ISO's**: an extension is an EDIT SCRIPT against the standard, new `spec: pdf_extension` · **four raw-source fetches found THREE vendor divergences from a two-day-old spec**, one of which converts conformance into a producer INTEROP default · check what an extension REUSES (predictors came free) · **closing it changed four other files and the fourth was a TRUE heading that would still have misled** |
 | 51 | ★ **THE TWO-GAPS-NAMED-FROM-OUTSIDE dispatch** (body § 51, line ~3078) — index row added 2026-08-20; the item had been appended without one. "Clause X is ENTIRELY ABSENT" is a coverage HYPOTHESIS; an ID minted by a SIBLING corpus; the refutation is in the OLDER edition; a third clause settles a two-`should` tie; a version-delta negative can be true of the SENTENCE and false of the CONCEPT; a recorded negative is a PREDICTION and expires; UNREMEDIED ≠ PERMANENT; quote the FREE edition of a sentence that exists in both; Write the script, then run it |
 | 52 | ★ **THE SIBLING-CARRIER dispatch** ("build clause C's file, parallel to C′'s"). The dispatch's "clause X is absent" was true of the FILE and false of the COVERAGE — **third instance** · **★ the headline was a CORRECTION to the corpus's own record, and its mechanism is corpus-wide: an ISO 32000-2 erratum's review `/State` is a CHAIN of `/Text` replies linked by `/IRT` — LATEST `/M` wins — and 376 of 547 `Accepted` annots (68.7 %) carry a later `Completed` reply, so an `Accepted` read from the first reply is stale two times in three** · **a table NUMBER can name DIFFERENT TABLES in the two editions** (1.7 T178 = polygon, 2.0 T178 = LINE) · **a `free_primary` table row can be corrupted by COPY-PASTE, and the next edition printing it clean is the proof** · **a key can be VACUOUS in one edition** (1.7's `/IC` fills "line endings" on a shape that has none) **and the later edition's ADDITION proves it** · complementary restrictions in one table are a pattern — grep for the mirror of a recorded one · **"must X bound Y?" can be a true negative whose practical answer is a DIFFERENT clause with a DIFFERENT failure mode** (no clipping; §12.5.5 SCALES the `/AP` to `/Rect`) · three readings can disagree on legality and agree on the decision · **a term with EXACTLY 1 hit per edition IS the headline** · a ~58 kB Bash heredoc dies with `ENAMETOOLONG`, use Write |
+| 61 | ★ **THE OVERDUE-REGISTER-FILING dispatch** (*"two ambiguity entries have been owed to you; file them in the register's existing schema"*) — the transcription is the cheap half, **the audit is the deliverable, and BOTH ambiguities were misstated**. *"Neither reading contradicts any `shall`"* is CHECKABLE: refuted by **the adjacent sentence**, by **a summary TABLE that enumerates the case** (Tables 148/149 row 2), and ⇒ the finding is a **spec-vs-Acrobat DIVERGENCE, not a silence**. But **ISO 32000-2 DELETED two of the three supports** (including a whole table — grep table TITLES, a deletion leaves no renumbering trace). A **null measurement over a settings axis** was **predicted by a table row** ⇒ the FIXTURE was wrong, not the axis. *"The spec says nothing about sub-pixel strokes"* — **grep the RASTERISING clause (clause 10), not the parameter clause**: three provisions, and the carve-out releases the **ZERO-width** case, not the sub-pixel one. The residual ambiguity survives **only because the normative model is BILEVEL** (`anti-?alias` = 4 hits/edition, none in clause 10). **The dispatch's blanket preamble about its own codebase was FALSE** ("both are shipped"; one had **0 hits workspace-wide**) — verify the blanket, not just the caveat. And a register **"verified by grep on <date>"** line was **892 hits stale** and had mis-bucketed ~20 IDs. |
 
 ---
 
@@ -4272,3 +4273,206 @@ sets. Deliverable = one cross-family register file. What this shape teaches:
   `cdn.standards.iteh.ai` on 2026-08-28*, and a negative of that shape expired in ONE DAY
   once before.
 
+
+
+---
+
+## 61. The OVERDUE-REGISTER-FILING dispatch — *"two ambiguity entries have been owed to you since <date>; file them in the register's existing schema"* (2026-08-29, `overprint_zero_tint_scope` + hairline clamp)
+
+**Shape.** The caller hands you a *finished analysis*: two ambiguities, each with
+its clause citations, its two readings, its chosen default, and (allegedly) a
+shipped implementation. The framing invites transcription — "just put these in
+the register, match the house format." **The transcription is the cheap half;
+the deliverable was the audit**, and the dispatch even said so
+(*"anything in the two ambiguities you think the engineer has stated wrongly —
+that last part matters more than the filing"*). Both ambiguities were
+misstated, in opposite directions, and one of the two premises about pdfce's own
+code was false.
+
+### 61a. ★★★ "NEITHER READING CONTRADICTS ANY `shall`" IS A CLAIM ABOUT THE WHOLE CLAUSE, AND IT IS CHECKABLE — RE-READ THE SENTENCE **AFTER** THE ONE BEING QUOTED
+
+The dispatch quoted §8.6.7's OPM-1 scope sentence and its `see 8.6.5.7`
+parenthesis, and concluded the standard resolves neither reading. **The very
+next sentence disposes of one of them**: *"It shall not apply to the painting of
+images or **to any colours that are the result of a computation, such as those
+in a shading pattern or conversions from some other colour space**."* A
+`DeviceGray`→`DeviceCMYK` map is a *conversion from some other colour space*
+(the standard even specifies the arithmetic, §10.3.3). **The convert-first
+reading is excluded by a `shall not`, in terms.**
+
+**And a TABLE disposed of it a third time.** Tables 148/149 row 2, *"Any process
+colour space (including other cases of `DeviceCMYK`)"* × *Process colorant* ×
+`OP true, OPM 1` = **"Paint source"**, identical to the `OPM 0` column. **The
+standard did not omit non-`DeviceCMYK` process spaces — it TABULATED them and
+gave them the OPM-0 behaviour.**
+
+⇒ **Generalise: when a dispatch says "the standard resolves neither reading",
+the three cheapest refutations, in order, are (1) the adjacent sentence,
+(2) a summary TABLE elsewhere in the standard that enumerates cases, and (3) the
+titled clause the escape-hatch parenthesis points at.** All three fired here.
+(3) was the one the dispatch got right: §8.6.5.7 really is *Implicit Conversion
+of **CIE-Based** Colour Spaces* and does not reach a device space.
+
+**What the finding turns into:** not "an ambiguity", but **"a spec-vs-Acrobat
+divergence, and pdfce's default follows Acrobat"**. That must be written in
+those words, because the two things license different behaviour — an ambiguity
+justifies a free choice; a divergence is a *deliberate departure from the text*
+and owes a rule-4 disclosure.
+
+### 61b. ★★ AND THEN THE LATER EDITION PUTS IT BACK — A DELETION CAN RE-OPEN A CLOSED QUESTION
+
+ISO 32000-2 **deleted two of the three supports**: the *"conversions from some
+other colour space"* clause (2.0's exclusion reads only *"images or shadings"*),
+and **the entire opaque-model overprint table** (measured, whole-document,
+whitespace-stripped: `"Overprinting behaviour in the opaque imaging model"` =
+**1 hit in 1.7, 0 in 2.0**; 2.0 §11.7.4.5 introduces only the transparent-model
+Table 146). So the literal reading is **strong under 1.7 and merely arguable
+under 2.0**.
+
+⇒ **A "which reading is right?" question can be EDITION-GATED not by a changed
+sentence but by DELETED ones.** A renumbering check will not find this. The
+probe that does: take the 1.7 sentence that decides the question, grep its
+distinctive phrase in 2.0, and **grep the TABLE TITLE too** — a deleted table
+leaves no renumbering trace at all.
+
+### 61c. ★★★ THE MEASUREMENT THE DISPATCH OFFERED AS EVIDENCE WAS PREDICTED BY A TABLE ROW — AND IT PROVED THE TEST CASE WAS WRONG, NOT THAT THE AMBIGUITY WAS INERT
+
+Relayed measurement: on the patch that "most obviously exercises grey-over-spot
+overprint", all three settings give **bit-identical ink**, while the page's
+effective-overprint *count* moves (24/29/29). The dispatch read that as
+"the ambiguity is real but is not the cause of this failure".
+
+**Tables 148/149 row *"Any process colour space"* × *Spot colorant* × `OP true`
+= "Do not paint" / c_b in BOTH the `OPM 0` and `OPM 1` columns.** A grey fill
+with `/OP true` preserves a spot backdrop **under every setting and under either
+reading** — because that is the plain *overprint parameter* working, not
+overprint *mode*. ⇒ **grey-over-SPOT cannot discriminate the settings at all.**
+The discriminating case is a non-`DeviceCMYK` process source over **process**
+components.
+
+⇒ **Generalise: when a measurement over a settings axis returns "no
+difference", look up the row of the standard's own summary table that covers the
+test case BEFORE concluding anything about the axis.** A null measurement can be
+a fact about the *fixture*, and the standard will often tell you which.
+(The count moving while the ink does not is itself consistent and worth saying:
+the counter counts **gate decisions**, not ink.)
+
+### 61d. ★★★ "THE SPEC SAYS NOTHING ABOUT X" — SEARCH THE *NEIGHBOURING CLAUSE THAT DOES THE RASTERISING*, NOT THE CLAUSE THAT DEFINES THE PARAMETER
+
+The second ambiguity was framed as: *"§8.4.3.2 gives a `shall` for width **0**
+and says nothing about a width that resolves to less than one device pixel."*
+The first half is right. **The second is wrong, three times:**
+
+- **§10.6.4 / §10.7.4** (*Scan conversion rules*), a `shall`: *"A shape shall be
+  scan-converted by painting **any pixel whose square region intersects the
+  shape, no matter how small the intersection is**. This ensures that **no shape
+  ever disappears** … The area covered by painted pixels **shall always be at
+  least as large as** the area of the original shape. **This rule applies both to
+  fill operations and to strokes with nonzero width.**"* In a bilevel model that
+  **is** the clamp, reached from geometry with no hairline special case.
+- **★ Its carve-out runs the OTHER WAY:** *"**Zero-width** strokes may be done in
+  an implementation-defined manner that **may include fewer pixels** than the
+  rule implies."* The standard is **less** prescriptive about `0 w` than about a
+  0.2-unit stroke — the exact inverse of the intuition behind the framing.
+- **§10.6.5 / §10.7.5** (*Automatic stroke adjustment*), a conditional `shall`:
+  *"If stroke adjustment is enabled and the requested line width, transformed
+  into device space, is **less than half a pixel**, the stroke shall be rendered
+  as a single-pixel line."* — **half, not one**, and gated on `/SA`, whose
+  **Table 52 initial value is `false`**, so it usually never fires.
+- **§8.4.3.2 ¶1** itself, one paragraph above the sentence being quoted: *"The
+  actual line width achieved **can differ from the requested width by as much as
+  2 device pixels**."* A tolerance grant that pays for the clamp outright, and
+  nobody cites it.
+
+⇒ **Generalise: a graphics-state PARAMETER clause defines the parameter; the
+RENDERING clause (clause 10) says what a device does with it.** A "the spec is
+silent" claim about rasterisation that has not grepped clause 10 is untested.
+**And note the renumbering trap it exposes: §10.6 is *Scan Conversion Details*
+in ISO 32000-1 and *Halftones* in ISO 32000-2** — a bare `§10.6.5` citation
+means two unrelated things.
+
+### 61e. ★★ THE RESIDUAL AMBIGUITY WAS REAL BUT ITS *STATEMENT* CHANGED COMPLETELY — IT SURVIVES ONLY BECAUSE THE NORMATIVE MODEL IS BILEVEL
+
+After 61d the honest `LW-A1` is **not** "clamp or not?" but: **clause 10's
+scan-conversion model has no partial coverage, and anti-aliasing is permitted
+ONLY by an informative NOTE.** Measured: `anti-?alias` (case-insensitive,
+whole document) = **4 hit lines in ISO 32000-1, 4 in ISO 32000-2, NONE in
+clause 10**; the only rule is **§11.3.7.2 NOTE 1** (*"the shape values along the
+boundaries **may** be anti-aliased … treat the fractional coverage as **shape**
+rather than opacity"*), sitting against a normative bullet in the same list that
+says an elementary object's shape *"**shall** be 1.0 for points inside the
+object and 0.0 outside"*.
+
+⇒ **Both branches are defensible because the `shall` that would decide it
+belongs to a rendering model the renderer is not using.** That is a *much*
+better statement of the ambiguity than "the spec is silent", and it tells the
+implementer where the seam is.
+
+⇒ **Generalise: before filing "unspecified", ask whether the standard specifies
+it for a DIFFERENT DEVICE MODEL than the one in use.** Same shape as the
+device-class trap in item 54 (`spot_colour_overprint` §A) and OPM-5 in
+`iso32000__s__8.6.7.md`.
+
+### 61f. ★★ THE DISPATCH'S CLAIM ABOUT ITS OWN CODEBASE WAS FALSE — AND IT WAS THE ONE IT ASKED ME TO TRUST LEAST *AND* THE ONE IT ASSERTED IN ITS PREAMBLE
+
+Preamble: *"Both are SHIPPED pdfce settings, so each already has a chosen
+default and a consuming implementation."* Later, for the second: *"treat the
+pdfce side as UNVERIFIED BY YOU and say so."* **The two sentences contradict
+each other and the preamble was the wrong one.** Measured read-only:
+`hairline_clamp|HairlineClamp|min_stroke|MIN_STROKE` = **0 hits workspace-wide**;
+no such key in `pdfce-core/src/settings/mod.rs`. What exists is an **unexposed,
+inherited** behaviour (stroking delegated to `tiny_skia`) plus a code comment
+that *looks* like a policy statement but is a **cull-bounds padding** claim.
+
+⇒ **Generalise: a dispatch's blanket preamble ("both are shipped") is a weaker
+claim than its per-item caveats — verify the blanket, not just the caveat.**
+One `grep` settled it. And **a code comment that asserts renderer behaviour
+while doing something else (bounds padding) is not evidence of that behaviour.**
+
+**Filing consequence:** the entry went into the register's §5 (SETTING) **and**
+its §4 (HARD-CODED TODAY) with `Picked` = **UNVERIFIED**, which is the honest
+cell. §4 had no such value before; it does now.
+
+### 61g. A REGISTER'S "VERIFICATION" LINES ARE DATED MEASUREMENTS AND GO STALE SILENTLY — RE-RUN THEM WHEN YOU TOUCH THE SECTION
+
+`iso32000__ref__ambiguity_settings_register.md` §9.1 carried
+*"**Verification:** `grep -rniE "overprint|OPM" crates/` = **0 hits**;
+`FunctionType` = **0 hits**"* and used it to justify deferring ~20 prepress IDs
+with *"no setting can exist yet"*. **Re-measured 2026-08-29: 892 hit lines
+across 42 files; `FunctionType` = 113.** One of the deferred IDs
+(`OP-A5`) had **already shipped as a real setting**.
+
+Same session, §3.4 asserted *"There is no settings/preferences infrastructure in
+pdfce"* — also false now (`Settings::load`/`Settings::save`, a `StoreLocation`,
+a string-keyed setter and a CLI override all exist). **Both were struck with a
+dated banner and the original text kept legible.**
+
+⇒ **Generalise: any corpus sentence of the form "verified by grep on <date>" is
+a claim with an expiry. Re-run every such line inside a section you edit** — it
+costs one command and it is where multi-week-old wrong statements live.
+**Corollary: do not just fix the line — say what it caused** (here: ~20 IDs
+mis-bucketed as *deferred* when their status is actually *unknown*).
+
+### 61h. Filing mechanics that recurred
+
+- **A new bucket-1 entry touches SEVEN places** in the register: §2 count table
+  (**and every percentage — recompute, do not eyeball**), §3's priority list (a
+  new §3.3a here, because one entry had *graduated* and none of the existing
+  ranks fit), §3.4's stale-blocker banner, §4's hard-coded table, §5's heading
+  count, §5's body, §12's cross-references, plus frontmatter (`updated:`,
+  keywords, `related_files`, and `license_basis` if 2.0 text is now quoted).
+- **`index.md` takes FIVE:** the file-inventory row, the `iso32000__s__*` **file
+  count** (`ls`-verified: 99 → 100), the ambiguity table, the trigger-topic
+  table, and the *"the 18 that ARE settings"* search recipe. **The search recipe
+  is the one that gets missed** — it hard-codes the count in a comment line.
+- **A dispatch that adds a clause file can expose a NEIGHBOUR'S over-claim.**
+  `iso32000__s__8.4.3.md`'s `clause:` field listed §8.4.3.2 and its body never
+  covered it. Fixed by a **scope banner in the neighbour**, not by editing the
+  frontmatter, because other files cite it by name (same treatment as item 53's
+  absent-scope-banner finding).
+- **Third-party claims relayed inside a dispatch are CLAIMS.** Two arrived here
+  ("PDF/A-4 phrases its restriction as covering *image masks*"; "Enfocus
+  documents masks as OPM-sensitive"). The first was **checkable and not
+  corroborated** — veraPDF's `PDFA-4.xml` has exactly **one** overprint rule and
+  it is `object="PDICCBasedCMYK"`, ISO_19005_4 §6.2.4.2 test 2. Recorded as
+  unsourced, with the measurement, so nobody re-derives the doubt.
