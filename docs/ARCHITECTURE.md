@@ -3000,7 +3000,19 @@ Full current re-export surface (`dimension/mod.rs:62-76`), verified:
 - **`length_parse::{LengthParseError, ParsedLength, parse_length}`**
 - **`measure_dict::{build_measure_dict, build_ocg, build_ocproperties}`**
 - **`sidecar::{SIDECAR_VERSION, deserialize_model, serialize_model,
-  sidecar_version}`** — `SIDECAR_VERSION: i64 = 1`
+  sidecar_version}`** — **read the constant, do not quote a number here**
+  (`grep 'pub const SIDECAR_VERSION' crates/pdfce-core/src/dimension/sidecar.rs`).
+  ★ **This line said `SIDECAR_VERSION: i64 = 1` until 2026-08-30 (336th
+  filing) and had been wrong since the constant first moved to `2` on
+  2026-08-12** (decision (R), `9f2af1d`) — sixteen days and three bumps,
+  sitting under this block's own word *verified*, in a **body** section that
+  is supposed to be the living truth. `R232`'s class exactly: a hand-written
+  copy of a derivable figure, in a document no gate reads, drifting at the
+  rate the source changes. Corrected here rather than handed back, because
+  `ARCHITECTURE.md` is the librarian's file; the same discharge for the three
+  `docs/core-api/` copies is `Pass 176.0`. **Note also that the version is
+  emitted PER DOCUMENT, not per build** (decision 105), so the constant is the
+  ceiling a document may declare, not the number every file carries.
 - **`units::{DecimalMarker, FractionMode, MeasurementDisplay,
   NO_SCALE_DISCLOSURE, NumberFormat, ScaleEntry, ScalePreview, ScaleState,
   Unit, format_measurement, preview_group_scale}`**

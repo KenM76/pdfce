@@ -77996,3 +77996,231 @@ of `NEXT_SESSION.md` §A and the only item on it Ken has personally specified.
    geometry the way `<DIM>` does.
 5. **Notify `D:\dev\pdfceGUI`** that `set_dimension_label` / `dimension-label`
    exist, so its `gui` box has a route to being ticked.
+
+---
+
+## 2026-08-30 (336th filing) — `Pass 176.0` and `Pass 175.1` filed: the CLI route for four ce-dimension group verbs found two live defects, one of which silently destroyed a document's whole measurement model — and a sweep found the SAME stale GUI claim in two `FEATURES.md` rows plus a three-versions-stale constant in `ARCHITECTURE.md` §4
+
+**Shipped:**
+- **`Pass 176.0`** (`8b825ed`) — `group-rename`, `group-delete
+  --members refuse|reassign --to N` and `dimension-group` ship, closing an
+  `R151`-shaped `[x] core / [ ] cli` gap open since `Pass 25.7`. **Building
+  the route is what found both defects.**
+- **`Pass 175.1`** (`8d74447`) — doc-only, no behaviour change: the black end
+  of the `iccce` comparison is a **false-defect trap** and pdfce is the closer
+  answer there. Absorbed into `CmykIntent::Calibrated`'s doc comment.
+
+**The two defects, because they are the substance:**
+
+1. **★★ The DEFAULT ce-dimension group could be deleted, and doing it
+   destroyed everything, silently.**
+   `EditSession::delete_dimension_group_with` had **no** default-group guard;
+   the pure-model sibling `DimensionModel::delete_group` has had one since
+   `Pass 25.7`. **One rule, two paths, enforced only in the path nobody ships
+   through** — latent because nothing had ever called the session verb with
+   group `0`. Measured on the release binary before the fix:
+   `groups=2 dimensions=1` → `groups=1 dimensions=0`. **The sidecar pdfce
+   WROTE was correct; the READER rejected it** — `deserialize_model` requires
+   group `0` as a coherence check, yields `None` without it, and the session
+   turns `None` into a fresh empty model. **Silent**, because the `/Line`
+   annotations keep rendering perfectly off their baked `/AP` until the next
+   save writes the empty model over the good sidecar. Fixed with
+   `EditError::DimensionGroupIsDefault`, refused before any mutation under
+   every policy.
+2. **★★ `group-set-scale --real-length` with an inch notation produced
+   dimensions labelled in millimetres.** A **shadowed binding**: the
+   `NumberFormat` was built from `--unit` *before* the `--real-length` branch
+   shadowed `unit` with the one it read from the text, so the text-named unit
+   reached the **scale** and never the **label**. All five tested notations
+   wrong. The magnitude was the inch value with a millimetre label — **25.4×
+   out, on a drawing**. The command's own `--help` promised the opposite **in
+   writing** and cited GUI parity. Fixed by yielding `(scale, effective_unit)`
+   and building the format after; feet-inches notation now also selects the
+   feet-inches **format**, and the result line prints `unit=`, **whose absence
+   is part of why it survived**.
+
+**Two near-misses recorded, both caught by measuring rather than eyeballing:**
+the feet-inches render keeping its unreduced denominator is **correct**
+(`/FD` architectural convention, `reduce = false`, asserted unreduced
+deliberately); and an apparent dimension-line-through-caption render is the
+**fixture's own page content** (`1 w 100 200 m 300 200 l S`) sitting collinear
+with the ce dimension.
+
+**Decisions made this session:** none minted. Two dispositions, both argued in
+the `ROADMAP.md` entries rather than left implicit:
+
+- **Standing rule — MINT DECLINED, `n = 1`.** The dispatch asked whether *"a
+  rule enforced in the pure-model helper and not in the session verb that
+  ships"* is a recurring mechanism; the bar is two instances and the count is
+  **one**. `Pass 68.0` is **not** a second — its defect was *two independent
+  derivations of one display value* (`77.5°` vs `77.47 pt`), which is
+  **`R171`**'s widened scope. `Pass 174.8` is **not** a second either — its
+  guard was half present **within one function's own branches**, not across a
+  layer boundary. The two live parents are named instead: **`R151`'s mechanism
+  in the mirror** for defect 1 (the rule lived where nothing called it), and
+  **`R171` exactly** for defect 2 (a derived value computed before its input
+  was resolved; the shipped fix *is* `R171`'s prescription). **`R234` stays
+  the ceiling; `R235` is free.** If a second layer-boundary instance appears,
+  mint on it — the count is recorded so it can be added to rather than
+  re-derived.
+- **Decision log — NO ENTRY.** Neither defect moves a crate boundary, an
+  invariant definition or a library choice; both are bug fixes whose reasoning
+  is written where a reader meets it. **Ceiling stays 105; next free 106.**
+
+**Findings + decisions:**
+
+- **★★ `Pass 175.1`'s black-end trap, which is the reason it earned a commit.**
+  ONE table makes pdfce look wrong on the grey axis (**it is**) and wrong on
+  the black end (**it is not**), and nothing in the table distinguishes them.
+  `iccce`'s black-point estimator **refuses by name** on this profile rather
+  than guessing, so its media-relative column has **no BPC**; Acrobat's display
+  path almost certainly does. pdfce's `35,31,31` for pure-K black is within a
+  count of the `#231F20` the type already documents — **pdfce matches the
+  reference and `iccce` does not**. A session that "fixed" the black end toward
+  `iccce` would move pdfce **away** from the reference by up to **34 counts**
+  while believing it had closed a gap. `iccce` said so unprompted: *"Refusing
+  and being wrong look identical in a table; only this paragraph distinguishes
+  them."*
+- **The grey item gains a THIRD independent line.** `iccce` ran the actual ICC
+  transform (the print-conformance patch's own `/DestOutputProfile`, a v2.4.0
+  `prtr` CMYK/Lab, to OS sRGB, media-relative colorimetric, **49 operands**,
+  corroborated against `lcms2` 2.19.1 **to 0.22 counts**) and returns
+  **neutral** greys within 2–3 counts of the reference — `158,159,159` at
+  K=0.50 against the reference's `156,156,156`, where pdfce gives
+  `147,148,152`. `Pass 174.1`'s *"two levels is a thin basis"* sentence is
+  **qualified in place, not rewritten**, because the sequence is what a future
+  session needs. **Still not a reason to change the conversion** — decision 064
+  puts it in `iccce`'s domain and the operator ruled the default on 2026-08-28.
+  **Neither engine is a fitting target**, which `iccce` holds symmetrically.
+- **★ A hand-off marked *"nothing owed back"* is a statement about OBLIGATION,
+  not about INFORMATION.** This session **read the inbound file** rather than
+  inheriting a prior summary of it, and the entire black-end half was in the
+  file and in no summary. Worth carrying past this Pass.
+- **★★ Hard-rule-11 sweep — TWO survivors of one claim, neither named by the
+  dispatch, both stale since 2026-08-19.** The claim: *"the CLI (and the GUI)
+  cannot reach the four group management verbs."* `FEATURES.md`'s groups row
+  said *"the GUI likewise reaches only the older half"* while its own `gui`
+  box read `[x]`; the *Planned* row carried `gui` `[ ]` for the same reason.
+  **Both are false** — `D:/dev/pdfceGUI/FEATURES.md` records the capability
+  under *Phase 7* as **✅**, twice and independently (its lines 556 and 696,
+  dated **2026-08-19**: the panel *"creates, renames, deletes, recalibrates and
+  restyles a group, and carries the **Draw into** picker"*). **A checkbox and
+  the sentence beside it disagreed for eleven days**, and the dispatch's
+  *"do not round the gui box up"* was written from the stale half. Corrected
+  and cited per `R203`/`R196`.
+- **★ A third survivor, of the `R232` class, FIXED here rather than handed
+  back:** `docs/ARCHITECTURE.md:3003` — inside §4's block headed *"Full current
+  re-export surface … **verified**"* — asserted **`SIDECAR_VERSION: i64 = 1`**.
+  The constant is **`4`**. Wrong since the first bump to `2` on **2026-08-12**
+  (decision (R), `9f2af1d`): **sixteen days, three bumps, under the word
+  *verified*, in a body section that is supposed to be the living truth.** Now
+  a pointer, on the same pattern `Pass 176.0` used for the `docs/core-api/`
+  copies.
+- **Reported as SURVIVING-AND-CORRECT so the next sweep does not "fix" them:**
+  `docs/core-api/03-capabilities.md:510-511` still contains the literal `2`,
+  and should — it is now a **history of the figure's motion** (*"it was `2`
+  when this line was written, `3` when it was next read and `4` now"*) used as
+  the argument for the pointer, not a claim about the current value.
+  `docs/ARCHITECTURE.md:24674`'s *"`SIDECAR_VERSION` 3"* likewise survives
+  correctly, inside decision 073's append-only entry as a dated statement.
+- **The 335th filing's three handed-back figures are DISCHARGED — verified on
+  disk, not relayed** (`git show 8b825ed -- docs/core-api/`). All three
+  `SIDECAR_VERSION` literals became *"read the constant"* pointers
+  (`02-editing-and-saving.md:3116`, `:3655`, `03-capabilities.md:510`), and
+  `ce dimensions (14 verbs)` became `ce dimensions (see §1's ce-dimension
+  block for the current set)`. **Deleted rather than corrected a third time,
+  per `R232`** — which also **retires** the 335th filing's "correct verb count
+  is 15" follow-up: there is no longer a count there to be right or wrong.
+- **★ Why the new tests drive the BINARY, which is not stylistic here.** Three
+  of the verbs are reached through a flag **combination** core never sees
+  (`--members reassign --to N`), so a unit test calling core directly would
+  **construct the policy itself** and pass on a build whose flag was parsed and
+  never read. `R152`'s distinction, met by putting the process boundary inside
+  the test.
+- **The orphaned-doc-comment trap was walked into again** — the three handlers
+  were first spliced **between** `cmd_group_set_standard`'s doc comment and its
+  `fn`, caught by clippy's `doc_lazy_continuation`. Anchoring on an `fn` name
+  lands *above* the doc block; anchor on the doc block's first line instead.
+
+**Sourcing — `R228`, and this filing had a shell and used it.** Re-run here:
+`check-ledger-numbers` **clean**, `check-core-api-verbs` **PASS (174 public
+`EditSession` methods)**, `check-suite-name-absent` **clean**, both filing
+gates **confirmed naming `8d74447` UNFILED and `8b825ed` DEFERRED before the
+entries were written** and **clean after**. `git show --stat`: `8b825ed` = 6
+files, +1,207 / −17; `8d74447` = 1 file, +84 / −4. Live constant read from
+source: `pub const SIDECAR_VERSION: i64 = 4` at `dimension/sidecar.rs:97`.
+**Relayed, not re-run:** `cargo test --workspace --all-features` (foreground),
+fmt, clippy, `check-clap-help` (122 subcommands), `check-cli-help-leads`, the
+10 integration tests, both sabotage results, `cargo test -p pdfce-core --lib`
+(1,911 passed).
+
+**Cross-project RAG — two findings written:**
+- `D:/dev/rag/rust/a_shadowed_binding_in_a_branch_leaves_a_value_derived_above_it_stale.md`
+  — the general Rust fact: a `let` that shadows an outer binding **inside** a
+  branch, where something derived from the outer one was already computed
+  **above** the branch. Both bindings are read, so the compiler is silent; the
+  symptom is half the derived state right and half stale.
+- `C:/personal_rag/pdf/lesson_20260830_reader_enforced_invariant_writer_does_not_is_silent_total_data_loss.md`
+  — **format-spec / HIGH.** A sidecar reader that requires the default group as
+  a coherence check turns a well-formed writer output into **total silent data
+  loss**, and the loss is invisible for exactly as long as the baked
+  appearance survives. Generalisable half: **when a reader enforces an
+  invariant the writer does not, the WRITER is the side to fix.**
+
+**Still in flight:**
+- **`crates/pdfce-cli/src/main.rs`'s +388 uncommitted lines from the 335th
+  filing are GONE** — `8b825ed` touches that file (+452) and `git status
+  --short` no longer names it. Reconciled, not assumed.
+- **★★★ THE TREE MOVED UNDER THIS FILING TWICE — third consecutive filing, and
+  the pattern is now the finding.** First `git status --short`: three files
+  under `.claude/agent-memory/pdfce-spec-librarian/`. Second, taken after the
+  entries were written: **thirteen paths**, including
+  `.claude/agent-memory/pdfce-engineer/MEMORY.md`, this filing's four `docs/`
+  edits, an untracked `.tmp_cli177.py`, and **+637 / −18 of uncommitted
+  engineering work** across `pdfce-cli/src/main.rs` (+148),
+  `pdfce-core/src/edit.rs` (+441) and `pdfce-core/src/forms.rs` (+66)
+  (`git diff --stat crates/`). ⇒ **A librarian's *"the tree is clean"* or *"a
+  gate is green"* is a timestamped observation about a moving object, not a
+  property of the commit being filed.** `R201` says a dispatch in flight is
+  not a commit window; this is the **reporting** half — when the window is
+  used anyway, the filing must say which statements were about the commit and
+  which about the tree. Full banner on `Pass 176.0`'s `ROADMAP.md` entry.
+- **★★ `rotate_widget` IS BEING BUILT, uncommitted, as this filing is
+  written** — `pub fn rotate_widget(` at
+  `crates/pdfce-core/src/edit.rs:16588`, by grep on live source. It is
+  **unbuilt at `8b825ed`**, which is what this filing files, and **present in
+  the tree**. Both are true of different objects. **Consequence:**
+  `check-core-api-verbs.py` passed at **174** verbs when run for this filing
+  and now **exits 1 at 175** — `rotate_widget` absent from `docs/core-api/`,
+  four stated counts (`174`→`175`) and an `EditError` count (`102`→`103`) to
+  follow. **Engineer's owed doc work on in-flight code; neither Pass filed
+  here touches it.**
+- `bash tools/run-gates.sh` has **not** been run against `8d74447` or
+  `8b825ed`; the engineer's `29 of 29` sweep predates both, and the two filing
+  gates were red *because of* this filing until it landed.
+- Backup bundle is **4 commits behind `HEAD`**
+  (`pdfce-20260830-0122-e49619f-full.bundle`, by `ls -lt` and
+  `git rev-list --count e49619f..HEAD` = 4).
+- `main` is **4 commits ahead of `origin/main`**; pushing `main` is
+  standing-authorized (decision 090) once the public-facing gate is green,
+  which `check-suite-name-absent` says it is.
+
+**For next session:**
+1. **Consider whether `check-core-api-verbs.py` should derive `SIDECAR_VERSION`
+   and `CLIP_VERSION`** the way it already derives the verb and error counts.
+   `Pass 176.0`'s pointer discharge makes this **optional rather than owed** —
+   there is no longer a literal at those three sites to go stale — but the
+   `ARCHITECTURE.md` §4 survivor found this filing is the same class in a file
+   no gate reads at all, so the gap is real and now measured at **four sites in
+   two documents over sixteen days**.
+2. **Notify `D:\dev\pdfceGUI`** that `group-rename` / `group-delete` /
+   `dimension-group` now exist on the CLI, and that
+   `set_dimension_label` / `dimension-label` shipped as `Pass 175.0` — the
+   text-override row's `gui` box has no route to being ticked until they know.
+3. **`Acrobat_Features/measure__distance_tool.md` re-verification** — still
+   open, unchanged by this filing: single-sourced at moderate confidence, its
+   own author asked for a live-Acrobat check, and this machine has Reader only.
+4. **The `ARCHITECTURE.md` §4 sweep is not finished.** One stale re-export
+   figure was found by reading for the claim; the block it sits in lists
+   several modules' surfaces the same way, and nothing derives any of them.
+   Worth one deliberate pass rather than waiting for the next accident.
