@@ -12031,7 +12031,7 @@ impl EditSession {
     /// that commits thousands of edits. The value is entirely in catching a
     /// developer's mistake at the moment it is made, and a release build's
     /// operator gains nothing from paying for it. CI runs the test suite in
-    /// debug, so the guard is live exactly where it earns its cost.
+    /// debug, so the guard is live where it earns its cost.
     ///
     /// # ★ It asserts "this COMMAND broke it", not "this document is broken"
     ///
@@ -25231,7 +25231,8 @@ impl EditSession {
     }
 
     /// Every object id whose removal would cost the document its page tree —
-    /// the leaves, the nodes above them, **and the catalog** (`Pass 185.1`).
+    /// the leaves, the nodes above them (`Pass 185.1`), **and the catalog**
+    /// (`Pass 185.2`, because `185.1`'s set did not contain it).
     ///
     /// The page half comes from `page_slots`, which already returns each
     /// page's `ancestors`, so it is the reachable tree exactly as the reader

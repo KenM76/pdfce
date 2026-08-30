@@ -48,6 +48,32 @@ location, the replay seed, the harness traps and a stated guess to start from.
 `Pass 185.1` (the target + the first guard) and `Pass 185.2` (the catalog,
 which the first guard did not cover) are both shipped and pushed.
 
+**★★ AND `R236` ARRIVED WITH THIS PASS, SO ITS DENOMINATOR IS MEASURED HERE
+RATHER THAN LEFT AS "SEVERAL".** The rule: *a `debug_assert` postcondition over
+state derived from untrusted input is a tripwire for a fuzzer, not a guard for
+an operator*, so it owes a `cargo-fuzz` target over the verbs it guards or a
+written exemption at the site.
+
+The filing's ledger counted **named helpers** (2 of 2). The unit was then
+widened to include bare inline assertions — finding #3 is one — and **the wider
+denominator was never taken**. Measured 2026-08-30 by
+`grep -rn "debug_assert\(_eq\|_ne\)\?!"` over `pdfce-core` +
+`pdfce-render`: **27 invocations**, of which the ones this rule actually
+reaches:
+
+| site | verdict |
+|---|---|
+| `edit.rs:12095` page-tree postcondition | **covered** — `form_edit_sequence`, `pageops_sequence` |
+| `edit.rs:17486` group cascade vs prediction | **open finding #3** — the target reaches it |
+| **`edit.rs:21669`** *"the target was located on some page, so at least that page must be patched"* | ★ **UNCOVERED. No fuzz target drives annotation DELETION** — `annot_walk` reads, `annot_author` writes. This is the concrete work `R236` creates. |
+| `ccitt.rs:236`, `lexer.rs:400`, `parser.rs:699` | covered by `image_codec_ccitt` / `parse_object` / `load_document` |
+| `cmyk_buffer.rs` ×10, `mesh.rs` ×2 | render side; `mesh_shading` covers the mesh pair — **the cmyk_buffer ten are unaudited and are the second thing to look at** |
+| `text_edit/edit.rs:2998`, `addtext.rs:682`, `xref_out.rs:292`, `writer/content.rs` | **exempt**: caller-convention or pdfce-constructed state, not untrusted-derived — the same reasoning `writer/content.rs:649` already wrote for itself |
+
+⇒ **One named uncovered site, one unaudited group of ten.** That is a finite
+work item rather than a rule with an open-ended obligation, which is the shape
+it needs to survive contact with a busy session.
+
 ---
 
 ## §A — Candidates, ordered by my read of value. None is a commitment.
@@ -235,6 +261,6 @@ gh run list --limit 3                     # CI's colour, from GitHub
   §A item 2 before trusting a failing job's *name*.
 - The backup bundle drifts about one commit per Pass. A fresh one is cheap:
   `git bundle create <path> --all`.
-- `.tmp_bench.py` has been untracked for four filings. It is deliberately not
+- `.tmp_bench.py` has been untracked for seven filings. It is deliberately not
   committed — the repository is public — so **stage by path, never `git add
   -A`**.

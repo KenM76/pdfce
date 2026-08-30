@@ -773,14 +773,23 @@ jobs:
       # shipping criteria of every Pass that added one — see
       # fuzz/fuzz_targets/*.rs for the invariant each asserts.
       #
-      # ★ This comment named EIGHT targets and listed them by hand. There
-      # are 24 (measured 2026-08-25, `ls fuzz/fuzz_targets/*.rs | wc -l`),
-      # and the list had been wrong for months — the same stale-count
-      # defect `R212` is about, in the one place nobody re-reads because
+      # ★ This comment named EIGHT targets and listed them by hand, and
+      # the list had been wrong for months — the same stale-count defect
+      # `R212` is about, in the one place nobody re-reads, because
       # `cargo fuzz build` compiles every target in fuzz/Cargo.toml and
       # needs no per-target wiring here. A hand-maintained list beside an
       # automatic mechanism has nothing forcing it to stay true, so it is
       # now a pointer rather than a list.
+      #
+      # ★★ AND THE FIX SHIPPED A HAND-MAINTAINED **COUNT** IN PLACE OF THE
+      # HAND-MAINTAINED LIST. It read "There are 24 (measured 2026-08-25,
+      # `ls fuzz/fuzz_targets/*.rs | wc -l`)" — dated, sourced with the
+      # exact command, and correct on the day. Five days later there are
+      # 27. **Sourcing a figure makes it auditable, not durable**, and the
+      # replacement inherited the whole defect it was written to remove.
+      # The count is deleted rather than corrected or gated: run the
+      # command above if the number matters, which is the same answer the
+      # list already got.
       #
       # ★★ AND THIS JOB HAS A BLIND SPOT WORTH NAMING HERE, because this
       # is where someone will look. It runs on `ubuntu-latest`. On

@@ -12,9 +12,11 @@
 # needed here):
 #   cargo +nightly fuzz build                       # compile all targets
 #   cargo +nightly fuzz run <target> -- -max_total_time=90
-# Targets: parse_object, load_document, content_and_filters,
-# image_codec_dct, image_codec_ccitt, image_codec_jbig2, image_codec_jpx,
-# writer_roundtrip
+# Targets: every `[[bin]]` below, and `ls fuzz_targets/*.rs` if you want
+# the number. This line USED to name eight of them by hand and had been
+# wrong for months — the twin of the list `ci.yml` deleted on 2026-08-25,
+# found by the librarian's sweep on 2026-08-30 because deleting one copy
+# of a hand-maintained list does not find the other one.
 # — see the doc comment at the top of each fuzz_targets/*.rs for the
 # invariant it asserts.
 #
