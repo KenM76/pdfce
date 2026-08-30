@@ -4824,6 +4824,47 @@ pub enum EditError {
         /// The angle that was asked for.
         degrees: i64,
     },
+    /// The **default** ce-dimension group was asked to be HIDDEN
+    /// (`Pass 178.0`).
+    ///
+    /// The default group is un-hideable (ui-spec §5.3) because every ce
+    /// dimension falls back to it: a document whose default layer is off can
+    /// have measurements on it that nothing in the layer list can turn back
+    /// on. That rule is not new — [`crate::dimension::DimensionModel::set_group_visible`]
+    /// has enforced it since `Pass 12.M2`.
+    ///
+    /// # ★ What is new is SAYING SO
+    ///
+    /// The model enforced it by returning `true` — "still visible" — and
+    /// [`EditSession::toggle_dimension_layer`] passed that back as `Ok(true)`,
+    /// **committed a command anyway, and wrote an incremental revision.**
+    /// Measured on the release binary 2026-08-30:
+    ///
+    /// ```text
+    ///   layer-toggle base.pdf --group 0 --hide
+    ///   -> visible=true changed=1 appended=556   (exit 0)
+    ///   -> the group is still visible
+    /// ```
+    ///
+    /// So the operator asked to hide a layer, got a success, got a modified
+    /// file 556 bytes larger, got an undo entry that undoes nothing visible,
+    /// and got no reason. A shell's toggle switch flips back on with no
+    /// explanation, which reads as a broken switch rather than as a rule.
+    ///
+    /// This is the same shape as [`Self::DimensionGroupIsDefault`] — a rule
+    /// enforced in the pure model and not at the verb that ships through it —
+    /// and it is the second instance found by looking for one after the first
+    /// was fixed.
+    ///
+    /// A shell should grey the toggle out for the default group. This refusal
+    /// is the backstop, not the UI.
+    #[error(
+        "dimension group {id} is the default group and cannot be hidden; every ce dimension falls back to it, so a document with that layer off could carry measurements nothing can turn back on"
+    )]
+    DimensionGroupNotHideable {
+        /// The group that was asked to be hidden — always the default group.
+        id: u32,
+    },
     /// The **default** ce-dimension group was named for deletion
     /// (`Pass 176.0`).
     ///
@@ -29446,12 +29487,36 @@ impl EditSession {
 
     /// Toggle a dimension group's optional-content layer default visibility
     /// (§8.11 `/D` config `/OFF`, Pass 12.M2). Returns the resulting
-    /// visibility (the default group is un-hideable, ui-spec §5.3). One undo
-    /// entry.
+    /// visibility. One undo entry.
+    ///
+    /// # ★ The default group is UN-HIDEABLE, and asking is now a REFUSAL
+    ///
+    /// Every ce dimension falls back to the default group, so a document whose
+    /// default layer is off could carry measurements nothing in a layer list
+    /// can turn back on (ui-spec §5.3). The rule is old; **saying so is
+    /// `Pass 178.0`.** Until then this verb answered `Ok(true)`, committed a
+    /// command and wrote an incremental revision -- a success, a bigger file,
+    /// an undo entry that undoes nothing visible, and no change. See
+    /// [`EditError::DimensionGroupNotHideable`] for the measurement.
+    ///
+    /// # Commits even when nothing changed, deliberately
+    ///
+    /// Setting a group to the visibility it already has still records one undo
+    /// entry, matching [`Self::set_dimension_display`] and for its reason: a
+    /// TOGGLE whose undo behaviour is sometimes-present is worse than one that
+    /// always records. This is the opposite of [`Self::set_info_field`] and
+    /// [`Self::set_dimension_label`], which are not toggles.
     ///
     /// # Errors
     ///
-    /// Encryption / enforced-certification guards.
+    /// - [`EditError::DimensionGroupNotFound`] — no such group. Every sibling
+    ///   group verb already refused this; until `Pass 178.0` this one alone
+    ///   returned `Ok(true)` for an id that resolved to nothing, so a script
+    ///   with a mistyped group got a green exit code.
+    /// - [`EditError::DimensionGroupNotHideable`] — hiding the default group.
+    /// - Encryption / enforced-certification / newer-sidecar guards.
+    ///
+    /// Both refusals happen before any mutation (rule 4).
     pub fn toggle_dimension_layer(
         &mut self,
         group: GroupId,
@@ -29463,6 +29528,31 @@ impl EditSession {
         self.check_certification()?;
         self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
+
+        // ★ TWO REFUSALS THIS VERB DID NOT HAVE (`Pass 178.0`), both before
+        // anything is written (rule 4).
+        //
+        // `DimensionModel::set_group_visible` answers `true` for BOTH of these
+        // cases -- an un-hideable default group and an id that resolves to no
+        // group at all -- because it is a pure-model setter with no way to
+        // report anything but the resulting visibility. This verb passed that
+        // `true` back as `Ok(true)`, committed a command, and wrote an
+        // incremental revision, so an operator got a success, a larger file
+        // and no change.
+        //
+        // The unknown-group half was also an INCONSISTENCY: every sibling
+        // group verb -- `rename_dimension_group`, `set_group_scale`,
+        // `set_group_standard`, `set_group_style`,
+        // `delete_dimension_group_with` -- refuses an unknown id by name. A
+        // script that mistyped a group id got a green exit code from this one
+        // alone.
+        if model.group(group).is_none() {
+            return Err(EditError::DimensionGroupNotFound { id: group.0 });
+        }
+        if group == crate::dimension::DEFAULT_GROUP_ID && !visible {
+            return Err(EditError::DimensionGroupNotHideable { id: group.0 });
+        }
+
         let result = model.set_group_visible(group, visible);
         let catalog_write = self.catalog_dimension_write(&model)?;
         self.commit(Command {

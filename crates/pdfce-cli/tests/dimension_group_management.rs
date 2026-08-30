@@ -682,3 +682,107 @@ fn a_unit_named_in_real_length_reaches_the_label_and_not_only_the_scale() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// layer-toggle -- two refusals it did not have (Pass 178.0)
+// ---------------------------------------------------------------------------
+
+/// ★★ **Hiding the DEFAULT group is refused, and an UNKNOWN group is refused
+/// — this verb reported success for both.**
+///
+/// # What it did before, measured on the release binary
+///
+/// ```text
+///   layer-toggle base.pdf --group 0  --hide
+///   layer-toggle base.pdf --group 99 --hide
+///   -> visible=true changed=1 appended=556   (exit 0, both)
+/// ```
+///
+/// Group `0` is un-hideable by a rule that has existed since `Pass 12.M2`;
+/// group `99` does not exist at all. Both got a **success**, a file **556
+/// bytes larger**, and an undo entry that undoes nothing visible. A shell's
+/// visibility switch flips back on with no explanation, which reads as a
+/// broken switch rather than as a rule.
+///
+/// # Why the model could not report it, and why that is the pattern
+///
+/// `DimensionModel::set_group_visible` returns the resulting visibility and
+/// nothing else, so it answers `true` for BOTH cases — un-hideable, and no
+/// such group. It is a pure-model setter with no channel for a refusal. The
+/// verb that ships through it is the policy boundary and had no guard.
+///
+/// **That is the same shape as `DimensionGroupIsDefault` one Pass earlier**
+/// (`delete_dimension_group_with` vs `DimensionModel::delete_group`), and it
+/// was found by going to look for a second instance rather than by a report.
+///
+/// # The unknown-group half is also an INCONSISTENCY
+///
+/// Every sibling group verb — `group-rename`, `group-set-scale`,
+/// `group-set-standard`, `group-style`, `group-delete` — refuses an unknown
+/// id by name. This one alone returned success, so a script that mistyped a
+/// group id got a green exit code from it and a refusal from every other.
+#[test]
+fn hiding_the_default_group_and_naming_an_unknown_one_are_both_refused() {
+    let src = two_groups("layer");
+    let before = list(&src);
+
+    for (group, why) in [
+        ("0", "the default group is un-hideable"),
+        ("99", "there is no group 99"),
+    ] {
+        let out = temp_out(&format!("layer-{group}.pdf"));
+        let (code, stdout, err) = run(&[
+            "layer-toggle",
+            src.to_str().unwrap(),
+            "--group",
+            group,
+            "--hide",
+            "-o",
+            out.to_str().unwrap(),
+        ]);
+        assert_eq!(code, EDIT_REFUSED, "{why}: {err}{stdout}");
+        assert!(
+            !out.exists(),
+            "{why} -- a refusal before any mutation writes no output file"
+        );
+    }
+
+    // ★ The contrast case, and it is what keeps the two above from being a
+    // verb that simply stopped working: a NON-default group still hides.
+    let out = temp_out("layer-ok.pdf");
+    let (code, stdout, err) = run(&[
+        "layer-toggle",
+        src.to_str().unwrap(),
+        "--group",
+        "1",
+        "--hide",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0, "a non-default group hides: {err}");
+    assert!(stdout.contains("visible=false"), "{stdout}");
+    assert!(
+        list(&out).contains("visible=false"),
+        "and it stays hidden in the saved file: {}",
+        list(&out)
+    );
+
+    // And SHOWING the default group is fine -- only hiding it is refused.
+    let out = temp_out("layer-show.pdf");
+    let (code, stdout, err) = run(&[
+        "layer-toggle",
+        src.to_str().unwrap(),
+        "--group",
+        "0",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0, "showing the default group is not refused: {err}");
+    assert!(stdout.contains("visible=true"), "{stdout}");
+
+    assert_eq!(
+        list(&src),
+        before,
+        "and the input document is untouched by any of it"
+    );
+}

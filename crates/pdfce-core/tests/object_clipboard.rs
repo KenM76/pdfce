@@ -144,6 +144,31 @@ fn a_pasted_font_is_the_clips_font_not_the_destinations() {
         text.contains("/Helvetica"),
         "the clip's own font must have been imported: {text}"
     );
+    // ★ AN ABSENCE ASSERTION OVER `to_incremental_bytes`, AND ITS SOUNDNESS
+    // IS A PROPERTY OF THE FIXTURE RATHER THAN OF THE CODE.
+    //
+    // `saved()` here is an INCREMENTAL save, so `text` is every revision of
+    // the file concatenated, not the state in force. A `!contains` over that
+    // can only mean "these bytes were never written anywhere", which is a
+    // stronger claim than the one being made and is true here for a reason
+    // this test does not otherwise state:
+    //
+    //   - the destination fixture's content is `0 0 5 5 re f` -- no text
+    //     operator at all, so `/F1 12 Tf` cannot appear from the base
+    //     revision; and
+    //   - the source carrying that string is a SEPARATE `Document` that is
+    //     never saved into this one.
+    //
+    // Give the destination fixture any text and this assertion goes VACUOUS
+    // with nothing turning red -- it would then be finding the destination's
+    // own operator and passing for the wrong reason.
+    //
+    // Stated rather than hardened, deliberately: switching to a full rewrite
+    // would change what the test exercises (the paste's incremental path is
+    // the interesting one), and the honest fix for a fixture that grows text
+    // is to assert on the CURRENT resource dictionary instead. See
+    // `C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`,
+    // whose worked examples include two other tests in this repo.
     assert!(
         !text.contains("/F1 12 Tf"),
         "the pasted operator must NOT still say /F1 -- that is the destination's Courier: {text}"

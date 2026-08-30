@@ -2075,6 +2075,15 @@ CLI: `pdfce-cli add-named-dest --name X --page N [--top Y]`, then
 > | Delete, answering the members question | `delete_dimension_group_with(&mut self, group: GroupId, policy: GroupDeletion) -> Result<usize, EditError>` | Count of members reassigned. ONE undo entry. ⚠️ **Refuses the DEFAULT group with `DimensionGroupIsDefault`, whatever the policy** (`Pass 176.0`) — see below. |
 > | **Move a dimension to another group** | `set_dimension_group(&mut self, dimension: DimensionId, group: GroupId) -> Result<(), EditError>` | ★ **RE-MEASURES it** — see below. |
 >
+> ★★ **The default group also cannot be HIDDEN** (`DimensionGroupNotHideable`,
+> `Pass 178.0`), and `toggle_dimension_layer` **now refuses an unknown group**
+> like every sibling group verb already did. Until that Pass it answered
+> `Ok(true)` for both — an un-hideable default group and an id resolving to
+> nothing — committed a command and wrote an incremental revision, so a shell
+> got a success, a larger file and no change. A visibility switch that flips
+> back on with no explanation reads as a broken switch. Grey the toggle out for
+> the default group; the refusal is the backstop.
+>
 > ★★ **The DEFAULT group cannot be deleted, and a shell should not offer to.**
 > `DimensionGroupIsDefault { id }` (`Pass 176.0`) refuses it before anything is
 > touched, under **every** `GroupDeletion` policy including `Reassign`.
