@@ -96,6 +96,213 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 178.0` (`c441a92`, 2026-08-30) — LOOKING FOR A SECOND INSTANCE FOUND **TWO**, AND ONE OF THEM RETURNED `exit 0` FOR A ce-DIMENSION GROUP THAT DOES NOT EXIST — ★★★ **THE 336th FILING'S DECLINE WAS CORRECT ON THE EVIDENCE IT HAD AND THE EVIDENCE HAS CHANGED: `R235` IS MINTED HERE AT n=2, WIDENED AT MINT TIME BY A THIRD INSTANCE FOUND IN THE WORKING TREE WHILE THIS ENTRY WAS BEING WRITTEN** — filed 2026-08-30 (338th filing)
+
+**Sourcing — `R228` invoked; this filing had a shell and used it.** Re-run
+here, not relayed: `check-core-api-verbs` **PASS at 175 public `EditSession`
+methods** (unchanged from the 337th filing — this Pass adds no verb, only two
+refusals); `check-ledger-numbers` **clean**, and its LIVE CEILINGS block read
+directly for the three numbers reported below; `check-cited-verbs-exist`
+**PASS, 7 of 7**; `check-suite-name-absent` **clean**; `check-commits-filed`
+named **`c441a92` DEFERRED** — unfiled — before these entries were written.
+`git show --numstat`: **5 files, +232 / −4**; **test-file share 129 of 232 =
+55.6 %** (`crates/pdfce-cli/tests/dimension_group_management.rs` +104,
+`crates/pdfce-core/tests/object_clipboard.rs` +25 — the latter all comment,
+see §6). Live source read for the rule verdict, not relayed:
+`crates/pdfce-core/src/dimension/group.rs:1062` and `:1175`.
+**Relayed, not re-run:** `cargo test --workspace --all-features`
+(foreground), fmt, `clippy --all-targets --all-features -D warnings`, the new
+integration test's three contrast cases and the sabotage result.
+
+#### 1. WHAT SHIPPED — TWO REFUSALS, NO NEW VERB
+
+```
+EditError::DimensionGroupNotHideable { id }      <- new
+EditError::DimensionGroupNotFound { id }         <- newly REACHED from here
+EditSession::toggle_dimension_layer(...)         <- both, before any mutation
+```
+
+`EditError`'s variant count **103 → 104**; the public `EditSession` verb
+count is **unchanged at 175**. `docs/core-api/02-editing-and-saving.md` gains
+the refusal and the *grey the toggle out* guidance;
+`docs/core-api/index.md`'s `EditError` figure moves with it. **Confirmed on
+disk by `git show c441a92 -- docs/core-api/`, not relayed.**
+
+#### 2. ★★ THE MEASUREMENT, WHICH IS WHY THIS IS A DEFECT AND NOT A POLISH
+
+On the release binary, **before** the fix:
+
+```
+layer-toggle base.pdf --group 0  --hide     -> visible=true changed=1 appended=556   (exit 0)
+layer-toggle base.pdf --group 99 --hide     -> visible=true changed=1 appended=556   (exit 0)
+```
+
+**Two different wrong answers with identical output.** Group `0` is
+un-hideable by a rule that has existed since `Pass 12.M2`; group `99` does not
+exist at all. Both got a success line, a file **556 bytes larger**, and an
+undo entry that undoes nothing visible. ⇒ **556 bytes over 1 command = the
+entire byte cost of a command that did nothing**, which is the form the figure
+has to be filed in for it to be able to disagree with anything (hard rule
+10(a)).
+
+**(a) The default group cannot be hidden, and nothing said so.** Every ce
+dimension falls back to the default group, so a document whose default layer
+is off can carry measurements **nothing in a layer list can turn back on**.
+`DimensionModel::set_group_visible` enforces that rule by `return true` —
+"still visible" — and `toggle_dimension_layer` passed it back as `Ok(true)`
+and committed anyway. A shell's visibility switch therefore flips back on with
+no explanation, which reads as **a broken switch rather than as a rule**.
+
+**(b) An unknown group reported success, and that is an INCONSISTENCY, not
+merely a missing guard.** `set_group_visible`'s `else { true }` arm answers
+`true` for an id resolving to no group. **Every sibling group verb** —
+`rename_dimension_group`, `set_group_scale`, `set_group_standard`,
+`set_group_style`, `set_dimension_group`, `delete_dimension_group_with` —
+refuses an unknown id by name. So a script that mistyped a ce-dimension group
+id got **a green exit code from this one verb and a refusal from all the
+others**, which is worse than either behaviour applied uniformly: the operator
+cannot learn the convention from the tool.
+
+#### 3. ★★★ THE RULE CALL — **MINT**, AND WHAT MADE IT A MINT IS THAT SOMEBODY LOOKED
+
+The **336th filing declined** this rule at `n = 1` and the decline was right on
+its evidence: `Pass 68.0` was correctly rejected (it is `R171`'s widened
+scope) and `Pass 174.8` was correctly rejected (its guard was half-present
+*within one function's own branches*, not across a layer boundary). It also
+recorded the count **so it could be added to rather than re-derived**, which
+is exactly what happened.
+
+★ **But a decline is a judgement about the candidates OFFERED, not a search**
+— the engineer's phrase, and it is the finding. Nobody had gone looking. He
+looked, and `set_group_visible` is a genuine second instance carrying **two**
+distinct failures. **`R235` is minted, in *Standing rules*.** The full
+warrant, the parent analysis, the mechanical check and the closed sweep live
+in that entry; what belongs here is the **evidence**:
+
+| # | pure-model helper | how the refusal is encoded | shipping verb | symptom |
+|---|---|---|---|---|
+| **1** (`Pass 176.0`, `8b825ed`) | `DimensionModel::delete_group(id) -> usize` | `return 0` for the default group | `delete_dimension_group_with` | **silent total loss of the measurement model** |
+| **2** (`Pass 178.0`, `c441a92`) | `DimensionModel::set_group_visible(id, v) -> bool` | `return true`, twice over | `toggle_dimension_layer` | **false success**, 556 bytes, undo entry |
+| **3** (`Pass 178.1`, **UNCOMMITTED at filing time**) | `DimensionModel::add_dimension(group, kind) -> DimensionId` | **silent substitution** of `DEFAULT_GROUP_ID` | the `dimension-add` session path | **the success line NAMES a ce-dimension group the ce dimension did not go into** |
+
+**★★ The two committed instances differ in KIND, and the common shape is the
+mint's subject rather than the symptom:** instance 1 **lost data silently**,
+instance 2 **reported success falsely**. What they share is that **the pure
+model expressed a rule through its RESULT, which has no channel for a refusal,
+and the verb that ships through it did not add one.**
+
+**★★★ Instance 3 is why the rule is widened AT MINT TIME rather than a filing
+later,** and it is reported here with its provenance stated because hard rule
+8 requires it: it is **in the working tree, UNCOMMITTED**, observed by
+`git diff crates/` (+33 lines at `edit.rs:27326`) *while this entry was being
+written*, and **it is not what this entry files**. Its measured symptom, from
+the engineer's own in-tree comment: `dimension-add --group 99` printed
+`group=99 … dim=1` and `dimension-list` then read `dim 1 group=0` — **a ce
+dimension measured against a scale, unit, precision and drafting standard the
+caller did not choose, from a mistyped id, with a green exit code.** ⇒ **A
+wrong number on a drawing.** See §4 for what it did to this filing's own
+sweep.
+
+#### 4. ★★ THE SWEEP THIS FILING RAN — AND THE FACT THAT IT WAS TOO NARROW
+
+The mint is not made on an open suspicion. The mechanical check was **run**
+over `crates/pdfce-core/src/` and comes back **bounded**:
+
+```
+grep '    pub fn (set_|remove_|delete_|clear_|add_|insert_|toggle_|rename_|move_|apply_)[a-z_]*(&mut self…) -> (bool|usize|u32|i64|u64)'
+     crates/pdfce-core/src/   [excluding edit.rs, which is the session layer]
+```
+
+**5 hits, 2 of them instances**, both already fixed: `set_group_visible` and
+`delete_group`. The other three are **discriminating** and enforce no rule —
+`remove_group -> bool` and `remove_dimension -> bool` (`false` genuinely means
+"it was not there") and `text_state.rs:734 apply_operator -> bool` ("did I
+handle this operator"). **Reported as surviving-and-correct so a later sweep
+does not "fix" them** (hard rule 11(e)). `set_group_scale` returns `()` and
+no-ops silently on an unknown id, but its session verb **does** guard, so that
+boundary is closed.
+
+★★ **And then instance 3 walked straight through that grep**, because
+`add_dimension` returns `DimensionId` — **a fresh, correct, always-valid
+success value**. ⇒ **The signature check catches the RETURN-VALUE CONFLATION
+and is blind to the SILENT SUBSTITUTION**, and the reason is exact: a
+substitution's return value **is not wrong**. It truthfully describes what
+happened; it simply does not describe **what was asked for**. `R235`'s
+mechanical check is written in the widened form because of this, roughly an
+hour after the narrow form was drafted. Re-running the widened predicate over
+`dimension/` (a `DEFAULT_GROUP_ID` sweep, 34 hits read) closes the set at
+**three**: `group.rs:1063` (instance 2), `:1080` (instance 3), `:1176`
+(instance 1).
+
+★ **`group.rs:1182` — `delete_group`'s reassignment of members to the default
+group — is NOT an instance and must not be "fixed".** It is deliberate ui-spec
+§5.2 policy (*never a silent orphan*), and the session verb **surfaces it as
+an operand** (`GroupDeletion::Reassign`), which is precisely the channel the
+other three lacked. **That contrast is the rule's own discriminator**, which
+is why it is recorded here rather than left to be re-derived.
+
+#### 5. WHAT IS DELIBERATELY NOT CHANGED, AND IT IS NOT AN OVERSIGHT
+
+Setting a ce-dimension group to the visibility **it already has** still
+records one undo entry. That matches `set_dimension_display`, for its stated
+reason: **a TOGGLE whose undo behaviour is sometimes-present is worse than one
+that always records** — an operator who pressed a switch twice and can undo
+once has a history that disagrees with what he did. It is deliberately the
+**opposite** of `set_info_field` and `set_dimension_label`, which are **not
+toggles**. Both positions are argued in the code, and **this Pass did not
+quietly harmonise them.**
+
+**★ Librarian's disposition, asked for by the dispatch: NO decision record is
+owed.** A decision record is for a crate boundary, an invariant definition or
+a library choice (`ARCHITECTURE.md` §12's own scope, and the disposition the
+335th, 336th and 337th filings each reached on the same test). This is a
+**verb-level** contract split that is (a) already argued at both loci in
+source, (b) **principled rather than accidental** — the discriminator is *is
+this verb a toggle?*, a property of the verb rather than a policy chosen
+per-verb — and (c) has **produced no defect**. A decision record minted for a
+split nobody got wrong would make the ledger the place where consistent things
+are justified. **Ceiling stays `105`; next free `106`.** ★ **The trigger is
+recorded so it can be added to rather than re-derived:** a *third* undo policy,
+or the first observation of a toggle and a non-toggle verb being confused for
+one another in a shell.
+
+#### 6. TWO ITEMS FROM THE 337th FILING, BOTH DISCHARGED — **CONFIRMED ON DISK**
+
+- **`object_clipboard.rs:147` — the absence assertion handed back as OWED.**
+  **Discharged, and confirmed by reading the file rather than by relay:** a
+  25-line comment now sits above the assertion stating that its soundness is
+  **a property of the FIXTURE rather than of the code**, naming both reasons
+  (`0 0 5 5 re f` carries no text operator at all; the source carrying
+  `/F1 12 Tf` is a separate `Document` never saved into this one), stating
+  that a future fixture with text makes the assertion **vacuous with nothing
+  turning red**, and citing
+  `C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`
+  by name. **Stated rather than hardened, and the reasoning is accepted:**
+  `--mode full` would change *what the test exercises* (the incremental paste
+  path is the interesting one), and the honest fix for a fixture that grows
+  text is to assert on the **current resource dictionary** instead.
+- **The RAG re-derivation.** The 337th filing's finding is **accepted in full
+  by the engineer and recorded in `c441a92`'s own message as a COST, not a
+  win** — a seventeen-day-old HIGH-severity lesson re-derived in the subject
+  `CLAUDE.md` says to grep first. ★ **The half worth carrying is his own
+  sentence: *"the habit is the fix, not the outcome."*** The second derivation
+  came back stronger (it produced the asymmetry table's third row), and that is
+  **not** a warrant for re-deriving: a stronger accidental result is the most
+  persuasive possible argument for a bad habit. The open question of whether
+  the RAG-consultation step belongs in the engineer's own Pass checklist stays
+  where the 337th filing left it — **his call, not this role's.**
+
+#### 7. `FEATURES.md`
+
+**No new row.** Decision `105`'s precedent governs — **a refusal is not a
+capability** — and both changes are refusals. The engineer's read was *no*;
+this role's independent read agrees, and the reason it is worth stating rather
+than nodding at is that the opposite reading would eventually put **104
+`EditError` rows** into a file whose only job is *what can pdfce do*.
+
+**One row edited**, found by the hard-rule-11 sweep and reported in the
+338th `SESSION_LOG.md` entry.
+
 ### `Pass 177.0` (`a27ae08`, 2026-08-30) — `rotate_widget` CLOSES THE TRANSFORM TRIO, AND **WRITING `/MK /R` ALONE WOULD HAVE SHIPPED A NO-OP** — the spec lookup changed the design rather than validating it, and threading the result through the one regeneration path fixed a SECOND, UNLOOKED-FOR BUG — ★★★ **AND THIS FILING'S OWN FINDING IS THAT A `personal_rag` LESSON FROM SEVENTEEN DAYS AGO, MARKED HIGH, ALREADY HELD THE TESTING FACT THIS PASS RE-DERIVED FROM SCRATCH** — filed 2026-08-30 (337th filing)
 
 **Sourcing — `R228` invoked; this filing had a shell and used it.** Re-run
@@ -124222,6 +124429,169 @@ same cause (hashes exist only at commit time), two different failure modes.
   as opposed to this rule, which governs how such a thing is described.
 
   **Standing rules ceiling `R233` → `R234`; next free `R235`.**
+
+- **R235 — A PURE-MODEL HELPER THAT ENFORCES A RULE BY RETURNING A *RESULT*
+  HAS NO CHANNEL TO REFUSE, SO THE RULE IS INVISIBLE AT THE VERB THAT SHIPS
+  THROUGH IT. THE SESSION VERB OWES THE `Err` — AND THE CHECK IS NOT *"DOES
+  THE HELPER ENFORCE IT?"* BUT *"IS THERE AN INPUT FOR WHICH THIS HELPER DOES
+  SOMETHING OTHER THAN WHAT WAS ASKED AND STILL RETURNS A VALUE THE CALLER
+  CANNOT TELL FROM SUCCESS?"*** Minted 2026-08-30 (338th filing),
+  librarian-minted, from `Pass 178.0` (`c441a92`) at **`n = 2`** — the
+  **336th filing declined this rule at `n = 1` and the decline was correct on
+  the evidence it had.**
+
+  **★ THE PROCESS FACT THAT MADE THE MINT POSSIBLE, AND IT GENERALISES PAST
+  THIS RULE.** The 336th filing was offered two candidate second instances
+  (`Pass 68.0`, `Pass 174.8`), rejected **both** correctly — the first is
+  `R171`'s widened scope, the second was a guard half-present *within one
+  function's own branches* rather than across a layer boundary — declined the
+  mint, and **recorded the count so it could be added to rather than
+  re-derived.** The engineer's answer, verbatim in `c441a92`'s message:
+  **"★ BUT A DECLINE IS A JUDGEMENT ABOUT THE CANDIDATES OFFERED, NOT A
+  SEARCH."** Nobody had gone looking. He looked, and found a second instance
+  **with two distinct failures**. ⇒ **A declined mint that records its count
+  is not a closed question; it is an open one with a known denominator, and
+  the cheapest way to answer it is a grep rather than another filing's worth
+  of waiting.** Preserved because the 336th filing's own closing sentence
+  invited exactly this and a future filing will be in the same position.
+
+  **The instances.**
+
+  - **Instance 1 — `Pass 176.0` (`8b825ed`, 2026-08-30). SILENT TOTAL DATA
+    LOSS.** `DimensionModel::delete_group(id) -> usize` has refused the
+    default ce-dimension group since `Pass 25.7`, by `return 0`. **`0`
+    members reassigned is also a perfectly legitimate success** — a group that
+    was empty. `EditSession::delete_dimension_group_with` could not tell the
+    two apart, deleted nothing, reported success, and the *next save* wrote an
+    empty model over a good sidecar. Measured before the fix:
+    `groups=2 dimensions=1` → `groups=1 dimensions=0`.
+  - **Instance 2 — `Pass 178.0` (`c441a92`, 2026-08-30). FALSE SUCCESS,
+    TWICE.** `DimensionModel::set_group_visible(id, visible) -> bool` returns
+    **the resulting visibility**, so it encodes *both* of its refusals as
+    `true`: the un-hideable default group (`return true // un-hideable`) and
+    an id resolving to no group at all (`else { true }`).
+    `toggle_dimension_layer` passed either back as `Ok(true)`, **committed a
+    command and wrote an incremental revision.** Measured on the release
+    binary: `--group 0 --hide` and `--group 99 --hide` both →
+    `visible=true changed=1 appended=556`, **exit 0**.
+  - **★★ Instance 3 — `Pass 178.1`, IN THE WORKING TREE AND UNCOMMITTED when
+    this rule was minted, stated as such because hard rule 8 requires it.
+    SILENT SUBSTITUTION.** `DimensionModel::add_dimension(group, kind) ->
+    DimensionId` **falls back to `DEFAULT_GROUP_ID`** for an unknown group —
+    reasonable in the pure model, where a record whose `group` resolves to
+    nothing would be an orphan every reader must then handle. The session path
+    passed it through, so `dimension-add --group 99` printed `group=99 … dim=1`
+    while `dimension-list` read `dim 1 group=0`. **The ce-dimension group is
+    the authority for scale, unit, precision and drafting standard**, so the ce
+    dimension was measured against a scale nobody chose. ⇒ **A wrong number on
+    a drawing, from a mistyped id, with a green exit code.**
+
+  **★★★ WHY THIS IS A MINT AND NOT AN INSTANCE OF AN EXISTING RULE**, which is
+  what a future session will reach for. This project's bar for a sharpening
+  mint is *the parent's remedy is correct and **does not reach** the case* —
+  `R232`'s, `R233`'s and `R234`'s stated warrant, and deliberately **not** an
+  occurrence count (the 2026-08-05 ruling forbids elevating per occurrence).
+  Every plausible parent was checked and every one fails on its remedy:
+
+  | candidate parent | its remedy | why it does not reach |
+  |---|---|---|
+  | **`R151`** (a core capability with no caller) | audit the call graph | **Both helpers HAVE callers.** The defect is not absence of a caller but a caller that cannot *hear* a refusal. |
+  | **`R171`** (a value that must agree with another place is read off its owner, never restated) | **delete the second copy** | ★ Applying it makes this **worse**. Nothing is restated here — there is exactly **one** copy of the rule, and that is the problem. `R171`'s remedy presupposes a duplicate to remove. |
+  | **`R150`** (a two-sided mechanism with one side an empty stub) | read the function body | The bodies are **correct and complete**. Reading either helper shows the rule enforced. |
+  | **`R143`/`R144`/`R147`/`R204`** (the refusal family) | audit callers when a refusal is added, removed or widened | All four presuppose a refusal that **is expressible**. Here the refusal has no representation to audit. |
+  | **project rule 4** (fuzzy, never sneaky) | disclose what pdfce inferred | Scoped to **inference**. pdfce inferred nothing; it **refused and said "success"**. |
+
+  ⇒ The remedy this rule adds and no parent contains: **the type at the layer
+  boundary must be able to say no.** The pure model may keep its total,
+  `Result`-free signature — that is what makes it testable without a
+  `Document` — but the **session verb** must re-derive the precondition and
+  return `Err` **before any mutation**.
+
+  **★★ THE MECHANICAL CHECK, AND THE FACT THAT ITS FIRST FORM WAS TOO NARROW —
+  which is why it is stated in the widened form and why the narrow form is
+  kept visible rather than quietly replaced.** The check first drafted was a
+  **signature** check:
+
+  > ~~"look for `fn set_x(&mut self, …) -> bool` — a mutator returning *the
+  > resulting state* rather than `Result`."~~
+
+  Run over `crates/pdfce-core/src/` (excluding `edit.rs`, the session layer)
+  it returned **5 hits, 2 of them instances** — both already fixed — and three
+  **discriminating** returns that enforce no rule and are **correct as they
+  stand**: `remove_group -> bool`, `remove_dimension -> bool` (`false`
+  genuinely means *it was not there*) and `text_state.rs:734
+  `apply_operator -> bool`` (*did I handle this operator*). **Reported
+  surviving-and-correct per hard rule 11(e), so a later sweep does not "fix"
+  them.**
+
+  ★★ **Instance 3 then walked straight through that grep**, because
+  `add_dimension` returns `DimensionId` — **a fresh, correct, always-valid
+  success value**. The signature check catches the **return-value conflation**
+  and is **blind to the silent substitution**, and the reason is exact: *a
+  substitution's return value is not wrong.* It truthfully describes what
+  happened; it simply does not describe **what was asked for**. So the check
+  is not about the return **type** at all:
+
+  > **For each mutating helper on a pure model, ask: is there an input for
+  > which this does something OTHER than what was asked, and still returns a
+  > value the caller cannot distinguish from success?** Two known sub-shapes:
+  > **(i) a refusal encoded as a legitimate result value** (`0` members, `true`
+  > = visible); **(ii) a silent substitution of a different operand** (an
+  > unknown id becomes the default). If yes, the **shipping verb** owes an
+  > `Err`.
+
+  **★ The discriminator, so the rule is not over-applied.** A model helper
+  that substitutes or refuses is **not** a defect when the shipping verb
+  **surfaces the choice as an operand.** `delete_group`'s reassignment of
+  members to the default group (`group.rs:1182`) is the live contrast: same
+  file, same substitution shape, and **not** an instance, because
+  `delete_dimension_group_with` exposes it as `GroupDeletion::Reassign` — the
+  operator chose it. **The rule is about a policy the caller cannot see, not
+  about substitution as such.**
+
+  **What the rule obliges, in four lines.**
+  (a) **When a session verb delegates to a pure-model helper, re-derive the
+  helper's preconditions at the verb and return `Err` before any mutation** —
+  do not infer refusal from the helper's return value.
+  (b) **Run the widened check above over the model type whenever a Pass adds
+  or touches a verb that delegates to one**, and **record the hits that
+  survive and are correct** so the next sweep does not undo them.
+  (c) **A refusal or substitution the operator chose is an OPERAND, not a
+  defect.** Where the model's policy is legitimate and the operator should
+  pick, give the verb a parameter rather than an `Err`.
+  (d) **Sibling verbs over the same identifier space refuse alike.** Instance
+  2's second half was not merely a missing guard but an **inconsistency** —
+  six sibling ce-dimension-group verbs refused an unknown id by name and one
+  did not, so a script got a green exit code from that one alone and the
+  operator could not learn the convention from the tool.
+
+  **★ Scope, so it is not over-read.** This binds on the boundary between a
+  **pure model** (no `Document`, deliberately `Result`-free so it stays
+  testable in isolation) and a **session/shell verb that commits**. It does
+  **not** oblige `Result` on the pure model — converting these helpers would
+  destroy the property that makes them worth having, and is the wrong fix. It
+  does **not** bind on internal helpers with a single caller inside the same
+  layer. And it is **not** a claim that returning state is bad style:
+  `remove_group -> bool` is exemplary, because its `false` is
+  **discriminating**.
+
+  **`FEATURES.md`: no row.** Both changes are refusals, and decision `105`'s
+  precedent is that **a refusal is not a capability**. One existing row was
+  edited — the ce-dimension layer-visibility row, which was silent on both new
+  limits.
+
+  **Cross-references.** `R151` (the mechanism in the mirror: there, a rule with
+  no caller; here, a caller that cannot hear it), `R171` (argued above as the
+  nearest parent that does **not** reach), `R143`/`R204` (the refusal family,
+  all of which presuppose an expressible refusal), **hard rule 11(e)** (report
+  the survivors), **project rule 4** (the disclosure obligation this is
+  adjacent to but distinct from). **Cross-project derivation:**
+  `D:/dev/rag/rust/a_pure_model_helper_that_returns_a_result_value_cannot_refuse_so_the_rule_is_invisible_at_the_verb.md`
+  (forward slashes deliberately, per hard rule 11's path note).
+
+  **Standing rules ceiling `R234` → `R235`; next free `R236`.** **Decision
+  ceiling UNCHANGED: `105`; next free `106`** — see `Pass 178.0`'s entry §5 for
+  why the toggle/non-toggle undo split earns no record.
 
 ## Update protocol
 

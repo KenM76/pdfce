@@ -78488,3 +78488,261 @@ and the zero is deliberate:**
    rules 8, 10 and 11 already are — commitments on behaviour, not machinery —
    and the engineer's own Pass checklist is where such a step would actually
    be read. **Operator/engineer's call, not this role's to add.**
+
+## 2026-08-30 (338th filing) — `Pass 178.0` (`c441a92`) filed: the ce-dimension layer toggle answered **`exit 0`, `visible=true`, 556 bytes** for a group that cannot be hidden AND for one that does not exist. ★★★ **`R235` IS MINTED at `n = 2`, reversing the 336th filing's decline — which was CORRECT on the evidence it had, because nobody had gone looking. And the mint's own mechanical check was TOO NARROW: a third instance walked through it while this entry was being written.** One `FEATURES.md` row corrected; both 337th-filing items discharged and confirmed on disk; one new cross-project RAG finding
+
+**Shipped:**
+- **`Pass 178.0`** (`c441a92`) — `EditError::DimensionGroupNotHideable` is new
+  and `DimensionGroupNotFound` is newly reached from
+  `EditSession::toggle_dimension_layer`, both refused **before any mutation**.
+  **5 files, +232 / −4; test-file share 129 of 232 = 55.6 %.** No new verb —
+  `EditSession` stays at **175** public methods, `EditError` moves **103 →
+  104**. One new integration test with three contrast cases (a NON-default
+  group still hides; SHOWING the default group is still fine; the input file is
+  byte-untouched after every refusal) — **without those the fix would be
+  indistinguishable from a verb that stopped working.** Sabotage-checked:
+  neutering both guards fails it.
+
+**The defect, measured on the release binary before the fix:**
+
+```
+layer-toggle base.pdf --group 0  --hide   -> visible=true changed=1 appended=556  (exit 0)
+layer-toggle base.pdf --group 99 --hide   -> visible=true changed=1 appended=556  (exit 0)
+```
+
+**Two different wrong answers with byte-identical output.** Group `0` is
+un-hideable by a rule that has existed since `Pass 12.M2` — every ce dimension
+falls back to the default group, so a document whose default layer is off can
+carry measurements nothing in a layer list can turn back on. Group `99` does
+not exist. Both got a success line, a file **556 bytes larger** (**= the entire
+byte cost of a command that did nothing**, hard rule 10(a)) and an undo entry
+that undoes nothing visible. ★ The second half is an **inconsistency**, not
+merely a missing guard: **six** sibling ce-dimension-group verbs refuse an
+unknown id by name and this one did not, so a mistyped id got a green exit code
+from exactly one verb — **the operator could not learn the convention from the
+tool.**
+
+**Decisions made this session:** none minted; **ceiling stays `105`, next free
+`106`.** Two dispositions:
+
+- **★★★ STANDING RULE — MINTED. `R235`, at `n = 2`.** *"A pure-model helper
+  that enforces a rule by returning a **result** has no channel to refuse, so
+  the rule is invisible at the verb that ships through it; the session verb
+  owes the `Err`."* Instance 1 is `Pass 176.0`'s `delete_group -> usize`
+  returning `0` (**silent total data loss**); instance 2 is `Pass 178.0`'s
+  `set_group_visible -> bool` returning `true` twice over (**false success**).
+  ★ **The two instances differ in kind and that is the point** — one lost data,
+  one lied about success; what they share is the *shape*, and a rule minted on
+  the shape covers both symptoms.
+  **Every plausible parent was checked and each fails on its remedy** (the
+  table is in `R235`): `R151` — both helpers **have** callers, the defect is a
+  caller that cannot *hear* a refusal; **`R171` — applying its remedy makes
+  this WORSE**, since nothing is restated here and *"delete the second copy"*
+  presupposes a duplicate that does not exist; `R150` — both bodies are correct
+  and complete; the `R143`/`R144`/`R147`/`R204` refusal family — all four
+  presuppose a refusal that **is expressible**; project rule 4 — scoped to
+  **inference**, and pdfce inferred nothing, it **refused and said "success"**.
+  That is this project's stated bar (*the parent's remedy is correct and does
+  not reach the case*, per `R232`/`R233`/`R234`), met independently of the
+  count. **`R234` → `R235`; next free `R236`.**
+- **DECISION LOG — NO ENTRY.** The deliberate non-change (setting a
+  ce-dimension group to the visibility it already has still records one undo
+  entry, matching `set_dimension_display` and deliberately opposite to
+  `set_info_field`/`set_dimension_label`, which are not toggles) is a
+  **verb-level** contract split: argued at both loci in source, **principled
+  rather than accidental** — the discriminator is *is this verb a toggle?*, a
+  property of the verb and not a policy chosen per-verb — and it has **produced
+  no defect**. A record minted for a split nobody got wrong would make the
+  ledger the place where consistent things are justified. ★ **The trigger is
+  recorded so it can be added to rather than re-derived:** a *third* undo
+  policy, or the first observation of a toggle and a non-toggle verb being
+  confused for one another in a shell.
+
+**Findings + decisions:**
+
+- **★★★ THE FINDING OF THIS FILING — THE MINT'S OWN MECHANICAL CHECK WAS TOO
+  NARROW, AND IT WAS DISPROVED WITHIN THE HOUR.** The check first drafted was a
+  **signature** check: *"look for `fn set_x(&mut self, …) -> bool` — a mutator
+  returning the resulting state rather than `Result`."* Run over
+  `crates/pdfce-core/src/` (excluding `edit.rs`) it returned **5 hits, 2 of
+  them instances**, both already fixed — a clean, bounded, satisfying result.
+  ★★ **Then a third instance walked straight through it.**
+  `DimensionModel::add_dimension(group, kind) -> DimensionId` **silently
+  substitutes `DEFAULT_GROUP_ID`** for an unknown ce-dimension group, and it is
+  invisible to the grep because it returns **a fresh, correct, always-valid
+  success value**. ⇒ **The signature check catches the RETURN-VALUE CONFLATION
+  and is blind to the SILENT SUBSTITUTION, and the reason is exact: a
+  substitution's return value is not wrong.** It truthfully describes what
+  happened; it simply does not describe **what was asked for**. `R235` is
+  therefore minted with the **widened** predicate — *is there an input for which
+  this does something other than what was asked and still returns a value the
+  caller cannot tell from success?* — and the **narrow form is kept visible and
+  struck** inside the rule rather than quietly replaced, per house style, so
+  the next reader sees why the widening exists.
+- **★★ Instance 3 is `Pass 178.1` and it is UNCOMMITTED — stated as such
+  because hard rule 8 requires it.** Observed by `git diff crates/` (+33 lines
+  at `crates/pdfce-core/src/edit.rs:27326`) **while this filing's `ROADMAP.md`
+  entry was being written**; it is **not** what this filing files. Its measured
+  symptom, from the engineer's own in-tree comment: `dimension-add --group 99`
+  printed `group=99 … dim=1` while `dimension-list` then read `dim 1 group=0`.
+  **The ce-dimension group is the authority for scale, unit, precision and
+  drafting standard**, so the ce dimension was measured against a scale nobody
+  chose ⇒ **a wrong number on a drawing, from a mistyped id, with a green exit
+  code.** ★ Note the ledger gate now reports *"Pass families MENTIONED: up to
+  178 (highest ID 178.1)"* with `178` under CLAIMED-BUT-NOT-YET-HEADED — **that
+  is the correct state**, not a defect, and the next filing heads it.
+- **★★ THE PROCESS FACT, which generalises past this rule and is preserved in
+  `R235`'s own text.** The 336th filing was **offered** two candidate second
+  instances, rejected **both correctly** (`Pass 68.0` is `R171`'s widened
+  scope; `Pass 174.8`'s guard was half-present *within one function's own
+  branches*, not across a layer boundary), declined the mint, and **recorded
+  the count so it could be added to rather than re-derived.** The engineer's
+  answer, verbatim: **"★ BUT A DECLINE IS A JUDGEMENT ABOUT THE CANDIDATES
+  OFFERED, NOT A SEARCH."** ⇒ **A declined mint that records its count is not a
+  closed question; it is an open one with a known denominator, and the cheapest
+  way to answer it is a grep rather than another filing's worth of waiting.**
+  The 336th filing's closing sentence invited exactly this, and a future filing
+  will stand in the same place.
+- **★ The rule's discriminator, recorded so it is not over-applied.**
+  `group.rs:1182` — `delete_group`'s reassignment of members to the default
+  group — is **the same substitution shape in the same file and is NOT an
+  instance.** It is deliberate ui-spec §5.2 policy (*never a silent orphan*),
+  and `delete_dimension_group_with` **surfaces it as an operand**
+  (`GroupDeletion::Reassign`). **The rule is about a policy the caller cannot
+  see, not about substitution as such**, and the live contrast is what makes
+  that checkable.
+- **Both 337th-filing items DISCHARGED, confirmed on disk rather than
+  relayed.** (1) `crates/pdfce-core/tests/object_clipboard.rs:147` — read the
+  file: a 25-line comment now states the assertion's soundness is **a property
+  of the FIXTURE rather than of the code**, names both reasons, says a future
+  fixture with text makes it **vacuous with nothing turning red**, and cites
+  `C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`
+  by name. **Stated rather than hardened; the reasoning is accepted** —
+  `--mode full` would change *what the test exercises*, and the honest fix for
+  a fixture that grows text is to assert on the current resource dictionary.
+  (2) The RAG re-derivation: **accepted in full by the engineer and recorded in
+  the commit message as a COST, not a win.** ★ His own sentence is the half
+  worth carrying — ***"the habit is the fix, not the outcome"*** — because the
+  second derivation came back **stronger**, and a stronger accidental result is
+  the most persuasive possible argument for a bad habit.
+- **`docs/core-api` CONFIRMED, not relayed** (`git show c441a92 --
+  docs/core-api/`): `02-editing-and-saving.md` gains the
+  `DimensionGroupNotHideable` refusal, the unknown-group consistency note and
+  the **grey-the-toggle-out** guidance; `index.md`'s `EditError` figure moves
+  **103 → 104**. `check-core-api-verbs` **PASS at 175**.
+
+**★★ Hard-rule-11 sweep — ONE survivor corrected, FIVE reported as
+surviving-and-correct.** Claim: *"the ce-dimension layer toggle has no
+limits."* Swept per clause (e) — bare keywords (`layer-toggle`,
+`toggle_dimension_layer`, `hideable`, `visib`), case-insensitive, over the
+files the feature touches — not the exact phrase over the tree.
+
+- **Survivor 1 — `docs/FEATURES.md` line 182**, the ce-dimension layer-toggle
+  row, which read in its entirety: *"Toggle a group's OCG layer visibility."*
+  **Not wrong, and silent on both new limits** — a shell author reading that
+  row would build a toggle for the default group and discover the refusal at
+  runtime. **Corrected**: it now names `DimensionGroupNotHideable` with the
+  reason (every ce dimension falls back to the default group), tells a shell to
+  **grey that toggle out rather than let the refusal be the only signal**, and
+  records the unknown-id refusal as matching every sibling group verb. Also
+  qualified *"a group"* → *"a ce-dimension group"* per project rule 15.
+- **Reported surviving-and-correct, so the next sweep does not "fix" them:**
+  `docs/FEATURES.md`'s ce-dimension **groups** row (line 179) — it enumerates
+  *"create, rename, delete and re-parent"* and already carries
+  `DimensionGroupIsDefault`'s refusal clause; **visibility is not among those
+  four and belongs on its own row**, so it correctly takes no new clause.
+  `crates/pdfce-core/src/dimension/group.rs:1033` `remove_group -> bool`,
+  `:1169` `remove_dimension -> bool` and `crates/pdfce-core/src/text_state.rs:734`
+  `apply_operator -> bool` — all three **discriminating** returns that enforce
+  no rule and are correct as they stand (they are `R235`'s own false positives).
+  `group.rs:1182` — argued above.
+- **Nothing owed back to the engineer from this sweep.**
+
+**Sourcing — `R228`; this filing had a shell and used it.** Re-run here:
+`check-core-api-verbs` **PASS at 175 public `EditSession` methods** (unchanged
+from the 337th filing — this Pass adds no verb); `check-ledger-numbers`
+**clean**, and its LIVE CEILINGS block read directly for all three numbers
+below rather than inferred from documents; `check-cited-verbs-exist` **PASS,
+7 of 7**; `check-suite-name-absent` **clean**; `check-commits-filed` named
+**`c441a92` DEFERRED** before these entries were written. `git show --numstat`:
+**5 files, +232 / −4**. Live source read for the rule verdict:
+`crates/pdfce-core/src/dimension/group.rs:1062`, `:1175`, `:1080`, `:1182`.
+**Relayed, not re-run:** `cargo test --workspace --all-features` (foreground),
+fmt, `clippy --all-targets --all-features -D warnings`, the three contrast
+cases and the sabotage result.
+
+**Cross-project RAG — ONE new finding, and the neighbours it is deliberately
+NOT duplicating are named:**
+- `D:/dev/rag/rust/a_pure_model_helper_that_returns_a_result_value_cannot_refuse_so_the_rule_is_invisible_at_the_verb.md`
+  — the general Rust/API-design fact, with all three instances, the **widened**
+  check and its **narrow** predecessor, and the `GroupDeletion::Reassign`
+  discriminator.
+- **Checked before writing, per the 337th filing's own lesson.**
+  `a_shadowed_binding_in_a_branch_leaves_a_value_derived_above_it_stale.md`
+  covers `Pass 176.0`'s *other* defect (the scale/unit bug), **not** this
+  shape; `C:/personal_rag/pdf/lesson_20260830_reader_enforced_invariant_writer_does_not_is_silent_total_data_loss.md`
+  covers instance 1's *consequence in the PDF domain*, not the API-boundary
+  mechanism; `a_safely_degrading_guard_converts_a_loud_failure_into_a_silent_one.md`
+  is the nearest neighbour and is about **input validation of garbage**, whose
+  remedy is observability of skipped inputs — the new file cites it and states
+  the boundary. `refuse_a_nonsensical_state_by_construction_not_by_error_variant.md`
+  is the **opposite** direction (make it unrepresentable) and is cited as the
+  alternative that is wrong here, because converting the pure model to `Result`
+  destroys the property that makes it testable without a `Document`.
+- **Nothing filed to `C:\personal_rag\pdf\`** — this is a Rust/API-design fact
+  with no PDF-domain content; hard rule 3's bar is met by the `rust` file
+  alone, and a second copy would violate hard rule 4.
+
+**Still in flight:**
+- **★★ THE TREE MOVED UNDER THIS FILING, and this time it moved a fact the
+  filing depends on.** First `git status --short`: `M
+  crates/pdfce-core/src/edit.rs` plus untracked `.tmp_1781.py`. `git diff
+  --stat crates/` = **+33 lines, 1 file** — `Pass 178.1`, the third `R235`
+  instance, **which changed the rule this filing was minting** (see the finding
+  above). **Second `git status --short`, taken after every entry was written:
+  the same plus `M crates/pdfce-cli/tests/dimension_group_management.rs`, and
+  `git diff --stat crates/` = +122 across 2 files (+33 `edit.rs`, +89 the
+  test)** — `Pass 178.1` grew its integration test while this filing ran.
+  ⇒ **`R201` says a dispatch in flight is not a commit window; this is
+  the reporting half again, and the sharpest instance yet: the moving object
+  was not merely adjacent to the filing, it was inside its argument.**
+  Statements about `c441a92` in this filing are about the **commit**;
+  statements about `Pass 178.1` are about the **tree**, at the time given.
+- **`Pass 178.1` is unfiled and owed a heading** — the ledger gate now lists
+  `178` under CLAIMED-BUT-NOT-YET-HEADED, correctly.
+- **Backup bundle is 10 commits behind `HEAD`** —
+  `pdfce-20260830-0122-e49619f-full.bundle`, by `ls -lt /d/Dev/pdfce-backups/`
+  and `git rev-list --count e49619f..HEAD` = **10**. ★ It was 6 at the 337th
+  filing and 4 at the 336th; **the lag is growing by roughly one filing's worth
+  per filing**, which is the figure rather than the fact.
+- **`main` is 10 commits ahead of `origin/main`** (`git rev-list --count
+  origin/main..HEAD`); pushing `main` is standing-authorized (decision 090) and
+  `check-suite-name-absent` is clean.
+- `bash tools/run-gates.sh` has **not** been run against `c441a92`; five gates
+  were run individually here.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — still
+  open, unchanged for a fourth filing: single-sourced at moderate confidence,
+  its own author asked for a live-Acrobat check, and this machine has Reader
+  only.
+
+**For next session:**
+1. **File `Pass 178.1`** (the third `R235` instance) and, when filing it, **add
+   it to `R235`'s instance table as a COMMITTED instance** — it is recorded
+   there now as *uncommitted at mint time* and that qualifier must be
+   discharged rather than left standing.
+2. **★ Run `R235`'s widened check over the OTHER pure-model types**, which this
+   filing did not: `forms`, the outline model, and the annotation model. The
+   `dimension/` set is closed at three; **nothing has been measured outside
+   it**, and saying so is the point — the check's value is that it is cheap and
+   bounded, not that it has been run everywhere.
+3. **Carried unchanged from the 337th filing** — notify `D:\dev\pdfceGUI` of
+   `rotate_widget` / `rotate-widget` **together with** the 336th filing's still
+   unsent item (`group-rename` / `group-delete` / `dimension-group` /
+   `dimension-label`), as one note rather than two. ★ **Add the two new
+   refusals to that note**: their layer panel needs to grey the default group's
+   toggle out, which is a UI change on their side that only this filing tells
+   them about.
+4. **The `ARCHITECTURE.md` §4 sweep is still not finished** — carried unchanged
+   for a third filing. One stale re-export figure was found by reading for the
+   claim; the block it sits in lists several modules' surfaces the same way and
+   nothing derives any of them.
