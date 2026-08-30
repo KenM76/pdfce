@@ -28075,7 +28075,7 @@ free 072.**
   |---|---|---|
   | pdfce **recognises** an `/A` action | ✅ every subtype (`classify_action_hazard_dict`) | unchanged |
   | pdfce **preserves** an `/A` action byte-exactly through save | ✅ incremental **and** full rewrite, measured | unchanged |
-  | pdfce **authors** an `/A` action | ❌ **none, of any kind** — measured, not recalled: a `grep` for an `/A` insert across `pdfce-core` returned three hits and all three were unrelated | ✅ **`/ResetForm`, `/SubmitForm`, `/GoTo`, `/Named`, `/URI`** |
+  | pdfce **authors** an `/A` action | ❌ **none, of any kind** — measured, not recalled: a `grep` for an `/A` insert across `pdfce-core` returned three hits and all three were unrelated | ✅ **`/ResetForm`, `/SubmitForm`, `/GoTo`, `/Named`, `/URI`** — ★★ **and `/Hide`, added 2026-08-30 by `Pass 183.1` (`3762b5d`) under the SAME ruling 2 this decision already records. SIX variants, not five — see the amendment footer below** |
   | pdfce authors `/JavaScript` or `/Launch` | ❌ | ❌ **refused by name, permanently** (`R53`, `R13`) |
   | pdfce **FIRES** a trigger | ❌ | ❌ **UNCHANGED — `R54` is not engaged and its decision-`088` amendment is NOT relied on** |
   | pdfce opens a network connection | ❌ | ❌ **UNCHANGED — `R12` is not engaged; no network code exists in any crate touched, `no-network` green** |
@@ -28139,3 +28139,136 @@ free 072.**
   under-reporting-census class, third instance; see `ROADMAP.md`'s `Pass 183.0`
   entry, Finding 1), on the standing warrant that **no mechanical gate can
   content-check a census's own completeness.**
+
+  **★★★ AMENDED 2026-08-30 (344th filing) — `/Hide` JOINS THE AUTHORED SET.
+  THE DECISION IS NOT SUPERSEDED AND THE CEILING DOES NOT MOVE, BECAUSE THIS
+  IS THE SAME RULING FINISHING ARRIVING.** `Pass 183.1` (`3762b5d`) added
+  `ButtonAction::SetHidden` → `/S /Hide`. **It is authorised by ruling 2 above,
+  quoted in this very entry** — *"the submit and other options that don't need
+  javascript"* — so it is not a new decision at all. `Pass 183.0` omitted it
+  **by accident, not by decision**: the plan the ruling cited
+  (`docs/plan-scripting-submit-and-plugins.md` §8 Phase 1) did not list it, and
+  the Pass built to the plan. ⇒ **Amended in place rather than filed as `108`,
+  on this entry's own stated precedent** — filing it separately would leave
+  `107` standing in the corpus as *"pdfce authors five kinds"*, which is the
+  reading it would invite and which is **wrong within the same day**, exactly
+  the argument this entry already made for folding ruling 2 into ruling 1.
+  **Third application of `106`'s precedent.**
+
+  ★★ **THE COUNT, FILED IN BOTH FORMS (hard rule 10(a)), because two correct
+  counts here look like a contradiction.** `ButtonAction` has **SIX** variants
+  — `ResetForm`, `SubmitForm`, `GoToPage`, `Named`, `SetHidden`, `Uri`
+  (counted off the live `enum`, `crates/pdfce-core/src/edit.rs`). Of those,
+  **FOUR are reach-nothing** — `GoTo`, `Hide`, `ResetForm`, `Named` — out of
+  the **EIGHT** script-free reach-nothing action types ISO 32000-1 defines.
+  **Six, four and eight are three different facts and all three are true.**
+
+  ★ **The boundary table above is otherwise UNCHANGED by this amendment.**
+  `/Hide` reaches nothing, fires nothing and opens no connection: `R54` and
+  `R12` remain un-engaged, creation stays inert, and `/JavaScript` and
+  `/Launch` stay refused by name. **A show/hide button is the cheapest thing
+  in this decision's scope**, and it is worth saying so, because the word
+  *hide* invites a reader to look for a security consequence that is not
+  there.
+
+- **2026-08-30 — Decision `108`: WHEN A SPEC AMBIGUITY'S TWO READINGS DIFFER
+  BY *SILENCE* RATHER THAN BY *OUTPUT*, pdfce REFUSES INSTEAD OF DEFAULTING —
+  A NARROW, STATED CARVE-OUT FROM THE OPERATOR'S STANDING "NEVER HARD-CODE A
+  CHOICE THE STANDARD LEAVES OPEN".** Filed in the **344th filing**
+  (librarian; a shell was held and used; **no code was written in this
+  filing**). First applied in `Pass 183.1` (`3762b5d`);
+  `ROADMAP.md`'s *Shipped* section carries the engineering detail.
+
+  **★★★ THE DIRECTIVE BEING NARROWED, QUOTED RATHER THAN PARAPHRASED.** From
+  the operator's standing preferences, recorded as *"Fix bugs on discovery;
+  make spec ambiguity a setting"*:
+
+  > *"…never hard-code a choice the standard leaves open."*
+
+  **That directive is not weakened and its default is unchanged.** Where the
+  standard is ambiguous, pdfce still ships both readings and picks a default.
+  **This decision names the one class where that instruction, applied
+  literally, produces the outcome it exists to prevent.**
+
+  **★★★ THE TRIGGERING CASE.** ISO 32000-1 Table 210 (`/Hide`) states **no**
+  descendant rule, while `/ResetForm`'s and `/SubmitForm`'s `/Fields` rows both
+  do — **measured: 2 hits per edition, both on a `/Fields` row, never on
+  Table 210.** So what a **grouping (non-terminal)** field name means to a hide
+  action is genuinely undefined. The two readings:
+
+  | reading | what the file contains | ★ what the operator can observe |
+  |---|---|---|
+  | *hide the subtree* | a conforming `/Hide` action | the buttons work |
+  | *hide nothing* | ★ **a byte-identical conforming `/Hide` action** | ★★ **the button does nothing, forever, and no check pdfce owns can tell him** |
+
+  **★★★ THE CRITERION, STATED SO IT IS REUSED RATHER THAN RE-DERIVED.**
+
+  > **"Make it a setting" presupposes that BOTH readings produce something the
+  > operator can inspect. When one reading produces SILENCE, the ambiguity is
+  > not a configuration axis — it is a thing the standard did not define, and
+  > pdfce refuses to pick.**
+
+  ⇒ **A setting whose wrong position is undetectable is not a setting; it is a
+  coin flip with a knob drawn on it.** The directive's *purpose* is to stop
+  pdfce from quietly imposing one reading of the standard on the operator. A
+  default here would do precisely that **and** remove his ability to notice —
+  so honouring the letter would violate the intent.
+
+  **★★ THE TEST, IN THE FORM A FUTURE SESSION CAN APPLY IN ONE MINUTE.** Given
+  two readings A and B of an ambiguous clause, ask **only** this:
+
+  1. **Does each reading produce an artefact the operator can inspect?** If
+     yes → **the directive applies unchanged: ship both, pick a default.**
+  2. **Does either reading produce a NO-OP, or an effect visible only in
+     third-party software pdfce does not control?** If yes → ★ **refuse by
+     name**, with an error that says which ambiguity was hit.
+
+  **The discriminator is OBSERVABILITY, not risk, not severity, and not
+  how confident anyone feels about the reading.** A merely *wrong* default is
+  recoverable — the operator sees the output and says so. A *silent* default is
+  not, because there is nothing to see.
+
+  **★★ WHY THIS IS A DECISION AND NOT A STANDING RULE — the mint was
+  CONSIDERED and DECLINED.** Standing rules in this project are **behavioural
+  commitments a reviewer can check after the fact** (`R228`'s sourcing, hard
+  rule 8's measurement, hard rule 11's sweep). This is an **adjudication test
+  applied at design time**, before there is an artefact to review. Filing it
+  as `R236` would put a *criterion* into a list readers consult for
+  *obligations*, which is how a standing-rules section stops being scannable.
+  ⇒ **`R235` remains the ceiling; next free `R236`.**
+
+  **★ HOW RULE 4 BINDS, since the refusal could be mistaken for a gate.**
+  Decision `059` forbids accept/reject gates in front of inferences. **Nothing
+  is inferred here and nothing is gated**: pdfce is not offering the operator a
+  provisional guess to confirm, it is declining to author bytes whose meaning
+  the standard never fixed. **A refusal at the API boundary is not a
+  confirmation step** — there is no state to accept, and the error names the
+  ambiguity rather than asking the operator to resolve it. What rule 4 requires
+  and gets is **non-silence**: the refusal is by name
+  (`EditError::ButtonActionHideTargetNotTerminal`), never a quiet no-op.
+
+  **★ WHAT THIS DOES NOT LICENSE**, stated because a refusal is a cheap thing
+  to reach for. **Refusal is not the safe default for ambiguity** — it is the
+  answer for the *silence* class only. Refusing where both readings are
+  observable would strand the operator with no way to author a legal file, and
+  **that is the failure the directive was written against in the first place.**
+  Two live counter-examples in the immediately adjacent work, both of which
+  correctly did **not** refuse: `Pass 183.0` **allows `http` and says so**
+  rather than refusing it (destination policy is open by operator ruling O4),
+  and `Pass 183.1` **authors a hide action for a field that owns no widget**
+  and discloses it, because refusing would be pdfce inventing a reader rule the
+  standard does not state. ⇒ **pdfce refuses for DECIDABILITY, never for
+  taste.**
+
+  **Body-section counterpart: none required.** No crate boundary is redrawn and
+  no §4.2 published guarantee moves; the living account of the refusal is the
+  error type's own doc comment and `docs/core-api/` (engineer-owned).
+
+  **GUI-core separation:** **not re-verified and NOT claimed** — no code was
+  written in this filing, no crate manifest was touched, no dependency added,
+  so `cargo tree` was neither run nor asserted (hard rule 8).
+
+  **Decision ceiling moves `107` → `108`; next free `109`. No standing rule
+  minted** — `R235` stays the ceiling, next free `R236`, and the decline is
+  argued above rather than left implicit.
+

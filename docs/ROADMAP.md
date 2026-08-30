@@ -96,6 +96,447 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 183.1` (`3762b5d`, 2026-08-30) — **A SHOW/HIDE BUTTON, AND THE DEFAULT THAT MAKES *SHOW* THE EASY ONE TO GET WRONG** — ★★★ **THE COUNT IN THE DISPATCH WAS WRONG AND THE COUNT IN TWO TREES IS STILL WRONG: THE ACTION SET IS SIX, NOT FIVE, COUNTED HERE FROM THE LIVE `enum` RATHER THAN CARRIED** — ★★ **AN AMBIGUITY WAS *REFUSED* RATHER THAN MADE A SETTING, WHICH IS A CARVE-OUT FROM A STANDING OPERATOR DIRECTIVE AND IS THEREFORE FILED AS DECISION `108` RATHER THAN LEFT AS A CODE COMMENT** — ★ **AND THE PASS LEAVES A KNOWN, SILENT DEFECT STANDING; THIS FILING RULES THAT THE *REPAIR* MAY BE SEQUENCED BUT THE *DISCLOSURE* MAY NOT, AND SAYS SO AGAINST THE OPERATOR'S OWN "NEVER FILE A BUG FOR LATER" RULE** — filed 2026-08-30 (344th filing)
+
+**Sourcing — `R228`.** This filing held a shell and used it, and the dispatch's
+own framing note (*"`git log` is not available to you"*) was **wrong** — it is
+available, and it was used. **Run here, not relayed:** `git log` / `git show` /
+`git diff --shortstat` / `git rev-list --count` / `git rev-parse` /
+`git tag --list` / `git status --porcelain`, `python
+tools/check-commits-filed.py`, `python tools/check-passes-filed.py`,
+`ls -lt /d/Dev/pdfce-backups/`, a `#[test]` count of
+`crates/pdfce-core/tests/button_action_submit.rs` (**25**, counted here), and a
+live read of `ButtonAction`'s variant list and of `FieldRename`'s fields in
+`crates/pdfce-core/src/edit.rs`. **Relayed and NOT re-run:** `cargo test
+--workspace --all-features`, `cargo fmt --check`, `cargo clippy`, `bash
+tools/run-gates.sh` (**PASS on all 29 commands including both filing gates at
+`3762b5d`**), and every end-to-end binary measurement quoted below.
+
+**Backup currency, measured not inferred (hard rule 8).** `ls -lt
+/d/Dev/pdfce-backups/` — most recent bundle
+`pdfce-20260830-1358-a168061-full.bundle`, at **`a168061`**. ⇒ **two commits
+behind `HEAD`** (`3762b5d`, `5d87a5f`). `origin/main` is at **`5d87a5f`**
+(`git rev-parse --short origin/main`), so the remote is current and only the
+bundle lags.
+
+#### What shipped
+
+`ButtonAction::SetHidden { targets: Vec<String>, hidden: bool }`, plus
+`pdfce-cli set-button-action --hide A,B | --show A,B`. Written from
+`iso32000__s__12.6.4.10.md` (Table 210), **ingested by `pdfce-spec-librarian`
+for this Pass, before any code was written** — the ordering matters and is
+recorded because it is the ordering `CLAUDE.md` rule 1 asks for and rarely
+gets.
+
+**Why it exists at all.** `Pass 183.0` shipped `/SubmitForm`, `/GoTo`,
+`/Named` and `/URI` under the operator's ruling — *"the submit and **other
+options that don't need javascript**"* — and **omitted `/Hide` by accident,
+not by decision**: `docs/plan-scripting-submit-and-plugins.md` §8 Phase 1,
+written four days earlier, did not list it, and the Pass built to the plan.
+★ **A show/hide button is the second-commonest script-free button on a real
+form after reset**, so the omission took out the set's most-wanted surviving
+member.
+
+⇒ **The failure mode is worth naming, because it will recur: a
+citation-shaped ruling (*"the safeguards like we had planned"*) makes the
+cited plan authoritative for SCOPE as well as for safeguards — and the plan
+was never written to be a complete enumeration.** A document cited for one
+purpose silently became the boundary of another. **The defence is not "read
+the plan harder"**; it is to derive the *set* from the standard (which is
+what this Pass did, arriving at the closed eight below) rather than from the
+plan that happened to be cited.
+
+#### ★★★ TRAP 1 — `/H`'s DEFAULT IS `true`, SO THE ORDINARY REFLEX AUTHORS A *SHOW* BUTTON THAT *HIDES*
+
+Verbatim, and identical in both editions:
+
+> *"A flag indicating whether to hide the annotation (true) or show it
+> (false). **Default value: true.**"*
+
+⇒ **An action that OMITS `/H` hides.** The universal reflex — *write the flag
+when it is set, leave it out when it is clear* — produces a Show button that
+hides, **and the file is perfectly conforming**, so no validator, no
+round-trip check and no census this project owns would ever flag it.
+
+- pdfce writes `/H` **explicitly in both directions**. Measured on the shipped
+  binary: `--show` emits `/S /Hide /T [(FullName) (Subscribe)] /H false`.
+- ★ **The CLI spells `--hide` and `--show` as two flags rather than one flag
+  with a modifier for the same reason**: *"show" has to be written out to
+  exist*, and an argument surface where the show case is the **absent** case
+  reproduces the identical bug one layer up.
+- **Sabotage-checked** — writing `/H` only when hiding is caught.
+
+★★ **The generalizable half, and it is why this is escalated rather than left
+in a doc comment: a boolean whose spec default is `true` INVERTS the
+absent-means-off convention that every other flag in the format trains you
+into.** The hazard is not that it is hard — it is that the wrong
+implementation is **easy, conforming, and invisible to every mechanical check
+available**. Captured cross-project as a `personal_rag/pdf` lesson (see
+*Findings escalated*, below).
+
+#### ★★★ TRAP 2 — TABLE 210 HAS NO DESCENDANT RULE, AND BOTH ITS NEIGHBOURS DO. REFUSED, NOT DEFAULTED — AND THAT IS A CARVE-OUT FROM A STANDING OPERATOR DIRECTIVE
+
+`/ResetForm` and `/SubmitForm` both state descendant expansion in their flag
+rows — *"all descendants of the specified fields in the field hierarchy"*. The
+phrase was **measured**, not recalled: **2 hits per edition, both times on a
+`/Fields` row, NEVER on Table 210.**
+
+⇒ **What a grouping (non-terminal) name means to a hide action is genuinely
+undefined**, and the two readings — *hide the subtree* and *hide nothing* —
+differ by everything. **Refused by name**
+(`EditError::ButtonActionHideTargetNotTerminal`) rather than defaulted.
+**Sabotage-checked** — accepting a grouping node is caught.
+
+★★★ **WHY THIS IS *NOT* THE STANDING "TWO DEFENSIBLE ANSWERS → SHIP BOTH, PICK
+A DEFAULT" POSTURE.** The engineer asked for this on the record because a
+future session will reasonably ask — and the question deserves a **criterion**,
+not a precedent.
+
+The standing directive is the operator's own, and it is global rather than
+pdfce-specific: **"never hard-code a choice the standard leaves open"** — make
+spec ambiguity a setting. Read literally it applies here. Applying it here
+would be wrong.
+
+| | the ordinary spec ambiguity | ★ **this one** |
+|---|---|---|
+| reading A | produces a document | produces a document |
+| reading B | produces a **different** document | ★ **produces a button that does NOTHING** |
+| can the operator tell which he got? | **yes — he inspects the output** | ★ **no. Both readings emit a conforming `/Hide` action. The difference appears only when a *reader* presses the button, in software pdfce does not control and cannot observe** |
+| is a default defensible? | **yes** — a wrong default is visible, and therefore reversible | ★ **no** — a wrong default is **silence**, which is the one outcome rule 4 exists to prevent |
+
+⇒ **The criterion, stated so it is reused rather than re-derived: "make it a
+setting" PRESUPPOSES that both readings produce something the operator can
+inspect. When one reading produces SILENCE, the ambiguity is not a
+configuration axis — it is a thing the standard did not define, and pdfce
+refuses to pick.** A setting whose wrong position is undetectable is not a
+setting; it is a coin flip with a knob drawn on it.
+
+**Filed as decision `108`** (`ARCHITECTURE.md` §12) rather than left as a code
+comment, because it **narrows a standing operator directive**, and this project
+records those with the directive quoted rather than paraphrased.
+
+#### ★★ AN *ASSIGNMENT*, NOT A TOGGLE — A CAPABILITY BOUNDARY, NOT A GAP
+
+Table 210: the action works *"by setting or clearing their Hidden flags"*, with
+`/H` as a **value**. ★ **The standard OWNS a toggle — `/SetOCGState`'s `/State`
+has `ToggleNoView` — and did not use it here.** That is a choice **by the
+standard**, not an omission by pdfce.
+
+⇒ **A genuinely toggling show/hide button REQUIRES ECMAScript**, which puts it
+**out of pdfce's scope entirely** (`R53`, `NF4`) rather than merely unbuilt.
+**Recorded as a boundary so a future session does not open it as a gap** and
+spend a Pass rediscovering it. The CLI says so on every run, because *"pressing
+it twice puts it back"* is exactly what an operator will assume.
+
+#### ★★ THE COUNT THAT IS NOT THE ONE YOU EXPECT — WIDGETS, NOT NAMES
+
+**SOURCED**, not inferred: an FQN reaches *"the associated widget annotation
+**or annotations**"* — **every widget of that field, on every page**.
+
+⇒ **`HideDisclosure::widgets_affected` is usually LARGER than the number of
+names**, and it is the number of things that will actually move.
+**Sabotage-checked** — counting names instead of widgets is caught.
+
+**Filed in the form hard rule 10(a) requires** — the figure beside its
+per-item form, with the denominator stated: measured on the shipped release
+binary, `--show FullName,Subscribe` reports **2 fields affecting 2 widgets =
+1 widget per field**. ★ **That ratio is exactly 1 here, which is the *simple*
+case — and it is precisely why a test corpus of simple files cannot
+distinguish the two counters from each other.** The sabotage check, not the
+corpus, is what separates them.
+
+**`targets_without_widgets`** names fields owning no widget: the action is
+**authored anyway** and the fact **disclosed**. ★ **Refusing would be pdfce
+inventing a reader rule the standard does not state** — the same discipline
+that produced the `http` non-refusal in `Pass 183.0`, and worth naming as the
+**second instance in two Passes** of one principle: *pdfce refuses for
+decidability, never for taste.*
+
+**The name form reaches WIDGETS ONLY.** A `/Text` note, a stamp or a **ce
+dimension**'s `/Line` is nameable only by indirect reference, so hiding one is
+not expressible here. Deliberate: an object-id-valued target is not something a
+form editor's UI can offer safely, and it is not what was asked for.
+
+#### ★ THE FRAMING CORRECTION THIS ROLE SUPPLIED, AND WHAT IT PREVENTS
+
+**"Script-free" and "reaches nothing" are two predicates, not one.**
+`SubmitForm` and `Uri` satisfy only the first — **deliberately** — and that
+asymmetry is the *entire reason* `SubmitDisclosure` exists.
+
+⇒ **Collapsing them is how a reader concludes the variant list is arbitrary —
+or, far worse, that a submit is as inert as a reset.** Now a table in
+`ButtonAction`'s doc block.
+
+**And the set is CLOSED, so this is a boundary rather than six arbitrary
+picks.** ISO 32000-1 defines **eight** action types that are both script-free
+and reach-nothing (2.0 adds a ninth); **pdfce authors four of them** — `GoTo`,
+`Hide`, `ResetForm`, `Named`. The four it does not are **sized** in the doc
+block rather than left unexplained: `/SetOCGState` (a run-length sequence
+grammar over `/OCProperties /OCGs` plus `/PreserveRB` against `/RBGroups` —
+**not** an OCG name tree, which was the dispatch's guess and was corrected by
+the spec-librarian), `/Trans` (Table 162, and pointless standalone — it acts
+only *"during a sequence of actions"*, making it a `/Next` companion rather
+than a button's action), `/GoTo3DView` (3D annotations pdfce does not model),
+`/GoToDp` (the PDF 2.0 document-part model). `/Sound` is **excluded from that
+count for a stated reason** rather than overlooked: any stream may carry `/F`
+(Table 5), so it can reach a file, and 2.0 deprecates it.
+
+⇒ **`FEATURES.md` gets the closed-set fact as a SENTENCE, not a *Planned*
+row** — the engineer's lean, and this role agrees with a reason worth stating:
+**a *Planned* row is a promise.** Nobody has asked for any of the four. A row
+would make `FEATURES.md` predict work that is not queued, which is the opposite
+of the scan it is contracted to be, and would be read as a commitment at the
+next roadmap review.
+
+#### ★★★ THE COUNT CORRECTION — THE DISPATCH SAID FIVE, THE `enum` SAYS SIX, AND TWO TREES STILL SAY FIVE
+
+The dispatch instructed: *"add `/Hide`, i.e. the action set is now **five**
+kinds."* **That is wrong, and it was caught by counting rather than by
+reading.** `ButtonAction`'s variants, read live from
+`crates/pdfce-core/src/edit.rs`:
+
+| # | variant | writes |
+|---|---|---|
+| 1 | `ResetForm` | `/S /ResetForm` |
+| 2 | `SubmitForm` | `/S /SubmitForm` |
+| 3 | `GoToPage` | `/S /GoTo` |
+| 4 | `Named` | `/S /Named` |
+| 5 | ★ **`SetHidden`** | ★ **`/S /Hide`** — added by this Pass |
+| 6 | `Uri` | `/S /URI` |
+
+⇒ **SIX.** *Five* was the count **before** this Pass, and `FEATURES.md` row 221
+already said *five* **correctly** — so the instruction *"add `/Hide`, the set is
+now five"* would have **added the new item and left the number untouched**.
+
+★★★ **That is the most dangerous shape a stale figure takes: an edit that
+touches the sentence around a number and leaves the number itself.** The
+resulting line reads as **freshly confirmed** rather than as missed, because
+the prose beside it is visibly current. **A number that survives an edit to its
+own sentence is harder to catch than one nobody has looked at in months.**
+
+**The correction names its world-source** (hard rule 10's corollary — *a
+correction is a claim*): `sed -n '13440,13560p'
+crates/pdfce-core/src/edit.rs`, run in this filing, variants counted off the
+`enum` body.
+
+#### ★★ HARD-RULE-11 SWEEP — SEARCHED FOR THE CLAIM (the action-set count), NOT FOR A STRING
+
+Clause (e) applied: **narrow the file set, widen the pattern.** Six files that
+touch the feature, grepped **case-insensitively for the bare count keywords**
+(`five|four|six|kinds|variants|action set`) with **every hit read** — rather
+than the exact phrase grepped tree-wide.
+
+**THREE SURVIVORS FOUND (in four locations). One is mine and is FIXED in this
+filing; the rest are in engineer-owned trees and are REPORTED, not edited.**
+
+| # | location | the stale claim | disposition |
+|---|---|---|---|
+| 1 | `docs/FEATURES.md:221` | *"…`set-button-action`, **five kinds**: `/ResetForm`, `/SubmitForm`, `/GoTo`, `/Named`, `/URI`"* | ★ **MINE — FIXED in this filing.** → **six kinds**, `/Hide` added |
+| 2 | `docs/core-api/02-editing-and-saving.md:1083` | *"`ButtonAction` is `#[non_exhaustive]`. **Five variants:**"* — ★ **immediately above a table that has SIX rows, `SetHidden` included** | **ENGINEER-OWNED — reported.** The §1.12b heading one line above was updated to *"(`Pass 183.0`/`Pass 183.1`)"* **and the table below it gained its sixth row, in the same edit that left the count sentence between them untouched** |
+| 3a | `crates/pdfce-core/src/edit.rs:13397` | *"…`\"the safeguards like we had planned\"` → **the other four variants**"* — that ruling now authorises **five** other variants, `SetHidden` included | **`crates/` — reported, not edited** (hard rule 11's scope) |
+| 3b | `crates/pdfce-core/src/edit.rs:13419` | doc-comment heading: *"a selection with a boundary rather than **five** arbitrary picks"* | **`crates/` — reported.** Same file, same commit, and **a number in a HEADING** — the exact shape clause (e) was minted for |
+
+★★★ **SURVIVOR 2 IS THE SAME DEFECT `a168061` WAS COMMITTED TO FIX — SAME DAY,
+SAME SESSION, HOURS APART.** That commit's own message names the class:
+
+> *"A correction that reaches a status block and stops short of the prose is
+> this project's most-repeated documentation defect, and the sentence it stops
+> short of is always the one a reader actually reads."*
+
+⇒ **The rule was minted, the sweep was run, the commit was made — and the next
+edit reproduced the class within hours, in a different file.** Filed **not as
+blame but as evidence about the class**: **naming a defect does not inoculate
+the next edit against it.** That is the same lesson hard rule 11's own
+corollary already records (*"naming the failure does not perform the check"*),
+and this is its clearest instance yet, because the interval between the naming
+and the recurrence is measured in hours rather than filings.
+
+★ **Note also which half was updated in survivor 2 and which was not.** The
+**structured** halves — the heading and the table — were both correct; the
+**prose count between them** was not. **`a168061`'s finding was that
+corrections reach status blocks and stop short of prose. Survivor 2 is that
+finding happening again in a file the same session was editing**, and it
+suggests the mechanism is not carelessness but **attention following
+structure**: a table row is a slot that visibly wants filling, and a number in
+a sentence is not.
+
+**HITS THAT SURVIVE AND ARE CORRECT — do NOT "fix" these** (clause (e)'s
+reporting obligation, so the next sweep does not undo them):
+
+- `crates/pdfce-core/src/edit.rs:13422` — *"pdfce authors **four** of them —
+  `GoTo`, `Hide`, `ResetForm`, `Named`"*. ★ **CORRECT.** This counts pdfce's
+  **reach-nothing** variants out of the standard's **eight** — a *different
+  numerator over a different denominator* than the six-variant total. The two
+  will keep looking like a contradiction to anyone who meets one without the
+  other, which is exactly why **both are filed here, beside each other**
+  (hard rule 10(a)).
+- `crates/pdfce-core/src/edit.rs:13424` — *"the **four** it does not"*
+  (`/SetOCGState`, `/Trans`, `/GoTo3DView`, `/GoToDp`). **CORRECT** —
+  8 − 4 = 4.
+
+#### ★★★ THE OWED FOLLOW-UP, AND THIS FILING'S RULING ON WHETHER IT CROSSES THE OPERATOR'S RULE
+
+**A defect `Pass 182.0`/`183.0` created, `183.1` extended, and none of them
+fixed.** The engineer **disclosed it in the dispatch** and explicitly asked for
+this role's judgement rather than its agreement. **Minted as `Pass 184.0`** in
+*Next up*.
+
+**The defect, verified live in this filing.** pdfce writes `/ResetForm` and
+`/SubmitForm` `/Fields` — and now `/Hide` `/T` — as **fully-qualified NAME
+STRINGS**. That is deliberate and the reasoning holds: *a name survives a field
+being renumbered or copied between documents, where an indirect reference does
+not.* But:
+
+- **`EditSession::rename_field` does not sweep them.** Renaming a field
+  **silently breaks every reset, submit and hide button that names it.**
+  ★ **Measured, not relayed:** `FieldRename`
+  (`crates/pdfce-core/src/edit.rs:15372`) has exactly **three** fields —
+  `from`, `to`, `descendants_renamed`. ⇒ **There is no field in which such a
+  disclosure could even be returned**, so this is a *type-level* absence, not a
+  forgotten `if`.
+- **`delete_field` does not disclose them either** — and the spec corpus
+  **already asked for this**: `iso32000__ref__annotation_deletion_semantics.md`
+  **C8** requires a deleted target be *"detect and disclose"*, and its §5
+  disclosure set lists *"N hide action(s) … will point at nothing"*. ⇒ **Owed
+  since `Pass 38.5` and never delivered.** ★ **The corpus specified the
+  disclosure before the feature that needs it existed, and the feature shipped
+  without it anyway** — a spec-RAG requirement with no gate behind it is a
+  requirement that depends entirely on someone re-reading the file.
+- ★★★ **`census_dangling` CANNOT SEE EITHER CASE, AND THIS IS THE SHARP PART.**
+  A name-string reference **leaves no dangling object reference**, so the census
+  `Pass 183.0` correctly widened to non-link annotations is **STRUCTURALLY
+  blind to it** — not under-scoped, **blind by construction**. ⇒ **Two
+  different invisibilities in two consecutive Passes**: `183.0` fixed one by
+  widening a counter, and **no widening of that counter can ever reach the
+  other**. Escalated cross-project as a `personal_rag/pdf` lesson, because the
+  shape — *an integrity checker built on the reference graph cannot see
+  references that are not in the graph* — outlives this project.
+
+**Why the engineer did not fix it in-Pass, stated fairly.** Doing it correctly
+needs the reference-finder to walk **every action carrier** — the 17-site walk
+with `/Next` chains that `forms::scan_javascript` owns — and that function
+threads `&mut FormJavaScript` throughout, so generalising it to a visitor is a
+real refactor of the most defect-prone function in the crate (`Pass 133.0`'s
+history is attached to it). **Writing a second, narrower walker instead is
+precisely the defect class this project keeps recording.** ⇒ **That argument is
+ACCEPTED.**
+
+★★★ **THE RULING, GIVEN PLAINLY BECAUSE THAT IS WHAT WAS ASKED FOR.**
+
+The operator's standing rule is *"fix bugs on discovery; **never file a found
+bug for later**."* The engineer judged this **a sequencing call rather than a
+deferral**, on the ground that the fix is a **refactor** rather than a
+correction. **This filing agrees IN HALF — and the other half is a distinction
+the dispatch did not draw:**
+
+- ★ **The REPAIR may be sequenced. ACCEPTED, on the engineer's own argument.**
+  A narrow second walker would ship the very defect class the refactor exists
+  to remove, so *"fix it now"* would mean *"fix it wrongly now"*. **The rule's
+  purpose is not served by a worse fix arriving sooner.**
+- ★★★ **The DISCLOSURE may NOT be sequenced, and deferring it IS a deferral,
+  not a sequencing call.** Between now and `Pass 184.0`, an operator who
+  renames a field gets **a broken form and no report**. That is not a latent
+  bug awaiting a refactor — it is **live silence**, and rule 4's one binding
+  obligation is *non-silence about what the operator cannot see*. ⇒ **On the
+  strict reading, the Pass as shipped crosses the operator's rule — and it
+  crosses it on the DISCLOSURE, not on the repair.**
+- ★★ **AND THE INTERIM IS CHEAP, WHICH IS WHAT MAKES THE DEFERRAL
+  INDEFENSIBLE RATHER THAN MERELY IMPERFECT.** A **categorical** disclosure
+  needs **no traversal at all**, therefore **no visitor and no refactor**:
+  *"renaming a field does not update `/ResetForm`, `/SubmitForm` or `/Hide`
+  action targets that name it; a button naming the old name will stop
+  working."* A **counted** disclosure needs the walk. A **stated limitation**
+  needs one sentence. ⇒ **The refactor argument justifies deferring the COUNT.
+  It does not justify deferring the SENTENCE** — and the two were folded
+  together in the dispatch, which is how the whole item came to look
+  refactor-blocked.
+
+⇒ **RECOMMENDATION, the actionable half of this ruling: ship the CATEGORICAL
+disclosure NOW, ahead of `Pass 184.0`, as a docs-and-report change requiring no
+visitor.** `Pass 184.0` then upgrades it from *categorical* to
+*counted-and-repaired*. That discharges the operator's rule immediately, costs
+one sentence on each of three surfaces, and leaves the refactor properly
+scoped. **Filed as `Pass 184.0`'s FIRST acceptance criterion, ahead of the
+refactor, so it cannot be absorbed into it and disappear.**
+
+★ **Recorded for the next reader of the operator's rule**, since this is the
+first time this project has tested it against a refactor: **the rule bites on
+SILENCE, not on code.** *"Fix bugs on discovery"* is satisfiable by disclosing
+a defect you have not yet repaired, and is **not** satisfiable by repairing one
+you never mention. Where the two halves separate — as here — **the disclosure
+is the half that is due immediately**, and the repair is the half that may be
+scheduled on engineering grounds.
+
+#### Findings escalated
+
+- **`C:\personal_rag\pdf\lesson_20260830_name_string_reference_leaves_no_dangling_reference_so_the_graph_census_is_blind.md`** —
+  the `census_dangling` blindness, generalized: *a referential-integrity check
+  built on the object-reference graph cannot see references carried as name
+  strings, no matter how far it is widened.* PDF-domain, outlives pdfce.
+  Cross-linked to the existing
+  `lesson_20260807_dangling_reference_is_null_so_a_survivorship_reload_check_reads_clean.md`,
+  which is the **adjacent but different** case (a reference that *is* in the
+  graph and resolves to null).
+- **`/H`'s default-`true` trap is NOT written to `personal_rag/pdf`** — it is
+  *what the standard says*, which is `pdfce-spec-librarian`'s exclusive
+  territory (hard rule 6), and it is already ingested as
+  `iso32000__s__12.6.4.10.md`. ★ **Stated rather than silently omitted**, so a
+  future index check does not read the absence as a missed escalation. The
+  *implementation consequence* is filed above, in this entry, which is where
+  project-specific consequences of spec facts belong.
+
+#### Verification
+
+**Diffstats, read here (`git diff --shortstat <c>^ <c>`):**
+
+| commit | what | files | +/− |
+|---|---|---|---|
+| `a168061` | **docs-only** — `docs/plan-scripting-submit-and-plugins.md`; the §0 survivor this role identified in the 343rd filing, **plus §2.2, which carried the same stale claim in the same shape** | 1 | +96 / −25 |
+| `3762b5d` | **`Pass 183.1`** — the Pass | 6 | +577 / −13 |
+| `5d87a5f` | **chore** — `pdfce-spec-librarian`'s own agent-memory from the 12.6.4.10 ingestion, **committed separately so `183.1`'s diff is the Pass and nothing else** | 3 | +252 / −3 |
+
+**Tests.** 6 new core tests — **25 in
+`crates/pdfce-core/tests/button_action_submit.rs`, counted here by `grep -c`,
+not carried.** The 343rd filing counted **19** at `183.0`, so the arithmetic
+reconciles and is filed in both forms per hard rule 10(a): **19 + 6 = 25**.
+**Three sabotage-checked, all three caught.** `cargo test --workspace
+--all-features` green; `fmt` and `clippy` clean; `bash tools/run-gates.sh`
+**PASS on all 29 commands including both filing gates** — relayed, not re-run.
+
+**Gate state at filing time, run here.** `check-commits-filed.py` reported
+**exactly one** unfiled code commit (`3762b5d`); `a168061` and `5d87a5f` fall
+outside its code-commit predicate. ★ **Which is why this entry records those two
+explicitly: a commit no gate will ever chase is a commit only a filing can
+carry.** `check-passes-filed.py` clean apart from its six pre-existing
+multi-commit notes.
+
+**GUI-core separation:** **not re-verified and NOT claimed.** No crate manifest
+was touched and no dependency added, so `cargo tree` was neither run nor
+asserted (hard rule 8).
+
+**`FEATURES.md`: one row changed** — row 221, *five kinds* → **six**, `/Hide`
+added, plus the closed-set sentence. **No new row**, for the reason argued
+above.
+
+**Ledger.** Pass ceiling `183.0` → **`183.1`**; ★ **`184.0` MINTED in *Next
+up*** for the name-string reference sweep, so the ceiling is **`184.0`** and
+next free is `184.1` / new major `185.0`. **Standing rules ceiling `R235` —
+UNCHANGED**; next free `R236`. ★ **A mint was CONSIDERED and DECLINED, with its
+argument recorded**: the refuse-vs-default criterion is an **adjudication test
+applied at design time**, not a behavioural commitment a reviewer can check
+after the fact — so it is a **decision**, not a rule. Filing it as `R236` would
+put a criterion into a list readers consult for **obligations**, which is how a
+standing-rules section stops being scannable. **Decision ceiling `107` →
+`108`** (`ARCHITECTURE.md` §12, minted this filing); next free `109`.
+**Decision `107` AMENDED IN PLACE** — its *authors* row said `/ResetForm`,
+`/SubmitForm`, `/GoTo`, `/Named`, `/URI` and now names `/Hide` too; **amended
+rather than superseded because `Pass 183.1` is authorised by the SAME ruling
+`107` already records**, so a new decision would fragment one operator ruling
+across two entries (`106`'s and `107`'s own precedent, applied a third time).
+**`personal_rag/pdf`: one lesson written.** Filing ordinal `343` → **`344`**.
+
+---
+
 ### `Pass 183.0` (`cff102a`, 2026-08-30) — **SUBMIT, AND EVERY OTHER BUTTON ACTION THAT NEEDS NO JAVASCRIPT** — ★★★ **THIS DELIVERS `Pass 131.0`, WHICH IS THEREFORE NARROWED IN *Backlog* TO ITS TWO GENUINELY UNBUILT ITEMS RATHER THAN LEFT CLAIMING WORK THAT HAS SHIPPED** — ★★ **A CENSUS WENT FROM COMPLETE TO UNDER-REPORTING INSIDE THIS ONE COMMIT AND WAS CAUGHT WHILE IMPLEMENTING, NOT AFTERWARDS — THIRD INSTANCE OF THAT SHAPE HERE** — ★ **`R54` IS NOT ENGAGED AND `R12` IS NOT ENGAGED, AND THIS ENTRY SAYS SO IN PLAIN WORDS BECAUSE A READER WHO SEES "SUBMIT" IN A PASS TITLE WILL REASONABLY ASSUME OTHERWISE** — filed 2026-08-30 (343rd filing)
 
 **Sourcing — `R228`.** This filing held a shell and used it. **Run here, not
@@ -91665,6 +92106,112 @@ in the "still open" list. Full build record: this file's own
 `f79f044..f79d9a2` *Shipped* entry, top of *Shipped*.
 
 ## Next up
+
+### `Pass 184.0` — **A FIELD NAME IS A REFERENCE, AND NOTHING IN pdfce TREATS IT AS ONE: RENAME REPAIRS, DELETE DISCLOSES, AND THE ACTION-CARRIER WALK BECOMES A VISITOR** — ★★★ **THIS IS AN OWED FOLLOW-UP DISCLOSED BY THE ENGINEER, NOT A DEFECT FOUND IN REVIEW — AND THIS FILING RULES THAT ITS *DISCLOSURE* HALF IS DUE IMMEDIATELY WHILE ITS *REPAIR* HALF MAY BE SEQUENCED** — ★★ **`census_dangling` IS STRUCTURALLY BLIND HERE AND NO WIDENING OF IT CAN EVER HELP: A NAME STRING LEAVES NO REFERENCE IN THE GRAPH** — ★ **DISCHARGES THE `Pass 38.5` C8 DEBT, OWED SINCE THE SPEC CORPUS SPECIFIED IT** — filed 2026-08-30 (344th filing), **NOT STARTED**
+
+**★ ID assignment.** `CLAUDE.md` rule 5 makes the ID the engineer's act; this
+filing's dispatch **explicitly delegated it** (*"Please mint it — my proposed
+shape, which you should adjust"*). Highest Pass ID before this filing was
+`183.1`. ⇒ **`184.0` is minted here; highest ID now `184.0`, next free `184.1`
+/ new major `185.0`.** The proposed shape was adjusted in **one** substantive
+respect — the split of criterion **A** out of the refactor — argued below and
+in `Pass 183.1`'s Shipped entry.
+
+#### What is wrong today, measured
+
+pdfce writes `/ResetForm` and `/SubmitForm` `/Fields` — and, since
+`Pass 183.1`, `/Hide` `/T` — as **fully-qualified name strings**. ★ **That
+choice is CORRECT and this Pass does not reverse it**: a name survives a field
+being renumbered, or copied between documents, where an indirect reference does
+not. The defect is that **nothing else in pdfce knows those strings are
+references.**
+
+| # | site | today | ★ what it should be |
+|---|---|---|---|
+| 1 | `EditSession::rename_field` (`crates/pdfce-core/src/edit.rs:18387`) | ★ **silently breaks** every reset, submit and hide button naming the field. `FieldRename` (`:15372`) has exactly **three** fields — `from`, `to`, `descendants_renamed` — so **there is no field in which a disclosure could even be returned** | **REPAIRS** the name strings and **REPORTS** the count |
+| 2 | `EditSession::delete_field` (`:17151`) / `delete_field_group` (`:17261`) | no disclosure of actions left naming a deleted field | **DISCLOSES, does NOT repair** |
+| 3 | `pageops::references::census_dangling` | ★★ **structurally blind** — a name string leaves **no dangling object reference**, so the census `Pass 183.0` correctly widened to non-link annotations **cannot reach this class at any width** | unchanged; the blindness is **stated**, not patched |
+
+★★ **Why 1 REPAIRS and 2 only DISCLOSES, and the asymmetry is the design, not
+an inconsistency.** **Repair is defensible in exactly one of these cases.** On
+a rename pdfce knows **both the old and the new name, exactly** — the
+substitution is mechanical and is *not a guess*, so performing it silently is
+not an inference and rule 4 is not engaged. On a **delete** there is no new
+name: *"what did the author intend this button to do now?"* has **no answer**,
+and any repair (drop the target, drop the action, retarget it) would be pdfce
+inventing intent. ⇒ **Disclose.** **A future session tempted to "make these
+consistent" should read this row before doing it** — the inconsistency is
+load-bearing.
+
+#### Acceptance criteria
+
+★★★ **CRITERION A IS SPLIT OUT OF THE REFACTOR AND IS DUE FIRST — this is the
+one adjustment this filing made to the engineer's proposed shape.** It exists
+as its own criterion **specifically so it cannot be absorbed into the refactor
+and disappear**, which is the failure mode that produced this Pass.
+
+- ★★★ **A — THE CATEGORICAL DISCLOSURE, WHICH NEEDS NO VISITOR AND NO
+  TRAVERSAL.** A **stated limitation** on `rename_field`, `delete_field` and
+  `delete_field_group` — in rustdoc, in `docs/core-api/`, and in the CLI's
+  output for those verbs: *"renaming or deleting a field does not update
+  `/ResetForm`, `/SubmitForm` or `/Hide` action targets that name it; a button
+  naming the old name will stop working."* **No walk is required to say this**,
+  because it is categorical rather than counted. ⇒ **It discharges the
+  operator's *"never file a found bug for later"* rule immediately**, at a cost
+  of one sentence per surface, and it is **shippable ahead of the rest of this
+  Pass**. See `Pass 183.1`'s Shipped entry for the full ruling on why the
+  disclosure half is due immediately while the repair half may be sequenced.
+- **B — Generalise the action-carrier walk to a VISITOR**, keeping
+  `forms::scan_javascript`'s behaviour **byte-identical**. The 17-site walk
+  with `/Next` chains currently threads `&mut FormJavaScript` throughout.
+  ★ **Byte-identical is the acceptance bar, not "equivalent"** — this is the
+  most defect-prone function in the crate (`Pass 133.0`'s history is attached
+  to it), and a refactor that "improves" its output while refactoring it is
+  indistinguishable from a regression. **A characterisation test over the
+  conformance corpus, captured BEFORE the refactor, is the check.**
+  ★★ **Writing a second, narrower walker instead is explicitly REFUSED** — that
+  is the defect class this project keeps recording, and it is why this work is
+  a Pass rather than a patch.
+- **C — `rename_field` REPAIRS and REPORTS.** New `FieldRename` field carrying
+  the count of action targets rewritten. **The repair is not an inference**
+  (see the asymmetry note above), so it needs no gate — but it **does** need
+  the report, because a rename that quietly rewrote objects the operator did
+  not name is exactly what rule 4's off-canvas disclosure covers.
+- **D — `delete_field` / `delete_field_group` DISCLOSE, do not repair**,
+  satisfying `iso32000__ref__annotation_deletion_semantics.md` **C8**'s
+  *"detect and disclose"* and its §5 disclosure set — including the item that
+  names this case verbatim: *"N hide action(s) … will point at nothing"*.
+  ⇒ **This discharges the C8 debt owed since `Pass 38.5`.**
+- **E — C9 (`/StructParent` / `/OBJR`) is EXPLICITLY OUT OF SCOPE, and the
+  reason is stated rather than left as an omission.** C8 is about **name-string
+  references in actions**; C9 is about the **structure tree's** back-references
+  to a deleted annotation. **Different graph, different carrier, different
+  repair question** — and C9 has no name-string component at all, so it shares
+  none of this Pass's machinery. ★ **Folding them together because they are
+  adjacent clause numbers would make the visitor's scope unclear**, which is
+  the one thing criterion B cannot afford. **C9 remains owed and un-minted.**
+- **F — The `census_dangling` blindness is STATED, not patched.** Its rustdoc
+  and `docs/core-api/` account must say that name-string targets are **outside
+  what it can see, by construction**. ★★ **An integrity checker that is silent
+  about the class it cannot see reads as a clean bill of health** — the exact
+  shape recorded three times already in this project (`Pass 133.0`;
+  `check-outcome-disclosed.py`'s input list, 2026-08-19; `Pass 183.0`'s
+  Finding 1). **This is the fourth**, and it is the one whose fix is *not* a
+  widening.
+- **G — Sabotage checks.** At minimum: a rename that repairs the reset target
+  but not the hide target; a delete that reports zero when an action names the
+  deleted field; and a visitor that misses the `/Next` chain.
+
+#### ★ Why this is filed rather than fixed in `Pass 183.1`
+
+**Disclosed by the engineer in the dispatch, not found in review** — recorded
+that way because the two have different implications for how much of the rest
+of the Pass to trust. The engineer's argument for sequencing the **repair** is
+**accepted**: it is a real refactor of a defect-prone function, and a narrow
+second walker would ship the class the refactor exists to remove. ★ **This
+filing's dissent is narrow and is criterion A**: the *disclosure* is not
+refactor-blocked and should not have waited. See `Pass 183.1`'s Shipped entry
+for the full ruling.
 
 ### `Pass 179.0` — **BOLD BECOMES AUTOMATIC: A FALLBACK LADDER THAT BINDS A REAL FACE WHEN ONE EXISTS AND SYNTHESISES WHEN ONE DOES NOT, WITH NO OPERATOR INTERVENTION** — ★★★ **OPERATOR RULING, 2026-08-30; DECISION `106`. REVERSES THREE CLAUSES OF pdfce's OWN DOCUMENTED POSTURE AND AMENDS `R90`** — filed 2026-08-30 (340th filing), **NOT STARTED**
 

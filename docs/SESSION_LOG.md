@@ -80482,3 +80482,252 @@ moved *Planned* → *Implemented* and rewritten, one new *Planned* row. `Pass
 5. **Take a backup bundle** — 4 commits behind, measured.
 6. **`Pass 179.0`** is the next real engineering item in the bold cluster;
    `Pass 131.0`'s appearance remainder is the next one in the forms cluster.
+
+---
+
+## 2026-08-30 (344th filing) — **`Pass 183.1` (`3762b5d`) filed, plus two housekeeping commits (`a168061` docs, `5d87a5f` chore).** ★★★ **THE DISPATCH'S OWN COUNT WAS WRONG — THE ACTION SET IS SIX, NOT FIVE — AND THE SAME STALE NUMBER SURVIVES IN TWO ENGINEER-OWNED TREES, INCLUDING ONE LINE ABOVE A TABLE THAT ALREADY HAS SIX ROWS.** ★★ **A SPEC AMBIGUITY WAS *REFUSED* RATHER THAN DEFAULTED, WHICH CARVES A NARROW EXCEPTION OUT OF THE OPERATOR'S STANDING "NEVER HARD-CODE A CHOICE THE STANDARD LEAVES OPEN" — FILED AS DECISION `108` WITH THE DIRECTIVE QUOTED.** ★ **AND THIS FILING RULES *AGAINST* THE ENGINEER ON HALF OF THE OWED FOLLOW-UP: THE REPAIR MAY BE SEQUENCED, THE DISCLOSURE MAY NOT**
+
+**Sourcing — `R228`.** A shell was held and used. ★ **The dispatch stated
+`git log` was unavailable to this role; it was available, and it was used** —
+recorded because a filing that had accepted the constraint would have relayed
+every hash instead of verifying it. **Run here:** `git log` / `show` /
+`diff --shortstat` / `rev-parse` / `rev-list --count` / `tag --list` /
+`status --porcelain`, both filing gates, `ls -lt /d/Dev/pdfce-backups/`, a
+`#[test]` count, and live reads of `ButtonAction` and `FieldRename` in
+`crates/pdfce-core/src/edit.rs`. **Relayed, not re-run:** `cargo test` / `fmt`
+/ `clippy` / `run-gates.sh` and the end-to-end binary measurements.
+
+### Shipped
+
+- **`Pass 183.1`** (`3762b5d`) — `ButtonAction::SetHidden` → `/S /Hide`, plus
+  `pdfce-cli set-button-action --hide | --show`. Closes the script-free button
+  action set the operator's 2026-08-30 ruling asked for. 6 new core tests (25
+  in the file), three sabotage-checked, all three caught.
+- **`a168061`** (docs-only) — `docs/plan-scripting-submit-and-plugins.md` §0 and
+  §2.2. ★ **This discharges the survivor this role reported in the 343rd
+  filing**, and found a **second** copy of the same claim in the same shape at
+  §2.2 that the report had not named.
+- **`5d87a5f`** (chore) — `pdfce-spec-librarian`'s own agent-memory from the
+  12.6.4.10 ingestion, committed separately so `183.1`'s diff is the Pass and
+  nothing else. ★ **Neither `a168061` nor `5d87a5f` is a "code commit" to
+  `check-commits-filed.py`** — so a commit no gate will ever chase is a commit
+  only a filing can carry, which is why both are recorded here by hash.
+
+### Decisions made this session
+
+- **Decision `108` MINTED** — *when a spec ambiguity's two readings differ by
+  **silence** rather than by **output**, pdfce refuses instead of defaulting.*
+  A narrow, stated carve-out from the operator's standing *"never hard-code a
+  choice the standard leaves open"*, with the directive quoted rather than
+  paraphrased. **The discriminator is OBSERVABILITY, not risk or severity**: a
+  merely wrong default is recoverable because the operator sees the output; a
+  silent one is not, because there is nothing to see. Includes the
+  one-minute test a future session applies, and an explicit **"what this does
+  not license"** clause with two live counter-examples from the adjacent work
+  that correctly did *not* refuse (`http` allowed and said; a widget-less
+  target authored and disclosed). ⇒ **pdfce refuses for decidability, never for
+  taste.**
+- **Decision `107` AMENDED IN PLACE, ceiling unmoved** — `/Hide` joins the
+  authored set. **Not a new decision**: `Pass 183.1` is authorised by **ruling
+  2, which `107` already quotes**. Filing it as `108` would have left `107`
+  standing as *"pdfce authors five kinds"* — wrong within the same day, which
+  is the identical argument `107` itself made for folding ruling 2 into ruling
+  1. **Third application of `106`'s precedent.**
+- **A standing-rule mint was CONSIDERED and DECLINED, with the argument
+  recorded.** The refuse-vs-default criterion is an **adjudication test applied
+  at design time**, not a behavioural commitment a reviewer can check
+  afterwards — so it is a decision, not a rule. `R235` stays the ceiling.
+- **`FEATURES.md` gets the closed-set fact as a SENTENCE, not a *Planned*
+  row.** The engineer leaned this way and this role agrees with a stated
+  reason: **a *Planned* row is a promise**, and none of `/SetOCGState`,
+  `/Trans`, `/GoTo3DView`, `/GoToDp` is queued.
+
+### Findings + decisions
+
+- ★★★ **THE COUNT CORRECTION.** The dispatch said *"add `/Hide`, i.e. the
+  action set is now **five** kinds."* **It is SIX** — counted off the live
+  `enum`, not carried: `ResetForm`, `SubmitForm`, `GoToPage`, `Named`,
+  `SetHidden`, `Uri`. *Five* was the count **before** this Pass, and
+  `FEATURES.md` already said five **correctly**. ⇒ **Following the instruction
+  would have added the new item and left the number untouched — the most
+  dangerous shape a stale figure takes, because the freshly-edited prose beside
+  it makes the number read as confirmed rather than as missed.**
+- ★★★ **HARD-RULE-11 SWEEP — three survivors in four locations, found by
+  reading for the claim, not grepping the phrase.** Clause (e) applied: six
+  files, bare keywords, every hit read.
+  - `docs/FEATURES.md:221` — **mine, FIXED.**
+  - `docs/core-api/02-editing-and-saving.md:1083` — *"Five variants:"* ★ **one
+    line above a table that has SIX rows.** **Engineer-owned — reported.**
+  - `crates/pdfce-core/src/edit.rs:13397` — *"the other four variants"*; the
+    ruling now authorises five. **Reported, not edited.**
+  - `crates/pdfce-core/src/edit.rs:13419` — *"rather than five arbitrary
+    picks"*, ★ **a number in a HEADING**, the exact shape clause (e) was minted
+    for. **Reported.**
+- ★★★ **SURVIVOR 2 IS THE DEFECT `a168061` WAS COMMITTED TO FIX — SAME DAY,
+  SAME SESSION, HOURS APART.** That commit's message names the class: *"a
+  correction that reaches a status block and stops short of the prose."*
+  ⇒ **Naming a defect does not inoculate the next edit against it**, and the
+  interval here is hours, not filings. ★ **Note which halves were correct: the
+  heading and the table both were; the prose count between them was not.**
+  That suggests the mechanism is **attention following structure** — a table
+  row is a slot that visibly wants filling; a number in a sentence is not.
+- **HITS THAT SURVIVE AND ARE CORRECT — do not "fix" these.**
+  `edit.rs:13422` *"pdfce authors **four** of them"* and `:13424` *"the
+  **four** it does not"*. ★ **Six, four and eight are three different facts and
+  all three are true** — six variants; four of them reach-nothing; eight
+  script-free reach-nothing types in the standard. **Filed beside each other in
+  both the Pass entry and decision `107`'s amendment** precisely because they
+  read as a contradiction apart (hard rule 10(a)).
+- **`/H`'s default is `true`**, so an action that omits it **hides** — the
+  absent-means-off reflex authors a Show button that hides, **and the file is
+  perfectly conforming**, so nothing mechanical would flag it. **Not written to
+  `personal_rag/pdf`**: it is *what the standard says*, which is
+  `pdfce-spec-librarian`'s exclusive territory (hard rule 6) and is already
+  ingested as `iso32000__s__12.6.4.10.md`. ★ **Stated rather than silently
+  omitted**, so a future index check does not read the absence as a miss.
+- **`/Hide` is an ASSIGNMENT, not a toggle**, and the standard chose that — it
+  owns a toggle (`/SetOCGState`'s `/State`) and did not use it here. ⇒ **A
+  toggling show/hide button requires ECMAScript and is therefore OUT OF SCOPE,
+  not unbuilt.** Recorded as a **capability boundary** so a future session does
+  not open it as a gap.
+- **A name reaches every widget of the field, on every page** (sourced), so the
+  disclosed widget count is usually **larger** than the number of names. ★ **The
+  measured ratio was exactly 1 widget per field**, which is the *simple* case —
+  and is precisely why a corpus of simple files cannot separate the two
+  counters. **The sabotage check, not the corpus, is what does.**
+- **Two predicates, not one.** *Script-free* and *reaches-nothing* are
+  different tests; `SubmitForm` and `Uri` satisfy only the first, deliberately,
+  and that asymmetry is the entire reason `SubmitDisclosure` exists.
+
+### ★★★ The owed follow-up — `Pass 184.0` MINTED, and this filing rules AGAINST the engineer on half of it
+
+**The defect:** pdfce writes action targets as fully-qualified **name strings**
+(correctly — a name survives renumbering and cross-document copying). But
+`rename_field` **silently breaks** every reset/submit/hide button naming the
+field — **measured: `FieldRename` has exactly three fields, so there is no
+field in which a disclosure could even be returned** — `delete_field` does not
+disclose either (**`Pass 38.5`'s C8 debt, owed since the spec corpus specified
+it**), and ★★ **`census_dangling` is STRUCTURALLY blind: a name string leaves
+no dangling object reference, so no widening of the counter `Pass 183.0`
+correctly widened can ever reach this class.**
+
+**The engineer asked for this role's judgement on whether it crosses the
+operator's *"never file a found bug for later"* rule. The ruling:**
+
+- ★ **The REPAIR may be sequenced — ACCEPTED**, on the engineer's own argument.
+  It needs the 17-site `/Next`-chain walk in `forms::scan_javascript`
+  generalised to a visitor; a second narrow walker would ship the very defect
+  class the refactor removes. *"Fix it now"* would mean *"fix it wrongly now"*.
+- ★★★ **The DISCLOSURE may NOT be sequenced — that half IS a deferral.** Right
+  now an operator who renames a field gets a broken form and no report. That is
+  not a latent bug awaiting a refactor; it is **live silence**, and rule 4's one
+  binding obligation is non-silence about what the operator cannot see.
+- ★★ **And the interim is CHEAP, which is what makes it indefensible rather
+  than merely imperfect.** A **categorical** disclosure needs **no traversal**,
+  hence no visitor: *"renaming a field does not update `/ResetForm`,
+  `/SubmitForm` or `/Hide` targets that name it."* ⇒ **The refactor argument
+  justifies deferring the COUNT; it does not justify deferring the SENTENCE**,
+  and the dispatch folded the two together, which is how the whole item came to
+  look refactor-blocked.
+- **Filed as `Pass 184.0`'s FIRST acceptance criterion, ahead of the refactor,
+  so it cannot be absorbed into it and disappear.**
+
+★ **Recorded for the next reader of the operator's rule, since this is the
+first time it has been tested against a refactor: the rule bites on SILENCE,
+not on code.** *"Fix bugs on discovery"* is satisfiable by disclosing a defect
+you have not yet repaired, and is **not** satisfiable by repairing one you
+never mention. Where the halves separate, **the disclosure is due
+immediately.**
+
+★ **`Pass 184.0` also adjusts one thing in the proposed shape beyond the split:
+C9 (`/StructParent` / `/OBJR`) is explicitly OUT of scope with the reason
+stated** — different graph, different carrier, no name-string component, so it
+shares none of this Pass's machinery. **C9 remains owed and un-minted.**
+
+### Findings escalated to `C:\personal_rag\pdf\` (1 new lesson + index)
+
+- `lesson_20260830_name_string_reference_leaves_no_dangling_reference_so_the_graph_census_is_blind.md`
+  — *a referential-integrity check built on the object-reference graph cannot
+  see references carried as name strings, at any width.* Cross-linked to the
+  **adjacent but different** `lesson_20260807_dangling_reference_is_null_...`
+  (a reference that *is* in the graph and resolves to null).
+
+### Git, CI and backup state — MEASURED, not inferred (hard rule 8)
+
+- `origin/main` at **`5d87a5f`** (`git rev-parse --short origin/main`) — the
+  remote is **current**; all three commits are pushed.
+- **1157 commits** on `HEAD` (`git rev-list --count HEAD`).
+- **Backup bundle is 2 commits behind** — most recent is
+  `pdfce-20260830-1358-a168061-full.bundle` at **`a168061`**
+  (`ls -lt /d/Dev/pdfce-backups/`), so `3762b5d` and `5d87a5f` are not in it.
+- **Filing gates before this filing:** `check-commits-filed.py` reported
+  **exactly one** unfiled code commit (`3762b5d`) — **this filing is the
+  discharge**. `check-passes-filed.py` clean apart from its six pre-existing
+  multi-commit notes.
+- **`run-gates.sh` PASS on all 29 commands at `3762b5d`** — relayed by the
+  engineer, **not re-run here**.
+- ★ **CI colour NOT carried forward.** Read it from GitHub after this filing's
+  commit lands.
+
+### Ledger
+
+Pass ceiling `183.0` → **`183.1`**, then **`184.0` MINTED** in *Next up*;
+ceiling **`184.0`**, next free `184.1` / new major `185.0`. **Standing rules
+ceiling `R235` — UNCHANGED**, next free `R236` (one mint considered and
+declined, argued). **Decision ceiling `107` → `108`**, next free `109`;
+**`107` amended in place**. **`FEATURES.md`: one row changed** (row 221 — *five
+kinds* → **six**, `/Hide` added, closed-set sentence appended). **No new
+`FEATURES.md` row.** **`personal_rag/pdf`: one lesson + index entry + master
+index entry.** Filing ordinal `343` → **`344`**.
+
+### Still in flight
+
+- ★★★ **`Pass 184.0` is `NOT STARTED` and its criterion A is due
+  IMMEDIATELY** — the categorical disclosure needs no visitor and should not
+  wait for the refactor. **This is the one item in this entry with a live
+  operator-rule consequence.**
+- ★★ **Two engineer-owned survivors reported and NOT edited by this role** —
+  `docs/core-api/02-editing-and-saving.md:1083` (*"Five variants:"* above a
+  six-row table) and `crates/pdfce-core/src/edit.rs:13397` + `:13419` (*"the
+  other four variants"*, *"five arbitrary picks"*).
+- **`Pass 131.0`'s remainder is APPEARANCE work** — `/AP` `/D` and `/MK`
+  icon/label layout. Unchanged by this filing.
+- **`Pass 131.1` (in-app dispatch, `R54` allow-list) and `Pass 131.2`
+  (`pdfceNet`) remain Backlog and untouched.** ★ **pdfce authors a declaration
+  and fires no trigger** — still true after `/Hide`, and `/Hide` is the
+  cheapest thing in decision `107`'s scope despite the word *hide*.
+- **`Pass 179.0`** — the automatic bold ladder — still `NOT STARTED`; the
+  cross-family rung still OPEN.
+- **The `Pass 38.5` C9 debt** (`/StructParent` / `/OBJR`) — **owed and
+  un-minted**, deliberately excluded from `Pass 184.0` with the reason stated.
+- ★ **`.tmp_bench.py` is STILL untracked** — carried from the 343rd filing, now
+  a **second** filing. **The repository is public**; it should not land via
+  `git add -A`. Not deleted and not committed by this role.
+- **`D:\dev\pdfceGUI` notification still TEN items deep** — unchanged, still
+  unsent as far as this role can see.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — a **tenth**
+  filing; Reader only on this machine.
+- **`ARCHITECTURE.md` §4 sweep still unfinished** — a **ninth** filing.
+- **The two broken markdown tables in `ROADMAP.md`** — still unrepaired,
+  deliberately (the correct split is a guess about the author's column intent).
+  `grep` for the `a2` row and for `` `Pass 48.3` | **GUI drag-and-drop image
+  placement ``. ★ **Line numbers deliberately not restated** — this filing
+  inserted well over a thousand lines above them.
+
+### For next session
+
+1. ★★★ **Ship `Pass 184.0` criterion A — the categorical disclosure — as a
+   standalone docs-and-report change.** No visitor, no refactor, one sentence
+   on each of `rename_field`, `delete_field`, `delete_field_group`. **This is
+   the item with a live operator-rule consequence and it should go first.**
+2. ★★ **Fix the two engineer-owned count survivors** —
+   `docs/core-api/02-editing-and-saving.md:1083` (*"Five variants:"* → six) and
+   `crates/pdfce-core/src/edit.rs:13397` / `:13419`. **Do NOT touch
+   `:13422`/`:13424` — those fours are correct.**
+3. **Push this filing, then read CI's colour from GitHub.** Pushing `main` is
+   standing-authorized (decision `090`, *"always push"*).
+4. **Take a backup bundle** — 2 commits behind, measured.
+5. **Dispose of `.tmp_bench.py`** — second filing carrying it.
+6. **Send the `pdfceGUI` note — ten items**, still owed.
+7. **Then `Pass 184.0` proper** (the visitor + repair + disclose), or
+   `Pass 179.0`, or `Pass 131.0`'s appearance remainder.
