@@ -96,6 +96,174 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 184.0` (criterion F, `4a25fb2`, 2026-08-30) — **★★★★ `Pass 184.0` IS NOW CLOSED — 6 OF 7 DISCHARGED, `B` STILL *WITHDRAWN* AND NOT DISCHARGED** — ★★★ **CRITERION F VERIFIED BY LIVE GREP AT ALL THREE LOCATIONS THE 346th FILING NAMED, NOT ACCEPTED FROM THE DISPATCH** — ★★ **THE `empty_line_after_doc_comments` LINT IS A *GENUINE* GUARD, NOT A THIRD LUCKY ACCIDENT — AND MEASURED HERE, IT IS SILENT ON THE VARIANT THAT ACTUALLY COSTS MONEY** — ★ **TWO SWEEPS CAME BACK CLEAN AND WERE *DISJOINT*: NEITHER KEYWORD SET CONTAINED THE OTHER'S SPELLING** — filed 2026-08-30 (347th filing)
+
+**Sourcing (`R228`).** A shell was held and used; **no code was written in this
+filing.** Measured here: `git log` / `git rev-parse HEAD origin/main` /
+`git status --porcelain` / `git show` / `git merge-base --is-ancestor`;
+`ls D:\Dev\pdfce-backups\`; live greps of `pageops/references.rs`,
+`docs/core-api/*.md`, `docs/FEATURES.md`, `ARCHITECTURE.md`,
+`tools/check-outcome-disclosed.py`; and **three `clippy-driver` runs on
+purpose-built two-line fixtures** to establish what the doc-boundary lint does
+and does not catch. `HEAD` = `origin/main` = `4a25fb2`; the backup bundle
+`pdfce-20260830-1702-4a25fb2-full.bundle` is **current at `HEAD`** (by `ls`,
+17:02). `.tmp_bench.py` remains untracked — **fifth filing carrying it**,
+deliberate.
+
+#### ★★★★ THE STATUS — THE PASS IS CLOSED, AND `B` DOES NOT BECOME "DISCHARGED" BY THE PASS CLOSING
+
+The 346th filing ruled **six of seven** and held the Pass open on **F** alone.
+**F is now discharged**, verified here rather than relayed. The Pass closes.
+
+**What must not drift:** closing a Pass is not a retroactive discharge of every
+criterion in it. **`B` was WITHDRAWN ON ARGUMENT and stays withdrawn** — the
+criterion asked for a **visitor** refactor of `forms::scan_javascript`, that
+work was never done, and `scan_javascript` is untouched at `4a25fb2`. A future
+reader who reads "Pass 184.0: complete" and goes hunting for a visitor will
+find nothing, which is the precise outcome the 346th filing was protecting
+against. **The Pass is closed at 6 discharged + 1 withdrawn, never 7 of 7.**
+
+| criterion | ★ status at `4a25fb2` |
+|---|---|
+| **A** | **DISCHARGED** (`92b9f99`), superseded by C |
+| **B** | ★★★ **WITHDRAWN ON ARGUMENT — NOT DISCHARGED, AND NOT DISCHARGED BY THIS CLOSURE EITHER.** No visitor exists; `scan_javascript` untouched |
+| **C** | **DISCHARGED** — `action_targets_retargeted` |
+| **D** | **DISCHARGED** — reached **five** verbs, not the two named |
+| **E** | scoped out with reason; **still owed and un-minted** |
+| **F** | ★ **DISCHARGED** (`4a25fb2`) — verified here at all three locations |
+| **G** | **DISCHARGED** — four sabotages, all four caught |
+
+#### ★★★ CRITERION F — VERIFIED, NOT ACCEPTED
+
+The dispatch asserted three locations. All three checked by live grep:
+
+1. **`census_dangling`'s own rustdoc** — `references.rs:402`, a
+   `★★ WHAT THIS CENSUS CANNOT SEE, and the reader who most needs to know`
+   block. It states that a field-name string is not a reference, that every
+   count therefore stays `0`, and it **names the companion verbs**
+   (`action_targets_orphaned` / `action_targets_retargeted`) with the
+   conclusion *"A caller reporting document health needs both; neither
+   subsumes the other."*
+2. **`DanglingReport`'s type doc** — `references.rs:326`, headed
+   *"It does not cover field-name targets, and `is_empty()` will not say so"*.
+3. **`docs/core-api/01-reading-and-model.md:141`** — the census row now carries
+   the ⚠️ warning **including** the explicit sentence that `is_empty() == true`
+   is *"**not** a clean bill of health on its own"*.
+
+⇒ **Criterion F is discharged.** The reader it was written for — the one who
+arrives at the census from the *checking* direction rather than the *mutating*
+direction — now meets the caveat on all three approaches.
+
+#### ★★ THE DOC-BOUNDARY TRAP FIRED A THIRD TIME TODAY, AND THE GUARD THAT CAUGHT IT IS REAL — BUT NOT WHERE IT MATTERS MOST
+
+Two of the engineer's insertions ended one `///` short of the item below,
+splitting the doc block. **Clippy caught both**
+(`clippy::empty_line_after_doc_comments`). The engineer read this as a genuine
+guard rather than another coincidental oracle, and **that reading is correct —
+but it is only half the picture, and the missing half inverts the comfort.**
+
+**Measured here** with `clippy-driver` on three purpose-built fixtures, because
+the RAG's standing claim is that detection of this class has been *luck*:
+
+| fixture shape | result | consequence |
+|---|---|---|
+| doc run, **blank line**, item | ★ **CAUGHT** — warn-by-default, names the item it documents | genuinely gated |
+| doc run, **blank line**, `#[inline]`, item | ★ **CAUGHT** — the lint sees *through* the attribute | the attribute variant that defeated every upward heuristic is gated too |
+| doc run **contiguous** with the *wrong* item | ★★★ **SILENT — zero warnings** | **ungated** |
+
+⇒ **The class splits by BOUNDARY SHAPE, not by luck.** The blank-line variant —
+today's — is genuinely, unconditionally gated. **The contiguous weld is not**,
+and that is the expensive variant: a blank line leaves the victim merely
+*undocumented*, whereas a contiguous weld ships a **wrong description** on a
+public item, which is instances 1–6 of the RAG's own history. **A future
+session must not read "clippy has this class covered" out of today's two
+catches.** Filed as a dated footer on the RAG finding, whose title —
+*"invisibly to every gate"* — is now precise only for the contiguous variant.
+
+#### ★ TWO SWEEPS, BOTH CLEAN, AND DISJOINT
+
+The engineer swept the phrase *"submit mapping"*; the 346th filing swept six
+other keywords. **Neither set contains the other's spelling**, so each would
+have missed **every one** of the other's survivors — and both came back
+*clean* in the meantime. The last live *"submit mapping"* survivor
+(`forms.rs:1029`) is fixed in `4a25fb2`; `ROADMAP.md:71688` and
+`SESSION_LOG.md:24786` are **correct as history and deliberately untouched**.
+
+⇒ **When a sweep returns clean, the question is not *did I find them all* but
+*what could my keyword set not have matched*.** The engineer asked whether this
+is distinct from the *attention-follows-structure* finding filed by the 345th.
+**This role's call: it is distinct from that one and NOT distinct from the
+spelling finding** — *attention follows structure* is about **where** a reader
+stops; this is about **what the search could match**, which is the spelling
+finding's own thesis. It is therefore filed as a **dated footer** on
+`a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md` rather
+than as a new file, per hard rule 4.
+
+**The genuinely new half, which the spelling finding did not have:** it is
+about the **aggregation of two sweeps**, not the quality of one. **Two
+independent agents both reporting "clean" reads as corroboration and is not,
+when their search sets are disjoint.** Two clean verdicts over disjoint sets
+are not one stronger verdict — they are two weak ones that flatter each other,
+and the union was never taken by anybody.
+
+#### THE TWO NUMERIC CORRECTIONS — RE-DERIVED HERE, NOT CARRIED ON ASSERTION
+
+The dispatch offered both as already-measured. **A correction is a claim
+(hard rule 10's corollary), so both were re-measured from `git show`:**
+
+- **`b62e069`'s message says "11 new core tests"; the true figure is 7.**
+  **Confirmed independently.** `button_action_submit.rs` is the **only** core
+  file whose `#[test]` count changed: **25** at `8456c45` → **26** at
+  `92b9f99` → **33** at `b62e069`. `b62e069`'s parent is `b3d754e`, a
+  librarian filing touching no code, so the commit's own delta is
+  **33 − 26 = 7**. A whole-crate sweep of `crates/pdfce-core/{src,tests}`
+  gives **3,161 → 3,169 = 8** across `8456c45..b62e069`, which is the two code
+  commits summed (**1 + 7**) and is consistent. **The published message stays
+  wrong, deliberately** — rewriting it breaks every document citing the hash,
+  a failure this project has **fourteen recorded casualties** of
+  (`tools/check-cited-commits-exist.py`, `0d9f4df`).
+- **The 345th filing's *"27 in the file, up from 25"*** was wrong by one; the
+  file held **26**. The **delta of 1 was right and the addition was not
+  performed** — hard rule 10's own failure mode, inside a filing citing hard
+  rule 10. Already corrected in the 346th entry; restated here so the wrong
+  number and its correction stay adjacent to the Shipped row carrying it.
+
+#### RULE-11 SWEEP — CLEAN, WITH THE FILE SET NARROWED AND THE PATTERN WIDENED (clause (e))
+
+Closing a Pass is a meaning change, so every live claim that `Pass 184.0` is
+*open* / *partial* / *6 of 7* was swept. **16 files mention `184.0`.** Of
+these, `ROADMAP.md` and `SESSION_LOG.md` are **append-only history and correct
+as history**; `NEXT_SESSION.md` and `.claude/agent-memory/pdfce-engineer/` are
+**engineer-owned**; the rest were read.
+
+**Zero survivors.** The three remaining live references —
+`ARCHITECTURE.md:28281`, `tools/check-outcome-disclosed.py:154`,
+`docs/core-api/03-capabilities.md:883` — are all **provenance tags**
+(*"applied in `Pass 184.0` criteria C and D"*), which stay **true and correct**
+after the closure. **Reported by name so the next sweep does not "fix" them.**
+
+**One stale citation found, and it is inside an accepted class rather than
+owed work.** `01-reading-and-model.md:141` and `:2326` cite
+`references.rs:336` for `census_dangling`, which is at **`:430`** (`:335` is
+`DanglingReport`). It was **already wrong before `4a25fb2`** — at `8aee768`
+the function was at `:401` — so this commit did not introduce it.
+`tools/check-core-api-verbs.py`'s own docstring **item 4** records `path:line`
+citations as **deliberately unchecked** (*"over a thousand of them … one
+spot-check found a citation off by 2,169 lines"*). ⇒ **Not raised as owed
+work**, recorded so a future session does not re-discover it as new.
+
+#### `FEATURES.md` — CHECKED, NO CHANGE, AND THE REASON MATTERS
+
+Criterion F was **doc-comment text only** — no behaviour, no new capability, no
+shell reach. Rows **222** (delete/`action_targets_orphaned`) and **223**
+(rename/`action_targets_retargeted`) were ticked correctly by the 346th filing
+and remain accurate at `4a25fb2`. Row 222 **already carries criterion F's own
+claim** — *"a graph census cannot see any of it, because a name string leaves
+no dangling reference."* ⇒ **No tick changes**, per *never tick a box you
+cannot substantiate*, and no expansion, per the file's hard conciseness rule.
+
+---
+
 ### `Pass 184.0` (criteria B/C/D, `b62e069`, 2026-08-30) — **A RENAME NOW REPAIRS THE BUTTONS IT USED TO BREAK, AND A DELETE SAYS WHICH ONES IT ORPHANED** — ★★★★ **`Pass 184.0` IS *NOT CLOSED*: CRITERION F IS ONE LOCATION SHORT, AND THE LOCATION IT IS SHORT AT IS `census_dangling` ITSELF — THE BLINDNESS IS STATED EVERYWHERE THE *FIX* TOUCHED AND NOWHERE THE *CHECKER* LIVES** — ★★★ **THE ENGINEER SIZED CRITERION B AS A REFACTOR AND IT WAS THE WRONG SHAPE ENTIRELY: THE DIFFICULTY OF THE OBVIOUS IMPLEMENTATION STOOD IN FOR THE DIFFICULTY OF THE PROBLEM, AND `scan_javascript` IS UNTOUCHED** — ★★ **A SURVIVING SABOTAGE IS NOT ALWAYS A WEAK TEST: THREE DISTINCT REASONS APPEARED IN ONE PASS AND THEY HAVE THREE DIFFERENT REMEDIES** — ★ **THE TEST-COUNT DELTA IN THE DISPATCH IS WRONG (7 NEW, NOT 11) AND THE 345th FILING'S TOTAL WAS WRONG BY ONE — BOTH MEASURED HERE FROM `git show`** — filed 2026-08-30 (346th filing)
 
 **Sourcing — `R228`.** A shell was held and used; **no code was written in this
@@ -92945,17 +93113,34 @@ in the "still open" list. Full build record: this file's own
 > out. **Its full entry, its criteria ledger and the design record are at the top
 > of *Shipped*.**
 >
-> ★★★★ **ONE CRITERION IS STILL OPEN AND IS NOT TRACKED HERE, DELIBERATELY.**
-> **Criterion F** — *"`census_dangling`'s blindness is STATED, not patched"* — is
-> discharged at the **mutation** sites (`FieldDeletion`'s rustdoc,
+> ★★★★ **CRITERION F IS NOW DISCHARGED AND `Pass 184.0` IS CLOSED — `4a25fb2`,
+> 2026-08-30 (347th filing).** ~~"ONE CRITERION IS STILL OPEN AND IS NOT TRACKED
+> HERE, DELIBERATELY."~~ The paragraph below is kept struck rather than deleted,
+> because it is the record of what was owed and of the reader it was owed to.
+>
+> ~~**Criterion F** — *"`census_dangling`'s blindness is STATED, not patched"* —
+> is discharged at the **mutation** sites (`FieldDeletion`'s rustdoc,
 > `docs/core-api/02-editing-and-saving.md`) and **absent at the CHECKER**
 > (`pageops::references::census_dangling`'s own rustdoc, `DanglingReport`'s
 > type-level doc, `docs/core-api/01-reading-and-model.md:141`). **A reader who
 > calls the census and gets an empty report still gets a clean bill of health
 > with no footnote — which is the exact reader criterion F was written for.**
 > Three doc-comment edits, no logic; **reported to the engineer as owed** rather
-> than re-minted as a Pass, because splitting a criterion out of a shipped Pass
-> into a new ID would make the debt harder to find, not easier.
+> than re-minted as a Pass.~~
+>
+> **All three CHECKER locations now carry it**, verified by live grep in the
+> 347th filing: `references.rs:402` (`census_dangling`'s own rustdoc, naming the
+> companion verbs), `references.rs:326` (`DanglingReport`, *"`is_empty()` will
+> not say so"*), and `01-reading-and-model.md:141` (*"`is_empty() == true` is
+> **not** a clean bill of health on its own"*). **The debt is closed; the
+> decision not to re-mint it as a separate ID was correct — it was discharged
+> within the Pass that owed it.**
+>
+> ★★ **`B` REMAINS *WITHDRAWN*, NOT DISCHARGED, AND THE PASS CLOSING DOES NOT
+> CHANGE THAT.** `Pass 184.0` closes at **6 discharged + 1 withdrawn**, never
+> 7 of 7. No visitor exists and `forms::scan_javascript` is untouched — a future
+> reader hunting one will find nothing, which is what this note exists to
+> prevent.
 >
 > **Still owed and un-minted, unchanged:** the `Pass 38.5` **C9** debt
 > (`/StructParent` / `/OBJR`) — different graph, different carrier, no

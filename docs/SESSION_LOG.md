@@ -81191,3 +81191,141 @@ against this role's own 345th filing.** Filing ordinal `345` → **`346`**.
    says *"this needs a refactor"*, write down the question the existing
    machinery answers and the question you need answered. **This role wrote the
    refactor plan; the engineer disproved it; nothing in review would have.**
+
+---
+
+## 2026-08-30 (347th filing) — **`Pass 184.0` criterion F (`4a25fb2`) filed; THE PASS IS NOW CLOSED at 6 discharged + 1 WITHDRAWN.** ★★★★ **CRITERION F VERIFIED BY LIVE GREP AT ALL THREE CHECKER LOCATIONS, NOT ACCEPTED FROM THE DISPATCH.** ★★★ **THE DOC-BOUNDARY LINT IS A GENUINE GUARD — AND MEASURED HERE ON PURPOSE-BUILT FIXTURES, IT IS *SILENT* ON THE VARIANT THAT SHIPS A WRONG DESCRIPTION.** ★★ **TWO SWEEPS CAME BACK CLEAN AND WERE DISJOINT: TWO CLEAN VERDICTS OVER DISJOINT SETS ARE NOT ONE STRONGER VERDICT.** ★ **BOTH NUMERIC CORRECTIONS RE-DERIVED FROM `git show` RATHER THAN CARRIED ON ASSERTION**
+
+**Sourcing (`R228`).** A shell was held and used; **no code was written in this
+filing.** Measured here: `git log`, `git rev-parse HEAD origin/main`,
+`git status --porcelain`, `git show`, `git merge-base --is-ancestor`,
+`ls D:\Dev\pdfce-backups\`, live greps of `pageops/references.rs`,
+`docs/core-api/*.md`, `docs/FEATURES.md`, `docs/ARCHITECTURE.md`,
+`tools/check-outcome-disclosed.py`, `tools/check-core-api-verbs.py`, and
+**three `clippy-driver` runs on two-line fixtures**. `HEAD` = `origin/main` =
+`4a25fb2`; backup bundle `pdfce-20260830-1702-4a25fb2-full.bundle` **current at
+`HEAD`** (by `ls`, 17:02). `run-gates.sh` PASS on 29 commands is the engineer's
+figure, relayed and **not re-run here**. `.tmp_bench.py` still untracked —
+**fifth filing**, deliberate.
+
+**Shipped:**
+- `Pass 184.0` **criterion F** (`4a25fb2`) — the census's blindness to
+  field-**name** targets is now stated where the census lives. **The Pass is
+  closed.**
+
+**Findings + decisions:**
+
+1. ★★★★ **Criterion F verified, not relayed.** All three locations the 346th
+   filing named as absent now carry the caveat: `references.rs:402`
+   (`census_dangling`'s own rustdoc, a `★★ WHAT THIS CENSUS CANNOT SEE` block
+   that **names the companion verbs** and concludes *"neither subsumes the
+   other"*), `references.rs:326` (`DanglingReport`, *"`is_empty()` will not say
+   so"*), and `01-reading-and-model.md:141` (*"`is_empty() == true` is **not** a
+   clean bill of health on its own"*). ⇒ **Discharged.**
+
+2. ★★★★ **`B` STAYS WITHDRAWN. A PASS CLOSING IS NOT A RETROACTIVE DISCHARGE.**
+   The Pass closes at **6 discharged + 1 withdrawn**, never 7 of 7. Criterion B
+   asked for a **visitor** refactor of `forms::scan_javascript`; that work was
+   never done and `scan_javascript` is untouched at `4a25fb2`. Recorded in both
+   the Shipped entry and the *Next up* marker, because a reader who takes
+   "complete" to mean "all seven happened" goes hunting for a visitor that does
+   not exist — **the exact outcome the 346th filing held the Pass open to
+   prevent.**
+
+3. ★★★ **THE DOC-BOUNDARY TRAP FIRED A THIRD TIME TODAY, AND THE GUARD IS REAL
+   BUT NARROW.** Two engineer insertions ended one `///` short of the item
+   below; **clippy caught both** (`empty_line_after_doc_comments`). The engineer
+   read this as a genuine guard rather than another coincidental oracle. **That
+   is correct and incomplete.** Measured here with `clippy-driver` on three
+   purpose-built fixtures:
+
+   | fixture | result |
+   |---|---|
+   | doc run, **blank line**, item | ★ **CAUGHT** — warn-by-default, names the documented item |
+   | doc run, **blank line**, `#[inline]`, item | ★ **CAUGHT** — sees *through* the attribute |
+   | doc run **contiguous** with the **wrong** item | ★★★ **SILENT — zero warnings** |
+
+   ⇒ **The class splits by BOUNDARY SHAPE, not by luck.** The blank-line variant
+   is unconditionally gated — including the attribute case that defeated every
+   upward-walking heuristic in the RAG's history. **The contiguous weld is not
+   gated, and it is the expensive one**: a blank line leaves the victim merely
+   *undocumented*, a contiguous weld ships a **wrong description on a public
+   item** (instances 1–6). **A future session must not read "clippy covers this
+   class" out of today's two catches.**
+
+4. ★★ **TWO SWEEPS, BOTH CLEAN, AND DISJOINT.** The engineer swept the phrase
+   *"submit mapping"*; the 346th filing swept six other keywords. **Neither set
+   contains the other's spelling**, so each would have missed **every one** of
+   the other's survivors — and both reported clean in the meantime. ⇒ **When a
+   sweep returns clean, the question is not *did I find them all* but *what
+   could my keyword set not have matched*.**
+
+   **Filing judgement (the engineer delegated it).** Distinct from the
+   *attention-follows-structure* finding (345th) — that one is about **where** a
+   reader stops, this is about **what a search can match**. **Not** distinct from
+   `a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md`, whose
+   thesis this is. Filed there as a **dated footer**, per hard rule 4.
+   **The genuinely new half:** it is about the **aggregation of two sweeps**.
+   **Two independent agents both reporting "clean" reads as corroboration and is
+   not, when their search sets are disjoint** — two weak verdicts flattering each
+   other, with the union never taken by anybody.
+
+5. ★ **BOTH NUMERIC CORRECTIONS RE-DERIVED.** A correction is a claim (hard rule
+   10's corollary), so neither was carried on the dispatch's word.
+   - **`b62e069`'s "11 new core tests" → 7. Confirmed independently.**
+     `button_action_submit.rs` is the **only** core file whose `#[test]` count
+     moved: **25** (`8456c45`) → **26** (`92b9f99`) → **33** (`b62e069`).
+     `b62e069`'s parent is `b3d754e`, a librarian filing touching no code, so the
+     commit's own delta is **33 − 26 = 7**. Whole-crate cross-check over
+     `crates/pdfce-core/{src,tests}`: **3,161 → 3,169 = 8** across
+     `8456c45..b62e069`, which is the two code commits summed (**1 + 7**) and is
+     consistent. **The published message stays wrong, deliberately** — rewriting
+     history breaks every document citing the hash, which this project has
+     **fourteen recorded casualties** of.
+   - **The 345th's *"27 in the file, up from 25"*** — the file held **26**. The
+     **delta of 1 was right; the addition was never performed.** Already
+     corrected in the 346th; restated beside the Shipped row carrying it.
+
+6. **Rule-11 sweep — clean, file set narrowed and pattern widened (clause (e)).**
+   Closing a Pass is a meaning change. **16 files mention `184.0`.**
+   `ROADMAP.md`/`SESSION_LOG.md` are correct **as history**; `NEXT_SESSION.md`
+   and `.claude/agent-memory/pdfce-engineer/` are engineer-owned; the rest were
+   read. ★ **Reported by name so the next sweep does not "fix" them:**
+   `ARCHITECTURE.md:28281`, `tools/check-outcome-disclosed.py:154`,
+   `docs/core-api/03-capabilities.md:883` — all **provenance tags** that stay
+   true after the closure.
+
+   ★★ **One survivor WAS found, and it was in this role's own tree:** the
+   *Next up* marker note still asserted criterion F was open at the checker.
+   Struck (not deleted) and corrected in this filing. **Second consecutive
+   filing whose only rule-11 survivor was written by this role** — the 345th's
+   two were also its own.
+
+7. **A stale citation found, inside an ACCEPTED class rather than owed work.**
+   `01-reading-and-model.md:141`/`:2326` cite `references.rs:336` for
+   `census_dangling`, which is at **`:430`** (`:335` is `DanglingReport`).
+   **Pre-existing** — at `8aee768` the function was at `:401`, so `4a25fb2` did
+   not introduce it. `tools/check-core-api-verbs.py`'s **own docstring, item 4**,
+   records `path:line` citations as deliberately unchecked (*"over a thousand of
+   them … one spot-check found a citation off by 2,169 lines"*). ⇒ **Not raised
+   as owed work**; recorded so a future session does not re-discover it as new.
+
+8. **`FEATURES.md` checked, no change, reason recorded.** Criterion F was
+   doc-text only — no behaviour, no capability, no shell reach. Rows **222** and
+   **223** were ticked correctly by the 346th and remain accurate at `4a25fb2`;
+   row 222 **already carries criterion F's own claim**. No ticks changed, no
+   expansion, per the file's hard conciseness rule.
+
+**Still in flight:**
+- **`Pass 185.0`** (the CI job named for one of its nineteen steps) — filed by
+  the 345th, **NOT STARTED**.
+- **`Pass 38.5` C9** (`/StructParent` / `/OBJR`) — still owed, **un-minted**.
+- **`Pass 184.0` criterion E** — scoped out with reason, **still owed and
+  un-minted**.
+
+**For next session:**
+- `Pass 184.0` needs nothing further. **Do not re-open it, and do not record it
+  as 7 of 7** — it is 6 discharged + 1 withdrawn.
+- **Do not plan around clippy for doc splices.** It gates the blank-line
+  boundary only; the contiguous weld — the variant that ships a wrong
+  description on a public item — is silent, measured here.
