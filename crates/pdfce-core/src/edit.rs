@@ -29488,6 +29488,21 @@ impl EditSession {
 
         self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
+
+        // ★ R235 instance 4 (`Pass 178.2`). `DimensionModel::set_group_scale`
+        // is documented "No-op for an unknown group" -- a pure-model setter
+        // returning `()`, so it cannot refuse -- and this verb called it
+        // without checking. Measured: `group-set-scale --group 99` printed a
+        // success line naming group 99 and changed nothing.
+        //
+        // Every sibling already refused (`set_group_style`,
+        // `set_group_standard`, `rename_dimension_group`,
+        // `delete_dimension_group_with`, `toggle_dimension_layer` since
+        // `Pass 178.0`); this one alone did not, which is the same
+        // inconsistency the layer toggle had.
+        if model.group(group).is_none() {
+            return Err(EditError::DimensionGroupNotFound { id: group.0 });
+        }
         model.set_group_scale(group, scale, format);
 
         // Regeneration goes through the ONE shared path (R92). This used to

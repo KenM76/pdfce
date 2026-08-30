@@ -875,3 +875,79 @@ fn authoring_into_an_unknown_group_is_refused_rather_than_silently_redirected() 
          what the silent fallback used to get wrong: {listing}"
     );
 }
+
+/// ★ **`group-set-scale` was the LAST group verb accepting an unknown id**,
+/// and it was found by probing all eight rather than by reading them.
+///
+/// # The sweep, and why it beat the reading
+///
+/// After three instances of `R235` were fixed by inspection, every
+/// ce-dimension verb was driven with a bogus id against the shipped binary.
+/// Seven refused; `group-set-scale` returned exit 0 with a success line
+/// naming group 99 and changed nothing.
+///
+/// It had been *read* earlier in the same session and *asserted* to be
+/// guarded — the assertion came from reading `set_group_style`, which is
+/// guarded, and generalising. A claim about a caller is a measurement, and
+/// that one was made and was wrong.
+///
+/// `DimensionModel::set_group_scale` returns `()` and is documented "No-op
+/// for an unknown group", so it has no channel to refuse — `R235`'s shape
+/// exactly, and the fourth instance of it.
+///
+/// # This test covers the whole family, not just the one that was broken
+///
+/// A test for `group-set-scale` alone would have to be written again for the
+/// next verb added to the family. Driving all of them is what found this one.
+#[test]
+fn every_ce_dimension_group_verb_refuses_an_id_that_does_not_exist() {
+    let src = two_groups("family");
+    let before = list(&src);
+
+    // (label, argv after the input path). Group 99 does not exist; the
+    // fixture has 0 and 1.
+    let cases: [(&str, Vec<&str>); 5] = [
+        (
+            "group-set-scale",
+            vec!["group-set-scale", "--group", "99", "--ratio", "1:50"],
+        ),
+        (
+            "group-set-standard",
+            vec!["group-set-standard", "--group", "99", "--standard", "iso"],
+        ),
+        (
+            "group-style",
+            vec!["group-style", "--group", "99", "--text-height", "12"],
+        ),
+        (
+            "group-rename",
+            vec!["group-rename", "--group", "99", "--name", "x"],
+        ),
+        (
+            "layer-toggle",
+            vec!["layer-toggle", "--group", "99", "--hide"],
+        ),
+    ];
+
+    for (label, args) in &cases {
+        let out = temp_out(&format!("family-{label}.pdf"));
+        let mut argv = vec![args[0], src.to_str().unwrap()];
+        argv.extend(args[1..].iter().copied());
+        argv.extend(["-o", out.to_str().unwrap()]);
+        let (code, stdout, err) = run(&argv);
+        assert_eq!(
+            code, EDIT_REFUSED,
+            "{label} must refuse a group that does not exist: {err}{stdout}"
+        );
+        assert!(
+            !out.exists(),
+            "{label} -- a refusal before any mutation writes no output file"
+        );
+    }
+
+    assert_eq!(
+        list(&src),
+        before,
+        "and the input document is untouched after all of them"
+    );
+}
