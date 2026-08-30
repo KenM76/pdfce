@@ -47,6 +47,7 @@
 use std::path::{Path, PathBuf};
 
 use pdfce_core::document::Document;
+use pdfce_core::settings::StylePolicy;
 use pdfce_core::text_edit::{
     FontSelector, FormatError, FormatOptions, FormatRequest, StyleSynthesis, set_format,
 };
@@ -63,11 +64,25 @@ fn doc(name: &str) -> Document {
 }
 
 /// Ask for synthetic bold on `find`, and return the refusal if there was one.
+///
+/// # ★ Under `StylePolicy::Refuse`, deliberately
+///
+/// This whole file is about the CONTENT of the refusal — that it names a face
+/// `set_font` will actually accept — and decision 106 did not change that
+/// content. What it changed is when the refusal fires: it is now a **posture**
+/// rather than pdfce's only behaviour, because the operator ruled that bold
+/// should resolve automatically *and*, separately, that the refusal should
+/// stay available.
+///
+/// So the assertions here are unchanged and only the posture is named. Leaving
+/// this at `default()` would silently retarget every test in the file at
+/// `Auto`, where there is no refusal to inspect — the suite would go green by
+/// testing nothing, which is worse than the failure that led here.
 fn ask_bold(doc: &Document, find: &str) -> Result<(), FormatError> {
     set_format(
         doc,
         &FormatRequest::new(0, find).synthetic(StyleSynthesis::Bold),
-        &FormatOptions::default(),
+        &FormatOptions::default().with_style_policy(StylePolicy::Refuse),
     )
     .map(|_| ())
 }

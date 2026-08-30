@@ -261,20 +261,60 @@ pub struct SynthesisOffer {
     pub base_font: String,
     /// Which path is offering, and hence the remedy order.
     pub path: SynthesisPath,
+    /// The real face this synthesis PASSED OVER, if the ladder found one and
+    /// the posture proceeded anyway (`Pass 179.x`, decision 106).
+    ///
+    /// `None` means nothing was passed over — which, before this field
+    /// existed, [`Self::disclosure`] asserted unconditionally.
+    pub passed_over: Option<String>,
 }
 
 impl SynthesisOffer {
-    /// The offer text — one wording, both paths, differing only in the order
-    /// the two remedies are listed.
+    /// The offer text.
+    ///
+    /// # ★★ THIS SENTENCE USED TO CONTRADICT ITS OWN REPORT
+    ///
+    /// It asserted, unconditionally, *"no real Bold face resolves for X on
+    /// this page, so pdfce cannot make this change with a genuine typeface"*
+    /// — and after decision 106 it was emitted in reports that ALSO carried
+    /// [`crate::text_edit::FormatReport::real_face_passed_over`] naming the
+    /// exact face it claimed did not exist. Two disclosures, one report,
+    /// flatly disagreeing.
+    ///
+    /// It also claimed synthesis *"is never applied silently, never as a
+    /// global preference"*. Both halves became false the moment
+    /// [`crate::settings::StylePolicy::Auto`] shipped as the default: it is a
+    /// preference, it is global, and proceeding without asking is the point.
+    ///
+    /// ★ Note the DIRECTION of the error, because it is the one nobody
+    /// watches for: this disclosure **understated** pdfce's reach. Rule 4 is
+    /// usually invoked against a claim that flatters the software; a claim
+    /// that a capability is absent when it is present sends an operator to a
+    /// worse remedy, and no test fails.
+    ///
+    /// So the sentence now branches on the fact rather than assuming it.
     #[must_use]
     pub fn disclosure(&self) -> String {
         let [first, second] = self.path.remedy_order();
+        if let Some(face) = &self.passed_over {
+            // A real face WAS there and the posture proceeded. Say that, name
+            // it, and say why this is not a refusal -- the operator asked for
+            // synthesis explicitly, or the posture is one that does not stop.
+            return format!(
+                "SYNTHETIC STYLE: pdfce applied {} to '{}' even though a real face WAS available \
+                 on this page. {face} This is not a mistake and not a refusal: synthesis was \
+                 asked for explicitly, and the fallback posture in force does not stop for it \
+                 (set it to `refuse` to be stopped instead). A synthesised weight is the regular \
+                 letterforms thickened, not a genuine typeface.",
+                self.synthesis.label(),
+                self.base_font,
+            );
+        }
         format!(
             "SYNTHETIC STYLE: no real {} face resolves for '{}' on this page, so pdfce cannot make \
-             this change with a genuine typeface. Remedies, in pdfce's recommended order here: \
-             (1) {first}; (2) {second}. pdfce applied {} ONLY because it was asked for explicitly \
-             — it is never applied silently, never as a global preference, and it is a FALLBACK, \
-             not an alternative to a real face.",
+             this change with a genuine typeface HERE. Remedies, in pdfce's recommended order \
+             here: (1) {first}; (2) {second}. A synthesised weight is a FALLBACK — the regular \
+             letterforms thickened — not an alternative to a real face. pdfce applied {}.",
             self.wanted_face_words(),
             self.base_font,
             self.synthesis.label(),
@@ -657,20 +697,82 @@ mod tests {
         assert!(edit.iter().all(|r| !r.is_empty()));
     }
 
+    /// ★★ **The disclosure must NOT claim a real face is absent when one was
+    /// passed over.**
+    ///
+    /// Before decision 106 this sentence was unconditional: *"no real Bold
+    /// face resolves for X on this page, so pdfce cannot make this change with
+    /// a genuine typeface."* Under [`crate::settings::StylePolicy::Auto`] it
+    /// began shipping in reports that ALSO named the exact face it claimed did
+    /// not exist — two disclosures, one report, flatly contradicting.
+    ///
+    /// Note the direction: it **understated** what pdfce could do. Rule 4 is
+    /// usually invoked against a claim that flatters the software, and a claim
+    /// that a capability is missing sends the operator to a worse remedy with
+    /// nothing failing.
+    #[test]
+    fn a_passed_over_face_is_named_rather_than_denied() {
+        let offer = SynthesisOffer {
+            synthesis: StyleSynthesis::Bold,
+            base_font: "Times-Roman".to_owned(),
+            path: SynthesisPath::InPlaceEdit,
+            passed_over: Some(
+                "a REAL bold face is available on this page as 'Times-Bold'.".to_owned(),
+            ),
+        };
+        let d = offer.disclosure();
+        assert!(
+            d.contains("Times-Bold"),
+            "the face that was passed over must be NAMED: {d}"
+        );
+        assert!(
+            !d.contains("no real"),
+            "★ and the sentence must not also assert that none resolves: {d}"
+        );
+        assert!(
+            !d.contains("cannot make this change with a genuine typeface"),
+            "★★ nor that pdfce is incapable of it -- it demonstrably is not: {d}"
+        );
+        assert!(
+            d.contains("refuse"),
+            "and it should say how to be stopped instead: {d}"
+        );
+    }
+
     /// The disclosure must name the font, name what was applied, and say it
-    /// is a fallback — R90's "per-use, named, declinable".
+    /// is a fallback.
     #[test]
     fn the_disclosure_names_the_font_the_style_and_the_fallback_posture() {
         let offer = SynthesisOffer {
             synthesis: StyleSynthesis::Bold,
             base_font: "Calibri".to_owned(),
             path: SynthesisPath::InPlaceEdit,
+            // Nothing was passed over: this is the arm that says a real face
+            // does not resolve, which is TRUE only in this case.
+            passed_over: None,
         };
         let d = offer.disclosure();
         assert!(d.contains("Calibri"), "{d}");
         assert!(d.contains("synthetic bold"), "{d}");
         assert!(d.contains("FALLBACK"), "{d}");
-        assert!(d.contains("never applied silently"), "{d}");
+        // ★ The old assertion here required the sentence to contain
+        // "never applied silently". That was true of pdfce and is not any
+        // more: decision 106 made `StylePolicy::Auto` the default, and it IS
+        // silent and IS a global preference. The claim was removed from the
+        // disclosure, so requiring it would pin a sentence pdfce is no longer
+        // entitled to say.
+        //
+        // Replaced with the half that survived and is what the operator
+        // actually needs from this arm: the letterforms are the regular
+        // face's, thickened.
+        assert!(
+            d.contains("letterforms thickened"),
+            "the disclosure must still say what a synthesised weight IS: {d}"
+        );
+        assert!(
+            !d.contains("never applied silently"),
+            "★ and must NOT still claim it -- Auto is silent by default: {d}"
+        );
     }
 
     #[test]

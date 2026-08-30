@@ -337,6 +337,73 @@ impl LoadReport {
 ///
 /// # A variant was DELETED here, which is rarer than a default moving
 ///
+/// What pdfce does when the operator asks for **bold or italic** and the
+/// ideal face may or may not be there (`Pass 179.0`, decision 106).
+///
+/// # ★ The operator ruled this, twice, and the second half is why it is a
+/// setting rather than a constant
+///
+/// First (2026-08-30): *"bold font should be automatically used if available,
+/// but otherwise synthetic should be supported, and the user shouldn't have to
+/// intervene."* That gives [`Self::Auto`] and makes it the default.
+///
+/// Then, immediately after: *"let's still make the current method of warning
+/// or forcing it manually or refusing available as well as the automatic
+/// silent one."* So the postures pdfce already had are **kept**, not replaced.
+///
+/// This is the same argument [`SeparationPolicy`] carries and the same reason:
+/// **all three answers are defensible for different workflows.** A drawing
+/// office wants the bold and does not want to be asked; a typographer setting
+/// body text wants to be told when a weight was faked; a conformance run wants
+/// to be stopped rather than given a fake. None of those is wrong.
+///
+/// # What each posture does NOT change
+///
+/// The **ladder** is the same in every posture — a real face is always
+/// preferred to a synthesised one, and the rung order never varies. What
+/// varies is only **what pdfce does about a fallback once it has picked one**.
+/// A posture that changed which face was chosen would be a second resolution
+/// path, and two paths drift.
+///
+/// Naming the face explicitly (`set_font`) or forcing synthesis
+/// (`set_synthetic`) is the operator "forcing it manually" and is honoured
+/// under [`Self::Auto`] and [`Self::Warn`] exactly as asked — those controls
+/// are unchanged and are not a posture.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum StylePolicy {
+    /// **Decide and apply, silently. The default** (operator ruling,
+    /// 2026-08-30).
+    ///
+    /// Walk the ladder, bind the best face available, synthesise only if
+    /// nothing real is reachable, and never refuse and never ask. Which rung
+    /// was used is **reported in the outcome** — rule 4 obliges disclosure,
+    /// not a gate, and the operator's *"shouldn't have to intervene"* forbids
+    /// the gate specifically.
+    #[default]
+    Auto,
+    /// As [`Self::Auto`], but a **fallback is warned about**.
+    ///
+    /// The edit still happens — this is not a refusal and not a prompt. It
+    /// raises the disclosure from a reported field to a warning a caller has
+    /// to actively ignore, for a workflow where a faked weight in the output
+    /// is a problem worth noticing at the moment it is created.
+    ///
+    /// A rung-1 or rung-2 result — a genuine face — warns about nothing,
+    /// because nothing was faked.
+    Warn,
+    /// **Refuse a synthesis request when a real face is available**, naming
+    /// the face — pdfce's behaviour before `Pass 179.0`, kept because the
+    /// operator asked for it to be kept.
+    ///
+    /// Strictly narrower than the others: it only ever fires on an **explicit**
+    /// `set_synthetic` request that the ladder could have satisfied for real.
+    /// An automatic bold request still resolves normally, and a run with no
+    /// real face anywhere still synthesises — there is nothing to refuse in
+    /// favour of.
+    Refuse,
+}
+
 /// `CmykIntent::Naive` — the additive `1 − min(1, x + k)` formula pdfce used
 /// before it was calibrated — was removed by the same ruling: *"you can also
 /// remove the old pdfce formula from that section, even the code for it."*
@@ -1459,6 +1526,10 @@ pub struct Settings {
     /// all three answers are defensible for different workflows, not
     /// because the standard is unclear.
     pub separations: SeparationPolicy,
+    /// What pdfce does when a bold/italic request may need a fallback
+    /// (`Pass 179.0`). Defaults to [`StylePolicy::Auto`] — decide and apply,
+    /// silently.
+    pub style_policy: StylePolicy,
     /// How `DeviceCMYK` is converted for display.
     pub cmyk_intent: CmykIntent,
     /// The largest **subtractive compositing buffer** the renderer may
@@ -1617,6 +1688,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             separations: SeparationPolicy::default(),
+            style_policy: StylePolicy::default(),
             cmyk_intent: CmykIntent::default(),
             // `None`, and deliberately NOT a copy of the renderer's
             // constant: `pdfce-core` cannot see `pdfce-render` (the
@@ -1845,6 +1917,16 @@ const fn separation_token(policy: SeparationPolicy) -> &'static str {
 }
 
 /// The settings-file token for a CMYK intent. See [`separation_token`].
+/// The persisted spelling of a [`StylePolicy`], for the settings file and for
+/// the `BadValue` note that names the fallback.
+const fn style_policy_token(policy: StylePolicy) -> &'static str {
+    match policy {
+        StylePolicy::Auto => "auto",
+        StylePolicy::Warn => "warn",
+        StylePolicy::Refuse => "refuse",
+    }
+}
+
 const fn cmyk_token(intent: CmykIntent) -> &'static str {
     match intent {
         CmykIntent::Calibrated => "calibrated",
@@ -2048,6 +2130,17 @@ impl Settings {
                     value: value.to_owned(),
                     line,
                     using: separation_token(Self::default().separations).to_owned(),
+                }),
+            },
+            "style_policy" => match value {
+                "auto" => self.style_policy = StylePolicy::Auto,
+                "warn" => self.style_policy = StylePolicy::Warn,
+                "refuse" => self.style_policy = StylePolicy::Refuse,
+                _ => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: style_policy_token(Self::default().style_policy).to_owned(),
                 }),
             },
             "cmyk_intent" => match value {
@@ -2318,6 +2411,33 @@ impl Settings {
                 CmykIntent::Calibrated => "calibrated",
                 CmykIntent::NeutralBlack => "neutral_black",
             }
+        );
+
+        out.push_str(
+            "# What pdfce does when you make text BOLD or ITALIC and the real\n\
+             # face may not be there.\n\
+             #\n\
+             # Bold is not a switch in a PDF -- it is a different typeface. So\n\
+             # pdfce looks for a real bold face first and thickens the letters\n\
+             # only if it cannot find one. That ladder is the same whatever you\n\
+             # set here; this only decides what pdfce DOES about having had to\n\
+             # fall back.\n\
+             #   auto   = just do it, and say afterwards which it used (default).\n\
+             #            You are never asked and never stopped.\n\
+             #   warn   = the same, but say so loudly when the weight was faked\n\
+             #            rather than real. For work where a fake bold in the\n\
+             #            output is worth noticing as it happens.\n\
+             #   refuse = if you specifically ask to fake it and a real face was\n\
+             #            available, stop and name that face instead. Strict, and\n\
+             #            what pdfce did before this was a choice.\n\
+             #\n\
+             # Naming a font yourself, or forcing the fake one, always works and\n\
+             # is not affected by this.\n",
+        );
+        let _ = writeln!(
+            out,
+            "style_policy = {}\n",
+            style_policy_token(self.style_policy)
         );
 
         out.push_str(
@@ -3141,7 +3261,14 @@ mod tests {
         // matching the default on the way back in.
         let written = Settings {
             separations: SeparationPolicy::Discard,
-            cmyk_intent: CmykIntent::Calibrated,
+            // ★ Was `Calibrated`, WHICH IS THE DEFAULT -- so this one field
+            // broke the discipline the comment above states, and if
+            // `write_to_string` had forgotten `cmyk_intent` entirely this
+            // test would have passed. Found 2026-08-30 while adding
+            // `style_policy` below. `NeutralBlack` is the non-default.
+            cmyk_intent: CmykIntent::NeutralBlack,
+            // NOT the default (`Auto`), same reason.
+            style_policy: StylePolicy::Refuse,
             // NOT the default (`OutputIntentIfSubtractive`) -- see the note
             // above about a value that matches the default proving nothing.
             page_blend_space_source: PageBlendSpaceSource::DeviceNative,

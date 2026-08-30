@@ -2641,6 +2641,51 @@ literally names. Try this if a file with a curved-patch gradient renders as \
 nonsense or not at all."
 }
 
+/// Title for the bold/italic fallback posture (`Pass 179.x`, decision 106).
+pub fn setting_style_policy_title() -> &'static str {
+    "When bold or italic needs a fallback"
+}
+
+/// Why this is a setting rather than a fixed behaviour.
+pub fn setting_style_policy_silence() -> &'static str {
+    "Bold is not a switch in a PDF — it is a different typeface. pdfce looks \
+for a real bold face first and thickens the letters only when it cannot find \
+one. That preference never changes. This decides only what pdfce does about \
+having had to fall back."
+}
+
+/// What the choice affects.
+pub fn setting_style_policy_radius() -> &'static str {
+    "Affects what pdfce tells you, not which font it picks."
+}
+
+pub fn setting_style_policy_auto() -> &'static str {
+    "Just do it (pdfce's default)"
+}
+
+pub fn setting_style_policy_auto_note() -> &'static str {
+    "You are never asked and never stopped. pdfce says afterwards which it \
+used."
+}
+
+pub fn setting_style_policy_warn() -> &'static str {
+    "Do it, but say so loudly when the weight was faked"
+}
+
+pub fn setting_style_policy_warn_note() -> &'static str {
+    "For work where a fake bold in the finished file is worth noticing as it \
+happens."
+}
+
+pub fn setting_style_policy_refuse() -> &'static str {
+    "Stop me if a real face was available"
+}
+
+pub fn setting_style_policy_refuse_note() -> &'static str {
+    "Only when you specifically ask to fake it. pdfce names the real face \
+instead. This is what pdfce always did before it became a choice."
+}
+
 pub fn setting_cmyk_title() -> &'static str {
     "How CMYK colour is shown on screen"
 }

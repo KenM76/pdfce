@@ -98,7 +98,8 @@ use pdfce_core::pageops::SeparationPolicy;
 use pdfce_core::settings::{
     ActualTextPrecedence, CmykIntent, CmykJpegPolarity, MaskResample, MeshPatchPadding,
     MinifyFilter, MissingAppearanceState, OverprintZeroTintScope, PageBlendSpaceSource,
-    QuadPointOrder, Settings, StoreLocation, TrailingEol, UnmappableCode, XrefEntryEol,
+    QuadPointOrder, Settings, StoreLocation, StylePolicy, TrailingEol, UnmappableCode,
+    XrefEntryEol,
 };
 
 use crate::ui_text;
@@ -243,6 +244,7 @@ pub fn show(
                     });
                     group(ui, ui_text::settings_group_colour(), false, |ui| {
                         cmyk_intent_setting(ui, draft);
+                        style_policy_setting(ui, draft);
                         page_blend_space_setting(ui, draft);
                         grey_overprint_setting(ui, draft);
                         ui.add_space(10.0);
@@ -507,6 +509,37 @@ fn mesh_padding_setting(ui: &mut egui::Ui, draft: &mut Draft) {
         MeshPatchPadding::None,
         ui_text::setting_mesh_padding_none(),
         Some(ui_text::setting_mesh_padding_none_note()),
+    );
+}
+
+fn style_policy_setting(ui: &mut egui::Ui, draft: &mut Draft) {
+    header(
+        ui,
+        ui_text::setting_style_policy_title(),
+        ui_text::setting_style_policy_silence(),
+        ui_text::setting_style_policy_radius(),
+    );
+    let v = &mut draft.working.style_policy;
+    option(
+        ui,
+        v,
+        StylePolicy::Auto,
+        ui_text::setting_style_policy_auto(),
+        Some(ui_text::setting_style_policy_auto_note()),
+    );
+    option(
+        ui,
+        v,
+        StylePolicy::Warn,
+        ui_text::setting_style_policy_warn(),
+        Some(ui_text::setting_style_policy_warn_note()),
+    );
+    option(
+        ui,
+        v,
+        StylePolicy::Refuse,
+        ui_text::setting_style_policy_refuse(),
+        Some(ui_text::setting_style_policy_refuse_note()),
     );
 }
 

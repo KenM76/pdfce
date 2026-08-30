@@ -5320,6 +5320,24 @@ enum Command {
         /// would displace that line), and refused with `--pin`.
         #[arg(long = "italic-synthetic")]
         italic_synthetic: bool,
+        /// What to do when a bold/italic request needs a FALLBACK, for this
+        /// run only. Omit to use the stored `style_policy` setting.
+        ///
+        /// Bold is not a switch in a PDF -- it is a different typeface -- so
+        /// pdfce prefers a real face and thickens the letters only when it
+        /// cannot find one. That preference never changes; this decides only
+        /// what pdfce does about having fallen back.
+        ///
+        /// `auto` just does it and reports which it used, and is the default.
+        /// `warn` says so loudly when the weight was faked. `refuse` stops an
+        /// explicit `--bold-synthetic` when a real face was available and
+        /// names that face, which is what pdfce always did before this became
+        /// a choice.
+        ///
+        /// Naming a font with `--set-font`, or forcing the fake one with
+        /// `--bold-synthetic`, always works and is not affected by this.
+        #[arg(long, value_enum)]
+        style_policy: Option<StylePolicyArg>,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -8770,6 +8788,7 @@ fn run() -> ExitCode {
             rise,
             bold_synthetic,
             italic_synthetic,
+            style_policy,
             output,
             pin,
             pin_span,
@@ -8789,6 +8808,7 @@ fn run() -> ExitCode {
             h_scale,
             rise: rise.as_deref(),
             synthetic: pdfce_core::text_edit::StyleSynthesis::new(bold_synthetic, italic_synthetic),
+            style_policy,
             // clap's `conflicts_with` guarantees at most one is set, so this
             // ladder cannot silently prefer one over another.
             script: if superscript {
@@ -20408,6 +20428,9 @@ struct FormatTextArgs<'a> {
     /// [`StyleSynthesis::None`] means none were, which is the default and
     /// the only state in which nothing is synthesized (R90).
     synthetic: pdfce_core::text_edit::StyleSynthesis,
+    /// `--style-policy`, or `None` to use the stored setting. Overrides the
+    /// setting for this invocation only; nothing is persisted.
+    style_policy: Option<StylePolicyArg>,
     pin: bool,
     /// The `--target` selector, unparsed — see `parse_edit_target`.
     target: &'a str,
@@ -20670,11 +20693,29 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
     if !args.synthetic.is_none() {
         req = req.synthetic(args.synthetic);
     }
-    let opts = FormatOptions::default().with_disposition(if args.pin {
-        FollowerDisposition::Pin
-    } else {
-        FollowerDisposition::Reflow
-    });
+    // ★ The bold/italic fallback posture (`Pass 179.0`, decision 106).
+    //
+    // Resolved HERE, in the shell, and handed to core as a value -- the
+    // established convention for every ambiguity setting, and the thing that
+    // keeps an engine call from depending on machine state (`wasm32`).
+    //
+    // `--style-policy` overrides the stored setting for this invocation only,
+    // the same shape `render-page --max-cmyk-buffer-bytes` uses. Nothing is
+    // persisted by passing it.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
+    let policy = args
+        .style_policy
+        .map_or(settings.style_policy, StylePolicyArg::to_core);
+
+    let opts = FormatOptions::default()
+        .with_style_policy(policy)
+        .with_disposition(if args.pin {
+            FollowerDisposition::Pin
+        } else {
+            FollowerDisposition::Reflow
+        });
 
     let outcome = match pdfce_core::text_edit::set_format(&doc, &req, &opts) {
         Ok(o) => o,
@@ -20782,6 +20823,37 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
         format!("{}{bold}{ital}", report.synthesis)
     };
     println!("  rise={rise_str} synthesis={synth_str}");
+
+    // ★ THE DISCLOSURE A NON-REFUSING POSTURE OWES (`Pass 179.0`, decision
+    // 106).
+    //
+    // Under `refuse` this situation is the error and the command already
+    // failed with the sentence below. Under `auto` and `warn` the edit
+    // HAPPENS, so rule 4's obligation lands here instead: the operator asked
+    // to fake a weight, pdfce did it, and a real face was sitting there. That
+    // must not be silent -- "the user shouldn't have to intervene" removed the
+    // GATE, not the disclosure.
+    //
+    // The two postures differ only in loudness and in the stream:
+    //
+    //   auto -> a `note:` on stdout, a reported fact beside the others
+    //   warn -> a `warning:` on STDERR, so a script that only reads stdout
+    //           still surfaces it and a human running the command sees it
+    //           separated from the result
+    //
+    // The engine's own sentence is printed VERBATIM. It already names the
+    // face, the resource, whether the family differs and the exact
+    // `--set-font` to retry with; re-wording it here would be a second
+    // description of one fact, and the two would drift.
+    if let Some(passed_over) = &report.real_face_passed_over {
+        match policy {
+            pdfce_core::settings::StylePolicy::Warn => {
+                eprintln!("pdfce-cli: warning: {passed_over}");
+            }
+            // `Refuse` cannot reach here -- the call returned `Err`.
+            _ => println!("  note: {passed_over}"),
+        }
+    }
     if !report.restore_narrowed.is_empty() {
         let names: Vec<String> = report
             .restore_narrowed
@@ -24292,6 +24364,36 @@ undo_verified={} undo_identical={}",
 /// refused by name rather than defaulted. Defaulting either one would pick a
 /// destination group on the operator's behalf and re-measure every dimension
 /// in it.
+/// `--style-policy` for `format-text`: what pdfce does when a bold/italic
+/// request may need a fallback (`Pass 179.0`, decision 106).
+///
+/// A per-invocation override of the `style_policy` setting. Absent means "use
+/// whatever is stored", which is the shape every other settings-backed flag in
+/// this binary uses -- an `Option` rather than a `default_value_t`, so that
+/// "not passed" and "passed the same value the setting holds" stay
+/// distinguishable and passing nothing never overwrites a stored choice.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum StylePolicyArg {
+    /// Decide and apply, silently. Reports which face was used afterwards.
+    Auto,
+    /// As `auto`, but say so loudly when the weight or slant was FAKED
+    /// rather than real.
+    Warn,
+    /// Refuse an explicit fake-it request when a real face was available,
+    /// and name that face. pdfce's behaviour before this was a choice.
+    Refuse,
+}
+
+impl StylePolicyArg {
+    const fn to_core(self) -> pdfce_core::settings::StylePolicy {
+        match self {
+            Self::Auto => pdfce_core::settings::StylePolicy::Auto,
+            Self::Warn => pdfce_core::settings::StylePolicy::Warn,
+            Self::Refuse => pdfce_core::settings::StylePolicy::Refuse,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 enum GroupDeletionArg {
     /// Refuse if the group still has members, reporting how many.

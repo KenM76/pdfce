@@ -235,6 +235,7 @@ use crate::content::{ContentError, ContentStream};
 use crate::document::Document;
 use crate::object::{Dict, Object};
 use crate::page_tree::{self, PageTreeError};
+use crate::settings::StylePolicy;
 use crate::span::ByteSpan;
 use crate::text_edit::EditGlyphSource;
 use crate::text_edit::edit::{
@@ -878,9 +879,27 @@ pub struct FormatOptions {
     /// (default [`FollowerDisposition::Reflow`]). A colour-only change never
     /// shifts anything, so this is moot for it.
     pub disposition: FollowerDisposition,
+    /// What to do when a bold/italic request may need a **fallback**
+    /// (`Pass 179.0`, decision 106).
+    ///
+    /// Set by [`crate::edit::EditSession`] from its own
+    /// [`style_policy`](crate::edit::EditSession::style_policy), which the
+    /// SHELL resolves from the settings store — core never reads a settings
+    /// file (`wasm32`).
+    ///
+    /// Defaults to [`StylePolicy::Auto`], so a caller that never sets it gets
+    /// the operator's ruled behaviour: decide, apply, disclose, never refuse.
+    pub style_policy: StylePolicy,
 }
 
 impl FormatOptions {
+    /// Set the bold/italic fallback posture, returning `self`.
+    #[must_use]
+    pub const fn with_style_policy(mut self, policy: StylePolicy) -> Self {
+        self.style_policy = policy;
+        self
+    }
+
     /// Set the follower [`FollowerDisposition`], returning `self`.
     #[must_use]
     pub fn with_disposition(mut self, disposition: FollowerDisposition) -> Self {
@@ -975,6 +994,29 @@ pub struct FormatReport {
     /// re-detectable on their own — see
     /// [`synth::detect`](crate::text_edit::synth::detect).
     pub synthesis: StyleSynthesis,
+    /// A real face **could** have satisfied this synthesis request and was
+    /// passed over (`Pass 179.0`, decision 106).
+    ///
+    /// `None` when nothing was passed over — either the ladder found nothing
+    /// real, or nothing was synthesised at all.
+    ///
+    /// # Why this exists, and why it is not an error
+    ///
+    /// Before this Pass, this situation WAS the error
+    /// ([`FormatError::RealFaceAvailable`]) and the edit did not happen. The
+    /// operator ruled on 2026-08-30 that it should happen, and separately that
+    /// the refusal must stay available — so which of the two you get is
+    /// [`StylePolicy`], and this field is what the non-refusing postures owe
+    /// instead of the refusal.
+    ///
+    /// It carries the refusal's own sentence, verbatim, rather than a
+    /// paraphrase: it names the face and the resource, and re-wording it here
+    /// would be a second description of one fact.
+    ///
+    /// Under [`StylePolicy::Warn`] a shell should surface this prominently;
+    /// under [`StylePolicy::Auto`] it is a reported fact like any other. Under
+    /// [`StylePolicy::Refuse`] it is always `None`, because the call failed.
+    pub real_face_passed_over: Option<String>,
     /// The user-space stroke width a synthetic bold emitted (§9.3.6), quoted
     /// by value so the number is never hidden from the operator (rule 4).
     pub synthetic_bold_width: Option<f64>,
@@ -1852,6 +1894,9 @@ pub(crate) fn plan_format_target(
     // resolves on this page, the request is refused and pointed at it. Only
     // then is anything emitted.
     let synthesis = req.set_synthetic.unwrap_or_default();
+    // Hoisted to the siblings' scope: the report is built far below this
+    // block, and a value that only exists inside the `if` cannot reach it.
+    let mut real_face_passed_over: Option<String> = None;
     let mut synthetic_bold_width: Option<f64> = None;
     let mut synthetic_italic: Option<(f64, f64)> = None;
     let mut synthesis_offer: Option<SynthesisOffer> = None;
@@ -1863,7 +1908,22 @@ pub(crate) fn plan_format_target(
         let effective_font = font_plan
             .as_ref()
             .map_or(&orig_font.base_font, |p| &p.font.base_font);
-        gate_synthesis(
+        // ★ THE POSTURE IS APPLIED HERE, AND ONLY HERE (`Pass 179.0`).
+        //
+        // `gate_synthesis` answers one question -- "could a real face have
+        // done this instead?" -- and until this Pass its answer was always a
+        // refusal. The operator ruled otherwise on 2026-08-30, then ruled that
+        // the refusal must stay AVAILABLE, so the answer is now routed by
+        // posture rather than acted on unconditionally:
+        //
+        //   Refuse -> refuse, naming the face (pdfce's prior behaviour)
+        //   Warn   -> proceed, and record that a real face was passed over
+        //   Auto   -> proceed; the outcome still reports what happened
+        //
+        // Note what does NOT vary: the question, and the survey that answers
+        // it. A posture that changed WHICH face was found would be a second
+        // resolution path, and two paths drift.
+        real_face_passed_over = match gate_synthesis(
             doc,
             page_resources_dict,
             &recs,
@@ -1871,11 +1931,21 @@ pub(crate) fn plan_format_target(
             find,
             synthesis,
             set_font_name,
-        )?;
+        ) {
+            Ok(()) => None,
+            Err(e) => match opts.style_policy {
+                StylePolicy::Refuse => return Err(e),
+                StylePolicy::Warn | StylePolicy::Auto => Some(e.to_string()),
+            },
+        };
         synthesis_offer = Some(SynthesisOffer {
             synthesis,
             base_font: effective_font.clone(),
             path: SynthesisPath::InPlaceEdit,
+            // The fact the disclosure used to ASSUME. Cloned rather than
+            // moved: the same string is also reported on its own field, and
+            // one of the two must not consume it.
+            passed_over: real_face_passed_over.clone(),
         });
 
         if synthesis.bold() {
@@ -2181,6 +2251,7 @@ pub(crate) fn plan_format_target(
         script_size: script_metrics.map(|_| (base_size, emitted_size)),
         rise_change: new_rise.map(|r| (anchor.text_state.rise.value, r)),
         synthesis,
+        real_face_passed_over,
         synthetic_bold_width,
         synthetic_italic,
         restore_narrowed,
@@ -5536,7 +5607,18 @@ mod tests {
         let err = set_format(
             &doc,
             &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
-            &FormatOptions::default(),
+            // ★ `Refuse`, not `default()`. The refusal is no longer
+            // unconditional -- decision 106 made it a POSTURE, and the
+            // operator asked for it to stay available rather than to stay
+            // mandatory. Asserting it under `default()` would now be
+            // asserting the old contract, which is exactly the failure mode
+            // `a_form_widget_is_refused_...` hit earlier the same day: a test
+            // pinning a temporary state as though it were permanent.
+            //
+            // Under `Auto` this same call SUCCEEDS and reports
+            // `real_face_passed_over` -- covered by the CLI suite
+            // `style_policy.rs`, which drives all three postures.
+            &FormatOptions::default().with_style_policy(StylePolicy::Refuse),
         )
         .unwrap_err();
         match err {
@@ -5915,7 +5997,18 @@ mod tests {
         let err = set_format(
             &doc,
             &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
-            &FormatOptions::default(),
+            // ★ `Refuse`, not `default()`. The refusal is no longer
+            // unconditional -- decision 106 made it a POSTURE, and the
+            // operator asked for it to stay available rather than to stay
+            // mandatory. Asserting it under `default()` would now be
+            // asserting the old contract, which is exactly the failure mode
+            // `a_form_widget_is_refused_...` hit earlier the same day: a test
+            // pinning a temporary state as though it were permanent.
+            //
+            // Under `Auto` this same call SUCCEEDS and reports
+            // `real_face_passed_over` -- covered by the CLI suite
+            // `style_policy.rs`, which drives all three postures.
+            &FormatOptions::default().with_style_policy(StylePolicy::Refuse),
         )
         .unwrap_err();
         match err {
@@ -6238,7 +6331,18 @@ mod tests {
         let err = set_format(
             &doc,
             &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
-            &FormatOptions::default(),
+            // ★ `Refuse`, not `default()`. The refusal is no longer
+            // unconditional -- decision 106 made it a POSTURE, and the
+            // operator asked for it to stay available rather than to stay
+            // mandatory. Asserting it under `default()` would now be
+            // asserting the old contract, which is exactly the failure mode
+            // `a_form_widget_is_refused_...` hit earlier the same day: a test
+            // pinning a temporary state as though it were permanent.
+            //
+            // Under `Auto` this same call SUCCEEDS and reports
+            // `real_face_passed_over` -- covered by the CLI suite
+            // `style_policy.rs`, which drives all three postures.
+            &FormatOptions::default().with_style_policy(StylePolicy::Refuse),
         )
         .unwrap_err();
         match err {
