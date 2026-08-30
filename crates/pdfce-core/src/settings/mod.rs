@@ -360,9 +360,62 @@ pub enum CmykIntent {
     /// docs record that they did not always.
     ///
     /// Its visible consequence is that solid black ink (`0 0 0 1 k`) renders
-    /// `#231F20` rather than `#000000`, and mid greys are slightly cool. That
-    /// is what Acrobat shows, which is the point: *"what will this look like
-    /// in Acrobat?"* and *"what does pdfce show?"* now have one answer.
+    /// `#231F20` rather than `#000000`, and mid greys come out slightly cool.
+    ///
+    /// # ★★ THE SECOND HALF OF THAT SENTENCE WAS A CLAIM, AND IT HAS BEEN
+    /// MEASURED. It was wrong.
+    ///
+    /// This paragraph read, until `Pass 174.1`:
+    ///
+    /// > ~~"…and mid greys are slightly cool. **That is what Acrobat shows,
+    /// > which is the point**: *"what will this look like in Acrobat?"* and
+    /// > *"what does pdfce show?"* now have one answer."~~
+    ///
+    /// Measured 2026-08-29 against a reference engine's own renders of the
+    /// licensed print-conformance corpus, over **every flat achromatic region
+    /// of at least 2 000 px in all 51 patches** (`tools/flat-color-parity.py
+    /// --neutrals`), with the probe (`--probe-ink`) confirming each grey's
+    /// route:
+    ///
+    /// ```text
+    ///   pure-K ink      reference        pdfce (Calibrated)     spread
+    ///   0 0 0 0.500     156,156,156       147,149,152             5
+    ///   0 0 0 0.749      98, 98, 98        99,100,103             4
+    /// ```
+    ///
+    /// **The reference renders pure-K greys EXACTLY neutral — channel spread
+    /// zero — at both levels the corpus offers. pdfce does not, at either.**
+    /// (Two, not more: a third achromatic pair, on the output-intent-change
+    /// patch, is excluded because pdfce's whole region there is 65–70 counts
+    /// dark, which is a different defect and not a hue one. Two levels is a
+    /// small sample and is stated as one.)
+    /// So the cool cast is a divergence, not agreement, and the sentence that
+    /// justified it was justifying the opposite of what it claimed.
+    ///
+    /// ★ **The other half of the claim SURVIVES, and separating them is the
+    /// point of stating both.** `Calibrated` tracks the reference's
+    /// *lightness* closely — `99` against `98` at `K = 0.749` — where a naive
+    /// `1 − K` formula would have given `64`, more than thirty counts out.
+    /// The table is right about how dark ink looks and wrong about its hue.
+    /// A future session must not read this note as an argument for reverting
+    /// to a naive conversion; it is an argument about **neutrality**, on the
+    /// achromatic axis only.
+    ///
+    /// ★★ **The aggregate number is the trap here, and it is recorded so the
+    /// measurement is not re-run and re-misread.** Over the same corpus,
+    /// **125 of 132** achromatic reference regions come out of pdfce still
+    /// achromatic — 95 %, which reads as a strong result and is one. Segment
+    /// out the regions the reference painted **paper white**, where a
+    /// conversion that did nothing at all would also score perfectly, and the
+    /// population is **7 mid-grey regions of which pdfce leaves 0 neutral**.
+    /// A fixture whose expected value equals what the code writes anyway
+    /// cannot falsify anything, and 125 of those 132 were that fixture.
+    ///
+    /// **Not changed here, deliberately.** The conversion itself is the
+    /// sibling `iccce` project's domain under decision 064, two levels is a
+    /// thin basis for moving a shipped default, and the operator ruled this
+    /// default on 2026-08-28. What is owed is an accurate justification, and
+    /// that is what this is.
     #[default]
     Calibrated,
     /// As [`Self::Calibrated`], except that pure black — `C = M = Y = 0`
