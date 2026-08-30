@@ -5566,7 +5566,8 @@ enum Command {
         #[arg(long)]
         style: bool,
     },
-    /// **Rename a ce dimension group** (Pass 25.7).
+    /// **Rename a ce dimension group** (core verb since Pass 25.7; this
+    /// subcommand Pass 176.0).
     ///
     /// Metadata only — **no appearance is regenerated**, because a group's
     /// name is not drawn on the page. Nothing about what any member measures
@@ -5598,7 +5599,8 @@ enum Command {
         verify_undo: bool,
     },
     /// **Delete a ce dimension group**, answering the what-about-the-members
-    /// question explicitly (Pass 25.7).
+    /// question explicitly (core verb since Pass 25.7; this subcommand
+    /// Pass 176.0).
     ///
     /// `--members refuse` (the default) **refuses** a group that still has
     /// members and reports how many, so a script never destroys measurements
@@ -5637,7 +5639,7 @@ enum Command {
         verify_undo: bool,
     },
     /// **Move one placed ce dimension into another group — RE-MEASURING it**
-    /// (Pass 25.7).
+    /// (core verb since Pass 25.7; this subcommand Pass 176.0).
     ///
     /// ★ This is not a field assignment. A ce dimension's scale, unit,
     /// precision and drafting standard all live on its GROUP, so re-parenting

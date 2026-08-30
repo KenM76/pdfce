@@ -3301,19 +3301,41 @@ frame while the pointer rests on a row (`annot_deletion.rs:385-399`).
 
 ### 6.6 Orderings that are required — and three that look required but are not
 
-**NOT required — `add_dimension_group` before `add_dimension`.** An unknown
-`GroupId` joins the always-present default group (`edit.rs:15372-15374`,
-implementation `:15407-15410`, fallback `DEFAULT_GROUP_ID`). ~25 tests call
-`add_dimension(0, DEFAULT_GROUP_ID, …)` with no prior group creation.
-**UNVERIFIED — the unknown-`GroupId` fallback specifically is NOT TESTED**; no
-test passes a bogus `GroupId` to `add_dimension` (searched
-`DimensionGroupNotFound`, `GroupId(99`, across `crates/`).
+**★ REQUIRED as of `Pass 178.1` — `add_dimension_group` before
+`add_dimension` with a custom group.** This paragraph said the opposite, and
+all three of its claims were wrong or became wrong:
+
+> ~~"**NOT required.** An unknown `GroupId` joins the always-present default
+> group … **UNVERIFIED — the unknown-`GroupId` fallback specifically is NOT
+> TESTED**; no test passes a bogus `GroupId` to `add_dimension` (searched
+> `DimensionGroupNotFound`, `GroupId(99`, across `crates/`)."~~
+
+1. **The fallback is gone.** `add_dimension` now returns
+   `EditError::DimensionGroupNotFound` for a group that does not exist. The
+   silent join was `R235`'s third instance: the success line named a group the
+   ce dimension did not go into, and the group carries the scale, so it was
+   measured against a scale nobody chose.
+2. **It IS tested** — `tests/dimension_group_management.rs`,
+   `authoring_into_an_unknown_group_is_refused_rather_than_silently_redirected`,
+   with the contrast case that a real non-default group still works and reads
+   at *its* scale.
+3. **★ The quoted search would still return nothing, and that is the lesson.**
+   The test drives the **CLI** with the string `"99"`, so grepping `crates/`
+   for `GroupId(99` finds it no better today than it did then. A search that
+   returns nothing is evidence about the search, not about the codebase — and
+   a *guard's absence has no syntax*, so no grep can find one.
+
+Passing `DEFAULT_GROUP_ID` still needs no prior call; the default group always
+exists. ~25 tests do exactly that and are unaffected.
 
 **Required — a custom group must exist before `set_group_scale` /
-`set_group_style` / `set_group_standard`**, which return
-`EditError::DimensionGroupNotFound` (`edit.rs:15996`, `:16072`). The canonical
-ordered fixture, `tests/dxf_scale.rs:313-331`: `new` → `add_dimension_group` ×2
-→ `set_group_scale` → `add_dimension` ×2.
+`set_group_style` / `set_group_standard` / `rename_dimension_group` /
+`toggle_dimension_layer` / `delete_dimension_group_with`**, all of which return
+`EditError::DimensionGroupNotFound`. **Two of those became true only in
+`Pass 178.0`/`178.2`** — `toggle_dimension_layer` and `set_group_scale` used to
+return `Ok` and change nothing — so a shell that special-cased them can stop.
+The canonical ordered fixture, `tests/dxf_scale.rs:313-331`: `new` →
+`add_dimension_group` ×2 → `set_group_scale` → `add_dimension` ×2.
 
 **Semantically ordered, not error-enforced:** calibrating a group's scale
 *after* its members exist regenerates their labels
