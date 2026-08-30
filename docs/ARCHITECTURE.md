@@ -27697,9 +27697,110 @@ free 072.**
   THAT A REAL BOLD FACE IS USED WHEN ONE IS AVAILABLE AND SYNTHESIS TAKES OVER
   WHEN ONE IS NOT — WITHOUT INTERVENTION. THIS REVERSES THREE CLAUSES OF A
   DELIBERATE, DOCUMENTED pdfce POSTURE, AND `R90`'s "per-use, declinable"
-  HALF GOES WITH THEM.** Filed in the 340th filing. **No Pass has shipped for
+  HALF GOES WITH THEM.** Filed in the 340th filing. ~~**No Pass has shipped for
   this** — `Pass 179.0` and `Pass 179.1` are filed to *Next up* by the same
-  filing.
+  filing.~~
+
+  ---
+
+  **★★★ AMENDED 2026-08-30 (341st filing) — A SECOND OPERATOR RULING ARRIVED
+  MINUTES AFTER THE FIRST, AND IT CHANGES WHAT THIS RECORD MEANS. THE THREE
+  OVERRULED CLAUSES ARE NOT DELETED FROM pdfce; THEY ARE DEMOTED TO OPT-IN
+  POSTURES, WITH THE AUTOMATIC ONE ADDED AS THE DEFAULT. AND `Pass 179.2`
+  (`8671daa`) HAS NOW SHIPPED, SO THE STRUCK SENTENCE ABOVE IS NO LONGER
+  TRUE.**
+
+  **The second ruling, verbatim (Ken, 2026-08-30, minutes after the first):**
+
+  > *"let's still make the current method of warning or forcing it manually or
+  > refusing available as well as the automatic silent one."*
+
+  **★★ WHY THIS IS AN AMENDMENT AND NOT A NEW DECISION RECORD.** It is the
+  same operator, the same conversation, the same capability, minutes apart —
+  one decision arriving in two sentences, not two decisions. Filing it as
+  `107` would leave `106` standing in the corpus as a **straight reversal**,
+  which is the reading it currently invites and which is **wrong**. The
+  correction has to be *here*, on the record that a future session will grep
+  for. **The decision ceiling therefore does NOT move: `106` stands, next free
+  `107`.** (`R106`'s own precedent: amend where the reader will be, rather
+  than mint for tidiness.)
+
+  **★★★ THE CORRECTED DISPOSITION OF THE THREE OVERRULED CLAUSES.** The table
+  further down this record is **kept unaltered** — it is an accurate account of
+  ruling 1 — and this table is its correction under the pair:
+
+  | clause | under ruling 1 alone (as filed) | ★ **under BOTH rulings (what pdfce does)** |
+  |---|---|---|
+  | *"the operator's explicit, per-use acceptance"* | OVERRULED | **DEMOTED, NOT DELETED.** Survives as `style_policy = refuse`, which fires only on an **explicit** `set_synthetic` — the per-use acceptance, made opt-in |
+  | *"nothing is ever applied silently"* | OVERRULED as a gate, survives as a disclosure obligation | **UNCHANGED BY RULING 2, and now sharper.** `warn` is the posture for an operator who wants the non-silence loud; the disclosure obligation binds in **all three** |
+  | *"if a real face does resolve … the request is refused"* | OVERRULED | **DEMOTED, NOT DELETED.** This *is* `refuse`, kept verbatim in behaviour — *"what pdfce always did before this became a choice"* |
+  | *"a **fallback** … never an alternative to one"* | SURVIVES UNCHANGED | **SURVIVES UNCHANGED IN ALL THREE POSTURES**, and is now enforced by a test asserting `auto` and `warn` write byte-identical output |
+
+  ⇒ **The reversal is a DEFAULT CHANGE plus a SETTING, not a deletion.** A
+  session that reads `106` as *"the refusal was removed"* will delete code the
+  operator explicitly asked to keep.
+
+  **★ `R90`'s "never a global preference" clause is NARROWED, and its
+  disposition was recorded two ways in the 340th filing.** This record's prose
+  below says the clause *"per-use, declinable, never a global preference"* is
+  **overruled**; `ROADMAP.md`'s `R90` table said *"never a global preference —
+  **SURVIVES**"*. **Both were written in one filing and neither reader had
+  reason to fetch the other.** Under the pair of rulings the answer is neither:
+  it is **overruled as a prohibition on pdfce** (the default *is* a global
+  preference) and **survives as a reachable guarantee** (`refuse` is `R90`'s
+  original gate, opt-in). The three-row correction lives in `ROADMAP.md`'s
+  *Standing rules* under `R90`. **This is hard rule 10's set-consistency
+  problem landing on a DISPOSITION rather than on a number** — the remedy is
+  the same: state it in a form that can disagree with something.
+
+  **What shipped, and what did NOT** (`Pass 179.2`, `8671daa`, 2026-08-30):
+
+  ```
+  settings: style_policy = auto | warn | refuse      (default auto)
+  core:     FormatOptions::with_style_policy(...) + FormatReport::real_face_passed_over
+  cli:      format-text --style-policy auto|warn|refuse
+  gui:      a three-option control in crates/pdfce-gui's settings window
+  ```
+
+  **★★★ THE LADDER ITSELF IS STILL NOT BUILT.** `Pass 179.0` remains `NOT
+  STARTED`. Rung 1 still does not bind; **rung 2 does not exist**, so the
+  standard-14 sibling is still never considered, and on
+  `fixtures/synthetic/textedit/format_other.pdf` pdfce still synthesises in
+  **every** posture where `--set-font Helvetica-Bold` would bind a real face.
+  What ruling 1's *"shouldn't have to intervene"* buys today is only that the
+  **existing** path no longer stops to refuse — not that a better face is
+  found. **`179.0` builds on top of this, in every posture.**
+
+  **★★ AND `Pass 179.2` MADE ITS OWN MEANING CHANGE, WITH ITS OWN SURVIVORS.**
+  *"The refusal is now posture-conditional and off by default"* falsifies every
+  doc comment, `--help` string and published-contract sentence that states the
+  refusal unconditionally. **Eight locations found by a hard-rule-11 clause-(e)
+  sweep**, including `--bold-synthetic`'s own `--help`
+  (`main.rs:5300`, contradicting `--style-policy`'s help twenty lines below
+  it), `StyleOutcome::RealFaceResolves` (a **preview** type whose own doc
+  forbids exactly the preview/commit divergence it now has), and
+  `docs/core-api/03-capabilities.md:1397` — *"synthesis is applied only when
+  asked for explicitly, never as a preference"* — **in the contract
+  `pdfceGUI` builds against.** Enumerated in `ROADMAP.md`'s `Pass 179.1` entry.
+  **No Pass ID is claimed for that set** (`CLAUDE.md` rule 5).
+
+  **★ AND ONE OF `Pass 179.1`'s OWN SURVIVORS IS ONLY PARTLY DISCHARGED.**
+  `179.2` rewrote `SynthesisOffer::disclosure()`, which was survivor 6. Two of
+  its three false claims are gone; **the standard-14 claim — the one `179.1`
+  was filed for — survives** in the `passed_over == None` arm, because the
+  survey `gate_synthesis` runs was deliberately not touched. `179.1` is **still
+  six survivors, not five.**
+
+  **The direction of the error, recorded once more because it is now at three
+  instances in one day in one subsystem:** the fixed disclosure **understated**
+  pdfce's reach. Rule 4 is almost always invoked against a claim that
+  **flatters** the software; a claim that a capability is **absent when it is
+  present** sends the operator to a worse remedy, **and nothing fails.** No
+  standing rule is minted — the correct home is rule 4 itself, which already
+  forbids silence in both directions and has simply never been read in this
+  one. `R235` stays the ceiling.
+
+  ---
 
   **The ruling, verbatim (Ken, 2026-08-30):**
 
@@ -27726,7 +27827,11 @@ free 072.**
   > page, the request is **refused** by name and pointed at that face
   > (`FormatError::RealFaceAvailable`)."~~
 
-  **Three clauses are overruled, and one survives:**
+  **Three clauses are overruled, and one survives** — ★★★ **READ THE
+  2026-08-30 AMENDMENT AT THE HEAD OF THIS RECORD BEFORE ACTING ON THIS TABLE.
+  A SECOND RULING DEMOTED THE THREE TO OPT-IN POSTURES RATHER THAN DELETING
+  THEM. This table is an accurate account of ruling 1 and an incomplete account
+  of what pdfce does:**
 
   | clause | disposition |
   |---|---|

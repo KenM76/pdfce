@@ -79392,3 +79392,354 @@ current rather than pre-move.
    of them on stdout, one of them a rule-4 disclosure.
 3. **Send the `pdfceGUI` note**, now six items.
 4. **Take a backup bundle** — 2 commits behind, measured above.
+
+## 2026-08-30 (341st filing) — `Pass 179.2` (`8671daa`) filed. ★★★ **A SECOND OPERATOR RULING ARRIVED MINUTES AFTER THE FIRST AND TURNED YESTERDAY'S REVERSAL INTO A DEFAULT: the three clauses decision `106` recorded as OVERRULED are not deleted from pdfce, they are DEMOTED TO OPT-IN POSTURES. Decision `106` amended in place; `R90`'s "never a global preference" clause NARROWED — and that narrowing corrects a DISAGREEMENT BETWEEN TWO RECORDS OF THE 340th FILING, written hours apart by this role.** ★★ **Survivor 6 is only PARTLY discharged, survivor 4 got WORSE, and `Pass 179.2` created a SECOND survivor set of eight with no Pass ID — thirteen locations owed across two differently-caused sets**
+
+**Shipped:** `Pass 179.2` (`8671daa`) — the bold/italic fallback **posture**
+(`style_policy = auto | warn | refuse`, default `auto`) across settings, core,
+CLI and the in-repo settings window. **The automatic ladder itself (`Pass
+179.0`) is still `NOT STARTED`** — see the boundary note below, which is the
+single most misreadable fact in this filing.
+
+**Files edited by this role:** `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`,
+`docs/FEATURES.md`, `docs/SESSION_LOG.md`,
+`D:/dev/rag/rust/a_sabotage_that_does_not_compile_or_change_behavior_measures_nothing_verify_the_mutation_before_trusting_the_catch.md`
+and `D:/dev/rag/rust/index.md`. **`crates/` untouched** (hard rule 11).
+
+**Sourcing — `R228`.** A shell was held and used. Run by this role, not
+relayed: `python tools/check-ledger-numbers.py` (clean; its LIVE CEILINGS block
+read directly for all three ceilings), `git log`, `git status --porcelain`,
+`git rev-list --count origin/main..HEAD`, `ls -lt /d/Dev/pdfce-backups/`, and
+`cargo tree -p pdfce-core -p pdfce-render | grep -Eic
+'egui|eframe|winit|wgpu|reqwest|hyper'` ⇒ **0** over a resolved tree
+(`cargo tree -p pdfce-core` alone is **99 lines**, so the 0 is a measurement
+and not an empty invocation). **Every line number in this filing was
+re-measured by `grep`/`sed` at `HEAD` = `74ac410`**, not adjusted by arithmetic
+from a diffstat — two of the six `Pass 179.1` survivors had moved.
+**Relayed, not re-run:** `cargo test --workspace --all-features`, `fmt`,
+`clippy --all-targets --all-features -D warnings`, and the five `check-*`
+gates named in `8671daa`.
+
+---
+
+### ★★★ THE BOUNDARY, FIRST, BECAUSE IT IS THE THING A HURRIED READER WILL GET WRONG
+
+The headline available from this Pass is *"bold is automatic now."* **It is
+not.** What shipped is a **posture selector** — three answers to *what does
+pdfce do about having fallen back* — with the automatic answer as the default.
+
+**The ladder is untouched.** Rung 1 still does not bind; **rung 2 does not
+exist**. On `fixtures/synthetic/textedit/format_other.pdf` — a `Helvetica`-only
+page — pdfce still synthesises **in every posture** where
+`--set-font Helvetica-Bold` would bind a real standard-14 face with no
+embedding. What ruling 1's *"shouldn't have to intervene"* buys **today** is
+only that the existing path no longer stops to refuse — **not** that a better
+face is found.
+
+### The second ruling (Ken, 2026-08-30), verbatim
+
+> *"let's still make the current method of warning or forcing it manually or
+> refusing available as well as the automatic silent one."*
+
+Given minutes after ruling 1. The 340th filing recorded **only ruling 1**, so
+decision `106` as filed reads as a **straight reversal**. It is not one.
+
+**★★ The shape, because it will recur: a ruling filed while its author is
+still talking is a PARTIAL TRANSCRIPT.** The 340th filing was not wrong about
+ruling 1 — it was **complete about a conversation that was not.** There is no
+gate for this and none is proposed; the remedy is that the next filing
+**amends rather than assumes**, which is what this one does.
+
+### Decisions this session
+
+**Decision `106` AMENDED IN PLACE** (`ARCHITECTURE.md` §12), **not superseded
+by a new record.** Same operator, same conversation, same capability, minutes
+apart — one decision arriving in two sentences. Filing it as `107` would leave
+`106` standing in the corpus as a straight reversal, which is the reading it
+currently invites and which is **wrong**; the correction has to be on the
+record a future session will grep. **The decision ceiling therefore does NOT
+move: `106` stands, next free `107`.** (`R106`'s precedent — amend where the
+reader will be, rather than mint for tidiness.)
+
+The corrected disposition, kept beside the original table rather than
+replacing it:
+
+| clause | as filed (ruling 1 alone) | ★ under **both** rulings |
+|---|---|---|
+| *"explicit, per-use acceptance"* | OVERRULED | **DEMOTED, NOT DELETED** — survives as `refuse`, which fires only on an explicit `set_synthetic` |
+| *"nothing is ever applied silently"* | OVERRULED as a gate | **UNCHANGED, and sharper** — `warn` is the posture for an operator who wants the non-silence loud; the disclosure obligation binds in all three |
+| *"a resolving real face ⇒ refused"* | OVERRULED | **DEMOTED, NOT DELETED** — this *is* `refuse`, behaviour kept verbatim |
+| *"a fallback, never an alternative"* | SURVIVES | **SURVIVES IN ALL THREE**, now enforced by a byte-identical-output test |
+
+⇒ **The reversal is a DEFAULT CHANGE PLUS A SETTING, not a deletion.** A
+session that reads `106` as *"the refusal was removed"* will delete code the
+operator explicitly asked to keep.
+
+### ★★★ `R90` NARROWED — AND THE NARROWING CORRECTS A DISAGREEMENT BETWEEN TWO RECORDS OF ONE FILING
+
+The dispatch for this filing said *"`R90`'s amendment said the 'never a global
+preference' clause was overruled."* **Checked against the file: it said the
+opposite** — `ROADMAP.md`'s `R90` table read *"never a global preference |
+**SURVIVES**"*. But decision `106`'s **prose**, written by the same role in the
+same filing, read *"Its **'per-use, declinable, never a global preference'**
+clause is what the ruling overrules."*
+
+**Both were written on 2026-08-30, by one role, hours apart, in two documents,
+and neither reader had reason to fetch the other.** Nothing was misread and no
+measurement was wrong — **the clause was split across two records in two
+states.**
+
+**★ This is hard rule 10's failure mode landing on a DISPOSITION rather than
+on a number.** *Review is an operation on one claim; consistency is an
+operation on a set, and nothing in an append-only record performs it.* The rule
+was written after a 26× contradiction between two figures 217 lines apart in
+one `index.md`; **the same mechanism produces a contradiction between two
+verdicts in two files**, and the same remedy applies: **state the fact in a
+form that can DISAGREE with something.** Hence a three-row table where a single
+word used to be:
+
+| | |
+|---|---|
+| **as a prohibition on pdfce** | ★★ **OVERRULED.** `style_policy` is a persisted global preference and its default `auto` applies synthesis without asking — precisely the Acrobat-style set-and-forget switch the clause forbade |
+| **as a guarantee to an operator who wants it** | ★ **SURVIVES, AND IS REACHABLE.** `refuse` **is** `R90`'s original gate, unchanged, kept because the operator asked for it to be kept — opt-in rather than mandatory |
+| **as a boast** (*deliberately stricter than Acrobat*) | **OVERRULED**, as already recorded |
+
+⇒ **Neither 340th-filing statement was exactly right.** Ruling 1 alone did
+overrule the clause; ruling 2 restored it **as an option, not as a default** —
+which is not what *"SURVIVES"* claimed either. The pair has one answer and it
+needed three rows to state.
+
+**`Pass 179.0`'s "Not in this Pass" bullet was STRUCK** in the same edit — it
+read *"Any global preference … `R90`'s never-a-global-preference clause
+survives that far"*, which was **true of ruling 1 and false of the pair**, and
+the thing it excluded had **already shipped**.
+
+### ★★★ SURVIVOR 6: PARTLY DISCHARGED. `Pass 179.1` IS STILL SIX, NOT FIVE
+
+The dispatch proposed re-scoping `179.1` to five. **Re-measured against live
+source: no.**
+
+`Pass 179.2` rewrote `SynthesisOffer::disclosure()` so it branches on
+`passed_over`. **That one sentence carried three false claims with three
+different causes and three different fates:**
+
+| claim | fate |
+|---|---|
+| *"never applied silently, never as a global preference"* | ★★ **FULLY DISCHARGED** — deleted, and a test now asserts the string is **absent** |
+| the contradiction with `real_face_passed_over` naming the face | ★★ **FULLY DISCHARGED** — the `Some` arm names the face and says how to be stopped |
+| ★★★ *"…so pdfce **cannot make this change with a genuine typeface**"* on a standard-14 page | ★★★ **NOT DISCHARGED — this is the half `179.1` was filed for** |
+
+**Why it survives, mechanically.** `gate_synthesis` → `survey_page_fonts` still
+reads `/Resources /Font` and nothing else — `179.2` deliberately did not touch
+the survey, because changing *which face is found* would have been the second
+resolution path it exists to prevent. So on the `Helvetica`-only fixture
+nothing is passed over, `passed_over` is `None`, and **the `else` arm ships the
+original sentence** (`synth.rs:313-317`).
+
+**One word was added — `HERE`.** *"cannot make this change with a genuine
+typeface HERE."* **It narrows the claim and does not make it true**:
+`--set-font Helvetica-Bold` makes exactly that change with a genuine typeface
+on that same page, in the same session. *"Here"* can only mean *"with the faces
+already in this page's resource dictionary"* — **the very scoping the operator
+cannot see, and the cause of the defect.** A qualifier that requires the reader
+to already know the bug is not a fix.
+
+### ★★ SURVIVOR 4 GOT WORSE — RE-GRADED ★ → ★★★
+
+Filed as *"★ narrow — accurate about the gate."* **It is no longer accurate
+about the gate.** `main.rs:5300-5302` still says *"if one does, the command
+**REFUSES** and names it"*, and under the shipped default it does not. **The
+contradiction is twenty lines apart in one `--help` screen**: `--style-policy`
+at `:5331-5335` correctly says `refuse` *"is what pdfce always did before this
+became a choice"*, implying the others do not, while `--bold-synthetic` above
+it states the refusal flatly. **The `Pass 174.10` shape again — the correction
+reached one copy and stopped short of the one an operator reads.**
+
+### ★★★★ A SECOND SURVIVOR SET, FROM `Pass 179.2`'s OWN MEANING CHANGE — EIGHT LOCATIONS, **NO PASS ID CLAIMED**
+
+**Trigger:** hard rule 11, and its 2026-08-23 amendment (*a ruling about a
+behaviour is itself a meaning-change event*). **The change:** *the refusal is
+now posture-conditional and OFF by default.* **Method — clause (e), narrow the
+file set and widen the pattern:** case-insensitive `refus` over the six files
+the feature touches, intersected with `synth|real |bold|italic`, every hit
+read.
+
+Full table in `ROADMAP.md`'s `Pass 179.1` entry. The three that matter most:
+
+- **A / `main.rs:5300`** — `--bold-synthetic`'s own `--help`. **The only copy
+  an operator reads.** Same location as survivor 4; one fix closes both.
+- **E / `format.rs:2700-2706`** — `StyleOutcome::RealFaceResolves`, the
+  **preview** type. ★★★ **Its own doc states the contract it now breaks:**
+  *"Inventing a third state here would let a preview promise something the
+  commit path cannot honour."* Under `auto` **the preview promises a refusal
+  the commit path will not perform** — the exact failure the comment forbids,
+  arriving by a route the comment did not anticipate.
+- **H / `docs/core-api/03-capabilities.md:1358-1361`, `:1397`** — ★★★ **this
+  one leaves the repository.** *"`R90` is why it is never silent: synthesis is
+  applied only when asked for explicitly, never as a preference"* is now false
+  twice over, **in the contract `pdfceGUI` builds against**. `docs/core-api/`
+  is engineer-maintained and gated; **reported, not edited.**
+
+**★ One hit SURVIVES the sweep and is CORRECT**, recorded per clause (e) so the
+next sweep does not "fix" it: `format.rs:3159-3160`, *"`set_font` then
+refuses"* — that is `set_font`'s own coverage refusal, which `StylePolicy` does
+not reach. **Leave it.** Likewise `03-capabilities.md`'s 2026-08-27 correction
+block and its *"do not grey out a bold button"* guidance.
+
+**No ID is minted.** Assigning one is the engineer's act (`CLAUDE.md` rule 5);
+the 340th filing minted `179.0`/`179.1` **only** because that dispatch
+explicitly delegated it, and this one did not. **The engineer decides whether
+this is `179.1`'s remainder or its own Pass.**
+
+**★★ The two sets must not be merged silently.** `179.1`'s cause is
+`Pass 162.0` widening `--set-font`'s reach; the new set's cause is `179.2`
+making the refusal conditional. **A Pass that fixes one does not fix the
+other**, and a session that reads *"the bold strings"* as one job will ship
+half of it. **Thirteen distinct locations owed**, two on `--help`/stdout, one
+in another project's contract.
+
+### Findings
+
+**★★★ The direction of the error — three independent instances in one day, in
+one subsystem.** The disclosure `179.2` fixed **understated** pdfce's reach, as
+did all six `179.1` survivors and decision 106's own measured defect. **Rule 4
+is almost always invoked against a claim that FLATTERS the software**; the
+opposite sign has no natural alarm — a claim that a capability is **absent**
+sends the operator to a **worse remedy**, **nothing fails**, and it reads as
+**modesty**. **No rule is minted:** the correct home is rule 4 itself, which
+already forbids silence in both directions and has simply never been read in
+this one. `R235` stays the ceiling; if a fourth instance appears **outside** the
+font subsystem, mint it.
+
+**★★ When a behaviour becomes CONDITIONAL, every test that asserted it
+unconditionally is now testing the DEFAULT BRANCH.** Five tests correctly went
+red here and moved to `.with_style_policy(Refuse)` — **the refusal moved rather
+than vanished**, and left at `default()` they would have gone **green by
+testing nothing**. The general question, worth asking on every defaulting
+change: **does relaxing this red test restore the assertion, or delete it?**
+
+**★★★ A sabotage that arrives RED can still be measuring the wrong thing** —
+the finding escalated to the cross-project RAG. Two of three attempts to
+measure a vacuous round-trip test lied, in **different** ways: attempt 1 never
+fired (bash heredoc collapsed a backslash escape ⇒ silent no-op ⇒ **green**),
+attempt 2 fired and was caught by the **unknown-key assertion instead of the
+value comparison** ⇒ **red, and proving something else.** Only omitting the key
+(**red, exactly 1 of 35**) isolated the assertion under test.
+
+**★ Checking the neighbours turned a two-part finding into a one-part one.**
+Attempt 1's cause was **already on disk** — the heredoc-eats-a-backslash cause
+has been in
+`a_sabotage_that_does_not_compile_or_change_behavior_measures_nothing_verify_the_mutation_before_trusting_the_catch.md`
+since its 2026-08-28 amendment, with the `git diff --stat` precondition. **The
+337th filing's lesson paying again**; only attempt 2 was new, and it was filed
+as that file's **fifth cause** rather than as a near-duplicate file (hard rule
+4).
+
+**Sibling defect, recorded in the same amendment:** a round-trip test whose
+fixture uses a **default** value for any field cannot detect that field being
+dropped — and **the test's own comment stating that rule does not enforce it**,
+which is what happened here (`cmyk_intent: Calibrated` **is** the default).
+
+**★ A negative result worth filing:** the *"why a setting rather than a
+replacement"* argument was **already in the codebase** before the ruling —
+`SeparationPolicy`'s doc comment, verbatim: *"a setting because all three
+answers are defensible for different workflows."* `Pass 179.2` recognised an
+existing pattern rather than inventing one, which is why it is 768 lines and
+not a redesign.
+
+### `FEATURES.md` — one row ADDED (`[x]`/`[x]`/`[ ]`), two corrected
+
+- **NEW *Implemented* row, immediately after row 149** — *"Choose what pdfce
+  does when bold or italic needs a fallback."* `[x]` core · `[x]` cli · **`[ ]`
+  gui** · `◐` Acrobat.
+  **★ The `gui` box is `[ ]` DELIBERATELY, and the dispatch's own note is why.**
+  The three-option control shipped in **`crates/pdfce-gui`**, which this column
+  **has not tracked since the 2026-08-19 re-basing** (decision 073) — the `gui`
+  column is `D:\dev\pdfceGUI`, which has not been notified and cannot reach it.
+  **Ticking it because a settings window exists in this repo would have been
+  exactly the over-optimistic tick the maintenance contract forbids.**
+  Acrobat is `◐`: one combined on/off preference for artificial bold/italic —
+  it can express `auto` and `refuse`, but has **no warn posture and no per-axis
+  split**.
+- **Row 149** — the clause *"refused when a real face of the family is
+  resident (`R90`, synthesis is a fallback)"* was **replaced** (not appended
+  to) with the posture-aware statement; the italic-shear refusal is now
+  correctly scoped as applying *in every posture*.
+- **Planned ladder row (345)** — corrected: `--bold-synthetic` **no longer
+  refuses by default**, but the **ladder is untouched** and rung 2 does not
+  exist. Stays `[ ]`/`[ ]`/`[ ]` — **`179.0` is unbuilt.**
+
+### Ledger
+
+| | |
+|---|---|
+| Passes | `179.2` filed to *Shipped*. Highest ID **`179.2`**; **next free family `180`**. ★ **No ID minted this filing** — the second survivor set is recorded with none, because this dispatch did not delegate ID assignment (unlike the 340th's) |
+| Decisions | **`106` AMENDED IN PLACE, not superseded.** Ceiling **does not move: 106; next free `107`** |
+| Standing rules | **none minted.** `R235` stays the ceiling, **next free `R236`**. **`R90` NARROWED** (its 2026-08-30 amendment's *"never a global preference \| SURVIVES"* row corrected to a three-way disposition) |
+| Filings | this is the **341st**; next free **342** |
+| Gate confirming all three ceilings | `python tools/check-ledger-numbers.py` → *"standing rules: R235 → next free is R236 / decision records: 106 → next free is 107 / SESSION_LOG filings: 340 → next free is 341"*, **run at filing time, before this entry was appended** |
+
+### Git and backup state — MEASURED, not inferred (hard rule 8)
+
+| fact | command | result |
+|---|---|---|
+| `HEAD` | `git log --format='%H %s' -4` | **`74ac410`** (memory only, no Pass ID) over **`8671daa`** (`Pass 179.2`) over **`06d11e9`** (340th filing) |
+| working tree, **first** check (before any edit) | `git status --porcelain` | **clean, empty output** |
+| working tree, **second** check (mid-filing) | `git status --porcelain` | this role's three `docs/` files, **plus an untracked `.relnotes`** (5,496 bytes, mtime **08:53**, a v0.17.0 release-note draft, not `.gitignore`d — `git check-ignore` exits 1). ★ **The two readings do not reconcile and both are reported rather than one being picked**: the file's mtime PREDATES this filing, yet the first check was empty. Not this role's file and nothing here is claimed about it (`R201`'s fifth consecutive filing, by a different mechanism) |
+| ★ divergence from `origin` | `git rev-list --count origin/main..HEAD` | **3** — `06d11e9`, `8671daa`, `74ac410` are **unpushed**. The 340th filing measured **0** at `49caa88`; three commits have landed since |
+| backup bundle | `ls -lt /d/Dev/pdfce-backups/` | newest still `pdfce-20260830-0553-d6a2e6d-full.bundle`, **05:51**, at `d6a2e6d` — **unchanged since the 340th filing**, which already reported it 2 behind |
+| bundle staleness | `git rev-list --count d6a2e6d..HEAD` | ★ **5 commits behind** (`b9115fd`, `49caa88`, `06d11e9`, `8671daa`, `74ac410`) — a figure, and the command that produced it. **It has grown from 2 to 5 across one filing** |
+| GUI-core separation | `cargo tree -p pdfce-core -p pdfce-render \| grep -Eic 'egui\|eframe\|winit\|wgpu\|reqwest\|hyper'` | **0**, over a resolved tree (99 lines for `pdfce-core` alone) |
+
+### Still in flight
+
+- **★★★ THIRTEEN LOCATIONS OWED ACROSS TWO SURVIVOR SETS**, enumerated in
+  `ROADMAP.md`'s `Pass 179.1` entry. Two are on `--help`/stdout; **one (H) is
+  in `docs/core-api/`, the contract another project builds against.** The sets
+  have **different causes** and one Pass does not close both.
+- **`Pass 179.0` — the ladder — is still `NOT STARTED`**, and now builds **on
+  top of** the posture selector: it must make the ladder automatic **in every
+  posture**, since a posture selects only what pdfce *says about* a fallback,
+  never which face it picks.
+- **The cross-family rung is still OPEN** and Acrobat cannot settle it — the
+  one thing that could change `179.0`'s design before it ships.
+- **`bash tools/run-gates.sh` has NOT been run** this filing; only
+  `check-ledger-numbers` was run individually, and it is clean.
+- **`D:\dev\pdfceGUI` notification is now SEVEN items deep** — the five carried
+  from the 339th and 340th filings, **plus the bold ladder**, **plus (new)
+  `style_policy`**, which is a shipped, reachable setting that project's `gui`
+  column cannot yet tick and whose `refuse` posture changes what their existing
+  refusal-handling code will see. ★ Their deliberate decision not to take
+  `real_bold()`/`real_italic()` remains fortunate.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — still
+  open, a **seventh** filing; Reader only on this machine.
+- **`ARCHITECTURE.md` §4 sweep still unfinished** — a **sixth** filing.
+- ★ **FOUND IN PASSING, NOT FIXED — a broken markdown table in `ROADMAP.md`,
+  lines **`96722`–`96723`** (re-measured after this filing's own insertions
+  moved them 12 lines — they read `96710`–`96711` on the first pass, and
+  citing that would have been the very error hard rule 8 and this filing's own
+  survivor re-measurement exist to prevent).** A four-column table (`sub-family | /AP state |
+  MOVE | RESIZE`) whose rows **a2** and **a3** carry only **three** cells: the
+  `/AP state` column's content was folded into the sub-family cell behind an
+  **em-dash where a pipe belongs**, so two of three rows render with a column
+  missing. **Deliberately not repaired**, because the correct split is a guess
+  about the author's column intent and a guessed repair is a fabrication —
+  reported with both line numbers instead. Found by a whole-file table-cell
+  count run over all four `docs/` files this filing (**2 mismatched rows in
+  4 files; the other three files are clean**), which is a check worth keeping:
+  a table that loses a column still *looks* like a table.
+
+### For next session
+
+1. **Fix survivor 4 / new-set A first** — one string, on `--help`, currently
+   contradicting another string in the same `--help` screen. Cheapest
+   high-severity item on the board.
+2. **Decide whether the second survivor set is `179.1`'s remainder or its own
+   Pass**, and assign the ID — this role deliberately did not.
+3. **Send the `pdfceGUI` note**, now seven items, and flag `style_policy`
+   specifically: it is reachable in `crates/pdfce-gui` and **not** in theirs.
+4. ★ **Take a backup bundle — 5 commits behind, measured above, and it grew
+   from 2 to 5 in one filing.**
+5. **Push.** `main` is **3 commits ahead of `origin`** and pushing is
+   standing-authorized (decision 090, *"always push"*); scrub
+   `check-suite-name-absent.py` green first, since the repository is public.
